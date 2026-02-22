@@ -11,6 +11,7 @@ export const metadata: Metadata = {
   alternates: {
     canonical: `${siteUrl}/digital-content-terms`,
   },
+  robots: { index: false },
 };
 
 export default function DigitalContentTermsPage() {

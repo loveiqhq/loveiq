@@ -47,6 +47,38 @@ const websiteSchema = {
   "@type": "WebSite",
   name: "LoveIQ",
   url: siteUrl,
+  potentialAction: {
+    "@type": "SearchAction",
+    target: {
+      "@type": "EntryPoint",
+      urlTemplate: `${siteUrl}/glossary?q={search_term_string}`,
+    },
+    "query-input": "required name=search_term_string",
+  },
+};
+
+const softwareApplicationSchema = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: "LoveIQ",
+  description:
+    "Science-backed sexual psychology assessment that maps your desire patterns, attachment style, and intimacy blueprint across 14 psychological dimensions.",
+  url: "https://www.loveiq.org",
+  applicationCategory: "HealthApplication",
+  operatingSystem: "Web",
+  offers: {
+    "@type": "Offer",
+    price: "0",
+    priceCurrency: "EUR",
+    description: "Free introductory assessment. Advanced reports available as one-time purchase.",
+  },
+  aggregateRating: {
+    "@type": "AggregateRating",
+    ratingValue: "4.9",
+    ratingCount: "30000",
+    bestRating: "5",
+    worstRating: "1",
+  },
 };
 
 const faqSchema = {
@@ -55,34 +87,106 @@ const faqSchema = {
   mainEntity: [
     {
       "@type": "Question",
-      name: "What is LoveIQ Early Access?",
+      name: "Is this a test or an ongoing journey?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Early Access members get priority entry to our platform before the public launch, exclusive content, and a locked-in lifetime discount on premium features.",
+        text: "LoveIQ is not a one-off quiz. It is a guided journey of self-understanding. You begin with a core assessment, and your profile can deepen over time as you explore additional topics, reflections, and optional follow-ups. Continued engagement allows your insights to become more precise and personalized.",
       },
     },
     {
       "@type": "Question",
-      name: "What's included in the survey?",
+      name: "What exactly does this app do?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Our comprehensive assessment covers 5 key psychological dimensions of intimacy. You will receive a detailed report outlining your unique profile immediately after completion.",
+        text: "LoveIQ analyzes how you think, feel, communicate, and relate. It translates your responses into a personalized archetype profile and relationship intelligence report that highlights patterns, strengths, challenges, and compatibility dynamics.",
       },
     },
     {
       "@type": "Question",
-      name: "Is there support available?",
+      name: "How is my data used and protected?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Yes. Our team of relationship psychologists and support staff are available to help interpret your results and guide you through the platform.",
+        text: "Your data is encrypted, private, and never sold. Responses are used only to generate your results and to improve our models in anonymized form. You can delete or export your data at any time.",
       },
     },
     {
       "@type": "Question",
-      name: "How much will this cost?",
+      name: "What kind of results will I receive?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Joining the waitlist is free. The basic assessment is free, while deeper analytical reports will be available for a one-time fee or subscription.",
+        text: "Depending on the product you use, your results may include: Archetype match scores; Trait patterns across psychological dimensions; Strengths, challenges, and blind spots; Practical insights for attraction, communication, intimacy, and long-term compatibility. The reports are designed to feel both emotionally resonant and scientifically grounded.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "Who is this app for?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "LoveIQ is for anyone seeking deeper clarity about themselves and their relationship patterns—whether single, dating, or in a long-term partnership. It is especially relevant for people who value self-awareness, emotional intelligence, and personal growth.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "Is it based on science?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "Yes. LoveIQ draws from relationship psychology, attachment theory, personality science, behavioral research, and large-scale pattern analysis. These foundations are combined with modern machine-learning techniques to create a rigorous and human-centered system.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "How accurate are the insights?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "Accuracy depends on the clarity and honesty of your inputs. The model identifies consistent patterns across multiple dimensions, going beyond a casual personality quiz. While no system can capture every nuance of a person, many users report that the insights feel precise and personally meaningful.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "Will I get recommendations or next steps?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "Yes. Your profile includes tailored suggestions such as communication strategies, dating insights, intimacy considerations, and long-term growth paths. Optional follow-up modules allow for deeper exploration.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "Is it anonymous?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "Yes. You can use LoveIQ with only an email address, and in some cases without entering your name. Your answers are private unless you choose to share your results.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "Can I talk to a professional or coach through the app?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "We are working with selected psychologists and relationship coaches to offer optional paid sessions. These experts will be familiar with the LoveIQ framework and able to support you based on your profile.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "Is it free?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "You can start with a free introductory assessment. Full reports and advanced insights are available through a one-time purchase.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "How long does the first assessment take?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "Most users complete the initial assessment in 7–12 minutes. It is mobile-friendly, intuitive, and can be paused and resumed at any time.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "Can I save progress, revisit results, or share with a partner?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "Yes. Progress is saved using a secure magic link sent to your email. You can resume, revisit results, or share them with a partner—no account required.",
       },
     },
   ],
@@ -179,30 +283,22 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             });
           `}
         </Script>
-        <Script
-          id="schema-org"
+        <script
           type="application/ld+json"
-          strategy="afterInteractive"
-          nonce={nonce}
-        >
-          {JSON.stringify(organizationSchema)}
-        </Script>
-        <Script
-          id="schema-website"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationSchema) }}
+        />
+        <script
           type="application/ld+json"
-          strategy="afterInteractive"
-          nonce={nonce}
-        >
-          {JSON.stringify(websiteSchema)}
-        </Script>
-        <Script
-          id="schema-faq"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteSchema) }}
+        />
+        <script
           type="application/ld+json"
-          strategy="afterInteractive"
-          nonce={nonce}
-        >
-          {JSON.stringify(faqSchema)}
-        </Script>
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }}
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareApplicationSchema) }}
+        />
       </head>
       <body className="bg-white dark:bg-[#050208]">
         <a

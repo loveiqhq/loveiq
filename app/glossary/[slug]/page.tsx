@@ -54,5 +54,39 @@ export default async function Page({ params }: PageProps) {
     notFound();
   }
 
-  return <GlossaryTermPage term={term} />;
+  const definedTermSchema = {
+    "@context": "https://schema.org",
+    "@type": "DefinedTerm",
+    name: term.term,
+    description: term.definition,
+    inDefinedTermSet: {
+      "@type": "DefinedTermSet",
+      name: "LoveIQ Glossary",
+      url: `${siteUrl}/glossary`,
+    },
+  };
+
+  const breadcrumbSchema = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: siteUrl },
+      { "@type": "ListItem", position: 2, name: "Glossary", item: `${siteUrl}/glossary` },
+      { "@type": "ListItem", position: 3, name: term.term, item: `${siteUrl}/glossary/${slug}` },
+    ],
+  };
+
+  return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(definedTermSchema) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }}
+      />
+      <GlossaryTermPage term={term} />
+    </>
+  );
 }

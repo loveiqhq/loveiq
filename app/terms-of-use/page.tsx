@@ -10,6 +10,7 @@ export const metadata: Metadata = {
   alternates: {
     canonical: `${siteUrl}/terms-of-use`,
   },
+  robots: { index: false },
 };
 
 export default function TermsOfUsePage() {

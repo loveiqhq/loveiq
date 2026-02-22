@@ -2,6 +2,7 @@
 
 import type { FC } from "react";
 import { useState, useEffect, useMemo } from "react";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import GlossaryNavSection from "./GlossaryNavSection";
 import FooterSection from "@/components/landing/FooterSection";
@@ -19,9 +20,22 @@ const filterCategories = [
 ];
 
 const GlossaryPage: FC = () => {
-  const [searchQuery, setSearchQuery] = useState("");
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+
+  const [searchQuery, setSearchQuery] = useState(searchParams.get("q") ?? "");
   const [activeFilter, setActiveFilter] = useState("all");
   const [activeLetter, setActiveLetter] = useState("A");
+
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value);
+    const params = new URLSearchParams();
+    if (value) params.set("q", value);
+    router.replace(params.size > 0 ? `${pathname}?${params.toString()}` : pathname, {
+      scroll: false,
+    });
+  };
 
   // Re-run observer when filters/search change to observe newly rendered elements
   useEffect(() => {
@@ -203,7 +217,7 @@ const GlossaryPage: FC = () => {
                 type="text"
                 placeholder="Search a term or concept (e.g. 'Arousal', 'Boundaries')"
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => handleSearchChange(e.target.value)}
                 className="w-full rounded-full border border-white/10 bg-white/[0.03] py-5 pl-[49px] pr-6 text-base text-white placeholder:text-white/30 hover:bg-white/[0.05] hover:border-white/50 focus:border-2 focus:border-[rgba(254,104,57,0.6)] focus:bg-white/[0.03] focus:outline-none focus:ring-0 transition"
               />
             </div>
@@ -296,7 +310,7 @@ const GlossaryPage: FC = () => {
               </p>
               <button
                 onClick={() => {
-                  setSearchQuery("");
+                  handleSearchChange("");
                   setActiveFilter("all");
                 }}
                 className="mt-4 text-[#fe6839] hover:underline"

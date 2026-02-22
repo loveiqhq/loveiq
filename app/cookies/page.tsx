@@ -10,6 +10,7 @@ export const metadata: Metadata = {
   alternates: {
     canonical: `${siteUrl}/cookies`,
   },
+  robots: { index: false },
 };
 
 export default function CookiesPage() {

@@ -3,12 +3,11 @@ import { getAllSlugs } from "@/data/glossary-data";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.loveiq.org";
 
-const staticRoutes = [
-  "/",
-  "/about",
-  "/glossary",
-  "/waitlist",
-  "/trust-zone",
+const coreRoutes = ["/"];
+
+const mainRoutes = ["/about", "/glossary", "/waitlist", "/trust-zone"];
+
+const legalRoutes = [
   "/privacy-policy",
   "/terms-of-use",
   "/terms-and-conditions",
@@ -19,17 +18,35 @@ const staticRoutes = [
 ];
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const siteLastModified = new Date("2026-02-16");
+  const siteLastModified = new Date();
 
-  const staticEntries = staticRoutes.map((path) => ({
+  const coreEntries = coreRoutes.map((path) => ({
     url: `${siteUrl}${path}`,
     lastModified: siteLastModified,
+    changeFrequency: "weekly" as const,
+    priority: 1.0,
+  }));
+
+  const mainEntries = mainRoutes.map((path) => ({
+    url: `${siteUrl}${path}`,
+    lastModified: siteLastModified,
+    changeFrequency: "monthly" as const,
+    priority: 0.8,
+  }));
+
+  const legalEntries = legalRoutes.map((path) => ({
+    url: `${siteUrl}${path}`,
+    lastModified: siteLastModified,
+    changeFrequency: "yearly" as const,
+    priority: 0.3,
   }));
 
   const glossaryEntries = getAllSlugs().map((slug) => ({
     url: `${siteUrl}/glossary/${slug}`,
     lastModified: siteLastModified,
+    changeFrequency: "monthly" as const,
+    priority: 0.7,
   }));
 
-  return [...staticEntries, ...glossaryEntries];
+  return [...coreEntries, ...mainEntries, ...legalEntries, ...glossaryEntries];
 }
