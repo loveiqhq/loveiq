@@ -105,7 +105,9 @@
       "Bash(netstat:*)",
       "Bash(tasklist:*)",
       "Bash(python3:*)",
-      "Bash(git mv:*)"
+      "Bash(git mv:*)",
+      "WebFetch(domain:eslint.org)",
+      "WebFetch(domain:www.npmjs.com)"
     ]
   }
 }
