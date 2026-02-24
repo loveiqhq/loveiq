@@ -5,12 +5,6 @@ import { useRef, useState, useEffect, useCallback, type FC } from "react";
 
 const experts = [
   {
-    name: "Prof. Dr. Konrad Schnabel",
-    tags: ["Personality Psychology", "Psychological Diagnostics"],
-    photo: "/academic/konrad.png",
-    photoPosition: "center 20%",
-  },
-  {
     name: "Dr. Dijana Galijašević",
     tags: ["Business Ethics", "Social Science"],
     photo: "/academic/dijana.jpg",
@@ -34,32 +28,7 @@ const experts = [
 const renderLogos = (index: number) => {
   const mod = index % experts.length;
   switch (mod) {
-    case 0: // Konrad — IPS Berlin + Harvard
-      return (
-        <>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/academic/ips-berlin-logo.svg"
-            alt="IPS Berlin logo"
-            style={{ height: 34, width: 119 }}
-          />
-          <div className="flex items-center">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/academic/harvard-shield.svg"
-              alt="Harvard University shield"
-              style={{ height: 32, width: 27 }}
-            />
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/academic/harvard-logo.svg"
-              alt="Harvard University"
-              style={{ height: 22, width: 84, marginLeft: 6, marginTop: 2 }}
-            />
-          </div>
-        </>
-      );
-    case 1: // Dijana — Columbia + HHL
+    case 0: // Dijana — Columbia + HHL
       return (
         <>
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -76,7 +45,7 @@ const renderLogos = (index: number) => {
           />
         </>
       );
-    case 2: // Bruno — ICL + Oxford
+    case 1: // Bruno — ICL + Oxford
       return (
         <>
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -93,7 +62,7 @@ const renderLogos = (index: number) => {
           />
         </>
       );
-    case 3: // Quentin — Oxford + MIT
+    case 2: // Quentin — Oxford + MIT
       return (
         <>
           {/* eslint-disable-next-line @next/next/no-img-element */}

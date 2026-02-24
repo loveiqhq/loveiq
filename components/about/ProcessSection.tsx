@@ -455,9 +455,9 @@ const ProcessSection: FC = () => {
               How We Work
             </h2>
             <p className="reveal-on-scroll stagger-1 max-w-[512px] text-lg font-light leading-relaxed text-[#9CA3AF] md:text-xl">
-              We work like a super-therapist and coach that never stops learning by continuously
-              consuming new research, books, and practical expertise to transform that knowledge
-              into easy understandable, actionable, and personalized insights for our users.
+              We work like a coach that never stops learning by continuously consuming new research,
+              books, and practical expertise to transform that knowledge into easy understandable,
+              actionable, and personalized insights for our users.
             </p>
           </div>
 
