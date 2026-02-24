@@ -30,7 +30,7 @@ jobs:
           fetch-depth: 10 # Last 10 commits
 
       - name: TruffleHog Secret Scan
-        uses: trufflesecurity/trufflehog@e42153d44a5e5c37c1bd0c70e074781e9edcb760 # v3.88.28
+        uses: trufflesecurity/trufflehog@7c0734f987ad0bb30ee8da210773b800ee2016d3 # v3.93.4
         with:
           extra_args: --only-verified
 
