@@ -4,10 +4,7 @@ module.exports = {
     hoverOnlyWhenSupported: true,
   },
   darkMode: "class",
-  content: [
-    "./app/**/*.{js,ts,jsx,tsx}",
-    "./components/**/*.{js,ts,jsx,tsx}",
-  ],
+  content: ["./app/**/*.{js,ts,jsx,tsx}", "./components/**/*.{js,ts,jsx,tsx}"],
   theme: {
     extend: {
       colors: {
@@ -36,7 +33,8 @@ module.exports = {
         card: "var(--shadow-card)",
         soft: "var(--shadow-soft)",
         pill: "var(--shadow-pill)",
-        focus: "0 0 0 2px var(--color-border-strong), 0 0 0 4px color-mix(in srgb, var(--accent-purple) 40%, transparent)",
+        focus:
+          "0 0 0 2px var(--color-border-strong), 0 0 0 4px color-mix(in srgb, var(--accent-purple) 40%, transparent)",
       },
       spacing: {
         section: "var(--space-section)",

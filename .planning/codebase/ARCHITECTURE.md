@@ -7,6 +7,7 @@
 **Overall:** Static Marketing Site with API Routes
 
 **Key Characteristics:**
+
 - Next.js App Router architecture
 - Server-side rendering for pages
 - Client components for interactivity
@@ -16,6 +17,7 @@
 ## Layers
 
 **Pages Layer (App Router):**
+
 - Purpose: Define routes and page-level layouts
 - Contains: Page components that compose UI sections
 - Location: `app/` directory
@@ -23,6 +25,7 @@
 - Used by: Next.js routing
 
 **Component Layer:**
+
 - Purpose: Reusable UI components organized by page
 - Contains: React components (Server + Client)
 - Location: `components/` directory
@@ -31,6 +34,7 @@
 - Used by: Pages
 
 **API Layer:**
+
 - Purpose: Server-side form processing
 - Contains: Route handlers for POST requests
 - Location: `app/api/` directory
@@ -38,6 +42,7 @@
 - Used by: Client-side form submissions
 
 **Library Layer:**
+
 - Purpose: Shared utilities and helpers
 - Contains: Analytics tracking, email templates
 - Location: `lib/` directory
@@ -45,6 +50,7 @@
 - Used by: Components, API routes
 
 **Theme Layer:**
+
 - Purpose: Design system tokens and utilities
 - Contains: Gradient definitions, radius, effects
 - Location: `components/theme.ts`, `app/globals.css`
@@ -89,6 +95,7 @@
 9. Return success response
 
 **State Management:**
+
 - Stateless - No persistent client state
 - Form state managed locally in components
 - No global state management (Redux, Context)
@@ -97,24 +104,28 @@
 ## Key Abstractions
 
 **Section Components:**
+
 - Purpose: Self-contained page sections
 - Examples: `HeroSection`, `FooterSection`, `Section05-12`
 - Pattern: Functional components with Tailwind styling
 - Location: `components/landing/*.tsx`, `components/about/*.tsx`
 
 **API Route Handlers:**
+
 - Purpose: Server-side form processing
 - Examples: `app/api/waitlist/route.ts`, `app/api/contact/route.ts`
 - Pattern: Next.js Route Handlers with POST method
 - Features: Rate limiting, validation, honeypot
 
 **Theme Constants:**
+
 - Purpose: Centralized design tokens
 - Examples: `gradients`, `radii`, `effects`, `pills`
 - Pattern: Exported objects with Tailwind class strings
 - Location: `components/theme.ts`
 
 **Analytics Helpers:**
+
 - Purpose: Typed event tracking
 - Examples: `track()`, `trackStartSurvey()`, `trackWaitlistSignup()`
 - Pattern: Wrapper functions around gtag
@@ -123,20 +134,24 @@
 ## Entry Points
 
 **Main Entry:**
+
 - Location: `app/layout.tsx`
 - Triggers: All page navigations
 - Responsibilities: Root layout, fonts, metadata, scripts, analytics
 
 **Page Routes:**
+
 - `/` - `app/page.tsx` → `LandingPage`
 - `/about` - `app/about/page.tsx` → `AboutPage`
 - `/waitlist` - `app/waitlist/page.tsx`
 
 **API Routes:**
+
 - `/api/waitlist` - `app/api/waitlist/route.ts`
 - `/api/contact` - `app/api/contact/route.ts`
 
 **SEO Routes:**
+
 - `/robots.txt` - `app/robots.ts`
 - `/sitemap.xml` - `app/sitemap.ts`
 
@@ -145,6 +160,7 @@
 **Strategy:** Try/catch in API routes, graceful degradation in UI
 
 **Patterns:**
+
 - API routes return JSON with `error` field on failure
 - Rate limiting returns 429 status
 - Validation errors return 400 status
@@ -154,15 +170,18 @@
 ## Cross-Cutting Concerns
 
 **Logging:**
+
 - Console.log/warn/error for debugging
 - No structured logging or log aggregation
 - Slack notifications for important events
 
 **Validation:**
+
 - Zod schemas at API boundary (`app/api/*/route.ts`)
 - No client-side validation library
 
 **Security:**
+
 - Rate limiting (IP-based, in-memory)
 - Honeypot fields for bot detection
 - reCAPTCHA for contact form
@@ -170,11 +189,12 @@
 - Input sanitization via Zod
 
 **SEO:**
+
 - Structured data (Organization, Website, FAQ schemas)
 - Open Graph and Twitter meta tags
 - Sitemap and robots.txt generation
 
 ---
 
-*Architecture analysis: 2025-01-14*
-*Update when major patterns change*
+_Architecture analysis: 2025-01-14_
+_Update when major patterns change_

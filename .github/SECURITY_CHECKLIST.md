@@ -24,6 +24,7 @@ When creating or modifying API routes (`app/api/**`):
 - [ ] Email addresses normalized (lowercase, trimmed)
 
 **Example template:**
+
 ```typescript
 export async function POST(request: Request) {
   // 1. CSRF verification
@@ -112,6 +113,7 @@ Before opening a PR:
 When reviewing PRs, pay special attention to:
 
 ### High Risk Areas
+
 - API routes (authentication, authorization, input validation)
 - Database queries (SQL injection, data leaks)
 - File uploads/downloads (path traversal)
@@ -119,6 +121,7 @@ When reviewing PRs, pay special attention to:
 - Crypto operations (weak algorithms, bad entropy)
 
 ### Common Vulnerabilities
+
 - ❌ SQL injection (not applicable - we use REST API)
 - ❌ XSS (dangerouslySetInnerHTML, unescaped user input)
 - ❌ CSRF (missing token verification)
@@ -133,6 +136,7 @@ When reviewing PRs, pay special attention to:
 ## Security Testing
 
 ### Manual Testing
+
 - [ ] Test with invalid/malicious input
 - [ ] Test rate limiting (submit form 6+ times rapidly)
 - [ ] Test CSRF protection (submit without cookie/header)
@@ -140,7 +144,9 @@ When reviewing PRs, pay special attention to:
 - [ ] Test special characters in inputs (injection)
 
 ### Automated Testing
+
 Security scans run automatically on push/PR:
+
 - Secret scanning (TruffleHog)
 - SAST (Semgrep + CodeQL)
 - Dependency scanning (npm audit + SBOM)
@@ -148,6 +154,7 @@ Security scans run automatically on push/PR:
 - ESLint security plugins
 
 View results in:
+
 - GitHub Actions → Security & Quality workflow
 - GitHub Security tab → Code scanning alerts
 - Pull request checks

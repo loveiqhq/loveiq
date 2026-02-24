@@ -9,9 +9,26 @@ permissions:
   contents: write
 
 jobs:
+  verify:
+    name: Verify Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+        env:
+          NEXT_PUBLIC_SITE_URL: https://www.loveiq.org
+          NEXT_PUBLIC_RECAPTCHA_SITE_KEY: dummy
+
   release:
     name: Create Release
     runs-on: ubuntu-latest
+    needs: [verify]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:

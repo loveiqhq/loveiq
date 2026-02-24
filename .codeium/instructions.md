@@ -1,12 +1,14 @@
 # Codeium Instructions for LoveIQ Web
 
 ## Project Overview
+
 **Type:** Next.js 16 App Router marketing website
 **Stack:** TypeScript + React + Tailwind CSS + Supabase + Resend
 **Purpose:** Pre-launch marketing with waitlist/contact forms
 **Authentication:** None
 
 ## Documentation to Read
+
 1. `CLAUDE.md` - Main codebase instructions and architecture
 2. `SECURITY.md` - Security policy and procedures
 3. `.github/SECURITY_CHECKLIST.md` - Developer security checklist
@@ -17,6 +19,7 @@
 ### All API Routes Must Include
 
 #### 1. CSRF Verification
+
 ```typescript
 import { verifyCsrfToken } from "@/lib/csrf";
 
@@ -26,6 +29,7 @@ if (!(await verifyCsrfToken(request))) {
 ```
 
 #### 2. Rate Limiting
+
 ```typescript
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
 
@@ -41,6 +45,7 @@ if (!rateLimit.allowed) {
 ```
 
 #### 3. Input Validation
+
 ```typescript
 import { z } from "zod";
 
@@ -109,7 +114,9 @@ export async function POST(request: Request) {
       { error: "Please try again later." },
       {
         status: 429,
-        headers: { "Retry-After": String(Math.ceil((rateLimit.resetAt.getTime() - Date.now()) / 1000)) },
+        headers: {
+          "Retry-After": String(Math.ceil((rateLimit.resetAt.getTime() - Date.now()) / 1000)),
+        },
       }
     );
   }
@@ -136,13 +143,13 @@ export async function POST(request: Request) {
 
 ## File Organization Patterns
 
-| Type | Location | Example |
-|------|----------|---------|
-| Landing sections | `components/landing/` | `S01Hero.tsx`, `S02Features.tsx` |
-| API routes | `app/api/` | `app/api/waitlist/route.ts` |
-| Utilities | `lib/` | `lib/csrf.ts`, `lib/ratelimit.ts` |
-| Pages | `app/` | `app/about/page.tsx` |
-| Components | `components/` | `components/glossary/GlossaryCard.tsx` |
+| Type             | Location              | Example                                |
+| ---------------- | --------------------- | -------------------------------------- |
+| Landing sections | `components/landing/` | `S01Hero.tsx`, `S02Features.tsx`       |
+| API routes       | `app/api/`            | `app/api/waitlist/route.ts`            |
+| Utilities        | `lib/`                | `lib/csrf.ts`, `lib/ratelimit.ts`      |
+| Pages            | `app/`                | `app/about/page.tsx`                   |
+| Components       | `components/`         | `components/glossary/GlossaryCard.tsx` |
 
 **Before creating new files:** Check if similar functionality already exists.
 
@@ -189,12 +196,13 @@ export default ComponentName;
 
 ## Environment Variables
 
-| Type | Prefix | Access | Example |
-|------|--------|--------|---------|
-| Server-only secrets | None | Server only | `SUPABASE_SERVICE_ROLE_KEY` |
-| Client-safe config | `NEXT_PUBLIC_` | Server + Client | `NEXT_PUBLIC_SITE_URL` |
+| Type                | Prefix         | Access          | Example                     |
+| ------------------- | -------------- | --------------- | --------------------------- |
+| Server-only secrets | None           | Server only     | `SUPABASE_SERVICE_ROLE_KEY` |
+| Client-safe config  | `NEXT_PUBLIC_` | Server + Client | `NEXT_PUBLIC_SITE_URL`      |
 
 **Rule:** Only suggest `process.env.*` access:
+
 - In API routes (server-side)
 - In server components
 - `NEXT_PUBLIC_*` can be used anywhere
@@ -202,16 +210,21 @@ export default ComponentName;
 ## Error Handling Best Practices
 
 ### Generic Error Messages
+
 ```typescript
 // ✅ GOOD - No information disclosure
 return NextResponse.json({ error: "Invalid input" }, { status: 400 });
 return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
 
 // ❌ BAD - Exposes internal details
-return NextResponse.json({ error: "Email admin@company.com not found in users table" }, { status: 400 });
+return NextResponse.json(
+  { error: "Email admin@company.com not found in users table" },
+  { status: 400 }
+);
 ```
 
 ### Proper Error Logging
+
 ```typescript
 try {
   // ... operation
@@ -236,6 +249,7 @@ try {
 ## Testing Checklist
 
 Before marking code as complete:
+
 1. ✅ Run `npm run lint` - must pass
 2. ✅ Run `npm run build` - must succeed
 3. ✅ No hardcoded secrets
@@ -247,6 +261,7 @@ Before marking code as complete:
 ## Security Headers
 
 All security headers are configured in `proxy.ts` (middleware):
+
 - Content-Security-Policy (CSP) with nonce
 - X-Frame-Options: DENY
 - X-Content-Type-Options: nosniff
@@ -274,6 +289,7 @@ const response = await fetchWithTimeout(url, {
 ## Red Flags - Alert User
 
 Warn user if suggesting code with:
+
 - Hardcoded secrets (even test data)
 - Missing security controls in API routes
 - Unsafe patterns (eval, dangerouslySetInnerHTML)
@@ -285,10 +301,12 @@ Warn user if suggesting code with:
 ## Reference Files
 
 For architectural decisions:
+
 - `.planning/codebase/ARCHITECTURE.md`
 - `.planning/codebase/CONVENTIONS.md`
 
 For similar patterns:
+
 - Check existing code in `components/landing/`
 - Check existing API routes in `app/api/`
 
@@ -304,6 +322,7 @@ For similar patterns:
 ## Summary
 
 **Key Principles:**
+
 - **Security first:** All API routes need CSRF + rate limiting + validation
 - **Type safety:** Proper TypeScript, no `any`
 - **Error handling:** Generic messages to users, detailed logs on server

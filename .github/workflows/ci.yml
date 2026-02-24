@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -21,6 +25,8 @@ jobs:
           cache: "npm"
       - run: npm ci
       - run: npm run lint
+      - run: npx prettier --check .
+      - run: npx tsc --noEmit
 
   test:
     name: Test

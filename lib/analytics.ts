@@ -11,7 +11,9 @@ export const track = (name: string, params?: Record<string, unknown>) => {
   window.gtag?.("event", name, params);
 };
 
-export const trackStartSurvey = (location: "nav" | "hero" | "report_section" | "footer" | "archetype-teaser") => {
+export const trackStartSurvey = (
+  location: "nav" | "hero" | "report_section" | "footer" | "archetype-teaser"
+) => {
   track("cta_click", { cta: "start_survey", location });
 };
 
@@ -22,4 +24,3 @@ export const trackLearnMore = (location: "hero") => {
 export const trackWaitlistSignup = (source: string) => {
   track("waitlist_signup", { method: "form", source });
 };
-

@@ -11,7 +11,7 @@ updates:
       day: "monday"
       time: "09:00"
     open-pull-requests-limit: 10
-    reviewers:  # Valid field - IDE may show false warning
+    reviewers: # Valid field - IDE may show false warning
       - "eman-cickusic"
       - "FerhadJukicc"
     labels:
@@ -40,7 +40,7 @@ updates:
     directory: "/"
     schedule:
       interval: "monthly"
-    reviewers:  # Valid field - IDE may show false warning
+    reviewers: # Valid field - IDE may show false warning
       - "eman-cickusic"
       - "FerhadJukicc"
     labels:

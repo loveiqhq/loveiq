@@ -18,9 +18,9 @@ const BASE_URL = __ENV.BASE_URL || "https://www.loveiq.org";
 
 export const options = {
   stages: [
-    { duration: "30s", target: 50 },  // ramp up
-    { duration: "2m", target: 50 },   // hold
-    { duration: "30s", target: 0 },   // ramp down
+    { duration: "30s", target: 50 }, // ramp up
+    { duration: "2m", target: 50 }, // hold
+    { duration: "30s", target: 0 }, // ramp down
   ],
   thresholds: {
     http_req_duration: ["p(95)<3000", "p(99)<5000"],

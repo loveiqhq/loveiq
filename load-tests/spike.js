@@ -20,8 +20,8 @@ const BASE_URL = __ENV.BASE_URL || "https://www.loveiq.org";
 export const options = {
   stages: [
     { duration: "10s", target: 100 }, // instant spike
-    { duration: "1m", target: 100 },  // hold at peak
-    { duration: "5s", target: 0 },    // drop
+    { duration: "1m", target: 100 }, // hold at peak
+    { duration: "5s", target: 0 }, // drop
   ],
   thresholds: {
     http_req_duration: ["p(95)<5000"],
@@ -42,10 +42,14 @@ export default function () {
 
   // Also probe the waitlist API — expects 403 (CSRF missing), not 500
   if (Math.random() < 0.2) {
-    const apiRes = http.post(`${BASE_URL}/api/waitlist`, JSON.stringify({ email: "test@test.com" }), {
-      headers: { "Content-Type": "application/json" },
-      tags: { page: "/api/waitlist" },
-    });
+    const apiRes = http.post(
+      `${BASE_URL}/api/waitlist`,
+      JSON.stringify({ email: "test@test.com" }),
+      {
+        headers: { "Content-Type": "application/json" },
+        tags: { page: "/api/waitlist" },
+      }
+    );
     check(apiRes, {
       "waitlist API alive (403 CSRF, not 500)": (r) => r.status === 403,
     });

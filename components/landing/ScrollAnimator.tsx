@@ -17,7 +17,7 @@ const ScrollAnimator = () => {
           }
         });
       },
-      { threshold: 0.12, rootMargin: "0px 0px -10% 0px" },
+      { threshold: 0.12, rootMargin: "0px 0px -10% 0px" }
     );
 
     elements.forEach((el) => observer.observe(el));

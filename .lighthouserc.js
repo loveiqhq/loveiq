@@ -5,7 +5,11 @@ module.exports = {
       startServerCommand: "npm run start",
       startServerReadyPattern: "Ready in",
       startServerReadyTimeout: 30000,
-      url: ["http://localhost:3000/", "http://localhost:3000/about", "http://localhost:3000/waitlist"],
+      url: [
+        "http://localhost:3000/",
+        "http://localhost:3000/about",
+        "http://localhost:3000/waitlist",
+      ],
       numberOfRuns: 1,
     },
     assert: {

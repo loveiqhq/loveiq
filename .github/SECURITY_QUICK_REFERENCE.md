@@ -12,6 +12,7 @@ npm run build   # Must succeed
 ```
 
 **Check:**
+
 - [ ] No secrets/API keys in code
 - [ ] No console.log (use console.info/warn/error)
 - [ ] No eval() or dangerouslySetInnerHTML
@@ -68,13 +69,13 @@ export async function POST(request: Request) {
 
 ## ✅ Required for All API Routes
 
-| HTTP Method | CSRF | Rate Limit | Validation |
-|-------------|------|------------|------------|
-| POST | ✅ Required | ✅ Required | ✅ Required |
-| PUT | ✅ Required | ✅ Recommended | ✅ Required |
-| DELETE | ✅ Required | ✅ Recommended | ❌ Optional |
-| PATCH | ✅ Required | ✅ Recommended | ✅ Required |
-| GET | ❌ No | ❌ No | ❌ No |
+| HTTP Method | CSRF        | Rate Limit     | Validation  |
+| ----------- | ----------- | -------------- | ----------- |
+| POST        | ✅ Required | ✅ Required    | ✅ Required |
+| PUT         | ✅ Required | ✅ Recommended | ✅ Required |
+| DELETE      | ✅ Required | ✅ Recommended | ❌ Optional |
+| PATCH       | ✅ Required | ✅ Recommended | ✅ Required |
+| GET         | ❌ No       | ❌ No          | ❌ No       |
 
 ---
 
@@ -100,10 +101,10 @@ console.info(publicData)  // or error/warn
 
 ## 🔐 Environment Variables
 
-| Prefix | Where | Example |
-|--------|-------|---------|
-| None | Server only | `SUPABASE_SERVICE_ROLE_KEY` |
-| `NEXT_PUBLIC_` | Server + Client | `NEXT_PUBLIC_SITE_URL` |
+| Prefix         | Where           | Example                     |
+| -------------- | --------------- | --------------------------- |
+| None           | Server only     | `SUPABASE_SERVICE_ROLE_KEY` |
+| `NEXT_PUBLIC_` | Server + Client | `NEXT_PUBLIC_SITE_URL`      |
 
 **Rule:** If client needs it, prefix with `NEXT_PUBLIC_`. Otherwise, never expose.
 
@@ -129,48 +130,48 @@ npx @cyclonedx/cyclonedx-npm --output-file sbom.json
 
 ## 📊 View Security Results
 
-| What | Where |
-|------|-------|
-| Code scanning alerts | GitHub → Security → Code scanning |
-| Dependency alerts | GitHub → Security → Dependabot |
-| Secret scanning | GitHub → Security → Secret scanning |
-| Workflow logs | GitHub → Actions → Security & Quality |
-| SBOM artifact | Actions → Latest run → Artifacts |
+| What                 | Where                                 |
+| -------------------- | ------------------------------------- |
+| Code scanning alerts | GitHub → Security → Code scanning     |
+| Dependency alerts    | GitHub → Security → Dependabot        |
+| Secret scanning      | GitHub → Security → Secret scanning   |
+| Workflow logs        | GitHub → Actions → Security & Quality |
+| SBOM artifact        | Actions → Latest run → Artifacts      |
 
 ---
 
 ## 🔧 Workflow Triggers
 
-| Event | Workflow | Duration |
-|-------|----------|----------|
-| Push to main | Full security scan | ~10-15 min |
-| Pull request | Full security scan | ~10-15 min |
-| Monday 9am UTC | Scheduled scan | ~10-15 min |
-| Tuesday 2:30am UTC | CodeQL only | ~5-10 min |
+| Event              | Workflow           | Duration   |
+| ------------------ | ------------------ | ---------- |
+| Push to main       | Full security scan | ~10-15 min |
+| Pull request       | Full security scan | ~10-15 min |
+| Monday 9am UTC     | Scheduled scan     | ~10-15 min |
+| Tuesday 2:30am UTC | CodeQL only        | ~5-10 min  |
 
 ---
 
 ## 🐛 Common Issues & Fixes
 
-| Issue | Fix |
-|-------|-----|
-| "Invalid request" (403) | Clear cookies, refresh page |
-| "Please try again later" (429) | Wait 1 minute, retry |
-| Linting fails | Fix errors, don't suppress unless necessary |
-| Build fails | Check for type errors, missing imports |
-| Secret detected | Rotate immediately, then suppress if false positive |
+| Issue                          | Fix                                                 |
+| ------------------------------ | --------------------------------------------------- |
+| "Invalid request" (403)        | Clear cookies, refresh page                         |
+| "Please try again later" (429) | Wait 1 minute, retry                                |
+| Linting fails                  | Fix errors, don't suppress unless necessary         |
+| Build fails                    | Check for type errors, missing imports              |
+| Secret detected                | Rotate immediately, then suppress if false positive |
 
 ---
 
 ## 📚 Documentation Links
 
-| Need to... | Read |
-|------------|------|
+| Need to...             | Read                       |
+| ---------------------- | -------------------------- |
 | Enable GitHub features | `GITHUB_SECURITY_SETUP.md` |
-| Understand scanning | `SECURITY_SCANNING.md` |
-| Follow best practices | `SECURITY_CHECKLIST.md` |
-| Review security policy | `SECURITY.md` |
-| Understand codebase | `CLAUDE.md` |
+| Understand scanning    | `SECURITY_SCANNING.md`     |
+| Follow best practices  | `SECURITY_CHECKLIST.md`    |
+| Review security policy | `SECURITY.md`              |
+| Understand codebase    | `CLAUDE.md`                |
 
 ---
 
@@ -195,21 +196,22 @@ npx @cyclonedx/cyclonedx-npm --output-file sbom.json
 
 ## 🎯 Security Severity Guide
 
-| Level | Action | Timeline |
-|-------|--------|----------|
-| **Critical** | Fix immediately, deploy ASAP | < 24 hours |
-| **High** | Fix in current sprint | < 1 week |
-| **Medium** | Create issue, prioritize next | < 1 month |
-| **Low** | Create issue, backlog | As time permits |
-| **Info** | Review, document, no action | Optional |
+| Level        | Action                        | Timeline        |
+| ------------ | ----------------------------- | --------------- |
+| **Critical** | Fix immediately, deploy ASAP  | < 24 hours      |
+| **High**     | Fix in current sprint         | < 1 week        |
+| **Medium**   | Create issue, prioritize next | < 1 month       |
+| **Low**      | Create issue, backlog         | As time permits |
+| **Info**     | Review, document, no action   | Optional        |
 
 ---
 
 ## ⚠️ Red Flags in Code Review
 
 Look for:
+
 - [ ] API routes missing CSRF/rate limiting/validation
-- [ ] `process.env.*` in client components (without NEXT_PUBLIC_)
+- [ ] `process.env.*` in client components (without NEXT*PUBLIC*)
 - [ ] `eval()`, `new Function()`, `dangerouslySetInnerHTML`
 - [ ] Hardcoded secrets (even test data)
 - [ ] Missing error handling
@@ -236,6 +238,7 @@ Look for:
 Email: security@loveiq.org
 
 Include:
+
 - Description of vulnerability
 - Steps to reproduce
 - Potential impact

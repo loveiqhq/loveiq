@@ -1,10 +1,24 @@
 import nextConfig from "eslint-config-next";
+import securityPlugin from "eslint-plugin-security";
+import noSecretsPlugin from "eslint-plugin-no-secrets";
 
 const eslintConfig = [
   {
     ignores: ["scripts/*-output.js", ".next/**", "node_modules/**", "out/**"],
   },
   ...nextConfig,
+  {
+    // eslint-plugin-security: detect unsafe patterns in server-side code
+    files: ["app/api/**/*.ts", "lib/**/*.ts", "proxy.ts"],
+    plugins: { security: securityPlugin },
+    rules: securityPlugin.configs.recommended.rules,
+  },
+  {
+    // eslint-plugin-no-secrets: detect hardcoded credentials in server-side code
+    files: ["app/api/**/*.ts", "lib/**/*.ts", "proxy.ts"],
+    plugins: { "no-secrets": noSecretsPlugin },
+    rules: { "no-secrets/no-secrets": "error" },
+  },
   {
     // Security-focused rules for API routes and sensitive code
     files: ["app/api/**/*.ts", "lib/**/*.ts", "proxy.ts"],
@@ -44,7 +58,8 @@ const eslintConfig = [
       "no-restricted-syntax": [
         "error",
         {
-          selector: "MemberExpression[object.object.name='process'][object.property.name='env'][property.name!=/^NEXT_PUBLIC_/]",
+          selector:
+            "MemberExpression[object.object.name='process'][object.property.name='env'][property.name!=/^NEXT_PUBLIC_/]",
           message: "Only NEXT_PUBLIC_* environment variables are available in client components",
         },
       ],

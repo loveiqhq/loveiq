@@ -24,23 +24,17 @@ const nextConfig = {
       {
         // Videos — long cache, immutable (filenames change when content changes)
         source: "/:path*.mp4",
-        headers: [
-          { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
-        ],
+        headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
       },
       {
         // Images — long cache
         source: "/:path*.{jpg,jpeg,png,webp,gif,avif}",
-        headers: [
-          { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
-        ],
+        headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
       },
       {
         // SVGs — long cache
         source: "/:path*.svg",
-        headers: [
-          { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
-        ],
+        headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
       },
     ];
   },

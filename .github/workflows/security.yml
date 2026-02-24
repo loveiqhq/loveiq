@@ -9,6 +9,10 @@ on:
     # Run security scans weekly on Mondays at 9am UTC
     - cron: "0 9 * * 1"
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
   security-events: write
@@ -26,7 +30,7 @@ jobs:
           fetch-depth: 10 # Last 10 commits
 
       - name: TruffleHog Secret Scan
-        uses: trufflesecurity/trufflehog@v3.88.28
+        uses: trufflesecurity/trufflehog@e42153d44a5e5c37c1bd0c70e074781e9edcb760 # v3.88.28
         with:
           extra_args: --only-verified
 
@@ -87,7 +91,6 @@ jobs:
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@9e907b5e64f6b83e7804b09294d44122997950d6 # v4
-        continue-on-error: true # Allow to fail if Advanced Security not enabled
         with:
           category: "/language:${{matrix.language}}"
           upload: false # Don't upload SARIF (requires Advanced Security)
@@ -110,7 +113,7 @@ jobs:
         run: npm ci
 
       - name: Run npm audit
-        run: npm audit --audit-level=high --omit=dev
+        run: npm audit --audit-level=high
 
       - name: Generate SBOM (CycloneDX)
         run: npx @cyclonedx/cyclonedx-npm --output-file sbom.json
@@ -122,10 +125,12 @@ jobs:
           path: sbom.json
           retention-days: 90
 
-      - name: Check for known vulnerabilities in SBOM
-        run: |
-          echo "SBOM generated. Manual review recommended."
-          cat sbom.json | jq '.components | length'
+      - name: Scan for known vulnerabilities (OSV)
+        uses: google/osv-scanner-action@e69cc6c86b31f1e7e23935bbe7031b50e51082de # v2.0.2
+        with:
+          scan-args: |-
+            --lockfile=package-lock.json
+          upload-sarif: false
 
   # Enhanced linting with security rules
   security-lint:
@@ -144,11 +149,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Install security ESLint plugins
-        run: npm install --no-save eslint-plugin-security eslint-plugin-no-secrets
-
       - name: Run ESLint with security rules
-        run: npx eslint . --ext .js,.jsx,.ts,.tsx --format json --output-file eslint-results.json || true
+        run: npx eslint . --ext .js,.jsx,.ts,.tsx --format json --output-file eslint-results.json
 
       - name: Display ESLint results
         run: |

@@ -107,7 +107,10 @@
       "Bash(python3:*)",
       "Bash(git mv:*)",
       "WebFetch(domain:eslint.org)",
-      "WebFetch(domain:www.npmjs.com)"
+      "WebFetch(domain:www.npmjs.com)",
+      "Bash(git ls-remote:*)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:google.github.io)"
     ]
   }
 }

@@ -18,20 +18,20 @@ npm run dev
 
 ### Required for full functionality
 
-| Variable | Purpose | Required for dev? |
-|----------|---------|-------------------|
-| `SUPABASE_URL` | Waitlist database | Only for form submissions |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase auth | Only for form submissions |
-| `RESEND_API_KEY` | Email sending | Only for form submissions |
-| `NEXT_PUBLIC_RECAPTCHA_SITE_KEY` | Contact form captcha | Only for contact form |
-| `RECAPTCHA_SECRET_KEY` | Captcha verification | Only for contact form |
+| Variable                         | Purpose              | Required for dev?         |
+| -------------------------------- | -------------------- | ------------------------- |
+| `SUPABASE_URL`                   | Waitlist database    | Only for form submissions |
+| `SUPABASE_SERVICE_ROLE_KEY`      | Supabase auth        | Only for form submissions |
+| `RESEND_API_KEY`                 | Email sending        | Only for form submissions |
+| `NEXT_PUBLIC_RECAPTCHA_SITE_KEY` | Contact form captcha | Only for contact form     |
+| `RECAPTCHA_SECRET_KEY`           | Captcha verification | Only for contact form     |
 
 ### Optional
 
-| Variable | Purpose |
-|----------|---------|
+| Variable                     | Purpose                                  |
+| ---------------------------- | ---------------------------------------- |
 | `SLACK_WAITLIST_WEBHOOK_URL` | Slack notifications for waitlist signups |
-| `SLACK_CONTACT_WEBHOOK_URL` | Slack notifications for contact form |
+| `SLACK_CONTACT_WEBHOOK_URL`  | Slack notifications for contact form     |
 
 **Tip:** You can run the site without any env vars set - the UI will render fine. Forms will fail gracefully with error messages.
 
@@ -41,17 +41,18 @@ npm run dev
 
 The middleware applies different CSP rules based on environment:
 
-| Directive | Development | Production |
-|-----------|-------------|------------|
-| `script-src` | Includes `'unsafe-eval'` for HMR | No `'unsafe-eval'` |
-| `connect-src` | Allows `ws://localhost:*` | HTTPS only |
-| `upgrade-insecure-requests` | Disabled | Enabled |
+| Directive                   | Development                      | Production         |
+| --------------------------- | -------------------------------- | ------------------ |
+| `script-src`                | Includes `'unsafe-eval'` for HMR | No `'unsafe-eval'` |
+| `connect-src`               | Allows `ws://localhost:*`        | HTTPS only         |
+| `upgrade-insecure-requests` | Disabled                         | Enabled            |
 
 This is handled automatically - no configuration needed.
 
 ### Third-Party Scripts
 
 In development, these scripts still load but may not function fully without keys:
+
 - **Google Analytics** - Loads but won't track without valid ID
 - **CookieYes** - Cookie consent banner loads
 - **reCAPTCHA** - Requires `NEXT_PUBLIC_RECAPTCHA_SITE_KEY`
@@ -65,6 +66,7 @@ If you see `EvalError: call to eval() blocked by CSP` in the console, ensure you
 ### Form submissions fail with 403
 
 The CSRF token is set via a cookie (`__csrf`). If forms return 403:
+
 1. Clear cookies for localhost
 2. Refresh the page (middleware sets the cookie on first request)
 3. Try submitting again
