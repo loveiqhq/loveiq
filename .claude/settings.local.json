@@ -110,7 +110,8 @@
       "WebFetch(domain:www.npmjs.com)",
       "Bash(git ls-remote:*)",
       "WebFetch(domain:raw.githubusercontent.com)",
-      "WebFetch(domain:google.github.io)"
+      "WebFetch(domain:google.github.io)",
+      "Bash(tail:*)"
     ]
   }
 }

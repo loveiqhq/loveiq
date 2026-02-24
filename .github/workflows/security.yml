@@ -30,7 +30,7 @@ jobs:
           fetch-depth: 10 # Last 10 commits
 
       - name: TruffleHog Secret Scan
-        uses: trufflesecurity/trufflehog@e42153d44a5e5c37c1bd0c70e074781e9edcb760 # v3.88.28
+        uses: trufflesecurity/trufflehog@7c0734f987ad0bb30ee8da210773b800ee2016d3 # v3.93.4
         with:
           extra_args: --only-verified
 
@@ -80,17 +80,17 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@9e907b5e64f6b83e7804b09294d44122997950d6 # v4
+        uses: github/codeql-action/init@e34fc2711fb7964ca6850c8a8382121f34745f3b # v4.32.4
         with:
           languages: ${{ matrix.language }}
           # Use security-extended query suite for more thorough analysis
           queries: security-extended
 
       - name: Autobuild
-        uses: github/codeql-action/autobuild@9e907b5e64f6b83e7804b09294d44122997950d6 # v4
+        uses: github/codeql-action/autobuild@e34fc2711fb7964ca6850c8a8382121f34745f3b # v4.32.4
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@9e907b5e64f6b83e7804b09294d44122997950d6 # v4
+        uses: github/codeql-action/analyze@e34fc2711fb7964ca6850c8a8382121f34745f3b # v4.32.4
         with:
           category: "/language:${{matrix.language}}"
           upload: false # Don't upload SARIF (requires Advanced Security)
@@ -126,11 +126,10 @@ jobs:
           retention-days: 90
 
       - name: Scan for known vulnerabilities (OSV)
-        uses: google/osv-scanner-action@e69cc6c86b31f1e7e23935bbe7031b50e51082de # v2.0.2
-        with:
-          scan-args: |-
-            --lockfile=package-lock.json
-          upload-sarif: false
+        run: |
+          curl -sSfL "https://github.com/google/osv-scanner/releases/download/v1.9.2/osv-scanner_linux_amd64" -o /tmp/osv-scanner
+          chmod +x /tmp/osv-scanner
+          /tmp/osv-scanner --lockfile=package-lock.json
 
   # Enhanced linting with security rules
   security-lint:
