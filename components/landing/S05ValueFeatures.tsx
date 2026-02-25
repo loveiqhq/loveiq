@@ -5,9 +5,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 const noopSubscribe = () => () => {};
 const getVideoSrc = () =>
-  window.innerWidth <= 640
-    ? "/8060391-uhd_4096_2160_25fps-mobile.mp4"
-    : "/8060391-uhd_4096_2160_25fps.mp4";
+  window.innerWidth <= 640 ? "/couple-hero-mobile.mp4" : "/couple-hero.mp4";
 const getServerVideoSrc = (): string | null => null;
 
 const bullets = [
