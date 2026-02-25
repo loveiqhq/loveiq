@@ -1,7 +1,7 @@
 "use client";
 
 import type { FC } from "react";
-import { useCallback, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { trackLearnMore, trackStartSurvey } from "@/lib/analytics";
 
@@ -13,19 +13,45 @@ const getServerVideoSrc = (): string | null => null;
 const S01Hero: FC = () => {
   const [videoReady, setVideoReady] = useState(false);
   const videoSrc = useSyncExternalStore(noopSubscribe, getVideoSrc, getServerVideoSrc);
+  const videoElRef = useRef<HTMLVideoElement | null>(null);
 
-  const videoRef = useCallback((video: HTMLVideoElement | null) => {
-    if (!video) return;
-    video.playbackRate = 0.75;
-    if (video.readyState >= 2) {
-      setVideoReady(true);
-      return;
-    }
-    const onReady = () => setVideoReady(true);
-    video.addEventListener("canplay", onReady, { once: true });
-    video.addEventListener("loadeddata", onReady, { once: true });
-    video.addEventListener("playing", onReady, { once: true });
+  const tryPlay = useCallback(() => {
+    const video = videoElRef.current;
+    if (!video || !video.paused) return;
+    video.play().catch(() => {});
   }, []);
+
+  const videoRef = useCallback(
+    (video: HTMLVideoElement | null) => {
+      if (!video) return;
+      videoElRef.current = video;
+      video.playbackRate = 0.75;
+      const onReady = () => {
+        setVideoReady(true);
+        tryPlay();
+      };
+      if (video.readyState >= 2) {
+        onReady();
+        return;
+      }
+      video.addEventListener("canplay", onReady, { once: true });
+      video.addEventListener("loadeddata", onReady, { once: true });
+      video.addEventListener("playing", onReady, { once: true });
+    },
+    [tryPlay]
+  );
+
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (!document.hidden) tryPlay();
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("pageshow", tryPlay);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("pageshow", tryPlay);
+    };
+  }, [tryPlay]);
 
   return (
     <section

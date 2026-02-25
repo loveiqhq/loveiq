@@ -1,7 +1,7 @@
 "use client";
 
 import type { FC } from "react";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 const noopSubscribe = () => () => {};
 const getVideoSrc = () =>
@@ -27,6 +27,41 @@ const S05ValueFeatures: FC = () => {
   const [loadVideo, setLoadVideo] = useState(false);
   const sectionRef = useRef<HTMLElement | null>(null);
   const videoSrc = useSyncExternalStore(noopSubscribe, getVideoSrc, getServerVideoSrc);
+  const videoElRef = useRef<HTMLVideoElement | null>(null);
+
+  const tryPlay = useCallback(() => {
+    const video = videoElRef.current;
+    if (!video || !video.paused) return;
+    video.play().catch(() => {});
+  }, []);
+
+  const videoRef = useCallback(
+    (video: HTMLVideoElement | null) => {
+      if (!video) return;
+      videoElRef.current = video;
+      const onReady = () => tryPlay();
+      if (video.readyState >= 2) {
+        onReady();
+        return;
+      }
+      video.addEventListener("canplay", onReady, { once: true });
+      video.addEventListener("loadeddata", onReady, { once: true });
+      video.addEventListener("playing", onReady, { once: true });
+    },
+    [tryPlay]
+  );
+
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (!document.hidden) tryPlay();
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("pageshow", tryPlay);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("pageshow", tryPlay);
+    };
+  }, [tryPlay]);
 
   useEffect(() => {
     const section = sectionRef.current;
@@ -70,6 +105,7 @@ const S05ValueFeatures: FC = () => {
           <div className="relative h-full w-full overflow-hidden rounded-[24px]">
             {loadVideo && videoSrc && (
               <video
+                ref={videoRef}
                 className="absolute inset-0 h-full w-full object-cover lg:object-cover"
                 autoPlay
                 muted
