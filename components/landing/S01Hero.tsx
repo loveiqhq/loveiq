@@ -18,7 +18,11 @@ const S01Hero: FC = () => {
   const tryPlay = useCallback(() => {
     const video = videoElRef.current;
     if (!video || !video.paused) return;
-    video.play().catch(() => {});
+    video.play().catch(() => {
+      const resume = () => video.play().catch(() => {});
+      document.addEventListener("touchstart", resume, { once: true, capture: true });
+      document.addEventListener("click", resume, { once: true, capture: true });
+    });
   }, []);
 
   const videoRef = useCallback(
