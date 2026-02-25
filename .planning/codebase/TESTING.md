@@ -102,7 +102,8 @@ e2e/
 ├── smoke.spec.ts        # Landing, nav, footer, security headers, 404, API
 ├── navigation.spec.ts   # Desktop nav links + mobile hamburger
 ├── interactions.spec.ts # FAQ accordion, CTA hrefs, footer links, waitlist form
-└── pages.spec.ts        # All 12 static routes: status 200 + title check
+├── pages.spec.ts        # Static routes: status 200 + title check
+└── a11y.spec.ts         # Accessibility audits via axe-core
 ```
 
 **Viewport breakpoints:**

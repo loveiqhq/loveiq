@@ -61,7 +61,7 @@ In development, these scripts still load but may not function fully without keys
 
 ### Blank sections / CSP errors in dev
 
-If you see `EvalError: call to eval() blocked by CSP` in the console, ensure you're running the latest `middleware.ts` which relaxes CSP in development.
+If you see `EvalError: call to eval() blocked by CSP` in the console, ensure you're running the latest `proxy.ts` which relaxes CSP in development.
 
 ### Form submissions fail with 403
 

@@ -94,8 +94,6 @@ The repository uses multiple layers of automated security scanning:
 - `eslint-plugin-no-secrets` for secret detection
 - Custom rules in `eslint.config.mjs`
 
-**For detailed information**, see `SECURITY_SCANNING.md`.
-
 ## Incident response
 
 - On suspected compromise: rotate Supabase/Resend keys, invalidate sessions if added later, redeploy, and review logs. Notify affected users if data exposure is confirmed.

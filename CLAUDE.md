@@ -303,7 +303,7 @@ Always return `{ error: string }` or `{ success: true }`. Keep error messages ge
 #### Add a New Landing Section
 
 1. Create `components/landing/S##NewSection.tsx`
-2. Follow existing section patterns (see `S05Archetypes.tsx` for complex example)
+2. Follow existing section patterns (see `S06Archetypes.tsx` for complex example)
 3. Import and add to `components/landing/LandingPage.tsx` in order
 4. Use `animate-on-scroll` class for scroll animations
 

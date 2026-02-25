@@ -1,6 +1,6 @@
 # Technology Stack
 
-**Analysis Date:** 2025-01-14
+**Analysis Date:** 2026-02-25
 
 ## Languages
 
@@ -16,7 +16,7 @@
 
 **Environment:**
 
-- Node.js (no version pinned, typical Next.js 14 compatibility)
+- Node.js (no version pinned, typical Next.js 16 compatibility)
 - Browser runtime (React client components)
 
 **Package Manager:**
@@ -28,28 +28,39 @@
 
 **Core:**
 
-- Next.js 14.2.0 - Full-stack React framework with App Router (`package.json`)
-- React 18.2.0 - UI component library (`package.json`)
-- React DOM 18.2.0 - React rendering for web (`package.json`)
+- Next.js ^16.1.6 - Full-stack React framework with App Router (`package.json`)
+- React ^19.2.4 - UI component library (`package.json`)
+- React DOM ^19.2.4 - React rendering for web (`package.json`)
 
 **Testing:**
 
-- Not detected (no test framework in dependencies)
+- Vitest ^4.0.18 - Unit/integration test runner (`package.json`, `__tests__/`)
+- Playwright ^1.58.2 - E2E browser testing (`package.json`, `e2e/`)
+- @axe-core/playwright ^4.11.1 - Accessibility audits in E2E (`package.json`)
+- @testing-library/react ^16.3.2 - React component testing utilities
 
 **Build/Dev:**
 
-- TypeScript 5.3.3 - Type checking and compilation (`package.json`)
-- PostCSS 8.4.31 - CSS processing (`postcss.config.js`)
-- Autoprefixer 10.4.16 - CSS vendor prefixes (`package.json`)
-- Tailwind CSS 3.4.4 - Utility-first CSS framework (`tailwind.config.js`)
-- ESLint 8.57.1 - Code linting (`package.json`)
+- TypeScript ^5.3.3 - Type checking and compilation (`package.json`)
+- PostCSS ^8.4.31 - CSS processing (`postcss.config.js`)
+- Autoprefixer ^10.4.24 - CSS vendor prefixes (`package.json`)
+- Tailwind CSS ^3.4.19 - Utility-first CSS framework (`tailwind.config.js`)
+- ESLint ^9.39.2 - Code linting (`package.json`)
+- Prettier ^3.8.1 - Code formatting
+- Husky ^9.1.7 - Git hooks (pre-push runs unit tests)
 
 ## Key Dependencies
 
 **Critical:**
 
-- Resend 6.6.0 - Transactional email service (`package.json`, `app/api/waitlist/route.ts`, `app/api/contact/route.ts`)
-- Zod 4.3.4 - Schema validation (`package.json`, `app/api/waitlist/route.ts`, `app/api/contact/route.ts`)
+- Resend ^6.9.2 - Transactional email service (`package.json`, `app/api/waitlist/route.ts`, `app/api/contact/route.ts`)
+- Zod ^4.3.6 - Schema validation (`package.json`, `app/api/waitlist/route.ts`, `app/api/contact/route.ts`)
+- Lenis ^1.3.17 - Smooth scroll library (`components/SmoothScroll.tsx`)
+
+**Observability:**
+
+- @vercel/otel ^2.1.1 - OpenTelemetry for Vercel
+- pino ^10.3.1 - Structured logging
 
 **Infrastructure:**
 
@@ -58,11 +69,14 @@
 
 **Dev Only:**
 
-- @types/node 20.11.0 - Node.js type definitions
-- @types/react 18.2.43 - React type definitions
-- @types/react-dom 18.2.17 - React DOM type definitions
-- eslint-config-next 14.2.0 - Next.js ESLint rules
-- ffmpeg-static 5.3.0 - FFmpeg binary (purpose unclear, possibly unused)
+- @types/node ^25.3.0 - Node.js type definitions
+- @types/react ^19.2.14 - React type definitions
+- @types/react-dom ^19.2.3 - React DOM type definitions
+- eslint-config-next ^16.1.6 - Next.js ESLint rules
+- eslint-plugin-no-secrets ^2.2.2 - Secret detection in code
+- eslint-plugin-security ^4.0.0 - Security anti-pattern linting
+- @next/bundle-analyzer ^16.1.6 - Bundle size visualization (`npm run analyze`)
+- csv-parse ^6.1.0 - CSV parsing (used by `scripts/update-glossary.js`)
 
 ## Configuration
 
@@ -79,10 +93,11 @@
 **Build:**
 
 - `tsconfig.json` - TypeScript compiler options (strict mode enabled)
-- `next.config.js` - Next.js configuration with security headers
+- `next.config.js` - Next.js configuration
 - `tailwind.config.js` - Tailwind with custom design tokens
 - `postcss.config.js` - PostCSS with Tailwind and Autoprefixer
-- `.eslintrc.json` - ESLint extending next/core-web-vitals
+- `eslint.config.mjs` - Flat ESLint config (ESLint 9+)
+- `proxy.ts` - Next.js middleware: CSP headers, CSRF cookies, security logging
 
 ## Platform Requirements
 
@@ -94,10 +109,10 @@
 **Production:**
 
 - Vercel-ready (Next.js optimized)
-- Strict CSP headers configured in `next.config.js`
+- Strict CSP headers configured in `proxy.ts`
 - HSTS, X-Frame-Options, and other security headers enabled
 
 ---
 
-_Stack analysis: 2025-01-14_
+_Stack analysis: 2026-02-25_
 _Update after major dependency changes_
