@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import type { FC } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { trackStartSurvey } from "@/lib/analytics";
 
@@ -195,20 +196,14 @@ const LegalNavSection: FC = () => {
                 className="flex items-center gap-2 focus-visible-ring"
                 onClick={closeMenu}
               >
-                <div className="relative flex h-7 w-7 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-[#ff9450] via-[#fe6839] to-[#c36ddf] shadow-[0_8px_18px_rgba(0,0,0,0.28)]">
-                  <svg
-                    aria-hidden
-                    viewBox="0 0 24 24"
-                    className="relative h-3.5 w-3.5 text-white"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M12 19s-7-4-7-9a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5-7 9-7 9Z" />
-                  </svg>
-                </div>
+                <Image
+                  src="/favicon.svg"
+                  alt=""
+                  width={28}
+                  height={28}
+                  unoptimized
+                  className="h-7 w-7 rounded-full shadow-[0_8px_18px_rgba(0,0,0,0.28)]"
+                />
                 <span className="font-serif text-xl font-semibold text-white">LoveIQ</span>
               </Link>
             </div>
