@@ -363,7 +363,7 @@ const GlossaryPage: FC = () => {
                 patterns and relationship dynamics.
               </p>
               <Link
-                href="/waitlist"
+                href="/survey"
                 className="group relative inline-flex items-center justify-center gap-2 overflow-hidden rounded-full bg-gradient-brand px-6 py-3 text-sm font-semibold text-white shadow-pill transition hover:translate-y-[-2px] focus-visible-ring"
                 onClick={() => trackStartSurvey("footer")}
               >

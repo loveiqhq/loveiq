@@ -131,7 +131,7 @@ const S01Hero: FC = () => {
         <div className="animate-on-scroll mt-12 flex flex-col items-center gap-4 sm:flex-row">
           <div className="relative rounded-full p-0 shadow-[0_28px_90px_rgba(254,104,57,0.28),0_14px_50px_rgba(0,0,0,0.45)]">
             <Link
-              href="/waitlist"
+              href="/survey"
               aria-label="Start survey now - begin your assessment"
               className="group relative inline-flex h-[58px] min-w-[220px] items-center justify-center gap-2 overflow-hidden rounded-full bg-gradient-brand px-10 text-[15px] font-semibold text-white shadow-pill transition hover:translate-y-[-2px] focus-visible-ring transition-colors duration-500"
               onClick={() => trackStartSurvey("hero")}

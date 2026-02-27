@@ -88,10 +88,10 @@ describe("NavSection", () => {
     expect(homeLinks[0]).toHaveAttribute("href", "/");
   });
 
-  it("Start survey now CTA links to /waitlist", () => {
+  it("Start survey now CTA links to /survey", () => {
     render(<NavSection />);
     const ctaLinks = screen.getAllByRole("link", { name: /start survey now/i });
     expect(ctaLinks.length).toBeGreaterThan(0);
-    ctaLinks.forEach((link) => expect(link).toHaveAttribute("href", "/waitlist"));
+    ctaLinks.forEach((link) => expect(link).toHaveAttribute("href", "/survey"));
   });
 });

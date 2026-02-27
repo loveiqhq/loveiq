@@ -218,7 +218,7 @@ const GlossaryNavSection: FC = () => {
                 </Link>
               ))}
               <Link
-                href="/waitlist"
+                href="/survey"
                 className="group relative inline-flex shrink-0 items-center justify-center gap-1.5 overflow-hidden whitespace-nowrap rounded-full bg-gradient-brand px-3.5 py-2 text-[12px] font-semibold text-white shadow-pill transition hover:translate-y-[-2px] focus-visible-ring sm:gap-2 sm:px-6 sm:py-3 sm:text-sm"
                 onClick={() => trackStartSurvey("nav")}
               >
@@ -304,7 +304,7 @@ const GlossaryNavSection: FC = () => {
                 style={{ transitionDelay: menuOpen ? "320ms" : "0ms" }}
               >
                 <Link
-                  href="/waitlist"
+                  href="/survey"
                   role="menuitem"
                   tabIndex={menuOpen ? 0 : -1}
                   aria-label="Start survey now"

@@ -866,7 +866,7 @@ const QuoteSection = () => (
 
       <div className="relative z-10 flex flex-col items-center gap-6 pt-6">
         <Link
-          href="/waitlist"
+          href="/survey"
           className="reveal-on-scroll stagger-1 group relative inline-flex items-center justify-center gap-2 overflow-hidden rounded-full bg-gradient-brand px-6 py-3 text-[16px] font-semibold leading-6 text-white shadow-pill transition hover:-translate-y-[2px] focus-visible-ring"
         >
           <span

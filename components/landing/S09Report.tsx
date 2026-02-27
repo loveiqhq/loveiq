@@ -75,7 +75,7 @@ const S09Report: FC = () => {
 
           <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center">
             <a
-              href="/waitlist"
+              href="/survey"
               aria-label="Start survey now - get your report"
               className="group relative inline-flex items-center justify-center gap-2 overflow-hidden rounded-full bg-gradient-brand px-6 py-3 text-[16px] font-semibold leading-6 text-white shadow-pill transition hover:translate-y-[-2px] focus-visible-ring"
               onClick={() => trackStartSurvey("report_section")}

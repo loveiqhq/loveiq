@@ -5,7 +5,7 @@ const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.loveiq.org";
 
 const coreRoutes = ["/"];
 
-const mainRoutes = ["/about", "/glossary", "/waitlist", "/trust-zone"];
+const mainRoutes = ["/about", "/glossary", "/waitlist", "/survey", "/trust-zone"];
 
 const legalRoutes = [
   "/privacy-policy",

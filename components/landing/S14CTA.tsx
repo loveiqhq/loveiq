@@ -46,7 +46,7 @@ const S14CTA: FC = () => {
 
         <div className="flex flex-col items-center gap-6">
           <a
-            href="/waitlist"
+            href="/survey"
             aria-label="Start survey now - take the first step"
             className="group relative inline-flex items-center justify-center gap-2 overflow-hidden rounded-full bg-gradient-brand px-8 py-3 text-base font-semibold text-white shadow-pill transition hover:translate-y-[-2px] focus-visible-ring"
             onClick={() => trackStartSurvey("footer")}
