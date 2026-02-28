@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, type FC, type ReactNode } from "react";
+import { useState, useCallback, useEffect, useRef, type FC, type ReactNode } from "react";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -367,7 +367,7 @@ const slides: Slide[] = [
       <>
         Everything can be fully anonymous and we encrypt with high security standards. If you prefer
         to remain completely unidentifiable, you&rsquo;re welcome to use an alias email address.{" "}
-        <span className="inline-block whitespace-nowrap">
+        <span className="inline-block">
           Learn more in our{" "}
           <Link href="/trust-zone" className="font-extrabold text-white hover:underline">
             &gt; Trust Zone.
@@ -397,78 +397,97 @@ const slides: Slide[] = [
 const IntroScreen: FC<{
   onContinue: () => void;
   transitioning: boolean;
-}> = ({ onContinue, transitioning }) => (
-  <main
-    className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden px-4 py-16"
-    style={{
-      backgroundImage: "linear-gradient(180deg, #fff 0%, rgba(250,245,255,0.3) 50%, #fff 100%)",
-    }}
-  >
-    <div className="relative z-10 flex w-full max-w-[700px] flex-col items-center text-center">
-      {/* Text + button container — fades out during transition */}
-      <div
-        className="flex flex-col items-center transition-opacity duration-[600ms] ease-out"
-        style={{ opacity: transitioning ? 0 : 1 }}
-      >
-        <h1 className="font-serif text-[36px] font-normal leading-[1.18] tracking-[-0.8px] text-[#1a1a2e] sm:text-[52px] sm:tracking-[-1.2px] md:text-[64px] md:leading-[1.18] md:tracking-[-1.5px]">
-          Let&rsquo;s prepare you well to discover your{" "}
-          <span className="bg-gradient-to-r from-[#fe6839] from-[27%] via-[#a78bfa] via-[77%] to-[#e9d5ff] bg-clip-text text-transparent">
-            sexual archetypes{" "}
-          </span>
-        </h1>
+}> = ({ onContinue, transitioning }) => {
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Enter" && !transitioning) onContinue();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onContinue, transitioning]);
 
-        <p className="mt-8 max-w-[540px] font-sans text-[16px] font-light leading-[1.5] text-[#6a7282] sm:text-[18px] sm:leading-[29px] md:text-[20px]">
-          This short guide will help you get the most meaningful and accurate results. The survey
-          takes about 15 minutes
-        </p>
-
-        <button
-          type="button"
-          onClick={onContinue}
-          disabled={transitioning}
-          className="mt-10 inline-flex h-[54px] items-center justify-center gap-3 rounded-full bg-[#fe6839] px-8 text-[16px] font-bold uppercase tracking-[0.1em] text-white shadow-[0_15px_22px_rgba(254,104,57,0.2),0_6px_9px_rgba(254,104,57,0.2)] transition hover:-translate-y-[2px] hover:shadow-[0_18px_28px_rgba(254,104,57,0.28),0_8px_12px_rgba(254,104,57,0.24)] focus-visible-ring sm:h-[60px] sm:gap-4 sm:px-9 sm:text-[18px] disabled:opacity-70"
+  return (
+    <main
+      className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden px-4 py-16"
+      style={{
+        backgroundImage: "linear-gradient(180deg, #fff 0%, rgba(250,245,255,0.3) 50%, #fff 100%)",
+      }}
+    >
+      <div className="relative z-10 flex w-full max-w-[700px] flex-col items-center text-center">
+        {/* Text + button container — fades out during transition */}
+        <div
+          className="flex flex-col items-center transition-opacity duration-[600ms] ease-out"
+          style={{ opacity: transitioning ? 0 : 1 }}
         >
-          Continue
-          <ArrowRight className="h-5 w-5 sm:h-6 sm:w-6" />
-        </button>
+          <h1
+            className="font-serif text-[36px] font-normal leading-[1.18] tracking-[-0.8px] text-[#1a1a2e] sm:text-[52px] sm:tracking-[-1.2px] md:text-[64px] md:leading-[1.18] md:tracking-[-1.5px]"
+            style={{ animation: "survey-fade-up 700ms cubic-bezier(0.16,1,0.3,1) 0ms both" }}
+          >
+            Let&rsquo;s prepare you well to discover your{" "}
+            <span className="bg-gradient-to-r from-[#fe6839] from-[27%] via-[#a78bfa] via-[77%] to-[#e9d5ff] bg-clip-text text-transparent">
+              sexual archetypes{" "}
+            </span>
+          </h1>
+
+          <p
+            className="mt-8 max-w-[540px] font-sans text-[16px] font-light leading-[1.5] text-[#6a7282] sm:text-[18px] sm:leading-[29px] md:text-[20px]"
+            style={{ animation: "survey-fade-up 700ms cubic-bezier(0.16,1,0.3,1) 150ms both" }}
+          >
+            This short guide will help you get the most meaningful and accurate results. The survey
+            takes about 15 minutes
+          </p>
+
+          <button
+            type="button"
+            onClick={onContinue}
+            disabled={transitioning}
+            className="mt-10 inline-flex h-[54px] items-center justify-center gap-3 rounded-full bg-[#fe6839] px-8 text-[16px] font-bold uppercase tracking-[0.1em] text-white shadow-[0_15px_22px_rgba(254,104,57,0.2),0_6px_9px_rgba(254,104,57,0.2)] transition hover:-translate-y-[2px] hover:shadow-[0_18px_28px_rgba(254,104,57,0.28),0_8px_12px_rgba(254,104,57,0.24)] focus-visible-ring sm:h-[60px] sm:gap-4 sm:px-9 sm:text-[18px] disabled:opacity-70"
+            style={{ animation: "survey-fade-up 700ms cubic-bezier(0.16,1,0.3,1) 300ms both" }}
+          >
+            Continue
+            <ArrowRight className="h-5 w-5 sm:h-6 sm:w-6" />
+          </button>
+        </div>
+
+        {/* Clickable avatar */}
+        <div style={{ animation: "survey-fade-up 700ms cubic-bezier(0.16,1,0.3,1) 450ms both" }}>
+          <button
+            type="button"
+            onClick={onContinue}
+            disabled={transitioning}
+            className={`relative mt-12 h-[240px] w-[177px] sm:mt-16 will-change-transform transition-transform duration-[1200ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${
+              transitioning ? "" : "cursor-pointer hover:scale-[1.03]"
+            }`}
+            style={transitioning ? { transform: "scale(12)" } : undefined}
+            aria-label="Continue to survey introduction"
+          >
+            <div className="absolute -left-[22px] top-0 h-[180px] w-[180px] rounded-full bg-[rgba(255,184,106,0.2)] blur-[56px]" />
+            <div
+              className="absolute left-1/2 top-0 h-[128px] w-[115px] -translate-x-1/2 rounded-full shadow-[0_2.813px_14.063px_0_rgba(126,87,194,0.3)]"
+              style={{
+                background:
+                  "radial-gradient(70.71% 70.71% at 50% 50%, #FE6839 0%, #A78BFA 79.81%, #A78BFA 100%)",
+              }}
+            />
+            <div
+              className="absolute bottom-0 left-1/2 h-[103px] w-[177px] -translate-x-1/2"
+              style={{
+                borderRadius: "23592938px 23592938px 0 0",
+                background: "linear-gradient(180deg, #A78BFA 0%, #541475 68.03%)",
+              }}
+            />
+          </button>
+        </div>
       </div>
 
-      {/* Clickable avatar */}
-      <button
-        type="button"
-        onClick={onContinue}
-        disabled={transitioning}
-        className={`relative mt-12 h-[240px] w-[177px] sm:mt-16 will-change-transform transition-transform duration-[1200ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${
-          transitioning ? "" : "cursor-pointer hover:scale-[1.03]"
-        }`}
-        style={transitioning ? { transform: "scale(12)" } : undefined}
-        aria-label="Continue to survey introduction"
-      >
-        <div className="absolute -left-[22px] top-0 h-[180px] w-[180px] rounded-full bg-[rgba(255,184,106,0.2)] blur-[56px]" />
-        <div
-          className="absolute left-1/2 top-0 h-[128px] w-[115px] -translate-x-1/2 rounded-full shadow-[0_2.813px_14.063px_0_rgba(126,87,194,0.3)]"
-          style={{
-            background:
-              "radial-gradient(70.71% 70.71% at 50% 50%, #FE6839 0%, #A78BFA 79.81%, #A78BFA 100%)",
-          }}
-        />
-        <div
-          className="absolute bottom-0 left-1/2 h-[103px] w-[177px] -translate-x-1/2"
-          style={{
-            borderRadius: "23592938px 23592938px 0 0",
-            background: "linear-gradient(180deg, #A78BFA 0%, #541475 68.03%)",
-          }}
-        />
-      </button>
-    </div>
-
-    {/* Dark overlay — crossfades in during transition */}
-    <div
-      className="pointer-events-none fixed inset-0 z-20 bg-[#0a0510] transition-opacity duration-[800ms] ease-out"
-      style={{ opacity: transitioning ? 1 : 0, transitionDelay: transitioning ? "200ms" : "0ms" }}
-    />
-  </main>
-);
+      {/* Dark overlay — crossfades in during transition */}
+      <div
+        className="pointer-events-none fixed inset-0 z-20 bg-[#0a0510] transition-opacity duration-[800ms] ease-out"
+        style={{ opacity: transitioning ? 1 : 0, transitionDelay: transitioning ? "200ms" : "0ms" }}
+      />
+    </main>
+  );
+};
 
 /* ------------------------------------------------------------------ */
 /*  Dark wizard slide screen                                           */
@@ -479,8 +498,55 @@ const SlideScreen: FC<{
   onBack: () => void;
   onSkip: () => void;
 }> = ({ slideIndex, onContinue, onBack, onSkip }) => {
+  const [isLeaving, setIsLeaving] = useState(false);
   const slide = slides[slideIndex] ?? slides[0];
   const Icon = slideIcons[slide.icon] ?? SparkleIcon;
+
+  const handleNext = useCallback(() => {
+    if (isLeaving) return;
+    setIsLeaving(true);
+    setTimeout(() => {
+      setIsLeaving(false);
+      onContinue();
+    }, 200);
+  }, [onContinue, isLeaving]);
+
+  const handlePrev = useCallback(() => {
+    if (isLeaving) return;
+    setIsLeaving(true);
+    setTimeout(() => {
+      setIsLeaving(false);
+      onBack();
+    }, 200);
+  }, [onBack, isLeaving]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (isLeaving) return;
+      if (e.key === "ArrowRight" || e.key === "Enter") handleNext();
+      if (e.key === "ArrowLeft" && slideIndex > 0) handlePrev();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleNext, handlePrev, slideIndex, isLeaving]);
+
+  // Swipe gesture support for mobile
+  const touchStartX = useRef<number | null>(null);
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+  }, []);
+  const handleTouchEnd = useCallback(
+    (e: React.TouchEvent) => {
+      if (touchStartX.current === null) return;
+      const delta = touchStartX.current - e.changedTouches[0].clientX;
+      touchStartX.current = null;
+      if (Math.abs(delta) < 50) return;
+      if (delta > 0)
+        handleNext(); // swipe left → next
+      else if (slideIndex > 0) handlePrev(); // swipe right → prev
+    },
+    [handleNext, handlePrev, slideIndex]
+  );
 
   return (
     <main
@@ -522,7 +588,12 @@ const SlideScreen: FC<{
         </div>
 
         {/* Slide content — key forces remount on slide change, retriggering animations */}
-        <div key={slideIndex} className="flex flex-1 flex-col justify-center py-12 sm:py-16">
+        <div
+          key={slideIndex}
+          className={`flex flex-1 flex-col justify-center py-12 sm:py-16 transition-opacity duration-200 ${isLeaving ? "opacity-0" : "opacity-100"}`}
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+        >
           <div
             className="survey-animate"
             style={{
@@ -534,7 +605,7 @@ const SlideScreen: FC<{
           </div>
 
           <h2
-            className="survey-animate mt-2 font-serif text-[72px] font-medium leading-[90px] text-white"
+            className="survey-animate mt-2 font-serif text-[36px] font-medium leading-[44px] sm:text-[52px] sm:leading-[64px] lg:text-[72px] lg:leading-[90px] text-white"
             style={{
               opacity: 0,
               animation: "survey-fade-up 700ms cubic-bezier(0.16,1,0.3,1) 150ms both",
@@ -544,7 +615,7 @@ const SlideScreen: FC<{
           </h2>
 
           <p
-            className="survey-animate mt-8 max-w-[798px] font-sans text-[24px] font-normal leading-[39px] text-white/80"
+            className="survey-animate mt-4 sm:mt-8 max-w-[798px] font-sans text-[16px] font-normal leading-[26px] sm:text-[20px] sm:leading-[32px] lg:text-[24px] lg:leading-[39px] text-white/80"
             style={{
               opacity: 0,
               animation: "survey-fade-up 700ms cubic-bezier(0.16,1,0.3,1) 300ms both",
@@ -560,24 +631,29 @@ const SlideScreen: FC<{
           style={{ animation: "survey-fade-in 700ms cubic-bezier(0.16,1,0.3,1) 400ms both" }}
         >
           {/* Step progress bar */}
-          <div className="flex h-1 w-full max-w-[448px] gap-3">
-            {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
-              <div
-                key={i}
-                className="relative h-1 flex-1 overflow-hidden rounded-full"
-                style={{ background: "rgba(255,255,255,0.1)" }}
-              >
+          <div className="space-y-2">
+            <div className="flex h-1 w-full max-w-[448px] gap-3">
+              {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
                 <div
-                  className="absolute inset-y-0 left-0 rounded-full"
-                  style={{
-                    width: i <= slideIndex ? "100%" : "0%",
-                    background: "#fe6839",
-                    boxShadow: i <= slideIndex ? "0 0 8px rgba(254,104,57,0.5)" : "none",
-                    transition: "width 500ms cubic-bezier(0.16,1,0.3,1), box-shadow 400ms ease",
-                  }}
-                />
-              </div>
-            ))}
+                  key={i}
+                  className="relative h-1 flex-1 overflow-hidden rounded-full"
+                  style={{ background: "rgba(255,255,255,0.1)" }}
+                >
+                  <div
+                    className="absolute inset-y-0 left-0 rounded-full"
+                    style={{
+                      width: i <= slideIndex ? "100%" : "0%",
+                      background: "#fe6839",
+                      boxShadow: i <= slideIndex ? "0 0 8px rgba(254,104,57,0.5)" : "none",
+                      transition: "width 500ms cubic-bezier(0.16,1,0.3,1), box-shadow 400ms ease",
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+            <span className="text-[12px] font-medium tracking-[0.5px] text-white/30">
+              {slideIndex + 1} / {TOTAL_STEPS}
+            </span>
           </div>
 
           {/* Navigation buttons */}
@@ -588,7 +664,8 @@ const SlideScreen: FC<{
             >
               <button
                 type="button"
-                onClick={onBack}
+                onClick={handlePrev}
+                aria-label="Go to previous slide"
                 className="flex h-[48px] w-[48px] items-center justify-center rounded-full border border-[rgba(254,104,57,0.3)] bg-[rgba(254,104,57,0.1)] text-[#fe6839] transition hover:-translate-y-[1px] focus-visible-ring"
               >
                 <ArrowLeft className="h-5 w-5" />
@@ -597,8 +674,9 @@ const SlideScreen: FC<{
 
             <button
               type="button"
-              onClick={onContinue}
-              className="inline-flex w-[160.828px] h-[44px] items-center gap-3 rounded-[33554400px] bg-[#FE6839] px-6 text-[14px] font-bold uppercase leading-[20px] tracking-[1.4px] text-white shadow-[0_10px_15px_-3px_rgba(254,104,57,0.2),0_4px_6px_-4px_rgba(254,104,57,0.2)] transition hover:-translate-y-[1px] hover:shadow-[0_14px_20px_-3px_rgba(254,104,57,0.28)] focus-visible-ring"
+              onClick={handleNext}
+              aria-label="Continue to next slide"
+              className="inline-flex h-[48px] items-center gap-3 rounded-full bg-[#FE6839] px-7 sm:px-8 text-[14px] font-bold uppercase leading-[20px] tracking-[1.4px] text-white shadow-[0_10px_15px_-3px_rgba(254,104,57,0.2),0_4px_6px_-4px_rgba(254,104,57,0.2)] transition hover:-translate-y-[1px] hover:shadow-[0_14px_20px_-3px_rgba(254,104,57,0.28)] focus-visible-ring"
             >
               Continue
               <ArrowRight className="h-[18px] w-[18px]" />
@@ -606,6 +684,14 @@ const SlideScreen: FC<{
           </div>
         </div>
       </div>
+
+      {/* Dark overlay — crossfades in when leaving last slide for consent */}
+      {slideIndex === TOTAL_STEPS - 1 && (
+        <div
+          className="pointer-events-none fixed inset-0 z-20 bg-[#0a0510] transition-opacity duration-200 ease-out"
+          style={{ opacity: isLeaving ? 1 : 0 }}
+        />
+      )}
     </main>
   );
 };
@@ -619,7 +705,13 @@ const ConsentScreen: FC<{
 }> = ({ onAgree, onReturn }) => {
   const [ageConfirmed, setAgeConfirmed] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const [isLeaving, setIsLeaving] = useState(false);
   const canProceed = ageConfirmed && termsAccepted;
+
+  const handleAgreeClick = useCallback(() => {
+    setIsLeaving(true);
+    setTimeout(() => onAgree(), 400);
+  }, [onAgree]);
 
   return (
     <main
@@ -653,7 +745,7 @@ const ConsentScreen: FC<{
 
       {/* Popup card */}
       <div
-        className="survey-animate relative z-10 w-full max-w-[512px] overflow-hidden rounded-[24px] border border-[rgba(167,139,250,0.2)] bg-[rgba(19,11,28,0.9)] px-8 py-10 shadow-[0_0_50px_rgba(84,20,117,0.4)] sm:px-10"
+        className={`survey-animate relative z-10 w-full max-w-[512px] overflow-hidden rounded-[24px] border border-[rgba(167,139,250,0.2)] bg-[rgba(19,11,28,0.9)] px-8 py-10 shadow-[0_0_50px_rgba(84,20,117,0.4)] sm:px-10 transition-all duration-[400ms] ${isLeaving ? "opacity-0 scale-95" : ""}`}
         style={{ animation: "survey-scale-in 600ms cubic-bezier(0.16,1,0.3,1) 100ms both" }}
       >
         {/* 18+ badge */}
@@ -689,7 +781,7 @@ const ConsentScreen: FC<{
                 setAgeConfirmed(!ageConfirmed);
               }
             }}
-            className={`flex cursor-pointer items-start gap-4 rounded-[16px] border bg-white/5 px-4 py-4 transition-colors duration-200 ${ageConfirmed ? "border-[rgba(254,104,57,0.3)]" : "border-white/10"}`}
+            className={`flex cursor-pointer items-start gap-4 rounded-[16px] border bg-white/5 px-4 py-4 transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#fe6839]/50 ${ageConfirmed ? "border-[rgba(254,104,57,0.3)]" : "border-white/10"}`}
           >
             <div
               className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-[8px] border transition-all duration-200 ease-out ${ageConfirmed ? "border-[#fe6839] bg-[#fe6839]" : "border-white/20 bg-[rgba(0,0,0,0.4)]"}`}
@@ -729,7 +821,7 @@ const ConsentScreen: FC<{
                 setTermsAccepted(!termsAccepted);
               }
             }}
-            className={`flex cursor-pointer items-start gap-4 rounded-[16px] border bg-white/5 px-4 py-4 transition-colors duration-200 ${termsAccepted ? "border-[rgba(254,104,57,0.3)]" : "border-white/10"}`}
+            className={`flex cursor-pointer items-start gap-4 rounded-[16px] border bg-white/5 px-4 py-4 transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#fe6839]/50 ${termsAccepted ? "border-[rgba(254,104,57,0.3)]" : "border-white/10"}`}
           >
             <div
               className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-[8px] border transition-all duration-200 ease-out ${termsAccepted ? "border-[#fe6839] bg-[#fe6839]" : "border-white/20 bg-[rgba(0,0,0,0.4)]"}`}
@@ -800,8 +892,8 @@ const ConsentScreen: FC<{
           </button>
           <button
             type="button"
-            onClick={onAgree}
-            disabled={!canProceed}
+            onClick={handleAgreeClick}
+            disabled={!canProceed || isLeaving}
             className="flex-1 rounded-full border border-white/10 bg-white/5 py-[15px] text-[14px] font-bold leading-[20px] tracking-[0.7px] shadow-[0_10px_15px_rgba(0,0,0,0.1),0_4px_6px_rgba(0,0,0,0.1)] transition focus-visible-ring disabled:text-white/40 enabled:bg-[#fe6839] enabled:text-white enabled:hover:-translate-y-[1px]"
           >
             I agree
@@ -819,6 +911,30 @@ const SurveyPage: FC = () => {
   // 0 = intro, 1–4 = slides, 5 = consent
   const [step, setStep] = useState(0);
   const [transitioning, setTransitioning] = useState(false);
+  const isPopStateNav = useRef(false);
+
+  // Push history entry on forward navigation
+  useEffect(() => {
+    if (isPopStateNav.current) {
+      isPopStateNav.current = false;
+      return;
+    }
+    if (step > 0) {
+      window.history.pushState({ surveyStep: step }, "");
+    }
+  }, [step]);
+
+  // Handle browser back button
+  useEffect(() => {
+    const handlePopState = (e: PopStateEvent) => {
+      isPopStateNav.current = true;
+      const prevStep = e.state?.surveyStep;
+      setStep(prevStep !== undefined ? prevStep : 0);
+      setTransitioning(false);
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
 
   const handleIntroContinue = useCallback(() => {
     setTransitioning(true);

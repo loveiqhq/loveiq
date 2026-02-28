@@ -114,7 +114,8 @@
       "Bash(tail:*)",
       "Bash(head:*)",
       "Bash(ffprobe:*)",
-      "Bash(cd \"/c/Users/Hamza Korkutovic/loveiq-web\" && npm update rollup 2>&1)"
+      "Bash(cd \"/c/Users/Hamza Korkutovic/loveiq-web\" && npm update rollup 2>&1)",
+      "Bash(cd \"/c/Users/Hamza Korkutovic/loveiq-web\" && npx next lint --file components/survey/SurveyPage.tsx 2>&1)"
     ]
   }
 }
