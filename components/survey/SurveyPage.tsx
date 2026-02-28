@@ -596,7 +596,7 @@ const SlideScreen: FC<{
               className="h-[42px] w-[42px] rounded-full sm:h-[50px] sm:w-[50px]"
             />
             <span className="text-[12px] font-bold uppercase tracking-[1.6px] text-white/90 sm:text-[16px]">
-              Identify Your Sextype
+              Identify Your Sexual Archetype
             </span>
           </div>
           <button
