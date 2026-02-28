@@ -28,6 +28,7 @@ loveiq-web/
 │   ├── waitlist/page.tsx       # Waitlist standalone page
 │   ├── glossary/               # Glossary pages (index + [slug])
 │   ├── trust-zone/             # Trust zone pages
+│   ├── survey/page.tsx         # Intro wizard / survey
 │   ├── [legal pages]           # privacy-policy, terms-*, cookies, imprint, etc.
 │   ├── globals.css             # CSS variables + Tailwind + animations
 │   ├── layout.tsx              # Root layout (fonts, scripts, metadata)
@@ -44,6 +45,7 @@ loveiq-web/
 │   ├── about/                  # About page sections
 │   ├── glossary/               # Glossary components
 │   ├── legal/                  # Legal page nav component
+│   ├── survey/                 # Survey / intro wizard components
 │   └── SmoothScroll.tsx        # Lenis smooth scroll wrapper
 ├── lib/
 │   ├── analytics.ts            # GA4 event tracking helpers

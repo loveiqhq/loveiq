@@ -144,6 +144,7 @@
 - `/` - `app/page.tsx` → `LandingPage`
 - `/about` - `app/about/page.tsx` → `AboutPage`
 - `/waitlist` - `app/waitlist/page.tsx`
+- `/survey` - `app/survey/page.tsx` → `SurveyPage`
 
 **API Routes:**
 

@@ -13,6 +13,7 @@ const routes = [
   "/digital-content-terms",
   "/cookies",
   "/imprint",
+  "/survey",
 ];
 
 for (const path of routes) {
