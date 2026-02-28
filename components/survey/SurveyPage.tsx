@@ -358,7 +358,18 @@ const slides: Slide[] = [
   {
     icon: "scale",
     heading: "Judgment-Free Zone",
-    body: "This is a strictly judgment-free space. There are no good, bad, impressive, or embarrassing answers and no one is rating you. Don\u2019t answer how you should feel, how you wish to be seen, or what sounds mature or attractive. Answer what is actually true for you. The more real you are, the more precise and powerful your results will be.",
+    body: (
+      <>
+        This is a strictly judgment-free space. There are no good, bad, impressive,
+        <br className="hidden lg:inline" /> or embarrassing answers and no one is rating you.
+        Don&rsquo;t answer how you
+        <br className="hidden lg:inline" /> should feel, how you wish to be seen, or what sounds
+        mature or
+        <br className="hidden lg:inline" /> attractive. Answer what is actually true for you. The
+        more real you are, the
+        <br className="hidden lg:inline" /> more precise and powerful your results will be.
+      </>
+    ),
   },
   {
     icon: "privacy",
@@ -369,7 +380,10 @@ const slides: Slide[] = [
         to remain completely unidentifiable, you&rsquo;re welcome to use an alias email address.{" "}
         <span className="inline-block">
           Learn more in our{" "}
-          <Link href="/trust-zone" className="font-extrabold text-white hover:underline">
+          <Link
+            href="/trust-zone"
+            className="font-extrabold text-white transition-colors duration-300 hover:text-[#fe6839] hover:underline hover:decoration-[#fe6839]"
+          >
             &gt; Trust Zone.
           </Link>
         </span>
@@ -423,9 +437,13 @@ const IntroScreen: FC<{
             className="font-serif text-[36px] font-normal leading-[1.18] tracking-[-0.8px] text-[#1a1a2e] sm:text-[52px] sm:tracking-[-1.2px] md:text-[64px] md:leading-[1.18] md:tracking-[-1.5px]"
             style={{ animation: "survey-fade-up 700ms cubic-bezier(0.16,1,0.3,1) 0ms both" }}
           >
-            Let&rsquo;s prepare you well to discover your{" "}
-            <span className="bg-gradient-to-r from-[#fe6839] from-[27%] via-[#a78bfa] via-[77%] to-[#e9d5ff] bg-clip-text text-transparent">
-              sexual archetypes{" "}
+            Let&rsquo;s prepare you well to discover
+            <br />
+            <span className="whitespace-nowrap">
+              your{" "}
+              <span className="bg-gradient-to-r from-[#fe6839] from-[27%] via-[#a78bfa] via-[77%] to-[#e9d5ff] bg-clip-text text-transparent">
+                sexual archetypes
+              </span>
             </span>
           </h1>
 
@@ -433,8 +451,9 @@ const IntroScreen: FC<{
             className="mt-8 max-w-[540px] font-sans text-[16px] font-light leading-[1.5] text-[#6a7282] sm:text-[18px] sm:leading-[29px] md:text-[20px]"
             style={{ animation: "survey-fade-up 700ms cubic-bezier(0.16,1,0.3,1) 150ms both" }}
           >
-            This short guide will help you get the most meaningful and accurate results. The survey
-            takes about 15 minutes
+            This short guide will help you get the most meaningful and accurate
+            <br />
+            <span className="whitespace-nowrap">results. The survey takes about 15 minutes.</span>
           </p>
 
           <button
@@ -498,14 +517,17 @@ const SlideScreen: FC<{
   onSkip: () => void;
 }> = ({ slideIndex, onContinue, onBack, onSkip }) => {
   const [isLeaving, setIsLeaving] = useState(false);
+  const [isLeavingForward, setIsLeavingForward] = useState(false);
   const slide = slides[slideIndex] ?? slides[0];
   const Icon = slideIcons[slide.icon] ?? SparkleIcon;
 
   const handleNext = useCallback(() => {
     if (isLeaving) return;
     setIsLeaving(true);
+    setIsLeavingForward(true);
     setTimeout(() => {
       setIsLeaving(false);
+      setIsLeavingForward(false);
       onContinue();
     }, 200);
   }, [onContinue, isLeaving]);
@@ -614,7 +636,7 @@ const SlideScreen: FC<{
           </h2>
 
           <p
-            className="survey-animate mt-4 sm:mt-8 max-w-[798px] font-sans text-[16px] font-normal leading-[26px] sm:text-[20px] sm:leading-[32px] lg:text-[24px] lg:leading-[39px] text-white/80"
+            className="survey-animate mt-4 sm:mt-8 max-w-[798px] lg:max-w-[880px] font-sans text-[16px] font-normal leading-[26px] sm:text-[20px] sm:leading-[32px] lg:text-[24px] lg:leading-[39px] text-white/80"
             style={{
               opacity: 0,
               animation: "survey-fade-up 700ms cubic-bezier(0.16,1,0.3,1) 300ms both",
@@ -688,7 +710,7 @@ const SlideScreen: FC<{
       {slideIndex === TOTAL_STEPS - 1 && (
         <div
           className="pointer-events-none fixed inset-0 z-20 bg-[#0a0510] transition-opacity duration-200 ease-out"
-          style={{ opacity: isLeaving ? 1 : 0 }}
+          style={{ opacity: isLeavingForward ? 1 : 0 }}
         />
       )}
     </main>
