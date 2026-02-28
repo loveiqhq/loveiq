@@ -3,12 +3,14 @@ import type { MetadataRoute } from "next";
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.loveiq.org";
 
 export default function robots(): MetadataRoute.Robots {
+  const isProduction = siteUrl === "https://www.loveiq.org";
+
   return {
     rules: {
       userAgent: "*",
-      allow: "/",
-      disallow: "/api/",
+      allow: isProduction ? "/" : undefined,
+      disallow: isProduction ? "/api/" : "/",
     },
-    sitemap: `${siteUrl}/sitemap.xml`,
+    sitemap: isProduction ? `${siteUrl}/sitemap.xml` : undefined,
   };
 }

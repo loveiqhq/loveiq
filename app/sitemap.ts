@@ -41,9 +41,11 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: 0.3,
   }));
 
+  const glossaryLastModified = new Date("2026-02-28");
+
   const glossaryEntries = getAllSlugs().map((slug) => ({
     url: `${siteUrl}/glossary/${slug}`,
-    lastModified: siteLastModified,
+    lastModified: glossaryLastModified,
     changeFrequency: "monthly" as const,
     priority: 0.7,
   }));
