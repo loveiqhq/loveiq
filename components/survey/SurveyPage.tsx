@@ -432,11 +432,15 @@ const IntroScreen: FC<{
             type="button"
             onClick={onContinue}
             disabled={transitioning}
-            className={`relative mt-12 h-[240px] w-[177px] sm:mt-16 will-change-transform transition-transform duration-[1200ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${
+            className={`group relative mt-12 h-[240px] w-[177px] sm:mt-16 will-change-transform transition-transform duration-[1200ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${
               transitioning ? "scale-[6] sm:scale-[12]" : "cursor-pointer hover:scale-[1.03]"
             }`}
             aria-label="Continue to survey introduction"
           >
+            {/* Hover glow — head */}
+            <div className="pointer-events-none absolute left-1/2 -top-3 h-[152px] w-[140px] -translate-x-1/2 rounded-full bg-[#A78BFA] opacity-0 blur-[24px] transition-opacity duration-500 ease-out group-hover:opacity-100" />
+            {/* Hover glow — body */}
+            <div className="pointer-events-none absolute -bottom-3 left-1/2 h-[120px] w-[200px] -translate-x-1/2 rounded-[9999px_9999px_0_0] bg-[#A78BFA] opacity-0 blur-[24px] transition-opacity duration-500 ease-out group-hover:opacity-100" />
             <div className="absolute -left-[22px] top-0 h-[180px] w-[180px] rounded-full bg-[rgba(255,184,106,0.2)] blur-[56px]" />
             <div
               className="absolute left-1/2 top-0 h-[128px] w-[115px] -translate-x-1/2 rounded-full shadow-[0_2.813px_14.063px_0_rgba(126,87,194,0.3)]"
