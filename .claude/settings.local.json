@@ -113,7 +113,8 @@
       "WebFetch(domain:google.github.io)",
       "Bash(tail:*)",
       "Bash(head:*)",
-      "Bash(ffprobe:*)"
+      "Bash(ffprobe:*)",
+      "Bash(cd \"/c/Users/Hamza Korkutovic/loveiq-web\" && npm update rollup 2>&1)"
     ]
   }
 }
