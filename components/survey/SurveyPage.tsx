@@ -206,61 +206,41 @@ const ScaleIcon: FC = () => (
   </IconGlow>
 );
 
-/* Slide 3 — User with key / privacy */
+/* Slide 3 — User with privacy indicator */
 const PrivacyIcon: FC = () => (
   <IconGlow>
-    <div className="relative h-[40px] w-[40px] opacity-90 flex items-end">
-      {/* Person — head + body, left side */}
-      <svg aria-hidden width="16" height="28" viewBox="0 0 16 28" fill="none" className="shrink-0">
-        {/* Head — centered at x=8 */}
-        <circle
-          cx="8"
-          cy="7"
-          r="6"
-          stroke="#F7F5F7"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        {/* Body arc — shoulders, trimmed to not extend too far right */}
+    <div className="relative h-[40px] w-[40px] opacity-90 flex items-center justify-center">
+      <svg aria-hidden width="32" height="32" viewBox="0 0 32 32" fill="none">
         <path
-          d="M1 27C1 24.6 1.5 22.8 2.5 21.3C3.5 19.8 4.9 18.6 6.5 17.8C8.1 17 9.8 16.8 11.5 17C13.2 17.2 14.5 17.7 15 18.2"
+          d="M25.3335 14.668V22.668"
           stroke="#F7F5F7"
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
         />
-      </svg>
-      {/* Key — flipped upward: tooth + shaft + ring (bottom to top), right side */}
-      <svg
-        aria-hidden
-        width="8"
-        height="22"
-        viewBox="0 0 8 22"
-        fill="none"
-        className="shrink-0 ml-[2px]"
-      >
-        {/* Shaft going up */}
         <path
-          d="M4 21V7"
+          d="M25.3335 17.332H28.0002"
           stroke="#F7F5F7"
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
         />
-        {/* Tooth pointing left */}
         <path
-          d="M4 10H1"
+          d="M2.6665 27.9995C2.66636 26.0088 3.22328 24.0578 4.27425 22.3672C5.32522 20.6766 6.82832 19.3138 8.61351 18.433C10.3987 17.5522 12.3947 17.1885 14.3759 17.3831C16.357 17.5777 18.2441 18.3228 19.8238 19.5341"
           stroke="#F7F5F7"
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
         />
-        {/* Ring at top */}
-        <circle
-          cx="4"
-          cy="4"
-          r="3"
+        <path
+          d="M13.3332 17.3333C17.0151 17.3333 19.9998 14.3486 19.9998 10.6667C19.9998 6.98477 17.0151 4 13.3332 4C9.65127 4 6.6665 6.98477 6.6665 10.6667C6.6665 14.3486 9.65127 17.3333 13.3332 17.3333Z"
+          stroke="#F7F5F7"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M25.3332 28.0013C26.8059 28.0013 27.9998 26.8074 27.9998 25.3346C27.9998 23.8619 26.8059 22.668 25.3332 22.668C23.8604 22.668 22.6665 23.8619 22.6665 25.3346C22.6665 26.8074 23.8604 28.0013 25.3332 28.0013Z"
           stroke="#F7F5F7"
           strokeWidth="2"
           strokeLinecap="round"
@@ -271,61 +251,39 @@ const PrivacyIcon: FC = () => (
   </IconGlow>
 );
 
-/* Slide 4 — Clipboard */
+/* Slide 4 — Clipboard with question mark */
 const ClipboardIcon: FC = () => (
   <IconGlow>
-    <div className="relative h-[40px] w-[40px] opacity-90">
-      {/* Clipboard body */}
-      <svg
-        aria-hidden
-        className="absolute left-[5px] top-[4px]"
-        width="25"
-        height="28"
-        viewBox="0 0 25 28"
-        fill="none"
-      >
+    <div className="relative h-[40px] w-[40px] opacity-90 flex items-center justify-center">
+      <svg aria-hidden width="34" height="34" viewBox="0 0 34 34" fill="none">
         <path
-          d="M18 1H20.8333C21.5848 1 22.3055 1.29851 22.8368 1.82986C23.3682 2.36122 23.6667 3.08189 23.6667 3.83333V23.6667C23.6667 24.4181 23.3682 25.1388 22.8368 25.6701C22.3055 26.2015 21.5848 26.5 20.8333 26.5H3.83333C3.08189 26.5 2.36122 26.2015 1.82986 25.6701C1.29851 25.1388 1 24.4181 1 23.6667V3.83333C1 3.08189 1.29851 2.36122 1.82986 1.82986C2.36122 1.29851 3.08189 1 3.83333 1H6.66667"
+          d="M21.2499 2.83203H12.7499C11.9675 2.83203 11.3333 3.46629 11.3333 4.2487V7.08203C11.3333 7.86444 11.9675 8.4987 12.7499 8.4987H21.2499C22.0323 8.4987 22.6666 7.86444 22.6666 7.08203V4.2487C22.6666 3.46629 22.0323 2.83203 21.2499 2.83203Z"
           stroke="#F7F5F7"
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
         />
-      </svg>
-      {/* Clipboard tab */}
-      <svg
-        aria-hidden
-        className="absolute left-[11px] top-[1px]"
-        width="14"
-        height="8"
-        viewBox="0 0 14 8"
-        fill="none"
-      >
         <path
-          d="M10.9167 1H2.41667C1.63426 1 1 1.63426 1 2.41667V5.25C1 6.0324 1.63426 6.66667 2.41667 6.66667H10.9167C11.6991 6.66667 12.3333 6.0324 12.3333 5.25V2.41667C12.3333 1.63426 11.6991 1 10.9167 1Z"
+          d="M22.6667 5.66797H25.5001C26.2515 5.66797 26.9722 5.96648 27.5036 6.49783C28.0349 7.02919 28.3334 7.74986 28.3334 8.5013V28.3346C28.3334 29.0861 28.0349 29.8068 27.5036 30.3381C26.9722 30.8695 26.2515 31.168 25.5001 31.168H8.50008C7.74863 31.168 7.02797 30.8695 6.49661 30.3381C5.96526 29.8068 5.66675 29.0861 5.66675 28.3346V8.5013C5.66675 7.74986 5.96526 7.02919 6.49661 6.49783C7.02797 5.96648 7.74863 5.66797 8.50008 5.66797H11.3334"
           stroke="#F7F5F7"
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
         />
-      </svg>
-      {/* Question mark — clean ?, centered in clipboard */}
-      <svg
-        aria-hidden
-        className="absolute left-[12px] top-[13px]"
-        width="10"
-        height="16"
-        viewBox="0 0 10 16"
-        fill="none"
-      >
         <path
-          d="M1 4C1 2.34315 2.34315 1 4 1H5C6.65685 1 8 2.34315 8 4C8 5.65685 6.65685 7 5 7V9"
+          d="M16.8696 26.125H16.8827"
           stroke="#F7F5F7"
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
         />
-        <circle cx="5" cy="13" r="1.2" fill="#F7F5F7" />
+        <path
+          d="M13.0769 15.667C13.3907 14.8021 13.9985 14.0751 14.7941 13.6129C15.5896 13.1507 16.5223 12.9829 17.429 13.1387C18.3358 13.2945 19.159 13.764 19.7546 14.4652C20.3503 15.1664 20.6805 16.0547 20.6877 16.9747C20.6877 19.5901 16.7646 20.8978 16.7646 20.8978"
+          stroke="#F7F5F7"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
       </svg>
     </div>
   </IconGlow>
