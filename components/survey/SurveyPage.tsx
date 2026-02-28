@@ -456,9 +456,8 @@ const IntroScreen: FC<{
             onClick={onContinue}
             disabled={transitioning}
             className={`relative mt-12 h-[240px] w-[177px] sm:mt-16 will-change-transform transition-transform duration-[1200ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${
-              transitioning ? "" : "cursor-pointer hover:scale-[1.03]"
+              transitioning ? "scale-[6] sm:scale-[12]" : "cursor-pointer hover:scale-[1.03]"
             }`}
-            style={transitioning ? { transform: "scale(12)" } : undefined}
             aria-label="Continue to survey introduction"
           >
             <div className="absolute -left-[22px] top-0 h-[180px] w-[180px] rounded-full bg-[rgba(255,184,106,0.2)] blur-[56px]" />
@@ -745,7 +744,7 @@ const ConsentScreen: FC<{
 
       {/* Popup card */}
       <div
-        className={`survey-animate relative z-10 w-full max-w-[512px] overflow-hidden rounded-[24px] border border-[rgba(167,139,250,0.2)] bg-[rgba(19,11,28,0.9)] px-8 py-10 shadow-[0_0_50px_rgba(84,20,117,0.4)] sm:px-10 transition-all duration-[400ms] ${isLeaving ? "opacity-0 scale-95" : ""}`}
+        className={`survey-animate relative z-10 w-full max-w-[512px] overflow-hidden rounded-[24px] border border-[rgba(167,139,250,0.2)] bg-[rgba(19,11,28,0.9)] px-8 py-7 sm:py-10 shadow-[0_0_50px_rgba(84,20,117,0.4)] sm:px-10 transition-all duration-[400ms] ${isLeaving ? "opacity-0 scale-95" : ""}`}
         style={{ animation: "survey-scale-in 600ms cubic-bezier(0.16,1,0.3,1) 100ms both" }}
       >
         {/* 18+ badge */}
@@ -758,7 +757,7 @@ const ConsentScreen: FC<{
         </div>
 
         {/* Heading */}
-        <h2 className="mt-5 text-center font-serif text-[30px] font-medium leading-[40px] text-white sm:text-[36px]">
+        <h2 className="mt-4 sm:mt-5 text-center font-serif text-[30px] font-medium leading-[40px] text-white sm:text-[36px]">
           Before we begin
         </h2>
 
@@ -769,7 +768,7 @@ const ConsentScreen: FC<{
         </p>
 
         {/* Checkboxes */}
-        <div className="mt-8 space-y-4">
+        <div className="mt-6 sm:mt-8 space-y-4">
           <div
             role="checkbox"
             aria-checked={ageConfirmed}
@@ -882,7 +881,7 @@ const ConsentScreen: FC<{
         </div>
 
         {/* Action buttons */}
-        <div className="mt-8 flex gap-4">
+        <div className="mt-6 sm:mt-8 flex gap-4">
           <button
             type="button"
             onClick={onReturn}
