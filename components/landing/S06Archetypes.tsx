@@ -631,13 +631,13 @@ const TeaserCard: FC = () => (
     <div className="relative flex flex-col items-center gap-1 sm:gap-3 w-full overflow-hidden py-1 sm:py-3">
       {/* Faded outer items hidden on mobile to save space */}
       <span className="hidden sm:block font-serif sm:text-[16px] lg:text-[18px] leading-[24px] text-white/20">
-        Erotic Blueprint
+        Emotional Voyeur
       </span>
       <div className="flex items-center gap-1.5">
         <span className="h-1 w-1 rounded-full bg-[#130b17]" aria-hidden />
         <span className="h-1 w-1 rounded-full bg-white/40" aria-hidden />
         <span className="font-serif text-[13px] sm:text-[18px] lg:text-[21px] leading-[22px] sm:leading-[24px] text-white/40">
-          Relational Healer
+          Explorer of Edges
         </span>
       </div>
       <div className="flex items-center gap-2 sm:gap-3 rounded-xl border border-white/10 bg-white/5 px-3 sm:px-6 py-1.5 sm:py-3 shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-4px_rgba(0,0,0,0.1)] backdrop-blur-sm">
@@ -654,7 +654,7 @@ const TeaserCard: FC = () => (
         </span>
       </div>
       <span className="hidden sm:block font-serif sm:text-[16px] lg:text-[18px] leading-[24px] text-white/20">
-        Storm Chaser
+        Analytical Sexualist
       </span>
     </div>
 
