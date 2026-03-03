@@ -380,7 +380,7 @@ const IntroScreen: FC<{
 
   return (
     <main
-      className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden px-4 py-16"
+      className="relative flex h-dvh flex-col items-center justify-center overflow-hidden px-4 py-6 sm:py-10 md:py-16"
       style={{
         backgroundImage: "linear-gradient(180deg, #fff 0%, rgba(250,245,255,0.3) 50%, #fff 100%)",
       }}
@@ -406,7 +406,7 @@ const IntroScreen: FC<{
           </h1>
 
           <p
-            className="mt-8 max-w-[540px] font-sans text-[16px] font-light leading-[1.5] text-[#6a7282] sm:text-[18px] sm:leading-[29px] md:text-[20px]"
+            className="mt-4 max-w-[540px] font-sans text-[16px] font-light leading-[1.5] text-[#6a7282] sm:mt-6 sm:text-[18px] sm:leading-[29px] md:mt-8 md:text-[20px]"
             style={{ animation: "survey-fade-up 700ms cubic-bezier(0.16,1,0.3,1) 150ms both" }}
           >
             This short guide will help you get the most meaningful and accurate
@@ -418,7 +418,7 @@ const IntroScreen: FC<{
             type="button"
             onClick={onContinue}
             disabled={transitioning}
-            className="mt-10 inline-flex h-[54px] items-center justify-center gap-3 rounded-full bg-[#fe6839] px-8 text-[16px] font-bold uppercase tracking-[0.1em] text-white shadow-[0_15px_22px_rgba(254,104,57,0.2),0_6px_9px_rgba(254,104,57,0.2)] transition hover:-translate-y-[2px] hover:shadow-[0_18px_28px_rgba(254,104,57,0.28),0_8px_12px_rgba(254,104,57,0.24)] focus-visible-ring sm:h-[60px] sm:gap-4 sm:px-9 sm:text-[18px] disabled:opacity-70"
+            className="mt-6 inline-flex h-[54px] items-center justify-center gap-3 rounded-full bg-[#fe6839] px-8 text-[16px] font-bold uppercase tracking-[0.1em] text-white shadow-[0_15px_22px_rgba(254,104,57,0.2),0_6px_9px_rgba(254,104,57,0.2)] transition hover:-translate-y-[2px] hover:shadow-[0_18px_28px_rgba(254,104,57,0.28),0_8px_12px_rgba(254,104,57,0.24)] focus-visible-ring sm:mt-8 sm:h-[60px] sm:gap-4 sm:px-9 sm:text-[18px] md:mt-10 disabled:opacity-70"
             style={{ animation: "survey-fade-up 700ms cubic-bezier(0.16,1,0.3,1) 300ms both" }}
           >
             Continue
@@ -432,30 +432,32 @@ const IntroScreen: FC<{
             type="button"
             onClick={onContinue}
             disabled={transitioning}
-            className={`group relative mt-12 h-[240px] w-[177px] sm:mt-16 will-change-transform transition-transform duration-[1200ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${
+            className={`group mt-6 h-[160px] w-[118px] sm:mt-10 sm:h-[200px] sm:w-[148px] md:mt-12 md:h-[240px] md:w-[177px] will-change-transform transition-transform duration-[1200ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${
               transitioning ? "scale-[6] sm:scale-[12]" : "cursor-pointer hover:scale-[1.03]"
             }`}
             aria-label="Continue to survey introduction"
           >
-            {/* Hover glow — head */}
-            <div className="pointer-events-none absolute left-1/2 -top-3 h-[152px] w-[140px] -translate-x-1/2 rounded-full bg-[#A78BFA] opacity-0 blur-[24px] transition-opacity duration-500 ease-out group-hover:opacity-100" />
-            {/* Hover glow — body */}
-            <div className="pointer-events-none absolute -bottom-3 left-1/2 h-[120px] w-[200px] -translate-x-1/2 rounded-[9999px_9999px_0_0] bg-[#A78BFA] opacity-0 blur-[24px] transition-opacity duration-500 ease-out group-hover:opacity-100" />
-            <div className="absolute -left-[22px] top-0 h-[180px] w-[180px] rounded-full bg-[rgba(255,184,106,0.2)] blur-[56px]" />
-            <div
-              className="absolute left-1/2 top-0 h-[128px] w-[115px] -translate-x-1/2 rounded-full shadow-[0_2.813px_14.063px_0_rgba(126,87,194,0.3)]"
-              style={{
-                background:
-                  "radial-gradient(70.71% 70.71% at 50% 50%, #FE6839 0%, #A78BFA 79.81%, #A78BFA 100%)",
-              }}
-            />
-            <div
-              className="absolute bottom-0 left-1/2 h-[103px] w-[177px] -translate-x-1/2"
-              style={{
-                borderRadius: "23592938px 23592938px 0 0",
-                background: "linear-gradient(180deg, #A78BFA 0%, #541475 68.03%)",
-              }}
-            />
+            <div className="relative h-[240px] w-[177px] origin-top-left scale-[0.667] sm:scale-[0.833] md:scale-100">
+              {/* Hover glow — head */}
+              <div className="pointer-events-none absolute left-1/2 -top-3 h-[152px] w-[140px] -translate-x-1/2 rounded-full bg-[#A78BFA] opacity-0 blur-[24px] transition-opacity duration-500 ease-out group-hover:opacity-100" />
+              {/* Hover glow — body */}
+              <div className="pointer-events-none absolute -bottom-3 left-1/2 h-[120px] w-[200px] -translate-x-1/2 rounded-[9999px_9999px_0_0] bg-[#A78BFA] opacity-0 blur-[24px] transition-opacity duration-500 ease-out group-hover:opacity-100" />
+              <div className="absolute -left-[22px] top-0 h-[180px] w-[180px] rounded-full bg-[rgba(255,184,106,0.2)] blur-[56px]" />
+              <div
+                className="absolute left-1/2 top-0 h-[128px] w-[115px] -translate-x-1/2 rounded-full shadow-[0_2.813px_14.063px_0_rgba(126,87,194,0.3)]"
+                style={{
+                  background:
+                    "radial-gradient(70.71% 70.71% at 50% 50%, #FE6839 0%, #A78BFA 79.81%, #A78BFA 100%)",
+                }}
+              />
+              <div
+                className="absolute bottom-0 left-1/2 h-[103px] w-[177px] -translate-x-1/2"
+                style={{
+                  borderRadius: "23592938px 23592938px 0 0",
+                  background: "linear-gradient(180deg, #A78BFA 0%, #541475 68.03%)",
+                }}
+              />
+            </div>
           </button>
         </div>
       </div>
