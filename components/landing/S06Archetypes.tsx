@@ -693,7 +693,7 @@ const TeaserCard: FC = () => (
       </Link>
 
       <p className="mt-1.5 sm:mt-3 font-sans text-[9px] sm:text-[10px] font-bold leading-[18px] sm:leading-[20px] tracking-[1.4px] uppercase text-white/40 text-center">
-        {"\u2022"}Takes 10 minutes {"\u2022"} No account required
+        {"\u2022"}Takes 15 minutes {"\u2022"} No account required
       </p>
     </div>
   </div>

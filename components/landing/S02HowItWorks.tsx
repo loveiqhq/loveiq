@@ -5,7 +5,7 @@ const steps = [
     step: "Step One",
     title: "Take the Assessment",
     description: "We’ll guide you through eight key dimensions that shape your sexual life.",
-    badge: "~10 Minutes",
+    badge: "~15 minutes",
     variant: "sliders",
   },
   {
