@@ -532,16 +532,18 @@ const SlideScreen: FC<{
   );
 
   return (
-    <main
-      className="relative flex min-h-screen flex-col overflow-hidden"
-      style={{
-        background: `
-          radial-gradient(ellipse 140% 140% at 0% 100%, #FE6839 0%, rgba(254,104,57,0.4) 30%, transparent 65%),
-          radial-gradient(ellipse 140% 140% at 100% 0%, #A78BFA 0%, rgba(167,139,250,0.35) 30%, transparent 65%),
-          #140a1a
-        `,
-      }}
-    >
+    <main className="relative flex min-h-screen flex-col overflow-hidden bg-[#140a1a]">
+      {/* Orange corner blob */}
+      <div className="pointer-events-none absolute bottom-0 left-0 -translate-x-1/2 translate-y-1/2">
+        <div className="rounded-full bg-[#FE6839] w-[718px] h-[1895px] blur-[500px] sm:w-[1296px] sm:h-[1296px] animate-pulse-glow" />
+      </div>
+      {/* Purple corner blob */}
+      <div className="pointer-events-none absolute right-0 top-0 translate-x-1/2 -translate-y-1/2">
+        <div
+          className="rounded-full bg-[#A78BFA] w-[653px] h-[1724px] blur-[400px] sm:w-[920px] sm:h-[920px] animate-pulse-glow"
+          style={{ animationDelay: "2s", animationFillMode: "backwards" }}
+        />
+      </div>
       <div className="relative z-10 mx-auto flex w-full max-w-[1120px] flex-1 flex-col px-5 py-12 sm:px-10 sm:py-14">
         {/* Top bar */}
         <div
