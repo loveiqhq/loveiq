@@ -406,7 +406,7 @@ const IntroScreen: FC<{
           </h1>
 
           <p
-            className="mt-6 max-w-[540px] font-sans text-[16px] font-light leading-[1.5] text-[#6a7282] sm:text-[18px] sm:leading-[29px] md:mt-8 md:text-[20px]"
+            className="mt-8 max-w-[540px] font-sans text-[16px] font-light leading-[1.5] text-[#6a7282] sm:text-[18px] sm:leading-[29px] md:text-[20px]"
             style={{ animation: "survey-fade-up 700ms cubic-bezier(0.16,1,0.3,1) 150ms both" }}
           >
             This short guide will help you get the most meaningful and accurate
@@ -418,7 +418,7 @@ const IntroScreen: FC<{
             type="button"
             onClick={onContinue}
             disabled={transitioning}
-            className="mt-8 inline-flex h-[54px] items-center justify-center gap-3 rounded-full bg-[#fe6839] px-8 text-[16px] font-bold uppercase tracking-[0.1em] text-white shadow-[0_15px_22px_rgba(254,104,57,0.2),0_6px_9px_rgba(254,104,57,0.2)] transition hover:-translate-y-[2px] hover:shadow-[0_18px_28px_rgba(254,104,57,0.28),0_8px_12px_rgba(254,104,57,0.24)] focus-visible-ring sm:h-[60px] sm:gap-4 sm:px-9 sm:text-[18px] md:mt-10 disabled:opacity-70"
+            className="mt-10 inline-flex h-[54px] items-center justify-center gap-3 rounded-full bg-[#fe6839] px-8 text-[16px] font-bold uppercase tracking-[0.1em] text-white shadow-[0_15px_22px_rgba(254,104,57,0.2),0_6px_9px_rgba(254,104,57,0.2)] transition hover:-translate-y-[2px] hover:shadow-[0_18px_28px_rgba(254,104,57,0.28),0_8px_12px_rgba(254,104,57,0.24)] focus-visible-ring sm:h-[60px] sm:gap-4 sm:px-9 sm:text-[18px] disabled:opacity-70"
             style={{ animation: "survey-fade-up 700ms cubic-bezier(0.16,1,0.3,1) 300ms both" }}
           >
             Continue
@@ -432,7 +432,7 @@ const IntroScreen: FC<{
             type="button"
             onClick={onContinue}
             disabled={transitioning}
-            className={`group mt-8 h-[160px] w-[118px] sm:mt-10 sm:h-[200px] sm:w-[148px] md:mt-12 md:h-[240px] md:w-[177px] will-change-transform transition-transform duration-[1200ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${
+            className={`group mt-12 h-[160px] w-[118px] sm:mt-10 sm:h-[200px] sm:w-[148px] md:mt-12 md:h-[240px] md:w-[177px] will-change-transform transition-transform duration-[1200ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${
               transitioning ? "scale-[6] sm:scale-[12]" : "cursor-pointer hover:scale-[1.03]"
             }`}
             aria-label="Continue to survey introduction"
