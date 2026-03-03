@@ -311,42 +311,22 @@ const slides: Slide[] = [
   {
     icon: "sparkle",
     heading: "Quality In \u2192 Magic Out",
-    body: "LoveIQ follows a strict input\u2013output principle: the accuracy of your report depends on the accuracy of your answers. Rushed or filtered responses lower signal quality; honest, precise responses produce clear, high-resolution insights.",
+    body: "Take time to answer well. If you rush or guess, the output will feel shallow. Answer as honest as possible (it takes some courage, but you are safe).",
   },
   {
     icon: "scale",
     heading: "Judgment-Free Zone",
     body: (
       <>
-        This is a strictly judgment-free space. There are no good, bad, impressive,
-        <br className="hidden lg:inline" /> or embarrassing answers and no one is rating you.
-        Don&rsquo;t answer how you
-        <br className="hidden lg:inline" /> should feel, how you wish to be seen, or what sounds
-        mature or
-        <br className="hidden lg:inline" /> attractive. Answer what is actually true for you. The
-        more real you are, the
-        <br className="hidden lg:inline" /> more precise and powerful your results will be.
+        This is a judgment-Free Zone so use your own language. Be honest, bold, playful, romantic,
+        or raw — whatever feels true to you.
       </>
     ),
   },
   {
     icon: "privacy",
     heading: "Your Privacy Matters",
-    body: (
-      <>
-        Everything can be fully anonymous and we encrypt with high security standards. If you prefer
-        to remain completely unidentifiable, you&rsquo;re welcome to use an alias email address.{" "}
-        <span className="inline-block">
-          Learn more in our{" "}
-          <Link
-            href="/trust-zone"
-            className="font-extrabold text-white transition-colors duration-300 hover:text-[#fe6839] hover:underline hover:decoration-[#fe6839]"
-          >
-            &gt; Trust Zone.
-          </Link>
-        </span>
-      </>
-    ),
+    body: <>Everything is anonymous and encrypted on highest standards.</>,
   },
   {
     icon: "clipboard",
@@ -355,9 +335,6 @@ const slides: Slide[] = [
       <>
         Questions appear one at a time. Answer options are clear and simple. Dynamic Guidance adapts
         the journey to your responses.
-        <br />
-        <br />
-        Now take a breath, trust your intuition — and enjoy the journey ahead.
       </>
     ),
   },
@@ -546,7 +523,7 @@ const SlideScreen: FC<{
           style={{ animationDelay: "2s", animationFillMode: "backwards" }}
         />
       </div>
-      <div className="relative z-10 mx-auto flex w-full max-w-[1120px] flex-1 flex-col px-5 py-12 sm:px-10 sm:py-14">
+      <div className="relative z-10 mx-auto flex w-full max-w-[1120px] flex-1 flex-col px-6 py-12 sm:px-10 sm:py-14">
         {/* Top bar */}
         <div
           className="survey-animate flex items-center justify-between"
@@ -581,35 +558,38 @@ const SlideScreen: FC<{
           onTouchStart={handleTouchStart}
           onTouchEnd={handleTouchEnd}
         >
-          <div
-            className="survey-animate"
-            style={{
-              opacity: 0,
-              animation: "survey-fade-up 700ms cubic-bezier(0.16,1,0.3,1) 0ms both",
-            }}
-          >
-            <Icon />
+          <div className="max-w-[294px] sm:max-w-none">
+            <div
+              className="survey-animate"
+              style={{
+                opacity: 0,
+                animation: "survey-fade-up 700ms cubic-bezier(0.16,1,0.3,1) 0ms both",
+              }}
+            >
+              <Icon />
+            </div>
+
+            <h2
+              className="survey-animate mt-6 sm:mt-2 font-serif text-[36px] font-medium leading-[45px] sm:text-[52px] sm:leading-[64px] lg:text-[72px] lg:leading-[90px] text-white"
+              style={{
+                opacity: 0,
+                animation: "survey-fade-up 700ms cubic-bezier(0.16,1,0.3,1) 150ms both",
+              }}
+            >
+              {slide.heading}
+            </h2>
+
+            <p
+              className="survey-animate mt-6 max-w-[798px] lg:max-w-[880px] font-sans not-italic text-[18px] font-light leading-[29.25px] text-white/80"
+              style={{
+                opacity: 0,
+                animation: "survey-fade-up 700ms cubic-bezier(0.16,1,0.3,1) 300ms both",
+                fontVariationSettings: '"wght" 300',
+              }}
+            >
+              {slide.body}
+            </p>
           </div>
-
-          <h2
-            className="survey-animate mt-2 font-serif text-[36px] font-medium leading-[44px] sm:text-[52px] sm:leading-[64px] lg:text-[72px] lg:leading-[90px] text-white"
-            style={{
-              opacity: 0,
-              animation: "survey-fade-up 700ms cubic-bezier(0.16,1,0.3,1) 150ms both",
-            }}
-          >
-            {slide.heading}
-          </h2>
-
-          <p
-            className="survey-animate mt-4 sm:mt-8 max-w-[798px] lg:max-w-[880px] font-sans text-[16px] font-normal leading-[26px] sm:text-[20px] sm:leading-[32px] lg:text-[24px] lg:leading-[39px] text-white/80"
-            style={{
-              opacity: 0,
-              animation: "survey-fade-up 700ms cubic-bezier(0.16,1,0.3,1) 300ms both",
-            }}
-          >
-            {slide.body}
-          </p>
         </div>
 
         {/* Bottom: step bar + navigation */}
