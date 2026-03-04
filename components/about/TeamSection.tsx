@@ -117,12 +117,13 @@ const TeamSection: FC = () => {
     {
       name: "Marcus Börner",
       role: "Strategy Lead",
-      image: "/about/team-marcus-borner.png",
+      image: "/about/marcus.png",
       linkedinUrl: "https://www.linkedin.com/in/marcusb1/",
       socials: ["linkedin"],
       hoverColor: "orange",
       imageScale: 1,
-      imagePosition: "center center",
+      imagePosition: "center 0%",
+      imageOffsetY: "-20%",
     },
   ];
 
