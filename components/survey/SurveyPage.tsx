@@ -357,7 +357,7 @@ const IntroScreen: FC<{
 
   return (
     <main
-      className="relative flex h-dvh flex-col items-center justify-center overflow-hidden px-4 py-8 sm:py-10 md:py-16"
+      className={`relative flex flex-col items-center justify-center px-4 py-8 sm:py-10 md:py-16 ${transitioning ? "h-dvh overflow-hidden" : "min-h-dvh"}`}
       style={{
         backgroundImage: "linear-gradient(180deg, #fff 0%, rgba(250,245,255,0.3) 50%, #fff 100%)",
       }}
@@ -368,27 +368,56 @@ const IntroScreen: FC<{
           className="flex flex-col items-center transition-opacity duration-[600ms] ease-out"
           style={{ opacity: transitioning ? 0 : 1 }}
         >
+          {/* Mobile heading */}
           <h1
-            className="font-serif text-[36px] font-normal leading-[1.18] tracking-[-0.8px] text-[#1a1a2e] sm:text-[52px] sm:tracking-[-1.2px] md:text-[64px] md:leading-[1.18] md:tracking-[-1.5px]"
+            className="font-serif text-[36px] font-normal leading-[1.18] tracking-[-0.8px] text-[#1a1a2e] sm:text-[52px] sm:tracking-[-1.2px] md:hidden"
             style={{ animation: "survey-fade-up 700ms cubic-bezier(0.16,1,0.3,1) 0ms both" }}
           >
-            Let&rsquo;s prepare you well to discover
+            Let&rsquo;s prepare you
             <br />
-            <span className="whitespace-nowrap">
-              your{" "}
-              <span className="bg-gradient-to-r from-[#fe6839] from-[27%] via-[#a78bfa] via-[77%] to-[#e9d5ff] bg-clip-text text-transparent">
-                sexual archetypes
-              </span>
+            well to discover
+            <br />
+            your
+            <br />
+            <span className="bg-gradient-to-b from-[#FE6839] to-[#A78BFA] bg-clip-text italic font-medium text-transparent">
+              sexual archetypes
             </span>
           </h1>
 
+          {/* Desktop heading */}
+          <h1
+            className="hidden font-serif font-normal leading-[1.18] text-[#1a1a2e] md:block md:text-[64px] md:leading-[1.18] md:tracking-[-1.5px]"
+            style={{ animation: "survey-fade-up 700ms cubic-bezier(0.16,1,0.3,1) 0ms both" }}
+          >
+            Let&rsquo;s prepare you well
+            <br />
+            to discover your
+            <br />
+            <span className="bg-gradient-to-b from-[#FE6839] to-[#A78BFA] bg-clip-text italic font-medium text-transparent">
+              sexual archetypes
+            </span>
+          </h1>
+
+          {/* Mobile paragraph */}
           <p
-            className="mt-8 max-w-[540px] font-sans text-[16px] font-light leading-[1.5] text-[#6a7282] sm:text-[18px] sm:leading-[29px] md:text-[20px]"
+            className="mt-8 max-w-[540px] font-sans text-[16px] font-light leading-[1.5] text-[#6a7282] sm:text-[18px] sm:leading-[29px] md:hidden"
+            style={{ animation: "survey-fade-up 700ms cubic-bezier(0.16,1,0.3,1) 150ms both" }}
+          >
+            This short guide will help you get the most
+            <br />
+            meaningful and accurate results. Tap the
+            <br />
+            silhouette below to begin.
+          </p>
+
+          {/* Desktop paragraph */}
+          <p
+            className="mt-8 hidden max-w-[640px] font-sans font-light leading-[1.5] text-[#6a7282] md:block md:text-[20px]"
             style={{ animation: "survey-fade-up 700ms cubic-bezier(0.16,1,0.3,1) 150ms both" }}
           >
             This short guide will help you get the most meaningful and accurate
             <br />
-            <span className="whitespace-nowrap">results. The survey takes about 15 minutes.</span>
+            results. Tap the silhouette below to begin.
           </p>
 
           <button
@@ -704,7 +733,7 @@ const ConsentScreen: FC<{
       {/* Background gradient blobs */}
       <div className="pointer-events-none absolute inset-0">
         <div
-          className="absolute h-[140%] w-[110%] rounded-full"
+          className="animate-pulse-glow absolute h-[140%] w-[110%] rounded-full"
           style={{
             bottom: "-40%",
             left: "-35%",
@@ -713,10 +742,12 @@ const ConsentScreen: FC<{
           }}
         />
         <div
-          className="absolute h-[130%] w-[100%] rounded-full"
+          className="animate-pulse-glow absolute h-[130%] w-[100%] rounded-full"
           style={{
             top: "-35%",
             right: "-25%",
+            animationDelay: "2s",
+            animationFillMode: "backwards",
             background:
               "radial-gradient(ellipse at center, rgba(155,140,195,0.7) 0%, rgba(145,130,185,0.3) 45%, transparent 70%)",
           }}
