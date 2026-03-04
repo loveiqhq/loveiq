@@ -404,7 +404,10 @@ const IntroScreen: FC<{
         </div>
 
         {/* Clickable avatar */}
-        <div style={{ animation: "survey-fade-up 700ms cubic-bezier(0.16,1,0.3,1) 450ms both" }}>
+        <div
+          className="flex flex-col items-center"
+          style={{ animation: "survey-fade-up 700ms cubic-bezier(0.16,1,0.3,1) 450ms both" }}
+        >
           <button
             type="button"
             onClick={onContinue}
@@ -436,6 +439,16 @@ const IntroScreen: FC<{
               />
             </div>
           </button>
+          <span
+            className="mt-4 font-sans text-[10px] font-bold uppercase leading-[15px] tracking-[2px] text-[#90A1B9] sm:text-[11px] sm:tracking-[2.5px] transition-opacity duration-300"
+            style={
+              transitioning
+                ? { opacity: 0 }
+                : { animation: "survey-fade-up 700ms cubic-bezier(0.16,1,0.3,1) 600ms both" }
+            }
+          >
+            Tap to begin
+          </span>
         </div>
       </div>
 
