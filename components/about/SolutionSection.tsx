@@ -2,25 +2,6 @@
 
 import type { FC } from "react";
 
-// Arrow button that slides up and fades in on hover
-const ArrowButton: FC = () => (
-  <div className="absolute bottom-4 right-4 z-10 flex h-10 w-10 translate-y-2 items-center justify-center rounded-xl bg-white text-black opacity-0 shadow-lg transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100">
-    <svg
-      width="18"
-      height="18"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M7 7h10v10" />
-      <path d="M7 17 17 7" />
-    </svg>
-  </div>
-);
-
 // Illustration for Educational Surveys - Form/Survey UI with animations
 const SurveyIllustration: FC = () => (
   <div className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-3xl border border-white/5 bg-[#0A0510] transition-colors group-hover:border-white/10">
@@ -101,8 +82,6 @@ const SurveyIllustration: FC = () => (
       {/* Decorative Glow */}
       <div className="absolute -inset-4 -z-10 rounded-full bg-[#FE6839] opacity-0 blur-2xl transition-opacity duration-500 group-hover:opacity-5" />
     </div>
-
-    <ArrowButton />
   </div>
 );
 
@@ -144,8 +123,6 @@ const ReportsIllustration: FC = () => (
         <div className="h-[50%] w-full rounded-sm bg-white/5 transition-all delay-100 duration-700 ease-out group-hover:h-[45%]" />
       </div>
     </div>
-
-    <ArrowButton />
   </div>
 );
 
@@ -185,8 +162,6 @@ const GrowthIllustration: FC = () => (
         </div>
       </div>
     </div>
-
-    <ArrowButton />
   </div>
 );
 
