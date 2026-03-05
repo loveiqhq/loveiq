@@ -311,30 +311,115 @@ const slides: Slide[] = [
   {
     icon: "sparkle",
     heading: "Quality In \u2192 Magic Out",
-    body: "Take time to answer well. If you rush or guess, the output will feel shallow. Answer as honest as possible (it takes some courage, but you are safe).",
+    body: (
+      <>
+        {/* Mobile — natural wrap */}
+        <span className="md:hidden">
+          LoveIQ follows a strict input–output principle: the accuracy of your report depends on the
+          accuracy of your answers. Rushed or filtered responses lower signal quality; honest,
+          precise responses produce clear, high-resolution insights.
+        </span>
+        {/* Desktop line breaks */}
+        <span className="hidden md:inline">
+          LoveIQ follows a strict input–output principle: the accuracy of your
+          <br />
+          report depends on the accuracy of your answers. Rushed or filtered
+          <br />
+          responses lower signal quality; honest, precise responses produce
+          <br />
+          clear, high-resolution insights.
+        </span>
+      </>
+    ),
   },
   {
     icon: "scale",
     heading: "Judgment-Free Zone",
     body: (
       <>
-        This is a judgment-Free Zone so use your own language. Be honest, bold, playful, romantic,
-        or raw — whatever feels true to you.
+        {/* Mobile — natural wrap */}
+        <span className="md:hidden">
+          This is a strictly judgment-free space. There are no good, bad, impressive, or
+          embarrassing answers and no one is rating you. Don&rsquo;t answer how you should feel, how
+          you wish to be seen, or what sounds mature or attractive. Answer what is actually true for
+          you. The more real you are, the more precise and powerful your results will be.
+        </span>
+        {/* Desktop line breaks */}
+        <span className="hidden md:inline">
+          This is a strictly judgment-free space. There are no good, bad, impressive,
+          <br />
+          or embarrassing answers and no one is rating you. Don&rsquo;t answer how you
+          <br />
+          should feel, how you wish to be seen, or what sounds mature or
+          <br />
+          attractive. Answer what is actually true for you. The more real you are, the
+          <br />
+          more precise and powerful your results will be.
+        </span>
       </>
     ),
   },
   {
     icon: "privacy",
     heading: "Your Privacy Matters",
-    body: <>Everything is anonymous and encrypted on highest standards.</>,
+    body: (
+      <>
+        {/* Mobile — natural wrap */}
+        <span className="md:hidden">
+          Everything can be fully anonymous and we encrypt with high security standards. If you
+          prefer to remain unidentifiable, you&rsquo;re welcome to use an alias email address. Learn
+          more in our{" "}
+          <a
+            href="/trust-zone"
+            className="no-underline decoration-white/50 underline-offset-2 transition-all duration-300 hover:text-white hover:underline"
+          >
+            &gt; Trust Zone
+          </a>
+          .
+        </span>
+        {/* Desktop line breaks */}
+        <span className="hidden md:inline">
+          Everything can be fully anonymous and we encrypt with high security
+          <br />
+          standards. If you prefer to remain unidentifiable, you&rsquo;re welcome to use an
+          <br />
+          alias email address. Learn more in our{" "}
+          <a
+            href="/trust-zone"
+            className="no-underline decoration-white/50 underline-offset-2 transition-all duration-300 hover:text-white hover:underline"
+          >
+            &gt; Trust Zone
+          </a>
+          .
+        </span>
+      </>
+    ),
   },
   {
     icon: "clipboard",
     heading: "How the Survey Works",
     body: (
       <>
-        Questions appear one at a time. Answer options are clear and simple. Dynamic Guidance adapts
-        the journey to your responses.
+        {/* Mobile — natural wrap */}
+        <span className="md:hidden">
+          For ~15 min we will guide you towards the most meaningful exploration of your sexuality.
+          Questions appear one at a time. Answer options are clear and simple. Dynamic Guidance
+          adapts the journey to your responses.
+          <br />
+          <br />
+          Now take a breath, trust your intuition — and enjoy the journey ahead.
+        </span>
+        {/* Desktop line breaks */}
+        <span className="hidden md:inline">
+          For ~15 min we will guide you towards the most meaningful exploration of
+          <br />
+          your sexuality. Questions appear one at a time. Answer options are clear
+          <br />
+          and simple. Dynamic Guidance adapts the journey to your responses.
+          <br />
+          <br />
+          Now take a breath, trust your intuition — and enjoy the journey ahead.
+        </span>
       </>
     ),
   },
@@ -379,7 +464,13 @@ const IntroScreen: FC<{
             <br />
             your
             <br />
-            <span className="bg-gradient-to-b from-[#FE6839] to-[#A78BFA] bg-clip-text italic font-medium text-transparent">
+            <span
+              className="bg-clip-text text-transparent"
+              style={{
+                backgroundImage:
+                  "linear-gradient(90deg, #FE6839 27.4%, #A78BFA 76.92%, #E9D5FF 100%)",
+              }}
+            >
               sexual archetypes
             </span>
           </h1>
@@ -393,7 +484,13 @@ const IntroScreen: FC<{
             <br />
             to discover your
             <br />
-            <span className="bg-gradient-to-b from-[#FE6839] to-[#A78BFA] bg-clip-text italic font-medium text-transparent">
+            <span
+              className="bg-clip-text text-transparent"
+              style={{
+                backgroundImage:
+                  "linear-gradient(90deg, #FE6839 27.4%, #A78BFA 76.92%, #E9D5FF 100%)",
+              }}
+            >
               sexual archetypes
             </span>
           </h1>
@@ -856,6 +953,8 @@ const ConsentScreen: FC<{
               I have read and agree to the{" "}
               <Link
                 href="/privacy-policy"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="no-underline decoration-white/50 underline-offset-2 transition-all duration-300 hover:text-white hover:underline"
               >
                 Privacy Policy
@@ -863,6 +962,8 @@ const ConsentScreen: FC<{
               ,{" "}
               <Link
                 href="/terms-and-conditions"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="no-underline decoration-white/50 underline-offset-2 transition-all duration-300 hover:text-white hover:underline"
               >
                 Terms &amp; Conditions
@@ -870,6 +971,8 @@ const ConsentScreen: FC<{
               ,{" "}
               <Link
                 href="/terms-of-use"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="no-underline decoration-white/50 underline-offset-2 transition-all duration-300 hover:text-white hover:underline"
               >
                 Terms of Use
@@ -877,6 +980,8 @@ const ConsentScreen: FC<{
               ,{" "}
               <Link
                 href="/digital-content-terms"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="no-underline decoration-white/50 underline-offset-2 transition-all duration-300 hover:text-white hover:underline"
               >
                 Digital Content &amp; Subscription Terms
@@ -884,6 +989,8 @@ const ConsentScreen: FC<{
               and{" "}
               <Link
                 href="/medical-disclaimer"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="no-underline decoration-white/50 underline-offset-2 transition-all duration-300 hover:text-white hover:underline"
               >
                 Medical &amp; Psychological Disclaimer
