@@ -1,6 +1,7 @@
 # Architecture
 
 **Analysis Date:** 2025-01-14
+**Last Updated:** 2026-03-05
 
 ## Pattern Overview
 
@@ -8,11 +9,13 @@
 
 **Key Characteristics:**
 
-- Next.js App Router architecture
+- Next.js 16 App Router architecture
 - Server-side rendering for pages
 - Client components for interactivity
-- API routes for form handling (waitlist, contact)
+- API routes for form handling (waitlist, contact) and staging auth
 - No persistent user sessions or authentication
+- CSRF protection via double-submit cookie pattern
+- Supabase-backed rate limiting on all form endpoints
 
 ## Layers
 
@@ -29,33 +32,33 @@
 - Purpose: Reusable UI components organized by page
 - Contains: React components (Server + Client)
 - Location: `components/` directory
-- Subdirectories: `landing/`, `about/`
-- Depends on: Theme utilities, Tailwind CSS
+- Subdirectories: `landing/`, `about/`, `glossary/`, `legal/`, `survey/`
+- Depends on: CSS custom properties (globals.css), Tailwind CSS
 - Used by: Pages
 
 **API Layer:**
 
-- Purpose: Server-side form processing
-- Contains: Route handlers for POST requests
+- Purpose: Server-side form processing and utilities
+- Contains: Route handlers for POST/GET requests
 - Location: `app/api/` directory
-- Depends on: External services (Supabase, Resend, Slack)
+- Depends on: External services (Supabase, Resend, Slack), lib utilities
 - Used by: Client-side form submissions
 
 **Library Layer:**
 
 - Purpose: Shared utilities and helpers
-- Contains: Analytics tracking, email templates
+- Contains: Analytics, CSRF, rate limiting, circuit breaker, logging, email templates
 - Location: `lib/` directory
-- Depends on: External APIs (Google Analytics)
-- Used by: Components, API routes
+- Key files: `analytics.ts`, `csrf.ts`, `ratelimit.ts`, `circuit-breaker.ts`, `logger.ts`, `fetch-with-timeout.ts`
+- Depends on: External APIs, Supabase
+- Used by: Components, API routes, middleware
 
-**Theme Layer:**
+**Middleware Layer:**
 
-- Purpose: Design system tokens and utilities
-- Contains: Gradient definitions, radius, effects
-- Location: `components/theme.ts`, `app/globals.css`
-- Depends on: CSS custom properties
-- Used by: All components
+- Purpose: Security headers, CSRF cookie management, request logging
+- Contains: CSP directives, CSRF token generation, security logging
+- Location: `proxy.ts`
+- Used by: All requests
 
 ## Data Flow
 
@@ -63,50 +66,53 @@
 
 1. User navigates to `/`
 2. Next.js renders `app/page.tsx` (Server Component)
-3. `LandingPage` component composes all sections
+3. `LandingPage` component composes all sections (S01Hero through S14CTA)
 4. Client components hydrate for interactivity
-5. Google Analytics tracks page view
+5. Smooth scroll initialized (Lenis)
+6. Google Analytics tracks page view
 
 **Waitlist Signup Flow:**
 
 1. User submits email via modal/form
 2. Client-side validation (basic)
 3. POST to `/api/waitlist`
-4. Server validates with Zod schema
-5. Rate limiting check (IP-based)
-6. Honeypot check (bot detection)
-7. Check Supabase for existing email
-8. Insert new signup to Supabase
-9. Send confirmation email via Resend
-10. Notify Slack webhook
-11. Return success response
-12. Client shows success state
+4. CSRF token verification (`lib/csrf.ts`)
+5. Rate limiting check (IP-based, Supabase-backed)
+6. Server validates with Zod schema
+7. Honeypot check (bot detection)
+8. Check Supabase for existing email
+9. Insert new signup to Supabase
+10. Send confirmation email via Resend
+11. Notify Slack webhook
+12. Return success response
+13. Client shows success state
 
 **Contact Form Flow:**
 
 1. User fills contact form on About page
 2. reCAPTCHA verification on client
 3. POST to `/api/contact` with captcha token
-4. Server validates with Zod schema
-5. Rate limiting check
-6. Server-side reCAPTCHA verification
-7. Send email via Resend to team
-8. Notify Slack webhook
-9. Return success response
+4. CSRF token verification
+5. Rate limiting check (Supabase-backed)
+6. Server validates with Zod schema
+7. Server-side reCAPTCHA verification
+8. Send email via Resend to team
+9. Notify Slack webhook
+10. Return success response
 
 **State Management:**
 
 - Stateless - No persistent client state
 - Form state managed locally in components
 - No global state management (Redux, Context)
-- Server state: Database (Supabase) for waitlist only
+- Server state: Database (Supabase) for waitlist and rate limiting
 
 ## Key Abstractions
 
 **Section Components:**
 
 - Purpose: Self-contained page sections
-- Examples: `HeroSection`, `FooterSection`, `Section05-12`
+- Examples: `S01Hero`, `S06Archetypes`, `S13FAQ`, `S14CTA`
 - Pattern: Functional components with Tailwind styling
 - Location: `components/landing/*.tsx`, `components/about/*.tsx`
 
@@ -114,15 +120,8 @@
 
 - Purpose: Server-side form processing
 - Examples: `app/api/waitlist/route.ts`, `app/api/contact/route.ts`
-- Pattern: Next.js Route Handlers with POST method
-- Features: Rate limiting, validation, honeypot
-
-**Theme Constants:**
-
-- Purpose: Centralized design tokens
-- Examples: `gradients`, `radii`, `effects`, `pills`
-- Pattern: Exported objects with Tailwind class strings
-- Location: `components/theme.ts`
+- Pattern: Next.js Route Handlers with CSRF + rate limiting + Zod validation
+- Features: CSRF protection, Supabase-backed rate limiting, validation, honeypot
 
 **Analytics Helpers:**
 
@@ -145,11 +144,19 @@
 - `/about` - `app/about/page.tsx` → `AboutPage`
 - `/waitlist` - `app/waitlist/page.tsx`
 - `/survey` - `app/survey/page.tsx` → `SurveyPage`
+- `/glossary` - `app/glossary/page.tsx` → Glossary index
+- `/glossary/[slug]` - `app/glossary/[slug]/page.tsx` → Glossary term
+- `/trust-zone` - `app/trust-zone/page.tsx`
+- `/login` - `app/login/page.tsx` → Staging login
+- `/privacy-policy`, `/terms-of-use`, `/terms-and-conditions`, `/medical-disclaimer`, `/digital-content-terms`, `/cookies`, `/imprint` - Legal pages
 
 **API Routes:**
 
 - `/api/waitlist` - `app/api/waitlist/route.ts`
 - `/api/contact` - `app/api/contact/route.ts`
+- `/api/health` - `app/api/health/route.ts`
+- `/api/staging-login` - `app/api/staging-login/route.ts` (staging only)
+- `/api/staging-logout` - `app/api/staging-logout/route.ts` (staging only)
 
 **SEO Routes:**
 
@@ -164,17 +171,18 @@
 
 - API routes return JSON with `error` field on failure
 - Rate limiting returns 429 status
+- CSRF failure returns 403 status
 - Validation errors return 400 status
 - External service errors return 500 status
-- Console logging for debugging (no structured error tracking)
+- Structured logging via pino (`lib/logger.ts`)
 
 ## Cross-Cutting Concerns
 
 **Logging:**
 
-- Console.log/warn/error for debugging
-- No structured logging or log aggregation
-- Slack notifications for important events
+- pino structured logging (`lib/logger.ts`)
+- Slack notifications for important events (waitlist signups, contact submissions)
+- @vercel/otel for OpenTelemetry integration
 
 **Validation:**
 
@@ -183,11 +191,14 @@
 
 **Security:**
 
-- Rate limiting (IP-based, in-memory)
+- CSRF protection via double-submit cookie (`lib/csrf.ts`, `proxy.ts`)
+- Rate limiting (IP-based, Supabase-backed via `lib/ratelimit.ts`)
 - Honeypot fields for bot detection
 - reCAPTCHA for contact form
-- Strict CSP headers in `next.config.js`
+- Strict CSP headers in `proxy.ts`
 - Input sanitization via Zod
+- Fetch timeout wrapper (`lib/fetch-with-timeout.ts`)
+- Circuit breaker pattern (`lib/circuit-breaker.ts`)
 
 **SEO:**
 
@@ -198,4 +209,5 @@
 ---
 
 _Architecture analysis: 2025-01-14_
+_Last updated: 2026-03-05_
 _Update when major patterns change_

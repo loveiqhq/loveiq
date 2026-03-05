@@ -23,7 +23,9 @@ loveiq-web/
 │   ├── api/
 │   │   ├── contact/route.ts    # Contact form → Resend + Slack
 │   │   ├── waitlist/route.ts   # Waitlist signup → Supabase + Resend + Slack
-│   │   └── health/route.ts     # Health check endpoint
+│   │   ├── health/route.ts     # Health check endpoint
+│   │   ├── staging-login/route.ts   # Staging environment auth
+│   │   └── staging-logout/route.ts  # Staging environment auth
 │   ├── about/page.tsx          # About page
 │   ├── waitlist/page.tsx       # Waitlist standalone page
 │   ├── glossary/               # Glossary pages (index + [slug])
@@ -51,6 +53,8 @@ loveiq-web/
 │   ├── analytics.ts            # GA4 event tracking helpers
 │   ├── csrf.ts                 # CSRF token verification
 │   ├── ratelimit.ts            # IP-based rate limiting (Supabase-backed)
+│   ├── circuit-breaker.ts      # Circuit breaker pattern for external calls
+│   ├── logger.ts               # pino structured logging
 │   ├── fetch-with-timeout.ts   # Fetch wrapper with timeout
 │   └── emails/
 │       └── waitlist.ts         # Waitlist confirmation email template
@@ -60,8 +64,13 @@ loveiq-web/
 ├── public/                     # Static assets (images, videos)
 ├── proxy.ts                    # Middleware: CSP headers, CSRF cookies, security logging
 ├── .github/workflows/
-│   ├── security.yml            # Comprehensive security scanning (secrets, SAST, dependencies, SBOM)
-│   └── codeql.yml              # Advanced CodeQL analysis
+│   ├── ci.yml                  # Build + lint + test
+│   ├── security.yml            # Security scanning (secrets, SAST, dependencies, SBOM)
+│   ├── codeql.yml              # Advanced CodeQL analysis
+│   ├── release.yml             # Release workflow
+│   ├── health-monitor.yml      # Health monitoring
+│   ├── lighthouse.yml          # Lighthouse CI
+│   └── load-test.yml           # Load testing
 ├── .planning/                  # Architecture docs (ARCHITECTURE.md, CONVENTIONS.md, etc.)
 ├── SECURITY.md                 # Security guidelines + secrets rotation
 ├── DEVELOPMENT.md              # Development setup guide
@@ -172,10 +181,15 @@ The middleware (`proxy.ts`) relaxes CSP in dev mode:
 
 ## CI/CD
 
-**GitHub Actions** (`.github/workflows/security.yml`):
+**GitHub Actions** (`.github/workflows/`):
 
-1. **Security Audit:** `npm audit --audit-level=high` - Fails on high/critical vulnerabilities
-2. **Build & Lint:** `npm run lint` + `npm run build`
+- `ci.yml` — Build + lint + test on push/PR
+- `security.yml` — Security scanning (secrets, SAST, dependencies, SBOM)
+- `codeql.yml` — Advanced CodeQL analysis
+- `release.yml` — Release workflow
+- `health-monitor.yml` — Health monitoring
+- `lighthouse.yml` — Lighthouse CI
+- `load-test.yml` — Load testing
 
 Runs on push/PR to `main`.
 

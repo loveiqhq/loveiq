@@ -10,7 +10,7 @@ Marketing website for LoveIQ — a science-backed relationship intelligence plat
 - **Email:** Resend
 - **Database:** Supabase (waitlist storage + rate limiting)
 - **Deployment:** Vercel
-- **Testing:** Vitest
+- **Testing:** Vitest + Playwright
 
 ## Quick Start
 

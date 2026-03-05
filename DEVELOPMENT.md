@@ -20,6 +20,7 @@ npm run dev
 
 | Variable                         | Purpose              | Required for dev?         |
 | -------------------------------- | -------------------- | ------------------------- |
+| `NEXT_PUBLIC_SITE_URL`           | Canonical URL        | Only for metadata         |
 | `SUPABASE_URL`                   | Waitlist database    | Only for form submissions |
 | `SUPABASE_SERVICE_ROLE_KEY`      | Supabase auth        | Only for form submissions |
 | `RESEND_API_KEY`                 | Email sending        | Only for form submissions |
@@ -28,10 +29,13 @@ npm run dev
 
 ### Optional
 
-| Variable                     | Purpose                                  |
-| ---------------------------- | ---------------------------------------- |
-| `SLACK_WAITLIST_WEBHOOK_URL` | Slack notifications for waitlist signups |
-| `SLACK_CONTACT_WEBHOOK_URL`  | Slack notifications for contact form     |
+| Variable                     | Purpose                                                  |
+| ---------------------------- | -------------------------------------------------------- |
+| `RESEND_FROM`                | From address (default: `LoveIQ <hello@send.loveiq.org>`) |
+| `RESEND_REPLY_TO`            | Reply-to address (default: `hello@loveiq.org`)           |
+| `CONTACT_TO_EMAIL`           | Contact form recipient email                             |
+| `SLACK_WAITLIST_WEBHOOK_URL` | Slack notifications for waitlist signups                 |
+| `SLACK_CONTACT_WEBHOOK_URL`  | Slack notifications for contact form                     |
 
 **Tip:** You can run the site without any env vars set - the UI will render fine. Forms will fail gracefully with error messages.
 
@@ -56,6 +60,17 @@ In development, these scripts still load but may not function fully without keys
 - **Google Analytics** - Loads but won't track without valid ID
 - **CookieYes** - Cookie consent banner loads
 - **reCAPTCHA** - Requires `NEXT_PUBLIC_RECAPTCHA_SITE_KEY`
+
+## Testing
+
+```bash
+npm test              # Run unit tests (Vitest)
+npm run test:watch    # Run tests in watch mode
+npm run test:coverage # Run tests with coverage report
+npm run test:e2e      # Run E2E tests (Playwright) — builds prod first
+```
+
+Unit tests live in `__tests__/` and E2E tests in `e2e/`. See `.planning/codebase/TESTING.md` for full test reference.
 
 ## Common Issues
 
@@ -84,6 +99,8 @@ npm run dev      # Start dev server (http://localhost:3000)
 npm run build    # Production build
 npm run start    # Run production build locally
 npm run lint     # Run ESLint
+npm run analyze  # Bundle size analysis (visual treemap)
+npm run check    # Lint + test + build (full CI check)
 ```
 
 ## Project Structure
