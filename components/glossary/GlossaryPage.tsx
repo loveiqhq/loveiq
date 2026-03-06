@@ -7,7 +7,7 @@ import Link from "next/link";
 import GlossaryNavSection from "./GlossaryNavSection";
 import FooterSection from "@/components/landing/FooterSection";
 import { trackStartSurvey } from "@/lib/analytics";
-import { glossaryTerms as allTerms, type GlossaryTerm } from "@/data/glossary-data";
+import type { GlossaryTerm } from "@/data/glossary-data";
 
 const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 
@@ -24,9 +24,15 @@ const GlossaryPage: FC = () => {
   const router = useRouter();
   const pathname = usePathname();
 
+  const [allTerms, setAllTerms] = useState<GlossaryTerm[]>([]);
   const [searchQuery, setSearchQuery] = useState(searchParams.get("q") ?? "");
   const [activeFilter, setActiveFilter] = useState("all");
   const [activeLetter, setActiveLetter] = useState("A");
+
+  // Lazy-load the full glossary data (688KB) only when this page is visited
+  useEffect(() => {
+    import("@/data/glossary-data").then((mod) => setAllTerms(mod.glossaryTerms));
+  }, []);
 
   const handleSearchChange = (value: string) => {
     setSearchQuery(value);
@@ -87,7 +93,7 @@ const GlossaryPage: FC = () => {
     }
 
     return grouped;
-  }, []);
+  }, [allTerms]);
 
   const scrollToLetter = (letter: string) => {
     setActiveLetter(letter);

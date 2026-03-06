@@ -113,7 +113,8 @@
       "WebFetch(domain:google.github.io)",
       "Bash(tail:*)",
       "Bash(head:*)",
-      "Bash(ffprobe:*)"
+      "Bash(ffprobe:*)",
+      "Bash(rm:*)"
     ]
   }
 }

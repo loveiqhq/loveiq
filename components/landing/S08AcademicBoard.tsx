@@ -28,48 +28,46 @@ const renderLogos = (index: number) => {
     case 0: // Dijana — Columbia + HHL
       return (
         <>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
+          <Image
             src="/academic/columbia-logo.svg"
             alt="Columbia University logo"
-            style={{ height: 40, width: 58, transform: "scaleY(-1)" }}
+            width={58}
+            height={40}
+            style={{ transform: "scaleY(-1)" }}
           />
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/academic/hhl-logo.svg"
-            alt="HHL Leipzig logo"
-            style={{ height: 34, width: 136 }}
-          />
+          <Image src="/academic/hhl-logo.svg" alt="HHL Leipzig logo" width={136} height={34} />
         </>
       );
     case 1: // Bruno — ICL + Oxford
       return (
         <>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
+          <Image
             src="/academic/icl-logo.svg"
             alt="Imperial College London logo"
-            style={{ height: 28, width: 107, transform: "scaleY(-1)" }}
+            width={107}
+            height={28}
+            style={{ transform: "scaleY(-1)" }}
           />
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
+          <Image
             src="/academic/oxford-logo.svg"
             alt="University of Oxford logo"
-            style={{ height: 38, width: 128, transform: "scaleY(-1)" }}
+            width={128}
+            height={38}
+            style={{ transform: "scaleY(-1)" }}
           />
         </>
       );
     case 2: // Quentin — Oxford + MIT
       return (
         <>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
+          <Image
             src="/academic/oxford-logo.svg"
             alt="University of Oxford logo"
-            style={{ height: 34, width: 115, transform: "scaleY(-1)" }}
+            width={115}
+            height={34}
+            style={{ transform: "scaleY(-1)" }}
           />
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/academic/mit-logo.svg" alt="MIT logo" style={{ height: 40, width: 75 }} />
+          <Image src="/academic/mit-logo.svg" alt="MIT logo" width={75} height={40} />
         </>
       );
     default:

@@ -6,12 +6,13 @@ import { headers } from "next/headers";
 import SmoothScroll from "@/components/SmoothScroll";
 import { NonceProvider } from "@/components/NonceProvider";
 import HydrationMarker from "@/components/HydrationMarker";
+import WebVitals from "@/components/WebVitals";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.loveiq.org";
 
 const manrope = Manrope({
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
+  weight: ["300", "400", "500", "600", "700", "800"],
   variable: "--font-sans",
   display: "swap",
 });
@@ -243,20 +244,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang="en" className={`${manrope.variable} ${lora.variable}`}>
       <head>
-        <link
-          rel="preload"
-          as="video"
-          href="/couple-hero-mobile.mp4"
-          type="video/mp4"
-          media="(max-width: 640px)"
-        />
-        <link
-          rel="preload"
-          as="video"
-          href="/couple-hero.mp4"
-          type="video/mp4"
-          media="(min-width: 641px)"
-        />
         <link rel="preconnect" href="https://cdn-cookieyes.com" />
         <link rel="preconnect" href="https://www.googletagmanager.com" />
         <link rel="dns-prefetch" href="https://www.google.com" />
@@ -265,7 +252,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <Script
           id="cookieyes"
           src="https://cdn-cookieyes.com/client_data/761bc9303937f7b41b200de8ed556d45/script.js"
-          strategy="afterInteractive"
+          strategy="lazyOnload"
           nonce={nonce}
         />
         <Script
@@ -308,6 +295,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           Skip to main content
         </a>
         <HydrationMarker />
+        <WebVitals />
         <NonceProvider nonce={nonce}>
           <SmoothScroll>{children}</SmoothScroll>
         </NonceProvider>

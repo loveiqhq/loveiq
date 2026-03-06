@@ -12250,3 +12250,14 @@ export function getTermBySlug(slug: string): GlossaryTerm | undefined {
 export function getAllSlugs(): string[] {
   return glossaryTerms.map((term) => term.slug);
 }
+
+// Helper to resolve related term names to slugs (for server-side usage,
+// avoids shipping the full glossaryTerms array to the client)
+export function resolveRelatedTerms(
+  relatedTermNames: string[]
+): Array<{ name: string; slug: string | null }> {
+  return relatedTermNames.map((name) => {
+    const found = glossaryTerms.find((t) => t.term.toLowerCase() === name.toLowerCase());
+    return { name, slug: found?.slug ?? null };
+  });
+}

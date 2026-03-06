@@ -20,6 +20,19 @@ async function sha256(value: string): Promise<string> {
     .join("");
 }
 
+// Cache staging password hash at module level to avoid recomputing on every request
+let stagingPasswordHash: string | null = null;
+let stagingPasswordSource: string | null = null;
+
+async function getStagingPasswordHash(password: string): Promise<string> {
+  if (stagingPasswordHash && stagingPasswordSource === password) {
+    return stagingPasswordHash;
+  }
+  stagingPasswordHash = await sha256(password);
+  stagingPasswordSource = password;
+  return stagingPasswordHash;
+}
+
 export async function proxy(request: NextRequest) {
   // Staging gate: when STAGING_PASSWORD is set, require a valid session cookie
   const STAGING_PASSWORD = process.env.STAGING_PASSWORD;
@@ -34,7 +47,7 @@ export async function proxy(request: NextRequest) {
 
     if (!isPublic) {
       const session = request.cookies.get("staging_session")?.value;
-      const expected = await sha256(STAGING_PASSWORD);
+      const expected = await getStagingPasswordHash(STAGING_PASSWORD);
       if (session !== expected) {
         return NextResponse.redirect(new URL("/login", request.url));
       }

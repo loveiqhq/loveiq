@@ -7,7 +7,7 @@ import { getBreaker, CircuitOpenError } from "@/lib/circuit-breaker";
 import { verifyCsrfToken } from "@/lib/csrf";
 import logger from "@/lib/logger";
 
-const RESEND_TIMEOUT_MS = 3_000;
+const RESEND_TIMEOUT_MS = 5_000;
 
 /** See waitlist/route.ts — same pattern. */
 function scheduleAfterResponse(fn: () => Promise<void>): void {
@@ -142,6 +142,8 @@ const sendSlackContactNotification = async (payload: {
 };
 
 export async function POST(request: Request) {
+  const routeStart = Date.now();
+
   // Verify CSRF token
   const csrfValid = await verifyCsrfToken(request);
   if (!csrfValid) {
@@ -157,7 +159,9 @@ export async function POST(request: Request) {
   const ip = getClientIp(request);
 
   // Check IP-based rate limit (persistent across restarts)
+  const rateLimitStart = Date.now();
   const rateLimit = await checkRateLimit(ip, RATE_LIMIT_CONFIG);
+  logger.info({ duration_ms: Date.now() - rateLimitStart }, "contact: rateLimit check");
   if (!rateLimit.allowed) {
     return NextResponse.json(
       { error: "Please try again later." },
@@ -177,7 +181,9 @@ export async function POST(request: Request) {
 
   const { firstName, lastName, phone, email, message, captcha } = parsed.data;
 
+  const captchaStart = Date.now();
   const captchaOk = await verifyCaptcha(captcha, ip);
+  logger.info({ duration_ms: Date.now() - captchaStart }, "contact: reCAPTCHA verify");
   if (!captchaOk) {
     return NextResponse.json({ error: "Captcha failed. Please try again." }, { status: 400 });
   }
@@ -195,8 +201,8 @@ export async function POST(request: Request) {
 
   const from = process.env.RESEND_FROM || "LoveIQ <hello@send.loveiq.org>";
 
-  try {
-    await Promise.race([
+  const sendEmail = () =>
+    Promise.race([
       getResend().emails.send({
         from,
         to: contactToEmail!,
@@ -214,13 +220,27 @@ export async function POST(request: Request) {
         setTimeout(() => reject(new Error("Resend timeout")), RESEND_TIMEOUT_MS)
       ),
     ]);
-  } catch (err) {
-    logger.error({ err }, "Contact email send error or timeout");
-    return NextResponse.json(
-      { error: "Unable to send message. Please try later." },
-      { status: 500 }
-    );
+
+  const resendStart = Date.now();
+  try {
+    await sendEmail();
+  } catch (firstErr) {
+    // One retry with 1s backoff for transient failures
+    logger.warn({ err: firstErr }, "Contact email first attempt failed, retrying");
+    try {
+      await new Promise((r) => setTimeout(r, 1000));
+      await sendEmail();
+    } catch (retryErr) {
+      logger.error({ err: retryErr }, "Contact email retry also failed");
+      return NextResponse.json(
+        { error: "Unable to send message. Please try later." },
+        { status: 500 }
+      );
+    }
   }
+
+  logger.info({ duration_ms: Date.now() - resendStart }, "contact: resend email");
+  logger.info({ duration_ms: Date.now() - routeStart }, "contact: total route duration");
 
   // Slack runs after the response — keeps the function alive but never blocks it
   scheduleAfterResponse(() =>

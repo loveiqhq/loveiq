@@ -1,21 +1,30 @@
 /**
- * Persistent rate limiting using Supabase.
+ * Rate limiting using Upstash Redis (Vercel KV).
  *
- * This module provides sliding-window rate limiting that persists across
- * server restarts and deployments. When Supabase is configured but unreachable,
- * requests are blocked (fail-closed) to prevent rate limit bypass during outages.
- * When Supabase is not configured at all (local dev), an in-memory fallback is used.
+ * Uses edge-deployed Redis for sub-10ms rate limit checks, replacing the
+ * previous Supabase-backed implementation that added 150-400ms RTT for
+ * non-US users. Falls back to in-memory rate limiting when Redis is not
+ * configured (local dev). Fails open on Redis errors to prevent
+ * infrastructure failures from blocking legitimate traffic.
  */
 
-import { fetchWithTimeout } from "./fetch-with-timeout";
-import { getBreaker } from "./circuit-breaker";
+import { Redis } from "@upstash/redis";
 import logger from "./logger";
 
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+// Initialize Redis client from Vercel KV env vars
+let redis: Redis | null = null;
 
-/** Timeout for Supabase rate limit requests (ms) */
-const RATELIMIT_TIMEOUT_MS = 3000;
+function getRedis(): Redis | null {
+  if (redis) return redis;
+
+  const url = process.env.KV_REST_API_URL;
+  const token = process.env.KV_REST_API_TOKEN;
+
+  if (!url || !token) return null;
+
+  redis = new Redis({ url, token });
+  return redis;
+}
 
 interface RateLimitResult {
   allowed: boolean;
@@ -81,147 +90,92 @@ if (typeof setInterval !== "undefined") {
 }
 
 /**
- * Check if a request should be rate limited using Supabase for persistence.
- * Uses a sliding window algorithm. Falls back to in-memory rate limiting
- * when Supabase is unavailable.
- *
- * @param key - The key to rate limit (typically IP address or email)
- * @param config - Rate limit configuration
- * @returns RateLimitResult indicating if request is allowed
+ * Check if a request should be rate limited using Redis for persistence.
+ * Uses a fixed window algorithm with Redis INCR + EXPIRE for atomic,
+ * sub-10ms rate limit checks. Falls back to in-memory rate limiting
+ * when Redis is not configured.
  */
 export async function checkRateLimit(
   key: string,
   config: RateLimitConfig
 ): Promise<RateLimitResult> {
   const now = Date.now();
+  const windowSec = Math.ceil(config.windowMs / 1000);
   const resetAt = new Date(now + config.windowMs);
-  const compositeKey = `${config.bucket}:${key}`;
+  const compositeKey = `rl:${config.bucket}:${key}`;
 
-  // If Supabase is not configured, use in-memory fallback
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-    logger.warn("[ratelimit] Supabase not configured, using in-memory fallback");
+  const kv = getRedis();
+
+  // If Redis is not configured, use in-memory fallback
+  if (!kv) {
+    logger.warn("[ratelimit] Redis not configured, using in-memory fallback");
     return checkMemoryRateLimit(compositeKey, config);
   }
 
   try {
-    // Call Supabase RPC function to atomically check and update rate limit
-    // Wrapped in circuit breaker: after 3 failures, opens for 30s (fail fast, no timeout wait)
-    const response = await getBreaker("supabase").fire(() =>
-      fetchWithTimeout(`${SUPABASE_URL}/rest/v1/rpc/check_rate_limit`, {
-        method: "POST",
-        headers: {
-          apikey: SUPABASE_SERVICE_ROLE_KEY,
-          Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-          "Content-Type": "application/json",
-          Prefer: "return=representation",
-        },
-        body: JSON.stringify({
-          p_key: compositeKey,
-          p_limit: config.limit,
-          p_window_ms: config.windowMs,
-          p_now: now,
-        }),
-        cache: "no-store",
-        timeoutMs: RATELIMIT_TIMEOUT_MS,
-      })
-    );
+    // Atomic INCR + EXPIRE: increment counter and set TTL if new key
+    const count = await kv.incr(compositeKey);
 
-    if (!response.ok) {
-      logger.error(
-        { status: response.status },
-        response.status === 404
-          ? "[ratelimit] check_rate_limit RPC not found — deploy the SQL function. Blocking request."
-          : "[ratelimit] Supabase RPC failed, blocking request (fail-closed)"
-      );
-      return { allowed: false, remaining: 0, resetAt };
+    // Set expiry only on the first request in the window
+    if (count === 1) {
+      await kv.expire(compositeKey, windowSec);
     }
 
-    const result = await response.json();
+    if (count > config.limit) {
+      return {
+        allowed: false,
+        remaining: 0,
+        resetAt,
+      };
+    }
+
     return {
-      allowed: result.allowed ?? true,
-      remaining: result.remaining ?? config.limit,
-      resetAt: new Date(result.reset_at ?? resetAt),
+      allowed: true,
+      remaining: config.limit - count,
+      resetAt,
     };
   } catch (err) {
-    logger.error({ err }, "[ratelimit] Error checking rate limit, blocking request (fail-closed)");
-    return { allowed: false, remaining: 0, resetAt };
+    logger.error({ err }, "[ratelimit] Redis error, allowing request (fail-open)");
+    return { allowed: true, remaining: config.limit, resetAt };
   }
 }
 
 /**
  * Check cooldown for a specific key (e.g., email-based cooldown).
- * Simpler than rate limiting - just checks if enough time has passed.
+ * Uses Redis SET with NX + EX for atomic check-and-set in a single command.
+ * If the key exists (SET NX returns null), the cooldown hasn't elapsed.
  */
 export async function checkCooldown(
   key: string,
   bucket: string,
   cooldownMs: number
 ): Promise<{ allowed: boolean; retryAfterMs: number }> {
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+  const kv = getRedis();
+  if (!kv) {
     return { allowed: true, retryAfterMs: 0 };
   }
 
-  const compositeKey = `cooldown:${bucket}:${key}`;
-  const now = Date.now();
+  const compositeKey = `cd:${bucket}:${key}`;
+  const cooldownSec = Math.ceil(cooldownMs / 1000);
 
   try {
-    const getResponse = await getBreaker("supabase").fire(() =>
-      fetchWithTimeout(
-        `${SUPABASE_URL}/rest/v1/rate_limits?key=eq.${encodeURIComponent(compositeKey)}&select=updated_at`,
-        {
-          headers: {
-            apikey: SUPABASE_SERVICE_ROLE_KEY,
-            Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-          },
-          cache: "no-store",
-          timeoutMs: RATELIMIT_TIMEOUT_MS,
-        }
-      )
-    );
+    // SET NX: only sets the key if it doesn't exist, with TTL.
+    // Returns "OK" if set (cooldown passed), null if key exists (still cooling down).
+    const result = await kv.set(compositeKey, Date.now(), { nx: true, ex: cooldownSec });
 
-    if (!getResponse.ok) {
-      logger.error(
-        { status: getResponse.status },
-        "[ratelimit] Cooldown GET failed, blocking (fail-closed)"
-      );
-      return { allowed: false, retryAfterMs: cooldownMs };
+    if (result === null) {
+      // Key exists — check remaining TTL for retry-after
+      const ttl = await kv.ttl(compositeKey);
+      return {
+        allowed: false,
+        retryAfterMs: ttl > 0 ? ttl * 1000 : cooldownMs,
+      };
     }
-
-    const records = (await getResponse.json()) as Array<{ updated_at: string }>;
-    const lastHit = records[0]?.updated_at;
-
-    if (lastHit) {
-      const lastHitTime = new Date(lastHit).getTime();
-      const elapsed = now - lastHitTime;
-      if (elapsed < cooldownMs) {
-        return { allowed: false, retryAfterMs: cooldownMs - elapsed };
-      }
-    }
-
-    // Update cooldown timestamp
-    await getBreaker("supabase").fire(() =>
-      fetchWithTimeout(`${SUPABASE_URL}/rest/v1/rate_limits`, {
-        method: "POST",
-        headers: {
-          apikey: SUPABASE_SERVICE_ROLE_KEY,
-          Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-          "Content-Type": "application/json",
-          Prefer: "resolution=merge-duplicates",
-        },
-        body: JSON.stringify({
-          key: compositeKey,
-          hits: [],
-          updated_at: new Date(now).toISOString(),
-        }),
-        cache: "no-store",
-        timeoutMs: RATELIMIT_TIMEOUT_MS,
-      })
-    );
 
     return { allowed: true, retryAfterMs: 0 };
   } catch (err) {
-    logger.error({ err }, "[ratelimit] Cooldown check error, blocking (fail-closed)");
-    return { allowed: false, retryAfterMs: cooldownMs };
+    logger.error({ err }, "[ratelimit] Redis cooldown error, allowing request (fail-open)");
+    return { allowed: true, retryAfterMs: 0 };
   }
 }
 

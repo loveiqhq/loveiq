@@ -127,6 +127,8 @@ const notifySlackWaitlist = async ({
 };
 
 export async function POST(request: Request) {
+  const routeStart = Date.now();
+
   // Verify CSRF token
   const csrfValid = await verifyCsrfToken(request);
   if (!csrfValid) {
@@ -136,7 +138,9 @@ export async function POST(request: Request) {
   const ip = getClientIp(request);
 
   // Check IP-based rate limit (persistent across restarts)
+  const rateLimitStart = Date.now();
   const rateLimit = await checkRateLimit(ip, RATE_LIMIT_CONFIG);
+  logger.info({ duration_ms: Date.now() - rateLimitStart }, "waitlist: rateLimit check");
   if (!rateLimit.allowed) {
     return NextResponse.json(
       { error: "Please try again later." },
@@ -162,8 +166,48 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   }
 
-  // Check email-based cooldown (persistent across restarts)
-  const cooldown = await checkCooldown(normalizedEmail, "waitlist-email", EMAIL_COOLDOWN_MS);
+  const url = process.env.SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!url || !serviceRoleKey) {
+    return NextResponse.json({ error: "Service unavailable." }, { status: 503 });
+  }
+
+  // Run cooldown check and duplicate check in parallel to reduce latency
+  // (these are independent reads that don't depend on each other)
+  let cooldown: { allowed: boolean; retryAfterMs: number };
+  let existingRes: Response;
+  const parallelStart = Date.now();
+  try {
+    [cooldown, existingRes] = await Promise.all([
+      checkCooldown(normalizedEmail, "waitlist-email", EMAIL_COOLDOWN_MS),
+      getBreaker("supabase-crud").fire(() =>
+        fetchWithTimeout(
+          `${url}/rest/v1/${tableName}?email=eq.${encodeURIComponent(normalizedEmail)}&select=id&limit=1`,
+          {
+            headers: {
+              apikey: serviceRoleKey,
+              Authorization: `Bearer ${serviceRoleKey}`,
+            },
+            cache: "no-store",
+            timeoutMs: 3000,
+          }
+        )
+      ),
+    ]);
+  } catch (err) {
+    if (err instanceof CircuitOpenError) {
+      logger.warn("Supabase circuit open on waitlist cooldown/duplicate check");
+    } else {
+      logger.error({ err }, "Supabase error on waitlist cooldown/duplicate check");
+    }
+    return NextResponse.json({ error: "Service temporarily unavailable." }, { status: 503 });
+  }
+  logger.info(
+    { duration_ms: Date.now() - parallelStart },
+    "waitlist: cooldown+duplicate check (parallel)"
+  );
+
   if (!cooldown.allowed) {
     return NextResponse.json(
       { error: "Please wait before retrying." },
@@ -172,44 +216,6 @@ export async function POST(request: Request) {
         headers: { "Retry-After": String(Math.ceil(cooldown.retryAfterMs / 1000)) },
       }
     );
-  }
-
-  const url = process.env.SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!url || !serviceRoleKey) {
-    return NextResponse.json({ error: "Service unavailable." }, { status: 503 });
-  }
-
-  const insertPayload = {
-    email: normalizedEmail,
-    source: source?.trim() || "landing-modal",
-    created_at: new Date().toISOString(),
-  };
-
-  // Idempotency: if the email already exists, return success to avoid enumeration
-  let existingRes: Response;
-  try {
-    existingRes = await getBreaker("supabase").fire(() =>
-      fetchWithTimeout(
-        `${url}/rest/v1/${tableName}?email=eq.${encodeURIComponent(normalizedEmail)}&select=id&limit=1`,
-        {
-          headers: {
-            apikey: serviceRoleKey,
-            Authorization: `Bearer ${serviceRoleKey}`,
-          },
-          cache: "no-store",
-          timeoutMs: 3000, // fits within Vercel free plan 10s limit
-        }
-      )
-    );
-  } catch (err) {
-    if (err instanceof CircuitOpenError) {
-      logger.warn("Supabase circuit open on waitlist duplicate check");
-    } else {
-      logger.error({ err }, "Supabase error on waitlist duplicate check");
-    }
-    return NextResponse.json({ error: "Service temporarily unavailable." }, { status: 503 });
   }
 
   if (!existingRes.ok) {
@@ -221,9 +227,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, already: true });
   }
 
+  const insertPayload = {
+    email: normalizedEmail,
+    source: source?.trim() || "landing-modal",
+    created_at: new Date().toISOString(),
+  };
+
   let response: Response;
+  const insertStart = Date.now();
   try {
-    response = await getBreaker("supabase").fire(() =>
+    response = await getBreaker("supabase-crud").fire(() =>
       fetchWithTimeout(`${url}/rest/v1/${tableName}`, {
         method: "POST",
         headers: {
@@ -245,6 +258,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Service temporarily unavailable." }, { status: 503 });
   }
 
+  logger.info({ duration_ms: Date.now() - insertStart }, "waitlist: supabase insert");
+
   if (!response.ok) {
     // 409 = UNIQUE constraint violation: a concurrent request inserted the same email
     // a split-second before us. Treat as success — the record is in the DB.
@@ -253,6 +268,8 @@ export async function POST(request: Request) {
     }
     return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
   }
+
+  logger.info({ duration_ms: Date.now() - routeStart }, "waitlist: total route duration");
 
   // DB insert succeeded — return success immediately.
   // Email and Slack run after the response so the serverless function stays
