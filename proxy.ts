@@ -112,6 +112,8 @@ export async function proxy(request: NextRequest) {
   }
 
   // Security logging for API routes (3.4)
+  // Note: This IP is for observability logging only, not for security decisions
+  // (rate limiting uses getClientIp() which trusts only x-real-ip).
   if (request.nextUrl.pathname.startsWith("/api/")) {
     const ip =
       request.headers.get("x-real-ip") ||

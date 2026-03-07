@@ -17,14 +17,16 @@ import {
   trackSurveyComplete,
   trackSurveyPause,
 } from "@/lib/analytics";
+import { useSubmitSurvey } from "./hooks/useSubmitSurvey";
 
 interface SurveyEngineProps {
   onExit: () => void;
 }
 
 const SurveyEngine: FC<SurveyEngineProps> = ({ onExit }) => {
-  const { currentIndex, startedAt, progress, setAnswer, getAnswer, setCurrentIndex } =
+  const { answers, currentIndex, startedAt, progress, setAnswer, getAnswer, setCurrentIndex } =
     useSurveyState();
+  const { submit: submitSurvey, status: submitStatus } = useSubmitSurvey();
 
   const [animKey, setAnimKey] = useState(0);
   const [dismissedChapters, setDismissedChapters] = useState<Set<number>>(new Set());
@@ -101,6 +103,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit }) => {
       // Survey complete
       const duration = Date.now() - new Date(startedAt).getTime();
       trackSurveyComplete(duration);
+      submitSurvey(answers, startedAt);
       goTo(totalQuestions); // one past the end → triggers completion
       return;
     }
@@ -108,7 +111,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit }) => {
       trackSurveyAnswer(question.qId, question.chapter);
     }
     goTo(currentIndex + 1);
-  }, [currentIndex, totalQuestions, startedAt, question, goTo]);
+  }, [currentIndex, totalQuestions, startedAt, question, goTo, submitSurvey, answers]);
 
   const goPrev = useCallback(() => {
     goTo(currentIndex - 1);
@@ -202,6 +205,20 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit }) => {
           <p className="max-w-md font-sans text-[16px] leading-relaxed text-white/60">
             Thank you for sharing your answers. Your personalized report is being prepared.
           </p>
+          {submitStatus === "submitting" && (
+            <p className="font-sans text-[13px] text-white/40">Saving your answers...</p>
+          )}
+          {submitStatus === "success" && (
+            <p
+              className="font-sans text-[13px] text-white/40"
+              style={{ animation: "survey-fade-up 0.3s ease both 2s reverse" }}
+            >
+              Answers saved
+            </p>
+          )}
+          {submitStatus === "error" && (
+            <p className="font-sans text-[13px] text-white/40">Answers saved locally</p>
+          )}
           <button
             type="button"
             onClick={onExit}

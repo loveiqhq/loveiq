@@ -3,7 +3,7 @@
 **Audit Date:** 2026-01-15
 **Auditor:** Security Review
 **Status:** PARTIALLY IMPLEMENTED
-**Last Updated:** 2026-03-05
+**Last Updated:** 2026-03-07
 
 ---
 
@@ -96,15 +96,15 @@
 
 #### `/api/contact/route.ts`
 
-| Check               | Status             | Evidence               |
-| ------------------- | ------------------ | ---------------------- |
-| Input validation    | ✅ Zod schema      | All fields validated   |
-| CSRF protection     | ✅ IMPLEMENTED     | `verifyCsrfToken()`    |
-| Rate limiting       | ✅ Supabase-backed | `checkRateLimit()`     |
-| CAPTCHA             | ✅ Server-verified | reCAPTCHA v2           |
-| Message length      | ✅                 | Max 1000 chars         |
-| Reply-To header     | ⚠️ RISK            | User email in reply-to |
-| PII masking (Slack) | ❌ MISSING         | Phone/email unmasked   |
+| Check               | Status             | Evidence                                                              |
+| ------------------- | ------------------ | --------------------------------------------------------------------- |
+| Input validation    | ✅ Zod schema      | All fields validated                                                  |
+| CSRF protection     | ✅ IMPLEMENTED     | `verifyCsrfToken()`                                                   |
+| Rate limiting       | ✅ Supabase-backed | `checkRateLimit()`                                                    |
+| CAPTCHA             | ✅ Server-verified | reCAPTCHA v2                                                          |
+| Message length      | ✅                 | Max 1000 chars                                                        |
+| Reply-To header     | ⚠️ RISK            | User email in reply-to                                                |
+| PII masking (Slack) | ✅ IMPLEMENTED     | Email masked, phone masked, message truncated, Slack markdown escaped |
 
 #### `/api/health/route.ts`
 
@@ -128,7 +128,7 @@
 | ---------------- | ----------------------- | ---------------------------------------------------------- |
 | Supabase         | ✅ Secrets server-only  | RLS policy status unknown                                  |
 | Resend           | ✅ Secrets server-only  | Email template properly escaped (`lib/emails/waitlist.ts`) |
-| Slack webhooks   | ✅ Secrets server-only  | Contact form doesn't mask PII                              |
+| Slack webhooks   | ✅ Secrets server-only  | PII masked in both waitlist and contact notifications      |
 | reCAPTCHA        | ✅ Properly verified    | No score threshold (v2 checkbox)                           |
 | Google Analytics | ✅ Public ID acceptable | No PII should be sent                                      |
 | CookieYes        | ✅ External script      | Consent banner integration                                 |
@@ -149,9 +149,9 @@
 
 **NPM Audit Results:**
 
-| Vulnerability      | Severity        | Package                         | Status                    |
-| ------------------ | --------------- | ------------------------------- | ------------------------- |
-| glob CLI injection | HIGH (CVSS 7.5) | `glob` via `eslint-config-next` | DEV-ONLY but needs update |
+| Vulnerability      | Severity        | Package                         | Status                                           |
+| ------------------ | --------------- | ------------------------------- | ------------------------------------------------ |
+| glob CLI injection | HIGH (CVSS 7.5) | `glob` via `eslint-config-next` | ✅ RESOLVED via npm `overrides` (`glob@^10.5.0`) |
 
 ---
 
@@ -169,17 +169,19 @@ _None currently open — CSP nonce implementation still recommended for defense-
 - **Fix:** Supabase-backed persistent rate limiting in `lib/ratelimit.ts`
 - **Verification:** Rate limits persist across server restarts/redeploys
 
-#### RISK-H2: X-Forwarded-For Header Spoofing
+#### RISK-H2: X-Forwarded-For Header Spoofing — MITIGATED ✅
 
+- **Status:** RESOLVED (2026-03)
 - **Location:** `lib/ratelimit.ts`
-- **Impact:** Attacker can bypass IP-based rate limiting by spoofing header
-- **Mitigation:** Vercel automatically strips untrusted headers, but verification needed
+- **Fix:** `getClientIp()` trusts only `x-real-ip`, which Vercel sets to the actual client IP and strips any client-provided value. `X-Forwarded-For` is intentionally ignored (attacker-controlled).
+- **Verification:** Unit tests in `__tests__/lib/ratelimit.test.ts` confirm header trust behavior.
 
-#### RISK-H3: npm Dependency Vulnerability
+#### RISK-H3: npm Dependency Vulnerability — RESOLVED ✅
 
+- **Status:** RESOLVED (2026-03)
 - **Location:** `package.json` → `eslint-config-next` → `glob`
-- **Evidence:** `npm audit` shows HIGH severity (CVSS 7.5) command injection
-- **Impact:** Dev-only but could compromise build pipeline
+- **Fix:** npm `overrides` in `package.json` forces `glob@^10.5.0`, resolving the CLI injection vulnerability.
+- **Verification:** `npm audit` shows 0 vulnerabilities.
 
 ### MEDIUM Risks
 
@@ -188,10 +190,11 @@ _None currently open — CSP nonce implementation still recommended for defense-
 - **Location:** `app/api/contact/route.ts`
 - **Impact:** Could be used in email header injection attacks
 
-#### RISK-M2: Unmasked PII in Slack Contact Notifications
+#### RISK-M2: Unmasked PII in Slack Contact Notifications — IMPLEMENTED ✅
 
-- **Location:** `app/api/contact/route.ts`
-- **Impact:** PII visible to anyone with Slack channel access
+- **Status:** RESOLVED (2026-03)
+- **Location:** `app/api/contact/route.ts` (lines 104–124)
+- **Fix:** Email masking (`j***@example.com`), phone masking (`123***89`), message truncation (200 chars), and Slack markdown escaping all implemented in `notifySlackContact()`.
 
 #### RISK-M3: No CSRF Tokens on State-Changing Endpoints — IMPLEMENTED ✅
 
@@ -232,10 +235,7 @@ _None currently open — CSP nonce implementation still recommended for defense-
 
 ### Open Items (from original plan)
 
-#### Mask PII in Contact Slack Notifications (RISK-M2)
-
-**File:** `app/api/contact/route.ts`
-**Priority:** MEDIUM
+#### ~~Mask PII in Contact Slack Notifications (RISK-M2)~~ — RESOLVED ✅
 
 #### Configure Supabase RLS Policies
 
@@ -257,7 +257,7 @@ _None currently open — CSP nonce implementation still recommended for defense-
 | Rate limit persists   | Deploy twice, test rate limit  | ✅ Supabase-backed         |
 | CSRF protected        | Replay old form submission     | ✅ Double-submit cookie    |
 | Secrets not in client | View page source / network tab | ✅ Server-only             |
-| Dependencies clean    | `npm audit`                    | ⚠️ 1 dev-only HIGH         |
+| Dependencies clean    | `npm audit`                    | ✅ 0 vulnerabilities       |
 | Build artifacts clean | `git ls-files \| grep tmp`     | ✅ Cleaned                 |
 | Fetch timeouts        | Slow network simulation        | ✅ `fetch-with-timeout.ts` |
 
@@ -280,4 +280,4 @@ All future changes MUST pass these checks:
 ---
 
 _Document generated: 2026-01-15_
-_Last updated: 2026-03-05_
+_Last updated: 2026-03-07_

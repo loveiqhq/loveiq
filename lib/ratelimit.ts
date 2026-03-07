@@ -227,9 +227,13 @@ export async function checkCooldown(
 
 /**
  * Get client IP address from request headers.
- * Trusts only x-real-ip which Vercel sets to the actual client IP.
- * X-Forwarded-For is intentionally ignored — it is attacker-controlled and
- * would allow rate limit key spoofing.
+ *
+ * Trusts ONLY x-real-ip, which Vercel sets to the actual client IP
+ * and strips any client-provided x-real-ip header (platform guarantee).
+ * X-Forwarded-For is intentionally ignored — it is attacker-controlled
+ * and would allow rate-limit key spoofing if used.
+ *
+ * @see https://vercel.com/docs/edge-network/headers#x-real-ip
  */
 export function getClientIp(request: Request): string {
   return request.headers.get("x-real-ip") ?? "unknown";

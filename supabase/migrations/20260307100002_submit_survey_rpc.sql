@@ -1,0 +1,163 @@
+-- Migration: submit_survey RPC function
+--
+-- Atomic survey submission: upserts app_user, creates survey_submission,
+-- and inserts all survey_submission_answer rows in a single transaction.
+--
+-- Called from app/api/survey/route.ts via POST /rest/v1/rpc/submit_survey
+
+CREATE OR REPLACE FUNCTION submit_survey(
+  p_email         TEXT,
+  p_first_name    TEXT,
+  p_answers       JSONB,
+  p_started_at    TIMESTAMPTZ,
+  p_duration_ms   BIGINT
+)
+RETURNS JSON
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_user_id       BIGINT;
+  v_survey_id     BIGINT;
+  v_submission_id BIGINT;
+  v_key           TEXT;
+  v_value         JSONB;
+  v_question_id   BIGINT;
+  v_question_type TEXT;
+  v_answer_id     BIGINT;
+  v_option_id     BIGINT;
+  v_option_text   TEXT;
+  v_other_text    TEXT;
+  v_elem          JSONB;
+BEGIN
+  -- 1. Upsert app_user by email
+  INSERT INTO app_user (email, first_name)
+  VALUES (p_email, p_first_name)
+  ON CONFLICT (email) DO UPDATE
+    SET first_name = EXCLUDED.first_name,
+        updated_date_time = now()
+  RETURNING id INTO v_user_id;
+
+  -- 2. Get the active survey
+  SELECT id INTO v_survey_id
+  FROM survey
+  WHERE status = 'active'
+  ORDER BY id
+  LIMIT 1;
+
+  IF v_survey_id IS NULL THEN
+    RETURN json_build_object('success', false, 'error', 'No active survey found');
+  END IF;
+
+  -- 3. Create survey_submission
+  INSERT INTO survey_submission (user_id, survey_id, status, start_date_time)
+  VALUES (v_user_id, v_survey_id, 'completed', p_started_at)
+  RETURNING id INTO v_submission_id;
+
+  -- 4. Loop through answer keys
+  FOR v_key, v_value IN SELECT * FROM jsonb_each(p_answers)
+  LOOP
+    -- Skip _other companion keys (handled inline with their parent)
+    IF v_key LIKE '%\_other' THEN
+      CONTINUE;
+    END IF;
+
+    -- Look up question by frontend_qid
+    SELECT sq.id, sq.type
+    INTO v_question_id, v_question_type
+    FROM survey_question sq
+    WHERE sq.frontend_qid = v_key;
+
+    IF v_question_id IS NULL THEN
+      -- Unknown question key — skip gracefully
+      CONTINUE;
+    END IF;
+
+    -- Check for companion _other text
+    v_other_text := NULL;
+    IF p_answers ? (v_key || '_other') THEN
+      v_other_text := p_answers ->> (v_key || '_other');
+    END IF;
+
+    -- Handle by question type
+    CASE v_question_type
+      WHEN 'open' THEN
+        -- Free text answer
+        INSERT INTO survey_submission_answer
+          (survey_submission_id, survey_question_id, answer_text, answered_at)
+        VALUES
+          (v_submission_id, v_question_id, v_value #>> '{}', now());
+
+      WHEN 'scale' THEN
+        -- Numeric scale (1-7)
+        INSERT INTO survey_submission_answer
+          (survey_submission_id, survey_question_id, normalized_value, answered_at)
+        VALUES
+          (v_submission_id, v_question_id, (v_value #>> '{}')::numeric, now());
+
+      WHEN 'single' THEN
+        -- Single choice — match option text
+        v_option_id := NULL;
+        SELECT ao.id INTO v_option_id
+        FROM answer_option ao
+        WHERE ao.survey_question_id = v_question_id
+          AND ao.option_text = v_value #>> '{}';
+
+        INSERT INTO survey_submission_answer
+          (survey_submission_id, survey_question_id, answer_option_id, answer_text, answered_at)
+        VALUES
+          (v_submission_id, v_question_id, v_option_id,
+           COALESCE(v_other_text, CASE WHEN v_option_id IS NULL THEN v_value #>> '{}' ELSE NULL END),
+           now());
+
+      WHEN 'multiple' THEN
+        -- Multiple choice — array of selected option texts
+        -- Insert the parent answer row
+        INSERT INTO survey_submission_answer
+          (survey_submission_id, survey_question_id, answer_text, answered_at)
+        VALUES
+          (v_submission_id, v_question_id, v_other_text, now())
+        RETURNING id INTO v_answer_id;
+
+        -- Insert each selected option into survey_submission_answer_options
+        FOR v_elem IN SELECT * FROM jsonb_array_elements(v_value)
+        LOOP
+          v_option_text := v_elem #>> '{}';
+          v_option_id := NULL;
+
+          SELECT ao.id INTO v_option_id
+          FROM answer_option ao
+          WHERE ao.survey_question_id = v_question_id
+            AND ao.option_text = v_option_text;
+
+          IF v_option_id IS NOT NULL THEN
+            INSERT INTO survey_submission_answer_options
+              (survey_submission_answer_id, answer_option_id)
+            VALUES
+              (v_answer_id, v_option_id);
+          END IF;
+        END LOOP;
+
+      ELSE
+        -- Unknown type — store as text fallback
+        INSERT INTO survey_submission_answer
+          (survey_submission_id, survey_question_id, answer_text, answered_at)
+        VALUES
+          (v_submission_id, v_question_id, v_value::text, now());
+    END CASE;
+
+  END LOOP;
+
+  -- 5. Return success
+  RETURN json_build_object(
+    'success', true,
+    'submission_id', v_submission_id,
+    'user_id', v_user_id
+  );
+END;
+$$;
+
+-- Grant execute to service_role (used by API routes)
+GRANT EXECUTE ON FUNCTION submit_survey(TEXT, TEXT, JSONB, TIMESTAMPTZ, BIGINT)
+  TO service_role;

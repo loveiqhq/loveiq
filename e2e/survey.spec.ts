@@ -263,7 +263,7 @@ test.describe("Survey — Consent screen", () => {
 });
 
 test.describe("Survey — Full happy path", () => {
-  test("intro → slides 1-4 → consent → agree → placeholder", async ({ page }) => {
+  test("intro → slides 1-4 → consent → agree → questions", async ({ page }) => {
     page.on("pageerror", (err) => {
       if (err.message.toLowerCase().includes("cookieyes")) return;
     });
@@ -308,10 +308,46 @@ test.describe("Survey — Full happy path", () => {
     await page.getByRole("checkbox").first().click();
     await page.getByRole("checkbox").nth(1).locator("div").first().click();
 
-    // Agree
+    // Agree → enters SurveyEngine
     await page.getByRole("button", { name: /i agree/i }).click();
 
-    // Placeholder screen
-    await expect(page.getByText(/survey coming soon/i)).toBeVisible({ timeout: 5000 });
+    // --- Q1: "What is your email?" (open/email, required) ---
+    await expect(page.getByRole("heading", { name: /what is your email/i })).toBeVisible({
+      timeout: 5000,
+    });
+    await expect(page.locator("header").getByText("Background & Lifestyle")).toBeVisible();
+    await expect(page.getByText("0%")).toBeVisible();
+    await expect(page.getByRole("button", { name: /previous/i })).toBeDisabled();
+
+    // Dismiss chapter intro popup (GuideAvatar) so it doesn't block clicks on mobile
+    const gotItBtn = page.getByRole("button", { name: /got it/i });
+    if (await gotItBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await gotItBtn.click();
+    }
+
+    await page.getByPlaceholder("your@email.com").fill("test@example.com");
+
+    // --- Q2: "What is your first name?" (open/text, required) ---
+    await page.getByRole("button", { name: /next/i }).click();
+    await expect(page.getByRole("heading", { name: /what is your first name/i })).toBeVisible({
+      timeout: 5000,
+    });
+    await page.getByPlaceholder("Type your answer...").fill("Test");
+
+    // --- Q3: scale question about satisfaction ---
+    await page.getByRole("button", { name: /next/i }).click();
+    await expect(page.getByRole("heading", { name: /satisfied/i })).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText("Current Sexual Wellbeing & Pain Points")).toBeVisible();
+
+    // --- Go back and verify persistence ---
+    await page.getByRole("button", { name: /previous/i }).click();
+    await expect(page.getByRole("heading", { name: /what is your first name/i })).toBeVisible({
+      timeout: 5000,
+    });
+    await expect(page.getByPlaceholder("Type your answer...")).toHaveValue("Test");
+
+    // --- Pause / Exit navigates to homepage ---
+    await page.getByRole("button", { name: /pause/i }).click();
+    await page.waitForURL("/", { timeout: 5000 });
   });
 });
