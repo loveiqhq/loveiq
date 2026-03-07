@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect, useRef, type FC, type ReactNode } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import SurveyEngine from "./SurveyEngine";
 
 /* ------------------------------------------------------------------ */
 /*  Shared icons                                                       */
@@ -1079,7 +1080,6 @@ const SurveyPage: FC = () => {
   }, []);
 
   const handleAgree = useCallback(() => {
-    // Placeholder — will navigate to actual survey when ready
     setStep(TOTAL_STEPS + 2);
   }, []);
 
@@ -1106,12 +1106,8 @@ const SurveyPage: FC = () => {
     return <ConsentScreen onAgree={handleAgree} onReturn={handleReturn} />;
   }
 
-  // Post-consent placeholder
-  return (
-    <main className="flex min-h-screen items-center justify-center bg-[#0a0510] text-white">
-      <p className="text-lg text-white/60">Survey coming soon...</p>
-    </main>
-  );
+  // Survey engine
+  return <SurveyEngine onExit={handleReturn} />;
 };
 
 export default SurveyPage;

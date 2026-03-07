@@ -734,6 +734,16 @@ h3,
   }
 }
 
+@keyframes survey-avatar-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 20px rgba(167, 139, 250, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(167, 139, 250, 0.5);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .survey-animate {
     animation-duration: 0.01ms !important;

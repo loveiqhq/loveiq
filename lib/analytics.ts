@@ -24,3 +24,19 @@ export const trackLearnMore = (location: "hero") => {
 export const trackWaitlistSignup = (source: string) => {
   track("waitlist_signup", { method: "form", source });
 };
+
+export const trackSurveyStart = () => {
+  track("survey_start");
+};
+
+export const trackSurveyAnswer = (qId: string, chapter: string) => {
+  track("survey_answer", { question_id: qId, chapter });
+};
+
+export const trackSurveyComplete = (durationMs: number) => {
+  track("survey_complete", { duration_ms: durationMs });
+};
+
+export const trackSurveyPause = (qId: string, progress: number) => {
+  track("survey_pause", { question_id: qId, progress_pct: progress });
+};
