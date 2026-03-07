@@ -11,6 +11,7 @@ loveiq-web/
 │   ├── api/                    # API route handlers
 │   │   ├── contact/route.ts    # Contact form endpoint
 │   │   ├── waitlist/route.ts   # Waitlist signup endpoint
+│   │   ├── survey/route.ts     # Survey submission endpoint
 │   │   ├── health/route.ts     # Health check endpoint
 │   │   ├── staging-login/route.ts   # Staging auth (staging only)
 │   │   └── staging-logout/route.ts  # Staging auth (staging only)
@@ -68,7 +69,10 @@ loveiq-web/
 │       └── waitlist.ts         # Waitlist confirmation email
 ├── data/                       # Static data files
 │   ├── glossary-data.ts        # Auto-generated glossary terms (from CSV)
-│   └── glossary-source.csv     # Source CSV for glossary
+│   ├── glossary-source.csv     # Source CSV for glossary
+│   ├── survey-data.ts          # Survey questions and structure
+│   ├── survey-source.csv       # Source CSV for survey questions
+│   └── countries.ts            # Country list for survey forms
 ├── __tests__/                  # Unit tests (Vitest)
 ├── e2e/                        # End-to-end tests (Playwright)
 ├── scripts/                    # Utility scripts
@@ -120,7 +124,7 @@ loveiq-web/
 
 - Purpose: Server-side API endpoints
 - Contains: Route handlers for form submissions and utilities
-- Key files: `waitlist/route.ts`, `contact/route.ts`, `health/route.ts`
+- Key files: `waitlist/route.ts`, `contact/route.ts`, `survey/route.ts`, `health/route.ts`
 - Pattern: Each endpoint in its own directory with `route.ts`
 
 **components/**
@@ -145,8 +149,8 @@ loveiq-web/
 
 **data/**
 
-- Purpose: Static data files for glossary
-- Contains: Auto-generated glossary terms, source CSV
+- Purpose: Static data files for glossary and survey
+- Contains: Auto-generated glossary terms, survey questions, country list, source CSVs
 
 \***\*tests**/\*\*
 

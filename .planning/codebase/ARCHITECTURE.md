@@ -12,7 +12,7 @@
 - Next.js 16 App Router architecture
 - Server-side rendering for pages
 - Client components for interactivity
-- API routes for form handling (waitlist, contact) and staging auth
+- API routes for form handling (waitlist, contact, survey) and staging auth
 - No persistent user sessions or authentication
 - CSRF protection via double-submit cookie pattern
 - Supabase-backed rate limiting on all form endpoints
@@ -32,7 +32,7 @@
 - Purpose: Reusable UI components organized by page
 - Contains: React components (Server + Client)
 - Location: `components/` directory
-- Subdirectories: `landing/`, `about/`, `glossary/`, `legal/`, `survey/`
+- Subdirectories: `landing/`, `about/`, `glossary/`, `legal/`, `survey/`, `trust-zone/`, `staging/`, `not-found/`, `waitlist/`
 - Depends on: CSS custom properties (globals.css), Tailwind CSS
 - Used by: Pages
 
@@ -100,6 +100,19 @@
 9. Notify Slack webhook
 10. Return success response
 
+**Survey Submission Flow:**
+
+1. User completes survey on `/survey`
+2. POST to `/api/survey`
+3. CSRF token verification
+4. Rate limiting check (IP-based, Supabase-backed)
+5. Server validates with Zod schema
+6. Honeypot check (bot detection)
+7. Email cooldown check (5 min per email)
+8. Submit via Supabase RPC (`submit_survey`)
+9. Notify Slack webhook (after response)
+10. Return success response
+
 **State Management:**
 
 - Stateless - No persistent client state
@@ -119,7 +132,7 @@
 **API Route Handlers:**
 
 - Purpose: Server-side form processing
-- Examples: `app/api/waitlist/route.ts`, `app/api/contact/route.ts`
+- Examples: `app/api/waitlist/route.ts`, `app/api/contact/route.ts`, `app/api/survey/route.ts`
 - Pattern: Next.js Route Handlers with CSRF + rate limiting + Zod validation
 - Features: CSRF protection, Supabase-backed rate limiting, validation, honeypot
 
@@ -154,6 +167,7 @@
 
 - `/api/waitlist` - `app/api/waitlist/route.ts`
 - `/api/contact` - `app/api/contact/route.ts`
+- `/api/survey` - `app/api/survey/route.ts`
 - `/api/health` - `app/api/health/route.ts`
 - `/api/staging-login` - `app/api/staging-login/route.ts` (staging only)
 - `/api/staging-logout` - `app/api/staging-logout/route.ts` (staging only)

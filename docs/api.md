@@ -78,6 +78,47 @@ Submit a contact form inquiry.
 | 500    | `{ "error": "Unable to send message. Please try later." }` | Server error                  |
 | 503    | `{ "error": "Service unavailable." }`                      | Missing configuration         |
 
+## POST /api/survey
+
+Submit a completed survey.
+
+**Rate limit:** 3 requests/minute per IP + 5 minute cooldown per email.
+
+**Request body:**
+
+```json
+{
+  "email": "user@example.com",
+  "firstName": "Jane",
+  "answers": { "q1": "answer", "q2": ["a", "b"], "q3": 5 },
+  "startedAt": "2026-01-01T00:00:00.000Z",
+  "durationMs": 120000,
+  "website": ""
+}
+```
+
+| Field        | Type   | Required | Notes                                            |
+| ------------ | ------ | -------- | ------------------------------------------------ |
+| `email`      | string | Yes      | Valid email, max 320 chars                       |
+| `firstName`  | string | Yes      | Max 80 chars                                     |
+| `answers`    | object | Yes      | Record of question ID → string, string[], or 1–7 |
+| `startedAt`  | string | Yes      | ISO 8601 datetime                                |
+| `durationMs` | number | Yes      | Time taken in ms (0–86,400,000)                  |
+| `website`    | string | No       | Honeypot field — must be empty                   |
+
+**Responses:**
+
+| Status | Body                                              | Meaning                                 |
+| ------ | ------------------------------------------------- | --------------------------------------- |
+| 200    | `{ "success": true }`                             | Survey submitted successfully           |
+| 400    | `{ "error": "Invalid input" }`                    | Validation failed or honeypot triggered |
+| 403    | `{ "error": "Invalid request." }`                 | CSRF token missing or invalid           |
+| 429    | `{ "error": "Please try again later." }`          | IP rate limited                         |
+| 429    | `{ "error": "Please wait before retrying." }`     | Email cooldown active                   |
+| 503    | `{ "error": "Service unavailable." }`             | Missing Supabase configuration          |
+| 503    | `{ "error": "Service temporarily unavailable." }` | Circuit breaker open                    |
+| 500    | `{ "error": "Unable to process request." }`       | Supabase RPC error                      |
+
 ## GET /api/health
 
 Health check endpoint.

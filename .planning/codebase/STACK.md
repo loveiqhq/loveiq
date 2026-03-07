@@ -87,8 +87,10 @@
   - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` - Database
   - `RESEND_API_KEY`, `RESEND_FROM`, `RESEND_REPLY_TO` - Email
   - `RECAPTCHA_SECRET_KEY` - Spam protection
-  - `SLACK_WAITLIST_WEBHOOK_URL`, `SLACK_CONTACT_WEBHOOK_URL` - Notifications
-  - `NEXT_PUBLIC_SITE_URL` - Public site URL
+  - `SLACK_WAITLIST_WEBHOOK_URL`, `SLACK_CONTACT_WEBHOOK_URL`, `SLACK_SURVEY_WEBHOOK_URL` - Notifications
+  - `STAGING_PASSWORD` - Staging environment auth
+  - `CONTACT_TO_EMAIL` - Contact form recipient
+  - `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_RECAPTCHA_SITE_KEY` - Public client-side vars
 
 **Build:**
 

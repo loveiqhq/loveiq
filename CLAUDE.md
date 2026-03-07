@@ -11,6 +11,8 @@ npm run build        # Production build
 npm run lint         # Run ESLint
 npm run start        # Run production build locally
 npm run analyze      # Bundle size analysis (opens visual treemap)
+npm run check        # Lint + test + build (full CI check)
+npm run setup        # Install deps + create .env.local from .env.example
 ```
 
 ---
@@ -23,18 +25,22 @@ loveiq-web/
 │   ├── api/
 │   │   ├── contact/route.ts    # Contact form → Resend + Slack
 │   │   ├── waitlist/route.ts   # Waitlist signup → Supabase + Resend + Slack
+│   │   ├── survey/route.ts     # Survey submission → Supabase RPC + Slack
 │   │   ├── health/route.ts     # Health check endpoint
 │   │   ├── staging-login/route.ts   # Staging environment auth
 │   │   └── staging-logout/route.ts  # Staging environment auth
 │   ├── about/page.tsx          # About page
+│   ├── login/page.tsx          # Staging login page
 │   ├── waitlist/page.tsx       # Waitlist standalone page
 │   ├── glossary/               # Glossary pages (index + [slug])
 │   ├── trust-zone/             # Trust zone pages
-│   ├── survey/page.tsx         # Intro wizard / survey
+│   ├── survey/page.tsx         # Survey / intro wizard
 │   ├── [legal pages]           # privacy-policy, terms-*, cookies, imprint, etc.
 │   ├── globals.css             # CSS variables + Tailwind + animations
 │   ├── layout.tsx              # Root layout (fonts, scripts, metadata)
 │   ├── page.tsx                # Landing page entry
+│   ├── error.tsx                # Error boundary page
+│   ├── global-error.tsx         # Root error boundary
 │   ├── robots.ts               # robots.txt generation
 │   └── sitemap.ts              # sitemap.xml generation
 ├── components/
@@ -48,6 +54,14 @@ loveiq-web/
 │   ├── glossary/               # Glossary components
 │   ├── legal/                  # Legal page nav component
 │   ├── survey/                 # Survey / intro wizard components
+│   │   ├── questions/          # Question type components (SingleChoice, Scale, etc.)
+│   │   └── hooks/              # Survey state and submission hooks
+│   ├── staging/                # Staging login form
+│   ├── not-found/              # 404 page component
+│   ├── trust-zone/             # Trust zone page component
+│   ├── waitlist/               # Waitlist page component
+│   ├── NonceProvider.tsx       # CSP nonce context provider
+│   ├── HydrationMarker.tsx     # Client hydration marker
 │   └── SmoothScroll.tsx        # Lenis smooth scroll wrapper
 ├── lib/
 │   ├── analytics.ts            # GA4 event tracking helpers
@@ -60,7 +74,11 @@ loveiq-web/
 │       └── waitlist.ts         # Waitlist confirmation email template
 ├── data/
 │   ├── glossary-data.ts        # Auto-generated glossary terms (688KB, from CSV)
-│   └── glossary-source.csv     # Source CSV; regenerate via `node scripts/update-glossary.js`
+│   ├── glossary-source.csv     # Source CSV; regenerate via `node scripts/update-glossary.js`
+│   ├── survey-data.ts          # Survey questions and structure
+│   ├── survey-source.csv       # Source CSV for survey questions
+│   └── countries.ts            # Country list for survey forms
+├── scripts/                    # Build/data scripts (update-glossary.js, update-survey.js, etc.)
 ├── public/                     # Static assets (images, videos)
 ├── proxy.ts                    # Middleware: CSP headers, CSRF cookies, security logging
 ├── .github/workflows/
@@ -90,6 +108,7 @@ loveiq-web/
 1. **Page Load:** SSR → Client hydration → Smooth scroll init → Analytics pageview
 2. **Waitlist Signup:** Form → CSRF check → Rate limit → Zod validation → Honeypot check → Supabase insert → Resend email → Slack notification
 3. **Contact Form:** Form → reCAPTCHA → CSRF check → Rate limit → Zod validation → Resend email → Slack notification
+4. **Survey Submission:** Form → CSRF check → Rate limit → Zod validation → Honeypot check → Email cooldown → Supabase RPC → Slack notification
 
 ### Key Boundaries
 
@@ -113,8 +132,10 @@ Copy `.env.example` to `.env.local` and fill values:
 | `RESEND_REPLY_TO`                | No          | Reply-to address                                         |
 | `NEXT_PUBLIC_RECAPTCHA_SITE_KEY` | For contact | reCAPTCHA client key                                     |
 | `RECAPTCHA_SECRET_KEY`           | For contact | reCAPTCHA server key                                     |
-| `SLACK_WAITLIST_WEBHOOK_URL`     | No          | Slack notifications                                      |
-| `SLACK_CONTACT_WEBHOOK_URL`      | No          | Slack notifications                                      |
+| `SLACK_WAITLIST_WEBHOOK_URL`     | No          | Slack notifications for waitlist signups                 |
+| `SLACK_CONTACT_WEBHOOK_URL`      | No          | Slack notifications for contact form                     |
+| `SLACK_SURVEY_WEBHOOK_URL`       | No          | Slack notifications for survey submissions               |
+| `STAGING_PASSWORD`               | For staging | Password gate for staging deployment                     |
 | `CONTACT_TO_EMAIL`               | For contact | Contact form recipient                                   |
 
 **The site renders without env vars.** Forms will fail gracefully with error messages.
@@ -263,6 +284,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { verifyCsrfToken } from "@/lib/csrf";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
+import logger from "@/lib/logger";
 
 const schema = z.object({
   email: z.string().email().max(320),
@@ -293,7 +315,7 @@ export async function POST(request: Request) {
     // ... do work
     return NextResponse.json({ success: true });
   } catch (err) {
-    console.error("Error:", err);
+    logger.error({ err }, "Error processing example");
     return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
   }
 }
@@ -337,7 +359,7 @@ Always return `{ error: string }` or `{ success: true }`. Keep error messages ge
 3. Include rate limiting (`checkRateLimit`)
 4. Add Zod schema for input validation
 5. Use generic error messages
-6. Log errors with `console.error`
+6. Log errors with `logger` from `@/lib/logger`
 
 #### Add a New Environment Variable
 
@@ -398,7 +420,7 @@ When working in this codebase:
 6. **Test the build** - `npm run build` must succeed
 7. **Preserve security** - Don't weaken CSP, rate limits, or CSRF checks
 8. **Keep error messages generic** - Avoid information disclosure
-9. **Use existing utilities** - `lib/ratelimit.ts`, `lib/csrf.ts`, `lib/analytics.ts`
+9. **Use existing utilities** - `lib/ratelimit.ts`, `lib/csrf.ts`, `lib/analytics.ts`, `lib/logger.ts`, `lib/circuit-breaker.ts`, `lib/fetch-with-timeout.ts`
 10. **Document unknowns** - If uncertain, note assumptions and which files to check
 11. **Clean up temporary files** - If you create any `.md` files for planning, implementation logs, fix summaries, or debugging notes (e.g., in `.planning/` or repo root), **delete them once the task is complete**. Only permanent documentation (like this file, `SECURITY.md`, `DEVELOPMENT.md`, `.planning/codebase/*`) should remain in the repo.
 

@@ -97,6 +97,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { verifyCsrfToken } from "@/lib/csrf";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
+import logger from "@/lib/logger";
 
 const schema = z.object({
   email: z.string().email().max(320),
@@ -126,7 +127,7 @@ export async function POST(request: Request) {
     // ... do work
     return NextResponse.json({ success: true });
   } catch (err) {
-    console.error("Error:", err);
+    logger.error({ err }, "Error processing request");
     return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
   }
 }
@@ -255,7 +256,7 @@ return NextResponse.json({ error: "User admin@company.com not found" }, { status
 try {
   // ...
 } catch (err) {
-  console.error("Descriptive error context:", err);
+  logger.error({ err }, "Descriptive error context");
   return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
 }
 ```

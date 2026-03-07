@@ -51,7 +51,7 @@ export async function POST(request: Request) {
     // ... do work
     return NextResponse.json({ success: true });
   } catch (err) {
-    console.error("Error:", err);
+    logger.error({ err }, "Error processing request");
     return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
   }
 }

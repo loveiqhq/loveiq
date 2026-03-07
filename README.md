@@ -47,7 +47,7 @@ npm run dev
 
 ```
 app/                  # Next.js App Router (pages + API routes)
-  api/                # API endpoints (contact, waitlist, health)
+  api/                # API endpoints (contact, waitlist, survey, health, staging-login, staging-logout)
 components/           # React components
   landing/            # Landing page sections (S01-S14)
   about/              # About page sections

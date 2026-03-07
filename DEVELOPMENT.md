@@ -36,6 +36,8 @@ npm run dev
 | `CONTACT_TO_EMAIL`           | Contact form recipient email                             |
 | `SLACK_WAITLIST_WEBHOOK_URL` | Slack notifications for waitlist signups                 |
 | `SLACK_CONTACT_WEBHOOK_URL`  | Slack notifications for contact form                     |
+| `SLACK_SURVEY_WEBHOOK_URL`   | Slack notifications for survey submissions               |
+| `STAGING_PASSWORD`           | Password gate for staging deployment                     |
 
 **Tip:** You can run the site without any env vars set - the UI will render fine. Forms will fail gracefully with error messages.
 
