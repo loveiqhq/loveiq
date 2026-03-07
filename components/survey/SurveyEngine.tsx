@@ -11,6 +11,7 @@ import OpenResponseQuestion from "./questions/OpenResponseQuestion";
 import ScaleQuestion from "./questions/ScaleQuestion";
 import SingleChoiceQuestion from "./questions/SingleChoiceQuestion";
 import MultipleChoiceQuestion from "./questions/MultipleChoiceQuestion";
+import CountryQuestion from "./questions/CountryQuestion";
 import {
   trackSurveyStart,
   trackSurveyAnswer,
@@ -295,6 +296,13 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit }) => {
                 onChange={handleChange}
                 otherText={otherText}
                 onOtherTextChange={handleOtherTextChange}
+              />
+            )}
+            {question.answerType === "country" && (
+              <CountryQuestion
+                question={question}
+                value={currentAnswer as string | null}
+                onChange={handleChange}
               />
             )}
           </div>

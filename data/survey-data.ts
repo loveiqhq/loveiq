@@ -1,7 +1,7 @@
 // Auto-generated from data/survey-source.csv — do not edit manually
 // Run: node scripts/update-survey.js
 
-export type AnswerType = "open" | "scale" | "single" | "multiple";
+export type AnswerType = "open" | "scale" | "single" | "multiple" | "country";
 
 export interface SurveyQuestion {
   qId: string;
@@ -589,8 +589,8 @@ export const surveyQuestions: SurveyQuestion[] = [
     cId: 15,
     chapter: "Background & Lifestyle",
     question: "Which country do you live in?",
-    answerType: "single",
-    options: ["DIN Countries"],
+    answerType: "country",
+    options: [],
     required: true,
     guide:
       "Choose the country where you currently live most of the time (your main residence). If you split time between countries, pick the one you spend the majority of the year in.",
