@@ -41,6 +41,23 @@ export async function proxy(request: NextRequest) {
     }
   }
 
+  // Admin gate: when ADMIN_PASSWORD is set, require a valid admin session cookie
+  const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+  if (ADMIN_PASSWORD) {
+    const path = request.nextUrl.pathname;
+    if (path.startsWith("/admin")) {
+      const isAdminPublic =
+        path === "/admin/login" || path === "/api/admin/login" || path === "/api/admin/logout";
+      if (!isAdminPublic) {
+        const adminSession = request.cookies.get("admin_session")?.value;
+        const expectedAdmin = await sha256(ADMIN_PASSWORD);
+        if (adminSession !== expectedAdmin) {
+          return NextResponse.redirect(new URL("/admin/login", request.url));
+        }
+      }
+    }
+  }
+
   // Generate a random nonce for CSP
   const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
 

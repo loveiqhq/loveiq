@@ -28,7 +28,23 @@ loveiq-web/
 │   │   ├── survey/route.ts     # Survey submission → Supabase RPC + Slack
 │   │   ├── health/route.ts     # Health check endpoint
 │   │   ├── staging-login/route.ts   # Staging environment auth
-│   │   └── staging-logout/route.ts  # Staging environment auth
+│   │   ├── staging-logout/route.ts  # Staging environment auth
+│   │   ├── survey-tracking/route.ts # Survey behavior tracking → Supabase
+│   │   └── admin/                   # Admin panel API routes
+│   │       ├── login/route.ts       # Admin login (ADMIN_PASSWORD)
+│   │       ├── logout/route.ts      # Admin logout
+│   │       ├── stats/route.ts       # Dashboard analytics
+│   │       ├── submissions/route.ts # Submission list (paginated)
+│   │       ├── submissions/[id]/route.ts # Submission CRUD (GET/PATCH/DELETE)
+│   │       ├── export/route.ts      # CSV export
+│   │       └── survey-status/route.ts # Survey active/closed toggle
+│   ├── admin/                   # Admin panel pages (password-protected)
+│   │   ├── layout.tsx           # Admin shell (sidebar + header)
+│   │   ├── login/page.tsx       # Admin login page
+│   │   ├── page.tsx             # Dashboard
+│   │   ├── submissions/page.tsx # Submission browser
+│   │   ├── submissions/[id]/page.tsx # Submission detail
+│   │   └── survey-status/page.tsx   # Survey status toggle
 │   ├── about/page.tsx          # About page
 │   ├── login/page.tsx          # Staging login page
 │   ├── waitlist/page.tsx       # Waitlist standalone page
@@ -55,7 +71,16 @@ loveiq-web/
 │   ├── legal/                  # Legal page nav component
 │   ├── survey/                 # Survey / intro wizard components
 │   │   ├── questions/          # Question type components (SingleChoice, Scale, etc.)
-│   │   └── hooks/              # Survey state and submission hooks
+│   │   └── hooks/              # Survey state, submission, and tracking hooks
+│   ├── admin/                  # Admin panel components
+│   │   ├── AdminLoginForm.tsx  # Admin login form
+│   │   ├── AdminSidebar.tsx    # Sidebar navigation
+│   │   ├── AdminHeader.tsx     # Mobile header with hamburger
+│   │   ├── AdminDashboard.tsx  # Dashboard with stats + charts
+│   │   ├── SubmissionBrowser.tsx # Filterable submission list
+│   │   ├── SubmissionDetail.tsx # Single submission view + actions
+│   │   ├── SurveyStatus.tsx    # Survey active/closed toggle
+│   │   └── hooks/useAdminFetch.ts # Generic data fetching hook
 │   ├── staging/                # Staging login form
 │   ├── not-found/              # 404 page component
 │   ├── trust-zone/             # Trust zone page component
@@ -70,6 +95,9 @@ loveiq-web/
 │   ├── circuit-breaker.ts      # Circuit breaker pattern for external calls
 │   ├── logger.ts               # pino structured logging
 │   ├── fetch-with-timeout.ts   # Fetch wrapper with timeout
+│   ├── admin/
+│   │   ├── auth.ts             # Admin session verification
+│   │   └── supabase.ts         # Supabase fetch helper for admin routes
 │   └── emails/
 │       └── waitlist.ts         # Waitlist confirmation email template
 ├── data/
@@ -109,6 +137,8 @@ loveiq-web/
 2. **Waitlist Signup:** Form → CSRF check → Rate limit → Zod validation → Honeypot check → Supabase insert → Resend email → Slack notification
 3. **Contact Form:** Form → reCAPTCHA → CSRF check → Rate limit → Zod validation → Resend email → Slack notification
 4. **Survey Submission:** Form → CSRF check → Rate limit → Zod validation → Honeypot check → Email cooldown → Supabase RPC → Slack notification
+5. **Survey Tracking:** Question transition → Buffer events → Flush batch → CSRF check → Rate limit → Zod validation → Supabase insert
+6. **Admin Panel:** `/admin/*` → Middleware gate (ADMIN_PASSWORD cookie) → API routes with session + CSRF + rate limit → Supabase queries
 
 ### Key Boundaries
 
@@ -136,6 +166,7 @@ Copy `.env.example` to `.env.local` and fill values:
 | `SLACK_CONTACT_WEBHOOK_URL`      | No          | Slack notifications for contact form                     |
 | `SLACK_SURVEY_WEBHOOK_URL`       | No          | Slack notifications for survey submissions               |
 | `STAGING_PASSWORD`               | For staging | Password gate for staging deployment                     |
+| `ADMIN_PASSWORD`                 | For admin   | Password gate for admin panel (`/admin/*`)               |
 | `CONTACT_TO_EMAIL`               | For contact | Contact form recipient                                   |
 
 **The site renders without env vars.** Forms will fail gracefully with error messages.

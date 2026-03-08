@@ -1,0 +1,115 @@
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
+import { getBreaker, CircuitOpenError } from "@/lib/circuit-breaker";
+import { verifyCsrfToken, verifyCsrfTokenFromBody } from "@/lib/csrf";
+import logger from "@/lib/logger";
+
+const eventSchema = z.object({
+  sessionId: z.string().uuid(),
+  qId: z.string().max(10),
+  chapter: z.string().max(100),
+  questionIndex: z.number().int().min(0).max(100),
+  timeSpentMs: z.number().int().min(0).max(600_000),
+  answered: z.boolean(),
+  direction: z.enum(["forward", "back", "abandon", "complete"]),
+  timestamp: z.string().datetime(),
+});
+
+const batchSchema = z.object({
+  events: z.array(eventSchema).min(1).max(20),
+  _csrf: z.string().optional(),
+});
+
+const RATE_LIMIT_CONFIG = {
+  bucket: "survey-tracking",
+  limit: 30,
+  windowMs: 60_000,
+};
+
+export async function POST(request: Request) {
+  // 1. CSRF verification — header first, then body field (for sendBeacon)
+  const csrfValid = await verifyCsrfToken(request);
+  if (!csrfValid) {
+    const body = await request
+      .clone()
+      .json()
+      .catch(() => ({}));
+    const bodyValid = await verifyCsrfTokenFromBody(body?._csrf);
+    if (!bodyValid) {
+      return NextResponse.json({ error: "Invalid request." }, { status: 403 });
+    }
+  }
+
+  // 2. Rate limiting
+  const ip = getClientIp(request);
+  const rateLimit = await checkRateLimit(ip, RATE_LIMIT_CONFIG);
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      { error: "Please try again later." },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": String(Math.ceil((rateLimit.resetAt.getTime() - Date.now()) / 1000)),
+        },
+      }
+    );
+  }
+
+  // 3. Validation
+  const parsed = batchSchema.safeParse(await request.json().catch(() => ({})));
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Invalid input" }, { status: 400 });
+  }
+
+  // 4. Supabase insert
+  const url = process.env.SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!url || !serviceRoleKey) {
+    return NextResponse.json({ error: "Service unavailable." }, { status: 503 });
+  }
+
+  const rows = parsed.data.events.map((e) => ({
+    session_id: e.sessionId,
+    q_id: e.qId,
+    chapter: e.chapter,
+    question_index: e.questionIndex,
+    time_spent_ms: e.timeSpentMs,
+    answered: e.answered,
+    direction: e.direction,
+    client_ip: ip,
+    event_time: e.timestamp,
+  }));
+
+  try {
+    const response = await getBreaker("supabase-tracking").fire(() =>
+      fetchWithTimeout(`${url}/rest/v1/survey_behavior_event`, {
+        method: "POST",
+        headers: {
+          apikey: serviceRoleKey,
+          Authorization: `Bearer ${serviceRoleKey}`,
+          "Content-Type": "application/json",
+          Prefer: "return=minimal",
+        },
+        body: JSON.stringify(rows),
+        timeoutMs: 5000,
+      })
+    );
+
+    if (!response.ok) {
+      logger.error({ status: response.status }, "Supabase survey tracking insert failed");
+      return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
+    }
+  } catch (err) {
+    if (err instanceof CircuitOpenError) {
+      logger.warn("Supabase-tracking circuit open");
+    } else {
+      logger.error({ err }, "Supabase error on survey tracking");
+    }
+    return NextResponse.json({ error: "Service temporarily unavailable." }, { status: 503 });
+  }
+
+  return NextResponse.json({ success: true });
+}

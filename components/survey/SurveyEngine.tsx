@@ -19,6 +19,7 @@ import {
   trackSurveyPause,
 } from "@/lib/analytics";
 import { useSubmitSurvey } from "./hooks/useSubmitSurvey";
+import { useSurveyTracking } from "./hooks/useSurveyTracking";
 
 interface SurveyEngineProps {
   onExit: () => void;
@@ -89,6 +90,8 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit }) => {
     return false;
   }, [currentAnswer]);
 
+  const { trackNavigation } = useSurveyTracking(currentIndex, hasAnswer, question);
+
   // Navigation
   const goTo = useCallback(
     (index: number) => {
@@ -102,28 +105,41 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit }) => {
   const goNext = useCallback(() => {
     if (currentIndex >= totalQuestions - 1) {
       // Survey complete
+      trackNavigation("complete");
       const duration = Date.now() - new Date(startedAt).getTime();
       trackSurveyComplete(duration);
       submitSurvey(answers, startedAt);
       goTo(totalQuestions); // one past the end → triggers completion
       return;
     }
+    trackNavigation("forward");
     if (question) {
       trackSurveyAnswer(question.qId, question.chapter);
     }
     goTo(currentIndex + 1);
-  }, [currentIndex, totalQuestions, startedAt, question, goTo, submitSurvey, answers]);
+  }, [
+    currentIndex,
+    totalQuestions,
+    startedAt,
+    question,
+    goTo,
+    submitSurvey,
+    answers,
+    trackNavigation,
+  ]);
 
   const goPrev = useCallback(() => {
+    trackNavigation("back");
     goTo(currentIndex - 1);
-  }, [currentIndex, goTo]);
+  }, [currentIndex, goTo, trackNavigation]);
 
   const handlePause = useCallback(() => {
+    trackNavigation("abandon");
     if (question) {
       trackSurveyPause(question.qId, progress);
     }
     onExit();
-  }, [question, progress, onExit]);
+  }, [question, progress, onExit, trackNavigation]);
 
   // Handle answer change
   const handleChange = useCallback(
