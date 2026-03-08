@@ -25,7 +25,9 @@ export const options = {
   ],
   thresholds: {
     http_req_duration: ["p(95)<5000"],
-    http_req_failed: ["rate<0.05"],
+    // Exclude waitlist API probe (expected 403) from failure rate
+    "http_req_failed{page:/}": ["rate<0.05"],
+    "http_req_failed{page:/api/health}": ["rate<0.05"],
   },
 };
 
