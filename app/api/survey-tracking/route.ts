@@ -29,13 +29,12 @@ const RATE_LIMIT_CONFIG = {
 };
 
 export async function POST(request: Request) {
+  // Parse body once — avoids double-read when sendBeacon falls back to body CSRF
+  const body = await request.json().catch(() => ({}));
+
   // 1. CSRF verification — header first, then body field (for sendBeacon)
   const csrfValid = await verifyCsrfToken(request);
   if (!csrfValid) {
-    const body = await request
-      .clone()
-      .json()
-      .catch(() => ({}));
     const bodyValid = await verifyCsrfTokenFromBody(body?._csrf);
     if (!bodyValid) {
       return NextResponse.json({ error: "Invalid request." }, { status: 403 });
@@ -57,8 +56,8 @@ export async function POST(request: Request) {
     );
   }
 
-  // 3. Validation
-  const parsed = batchSchema.safeParse(await request.json().catch(() => ({})));
+  // 3. Validation — reuse already-parsed body
+  const parsed = batchSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   }

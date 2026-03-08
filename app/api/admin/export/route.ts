@@ -25,7 +25,7 @@ export async function GET(request: Request) {
   const dateFrom = url.searchParams.get("dateFrom") || "";
   const dateTo = url.searchParams.get("dateTo") || "";
 
-  let query = `/rest/v1/survey_submission?select=id,status,start_date_time,created_date_time,app_user!fk_survey_submission_user(email,first_name)&order=created_date_time.desc`;
+  let query = `/rest/v1/survey_submission?select=id,status,start_date_time,created_date_time,duration_ms,app_user!fk_survey_submission_user(email,first_name)&order=created_date_time.desc`;
   if (status) query += `&status=eq.${encodeURIComponent(status)}`;
   if (dateFrom) query += `&start_date_time=gte.${encodeURIComponent(dateFrom)}`;
   if (dateTo) query += `&start_date_time=lte.${encodeURIComponent(dateTo)}`;
@@ -42,6 +42,7 @@ export async function GET(request: Request) {
       status: string;
       start_date_time: string | null;
       created_date_time: string;
+      duration_ms: number | null;
       app_user: { email: string; first_name: string } | null;
     }>;
 
@@ -52,6 +53,7 @@ export async function GET(request: Request) {
       status: r.status,
       started_at: r.start_date_time || r.created_date_time,
       completed_at: r.created_date_time,
+      duration_ms: r.duration_ms,
     }));
 
     // Fetch answers for all submissions with question info
@@ -60,19 +62,41 @@ export async function GET(request: Request) {
 
     if (ids.length > 0) {
       const answersRes = await supabaseFetch(
-        `/rest/v1/survey_submission_answer?survey_submission_id=in.(${ids.join(",")})&select=survey_submission_id,answer_text,normalized_value,survey_question(frontend_qid)&order=survey_question_id.asc`
+        `/rest/v1/survey_submission_answer?survey_submission_id=in.(${ids.join(",")})&select=survey_submission_id,answer_text,answer_option_id,normalized_value,survey_question(frontend_qid,type),answer_option!fk_ssa_answer_option(option_text),survey_submission_answer_options(answer_option!fk_ssao_answer_option(option_text))&order=survey_question_id.asc`
       );
       if (answersRes.ok) {
         const answers = (await answersRes.json()) as Array<{
           survey_submission_id: number;
           answer_text: string | null;
+          answer_option_id: number | null;
           normalized_value: number | null;
-          survey_question: { frontend_qid: string } | null;
+          survey_question: { frontend_qid: string; type: string } | null;
+          answer_option: { option_text: string } | null;
+          survey_submission_answer_options: Array<{
+            answer_option: { option_text: string } | null;
+          }>;
         }>;
         for (const a of answers) {
           const qId = a.survey_question?.frontend_qid || "unknown";
-          const value =
-            a.normalized_value != null ? String(a.normalized_value) : a.answer_text || "";
+          const type = a.survey_question?.type || "";
+          let value = "";
+
+          if (type === "scale") {
+            value = a.normalized_value != null ? String(a.normalized_value) : "";
+          } else if (type === "open") {
+            value = a.answer_text || "";
+          } else if (type === "single") {
+            value = a.answer_option?.option_text || a.answer_text || "";
+          } else if (type === "multiple") {
+            const options = (a.survey_submission_answer_options || [])
+              .map((o) => o.answer_option?.option_text)
+              .filter((t): t is string => !!t);
+            if (a.answer_text) options.push(a.answer_text);
+            value = options.join("; ");
+          } else {
+            value = a.normalized_value != null ? String(a.normalized_value) : a.answer_text || "";
+          }
+
           if (!answersMap[a.survey_submission_id]) answersMap[a.survey_submission_id] = {};
           answersMap[a.survey_submission_id][qId] = value;
         }
@@ -96,10 +120,12 @@ export async function GET(request: Request) {
       "status",
       "started_at",
       "completed_at",
+      "duration_sec",
       ...sortedQIds,
     ];
     const rows = submissions.map((s) => {
       const answers = answersMap[s.id] || {};
+      const durationSec = s.duration_ms != null ? Math.round(s.duration_ms / 1000) : "";
       return [
         s.id,
         s.email,
@@ -107,6 +133,7 @@ export async function GET(request: Request) {
         s.status,
         s.started_at,
         s.completed_at,
+        durationSec,
         ...sortedQIds.map((qId) => answers[qId] || ""),
       ];
     });

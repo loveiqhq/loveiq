@@ -31,7 +31,7 @@ export async function GET(request: Request) {
   const offset = (page - 1) * limit;
 
   // PostgREST query with embedded app_user for email/name
-  let query = `/rest/v1/survey_submission?select=id,status,start_date_time,created_date_time,app_user!fk_survey_submission_user(email,first_name)&order=created_date_time.desc`;
+  let query = `/rest/v1/survey_submission?select=id,status,start_date_time,created_date_time,duration_ms,app_user!fk_survey_submission_user(email,first_name)&order=created_date_time.desc`;
 
   if (status) query += `&status=eq.${encodeURIComponent(status)}`;
   if (dateFrom) query += `&start_date_time=gte.${encodeURIComponent(dateFrom)}`;
@@ -56,6 +56,7 @@ export async function GET(request: Request) {
       status: string;
       start_date_time: string | null;
       created_date_time: string;
+      duration_ms: number | null;
       app_user: { email: string; first_name: string } | null;
     }>;
 
@@ -68,6 +69,7 @@ export async function GET(request: Request) {
       status: r.status,
       started_at: r.start_date_time || r.created_date_time,
       completed_at: r.created_date_time,
+      duration_ms: r.duration_ms,
     }));
 
     if (email) {

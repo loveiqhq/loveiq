@@ -13,6 +13,7 @@ interface SubmissionData {
     status: string;
     started_at: string;
     completed_at: string;
+    duration_ms: number | null;
   };
   answers: Array<{
     q_id: string;
@@ -123,6 +124,19 @@ export default function SubmissionDetail({ id }: { id: string }) {
               })}
             </p>
           </div>
+          {submission.duration_ms != null && (
+            <div>
+              <p className="text-xs text-text-muted">Duration</p>
+              <p className="text-sm text-text-primary">
+                {(() => {
+                  const totalSec = Math.round(submission.duration_ms / 1000);
+                  const min = Math.floor(totalSec / 60);
+                  const sec = totalSec % 60;
+                  return min > 0 ? `${min} min ${sec} sec` : `${sec} sec`;
+                })()}
+              </p>
+            </div>
+          )}
         </div>
       </div>
 

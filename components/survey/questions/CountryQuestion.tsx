@@ -207,6 +207,7 @@ const CountryQuestion: FC<CountryQuestionProps> = ({ question, value, onChange }
         {isOpen && filtered.length > 0 && (
           <ul
             ref={listRef}
+            data-lenis-prevent
             className="absolute z-50 mt-2 max-h-[240px] w-full overflow-y-auto rounded-xl border border-white/10 bg-[#1a1225] py-1"
             role="listbox"
           >

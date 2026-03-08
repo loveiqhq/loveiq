@@ -31,11 +31,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const [submissionRes, answersRes] = await Promise.all([
       // Join with app_user to get email/name
       supabaseFetch(
-        `/rest/v1/survey_submission?id=eq.${numericId}&select=id,status,start_date_time,created_date_time,app_user!fk_survey_submission_user(email,first_name)`
+        `/rest/v1/survey_submission?id=eq.${numericId}&select=id,status,start_date_time,created_date_time,duration_ms,app_user!fk_survey_submission_user(email,first_name)`
       ),
-      // Join with survey_question to get frontend_qid and type
+      // Join with survey_question, answer_option (single-choice), and junction (multi-choice)
       supabaseFetch(
-        `/rest/v1/survey_submission_answer?survey_submission_id=eq.${numericId}&select=id,answer_text,answer_option_id,normalized_value,answered_at,survey_question(frontend_qid,type,question)&order=survey_question_id.asc`
+        `/rest/v1/survey_submission_answer?survey_submission_id=eq.${numericId}&select=id,answer_text,answer_option_id,normalized_value,answered_at,survey_question(frontend_qid,type,question),answer_option!fk_ssa_answer_option(option_text),survey_submission_answer_options(answer_option!fk_ssao_answer_option(option_text))&order=survey_question_id.asc`
       ),
     ]);
 
@@ -49,6 +49,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       status: string;
       start_date_time: string | null;
       created_date_time: string;
+      duration_ms: number | null;
       app_user: { email: string; first_name: string } | null;
     }>;
 
@@ -64,9 +65,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       status: raw.status,
       started_at: raw.start_date_time || raw.created_date_time,
       completed_at: raw.created_date_time,
+      duration_ms: raw.duration_ms,
     };
 
-    // Flatten answers
+    // Flatten answers — resolve values by question type
     const rawAnswers = (await answersRes.json()) as Array<{
       id: number;
       answer_text: string | null;
@@ -74,14 +76,39 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       normalized_value: number | null;
       answered_at: string | null;
       survey_question: { frontend_qid: string; type: string; question: string } | null;
+      answer_option: { option_text: string } | null;
+      survey_submission_answer_options: Array<{
+        answer_option: { option_text: string } | null;
+      }>;
     }>;
 
-    const answers = rawAnswers.map((a) => ({
-      q_id: a.survey_question?.frontend_qid || "",
-      question_text: a.survey_question?.question || "",
-      answer_type: a.survey_question?.type || "",
-      answer_value: a.normalized_value ?? a.answer_text,
-    }));
+    const answers = rawAnswers.map((a) => {
+      const type = a.survey_question?.type || "";
+      let answer_value: string | string[] | number | null = null;
+
+      if (type === "scale") {
+        answer_value = a.normalized_value;
+      } else if (type === "open") {
+        answer_value = a.answer_text;
+      } else if (type === "single") {
+        answer_value = a.answer_option?.option_text || a.answer_text || null;
+      } else if (type === "multiple") {
+        const options = (a.survey_submission_answer_options || [])
+          .map((o) => o.answer_option?.option_text)
+          .filter((t): t is string => !!t);
+        if (a.answer_text) options.push(a.answer_text);
+        answer_value = options.length > 0 ? options : null;
+      } else {
+        answer_value = a.normalized_value ?? a.answer_text;
+      }
+
+      return {
+        q_id: a.survey_question?.frontend_qid || "",
+        question_text: a.survey_question?.question || "",
+        answer_type: type,
+        answer_value,
+      };
+    });
 
     return NextResponse.json({ submission, answers });
   } catch (err) {
@@ -151,7 +178,21 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   }
 
   try {
-    // Delete answer options junction rows first
+    // Guard: block delete if personal_report exists (too valuable to cascade)
+    const reportCheckRes = await supabaseFetch(
+      `/rest/v1/personal_report?survey_submission_id=eq.${numericId}&select=id&limit=1`
+    );
+    if (reportCheckRes.ok) {
+      const reports = (await reportCheckRes.json()) as Array<{ id: number }>;
+      if (reports.length > 0) {
+        return NextResponse.json(
+          { error: "Cannot delete: a personal report exists for this submission." },
+          { status: 409 }
+        );
+      }
+    }
+
+    // 1. Delete answer options junction rows
     await supabaseFetch(
       `/rest/v1/survey_submission_answer_options?survey_submission_answer_id=in.(select id from survey_submission_answer where survey_submission_id=eq.${numericId})`,
       { method: "DELETE", headers: { Prefer: "return=minimal" } }
@@ -159,7 +200,15 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
       // May not exist, that's fine
     });
 
-    // Delete answers
+    // 2. Delete answer history rows (FK to survey_submission_answer)
+    await supabaseFetch(
+      `/rest/v1/survey_submission_answer_history?survey_submission_answer_id=in.(select id from survey_submission_answer where survey_submission_id=eq.${numericId})`,
+      { method: "DELETE", headers: { Prefer: "return=minimal" } }
+    ).catch(() => {
+      // May not exist, that's fine
+    });
+
+    // 3. Delete answers
     const answersRes = await supabaseFetch(
       `/rest/v1/survey_submission_answer?survey_submission_id=eq.${numericId}`,
       { method: "DELETE", headers: { Prefer: "return=minimal" } }
@@ -170,7 +219,15 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
       return NextResponse.json({ error: "Unable to delete." }, { status: 500 });
     }
 
-    // Delete submission
+    // 4. Delete analytics events referencing this submission
+    await supabaseFetch(`/rest/v1/analytics_event?survey_submission_id=eq.${numericId}`, {
+      method: "DELETE",
+      headers: { Prefer: "return=minimal" },
+    }).catch(() => {
+      // May not exist, that's fine
+    });
+
+    // 5. Delete submission
     const submissionRes = await supabaseFetch(`/rest/v1/survey_submission?id=eq.${numericId}`, {
       method: "DELETE",
       headers: { Prefer: "return=minimal" },

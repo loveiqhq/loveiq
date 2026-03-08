@@ -97,7 +97,8 @@ export function useSurveyTracking(
         const allEvents = [...buffer.current, event];
         buffer.current = [];
         const payload = JSON.stringify({ events: allEvents, _csrf: getCsrfToken() });
-        navigator.sendBeacon("/api/survey-tracking", payload);
+        const blob = new Blob([payload], { type: "application/json" });
+        navigator.sendBeacon("/api/survey-tracking", blob);
       }
     };
 
@@ -151,8 +152,6 @@ function flushEvents(events: TrackingEvent[]) {
     },
     body: JSON.stringify({ events }),
   }).catch(() => {
-    // Re-buffer on failure (capped)
-    // Note: This is a simple re-buffer. In production, you might want to
-    // deduplicate, but for analytics data, duplicates are acceptable.
+    // Fire-and-forget — analytics events may be lost on network failure
   });
 }
