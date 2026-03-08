@@ -33,6 +33,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit }) => {
   const [animKey, setAnimKey] = useState(0);
   const [dismissedChapters, setDismissedChapters] = useState<Set<number>>(new Set());
   const hasTrackedStart = useRef(false);
+  const hasCompleted = useRef(false);
   const touchStartX = useRef<number | null>(null);
 
   const question = surveyQuestions[currentIndex];
@@ -95,7 +96,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit }) => {
   // Navigation
   const goTo = useCallback(
     (index: number) => {
-      if (index < 0 || index >= totalQuestions) return;
+      if (index < 0 || index > totalQuestions) return;
       setAnimKey((k) => k + 1);
       setCurrentIndex(index);
     },
@@ -104,7 +105,8 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit }) => {
 
   const goNext = useCallback(() => {
     if (currentIndex >= totalQuestions - 1) {
-      // Survey complete
+      if (hasCompleted.current) return;
+      hasCompleted.current = true;
       trackNavigation("complete");
       const duration = Date.now() - new Date(startedAt).getTime();
       trackSurveyComplete(duration);
