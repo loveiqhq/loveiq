@@ -34,8 +34,8 @@
 - Supabase PostgreSQL - Waitlist signups storage
   - Connection: REST API via `SUPABASE_URL` env var
   - Auth: Service role key in `SUPABASE_SERVICE_ROLE_KEY` env var
-  - Table: `waitlist_signups`
-  - Used in: `app/api/waitlist/route.ts`
+  - Tables: `waitlist_user` (waitlist), `rate_limits` (rate limiting)
+  - Used in: `app/api/waitlist/route.ts`, `lib/ratelimit.ts`
   - Note: Direct REST API calls, no ORM
 
 **File Storage:**

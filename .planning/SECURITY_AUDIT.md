@@ -10,16 +10,16 @@
 
 ### 1.1 Assets
 
-| Asset                     | Classification          | Location                          | Risk Level |
-| ------------------------- | ----------------------- | --------------------------------- | ---------- |
-| Waitlist emails           | PII / Business-Critical | Supabase `waitlist_signups` table | HIGH       |
-| Contact form submissions  | PII                     | Resend email + Slack webhook      | MEDIUM     |
-| Supabase service role key | Secret                  | `.env.local` / Vercel env vars    | CRITICAL   |
-| Resend API key            | Secret                  | `.env.local` / Vercel env vars    | HIGH       |
-| reCAPTCHA secret key      | Secret                  | `.env.local` / Vercel env vars    | MEDIUM     |
-| Slack webhook URLs        | Secret                  | `.env.local` / Vercel env vars    | MEDIUM     |
-| Google Analytics ID       | Public                  | `app/layout.tsx:115`              | LOW        |
-| Source code               | Intellectual Property   | Git repository                    | MEDIUM     |
+| Asset                     | Classification          | Location                       | Risk Level |
+| ------------------------- | ----------------------- | ------------------------------ | ---------- |
+| Waitlist emails           | PII / Business-Critical | Supabase `waitlist_user` table | HIGH       |
+| Contact form submissions  | PII                     | Resend email + Slack webhook   | MEDIUM     |
+| Supabase service role key | Secret                  | `.env.local` / Vercel env vars | CRITICAL   |
+| Resend API key            | Secret                  | `.env.local` / Vercel env vars | HIGH       |
+| reCAPTCHA secret key      | Secret                  | `.env.local` / Vercel env vars | MEDIUM     |
+| Slack webhook URLs        | Secret                  | `.env.local` / Vercel env vars | MEDIUM     |
+| Google Analytics ID       | Public                  | `app/layout.tsx`               | LOW        |
+| Source code               | Intellectual Property   | Git repository                 | MEDIUM     |
 
 ### 1.2 Potential Attackers
 
