@@ -5,6 +5,7 @@ const routes = [
   "/about",
   "/waitlist",
   "/glossary",
+  "/glossary/abandonment-insecurity",
   "/trust-zone",
   "/privacy-policy",
   "/terms-of-use",

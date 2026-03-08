@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { usePathname } from "next/navigation";
 import type Lenis from "lenis";
 
 function isTouchDevice(): boolean {
@@ -10,9 +11,12 @@ function isTouchDevice(): boolean {
 
 export default function SmoothScroll({ children }: { children: React.ReactNode }) {
   const lenisRef = useRef<Lenis | null>(null);
+  const pathname = usePathname();
 
   useEffect(() => {
-    if (isTouchDevice()) return;
+    // Disable Lenis on admin pages — they use overflow-y-auto containers
+    // that Lenis's wheel hijacking breaks.
+    if (isTouchDevice() || pathname.startsWith("/admin")) return;
 
     // Dynamic import keeps lenis out of the initial JS bundle evaluated at
     // module load time. If lenis fails in a given browser (e.g. Playwright
@@ -43,7 +47,7 @@ export default function SmoothScroll({ children }: { children: React.ReactNode }
       lenisRef.current?.destroy();
       lenisRef.current = null;
     };
-  }, []);
+  }, [pathname]);
 
   return <>{children}</>;
 }
