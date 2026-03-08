@@ -26,16 +26,17 @@ export async function GET(request: Request) {
 
   try {
     const [submissionsRes, behaviorRes, recentRes] = await Promise.all([
-      // Total submissions & completion stats
+      // Q1: Total submissions & completion stats
       supabaseFetch(
-        `/rest/v1/survey_submission?select=id,status,created_date_time&created_date_time=gte.${since}`,
+        `/rest/v1/survey_submission?select=id,status,created_date_time,duration_ms,utm_tracker&created_date_time=gte.${since}`,
         { headers: { Prefer: "count=exact" } }
       ),
-      // Drop-off by question (abandon events)
-      supabaseFetch(
-        `/rest/v1/survey_behavior_event?select=q_id,direction&direction=eq.abandon&event_time=gte.${since}`
-      ),
-      // Submissions over time (daily counts)
+      // Q2: Behavior stats via RPC (replaces raw behavior query)
+      supabaseFetch("/rest/v1/rpc/get_behavior_stats", {
+        method: "POST",
+        body: JSON.stringify({ since_ts: since }),
+      }),
+      // Q3: Submissions over time (daily counts)
       supabaseFetch(
         `/rest/v1/survey_submission?select=created_date_time&created_date_time=gte.${since}&order=created_date_time.asc`
       ),
@@ -54,21 +55,89 @@ export async function GET(request: Request) {
       id: number;
       status: string;
       created_date_time: string;
+      duration_ms: number | null;
+      utm_tracker: string | null;
     }>;
 
     const completed = submissions.filter((s) => s.status === "completed");
     const completionRate = totalCount > 0 ? Math.round((completed.length / totalCount) * 100) : 0;
 
-    // Drop-off counts by question
-    const abandonEvents = (await behaviorRes.json()) as Array<{ q_id: string }>;
-    const dropOffMap: Record<string, number> = {};
-    for (const e of abandonEvents) {
-      dropOffMap[e.q_id] = (dropOffMap[e.q_id] || 0) + 1;
+    // Average duration (only submissions with duration_ms)
+    const durationsMs = submissions
+      .map((s) => s.duration_ms)
+      .filter((d): d is number => d != null && d > 0);
+    const avgDurationMs =
+      durationsMs.length > 0
+        ? Math.round(durationsMs.reduce((a, b) => a + b, 0) / durationsMs.length)
+        : null;
+
+    // Status breakdown
+    const statusBreakdown = {
+      completed: submissions.filter((s) => s.status === "completed").length,
+      flagged: submissions.filter((s) => s.status === "flagged").length,
+      archived: submissions.filter((s) => s.status === "archived").length,
+    };
+
+    // Today's submissions
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayCount = submissions.filter(
+      (s) => s.created_date_time.slice(0, 10) === todayStr
+    ).length;
+
+    // Q2: Behavior stats from RPC
+    const behaviorData = await behaviorRes.json();
+    const dropOff = (behaviorData.dropOff ?? []).map((d: { q_id: string; count: number }) => ({
+      qId: d.q_id,
+      count: d.count,
+    }));
+    const avgTimePerQuestion = (behaviorData.avgTimePerQuestion ?? []).map(
+      (d: { q_id: string; avg_ms: number }) => ({ qId: d.q_id, avgMs: d.avg_ms })
+    );
+    const funnel = behaviorData.funnel
+      ? {
+          uniqueSessions: behaviorData.funnel.unique_sessions ?? 0,
+          completedSessions: behaviorData.funnel.completed_sessions ?? 0,
+          abandonedSessions: behaviorData.funnel.abandoned_sessions ?? 0,
+        }
+      : { uniqueSessions: 0, completedSessions: 0, abandonedSessions: 0 };
+    const chapterDropOff = behaviorData.chapterDropOff ?? [];
+    const backtrackRateData = behaviorData.backtrackRate ?? { back_count: 0, forward_count: 0 };
+    const totalMoves = backtrackRateData.back_count + backtrackRateData.forward_count;
+    const backtrackRate =
+      totalMoves > 0 ? Math.round((backtrackRateData.back_count / totalMoves) * 100) : 0;
+    const backtrackByQuestion = (behaviorData.backtrackByQuestion ?? []).map(
+      (d: { q_id: string; count: number }) => ({ qId: d.q_id, count: d.count })
+    );
+
+    // Duration buckets
+    const durationBuckets = { under5m: 0, fiveTo15m: 0, fifteenTo30m: 0, over30m: 0 };
+    for (const ms of durationsMs) {
+      if (ms < 300_000) durationBuckets.under5m++;
+      else if (ms < 900_000) durationBuckets.fiveTo15m++;
+      else if (ms < 1_800_000) durationBuckets.fifteenTo30m++;
+      else durationBuckets.over30m++;
     }
-    const dropOff = Object.entries(dropOffMap)
-      .map(([qId, count]) => ({ qId, count }))
+
+    // UTM source breakdown (top 10)
+    const utmMap: Record<string, number> = {};
+    for (const s of submissions) {
+      const source = s.utm_tracker?.trim() || "Direct";
+      utmMap[source] = (utmMap[source] || 0) + 1;
+    }
+    const utmSources = Object.entries(utmMap)
+      .map(([source, count]) => ({ source, count }))
       .sort((a, b) => b.count - a.count)
-      .slice(0, 15);
+      .slice(0, 10);
+
+    // Peak submission hours (0-23)
+    const hourMap: Record<number, number> = {};
+    for (const s of submissions) {
+      const hour = new Date(s.created_date_time).getUTCHours();
+      hourMap[hour] = (hourMap[hour] || 0) + 1;
+    }
+    const hourly = Object.entries(hourMap)
+      .map(([h, count]) => ({ hour: Number(h), count }))
+      .sort((a, b) => a.hour - b.hour);
 
     // Daily submission counts
     const recentSubmissions = (await recentRes.json()) as Array<{ created_date_time: string }>;
@@ -79,11 +148,148 @@ export async function GET(request: Request) {
     }
     const daily = Object.entries(dailyMap).map(([date, count]) => ({ date, count }));
 
+    // Q4: Waitlist data (graceful degradation)
+    let waitlistTotal: number | null = null;
+    let waitlistToday: number | null = null;
+    let waitlistDaily: Array<{ date: string; count: number }> | null = null;
+    let waitlistUtmSources: Array<{ source: string; count: number }> | null = null;
+
+    try {
+      const waitlistRes = await supabaseFetch(
+        `/rest/v1/waitlist_user?select=id,utm_tracker,created_date_time&created_date_time=gte.${since}&order=created_date_time.asc`,
+        { headers: { Prefer: "count=exact" } }
+      );
+      if (waitlistRes.ok) {
+        waitlistTotal = parseInt(
+          waitlistRes.headers.get("content-range")?.split("/")[1] || "0",
+          10
+        );
+        const waitlistRows = (await waitlistRes.json()) as Array<{
+          id: number;
+          utm_tracker: string | null;
+          created_date_time: string;
+        }>;
+        waitlistToday = waitlistRows.filter(
+          (w) => w.created_date_time.slice(0, 10) === todayStr
+        ).length;
+        // Daily trend
+        const wDailyMap: Record<string, number> = {};
+        for (const w of waitlistRows) {
+          const day = w.created_date_time.slice(0, 10);
+          wDailyMap[day] = (wDailyMap[day] || 0) + 1;
+        }
+        waitlistDaily = Object.entries(wDailyMap).map(([date, count]) => ({ date, count }));
+        // UTM sources
+        const wUtmMap: Record<string, number> = {};
+        for (const w of waitlistRows) {
+          const source = w.utm_tracker?.trim() || "Direct";
+          wUtmMap[source] = (wUtmMap[source] || 0) + 1;
+        }
+        waitlistUtmSources = Object.entries(wUtmMap)
+          .map(([source, count]) => ({ source, count }))
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 10);
+      }
+    } catch (err) {
+      logger.error({ err }, "Admin stats: waitlist query failed (non-blocking)");
+    }
+
+    // Q5: Answer-level insights (graceful degradation)
+    let countryDistribution: Array<{ country: string; count: number }> | null = null;
+    let scaleAvg: Array<{ qId: string; avg: number }> | null = null;
+    let skipRate: Array<{ qId: string; skipped: number; total: number }> | null = null;
+
+    try {
+      const answerFields =
+        "answer_text,normalized_value,was_skipped,survey_question(frontend_qid,type)";
+      const answerFilter = `survey_submission_id=in.(select id from survey_submission where created_date_time=gte.${encodeURIComponent(since)})`;
+      const answersRes = await supabaseFetch(
+        `/rest/v1/survey_submission_answer?select=${answerFields}&${answerFilter}`
+      );
+      if (answersRes.ok) {
+        const answers = (await answersRes.json()) as Array<{
+          answer_text: string | null;
+          normalized_value: number | null;
+          was_skipped: boolean;
+          survey_question: { frontend_qid: string; type: string } | null;
+        }>;
+
+        // Country distribution (qId 15001)
+        const countryMap: Record<string, number> = {};
+        for (const a of answers) {
+          if (a.survey_question?.frontend_qid === "15001" && a.answer_text) {
+            const country = a.answer_text.trim();
+            if (country) countryMap[country] = (countryMap[country] || 0) + 1;
+          }
+        }
+        countryDistribution = Object.entries(countryMap)
+          .map(([country, count]) => ({ country, count }))
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 15);
+
+        // Scale question averages
+        const scaleMap: Record<string, { sum: number; count: number }> = {};
+        for (const a of answers) {
+          if (a.survey_question?.type === "scale" && a.normalized_value != null) {
+            const qId = a.survey_question.frontend_qid;
+            if (!scaleMap[qId]) scaleMap[qId] = { sum: 0, count: 0 };
+            scaleMap[qId].sum += a.normalized_value;
+            scaleMap[qId].count++;
+          }
+        }
+        scaleAvg = Object.entries(scaleMap)
+          .map(([qId, { sum, count }]) => ({
+            qId,
+            avg: Math.round((sum / count) * 10) / 10,
+          }))
+          .sort((a, b) => a.avg - b.avg)
+          .slice(0, 15);
+
+        // Skip rate per question
+        const skipMap: Record<string, { skipped: number; total: number }> = {};
+        for (const a of answers) {
+          const qId = a.survey_question?.frontend_qid;
+          if (!qId) continue;
+          if (!skipMap[qId]) skipMap[qId] = { skipped: 0, total: 0 };
+          skipMap[qId].total++;
+          if (a.was_skipped) skipMap[qId].skipped++;
+        }
+        skipRate = Object.entries(skipMap)
+          .filter(([, v]) => v.skipped > 0)
+          .map(([qId, v]) => ({ qId, skipped: v.skipped, total: v.total }))
+          .sort((a, b) => b.skipped - a.skipped)
+          .slice(0, 15);
+      }
+    } catch (err) {
+      logger.error({ err }, "Admin stats: answers query failed (non-blocking)");
+    }
+
     return NextResponse.json({
       totalSubmissions: totalCount,
       completionRate,
+      avgDurationMs,
+      statusBreakdown,
+      todayCount,
       dropOff,
       daily,
+      durationBuckets,
+      utmSources,
+      hourly,
+      // Behavior analytics (from RPC)
+      avgTimePerQuestion,
+      funnel,
+      chapterDropOff,
+      backtrackRate,
+      backtrackByQuestion,
+      // Waitlist (nullable)
+      waitlistTotal,
+      waitlistToday,
+      waitlistDaily,
+      waitlistUtmSources,
+      // Answer insights (nullable)
+      countryDistribution,
+      scaleAvg,
+      skipRate,
     });
   } catch (err) {
     logger.error({ err }, "Admin stats error");
