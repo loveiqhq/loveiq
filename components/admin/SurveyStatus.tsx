@@ -62,6 +62,7 @@ export default function SurveyStatus() {
     <div className="space-y-6">
       <h2 className="font-serif text-xl font-bold text-text-primary">Survey Status</h2>
 
+      {/* Status display */}
       <div className="rounded-xl border border-white/10 bg-surface p-6">
         <div className="flex items-center gap-4">
           <div className={`h-3 w-3 rounded-full ${data.active ? "bg-green-400" : "bg-red-400"}`} />
@@ -76,14 +77,38 @@ export default function SurveyStatus() {
             </p>
           </div>
         </div>
+      </div>
 
+      {/* Danger zone */}
+      <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-6">
+        <div className="flex items-center gap-2 mb-3">
+          <svg
+            className="h-5 w-5 text-red-400 flex-shrink-0"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z"
+            />
+          </svg>
+          <h3 className="text-sm font-semibold text-red-400">Danger Zone</h3>
+        </div>
+        <p className="text-sm text-red-300/70 mb-4">
+          {data.active
+            ? "Closing the survey will immediately prevent all new submissions. Users currently filling out the survey will be unable to submit. Existing data is preserved."
+            : "Reopening the survey will immediately allow new submissions from anyone with the survey link."}
+        </p>
         <button
           onClick={() => setShowConfirm(true)}
           disabled={actionLoading}
-          className={`mt-6 rounded-lg px-4 py-2 text-sm font-medium transition disabled:opacity-40 ${
+          className={`rounded-lg px-4 py-2 text-sm font-medium transition disabled:opacity-40 ${
             data.active
-              ? "border border-red-500/20 text-red-400 hover:bg-red-500/10"
-              : "border border-green-500/20 text-green-400 hover:bg-green-500/10"
+              ? "border border-red-500/40 text-red-400 hover:bg-red-500/20"
+              : "border border-green-500/40 text-green-400 hover:bg-green-500/20"
           }`}
         >
           {data.active ? "Close Survey" : "Reopen Survey"}
@@ -95,10 +120,11 @@ export default function SurveyStatus() {
         title={data.active ? "Close Survey" : "Reopen Survey"}
         message={
           data.active
-            ? "This will prevent new survey submissions. Existing data is preserved."
-            : "This will allow new survey submissions."
+            ? "This will immediately stop accepting new submissions. Users currently filling out the survey will lose their progress. This action can be reversed by reopening."
+            : "This will immediately start accepting new survey submissions from anyone with the link."
         }
         confirmLabel={data.active ? "Close survey" : "Reopen survey"}
+        requireTyped={data.active ? "CLOSE SURVEY" : "REOPEN SURVEY"}
         onConfirm={toggleStatus}
         onCancel={() => setShowConfirm(false)}
       />

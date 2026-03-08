@@ -33,15 +33,29 @@ interface StatsData {
   chapterDropOff: Array<{ chapter: string; count: number }>;
   backtrackRate: number;
   backtrackByQuestion: Array<{ qId: string; count: number }>;
+  chapterFunnel: Array<{ chapter: string; sessions: number }>;
   // Waitlist (nullable — graceful degradation)
   waitlistTotal: number | null;
   waitlistToday: number | null;
   waitlistDaily: Array<{ date: string; count: number }> | null;
   waitlistUtmSources: Array<{ source: string; count: number }> | null;
+  waitlistHourly: Array<{ hour: number; count: number }> | null;
   // Answer insights (nullable — graceful degradation)
   countryDistribution: Array<{ country: string; count: number }> | null;
   scaleAvg: Array<{ qId: string; avg: number }> | null;
   skipRate: Array<{ qId: string; skipped: number; total: number }> | null;
+  revisionHotspots: Array<{
+    qId: string;
+    avgRevisions: number;
+    totalRevisions: number;
+  }> | null;
+  // Completion by UTM
+  completionByUtm: Array<{ source: string; rate: number; completed: number; total: number }>;
+  // Answer distribution (nullable)
+  answerDistribution: Array<{
+    qId: string;
+    options: Array<{ option: string; count: number }>;
+  }> | null;
 }
 
 function truncateLabel(text: string, max = 50): string {
@@ -99,7 +113,7 @@ export default function AdminDashboard() {
       ? `${Math.round((data.funnel.completedSessions / data.funnel.uniqueSessions) * 100)}%`
       : "\u2014";
 
-  // New transforms — Behavior
+  // Behavior transforms
   const avgTimeItems = data.avgTimePerQuestion.map((d) => ({
     label: truncateLabel(qMap.get(d.qId) ?? d.qId),
     value: Math.round(d.avgMs / 1000),
@@ -112,6 +126,10 @@ export default function AdminDashboard() {
     label: truncateLabel(qMap.get(d.qId) ?? d.qId),
     value: d.count,
   }));
+  const chapterFunnelItems = data.chapterFunnel.map((d) => ({
+    label: d.chapter,
+    value: d.sessions,
+  }));
 
   // Waitlist transforms
   const waitlistDailyItems = data.waitlistDaily?.map((d) => ({
@@ -121,6 +139,10 @@ export default function AdminDashboard() {
   const waitlistUtmItems = data.waitlistUtmSources?.map((u) => ({
     label: u.source,
     value: u.count,
+  }));
+  const waitlistHourlyItems = data.waitlistHourly?.map((h) => ({
+    label: `${h.hour}h`,
+    value: h.count,
   }));
 
   // Answer insight transforms
@@ -135,6 +157,16 @@ export default function AdminDashboard() {
   const skipRateItems = data.skipRate?.map((d) => ({
     label: truncateLabel(qMap.get(d.qId) ?? d.qId),
     value: d.skipped,
+  }));
+  const revisionItems = data.revisionHotspots?.map((d) => ({
+    label: truncateLabel(qMap.get(d.qId) ?? d.qId),
+    value: d.totalRevisions,
+  }));
+
+  // Completion by UTM transform
+  const completionByUtmItems = data.completionByUtm.map((d) => ({
+    label: `${d.source} (${d.completed}/${d.total})`,
+    value: d.rate,
   }));
 
   return (
@@ -275,10 +307,25 @@ export default function AdminDashboard() {
         </div>
       </div>
 
+      {/* Row 7: Waitlist Signup Hours */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <div className="rounded-xl border border-white/10 bg-surface p-5">
+          <h3 className="mb-4 text-sm font-semibold text-text-primary">
+            Waitlist Signup Hours (UTC)
+          </h3>
+          {waitlistHourlyItems && waitlistHourlyItems.length > 0 ? (
+            <BarChart items={waitlistHourlyItems} direction="vertical" maxHeight={180} />
+          ) : (
+            <p className="py-8 text-center text-sm text-text-muted">No data</p>
+          )}
+        </div>
+        <div />
+      </div>
+
       {/* ─── Behavior Analytics ─── */}
       <h2 className="font-serif text-lg font-bold text-text-primary pt-2">Behavior Analytics</h2>
 
-      {/* Row 7: Avg Time Per Question + Chapter Drop-off */}
+      {/* Row 8: Avg Time Per Question + Chapter Drop-off */}
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="rounded-xl border border-white/10 bg-surface p-5">
           <h3 className="mb-4 text-sm font-semibold text-text-primary">
@@ -301,8 +348,19 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* Row 8: Backtracked Questions + Skipped Questions */}
+      {/* Row 9: Chapter Completion Funnel + Most Backtracked Questions */}
       <div className="grid gap-6 lg:grid-cols-2">
+        <div className="rounded-xl border border-white/10 bg-surface p-5">
+          <h3 className="mb-4 text-sm font-semibold text-text-primary">
+            Chapter Completion Funnel
+          </h3>
+          {chapterFunnelItems.length > 0 ? (
+            <BarChart items={chapterFunnelItems} direction="horizontal" />
+          ) : (
+            <p className="py-8 text-center text-sm text-text-muted">No data</p>
+          )}
+        </div>
+
         <div className="rounded-xl border border-white/10 bg-surface p-5">
           <h3 className="mb-4 text-sm font-semibold text-text-primary">
             Most Backtracked Questions
@@ -318,11 +376,23 @@ export default function AdminDashboard() {
             <p className="py-8 text-center text-sm text-text-muted">No data</p>
           )}
         </div>
+      </div>
 
+      {/* Row 10: Most Skipped Questions + Most Revised Questions */}
+      <div className="grid gap-6 lg:grid-cols-2">
         <div className="rounded-xl border border-white/10 bg-surface p-5">
           <h3 className="mb-4 text-sm font-semibold text-text-primary">Most Skipped Questions</h3>
           {skipRateItems && skipRateItems.length > 0 ? (
             <BarChart items={skipRateItems} direction="horizontal" />
+          ) : (
+            <p className="py-8 text-center text-sm text-text-muted">No data</p>
+          )}
+        </div>
+
+        <div className="rounded-xl border border-white/10 bg-surface p-5">
+          <h3 className="mb-4 text-sm font-semibold text-text-primary">Most Revised Questions</h3>
+          {revisionItems && revisionItems.length > 0 ? (
+            <BarChart items={revisionItems} direction="horizontal" />
           ) : (
             <p className="py-8 text-center text-sm text-text-muted">No data</p>
           )}
@@ -332,7 +402,7 @@ export default function AdminDashboard() {
       {/* ─── Answer Insights ─── */}
       <h2 className="font-serif text-lg font-bold text-text-primary pt-2">Answer Insights</h2>
 
-      {/* Row 9: Country Distribution + Scale Question Averages */}
+      {/* Row 11: Country Distribution + Scale Question Averages */}
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="rounded-xl border border-white/10 bg-surface p-5">
           <h3 className="mb-4 text-sm font-semibold text-text-primary">Country Distribution</h3>
@@ -352,6 +422,48 @@ export default function AdminDashboard() {
           )}
         </div>
       </div>
+
+      {/* Row 12: Completion Rate by UTM */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <div className="rounded-xl border border-white/10 bg-surface p-5">
+          <h3 className="mb-4 text-sm font-semibold text-text-primary">
+            Completion Rate by UTM Source (%)
+          </h3>
+          {completionByUtmItems.length > 0 ? (
+            <BarChart items={completionByUtmItems} direction="horizontal" />
+          ) : (
+            <p className="py-8 text-center text-sm text-text-muted">
+              No sources with 2+ submissions
+            </p>
+          )}
+        </div>
+        <div />
+      </div>
+
+      {/* ─── Answer Distribution ─── */}
+      {data.answerDistribution && data.answerDistribution.length > 0 && (
+        <>
+          <h2 className="font-serif text-lg font-bold text-text-primary pt-2">
+            Answer Distribution
+          </h2>
+          <div className="grid gap-6 lg:grid-cols-2">
+            {data.answerDistribution.map((q) => (
+              <div key={q.qId} className="rounded-xl border border-white/10 bg-surface p-5">
+                <h3 className="mb-4 text-sm font-semibold text-text-primary">
+                  {truncateLabel(qMap.get(q.qId) ?? q.qId)}
+                </h3>
+                <BarChart
+                  items={q.options.map((o) => ({
+                    label: truncateLabel(o.option, 40),
+                    value: o.count,
+                  }))}
+                  direction="horizontal"
+                />
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }

@@ -68,13 +68,21 @@ function mockAllQueriesOk() {
         { q_id: "q2", count: 1 },
       ],
       avgTimePerQuestion: [
+        { q_id: "00000", avg_ms: 94000 },
         { q_id: "q1", avg_ms: 45200 },
         { q_id: "q2", avg_ms: 12300 },
       ],
       funnel: { unique_sessions: 120, completed_sessions: 80, abandoned_sessions: 25 },
       chapterDropOff: [{ chapter: "Background & Lifestyle", count: 3 }],
       backtrackRate: { back_count: 50, forward_count: 800 },
-      backtrackByQuestion: [{ q_id: "q3", count: 12 }],
+      backtrackByQuestion: [
+        { q_id: "00001", count: 5 },
+        { q_id: "q3", count: 12 },
+      ],
+      chapterFunnel: [
+        { chapter: "Intro", sessions: 100 },
+        { chapter: "Background & Lifestyle", sessions: 85 },
+      ],
     }),
   });
   // Q3: recentRes
@@ -103,39 +111,59 @@ function mockAllQueriesOk() {
         answer_text: "Germany",
         normalized_value: null,
         was_skipped: false,
+        revision_count: null,
         survey_question: { frontend_qid: "15001", type: "single_choice" },
       },
       {
         answer_text: "Germany",
         normalized_value: null,
         was_skipped: false,
+        revision_count: null,
         survey_question: { frontend_qid: "15001", type: "single_choice" },
       },
       {
         answer_text: "USA",
         normalized_value: null,
         was_skipped: false,
+        revision_count: null,
         survey_question: { frontend_qid: "15001", type: "single_choice" },
       },
       {
         answer_text: null,
         normalized_value: 7,
         was_skipped: false,
+        revision_count: 2,
         survey_question: { frontend_qid: "03001", type: "scale" },
       },
       {
         answer_text: null,
         normalized_value: 5,
         was_skipped: false,
+        revision_count: 1,
         survey_question: { frontend_qid: "03001", type: "scale" },
       },
       {
         answer_text: null,
         normalized_value: null,
         was_skipped: true,
+        revision_count: null,
         survey_question: { frontend_qid: "04001", type: "single_choice" },
       },
     ],
+  });
+  // Q6: answerDistributionRes (RPC response)
+  mockSupabaseFetch.mockResolvedValueOnce({
+    ok: true,
+    json: async () => ({
+      single: [
+        { q_id: "04001", option_text: "Option A", count: 5 },
+        { q_id: "04001", option_text: "Option B", count: 3 },
+      ],
+      multiple: [
+        { q_id: "05001", option_text: "Tag X", count: 8 },
+        { q_id: "05001", option_text: "Tag Y", count: 4 },
+      ],
+    }),
   });
 }
 
@@ -210,7 +238,7 @@ describe("GET /api/admin/stats", () => {
       { hour: 16, count: 1 },
     ]);
 
-    // Behavior analytics (from RPC)
+    // Behavior analytics (from RPC) — intro fields filtered out
     expect(json.avgTimePerQuestion).toEqual([
       { qId: "q1", avgMs: 45200 },
       { qId: "q2", avgMs: 12300 },
@@ -223,7 +251,13 @@ describe("GET /api/admin/stats", () => {
     expect(json.chapterDropOff).toEqual([{ chapter: "Background & Lifestyle", count: 3 }]);
     // backtrackRate: 50 / (50+800) = 5.88... → 6%
     expect(json.backtrackRate).toBe(6);
+    // backtrackByQuestion: 00001 filtered out, only q3 remains
     expect(json.backtrackByQuestion).toEqual([{ qId: "q3", count: 12 }]);
+    // chapterFunnel (new)
+    expect(json.chapterFunnel).toEqual([
+      { chapter: "Intro", sessions: 100 },
+      { chapter: "Background & Lifestyle", sessions: 85 },
+    ]);
 
     // Waitlist
     expect(json.waitlistTotal).toBe(2);
@@ -236,6 +270,11 @@ describe("GET /api/admin/stats", () => {
       { source: "tiktok", count: 1 },
       { source: "Direct", count: 1 },
     ]);
+    // waitlistHourly (new)
+    expect(json.waitlistHourly).toEqual([
+      { hour: 9, count: 1 },
+      { hour: 12, count: 1 },
+    ]);
 
     // Answer insights
     expect(json.countryDistribution).toEqual([
@@ -244,6 +283,22 @@ describe("GET /api/admin/stats", () => {
     ]);
     expect(json.scaleAvg).toEqual([{ qId: "03001", avg: 6 }]);
     expect(json.skipRate).toEqual([{ qId: "04001", skipped: 1, total: 1 }]);
+    // revisionHotspots (new)
+    expect(json.revisionHotspots).toEqual([{ qId: "03001", avgRevisions: 1.5, totalRevisions: 3 }]);
+
+    // completionByUtm (new): instagram 2/2 = 100%, Direct 0/1 < min 2 → filtered
+    expect(json.completionByUtm).toEqual([
+      { source: "instagram", rate: 100, completed: 2, total: 2 },
+    ]);
+
+    // answerDistribution (new)
+    expect(json.answerDistribution).toHaveLength(2);
+    expect(json.answerDistribution[0].qId).toBe("05001");
+    expect(json.answerDistribution[0].options).toEqual([
+      { option: "Tag X", count: 8 },
+      { option: "Tag Y", count: 4 },
+    ]);
+    expect(json.answerDistribution[1].qId).toBe("04001");
   });
 
   it("returns 0% completion rate and empty arrays when total is 0", async () => {
@@ -263,6 +318,7 @@ describe("GET /api/admin/stats", () => {
         chapterDropOff: [],
         backtrackRate: { back_count: 0, forward_count: 0 },
         backtrackByQuestion: [],
+        chapterFunnel: [],
       }),
     });
     // Q3: empty recent
@@ -280,6 +336,11 @@ describe("GET /api/admin/stats", () => {
     mockSupabaseFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => [],
+    });
+    // Q6: empty answer distribution
+    mockSupabaseFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ single: [], multiple: [] }),
     });
 
     const res = await GET(makeRequest());
@@ -306,16 +367,25 @@ describe("GET /api/admin/stats", () => {
     expect(json.chapterDropOff).toEqual([]);
     expect(json.backtrackRate).toBe(0);
     expect(json.backtrackByQuestion).toEqual([]);
+    expect(json.chapterFunnel).toEqual([]);
 
     // Waitlist — zero
     expect(json.waitlistTotal).toBe(0);
     expect(json.waitlistDaily).toEqual([]);
     expect(json.waitlistUtmSources).toEqual([]);
+    expect(json.waitlistHourly).toEqual([]);
 
     // Answer insights — empty
     expect(json.countryDistribution).toEqual([]);
     expect(json.scaleAvg).toEqual([]);
     expect(json.skipRate).toEqual([]);
+    expect(json.revisionHotspots).toEqual([]);
+
+    // Completion by UTM — empty
+    expect(json.completionByUtm).toEqual([]);
+
+    // Answer distribution — empty
+    expect(json.answerDistribution).toEqual([]);
   });
 
   it("returns partial data when Q4 (waitlist) fails", async () => {
@@ -343,6 +413,7 @@ describe("GET /api/admin/stats", () => {
         chapterDropOff: [],
         backtrackRate: { back_count: 0, forward_count: 10 },
         backtrackByQuestion: [],
+        chapterFunnel: [],
       }),
     });
     // Q3
@@ -357,6 +428,11 @@ describe("GET /api/admin/stats", () => {
       ok: true,
       json: async () => [],
     });
+    // Q6: answer distribution ok
+    mockSupabaseFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ single: [], multiple: [] }),
+    });
 
     const res = await GET(makeRequest());
     expect(res.status).toBe(200);
@@ -369,10 +445,12 @@ describe("GET /api/admin/stats", () => {
     expect(json.waitlistToday).toBeNull();
     expect(json.waitlistDaily).toBeNull();
     expect(json.waitlistUtmSources).toBeNull();
+    expect(json.waitlistHourly).toBeNull();
     // Answers still present
     expect(json.countryDistribution).toEqual([]);
     expect(json.scaleAvg).toEqual([]);
     expect(json.skipRate).toEqual([]);
+    expect(json.revisionHotspots).toEqual([]);
   });
 
   it("returns partial data when Q5 (answers) fails", async () => {
@@ -400,6 +478,7 @@ describe("GET /api/admin/stats", () => {
         chapterDropOff: [],
         backtrackRate: { back_count: 0, forward_count: 10 },
         backtrackByQuestion: [],
+        chapterFunnel: [],
       }),
     });
     // Q3
@@ -415,6 +494,11 @@ describe("GET /api/admin/stats", () => {
     });
     // Q5: answers fails
     mockSupabaseFetch.mockRejectedValueOnce(new Error("Timeout"));
+    // Q6: answer distribution ok
+    mockSupabaseFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ single: [], multiple: [] }),
+    });
 
     const res = await GET(makeRequest());
     expect(res.status).toBe(200);
@@ -424,9 +508,79 @@ describe("GET /api/admin/stats", () => {
     expect(json.totalSubmissions).toBe(1);
     // Waitlist present
     expect(json.waitlistTotal).toBe(1);
+    expect(json.waitlistHourly).toEqual([{ hour: 12, count: 1 }]);
     // Answers are null (failed gracefully)
     expect(json.countryDistribution).toBeNull();
     expect(json.scaleAvg).toBeNull();
     expect(json.skipRate).toBeNull();
+    expect(json.revisionHotspots).toBeNull();
+  });
+
+  it("accepts days=0 for all-time range", async () => {
+    mockAllQueriesOk();
+
+    const res = await GET(makeRequest("?days=0"));
+    expect(res.status).toBe(200);
+
+    const json = await res.json();
+    expect(json.totalSubmissions).toBe(3);
+  });
+
+  it("returns partial data when Q6 (answer distribution) fails", async () => {
+    // Q1
+    mockSupabaseFetch.mockResolvedValueOnce({
+      ok: true,
+      headers: new Headers({ "content-range": "0-0/1" }),
+      json: async () => [
+        {
+          id: 1,
+          status: "completed",
+          created_date_time: "2025-01-01T10:00:00Z",
+          duration_ms: 60000,
+          utm_tracker: null,
+        },
+      ],
+    });
+    // Q2: RPC
+    mockSupabaseFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        dropOff: [],
+        avgTimePerQuestion: [],
+        funnel: { unique_sessions: 1, completed_sessions: 1, abandoned_sessions: 0 },
+        chapterDropOff: [],
+        backtrackRate: { back_count: 0, forward_count: 10 },
+        backtrackByQuestion: [],
+        chapterFunnel: [],
+      }),
+    });
+    // Q3
+    mockSupabaseFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => [{ created_date_time: "2025-01-01T10:00:00Z" }],
+    });
+    // Q4: waitlist ok
+    mockSupabaseFetch.mockResolvedValueOnce({
+      ok: true,
+      headers: new Headers({ "content-range": "0-0/1" }),
+      json: async () => [{ id: 1, utm_tracker: null, created_date_time: "2025-01-01T12:00:00Z" }],
+    });
+    // Q5: answers ok
+    mockSupabaseFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => [],
+    });
+    // Q6: answer distribution fails
+    mockSupabaseFetch.mockRejectedValueOnce(new Error("RPC not found"));
+
+    const res = await GET(makeRequest());
+    expect(res.status).toBe(200);
+
+    const json = await res.json();
+    expect(json.totalSubmissions).toBe(1);
+    // Answer distribution is null (failed gracefully)
+    expect(json.answerDistribution).toBeNull();
+    // Other data still present
+    expect(json.countryDistribution).toEqual([]);
   });
 });

@@ -22,7 +22,10 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url);
   const days = parseInt(url.searchParams.get("days") || "30", 10);
-  const since = new Date(Date.now() - days * 86_400_000).toISOString();
+  const since =
+    days > 0
+      ? new Date(Date.now() - days * 86_400_000).toISOString()
+      : new Date("2000-01-01").toISOString();
 
   try {
     const [submissionsRes, behaviorRes, recentRes] = await Promise.all([
@@ -90,9 +93,10 @@ export async function GET(request: Request) {
       qId: d.q_id,
       count: d.count,
     }));
-    const avgTimePerQuestion = (behaviorData.avgTimePerQuestion ?? []).map(
-      (d: { q_id: string; avg_ms: number }) => ({ qId: d.q_id, avgMs: d.avg_ms })
-    );
+    // Defense-in-depth: exclude intro fields (00xxx) from avgTime and backtrack
+    const avgTimePerQuestion = (behaviorData.avgTimePerQuestion ?? [])
+      .filter((d: { q_id: string }) => !d.q_id.startsWith("00"))
+      .map((d: { q_id: string; avg_ms: number }) => ({ qId: d.q_id, avgMs: d.avg_ms }));
     const funnel = behaviorData.funnel
       ? {
           uniqueSessions: behaviorData.funnel.unique_sessions ?? 0,
@@ -105,8 +109,14 @@ export async function GET(request: Request) {
     const totalMoves = backtrackRateData.back_count + backtrackRateData.forward_count;
     const backtrackRate =
       totalMoves > 0 ? Math.round((backtrackRateData.back_count / totalMoves) * 100) : 0;
-    const backtrackByQuestion = (behaviorData.backtrackByQuestion ?? []).map(
-      (d: { q_id: string; count: number }) => ({ qId: d.q_id, count: d.count })
+    const backtrackByQuestion = (behaviorData.backtrackByQuestion ?? [])
+      .filter((d: { q_id: string }) => !d.q_id.startsWith("00"))
+      .map((d: { q_id: string; count: number }) => ({ qId: d.q_id, count: d.count }));
+    const chapterFunnel = (behaviorData.chapterFunnel ?? []).map(
+      (d: { chapter: string; sessions: number }) => ({
+        chapter: d.chapter,
+        sessions: d.sessions,
+      })
     );
 
     // Duration buckets
@@ -128,6 +138,24 @@ export async function GET(request: Request) {
       .map(([source, count]) => ({ source, count }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 10);
+
+    // Completion rate by UTM source (min 2 submissions per source)
+    const utmCompletionMap: Record<string, { completed: number; total: number }> = {};
+    for (const s of submissions) {
+      const source = s.utm_tracker?.trim() || "Direct";
+      if (!utmCompletionMap[source]) utmCompletionMap[source] = { completed: 0, total: 0 };
+      utmCompletionMap[source].total++;
+      if (s.status === "completed") utmCompletionMap[source].completed++;
+    }
+    const completionByUtm = Object.entries(utmCompletionMap)
+      .filter(([, v]) => v.total >= 2)
+      .map(([source, v]) => ({
+        source,
+        rate: Math.round((v.completed / v.total) * 100),
+        completed: v.completed,
+        total: v.total,
+      }))
+      .sort((a, b) => b.rate - a.rate);
 
     // Peak submission hours (0-23)
     const hourMap: Record<number, number> = {};
@@ -153,6 +181,7 @@ export async function GET(request: Request) {
     let waitlistToday: number | null = null;
     let waitlistDaily: Array<{ date: string; count: number }> | null = null;
     let waitlistUtmSources: Array<{ source: string; count: number }> | null = null;
+    let waitlistHourly: Array<{ hour: number; count: number }> | null = null;
 
     try {
       const waitlistRes = await supabaseFetch(
@@ -189,6 +218,15 @@ export async function GET(request: Request) {
           .map(([source, count]) => ({ source, count }))
           .sort((a, b) => b.count - a.count)
           .slice(0, 10);
+        // Waitlist peak hours
+        const wHourMap: Record<number, number> = {};
+        for (const w of waitlistRows) {
+          const hour = new Date(w.created_date_time).getUTCHours();
+          wHourMap[hour] = (wHourMap[hour] || 0) + 1;
+        }
+        waitlistHourly = Object.entries(wHourMap)
+          .map(([h, count]) => ({ hour: Number(h), count }))
+          .sort((a, b) => a.hour - b.hour);
       }
     } catch (err) {
       logger.error({ err }, "Admin stats: waitlist query failed (non-blocking)");
@@ -198,10 +236,15 @@ export async function GET(request: Request) {
     let countryDistribution: Array<{ country: string; count: number }> | null = null;
     let scaleAvg: Array<{ qId: string; avg: number }> | null = null;
     let skipRate: Array<{ qId: string; skipped: number; total: number }> | null = null;
+    let revisionHotspots: Array<{
+      qId: string;
+      avgRevisions: number;
+      totalRevisions: number;
+    }> | null = null;
 
     try {
       const answerFields =
-        "answer_text,normalized_value,was_skipped,survey_question(frontend_qid,type)";
+        "answer_text,normalized_value,was_skipped,revision_count,survey_question(frontend_qid,type)";
       const answerFilter = `survey_submission_id=in.(select id from survey_submission where created_date_time=gte.${encodeURIComponent(since)})`;
       const answersRes = await supabaseFetch(
         `/rest/v1/survey_submission_answer?select=${answerFields}&${answerFilter}`
@@ -211,6 +254,7 @@ export async function GET(request: Request) {
           answer_text: string | null;
           normalized_value: number | null;
           was_skipped: boolean;
+          revision_count: number | null;
           survey_question: { frontend_qid: string; type: string } | null;
         }>;
 
@@ -259,9 +303,66 @@ export async function GET(request: Request) {
           .map(([qId, v]) => ({ qId, skipped: v.skipped, total: v.total }))
           .sort((a, b) => b.skipped - a.skipped)
           .slice(0, 15);
+
+        // Revision hotspots (most revised questions)
+        const revisionMap: Record<string, { totalRevisions: number; count: number }> = {};
+        for (const a of answers) {
+          const qId = a.survey_question?.frontend_qid;
+          if (!qId || !a.revision_count || a.revision_count <= 0) continue;
+          if (!revisionMap[qId]) revisionMap[qId] = { totalRevisions: 0, count: 0 };
+          revisionMap[qId].totalRevisions += a.revision_count;
+          revisionMap[qId].count++;
+        }
+        revisionHotspots = Object.entries(revisionMap)
+          .map(([qId, v]) => ({
+            qId,
+            avgRevisions: Math.round((v.totalRevisions / v.count) * 10) / 10,
+            totalRevisions: v.totalRevisions,
+          }))
+          .sort((a, b) => b.totalRevisions - a.totalRevisions)
+          .slice(0, 15);
       }
     } catch (err) {
       logger.error({ err }, "Admin stats: answers query failed (non-blocking)");
+    }
+
+    // Q6: Answer distribution (graceful degradation)
+    let answerDistribution: Array<{
+      qId: string;
+      options: Array<{ option: string; count: number }>;
+    }> | null = null;
+
+    try {
+      const distRes = await supabaseFetch("/rest/v1/rpc/get_answer_distribution", {
+        method: "POST",
+        body: JSON.stringify({ since_ts: since }),
+      });
+      if (distRes.ok) {
+        const distData = await distRes.json();
+        const allRows = [
+          ...((distData.single as Array<{ q_id: string; option_text: string; count: number }>) ??
+            []),
+          ...((distData.multiple as Array<{ q_id: string; option_text: string; count: number }>) ??
+            []),
+        ];
+        // Group by qId
+        const distMap: Record<string, Array<{ option: string; count: number }>> = {};
+        for (const row of allRows) {
+          if (!distMap[row.q_id]) distMap[row.q_id] = [];
+          distMap[row.q_id].push({ option: row.option_text, count: row.count });
+        }
+        // Sort by total responses, take top 5 questions
+        answerDistribution = Object.entries(distMap)
+          .map(([qId, options]) => ({ qId, options }))
+          .sort(
+            (a, b) =>
+              b.options.reduce((s, o) => s + o.count, 0) -
+              a.options.reduce((s, o) => s + o.count, 0)
+          )
+          .slice(0, 5);
+      }
+    } catch (err) {
+      logger.error({ err }, "Admin stats: answer distribution query failed (non-blocking)");
     }
 
     return NextResponse.json({
@@ -281,15 +382,22 @@ export async function GET(request: Request) {
       chapterDropOff,
       backtrackRate,
       backtrackByQuestion,
+      chapterFunnel,
       // Waitlist (nullable)
       waitlistTotal,
       waitlistToday,
       waitlistDaily,
       waitlistUtmSources,
+      waitlistHourly,
       // Answer insights (nullable)
       countryDistribution,
       scaleAvg,
       skipRate,
+      revisionHotspots,
+      // Completion by UTM
+      completionByUtm,
+      // Answer distribution (nullable)
+      answerDistribution,
     });
   } catch (err) {
     logger.error({ err }, "Admin stats error");
