@@ -1,7 +1,8 @@
 -- Migration: submit_survey RPC function
 --
--- Atomic survey submission: upserts app_user, creates survey_submission,
--- and inserts all survey_submission_answer rows in a single transaction.
+-- Atomic survey submission: upserts app_user, auto-links waitlist_mapping,
+-- creates survey_submission, and inserts all survey_submission_answer rows
+-- in a single transaction.
 --
 -- Called from app/api/survey/route.ts via POST /rest/v1/rpc/submit_survey
 
@@ -31,13 +32,20 @@ DECLARE
   v_other_text    TEXT;
   v_elem          JSONB;
 BEGIN
-  -- 1. Upsert app_user by email
+  -- 1a. Upsert app_user by email
   INSERT INTO app_user (email, first_name)
   VALUES (p_email, p_first_name)
   ON CONFLICT (email) DO UPDATE
     SET first_name = EXCLUDED.first_name,
         updated_date_time = now()
   RETURNING id INTO v_user_id;
+
+  -- 1b. Auto-link waitlist signup if email matches
+  INSERT INTO waitlist_mapping (waitlist_id, user_id)
+  SELECT wu.id, v_user_id
+  FROM waitlist_user wu
+  WHERE lower(wu.email) = lower(p_email)
+  ON CONFLICT DO NOTHING;
 
   -- 2. Get the active survey
   SELECT id INTO v_survey_id
@@ -51,8 +59,8 @@ BEGIN
   END IF;
 
   -- 3. Create survey_submission
-  INSERT INTO survey_submission (user_id, survey_id, status, start_date_time)
-  VALUES (v_user_id, v_survey_id, 'completed', p_started_at)
+  INSERT INTO survey_submission (user_id, survey_id, status, start_date_time, duration_ms)
+  VALUES (v_user_id, v_survey_id, 'completed', p_started_at, p_duration_ms)
   RETURNING id INTO v_submission_id;
 
   -- 4. Loop through answer keys

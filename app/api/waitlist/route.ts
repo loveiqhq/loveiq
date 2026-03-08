@@ -15,7 +15,7 @@ type Payload = {
   website?: string | null; // honeypot
 };
 
-const tableName = "waitlist_signups"; // matches Supabase table name
+const tableName = "waitlist_user"; // matches Supabase table name
 
 // Lazy initialization to avoid build-time errors when env vars are not set
 let _resend: Resend | null = null;
@@ -184,7 +184,7 @@ export async function POST(request: Request) {
   const insertPayload = {
     email: normalizedEmail,
     source: source?.trim() || "landing-modal",
-    created_at: new Date().toISOString(),
+    created_date_time: new Date().toISOString(),
   };
 
   // Idempotency: if the email already exists, return success to avoid enumeration

@@ -41,7 +41,7 @@
 - Supabase PostgreSQL
   - Connection: REST API via `SUPABASE_URL` env var
   - Auth: Service role key in `SUPABASE_SERVICE_ROLE_KEY` env var
-  - Tables: `waitlist_signups` (waitlist), `rate_limits` (rate limiting)
+  - Tables: `waitlist_user` (waitlist), `rate_limits` (rate limiting)
   - Used in: `app/api/waitlist/route.ts`, `lib/ratelimit.ts`
   - Note: Direct REST API calls, no ORM
 
