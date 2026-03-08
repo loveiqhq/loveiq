@@ -65,4 +65,19 @@ describe("waitlistEmail", () => {
     expect(result.text).toContain("LoveIQ Early Access");
     expect(result.text).toContain("hello@loveiq.org");
   });
+
+  it("HTML output matches snapshot (with firstName)", () => {
+    const { html } = waitlistEmail({ firstName: "Alice" });
+    expect(html).toMatchSnapshot();
+  });
+
+  it("HTML output matches snapshot (no firstName)", () => {
+    const { html } = waitlistEmail({});
+    expect(html).toMatchSnapshot();
+  });
+
+  it("text output matches snapshot", () => {
+    const { text } = waitlistEmail({ firstName: "Alice" });
+    expect(text).toMatchSnapshot();
+  });
 });

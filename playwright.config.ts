@@ -1,4 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
+import { loadEnvConfig } from "@next/env";
+
+// Load .env.local so E2E tests can access env vars like ADMIN_PASSWORD
+loadEnvConfig(process.cwd());
 
 export default defineConfig({
   testDir: "./e2e",
@@ -7,6 +11,11 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   workers: process.env.CI ? 1 : 3, // limit local parallelism so Firefox cold-start doesn't compete with 5 other simultaneous browser launches
   reporter: "html",
+  expect: {
+    toHaveScreenshot: {
+      maxDiffPixelRatio: 0.01,
+    },
+  },
   use: {
     baseURL: "http://localhost:3000",
     trace: "on-first-retry",

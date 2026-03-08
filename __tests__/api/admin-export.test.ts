@@ -164,4 +164,57 @@ describe("GET /api/admin/export", () => {
     const disposition = res.headers.get("Content-Disposition") || "";
     expect(disposition).toMatch(/filename="loveiq-submissions-\d{4}-\d{2}-\d{2}\.csv"/);
   });
+
+  it("CSV output matches snapshot (with data)", async () => {
+    vi.setSystemTime(new Date("2025-06-15T12:00:00Z"));
+
+    mockSupabaseFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => [
+        {
+          id: 1,
+          status: "completed",
+          start_date_time: "2025-06-15T10:00:00Z",
+          created_date_time: "2025-06-15T10:05:00Z",
+          duration_ms: 300000,
+          app_user: { email: "test@example.com", first_name: "Test" },
+        },
+      ],
+    });
+    mockSupabaseFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => [
+        {
+          survey_submission_id: 1,
+          answer_text: "Sample answer",
+          answer_option_id: null,
+          normalized_value: null,
+          survey_question: { frontend_qid: "q1", type: "open" },
+          answer_option: null,
+          survey_submission_answer_options: [],
+        },
+      ],
+    });
+
+    const res = await GET(makeRequest());
+    const csv = await res.text();
+    expect(csv).toMatchSnapshot();
+
+    vi.useRealTimers();
+  });
+
+  it("CSV output matches snapshot (empty data)", async () => {
+    vi.setSystemTime(new Date("2025-06-15T12:00:00Z"));
+
+    mockSupabaseFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => [],
+    });
+
+    const res = await GET(makeRequest());
+    const csv = await res.text();
+    expect(csv).toMatchSnapshot();
+
+    vi.useRealTimers();
+  });
 });
