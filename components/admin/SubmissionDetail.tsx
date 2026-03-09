@@ -30,6 +30,10 @@ function getCsrfToken(): string {
   return cookie?.substring(cookie.indexOf("=") + 1) || "";
 }
 
+function maskEmail(email: string): string {
+  return email.replace(/^(.).+(@.+)$/, "$1***$2");
+}
+
 export default function SubmissionDetail({ id }: { id: string }) {
   const { data, loading, error, refetch } = useAdminFetch<SubmissionData>(
     `/api/admin/submissions/${id}`
@@ -102,7 +106,7 @@ export default function SubmissionDetail({ id }: { id: string }) {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div>
             <p className="text-xs text-text-muted">Email</p>
-            <p className="text-sm text-text-primary">{submission.email}</p>
+            <p className="text-sm text-text-primary">{maskEmail(submission.email)}</p>
           </div>
           <div>
             <p className="text-xs text-text-muted">Name</p>

@@ -83,7 +83,7 @@ describe("SubmissionDetail", () => {
 
   it("renders submission info", () => {
     render(<SubmissionDetail id="1" />);
-    expect(screen.getByText("test@example.com")).toBeInTheDocument();
+    expect(screen.getByText("t***@example.com")).toBeInTheDocument();
     expect(screen.getByText("Test")).toBeInTheDocument();
     expect(screen.getByText("completed")).toBeInTheDocument();
     expect(screen.getByText("Submission #1")).toBeInTheDocument();
