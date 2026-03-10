@@ -151,7 +151,16 @@ function mockAllQueriesOk() {
       },
     ],
   });
-  // Q6: answerDistributionRes (RPC response)
+  // Q6: scoringRes
+  mockSupabaseFetch.mockResolvedValueOnce({
+    ok: true,
+    json: async () => [
+      { primary_archetype: "Spark Seeker" },
+      { primary_archetype: "Spark Seeker" },
+      { primary_archetype: "Romantic Idealist" },
+    ],
+  });
+  // Q7: answerDistributionRes (RPC response)
   mockSupabaseFetch.mockResolvedValueOnce({
     ok: true,
     json: async () => ({
@@ -291,6 +300,13 @@ describe("GET /api/admin/stats", () => {
       { source: "instagram", rate: 100, completed: 2, total: 2 },
     ]);
 
+    // Scoring analytics
+    expect(json.scoredCount).toBe(3);
+    expect(json.archetypeDistribution).toEqual([
+      { archetype: "Spark Seeker", count: 2 },
+      { archetype: "Romantic Idealist", count: 1 },
+    ]);
+
     // answerDistribution (new)
     expect(json.answerDistribution).toHaveLength(2);
     expect(json.answerDistribution[0].qId).toBe("05001");
@@ -337,7 +353,12 @@ describe("GET /api/admin/stats", () => {
       ok: true,
       json: async () => [],
     });
-    // Q6: empty answer distribution
+    // Q6: empty scoring
+    mockSupabaseFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => [],
+    });
+    // Q7: empty answer distribution
     mockSupabaseFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({ single: [], multiple: [] }),
@@ -384,6 +405,10 @@ describe("GET /api/admin/stats", () => {
     // Completion by UTM — empty
     expect(json.completionByUtm).toEqual([]);
 
+    // Scoring — empty
+    expect(json.scoredCount).toBe(0);
+    expect(json.archetypeDistribution).toEqual([]);
+
     // Answer distribution — empty
     expect(json.answerDistribution).toEqual([]);
   });
@@ -428,7 +453,12 @@ describe("GET /api/admin/stats", () => {
       ok: true,
       json: async () => [],
     });
-    // Q6: answer distribution ok
+    // Q6: scoring ok
+    mockSupabaseFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => [],
+    });
+    // Q7: answer distribution ok
     mockSupabaseFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({ single: [], multiple: [] }),
@@ -494,7 +524,12 @@ describe("GET /api/admin/stats", () => {
     });
     // Q5: answers fails
     mockSupabaseFetch.mockRejectedValueOnce(new Error("Timeout"));
-    // Q6: answer distribution ok
+    // Q6: scoring ok
+    mockSupabaseFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => [],
+    });
+    // Q7: answer distribution ok
     mockSupabaseFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({ single: [], multiple: [] }),
@@ -526,7 +561,7 @@ describe("GET /api/admin/stats", () => {
     expect(json.totalSubmissions).toBe(3);
   });
 
-  it("returns partial data when Q6 (answer distribution) fails", async () => {
+  it("returns partial data when Q7 (answer distribution) fails", async () => {
     // Q1
     mockSupabaseFetch.mockResolvedValueOnce({
       ok: true,
@@ -570,7 +605,12 @@ describe("GET /api/admin/stats", () => {
       ok: true,
       json: async () => [],
     });
-    // Q6: answer distribution fails
+    // Q6: scoring ok
+    mockSupabaseFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => [],
+    });
+    // Q7: answer distribution fails
     mockSupabaseFetch.mockRejectedValueOnce(new Error("RPC not found"));
 
     const res = await GET(makeRequest());

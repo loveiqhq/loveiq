@@ -68,7 +68,9 @@ describe("GET /api/admin/export", () => {
     expect(res.headers.get("Content-Disposition")).toContain("attachment");
 
     const csv = await res.text();
-    expect(csv).toContain("id,email,first_name,status,started_at,completed_at,duration_sec");
+    expect(csv).toContain(
+      "id,email,first_name,status,started_at,completed_at,duration_sec,primary_archetype,engine_version"
+    );
   });
 
   it("returns CSV with submission data and answers", async () => {
@@ -86,7 +88,19 @@ describe("GET /api/admin/export", () => {
         },
       ],
     });
-    // Second call: answers
+    // Second call: scoring results
+    mockSupabaseFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => [
+        {
+          survey_submission_id: 1,
+          primary_archetype: "Spark Seeker",
+          percentages: { "Spark Seeker": 15.2, "Romantic Idealist": 12.1 },
+          engine_version: "v3",
+        },
+      ],
+    });
+    // Third call: answers
     mockSupabaseFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => [
@@ -108,9 +122,14 @@ describe("GET /api/admin/export", () => {
     const csv = await res.text();
     const lines = csv.split("\n");
 
-    // Header row should include q1
+    // Header row should include scoring and answer columns
+    expect(lines[0]).toContain("primary_archetype");
+    expect(lines[0]).toContain("engine_version");
+    expect(lines[0]).toContain("pct_Spark Seeker");
     expect(lines[0]).toContain("q1");
-    // Data row should include "Hello world"
+    // Data row should include scoring and answer data
+    expect(lines[1]).toContain("Spark Seeker");
+    expect(lines[1]).toContain("v3");
     expect(lines[1]).toContain("Hello world");
     expect(lines[1]).toContain("alice@test.com");
   });
@@ -128,6 +147,11 @@ describe("GET /api/admin/export", () => {
           app_user: { email: "bob@test.com", first_name: "O'Brien, Bob" },
         },
       ],
+    });
+    // Scoring results
+    mockSupabaseFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => [],
     });
     // Answers with comma in text
     mockSupabaseFetch.mockResolvedValueOnce({
@@ -178,6 +202,18 @@ describe("GET /api/admin/export", () => {
           created_date_time: "2025-06-15T10:05:00Z",
           duration_ms: 300000,
           app_user: { email: "test@example.com", first_name: "Test" },
+        },
+      ],
+    });
+    // Scoring results
+    mockSupabaseFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => [
+        {
+          survey_submission_id: 1,
+          primary_archetype: "Spark Seeker",
+          percentages: { "Spark Seeker": 15.2 },
+          engine_version: "v3",
         },
       ],
     });

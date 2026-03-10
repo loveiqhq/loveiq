@@ -7,6 +7,7 @@ interface Submission {
   status: string;
   started_at: string;
   completed_at: string;
+  primary_archetype: string | null;
 }
 
 interface SubmissionTableProps {
@@ -50,6 +51,7 @@ export default function SubmissionTable({ submissions }: SubmissionTableProps) {
             <th className="px-4 py-3 font-medium">Email</th>
             <th className="px-4 py-3 font-medium">Name</th>
             <th className="px-4 py-3 font-medium">Status</th>
+            <th className="px-4 py-3 font-medium">Archetype</th>
             <th className="px-4 py-3 font-medium">Started</th>
             <th className="px-4 py-3 font-medium">Completed</th>
             <th className="px-4 py-3 font-medium">Actions</th>
@@ -66,6 +68,15 @@ export default function SubmissionTable({ submissions }: SubmissionTableProps) {
                 >
                   {s.status}
                 </span>
+              </td>
+              <td className="px-4 py-3 text-text-muted">
+                {s.primary_archetype ? (
+                  <span className="rounded-full bg-accent-purple/10 px-2 py-0.5 text-xs font-medium text-accent-purple">
+                    {s.primary_archetype}
+                  </span>
+                ) : (
+                  <span className="text-xs text-text-muted">&mdash;</span>
+                )}
               </td>
               <td className="px-4 py-3 text-text-muted">{formatDate(s.started_at)}</td>
               <td className="px-4 py-3 text-text-muted">{formatDate(s.completed_at)}</td>

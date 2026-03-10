@@ -56,8 +56,44 @@ export async function GET(request: Request) {
       duration_ms: r.duration_ms,
     }));
 
-    // Fetch answers for all submissions with question info
+    // Fetch scoring results for all submissions
     const ids = submissions.map((s) => s.id);
+    const scoringMap: Record<
+      number,
+      { primary_archetype: string; percentages: Record<string, number>; engine_version: string }
+    > = {};
+
+    if (ids.length > 0) {
+      try {
+        const scoringRes = await supabaseFetch(
+          `/rest/v1/scoring_result?survey_submission_id=in.(${ids.join(",")})&select=survey_submission_id,primary_archetype,percentages,engine_version`
+        );
+        if (scoringRes.ok) {
+          const scoringRows = (await scoringRes.json()) as Array<{
+            survey_submission_id: number;
+            primary_archetype: string;
+            percentages: Record<string, number>;
+            engine_version: string;
+          }>;
+          for (const row of scoringRows) {
+            scoringMap[row.survey_submission_id] = row;
+          }
+        }
+      } catch {
+        // Scoring fetch failure is non-blocking
+      }
+    }
+
+    // Collect all unique archetype names from percentages for CSV columns
+    const allArchetypes = new Set<string>();
+    for (const s of Object.values(scoringMap)) {
+      for (const key of Object.keys(s.percentages)) {
+        allArchetypes.add(key);
+      }
+    }
+    const sortedArchetypes = Array.from(allArchetypes).sort();
+
+    // Fetch answers for all submissions with question info
     const answersMap: Record<number, Record<string, string>> = {};
 
     if (ids.length > 0) {
@@ -121,10 +157,14 @@ export async function GET(request: Request) {
       "started_at",
       "completed_at",
       "duration_sec",
+      "primary_archetype",
+      "engine_version",
+      ...sortedArchetypes.map((a) => `pct_${a}`),
       ...sortedQIds,
     ];
     const rows = submissions.map((s) => {
       const answers = answersMap[s.id] || {};
+      const scoring = scoringMap[s.id];
       const durationSec = s.duration_ms != null ? Math.round(s.duration_ms / 1000) : "";
       return [
         s.id,
@@ -134,6 +174,11 @@ export async function GET(request: Request) {
         s.started_at,
         s.completed_at,
         durationSec,
+        scoring?.primary_archetype || "",
+        scoring?.engine_version || "",
+        ...sortedArchetypes.map((a) =>
+          scoring?.percentages[a] != null ? Math.round(scoring.percentages[a] * 10) / 10 : ""
+        ),
         ...sortedQIds.map((qId) => answers[qId] || ""),
       ];
     });

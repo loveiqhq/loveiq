@@ -16,6 +16,10 @@ vi.mock("@/components/admin/AnswerDisplay", () => ({
   ),
 }));
 
+vi.mock("@/components/admin/BarChart", () => ({
+  default: () => <div data-testid="bar-chart" />,
+}));
+
 vi.mock("@/components/admin/ConfirmDialog", () => ({
   default: (props: { open: boolean; onConfirm: () => void; onCancel: () => void }) =>
     props.open ? (
@@ -41,6 +45,7 @@ const submissionData = {
     duration_ms: 300000,
   },
   answers: [{ q_id: "q1", question_text: "Q1?", answer_type: "open", answer_value: "Answer" }],
+  scoring: null,
 };
 
 beforeEach(() => {
@@ -155,5 +160,34 @@ describe("SubmissionDetail", () => {
   it("renders duration when present", () => {
     render(<SubmissionDetail id="1" />);
     expect(screen.getByText("5 min 0 sec")).toBeInTheDocument();
+  });
+
+  it("shows Not Scored when scoring is null", () => {
+    render(<SubmissionDetail id="1" />);
+    expect(screen.getByText("Not Scored")).toBeInTheDocument();
+    expect(screen.getByText("No scoring data available for this submission.")).toBeInTheDocument();
+  });
+
+  it("shows scoring result when present", () => {
+    mockUseAdminFetch.mockReturnValue({
+      data: {
+        ...submissionData,
+        scoring: {
+          primary_archetype: "Spark Seeker",
+          percentages: { "Spark Seeker": 15.2, "Romantic Idealist": 12.1 },
+          raw_scores: { "Spark Seeker": 22.5, "Romantic Idealist": 20.1 },
+          engine_version: "v3",
+          scored_at: "2025-01-01T10:05:00Z",
+        },
+      },
+      loading: false,
+      error: null,
+      refetch: mockRefetch,
+    });
+    render(<SubmissionDetail id="1" />);
+    expect(screen.getByText("Scoring Result")).toBeInTheDocument();
+    expect(screen.getByText("Spark Seeker")).toBeInTheDocument();
+    expect(screen.getByText(/v3/)).toBeInTheDocument();
+    expect(screen.getByTestId("bar-chart")).toBeInTheDocument();
   });
 });

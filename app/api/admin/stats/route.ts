@@ -326,7 +326,32 @@ export async function GET(request: Request) {
       logger.error({ err }, "Admin stats: answers query failed (non-blocking)");
     }
 
-    // Q6: Answer distribution (graceful degradation)
+    // Q6: Scoring analytics (graceful degradation)
+    let scoredCount: number | null = null;
+    let archetypeDistribution: Array<{ archetype: string; count: number }> | null = null;
+
+    try {
+      const scoringRes = await supabaseFetch(
+        `/rest/v1/scoring_result?select=primary_archetype&scored_at=gte.${since}`
+      );
+      if (scoringRes.ok) {
+        const scoringRows = (await scoringRes.json()) as Array<{
+          primary_archetype: string;
+        }>;
+        scoredCount = scoringRows.length;
+        const archMap: Record<string, number> = {};
+        for (const row of scoringRows) {
+          archMap[row.primary_archetype] = (archMap[row.primary_archetype] || 0) + 1;
+        }
+        archetypeDistribution = Object.entries(archMap)
+          .map(([archetype, count]) => ({ archetype, count }))
+          .sort((a, b) => b.count - a.count);
+      }
+    } catch (err) {
+      logger.error({ err }, "Admin stats: scoring query failed (non-blocking)");
+    }
+
+    // Q7: Answer distribution (graceful degradation)
     let answerDistribution: Array<{
       qId: string;
       options: Array<{ option: string; count: number }>;
@@ -396,6 +421,9 @@ export async function GET(request: Request) {
       revisionHotspots,
       // Completion by UTM
       completionByUtm,
+      // Scoring analytics (nullable)
+      scoredCount,
+      archetypeDistribution,
       // Answer distribution (nullable)
       answerDistribution,
     });

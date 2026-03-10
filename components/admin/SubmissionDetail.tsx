@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useAdminFetch } from "./hooks/useAdminFetch";
 import AnswerDisplay from "./AnswerDisplay";
+import BarChart from "./BarChart";
 import ConfirmDialog from "./ConfirmDialog";
 
 interface SubmissionData {
@@ -21,6 +22,13 @@ interface SubmissionData {
     answer_type?: string;
     answer_value: string | string[] | number | null;
   }>;
+  scoring: {
+    primary_archetype: string;
+    percentages: Record<string, number>;
+    raw_scores: Record<string, number>;
+    engine_version: string;
+    scored_at: string;
+  } | null;
 }
 
 function getCsrfToken(): string {
@@ -88,7 +96,7 @@ export default function SubmissionDetail({ id }: { id: string }) {
     );
   }
 
-  const { submission, answers } = data;
+  const { submission, answers, scoring } = data;
 
   return (
     <div className="space-y-6">
@@ -142,6 +150,43 @@ export default function SubmissionDetail({ id }: { id: string }) {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Scoring Result */}
+      <div className="rounded-xl border border-white/10 bg-surface p-5">
+        <h3 className="mb-4 text-sm font-semibold text-text-primary">
+          {scoring ? "Scoring Result" : "Not Scored"}
+        </h3>
+        {scoring ? (
+          <>
+            <div className="mb-4 flex items-baseline gap-3">
+              <span className="font-serif text-lg font-bold text-accent-purple">
+                {scoring.primary_archetype}
+              </span>
+              <span className="text-xs text-text-muted">
+                {scoring.engine_version} &middot;{" "}
+                {new Date(scoring.scored_at).toLocaleDateString("en-US", {
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </span>
+            </div>
+            <BarChart
+              items={Object.entries(scoring.percentages)
+                .sort(([, a], [, b]) => b - a)
+                .map(([label, value]) => ({
+                  label,
+                  value: Math.round(value * 10) / 10,
+                }))}
+              direction="horizontal"
+            />
+          </>
+        ) : (
+          <p className="text-sm text-text-muted">No scoring data available for this submission.</p>
+        )}
       </div>
 
       {/* Actions */}

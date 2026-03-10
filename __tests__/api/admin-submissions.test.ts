@@ -38,6 +38,7 @@ const sampleRows = [
     created_date_time: "2025-01-01T00:05:00Z",
     duration_ms: 60000,
     app_user: { email: "alice@test.com", first_name: "Alice" },
+    scoring_result: [{ primary_archetype: "Spark Seeker" }],
   },
   {
     id: 2,
@@ -46,6 +47,7 @@ const sampleRows = [
     created_date_time: "2025-01-02T00:05:00Z",
     duration_ms: 90000,
     app_user: { email: "bob@test.com", first_name: "Bob" },
+    scoring_result: [],
   },
 ];
 
@@ -98,7 +100,9 @@ describe("GET /api/admin/submissions", () => {
       id: 1,
       email: "alice@test.com",
       first_name: "Alice",
+      primary_archetype: "Spark Seeker",
     });
+    expect(json.submissions[1].primary_archetype).toBeNull();
   });
 
   it("filters submissions by email (client-side)", async () => {
@@ -141,6 +145,17 @@ describe("GET /api/admin/submissions", () => {
     expect(json.limit).toBe(100);
   });
 
+  it("filters submissions by archetype (client-side)", async () => {
+    mockSubmissionsOk();
+
+    const res = await GET(makeRequest("?archetype=Spark%20Seeker"));
+    expect(res.status).toBe(200);
+
+    const json = await res.json();
+    expect(json.submissions).toHaveLength(1);
+    expect(json.submissions[0].primary_archetype).toBe("Spark Seeker");
+  });
+
   it("flattens app_user join into top-level fields", async () => {
     mockSubmissionsOk([
       {
@@ -150,6 +165,7 @@ describe("GET /api/admin/submissions", () => {
         created_date_time: "2025-01-03T00:00:00Z",
         duration_ms: null,
         app_user: null,
+        scoring_result: [],
       },
     ]);
 

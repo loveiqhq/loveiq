@@ -51,6 +51,9 @@ interface StatsData {
   }> | null;
   // Completion by UTM
   completionByUtm: Array<{ source: string; rate: number; completed: number; total: number }>;
+  // Scoring analytics (nullable)
+  scoredCount: number | null;
+  archetypeDistribution: Array<{ archetype: string; count: number }> | null;
   // Answer distribution (nullable)
   answerDistribution: Array<{
     qId: string;
@@ -177,7 +180,7 @@ export default function AdminDashboard() {
       </div>
 
       {/* Row 1: Key metrics */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
         <StatCard label="Total Submissions" value={data.totalSubmissions} />
         <StatCard label="Today" value={data.todayCount} />
         <StatCard label="Completion Rate" value={`${data.completionRate}%`} />
@@ -186,6 +189,11 @@ export default function AdminDashboard() {
           label="Waitlist Signups"
           value={data.waitlistTotal ?? "\u2014"}
           sub={data.waitlistToday != null ? `${data.waitlistToday} today` : undefined}
+        />
+        <StatCard
+          label="Scored"
+          value={data.scoredCount ?? "\u2014"}
+          sub={data.scoredCount != null ? `of ${data.totalSubmissions} submissions` : undefined}
         />
         <StatCard
           label="Session Funnel"
@@ -398,6 +406,28 @@ export default function AdminDashboard() {
           )}
         </div>
       </div>
+
+      {/* ─── Scoring Analytics ─── */}
+      {data.archetypeDistribution && data.archetypeDistribution.length > 0 && (
+        <>
+          <h2 className="font-serif text-lg font-bold text-text-primary pt-2">Scoring Analytics</h2>
+          <div className="grid gap-6 lg:grid-cols-2">
+            <div className="rounded-xl border border-white/10 bg-surface p-5">
+              <h3 className="mb-4 text-sm font-semibold text-text-primary">
+                Archetype Distribution
+              </h3>
+              <BarChart
+                items={data.archetypeDistribution.map((d) => ({
+                  label: d.archetype,
+                  value: d.count,
+                }))}
+                direction="horizontal"
+              />
+            </div>
+            <div />
+          </div>
+        </>
+      )}
 
       {/* ─── Answer Insights ─── */}
       <h2 className="font-serif text-lg font-bold text-text-primary pt-2">Answer Insights</h2>

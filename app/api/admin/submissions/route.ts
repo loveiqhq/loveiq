@@ -25,13 +25,14 @@ export async function GET(request: Request) {
   const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get("limit") || "20", 10)));
   const status = url.searchParams.get("status") || "";
   const email = url.searchParams.get("email") || "";
+  const archetype = url.searchParams.get("archetype") || "";
   const dateFrom = url.searchParams.get("dateFrom") || "";
   const dateTo = url.searchParams.get("dateTo") || "";
 
   const offset = (page - 1) * limit;
 
-  // PostgREST query with embedded app_user for email/name
-  let query = `/rest/v1/survey_submission?select=id,status,start_date_time,created_date_time,duration_ms,app_user!fk_survey_submission_user(email,first_name)&order=created_date_time.desc`;
+  // PostgREST query with embedded app_user for email/name + scoring_result for archetype
+  let query = `/rest/v1/survey_submission?select=id,status,start_date_time,created_date_time,duration_ms,app_user!fk_survey_submission_user(email,first_name),scoring_result(primary_archetype)&order=created_date_time.desc`;
 
   if (status) query += `&status=eq.${encodeURIComponent(status)}`;
   if (dateFrom) query += `&start_date_time=gte.${encodeURIComponent(dateFrom)}`;
@@ -58,6 +59,7 @@ export async function GET(request: Request) {
       created_date_time: string;
       duration_ms: number | null;
       app_user: { email: string; first_name: string } | null;
+      scoring_result: Array<{ primary_archetype: string }>;
     }>;
 
     // Flatten the joined data and apply email filter client-side
@@ -70,11 +72,16 @@ export async function GET(request: Request) {
       started_at: r.start_date_time || r.created_date_time,
       completed_at: r.created_date_time,
       duration_ms: r.duration_ms,
+      primary_archetype: r.scoring_result?.[0]?.primary_archetype || null,
     }));
 
     if (email) {
       const lowerEmail = email.toLowerCase();
       submissions = submissions.filter((s) => s.email.toLowerCase().includes(lowerEmail));
+    }
+
+    if (archetype) {
+      submissions = submissions.filter((s) => s.primary_archetype === archetype);
     }
 
     return NextResponse.json({ submissions, total, page, limit });

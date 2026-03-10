@@ -14,6 +14,7 @@ interface SubmissionsData {
     status: string;
     started_at: string;
     completed_at: string;
+    primary_archetype: string | null;
   }>;
   total: number;
   page: number;
@@ -25,6 +26,7 @@ export default function SubmissionBrowser() {
   const [filters, setFilters] = useState({
     status: "",
     email: "",
+    archetype: "",
     dateFrom: "",
     dateTo: "",
   });
@@ -33,6 +35,7 @@ export default function SubmissionBrowser() {
     const p: Record<string, string> = { page: String(page), limit: "20" };
     if (filters.status) p.status = filters.status;
     if (filters.email) p.email = filters.email;
+    if (filters.archetype) p.archetype = filters.archetype;
     if (filters.dateFrom) p.dateFrom = filters.dateFrom;
     if (filters.dateTo) p.dateTo = filters.dateTo;
     return p;

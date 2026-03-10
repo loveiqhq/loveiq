@@ -15,6 +15,7 @@ vi.mock("@/components/admin/hooks/useAdminFetch", () => ({
           status: "completed",
           started_at: "2025-01-01",
           completed_at: "2025-01-01",
+          primary_archetype: "Spark Seeker",
         },
       ],
       total: 1,
