@@ -60,20 +60,28 @@ export async function GET(request: Request) {
     const ids = submissions.map((s) => s.id);
     const scoringMap: Record<
       number,
-      { primary_archetype: string; percentages: Record<string, number>; engine_version: string }
+      {
+        primary_archetype: string;
+        percentages: Record<string, number>;
+        raw_scores: Record<string, number>;
+        engine_version: string;
+        scored_at: string;
+      }
     > = {};
 
     if (ids.length > 0) {
       try {
         const scoringRes = await supabaseFetch(
-          `/rest/v1/scoring_result?survey_submission_id=in.(${ids.join(",")})&select=survey_submission_id,primary_archetype,percentages,engine_version`
+          `/rest/v1/scoring_result?survey_submission_id=in.(${ids.join(",")})&select=survey_submission_id,primary_archetype,percentages,raw_scores,engine_version,scored_at`
         );
         if (scoringRes.ok) {
           const scoringRows = (await scoringRes.json()) as Array<{
             survey_submission_id: number;
             primary_archetype: string;
             percentages: Record<string, number>;
+            raw_scores: Record<string, number>;
             engine_version: string;
+            scored_at: string;
           }>;
           for (const row of scoringRows) {
             scoringMap[row.survey_submission_id] = row;
@@ -159,7 +167,9 @@ export async function GET(request: Request) {
       "duration_sec",
       "primary_archetype",
       "engine_version",
+      "scored_at",
       ...sortedArchetypes.map((a) => `pct_${a}`),
+      ...sortedArchetypes.map((a) => `raw_${a}`),
       ...sortedQIds,
     ];
     const rows = submissions.map((s) => {
@@ -176,8 +186,12 @@ export async function GET(request: Request) {
         durationSec,
         scoring?.primary_archetype || "",
         scoring?.engine_version || "",
+        scoring?.scored_at || "",
         ...sortedArchetypes.map((a) =>
           scoring?.percentages[a] != null ? Math.round(scoring.percentages[a] * 10) / 10 : ""
+        ),
+        ...sortedArchetypes.map((a) =>
+          scoring?.raw_scores[a] != null ? Math.round(scoring.raw_scores[a] * 100) / 100 : ""
         ),
         ...sortedQIds.map((qId) => answers[qId] || ""),
       ];

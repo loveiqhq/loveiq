@@ -84,7 +84,10 @@ export async function GET(request: Request) {
       submissions = submissions.filter((s) => s.primary_archetype === archetype);
     }
 
-    return NextResponse.json({ submissions, total, page, limit });
+    // Adjust total for client-side filters (email/archetype reduce the set)
+    const filteredTotal = email || archetype ? submissions.length : total;
+
+    return NextResponse.json({ submissions, total: filteredTotal, page, limit });
   } catch (err) {
     logger.error({ err }, "Admin submissions error");
     return NextResponse.json({ error: "Unable to load submissions." }, { status: 500 });

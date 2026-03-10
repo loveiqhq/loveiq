@@ -96,7 +96,9 @@ describe("GET /api/admin/export", () => {
           survey_submission_id: 1,
           primary_archetype: "Spark Seeker",
           percentages: { "Spark Seeker": 15.2, "Romantic Idealist": 12.1 },
+          raw_scores: { "Spark Seeker": 22.5, "Romantic Idealist": 20.1 },
           engine_version: "v3",
+          scored_at: "2025-01-01T00:05:00Z",
         },
       ],
     });
@@ -125,7 +127,9 @@ describe("GET /api/admin/export", () => {
     // Header row should include scoring and answer columns
     expect(lines[0]).toContain("primary_archetype");
     expect(lines[0]).toContain("engine_version");
+    expect(lines[0]).toContain("scored_at");
     expect(lines[0]).toContain("pct_Spark Seeker");
+    expect(lines[0]).toContain("raw_Spark Seeker");
     expect(lines[0]).toContain("q1");
     // Data row should include scoring and answer data
     expect(lines[1]).toContain("Spark Seeker");
@@ -213,7 +217,9 @@ describe("GET /api/admin/export", () => {
           survey_submission_id: 1,
           primary_archetype: "Spark Seeker",
           percentages: { "Spark Seeker": 15.2 },
+          raw_scores: { "Spark Seeker": 22.5 },
           engine_version: "v3",
+          scored_at: "2025-06-15T10:05:00Z",
         },
       ],
     });

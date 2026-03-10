@@ -105,7 +105,7 @@ describe("GET /api/admin/submissions", () => {
     expect(json.submissions[1].primary_archetype).toBeNull();
   });
 
-  it("filters submissions by email (client-side)", async () => {
+  it("filters submissions by email (client-side) and adjusts total", async () => {
     mockSubmissionsOk();
 
     const res = await GET(makeRequest("?email=alice"));
@@ -114,6 +114,7 @@ describe("GET /api/admin/submissions", () => {
     const json = await res.json();
     expect(json.submissions).toHaveLength(1);
     expect(json.submissions[0].email).toBe("alice@test.com");
+    expect(json.total).toBe(1);
   });
 
   it("email filter is case-insensitive", async () => {
@@ -145,7 +146,7 @@ describe("GET /api/admin/submissions", () => {
     expect(json.limit).toBe(100);
   });
 
-  it("filters submissions by archetype (client-side)", async () => {
+  it("filters submissions by archetype (client-side) and adjusts total", async () => {
     mockSubmissionsOk();
 
     const res = await GET(makeRequest("?archetype=Spark%20Seeker"));
@@ -154,6 +155,7 @@ describe("GET /api/admin/submissions", () => {
     const json = await res.json();
     expect(json.submissions).toHaveLength(1);
     expect(json.submissions[0].primary_archetype).toBe("Spark Seeker");
+    expect(json.total).toBe(1);
   });
 
   it("flattens app_user join into top-level fields", async () => {
