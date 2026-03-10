@@ -91,6 +91,7 @@ describe("GET /api/admin/submissions/[id]", () => {
   it("returns 404 when submission is not found", async () => {
     mockSupabaseFetch
       .mockResolvedValueOnce({ ok: true, json: async () => [] })
+      .mockResolvedValueOnce({ ok: true, json: async () => [] })
       .mockResolvedValueOnce({ ok: true, json: async () => [] });
 
     const res = await GET(makeGetRequest("999"), makeParams("999"));
@@ -103,6 +104,7 @@ describe("GET /api/admin/submissions/[id]", () => {
   it("returns 500 when Supabase query fails", async () => {
     mockSupabaseFetch
       .mockResolvedValueOnce({ ok: false, status: 500 })
+      .mockResolvedValueOnce({ ok: true, json: async () => [] })
       .mockResolvedValueOnce({ ok: true, json: async () => [] });
 
     const res = await GET(makeGetRequest("1"), makeParams("1"));
@@ -115,6 +117,7 @@ describe("GET /api/admin/submissions/[id]", () => {
   it("returns submission and answers on success", async () => {
     mockSupabaseFetch
       .mockResolvedValueOnce({ ok: true, json: async () => [sampleSubmission] })
+      .mockResolvedValueOnce({ ok: true, json: async () => [] })
       .mockResolvedValueOnce({ ok: true, json: async () => [] });
 
     const res = await GET(makeGetRequest("1"), makeParams("1"));
@@ -128,6 +131,31 @@ describe("GET /api/admin/submissions/[id]", () => {
       status: "completed",
     });
     expect(json.answers).toEqual([]);
+    expect(json.scoring).toBeNull();
+  });
+
+  it("returns scoring result when available", async () => {
+    const sampleScoring = {
+      primary_archetype: "Spark Seeker",
+      percentages: { "Spark Seeker": 15.2, "Sensual Connector": 12.1 },
+      raw_scores: { "Spark Seeker": 22.5, "Sensual Connector": 20.1 },
+      engine_version: "v3",
+      scored_at: "2025-01-01T00:05:00Z",
+    };
+
+    mockSupabaseFetch
+      .mockResolvedValueOnce({ ok: true, json: async () => [sampleSubmission] })
+      .mockResolvedValueOnce({ ok: true, json: async () => [] })
+      .mockResolvedValueOnce({ ok: true, json: async () => [sampleScoring] });
+
+    const res = await GET(makeGetRequest("1"), makeParams("1"));
+    expect(res.status).toBe(200);
+
+    const json = await res.json();
+    expect(json.scoring).toMatchObject({
+      primary_archetype: "Spark Seeker",
+      engine_version: "v3",
+    });
   });
 });
 
@@ -284,6 +312,8 @@ describe("DELETE /api/admin/submissions/[id]", () => {
     // Answer history delete
     mockSupabaseFetch.mockResolvedValueOnce({ ok: true });
     // Answers delete
+    mockSupabaseFetch.mockResolvedValueOnce({ ok: true });
+    // Scoring result delete
     mockSupabaseFetch.mockResolvedValueOnce({ ok: true });
     // Analytics events delete
     mockSupabaseFetch.mockResolvedValueOnce({ ok: true });

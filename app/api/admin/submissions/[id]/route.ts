@@ -28,7 +28,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   }
 
   try {
-    const [submissionRes, answersRes] = await Promise.all([
+    const [submissionRes, answersRes, scoringRes] = await Promise.all([
       // Join with app_user to get email/name
       supabaseFetch(
         `/rest/v1/survey_submission?id=eq.${numericId}&select=id,status,start_date_time,created_date_time,duration_ms,app_user!fk_survey_submission_user(email,first_name)`
@@ -37,11 +37,30 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       supabaseFetch(
         `/rest/v1/survey_submission_answer?survey_submission_id=eq.${numericId}&select=id,answer_text,answer_option_id,normalized_value,answered_at,survey_question(frontend_qid,type,question),answer_option!fk_ssa_answer_option(option_text),survey_submission_answer_options(answer_option!fk_ssao_answer_option(option_text))&order=survey_question_id.asc`
       ),
+      // Scoring result (may not exist)
+      supabaseFetch(
+        `/rest/v1/scoring_result?survey_submission_id=eq.${numericId}&select=primary_archetype,percentages,raw_scores,engine_version,scored_at&limit=1`
+      ),
     ]);
 
     if (!submissionRes.ok || !answersRes.ok) {
       logger.error("Admin submission detail query failed");
       return NextResponse.json({ error: "Unable to load submission." }, { status: 500 });
+    }
+
+    // Parse scoring result (optional — may not exist for older submissions)
+    let scoring = null;
+    if (scoringRes.ok) {
+      const scoringRows = (await scoringRes.json()) as Array<{
+        primary_archetype: string;
+        percentages: Record<string, number>;
+        raw_scores: Record<string, number>;
+        engine_version: string;
+        scored_at: string;
+      }>;
+      if (scoringRows.length > 0) {
+        scoring = scoringRows[0];
+      }
     }
 
     const submissions = (await submissionRes.json()) as Array<{
@@ -110,7 +129,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       };
     });
 
-    return NextResponse.json({ submission, answers });
+    return NextResponse.json({ submission, answers, scoring });
   } catch (err) {
     logger.error({ err }, "Admin submission detail error");
     return NextResponse.json({ error: "Unable to load submission." }, { status: 500 });
@@ -219,7 +238,15 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
       return NextResponse.json({ error: "Unable to delete." }, { status: 500 });
     }
 
-    // 4. Delete analytics events referencing this submission
+    // 4. Delete scoring result
+    await supabaseFetch(`/rest/v1/scoring_result?survey_submission_id=eq.${numericId}`, {
+      method: "DELETE",
+      headers: { Prefer: "return=minimal" },
+    }).catch(() => {
+      // May not exist, that's fine
+    });
+
+    // 5. Delete analytics events referencing this submission
     await supabaseFetch(`/rest/v1/analytics_event?survey_submission_id=eq.${numericId}`, {
       method: "DELETE",
       headers: { Prefer: "return=minimal" },
@@ -227,7 +254,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
       // May not exist, that's fine
     });
 
-    // 5. Delete submission
+    // 6. Delete submission
     const submissionRes = await supabaseFetch(`/rest/v1/survey_submission?id=eq.${numericId}`, {
       method: "DELETE",
       headers: { Prefer: "return=minimal" },

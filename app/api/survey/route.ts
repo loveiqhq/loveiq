@@ -5,6 +5,8 @@ import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { getBreaker, CircuitOpenError } from "@/lib/circuit-breaker";
 import { verifyCsrfToken } from "@/lib/csrf";
 import logger from "@/lib/logger";
+import { scoreArchetypes, getScoringConfig } from "@/lib/scoring";
+import type { ScoringResult } from "@/lib/scoring";
 
 const surveySchema = z.object({
   email: z.string().email().max(320),
@@ -186,15 +188,71 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
   }
 
-  // 7. Slack notification (after response)
-  scheduleAfterResponse(() =>
-    notifySlackSurvey({
+  // 7. Score the submission (pure CPU, ~5ms)
+  let scoringResult: ScoringResult | null = null;
+  try {
+    const config = getScoringConfig();
+    scoringResult = scoreArchetypes(config, answers);
+    logger.info({ primaryArchetype: scoringResult.primaryArchetype }, "Survey scored");
+  } catch (err) {
+    logger.error({ err }, "Scoring error — submission saved without score");
+  }
+
+  // 8. Store scoring result + Slack notification (after response)
+  const submissionId =
+    typeof rpcResult === "number"
+      ? rpcResult
+      : typeof rpcResult?.submission_id === "number"
+        ? rpcResult.submission_id
+        : null;
+
+  scheduleAfterResponse(async () => {
+    // Store scoring result in Supabase
+    if (scoringResult && submissionId && url && serviceRoleKey) {
+      try {
+        const storeRes = await getBreaker("supabase").fire(() =>
+          fetchWithTimeout(`${url}/rest/v1/scoring_result`, {
+            method: "POST",
+            headers: {
+              apikey: serviceRoleKey,
+              Authorization: `Bearer ${serviceRoleKey}`,
+              "Content-Type": "application/json",
+              Prefer: "return=minimal",
+            },
+            body: JSON.stringify({
+              survey_submission_id: submissionId,
+              engine_version: "v3",
+              primary_archetype: scoringResult.primaryArchetype,
+              percentages: scoringResult.percent,
+              raw_scores: scoringResult.rawScore,
+              diagnostics: scoringResult.diagnostics,
+            }),
+            timeoutMs: 5000,
+          })
+        );
+        if (!storeRes.ok) {
+          logger.error({ status: storeRes.status }, "Failed to store scoring result");
+        }
+      } catch (err) {
+        if (err instanceof CircuitOpenError) {
+          logger.warn("Supabase circuit open on scoring result storage");
+        } else {
+          logger.error({ err }, "Error storing scoring result");
+        }
+      }
+    }
+
+    // Slack notification
+    await notifySlackSurvey({
       email: normalizedEmail,
       firstName: normalizedFirstName,
       questionCount,
       durationMs,
-    })
-  );
+    });
+  });
 
-  return NextResponse.json({ success: true });
+  return NextResponse.json({
+    success: true,
+    ...(scoringResult ? { primaryArchetype: scoringResult.primaryArchetype } : {}),
+  });
 }
