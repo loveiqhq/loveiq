@@ -606,7 +606,7 @@ export const surveyQuestions: SurveyQuestion[] = [
     guide:
       "Enter your current postal code for your main residence. If you’re privacy-conscious, you can enter only the first part (for example, first 3–4 characters) as long as it still represents your area. Avoid adding extra address details. Examples: 11000; 94110; SW1A 1AA",
     inputType: "text",
-    placeholder: "Type your answer...",
+    placeholder: "11000; 94110; SW1A 1AA",
   },
   {
     qId: "15003",
