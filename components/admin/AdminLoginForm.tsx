@@ -2,13 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-
-function getCsrfToken(): string {
-  const cookie = document.cookie
-    .split("; ")
-    .find((row) => row.startsWith("__Host-csrf=") || row.startsWith("__csrf="));
-  return cookie?.substring(cookie.indexOf("=") + 1) || "";
-}
+import { getCsrfToken } from "@/lib/admin/client";
 
 export default function AdminLoginForm() {
   const router = useRouter();
@@ -34,7 +28,8 @@ export default function AdminLoginForm() {
       if (res.ok) {
         router.push("/admin");
       } else {
-        setError("Incorrect password");
+        const body = await res.json().catch(() => null);
+        setError((body as { error?: string } | null)?.error || "Incorrect password");
       }
     } catch {
       setError("Something went wrong. Please try again.");

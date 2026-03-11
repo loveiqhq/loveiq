@@ -31,11 +31,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const [submissionRes, answersRes, scoringRes] = await Promise.all([
       // Join with app_user to get email/name
       supabaseFetch(
-        `/rest/v1/survey_submission?id=eq.${numericId}&select=id,status,start_date_time,created_date_time,duration_ms,app_user!fk_survey_submission_user(email,first_name)`
+        `/rest/v1/survey_submission?id=eq.${numericId}&select=id,status,start_date_time,created_date_time,duration_ms,utm_tracker,app_user!fk_survey_submission_user(email,first_name)`
       ),
-      // Join with survey_question, answer_option (single-choice), and junction (multi-choice)
       supabaseFetch(
-        `/rest/v1/survey_submission_answer?survey_submission_id=eq.${numericId}&select=id,answer_text,answer_option_id,normalized_value,answered_at,survey_question(frontend_qid,type,question),answer_option!fk_ssa_answer_option(option_text),survey_submission_answer_options(answer_option!fk_ssao_answer_option(option_text))&order=survey_question_id.asc`
+        `/rest/v1/survey_submission_answer?survey_submission_id=eq.${numericId}&select=id,answer_text,answer_option_id,normalized_value,answered_at,time_spent_seconds,revision_count,was_skipped,survey_question(frontend_qid,type,question),answer_option!fk_ssa_answer_option(option_text),survey_submission_answer_options(answer_option!fk_ssao_answer_option(option_text))&order=survey_question_id.asc`
       ),
       // Scoring result (may not exist)
       supabaseFetch(
@@ -69,6 +68,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       start_date_time: string | null;
       created_date_time: string;
       duration_ms: number | null;
+      utm_tracker: string | null;
       app_user: { email: string; first_name: string } | null;
     }>;
 
@@ -85,6 +85,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       started_at: raw.start_date_time || raw.created_date_time,
       completed_at: raw.created_date_time,
       duration_ms: raw.duration_ms,
+      utm_source: raw.utm_tracker?.trim() || null,
     };
 
     // Flatten answers — resolve values by question type
@@ -94,6 +95,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       answer_option_id: number | null;
       normalized_value: number | null;
       answered_at: string | null;
+      time_spent_seconds: number | null;
+      revision_count: number | null;
+      was_skipped: boolean | null;
       survey_question: { frontend_qid: string; type: string; question: string } | null;
       answer_option: { option_text: string } | null;
       survey_submission_answer_options: Array<{
@@ -126,6 +130,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         question_text: a.survey_question?.question || "",
         answer_type: type,
         answer_value,
+        time_spent_seconds: a.time_spent_seconds,
+        revision_count: a.revision_count,
+        was_skipped: a.was_skipped ?? false,
       };
     });
 
@@ -145,6 +152,16 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const csrfValid = await verifyCsrfToken(request);
   if (!csrfValid) {
     return NextResponse.json({ error: "Invalid request." }, { status: 403 });
+  }
+
+  const ip = getClientIp(request);
+  const rateLimit = await checkRateLimit(ip, {
+    bucket: "admin-submission-mutate",
+    limit: 30,
+    windowMs: 60_000,
+  });
+  if (!rateLimit.allowed) {
+    return NextResponse.json({ error: "Please try again later." }, { status: 429 });
   }
 
   const { id } = await params;
@@ -190,6 +207,16 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     return NextResponse.json({ error: "Invalid request." }, { status: 403 });
   }
 
+  const ip = getClientIp(request);
+  const rateLimit = await checkRateLimit(ip, {
+    bucket: "admin-submission-mutate",
+    limit: 30,
+    windowMs: 60_000,
+  });
+  if (!rateLimit.allowed) {
+    return NextResponse.json({ error: "Please try again later." }, { status: 429 });
+  }
+
   const { id } = await params;
   const numericId = parseInt(id, 10);
   if (isNaN(numericId)) {
@@ -211,21 +238,27 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
       }
     }
 
-    // 1. Delete answer options junction rows
-    await supabaseFetch(
-      `/rest/v1/survey_submission_answer_options?survey_submission_answer_id=in.(select id from survey_submission_answer where survey_submission_id=eq.${numericId})`,
-      { method: "DELETE", headers: { Prefer: "return=minimal" } }
-    ).catch(() => {
-      // May not exist, that's fine
-    });
+    // Fetch answer IDs first (PostgREST doesn't support subqueries in in.())
+    const answerIdsRes = await supabaseFetch(
+      `/rest/v1/survey_submission_answer?survey_submission_id=eq.${numericId}&select=id`
+    );
+    const answerIds = answerIdsRes.ok
+      ? ((await answerIdsRes.json()) as Array<{ id: number }>).map((a) => a.id)
+      : [];
 
-    // 2. Delete answer history rows (FK to survey_submission_answer)
-    await supabaseFetch(
-      `/rest/v1/survey_submission_answer_history?survey_submission_answer_id=in.(select id from survey_submission_answer where survey_submission_id=eq.${numericId})`,
-      { method: "DELETE", headers: { Prefer: "return=minimal" } }
-    ).catch(() => {
-      // May not exist, that's fine
-    });
+    // 1. Delete answer options junction rows
+    if (answerIds.length > 0) {
+      await supabaseFetch(
+        `/rest/v1/survey_submission_answer_options?survey_submission_answer_id=in.(${answerIds.join(",")})`,
+        { method: "DELETE", headers: { Prefer: "return=minimal" } }
+      ).catch(() => {});
+
+      // 2. Delete answer history rows
+      await supabaseFetch(
+        `/rest/v1/survey_submission_answer_history?survey_submission_answer_id=in.(${answerIds.join(",")})`,
+        { method: "DELETE", headers: { Prefer: "return=minimal" } }
+      ).catch(() => {});
+    }
 
     // 3. Delete answers
     const answersRes = await supabaseFetch(

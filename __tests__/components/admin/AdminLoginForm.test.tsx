@@ -42,14 +42,17 @@ describe("AdminLoginForm", () => {
   });
 
   it("incorrect password shows error message", async () => {
-    mockFetch.mockResolvedValue({ ok: false } as Response);
+    mockFetch.mockResolvedValue({
+      ok: false,
+      json: async () => ({ error: "Incorrect password." }),
+    } as unknown as Response);
     const user = userEvent.setup();
     render(<AdminLoginForm />);
 
     await user.type(screen.getByLabelText(/password/i), "wrong-password");
     await user.click(screen.getByRole("button", { name: /enter admin panel/i }));
 
-    expect(await screen.findByText("Incorrect password")).toBeInTheDocument();
+    expect(await screen.findByText("Incorrect password.")).toBeInTheDocument();
     expect(mockRouterPush).not.toHaveBeenCalled();
   });
 

@@ -31,12 +31,12 @@ describe("Pagination", () => {
 
   it("prev button disabled on page 1", () => {
     render(<Pagination page={1} limit={20} total={50} onPageChange={vi.fn()} />);
-    expect(screen.getByRole("button", { name: "Prev" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Previous page" })).toBeDisabled();
   });
 
   it("next button disabled on last page", () => {
     render(<Pagination page={3} limit={20} total={50} onPageChange={vi.fn()} />);
-    expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Next page" })).toBeDisabled();
   });
 
   it("prev button calls onPageChange with page - 1", async () => {
@@ -44,7 +44,7 @@ describe("Pagination", () => {
     const onPageChange = vi.fn();
     render(<Pagination page={2} limit={20} total={50} onPageChange={onPageChange} />);
 
-    await user.click(screen.getByRole("button", { name: "Prev" }));
+    await user.click(screen.getByRole("button", { name: "Previous page" }));
     expect(onPageChange).toHaveBeenCalledWith(1);
   });
 
@@ -53,7 +53,7 @@ describe("Pagination", () => {
     const onPageChange = vi.fn();
     render(<Pagination page={1} limit={20} total={50} onPageChange={onPageChange} />);
 
-    await user.click(screen.getByRole("button", { name: "Next" }));
+    await user.click(screen.getByRole("button", { name: "Next page" }));
     expect(onPageChange).toHaveBeenCalledWith(2);
   });
 });

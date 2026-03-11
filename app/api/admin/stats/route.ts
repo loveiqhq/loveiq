@@ -242,14 +242,25 @@ export async function GET(request: Request) {
       totalRevisions: number;
     }> | null = null;
 
+    const submissionIds = submissions.map((s) => s.id);
+
     try {
+      if (submissionIds.length === 0) {
+        countryDistribution = [];
+        scaleAvg = [];
+        skipRate = [];
+        revisionHotspots = [];
+      }
+
       const answerFields =
         "answer_text,normalized_value,was_skipped,revision_count,survey_question(frontend_qid,type)";
-      const answerFilter = `survey_submission_id=in.(select id from survey_submission where created_date_time=gte.${encodeURIComponent(since)})`;
-      const answersRes = await supabaseFetch(
-        `/rest/v1/survey_submission_answer?select=${answerFields}&${answerFilter}`
-      );
-      if (answersRes.ok) {
+      const answersRes =
+        submissionIds.length > 0
+          ? await supabaseFetch(
+              `/rest/v1/survey_submission_answer?select=${answerFields}&survey_submission_id=in.(${submissionIds.join(",")})`
+            )
+          : null;
+      if (answersRes?.ok) {
         const answers = (await answersRes.json()) as Array<{
           answer_text: string | null;
           normalized_value: number | null;
@@ -331,21 +342,26 @@ export async function GET(request: Request) {
     let archetypeDistribution: Array<{ archetype: string; count: number }> | null = null;
 
     try {
-      const scoringRes = await supabaseFetch(
-        `/rest/v1/scoring_result?select=primary_archetype&scored_at=gte.${since}`
-      );
-      if (scoringRes.ok) {
-        const scoringRows = (await scoringRes.json()) as Array<{
-          primary_archetype: string;
-        }>;
-        scoredCount = scoringRows.length;
-        const archMap: Record<string, number> = {};
-        for (const row of scoringRows) {
-          archMap[row.primary_archetype] = (archMap[row.primary_archetype] || 0) + 1;
+      if (submissionIds.length === 0) {
+        scoredCount = 0;
+        archetypeDistribution = [];
+      } else {
+        const scoringRes = await supabaseFetch(
+          `/rest/v1/scoring_result?select=primary_archetype&survey_submission_id=in.(${submissionIds.join(",")})`
+        );
+        if (scoringRes.ok) {
+          const scoringRows = (await scoringRes.json()) as Array<{
+            primary_archetype: string;
+          }>;
+          scoredCount = scoringRows.length;
+          const archMap: Record<string, number> = {};
+          for (const row of scoringRows) {
+            archMap[row.primary_archetype] = (archMap[row.primary_archetype] || 0) + 1;
+          }
+          archetypeDistribution = Object.entries(archMap)
+            .map(([archetype, count]) => ({ archetype, count }))
+            .sort((a, b) => b.count - a.count);
         }
-        archetypeDistribution = Object.entries(archMap)
-          .map(([archetype, count]) => ({ archetype, count }))
-          .sort((a, b) => b.count - a.count);
       }
     } catch (err) {
       logger.error({ err }, "Admin stats: scoring query failed (non-blocking)");

@@ -1,8 +1,8 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`GET /api/admin/export > CSV output matches snapshot (empty data) 1`] = `"id,email,first_name,status,started_at,completed_at,duration_sec,primary_archetype,engine_version,scored_at"`;
+exports[`GET /api/admin/export > CSV output matches snapshot (empty data) 1`] = `"id,email,first_name,status,utm_source,started_at,completed_at,duration_sec,primary_archetype,engine_version,scored_at"`;
 
 exports[`GET /api/admin/export > CSV output matches snapshot (with data) 1`] = `
-"id,email,first_name,status,started_at,completed_at,duration_sec,primary_archetype,engine_version,scored_at,pct_Spark Seeker,raw_Spark Seeker,q1
-1,test@example.com,Test,completed,2025-06-15T10:00:00Z,2025-06-15T10:05:00Z,300,Spark Seeker,v3,2025-06-15T10:05:00Z,15.2,22.5,Sample answer"
+"id,email,first_name,status,utm_source,started_at,completed_at,duration_sec,primary_archetype,engine_version,scored_at,pct_Spark Seeker,raw_Spark Seeker,q1,q1_time_sec,q1_revisions,q1_skipped
+1,test@example.com,Test,completed,Direct,2025-06-15T10:00:00Z,2025-06-15T10:05:00Z,300,Spark Seeker,v3,2025-06-15T10:05:00Z,15.2,22.5,Sample answer,,,"
 `;

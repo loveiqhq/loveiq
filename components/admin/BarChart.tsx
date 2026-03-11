@@ -68,7 +68,10 @@ export default function BarChart({
             {items.map((item, idx) => {
               const pct = (item.value / maxValue) * 100;
               return (
-                <div key={item.label} className="group relative flex flex-1 flex-col items-center">
+                <div
+                  key={`${item.label}-${idx}`}
+                  className="group relative flex flex-1 flex-col items-center"
+                >
                   {/* Always-visible value above bar */}
                   <span className="mb-0.5 text-[10px] text-text-muted">
                     {item.value > 0 ? item.value : ""}
@@ -95,10 +98,10 @@ export default function BarChart({
 
   return (
     <div className="space-y-2">
-      {items.map((item) => {
+      {items.map((item, idx) => {
         const pct = (item.value / maxValue) * 100;
         return (
-          <div key={item.label}>
+          <div key={`${item.label}-${idx}`}>
             <div className="mb-1 flex items-center justify-between text-xs">
               <span className="text-text-muted truncate max-w-[60%]">{item.label}</span>
               <span className="text-text-primary">{item.value}</span>

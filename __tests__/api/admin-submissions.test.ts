@@ -105,26 +105,26 @@ describe("GET /api/admin/submissions", () => {
     expect(json.submissions[1].primary_archetype).toBeNull();
   });
 
-  it("filters submissions by email (client-side) and adjusts total", async () => {
+  it("includes email filter in PostgREST query with inner join", async () => {
     mockSubmissionsOk();
 
     const res = await GET(makeRequest("?email=alice"));
     expect(res.status).toBe(200);
 
-    const json = await res.json();
-    expect(json.submissions).toHaveLength(1);
-    expect(json.submissions[0].email).toBe("alice@test.com");
-    expect(json.total).toBe(1);
+    const queryUrl = mockSupabaseFetch.mock.calls[0][0] as string;
+    expect(queryUrl).toContain("app_user!fk_survey_submission_user!inner");
+    expect(queryUrl).toContain("app_user.email=ilike.*alice*");
   });
 
-  it("email filter is case-insensitive", async () => {
+  it("includes archetype filter in PostgREST query with inner join", async () => {
     mockSubmissionsOk();
 
-    const res = await GET(makeRequest("?email=ALICE"));
+    const res = await GET(makeRequest("?archetype=Spark%20Seeker"));
     expect(res.status).toBe(200);
 
-    const json = await res.json();
-    expect(json.submissions).toHaveLength(1);
+    const queryUrl = mockSupabaseFetch.mock.calls[0][0] as string;
+    expect(queryUrl).toContain("scoring_result!inner");
+    expect(queryUrl).toContain("scoring_result.primary_archetype=eq.Spark%20Seeker");
   });
 
   it("defaults page to 1 and limit to 20", async () => {
@@ -144,18 +144,6 @@ describe("GET /api/admin/submissions", () => {
     const json = await res.json();
 
     expect(json.limit).toBe(100);
-  });
-
-  it("filters submissions by archetype (client-side) and adjusts total", async () => {
-    mockSubmissionsOk();
-
-    const res = await GET(makeRequest("?archetype=Spark%20Seeker"));
-    expect(res.status).toBe(200);
-
-    const json = await res.json();
-    expect(json.submissions).toHaveLength(1);
-    expect(json.submissions[0].primary_archetype).toBe("Spark Seeker");
-    expect(json.total).toBe(1);
   });
 
   it("flattens app_user join into top-level fields", async () => {

@@ -31,12 +31,21 @@ export async function GET(request: Request) {
 
   const offset = (page - 1) * limit;
 
-  // PostgREST query with embedded app_user for email/name + scoring_result for archetype
-  let query = `/rest/v1/survey_submission?select=id,status,start_date_time,created_date_time,duration_ms,app_user!fk_survey_submission_user(email,first_name),scoring_result(primary_archetype)&order=created_date_time.desc`;
+  // Build PostgREST query with server-side filtering via !inner joins
+  const userJoin = email
+    ? "app_user!fk_survey_submission_user!inner(email,first_name)"
+    : "app_user!fk_survey_submission_user(email,first_name)";
+  const scoringJoin = archetype
+    ? "scoring_result!inner(primary_archetype)"
+    : "scoring_result(primary_archetype)";
+
+  let query = `/rest/v1/survey_submission?select=id,status,start_date_time,created_date_time,duration_ms,${userJoin},${scoringJoin}&order=created_date_time.desc`;
 
   if (status) query += `&status=eq.${encodeURIComponent(status)}`;
   if (dateFrom) query += `&start_date_time=gte.${encodeURIComponent(dateFrom)}`;
-  if (dateTo) query += `&start_date_time=lte.${encodeURIComponent(dateTo)}`;
+  if (dateTo) query += `&start_date_time=lte.${encodeURIComponent(dateTo + "T23:59:59.999Z")}`;
+  if (email) query += `&app_user.email=ilike.*${encodeURIComponent(email)}*`;
+  if (archetype) query += `&scoring_result.primary_archetype=eq.${encodeURIComponent(archetype)}`;
 
   try {
     const res = await supabaseFetch(query, {
@@ -62,9 +71,7 @@ export async function GET(request: Request) {
       scoring_result: Array<{ primary_archetype: string }>;
     }>;
 
-    // Flatten the joined data and apply email filter client-side
-    // (PostgREST can't filter on embedded resource fields via query params)
-    let submissions = raw.map((r) => ({
+    const submissions = raw.map((r) => ({
       id: r.id,
       email: r.app_user?.email || "",
       first_name: r.app_user?.first_name || "",
@@ -75,19 +82,7 @@ export async function GET(request: Request) {
       primary_archetype: r.scoring_result?.[0]?.primary_archetype || null,
     }));
 
-    if (email) {
-      const lowerEmail = email.toLowerCase();
-      submissions = submissions.filter((s) => s.email.toLowerCase().includes(lowerEmail));
-    }
-
-    if (archetype) {
-      submissions = submissions.filter((s) => s.primary_archetype === archetype);
-    }
-
-    // Adjust total for client-side filters (email/archetype reduce the set)
-    const filteredTotal = email || archetype ? submissions.length : total;
-
-    return NextResponse.json({ submissions, total: filteredTotal, page, limit });
+    return NextResponse.json({ submissions, total, page, limit });
   } catch (err) {
     logger.error({ err }, "Admin submissions error");
     return NextResponse.json({ error: "Unable to load submissions." }, { status: 500 });

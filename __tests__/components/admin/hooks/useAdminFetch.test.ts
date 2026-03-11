@@ -58,16 +58,34 @@ describe("useAdminFetch", () => {
     });
   });
 
-  it("sets error on non-ok response", async () => {
+  it("sets error on non-ok response with API message", async () => {
     mockFetch.mockResolvedValueOnce({
       ok: false,
       status: 401,
+      json: async () => ({ error: "Unauthorized." }),
     });
 
     const { result } = renderHook(() => useAdminFetch("/api/test"));
 
     await waitFor(() => {
-      expect(result.current.error).toBe("Request failed: 401");
+      expect(result.current.error).toBe("Unauthorized.");
+      expect(result.current.data).toBeNull();
+    });
+  });
+
+  it("sets fallback error when response has no JSON body", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      json: async () => {
+        throw new Error("no body");
+      },
+    });
+
+    const { result } = renderHook(() => useAdminFetch("/api/test"));
+
+    await waitFor(() => {
+      expect(result.current.error).toBe("Request failed: 500");
       expect(result.current.data).toBeNull();
     });
   });

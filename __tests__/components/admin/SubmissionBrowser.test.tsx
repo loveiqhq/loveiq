@@ -85,14 +85,13 @@ describe("SubmissionBrowser", () => {
     expect(screen.getByText("Failed to load submissions")).toBeInTheDocument();
   });
 
-  it("export CSV link includes filter params in query string", () => {
+  it("export CSV link excludes page/limit params", () => {
     render(<SubmissionBrowser />);
 
     const exportLink = screen.getByRole("link", { name: /export csv/i });
     const href = exportLink.getAttribute("href") ?? "";
     expect(href).toContain("/api/admin/export");
-    // Default params: page=1, limit=20
-    expect(href).toContain("page=1");
-    expect(href).toContain("limit=20");
+    expect(href).not.toContain("page=");
+    expect(href).not.toContain("limit=");
   });
 });

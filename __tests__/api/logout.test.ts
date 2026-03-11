@@ -1,4 +1,8 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+
+vi.mock("../../lib/csrf", () => ({
+  verifyCsrfToken: vi.fn().mockResolvedValue(true),
+}));
 
 import { POST as adminLogout } from "../../app/api/admin/logout/route";
 import { POST as stagingLogout } from "../../app/api/staging-logout/route";
@@ -6,8 +10,15 @@ import { POST as stagingLogout } from "../../app/api/staging-logout/route";
 // --- Helpers ---
 
 function makeRequest(url: string) {
-  return new Request(url, { method: "POST" });
+  return new Request(url, {
+    method: "POST",
+    headers: { "x-csrf-token": "valid-token" },
+  });
 }
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 // --- Tests ---
 

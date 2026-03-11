@@ -233,6 +233,7 @@ describe("PATCH /api/admin/submissions/[id]", () => {
       vi.resetAllMocks();
       mockVerifyAdminSession.mockResolvedValue(true);
       mockVerifyCsrf.mockResolvedValue(true);
+      mockCheckRateLimit.mockResolvedValue({ allowed: true, remaining: 29, resetAt: new Date() });
       mockSupabaseFetch.mockResolvedValueOnce({ ok: true });
 
       const res = await PATCH(makePatchRequest("1", { status }), makeParams("1"));
@@ -290,6 +291,8 @@ describe("DELETE /api/admin/submissions/[id]", () => {
   it("returns 500 when answers delete fails", async () => {
     // Report check → no reports
     mockSupabaseFetch.mockResolvedValueOnce({ ok: true, json: async () => [] });
+    // Fetch answer IDs
+    mockSupabaseFetch.mockResolvedValueOnce({ ok: true, json: async () => [{ id: 10 }] });
     // Answer options delete (caught)
     mockSupabaseFetch.mockResolvedValueOnce({ ok: true });
     // Answer history delete (caught)
@@ -307,6 +310,11 @@ describe("DELETE /api/admin/submissions/[id]", () => {
   it("returns 200 on successful cascade delete", async () => {
     // Report check → no reports
     mockSupabaseFetch.mockResolvedValueOnce({ ok: true, json: async () => [] });
+    // Fetch answer IDs
+    mockSupabaseFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => [{ id: 10 }, { id: 11 }],
+    });
     // Answer options delete
     mockSupabaseFetch.mockResolvedValueOnce({ ok: true });
     // Answer history delete

@@ -5,6 +5,7 @@ import { useAdminFetch } from "./hooks/useAdminFetch";
 import AnswerDisplay from "./AnswerDisplay";
 import BarChart from "./BarChart";
 import ConfirmDialog from "./ConfirmDialog";
+import { getCsrfToken, maskEmail } from "@/lib/admin/client";
 
 interface SubmissionData {
   submission: {
@@ -15,12 +16,16 @@ interface SubmissionData {
     started_at: string;
     completed_at: string;
     duration_ms: number | null;
+    utm_source: string | null;
   };
   answers: Array<{
     q_id: string;
     question_text?: string;
     answer_type?: string;
     answer_value: string | string[] | number | null;
+    time_spent_seconds?: number | null;
+    revision_count?: number | null;
+    was_skipped?: boolean;
   }>;
   scoring: {
     primary_archetype: string;
@@ -31,28 +36,19 @@ interface SubmissionData {
   } | null;
 }
 
-function getCsrfToken(): string {
-  const cookie = document.cookie
-    .split("; ")
-    .find((row) => row.startsWith("__Host-csrf=") || row.startsWith("__csrf="));
-  return cookie?.substring(cookie.indexOf("=") + 1) || "";
-}
-
-function maskEmail(email: string): string {
-  return email.replace(/^(.).+(@.+)$/, "$1***$2");
-}
-
 export default function SubmissionDetail({ id }: { id: string }) {
   const { data, loading, error, refetch } = useAdminFetch<SubmissionData>(
     `/api/admin/submissions/${id}`
   );
   const [showDelete, setShowDelete] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   async function updateStatus(status: string) {
     setActionLoading(true);
+    setActionError(null);
     try {
-      await fetch(`/api/admin/submissions/${id}`, {
+      const res = await fetch(`/api/admin/submissions/${id}`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -60,7 +56,14 @@ export default function SubmissionDetail({ id }: { id: string }) {
         },
         body: JSON.stringify({ status }),
       });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        setActionError((body as { error?: string } | null)?.error || "Action failed.");
+        return;
+      }
       refetch();
+    } catch {
+      setActionError("Network error. Please try again.");
     } finally {
       setActionLoading(false);
     }
@@ -69,12 +72,20 @@ export default function SubmissionDetail({ id }: { id: string }) {
   async function handleDelete() {
     setShowDelete(false);
     setActionLoading(true);
+    setActionError(null);
     try {
-      await fetch(`/api/admin/submissions/${id}`, {
+      const res = await fetch(`/api/admin/submissions/${id}`, {
         method: "DELETE",
         headers: { "x-csrf-token": getCsrfToken() },
       });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        setActionError((body as { error?: string } | null)?.error || "Delete failed.");
+        return;
+      }
       window.location.href = "/admin/submissions";
+    } catch {
+      setActionError("Network error. Please try again.");
     } finally {
       setActionLoading(false);
     }
@@ -149,6 +160,10 @@ export default function SubmissionDetail({ id }: { id: string }) {
               </p>
             </div>
           )}
+          <div>
+            <p className="text-xs text-text-muted">UTM Source</p>
+            <p className="text-sm text-text-primary">{submission.utm_source || "Direct"}</p>
+          </div>
         </div>
       </div>
 
@@ -190,10 +205,16 @@ export default function SubmissionDetail({ id }: { id: string }) {
       </div>
 
       {/* Actions */}
+      {actionError && (
+        <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-4 text-sm text-red-400">
+          {actionError}
+        </div>
+      )}
       <div className="flex flex-wrap gap-2">
         <button
           onClick={() => updateStatus("flagged")}
           disabled={actionLoading || submission.status === "flagged"}
+          aria-label="Flag submission"
           className="rounded-lg border border-yellow-500/20 px-3 py-1.5 text-sm text-yellow-400 transition hover:bg-yellow-500/10 disabled:opacity-40"
         >
           Flag
@@ -201,6 +222,7 @@ export default function SubmissionDetail({ id }: { id: string }) {
         <button
           onClick={() => updateStatus("archived")}
           disabled={actionLoading || submission.status === "archived"}
+          aria-label="Archive submission"
           className="rounded-lg border border-white/10 px-3 py-1.5 text-sm text-text-muted transition hover:bg-white/5 disabled:opacity-40"
         >
           Archive
@@ -208,6 +230,7 @@ export default function SubmissionDetail({ id }: { id: string }) {
         <button
           onClick={() => updateStatus("completed")}
           disabled={actionLoading || submission.status === "completed"}
+          aria-label="Restore submission"
           className="rounded-lg border border-green-500/20 px-3 py-1.5 text-sm text-green-400 transition hover:bg-green-500/10 disabled:opacity-40"
         >
           Restore
@@ -215,6 +238,7 @@ export default function SubmissionDetail({ id }: { id: string }) {
         <button
           onClick={() => setShowDelete(true)}
           disabled={actionLoading}
+          aria-label="Delete submission"
           className="rounded-lg border border-red-500/20 px-3 py-1.5 text-sm text-red-400 transition hover:bg-red-500/10 disabled:opacity-40"
         >
           Delete

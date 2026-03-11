@@ -1,5 +1,7 @@
 "use client";
 
+import { maskEmail } from "@/lib/admin/client";
+
 interface Submission {
   id: number;
   email: string;
@@ -12,10 +14,6 @@ interface Submission {
 
 interface SubmissionTableProps {
   submissions: Submission[];
-}
-
-function maskEmail(email: string): string {
-  return email.replace(/^(.).+(@.+)$/, "$1***$2");
 }
 
 function formatDate(iso: string): string {

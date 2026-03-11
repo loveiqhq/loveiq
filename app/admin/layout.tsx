@@ -20,7 +20,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     return <>{children}</>;
   }
 
-  const title = pageTitles[pathname] || "Admin";
+  const title =
+    pageTitles[pathname] ||
+    (pathname.startsWith("/admin/submissions/") ? "Submission Detail" : "Admin");
 
   return (
     <div className="flex h-screen bg-page text-text-primary">

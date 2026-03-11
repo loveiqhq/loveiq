@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { getCsrfToken } from "@/lib/admin/client";
 
 const navItems = [
   {
@@ -34,7 +35,10 @@ export default function AdminSidebar({ open, onClose }: AdminSidebarProps) {
   };
 
   async function handleLogout() {
-    await fetch("/api/admin/logout", { method: "POST" });
+    await fetch("/api/admin/logout", {
+      method: "POST",
+      headers: { "x-csrf-token": getCsrfToken() },
+    });
     window.location.href = "/admin/login";
   }
 

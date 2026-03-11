@@ -105,7 +105,7 @@ describe("SubmissionDetail", () => {
     mockFetch.mockResolvedValueOnce({ ok: true });
     render(<SubmissionDetail id="1" />);
 
-    await user.click(screen.getByRole("button", { name: "Flag" }));
+    await user.click(screen.getByRole("button", { name: "Flag submission" }));
 
     await waitFor(() => {
       expect(mockFetch).toHaveBeenCalledWith(
@@ -123,7 +123,7 @@ describe("SubmissionDetail", () => {
     mockFetch.mockResolvedValueOnce({ ok: true });
     render(<SubmissionDetail id="1" />);
 
-    await user.click(screen.getByRole("button", { name: "Archive" }));
+    await user.click(screen.getByRole("button", { name: "Archive submission" }));
 
     await waitFor(() => {
       expect(mockFetch).toHaveBeenCalledWith(
@@ -140,7 +140,7 @@ describe("SubmissionDetail", () => {
     const user = userEvent.setup();
     render(<SubmissionDetail id="1" />);
 
-    await user.click(screen.getByRole("button", { name: "Delete" }));
+    await user.click(screen.getByRole("button", { name: "Delete submission" }));
     expect(screen.getByTestId("confirm-dialog")).toBeInTheDocument();
   });
 
@@ -149,7 +149,7 @@ describe("SubmissionDetail", () => {
     mockFetch.mockResolvedValueOnce({ ok: true });
     render(<SubmissionDetail id="1" />);
 
-    await user.click(screen.getByRole("button", { name: "Flag" }));
+    await user.click(screen.getByRole("button", { name: "Flag submission" }));
 
     await waitFor(() => {
       const call = mockFetch.mock.calls[0];

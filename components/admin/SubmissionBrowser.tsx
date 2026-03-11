@@ -54,7 +54,9 @@ export default function SubmissionBrowser() {
         <h2 className="font-serif text-xl font-bold text-text-primary">Submissions</h2>
         <a
           href={`/api/admin/export?${new URLSearchParams(
-            Object.fromEntries(Object.entries(params).filter(([, v]) => v))
+            Object.fromEntries(
+              Object.entries(params).filter(([k, v]) => v && k !== "page" && k !== "limit")
+            )
           ).toString()}`}
           className="rounded-lg border border-white/10 px-3 py-1.5 text-sm text-text-muted transition hover:bg-white/5"
         >

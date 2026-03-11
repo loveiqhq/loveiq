@@ -22,13 +22,20 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url);
   const status = url.searchParams.get("status") || "";
+  const email = url.searchParams.get("email") || "";
+  const archetype = url.searchParams.get("archetype") || "";
   const dateFrom = url.searchParams.get("dateFrom") || "";
   const dateTo = url.searchParams.get("dateTo") || "";
 
-  let query = `/rest/v1/survey_submission?select=id,status,start_date_time,created_date_time,duration_ms,app_user!fk_survey_submission_user(email,first_name)&order=created_date_time.desc`;
+  const userJoin = email
+    ? "app_user!fk_survey_submission_user!inner(email,first_name)"
+    : "app_user!fk_survey_submission_user(email,first_name)";
+
+  let query = `/rest/v1/survey_submission?select=id,status,start_date_time,created_date_time,duration_ms,utm_tracker,${userJoin}&order=created_date_time.desc`;
   if (status) query += `&status=eq.${encodeURIComponent(status)}`;
   if (dateFrom) query += `&start_date_time=gte.${encodeURIComponent(dateFrom)}`;
-  if (dateTo) query += `&start_date_time=lte.${encodeURIComponent(dateTo)}`;
+  if (dateTo) query += `&start_date_time=lte.${encodeURIComponent(dateTo + "T23:59:59.999Z")}`;
+  if (email) query += `&app_user.email=ilike.*${encodeURIComponent(email)}*`;
 
   try {
     const res = await supabaseFetch(query);
@@ -43,6 +50,7 @@ export async function GET(request: Request) {
       start_date_time: string | null;
       created_date_time: string;
       duration_ms: number | null;
+      utm_tracker: string | null;
       app_user: { email: string; first_name: string } | null;
     }>;
 
@@ -54,6 +62,7 @@ export async function GET(request: Request) {
       started_at: r.start_date_time || r.created_date_time,
       completed_at: r.created_date_time,
       duration_ms: r.duration_ms,
+      utm_source: r.utm_tracker?.trim() || "Direct",
     }));
 
     // Fetch scoring results for all submissions
@@ -92,6 +101,14 @@ export async function GET(request: Request) {
       }
     }
 
+    // Apply archetype filter (post-scoring lookup since export doesn't join scoring in main query)
+    let filteredSubmissions = submissions;
+    if (archetype) {
+      filteredSubmissions = submissions.filter(
+        (s) => scoringMap[s.id]?.primary_archetype === archetype
+      );
+    }
+
     // Collect all unique archetype names from percentages for CSV columns
     const allArchetypes = new Set<string>();
     for (const s of Object.values(scoringMap)) {
@@ -101,12 +118,16 @@ export async function GET(request: Request) {
     }
     const sortedArchetypes = Array.from(allArchetypes).sort();
 
-    // Fetch answers for all submissions with question info
+    // Fetch answers for all submissions with question info and per-answer metadata
     const answersMap: Record<number, Record<string, string>> = {};
+    const answerMetaMap: Record<
+      number,
+      Record<string, { time_spent: number | null; revisions: number | null; skipped: boolean }>
+    > = {};
 
     if (ids.length > 0) {
       const answersRes = await supabaseFetch(
-        `/rest/v1/survey_submission_answer?survey_submission_id=in.(${ids.join(",")})&select=survey_submission_id,answer_text,answer_option_id,normalized_value,survey_question(frontend_qid,type),answer_option!fk_ssa_answer_option(option_text),survey_submission_answer_options(answer_option!fk_ssao_answer_option(option_text))&order=survey_question_id.asc`
+        `/rest/v1/survey_submission_answer?survey_submission_id=in.(${ids.join(",")})&select=survey_submission_id,answer_text,answer_option_id,normalized_value,time_spent_seconds,revision_count,was_skipped,survey_question(frontend_qid,type),answer_option!fk_ssa_answer_option(option_text),survey_submission_answer_options(answer_option!fk_ssao_answer_option(option_text))&order=survey_question_id.asc`
       );
       if (answersRes.ok) {
         const answers = (await answersRes.json()) as Array<{
@@ -114,6 +135,9 @@ export async function GET(request: Request) {
           answer_text: string | null;
           answer_option_id: number | null;
           normalized_value: number | null;
+          time_spent_seconds: number | null;
+          revision_count: number | null;
+          was_skipped: boolean | null;
           survey_question: { frontend_qid: string; type: string } | null;
           answer_option: { option_text: string } | null;
           survey_submission_answer_options: Array<{
@@ -143,6 +167,13 @@ export async function GET(request: Request) {
 
           if (!answersMap[a.survey_submission_id]) answersMap[a.survey_submission_id] = {};
           answersMap[a.survey_submission_id][qId] = value;
+
+          if (!answerMetaMap[a.survey_submission_id]) answerMetaMap[a.survey_submission_id] = {};
+          answerMetaMap[a.survey_submission_id][qId] = {
+            time_spent: a.time_spent_seconds,
+            revisions: a.revision_count,
+            skipped: a.was_skipped ?? false,
+          };
         }
       }
     }
@@ -162,6 +193,7 @@ export async function GET(request: Request) {
       "email",
       "first_name",
       "status",
+      "utm_source",
       "started_at",
       "completed_at",
       "duration_sec",
@@ -170,10 +202,16 @@ export async function GET(request: Request) {
       "scored_at",
       ...sortedArchetypes.map((a) => `pct_${a}`),
       ...sortedArchetypes.map((a) => `raw_${a}`),
-      ...sortedQIds,
+      ...sortedQIds.flatMap((qId) => [
+        qId,
+        `${qId}_time_sec`,
+        `${qId}_revisions`,
+        `${qId}_skipped`,
+      ]),
     ];
-    const rows = submissions.map((s) => {
+    const rows = filteredSubmissions.map((s) => {
       const answers = answersMap[s.id] || {};
+      const meta = answerMetaMap[s.id] || {};
       const scoring = scoringMap[s.id];
       const durationSec = s.duration_ms != null ? Math.round(s.duration_ms / 1000) : "";
       return [
@@ -181,6 +219,7 @@ export async function GET(request: Request) {
         s.email,
         s.first_name,
         s.status,
+        s.utm_source,
         s.started_at,
         s.completed_at,
         durationSec,
@@ -193,7 +232,12 @@ export async function GET(request: Request) {
         ...sortedArchetypes.map((a) =>
           scoring?.raw_scores[a] != null ? Math.round(scoring.raw_scores[a] * 100) / 100 : ""
         ),
-        ...sortedQIds.map((qId) => answers[qId] || ""),
+        ...sortedQIds.flatMap((qId) => [
+          answers[qId] || "",
+          meta[qId]?.time_spent ?? "",
+          meta[qId]?.revisions ?? "",
+          meta[qId]?.skipped ? "yes" : "",
+        ]),
       ];
     });
 

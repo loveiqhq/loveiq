@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 
 interface UseAdminFetchResult<T> {
   data: T | null;
@@ -15,17 +15,20 @@ export function useAdminFetch<T>(
 ): UseAdminFetchResult<T> {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [requestKey, setRequestKey] = useState(0);
-  const [completedKey, setCompletedKey] = useState(-1);
 
   const serializedParams = useMemo(() => (params ? JSON.stringify(params) : ""), [params]);
 
   const refetch = useCallback(() => {
+    setLoading(true);
     setRequestKey((k) => k + 1);
   }, []);
 
   useEffect(() => {
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- loading must be set synchronously before async fetch
+    setLoading(true);
 
     const queryString = serializedParams
       ? "?" + new URLSearchParams(JSON.parse(serializedParams) as Record<string, string>).toString()
@@ -33,21 +36,26 @@ export function useAdminFetch<T>(
 
     fetch(`${url}${queryString}`)
       .then(async (res) => {
-        if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(
+            (body as { error?: string } | null)?.error || `Request failed: ${res.status}`
+          );
+        }
         return res.json();
       })
       .then((json) => {
         if (!cancelled) {
           setData(json);
           setError(null);
-          setCompletedKey(requestKey);
+          setLoading(false);
         }
       })
       .catch((err) => {
         if (!cancelled) {
           setData(null);
           setError(err instanceof Error ? err.message : "Unknown error");
-          setCompletedKey(requestKey);
+          setLoading(false);
         }
       });
 
@@ -55,8 +63,6 @@ export function useAdminFetch<T>(
       cancelled = true;
     };
   }, [url, serializedParams, requestKey]);
-
-  const loading = completedKey < requestKey;
 
   return { data, loading, error, refetch };
 }

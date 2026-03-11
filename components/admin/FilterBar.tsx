@@ -78,6 +78,7 @@ export default function FilterBar({ onFilterChange }: FilterBarProps) {
         value={email}
         onChange={(e) => setEmail(e.target.value)}
         className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-text-primary placeholder:text-text-muted outline-none"
+        aria-label="Search by email"
       />
 
       <input

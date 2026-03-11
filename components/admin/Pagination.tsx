@@ -23,6 +23,7 @@ export default function Pagination({ page, limit, total, onPageChange }: Paginat
         <button
           onClick={() => onPageChange(page - 1)}
           disabled={page <= 1}
+          aria-label="Previous page"
           className="rounded-lg border border-white/10 px-3 py-1.5 text-sm text-text-muted transition hover:bg-white/5 disabled:opacity-30"
         >
           Prev
@@ -30,6 +31,7 @@ export default function Pagination({ page, limit, total, onPageChange }: Paginat
         <button
           onClick={() => onPageChange(page + 1)}
           disabled={page >= totalPages}
+          aria-label="Next page"
           className="rounded-lg border border-white/10 px-3 py-1.5 text-sm text-text-muted transition hover:bg-white/5 disabled:opacity-30"
         >
           Next

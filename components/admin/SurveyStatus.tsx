@@ -3,17 +3,11 @@
 import { useState } from "react";
 import { useAdminFetch } from "./hooks/useAdminFetch";
 import ConfirmDialog from "./ConfirmDialog";
+import { getCsrfToken } from "@/lib/admin/client";
 
 interface SurveyStatusData {
   active: boolean;
   id?: number;
-}
-
-function getCsrfToken(): string {
-  const cookie = document.cookie
-    .split("; ")
-    .find((row) => row.startsWith("__Host-csrf=") || row.startsWith("__csrf="));
-  return cookie?.substring(cookie.indexOf("=") + 1) || "";
 }
 
 export default function SurveyStatus() {
@@ -22,13 +16,15 @@ export default function SurveyStatus() {
   );
   const [showConfirm, setShowConfirm] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   async function toggleStatus() {
     if (!data) return;
     setShowConfirm(false);
     setActionLoading(true);
+    setActionError(null);
     try {
-      await fetch("/api/admin/survey-status", {
+      const res = await fetch("/api/admin/survey-status", {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -36,7 +32,14 @@ export default function SurveyStatus() {
         },
         body: JSON.stringify({ active: !data.active }),
       });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        setActionError((body as { error?: string } | null)?.error || "Failed to update status.");
+        return;
+      }
       refetch();
+    } catch {
+      setActionError("Network error. Please try again.");
     } finally {
       setActionLoading(false);
     }
@@ -78,6 +81,12 @@ export default function SurveyStatus() {
           </div>
         </div>
       </div>
+
+      {actionError && (
+        <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-4 text-sm text-red-400">
+          {actionError}
+        </div>
+      )}
 
       {/* Danger zone */}
       <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-6">
