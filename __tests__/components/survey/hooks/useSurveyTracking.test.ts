@@ -19,6 +19,7 @@ function makeQuestion(overrides: Partial<SurveyQuestion> = {}): SurveyQuestion {
     options: ["Yes", "No"],
     required: true,
     guide: "",
+    supportAndGuidance: "",
     ...overrides,
   };
 }
