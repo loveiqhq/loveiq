@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, useRef, type FC } from "react";
-import { surveyQuestions, chapterIntros, type ChapterIntro } from "@/data/survey-data";
+import { surveyQuestions } from "@/data/survey-data";
 import { useSurveyState, type AnswerValue } from "./hooks/useSurveyState";
 import SurveyHeader from "./SurveyHeader";
 import SurveyNav from "./SurveyNav";
@@ -30,7 +30,6 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit }) => {
   const { submit: submitSurvey, status: submitStatus } = useSubmitSurvey();
 
   const [animKey, setAnimKey] = useState(0);
-  const [dismissedChapters, setDismissedChapters] = useState<Set<number>>(new Set());
   const hasTrackedStart = useRef(false);
   const hasCompleted = useRef(false);
   const touchStartX = useRef<number | null>(null);
@@ -45,29 +44,6 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit }) => {
       trackSurveyStart();
     }
   }, []);
-
-  // Chapter intro map
-  const chapterIntroMap = useMemo(() => {
-    const map = new Map<number, ChapterIntro>();
-    for (const intro of chapterIntros) {
-      map.set(intro.cId, intro);
-    }
-    return map;
-  }, []);
-
-  // Get current chapter intro (if any)
-  const currentChapterIntro = question ? chapterIntroMap.get(question.cId) : undefined;
-
-  // Compute pending chapter intro from current position + dismissed set
-  const pendingChapterIntro = useMemo<ChapterIntro | null>(() => {
-    if (!question) return null;
-    const prevQuestion = currentIndex > 0 ? surveyQuestions[currentIndex - 1] : null;
-    const isNewChapter = !prevQuestion || prevQuestion.cId !== question.cId;
-    if (isNewChapter && !dismissedChapters.has(question.cId)) {
-      return chapterIntroMap.get(question.cId) ?? null;
-    }
-    return null;
-  }, [currentIndex, question, chapterIntroMap, dismissedChapters]);
 
   // Current answer
   const currentAnswer = question ? getAnswer(question.qId) : null;
@@ -189,13 +165,6 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit }) => {
       window.removeEventListener("touchend", handleTouchEnd);
     };
   }, [hasAnswer, question, goNext, goPrev]);
-
-  // Dismiss chapter intro
-  const handleDismissIntro = useCallback(() => {
-    if (pendingChapterIntro) {
-      setDismissedChapters((s) => new Set(s).add(pendingChapterIntro.cId));
-    }
-  }, [pendingChapterIntro]);
 
   // Survey complete
   if (!question || currentIndex >= totalQuestions) {

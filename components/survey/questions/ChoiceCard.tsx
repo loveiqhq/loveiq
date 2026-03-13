@@ -31,7 +31,7 @@ const ChoiceCard: FC<ChoiceCardProps> = ({ label, selected, onClick, multi = fal
       role={multi ? "checkbox" : "radio"}
       aria-checked={selected}
       onClick={onClick}
-      className={`relative flex min-h-[60px] w-full items-center justify-between gap-3 rounded-[16px] border px-[21px] py-3.5 text-left font-sans text-[13px] font-medium leading-snug transition-all duration-200 sm:rounded-[16px] sm:px-4 sm:text-[15px] ${
+      className={`relative flex min-h-[60px] w-full items-center justify-between gap-3 rounded-[16px] border px-[21px] py-3.5 text-left font-sans text-[13px] font-medium leading-snug transition-all duration-200 sm:text-[15px] ${
         selected
           ? "border-[#fe6839] bg-[rgba(254,104,57,0.12)] text-white shadow-[0_0_16px_rgba(254,104,57,0.1)]"
           : "border-white/10 bg-white/[0.04] text-white/75 hover:border-white/20 hover:bg-white/[0.07]"

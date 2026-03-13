@@ -32,7 +32,8 @@ function getValidationError(value: string, inputType?: string): string | null {
   if (!value) return null;
   if (inputType === "email") {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(value)) return "Please enter a valid email address";
+    if (!emailRegex.test(value))
+      return "Hmm, that doesn\u2019t look like a valid email. Make sure it follows the format: name@example.com";
   }
   if (value.length > MAX_LENGTH) return `Maximum ${MAX_LENGTH} characters allowed`;
   return null;
