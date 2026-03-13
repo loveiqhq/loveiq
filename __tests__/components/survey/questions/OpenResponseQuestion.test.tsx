@@ -13,6 +13,9 @@ const baseQuestion: SurveyQuestion = {
   answerType: "open",
   chapter: "ch1",
   required: true,
+  guide: "",
+  supportAndGuidance: "",
+  options: [],
 } as SurveyQuestion;
 
 describe("OpenResponseQuestion", () => {
@@ -49,25 +52,21 @@ describe("OpenResponseQuestion", () => {
     expect(input).toHaveAttribute("autocomplete", "email");
   });
 
-  it("does not show skip button when question is required", () => {
-    render(<OpenResponseQuestion question={baseQuestion} value={null} onChange={vi.fn()} />);
-    expect(screen.queryByText(/skip/i)).not.toBeInTheDocument();
+  it("shows character counter", () => {
+    render(<OpenResponseQuestion question={baseQuestion} value="hello" onChange={vi.fn()} />);
+    expect(screen.getByText("5 / 500")).toBeInTheDocument();
   });
 
-  it("shows skip button when question is not required", () => {
-    const q = { ...baseQuestion, required: false };
+  it("shows purple subtitle for email input type", () => {
+    const q = { ...baseQuestion, inputType: "email" } as SurveyQuestion;
     render(<OpenResponseQuestion question={q} value={null} onChange={vi.fn()} />);
-    expect(screen.getByText(/skip for now/i)).toBeInTheDocument();
+    expect(screen.getByText("Please enter your email address")).toBeInTheDocument();
   });
 
-  it("skip button calls onChange with empty string", async () => {
-    const user = userEvent.setup();
-    const onChange = vi.fn();
-    const q = { ...baseQuestion, required: false };
-    render(<OpenResponseQuestion question={q} value="existing" onChange={onChange} />);
-
-    await user.click(screen.getByText(/skip for now/i));
-    expect(onChange).toHaveBeenCalledWith("");
+  it("shows formatGuidance as subtitle when provided", () => {
+    const q = { ...baseQuestion, formatGuidance: "Enter a valid email address." };
+    render(<OpenResponseQuestion question={q} value={null} onChange={vi.fn()} />);
+    expect(screen.getByText("Enter a valid email address.")).toBeInTheDocument();
   });
 
   it("displays current value in input", () => {

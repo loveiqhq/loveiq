@@ -56,14 +56,14 @@ const SurveyNav: FC<SurveyNavProps> = ({
         type="button"
         onClick={onPrevious}
         disabled={!canGoBack}
-        className="flex items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-5 py-2.5 font-sans text-[14px] font-medium text-white/80 transition hover:bg-white/15 disabled:pointer-events-none disabled:opacity-30"
+        className="flex items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-5 py-2.5 font-sans text-[14px] font-medium text-white/70 transition hover:bg-white/10 disabled:pointer-events-none disabled:opacity-30"
       >
         <ChevronLeft className="h-4 w-4" />
         Previous
       </button>
 
       {/* Center status */}
-      <span className="hidden font-sans text-[14px] font-semibold text-white/30 sm:block">
+      <span className="hidden font-sans text-[13px] font-medium text-white/30 sm:block">
         {statusText}
       </span>
 
@@ -72,10 +72,10 @@ const SurveyNav: FC<SurveyNavProps> = ({
         type="button"
         onClick={onNext}
         disabled={!canGoNext}
-        className={`flex items-center gap-1.5 rounded-full px-5 py-2.5 font-sans text-[14px] font-bold text-white transition ${
+        className={`flex items-center gap-1.5 rounded-full px-6 py-2.5 font-sans text-[14px] font-bold text-white transition ${
           hasAnswer
-            ? "bg-gradient-to-r from-[#fe6839] to-[#ff8f6b] shadow-[0_4px_16px_rgba(254,104,57,0.3)] hover:shadow-[0_6px_20px_rgba(254,104,57,0.4)]"
-            : "bg-gradient-to-r from-[#fe6839]/70 to-[#ff8f6b]/70 opacity-70"
+            ? "bg-gradient-to-r from-[#fe6839] to-[#ff8f6b] shadow-[0_4px_16px_rgba(254,104,57,0.25)] hover:shadow-[0_6px_20px_rgba(254,104,57,0.35)]"
+            : "bg-gradient-to-r from-[#fe6839]/60 to-[#ff8f6b]/60 opacity-60"
         } disabled:pointer-events-none disabled:opacity-40`}
       >
         Next

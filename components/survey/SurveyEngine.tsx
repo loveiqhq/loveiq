@@ -5,7 +5,6 @@ import { surveyQuestions, chapterIntros, type ChapterIntro } from "@/data/survey
 import { useSurveyState, type AnswerValue } from "./hooks/useSurveyState";
 import SurveyHeader from "./SurveyHeader";
 import SurveyNav from "./SurveyNav";
-import GuideAvatar from "./GuideAvatar";
 import GuidancePanel from "./GuidancePanel";
 import OpenResponseQuestion from "./questions/OpenResponseQuestion";
 import ScaleQuestion from "./questions/ScaleQuestion";
@@ -99,6 +98,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit }) => {
       if (index < 0 || index > totalQuestions) return;
       setAnimKey((k) => k + 1);
       setCurrentIndex(index);
+      window.scrollTo({ top: 0, behavior: "instant" });
     },
     [totalQuestions, setCurrentIndex]
   );
@@ -251,13 +251,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit }) => {
   }
 
   // Status text for nav
-  const statusText = hasAnswer
-    ? question.answerType === "multiple"
-      ? `${(currentAnswer as string[]).length} selected`
-      : "Answer saved"
-    : question.required
-      ? "Select an option"
-      : "Optional — skip or answer";
+  const statusText = `Question ${currentIndex + 1} of ${totalQuestions}`;
 
   const canGoNext = hasAnswer || !question.required;
 
@@ -270,9 +264,9 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit }) => {
       </div>
 
       {/* Content */}
-      <div className="relative z-10 mx-auto flex w-full max-w-[512px] flex-1 flex-col gap-6 px-5 pb-32 pt-6 sm:pt-10">
+      <div className="relative z-10 mx-auto flex w-full max-w-[768px] flex-1 flex-col gap-6 px-6 pb-[100px] pt-6 sm:pb-32 sm:pt-10">
         {/* Header */}
-        <SurveyHeader chapter={question.chapter} progress={progress} onPause={handlePause} />
+        <SurveyHeader progress={progress} onPause={handlePause} />
 
         {/* Question with animation */}
         <div
@@ -327,23 +321,22 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit }) => {
 
           {/* Guidance panel */}
           <div className="mt-4">
-            <GuidancePanel question={question} chapterIntro={currentChapterIntro} />
+            <GuidancePanel question={question} />
           </div>
         </div>
 
-        {/* Navigation */}
-        <SurveyNav
-          canGoBack={currentIndex > 0}
-          canGoNext={canGoNext}
-          hasAnswer={hasAnswer}
-          statusText={statusText}
-          onPrevious={goPrev}
-          onNext={goNext}
-        />
+        {/* Navigation — fixed bottom bar on mobile, static on desktop */}
+        <div className="fixed bottom-0 left-0 right-0 z-20 rounded-tl-[24px] rounded-tr-[24px] border-t border-white/10 bg-[rgba(10,5,16,0.8)] px-6 py-4 backdrop-blur-xl sm:static sm:rounded-none sm:border-0 sm:bg-transparent sm:p-0 sm:backdrop-blur-none">
+          <SurveyNav
+            canGoBack={currentIndex > 0}
+            canGoNext={canGoNext}
+            hasAnswer={hasAnswer}
+            statusText={statusText}
+            onPrevious={goPrev}
+            onNext={goNext}
+          />
+        </div>
       </div>
-
-      {/* Guide Avatar */}
-      <GuideAvatar chapterIntro={pendingChapterIntro} onDismiss={handleDismissIntro} />
     </main>
   );
 };

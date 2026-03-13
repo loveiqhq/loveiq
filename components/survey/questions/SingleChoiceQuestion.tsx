@@ -19,13 +19,21 @@ const SingleChoiceQuestion: FC<SingleChoiceQuestionProps> = ({
   otherText,
   onOtherTextChange,
 }) => {
-  return (
-    <div className="flex flex-col gap-6">
-      <h2 className="font-sans text-[28px] font-bold leading-tight text-white sm:text-[36px]">
-        {question.question}
-      </h2>
+  // Subtitle from formatGuidance or default
+  const subtitle = question.formatGuidance || "Select one option";
 
-      <div className="grid grid-cols-1 gap-2 min-[400px]:grid-cols-2">
+  return (
+    <div className="flex flex-col gap-5">
+      {/* Title + subtitle */}
+      <div className="flex flex-col gap-2">
+        <h2 className="font-serif text-[31px] font-medium leading-[1.2] text-white sm:text-[39px]">
+          {question.question}
+        </h2>
+        <p className="font-sans text-[15px] font-medium text-[#a78bfa]">{subtitle}</p>
+      </div>
+
+      {/* Options — single column */}
+      <div className="flex flex-col gap-3">
         {question.options.map((option) => (
           <ChoiceCard
             key={option}
@@ -36,13 +44,14 @@ const SingleChoiceQuestion: FC<SingleChoiceQuestionProps> = ({
         ))}
       </div>
 
+      {/* Other text input */}
       {value && /^other\b/i.test(value) && (
         <input
           type="text"
           value={otherText ?? ""}
           onChange={(e) => onOtherTextChange?.(e.target.value)}
           placeholder="Please specify…"
-          className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 font-sans text-[15px] text-white placeholder:text-white/30 focus:border-[#a78bfa] focus:outline-none"
+          className="w-full border-b-2 border-[rgba(254,104,57,0.2)] bg-transparent pb-3 pt-2 font-sans text-[18px] text-white placeholder:text-white/30 focus:border-[rgba(254,104,57,0.4)] focus:outline-none"
           autoFocus
         />
       )}
