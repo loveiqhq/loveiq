@@ -44,15 +44,17 @@ export async function GET(request: Request) {
   const userJoin = email
     ? "app_user!fk_survey_submission_user!inner(email,first_name)"
     : "app_user!fk_survey_submission_user(email,first_name)";
+  const scoringJoin = archetype ? ",scoring_result!inner(primary_archetype)" : "";
 
-  let query = `/rest/v1/survey_submission?select=id,status,start_date_time,created_date_time,duration_ms,utm_tracker,${userJoin}&order=created_date_time.desc`;
+  let query = `/rest/v1/survey_submission?select=id,status,start_date_time,created_date_time,duration_ms,utm_tracker,${userJoin}${scoringJoin}&order=created_date_time.desc`;
   if (status) query += `&status=eq.${encodeURIComponent(status)}`;
   if (dateFrom) query += `&start_date_time=gte.${encodeURIComponent(dateFrom)}`;
   if (dateTo) query += `&start_date_time=lte.${encodeURIComponent(dateTo + "T23:59:59.999Z")}`;
   if (email) query += `&app_user.email=ilike.*${encodeURIComponent(email)}*`;
+  if (archetype) query += `&scoring_result.primary_archetype=eq.${encodeURIComponent(archetype)}`;
 
   try {
-    const res = await supabaseFetch(query);
+    const res = await supabaseFetch(query, { headers: { Range: "0-99999" } });
     if (!res.ok) {
       logger.error({ status: res.status }, "Admin export query failed");
       return NextResponse.json({ error: "Unable to export." }, { status: 500 });
@@ -95,7 +97,8 @@ export async function GET(request: Request) {
     if (ids.length > 0) {
       try {
         const scoringRes = await supabaseFetch(
-          `/rest/v1/scoring_result?survey_submission_id=in.(${ids.join(",")})&select=survey_submission_id,primary_archetype,percentages,raw_scores,engine_version,scored_at`
+          `/rest/v1/scoring_result?survey_submission_id=in.(${ids.join(",")})&select=survey_submission_id,primary_archetype,percentages,raw_scores,engine_version,scored_at`,
+          { headers: { Range: "0-99999" } }
         );
         if (scoringRes.ok) {
           const scoringRows = (await scoringRes.json()) as Array<{
@@ -115,13 +118,8 @@ export async function GET(request: Request) {
       }
     }
 
-    // Apply archetype filter (post-scoring lookup since export doesn't join scoring in main query)
-    let filteredSubmissions = submissions;
-    if (archetype) {
-      filteredSubmissions = submissions.filter(
-        (s) => scoringMap[s.id]?.primary_archetype === archetype
-      );
-    }
+    // Archetype filtering is now done at the query level via scoring_result!inner join
+    const filteredSubmissions = submissions;
 
     // Collect all unique archetype names from percentages for CSV columns
     const allArchetypes = new Set<string>();
@@ -141,7 +139,8 @@ export async function GET(request: Request) {
 
     if (ids.length > 0) {
       const answersRes = await supabaseFetch(
-        `/rest/v1/survey_submission_answer?survey_submission_id=in.(${ids.join(",")})&select=survey_submission_id,answer_text,answer_option_id,normalized_value,time_spent_seconds,revision_count,was_skipped,survey_question(frontend_qid,type),answer_option!fk_ssa_answer_option(option_text),survey_submission_answer_options(answer_option!fk_ssao_answer_option(option_text))&order=survey_question_id.asc`
+        `/rest/v1/survey_submission_answer?survey_submission_id=in.(${ids.join(",")})&select=survey_submission_id,answer_text,answer_option_id,normalized_value,time_spent_seconds,revision_count,was_skipped,survey_question(frontend_qid,type),answer_option!fk_ssa_answer_option(option_text),survey_submission_answer_options(answer_option!fk_ssao_answer_option(option_text))&order=survey_question_id.asc`,
+        { headers: { Range: "0-999999" } }
       );
       if (answersRes.ok) {
         const answers = (await answersRes.json()) as Array<{
@@ -274,6 +273,10 @@ export async function GET(request: Request) {
 }
 
 function escapeCSV(value: string): string {
+  // Prevent formula injection in Excel/Sheets
+  if (/^[=+\-@]/.test(value)) {
+    value = "'" + value;
+  }
   if (value.includes(",") || value.includes('"') || value.includes("\n")) {
     return `"${value.replace(/"/g, '""')}"`;
   }

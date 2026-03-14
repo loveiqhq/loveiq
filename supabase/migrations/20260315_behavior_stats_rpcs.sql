@@ -1,9 +1,10 @@
--- Migration: Update get_behavior_stats RPC + create get_answer_distribution RPC
--- Applied 2026-03-08
+-- Migration: Behavior stats RPCs (get_behavior_stats + get_answer_distribution)
+-- Synced from .planning/migration_behavior_stats_v2.sql with funnel double-count fix
 --
--- Changes to get_behavior_stats:
+-- Changes from v1:
 -- - Exclude intro fields (q_id LIKE '00%') from avgTimePerQuestion and backtrackByQuestion
 -- - Add chapterFunnel sub-query
+-- - Fix funnel: abandoned = unique - completed (prevents double-counting)
 -- - Uses correct column names: direction (not event_type), time_spent_ms (not duration_ms)
 --   direction values: 'forward', 'back', 'abandon', 'complete'
 
@@ -93,7 +94,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 GRANT EXECUTE ON FUNCTION get_behavior_stats(TIMESTAMPTZ) TO service_role;
 
 
--- New RPC: get_answer_distribution
+-- RPC: get_answer_distribution
 -- Returns choice question option distribution for single and multiple choice questions
 
 CREATE OR REPLACE FUNCTION get_answer_distribution(since_ts TIMESTAMPTZ)

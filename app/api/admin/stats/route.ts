@@ -36,7 +36,7 @@ export async function GET(request: Request) {
       // Q1: Total submissions & completion stats
       supabaseFetch(
         `/rest/v1/survey_submission?select=id,status,created_date_time,duration_ms,utm_tracker&created_date_time=gte.${since}`,
-        { headers: { Prefer: "count=exact" } }
+        { headers: { Prefer: "count=exact", Range: "0-49999" } }
       ),
       // Q2: Behavior stats via RPC (replaces raw behavior query)
       supabaseFetch("/rest/v1/rpc/get_behavior_stats", {
@@ -93,10 +93,12 @@ export async function GET(request: Request) {
 
     // Q2: Behavior stats from RPC
     const behaviorData = await behaviorRes.json();
-    const dropOff = (behaviorData.dropOff ?? []).map((d: { q_id: string; count: number }) => ({
-      qId: d.q_id,
-      count: d.count,
-    }));
+    const dropOff = (behaviorData.dropOff ?? [])
+      .filter((d: { q_id: string }) => !d.q_id.startsWith("00"))
+      .map((d: { q_id: string; count: number }) => ({
+        qId: d.q_id,
+        count: d.count,
+      }));
     // Defense-in-depth: exclude intro fields (00xxx) from avgTime and backtrack
     const avgTimePerQuestion = (behaviorData.avgTimePerQuestion ?? [])
       .filter((d: { q_id: string }) => !d.q_id.startsWith("00"))
@@ -257,11 +259,12 @@ export async function GET(request: Request) {
       }
 
       const answerFields =
-        "answer_text,normalized_value,was_skipped,revision_count,survey_question(frontend_qid,type)";
+        "answer_text,normalized_value,was_skipped,revision_count,survey_question(frontend_qid,type),answer_option!fk_ssa_answer_option(option_text)";
       const answersRes =
         submissionIds.length > 0
           ? await supabaseFetch(
-              `/rest/v1/survey_submission_answer?select=${answerFields}&survey_submission_id=in.(${submissionIds.join(",")})`
+              `/rest/v1/survey_submission_answer?select=${answerFields}&survey_submission_id=in.(${submissionIds.join(",")})`,
+              { headers: { Range: "0-99999" } }
             )
           : null;
       if (answersRes?.ok) {
@@ -271,13 +274,14 @@ export async function GET(request: Request) {
           was_skipped: boolean;
           revision_count: number | null;
           survey_question: { frontend_qid: string; type: string } | null;
+          answer_option: { option_text: string } | null;
         }>;
 
-        // Country distribution (qId 15001)
+        // Country distribution (qId 15001) — includes both free-text and option-based answers
         const countryMap: Record<string, number> = {};
         for (const a of answers) {
-          if (a.survey_question?.frontend_qid === "15001" && a.answer_text) {
-            const country = a.answer_text.trim();
+          if (a.survey_question?.frontend_qid === "15001") {
+            const country = (a.answer_text || a.answer_option?.option_text || "").trim();
             if (country) countryMap[country] = (countryMap[country] || 0) + 1;
           }
         }
@@ -351,7 +355,8 @@ export async function GET(request: Request) {
         archetypeDistribution = [];
       } else {
         const scoringRes = await supabaseFetch(
-          `/rest/v1/scoring_result?select=primary_archetype&survey_submission_id=in.(${submissionIds.join(",")})`
+          `/rest/v1/scoring_result?select=primary_archetype&survey_submission_id=in.(${submissionIds.join(",")})`,
+          { headers: { Range: "0-49999" } }
         );
         if (scoringRes.ok) {
           const scoringRows = (await scoringRes.json()) as Array<{

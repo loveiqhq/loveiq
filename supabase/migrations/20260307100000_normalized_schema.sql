@@ -172,6 +172,7 @@ CREATE TABLE IF NOT EXISTS survey_submission (
   regeneration_url  text,
   status            text,
   start_date_time   timestamptz,
+  duration_ms       bigint,
   created_date_time timestamptz DEFAULT now(),
   CONSTRAINT survey_submission_pkey PRIMARY KEY (id),
   CONSTRAINT fk_survey_submission_user FOREIGN KEY (user_id) REFERENCES app_user(id),
