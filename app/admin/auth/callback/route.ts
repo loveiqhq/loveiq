@@ -34,9 +34,10 @@ function createCallbackClient(request: NextRequest, response: NextResponse) {
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
-  const code = searchParams.get("code");
+  const tokenHash = searchParams.get("token_hash");
+  const type = searchParams.get("type");
 
-  if (!code) {
+  if (!tokenHash || type !== "magiclink") {
     return NextResponse.redirect(new URL("/admin/login?error=missing_code", origin));
   }
 
@@ -44,7 +45,12 @@ export async function GET(request: NextRequest) {
   const redirectToAdmin = NextResponse.redirect(new URL("/admin", origin));
   const supabase = createCallbackClient(request, redirectToAdmin);
 
-  const { error } = await supabase.auth.exchangeCodeForSession(code);
+  // verifyOtp with token_hash does not require PKCE code_verifier,
+  // so it works even when the link is opened in a different browser context.
+  const { error } = await supabase.auth.verifyOtp({
+    token_hash: tokenHash,
+    type: "magiclink",
+  });
 
   if (error) {
     logger.error({ error: error.message }, "Admin auth callback failed");

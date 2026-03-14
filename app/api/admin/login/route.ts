@@ -1,10 +1,19 @@
 import { NextResponse } from "next/server";
+import { Resend } from "resend";
 import { verifyCsrfToken } from "@/lib/csrf";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
 import { supabaseFetch } from "@/lib/admin/supabase";
-import { createSupabaseServer } from "@/lib/admin/supabase-server";
+import { adminMagicLinkEmail } from "@/lib/emails/admin-magic-link";
 import logger from "@/lib/logger";
 import { z } from "zod";
+
+let _resend: Resend | null = null;
+function getResend(): Resend {
+  if (!_resend) {
+    _resend = new Resend(process.env.RESEND_API_KEY);
+  }
+  return _resend;
+}
 
 const schema = z.object({
   email: z
@@ -68,21 +77,44 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
   }
 
-  // 5. Send magic link
+  // 5. Generate magic link + send email via Resend
+  // Uses admin.generateLink REST API to avoid PKCE code_verifier cookies,
+  // which break when the magic link is opened in a different browser context.
   try {
-    const supabase = await createSupabaseServer();
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: `${siteUrl}/admin/auth/callback`,
-      },
+
+    const linkRes = await supabaseFetch("/auth/v1/admin/generate_link", {
+      method: "POST",
+      body: JSON.stringify({ type: "magiclink", email }),
     });
 
-    if (error) {
-      logger.error({ error: error.message, ip }, "Failed to send magic link");
+    if (!linkRes.ok) {
+      const errBody = await linkRes.json().catch(() => ({}));
+      logger.error({ status: linkRes.status, body: errBody, ip }, "Failed to generate magic link");
       return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
     }
+
+    const linkData = await linkRes.json();
+    const hashedToken: string | undefined = linkData.hashed_token;
+
+    if (!hashedToken) {
+      logger.error({ ip }, "generate_link response missing hashed_token");
+      return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
+    }
+
+    const callbackUrl = `${siteUrl}/admin/auth/callback?token_hash=${encodeURIComponent(hashedToken)}&type=magiclink`;
+    const { subject, html } = adminMagicLinkEmail({ magicLink: callbackUrl });
+
+    const from = process.env.RESEND_FROM || "LoveIQ <hello@send.loveiq.org>";
+    const replyTo = process.env.RESEND_REPLY_TO || "hello@loveiq.org";
+
+    await getResend().emails.send({
+      from,
+      replyTo,
+      to: email,
+      subject,
+      html,
+    });
   } catch (err) {
     logger.error({ err, ip }, "Magic link send error");
     return NextResponse.json({ error: "Unable to process request." }, { status: 500 });

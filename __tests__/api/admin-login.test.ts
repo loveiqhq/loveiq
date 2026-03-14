@@ -18,12 +18,19 @@ vi.mock("../../lib/admin/supabase", () => ({
   supabaseFetch: (...args: unknown[]) => mockSupabaseFetch(...args),
 }));
 
-const mockSignInWithOtp = vi.fn();
-vi.mock("../../lib/admin/supabase-server", () => ({
-  createSupabaseServer: vi.fn().mockResolvedValue({
-    auth: {
-      signInWithOtp: (...args: unknown[]) => mockSignInWithOtp(...args),
+const mockResendSend = vi.fn().mockResolvedValue({ id: "msg_123" });
+vi.mock("resend", () => {
+  return {
+    Resend: class MockResend {
+      emails = { send: (...args: unknown[]) => mockResendSend(...args) };
     },
+  };
+});
+
+vi.mock("../../lib/emails/admin-magic-link", () => ({
+  adminMagicLinkEmail: vi.fn().mockReturnValue({
+    subject: "Your LoveIQ admin login link",
+    html: "<p>Sign in</p>",
   }),
 }));
 
@@ -52,11 +59,22 @@ describe("POST /api/admin/login (magic link)", () => {
       resetAt: new Date(),
     });
     // Default: email is in allowlist
-    mockSupabaseFetch.mockResolvedValue({
-      ok: true,
-      json: async () => [{ email: "admin@test.com" }],
+    mockSupabaseFetch.mockImplementation((path: string) => {
+      if (path.includes("/admin_users")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => [{ email: "admin@test.com" }],
+        });
+      }
+      if (path.includes("/admin/generate_link")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ hashed_token: "test-hashed-token" }),
+        });
+      }
+      return Promise.resolve({ ok: false, json: async () => ({}) });
     });
-    mockSignInWithOtp.mockResolvedValue({ error: null });
+    mockResendSend.mockResolvedValue({ id: "msg_123" });
   });
 
   it("returns success and sends magic link for allowed email", async () => {
@@ -65,13 +83,24 @@ describe("POST /api/admin/login (magic link)", () => {
     const json = await res.json();
     expect(json.success).toBe(true);
     expect(json.message).toContain("check your inbox");
-    expect(mockSignInWithOtp).toHaveBeenCalledOnce();
+    // Should have called generate_link
+    expect(mockSupabaseFetch).toHaveBeenCalledWith(
+      "/auth/v1/admin/generate_link",
+      expect.objectContaining({ method: "POST" })
+    );
+    // Should have sent email via Resend
+    expect(mockResendSend).toHaveBeenCalledOnce();
   });
 
   it("returns same generic response for non-allowed email (no enumeration)", async () => {
-    mockSupabaseFetch.mockResolvedValue({
-      ok: true,
-      json: async () => [],
+    mockSupabaseFetch.mockImplementation((path: string) => {
+      if (path.includes("/admin_users")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => [],
+        });
+      }
+      return Promise.resolve({ ok: false, json: async () => ({}) });
     });
 
     const res = await POST(makeRequest({ email: "nobody@test.com" }));
@@ -79,8 +108,8 @@ describe("POST /api/admin/login (magic link)", () => {
     const json = await res.json();
     expect(json.success).toBe(true);
     expect(json.message).toContain("check your inbox");
-    // Should NOT have called signInWithOtp
-    expect(mockSignInWithOtp).not.toHaveBeenCalled();
+    // Should NOT have called generate_link or Resend
+    expect(mockResendSend).not.toHaveBeenCalled();
   });
 
   it("returns 400 for invalid email", async () => {
@@ -116,8 +145,22 @@ describe("POST /api/admin/login (magic link)", () => {
     expect(res.status).toBe(500);
   });
 
-  it("returns 500 when magic link send fails", async () => {
-    mockSignInWithOtp.mockResolvedValue({ error: { message: "SMTP error" } });
+  it("returns 500 when generate_link fails", async () => {
+    mockSupabaseFetch.mockImplementation((path: string) => {
+      if (path.includes("/admin_users")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => [{ email: "admin@test.com" }],
+        });
+      }
+      if (path.includes("/admin/generate_link")) {
+        return Promise.resolve({
+          ok: false,
+          json: async () => ({ error: "Internal server error" }),
+        });
+      }
+      return Promise.resolve({ ok: false, json: async () => ({}) });
+    });
 
     const res = await POST(makeRequest({ email: "admin@test.com" }));
     expect(res.status).toBe(500);
