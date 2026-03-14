@@ -52,6 +52,7 @@ function makeRequest(body: unknown) {
 describe("POST /api/admin/login (magic link)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubEnv("RESEND_API_KEY", "re_test_fake_key");
     vi.mocked(verifyCsrfToken).mockResolvedValue(true);
     vi.mocked(checkRateLimit).mockResolvedValue({
       allowed: true,

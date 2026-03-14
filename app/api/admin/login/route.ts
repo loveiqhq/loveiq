@@ -80,6 +80,11 @@ export async function POST(request: Request) {
   // 5. Generate magic link + send email via Resend
   // Uses admin.generateLink REST API to avoid PKCE code_verifier cookies,
   // which break when the magic link is opened in a different browser context.
+  if (!process.env.RESEND_API_KEY) {
+    logger.error({ ip }, "RESEND_API_KEY not configured — cannot send magic link");
+    return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
+  }
+
   try {
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
 
