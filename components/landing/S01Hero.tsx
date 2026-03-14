@@ -93,11 +93,11 @@ const S01Hero: FC = () => {
         </div>
 
         <div className="mt-8 space-y-[2px]">
-          <h1 className="animate-on-scroll font-serif text-[40px] font-semibold leading-[1.04] tracking-[-0.6px] sm:text-[48px] md:text-[60px] lg:text-[72px] lg:leading-[72px] lg:tracking-[-1.4px]">
+          <h1 className="animate-on-scroll font-serif text-[32px] font-semibold leading-[1.08] tracking-[-0.4px] sm:text-[48px] sm:leading-[1.04] sm:tracking-[-0.6px] md:text-[60px] lg:text-[72px] lg:leading-[72px] lg:tracking-[-1.4px]">
             Gain Insights Into Your
           </h1>
           <div className="animate-on-scroll relative inline-block">
-            <span className="bg-gradient-to-r from-[#ff6a3a] via-[#cf5afb] to-[#7d88ff] bg-clip-text font-serif text-[72px] font-[500] italic leading-[72px] tracking-[-1.8px] text-transparent">
+            <span className="bg-gradient-to-r from-[#ff6a3a] via-[#cf5afb] to-[#7d88ff] bg-clip-text font-serif text-[44px] font-[500] italic leading-[48px] tracking-[-1px] text-transparent sm:text-[72px] sm:leading-[72px] sm:tracking-[-1.8px]">
               Sexual Psychology
             </span>
             <div aria-hidden className="pointer-events-none absolute inset-x-0 top-full mt-[4px]">

@@ -199,8 +199,8 @@ const NavSection: FC = () => {
       <div className="content-shell">
         <div className="relative z-10 pointer-events-auto">
           <div className="pointer-events-none absolute inset-[-10px] rounded-[999px] bg-[radial-gradient(80%_120%_at_50%_50%,rgba(0,0,0,0.55),transparent_65%)] blur-3xl" />
-          <nav className="relative mx-auto flex w-full items-center justify-between gap-2 rounded-[999px] bg-gradient-to-r from-[#1b0f2a] via-[#120a20] to-[#1b0f2a] px-3 py-2 shadow-[0_25px_80px_rgba(0,0,0,0.55)] backdrop-blur sm:gap-5 sm:pl-6 sm:pr-2 sm:py-[6px] sm:max-w-[1200px]">
-            <div className="flex flex-1 items-center gap-2">
+          <nav className="relative mx-auto flex w-full items-center justify-between gap-1.5 rounded-[999px] bg-gradient-to-r from-[#1b0f2a] via-[#120a20] to-[#1b0f2a] px-2 py-2 shadow-[0_25px_80px_rgba(0,0,0,0.55)] backdrop-blur sm:gap-5 sm:px-3 sm:pl-6 sm:pr-2 sm:py-[6px] sm:max-w-[1200px]">
+            <div className="flex min-w-0 items-center gap-2 sm:flex-1">
               <Link
                 href="/"
                 className="flex items-center gap-2 focus-visible-ring"
@@ -235,7 +235,7 @@ const NavSection: FC = () => {
               ))}
             </div>
 
-            <div className="flex flex-1 items-center justify-end gap-2 sm:gap-2">
+            <div className="flex items-center justify-end gap-2 sm:flex-1 sm:gap-2">
               {navLinks.slice(0, 3).map((item) => (
                 <Link
                   key={item.href}
@@ -248,7 +248,7 @@ const NavSection: FC = () => {
               <Link
                 href="/waitlist"
                 aria-label="Start survey now - navigation"
-                className="group relative inline-flex shrink-0 items-center justify-center gap-1.5 overflow-hidden whitespace-nowrap rounded-full bg-gradient-brand px-3.5 py-2 text-[12px] font-semibold text-white shadow-pill transition hover:translate-y-[-2px] focus-visible-ring sm:gap-2 sm:px-6 sm:py-3 sm:text-sm"
+                className="group relative inline-flex shrink-0 items-center justify-center gap-1 overflow-hidden whitespace-nowrap rounded-full bg-gradient-brand px-2.5 py-2 text-[12px] font-semibold text-white shadow-pill transition hover:translate-y-[-2px] focus-visible-ring sm:gap-2 sm:px-6 sm:py-3 sm:text-sm"
                 onClick={() => trackStartSurvey("nav")}
               >
                 <span
