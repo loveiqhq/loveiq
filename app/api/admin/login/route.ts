@@ -113,15 +113,26 @@ export async function POST(request: Request) {
     const from = process.env.RESEND_FROM || "LoveIQ <hello@send.loveiq.org>";
     const replyTo = process.env.RESEND_REPLY_TO || "hello@loveiq.org";
 
-    await getResend().emails.send({
-      from,
-      replyTo,
-      to: email,
-      subject,
-      html,
-    });
+    const RESEND_TIMEOUT_MS = 8_000;
+    const { error: sendError } = await Promise.race([
+      getResend().emails.send({
+        from,
+        replyTo,
+        to: email,
+        subject,
+        html,
+      }),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("Resend timeout")), RESEND_TIMEOUT_MS)
+      ),
+    ]);
+
+    if (sendError) {
+      logger.error({ error: sendError, ip }, "Resend rejected magic link email");
+      return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
+    }
   } catch (err) {
-    logger.error({ err, ip }, "Magic link send error");
+    logger.error({ err, ip }, "Magic link send error or timeout");
     return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
   }
 

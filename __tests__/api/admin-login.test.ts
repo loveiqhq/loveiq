@@ -146,6 +146,18 @@ describe("POST /api/admin/login (magic link)", () => {
     expect(res.status).toBe(500);
   });
 
+  it("returns 500 when Resend rejects the email", async () => {
+    mockResendSend.mockResolvedValue({
+      error: { statusCode: 403, message: "The from address is not verified" },
+    });
+
+    const res = await POST(makeRequest({ email: "admin@test.com" }));
+    expect(res.status).toBe(500);
+    // Should NOT have returned success
+    const json = await res.json();
+    expect(json.error).toBeDefined();
+  });
+
   it("returns 500 when generate_link fails", async () => {
     mockSupabaseFetch.mockImplementation((path: string) => {
       if (path.includes("/admin_users")) {
