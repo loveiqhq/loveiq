@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { getCsrfToken } from "@/lib/admin/client";
 
 export default function StagingLoginForm() {
   const router = useRouter();
@@ -17,7 +18,10 @@ export default function StagingLoginForm() {
     try {
       const res = await fetch("/api/staging-login", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-csrf-token": getCsrfToken(),
+        },
         body: JSON.stringify({ password }),
       });
 

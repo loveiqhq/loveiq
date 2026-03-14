@@ -1,25 +1,34 @@
-import { cookies } from "next/headers";
-
-async function sha256(value: string): Promise<string> {
-  const data = new TextEncoder().encode(value);
-  const buf = await crypto.subtle.digest("SHA-256", data);
-  return Array.from(new Uint8Array(buf))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
+import { createSupabaseServer } from "@/lib/admin/supabase-server";
+import { supabaseFetch } from "@/lib/admin/supabase";
+import type { AdminRole, AdminUser } from "@/lib/admin/roles";
 
 /**
- * Verify the admin session cookie in API routes.
+ * Verify admin session and return user info with role.
  * Belt-and-suspenders check alongside middleware gate.
+ * Returns null if not authenticated or not in admin_users.
  */
-export async function verifyAdminSession(): Promise<boolean> {
-  const adminPassword = process.env.ADMIN_PASSWORD;
-  if (!adminPassword) return false;
+export async function verifyAdminSession(): Promise<AdminUser | null> {
+  try {
+    const supabase = await createSupabaseServer();
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
 
-  const cookieStore = await cookies();
-  const session = cookieStore.get("admin_session")?.value;
-  if (!session) return false;
+    if (error || !user?.email) return null;
 
-  const expected = await sha256(adminPassword);
-  return session === expected;
+    // Check admin_users allowlist + get role
+    const res = await supabaseFetch(
+      `/rest/v1/admin_users?email=eq.${encodeURIComponent(user.email)}&select=email,role&limit=1`
+    );
+
+    if (!res.ok) return null;
+
+    const admins = await res.json();
+    if (!Array.isArray(admins) || admins.length === 0) return null;
+
+    return { email: admins[0].email, role: admins[0].role as AdminRole };
+  } catch {
+    return null;
+  }
 }

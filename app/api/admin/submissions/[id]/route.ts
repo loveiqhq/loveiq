@@ -1,14 +1,19 @@
 import { NextResponse } from "next/server";
 import { verifyAdminSession } from "@/lib/admin/auth";
+import { hasRole } from "@/lib/admin/roles";
+import { logAdminAction } from "@/lib/admin/audit";
 import { supabaseFetch } from "@/lib/admin/supabase";
 import { verifyCsrfToken } from "@/lib/csrf";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
 import logger from "@/lib/logger";
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const isAdmin = await verifyAdminSession();
-  if (!isAdmin) {
+  const admin = await verifyAdminSession();
+  if (!admin) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+  if (!hasRole(admin.role, "viewer")) {
+    return NextResponse.json({ error: "Forbidden." }, { status: 403 });
   }
 
   const ip = getClientIp(request);
@@ -144,9 +149,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const isAdmin = await verifyAdminSession();
-  if (!isAdmin) {
+  const admin = await verifyAdminSession();
+  if (!admin) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+  if (!hasRole(admin.role, "editor")) {
+    return NextResponse.json({ error: "Forbidden." }, { status: 403 });
   }
 
   const csrfValid = await verifyCsrfToken(request);
@@ -189,6 +197,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
 
     logger.info({ submissionId: numericId, newStatus: body.status }, "Submission status updated");
+    await logAdminAction({
+      admin_email: admin.email,
+      action: "update_status",
+      resource_type: "submission",
+      resource_id: String(numericId),
+      metadata: { new_status: body.status },
+      ip,
+    });
     return NextResponse.json({ success: true });
   } catch (err) {
     logger.error({ err }, "Admin submission PATCH error");
@@ -197,9 +213,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 }
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const isAdmin = await verifyAdminSession();
-  if (!isAdmin) {
+  const admin = await verifyAdminSession();
+  if (!admin) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+  if (!hasRole(admin.role, "admin")) {
+    return NextResponse.json({ error: "Forbidden." }, { status: 403 });
   }
 
   const csrfValid = await verifyCsrfToken(request);
@@ -298,7 +317,14 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
       return NextResponse.json({ error: "Unable to delete." }, { status: 500 });
     }
 
-    logger.info({ submissionId: numericId }, "Submission deleted");
+    logger.info({ submissionId: numericId, ip }, "Submission deleted");
+    await logAdminAction({
+      admin_email: admin.email,
+      action: "delete_submission",
+      resource_type: "submission",
+      resource_id: String(numericId),
+      ip,
+    });
     return NextResponse.json({ success: true });
   } catch (err) {
     logger.error({ err }, "Admin submission DELETE error");

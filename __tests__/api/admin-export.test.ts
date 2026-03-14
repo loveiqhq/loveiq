@@ -2,9 +2,13 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // --- Mocks ---
 
-const mockVerifyAdminSession = vi.fn<() => Promise<boolean>>();
+const mockVerifyAdminSession = vi.fn();
 vi.mock("../../lib/admin/auth", () => ({
   verifyAdminSession: (...args: unknown[]) => mockVerifyAdminSession(...(args as [])),
+}));
+
+vi.mock("../../lib/admin/audit", () => ({
+  logAdminAction: vi.fn().mockResolvedValue(undefined),
 }));
 
 const mockSupabaseFetch = vi.fn();
@@ -35,12 +39,12 @@ function makeRequest(queryString = "") {
 describe("GET /api/admin/export", () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    mockVerifyAdminSession.mockResolvedValue(true);
+    mockVerifyAdminSession.mockResolvedValue({ email: "admin@test.com", role: "admin" });
     mockCheckRateLimit.mockResolvedValue({ allowed: true, remaining: 4, resetAt: new Date() });
   });
 
   it("returns 401 when not authenticated", async () => {
-    mockVerifyAdminSession.mockResolvedValue(false);
+    mockVerifyAdminSession.mockResolvedValue(null);
 
     const res = await GET(makeRequest());
     expect(res.status).toBe(401);

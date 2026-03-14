@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { createSupabaseMiddleware } from "./lib/admin/supabase-middleware";
 import logger from "./lib/logger";
 
 const isProduction = process.env.NODE_ENV === "production";
@@ -37,23 +38,6 @@ export async function proxy(request: NextRequest) {
       const expected = await sha256(STAGING_PASSWORD);
       if (session !== expected) {
         return NextResponse.redirect(new URL("/login", request.url));
-      }
-    }
-  }
-
-  // Admin gate: when ADMIN_PASSWORD is set, require a valid admin session cookie
-  const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
-  if (ADMIN_PASSWORD) {
-    const path = request.nextUrl.pathname;
-    if (path.startsWith("/admin")) {
-      const isAdminPublic =
-        path === "/admin/login" || path === "/api/admin/login" || path === "/api/admin/logout";
-      if (!isAdminPublic) {
-        const adminSession = request.cookies.get("admin_session")?.value;
-        const expectedAdmin = await sha256(ADMIN_PASSWORD);
-        if (adminSession !== expectedAdmin) {
-          return NextResponse.redirect(new URL("/admin/login", request.url));
-        }
       }
     }
   }
@@ -101,6 +85,30 @@ export async function proxy(request: NextRequest) {
       headers: requestHeaders,
     },
   });
+
+  // Admin gate: verify Supabase Auth session for /admin routes
+  const adminPath = request.nextUrl.pathname;
+  if (adminPath.startsWith("/admin")) {
+    const isAdminPublic =
+      adminPath === "/admin/login" ||
+      adminPath === "/api/admin/login" ||
+      adminPath === "/api/admin/logout" ||
+      adminPath.startsWith("/admin/auth/"); // callback route
+
+    if (!isAdminPublic) {
+      const supabase = createSupabaseMiddleware(request, response);
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        return NextResponse.redirect(new URL("/admin/login", request.url));
+      }
+
+      // Pass user email to API routes via header for audit logging
+      requestHeaders.set("x-admin-email", user.email || "");
+    }
+  }
 
   // Set security headers on response
   response.headers.set("Content-Security-Policy", cspHeader);

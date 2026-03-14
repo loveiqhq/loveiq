@@ -1,4 +1,7 @@
 import { NextResponse } from "next/server";
+import { verifyCsrfToken } from "@/lib/csrf";
+import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
+import logger from "@/lib/logger";
 
 async function sha256(value: string): Promise<string> {
   const data = new TextEncoder().encode(value);
@@ -9,6 +12,30 @@ async function sha256(value: string): Promise<string> {
 }
 
 export async function POST(request: Request) {
+  // CSRF verification
+  if (!(await verifyCsrfToken(request))) {
+    return NextResponse.json({ error: "Invalid request." }, { status: 403 });
+  }
+
+  // Rate limiting
+  const ip = getClientIp(request);
+  const rateLimit = await checkRateLimit(ip, {
+    bucket: "staging-login",
+    limit: 5,
+    windowMs: 60_000,
+  });
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      { error: "Please try again later." },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": String(Math.ceil((rateLimit.resetAt.getTime() - Date.now()) / 1000)),
+        },
+      }
+    );
+  }
+
   const STAGING_PASSWORD = process.env.STAGING_PASSWORD;
   if (!STAGING_PASSWORD) {
     return NextResponse.json({ error: "Not found." }, { status: 404 });
@@ -25,6 +52,7 @@ export async function POST(request: Request) {
   const incoming = await sha256(password);
 
   if (incoming !== expected) {
+    logger.info({ ip }, "Failed staging login attempt");
     return NextResponse.json({ error: "Incorrect password." }, { status: 401 });
   }
 

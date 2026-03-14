@@ -8,6 +8,10 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: mockRouterPush }),
 }));
 
+vi.mock("@/lib/admin/client", () => ({
+  getCsrfToken: () => "test-csrf-token",
+}));
+
 import StagingLoginForm from "@/components/staging/StagingLoginForm";
 
 let mockFetch: ReturnType<typeof vi.fn>;
@@ -92,7 +96,10 @@ describe("StagingLoginForm", () => {
     await waitFor(() => {
       expect(mockFetch).toHaveBeenCalledWith("/api/staging-login", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-csrf-token": "test-csrf-token",
+        },
         body: JSON.stringify({ password: "secret123" }),
       });
     });

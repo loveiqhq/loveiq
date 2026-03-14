@@ -13,6 +13,20 @@ vi.mock("../../lib/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
+const mockSupabaseFetch = vi.fn();
+vi.mock("../../lib/admin/supabase", () => ({
+  supabaseFetch: (...args: unknown[]) => mockSupabaseFetch(...args),
+}));
+
+const mockSignInWithOtp = vi.fn();
+vi.mock("../../lib/admin/supabase-server", () => ({
+  createSupabaseServer: vi.fn().mockResolvedValue({
+    auth: {
+      signInWithOtp: (...args: unknown[]) => mockSignInWithOtp(...args),
+    },
+  }),
+}));
+
 import { POST } from "../../app/api/admin/login/route";
 import { verifyCsrfToken } from "../../lib/csrf";
 import { checkRateLimit } from "../../lib/ratelimit";
@@ -28,47 +42,60 @@ function makeRequest(body: unknown) {
   });
 }
 
-describe("POST /api/admin/login", () => {
+describe("POST /api/admin/login (magic link)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env.ADMIN_PASSWORD = "test-admin-password";
     vi.mocked(verifyCsrfToken).mockResolvedValue(true);
     vi.mocked(checkRateLimit).mockResolvedValue({
       allowed: true,
       remaining: 4,
       resetAt: new Date(),
     });
+    // Default: email is in allowlist
+    mockSupabaseFetch.mockResolvedValue({
+      ok: true,
+      json: async () => [{ email: "admin@test.com" }],
+    });
+    mockSignInWithOtp.mockResolvedValue({ error: null });
   });
 
-  it("returns 200 and sets cookie on correct password", async () => {
-    const res = await POST(makeRequest({ password: "test-admin-password" }));
+  it("returns success and sends magic link for allowed email", async () => {
+    const res = await POST(makeRequest({ email: "admin@test.com" }));
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.success).toBe(true);
-    // Cookie should be set
-    const setCookie = res.headers.get("set-cookie");
-    expect(setCookie).toContain("admin_session=");
+    expect(json.message).toContain("check your inbox");
+    expect(mockSignInWithOtp).toHaveBeenCalledOnce();
   });
 
-  it("returns 401 on wrong password", async () => {
-    const res = await POST(makeRequest({ password: "wrong" }));
-    expect(res.status).toBe(401);
+  it("returns same generic response for non-allowed email (no enumeration)", async () => {
+    mockSupabaseFetch.mockResolvedValue({
+      ok: true,
+      json: async () => [],
+    });
+
+    const res = await POST(makeRequest({ email: "nobody@test.com" }));
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.success).toBe(true);
+    expect(json.message).toContain("check your inbox");
+    // Should NOT have called signInWithOtp
+    expect(mockSignInWithOtp).not.toHaveBeenCalled();
   });
 
-  it("returns 400 when password is missing", async () => {
+  it("returns 400 for invalid email", async () => {
+    const res = await POST(makeRequest({ email: "not-an-email" }));
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 400 when email is missing", async () => {
     const res = await POST(makeRequest({}));
     expect(res.status).toBe(400);
   });
 
-  it("returns 404 when ADMIN_PASSWORD is not set", async () => {
-    delete process.env.ADMIN_PASSWORD;
-    const res = await POST(makeRequest({ password: "anything" }));
-    expect(res.status).toBe(404);
-  });
-
   it("returns 403 when CSRF fails", async () => {
     vi.mocked(verifyCsrfToken).mockResolvedValue(false);
-    const res = await POST(makeRequest({ password: "test-admin-password" }));
+    const res = await POST(makeRequest({ email: "admin@test.com" }));
     expect(res.status).toBe(403);
   });
 
@@ -78,7 +105,21 @@ describe("POST /api/admin/login", () => {
       remaining: 0,
       resetAt: new Date(Date.now() + 60_000),
     });
-    const res = await POST(makeRequest({ password: "test-admin-password" }));
+    const res = await POST(makeRequest({ email: "admin@test.com" }));
     expect(res.status).toBe(429);
+  });
+
+  it("returns 500 when admin_users check fails", async () => {
+    mockSupabaseFetch.mockRejectedValue(new Error("DB error"));
+
+    const res = await POST(makeRequest({ email: "admin@test.com" }));
+    expect(res.status).toBe(500);
+  });
+
+  it("returns 500 when magic link send fails", async () => {
+    mockSignInWithOtp.mockResolvedValue({ error: { message: "SMTP error" } });
+
+    const res = await POST(makeRequest({ email: "admin@test.com" }));
+    expect(res.status).toBe(500);
   });
 });

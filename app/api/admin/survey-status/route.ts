@@ -1,14 +1,19 @@
 import { NextResponse } from "next/server";
 import { verifyAdminSession } from "@/lib/admin/auth";
+import { hasRole } from "@/lib/admin/roles";
+import { logAdminAction } from "@/lib/admin/audit";
 import { supabaseFetch } from "@/lib/admin/supabase";
 import { verifyCsrfToken } from "@/lib/csrf";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
 import logger from "@/lib/logger";
 
 export async function GET(request: Request) {
-  const isAdmin = await verifyAdminSession();
-  if (!isAdmin) {
+  const admin = await verifyAdminSession();
+  if (!admin) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+  if (!hasRole(admin.role, "viewer")) {
+    return NextResponse.json({ error: "Forbidden." }, { status: 403 });
   }
 
   const ip = getClientIp(request);
@@ -43,9 +48,12 @@ export async function GET(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  const isAdmin = await verifyAdminSession();
-  if (!isAdmin) {
+  const admin = await verifyAdminSession();
+  if (!admin) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+  if (!hasRole(admin.role, "admin")) {
+    return NextResponse.json({ error: "Forbidden." }, { status: 403 });
   }
 
   const csrfValid = await verifyCsrfToken(request);
@@ -94,6 +102,14 @@ export async function PATCH(request: Request) {
     }
 
     logger.info({ surveyId, newStatus }, "Survey status updated");
+    await logAdminAction({
+      admin_email: admin.email,
+      action: "toggle_survey",
+      resource_type: "survey",
+      resource_id: String(surveyId),
+      metadata: { new_status: newStatus },
+      ip,
+    });
     return NextResponse.json({ success: true });
   } catch (err) {
     logger.error({ err }, "Admin survey status PATCH error");

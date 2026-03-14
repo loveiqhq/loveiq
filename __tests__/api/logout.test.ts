@@ -4,6 +4,14 @@ vi.mock("../../lib/csrf", () => ({
   verifyCsrfToken: vi.fn().mockResolvedValue(true),
 }));
 
+vi.mock("../../lib/admin/supabase-server", () => ({
+  createSupabaseServer: vi.fn().mockResolvedValue({
+    auth: {
+      signOut: vi.fn().mockResolvedValue({ error: null }),
+    },
+  }),
+}));
+
 import { POST as adminLogout } from "../../app/api/admin/logout/route";
 import { POST as stagingLogout } from "../../app/api/staging-logout/route";
 

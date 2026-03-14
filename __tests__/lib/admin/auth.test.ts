@@ -1,61 +1,103 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("next/headers", () => ({
-  cookies: vi.fn(),
+const mockGetUser = vi.fn();
+vi.mock("../../../lib/admin/supabase-server", () => ({
+  createSupabaseServer: vi.fn().mockResolvedValue({
+    auth: {
+      getUser: (...args: unknown[]) => mockGetUser(...args),
+    },
+  }),
+}));
+
+const mockSupabaseFetch = vi.fn();
+vi.mock("../../../lib/admin/supabase", () => ({
+  supabaseFetch: (...args: unknown[]) => mockSupabaseFetch(...args),
 }));
 
 import { verifyAdminSession } from "../../../lib/admin/auth";
-import { cookies } from "next/headers";
-
-const mockedCookies = vi.mocked(cookies);
-
-function mockCookieStore(cookieValue?: string) {
-  mockedCookies.mockResolvedValue({
-    get: vi.fn().mockReturnValue(cookieValue !== undefined ? { value: cookieValue } : undefined),
-  } as never);
-}
-
-// SHA-256 of "test-password"
-async function sha256(value: string): Promise<string> {
-  const data = new TextEncoder().encode(value);
-  const buf = await crypto.subtle.digest("SHA-256", data);
-  return Array.from(new Uint8Array(buf))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
 
 describe("verifyAdminSession", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    delete process.env.ADMIN_PASSWORD;
   });
 
-  it("returns false when ADMIN_PASSWORD is not set", async () => {
-    mockCookieStore("some-value");
+  it("returns null when getUser fails", async () => {
+    mockGetUser.mockResolvedValue({
+      data: { user: null },
+      error: { message: "No session" },
+    });
     const result = await verifyAdminSession();
-    expect(result).toBe(false);
+    expect(result).toBeNull();
   });
 
-  it("returns false when cookie is missing", async () => {
-    process.env.ADMIN_PASSWORD = "test-password";
-    mockCookieStore(undefined);
+  it("returns null when user has no email", async () => {
+    mockGetUser.mockResolvedValue({
+      data: { user: { id: "123", email: null } },
+      error: null,
+    });
     const result = await verifyAdminSession();
-    expect(result).toBe(false);
+    expect(result).toBeNull();
   });
 
-  it("returns false when cookie does not match hash", async () => {
-    process.env.ADMIN_PASSWORD = "test-password";
-    mockCookieStore("wrong-hash");
+  it("returns null when email not in admin_users", async () => {
+    mockGetUser.mockResolvedValue({
+      data: { user: { id: "123", email: "nobody@test.com" } },
+      error: null,
+    });
+    mockSupabaseFetch.mockResolvedValue({
+      ok: true,
+      json: async () => [],
+    });
+
     const result = await verifyAdminSession();
-    expect(result).toBe(false);
+    expect(result).toBeNull();
   });
 
-  it("returns true when cookie matches SHA-256 of password", async () => {
-    const password = "test-password";
-    process.env.ADMIN_PASSWORD = password;
-    const hash = await sha256(password);
-    mockCookieStore(hash);
+  it("returns null when supabaseFetch fails", async () => {
+    mockGetUser.mockResolvedValue({
+      data: { user: { id: "123", email: "admin@test.com" } },
+      error: null,
+    });
+    mockSupabaseFetch.mockResolvedValue({
+      ok: false,
+      status: 500,
+    });
+
     const result = await verifyAdminSession();
-    expect(result).toBe(true);
+    expect(result).toBeNull();
+  });
+
+  it("returns AdminUser when email is in admin_users", async () => {
+    mockGetUser.mockResolvedValue({
+      data: { user: { id: "123", email: "admin@test.com" } },
+      error: null,
+    });
+    mockSupabaseFetch.mockResolvedValue({
+      ok: true,
+      json: async () => [{ email: "admin@test.com", role: "admin" }],
+    });
+
+    const result = await verifyAdminSession();
+    expect(result).toEqual({ email: "admin@test.com", role: "admin" });
+  });
+
+  it("returns viewer role correctly", async () => {
+    mockGetUser.mockResolvedValue({
+      data: { user: { id: "456", email: "viewer@test.com" } },
+      error: null,
+    });
+    mockSupabaseFetch.mockResolvedValue({
+      ok: true,
+      json: async () => [{ email: "viewer@test.com", role: "viewer" }],
+    });
+
+    const result = await verifyAdminSession();
+    expect(result).toEqual({ email: "viewer@test.com", role: "viewer" });
+  });
+
+  it("returns null on unexpected error", async () => {
+    mockGetUser.mockRejectedValue(new Error("Unexpected"));
+    const result = await verifyAdminSession();
+    expect(result).toBeNull();
   });
 });

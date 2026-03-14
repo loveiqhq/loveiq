@@ -3,10 +3,12 @@ import { render, screen, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
 
-const mockRouterPush = vi.fn();
-
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: mockRouterPush }),
+  useSearchParams: () => new URLSearchParams(),
+}));
+
+vi.mock("@/lib/admin/client", () => ({
+  getCsrfToken: () => "test-csrf-token",
 }));
 
 import AdminLoginForm from "@/components/admin/AdminLoginForm";
@@ -14,8 +16,6 @@ import AdminLoginForm from "@/components/admin/AdminLoginForm";
 let mockFetch: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
-  mockRouterPush.mockClear();
-  document.cookie = "__csrf=test-token";
   mockFetch = vi.fn();
   globalThis.fetch = mockFetch;
 });
@@ -23,81 +23,104 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("AdminLoginForm", () => {
-  it("renders password input and submit button", () => {
+  it("renders email input and submit button", () => {
     render(<AdminLoginForm />);
-    expect(screen.getByLabelText(/password/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /enter admin panel/i })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/enter your email/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /send magic link/i })).toBeInTheDocument();
   });
 
-  it("successful login redirects to /admin", async () => {
-    mockFetch.mockResolvedValue({ ok: true } as Response);
-    const user = userEvent.setup();
-    render(<AdminLoginForm />);
-
-    await user.type(screen.getByLabelText(/password/i), "correct-password");
-    await user.click(screen.getByRole("button", { name: /enter admin panel/i }));
-
-    expect(await screen.findByRole("button", { name: /enter admin panel/i })).toBeInTheDocument();
-    expect(mockRouterPush).toHaveBeenCalledWith("/admin");
-  });
-
-  it("incorrect password shows error message", async () => {
+  it("shows success state after sending magic link", async () => {
     mockFetch.mockResolvedValue({
-      ok: false,
-      json: async () => ({ error: "Incorrect password." }),
+      ok: true,
+      json: async () => ({
+        success: true,
+        message: "If your email is registered, check your inbox.",
+      }),
     } as unknown as Response);
     const user = userEvent.setup();
     render(<AdminLoginForm />);
 
-    await user.type(screen.getByLabelText(/password/i), "wrong-password");
-    await user.click(screen.getByRole("button", { name: /enter admin panel/i }));
+    await user.type(screen.getByPlaceholderText(/enter your email/i), "admin@test.com");
+    await user.click(screen.getByRole("button", { name: /send magic link/i }));
 
-    expect(await screen.findByText("Incorrect password.")).toBeInTheDocument();
-    expect(mockRouterPush).not.toHaveBeenCalled();
+    expect(await screen.findByText(/check your email/i)).toBeInTheDocument();
+    expect(screen.getByText("admin@test.com")).toBeInTheDocument();
   });
 
-  it("network error shows generic error message", async () => {
+  it("shows error on failed request", async () => {
+    mockFetch.mockResolvedValue({
+      ok: false,
+      json: async () => ({ error: "Unable to process request." }),
+    } as unknown as Response);
+    const user = userEvent.setup();
+    render(<AdminLoginForm />);
+
+    await user.type(screen.getByPlaceholderText(/enter your email/i), "admin@test.com");
+    await user.click(screen.getByRole("button", { name: /send magic link/i }));
+
+    expect(await screen.findByText("Unable to process request.")).toBeInTheDocument();
+  });
+
+  it("shows generic error on network failure", async () => {
     mockFetch.mockRejectedValue(new Error("Network failure"));
     const user = userEvent.setup();
     render(<AdminLoginForm />);
 
-    await user.type(screen.getByLabelText(/password/i), "any-password");
-    await user.click(screen.getByRole("button", { name: /enter admin panel/i }));
+    await user.type(screen.getByPlaceholderText(/enter your email/i), "admin@test.com");
+    await user.click(screen.getByRole("button", { name: /send magic link/i }));
 
     expect(await screen.findByText("Something went wrong. Please try again.")).toBeInTheDocument();
-    expect(mockRouterPush).not.toHaveBeenCalled();
   });
 
-  it("button is disabled and shows Verifying... during submission", async () => {
-    // Fetch never resolves so the loading state persists
+  it("button shows Sending... during submission", async () => {
     mockFetch.mockReturnValue(new Promise(() => {}));
     const user = userEvent.setup();
     render(<AdminLoginForm />);
 
-    await user.type(screen.getByLabelText(/password/i), "any-password");
-    await user.click(screen.getByRole("button", { name: /enter admin panel/i }));
+    await user.type(screen.getByPlaceholderText(/enter your email/i), "admin@test.com");
+    await user.click(screen.getByRole("button", { name: /send magic link/i }));
 
-    const btn = await screen.findByRole("button", { name: /verifying/i });
+    const btn = await screen.findByRole("button", { name: /sending/i });
     expect(btn).toBeDisabled();
   });
 
   it("sends CSRF token in request headers", async () => {
-    mockFetch.mockResolvedValue({ ok: true } as Response);
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true }),
+    } as unknown as Response);
     const user = userEvent.setup();
     render(<AdminLoginForm />);
 
-    await user.type(screen.getByLabelText(/password/i), "any-password");
-    await user.click(screen.getByRole("button", { name: /enter admin panel/i }));
+    await user.type(screen.getByPlaceholderText(/enter your email/i), "admin@test.com");
+    await user.click(screen.getByRole("button", { name: /send magic link/i }));
 
-    await screen.findByRole("button", { name: /enter admin panel/i });
+    await screen.findByText(/check your email/i);
 
     expect(mockFetch).toHaveBeenCalledWith(
       "/api/admin/login",
       expect.objectContaining({
         headers: expect.objectContaining({
-          "x-csrf-token": "test-token",
+          "x-csrf-token": "test-csrf-token",
         }),
       })
     );
+  });
+
+  it("allows trying a different email after success", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true }),
+    } as unknown as Response);
+    const user = userEvent.setup();
+    render(<AdminLoginForm />);
+
+    await user.type(screen.getByPlaceholderText(/enter your email/i), "admin@test.com");
+    await user.click(screen.getByRole("button", { name: /send magic link/i }));
+
+    await screen.findByText(/check your email/i);
+    await user.click(screen.getByText(/try a different email/i));
+
+    expect(screen.getByPlaceholderText(/enter your email/i)).toBeInTheDocument();
   });
 });

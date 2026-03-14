@@ -2,9 +2,13 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // --- Mocks ---
 
-const mockVerifyAdminSession = vi.fn<() => Promise<boolean>>();
+const mockVerifyAdminSession = vi.fn();
 vi.mock("../../lib/admin/auth", () => ({
   verifyAdminSession: (...args: unknown[]) => mockVerifyAdminSession(...(args as [])),
+}));
+
+vi.mock("../../lib/admin/audit", () => ({
+  logAdminAction: vi.fn().mockResolvedValue(undefined),
 }));
 
 const mockSupabaseFetch = vi.fn();
@@ -48,13 +52,13 @@ function makePatchRequest(body: unknown) {
 describe("GET /api/admin/survey-status", () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    mockVerifyAdminSession.mockResolvedValue(true);
+    mockVerifyAdminSession.mockResolvedValue({ email: "admin@test.com", role: "admin" });
     mockVerifyCsrf.mockResolvedValue(true);
     mockCheckRateLimit.mockResolvedValue({ allowed: true, remaining: 29, resetAt: new Date() });
   });
 
   it("returns 401 when not authenticated", async () => {
-    mockVerifyAdminSession.mockResolvedValue(false);
+    mockVerifyAdminSession.mockResolvedValue(null);
 
     const res = await GET(makeGetRequest());
     expect(res.status).toBe(401);
@@ -113,13 +117,13 @@ describe("GET /api/admin/survey-status", () => {
 describe("PATCH /api/admin/survey-status", () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    mockVerifyAdminSession.mockResolvedValue(true);
+    mockVerifyAdminSession.mockResolvedValue({ email: "admin@test.com", role: "admin" });
     mockVerifyCsrf.mockResolvedValue(true);
     mockCheckRateLimit.mockResolvedValue({ allowed: true, remaining: 29, resetAt: new Date() });
   });
 
   it("returns 401 when not authenticated", async () => {
-    mockVerifyAdminSession.mockResolvedValue(false);
+    mockVerifyAdminSession.mockResolvedValue(null);
 
     const res = await PATCH(makePatchRequest({ active: true }));
     expect(res.status).toBe(401);
