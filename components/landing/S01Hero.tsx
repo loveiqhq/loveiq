@@ -96,14 +96,14 @@ const S01Hero: FC = () => {
           <h1 className="animate-on-scroll font-serif text-[40px] font-semibold leading-[1.04] tracking-[-0.6px] sm:text-[48px] md:text-[60px] lg:text-[72px] lg:leading-[72px] lg:tracking-[-1.4px]">
             Gain Insights Into Your
           </h1>
-          <div className="animate-on-scroll relative inline-block">
-            <span className="bg-gradient-to-r from-[#ff6a3a] via-[#cf5afb] to-[#7d88ff] bg-clip-text font-serif text-[44px] font-[500] italic leading-[48px] tracking-[-1px] text-transparent sm:text-[56px] sm:leading-[56px] sm:tracking-[-1.4px] lg:text-[72px] lg:leading-[72px] lg:tracking-[-1.8px]">
+          <div className="animate-on-scroll relative inline-block max-w-[341.48px] sm:max-w-none">
+            <span className="bg-gradient-to-r from-[#ff6a3a] via-[#cf5afb] to-[#7d88ff] bg-clip-text font-serif text-[72px] font-[500] italic leading-[72px] tracking-[-1px] text-transparent sm:text-[56px] sm:leading-[56px] sm:tracking-[-1.4px] lg:text-[72px] lg:leading-[72px] lg:tracking-[-1.8px]">
               Sexual Psychology
             </span>
             <span
               aria-hidden
-              className="pointer-events-none absolute bottom-0 right-0 translate-y-full mt-[4px]"
-              style={{ width: "58%" }}
+              className="pointer-events-none absolute inset-x-0 bottom-0"
+              style={{ transform: "translateY(calc(100% + 4px))" }}
             >
               <svg
                 viewBox="0 0 100 24"
@@ -126,7 +126,7 @@ const S01Hero: FC = () => {
         <p className="animate-on-scroll mt-8 max-w-3xl text-lg leading-relaxed text-text-secondary sm:text-xl">
           Grounded in state of the art science &amp; research.{" "}
           <strong className="font-semibold text-white">
-            In just 15 minutes, unlock a freemium personalized report
+            In just 10 minutes, unlock a freemium personalized report
           </strong>{" "}
           decoding your sexual archetype and patterns, so you can upgrade your intimate life with
           clarity
