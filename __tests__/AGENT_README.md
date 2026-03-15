@@ -1,37 +1,13 @@
 # **tests**/
 
-Unit tests (Vitest). Mirrors the source directory structure.
+> For the full file listing, see the **Repo Map** in [CLAUDE.md](../CLAUDE.md).
 
-## What belongs here
+## Purpose
 
-- Unit tests for `lib/` utilities
-- Unit tests for `app/api/` route handlers
-- Unit tests for `proxy.ts` middleware
+Unit tests (Vitest) that mirror the source directory structure: `api/` for route handlers, `components/` for React components, `lib/` for utilities, plus `proxy.test.ts` for middleware.
 
-## What does NOT belong here
+## Key Conventions
 
-- E2E / browser tests → use `e2e/`
-- Load / performance tests → use `load-tests/`
-
-## Subdirectory map
-
-| Directory       | Tests for                  |
-| --------------- | -------------------------- |
-| `api/`          | `app/api/` route handlers  |
-| `components/`   | React component unit tests |
-| `lib/`          | `lib/` utilities           |
-| `proxy.test.ts` | `proxy.ts` middleware      |
-
-## Key files
-
-| File       | Purpose                               |
-| ---------- | ------------------------------------- |
-| `setup.ts` | Vitest global setup (mocks, env vars) |
-
-## Running tests
-
-```bash
-npm test              # run all unit tests once
-npm run test:watch    # watch mode
-npm run test:coverage # with coverage report
-```
+- Run with `npm test` (once), `npm run test:watch` (watch mode), or `npm run test:coverage` (with coverage).
+- `setup.ts` contains global Vitest setup (mocks, env vars). New global mocks go there.
+- Test file paths mirror source paths: e.g., `lib/scoring/engine.ts` is tested in `__tests__/lib/scoring/engine.test.ts`.

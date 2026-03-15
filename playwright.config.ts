@@ -1,7 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 import { loadEnvConfig } from "@next/env";
 
-// Load .env.local so E2E tests can access env vars like ADMIN_PASSWORD
+// Load .env.local so E2E tests can access env vars (e.g. STAGING_PASSWORD)
 loadEnvConfig(process.cwd());
 
 export default defineConfig({

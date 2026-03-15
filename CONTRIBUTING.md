@@ -50,11 +50,12 @@ ci: pin GitHub Actions to SHA
 - Keep error messages generic (no internal details)
 - If modifying CSP headers (`proxy.ts`), test in both dev and production builds
 - See [SECURITY.md](SECURITY.md) for full guidelines
+- See [.github/SECURITY_CHECKLIST.md](.github/SECURITY_CHECKLIST.md) for the developer security checklist
 
 ## PR Checklist
 
 - [ ] `npm run check` passes (lint + test + build)
 - [ ] Changes tested manually in browser
 - [ ] No secrets committed
-- [ ] Security controls preserved
+- [ ] Security controls preserved (see [Security Checklist](.github/SECURITY_CHECKLIST.md))
 - [ ] Documentation updated if needed

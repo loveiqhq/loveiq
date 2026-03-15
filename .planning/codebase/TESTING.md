@@ -1,6 +1,6 @@
 # Testing Patterns
 
-**Last Updated:** 2026-02-15
+> **Last verified:** 2026-03-15 | **Verified against:** vitest.config.ts, playwright.config.ts, **tests**/, e2e/ spec files
 
 ## Test Framework
 

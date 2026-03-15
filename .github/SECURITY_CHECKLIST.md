@@ -125,10 +125,10 @@ When reviewing PRs, pay special attention to:
 - ❌ SQL injection (not applicable - we use REST API)
 - ❌ XSS (dangerouslySetInnerHTML, unescaped user input)
 - ❌ CSRF (missing token verification)
-- ❌ Broken authentication (not applicable - no auth yet)
+- ❌ Broken authentication (admin panel uses Supabase Auth magic links)
 - ❌ Sensitive data exposure (logging secrets, error messages)
 - ❌ XXE (not applicable - no XML parsing)
-- ❌ Broken access control (not applicable - no auth yet)
+- ❌ Broken access control (admin panel uses email allowlist via `admin_users` table)
 - ❌ Security misconfiguration (missing headers, insecure defaults)
 - ❌ Known vulnerable components (outdated dependencies)
 - ❌ Insufficient logging (no security event tracking)
@@ -172,7 +172,6 @@ If you discover a security issue:
 ## Resources
 
 - `SECURITY.md` - Main security guide
-- `SECURITY_SCANNING.md` - Detailed scanning documentation
 - `CLAUDE.md` - Codebase conventions and patterns
 - `.github/workflows/security.yml` - CI/CD security workflow
 

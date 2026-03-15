@@ -269,6 +269,6 @@ If you're using an AI assistant not listed here:
 
 ---
 
-**Last updated:** 2026-02-08
+**Last updated:** 2026-03-15
 **Configuration files:** 7 total (including CLAUDE.md)
 **Status:** ✅ All AI assistants configured

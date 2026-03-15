@@ -1,7 +1,8 @@
 # Codebase Structure
 
+> **Last verified:** 2026-03-15 | **Verified against:** full directory listing of app/, components/, lib/, data/, scripts/
+
 **Analysis Date:** 2025-01-14
-**Last Updated:** 2026-03-05
 
 ## Directory Layout
 
@@ -14,7 +15,25 @@ loveiq-web/
 │   │   ├── survey/route.ts     # Survey submission endpoint
 │   │   ├── health/route.ts     # Health check endpoint
 │   │   ├── staging-login/route.ts   # Staging auth (staging only)
-│   │   └── staging-logout/route.ts  # Staging auth (staging only)
+│   │   ├── staging-logout/route.ts  # Staging auth (staging only)
+│   │   ├── survey-tracking/route.ts # Survey behavior tracking
+│   │   └── admin/                   # Admin panel API routes
+│   │       ├── login/route.ts       # Admin magic link login trigger
+│   │       ├── logout/route.ts      # Admin logout
+│   │       ├── stats/route.ts       # Dashboard analytics
+│   │       ├── submissions/route.ts # Submission list (paginated)
+│   │       ├── submissions/[id]/route.ts # Submission CRUD
+│   │       ├── export/route.ts      # CSV export
+│   │       └── survey-status/route.ts # Survey active/closed toggle
+│   ├── admin/                  # Admin panel pages (Supabase Auth protected)
+│   │   ├── layout.tsx           # Admin shell (sidebar + header)
+│   │   ├── login/page.tsx       # Admin magic link login page
+│   │   ├── page.tsx             # Dashboard
+│   │   ├── submissions/page.tsx # Submission browser
+│   │   ├── submissions/[id]/page.tsx # Submission detail
+│   │   ├── survey-status/page.tsx   # Survey status toggle
+│   │   └── auth/
+│   │       └── callback/route.ts    # Supabase Auth magic link callback
 │   ├── about/                  # About page
 │   ├── waitlist/               # Waitlist standalone page
 │   ├── survey/                 # Survey / intro wizard page
@@ -57,6 +76,15 @@ loveiq-web/
 │   ├── glossary/               # Glossary components
 │   ├── legal/                  # Legal page nav component
 │   ├── survey/                 # Survey / intro wizard components
+│   ├── admin/                  # Admin panel components
+│   │   ├── AdminLoginForm.tsx  # Admin magic link login form
+│   │   ├── AdminSidebar.tsx    # Sidebar navigation
+│   │   ├── AdminHeader.tsx     # Mobile header with hamburger
+│   │   ├── AdminDashboard.tsx  # Dashboard with stats + charts
+│   │   ├── SubmissionBrowser.tsx # Filterable submission list
+│   │   ├── SubmissionDetail.tsx # Single submission view + actions
+│   │   ├── SurveyStatus.tsx    # Survey active/closed toggle
+│   │   └── hooks/useAdminFetch.ts # Generic data fetching hook
 │   └── SmoothScroll.tsx        # Lenis smooth scroll wrapper
 ├── lib/                        # Utilities and helpers
 │   ├── analytics.ts            # GA4 event tracking helpers
@@ -65,6 +93,15 @@ loveiq-web/
 │   ├── circuit-breaker.ts      # Circuit breaker pattern
 │   ├── logger.ts               # pino structured logging
 │   ├── fetch-with-timeout.ts   # Fetch wrapper with timeout
+│   ├── admin/                  # Admin panel utilities
+│   │   ├── auth.ts             # Admin session verification
+│   │   ├── audit.ts            # Admin action audit logging
+│   │   ├── client.ts           # Supabase client factory
+│   │   ├── roles.ts            # Role-based access control
+│   │   ├── supabase.ts         # Supabase fetch helper for admin routes
+│   │   ├── supabase-browser.ts # Browser-side Supabase client
+│   │   ├── supabase-middleware.ts # Middleware Supabase client (cookie refresh)
+│   │   └── supabase-server.ts  # Server-side Supabase client (RSC/API routes)
 │   └── emails/                 # Email templates
 │       └── waitlist.ts         # Waitlist confirmation email
 ├── data/                       # Static data files
@@ -131,7 +168,7 @@ loveiq-web/
 
 - Purpose: Reusable UI components organized by page context
 - Contains: React components (`.tsx`)
-- Subdirectories: `landing/` (14 numbered sections + nav/footer), `about/`, `glossary/`, `legal/`, `survey/`
+- Subdirectories: `landing/` (14 numbered sections + nav/footer), `about/`, `glossary/`, `legal/`, `survey/`, `admin/`
 
 **components/landing/**
 
@@ -145,7 +182,7 @@ loveiq-web/
 - Purpose: Shared utilities and non-component code
 - Contains: Helper functions, email templates, security utilities
 - Key files: `analytics.ts`, `csrf.ts`, `ratelimit.ts`, `logger.ts`, `circuit-breaker.ts`, `fetch-with-timeout.ts`
-- Subdirectories: `emails/` (email templates)
+- Subdirectories: `emails/` (email templates), `admin/` (auth, roles, audit, Supabase client helpers)
 
 **data/**
 
@@ -288,5 +325,5 @@ loveiq-web/
 ---
 
 _Structure analysis: 2025-01-14_
-_Last updated: 2026-03-05_
+_Last updated: 2026-03-15_
 _Update when directory structure changes_

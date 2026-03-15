@@ -85,7 +85,6 @@ Enable these in **Settings → Code security and analysis**:
 ## Documentation
 
 - `../SECURITY.md` - Main security guide and incident response
-- `../SECURITY_SCANNING.md` - Detailed scanning documentation
 - `../CLAUDE.md` - Codebase conventions and architecture
 - `SECURITY_CHECKLIST.md` - Developer security checklist
 
@@ -95,5 +94,5 @@ For issues with GitHub workflows:
 
 1. Check workflow logs in Actions tab
 2. Verify repository security settings are enabled
-3. Review `SECURITY_SCANNING.md` for troubleshooting
+3. Review `SECURITY_CHECKLIST.md` for troubleshooting
 4. Contact security team at security@loveiq.org

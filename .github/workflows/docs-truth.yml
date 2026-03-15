@@ -1,0 +1,187 @@
+name: Documentation Truth Check
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "**/*.md"
+      - "package.json"
+      - ".env.example"
+  pull_request:
+    branches: [main]
+    paths:
+      - "**/*.md"
+      - "package.json"
+      - ".env.example"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  docs-truth:
+    name: Documentation Truth
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      # ---------------------------------------------------------------
+      # 1. Check for broken file references in markdown
+      # ---------------------------------------------------------------
+      - name: Check broken markdown links
+        run: |
+          set -euo pipefail
+          ERRFILE=$(mktemp)
+
+          # Find all .md files, excluding dirs that aren't project docs
+          find . -name '*.md' \
+            -not -path './node_modules/*' \
+            -not -path './.agents/*' \
+            -not -path './.git/*' \
+            -not -path './.claude/*' \
+            -print0 | while IFS= read -r -d '' file; do
+
+            dir=$(dirname "$file")
+            clean_file="${file#./}"
+
+            # Helper: check a single link target
+            check_link() {
+              local link="$1"
+              # Strip anchor fragment
+              local path="${link%%#*}"
+
+              # Skip: empty (pure anchor), URLs, mailto, template vars, absolute paths
+              if [ -z "$path" ] || \
+                 [[ "$path" =~ ^https?:// ]] || \
+                 [[ "$path" =~ ^mailto: ]] || \
+                 [[ "$path" =~ ^\{ ]] || \
+                 [[ "$path" =~ ^/ ]]; then
+                return
+              fi
+
+              # Resolve relative to the file's directory
+              local resolved="$dir/$path"
+
+              if [ ! -e "$resolved" ] && [ ! -e "${resolved}.md" ]; then
+                echo "::error file=${clean_file},title=Broken link::${clean_file} references '${link}' but '${resolved#./}' does not exist"
+                echo "1" >> "$ERRFILE"
+              fi
+            }
+
+            # Inline-style links: [text](path)
+            grep -oP '\]\(\K[^)]+(?=\))' "$file" 2>/dev/null | while IFS= read -r link; do
+              check_link "$link"
+            done || true
+
+            # Reference-style links: [text]: path
+            grep -oP '^\[.*\]:\s+\K\S+' "$file" 2>/dev/null | while IFS= read -r link; do
+              check_link "$link"
+            done || true
+
+          done
+
+          TOTAL=$(wc -l < "$ERRFILE" 2>/dev/null | tr -d ' ')
+          rm -f "$ERRFILE"
+
+          if [ "${TOTAL:-0}" -gt 0 ]; then
+            echo ""
+            echo "Found $TOTAL broken file reference(s) in markdown."
+            exit 1
+          fi
+
+          echo "All markdown file references are valid."
+
+      # ---------------------------------------------------------------
+      # 2. Check npm scripts mentioned in CLAUDE.md exist in package.json
+      # ---------------------------------------------------------------
+      - name: Check documented npm scripts
+        run: |
+          set -euo pipefail
+
+          if [ ! -f CLAUDE.md ] || [ ! -f package.json ]; then
+            echo "CLAUDE.md or package.json not found, skipping."
+            exit 0
+          fi
+
+          ERRORS=0
+
+          # Extract "npm run <name>" script names from CLAUDE.md
+          RUN_SCRIPTS=$(grep -oP 'npm\s+run\s+\K[a-zA-Z0-9:_-]+' CLAUDE.md | sort -u)
+
+          # Extract bare "npm test" / "npm start" (these map to package.json scripts)
+          BARE_SCRIPTS=$(grep -oP 'npm\s+(test|start)\b' CLAUDE.md | awk '{print $2}' | sort -u)
+
+          # Combine and deduplicate
+          DOCUMENTED=$(printf '%s\n%s\n' "$RUN_SCRIPTS" "$BARE_SCRIPTS" | sort -u | grep -v '^$' || true)
+
+          # Get scripts defined in package.json
+          ACTUAL=$(node -e "
+            const scripts = Object.keys(require('./package.json').scripts || {});
+            scripts.forEach(s => console.log(s));
+          " | sort -u)
+
+          for script in $DOCUMENTED; do
+            # Skip npm built-in commands that don't need a package.json entry
+            if [[ "$script" == "install" ]] || [[ "$script" == "ci" ]]; then
+              continue
+            fi
+
+            if ! echo "$ACTUAL" | grep -qx "$script"; then
+              echo "::error file=CLAUDE.md,title=Missing npm script::CLAUDE.md references 'npm run $script' but it is not defined in package.json"
+              ERRORS=$((ERRORS + 1))
+            fi
+          done
+
+          if [ "$ERRORS" -gt 0 ]; then
+            echo ""
+            echo "Found $ERRORS npm script(s) documented in CLAUDE.md but missing from package.json."
+            exit 1
+          fi
+
+          echo "All documented npm scripts exist in package.json."
+
+      # ---------------------------------------------------------------
+      # 3. Check env var consistency between CLAUDE.md and .env.example
+      # ---------------------------------------------------------------
+      - name: Check env var consistency
+        run: |
+          set -euo pipefail
+
+          if [ ! -f CLAUDE.md ] || [ ! -f .env.example ]; then
+            echo "CLAUDE.md or .env.example not found, skipping."
+            exit 0
+          fi
+
+          ERRORS=0
+
+          # Extract env vars from the CLAUDE.md table rows: | `VAR_NAME` |
+          CLAUDE_VARS=$(grep -oP '^\|\s*`\K[A-Z][A-Z0-9_]+(?=`)' CLAUDE.md | sort -u)
+
+          # Extract env vars from .env.example (VAR=value lines, ignoring comments)
+          ENV_VARS=$(grep -oP '^[A-Z][A-Z0-9_]+(?==)' .env.example | sort -u)
+
+          # Every var documented in CLAUDE.md must exist in .env.example
+          for var in $CLAUDE_VARS; do
+            if ! echo "$ENV_VARS" | grep -qx "$var"; then
+              echo "::error file=CLAUDE.md,title=Missing from .env.example::CLAUDE.md documents '$var' but it is not in .env.example"
+              ERRORS=$((ERRORS + 1))
+            fi
+          done
+
+          # Every var in .env.example should be documented in CLAUDE.md (warning only)
+          for var in $ENV_VARS; do
+            if ! echo "$CLAUDE_VARS" | grep -qx "$var"; then
+              echo "::warning file=.env.example,title=Undocumented env var::.env.example defines '$var' but it is not documented in CLAUDE.md's environment variables table"
+            fi
+          done
+
+          if [ "$ERRORS" -gt 0 ]; then
+            echo ""
+            echo "Found $ERRORS env var(s) in CLAUDE.md that are missing from .env.example."
+            exit 1
+          fi
+
+          echo "Environment variable documentation is consistent."

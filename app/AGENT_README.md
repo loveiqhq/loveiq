@@ -1,38 +1,13 @@
 # app/
 
-Next.js App Router directory — all pages and API routes live here.
+> For the full file listing, see the **Repo Map** in [CLAUDE.md](../CLAUDE.md).
 
-## What belongs here
+## Purpose
 
-- Pages: `page.tsx` files defining URL routes
-- API routes: `app/api/<name>/route.ts`
-- Root layout: `layout.tsx`, `globals.css`
-- Next.js special files: `robots.ts`, `sitemap.ts`
+Next.js App Router directory containing all pages (`page.tsx`) and API routes (`app/api/<name>/route.ts`), plus root layout, global CSS, and Next.js special files (`robots.ts`, `sitemap.ts`).
 
-## What does NOT belong here
+## Key Conventions
 
-- Reusable UI components → use `components/`
-- Business logic / utilities → use `lib/`
-- Static assets → use `public/`
-- Data files → use `data/`
-
-## Key entry files
-
-| File                    | Purpose                                                 |
-| ----------------------- | ------------------------------------------------------- |
-| `page.tsx`              | Landing page entry point                                |
-| `layout.tsx`            | Root layout (fonts, metadata, scripts)                  |
-| `globals.css`           | Global CSS variables and Tailwind base                  |
-| `api/waitlist/route.ts` | Waitlist signup endpoint (reference for new API routes) |
-| `api/contact/route.ts`  | Contact form endpoint                                   |
-| `api/health/route.ts`   | Health check endpoint                                   |
-
-## Route structure
-
-- `/` → `page.tsx`
-- `/about` → `about/page.tsx`
-- `/glossary` → `glossary/page.tsx`
-- `/glossary/[slug]` → `glossary/[slug]/page.tsx`
-- `/waitlist` → `waitlist/page.tsx`
-- `/trust-zone` → `trust-zone/page.tsx`
-- Legal pages: `privacy-policy/`, `terms-of-service/`, `cookies/`, `imprint/`
+- Pages are thin wrappers that import their content from `components/<page-name>/`. Keep business logic and UI out of `app/` files.
+- All new API routes must include CSRF verification, rate limiting, and Zod validation. Use `app/api/waitlist/route.ts` as the canonical reference.
+- Legal pages follow a flat structure: `app/{legal-slug}/page.tsx`.

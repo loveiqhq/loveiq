@@ -1,30 +1,12 @@
 # load-tests/
 
-Load and performance tests using k6.
+> For the full file listing, see the **Repo Map** in [CLAUDE.md](../CLAUDE.md).
 
-## What belongs here
+## Purpose
 
-- k6 load test scripts
-- Performance benchmarks
+Load and performance tests using k6. Requires k6 installed locally or runs in CI via `.github/workflows/load-test.yml`.
 
-## What does NOT belong here
+## Key Conventions
 
-- Unit tests → use `__tests__/`
-- E2E browser tests → use `e2e/`
-
-## Key files
-
-| File       | Purpose                              |
-| ---------- | ------------------------------------ |
-| `load.js`  | Standard load test (gradual ramp-up) |
-| `smoke.js` | Minimal smoke load test (single VU)  |
-| `spike.js` | Spike test (sudden traffic surge)    |
-
-## Running tests
-
-```bash
-k6 run load-tests/load.js
-k6 run load-tests/smoke.js
-```
-
-> Requires k6 installed. Load tests run in CI via `.github/workflows/load-test.yml`.
+- Three test profiles: `load.js` (gradual ramp-up), `smoke.js` (single VU sanity check), `spike.js` (sudden traffic surge).
+- Run locally with `k6 run load-tests/<script>.js`.

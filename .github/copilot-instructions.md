@@ -16,7 +16,7 @@ Before suggesting code, understand:
 **Type:** Next.js 16 App Router marketing site
 **Stack:** TypeScript, React, Tailwind CSS, Supabase, Resend
 **Purpose:** Pre-launch marketing with waitlist/contact forms
-**Auth:** None (no user authentication)
+**Auth:** No end-user auth; admin panel uses Supabase Auth (magic links)
 
 ## 🔒 Security Requirements (Critical)
 

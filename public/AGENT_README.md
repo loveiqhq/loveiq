@@ -1,35 +1,13 @@
 # public/
 
-Static assets served directly at the root URL path. Not processed by Next.js bundler.
+> For the full file listing, see the **Repo Map** in [CLAUDE.md](../CLAUDE.md).
 
-## What belongs here
+## Purpose
 
-- Images (JPG, PNG, WebP, SVG)
-- Videos (MP4)
-- Favicons and app icons
-- Robots/sitemap files (if static; dynamic ones are in `app/`)
+Static assets served directly at the root URL path, not processed by the Next.js bundler. Includes images, videos, favicons, and app icons.
 
-## What does NOT belong here
+## Key Conventions
 
-- React components → use `components/`
-- TypeScript/JavaScript code → use `app/` or `lib/`
-- Data files → use `data/`
-
-## Subdirectory map
-
-| Directory   | Contents                  |
-| ----------- | ------------------------- |
-| `about/`    | About page images         |
-| `academic/` | Academic/research imagery |
-| `carousel/` | Carousel section images   |
-| `images/`   | General site images       |
-| `privacy/`  | Privacy-related assets    |
-
-## Key files
-
-| File                     | URL path                                       |
-| ------------------------ | ---------------------------------------------- |
-| `favicon.svg`            | `/favicon.svg`                                 |
-| `apple-touch-icon.png`   | `/apple-touch-icon.png`                        |
-| `couple-hero.mp4`        | `/couple-hero.mp4` (hero video, desktop)       |
-| `couple-hero-mobile.mp4` | `/couple-hero-mobile.mp4` (hero video, mobile) |
+- Assets are organized by page/feature: `about/`, `academic/`, `carousel/`, `images/`, `privacy/`.
+- Hero videos exist in two variants: `couple-hero.mp4` (desktop) and `couple-hero-mobile.mp4` (mobile).
+- Favicon/icon assets: `favicon.svg` (browser tab), `apple-touch-icon.png` (iOS home screen), `images/LoveiqLogo.svg` (schema.org logo).

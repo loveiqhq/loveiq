@@ -1,7 +1,8 @@
 # Codebase Concerns
 
+> **Last verified:** 2026-03-15 | **Verified against:** implemented features (admin dashboard, Supabase Auth), open issues
+
 **Analysis Date:** 2025-01-14
-**Last Updated:** 2026-03-05
 
 ## Tech Debt
 
@@ -58,6 +59,13 @@
 
 - Was: Unusual dependency with unclear purpose
 - Fix: Removed from `package.json`
+
+**No admin dashboard:** RESOLVED (2026-03)
+
+- Was: Cannot view waitlist signups without database access
+- Fix: Full admin panel at `/admin/*` with dashboard, submission browser, CSV export, and survey status toggle
+- Auth: Supabase Auth magic link emails with `admin_users` email allowlist table
+- Evidence: `app/admin/`, `app/api/admin/`, `lib/admin/`, `components/admin/`
 
 ## Known Bugs
 
@@ -130,12 +138,13 @@
 
 ## Missing Critical Features
 
-**No user authentication:**
+**No end-user authentication:**
 
 - Problem: Cannot identify returning waitlist members
 - Current workaround: Email-based identification only
 - Blocks: Member area, personalized content
 - Implementation complexity: Medium (Supabase Auth available)
+- Note: Admin panel now has authentication via Supabase Auth magic links (see resolved item below)
 
 **No email verification:**
 
@@ -144,13 +153,6 @@
 - Blocks: Clean email list for launches
 - Implementation complexity: Low (add verification flow)
 
-**No admin dashboard:**
-
-- Problem: Cannot view waitlist signups without database access
-- Current workaround: Direct Supabase dashboard access
-- Blocks: Non-technical team members viewing signups
-- Implementation complexity: Medium
-
 ## Documentation Gaps
 
 **None critical** — `CLAUDE.md`, `SECURITY.md`, `DEVELOPMENT.md`, `CONTRIBUTING.md`, and `docs/api.md` cover the main areas.
@@ -158,5 +160,5 @@
 ---
 
 _Concerns audit: 2025-01-14_
-_Last updated: 2026-03-05_
+_Last updated: 2026-03-15_
 _Update as issues are fixed or new ones discovered_

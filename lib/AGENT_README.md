@@ -1,36 +1,12 @@
 # lib/
 
-Runtime utilities and server-side logic shared across API routes and components.
+> For the full file listing, see the **Repo Map** in [CLAUDE.md](../CLAUDE.md).
 
-## What belongs here
+## Purpose
 
-- Security utilities (CSRF, rate limiting)
-- External service integrations (email sending, analytics)
-- Shared fetch helpers
-- Email templates
+Runtime utilities and server-side logic shared across API routes and components, including security (CSRF, rate limiting), external service integrations, email templates, and the scoring engine.
 
-## What does NOT belong here
+## Key Conventions
 
-- Large static data files → use `data/` (e.g., glossary-data.ts is in `data/`)
-- React components → use `components/`
-- Page/route definitions → use `app/`
-
-## Key files
-
-| File                    | Purpose                                   |
-| ----------------------- | ----------------------------------------- |
-| `csrf.ts`               | CSRF token generation and verification    |
-| `ratelimit.ts`          | IP-based rate limiting (Supabase-backed)  |
-| `analytics.ts`          | GA4 event tracking helpers (client-side)  |
-| `fetch-with-timeout.ts` | Fetch wrapper with configurable timeout   |
-| `emails/waitlist.ts`    | Waitlist confirmation email HTML template |
-
-## Usage pattern
-
-```typescript
-import { verifyCsrfToken } from "@/lib/csrf";
-import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
-import { trackEvent } from "@/lib/analytics";
-```
-
-All API routes must use `csrf.ts` and `ratelimit.ts`. See `app/api/waitlist/route.ts` as the canonical reference implementation.
+- All Supabase access is via REST API -- no direct database client. See `admin/supabase.ts` for the fetch helper pattern.
+- `lib/scoring/` is the V3 archetype scoring engine. Its config is auto-generated from CSVs in `data/scoring-config/` via `node scripts/update-scoring-config.js`. Do not hand-edit `data/scoring-config.ts`.

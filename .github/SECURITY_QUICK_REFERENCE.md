@@ -166,13 +166,12 @@ npx @cyclonedx/cyclonedx-npm --output-file sbom.json
 
 ## 📚 Documentation Links
 
-| Need to...             | Read                       |
-| ---------------------- | -------------------------- |
-| Enable GitHub features | `GITHUB_SECURITY_SETUP.md` |
-| Understand scanning    | `SECURITY_SCANNING.md`     |
-| Follow best practices  | `SECURITY_CHECKLIST.md`    |
-| Review security policy | `SECURITY.md`              |
-| Understand codebase    | `CLAUDE.md`                |
+| Need to...             | Read                    |
+| ---------------------- | ----------------------- |
+| Enable GitHub features | `.github/README.md`     |
+| Follow best practices  | `SECURITY_CHECKLIST.md` |
+| Review security policy | `SECURITY.md`           |
+| Understand codebase    | `CLAUDE.md`             |
 
 ---
 

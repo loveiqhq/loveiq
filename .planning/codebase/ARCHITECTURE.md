@@ -1,7 +1,8 @@
 # Architecture
 
+> **Last verified:** 2026-03-15 | **Verified against:** app/, lib/, components/ directory structure, package.json dependencies, admin auth flow
+
 **Analysis Date:** 2025-01-14
-**Last Updated:** 2026-03-05
 
 ## Pattern Overview
 
@@ -13,7 +14,7 @@
 - Server-side rendering for pages
 - Client components for interactivity
 - API routes for form handling (waitlist, contact, survey) and staging auth
-- No persistent user sessions or authentication
+- No end-user authentication; admin panel uses Supabase Auth magic links with `admin_users` email allowlist
 - CSRF protection via double-submit cookie pattern
 - Supabase-backed rate limiting on all form endpoints
 
@@ -32,7 +33,7 @@
 - Purpose: Reusable UI components organized by page
 - Contains: React components (Server + Client)
 - Location: `components/` directory
-- Subdirectories: `landing/`, `about/`, `glossary/`, `legal/`, `survey/`, `trust-zone/`, `staging/`, `not-found/`, `waitlist/`
+- Subdirectories: `landing/`, `about/`, `glossary/`, `legal/`, `survey/`, `trust-zone/`, `staging/`, `not-found/`, `waitlist/`, `admin/`
 - Depends on: CSS custom properties (globals.css), Tailwind CSS
 - Used by: Pages
 
@@ -47,9 +48,10 @@
 **Library Layer:**
 
 - Purpose: Shared utilities and helpers
-- Contains: Analytics, CSRF, rate limiting, circuit breaker, logging, email templates
+- Contains: Analytics, CSRF, rate limiting, circuit breaker, logging, email templates, admin auth/roles
 - Location: `lib/` directory
 - Key files: `analytics.ts`, `csrf.ts`, `ratelimit.ts`, `circuit-breaker.ts`, `logger.ts`, `fetch-with-timeout.ts`
+- Subdirectories: `admin/` (auth, roles, audit, Supabase client helpers), `emails/`
 - Depends on: External APIs, Supabase
 - Used by: Components, API routes, middleware
 
@@ -161,6 +163,11 @@
 - `/glossary/[slug]` - `app/glossary/[slug]/page.tsx` → Glossary term
 - `/trust-zone` - `app/trust-zone/page.tsx`
 - `/login` - `app/login/page.tsx` → Staging login
+- `/admin` - `app/admin/page.tsx` → Admin dashboard (Supabase Auth protected)
+- `/admin/login` - `app/admin/login/page.tsx` → Admin magic link login
+- `/admin/submissions` - `app/admin/submissions/page.tsx` → Submission browser
+- `/admin/submissions/[id]` - `app/admin/submissions/[id]/page.tsx` → Submission detail
+- `/admin/survey-status` - `app/admin/survey-status/page.tsx` → Survey toggle
 - `/privacy-policy`, `/terms-of-use`, `/terms-and-conditions`, `/medical-disclaimer`, `/digital-content-terms`, `/cookies`, `/imprint` - Legal pages
 
 **API Routes:**
@@ -171,6 +178,8 @@
 - `/api/health` - `app/api/health/route.ts`
 - `/api/staging-login` - `app/api/staging-login/route.ts` (staging only)
 - `/api/staging-logout` - `app/api/staging-logout/route.ts` (staging only)
+- `/api/admin/*` - Admin API routes (login, logout, stats, submissions, export, survey-status)
+- `/admin/auth/callback` - `app/admin/auth/callback/route.ts` (Supabase Auth magic link callback)
 
 **SEO Routes:**
 
@@ -223,5 +232,5 @@
 ---
 
 _Architecture analysis: 2025-01-14_
-_Last updated: 2026-03-05_
+_Last updated: 2026-03-15_
 _Update when major patterns change_

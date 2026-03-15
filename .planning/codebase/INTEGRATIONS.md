@@ -1,7 +1,8 @@
 # External Integrations
 
+> **Last verified:** 2026-03-15 | **Verified against:** API routes, lib/ utilities, .env.example, Supabase migrations
+
 **Analysis Date:** 2025-01-14
-**Last Updated:** 2026-03-05
 
 ## APIs & External Services
 
@@ -41,9 +42,9 @@
 - Supabase PostgreSQL
   - Connection: REST API via `SUPABASE_URL` env var
   - Auth: Service role key in `SUPABASE_SERVICE_ROLE_KEY` env var
-  - Tables: `waitlist_user` (waitlist), `rate_limits` (rate limiting)
-  - Used in: `app/api/waitlist/route.ts`, `lib/ratelimit.ts`
-  - Note: Direct REST API calls, no ORM
+  - Tables: `waitlist_user` (waitlist), `rate_limits` (rate limiting), `admin_users` (admin email allowlist), `scoring_result` (survey scoring)
+  - Used in: `app/api/waitlist/route.ts`, `lib/ratelimit.ts`, `lib/admin/supabase.ts`
+  - Note: Direct REST API calls, no ORM; also used via `@supabase/supabase-js` + `@supabase/ssr` for admin auth
 
 **File Storage:**
 
@@ -55,15 +56,30 @@
 
 ## Authentication & Identity
 
-**Auth Provider:**
+**Admin Auth:**
 
-- Not detected (no user authentication system)
+- Supabase Auth - Magic link email authentication for admin panel
+  - SDK/Client: `@supabase/supabase-js` + `@supabase/ssr`
+  - Flow: Admin enters email → magic link sent → callback at `/admin/auth/callback` → session cookie set
+  - Access control: `admin_users` table in Supabase acts as email allowlist
+  - Session management: Server-side via `@supabase/ssr` cookie helpers (`lib/admin/supabase-server.ts`, `lib/admin/supabase-middleware.ts`)
+  - Client-side: `lib/admin/supabase-browser.ts` for browser Supabase client
+  - Role support: `lib/admin/roles.ts` (role-based access control)
+  - Audit logging: `lib/admin/audit.ts`
+  - Used in: `app/admin/`, `app/api/admin/`, `lib/admin/`
+
+**End-User Auth:**
+
+- None (no end-user authentication system)
 - Site is marketing/landing page only
+
+**Staging Auth:**
+
 - Staging environment uses basic password auth (`app/api/staging-login/route.ts`)
 
 **OAuth Integrations:**
 
-- Not applicable
+- Not applicable (magic links are passwordless, not OAuth)
 
 ## Monitoring & Observability
 
@@ -148,5 +164,5 @@ Content Security Policy in `proxy.ts` allows:
 ---
 
 _Integration audit: 2025-01-14_
-_Last updated: 2026-03-05_
+_Last updated: 2026-03-15_
 _Update when adding/removing external services_

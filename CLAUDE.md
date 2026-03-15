@@ -9,6 +9,7 @@ npm install          # Install dependencies
 npm run dev          # Start dev server at http://localhost:3000
 npm run build        # Production build
 npm run lint         # Run ESLint
+npm test             # Run unit tests once (Vitest)
 npm run start        # Run production build locally
 npm run analyze      # Bundle size analysis (opens visual treemap)
 npm run check        # Lint + test + build (full CI check)
@@ -31,16 +32,17 @@ loveiq-web/
 │   │   ├── staging-logout/route.ts  # Staging environment auth
 │   │   ├── survey-tracking/route.ts # Survey behavior tracking → Supabase
 │   │   └── admin/                   # Admin panel API routes
-│   │       ├── login/route.ts       # Admin login (ADMIN_PASSWORD)
+│   │       ├── login/route.ts       # Admin login (magic link via Supabase Auth)
 │   │       ├── logout/route.ts      # Admin logout
 │   │       ├── stats/route.ts       # Dashboard analytics
 │   │       ├── submissions/route.ts # Submission list (paginated)
 │   │       ├── submissions/[id]/route.ts # Submission CRUD (GET/PATCH/DELETE)
 │   │       ├── export/route.ts      # CSV export
 │   │       └── survey-status/route.ts # Survey active/closed toggle
-│   ├── admin/                   # Admin panel pages (password-protected)
+│   ├── admin/                   # Admin panel pages (Supabase Auth-protected)
+│   │   ├── auth/callback/route.ts # Magic link callback handler
 │   │   ├── layout.tsx           # Admin shell (sidebar + header)
-│   │   ├── login/page.tsx       # Admin login page
+│   │   ├── login/page.tsx       # Admin login page (email + magic link)
 │   │   ├── page.tsx             # Dashboard
 │   │   ├── submissions/page.tsx # Submission browser
 │   │   ├── submissions/[id]/page.tsx # Submission detail
@@ -97,15 +99,24 @@ loveiq-web/
 │   ├── fetch-with-timeout.ts   # Fetch wrapper with timeout
 │   ├── admin/
 │   │   ├── auth.ts             # Admin session verification
-│   │   └── supabase.ts         # Supabase fetch helper for admin routes
+│   │   ├── audit.ts            # Admin action audit logging
+│   │   ├── client.ts           # Client-side admin utilities
+│   │   ├── roles.ts            # Role management
+│   │   ├── supabase.ts         # Supabase fetch helper for admin routes
+│   │   ├── supabase-browser.ts # Browser-side Supabase client
+│   │   ├── supabase-middleware.ts # Middleware Supabase client
+│   │   └── supabase-server.ts  # Server-side Supabase client
 │   └── emails/
+│       ├── admin-magic-link.ts # Admin magic link email template
 │       └── waitlist.ts         # Waitlist confirmation email template
 ├── data/
 │   ├── glossary-data.ts        # Auto-generated glossary terms (688KB, from CSV)
 │   ├── glossary-source.csv     # Source CSV; regenerate via `node scripts/update-glossary.js`
 │   ├── survey-data.ts          # Survey questions and structure
 │   ├── survey-source.csv       # Source CSV for survey questions
-│   └── countries.ts            # Country list for survey forms
+│   ├── countries.ts            # Country list for survey forms
+│   ├── scoring-config.ts       # Auto-generated scoring config (from CSVs)
+│   └── scoring-config/         # Source CSVs for archetype scoring (12 files)
 ├── scripts/                    # Build/data scripts (update-glossary.js, update-survey.js, etc.)
 ├── public/                     # Static assets (images, videos)
 ├── proxy.ts                    # Middleware: CSP headers, CSRF cookies, security logging
@@ -129,7 +140,7 @@ loveiq-web/
 
 **Type:** Static marketing site with API routes (Next.js 16 App Router)
 
-**No user authentication.** This is a pre-launch marketing site with waitlist collection.
+**No end-user authentication.** This is a pre-launch marketing site with waitlist collection. The admin panel (`/admin/*`) uses Supabase Auth with magic link emails; see `admin_users` table for the email allowlist.
 
 ### Data Flow
 
@@ -138,12 +149,12 @@ loveiq-web/
 3. **Contact Form:** Form → reCAPTCHA → CSRF check → Rate limit → Zod validation → Resend email → Slack notification
 4. **Survey Submission:** Form → CSRF check → Rate limit → Zod validation → Honeypot check → Email cooldown → Supabase RPC → Slack notification
 5. **Survey Tracking:** Question transition → Buffer events → Flush batch → CSRF check → Rate limit → Zod validation → Supabase insert
-6. **Admin Panel:** `/admin/*` → Middleware gate (ADMIN_PASSWORD cookie) → API routes with session + CSRF + rate limit → Supabase queries
+6. **Admin Panel:** `/admin/*` → Supabase Auth middleware gate (magic link session) → API routes with session + CSRF + rate limit → Supabase queries
 
 ### Key Boundaries
 
 - **Server-only secrets:** Supabase service key, Resend API key, reCAPTCHA secret, Slack webhooks
-- **Client-safe:** Only `NEXT_PUBLIC_*` vars (site URL, reCAPTCHA site key)
+- **Client-safe:** Only `NEXT_PUBLIC_*` vars (site URL, reCAPTCHA site key, Supabase URL + anon key)
 - **No direct DB client:** All Supabase access via REST API in API routes
 
 ---
@@ -166,7 +177,8 @@ Copy `.env.example` to `.env.local` and fill values:
 | `SLACK_CONTACT_WEBHOOK_URL`      | No          | Slack notifications for contact form                     |
 | `SLACK_SURVEY_WEBHOOK_URL`       | No          | Slack notifications for survey submissions               |
 | `STAGING_PASSWORD`               | For staging | Password gate for staging deployment                     |
-| `ADMIN_PASSWORD`                 | For admin   | Password gate for admin panel (`/admin/*`)               |
+| `NEXT_PUBLIC_SUPABASE_URL`       | For admin   | Supabase project URL (browser-safe, for admin auth SDK)  |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY`  | For admin   | Supabase anon key (browser-safe, for admin auth SDK)     |
 | `CONTACT_TO_EMAIL`               | For contact | Contact form recipient                                   |
 
 **The site renders without env vars.** Forms will fail gracefully with error messages.

@@ -1,21 +1,7 @@
 # docs/
 
-Human-readable documentation for developers and integrators.
+> For the full file listing, see the **Repo Map** in [CLAUDE.md](../CLAUDE.md).
 
-## What belongs here
+## Purpose
 
-- API reference documentation
-- Integration guides
-- Developer-facing prose docs
-
-## What does NOT belong here
-
-- Architecture decisions and planning artifacts → use `.planning/`
-- CI/CD configuration → use `.github/`
-- Machine-targeted agent docs → use `AGENT_README.md` files per directory
-
-## Key files
-
-| File     | Purpose                              |
-| -------- | ------------------------------------ |
-| `api.md` | API endpoint reference documentation |
+Human-readable developer documentation (API references, integration guides). Architecture decisions and planning artifacts live in `.planning/` instead.

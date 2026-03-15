@@ -119,6 +119,24 @@ Submit a completed survey.
 | 503    | `{ "error": "Service temporarily unavailable." }` | Circuit breaker open                    |
 | 500    | `{ "error": "Unable to process request." }`       | Supabase RPC error                      |
 
+## POST /api/survey-tracking
+
+Track survey behavior events (question transitions, time spent).
+
+**Rate limit:** 10 requests/minute per IP.
+
+**Request body:** Array of tracking events (question views, transitions, timing).
+
+**Responses:**
+
+| Status | Body                                        | Meaning                       |
+| ------ | ------------------------------------------- | ----------------------------- |
+| 200    | `{ "success": true }`                       | Events recorded               |
+| 400    | `{ "error": "Invalid input" }`              | Validation failed             |
+| 403    | `{ "error": "Invalid request." }`           | CSRF token missing or invalid |
+| 429    | `{ "error": "Please try again later." }`    | Rate limited                  |
+| 500    | `{ "error": "Unable to process request." }` | Server error                  |
+
 ## GET /api/health
 
 Health check endpoint.
@@ -128,3 +146,59 @@ Health check endpoint.
 ```json
 { "ok": true }
 ```
+
+## Admin API Routes
+
+All admin routes require an active Supabase Auth session (magic link authentication). Requests without a valid session return 401.
+
+### POST /api/admin/login
+
+Request a magic link email for admin login.
+
+**Request body:**
+
+```json
+{ "email": "admin@example.com" }
+```
+
+**Responses:**
+
+| Status | Body                                        | Meaning                            |
+| ------ | ------------------------------------------- | ---------------------------------- |
+| 200    | `{ "success": true }`                       | Magic link email sent              |
+| 400    | `{ "error": "..." }`                        | Invalid email                      |
+| 403    | `{ "error": "..." }`                        | Email not in admin_users allowlist |
+| 429    | `{ "error": "Please try again later." }`    | Rate limited                       |
+| 500    | `{ "error": "Unable to process request." }` | Server error                       |
+
+### POST /api/admin/logout
+
+End the admin session.
+
+### GET /api/admin/stats
+
+Dashboard analytics (total submissions, time-range stats, charts).
+
+### GET /api/admin/submissions
+
+Paginated submission list with optional filters.
+
+### GET /api/admin/submissions/[id]
+
+Single submission detail.
+
+### PATCH /api/admin/submissions/[id]
+
+Update submission metadata (status, notes).
+
+### DELETE /api/admin/submissions/[id]
+
+Delete a submission.
+
+### POST /api/admin/export
+
+Export submissions as CSV.
+
+### POST /api/admin/survey-status
+
+Toggle survey active/closed state.

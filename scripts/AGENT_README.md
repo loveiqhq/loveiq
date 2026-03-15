@@ -1,26 +1,12 @@
 # scripts/
 
-One-off and maintenance scripts (Node.js). Not part of the application bundle.
+> For the full file listing, see the **Repo Map** in [CLAUDE.md](../CLAUDE.md).
 
-## What belongs here
+## Purpose
 
-- Data generation scripts
-- Database migration helpers
-- Build-time tooling scripts
+One-off Node.js scripts for data generation and database tooling. Not part of the application bundle.
 
-## What does NOT belong here
+## Key Conventions
 
-- Application code → use `app/` or `lib/`
-- Test files → use `__tests__/` or `e2e/`
-
-## Key files
-
-| File                 | Purpose                                                                  |
-| -------------------- | ------------------------------------------------------------------------ |
-| `update-glossary.js` | Reads `data/glossary-source.csv`, writes updated `data/glossary-data.ts` |
-
-## Running scripts
-
-```bash
-node scripts/update-glossary.js   # regenerate glossary data from CSV
-```
+- All data-generation scripts read CSV sources from `data/` and write TypeScript files back to `data/`. They are idempotent and safe to re-run.
+- Scripts use plain Node.js (no TypeScript compilation required). Run with `node scripts/<name>.js`.

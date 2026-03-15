@@ -1,29 +1,20 @@
 # data/
 
-Static data assets for the LoveIQ website.
+> For the full file listing, see the **Repo Map** in [CLAUDE.md](../CLAUDE.md).
 
-## What belongs here
+## Purpose
 
-- Large static datasets generated from external sources (CSV, JSON, etc.)
-- Generated TypeScript data files that are not runtime logic
+Static data assets (large generated TypeScript files and their source CSVs) consumed by the application at build time and runtime.
 
-## What does NOT belong here
+## Key Conventions
 
-- Runtime utilities or helper functions → use `lib/`
-- API route logic → use `app/api/`
-- Component code → use `components/`
-
-## Key files
-
-| File                  | Purpose                                                                         |
-| --------------------- | ------------------------------------------------------------------------------- |
-| `glossary-data.ts`    | Auto-generated glossary term data (688KB, ~12k lines)                           |
-| `glossary-source.csv` | Source CSV for glossary terms; regenerate via `node scripts/update-glossary.js` |
-
-## Regenerating glossary data
+- **Auto-generated files must NOT be hand-edited.** Regenerate from their CSV sources using the scripts below:
 
 ```bash
-node scripts/update-glossary.js
+node scripts/update-glossary.js          # glossary-source.csv -> glossary-data.ts
+node scripts/update-survey.js            # survey-source.csv -> survey-data.ts
+node scripts/update-scoring-config.js    # scoring-config/*.csv -> scoring-config.ts
 ```
 
-This reads `data/glossary-source.csv` and writes the updated `data/glossary-data.ts`.
+- `countries.ts` is the only hand-maintained file in this directory.
+- `scoring-config/` contains the CSV source files for the scoring engine. To add or modify scoring rules, edit the CSVs and regenerate.

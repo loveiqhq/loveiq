@@ -1,25 +1,13 @@
 # supabase/
 
-Supabase project configuration and database migrations.
+> For the full file listing, see the **Repo Map** in [CLAUDE.md](../CLAUDE.md).
 
-## What belongs here
+## Purpose
 
-- SQL migration files (versioned, timestamped)
-- Supabase configuration
+Supabase project configuration and SQL migration files.
 
-## What does NOT belong here
+## Key Conventions
 
-- Application code → use `app/` or `lib/`
-- Seed data or test fixtures → document separately
-
-## Key files
-
-| File                                        | Purpose                    |
-| ------------------------------------------- | -------------------------- |
-| `migrations/20260219000000_rate_limits.sql` | Rate limiting table schema |
-
-## Usage
-
-Migrations are applied via the Supabase dashboard or CLI. The application accesses Supabase exclusively through the REST API in `app/api/` routes — there is no direct database client in the application code.
-
-**Required env vars:** `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (server-only, never expose to client).
+- Migration files are versioned with timestamps (e.g., `20260219000000_rate_limits.sql`). Always use a new timestamped file for schema changes -- never modify existing migrations.
+- Migrations are applied via the Supabase dashboard or CLI, not by the application.
+- The application accesses Supabase exclusively through the REST API -- there is no direct database client. Required env vars: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (server-only).
