@@ -42,7 +42,7 @@ const ChoiceCard: FC<ChoiceCardProps> = ({ label, selected, onClick, multi = fal
 
       {/* Radio circle or Checkbox square — on the right */}
       <span
-        className={`flex shrink-0 items-center justify-center transition-all duration-200 ${
+        className={`flex shrink-0 items-center justify-center transition-[background-color,box-shadow] duration-200 ${
           multi
             ? `h-5 w-5 rounded-[5px] ${
                 selected
@@ -56,7 +56,11 @@ const ChoiceCard: FC<ChoiceCardProps> = ({ label, selected, onClick, multi = fal
               }`
         }`}
       >
-        {selected && <CheckIcon />}
+        <span
+          className={`transition-opacity duration-150 ${selected ? "opacity-100" : "opacity-0"}`}
+        >
+          <CheckIcon />
+        </span>
       </span>
     </button>
   );
