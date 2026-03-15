@@ -98,7 +98,7 @@ const ScaleQuestion: FC<ScaleQuestionProps> = ({ question, value, onChange }) =>
                 className="relative z-10 flex h-[40px] w-[40px] shrink-0 items-center justify-center sm:h-[48px] sm:w-[48px]"
               >
                 <span
-                  className={`flex items-center justify-center rounded-full transition-all duration-200 ${
+                  className={`flex shrink-0 items-center justify-center rounded-full transition-all duration-200 ${
                     isSelected
                       ? "h-[44px] w-[44px] border-2 border-[#a78bfa] bg-[#1a0b2e] shadow-[0_0_15px_rgba(167,139,250,0.3)] sm:h-[53px] sm:w-[53px]"
                       : isBefore
