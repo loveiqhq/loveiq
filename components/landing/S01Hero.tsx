@@ -99,7 +99,7 @@ const S01Hero: FC = () => {
           <div className="animate-on-scroll inline-block">
             <span className="bg-gradient-to-r from-[#ff6a3a] via-[#cf5afb] to-[#7d88ff] bg-clip-text font-serif text-[44px] font-[500] italic leading-[48px] tracking-[-1px] text-transparent sm:text-[56px] sm:leading-[56px] sm:tracking-[-1.4px] lg:text-[72px] lg:leading-[72px] lg:tracking-[-1.8px]">
               Sexual{" "}
-              <span className="relative inline-block">
+              <span className="relative inline">
                 Psychology
                 <span
                   aria-hidden
