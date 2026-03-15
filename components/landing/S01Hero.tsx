@@ -96,26 +96,32 @@ const S01Hero: FC = () => {
           <h1 className="animate-on-scroll font-serif text-[40px] font-semibold leading-[1.04] tracking-[-0.6px] sm:text-[48px] md:text-[60px] lg:text-[72px] lg:leading-[72px] lg:tracking-[-1.4px]">
             Gain Insights Into Your
           </h1>
-          <div className="animate-on-scroll relative inline-block">
+          <div className="animate-on-scroll inline-block">
             <span className="bg-gradient-to-r from-[#ff6a3a] via-[#cf5afb] to-[#7d88ff] bg-clip-text font-serif text-[44px] font-[500] italic leading-[48px] tracking-[-1px] text-transparent sm:text-[56px] sm:leading-[56px] sm:tracking-[-1.4px] lg:text-[72px] lg:leading-[72px] lg:tracking-[-1.8px]">
-              Sexual Psychology
+              Sexual{" "}
+              <span className="relative inline-block">
+                Psychology
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute inset-x-0 top-full mt-[4px]"
+                >
+                  <svg
+                    viewBox="0 0 100 24"
+                    fill="none"
+                    preserveAspectRatio="none"
+                    className="h-[14px] w-full"
+                  >
+                    <path
+                      d="M0 10 C 25 22, 75 22, 100 10"
+                      stroke="#FE6839"
+                      strokeWidth="9"
+                      strokeLinecap="round"
+                      opacity="0.3"
+                    />
+                  </svg>
+                </span>
+              </span>
             </span>
-            <div aria-hidden className="pointer-events-none absolute inset-x-0 top-full mt-[4px]">
-              <svg
-                viewBox="0 0 100 24"
-                fill="none"
-                preserveAspectRatio="none"
-                className="h-[14px] w-full"
-              >
-                <path
-                  d="M0 10 C 25 22, 75 22, 100 10"
-                  stroke="#FE6839"
-                  strokeWidth="9"
-                  strokeLinecap="round"
-                  opacity="0.3"
-                />
-              </svg>
-            </div>
           </div>
         </div>
 
