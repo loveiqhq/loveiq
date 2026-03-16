@@ -301,6 +301,8 @@ const slideIcons: Record<string, FC> = {
 /*  Slide data                                                         */
 /* ------------------------------------------------------------------ */
 const TOTAL_STEPS = 4;
+const STEP_STORAGE_KEY = "loveiq-survey-step";
+const ANSWERS_STORAGE_KEY = "loveiq-survey-answers";
 
 interface Slide {
   icon: string;
@@ -1024,13 +1026,70 @@ const ConsentScreen: FC<{
 };
 
 /* ------------------------------------------------------------------ */
+/*  Helpers                                                            */
+/* ------------------------------------------------------------------ */
+function loadInitialStep(): number {
+  if (typeof window === "undefined") return 0;
+
+  // 1. Try sessionStorage (same-tab refresh)
+  try {
+    const stored = sessionStorage.getItem(STEP_STORAGE_KEY);
+    if (stored !== null) {
+      const parsed = parseInt(stored, 10);
+      if (Number.isFinite(parsed) && parsed >= 0 && parsed <= TOTAL_STEPS + 2) {
+        return parsed;
+      }
+    }
+  } catch {
+    /* blocked or unavailable */
+  }
+
+  // 2. If localStorage has answers, skip to engine (returning user)
+  try {
+    const raw = localStorage.getItem(ANSWERS_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed.answers && Object.keys(parsed.answers).length > 0) {
+        return TOTAL_STEPS + 2; // step 6 = engine
+      }
+    }
+  } catch {
+    /* corrupted or unavailable */
+  }
+
+  return 0;
+}
+
+/* ------------------------------------------------------------------ */
 /*  Root — orchestrates all steps                                      */
 /* ------------------------------------------------------------------ */
 const SurveyPage: FC = () => {
-  // 0 = intro, 1–4 = slides, 5 = consent
+  // 0 = intro, 1–4 = slides, 5 = consent, 6 = engine
   const [step, setStep] = useState(0);
+  const [hydrated, setHydrated] = useState(false);
   const [transitioning, setTransitioning] = useState(false);
   const isPopStateNav = useRef(false);
+
+  // Restore step from sessionStorage on mount (hydration-safe).
+  // setState in a mount-only effect is intentional here — we need to read
+  // sessionStorage after hydration to avoid SSR/client mismatch.
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    const restored = loadInitialStep();
+    if (restored !== 0) setStep(restored);
+    setHydrated(true);
+  }, []);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  // Persist step to sessionStorage on every change
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      sessionStorage.setItem(STEP_STORAGE_KEY, String(step));
+    } catch {
+      /* ignore */
+    }
+  }, [step, hydrated]);
 
   // Push history entry on forward navigation
   useEffect(() => {
@@ -1076,12 +1135,20 @@ const SurveyPage: FC = () => {
   }, []);
 
   const handleReturn = useCallback(() => {
+    try {
+      sessionStorage.removeItem(STEP_STORAGE_KEY);
+    } catch {
+      /* ignore */
+    }
     window.location.href = "/";
   }, []);
 
   const handleAgree = useCallback(() => {
     setStep(TOTAL_STEPS + 2);
   }, []);
+
+  // Wait for hydration before rendering to avoid flash
+  if (!hydrated) return null;
 
   // Intro screen
   if (step === 0) {
