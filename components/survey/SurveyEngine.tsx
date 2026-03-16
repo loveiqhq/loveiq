@@ -66,6 +66,14 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit }) => {
     return false;
   }, [currentAnswer]);
 
+  const isEmailValid = useMemo(() => {
+    if (question?.inputType !== "email") return true;
+    if (!currentAnswer || typeof currentAnswer !== "string") return true;
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(currentAnswer);
+  }, [question, currentAnswer]);
+
+  const [attemptedNext, setAttemptedNext] = useState(false);
+
   const { trackNavigation } = useSurveyTracking(currentIndex, hasAnswer, question);
 
   // Navigation
@@ -73,6 +81,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit }) => {
     (index: number) => {
       if (index < 0 || index > totalQuestions) return;
       setAnimKey((k) => k + 1);
+      setAttemptedNext(false);
       setCurrentIndex(index);
       window.scrollTo({ top: 0, behavior: "instant" });
     },
@@ -80,6 +89,10 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit }) => {
   );
 
   const goNext = useCallback(() => {
+    if (!isEmailValid) {
+      setAttemptedNext(true);
+      return;
+    }
     if (currentIndex >= totalQuestions - 1) {
       if (hasCompleted.current) return;
       hasCompleted.current = true;
@@ -104,6 +117,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit }) => {
     submitSurvey,
     answers,
     trackNavigation,
+    isEmailValid,
   ]);
 
   const goPrev = useCallback(() => {
@@ -222,7 +236,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit }) => {
   // Status text for nav
   const statusText = `Question ${currentIndex + 1} of ${totalQuestions}`;
 
-  const canGoNext = hasAnswer || !question.required;
+  const canGoNext = (hasAnswer && isEmailValid) || !question.required;
 
   return (
     <main className="relative flex min-h-screen flex-col bg-[#0a0510]">
@@ -252,6 +266,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit }) => {
                 question={question}
                 value={currentAnswer as string | null}
                 onChange={handleChange}
+                forceValidation={attemptedNext}
               />
             )}
             {question.answerType === "scale" && (

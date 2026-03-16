@@ -7,6 +7,7 @@ interface OpenResponseQuestionProps {
   question: SurveyQuestion;
   value: string | null;
   onChange: (value: string) => void;
+  forceValidation?: boolean;
 }
 
 const AlertCircleIcon: FC = () => (
@@ -39,10 +40,16 @@ function getValidationError(value: string, inputType?: string): string | null {
   return null;
 }
 
-const OpenResponseQuestion: FC<OpenResponseQuestionProps> = ({ question, value, onChange }) => {
+const OpenResponseQuestion: FC<OpenResponseQuestionProps> = ({
+  question,
+  value,
+  onChange,
+  forceValidation,
+}) => {
   const [touched, setTouched] = useState(false);
   const currentValue = value ?? "";
-  const error = touched ? getValidationError(currentValue, question.inputType) : null;
+  const showError = touched || forceValidation;
+  const error = showError ? getValidationError(currentValue, question.inputType) : null;
 
   // Subtitle text from formatGuidance or fallback
   const subtitle =
