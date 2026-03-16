@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { createSupabaseMiddleware } from "./lib/admin/supabase-middleware";
+import { createSupabaseMiddleware } from "./lib/supabase-middleware";
 import logger from "./lib/logger";
 
 const isProduction = process.env.NODE_ENV === "production";

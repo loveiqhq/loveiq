@@ -92,19 +92,19 @@ loveiq-web/
 │   └── SmoothScroll.tsx        # Lenis smooth scroll wrapper
 ├── lib/
 │   ├── analytics.ts            # GA4 event tracking helpers
-│   ├── csrf.ts                 # CSRF token verification
+│   ├── csrf.ts                 # CSRF token verification (server-side)
+│   ├── csrf-client.ts          # CSRF token reader (client-side)
 │   ├── ratelimit.ts            # IP-based rate limiting (Supabase-backed)
 │   ├── circuit-breaker.ts      # Circuit breaker pattern for external calls
 │   ├── logger.ts               # pino structured logging
 │   ├── fetch-with-timeout.ts   # Fetch wrapper with timeout
+│   ├── supabase-middleware.ts  # Supabase Auth client for middleware (proxy.ts)
 │   ├── admin/
 │   │   ├── auth.ts             # Admin session verification
 │   │   ├── audit.ts            # Admin action audit logging
-│   │   ├── client.ts           # Client-side admin utilities
+│   │   ├── format.ts           # Display formatting (maskEmail)
 │   │   ├── roles.ts            # Role management
 │   │   ├── supabase.ts         # Supabase fetch helper for admin routes
-│   │   ├── supabase-browser.ts # Browser-side Supabase client
-│   │   ├── supabase-middleware.ts # Middleware Supabase client
 │   │   └── supabase-server.ts  # Server-side Supabase client
 │   └── emails/
 │       ├── admin-magic-link.ts # Admin magic link email template
@@ -128,7 +128,8 @@ loveiq-web/
 │   ├── health-monitor.yml      # Health monitoring
 │   ├── lighthouse.yml          # Lighthouse CI
 │   └── load-test.yml           # Load testing
-├── .planning/                  # Architecture docs (ARCHITECTURE.md, CONVENTIONS.md, etc.)
+├── .planning/                  # Architecture docs (ARCHITECTURE.md, CONVENTIONS.md, AGENTS.md, etc.)
+├── FILE_INDEX.md               # Task-based file lookup (find any file by what you want to do)
 ├── SECURITY.md                 # Security guidelines + secrets rotation
 ├── DEVELOPMENT.md              # Development setup guide
 └── [config files]              # package.json, tsconfig.json, tailwind.config.js, etc.
@@ -533,8 +534,11 @@ Check browser DevTools Network tab for response. Common causes:
 
 ## File Quick Reference
 
+> For a complete task-based file index, see [`FILE_INDEX.md`](FILE_INDEX.md).
+
 | Need to...               | Look at...                                                |
 | ------------------------ | --------------------------------------------------------- |
+| Find any file by task    | `FILE_INDEX.md`                                           |
 | Add landing section      | `components/landing/LandingPage.tsx`, existing `S##*.tsx` |
 | Modify navigation        | `components/landing/NavSection.tsx`                       |
 | Modify footer            | `components/landing/FooterSection.tsx`                    |

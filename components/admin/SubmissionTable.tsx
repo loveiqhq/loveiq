@@ -1,6 +1,6 @@
 "use client";
 
-import { maskEmail } from "@/lib/admin/client";
+import { maskEmail } from "@/lib/admin/format";
 
 interface Submission {
   id: number;

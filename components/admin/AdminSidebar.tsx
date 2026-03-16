@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { getCsrfToken } from "@/lib/admin/client";
+import { getCsrfToken } from "@/lib/csrf-client";
 
 const navItems = [
   {

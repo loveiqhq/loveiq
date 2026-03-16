@@ -7,7 +7,7 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
-vi.mock("@/lib/admin/client", () => ({
+vi.mock("@/lib/csrf-client", () => ({
   getCsrfToken: () => "test-csrf-token",
 }));
 

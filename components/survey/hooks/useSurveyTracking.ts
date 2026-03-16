@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useCallback } from "react";
 import type { SurveyQuestion } from "@/data/survey-data";
+import { getCsrfToken } from "@/lib/csrf-client";
 
 interface TrackingEvent {
   sessionId: string;
@@ -27,13 +28,6 @@ function getSessionId(): string {
     sessionStorage.setItem(SESSION_KEY, id);
   }
   return id;
-}
-
-function getCsrfToken(): string {
-  const cookie = document.cookie
-    .split("; ")
-    .find((row) => row.startsWith("__Host-csrf=") || row.startsWith("__csrf="));
-  return cookie?.substring(cookie.indexOf("=") + 1) || "";
 }
 
 export function useSurveyTracking(

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { getCsrfToken } from "@/lib/admin/client";
+import { getCsrfToken } from "@/lib/csrf-client";
 
 type Status = "idle" | "sending" | "sent" | "error";
 

@@ -93,14 +93,14 @@ loveiq-web/
 │   ├── circuit-breaker.ts      # Circuit breaker pattern
 │   ├── logger.ts               # pino structured logging
 │   ├── fetch-with-timeout.ts   # Fetch wrapper with timeout
+│   ├── supabase-middleware.ts  # Supabase Auth client for middleware (proxy.ts)
+│   ├── csrf-client.ts          # Client-side CSRF token reader
 │   ├── admin/                  # Admin panel utilities
 │   │   ├── auth.ts             # Admin session verification
 │   │   ├── audit.ts            # Admin action audit logging
-│   │   ├── client.ts           # Supabase client factory
+│   │   ├── format.ts           # Display formatting (maskEmail)
 │   │   ├── roles.ts            # Role-based access control
 │   │   ├── supabase.ts         # Supabase fetch helper for admin routes
-│   │   ├── supabase-browser.ts # Browser-side Supabase client
-│   │   ├── supabase-middleware.ts # Middleware Supabase client (cookie refresh)
 │   │   └── supabase-server.ts  # Server-side Supabase client (RSC/API routes)
 │   └── emails/                 # Email templates
 │       └── waitlist.ts         # Waitlist confirmation email

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { getCsrfToken } from "@/lib/admin/client";
+import { getCsrfToken } from "@/lib/csrf-client";
 
 export default function StagingLoginForm() {
   const router = useRouter();

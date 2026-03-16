@@ -62,8 +62,7 @@
   - SDK/Client: `@supabase/supabase-js` + `@supabase/ssr`
   - Flow: Admin enters email → magic link sent → callback at `/admin/auth/callback` → session cookie set
   - Access control: `admin_users` table in Supabase acts as email allowlist
-  - Session management: Server-side via `@supabase/ssr` cookie helpers (`lib/admin/supabase-server.ts`, `lib/admin/supabase-middleware.ts`)
-  - Client-side: `lib/admin/supabase-browser.ts` for browser Supabase client
+  - Session management: Server-side via `@supabase/ssr` cookie helpers (`lib/admin/supabase-server.ts`, `lib/supabase-middleware.ts`)
   - Role support: `lib/admin/roles.ts` (role-based access control)
   - Audit logging: `lib/admin/audit.ts`
   - Used in: `app/admin/`, `app/api/admin/`, `lib/admin/`

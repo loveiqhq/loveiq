@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useAdminFetch } from "./hooks/useAdminFetch";
 import ConfirmDialog from "./ConfirmDialog";
-import { getCsrfToken } from "@/lib/admin/client";
+import { getCsrfToken } from "@/lib/csrf-client";
 
 interface SurveyStatusData {
   active: boolean;

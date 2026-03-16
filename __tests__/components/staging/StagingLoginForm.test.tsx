@@ -8,7 +8,7 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: mockRouterPush }),
 }));
 
-vi.mock("@/lib/admin/client", () => ({
+vi.mock("@/lib/csrf-client", () => ({
   getCsrfToken: () => "test-csrf-token",
 }));
 

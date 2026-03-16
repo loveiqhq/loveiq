@@ -2,15 +2,9 @@
 
 import { useState, useCallback } from "react";
 import type { AnswerValue } from "./useSurveyState";
+import { getCsrfToken } from "@/lib/csrf-client";
 
 type SubmitStatus = "idle" | "submitting" | "success" | "error";
-
-function getCsrfToken(): string {
-  const cookie = document.cookie
-    .split("; ")
-    .find((row) => row.startsWith("__Host-csrf=") || row.startsWith("__csrf="));
-  return cookie?.substring(cookie.indexOf("=") + 1) || "";
-}
 
 export function useSubmitSurvey() {
   const [status, setStatus] = useState<SubmitStatus>("idle");
