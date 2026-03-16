@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback, useMemo, type FC } from "react";
 import type { SurveyQuestion } from "@/data/survey-data";
-import { COUNTRIES } from "@/data/countries";
+import { COUNTRIES, getCountryFlag } from "@/data/countries";
 
 interface CountryQuestionProps {
   question: SurveyQuestion;
@@ -155,19 +155,15 @@ const CountryQuestion: FC<CountryQuestionProps> = ({ question, value, onChange }
       <div ref={containerRef} className="relative">
         {/* Search input */}
         <div className="relative">
-          {/* Search icon */}
-          <svg
-            className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <circle cx="11" cy="11" r="8" />
-            <path d="m21 21-4.3-4.3" />
-          </svg>
+          {/* Selected flag */}
+          {value && !isEditing && (
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[18px] leading-none"
+            >
+              {getCountryFlag(value)}
+            </span>
+          )}
 
           <input
             ref={inputRef}
@@ -178,7 +174,7 @@ const CountryQuestion: FC<CountryQuestionProps> = ({ question, value, onChange }
             onKeyDown={handleKeyDown}
             placeholder="Search for a country..."
             autoComplete="off"
-            className={`w-full rounded-xl border border-white/10 bg-white/5 py-3 pl-11 font-sans text-[15px] text-white placeholder:text-white/30 focus:border-[#a78bfa] focus:outline-none ${value ? "pr-10" : "pr-4"}`}
+            className={`w-full rounded-xl border border-white/10 bg-white/5 py-3 font-sans text-[15px] text-white placeholder:text-white/30 focus:border-[#a78bfa] focus:outline-none ${value && !isEditing ? "pl-11" : "pl-4"} ${value ? "pr-10" : "pr-4"}`}
           />
 
           {/* Clear button */}
@@ -225,6 +221,12 @@ const CountryQuestion: FC<CountryQuestionProps> = ({ question, value, onChange }
                 }}
                 onMouseEnter={() => setHighlightIndex(i)}
               >
+                <span
+                  aria-hidden="true"
+                  className="mr-2.5 inline-block w-[24px] text-center text-[18px]"
+                >
+                  {getCountryFlag(country)}
+                </span>
                 {country}
               </li>
             ))}

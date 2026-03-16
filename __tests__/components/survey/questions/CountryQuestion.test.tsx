@@ -3,9 +3,24 @@ import { render, screen, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
 
-vi.mock("@/data/countries", () => ({
-  COUNTRIES: ["Austria", "Australia", "Germany", "United States", "United Kingdom"],
-}));
+vi.mock("@/data/countries", () => {
+  const map: Record<string, string> = {
+    Austria: "AT",
+    Australia: "AU",
+    Germany: "DE",
+    "United States": "US",
+    "United Kingdom": "GB",
+  };
+  return {
+    COUNTRIES: ["Austria", "Australia", "Germany", "United States", "United Kingdom"],
+    COUNTRY_CODE_MAP: map,
+    getCountryFlag: (name: string) => {
+      const code = map[name];
+      if (!code) return "";
+      return String.fromCodePoint(...([...code] as string[]).map((c) => c.charCodeAt(0) + 127397));
+    },
+  };
+});
 
 // jsdom doesn't implement scrollIntoView
 Element.prototype.scrollIntoView = vi.fn();
@@ -51,10 +66,10 @@ describe("CountryQuestion", () => {
     await user.type(input, "Aus");
     const options = screen.getAllByRole("option");
     const labels = options.map((o) => o.textContent);
-    expect(labels).toContain("Austria");
-    expect(labels).toContain("Australia");
-    expect(labels).not.toContain("Germany");
-    expect(labels).not.toContain("United States");
+    expect(labels.some((l) => l?.includes("Austria"))).toBe(true);
+    expect(labels.some((l) => l?.includes("Australia"))).toBe(true);
+    expect(labels.every((l) => !l?.includes("Germany"))).toBe(true);
+    expect(labels.every((l) => !l?.includes("United States"))).toBe(true);
   });
 
   it("calls onChange with country name when a dropdown item is clicked", async () => {
