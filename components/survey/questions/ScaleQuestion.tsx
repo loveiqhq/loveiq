@@ -67,7 +67,13 @@ const ScaleQuestion: FC<ScaleQuestionProps> = ({ question, value, onChange }) =>
             </span>
           </>
         ) : hoveredValue !== null ? (
-          <span className="font-sans text-[16px] font-medium text-white/30 transition-opacity duration-200">
+          <span
+            className="font-sans text-[16px] font-medium text-white/40"
+            style={{
+              transition:
+                "opacity 250ms cubic-bezier(0.16, 1, 0.3, 1), transform 250ms cubic-bezier(0.16, 1, 0.3, 1)",
+            }}
+          >
             {getValueLabel(hoveredValue, question)}
           </span>
         ) : (
@@ -90,10 +96,14 @@ const ScaleQuestion: FC<ScaleQuestionProps> = ({ question, value, onChange }) =>
             )}
             {hoveredValue !== null && hoveredValue > (value ?? 0) && (
               <div
-                className="absolute h-full rounded-full bg-[#a78bfa]/20 transition-all duration-200 ease-out"
+                className="absolute h-full rounded-full transition-[left,width]"
                 style={{
                   left: value ? `${((value - 1) / 6) * 100}%` : "0%",
                   width: `${((hoveredValue - (value ?? 1)) / 6) * 100}%`,
+                  transitionDuration: "320ms",
+                  transitionTimingFunction: "cubic-bezier(0.16, 1, 0.3, 1)",
+                  background:
+                    "linear-gradient(90deg, rgba(167,139,250,0.35), rgba(167,139,250,0.15))",
                 }}
               />
             )}
@@ -105,6 +115,8 @@ const ScaleQuestion: FC<ScaleQuestionProps> = ({ question, value, onChange }) =>
             const isBefore = value !== null && v < value;
             const isHoverFill =
               !isSelected && !isBefore && hoveredValue !== null && v <= hoveredValue;
+            const isHoverTarget =
+              hoveredValue !== null && v === hoveredValue && !isSelected && !isBefore;
 
             return (
               <button
@@ -117,26 +129,46 @@ const ScaleQuestion: FC<ScaleQuestionProps> = ({ question, value, onChange }) =>
                 className="relative z-10 flex h-[40px] w-[40px] shrink-0 items-center justify-center sm:h-[48px] sm:w-[48px]"
               >
                 <span
-                  className={`flex shrink-0 items-center justify-center rounded-full transition-all duration-200 ${
+                  className={`flex shrink-0 items-center justify-center rounded-full transition-[border-color,background-color,box-shadow,width,height] ${
                     isSelected
                       ? "h-[44px] w-[44px] border-2 border-[#a78bfa] bg-[#1a0b2e] shadow-[0_0_15px_rgba(167,139,250,0.3)] sm:h-[53px] sm:w-[53px]"
                       : isBefore
                         ? "h-[40px] w-[40px] border-2 border-[#a78bfa] bg-[#1a0b2e] shadow-[0_0_15px_rgba(167,139,250,0.3)]"
-                        : isHoverFill
-                          ? "h-[40px] w-[40px] border-2 border-[rgba(167,139,250,0.35)] bg-[rgba(26,11,46,0.5)]"
-                          : "h-[40px] w-[40px] border-2 border-white/10 bg-[#0a0510] hover:border-white/20"
+                        : isHoverTarget
+                          ? "h-[44px] w-[44px] border-2 border-[rgba(167,139,250,0.55)] bg-[rgba(26,11,46,0.7)] shadow-[0_0_18px_rgba(167,139,250,0.25)] sm:h-[53px] sm:w-[53px]"
+                          : isHoverFill
+                            ? "h-[40px] w-[40px] border-2 border-[rgba(167,139,250,0.35)] bg-[rgba(26,11,46,0.45)] shadow-[0_0_10px_rgba(167,139,250,0.12)]"
+                            : "h-[40px] w-[40px] border-2 border-white/10 bg-[#0a0510] hover:border-white/20"
                   }`}
+                  style={{
+                    transitionDuration: "280ms",
+                    transitionTimingFunction: "cubic-bezier(0.16, 1, 0.3, 1)",
+                    transitionDelay:
+                      isHoverFill || isHoverTarget ? `${(v - 1) * 30}ms` : `${(7 - v) * 20}ms`,
+                  }}
                 >
                   <span
-                    className={`h-2.5 w-2.5 rounded-full transition-all duration-200 sm:h-3 sm:w-3 ${
+                    className={`h-2.5 w-2.5 rounded-full transition-[background-color,opacity,transform] sm:h-3 sm:w-3 ${
                       isSelected
                         ? "bg-white shadow-[0_0_10px_white]"
                         : isBefore
                           ? "bg-[#a78bfa] opacity-40"
-                          : isHoverFill
-                            ? "bg-[#a78bfa] opacity-25"
-                            : "h-2 w-2 bg-white/20"
+                          : isHoverTarget
+                            ? "scale-[1.3] bg-[#a78bfa] opacity-50"
+                            : isHoverFill
+                              ? "scale-[1.1] bg-[#a78bfa] opacity-25"
+                              : "h-2 w-2 bg-white/20"
                     }`}
+                    style={{
+                      transitionDuration: isHoverTarget ? "300ms" : "280ms",
+                      transitionTimingFunction: isHoverTarget
+                        ? "cubic-bezier(0.34, 1.56, 0.64, 1)"
+                        : "cubic-bezier(0.16, 1, 0.3, 1)",
+                      transitionDelay:
+                        isHoverFill || isHoverTarget
+                          ? `${(v - 1) * 30 + 40}ms`
+                          : `${(7 - v) * 20}ms`,
+                    }}
                   />
                 </span>
               </button>
