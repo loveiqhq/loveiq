@@ -399,9 +399,9 @@ export const COUNTRY_CODE_MAP: Record<string, string> = {
   Zimbabwe: "ZW",
 };
 
-/** Convert country name to flag emoji. Returns empty string if unknown. */
-export function getCountryFlag(name: string): string {
+/** Get flag image URL for a country name. Returns empty string if unknown. */
+export function getCountryFlagUrl(name: string): string {
   const code = COUNTRY_CODE_MAP[name];
   if (!code) return "";
-  return String.fromCodePoint(...([...code] as string[]).map((c) => c.charCodeAt(0) + 127397));
+  return `https://flagcdn.com/w40/${code.toLowerCase()}.png`;
 }

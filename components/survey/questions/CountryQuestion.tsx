@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback, useMemo, type FC } from "react";
 import type { SurveyQuestion } from "@/data/survey-data";
-import { COUNTRIES, getCountryFlag } from "@/data/countries";
+import { COUNTRIES, getCountryFlagUrl } from "@/data/countries";
 
 interface CountryQuestionProps {
   question: SurveyQuestion;
@@ -156,13 +156,15 @@ const CountryQuestion: FC<CountryQuestionProps> = ({ question, value, onChange }
         {/* Search input */}
         <div className="relative">
           {/* Selected flag */}
-          {value && !isEditing && (
-            <span
+          {value && !isEditing && getCountryFlagUrl(value) && (
+            <img
               aria-hidden="true"
-              className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[18px] leading-none"
-            >
-              {getCountryFlag(value)}
-            </span>
+              src={getCountryFlagUrl(value)}
+              alt=""
+              width={20}
+              height={15}
+              className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 rounded-[2px]"
+            />
           )}
 
           <input
@@ -221,12 +223,17 @@ const CountryQuestion: FC<CountryQuestionProps> = ({ question, value, onChange }
                 }}
                 onMouseEnter={() => setHighlightIndex(i)}
               >
-                <span
-                  aria-hidden="true"
-                  className="mr-2.5 inline-block w-[24px] text-center text-[18px]"
-                >
-                  {getCountryFlag(country)}
-                </span>
+                {getCountryFlagUrl(country) && (
+                  <img
+                    aria-hidden="true"
+                    src={getCountryFlagUrl(country)}
+                    alt=""
+                    width={20}
+                    height={15}
+                    loading="lazy"
+                    className="mr-2.5 inline-block rounded-[2px]"
+                  />
+                )}
                 {country}
               </li>
             ))}

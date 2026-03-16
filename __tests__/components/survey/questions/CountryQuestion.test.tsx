@@ -14,10 +14,10 @@ vi.mock("@/data/countries", () => {
   return {
     COUNTRIES: ["Austria", "Australia", "Germany", "United States", "United Kingdom"],
     COUNTRY_CODE_MAP: map,
-    getCountryFlag: (name: string) => {
+    getCountryFlagUrl: (name: string) => {
       const code = map[name];
       if (!code) return "";
-      return String.fromCodePoint(...([...code] as string[]).map((c) => c.charCodeAt(0) + 127397));
+      return `https://flagcdn.com/w40/${code.toLowerCase()}.png`;
     },
   };
 });
