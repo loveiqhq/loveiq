@@ -21,6 +21,7 @@ const surveySchema = z.object({
   ),
   startedAt: z.string().datetime(),
   durationMs: z.number().int().min(0).max(86_400_000),
+  utmTracker: z.string().max(500).optional().nullable(),
   website: z.string().max(0).optional().nullable(), // honeypot
 });
 
@@ -115,7 +116,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   }
 
-  const { email, firstName, answers, startedAt, durationMs, website } = parsed.data;
+  const { email, firstName, answers, startedAt, durationMs, utmTracker, website } = parsed.data;
   const normalizedEmail = email.trim().toLowerCase();
   const normalizedFirstName = firstName.trim();
 
@@ -152,6 +153,7 @@ export async function POST(request: Request) {
     p_answers: answers,
     p_started_at: startedAt,
     p_duration_ms: durationMs,
+    p_utm_tracker: utmTracker || null,
   };
 
   let response: Response;

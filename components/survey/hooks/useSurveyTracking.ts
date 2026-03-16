@@ -3,6 +3,7 @@
 import { useEffect, useRef, useCallback } from "react";
 import type { SurveyQuestion } from "@/data/survey-data";
 import { getCsrfToken } from "@/lib/csrf-client";
+import { getSessionId } from "./surveySession";
 
 interface TrackingEvent {
   sessionId: string;
@@ -15,20 +16,9 @@ interface TrackingEvent {
   timestamp: string;
 }
 
-const SESSION_KEY = "loveiq-survey-session";
 const FLUSH_SIZE = 5;
 const FLUSH_INTERVAL_MS = 15_000;
 const MAX_BUFFER_SIZE = 100;
-
-function getSessionId(): string {
-  if (typeof window === "undefined") return "";
-  let id = sessionStorage.getItem(SESSION_KEY);
-  if (!id) {
-    id = crypto.randomUUID();
-    sessionStorage.setItem(SESSION_KEY, id);
-  }
-  return id;
-}
 
 export function useSurveyTracking(
   currentIndex: number,

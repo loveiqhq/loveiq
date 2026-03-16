@@ -10,7 +10,7 @@ export function useSubmitSurvey() {
   const [status, setStatus] = useState<SubmitStatus>("idle");
 
   const submit = useCallback(
-    async (answers: Record<string, AnswerValue>, startedAt: string) => {
+    async (answers: Record<string, AnswerValue>, startedAt: string, utmTracker?: string | null) => {
       if (status === "submitting") return;
 
       const email = (answers["00000"] as string | undefined)?.trim().toLowerCase();
@@ -38,6 +38,7 @@ export function useSubmitSurvey() {
             answers,
             startedAt,
             durationMs,
+            ...(utmTracker ? { utmTracker } : {}),
           }),
         });
 

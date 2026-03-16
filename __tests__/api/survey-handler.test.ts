@@ -255,6 +255,33 @@ describe("POST /api/survey", () => {
     expect(json.success).toBe(true);
   });
 
+  it("forwards utmTracker to Supabase RPC when provided", async () => {
+    allowCsrf();
+    allowRateLimit();
+    allowCooldown();
+    mockSupabaseRpcOk();
+
+    const utmJson = JSON.stringify({ utm_source: "google", utm_medium: "cpc" });
+    await POST(makeRequest({ ...validBody(), utmTracker: utmJson }));
+
+    const rpcCall = mockFetchWithTimeout.mock.calls[0];
+    const rpcBody = JSON.parse(rpcCall[1].body);
+    expect(rpcBody.p_utm_tracker).toBe(utmJson);
+  });
+
+  it("sends p_utm_tracker as null when utmTracker is omitted", async () => {
+    allowCsrf();
+    allowRateLimit();
+    allowCooldown();
+    mockSupabaseRpcOk();
+
+    await POST(makeRequest());
+
+    const rpcCall = mockFetchWithTimeout.mock.calls[0];
+    const rpcBody = JSON.parse(rpcCall[1].body);
+    expect(rpcBody.p_utm_tracker).toBeNull();
+  });
+
   it("normalizes email to lowercase before calling checkCooldown", async () => {
     allowCsrf();
     allowRateLimit();

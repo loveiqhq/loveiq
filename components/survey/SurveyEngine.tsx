@@ -19,6 +19,8 @@ import {
 } from "@/lib/analytics";
 import { useSubmitSurvey } from "./hooks/useSubmitSurvey";
 import { useSurveyTracking } from "./hooks/useSurveyTracking";
+import { useUtmCapture } from "./hooks/useUtmCapture";
+import { usePartialSave } from "./hooks/usePartialSave";
 
 interface SurveyEngineProps {
   onExit: () => void;
@@ -28,6 +30,8 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit }) => {
   const { answers, currentIndex, startedAt, progress, setAnswer, getAnswer, setCurrentIndex } =
     useSurveyState();
   const { submit: submitSurvey, status: submitStatus } = useSubmitSurvey();
+  const utmTracker = useUtmCapture();
+  const { savePartial } = usePartialSave(answers, currentIndex, startedAt, utmTracker);
 
   const [animKey, setAnimKey] = useState(0);
   const hasTrackedStart = useRef(false);
@@ -99,10 +103,11 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit }) => {
       trackNavigation("complete");
       const duration = Date.now() - new Date(startedAt).getTime();
       trackSurveyComplete(duration);
-      submitSurvey(answers, startedAt);
+      submitSurvey(answers, startedAt, utmTracker);
       goTo(totalQuestions); // one past the end → triggers completion
       return;
     }
+    savePartial();
     trackNavigation("forward");
     if (question) {
       trackSurveyAnswer(question.qId, question.chapter);
@@ -118,6 +123,8 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit }) => {
     answers,
     trackNavigation,
     isEmailValid,
+    utmTracker,
+    savePartial,
   ]);
 
   const goPrev = useCallback(() => {
@@ -126,12 +133,13 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit }) => {
   }, [currentIndex, goTo, trackNavigation]);
 
   const handlePause = useCallback(() => {
+    savePartial();
     trackNavigation("abandon");
     if (question) {
       trackSurveyPause(question.qId, progress);
     }
     onExit();
-  }, [question, progress, onExit, trackNavigation]);
+  }, [question, progress, onExit, trackNavigation, savePartial]);
 
   // Handle answer change
   const handleChange = useCallback(
