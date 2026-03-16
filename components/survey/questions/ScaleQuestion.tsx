@@ -1,6 +1,6 @@
 "use client";
 
-import { type FC, useCallback } from "react";
+import { type FC, useCallback, useState } from "react";
 import type { SurveyQuestion } from "@/data/survey-data";
 
 interface ScaleQuestionProps {
@@ -27,6 +27,8 @@ function getValueLabel(value: number, question: SurveyQuestion): string {
 }
 
 const ScaleQuestion: FC<ScaleQuestionProps> = ({ question, value, onChange }) => {
+  const [hoveredValue, setHoveredValue] = useState<number | null>(null);
+
   const handleDotClick = useCallback(
     (v: number) => {
       onChange(v);
@@ -64,6 +66,10 @@ const ScaleQuestion: FC<ScaleQuestionProps> = ({ question, value, onChange }) =>
               Level {value} of 7
             </span>
           </>
+        ) : hoveredValue !== null ? (
+          <span className="font-sans text-[16px] font-medium text-white/30 transition-opacity duration-200">
+            {getValueLabel(hoveredValue, question)}
+          </span>
         ) : (
           <span className="font-sans text-[16px] font-medium text-white/30">
             Awaiting selection
@@ -82,12 +88,23 @@ const ScaleQuestion: FC<ScaleQuestionProps> = ({ question, value, onChange }) =>
                 style={{ width: `${((value - 1) / 6) * 100}%` }}
               />
             )}
+            {hoveredValue !== null && hoveredValue > (value ?? 0) && (
+              <div
+                className="absolute h-full rounded-full bg-[#a78bfa]/20 transition-all duration-200 ease-out"
+                style={{
+                  left: value ? `${((value - 1) / 6) * 100}%` : "0%",
+                  width: `${((hoveredValue - (value ?? 1)) / 6) * 100}%`,
+                }}
+              />
+            )}
           </div>
 
           {/* Dots */}
           {[1, 2, 3, 4, 5, 6, 7].map((v) => {
             const isSelected = v === value;
             const isBefore = value !== null && v < value;
+            const isHoverFill =
+              !isSelected && !isBefore && hoveredValue !== null && v <= hoveredValue;
 
             return (
               <button
@@ -95,6 +112,8 @@ const ScaleQuestion: FC<ScaleQuestionProps> = ({ question, value, onChange }) =>
                 type="button"
                 aria-label={`${v} of 7`}
                 onClick={() => handleDotClick(v)}
+                onMouseEnter={() => setHoveredValue(v)}
+                onMouseLeave={() => setHoveredValue(null)}
                 className="relative z-10 flex h-[40px] w-[40px] shrink-0 items-center justify-center sm:h-[48px] sm:w-[48px]"
               >
                 <span
@@ -103,7 +122,9 @@ const ScaleQuestion: FC<ScaleQuestionProps> = ({ question, value, onChange }) =>
                       ? "h-[44px] w-[44px] border-2 border-[#a78bfa] bg-[#1a0b2e] shadow-[0_0_15px_rgba(167,139,250,0.3)] sm:h-[53px] sm:w-[53px]"
                       : isBefore
                         ? "h-[40px] w-[40px] border-2 border-[#a78bfa] bg-[#1a0b2e] shadow-[0_0_15px_rgba(167,139,250,0.3)]"
-                        : "h-[40px] w-[40px] border-2 border-white/10 bg-[#0a0510] hover:border-white/20"
+                        : isHoverFill
+                          ? "h-[40px] w-[40px] border-2 border-[rgba(167,139,250,0.35)] bg-[rgba(26,11,46,0.5)]"
+                          : "h-[40px] w-[40px] border-2 border-white/10 bg-[#0a0510] hover:border-white/20"
                   }`}
                 >
                   <span
@@ -112,7 +133,9 @@ const ScaleQuestion: FC<ScaleQuestionProps> = ({ question, value, onChange }) =>
                         ? "bg-white shadow-[0_0_10px_white]"
                         : isBefore
                           ? "bg-[#a78bfa] opacity-40"
-                          : "h-2 w-2 bg-white/20"
+                          : isHoverFill
+                            ? "bg-[#a78bfa] opacity-25"
+                            : "h-2 w-2 bg-white/20"
                     }`}
                   />
                 </span>
