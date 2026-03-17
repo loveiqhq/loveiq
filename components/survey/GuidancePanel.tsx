@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FC } from "react";
+import { useState, useRef, useEffect, type FC } from "react";
 import type { SurveyQuestion } from "@/data/survey-data";
 
 interface GuidancePanelProps {
@@ -66,6 +66,25 @@ const ChevronIcon: FC<{ open: boolean }> = ({ open }) => (
 
 const GuidancePanel: FC<GuidancePanelProps> = ({ question }) => {
   const [insightOpen, setInsightOpen] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!insightOpen) return;
+    if (window.innerWidth >= 640) return; // desktop: no-op
+
+    const id = setTimeout(() => {
+      if (!panelRef.current) return;
+      const rect = panelRef.current.getBoundingClientRect();
+      // scrollHeight = full content height regardless of maxHeight clipping
+      const projectedBottom = rect.top + panelRef.current.scrollHeight;
+      const overflow = projectedBottom - window.innerHeight;
+      if (overflow > 0) {
+        window.scrollBy({ top: overflow + 32, behavior: "smooth" });
+      }
+    }, 50);
+
+    return () => clearTimeout(id);
+  }, [insightOpen]);
 
   const supportText = question.supportAndGuidance || question.guide;
   const hasInsight =
@@ -124,6 +143,7 @@ const GuidancePanel: FC<GuidancePanelProps> = ({ question }) => {
 
           {/* Collapsible insight panel */}
           <div
+            ref={panelRef}
             className="mt-3 w-full overflow-hidden transition-all duration-300 ease-out"
             style={{
               maxHeight: insightOpen ? "2000px" : "0px",
