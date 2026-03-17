@@ -374,6 +374,8 @@ const slides: Slide[] = [
           more in our{" "}
           <a
             href="/trust-zone"
+            target="_blank"
+            rel="noopener noreferrer"
             className="no-underline decoration-white/50 underline-offset-2 transition-all duration-300 hover:text-white hover:underline"
           >
             &gt; Trust Zone
@@ -389,6 +391,8 @@ const slides: Slide[] = [
           alias email address. Learn more in our{" "}
           <a
             href="/trust-zone"
+            target="_blank"
+            rel="noopener noreferrer"
             className="no-underline decoration-white/50 underline-offset-2 transition-all duration-300 hover:text-white hover:underline"
           >
             &gt; Trust Zone
