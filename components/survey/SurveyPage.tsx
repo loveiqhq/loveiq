@@ -46,12 +46,15 @@ const ArrowLeft: FC<{ className?: string }> = ({ className = "h-5 w-5" }) => (
 const IconGlow: FC<{ children: ReactNode }> = ({ children }) => (
   <div className="relative h-[40px] w-[40px]">
     <div
-      className="absolute -left-1 -top-1 rounded-full"
+      className="absolute rounded-full"
       style={{
-        width: "47.997px",
-        height: "47.997px",
-        background: "rgba(167, 139, 250, 0.50)",
-        filter: "blur(20px)",
+        width: "88px",
+        height: "88px",
+        top: "50%",
+        left: "50%",
+        transform: "translate(-50%, -50%)",
+        background:
+          "radial-gradient(circle, rgba(167, 139, 250, 0.55) 0%, rgba(167, 139, 250, 0.15) 40%, transparent 70%)",
       }}
     />
     {children}
