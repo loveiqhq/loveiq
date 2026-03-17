@@ -62,10 +62,7 @@ const SurveyNav: FC<SurveyNavProps> = ({
         Previous
       </button>
 
-      {/* Center status */}
-      <span className="hidden font-sans text-[13px] font-medium text-white/30 sm:block">
-        {statusText}
-      </span>
+      {/* Center status — hidden */}
 
       {/* Next */}
       <button
