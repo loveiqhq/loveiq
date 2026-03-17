@@ -21,6 +21,7 @@ import { useSubmitSurvey } from "./hooks/useSubmitSurvey";
 import { useSurveyTracking } from "./hooks/useSurveyTracking";
 import { useUtmCapture } from "./hooks/useUtmCapture";
 import { usePartialSave } from "./hooks/usePartialSave";
+import SurveyConfirmation from "./SurveyConfirmation";
 
 interface SurveyEngineProps {
   onExit: () => void;
@@ -190,57 +191,8 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit }) => {
 
   // Survey complete
   if (!question || currentIndex >= totalQuestions) {
-    return (
-      <main className="flex min-h-screen flex-col items-center justify-center bg-[#0a0510] px-6 text-center">
-        <div
-          className="flex flex-col items-center gap-6"
-          style={{ animation: "survey-scale-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) both" }}
-        >
-          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-[#fe6839] to-[#a78bfa]">
-            <svg
-              className="h-10 w-10 text-white"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M20 6 9 17l-5-5" />
-            </svg>
-          </div>
-          <h2 className="font-serif text-[32px] font-bold text-white sm:text-[40px]">
-            Survey Complete
-          </h2>
-          <p className="max-w-md font-sans text-[16px] leading-relaxed text-white/60">
-            Thank you for sharing your answers. Your personalized report is being prepared.
-          </p>
-          {submitStatus === "submitting" && (
-            <p className="font-sans text-[13px] text-white/40">Saving your answers...</p>
-          )}
-          {submitStatus === "success" && (
-            <p
-              className="font-sans text-[13px] text-white/40"
-              style={{ animation: "survey-fade-up 0.3s ease both 2s reverse" }}
-            >
-              Answers saved
-            </p>
-          )}
-          {submitStatus === "error" && (
-            <p className="font-sans text-[13px] text-white/40">Answers saved locally</p>
-          )}
-          <button
-            type="button"
-            onClick={onExit}
-            className="mt-4 rounded-full bg-gradient-to-r from-[#fe6839] to-[#ff8f6b] px-8 py-3 font-sans text-[14px] font-bold text-white shadow-[0_4px_16px_rgba(254,104,57,0.3)] transition hover:shadow-[0_6px_20px_rgba(254,104,57,0.4)]"
-          >
-            Return to site
-          </button>
-        </div>
-      </main>
-    );
+    return <SurveyConfirmation status={submitStatus} onExit={onExit} />;
   }
-
   // Status text for nav
   const statusText = `Question ${currentIndex + 1} of ${totalQuestions}`;
 

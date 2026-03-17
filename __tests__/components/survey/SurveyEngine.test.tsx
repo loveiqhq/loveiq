@@ -13,6 +13,7 @@ const mockSubmit = vi.fn();
 
 let mockCurrentIndex = 0;
 let mockProgress = 0;
+let mockSubmitStatus: string = "idle";
 
 vi.mock("@/components/survey/hooks/useSurveyState", () => ({
   useSurveyState: () => ({
@@ -32,7 +33,12 @@ vi.mock("@/components/survey/hooks/useSurveyState", () => ({
 }));
 
 vi.mock("@/components/survey/hooks/useSubmitSurvey", () => ({
-  useSubmitSurvey: () => ({ submit: mockSubmit, status: "idle" }),
+  useSubmitSurvey: () => ({
+    submit: mockSubmit,
+    get status() {
+      return mockSubmitStatus;
+    },
+  }),
 }));
 
 vi.mock("@/components/survey/hooks/useSurveyTracking", () => ({
@@ -127,6 +133,7 @@ import SurveyEngine from "@/components/survey/SurveyEngine";
 beforeEach(() => {
   mockCurrentIndex = 0;
   mockProgress = 0;
+  mockSubmitStatus = "idle";
   mockSetAnswer.mockClear();
   mockGetAnswer.mockClear().mockReturnValue(null);
   mockSetCurrentIndex.mockClear();
@@ -155,18 +162,19 @@ describe("SurveyEngine", () => {
     mockProgress = 100;
 
     render(<SurveyEngine onExit={vi.fn()} />);
-    expect(screen.getByText("Survey Complete")).toBeInTheDocument();
+    expect(screen.getByText("Processing Your Answers…")).toBeInTheDocument();
   });
 
-  it("calls onExit when Return to site button clicked on completion screen", async () => {
+  it("calls onExit when Return to LoveIQ button clicked on completion screen", async () => {
     mockCurrentIndex = 3;
     mockProgress = 100;
 
     const user = userEvent.setup();
     const onExit = vi.fn();
+    mockSubmitStatus = "success";
     render(<SurveyEngine onExit={onExit} />);
 
-    await user.click(screen.getByRole("button", { name: /return to site/i }));
+    await user.click(screen.getByRole("button", { name: /return to loveiq/i }));
     expect(onExit).toHaveBeenCalledTimes(1);
   });
 
