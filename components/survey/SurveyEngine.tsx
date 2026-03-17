@@ -317,8 +317,8 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit }) => {
           </div>
         </div>
 
-        {/* Navigation — fixed bottom bar on mobile, static on desktop */}
-        <div className="fixed bottom-0 left-0 right-0 z-20 rounded-tl-[24px] rounded-tr-[24px] border-t border-white/10 bg-[rgba(10,5,16,0.8)] px-6 py-4 backdrop-blur-xl sm:static sm:rounded-none sm:border-0 sm:bg-transparent sm:p-0 sm:backdrop-blur-none">
+        {/* Navigation — fixed bottom bar on mobile, sticky glass card on desktop */}
+        <div className="fixed bottom-0 left-0 right-0 z-20 rounded-tl-[24px] rounded-tr-[24px] border-t border-white/10 bg-[rgba(10,5,16,0.8)] px-6 py-4 backdrop-blur-xl sm:sticky sm:bottom-6 sm:left-auto sm:right-auto sm:rounded-2xl sm:border sm:border-white/10">
           <SurveyNav
             canGoBack={currentIndex > 0}
             canGoNext={canGoNext}
