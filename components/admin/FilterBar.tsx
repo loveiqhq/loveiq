@@ -49,24 +49,34 @@ export default function FilterBar({ onFilterChange }: FilterBarProps) {
       <select
         value={status}
         onChange={(e) => setStatus(e.target.value)}
-        className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-text-primary outline-none"
+        className="rounded-lg border border-white/10 bg-[#1a1025] px-3 py-2 text-sm text-text-primary outline-none"
         aria-label="Filter by status"
       >
-        <option value="">All statuses</option>
-        <option value="completed">Completed</option>
-        <option value="flagged">Flagged</option>
-        <option value="archived">Archived</option>
+        <option value="" className="bg-[#1a1025] text-gray-200">
+          All statuses
+        </option>
+        <option value="completed" className="bg-[#1a1025] text-gray-200">
+          Completed
+        </option>
+        <option value="flagged" className="bg-[#1a1025] text-gray-200">
+          Flagged
+        </option>
+        <option value="archived" className="bg-[#1a1025] text-gray-200">
+          Archived
+        </option>
       </select>
 
       <select
         value={archetype}
         onChange={(e) => setArchetype(e.target.value)}
-        className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-text-primary outline-none"
+        className="rounded-lg border border-white/10 bg-[#1a1025] px-3 py-2 text-sm text-text-primary outline-none"
         aria-label="Filter by archetype"
       >
-        <option value="">All archetypes</option>
+        <option value="" className="bg-[#1a1025] text-gray-200">
+          All archetypes
+        </option>
         {ARCHETYPES.map((a) => (
-          <option key={a} value={a}>
+          <option key={a} value={a} className="bg-[#1a1025] text-gray-200">
             {a}
           </option>
         ))}
