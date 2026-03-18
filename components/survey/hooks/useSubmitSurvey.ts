@@ -3,6 +3,7 @@
 import { useState, useCallback } from "react";
 import type { AnswerValue } from "./useSurveyState";
 import { getCsrfToken } from "@/lib/csrf-client";
+import { getSessionId } from "./surveySession";
 
 type SubmitStatus = "idle" | "submitting" | "success" | "error";
 
@@ -24,6 +25,7 @@ export function useSubmitSurvey() {
       setStatus("submitting");
 
       const durationMs = Date.now() - new Date(startedAt).getTime();
+      const sessionId = getSessionId();
 
       try {
         const res = await fetch("/api/survey", {
@@ -39,6 +41,7 @@ export function useSubmitSurvey() {
             startedAt,
             durationMs,
             ...(utmTracker ? { utmTracker } : {}),
+            ...(sessionId ? { sessionId } : {}),
           }),
         });
 

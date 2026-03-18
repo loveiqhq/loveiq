@@ -8,6 +8,8 @@ import logger from "@/lib/logger";
 import { scoreArchetypes, getScoringConfig } from "@/lib/scoring";
 import type { ScoringResult } from "@/lib/scoring";
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const surveySchema = z.object({
   email: z.string().email().max(320),
   firstName: z.string().max(80),
@@ -22,6 +24,7 @@ const surveySchema = z.object({
   startedAt: z.string().datetime(),
   durationMs: z.number().int().min(0).max(86_400_000),
   utmTracker: z.string().max(500).optional().nullable(),
+  sessionId: z.string().regex(UUID_RE).optional().nullable(),
   website: z.string().max(0).optional().nullable(), // honeypot
 });
 
@@ -116,7 +119,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   }
 
-  const { email, firstName, answers, startedAt, durationMs, utmTracker, website } = parsed.data;
+  const { email, firstName, answers, startedAt, durationMs, utmTracker, sessionId, website } =
+    parsed.data;
   const normalizedEmail = email.trim().toLowerCase();
   const normalizedFirstName = firstName.trim();
 
@@ -154,6 +158,7 @@ export async function POST(request: Request) {
     p_started_at: startedAt,
     p_duration_ms: durationMs,
     p_utm_tracker: utmTracker || null,
+    p_session_id: sessionId || null,
   };
 
   let response: Response;
