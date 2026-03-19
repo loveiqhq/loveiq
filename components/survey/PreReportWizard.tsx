@@ -458,8 +458,9 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete }) => {
             </h2>
 
             <p
-              className="mt-6 max-w-[924px] font-sans text-[16px] leading-[26px] text-white/80 sm:text-[18px] sm:leading-[29px] lg:text-[24px] lg:leading-[39px] [&_strong]:font-bold [&_strong]:text-white"
+              className="mt-6 max-w-[798px] lg:max-w-[880px] font-sans not-italic text-[18px] font-light leading-[29.25px] text-white/80 [&_strong]:font-bold [&_strong]:text-white"
               style={{
+                fontVariationSettings: '"wght" 300',
                 opacity: 0,
                 animation: "survey-fade-up 700ms cubic-bezier(0.16,1,0.3,1) 300ms both",
               }}
