@@ -21,6 +21,7 @@
     "analyze": "ANALYZE=true npm run build",
     "check": "npm run lint && npm test && npm run build",
     "setup": "npm install && node -e \"const fs=require('fs');if(!fs.existsSync('.env.local')){fs.copyFileSync('.env.example','.env.local');console.log('.env.local created from .env.example')}else{console.log('.env.local already exists')}\"",
+    "update:product-kpis": "node scripts/update-product-kpis.js",
     "prepare": "husky"
   },
   "dependencies": {

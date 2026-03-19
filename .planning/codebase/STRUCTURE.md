@@ -24,7 +24,8 @@ loveiq-web/
 │   │       ├── submissions/route.ts # Submission list (paginated)
 │   │       ├── submissions/[id]/route.ts # Submission CRUD
 │   │       ├── export/route.ts      # CSV export
-│   │       └── survey-status/route.ts # Survey active/closed toggle
+│   │       ├── survey-status/route.ts # Survey active/closed toggle
+│   │       └── product-kpis/route.ts  # Product KPI data (static)
 │   ├── admin/                  # Admin panel pages (Supabase Auth protected)
 │   │   ├── layout.tsx           # Admin shell (sidebar + header)
 │   │   ├── login/page.tsx       # Admin magic link login page
@@ -32,6 +33,7 @@ loveiq-web/
 │   │   ├── submissions/page.tsx # Submission browser
 │   │   ├── submissions/[id]/page.tsx # Submission detail
 │   │   ├── survey-status/page.tsx   # Survey status toggle
+│   │   ├── product-kpis/page.tsx   # Product KPIs dashboard
 │   │   └── auth/
 │   │       └── callback/route.ts    # Supabase Auth magic link callback
 │   ├── about/                  # About page
@@ -84,6 +86,8 @@ loveiq-web/
 │   │   ├── SubmissionBrowser.tsx # Filterable submission list
 │   │   ├── SubmissionDetail.tsx # Single submission view + actions
 │   │   ├── SurveyStatus.tsx    # Survey active/closed toggle
+│   │   ├── ProductKpiDashboard.tsx # Product KPIs dashboard + CSV download
+│   │   ├── kpi-tabs/           # KPI tab components (sortable table, 3 tabs)
 │   │   └── hooks/useAdminFetch.ts # Generic data fetching hook
 │   └── SmoothScroll.tsx        # Lenis smooth scroll wrapper
 ├── lib/                        # Utilities and helpers
@@ -109,7 +113,11 @@ loveiq-web/
 │   ├── glossary-source.csv     # Source CSV for glossary
 │   ├── survey-data.ts          # Survey questions and structure
 │   ├── survey-source.csv       # Source CSV for survey questions
-│   └── countries.ts            # Country list for survey forms
+│   ├── countries.ts            # Country list for survey forms
+│   ├── scoring-config.ts       # Auto-generated scoring config (from CSVs)
+│   ├── scoring-config/         # Source CSVs for archetype scoring (12 files)
+│   ├── product-kpis.ts         # Auto-generated product KPI data (from CSVs)
+│   └── product-kpis/           # Source CSVs for product KPIs (3 files)
 ├── __tests__/                  # Unit tests (Vitest)
 ├── e2e/                        # End-to-end tests (Playwright)
 ├── scripts/                    # Utility scripts
@@ -186,8 +194,8 @@ loveiq-web/
 
 **data/**
 
-- Purpose: Static data files for glossary and survey
-- Contains: Auto-generated glossary terms, survey questions, country list, source CSVs
+- Purpose: Static data files for glossary, survey, scoring, and product KPIs
+- Contains: Auto-generated glossary terms, survey questions, country list, scoring config, product KPIs, source CSVs
 
 \***\*tests**/\*\*
 

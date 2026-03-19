@@ -171,6 +171,7 @@
 - `/admin/submissions` - `app/admin/submissions/page.tsx` → Submission browser
 - `/admin/submissions/[id]` - `app/admin/submissions/[id]/page.tsx` → Submission detail
 - `/admin/survey-status` - `app/admin/survey-status/page.tsx` → Survey toggle
+- `/admin/product-kpis` - `app/admin/product-kpis/page.tsx` → Product KPIs dashboard
 - `/privacy-policy`, `/terms-of-use`, `/terms-and-conditions`, `/medical-disclaimer`, `/digital-content-terms`, `/cookies`, `/imprint` - Legal pages
 
 **API Routes:**
@@ -181,7 +182,7 @@
 - `/api/health` - `app/api/health/route.ts`
 - `/api/staging-login` - `app/api/staging-login/route.ts` (staging only)
 - `/api/staging-logout` - `app/api/staging-logout/route.ts` (staging only)
-- `/api/admin/*` - Admin API routes (login, logout, stats, submissions, export, survey-status)
+- `/api/admin/*` - Admin API routes (login, logout, stats, submissions, export, survey-status, product-kpis)
 - `/admin/auth/callback` - `app/admin/auth/callback/route.ts` (Supabase Auth magic link callback)
 
 **SEO Routes:**

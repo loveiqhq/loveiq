@@ -64,28 +64,37 @@ export default function BarChart({
           })}
 
           {/* Bars */}
-          <div className="flex h-full items-end gap-1">
+          <div className="flex h-full items-stretch gap-1">
             {items.map((item, idx) => {
               const pct = (item.value / maxValue) * 100;
               return (
                 <div
                   key={`${item.label}-${idx}`}
-                  className="group relative flex flex-1 flex-col items-center"
+                  className="group flex flex-1 flex-col items-center"
                 >
-                  {/* Always-visible value above bar */}
-                  <span className="mb-0.5 text-[10px] text-text-muted">
-                    {item.value > 0 ? item.value : ""}
-                  </span>
-                  <div
-                    className="w-full rounded-t bg-accent-purple/60 transition-colors group-hover:bg-accent-purple"
-                    style={{ height: `${pct}%`, minHeight: item.value > 0 ? 2 : 0 }}
-                  />
+                  {/* Bar area — fills remaining space, bar grows from bottom */}
+                  <div className="relative w-full flex-1">
+                    <div
+                      className="absolute bottom-0 left-0 right-0 rounded-t bg-accent-purple/60 transition-colors group-hover:bg-accent-purple"
+                      style={{ height: `${pct}%`, minHeight: item.value > 0 ? 2 : 0 }}
+                    />
+                    {/* Value label positioned just above bar */}
+                    {item.value > 0 && (
+                      <span
+                        className="absolute left-1/2 -translate-x-1/2 text-[10px] text-text-muted whitespace-nowrap"
+                        style={{ bottom: `calc(${pct}% + 2px)` }}
+                      >
+                        {item.value}
+                      </span>
+                    )}
+                  </div>
+                  {/* X-axis label */}
                   {idx % labelStep === 0 ? (
-                    <span className="mt-1 text-[10px] text-text-muted truncate max-w-full">
+                    <span className="mt-1 shrink-0 text-[10px] text-text-muted truncate max-w-full">
                       {item.label}
                     </span>
                   ) : (
-                    <span className="mt-1 text-[10px] invisible">.</span>
+                    <span className="mt-1 shrink-0 text-[10px] invisible">.</span>
                   )}
                 </div>
               );

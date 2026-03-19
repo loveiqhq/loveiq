@@ -71,6 +71,11 @@
 | Admin submissions API         | `app/api/admin/submissions/route.ts`, `app/api/admin/submissions/[id]/route.ts`                 |
 | Admin CSV export              | `app/api/admin/export/route.ts`                                                                 |
 | Admin survey toggle           | `components/admin/SurveyStatus.tsx`, `app/api/admin/survey-status/route.ts`                     |
+| Admin Product KPIs dashboard  | `components/admin/ProductKpiDashboard.tsx`, `app/api/admin/product-kpis/route.ts`               |
+| Admin KPI tab components      | `components/admin/kpi-tabs/ReportSectionsTab.tsx`, `QuestionsTab.tsx`, `ChaptersTab.tsx`        |
+| Admin KPI sortable table      | `components/admin/kpi-tabs/KpiDataTable.tsx`                                                    |
+| Product KPI data              | `data/product-kpis.ts` (auto-generated from `data/product-kpis/*.csv`)                          |
+| Regenerate product KPIs       | `node scripts/update-product-kpis.js`                                                           |
 | Admin layout (sidebar/header) | `components/admin/AdminSidebar.tsx`, `components/admin/AdminHeader.tsx`, `app/admin/layout.tsx` |
 | Admin data fetching hook      | `components/admin/hooks/useAdminFetch.ts`                                                       |
 

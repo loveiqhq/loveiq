@@ -38,7 +38,8 @@ loveiq-web/
 │   │       ├── submissions/route.ts # Submission list (paginated)
 │   │       ├── submissions/[id]/route.ts # Submission CRUD (GET/PATCH/DELETE)
 │   │       ├── export/route.ts      # CSV export
-│   │       └── survey-status/route.ts # Survey active/closed toggle
+│   │       ├── survey-status/route.ts # Survey active/closed toggle
+│   │       └── product-kpis/route.ts  # Product KPI data (static)
 │   ├── admin/                   # Admin panel pages (Supabase Auth-protected)
 │   │   ├── auth/callback/route.ts # Magic link callback handler
 │   │   ├── layout.tsx           # Admin shell (sidebar + header)
@@ -46,7 +47,8 @@ loveiq-web/
 │   │   ├── page.tsx             # Dashboard
 │   │   ├── submissions/page.tsx # Submission browser
 │   │   ├── submissions/[id]/page.tsx # Submission detail
-│   │   └── survey-status/page.tsx   # Survey status toggle
+│   │   ├── survey-status/page.tsx   # Survey status toggle
+│   │   └── product-kpis/page.tsx   # Product KPIs dashboard
 │   ├── about/page.tsx          # About page
 │   ├── login/page.tsx          # Staging login page
 │   ├── waitlist/page.tsx       # Waitlist standalone page
@@ -86,6 +88,12 @@ loveiq-web/
 │   │   ├── SubmissionBrowser.tsx # Filterable submission list
 │   │   ├── SubmissionDetail.tsx # Single submission view + actions
 │   │   ├── SurveyStatus.tsx    # Survey active/closed toggle
+│   │   ├── ProductKpiDashboard.tsx # Product KPIs dashboard + CSV download
+│   │   ├── kpi-tabs/           # KPI tab components
+│   │   │   ├── KpiDataTable.tsx    # Generic sortable table
+│   │   │   ├── ReportSectionsTab.tsx # Report sections tab
+│   │   │   ├── QuestionsTab.tsx     # Survey questions tab
+│   │   │   └── ChaptersTab.tsx      # Survey chapters tab
 │   │   └── hooks/useAdminFetch.ts # Generic data fetching hook
 │   ├── staging/                # Staging login form
 │   ├── not-found/              # 404 page component
@@ -120,7 +128,9 @@ loveiq-web/
 │   ├── survey-source.csv       # Source CSV for survey questions
 │   ├── countries.ts            # Country list for survey forms
 │   ├── scoring-config.ts       # Auto-generated scoring config (from CSVs)
-│   └── scoring-config/         # Source CSVs for archetype scoring (12 files)
+│   ├── scoring-config/         # Source CSVs for archetype scoring (12 files)
+│   ├── product-kpis.ts         # Auto-generated product KPI data (from CSVs)
+│   └── product-kpis/           # Source CSVs for product KPIs (3 files)
 ├── scripts/                    # Build/data scripts (update-glossary.js, update-survey.js, etc.)
 ├── public/                     # Static assets (images, videos)
 ├── proxy.ts                    # Middleware: CSP headers, CSRF cookies, security logging

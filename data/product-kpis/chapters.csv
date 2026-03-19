@@ -1,0 +1,16 @@
+C_ID,Chapter name,Number of Qs (non-intro),Number of Qs IYS,First Q_ID,Last Q_ID,First Q_ID IYS,Last Q_ID IYS,entry_n,last_reach_n,dropoff_n_sum,backtrack_n_sum,guidance_tooltip_open_n_sum,error_n_sum,weighted_active_time_sum_s,completion_%,dropoff_%,backtrack_%,guidance_tooltip_open_%,error_%,time_per_entry_s,z_dropoff_%,z_backtrack_%,z_guidance_tooltip_open_%,z_error_%,z_time_per_entry,friction_index
+1,Current Sexual Wellbeing & Pain Points,12,5,01001,01012,01001,01006,930,834,129,44,64,20,23316.5,89.68%,13.87%,4.73%,6.88%,2.15%,25.1,0.267,-0.135,-0.262,0.067,0.118,0.054
+2,Spontaneous Desire VS Responsive Desire,6,5,02001,02006,02000,02004,801,708,109,47,93,18,26949.9,88.39%,13.61%,5.87%,11.61%,2.25%,33.6,0.228,0.257,0.554,0.135,0.498,1.671
+3,"Arousal Styles — Cues, Conditions & Brakes",27,12,03001,03027,03000,03014,692,529,174,74,137,21,38647,76.45%,25.14%,10.69%,19.80%,3.03%,55.8,1.942,1.919,1.968,0.693,1.152,7.674
+4,Arousal Nonconcordance,9,0,04001,04009,,,,,,,,,,,,,,,,,,,,,
+5,Sexual Literacy & Experience,15,0,05001,05015,,,,,,,,,,,,,,,,,,,,,
+6,"Body Image, Physical Self-Perception & Erotic Confidence",11,0,06001,06012,,,,,,,,,,,,,,,,,,,,,
+7,Sexual Challenges — Inside Me & Between Us,23,0,07001,07023,,,,,,,,,,,,,,,,,,,,,
+8,Attachment Style & Emotional Safety,21,7,08001,08021,08000,08012,518,454,73,33,67,14,18708.5,87.64%,14.09%,6.37%,12.93%,2.70%,36.1,0.300,0.430,0.783,0.458,0.589,2.560
+9,Relational Patterns & Boundaries,13,1,09001,09013,09013,09013,445,445,13,6,5,0,2403,100.00%,2.92%,1.35%,1.12%,0.00%,5.4,-1.361,-1.300,-1.257,-1.457,-1.864,-7.239
+10,Communication Style,23,5,10001,10023,10000,10005,432,399,43,28,38,9,13842.5,92.36%,9.95%,6.48%,8.80%,2.08%,32.0,-0.315,0.468,0.068,0.019,0.435,0.675
+11,Partner-Related Needs,22,4,11001,11022,11001,11004,389,363,33,11,21,4,8407.9,93.32%,8.48%,2.83%,5.40%,1.03%,21.6,-0.534,-0.791,-0.518,-0.729,-0.073,-2.645
+12,"Edges, Limits & Curiosity about Fantasies",10,0,12001,12010,,,,,,,,,,,,,,,,,,,,,
+13,"Erotic Interests, Play Styles, Themes & Storylines",128,0,13001,13128,,,,,,,,,,,,,,,,,,,,,
+14,"Identity, Background & Conditioning",41,2,14001,14041,14020,14021,356,349,15,6,7,2,2680.4,98.03%,4.21%,1.69%,1.97%,0.56%,7.5,-1.169,-1.184,-1.111,-1.059,-1.435,-5.958
+15,"Demographics, Health & Lifestyle",19,20,00000,15017,00000,15017,1000,251,164,61,71,47,35843.2,25.10%,16.40%,6.10%,7.10%,4.70%,35.8,0.643,0.337,-0.225,1.873,0.580,3.207

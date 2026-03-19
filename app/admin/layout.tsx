@@ -9,6 +9,7 @@ const pageTitles: Record<string, string> = {
   "/admin": "Dashboard",
   "/admin/submissions": "Submissions",
   "/admin/survey-status": "Survey Status",
+  "/admin/product-kpis": "Product KPIs",
 };
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
