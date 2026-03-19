@@ -75,7 +75,7 @@ export default function BarChart({
                   {/* Bar area — fills remaining space, bar grows from bottom */}
                   <div className="relative w-full flex-1">
                     <div
-                      className="absolute bottom-0 left-0 right-0 rounded-t bg-accent-purple/60 transition-colors group-hover:bg-accent-purple"
+                      className="absolute bottom-0 left-0 right-0 rounded-t bg-accent-purple transition-colors group-hover:bg-accent-purple/80"
                       style={{ height: `${pct}%`, minHeight: item.value > 0 ? 2 : 0 }}
                     />
                     {/* Value label positioned just above bar */}
@@ -116,7 +116,7 @@ export default function BarChart({
               <span className="text-text-primary">{item.value}</span>
             </div>
             <div className="h-2 rounded-full bg-white/5">
-              <div className="h-2 rounded-full bg-accent-orange/70" style={{ width: `${pct}%` }} />
+              <div className="h-2 rounded-full bg-accent-orange" style={{ width: `${pct}%` }} />
             </div>
           </div>
         );
