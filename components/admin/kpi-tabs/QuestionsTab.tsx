@@ -86,17 +86,15 @@ export default function QuestionsTab({ data, selectedChapter, onChapterChange }:
 
       <KpiDataTable data={filtered} columns={columns} defaultSortKey="qId" />
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <div className="rounded-xl border border-white/10 bg-surface p-5">
-          <h3 className="mb-4 text-sm font-medium text-text-muted">
-            Reach Funnel{selectedChapter !== "all" ? ` (Ch ${selectedChapter})` : ""}
-          </h3>
-          <BarChart items={funnelItems} direction="vertical" maxHeight={220} />
-        </div>
-        <div className="rounded-xl border border-white/10 bg-surface p-5">
-          <h3 className="mb-4 text-sm font-medium text-text-muted">Top 15 Friction Questions</h3>
-          <BarChart items={topFriction} direction="horizontal" />
-        </div>
+      <div className="rounded-xl border border-white/10 bg-surface p-5">
+        <h3 className="mb-4 text-sm font-medium text-text-muted">
+          Reach Funnel{selectedChapter !== "all" ? ` (Ch ${selectedChapter})` : ""}
+        </h3>
+        <BarChart items={funnelItems} direction="vertical" maxHeight={220} />
+      </div>
+      <div className="rounded-xl border border-white/10 bg-surface p-5">
+        <h3 className="mb-4 text-sm font-medium text-text-muted">Top 15 Friction Questions</h3>
+        <BarChart items={topFriction} direction="horizontal" />
       </div>
     </div>
   );
