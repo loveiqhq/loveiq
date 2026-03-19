@@ -15,16 +15,17 @@ const navItems = [
     icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z",
   },
   {
-    href: "/admin/survey-status",
-    label: "Survey Status",
-    icon: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z",
-  },
-  {
     href: "/admin/product-kpis",
     label: "Product KPIs",
     icon: "M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z",
   },
 ];
+
+const dangerItem = {
+  href: "/admin/survey-status",
+  label: "Survey Status",
+  icon: "M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z",
+};
 
 interface AdminSidebarProps {
   open: boolean;
@@ -90,6 +91,32 @@ export default function AdminSidebar({ open, onClose }: AdminSidebarProps) {
               {item.label}
             </a>
           ))}
+
+          {/* Survey Status — separated and styled as danger action */}
+          <div className="mt-4 border-t border-white/10 pt-4">
+            <a
+              href={dangerItem.href}
+              onClick={onClose}
+              className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 text-sm font-medium transition ${
+                isActive(dangerItem.href)
+                  ? "border-red-500/40 bg-red-500/15 text-red-300"
+                  : "border-red-500/20 bg-red-500/5 text-red-400/70 hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-300"
+              }`}
+            >
+              <svg
+                className="h-5 w-5 shrink-0"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d={dangerItem.icon} />
+              </svg>
+              {dangerItem.label}
+            </a>
+          </div>
         </nav>
 
         <div className="border-t border-white/10 p-3">
