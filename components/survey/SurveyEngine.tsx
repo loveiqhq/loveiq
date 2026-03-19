@@ -22,6 +22,9 @@ import { useSurveyTracking } from "./hooks/useSurveyTracking";
 import { useUtmCapture } from "./hooks/useUtmCapture";
 import { usePartialSave } from "./hooks/usePartialSave";
 import SurveyConfirmation from "./SurveyConfirmation";
+import PreReportWizard from "./PreReportWizard";
+
+type CompletionPhase = "confirmation" | "wizard" | "done";
 
 interface SurveyEngineProps {
   onExit: () => void;
@@ -38,6 +41,25 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit }) => {
   const hasTrackedStart = useRef(false);
   const hasCompleted = useRef(false);
   const touchStartX = useRef<number | null>(null);
+
+  // Pre-report wizard phase management
+  const [completionPhase, setCompletionPhase] = useState<CompletionPhase>("confirmation");
+  const [fadingToWizard, setFadingToWizard] = useState(false);
+
+  // Auto-transition from success celebration to pre-report wizard
+  useEffect(() => {
+    if (submitStatus === "success" && completionPhase === "confirmation") {
+      const fadeTimer = setTimeout(() => setFadingToWizard(true), 3000);
+      const switchTimer = setTimeout(() => {
+        setFadingToWizard(false);
+        setCompletionPhase("wizard");
+      }, 3600);
+      return () => {
+        clearTimeout(fadeTimer);
+        clearTimeout(switchTimer);
+      };
+    }
+  }, [submitStatus, completionPhase]);
 
   const question = surveyQuestions[currentIndex];
   const totalQuestions = surveyQuestions.length;
@@ -189,9 +211,21 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit }) => {
     };
   }, [hasAnswer, question, goNext, goPrev]);
 
-  // Survey complete
+  // Survey complete — phase-based rendering
   if (!question || currentIndex >= totalQuestions) {
-    return <SurveyConfirmation status={submitStatus} onExit={onExit} />;
+    // Pre-report wizard phase
+    if (completionPhase === "wizard") {
+      return <PreReportWizard onComplete={() => setCompletionPhase("done")} />;
+    }
+
+    // Final confirmation (after wizard) or initial confirmation (processing/error)
+    return (
+      <div
+        className={`transition-opacity duration-[600ms] ${fadingToWizard ? "opacity-0" : "opacity-100"}`}
+      >
+        <SurveyConfirmation status={submitStatus} onExit={onExit} />
+      </div>
+    );
   }
   // Status text for nav
   const statusText = `Question ${currentIndex + 1} of ${totalQuestions}`;
