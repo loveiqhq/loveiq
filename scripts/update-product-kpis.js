@@ -75,57 +75,9 @@ function parseReportSections() {
     }));
 }
 
-// ─── Parse Questions ────────────────────────────────────────────────────────────
-function parseQuestions() {
-  const rows = readCsv("questions.csv", { skipFirstRow: true });
-  return rows
-    .filter((r) => r["Q_ID"] && r["Question"])
-    .map((r) => ({
-      qId: (r["Q_ID"] || "").trim(),
-      cId: (r["C_ID"] || "").trim(),
-      question: (r["Question"] || r["Question "] || "").trim(),
-      reachN: toInt(r["reach_n"]),
-      dropoffN: toInt(r["dropoff_n"]),
-      avgActiveTimeS: toFloat(r["avg_active_time_s"]),
-      backtrackN: toInt(r["backtrack_n"]),
-      guidanceTooltipOpenN: toInt(r["guidance_tooltip_open_n"]),
-      errorN: toInt(r["error_n"]),
-      reachPct: toFloat(r["reach_%"]),
-      dropoffPct: toFloat(r["dropoff_%"]),
-      backtrackPct: toFloat(r["backtrack_%"]),
-      guidanceTooltipOpenPct: toFloat(r["guidance_tooltip_open_%"]),
-      errorPct: toFloat(r["error_%"]),
-      frictionIndex: toFloat(r["friction_index"]),
-    }));
-}
-
-// ─── Parse Chapters ─────────────────────────────────────────────────────────────
-function parseChapters() {
-  // Chapters CSV: row 1 IS the header (no title row)
-  const rows = readCsv("chapters.csv");
-  return rows
-    .filter((r) => r["C_ID"])
-    .map((r) => ({
-      cId: (r["C_ID"] || "").trim(),
-      chapterName: (r["Chapter name"] || "").trim(),
-      numQsNonIntro: toInt(r["Number of Qs (non-intro)"]),
-      numQsIys: toInt(r["Number of Qs IYS"]),
-      entryN: toInt(r["entry_n"]),
-      lastReachN: toInt(r["last_reach_n"]),
-      dropoffNSum: toInt(r["dropoff_n_sum"]),
-      completionPct: toFloat(r["completion_%"]),
-      dropoffPct: toFloat(r["dropoff_%"]),
-      timePerEntryS: toFloat(r["time_per_entry_s"]),
-      backtrackPct: toFloat(r["backtrack_%"]),
-      frictionIndex: toFloat(r["friction_index"]),
-    }));
-}
-
 // ─── Generate TypeScript ────────────────────────────────────────────────────────
 function main() {
   const reportSections = parseReportSections();
-  const questions = parseQuestions();
-  const chapters = parseChapters();
 
   const output = `// Auto-generated from data/product-kpis/ — do not edit manually
 // Run: node scripts/update-product-kpis.js
@@ -158,7 +110,7 @@ export interface ReportSectionKpi {
 
 export const reportSections: ReportSectionKpi[] = ${JSON.stringify(reportSections, null, 2)};
 
-// ─── Questions (${questions.length}) ──────────────────────────────────────────────
+// ─── Questions (live from Supabase) ─────────────────────────────
 export interface QuestionKpi {
   qId: string;
   cId: string;
@@ -177,9 +129,7 @@ export interface QuestionKpi {
   frictionIndex: number | null;
 }
 
-export const questions: QuestionKpi[] = ${JSON.stringify(questions, null, 2)};
-
-// ─── Chapters (${chapters.length}) ───────────────────────────────────────────────
+// ─── Chapters (live from Supabase) ──────────────────────────────
 export interface ChapterKpi {
   cId: string;
   chapterName: string;
@@ -194,16 +144,15 @@ export interface ChapterKpi {
   backtrackPct: number | null;
   frictionIndex: number | null;
 }
-
-export const chapters: ChapterKpi[] = ${JSON.stringify(chapters, null, 2)};
+// NOTE: questions and chapters data removed — now computed live from Supabase RPC
+// See app/api/admin/product-kpis/route.ts
 `;
 
   fs.writeFileSync(tsPath, output, "utf-8");
 
   console.log("Written " + tsPath);
   console.log("  Report sections: " + reportSections.length);
-  console.log("  Questions: " + questions.length);
-  console.log("  Chapters: " + chapters.length);
+  console.log("  Questions & chapters: live from Supabase (not generated)");
 }
 
 main();

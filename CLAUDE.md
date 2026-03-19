@@ -129,8 +129,8 @@ loveiq-web/
 │   ├── countries.ts            # Country list for survey forms
 │   ├── scoring-config.ts       # Auto-generated scoring config (from CSVs)
 │   ├── scoring-config/         # Source CSVs for archetype scoring (12 files)
-│   ├── product-kpis.ts         # Auto-generated product KPI data (from CSVs)
-│   └── product-kpis/           # Source CSVs for product KPIs (3 files)
+│   ├── product-kpis.ts         # Report section KPI data (static/sample) + Question/Chapter KPI interfaces (live from Supabase)
+│   └── product-kpis/           # Source CSV for report sections (1 file; questions/chapters now live)
 ├── scripts/                    # Build/data scripts (update-glossary.js, update-survey.js, etc.)
 ├── public/                     # Static assets (images, videos)
 ├── proxy.ts                    # Middleware: CSP headers, CSRF cookies, security logging

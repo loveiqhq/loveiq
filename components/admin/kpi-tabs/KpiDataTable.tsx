@@ -24,7 +24,6 @@ function frictionColor(value: number | null): string {
   return "text-emerald-400";
 }
 
- 
 export default function KpiDataTable<T extends Record<string, any>>({
   data,
   columns,

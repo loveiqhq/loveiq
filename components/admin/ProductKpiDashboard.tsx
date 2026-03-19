@@ -3,6 +3,7 @@
 import { useState, useMemo, useCallback } from "react";
 import { useAdminFetch } from "@/components/admin/hooks/useAdminFetch";
 import StatCard from "@/components/admin/StatCard";
+import TimeRangeSelector from "@/components/admin/TimeRangeSelector";
 import ReportSectionsTab from "@/components/admin/kpi-tabs/ReportSectionsTab";
 import QuestionsTab from "@/components/admin/kpi-tabs/QuestionsTab";
 import ChaptersTab from "@/components/admin/kpi-tabs/ChaptersTab";
@@ -44,7 +45,9 @@ function downloadCsv(rows: Record<string, unknown>[], filename: string) {
 }
 
 export default function ProductKpiDashboard() {
-  const { data, loading, error } = useAdminFetch<ProductKpiData>("/api/admin/product-kpis");
+  const [days, setDays] = useState(0);
+  const params = useMemo(() => (days > 0 ? { days: String(days) } : undefined), [days]);
+  const { data, loading, error } = useAdminFetch<ProductKpiData>("/api/admin/product-kpis", params);
   const [activeTab, setActiveTab] = useState<Tab>("Report Sections");
   const [selectedChapter, setSelectedChapter] = useState("all");
 
@@ -121,6 +124,11 @@ export default function ProductKpiDashboard() {
 
   return (
     <div className="space-y-6">
+      {/* Time range */}
+      <div className="flex items-center justify-between">
+        <TimeRangeSelector value={days} onChange={setDays} />
+      </div>
+
       {/* Summary stats */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard label="Report Sections" value={stats?.totalSections ?? 0} />
@@ -152,6 +160,11 @@ export default function ProductKpiDashboard() {
               }`}
             >
               {tab}
+              {tab === "Report Sections" && (
+                <span className="ml-1.5 rounded bg-yellow-500/20 px-1.5 py-0.5 text-[10px] font-medium text-yellow-400">
+                  sample data
+                </span>
+              )}
             </button>
           ))}
         </div>
