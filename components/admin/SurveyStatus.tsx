@@ -10,13 +10,35 @@ interface SurveyStatusData {
   id?: number;
 }
 
+const CLOSE_PASSWORD = "kenseluj!123";
+
 export default function SurveyStatus() {
   const { data, loading, error, refetch } = useAdminFetch<SurveyStatusData>(
     "/api/admin/survey-status"
   );
+  const [showPassword, setShowPassword] = useState(false);
+  const [password, setPassword] = useState("");
+  const [passwordError, setPasswordError] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+
+  function handlePasswordSubmit() {
+    if (password === CLOSE_PASSWORD) {
+      setShowPassword(false);
+      setPassword("");
+      setPasswordError(false);
+      setShowConfirm(true);
+    } else {
+      setPasswordError(true);
+    }
+  }
+
+  function handlePasswordCancel() {
+    setShowPassword(false);
+    setPassword("");
+    setPasswordError(false);
+  }
 
   async function toggleStatus() {
     if (!data) return;
@@ -112,7 +134,7 @@ export default function SurveyStatus() {
             : "Reopening the survey will immediately allow new submissions from anyone with the survey link."}
         </p>
         <button
-          onClick={() => setShowConfirm(true)}
+          onClick={() => (data.active ? setShowPassword(true) : setShowConfirm(true))}
           disabled={actionLoading}
           className={`rounded-lg px-4 py-2 text-sm font-medium transition disabled:opacity-40 ${
             data.active
@@ -123,6 +145,69 @@ export default function SurveyStatus() {
           {data.active ? "Close Survey" : "Reopen Survey"}
         </button>
       </div>
+
+      {/* Password gate for closing survey */}
+      {showPassword && (
+        <>
+          <div
+            className="fixed inset-0 z-50 bg-black/60"
+            aria-hidden="true"
+            onClick={handlePasswordCancel}
+          />
+          <div className="fixed inset-0 z-50 flex items-center justify-center px-4 pointer-events-none">
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="password-dialog-title"
+              className="pointer-events-auto w-full max-w-sm rounded-2xl border border-red-500/30 bg-surface p-6"
+            >
+              <h3 id="password-dialog-title" className="font-serif text-lg font-bold text-red-400">
+                Authorization Required
+              </h3>
+              <p className="mt-2 text-sm text-text-muted">
+                Closing the survey is a protected action. Enter the authorization password to
+                proceed.
+              </p>
+              <div className="mt-4">
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    setPasswordError(false);
+                  }}
+                  onKeyDown={(e) => e.key === "Enter" && handlePasswordSubmit()}
+                  className={`w-full rounded-lg border bg-white/5 px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:outline-none ${
+                    passwordError
+                      ? "border-red-500/50 focus:border-red-500/70"
+                      : "border-white/10 focus:border-white/20"
+                  }`}
+                  placeholder="Enter password"
+                  autoComplete="off"
+                  autoFocus
+                />
+                {passwordError && (
+                  <p className="mt-1.5 text-xs text-red-400">Incorrect password.</p>
+                )}
+              </div>
+              <div className="mt-6 flex justify-end gap-3">
+                <button
+                  onClick={handlePasswordCancel}
+                  className="rounded-lg border border-white/10 px-4 py-2 text-sm text-text-muted transition hover:bg-white/5"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handlePasswordSubmit}
+                  className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-red-700"
+                >
+                  Continue
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
 
       <ConfirmDialog
         open={showConfirm}
