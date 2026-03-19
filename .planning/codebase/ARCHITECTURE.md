@@ -114,6 +114,9 @@
 8. Submit via Supabase RPC (`submit_survey`)
 9. Notify Slack webhook (after response)
 10. Return success response
+11. Client shows success animation (3s)
+12. Auto-transitions to PreReportWizard (5 educational slides)
+13. User completes wizard → returns to confirmation with "Return to LoveIQ" CTA
 
 **State Management:**
 

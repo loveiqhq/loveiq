@@ -75,7 +75,7 @@ loveiq-web/
 │   ├── about/                  # About page sections
 │   ├── glossary/               # Glossary components
 │   ├── legal/                  # Legal page nav component
-│   ├── survey/                 # Survey / intro wizard components
+│   ├── survey/                 # Survey / intro wizard + pre-report wizard components
 │   ├── admin/                  # Admin panel components
 │   │   ├── AdminLoginForm.tsx  # Admin magic link login form
 │   │   ├── AdminSidebar.tsx    # Sidebar navigation

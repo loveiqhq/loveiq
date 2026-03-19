@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, cleanup } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { render, screen, fireEvent, cleanup, act } from "@testing-library/react";
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
 
 // --- Mutable mock state ---
@@ -127,10 +126,18 @@ vi.mock("@/components/survey/GuideAvatar", () => ({
 vi.mock("@/components/survey/GuidancePanel", () => ({
   default: () => <div data-testid="guidance-panel" />,
 }));
+vi.mock("@/components/survey/PreReportWizard", () => ({
+  default: ({ onComplete }: { onComplete: () => void }) => (
+    <div data-testid="pre-report-wizard">
+      <button onClick={onComplete}>Complete Wizard</button>
+    </div>
+  ),
+}));
 
 import SurveyEngine from "@/components/survey/SurveyEngine";
 
 beforeEach(() => {
+  vi.useFakeTimers();
   mockCurrentIndex = 0;
   mockProgress = 0;
   mockSubmitStatus = "idle";
@@ -141,7 +148,10 @@ beforeEach(() => {
   mockSubmit.mockClear();
 });
 
-afterEach(cleanup);
+afterEach(() => {
+  vi.useRealTimers();
+  cleanup();
+});
 
 describe("SurveyEngine", () => {
   it("renders first question on mount", () => {
@@ -165,16 +175,15 @@ describe("SurveyEngine", () => {
     expect(screen.getByText("Processing Your Answers…")).toBeInTheDocument();
   });
 
-  it("calls onExit when Return to LoveIQ button clicked on completion screen", async () => {
+  it("calls onExit when Return to LoveIQ button clicked on completion screen", () => {
     mockCurrentIndex = 3;
     mockProgress = 100;
 
-    const user = userEvent.setup();
     const onExit = vi.fn();
     mockSubmitStatus = "success";
     render(<SurveyEngine onExit={onExit} />);
 
-    await user.click(screen.getByRole("button", { name: /return to loveiq/i }));
+    fireEvent.click(screen.getByRole("button", { name: /return to loveiq/i }));
     expect(onExit).toHaveBeenCalledTimes(1);
   });
 
@@ -198,5 +207,69 @@ describe("SurveyEngine", () => {
     render(<SurveyEngine onExit={vi.fn()} />);
     expect(screen.getByTestId("survey-header")).toBeInTheDocument();
     expect(screen.getByTestId("survey-nav")).toBeInTheDocument();
+  });
+});
+
+describe("SurveyEngine — completion phases", () => {
+  it("auto-transitions to pre-report wizard after success + timer", () => {
+    mockCurrentIndex = 3;
+    mockProgress = 100;
+    mockSubmitStatus = "success";
+
+    render(<SurveyEngine onExit={vi.fn()} />);
+
+    // Initially shows confirmation
+    expect(screen.getByText("Your Journey Begins")).toBeInTheDocument();
+    expect(screen.queryByTestId("pre-report-wizard")).not.toBeInTheDocument();
+
+    // Advance past the 3.6s transition
+    act(() => {
+      vi.advanceTimersByTime(3700);
+    });
+
+    // Now shows wizard
+    expect(screen.getByTestId("pre-report-wizard")).toBeInTheDocument();
+    expect(screen.queryByText("Your Journey Begins")).not.toBeInTheDocument();
+  });
+
+  it("shows final confirmation after wizard completes", () => {
+    mockCurrentIndex = 3;
+    mockProgress = 100;
+    mockSubmitStatus = "success";
+
+    render(<SurveyEngine onExit={vi.fn()} />);
+
+    // Transition to wizard
+    act(() => {
+      vi.advanceTimersByTime(3700);
+    });
+
+    expect(screen.getByTestId("pre-report-wizard")).toBeInTheDocument();
+
+    // Complete the wizard
+    fireEvent.click(screen.getByRole("button", { name: /complete wizard/i }));
+
+    // Back to confirmation (done phase)
+    expect(screen.getByText("Your Journey Begins")).toBeInTheDocument();
+    expect(screen.queryByTestId("pre-report-wizard")).not.toBeInTheDocument();
+  });
+
+  it("does not auto-transition to wizard on error", () => {
+    mockCurrentIndex = 3;
+    mockProgress = 100;
+    mockSubmitStatus = "error";
+
+    render(<SurveyEngine onExit={vi.fn()} />);
+
+    expect(screen.getByText("Answers Saved Locally")).toBeInTheDocument();
+
+    // Advance well past the transition timer
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
+
+    // Still shows error, no wizard
+    expect(screen.getByText("Answers Saved Locally")).toBeInTheDocument();
+    expect(screen.queryByTestId("pre-report-wizard")).not.toBeInTheDocument();
   });
 });

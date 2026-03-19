@@ -71,7 +71,11 @@ loveiq-web/
 │   ├── about/                  # About page sections
 │   ├── glossary/               # Glossary components
 │   ├── legal/                  # Legal page nav component
-│   ├── survey/                 # Survey / intro wizard components
+│   ├── survey/                 # Survey / intro wizard + pre-report wizard components
+│   │   ├── SurveyPage.tsx      # Orchestrator (intro → wizard → consent → engine)
+│   │   ├── SurveyEngine.tsx    # Question loop + completion phases
+│   │   ├── PreReportWizard.tsx  # 5-slide post-submission wizard
+│   │   ├── SurveyConfirmation.tsx # Processing/success/error screens
 │   │   ├── questions/          # Question type components (SingleChoice, Scale, etc.)
 │   │   └── hooks/              # Survey state, submission, and tracking hooks
 │   ├── admin/                  # Admin panel components
@@ -149,8 +153,9 @@ loveiq-web/
 2. **Waitlist Signup:** Form → CSRF check → Rate limit → Zod validation → Honeypot check → Supabase insert → Resend email → Slack notification
 3. **Contact Form:** Form → reCAPTCHA → CSRF check → Rate limit → Zod validation → Resend email → Slack notification
 4. **Survey Submission:** Form → CSRF check → Rate limit → Zod validation → Honeypot check → Email cooldown → Supabase RPC → Slack notification
-5. **Survey Tracking:** Question transition → Buffer events → Flush batch → CSRF check → Rate limit → Zod validation → Supabase insert
-6. **Admin Panel:** `/admin/*` → Supabase Auth middleware gate (magic link session) → API routes with session + CSRF + rate limit → Supabase queries
+5. **Pre-Report Wizard:** Survey submit success → 3s success animation → fade to PreReportWizard (5 slides) → SurveyConfirmation final CTA
+6. **Survey Tracking:** Question transition → Buffer events → Flush batch → CSRF check → Rate limit → Zod validation → Supabase insert
+7. **Admin Panel:** `/admin/*` → Supabase Auth middleware gate (magic link session) → API routes with session + CSRF + rate limit → Supabase queries
 
 ### Key Boundaries
 

@@ -14,6 +14,8 @@
 | Contact form UI             | `components/about/ContactSection.tsx` (embedded in About page)                                |
 | Contact form API endpoint   | `app/api/contact/route.ts`                                                                    |
 | Survey UI & question flow   | `components/survey/SurveyEngine.tsx`, `components/survey/SurveyPage.tsx`                      |
+| Survey completion wizard    | `components/survey/PreReportWizard.tsx`                                                       |
+| Survey confirmation UI      | `components/survey/SurveyConfirmation.tsx`                                                    |
 | Survey question types       | `components/survey/questions/*.tsx` (SingleChoice, Scale, MultipleChoice, etc.)               |
 | Survey submission logic     | `components/survey/hooks/useSubmitSurvey.ts`                                                  |
 | Survey API endpoint         | `app/api/survey/route.ts`                                                                     |
