@@ -17,7 +17,7 @@ export function hasRole(userRole: AdminRole, requiredRole: AdminRole): boolean {
 }
 
 /** Route-action to minimum role mapping. */
-export const ROUTE_PERMISSIONS: Record<string, AdminRole> = {
+const ROUTE_PERMISSIONS: Record<string, AdminRole> = {
   // GET endpoints — viewer
   "GET:/api/admin/stats": "viewer",
   "GET:/api/admin/submissions": "viewer",

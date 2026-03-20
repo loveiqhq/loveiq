@@ -21,19 +21,13 @@ module.exports = {
           purple: "var(--accent-purple)",
         },
       },
-      borderRadius: {
-        pill: "9999px",
-      },
       boxShadow: {
         card: "var(--shadow-card)",
         soft: "var(--shadow-soft)",
         pill: "var(--shadow-pill)",
-        focus:
-          "0 0 0 2px var(--color-border-strong), 0 0 0 4px color-mix(in srgb, var(--accent-purple) 40%, transparent)",
       },
       backgroundImage: {
         "gradient-brand": "var(--gradient-brand)",
-        "gradient-surface": "var(--gradient-surface)",
       },
     },
   },
