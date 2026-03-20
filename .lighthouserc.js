@@ -16,8 +16,8 @@ module.exports = {
       assertions: {
         // CI uses throttled mobile network — performance varies widely
         "categories:performance": ["warn", { minScore: 0.5 }],
-        // axe E2E tests enforce WCAG 2.1 AA; Lighthouse is a secondary signal
-        "categories:accessibility": ["warn", { minScore: 0.85 }],
+        // axe E2E tests enforce WCAG 2.1 AA; Lighthouse enforces as blocking gate
+        "categories:accessibility": ["error", { minScore: 0.85 }],
         "categories:best-practices": ["warn", { minScore: 0.9 }],
         "categories:seo": ["warn", { minScore: 0.9 }],
       },

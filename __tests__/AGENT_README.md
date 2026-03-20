@@ -33,3 +33,22 @@ Unit tests (Vitest) that mirror the source directory structure.
 | `components/staging/StagingLoginForm.test.tsx` | `components/staging/StagingLoginForm.tsx` |
 | `components/waitlist/WaitlistPage.test.tsx`    | `components/waitlist/WaitlistPage.tsx`    |
 | `proxy.test.ts`                                | `proxy.ts`                                |
+
+## Regression Test Convention
+
+When writing a test for a **bug fix**, wrap it in a `describe` block prefixed with `regression:` and the issue number or a short description. This makes regression tests searchable via `grep -r "regression:"`.
+
+```ts
+describe("regression: #42 — duplicate email signup returns wrong status", () => {
+  it("returns 409 for duplicate email instead of 500", async () => {
+    // test the specific scenario that caused the bug
+  });
+});
+```
+
+**Rules:**
+
+- Use `regression: #<number>` when a GitHub issue exists
+- Use `regression: <short-description>` for bugs found without an issue
+- Place the regression describe block inside the existing test file for the affected module
+- Always test the **exact scenario** that triggered the bug, not just a generic variation

@@ -1,0 +1,56 @@
+name: Visual Regression
+
+# Weekly scheduled run + manual trigger for on-demand checks.
+on:
+  schedule:
+    # Every Monday at 6:00 AM UTC
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+    inputs:
+      target_url:
+        description: "Target URL (defaults to staging)"
+        required: false
+        default: "https://staging.loveiq.org"
+
+permissions:
+  contents: read
+
+jobs:
+  visual-regression:
+    name: Playwright visual regression
+    runs-on: ubuntu-latest
+    env:
+      TARGET_URL: ${{ inputs.target_url || 'https://staging.loveiq.org' }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - run: npm ci
+
+      - name: Install Playwright (Chromium only)
+        run: npx playwright install --with-deps chromium
+
+      - name: Run visual regression tests
+        run: npx playwright test visual-regression --project="Desktop Chrome"
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ env.TARGET_URL }}
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: visual-regression-report
+          path: playwright-report/
+          retention-days: 14
+
+      - name: Upload diff images
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: visual-regression-diffs
+          path: test-results/
+          retention-days: 14
