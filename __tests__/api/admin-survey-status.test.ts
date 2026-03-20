@@ -117,6 +117,7 @@ describe("GET /api/admin/survey-status", () => {
 describe("PATCH /api/admin/survey-status", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    process.env.SURVEY_CLOSE_PASSWORD = "test-close-pw";
     mockVerifyAdminSession.mockResolvedValue({ email: "admin@test.com", role: "admin" });
     mockVerifyCsrf.mockResolvedValue(true);
     mockCheckRateLimit.mockResolvedValue({ allowed: true, remaining: 29, resetAt: new Date() });
@@ -181,18 +182,41 @@ describe("PATCH /api/admin/survey-status", () => {
     expect(json.success).toBe(true);
   });
 
-  it("returns success when toggling to closed", async () => {
+  it("returns success when toggling to closed with correct password", async () => {
     mockSupabaseFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => [{ id: 1 }],
     });
     mockSupabaseFetch.mockResolvedValueOnce({ ok: true });
 
-    const res = await PATCH(makePatchRequest({ active: false }));
+    const res = await PATCH(makePatchRequest({ active: false, closePassword: "test-close-pw" }));
     expect(res.status).toBe(200);
 
     const json = await res.json();
     expect(json.success).toBe(true);
+  });
+
+  it("returns 403 when closing without password", async () => {
+    const res = await PATCH(makePatchRequest({ active: false }));
+    expect(res.status).toBe(403);
+
+    const json = await res.json();
+    expect(json.error).toBe("Invalid authorization password.");
+  });
+
+  it("returns 403 when closing with wrong password", async () => {
+    const res = await PATCH(makePatchRequest({ active: false, closePassword: "wrong" }));
+    expect(res.status).toBe(403);
+
+    const json = await res.json();
+    expect(json.error).toBe("Invalid authorization password.");
+  });
+
+  it("returns 403 when SURVEY_CLOSE_PASSWORD env var is not set", async () => {
+    delete process.env.SURVEY_CLOSE_PASSWORD;
+
+    const res = await PATCH(makePatchRequest({ active: false, closePassword: "anything" }));
+    expect(res.status).toBe(403);
   });
 
   it("returns 500 when survey lookup fails", async () => {

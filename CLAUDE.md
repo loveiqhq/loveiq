@@ -179,23 +179,24 @@ loveiq-web/
 
 Copy `.env.example` to `.env.local` and fill values:
 
-| Variable                         | Required    | Purpose                                                  |
-| -------------------------------- | ----------- | -------------------------------------------------------- |
-| `NEXT_PUBLIC_SITE_URL`           | Yes         | Canonical URL for metadata                               |
-| `SUPABASE_URL`                   | For forms   | Waitlist database                                        |
-| `SUPABASE_SERVICE_ROLE_KEY`      | For forms   | Supabase auth (server-only!)                             |
-| `RESEND_API_KEY`                 | For forms   | Email sending                                            |
-| `RESEND_FROM`                    | No          | From address (default: `LoveIQ <hello@send.loveiq.org>`) |
-| `RESEND_REPLY_TO`                | No          | Reply-to address                                         |
-| `NEXT_PUBLIC_RECAPTCHA_SITE_KEY` | For contact | reCAPTCHA client key                                     |
-| `RECAPTCHA_SECRET_KEY`           | For contact | reCAPTCHA server key                                     |
-| `SLACK_WAITLIST_WEBHOOK_URL`     | No          | Slack notifications for waitlist signups                 |
-| `SLACK_CONTACT_WEBHOOK_URL`      | No          | Slack notifications for contact form                     |
-| `SLACK_SURVEY_WEBHOOK_URL`       | No          | Slack notifications for survey submissions               |
-| `STAGING_PASSWORD`               | For staging | Password gate for staging deployment                     |
-| `NEXT_PUBLIC_SUPABASE_URL`       | For admin   | Supabase project URL (browser-safe, for admin auth SDK)  |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY`  | For admin   | Supabase anon key (browser-safe, for admin auth SDK)     |
-| `CONTACT_TO_EMAIL`               | For contact | Contact form recipient                                   |
+| Variable                         | Required    | Purpose                                                   |
+| -------------------------------- | ----------- | --------------------------------------------------------- |
+| `NEXT_PUBLIC_SITE_URL`           | Yes         | Canonical URL for metadata                                |
+| `SUPABASE_URL`                   | For forms   | Waitlist database                                         |
+| `SUPABASE_SERVICE_ROLE_KEY`      | For forms   | Supabase auth (server-only!)                              |
+| `RESEND_API_KEY`                 | For forms   | Email sending                                             |
+| `RESEND_FROM`                    | No          | From address (default: `LoveIQ <hello@send.loveiq.org>`)  |
+| `RESEND_REPLY_TO`                | No          | Reply-to address                                          |
+| `NEXT_PUBLIC_RECAPTCHA_SITE_KEY` | For contact | reCAPTCHA client key                                      |
+| `RECAPTCHA_SECRET_KEY`           | For contact | reCAPTCHA server key                                      |
+| `SLACK_WAITLIST_WEBHOOK_URL`     | No          | Slack notifications for waitlist signups                  |
+| `SLACK_CONTACT_WEBHOOK_URL`      | No          | Slack notifications for contact form                      |
+| `SLACK_SURVEY_WEBHOOK_URL`       | No          | Slack notifications for survey submissions                |
+| `STAGING_PASSWORD`               | For staging | Password gate for staging deployment                      |
+| `NEXT_PUBLIC_SUPABASE_URL`       | For admin   | Supabase project URL (browser-safe, for admin auth SDK)   |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY`  | For admin   | Supabase anon key (browser-safe, for admin auth SDK)      |
+| `SURVEY_CLOSE_PASSWORD`          | For admin   | Password required to close/pause the survey (server-only) |
+| `CONTACT_TO_EMAIL`               | For contact | Contact form recipient                                    |
 
 **The site renders without env vars.** Forms will fail gracefully with error messages.
 

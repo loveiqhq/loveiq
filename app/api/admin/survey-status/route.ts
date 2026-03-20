@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { timingSafeEqual } from "crypto";
 import { verifyAdminSession } from "@/lib/admin/auth";
 import { hasRole } from "@/lib/admin/roles";
 import { logAdminAction } from "@/lib/admin/audit";
@@ -6,6 +7,13 @@ import { supabaseFetch } from "@/lib/admin/supabase";
 import { verifyCsrfToken } from "@/lib/csrf";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
 import logger from "@/lib/logger";
+
+function verifyClosePassword(input: string): boolean {
+  const expected = process.env.SURVEY_CLOSE_PASSWORD;
+  if (!expected) return false;
+  if (input.length !== expected.length) return false;
+  return timingSafeEqual(Buffer.from(input), Buffer.from(expected));
+}
 
 export async function GET(request: Request) {
   const admin = await verifyAdminSession();
@@ -71,9 +79,19 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "Please try again later." }, { status: 429 });
   }
 
-  const body = (await request.json().catch(() => ({}))) as { active?: boolean };
+  const body = (await request.json().catch(() => ({}))) as {
+    active?: boolean;
+    closePassword?: string;
+  };
   if (typeof body.active !== "boolean") {
     return NextResponse.json({ error: "Invalid input." }, { status: 400 });
+  }
+
+  // Closing the survey requires the close password
+  if (!body.active) {
+    if (!body.closePassword || !verifyClosePassword(body.closePassword)) {
+      return NextResponse.json({ error: "Invalid authorization password." }, { status: 403 });
+    }
   }
 
   try {

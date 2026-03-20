@@ -106,7 +106,7 @@ describe("SurveyStatus", () => {
     expect(screen.getByRole("button", { name: "Reopen Survey" })).toBeInTheDocument();
   });
 
-  it("Close Survey button opens password prompt, correct password opens confirm dialog", async () => {
+  it("Close Survey button opens password prompt, entering password opens confirm dialog", async () => {
     const user = userEvent.setup();
     mockUseAdminFetch.mockReturnValue({
       data: { active: true, id: 1 },
@@ -121,14 +121,12 @@ describe("SurveyStatus", () => {
     expect(screen.getByText("Authorization Required")).toBeInTheDocument();
     expect(screen.queryByTestId("confirm-dialog")).not.toBeInTheDocument();
 
-    // Wrong password shows error
-    await user.type(screen.getByPlaceholderText("Enter password"), "wrong");
+    // Empty password shows error
     await user.click(screen.getByRole("button", { name: "Continue" }));
     expect(screen.getByText("Incorrect password.")).toBeInTheDocument();
 
-    // Correct password proceeds to confirm dialog
-    await user.clear(screen.getByPlaceholderText("Enter password"));
-    await user.type(screen.getByPlaceholderText("Enter password"), "kenseluj!123");
+    // Any non-empty password proceeds to confirm dialog (server validates)
+    await user.type(screen.getByPlaceholderText("Enter password"), "somepassword");
     await user.click(screen.getByRole("button", { name: "Continue" }));
     expect(screen.getByTestId("confirm-dialog")).toBeInTheDocument();
   });

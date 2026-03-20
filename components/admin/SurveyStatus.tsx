@@ -10,8 +10,6 @@ interface SurveyStatusData {
   id?: number;
 }
 
-const CLOSE_PASSWORD = "kenseluj!123";
-
 export default function SurveyStatus() {
   const { data, loading, error, refetch } = useAdminFetch<SurveyStatusData>(
     "/api/admin/survey-status"
@@ -22,16 +20,19 @@ export default function SurveyStatus() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [pendingPassword, setPendingPassword] = useState("");
 
   function handlePasswordSubmit() {
-    if (password === CLOSE_PASSWORD) {
-      setShowPassword(false);
-      setPassword("");
-      setPasswordError(false);
-      setShowConfirm(true);
-    } else {
+    if (!password) {
       setPasswordError(true);
+      return;
     }
+    // Store password for the API call, proceed to confirm dialog
+    setPendingPassword(password);
+    setShowPassword(false);
+    setPassword("");
+    setPasswordError(false);
+    setShowConfirm(true);
   }
 
   function handlePasswordCancel() {
@@ -46,21 +47,35 @@ export default function SurveyStatus() {
     setActionLoading(true);
     setActionError(null);
     try {
+      const isClosing = data.active;
       const res = await fetch("/api/admin/survey-status", {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
           "x-csrf-token": getCsrfToken(),
         },
-        body: JSON.stringify({ active: !data.active }),
+        body: JSON.stringify({
+          active: !data.active,
+          ...(isClosing ? { closePassword: pendingPassword } : {}),
+        }),
       });
+      setPendingPassword("");
       if (!res.ok) {
         const body = await res.json().catch(() => null);
-        setActionError((body as { error?: string } | null)?.error || "Failed to update status.");
+        const errMsg = (body as { error?: string } | null)?.error || "Failed to update status.";
+        if (errMsg.includes("password")) {
+          // Password was wrong — re-show password dialog
+          setPasswordError(true);
+          setShowPassword(true);
+          setActionLoading(false);
+          return;
+        }
+        setActionError(errMsg);
         return;
       }
       refetch();
     } catch {
+      setPendingPassword("");
       setActionError("Network error. Please try again.");
     } finally {
       setActionLoading(false);
