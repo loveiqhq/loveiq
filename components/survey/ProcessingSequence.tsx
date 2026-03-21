@@ -14,7 +14,7 @@ interface ProcessingStep {
 const EASING = "cubic-bezier(0.16, 1, 0.3, 1)";
 const FADE_OUT_MS = 400;
 const FADE_IN_MS = 500;
-const EXIT_FADE_MS = 800;
+const EXIT_FADE_MS = 600;
 
 /* ------------------------------------------------------------------ */
 /*  SVG Icons                                                          */
@@ -106,15 +106,15 @@ const MailIcon: FC<{ className?: string }> = ({ className }) => (
 /*  Steps data                                                         */
 /* ------------------------------------------------------------------ */
 const STEPS: ProcessingStep[] = [
-  { icon: CheckSquareIcon, message: "Extracting your answers...", durationMs: 2400 },
+  { icon: CheckSquareIcon, message: "Extracting your answers...", durationMs: 1800 },
   {
     icon: FileUserIcon,
     message: "Scoring your answers against our archetypes...",
-    durationMs: 2800,
+    durationMs: 2100,
   },
-  { icon: FilePenIcon, message: "Generating your report results...", durationMs: 2600 },
-  { icon: LockIcon, message: "Creating your protected access link...", durationMs: 2200 },
-  { icon: MailIcon, message: "Sending you a report access link...", durationMs: 2000 },
+  { icon: FilePenIcon, message: "Generating your report results...", durationMs: 2000 },
+  { icon: LockIcon, message: "Creating your protected access link...", durationMs: 1700 },
+  { icon: MailIcon, message: "Sending you a report access link...", durationMs: 1500 },
 ];
 
 const TOTAL_DURATION_MS = STEPS.reduce((sum, s) => sum + s.durationMs, 0);
@@ -126,42 +126,39 @@ const MAX_PERCENT = 95;
 const RING_R = 88;
 const CIRCUMFERENCE = 2 * Math.PI * RING_R;
 
-const CircularProgress: FC<{ percent: number }> = ({ percent }) => {
-  const offset = CIRCUMFERENCE - (percent / 100) * CIRCUMFERENCE;
-  return (
-    <svg
-      className="absolute inset-0 h-full w-full"
-      viewBox="0 0 200 200"
-      fill="none"
-      aria-hidden="true"
-      style={{ transform: "rotate(-90deg)" }}
-    >
-      <defs>
-        <linearGradient id="circ-progress-grad" x1="1" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#fe6839" />
-          <stop offset="100%" stopColor="#a78bfa" />
-        </linearGradient>
-      </defs>
-      {/* Background track */}
-      <circle cx="100" cy="100" r={RING_R} stroke="rgba(255,255,255,0.04)" strokeWidth="2.5" />
-      {/* Progress arc */}
-      <circle
-        cx="100"
-        cy="100"
-        r={RING_R}
-        stroke="url(#circ-progress-grad)"
-        strokeWidth="3"
-        strokeLinecap="round"
-        strokeDasharray={CIRCUMFERENCE}
-        strokeDashoffset={offset}
-        style={{
-          transition: `stroke-dashoffset 200ms ${EASING}`,
-          filter: "drop-shadow(0 0 6px rgba(254,104,57,0.4))",
-        }}
-      />
-    </svg>
-  );
-};
+const CircularProgress: FC<{
+  progressRef: React.RefObject<SVGCircleElement | null>;
+}> = ({ progressRef }) => (
+  <svg
+    className="absolute inset-0 h-full w-full"
+    viewBox="0 0 200 200"
+    fill="none"
+    aria-hidden="true"
+    style={{ transform: "rotate(-90deg)" }}
+  >
+    <defs>
+      <linearGradient id="circ-progress-grad" x1="1" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="#fe6839" />
+        <stop offset="100%" stopColor="#a78bfa" />
+      </linearGradient>
+    </defs>
+    {/* Background track */}
+    <circle cx="100" cy="100" r={RING_R} stroke="rgba(255,255,255,0.04)" strokeWidth="2.5" />
+    {/* Progress arc — updated directly via ref for 60fps smoothness */}
+    <circle
+      ref={progressRef}
+      cx="100"
+      cy="100"
+      r={RING_R}
+      stroke="url(#circ-progress-grad)"
+      strokeWidth="3"
+      strokeLinecap="round"
+      strokeDasharray={CIRCUMFERENCE}
+      strokeDashoffset={CIRCUMFERENCE}
+      style={{ filter: "drop-shadow(0 0 6px rgba(254,104,57,0.4))" }}
+    />
+  </svg>
+);
 
 /* ------------------------------------------------------------------ */
 /*  Background orbs                                                    */
@@ -196,6 +193,7 @@ const ProcessingSequence: FC<ProcessingSequenceProps> = ({ onComplete, submitDon
   const submitDoneRef = useRef(submitDone);
   const hasCalledComplete = useRef(false);
   const startTimeRef = useRef(0);
+  const circleRef = useRef<SVGCircleElement>(null);
 
   useEffect(() => {
     submitDoneRef.current = submitDone;
@@ -205,10 +203,13 @@ const ProcessingSequence: FC<ProcessingSequenceProps> = ({ onComplete, submitDon
     if (hasCalledComplete.current) return;
     hasCalledComplete.current = true;
     setDisplayPercent(100);
+    if (circleRef.current) {
+      circleRef.current.style.strokeDashoffset = "0";
+    }
     setTimeout(() => {
       setIsExitingScreen(true);
       setTimeout(onComplete, EXIT_FADE_MS);
-    }, 500);
+    }, 350);
   }, [onComplete]);
 
   // Smooth percentage counter: ticks up by 1 continuously from 0 → 95
@@ -218,9 +219,15 @@ const ProcessingSequence: FC<ProcessingSequenceProps> = ({ onComplete, submitDon
 
     const tick = (now: number) => {
       const elapsed = now - startTimeRef.current;
-      const pct = Math.min(Math.floor((elapsed / TOTAL_DURATION_MS) * MAX_PERCENT), MAX_PERCENT);
-      setDisplayPercent(pct);
-      if (pct < MAX_PERCENT) raf = requestAnimationFrame(tick);
+      const floatPct = Math.min((elapsed / TOTAL_DURATION_MS) * MAX_PERCENT, MAX_PERCENT);
+      const intPct = Math.floor(floatPct);
+      // Update ring directly via DOM for 60fps smoothness (no CSS transition lag)
+      if (circleRef.current) {
+        const offset = CIRCUMFERENCE - (floatPct / 100) * CIRCUMFERENCE;
+        circleRef.current.style.strokeDashoffset = String(offset);
+      }
+      setDisplayPercent(intPct);
+      if (floatPct < MAX_PERCENT) raf = requestAnimationFrame(tick);
     };
 
     raf = requestAnimationFrame(tick);
@@ -247,7 +254,7 @@ const ProcessingSequence: FC<ProcessingSequenceProps> = ({ onComplete, submitDon
         stepsComplete.current = true;
         setTimeout(() => {
           if (submitDoneRef.current) fireComplete();
-        }, 1000);
+        }, 600);
         return;
       }
       setContentPhase("exiting");
@@ -325,7 +332,7 @@ const ProcessingSequence: FC<ProcessingSequenceProps> = ({ onComplete, submitDon
 
           {/* Circular progress ring */}
           <div className="absolute h-[140px] w-[140px] sm:h-[184px] sm:w-[184px]">
-            <CircularProgress percent={displayPercent} />
+            <CircularProgress progressRef={circleRef} />
           </div>
 
           {/* Inner circle (persistent) */}
