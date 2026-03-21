@@ -170,13 +170,13 @@ afterEach(() => {
 
 describe("SurveyEngine", () => {
   it("renders first question on mount", () => {
-    render(<SurveyEngine onExit={vi.fn()} />);
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
     expect(screen.getByTestId("single-choice")).toBeInTheDocument();
     expect(screen.getByText("Q1?")).toBeInTheDocument();
   });
 
   it("renders the correct question component for answerType single", () => {
-    render(<SurveyEngine onExit={vi.fn()} />);
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
     expect(screen.getByTestId("single-choice")).toBeInTheDocument();
     expect(screen.queryByTestId("scale-question")).not.toBeInTheDocument();
     expect(screen.queryByTestId("open-response")).not.toBeInTheDocument();
@@ -186,18 +186,18 @@ describe("SurveyEngine", () => {
     mockCurrentIndex = 3;
     mockProgress = 100;
 
-    render(<SurveyEngine onExit={vi.fn()} />);
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
     expect(screen.getByTestId("processing-sequence")).toBeInTheDocument();
     expect(screen.getByText("Extracting your answers...")).toBeInTheDocument();
   });
 
-  it("calls onExit when wizard completes after report ready screen", () => {
+  it("calls onComplete when wizard completes after report ready screen", () => {
     mockCurrentIndex = 3;
     mockProgress = 100;
 
-    const onExit = vi.fn();
+    const onComplete = vi.fn();
     mockSubmitStatus = "success";
-    render(<SurveyEngine onExit={onExit} />);
+    render(<SurveyEngine onExit={vi.fn()} onComplete={onComplete} />);
 
     // Complete processing → report ready
     fireEvent.click(screen.getByRole("button", { name: /finish processing/i }));
@@ -207,15 +207,15 @@ describe("SurveyEngine", () => {
     fireEvent.click(screen.getByRole("button", { name: /view your free report/i }));
     expect(screen.getByTestId("pre-report-wizard")).toBeInTheDocument();
 
-    // Complete wizard → calls onExit directly
+    // Complete wizard → calls onComplete (clears survey state)
     fireEvent.click(screen.getByRole("button", { name: /complete wizard/i }));
-    expect(onExit).toHaveBeenCalledTimes(1);
+    expect(onComplete).toHaveBeenCalledTimes(1);
   });
 
   it("renders scale question component for answerType scale", () => {
     mockCurrentIndex = 1;
 
-    render(<SurveyEngine onExit={vi.fn()} />);
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
     expect(screen.getByTestId("scale-question")).toBeInTheDocument();
     expect(screen.getByText("Q2?")).toBeInTheDocument();
   });
@@ -223,13 +223,13 @@ describe("SurveyEngine", () => {
   it("renders open response question component for answerType open", () => {
     mockCurrentIndex = 2;
 
-    render(<SurveyEngine onExit={vi.fn()} />);
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
     expect(screen.getByTestId("open-response")).toBeInTheDocument();
     expect(screen.getByText("Q3?")).toBeInTheDocument();
   });
 
   it("shows survey header and nav when in question view", () => {
-    render(<SurveyEngine onExit={vi.fn()} />);
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
     expect(screen.getByTestId("survey-header")).toBeInTheDocument();
     expect(screen.getByTestId("survey-nav")).toBeInTheDocument();
   });
@@ -241,7 +241,7 @@ describe("SurveyEngine — completion phases", () => {
     mockProgress = 100;
     mockSubmitStatus = "success";
 
-    render(<SurveyEngine onExit={vi.fn()} />);
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
 
     // Initially shows processing sequence
     expect(screen.getByTestId("processing-sequence")).toBeInTheDocument();
@@ -255,13 +255,13 @@ describe("SurveyEngine — completion phases", () => {
     expect(screen.queryByTestId("processing-sequence")).not.toBeInTheDocument();
   });
 
-  it("transitions through full success flow: processing → ready → wizard → exit", () => {
+  it("transitions through full success flow: processing → ready → wizard → complete", () => {
     mockCurrentIndex = 3;
     mockProgress = 100;
     mockSubmitStatus = "success";
 
-    const onExit = vi.fn();
-    render(<SurveyEngine onExit={onExit} />);
+    const onComplete = vi.fn();
+    render(<SurveyEngine onExit={vi.fn()} onComplete={onComplete} />);
 
     // Complete processing → report ready
     fireEvent.click(screen.getByRole("button", { name: /finish processing/i }));
@@ -272,9 +272,9 @@ describe("SurveyEngine — completion phases", () => {
     expect(screen.getByTestId("pre-report-wizard")).toBeInTheDocument();
     expect(screen.queryByTestId("report-ready")).not.toBeInTheDocument();
 
-    // Complete wizard → calls onExit
+    // Complete wizard → calls onComplete (clears survey state)
     fireEvent.click(screen.getByRole("button", { name: /complete wizard/i }));
-    expect(onExit).toHaveBeenCalledTimes(1);
+    expect(onComplete).toHaveBeenCalledTimes(1);
   });
 
   it("skips wizard and shows error confirmation on error", () => {
@@ -282,7 +282,7 @@ describe("SurveyEngine — completion phases", () => {
     mockProgress = 100;
     mockSubmitStatus = "error";
 
-    render(<SurveyEngine onExit={vi.fn()} />);
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
 
     // Initially shows processing
     expect(screen.getByTestId("processing-sequence")).toBeInTheDocument();

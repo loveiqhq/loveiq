@@ -1141,9 +1141,14 @@ const SurveyPage: FC = () => {
     setStep(TOTAL_STEPS + 1); // jump to consent
   }, []);
 
-  const handleReturn = useCallback(() => {
+  const handleReturn = useCallback((clearAnswers?: boolean) => {
     try {
       sessionStorage.removeItem(STEP_STORAGE_KEY);
+      if (clearAnswers) {
+        localStorage.removeItem(ANSWERS_STORAGE_KEY);
+        localStorage.removeItem("loveiq-survey-index");
+        localStorage.removeItem("loveiq-survey-utm");
+      }
     } catch {
       /* ignore */
     }
@@ -1181,7 +1186,7 @@ const SurveyPage: FC = () => {
   }
 
   // Survey engine
-  return <SurveyEngine onExit={handleReturn} />;
+  return <SurveyEngine onExit={() => handleReturn()} onComplete={() => handleReturn(true)} />;
 };
 
 export default SurveyPage;

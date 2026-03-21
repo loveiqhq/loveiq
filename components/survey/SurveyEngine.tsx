@@ -30,9 +30,10 @@ type CompletionPhase = "processing" | "ready" | "wizard" | "done";
 
 interface SurveyEngineProps {
   onExit: () => void;
+  onComplete: () => void;
 }
 
-const SurveyEngine: FC<SurveyEngineProps> = ({ onExit }) => {
+const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
   const { answers, currentIndex, startedAt, progress, setAnswer, getAnswer, setCurrentIndex } =
     useSurveyState();
   const { submit: submitSurvey, status: submitStatus } = useSubmitSurvey();
@@ -228,11 +229,11 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit }) => {
 
     // Pre-report wizard phase
     if (completionPhase === "wizard") {
-      return <PreReportWizard onComplete={onExit} />;
+      return <PreReportWizard onComplete={onComplete} />;
     }
 
     // Error confirmation only
-    return <SurveyConfirmation status={submitStatus} onExit={onExit} />;
+    return <SurveyConfirmation status={submitStatus} onExit={onComplete} />;
   }
   // Status text for nav
   const statusText = `Question ${currentIndex + 1} of ${totalQuestions}`;
