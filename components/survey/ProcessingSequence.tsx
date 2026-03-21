@@ -371,10 +371,13 @@ const ProcessingSequence: FC<ProcessingSequenceProps> = ({ onComplete, submitDon
         </div>
 
         {/* ---- Message text (TRANSITIONS) ---- */}
-        <div key={`msg-${stepIndex}`} className="mt-8 sm:mt-10" style={textStyle}>
-          <p className="max-w-[400px] text-center font-serif text-[17px] leading-[28px] text-white sm:text-[20px] sm:leading-[30px]">
-            {step.message}
-          </p>
+        {/* Fixed height prevents layout shift when text length changes between steps */}
+        <div className="mt-8 flex h-[56px] items-center justify-center sm:mt-10 sm:h-[60px]">
+          <div key={`msg-${stepIndex}`} style={textStyle}>
+            <p className="max-w-[400px] text-center font-serif text-[17px] leading-[28px] text-white sm:text-[20px] sm:leading-[30px]">
+              {step.message}
+            </p>
+          </div>
         </div>
 
         {/* ---- Percentage (PERSISTENT) ---- */}
