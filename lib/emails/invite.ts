@@ -1,6 +1,7 @@
 type InviteEmailParams = {
   referrerName?: string | null;
   surveyUrl: string;
+  siteUrl: string;
 };
 
 function escapeHtml(str: string): string {
@@ -11,9 +12,10 @@ function escapeHtml(str: string): string {
     .replace(/"/g, "&quot;");
 }
 
-export function inviteEmail({ referrerName, surveyUrl }: InviteEmailParams) {
+export function inviteEmail({ referrerName, surveyUrl, siteUrl }: InviteEmailParams) {
   const safeName = referrerName?.trim() ? escapeHtml(referrerName.trim()) : null;
   const safeUrl = escapeHtml(surveyUrl);
+  const logoUrl = `${siteUrl}/apple-touch-icon.png`;
 
   const subject = "Check out LoveIQ";
 
@@ -31,7 +33,7 @@ export function inviteEmail({ referrerName, surveyUrl }: InviteEmailParams) {
           <td style="padding: 20px 28px; background-color:#ffffff;">
             <table role="presentation" cellpadding="0" cellspacing="0">
               <tr>
-                <td style="width:22px; height:22px; border-radius:50%; background: linear-gradient(135deg, #2e0147 0%, #fe6839 100%); text-align:center; vertical-align:middle; font-size:11px; color:#ffffff;">&#x2764;</td>
+                <td style="width:24px; height:24px;"><img src="${logoUrl}" alt="LoveIQ" width="24" height="24" style="display:block; border-radius:6px;" /></td>
                 <td style="padding-left:10px; font-family: Georgia, 'Times New Roman', serif; font-size:20px; font-weight:600; color:#000000; letter-spacing:-0.3px;">LoveIQ</td>
               </tr>
             </table>

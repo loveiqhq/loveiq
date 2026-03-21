@@ -70,7 +70,7 @@ export async function POST(request: Request) {
   const surveyUrl = `${siteUrl}/survey?${utmParams.toString()}`;
 
   // 5. Build email
-  const tpl = inviteEmail({ referrerName, surveyUrl });
+  const tpl = inviteEmail({ referrerName, surveyUrl, siteUrl });
 
   // 6. Send email via Resend + track in DB (after response)
   const resendKey = process.env.RESEND_API_KEY;
