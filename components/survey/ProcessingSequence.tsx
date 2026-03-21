@@ -110,11 +110,11 @@ const STEPS: ProcessingStep[] = [
   {
     icon: FileUserIcon,
     message: "Scoring your answers against our archetypes...",
-    durationMs: 2100,
+    durationMs: 1800,
   },
-  { icon: FilePenIcon, message: "Generating your report results...", durationMs: 2000 },
-  { icon: LockIcon, message: "Creating your protected access link...", durationMs: 1700 },
-  { icon: MailIcon, message: "Sending you a report access link...", durationMs: 1500 },
+  { icon: FilePenIcon, message: "Generating your report results...", durationMs: 1800 },
+  { icon: LockIcon, message: "Creating your protected access link...", durationMs: 1800 },
+  { icon: MailIcon, message: "Sending you a report access link...", durationMs: 1800 },
 ];
 
 const TOTAL_DURATION_MS = STEPS.reduce((sum, s) => sum + s.durationMs, 0);
