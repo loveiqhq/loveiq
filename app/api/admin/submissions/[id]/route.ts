@@ -7,6 +7,17 @@ import { verifyCsrfToken } from "@/lib/csrf";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
 import logger from "@/lib/logger";
 
+/** Extract utm_source from a JSON utm_tracker string, falling back to the raw value. */
+function parseUtmSource(tracker: string | null): string | null {
+  if (!tracker?.trim()) return null;
+  try {
+    const parsed = JSON.parse(tracker);
+    return parsed.utm_source || null;
+  } catch {
+    return tracker.trim();
+  }
+}
+
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const admin = await verifyAdminSession();
   if (!admin) {
@@ -90,7 +101,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       started_at: raw.start_date_time || raw.created_date_time,
       completed_at: raw.created_date_time,
       duration_ms: raw.duration_ms,
-      utm_source: raw.utm_tracker?.trim() || null,
+      utm_source: parseUtmSource(raw.utm_tracker),
     };
 
     // Flatten answers — resolve values by question type

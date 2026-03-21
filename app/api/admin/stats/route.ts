@@ -5,6 +5,17 @@ import { supabaseFetch } from "@/lib/admin/supabase";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
 import logger from "@/lib/logger";
 
+/** Extract utm_source from a JSON utm_tracker string, falling back to the raw value. */
+function parseUtmSource(tracker: string | null, fallback = "Direct"): string {
+  if (!tracker?.trim()) return fallback;
+  try {
+    const parsed = JSON.parse(tracker);
+    return parsed.utm_source || fallback;
+  } catch {
+    return tracker.trim();
+  }
+}
+
 export async function GET(request: Request) {
   const admin = await verifyAdminSession();
   if (!admin) {
@@ -137,7 +148,7 @@ export async function GET(request: Request) {
     // UTM source breakdown (top 10)
     const utmMap: Record<string, number> = {};
     for (const s of submissions) {
-      const source = s.utm_tracker?.trim() || "Direct";
+      const source = parseUtmSource(s.utm_tracker);
       utmMap[source] = (utmMap[source] || 0) + 1;
     }
     const utmSources = Object.entries(utmMap)
@@ -148,7 +159,7 @@ export async function GET(request: Request) {
     // Completion rate by UTM source (min 2 submissions per source)
     const utmCompletionMap: Record<string, { completed: number; total: number }> = {};
     for (const s of submissions) {
-      const source = s.utm_tracker?.trim() || "Direct";
+      const source = parseUtmSource(s.utm_tracker);
       if (!utmCompletionMap[source]) utmCompletionMap[source] = { completed: 0, total: 0 };
       utmCompletionMap[source].total++;
       if (s.status === "completed") utmCompletionMap[source].completed++;
@@ -217,7 +228,7 @@ export async function GET(request: Request) {
         // UTM sources
         const wUtmMap: Record<string, number> = {};
         for (const w of waitlistRows) {
-          const source = w.utm_tracker?.trim() || "Direct";
+          const source = parseUtmSource(w.utm_tracker);
           wUtmMap[source] = (wUtmMap[source] || 0) + 1;
         }
         waitlistUtmSources = Object.entries(wUtmMap)

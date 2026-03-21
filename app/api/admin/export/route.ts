@@ -6,6 +6,17 @@ import { supabaseFetch } from "@/lib/admin/supabase";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
 import logger from "@/lib/logger";
 
+/** Extract utm_source from a JSON utm_tracker string, falling back to the raw value. */
+function parseUtmSource(tracker: string | null, fallback = "Direct"): string {
+  if (!tracker?.trim()) return fallback;
+  try {
+    const parsed = JSON.parse(tracker);
+    return parsed.utm_source || fallback;
+  } catch {
+    return tracker.trim();
+  }
+}
+
 export async function GET(request: Request) {
   const admin = await verifyAdminSession();
   if (!admin) {
@@ -78,7 +89,7 @@ export async function GET(request: Request) {
       started_at: r.start_date_time || r.created_date_time,
       completed_at: r.created_date_time,
       duration_ms: r.duration_ms,
-      utm_source: r.utm_tracker?.trim() || "Direct",
+      utm_source: parseUtmSource(r.utm_tracker),
     }));
 
     // Fetch scoring results for all submissions
