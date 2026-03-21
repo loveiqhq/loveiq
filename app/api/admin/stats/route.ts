@@ -426,6 +426,38 @@ export async function GET(request: Request) {
       logger.error({ err }, "Admin stats: answer distribution query failed (non-blocking)");
     }
 
+    // Q8: Invite click tracking (graceful degradation)
+    let inviteClicks: {
+      total: number;
+      today: number;
+      daily: Array<{ date: string; count: number }>;
+    } | null = null;
+
+    try {
+      const inviteRes = await supabaseFetch(
+        `/rest/v1/invite_event?select=id,created_at&created_at=gte.${since}&order=created_at.asc`
+      );
+      if (inviteRes.ok) {
+        const inviteRows = (await inviteRes.json()) as Array<{
+          id: number;
+          created_at: string;
+        }>;
+        const today = inviteRows.filter((r) => r.created_at.slice(0, 10) === todayStr).length;
+        const iDailyMap: Record<string, number> = {};
+        for (const r of inviteRows) {
+          const day = r.created_at.slice(0, 10);
+          iDailyMap[day] = (iDailyMap[day] || 0) + 1;
+        }
+        inviteClicks = {
+          total: inviteRows.length,
+          today,
+          daily: Object.entries(iDailyMap).map(([date, count]) => ({ date, count })),
+        };
+      }
+    } catch (err) {
+      logger.error({ err }, "Admin stats: invite click query failed (non-blocking)");
+    }
+
     return NextResponse.json({
       totalSubmissions: totalCount,
       completionRate,
@@ -462,6 +494,8 @@ export async function GET(request: Request) {
       archetypeDistribution,
       // Answer distribution (nullable)
       answerDistribution,
+      // Invite clicks (nullable)
+      inviteClicks,
     });
   } catch (err) {
     logger.error({ err }, "Admin stats error");

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, type FC } from "react";
 import Link from "next/link";
 import { trackSurveyInvite } from "@/lib/analytics";
+import { getCsrfToken } from "@/lib/csrf-client";
 
 const EASING = "cubic-bezier(0.16, 1, 0.3, 1)";
 
@@ -229,7 +230,21 @@ const ReportReady: FC<ReportReadyProps> = ({ name, email, onContinue }) => {
           {/* Secondary — opens email client with pre-filled invite message */}
           <a
             href={inviteMailto}
-            onClick={trackSurveyInvite}
+            onClick={() => {
+              trackSurveyInvite();
+              // Fire-and-forget server-side tracking
+              fetch("/api/invite-tracking", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "x-csrf-token": getCsrfToken(),
+                },
+                body: JSON.stringify({
+                  method: "email",
+                  referrerEmail: email.trim().toLowerCase() || undefined,
+                }),
+              }).catch(() => {});
+            }}
             className="flex w-full items-center justify-center gap-2 rounded-full border border-white/5 bg-[#171021] px-6 py-[17px] font-sans text-[16px] text-[#d1d5db] transition-all duration-300 hover:border-white/15 hover:bg-white/5 focus-visible-ring"
           >
             <PeopleIcon />

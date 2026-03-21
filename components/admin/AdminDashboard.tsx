@@ -59,6 +59,12 @@ interface StatsData {
     qId: string;
     options: Array<{ option: string; count: number }>;
   }> | null;
+  // Invite clicks (nullable)
+  inviteClicks: {
+    total: number;
+    today: number;
+    daily: Array<{ date: string; count: number }>;
+  } | null;
 }
 
 function truncateLabel(text: string, max = 50): string {
@@ -148,6 +154,12 @@ export default function AdminDashboard() {
     value: h.count,
   }));
 
+  // Invite click transforms
+  const inviteDailyItems = data.inviteClicks?.daily.map((d) => ({
+    label: d.date.slice(5),
+    value: d.count,
+  }));
+
   // Answer insight transforms
   const countryItems = data.countryDistribution?.map((d) => ({
     label: d.country,
@@ -180,7 +192,7 @@ export default function AdminDashboard() {
       </div>
 
       {/* Row 1: Key metrics */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
         <StatCard label="Total Submissions" value={data.totalSubmissions} />
         <StatCard label="Today" value={data.todayCount} />
         <StatCard label="Completion Rate" value={`${data.completionRate}%`} />
@@ -189,6 +201,11 @@ export default function AdminDashboard() {
           label="Waitlist Signups"
           value={data.waitlistTotal ?? "\u2014"}
           sub={data.waitlistToday != null ? `${data.waitlistToday} today` : undefined}
+        />
+        <StatCard
+          label="Invite Clicks"
+          value={data.inviteClicks?.total ?? "\u2014"}
+          sub={data.inviteClicks?.today != null ? `${data.inviteClicks.today} today` : undefined}
         />
         <StatCard
           label="Scored"
@@ -329,6 +346,26 @@ export default function AdminDashboard() {
         </div>
         <div />
       </div>
+
+      {/* ─── Invite Tracking ─── */}
+      {data.inviteClicks && (
+        <>
+          <h2 className="font-serif text-lg font-bold text-text-primary pt-2">Invite Tracking</h2>
+          <div className="grid gap-6 lg:grid-cols-2">
+            <div className="rounded-xl border border-white/10 bg-surface p-5">
+              <h3 className="mb-4 text-sm font-semibold text-text-primary">
+                Invite Clicks Over Time
+              </h3>
+              {inviteDailyItems && inviteDailyItems.length > 0 ? (
+                <BarChart items={inviteDailyItems} direction="vertical" maxHeight={180} />
+              ) : (
+                <p className="py-8 text-center text-sm text-text-muted">No data</p>
+              )}
+            </div>
+            <div />
+          </div>
+        </>
+      )}
 
       {/* ─── Behavior Analytics ─── */}
       <h2 className="font-serif text-lg font-bold text-text-primary pt-2">Behavior Analytics</h2>
