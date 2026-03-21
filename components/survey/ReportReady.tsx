@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback, type FC } from "react";
+import { useState, useEffect, useCallback, useMemo, type FC } from "react";
 import Link from "next/link";
+import { trackSurveyInvite } from "@/lib/analytics";
 
 const EASING = "cubic-bezier(0.16, 1, 0.3, 1)";
 
@@ -123,6 +124,29 @@ const ReportReady: FC<ReportReadyProps> = ({ name, email, onContinue }) => {
 
   const maskedEmail = email.trim() || "your email";
 
+  const inviteMailto = useMemo(() => {
+    const origin = typeof window !== "undefined" ? window.location.origin : "https://loveiq.org";
+    const refId = email.trim() ? btoa(email.trim().toLowerCase()) : "";
+    const utmParams = new URLSearchParams({
+      utm_source: "referral",
+      utm_medium: "email",
+      utm_campaign: "survey_invite",
+      ...(refId ? { utm_content: refId } : {}),
+    });
+    const surveyUrl = `${origin}/survey?${utmParams.toString()}`;
+
+    const subject = "Check out LoveIQ";
+    const body = [
+      "Hey :),",
+      "",
+      "I took this LoveIQ assessment and it gave me real clarity on my patterns, desires, and potentials. It was much better than I expected.",
+      "",
+      `You should try it. ${surveyUrl}`,
+    ].join("\n");
+
+    return `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  }, [email]);
+
   return (
     <main
       className="relative flex min-h-dvh flex-col items-center justify-between overflow-hidden bg-[#0b0710]"
@@ -202,18 +226,15 @@ const ReportReady: FC<ReportReadyProps> = ({ name, email, onContinue }) => {
             <ArrowRightIcon />
           </button>
 
-          {/* Secondary */}
-          <button
-            type="button"
-            onClick={() => {
-              const url = `${window.location.origin}/survey`;
-              navigator.clipboard?.writeText(url);
-            }}
+          {/* Secondary — opens email client with pre-filled invite message */}
+          <a
+            href={inviteMailto}
+            onClick={trackSurveyInvite}
             className="flex w-full items-center justify-center gap-2 rounded-full border border-white/5 bg-[#171021] px-6 py-[17px] font-sans text-[16px] text-[#d1d5db] transition-all duration-300 hover:border-white/15 hover:bg-white/5 focus-visible-ring"
           >
             <PeopleIcon />
             Invite someone to take the survey
-          </button>
+          </a>
         </div>
       </div>
 
