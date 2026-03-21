@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, type FC } from "react";
+import { useState, useEffect, useRef, useCallback, type FC } from "react";
 
 /* ------------------------------------------------------------------ */
 /*  Step configuration                                                 */
@@ -12,6 +12,11 @@ interface ProcessingStep {
   /** Minimum ms this step stays visible */
   durationMs: number;
 }
+
+const EASING = "cubic-bezier(0.16, 1, 0.3, 1)";
+const FADE_OUT_MS = 500;
+const FADE_IN_MS = 600;
+const EXIT_FADE_MS = 800;
 
 /* ------------------------------------------------------------------ */
 /*  SVG Icons (matching Figma exactly)                                 */
@@ -169,7 +174,6 @@ const AnimatedRing: FC = () => (
 /* ------------------------------------------------------------------ */
 const BackgroundOrbs: FC = () => (
   <div className="pointer-events-none fixed inset-0 overflow-hidden" aria-hidden="true">
-    {/* Purple orb — top left */}
     <div
       className="absolute h-[400px] w-[400px] rounded-full blur-[120px]"
       style={{
@@ -178,7 +182,6 @@ const BackgroundOrbs: FC = () => (
         top: "15%",
       }}
     />
-    {/* Orange orb — bottom right */}
     <div
       className="absolute h-[300px] w-[300px] rounded-full blur-[100px]"
       style={{
@@ -187,6 +190,25 @@ const BackgroundOrbs: FC = () => (
         bottom: "20%",
       }}
     />
+  </div>
+);
+
+/* ------------------------------------------------------------------ */
+/*  Progress bar                                                       */
+/* ------------------------------------------------------------------ */
+const ProgressBar: FC<{ percent: number }> = ({ percent }) => (
+  <div className="w-full max-w-[280px] sm:max-w-[320px]">
+    <div className="h-[3px] w-full overflow-hidden rounded-full bg-white/[0.06]">
+      <div
+        className="h-full rounded-full"
+        style={{
+          width: `${percent}%`,
+          background: "linear-gradient(90deg, #fe6839, #a78bfa)",
+          boxShadow: "0 0 12px rgba(254,104,57,0.4)",
+          transition: `width 800ms ${EASING}`,
+        }}
+      />
+    </div>
   </div>
 );
 
@@ -202,15 +224,30 @@ interface ProcessingSequenceProps {
 
 const ProcessingSequence: FC<ProcessingSequenceProps> = ({ onComplete, submitDone }) => {
   const [stepIndex, setStepIndex] = useState(0);
-  const [isFading, setIsFading] = useState(false);
+  const [phase, setPhase] = useState<"entering" | "visible" | "exiting">("entering");
+  const [isExitingScreen, setIsExitingScreen] = useState(false);
   const [displayPercent, setDisplayPercent] = useState(STEPS[0].percent);
   const stepsComplete = useRef(false);
   const submitDoneRef = useRef(submitDone);
+  const hasCalledComplete = useRef(false);
 
-  // Keep ref in sync
   useEffect(() => {
     submitDoneRef.current = submitDone;
   }, [submitDone]);
+
+  const fireComplete = useCallback(() => {
+    if (hasCalledComplete.current) return;
+    hasCalledComplete.current = true;
+    setIsExitingScreen(true);
+    setTimeout(onComplete, EXIT_FADE_MS);
+  }, [onComplete]);
+
+  // Entrance animation for each step
+  useEffect(() => {
+    setPhase("entering");
+    const timer = setTimeout(() => setPhase("visible"), 50);
+    return () => clearTimeout(timer);
+  }, [stepIndex]);
 
   // Auto-advance through steps
   useEffect(() => {
@@ -219,33 +256,27 @@ const ProcessingSequence: FC<ProcessingSequenceProps> = ({ onComplete, submitDon
     const step = STEPS[stepIndex];
     const timer = setTimeout(() => {
       if (stepIndex >= STEPS.length - 1) {
-        // Last step done — mark complete
         stepsComplete.current = true;
-        // Hold on last step briefly, then signal completion
         setTimeout(() => {
-          if (submitDoneRef.current) {
-            onComplete();
-          }
-        }, 800);
+          if (submitDoneRef.current) fireComplete();
+        }, 1000);
         return;
       }
-      // Fade out current step
-      setIsFading(true);
+      setPhase("exiting");
       setTimeout(() => {
         setStepIndex((i) => i + 1);
-        setIsFading(false);
-      }, 400);
+      }, FADE_OUT_MS);
     }, step.durationMs);
 
     return () => clearTimeout(timer);
-  }, [stepIndex, onComplete]);
+  }, [stepIndex, fireComplete]);
 
   // If submit finishes after all steps are done, fire completion
   useEffect(() => {
     if (submitDone && stepsComplete.current) {
-      onComplete();
+      fireComplete();
     }
-  }, [submitDone, onComplete]);
+  }, [submitDone, fireComplete]);
 
   // Animate the percentage counter
   useEffect(() => {
@@ -254,14 +285,13 @@ const ProcessingSequence: FC<ProcessingSequenceProps> = ({ onComplete, submitDon
     const diff = target - start;
     if (diff === 0) return;
 
-    const duration = 600;
+    const duration = 800;
     const startTime = performance.now();
     let raf: number;
 
     const tick = (now: number) => {
       const elapsed = now - startTime;
       const progress = Math.min(elapsed / duration, 1);
-      // ease-out cubic
       const eased = 1 - Math.pow(1 - progress, 3);
       setDisplayPercent(Math.round(start + diff * eased));
       if (progress < 1) raf = requestAnimationFrame(tick);
@@ -269,12 +299,29 @@ const ProcessingSequence: FC<ProcessingSequenceProps> = ({ onComplete, submitDon
 
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-    // Only re-run when stepIndex changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stepIndex]);
 
   const step = STEPS[stepIndex] ?? STEPS[STEPS.length - 1];
   const Icon = step.icon;
+
+  const contentStyle: React.CSSProperties =
+    phase === "exiting"
+      ? {
+          opacity: 0,
+          transform: "translateY(-12px) scale(0.98)",
+          transition: `opacity ${FADE_OUT_MS}ms ${EASING}, transform ${FADE_OUT_MS}ms ${EASING}`,
+        }
+      : phase === "entering"
+        ? {
+            opacity: 0,
+            transform: "translateY(20px) scale(0.98)",
+          }
+        : {
+            opacity: 1,
+            transform: "translateY(0) scale(1)",
+            transition: `opacity ${FADE_IN_MS}ms ${EASING}, transform ${FADE_IN_MS}ms ${EASING}`,
+          };
 
   return (
     <main
@@ -282,60 +329,62 @@ const ProcessingSequence: FC<ProcessingSequenceProps> = ({ onComplete, submitDon
       role="status"
       aria-live="polite"
       aria-label={step.message}
+      style={{
+        opacity: isExitingScreen ? 0 : 1,
+        transition: `opacity ${EXIT_FADE_MS}ms ${EASING}`,
+      }}
     >
       <BackgroundOrbs />
 
-      {/* Centered content */}
-      <div
-        className={`relative z-10 flex flex-col items-center gap-8 px-6 transition-opacity duration-400 sm:gap-10 ${
-          isFading ? "opacity-0" : "opacity-100"
-        }`}
-      >
-        {/* Icon container */}
-        <div className="relative flex items-center justify-center">
-          {/* Outer radial glow */}
-          <div
-            className="absolute rounded-full opacity-[0.84]"
-            style={{
-              width: "220px",
-              height: "220px",
-              background:
-                "radial-gradient(circle, rgba(167,139,250,0.18) 0%, rgba(120,80,200,0.06) 50%, transparent 75%)",
-            }}
-          />
+      <div className="relative z-10 flex flex-col items-center gap-8 px-6 sm:gap-10">
+        {/* Icon + text — animated per step */}
+        <div
+          key={stepIndex}
+          className="flex flex-col items-center gap-8 sm:gap-10"
+          style={contentStyle}
+        >
+          {/* Icon container */}
+          <div className="relative flex items-center justify-center">
+            <div
+              className="absolute rounded-full opacity-[0.84]"
+              style={{
+                width: "220px",
+                height: "220px",
+                background:
+                  "radial-gradient(circle, rgba(167,139,250,0.18) 0%, rgba(120,80,200,0.06) 50%, transparent 75%)",
+              }}
+            />
 
-          {/* Rotating ring */}
-          <div className="absolute h-[136px] w-[136px] sm:h-[176px] sm:w-[176px]">
-            <AnimatedRing />
+            <div className="absolute h-[136px] w-[136px] sm:h-[176px] sm:w-[176px]">
+              <AnimatedRing />
+            </div>
+
+            <div
+              className="relative flex h-[108px] w-[108px] items-center justify-center rounded-full shadow-[0_0_60px_0_rgba(167,139,250,0.12)] sm:h-[144px] sm:w-[144px]"
+              style={{
+                background:
+                  "radial-gradient(circle at 40% 35%, rgba(30,20,50,1) 0%, rgba(14,8,24,1) 100%)",
+              }}
+            >
+              <div className="absolute inset-0 rounded-full border border-white/[0.06]" />
+              <div className="pointer-events-none absolute inset-0 rounded-full shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]" />
+              <Icon className="h-7 w-7 text-[#fe6839] sm:h-[37px] sm:w-[37px]" />
+            </div>
           </div>
 
-          {/* Inner circle */}
-          <div
-            className="relative flex h-[108px] w-[108px] items-center justify-center rounded-full shadow-[0_0_60px_0_rgba(167,139,250,0.12)] sm:h-[144px] sm:w-[144px]"
-            style={{
-              background:
-                "radial-gradient(circle at 40% 35%, rgba(30,20,50,1) 0%, rgba(14,8,24,1) 100%)",
-            }}
-          >
-            {/* Subtle border */}
-            <div className="absolute inset-0 rounded-full border border-white/[0.06]" />
-            {/* Inner highlight */}
-            <div className="pointer-events-none absolute inset-0 rounded-full shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]" />
-
-            {/* Icon */}
-            <Icon className="h-7 w-7 text-[#fe6839] sm:h-[37px] sm:w-[37px]" />
+          {/* Text content */}
+          <div className="flex flex-col items-center gap-3">
+            <p className="max-w-[400px] text-center font-serif text-[17px] leading-[28px] text-white sm:text-[20px] sm:leading-[30px]">
+              {step.message}
+            </p>
+            <span className="font-sans text-[13px] font-normal tracking-[0.025em] text-white/50">
+              {displayPercent}% complete
+            </span>
           </div>
         </div>
 
-        {/* Text content */}
-        <div className="flex flex-col items-center gap-2">
-          <p className="max-w-[400px] text-center font-serif text-[17px] leading-[28px] text-white sm:text-[20px] sm:leading-[30px]">
-            {step.message}
-          </p>
-          <span className="font-sans text-[13px] font-normal tracking-[0.025em] text-white/50">
-            {displayPercent}% complete
-          </span>
-        </div>
+        {/* Progress bar — persists across steps */}
+        <ProgressBar percent={displayPercent} />
       </div>
     </main>
   );

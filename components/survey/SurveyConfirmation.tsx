@@ -148,6 +148,9 @@ const SurveyConfirmation: FC<SurveyConfirmationProps> = ({ status, onExit, onRet
       className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-[#0a0510] px-6 text-center"
       role="status"
       aria-live="polite"
+      style={{
+        animation: `survey-fade-in 800ms ${EASING} both`,
+      }}
     >
       <BackgroundOrbs />
 

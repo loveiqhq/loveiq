@@ -329,7 +329,15 @@ interface PreReportWizardProps {
 const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete }) => {
   const [slideIndex, setSlideIndex] = useState(0);
   const [isLeaving, setIsLeaving] = useState(false);
+  const [hasEntered, setHasEntered] = useState(false);
+  const [isExiting, setIsExiting] = useState(false);
   const touchStartX = useRef<number | null>(null);
+
+  // Entrance fade-in
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => setHasEntered(true));
+    return () => cancelAnimationFrame(raf);
+  }, []);
 
   const slide = slides[slideIndex];
   const Icon = slide.icon;
@@ -340,11 +348,12 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete }) => {
     setTimeout(() => {
       setIsLeaving(false);
       if (slideIndex >= TOTAL_SLIDES - 1) {
-        onComplete();
+        setIsExiting(true);
+        setTimeout(onComplete, 600);
       } else {
         setSlideIndex((i) => i + 1);
       }
-    }, 200);
+    }, 250);
   }, [slideIndex, onComplete, isLeaving]);
 
   const handlePrev = useCallback(() => {
@@ -353,11 +362,12 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete }) => {
     setTimeout(() => {
       setIsLeaving(false);
       setSlideIndex((i) => i - 1);
-    }, 200);
+    }, 250);
   }, [slideIndex, isLeaving]);
 
   const handleSkip = useCallback(() => {
-    onComplete();
+    setIsExiting(true);
+    setTimeout(onComplete, 600);
   }, [onComplete]);
 
   // Keyboard navigation
@@ -389,7 +399,15 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete }) => {
   );
 
   return (
-    <main className="relative flex min-h-screen flex-col overflow-hidden bg-[#140a1a]">
+    <main
+      className="relative flex min-h-screen flex-col overflow-hidden bg-[#140a1a]"
+      style={{
+        opacity: isExiting ? 0 : hasEntered ? 1 : 0,
+        transition: isExiting
+          ? "opacity 600ms cubic-bezier(0.16, 1, 0.3, 1)"
+          : "opacity 800ms cubic-bezier(0.16, 1, 0.3, 1)",
+      }}
+    >
       {/* Orange corner blob */}
       <div className="pointer-events-none absolute bottom-0 left-0 -translate-x-1/2 translate-y-1/2">
         <div className="h-[1895px] w-[718px] animate-pulse-glow rounded-full bg-[#FE6839] blur-[500px] sm:h-[1296px] sm:w-[1296px]" />
@@ -433,7 +451,13 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete }) => {
         {/* Slide content — key forces remount to retrigger animations */}
         <div
           key={slideIndex}
-          className={`flex flex-1 flex-col justify-center py-12 transition-opacity duration-200 sm:py-16 ${isLeaving ? "opacity-0" : "opacity-100"}`}
+          className="flex flex-1 flex-col justify-center py-12 sm:py-16"
+          style={{
+            opacity: isLeaving ? 0 : 1,
+            transform: isLeaving ? "translateY(-8px)" : "translateY(0)",
+            transition:
+              "opacity 250ms cubic-bezier(0.16, 1, 0.3, 1), transform 250ms cubic-bezier(0.16, 1, 0.3, 1)",
+          }}
           onTouchStart={handleTouchStart}
           onTouchEnd={handleTouchEnd}
         >

@@ -70,6 +70,10 @@ describe("PreReportWizard", () => {
     render(<PreReportWizard onComplete={onComplete} />);
 
     fireEvent.click(screen.getByRole("button", { name: /skip intro/i }));
+    // Exit animation delay (600ms) before onComplete fires
+    act(() => {
+      vi.advanceTimersByTime(650);
+    });
     expect(onComplete).toHaveBeenCalledTimes(1);
   });
 
@@ -84,8 +88,11 @@ describe("PreReportWizard", () => {
 
     expect(screen.getByText("Invite your friends to grow.")).toBeInTheDocument();
 
-    // Click continue on last slide
+    // Click continue on last slide — 250ms leave animation + 600ms exit fade
     clickAndFlush(screen.getByRole("button", { name: /continue to report/i }));
+    act(() => {
+      vi.advanceTimersByTime(650);
+    });
     expect(onComplete).toHaveBeenCalledTimes(1);
   });
 
