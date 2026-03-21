@@ -144,7 +144,9 @@ const ScaleQuestion: FC<ScaleQuestionProps> = ({ question, value, onChange }) =>
                     transitionDuration: "280ms",
                     transitionTimingFunction: "cubic-bezier(0.16, 1, 0.3, 1)",
                     transitionDelay:
-                      isHoverFill || isHoverTarget ? `${(v - 1) * 30}ms` : `${(7 - v) * 20}ms`,
+                      isHoverFill || isHoverTarget || isSelected || isBefore
+                        ? `${(v - 1) * 20}ms`
+                        : `${(7 - v) * 20}ms`,
                   }}
                 >
                   <span
@@ -165,8 +167,8 @@ const ScaleQuestion: FC<ScaleQuestionProps> = ({ question, value, onChange }) =>
                         ? "cubic-bezier(0.34, 1.56, 0.64, 1)"
                         : "cubic-bezier(0.16, 1, 0.3, 1)",
                       transitionDelay:
-                        isHoverFill || isHoverTarget
-                          ? `${(v - 1) * 30 + 40}ms`
+                        isHoverFill || isHoverTarget || isSelected || isBefore
+                          ? `${(v - 1) * 20 + 40}ms`
                           : `${(7 - v) * 20}ms`,
                     }}
                   />

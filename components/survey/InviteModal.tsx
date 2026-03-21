@@ -210,15 +210,6 @@ const InviteModal: FC<InviteModalProps> = ({ open, onClose, referrerEmail, refer
             transition: `all 400ms ${EASING}`,
           }}
         >
-          {/* Gradient accent line */}
-          <div
-            className="h-[3px] w-full"
-            style={{
-              background:
-                "linear-gradient(120deg, #fe6839 0%, #ff7f3e 40%, #ff9450 70%, #c36ddf 100%)",
-            }}
-          />
-
           {/* Content */}
           <div
             className="relative px-5 pb-8 pt-6 sm:px-7 sm:pb-7"
