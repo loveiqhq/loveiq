@@ -165,13 +165,40 @@ const CircularProgress: FC<{
 /* ------------------------------------------------------------------ */
 const BackgroundOrbs: FC = () => (
   <div className="pointer-events-none fixed inset-0 overflow-hidden" aria-hidden="true">
+    {/* Purple ambient blob — top-left area */}
     <div
-      className="absolute h-[400px] w-[400px] rounded-full blur-[120px]"
-      style={{ background: "rgba(167,139,250,0.10)", left: "14%", top: "15%" }}
+      className="animate-float1 absolute h-[260px] w-[260px] rounded-full sm:h-[400px] sm:w-[400px]"
+      style={{
+        background: "rgba(167, 139, 250, 0.10)",
+        filter: "blur(80px)",
+        left: "10%",
+        top: "12%",
+        willChange: "transform",
+      }}
     />
+    {/* Radial gradient blob — center area */}
     <div
-      className="absolute h-[300px] w-[300px] rounded-full blur-[100px]"
-      style={{ background: "rgba(254,104,57,0.10)", right: "5%", bottom: "20%" }}
+      className="animate-float2 absolute h-[200px] w-[200px] rounded-full sm:h-[286px] sm:w-[286px]"
+      style={{
+        opacity: 0.8351,
+        background:
+          "radial-gradient(70.71% 70.71% at 50% 50%, rgba(167, 139, 250, 0.18) 0%, rgba(120, 80, 200, 0.06) 50%, rgba(0, 0, 0, 0) 75%)",
+        left: "50%",
+        top: "50%",
+        transform: "translate(-50%, -50%)",
+        willChange: "transform",
+      }}
+    />
+    {/* Orange ambient blob — bottom-right area */}
+    <div
+      className="animate-float3 absolute h-[200px] w-[200px] rounded-full sm:h-[300px] sm:w-[300px]"
+      style={{
+        background: "rgba(254, 104, 57, 0.10)",
+        filter: "blur(70px)",
+        right: "5%",
+        bottom: "15%",
+        willChange: "transform",
+      }}
     />
   </div>
 );
