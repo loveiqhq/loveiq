@@ -133,6 +133,14 @@ vi.mock("@/components/survey/PreReportWizard", () => ({
     </div>
   ),
 }));
+vi.mock("@/components/survey/ProcessingSequence", () => ({
+  default: ({ onComplete }: { onComplete: () => void; submitDone: boolean }) => (
+    <div data-testid="processing-sequence">
+      <span>Extracting your answers...</span>
+      <button onClick={onComplete}>Finish Processing</button>
+    </div>
+  ),
+}));
 
 import SurveyEngine from "@/components/survey/SurveyEngine";
 
@@ -167,21 +175,27 @@ describe("SurveyEngine", () => {
     expect(screen.queryByTestId("open-response")).not.toBeInTheDocument();
   });
 
-  it("shows completion screen when currentIndex >= total questions", () => {
+  it("shows processing sequence when currentIndex >= total questions", () => {
     mockCurrentIndex = 3;
     mockProgress = 100;
 
     render(<SurveyEngine onExit={vi.fn()} />);
-    expect(screen.getByText("Processing Your Answers…")).toBeInTheDocument();
+    expect(screen.getByTestId("processing-sequence")).toBeInTheDocument();
+    expect(screen.getByText("Extracting your answers...")).toBeInTheDocument();
   });
 
-  it("calls onExit when Return to LoveIQ button clicked on completion screen", () => {
+  it("calls onExit when Return to LoveIQ button clicked on final confirmation screen", () => {
     mockCurrentIndex = 3;
     mockProgress = 100;
 
     const onExit = vi.fn();
     mockSubmitStatus = "success";
     render(<SurveyEngine onExit={onExit} />);
+
+    // Complete processing → wizard
+    fireEvent.click(screen.getByRole("button", { name: /finish processing/i }));
+    // Complete wizard → done
+    fireEvent.click(screen.getByRole("button", { name: /complete wizard/i }));
 
     fireEvent.click(screen.getByRole("button", { name: /return to loveiq/i }));
     expect(onExit).toHaveBeenCalledTimes(1);
@@ -211,25 +225,23 @@ describe("SurveyEngine", () => {
 });
 
 describe("SurveyEngine — completion phases", () => {
-  it("auto-transitions to pre-report wizard after success + timer", () => {
+  it("transitions from processing to pre-report wizard on success", () => {
     mockCurrentIndex = 3;
     mockProgress = 100;
     mockSubmitStatus = "success";
 
     render(<SurveyEngine onExit={vi.fn()} />);
 
-    // Initially shows confirmation
-    expect(screen.getByText("Your Journey Begins")).toBeInTheDocument();
+    // Initially shows processing sequence
+    expect(screen.getByTestId("processing-sequence")).toBeInTheDocument();
     expect(screen.queryByTestId("pre-report-wizard")).not.toBeInTheDocument();
 
-    // Advance past the 3.6s transition
-    act(() => {
-      vi.advanceTimersByTime(3700);
-    });
+    // Complete processing
+    fireEvent.click(screen.getByRole("button", { name: /finish processing/i }));
 
     // Now shows wizard
     expect(screen.getByTestId("pre-report-wizard")).toBeInTheDocument();
-    expect(screen.queryByText("Your Journey Begins")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("processing-sequence")).not.toBeInTheDocument();
   });
 
   it("shows final confirmation after wizard completes", () => {
@@ -239,11 +251,8 @@ describe("SurveyEngine — completion phases", () => {
 
     render(<SurveyEngine onExit={vi.fn()} />);
 
-    // Transition to wizard
-    act(() => {
-      vi.advanceTimersByTime(3700);
-    });
-
+    // Complete processing → wizard
+    fireEvent.click(screen.getByRole("button", { name: /finish processing/i }));
     expect(screen.getByTestId("pre-report-wizard")).toBeInTheDocument();
 
     // Complete the wizard
@@ -254,21 +263,20 @@ describe("SurveyEngine — completion phases", () => {
     expect(screen.queryByTestId("pre-report-wizard")).not.toBeInTheDocument();
   });
 
-  it("does not auto-transition to wizard on error", () => {
+  it("skips wizard and shows error confirmation on error", () => {
     mockCurrentIndex = 3;
     mockProgress = 100;
     mockSubmitStatus = "error";
 
     render(<SurveyEngine onExit={vi.fn()} />);
 
-    expect(screen.getByText("Answers Saved Locally")).toBeInTheDocument();
+    // Initially shows processing
+    expect(screen.getByTestId("processing-sequence")).toBeInTheDocument();
 
-    // Advance well past the transition timer
-    act(() => {
-      vi.advanceTimersByTime(5000);
-    });
+    // Complete processing (error path skips wizard)
+    fireEvent.click(screen.getByRole("button", { name: /finish processing/i }));
 
-    // Still shows error, no wizard
+    // Shows error confirmation directly, no wizard
     expect(screen.getByText("Answers Saved Locally")).toBeInTheDocument();
     expect(screen.queryByTestId("pre-report-wizard")).not.toBeInTheDocument();
   });

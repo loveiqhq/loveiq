@@ -753,6 +753,15 @@ h3,
   }
 }
 
+@keyframes processing-ring-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .survey-animate {
     animation-duration: 0.01ms !important;
