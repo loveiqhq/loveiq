@@ -1,9 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, type FC } from "react";
+import { useState, useEffect, useCallback, type FC } from "react";
 import Link from "next/link";
-import { trackSurveyInvite } from "@/lib/analytics";
-import { getCsrfToken } from "@/lib/csrf-client";
+import InviteModal from "./InviteModal";
 
 const EASING = "cubic-bezier(0.16, 1, 0.3, 1)";
 
@@ -107,6 +106,7 @@ interface ReportReadyProps {
 const ReportReady: FC<ReportReadyProps> = ({ name, email, onContinue }) => {
   const [hasEntered, setHasEntered] = useState(false);
   const [isExiting, setIsExiting] = useState(false);
+  const [showInvite, setShowInvite] = useState(false);
 
   useEffect(() => {
     const raf = requestAnimationFrame(() => setHasEntered(true));
@@ -124,29 +124,6 @@ const ReportReady: FC<ReportReadyProps> = ({ name, email, onContinue }) => {
     displayName === "Your" ? "Your report is ready" : `${displayName}, your report is ready`;
 
   const maskedEmail = email.trim() || "your email";
-
-  const inviteMailto = useMemo(() => {
-    const origin = typeof window !== "undefined" ? window.location.origin : "https://loveiq.org";
-    const refId = email.trim() ? btoa(email.trim().toLowerCase()) : "";
-    const utmParams = new URLSearchParams({
-      utm_source: "referral",
-      utm_medium: "email",
-      utm_campaign: "survey_invite",
-      ...(refId ? { utm_content: refId } : {}),
-    });
-    const surveyUrl = `${origin}/survey?${utmParams.toString()}`;
-
-    const subject = "Check out LoveIQ";
-    const body = [
-      "Hey :),",
-      "",
-      "I took this LoveIQ assessment and it gave me real clarity on my patterns, desires, and potentials. It was much better than I expected.",
-      "",
-      `You should try it. ${surveyUrl}`,
-    ].join("\n");
-
-    return `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-  }, [email]);
 
   return (
     <main
@@ -227,31 +204,25 @@ const ReportReady: FC<ReportReadyProps> = ({ name, email, onContinue }) => {
             <ArrowRightIcon />
           </button>
 
-          {/* Secondary — opens email client with pre-filled invite message */}
-          <a
-            href={inviteMailto}
-            onClick={() => {
-              trackSurveyInvite();
-              // Fire-and-forget server-side tracking
-              fetch("/api/invite-tracking", {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  "x-csrf-token": getCsrfToken(),
-                },
-                body: JSON.stringify({
-                  method: "email",
-                  referrerEmail: email.trim().toLowerCase() || undefined,
-                }),
-              }).catch(() => {});
-            }}
+          {/* Secondary — opens invite modal */}
+          <button
+            type="button"
+            onClick={() => setShowInvite(true)}
             className="flex w-full items-center justify-center gap-2 rounded-full border border-white/5 bg-[#171021] px-6 py-[17px] font-sans text-[16px] text-[#d1d5db] transition-all duration-300 hover:border-white/15 hover:bg-white/5 focus-visible-ring"
           >
             <PeopleIcon />
             Invite someone to take the survey
-          </a>
+          </button>
         </div>
       </div>
+
+      {/* Invite modal */}
+      <InviteModal
+        open={showInvite}
+        onClose={() => setShowInvite(false)}
+        referrerEmail={email}
+        referrerName={name}
+      />
 
       {/* Footer */}
       <footer
