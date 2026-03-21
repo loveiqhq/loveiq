@@ -8,18 +8,16 @@ import { useState, useEffect, useRef, useCallback, type FC } from "react";
 interface ProcessingStep {
   icon: FC<{ className?: string }>;
   message: string;
-  percent: number;
-  /** Minimum ms this step stays visible */
   durationMs: number;
 }
 
 const EASING = "cubic-bezier(0.16, 1, 0.3, 1)";
-const FADE_OUT_MS = 500;
-const FADE_IN_MS = 600;
+const FADE_OUT_MS = 400;
+const FADE_IN_MS = 500;
 const EXIT_FADE_MS = 800;
 
 /* ------------------------------------------------------------------ */
-/*  SVG Icons (matching Figma exactly)                                 */
+/*  SVG Icons                                                          */
 /* ------------------------------------------------------------------ */
 const CheckSquareIcon: FC<{ className?: string }> = ({ className }) => (
   <svg
@@ -108,66 +106,62 @@ const MailIcon: FC<{ className?: string }> = ({ className }) => (
 /*  Steps data                                                         */
 /* ------------------------------------------------------------------ */
 const STEPS: ProcessingStep[] = [
-  {
-    icon: CheckSquareIcon,
-    message: "Extracting your answers...",
-    percent: 21,
-    durationMs: 2400,
-  },
+  { icon: CheckSquareIcon, message: "Extracting your answers...", durationMs: 2400 },
   {
     icon: FileUserIcon,
     message: "Scoring your answers against our archetypes...",
-    percent: 41,
     durationMs: 2800,
   },
-  {
-    icon: FilePenIcon,
-    message: "Generating your report results...",
-    percent: 61,
-    durationMs: 2600,
-  },
-  {
-    icon: LockIcon,
-    message: "Creating your protected access link...",
-    percent: 81,
-    durationMs: 2200,
-  },
-  {
-    icon: MailIcon,
-    message: "Sending you a report access link...",
-    percent: 95,
-    durationMs: 2000,
-  },
+  { icon: FilePenIcon, message: "Generating your report results...", durationMs: 2600 },
+  { icon: LockIcon, message: "Creating your protected access link...", durationMs: 2200 },
+  { icon: MailIcon, message: "Sending you a report access link...", durationMs: 2000 },
 ];
 
+const TOTAL_DURATION_MS = STEPS.reduce((sum, s) => sum + s.durationMs, 0);
+const MAX_PERCENT = 95;
+
 /* ------------------------------------------------------------------ */
-/*  Animated ring SVG                                                  */
+/*  Circular progress ring                                             */
 /* ------------------------------------------------------------------ */
-const AnimatedRing: FC = () => (
-  <svg
-    className="absolute inset-0 h-full w-full animate-[processing-ring-spin_8s_linear_infinite]"
-    viewBox="0 0 176 176"
-    fill="none"
-    aria-hidden="true"
-  >
-    <circle
-      cx="88"
-      cy="88"
-      r="86"
-      stroke="url(#ring-gradient)"
-      strokeWidth="1.2"
-      strokeLinecap="round"
-      strokeDasharray="270 270"
-    />
-    <defs>
-      <linearGradient id="ring-gradient" x1="0" y1="0" x2="176" y2="176">
-        <stop offset="0%" stopColor="rgba(167,139,250,0.5)" />
-        <stop offset="50%" stopColor="rgba(167,139,250,0.15)" />
-        <stop offset="100%" stopColor="rgba(167,139,250,0)" />
-      </linearGradient>
-    </defs>
-  </svg>
-);
+const RING_R = 88;
+const CIRCUMFERENCE = 2 * Math.PI * RING_R;
+
+const CircularProgress: FC<{ percent: number }> = ({ percent }) => {
+  const offset = CIRCUMFERENCE - (percent / 100) * CIRCUMFERENCE;
+  return (
+    <svg
+      className="absolute inset-0 h-full w-full"
+      viewBox="0 0 200 200"
+      fill="none"
+      aria-hidden="true"
+      style={{ transform: "rotate(-90deg)" }}
+    >
+      <defs>
+        <linearGradient id="circ-progress-grad" x1="1" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#fe6839" />
+          <stop offset="100%" stopColor="#a78bfa" />
+        </linearGradient>
+      </defs>
+      {/* Background track */}
+      <circle cx="100" cy="100" r={RING_R} stroke="rgba(255,255,255,0.04)" strokeWidth="2.5" />
+      {/* Progress arc */}
+      <circle
+        cx="100"
+        cy="100"
+        r={RING_R}
+        stroke="url(#circ-progress-grad)"
+        strokeWidth="3"
+        strokeLinecap="round"
+        strokeDasharray={CIRCUMFERENCE}
+        strokeDashoffset={offset}
+        style={{
+          transition: `stroke-dashoffset 200ms ${EASING}`,
+          filter: "drop-shadow(0 0 6px rgba(254,104,57,0.4))",
+        }}
+      />
+    </svg>
+  );
+};
 
 /* ------------------------------------------------------------------ */
 /*  Background orbs                                                    */
@@ -176,39 +170,12 @@ const BackgroundOrbs: FC = () => (
   <div className="pointer-events-none fixed inset-0 overflow-hidden" aria-hidden="true">
     <div
       className="absolute h-[400px] w-[400px] rounded-full blur-[120px]"
-      style={{
-        background: "rgba(167,139,250,0.10)",
-        left: "14%",
-        top: "15%",
-      }}
+      style={{ background: "rgba(167,139,250,0.10)", left: "14%", top: "15%" }}
     />
     <div
       className="absolute h-[300px] w-[300px] rounded-full blur-[100px]"
-      style={{
-        background: "rgba(254,104,57,0.10)",
-        right: "5%",
-        bottom: "20%",
-      }}
+      style={{ background: "rgba(254,104,57,0.10)", right: "5%", bottom: "20%" }}
     />
-  </div>
-);
-
-/* ------------------------------------------------------------------ */
-/*  Progress bar                                                       */
-/* ------------------------------------------------------------------ */
-const ProgressBar: FC<{ percent: number }> = ({ percent }) => (
-  <div className="w-full max-w-[280px] sm:max-w-[320px]">
-    <div className="h-[3px] w-full overflow-hidden rounded-full bg-white/[0.06]">
-      <div
-        className="h-full rounded-full"
-        style={{
-          width: `${percent}%`,
-          background: "linear-gradient(90deg, #fe6839, #a78bfa)",
-          boxShadow: "0 0 12px rgba(254,104,57,0.4)",
-          transition: `width 800ms ${EASING}`,
-        }}
-      />
-    </div>
   </div>
 );
 
@@ -216,20 +183,19 @@ const ProgressBar: FC<{ percent: number }> = ({ percent }) => (
 /*  ProcessingSequence                                                 */
 /* ------------------------------------------------------------------ */
 interface ProcessingSequenceProps {
-  /** Called after all steps complete AND submission has finished */
   onComplete: () => void;
-  /** The actual API submission status */
   submitDone: boolean;
 }
 
 const ProcessingSequence: FC<ProcessingSequenceProps> = ({ onComplete, submitDone }) => {
   const [stepIndex, setStepIndex] = useState(0);
-  const [phase, setPhase] = useState<"entering" | "visible" | "exiting">("entering");
+  const [contentPhase, setContentPhase] = useState<"entering" | "visible" | "exiting">("entering");
   const [isExitingScreen, setIsExitingScreen] = useState(false);
-  const [displayPercent, setDisplayPercent] = useState(STEPS[0].percent);
+  const [displayPercent, setDisplayPercent] = useState(0);
   const stepsComplete = useRef(false);
   const submitDoneRef = useRef(submitDone);
   const hasCalledComplete = useRef(false);
+  const startTimeRef = useRef(0);
 
   useEffect(() => {
     submitDoneRef.current = submitDone;
@@ -238,16 +204,38 @@ const ProcessingSequence: FC<ProcessingSequenceProps> = ({ onComplete, submitDon
   const fireComplete = useCallback(() => {
     if (hasCalledComplete.current) return;
     hasCalledComplete.current = true;
-    setIsExitingScreen(true);
-    setTimeout(onComplete, EXIT_FADE_MS);
+    setDisplayPercent(100);
+    setTimeout(() => {
+      setIsExitingScreen(true);
+      setTimeout(onComplete, EXIT_FADE_MS);
+    }, 500);
   }, [onComplete]);
 
-  // Entrance animation for each step
+  // Smooth percentage counter: ticks up by 1 continuously from 0 → 95
   useEffect(() => {
-    setPhase("entering");
-    const timer = setTimeout(() => setPhase("visible"), 50);
+    startTimeRef.current = performance.now();
+    let raf: number;
+
+    const tick = (now: number) => {
+      const elapsed = now - startTimeRef.current;
+      const pct = Math.min(Math.floor((elapsed / TOTAL_DURATION_MS) * MAX_PERCENT), MAX_PERCENT);
+      setDisplayPercent(pct);
+      if (pct < MAX_PERCENT) raf = requestAnimationFrame(tick);
+    };
+
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  // Content entrance animation per step — intentional cascading render
+  // to trigger entering→visible CSS transition on step change.
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    setContentPhase("entering");
+    const timer = setTimeout(() => setContentPhase("visible"), 50);
     return () => clearTimeout(timer);
   }, [stepIndex]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Auto-advance through steps
   useEffect(() => {
@@ -262,8 +250,9 @@ const ProcessingSequence: FC<ProcessingSequenceProps> = ({ onComplete, submitDon
         }, 1000);
         return;
       }
-      setPhase("exiting");
+      setContentPhase("exiting");
       setTimeout(() => {
+        setContentPhase("entering");
         setStepIndex((i) => i + 1);
       }, FADE_OUT_MS);
     }, step.durationMs);
@@ -271,56 +260,40 @@ const ProcessingSequence: FC<ProcessingSequenceProps> = ({ onComplete, submitDon
     return () => clearTimeout(timer);
   }, [stepIndex, fireComplete]);
 
-  // If submit finishes after all steps are done, fire completion
+  // If submit finishes after all steps are done
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (submitDone && stepsComplete.current) {
       fireComplete();
     }
   }, [submitDone, fireComplete]);
-
-  // Animate the percentage counter
-  useEffect(() => {
-    const target = STEPS[stepIndex]?.percent ?? 95;
-    const start = displayPercent;
-    const diff = target - start;
-    if (diff === 0) return;
-
-    const duration = 800;
-    const startTime = performance.now();
-    let raf: number;
-
-    const tick = (now: number) => {
-      const elapsed = now - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-      const eased = 1 - Math.pow(1 - progress, 3);
-      setDisplayPercent(Math.round(start + diff * eased));
-      if (progress < 1) raf = requestAnimationFrame(tick);
-    };
-
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stepIndex]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const step = STEPS[stepIndex] ?? STEPS[STEPS.length - 1];
   const Icon = step.icon;
 
-  const contentStyle: React.CSSProperties =
-    phase === "exiting"
+  // Icon transitions: scale inside the circle
+  const iconStyle: React.CSSProperties =
+    contentPhase === "exiting"
+      ? { opacity: 0, transform: "scale(0.8)", transition: `all ${FADE_OUT_MS}ms ${EASING}` }
+      : contentPhase === "entering"
+        ? { opacity: 0, transform: "scale(0.8)" }
+        : { opacity: 1, transform: "scale(1)", transition: `all ${FADE_IN_MS}ms ${EASING}` };
+
+  // Text transitions: slide vertically
+  const textStyle: React.CSSProperties =
+    contentPhase === "exiting"
       ? {
           opacity: 0,
-          transform: "translateY(-12px) scale(0.98)",
-          transition: `opacity ${FADE_OUT_MS}ms ${EASING}, transform ${FADE_OUT_MS}ms ${EASING}`,
+          transform: "translateY(-10px)",
+          transition: `all ${FADE_OUT_MS}ms ${EASING}`,
         }
-      : phase === "entering"
-        ? {
-            opacity: 0,
-            transform: "translateY(20px) scale(0.98)",
-          }
+      : contentPhase === "entering"
+        ? { opacity: 0, transform: "translateY(16px)" }
         : {
             opacity: 1,
-            transform: "translateY(0) scale(1)",
-            transition: `opacity ${FADE_IN_MS}ms ${EASING}, transform ${FADE_IN_MS}ms ${EASING}`,
+            transform: "translateY(0)",
+            transition: `all ${FADE_IN_MS}ms ${EASING}`,
           };
 
   return (
@@ -336,55 +309,54 @@ const ProcessingSequence: FC<ProcessingSequenceProps> = ({ onComplete, submitDon
     >
       <BackgroundOrbs />
 
-      <div className="relative z-10 flex flex-col items-center gap-8 px-6 sm:gap-10">
-        {/* Icon + text — animated per step */}
-        <div
-          key={stepIndex}
-          className="flex flex-col items-center gap-8 sm:gap-10"
-          style={contentStyle}
-        >
-          {/* Icon container */}
-          <div className="relative flex items-center justify-center">
-            <div
-              className="absolute rounded-full opacity-[0.84]"
-              style={{
-                width: "220px",
-                height: "220px",
-                background:
-                  "radial-gradient(circle, rgba(167,139,250,0.18) 0%, rgba(120,80,200,0.06) 50%, transparent 75%)",
-              }}
-            />
+      <div className="relative z-10 flex flex-col items-center px-6">
+        {/* ---- Circle + progress ring (PERSISTENT) ---- */}
+        <div className="relative flex items-center justify-center">
+          {/* Outer radial glow */}
+          <div
+            className="absolute rounded-full opacity-[0.84]"
+            style={{
+              width: "240px",
+              height: "240px",
+              background:
+                "radial-gradient(circle, rgba(167,139,250,0.18) 0%, rgba(120,80,200,0.06) 50%, transparent 75%)",
+            }}
+          />
 
-            <div className="absolute h-[136px] w-[136px] sm:h-[176px] sm:w-[176px]">
-              <AnimatedRing />
-            </div>
+          {/* Circular progress ring */}
+          <div className="absolute h-[140px] w-[140px] sm:h-[184px] sm:w-[184px]">
+            <CircularProgress percent={displayPercent} />
+          </div>
 
-            <div
-              className="relative flex h-[108px] w-[108px] items-center justify-center rounded-full shadow-[0_0_60px_0_rgba(167,139,250,0.12)] sm:h-[144px] sm:w-[144px]"
-              style={{
-                background:
-                  "radial-gradient(circle at 40% 35%, rgba(30,20,50,1) 0%, rgba(14,8,24,1) 100%)",
-              }}
-            >
-              <div className="absolute inset-0 rounded-full border border-white/[0.06]" />
-              <div className="pointer-events-none absolute inset-0 rounded-full shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]" />
+          {/* Inner circle (persistent) */}
+          <div
+            className="relative flex h-[108px] w-[108px] items-center justify-center rounded-full shadow-[0_0_60px_0_rgba(167,139,250,0.12)] sm:h-[144px] sm:w-[144px]"
+            style={{
+              background:
+                "radial-gradient(circle at 40% 35%, rgba(30,20,50,1) 0%, rgba(14,8,24,1) 100%)",
+            }}
+          >
+            <div className="absolute inset-0 rounded-full border border-white/[0.06]" />
+            <div className="pointer-events-none absolute inset-0 rounded-full shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]" />
+
+            {/* Icon — only this transitions */}
+            <div key={stepIndex} style={iconStyle}>
               <Icon className="h-7 w-7 text-[#fe6839] sm:h-[37px] sm:w-[37px]" />
             </div>
           </div>
-
-          {/* Text content */}
-          <div className="flex flex-col items-center gap-3">
-            <p className="max-w-[400px] text-center font-serif text-[17px] leading-[28px] text-white sm:text-[20px] sm:leading-[30px]">
-              {step.message}
-            </p>
-            <span className="font-sans text-[13px] font-normal tracking-[0.025em] text-white/50">
-              {displayPercent}% complete
-            </span>
-          </div>
         </div>
 
-        {/* Progress bar — persists across steps */}
-        <ProgressBar percent={displayPercent} />
+        {/* ---- Message text (TRANSITIONS) ---- */}
+        <div key={`msg-${stepIndex}`} className="mt-8 sm:mt-10" style={textStyle}>
+          <p className="max-w-[400px] text-center font-serif text-[17px] leading-[28px] text-white sm:text-[20px] sm:leading-[30px]">
+            {step.message}
+          </p>
+        </div>
+
+        {/* ---- Percentage (PERSISTENT) ---- */}
+        <span className="mt-3 font-sans text-[13px] font-normal tracking-[0.025em] text-white/50">
+          {displayPercent}% complete
+        </span>
       </div>
     </main>
   );
