@@ -141,6 +141,13 @@ vi.mock("@/components/survey/ProcessingSequence", () => ({
     </div>
   ),
 }));
+vi.mock("@/components/survey/ReportReady", () => ({
+  default: ({ onContinue }: { onContinue: () => void; name: string; email: string }) => (
+    <div data-testid="report-ready">
+      <button onClick={onContinue}>View your free report</button>
+    </div>
+  ),
+}));
 
 import SurveyEngine from "@/components/survey/SurveyEngine";
 
@@ -184,7 +191,7 @@ describe("SurveyEngine", () => {
     expect(screen.getByText("Extracting your answers...")).toBeInTheDocument();
   });
 
-  it("calls onExit when Return to LoveIQ button clicked on final confirmation screen", () => {
+  it("calls onExit when wizard completes after report ready screen", () => {
     mockCurrentIndex = 3;
     mockProgress = 100;
 
@@ -192,12 +199,16 @@ describe("SurveyEngine", () => {
     mockSubmitStatus = "success";
     render(<SurveyEngine onExit={onExit} />);
 
-    // Complete processing → wizard
+    // Complete processing → report ready
     fireEvent.click(screen.getByRole("button", { name: /finish processing/i }));
-    // Complete wizard → done
-    fireEvent.click(screen.getByRole("button", { name: /complete wizard/i }));
+    expect(screen.getByTestId("report-ready")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /return to loveiq/i }));
+    // Continue from report ready → wizard
+    fireEvent.click(screen.getByRole("button", { name: /view your free report/i }));
+    expect(screen.getByTestId("pre-report-wizard")).toBeInTheDocument();
+
+    // Complete wizard → calls onExit directly
+    fireEvent.click(screen.getByRole("button", { name: /complete wizard/i }));
     expect(onExit).toHaveBeenCalledTimes(1);
   });
 
@@ -225,7 +236,7 @@ describe("SurveyEngine", () => {
 });
 
 describe("SurveyEngine — completion phases", () => {
-  it("transitions from processing to pre-report wizard on success", () => {
+  it("transitions from processing to report ready screen on success", () => {
     mockCurrentIndex = 3;
     mockProgress = 100;
     mockSubmitStatus = "success";
@@ -234,33 +245,36 @@ describe("SurveyEngine — completion phases", () => {
 
     // Initially shows processing sequence
     expect(screen.getByTestId("processing-sequence")).toBeInTheDocument();
-    expect(screen.queryByTestId("pre-report-wizard")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("report-ready")).not.toBeInTheDocument();
 
     // Complete processing
     fireEvent.click(screen.getByRole("button", { name: /finish processing/i }));
 
-    // Now shows wizard
-    expect(screen.getByTestId("pre-report-wizard")).toBeInTheDocument();
+    // Now shows report ready (not wizard directly)
+    expect(screen.getByTestId("report-ready")).toBeInTheDocument();
     expect(screen.queryByTestId("processing-sequence")).not.toBeInTheDocument();
   });
 
-  it("shows final confirmation after wizard completes", () => {
+  it("transitions through full success flow: processing → ready → wizard → exit", () => {
     mockCurrentIndex = 3;
     mockProgress = 100;
     mockSubmitStatus = "success";
 
-    render(<SurveyEngine onExit={vi.fn()} />);
+    const onExit = vi.fn();
+    render(<SurveyEngine onExit={onExit} />);
 
-    // Complete processing → wizard
+    // Complete processing → report ready
     fireEvent.click(screen.getByRole("button", { name: /finish processing/i }));
+    expect(screen.getByTestId("report-ready")).toBeInTheDocument();
+
+    // Continue → wizard
+    fireEvent.click(screen.getByRole("button", { name: /view your free report/i }));
     expect(screen.getByTestId("pre-report-wizard")).toBeInTheDocument();
+    expect(screen.queryByTestId("report-ready")).not.toBeInTheDocument();
 
-    // Complete the wizard
+    // Complete wizard → calls onExit
     fireEvent.click(screen.getByRole("button", { name: /complete wizard/i }));
-
-    // Back to confirmation (done phase)
-    expect(screen.getByText("Your Journey Begins")).toBeInTheDocument();
-    expect(screen.queryByTestId("pre-report-wizard")).not.toBeInTheDocument();
+    expect(onExit).toHaveBeenCalledTimes(1);
   });
 
   it("skips wizard and shows error confirmation on error", () => {

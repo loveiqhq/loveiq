@@ -24,8 +24,9 @@ import { usePartialSave } from "./hooks/usePartialSave";
 import SurveyConfirmation from "./SurveyConfirmation";
 import PreReportWizard from "./PreReportWizard";
 import ProcessingSequence from "./ProcessingSequence";
+import ReportReady from "./ReportReady";
 
-type CompletionPhase = "processing" | "wizard" | "done";
+type CompletionPhase = "processing" | "ready" | "wizard" | "done";
 
 interface SurveyEngineProps {
   onExit: () => void;
@@ -207,19 +208,30 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit }) => {
             if (submitStatus === "error") {
               setCompletionPhase("done");
             } else {
-              setCompletionPhase("wizard");
+              setCompletionPhase("ready");
             }
           }}
         />
       );
     }
 
-    // Pre-report wizard phase
-    if (completionPhase === "wizard") {
-      return <PreReportWizard onComplete={() => setCompletionPhase("done")} />;
+    // Report ready screen (after processing, before wizard)
+    if (completionPhase === "ready") {
+      return (
+        <ReportReady
+          name={(answers["00001"] as string) || ""}
+          email={(answers["00000"] as string) || ""}
+          onContinue={() => setCompletionPhase("wizard")}
+        />
+      );
     }
 
-    // Final confirmation (after wizard or on error)
+    // Pre-report wizard phase
+    if (completionPhase === "wizard") {
+      return <PreReportWizard onComplete={onExit} />;
+    }
+
+    // Error confirmation only
     return <SurveyConfirmation status={submitStatus} onExit={onExit} />;
   }
   // Status text for nav

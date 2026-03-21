@@ -194,6 +194,7 @@ const ProcessingSequence: FC<ProcessingSequenceProps> = ({ onComplete, submitDon
   const hasCalledComplete = useRef(false);
   const startTimeRef = useRef(0);
   const circleRef = useRef<SVGCircleElement>(null);
+  const currentPctRef = useRef(0);
 
   useEffect(() => {
     submitDoneRef.current = submitDone;
@@ -202,14 +203,31 @@ const ProcessingSequence: FC<ProcessingSequenceProps> = ({ onComplete, submitDon
   const fireComplete = useCallback(() => {
     if (hasCalledComplete.current) return;
     hasCalledComplete.current = true;
-    setDisplayPercent(100);
-    if (circleRef.current) {
-      circleRef.current.style.strokeDashoffset = "0";
-    }
-    setTimeout(() => {
-      setIsExitingScreen(true);
-      setTimeout(onComplete, EXIT_FADE_MS);
-    }, 350);
+
+    // Smooth 95→100 animation instead of an abrupt jump
+    const startPct = currentPctRef.current;
+    const startTime = performance.now();
+    const fillDuration = 500;
+
+    const animateFill = (now: number) => {
+      const elapsed = now - startTime;
+      const t = Math.min(elapsed / fillDuration, 1);
+      const pct = startPct + (100 - startPct) * t;
+      setDisplayPercent(Math.floor(pct));
+      if (circleRef.current) {
+        const offset = CIRCUMFERENCE - (pct / 100) * CIRCUMFERENCE;
+        circleRef.current.style.strokeDashoffset = String(offset);
+      }
+      if (t < 1) {
+        requestAnimationFrame(animateFill);
+      } else {
+        setTimeout(() => {
+          setIsExitingScreen(true);
+          setTimeout(onComplete, EXIT_FADE_MS);
+        }, 200);
+      }
+    };
+    requestAnimationFrame(animateFill);
   }, [onComplete]);
 
   // Smooth percentage counter: ticks up by 1 continuously from 0 → 95
@@ -221,6 +239,7 @@ const ProcessingSequence: FC<ProcessingSequenceProps> = ({ onComplete, submitDon
       const elapsed = now - startTimeRef.current;
       const floatPct = Math.min((elapsed / TOTAL_DURATION_MS) * MAX_PERCENT, MAX_PERCENT);
       const intPct = Math.floor(floatPct);
+      currentPctRef.current = floatPct;
       // Update ring directly via DOM for 60fps smoothness (no CSS transition lag)
       if (circleRef.current) {
         const offset = CIRCUMFERENCE - (floatPct / 100) * CIRCUMFERENCE;
@@ -268,13 +287,11 @@ const ProcessingSequence: FC<ProcessingSequenceProps> = ({ onComplete, submitDon
   }, [stepIndex, fireComplete]);
 
   // If submit finishes after all steps are done
-  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (submitDone && stepsComplete.current) {
       fireComplete();
     }
   }, [submitDone, fireComplete]);
-  /* eslint-enable react-hooks/set-state-in-effect */
 
   const step = STEPS[stepIndex] ?? STEPS[STEPS.length - 1];
   const Icon = step.icon;
