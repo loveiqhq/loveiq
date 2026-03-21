@@ -35,11 +35,11 @@ function buildIdealResponses(archetype: string): Record<string, unknown> {
     } else if (dim.transform === "categorical_to_numeric") {
       // DIM_RISK_PREF (03010) — pick the closest answer code
       if (dim.id === "DIM_RISK_PREF") {
-        if (proto <= 0.125) responses[dim.qid] = "safe";
-        else if (proto <= 0.375) responses[dim.qid] = "mostly_safe";
+        if (proto <= 0.125) responses[dim.qid] = "very_safe";
+        else if (proto <= 0.375) responses[dim.qid] = "safe_novelty";
         else if (proto <= 0.625) responses[dim.qid] = "balanced";
-        else if (proto <= 0.875) responses[dim.qid] = "adventurous";
-        else responses[dim.qid] = "high_risk";
+        else if (proto <= 0.875) responses[dim.qid] = "adventurous_boundaries";
+        else responses[dim.qid] = "edge_taboo";
       }
     }
   }
@@ -54,9 +54,9 @@ const archetypeBoosts: Record<string, Record<string, string | string[]>> = {
     "02004": "partner_starts",
     "03005": "connection",
     "03013": "absorbed",
-    "10002": "relational",
+    "10002": "reassurance",
     "11001": "egalitarian",
-    "11003": "mutual",
+    "11003": "balanced",
     "14020": "bonding",
   },
   "Spark Seeker": {
@@ -74,8 +74,8 @@ const archetypeBoosts: Record<string, Record<string, string | string[]>> = {
     "02004": "partner_starts",
     "03005": "connection",
     "08003": "pursue",
-    "10002": "relational",
-    "11003": "partner_first",
+    "10002": "reassurance",
+    "11003": "partner_focused",
     "14020": "healing",
   },
   "Exhibitionist Performer": {
@@ -91,7 +91,7 @@ const archetypeBoosts: Record<string, Record<string, string | string[]>> = {
     "02004": "i_start",
     "03003": "adventurous",
     "03005": "fantasy",
-    "03010": "high_risk",
+    "03010": "edge_taboo",
     "03013": "watching",
     "08004": "distance",
     "11001": "lead",
@@ -101,7 +101,7 @@ const archetypeBoosts: Record<string, Record<string, string | string[]>> = {
     "02001": "varies",
     "03003": "adventurous",
     "03005": "novelty",
-    "03006": "guided",
+    "03006": "guidance",
     "08003": "calm",
     "11001": "switch",
     "14020": "novelty",
@@ -113,28 +113,28 @@ const archetypeBoosts: Record<string, Record<string, string | string[]>> = {
     "03005": "connection",
     "03013": "absorbed",
     "08003": "calm",
-    "10002": "relational",
+    "10002": "reassurance",
     "14020": "meaning",
     "16005": "evolving",
   },
   "Minimalist Companion": {
-    "01003": "not_priority_stable",
+    "01003": "not_focus",
     "02001": "planned",
     "03003": "private",
     "03005": "safety",
     "08003": "withdraw",
-    "10002": "quiet",
-    "11003": "receive",
+    "10002": "nonverbal",
+    "11003": "self_focused",
     "14020": "comfort",
   },
   "Emotional Voyeur": {
-    "01003": "not_priority_stable",
+    "01003": "not_focus",
     "03005": "fantasy",
     "03013": "watching",
     "08003": "withdraw",
     "08004": "distance",
-    "10002": "quiet",
-    "11003": "receive",
+    "10002": "nonverbal",
+    "11003": "self_focused",
     "14020": "escape",
   },
   "Power Orchestrator": {
@@ -143,7 +143,7 @@ const archetypeBoosts: Record<string, Record<string, string | string[]>> = {
     "03003": "ritualized",
     "08003": "angry",
     "08004": "distance",
-    "10002": "short",
+    "10002": "direct_phrases",
     "11001": "lead",
     "14020": "power",
   },
@@ -151,7 +151,7 @@ const archetypeBoosts: Record<string, Record<string, string | string[]>> = {
     "02001": "planned",
     "02004": "plan_window",
     "03003": "ritualized",
-    "03010": "mostly_safe",
+    "03010": "safe_novelty",
     "08003": "calm",
     "08004": "balance",
     "11001": "egalitarian",
@@ -164,27 +164,27 @@ const archetypeBoosts: Record<string, Record<string, string | string[]>> = {
     "08004": "crave",
     "10002": "expressive",
     "11001": "surrender",
-    "11003": "partner_first",
+    "11003": "partner_focused",
     "14020": "validation",
   },
   "Analytical Sexualist": {
     "02001": "planned",
     "02004": "plan_window",
     "03005": "mastery",
-    "03006": "optimize",
-    "10002": "short",
+    "03006": "learning_by_doing",
+    "10002": "direct_phrases",
     "11001": "egalitarian",
     "14020": "novelty",
   },
   "Quiet Withdrawer": {
-    "01003": "not_priority_stable",
+    "01003": "not_focus",
     "02001": "low_lately",
     "03003": "private",
     "03005": "safety",
     "08003": "withdraw",
     "08004": "distance",
-    "10002": "quiet",
-    "11003": "receive",
+    "10002": "nonverbal",
+    "11003": "self_focused",
     "16005": "recharging",
     "14020": "escape",
   },
@@ -217,10 +217,13 @@ describe("Every archetype is achievable as primaryArchetype", () => {
 // All categorical questions used in scoring, with their exact survey labels
 const categoricalQuestions: Record<string, string[]> = {
   "01003": [
-    "It's genuinely not a priority for me (stable preference)",
-    "It's temporarily deprioritized (stress / life load)",
-    "It feels complicated (pain, shame, resentment, disconnection)",
-    "I'm not sure",
+    "Satisfied & actively engaged",
+    "Want more than I currently have",
+    "Frustrated or unfulfilled",
+    "Feels complicated or inconsistent",
+    "Present but often deprioritized",
+    "Currently not a focus for me",
+    "Unsure / still figuring it out",
   ],
   "02001": [
     "I often feel desire spontaneously (it starts inside me)",
@@ -253,16 +256,16 @@ const categoricalQuestions: Record<string, string[]> = {
     "Not sure / varies a lot",
   ],
   "03006": [
-    "\u201CI like being taught/guided step-by-step.\u201D",
-    "\u201CI like optimizing/understanding the system.\u201D",
-    "\u201CI don\u2019t want \u2018learning mode\u2019 during sex.\u201D",
+    "Clear guidance & feedback",
+    "Trying things out & learning by doing",
+    "Going with intuition & what feels natural",
   ],
   "03010": [
-    "Very safe/private/predictable",
-    "Mostly safe with small novelty",
+    "Very safe and predictable",
+    "Mostly safe, with a little novelty",
     "Balanced",
-    "Adventurous but still controlled",
-    "High-risk / edgy / taboo-leaning (within consent)",
+    "Adventurous, with clear boundaries",
+    "Strong edge or taboo energy",
   ],
   "03013": [
     "Being watched/admired (mirror, performance vibe)",
@@ -279,11 +282,11 @@ const categoricalQuestions: Record<string, string[]> = {
   ],
   "08004": ["Crave closeness", "Keep distance", "Balance both"],
   "10002": [
-    "Mostly nonverbal / quiet",
-    "Mainly through touch/movement",
-    "Short clear phrases (\u201Cslower / like that\u201D)",
-    "Expressive, ongoing verbal feedback",
-    "Emotionally transparent + relational check-ins",
+    "Mostly silent / nonverbal",
+    "Through touch & body movement",
+    'Short, direct phrases (e.g. "slower", "like that")',
+    "Continuous verbal feedback",
+    "Emotional check-ins & reassurance",
   ],
   "11001": [
     "I like to lead/direct",
@@ -293,10 +296,10 @@ const categoricalQuestions: Record<string, string[]> = {
     "Not sure / depends a lot",
   ],
   "11003": [
-    "Focus on my partner\u2019s pleasure first",
-    "Focus on mutual balance",
-    "Prefer receiving/being guided",
-    "It varies a lot",
+    "Primarily focused on my partner",
+    "A balance of giving and receiving",
+    "Primarily focused on my own experience",
+    "It changes depending on mood or partner",
   ],
   "14020": [
     "Bonding / intimacy",
@@ -428,11 +431,11 @@ describe("Dimension transforms produce correct values", () => {
 
   it("DIM_RISK_PREF categorical maps correctly", () => {
     const codes = [
-      { label: "Very safe/private/predictable", expected: 0 },
-      { label: "Mostly safe with small novelty", expected: 0.25 },
+      { label: "Very safe and predictable", expected: 0 },
+      { label: "Mostly safe, with a little novelty", expected: 0.25 },
       { label: "Balanced", expected: 0.5 },
-      { label: "Adventurous but still controlled", expected: 0.75 },
-      { label: "High-risk / edgy / taboo-leaning (within consent)", expected: 1 },
+      { label: "Adventurous, with clear boundaries", expected: 0.75 },
+      { label: "Strong edge or taboo energy", expected: 1 },
     ];
 
     for (const { label, expected } of codes) {
@@ -508,7 +511,7 @@ describe("Full realistic survey response", () => {
       "03009": 3, // Pursuit
       "03012": 2, // Edge need
       "03011": 5, // Sacred
-      "03010": "Mostly safe with small novelty", // Risk pref (categorical)
+      "03010": "Mostly safe, with a little novelty", // Risk pref (categorical)
       "10005": 4, // Feedback dep
       "10003": 5, // Turn-on express
       "10004": 5, // Boundary express
@@ -521,18 +524,18 @@ describe("Full realistic survey response", () => {
       "09013": 2, // Strategy
 
       // Categorical boost questions
-      "01003": "It's temporarily deprioritized (stress / life load)",
+      "01003": "Present but often deprioritized",
       "02001": "I usually warm up after affectionate/erotic cues (responsive)",
       "02004": "My partner starts and I warm up",
       "03003": "Private",
       "03005": "Connection-led (warmth, affection, closeness)",
-      "03006": "\u201CI don\u2019t want \u2018learning mode\u2019 during sex.\u201D",
+      "03006": "Going with intuition & what feels natural",
       "03013": "Neither\u2014being absorbed in sensation/connection is hottest",
       "08003": "Self-soothe and stay grounded",
       "08004": "Balance both",
-      "10002": "Emotionally transparent + relational check-ins",
+      "10002": "Emotional check-ins & reassurance",
       "11001": "I prefer egalitarian/no roles",
-      "11003": "Focus on mutual balance",
+      "11003": "A balance of giving and receiving",
       "14020": "Bonding / intimacy",
 
       // Overlays (scale)

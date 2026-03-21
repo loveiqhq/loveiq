@@ -122,7 +122,15 @@ export const surveyQuestions: SurveyQuestion[] = [
     chapter: "Current Sexual Wellbeing & Pain Points",
     question: "Which statement best describes your relationship with sexuality right now?",
     answerType: "single",
-    options: ["Not a priority", "Temporarily deprioritized", "Feels complicated", "I’m not sure"],
+    options: [
+      "Satisfied & actively engaged",
+      "Want more than I currently have",
+      "Frustrated or unfulfilled",
+      "Feels complicated or inconsistent",
+      "Present but often deprioritized",
+      "Currently not a focus for me",
+      "Unsure / still figuring it out",
+    ],
     required: true,
     guide:
       "Choose the option that best reflects your current lived reality, not your ideal explanation or what sounds most flattering. If more than one partly fits, select the one that feels most central to your sexuality right now. This question is about your present season, not a permanent identity.",
@@ -427,7 +435,7 @@ export const surveyQuestions: SurveyQuestion[] = [
     qId: "03003",
     cId: 3,
     chapter: "Arousal Styles — Cues, Conditions & Brakes",
-    question: "What is your preferred setting of sexual connection?",
+    question: "What kind of erotic environment feels most alive for you?",
     answerType: "single",
     options: ["Private", "Adventurous", "Ritualized", "Spontaneous", "Public-risk", "Other"],
     required: true,
@@ -580,7 +588,11 @@ export const surveyQuestions: SurveyQuestion[] = [
     chapter: "Arousal Styles — Cues, Conditions & Brakes",
     question: 'Which "learning mode" best fits you?',
     answerType: "single",
-    options: ["Taught / guided", "Optimizing / understanding", "No learning mode"],
+    options: [
+      "Clear guidance & feedback",
+      "Trying things out & learning by doing",
+      "Going with intuition & what feels natural",
+    ],
     required: true,
     guide:
       "Choose the option that best reflects how you naturally like to learn, grow, or discover what works sexually. This is about your real learning style, not what sounds most evolved or intelligent. If you dislike turning sexuality into a project, that matters too.",
@@ -613,7 +625,7 @@ export const surveyQuestions: SurveyQuestion[] = [
     qId: "03008",
     cId: 3,
     chapter: "Arousal Styles — Cues, Conditions & Brakes",
-    question: "I usually want sex to feel...",
+    question: "I usually want sex to feel more...",
     answerType: "scale",
     options: [],
     required: true,
@@ -697,14 +709,14 @@ export const surveyQuestions: SurveyQuestion[] = [
     qId: "03010",
     cId: 3,
     chapter: "Arousal Styles — Cues, Conditions & Brakes",
-    question: "In erotic contexts, I prefer:",
+    question: "Which erotic atmosphere feels best for you most often?",
     answerType: "single",
     options: [
-      "Very safe/private/predictable",
-      "Mostly safe with small novelty",
+      "Very safe and predictable",
+      "Mostly safe, with a little novelty",
       "Balanced",
-      "Adventurous but controlled",
-      "High-risk / edgy / taboo-leaning",
+      "Adventurous, with clear boundaries",
+      "Strong edge or taboo energy",
     ],
     required: true,
     guide:
@@ -831,7 +843,7 @@ export const surveyQuestions: SurveyQuestion[] = [
     qId: "03013",
     cId: 3,
     chapter: "Arousal Styles — Cues, Conditions & Brakes",
-    question: "What sounds most arousing?",
+    question: "Which of the following sounds most arousing to you?",
     answerType: "single",
     options: [
       "Being watched / admired",
@@ -1219,11 +1231,11 @@ export const surveyQuestions: SurveyQuestion[] = [
     question: "During intimacy, how do you prefer to communicate your needs and desires?",
     answerType: "single",
     options: [
-      "Mostly nonverbal / quiet",
-      "Touch / movement",
-      "Short clear phrases",
-      "Ongoing verbal feedback",
-      "Relational check-ins",
+      "Mostly silent / nonverbal",
+      "Through touch & body movement",
+      'Short, direct phrases (e.g. "slower", "like that")',
+      "Continuous verbal feedback",
+      "Emotional check-ins & reassurance",
     ],
     required: true,
     guide:
@@ -1236,22 +1248,22 @@ export const surveyQuestions: SurveyQuestion[] = [
       "This tells us whether your communication style is more quiet, embodied, concise, expressive, or emotionally transparent.",
     answerOptionsExplained: [
       {
-        option: "Mostly nonverbal / quiet",
+        option: "Mostly silent / nonverbal",
         explanation:
           "you communicate mainly through sounds, presence, pauses, expression, and subtle cues rather than many words",
       },
       {
-        option: "Touch / movement",
+        option: "Through touch & body movement",
         explanation:
           "your body language, repositioning, guiding touch, and physical response do most of the communicating",
       },
       {
-        option: "Short clear phrases",
+        option: "Short, direct phrases",
         explanation:
           "you prefer simple, direct prompts such as “slower,” “like that,” or “more of this.” Ongoing verbal feedback = frequent spoken communication feels natural and helpful during intimacy",
       },
       {
-        option: "Relational check-ins",
+        option: "Emotional check-ins & reassurance",
         explanation:
           "emotional clarity, reassurance, and checking how both people feel matter most to you during sex",
       },
@@ -1489,10 +1501,10 @@ export const surveyQuestions: SurveyQuestion[] = [
     question: "In sex I most naturally…",
     answerType: "single",
     options: [
-      "Put partner’s pleasure first",
-      "Strive for mutual balance",
-      "Prefer receiving / being guided",
-      "Varies",
+      "Primarily focused on my partner",
+      "A balance of giving and receiving",
+      "Primarily focused on my own experience",
+      "It changes depending on mood or partner",
     ],
     required: true,
     guide:
@@ -1505,21 +1517,21 @@ export const surveyQuestions: SurveyQuestion[] = [
       "This helps us distinguish giving-focused, balanced, and receiving-or-guided dynamics in the way you naturally relate during sex.",
     answerOptionsExplained: [
       {
-        option: "Put partner’s pleasure first",
+        option: "Primarily focused on my partner",
         explanation:
           "your attention naturally goes first toward pleasing, reading, or supporting the other person",
       },
       {
-        option: "Strive for mutual balance",
+        option: "A balance of giving and receiving",
         explanation: "you feel best when giving and receiving stay relatively equal or reciprocal",
       },
       {
-        option: "Prefer receiving / being guided",
+        option: "Primarily focused on my own experience",
         explanation:
           "being the focus, receiving attention, or being led feels most natural for you",
       },
       {
-        option: "Varies",
+        option: "It changes depending on mood or partner",
         explanation: "your erotic orientation changes significantly by mood, partner, or situation",
       },
     ],
@@ -2107,9 +2119,8 @@ export const surveyQuestions: SurveyQuestion[] = [
     qId: "16001",
     cId: 16,
     chapter: "Next Steps & Preferences",
-    question:
-      "If ONE thing changed in the next 3 months, your sex life would feel meaningfully better. Which is closest?",
-    answerType: "single",
+    question: "Which changes would meaningfully improve your sex life over the next 3 months?",
+    answerType: "multiple",
     options: [
       "Desire & arousal",
       "Pleasure & orgasm",
@@ -2603,7 +2614,7 @@ export const surveyQuestions: SurveyQuestion[] = [
     qId: "16014",
     cId: 16,
     chapter: "Next Steps & Preferences",
-    question: "Which things are in the way? (Select all that apply)",
+    question: "What most gets in the way of improving your sexuality? (Select all that apply)",
     answerType: "multiple",
     options: [
       "Not sure what would help",

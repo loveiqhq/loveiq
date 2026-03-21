@@ -103,7 +103,7 @@ describe("scoreArchetypes", () => {
   it("handles label-to-code resolution for categorical questions", () => {
     // Survey stores full labels; engine should resolve to codes
     const result = scoreArchetypes(config, {
-      "01003": "It's genuinely not a priority for me (stable preference)",
+      "01003": "Satisfied & actively engaged",
     });
     expect(result.percent).toBeDefined();
     const sum = Object.values(result.percent).reduce((a, b) => a + b, 0);
@@ -130,7 +130,7 @@ describe("scoreArchetypes", () => {
   });
 
   it("gate penalty applies when dimension is below threshold", () => {
-    // Explorer of Edges gate: DIM_EDGE_NEED >= 0.7, penalty 2
+    // Explorer of Edges gate: DIM_EDGE_NEED >= 0.7, scoreAdjustmentIfFail -2
     // Set edge need very low (1 on 1-7 scale = 0.0)
     const lowEdge = scoreArchetypes(config, { "03012": 1 });
     // Set edge need very high (7 on 1-7 scale = 1.0)
@@ -204,7 +204,7 @@ describe("scoreArchetypes", () => {
     const result = scoreArchetypes(config, {
       "01005": 6,
       "03013": "watched",
-      "01003": "not_priority_stable",
+      "01003": "engaged",
       "16005": "awakening",
       "16008": ["structured_steps", "conversation_prompts"],
       "16014": ["stress", "mismatch_with_partner"],

@@ -17,15 +17,15 @@ export interface OverlaySpec {
 export interface GateRule {
   archetype: string;
   dimension: string;
-  threshold: number;
-  penalty: number;
+  operator: string;
+  value: number;
+  scoreAdjustmentIfFail: number;
 }
 
 /** Categorical boost entry */
 export interface BoostEntry {
   archetype: string;
   scoreAdd: number;
-  category: string;
 }
 
 /** Weight modifier rule */

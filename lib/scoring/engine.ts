@@ -1,5 +1,5 @@
 /**
- * V3 Archetype Scoring Engine
+ * V4 Archetype Scoring Engine
  *
  * Faithful TypeScript port of the reference JS implementation.
  * Pure CPU, no I/O — safe for server-side use in API routes.
@@ -358,7 +358,16 @@ export function scoreArchetypes(
   // Step 7: Apply gates
   for (const gate of config.gates) {
     const val = uDimensions[gate.dimension] ?? 0.5;
-    if (val < gate.threshold) rawScore[gate.archetype] -= gate.penalty;
+    let passes = false;
+    if (gate.operator === ">=") passes = val >= gate.value;
+    else if (gate.operator === "<=") passes = val <= gate.value;
+    else if (gate.operator === ">") passes = val > gate.value;
+    else if (gate.operator === "<") passes = val < gate.value;
+    else if (gate.operator === "==") passes = val === gate.value;
+
+    if (!passes) {
+      rawScore[gate.archetype] += gate.scoreAdjustmentIfFail;
+    }
   }
 
   // Step 8: Categorical boosts

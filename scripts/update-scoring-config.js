@@ -103,7 +103,6 @@ function main() {
       answerLabel: (r.answer_label || "").trim(),
       archetypeName: r.archetype_name.trim(),
       scoreAdd: toFloat(r.score_add, 0.0),
-      category: (r.category || "").trim(),
     }));
 
   // 7. Gates
@@ -113,8 +112,9 @@ function main() {
     .map((r) => ({
       archetypeName: r.archetype_name.trim(),
       dimensionId: r.dimension_id.trim(),
-      threshold: toFloat(r.threshold, 0.0),
-      penaltyIfBelow: toFloat(r.penalty_if_below, 0.0),
+      operator: (r.operator || "").trim(),
+      value: toFloat(r.value, 0.0),
+      scoreAdjustmentIfFail: toFloat(r.score_adjustment_if_fail, 0.0),
     }));
 
   // 8. Categorical map (dim/ovl → answer_code → numeric_value)
@@ -233,7 +233,6 @@ export interface BoostRuleDef {
   answerLabel: string;
   archetypeName: string;
   scoreAdd: number;
-  category: string;
 }
 
 export const categoricalBoostRules: BoostRuleDef[] = ${JSON.stringify(categoricalBoostRules, null, 2)};
@@ -242,8 +241,9 @@ export const categoricalBoostRules: BoostRuleDef[] = ${JSON.stringify(categorica
 export interface GateDef {
   archetypeName: string;
   dimensionId: string;
-  threshold: number;
-  penaltyIfBelow: number;
+  operator: string;
+  value: number;
+  scoreAdjustmentIfFail: number;
 }
 
 export const gates: GateDef[] = ${JSON.stringify(gates, null, 2)};

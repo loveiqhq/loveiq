@@ -228,7 +228,7 @@ export async function POST(request: Request) {
             },
             body: JSON.stringify({
               survey_submission_id: submissionId,
-              engine_version: "v3",
+              engine_version: "v4",
               primary_archetype: scoringResult.primaryArchetype,
               percentages: scoringResult.percent,
               raw_scores: scoringResult.rawScore,

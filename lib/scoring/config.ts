@@ -72,7 +72,6 @@ function buildConfig(): ScoringConfig {
     arr.push({
       archetype: r.archetypeName,
       scoreAdd: r.scoreAdd,
-      category: r.category,
     });
     boosts.set(key, arr);
   }
@@ -81,8 +80,9 @@ function buildConfig(): ScoringConfig {
   const gates: GateRule[] = gatesDef.map((g) => ({
     archetype: g.archetypeName,
     dimension: g.dimensionId,
-    threshold: g.threshold,
-    penalty: g.penaltyIfBelow,
+    operator: g.operator,
+    value: g.value,
+    scoreAdjustmentIfFail: g.scoreAdjustmentIfFail,
   }));
 
   // Scalar map: "targetId||qid||answerCode" → numeric
