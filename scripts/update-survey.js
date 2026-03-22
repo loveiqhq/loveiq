@@ -158,12 +158,14 @@ function parseHoverStates(text) {
   if (!text || text.trim() === "" || text.trim().toLowerCase() === "n/a") return null;
 
   const trimmed = text.trim();
-  const parts = trimmed.split(/\s*·\s*/);
+  const parts = trimmed.split(/\s*·\s*|\s*\n\s*/);
   const result = {};
   let hasEntries = false;
 
   for (const part of parts) {
-    const match = part.trim().match(/^(\d+)\s*=\s*(.+)$/);
+    const clean = part.trim();
+    if (!clean) continue;
+    const match = clean.match(/^(\d+)\s*=\s*(.+)$/);
     if (match) {
       result[parseInt(match[1], 10)] = match[2].trim();
       hasEntries = true;
@@ -202,7 +204,9 @@ function main() {
     const qId = (row["Q_ID"] || "").trim();
     const cId = parseInt(row["C_ID"], 10);
     const chapter = (row["Category & chapter"] || "").trim();
-    const question = (row["Question"] || row["Question "] || "").trim();
+    const question = (row["Question"] || row["Question "] || "")
+      .trim()
+      .replace(/\s*\[update\]\s*$/i, "");
     const answerOptions = (row["Answer options"] || row["Answer Options"] || "").trim();
     const answerTypeRaw = (row["Answer format"] || row["Answer Type"] || "").trim();
     const howAnswerIsUsed = cleanText(row["How this answer will be used"] || row["Comment"] || "");

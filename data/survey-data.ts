@@ -90,28 +90,48 @@ export const surveyQuestions: SurveyQuestion[] = [
       "Provides baseline context for interpreting your report. This does not directly define your archetype.",
     answerOptionsExplained: [
       {
-        option: "1 = very dissatisfied",
+        option: "1 = Very dissatisfied",
         explanation:
           "your current sexual life feels clearly unfulfilling, frustrating, painful, absent, or far from what you want",
       },
       {
-        option: "4 = mixed or neutral",
+        option: "2 = Fairly dissatisfied",
         explanation:
-          "some parts may be working while others feel lacking, unclear, inconsistent, or only partly satisfying",
+          "more of your current experience feels lacking than fulfilling, and dissatisfaction is a noticeable part of your reality",
       },
       {
-        option: "7 = very satisfied",
+        option: "3 = Slightly dissatisfied",
+        explanation:
+          "some parts may work, but there is enough frustration, inconsistency, or disappointment to pull your overall satisfaction down",
+      },
+      {
+        option: "4 = Mixed / neutral",
+        explanation:
+          "some parts feel okay or satisfying, while others feel lacking, unclear, inconsistent, or only partly fulfilling",
+      },
+      {
+        option: "5 = Slightly satisfied",
+        explanation:
+          "your sexual life feels more satisfying than not, even if some frustrations, gaps, or unmet needs remain",
+      },
+      {
+        option: "6 = Fairly satisfied",
+        explanation:
+          "most of your sexual life feels good, aligned, and meaningfully fulfilling, with only limited dissatisfaction",
+      },
+      {
+        option: "7 = Very satisfied",
         explanation:
           "your current sexual life feels deeply fulfilling, aligned, and broadly good for you overall",
       },
     ],
     hoverStates: {
       "1": "Very dissatisfied",
-      "2": "Dissatisfied",
+      "2": "Fairly dissatisfied",
       "3": "Slightly dissatisfied",
       "4": "Mixed / neutral",
       "5": "Slightly satisfied",
-      "6": "Satisfied",
+      "6": "Fairly satisfied",
       "7": "Very satisfied",
     },
     formatGuidance: "Select one value from 1–7.",
@@ -142,24 +162,39 @@ export const surveyQuestions: SurveyQuestion[] = [
       "Helps distinguish whether lower sexual engagement reflects preference, life load, or emotional/relational difficulty.",
     answerOptionsExplained: [
       {
-        option: "Not a priority",
+        option: "Satisfied & actively engaged",
         explanation:
-          "sexuality is currently lower on your priority list by genuine preference, not mainly because something is wrong",
+          "sexuality currently feels alive, available, and broadly working for you; you are not mainly in a problem-solving mode right now",
       },
       {
-        option: "Temporarily deprioritized",
+        option: "Want more than I currently have",
         explanation:
-          "sexuality matters, but life demands such as stress, parenting, health, grief, work, or exhaustion are taking the lead right now",
+          "sexuality matters to you, and you feel a meaningful gap between what you want and what you are currently experiencing",
       },
       {
-        option: "Feels complicated",
+        option: "Frustrated or unfulfilled",
         explanation:
-          "sexuality is present, but pain, shame, resentment, fear, mismatch, disconnection, or emotional difficulty are getting in the way",
+          "your current sexual reality feels clearly lacking, disappointing, stuck, or far from what you want",
       },
       {
-        option: "I’m not sure",
+        option: "Feels complicated or inconsistent",
         explanation:
-          "your experience feels mixed, unclear, or hard to explain with one simple frame",
+          "sexuality is present, but mixed signals, changing desire, shame, pain, mismatch, or emotional difficulty make it hard to feel simple and steady",
+      },
+      {
+        option: "Present but often deprioritized",
+        explanation:
+          "sexuality matters, but stress, work, parenting, health, grief, logistics, or general life load often push it lower on the list",
+      },
+      {
+        option: "Currently not a focus for me",
+        explanation:
+          "sexuality is genuinely lower priority for you right now by preference or life stage, not mainly because something is wrong",
+      },
+      {
+        option: "Unsure / still figuring it out",
+        explanation:
+          "your current relationship with sexuality feels mixed, unclear, or still in discovery, and no single option fully captures it",
       },
     ],
     formatGuidance: "Select one option.",
@@ -176,35 +211,55 @@ export const surveyQuestions: SurveyQuestion[] = [
       "Answer from your usual pattern rather than rare spikes of curiosity or boredom. Novelty can mean new activities, fantasies, pacing, settings, roles, energy, emotional tone, or simply changing familiar routines. If you feel the pull toward “something different” regularly, even without acting on it, that still counts.",
     supportAndGuidance:
       "Answer from your usual pattern rather than rare spikes of curiosity or boredom. Novelty can mean new activities, fantasies, pacing, settings, roles, energy, emotional tone, or simply changing familiar routines. If you feel the pull toward “something different” regularly, even without acting on it, that still counts.",
-    scaleLabels: { low: "Not true at all", high: "Very true" },
+    scaleLabels: { low: "Not at all true", high: "Very true" },
     comment:
       "Helps estimate whether your erotic style leans more toward novelty-seeking or familiarity and steadiness.",
     howAnswerIsUsed:
       "Helps estimate whether your erotic style leans more toward novelty-seeking or familiarity and steadiness.",
     answerOptionsExplained: [
       {
-        option: "1 = not true at all",
+        option: "1 = Not at all true",
         explanation:
-          "familiarity, steadiness, and known patterns usually feel more satisfying than novelty",
+          "familiarity, steadiness, and known patterns usually feel more satisfying to you than novelty or change",
       },
       {
-        option: "4 = sometimes true",
+        option: "2 = Mostly not true",
         explanation:
-          "variety matters in some situations, but it is not a major driver of your sexuality",
+          "you may enjoy occasional variation, but novelty is usually not an important driver of your sexuality",
       },
       {
-        option: "7 = very true",
+        option: "3 = Slightly not true",
         explanation:
-          "newness, change, experimentation, or freshness are strong and recurring parts of what keeps sexuality alive for you",
+          "some variety appeals to you at times, though you generally lean more toward familiarity than change",
+      },
+      {
+        option: "4 = Mixed / depends",
+        explanation:
+          "variety matters in some situations, but it is not a major or consistent driver of your sexuality",
+      },
+      {
+        option: "5 = Slightly true",
+        explanation:
+          "novelty does matter to you, and some freshness or variation can noticeably improve your sexual experience",
+      },
+      {
+        option: "6 = Mostly true",
+        explanation:
+          "newness, change, or experimentation are often important parts of what keeps sexuality engaging for you",
+      },
+      {
+        option: "7 = Very true",
+        explanation:
+          "novelty, variety, experimentation, or freshness are strong and recurring parts of what keeps sexuality alive for you",
       },
     ],
     hoverStates: {
-      "1": "Not true at all",
+      "1": "Not at all true",
       "2": "Mostly not true",
-      "3": "Slightly true",
-      "4": "Sometimes true",
-      "5": "Fairly true",
-      "6": "True",
+      "3": "Slightly not true",
+      "4": "Mixed / depends",
+      "5": "Slightly true",
+      "6": "Mostly true",
       "7": "Very true",
     },
     formatGuidance: "Select one value from 1–7.",
@@ -221,35 +276,56 @@ export const surveyQuestions: SurveyQuestion[] = [
       "Answer based on your typical experience in recent months, not just one isolated event. Include any sexual activity you engage in, not only penetration. If discomfort happens only in certain situations, such as dryness, tension, anxiety, positions, toys, timing, or specific forms of touch, still include that in your answer if it meaningfully shapes your sexual experience.",
     supportAndGuidance:
       "Answer based on your typical experience in recent months, not just one isolated event. Include any sexual activity you engage in, not only penetration. If discomfort happens only in certain situations, such as dryness, tension, anxiety, positions, toys, timing, or specific forms of touch, still include that in your answer if it meaningfully shapes your sexual experience.",
-    scaleLabels: { low: "Not true at all", high: "Very often true" },
+    scaleLabels: { low: "Not at all true", high: "Very true" },
     comment:
       "Used to tailor guidance more safely and realistically around comfort, pacing, and pain sensitivity.",
     howAnswerIsUsed:
       "Used to tailor guidance more safely and realistically around comfort, pacing, and pain sensitivity.",
     answerOptionsExplained: [
       {
-        option: "1 = not true at all",
-        explanation: "sex is generally physically comfortable for you",
+        option: "1 = Not at all true",
+        explanation:
+          "sex is generally physically comfortable for you, without pain being a meaningful part of the experience",
       },
       {
-        option: "4 = sometimes true",
+        option: "2 = Mostly not true",
+        explanation:
+          "discomfort may happen occasionally, but it is uncommon and not a major pattern for you",
+      },
+      {
+        option: "3 = Slightly not true",
+        explanation:
+          "discomfort shows up sometimes, but not often enough to define your sexual experience overall",
+      },
+      {
+        option: "4 = Mixed / depends",
         explanation:
           "discomfort or pain shows up in some contexts and matters, but it is not always present",
       },
       {
-        option: "7 = very often true",
+        option: "5 = Slightly true",
+        explanation:
+          "discomfort is a noticeable part of your experience in certain situations, even if it is not constant",
+      },
+      {
+        option: "6 = Mostly true",
+        explanation:
+          "pain or physical discomfort happens fairly often and meaningfully shapes how sex feels for you",
+      },
+      {
+        option: "7 = Very true",
         explanation:
           "discomfort or pain is a frequent, important, or defining part of your sexual experience",
       },
     ],
     hoverStates: {
-      "1": "Not true at all",
-      "2": "Rarely true",
-      "3": "Slightly true",
-      "4": "Sometimes true",
-      "5": "True",
-      "6": "Often true",
-      "7": "Very often true",
+      "1": "Not at all true",
+      "2": "Mostly not true",
+      "3": "Slightly not true",
+      "4": "Mixed / depends",
+      "5": "Slightly true",
+      "6": "Mostly true",
+      "7": "Very true",
     },
     formatGuidance: "Select one value from 1–7.",
   },
@@ -317,36 +393,56 @@ export const surveyQuestions: SurveyQuestion[] = [
       "Think about your general pattern across situations, not one specific partner or one unusual day. Affectionate or erotic cues can include cuddling, kissing, softness, emotional closeness, flirtation, fantasy, romantic atmosphere, or sexual touch. This question is about how desire often begins, not whether you are capable of feeling desire at all.",
     supportAndGuidance:
       "Think about your general pattern across situations, not one specific partner or one unusual day. Affectionate or erotic cues can include cuddling, kissing, softness, emotional closeness, flirtation, fantasy, romantic atmosphere, or sexual touch. This question is about how desire often begins, not whether you are capable of feeling desire at all.",
-    scaleLabels: { low: "Not true at all", high: "Very often true" },
+    scaleLabels: { low: "Not at all true", high: "Very true" },
     comment:
       "A strong indicator of whether desire tends to be responsive rather than internally self-starting.",
     howAnswerIsUsed:
       "A strong indicator of whether desire tends to be responsive rather than internally self-starting.",
     answerOptionsExplained: [
       {
-        option: "1 = not true at all",
+        option: "1 = Not at all true",
         explanation:
-          "desire usually appears before someone else initiates or before affectionate cues are needed",
+          "desire usually appears on its own, before someone else initiates or before affectionate cues are needed",
       },
       {
-        option: "4 = sometimes true",
+        option: "2 = Mostly not true",
+        explanation:
+          "affection or initiation can help sometimes, but desire often begins internally without much prompting",
+      },
+      {
+        option: "3 = Slightly not true",
+        explanation:
+          "desire can be helped by affection, though it still often appears without needing much activation from someone else",
+      },
+      {
+        option: "4 = Mixed / depends",
         explanation:
           "affection or initiation often helps, but desire also begins on its own in other situations",
       },
       {
-        option: "7 = very true",
+        option: "5 = Slightly true",
+        explanation:
+          "desire often comes more easily after affection or initiation, even if it does not always require it",
+      },
+      {
+        option: "6 = Mostly true",
+        explanation:
+          "desire usually needs affectionate, relational, or erotic cues before it really starts to build",
+      },
+      {
+        option: "7 = Very true",
         explanation:
           "desire usually needs affectionate, relational, or erotic activation before it comes online",
       },
     ],
     hoverStates: {
-      "1": "Not true at all",
-      "2": "Rarely true",
-      "3": "Slightly true",
-      "4": "Sometimes true",
-      "5": "True",
-      "6": "Often true",
-      "7": "Very often true",
+      "1": "Not at all true",
+      "2": "Mostly not true",
+      "3": "Slightly not true",
+      "4": "Mixed / depends",
+      "5": "Slightly true",
+      "6": "Mostly true",
+      "7": "Very true",
     },
     formatGuidance: "Select one value from 1–7.",
   },
@@ -362,34 +458,56 @@ export const surveyQuestions: SurveyQuestion[] = [
       "Focus on what actually leads to better intimacy for you, not what sounds most romantic in theory. Planned can mean a clearly scheduled time or simply an agreed, protected window where intimacy has space to unfold. If planning reduces pressure, helps your body relax, or gives desire time to build, let that shape your answer.",
     supportAndGuidance:
       "Focus on what actually leads to better intimacy for you, not what sounds most romantic in theory. Planned can mean a clearly scheduled time or simply an agreed, protected window where intimacy has space to unfold. If planning reduces pressure, helps your body relax, or gives desire time to build, let that shape your answer.",
-    scaleLabels: { low: "Not true at all", high: "Very often true" },
+    scaleLabels: { low: "Not at all true", high: "Very true" },
     comment:
       "Helps determine whether anticipation and structure support desire better than spontaneity.",
     howAnswerIsUsed:
       "Helps determine whether anticipation and structure support desire better than spontaneity.",
     answerOptionsExplained: [
       {
-        option: "1 = not true at all",
-        explanation: "spontaneity usually feels better, freer, or more energizing than planning",
+        option: "1 = Not at all true",
+        explanation:
+          "spontaneity usually feels better, freer, or more energizing to you than planning",
       },
       {
-        option: "4 = sometimes true",
-        explanation: "both can work, depending on stress, timing, or context",
+        option: "2 = Mostly not true",
+        explanation:
+          "planning may help occasionally, but spontaneous intimacy is still usually more enjoyable for you",
       },
       {
-        option: "7 = very true",
+        option: "3 = Slightly not true",
+        explanation:
+          "you can appreciate planning in some contexts, though you still tend to prefer spontaneity overall",
+      },
+      {
+        option: "4 = Mixed / depends",
+        explanation:
+          "both planning and spontaneity can work, depending on stress, timing, or context",
+      },
+      {
+        option: "5 = Slightly true",
+        explanation:
+          "planned intimacy often helps your enjoyment, even if spontaneity can still work sometimes",
+      },
+      {
+        option: "6 = Mostly true",
+        explanation:
+          "planned intimacy usually feels easier, safer, or more successful for you than spontaneous intimacy",
+      },
+      {
+        option: "7 = Very true",
         explanation:
           "planned intimacy usually feels easier, safer, more enjoyable, or more successful than spontaneous intimacy",
       },
     ],
     hoverStates: {
-      "1": "Not true at all",
-      "2": "Rarely true",
-      "3": "Slightly true",
-      "4": "Sometimes true",
-      "5": "True",
-      "6": "Often true",
-      "7": "Very often true",
+      "1": "Not at all true",
+      "2": "Mostly not true",
+      "3": "Slightly not true",
+      "4": "Mixed / depends",
+      "5": "Slightly true",
+      "6": "Mostly true",
+      "7": "Very true",
     },
     formatGuidance: "Select one value from 1–7.",
   },
@@ -500,15 +618,36 @@ export const surveyQuestions: SurveyQuestion[] = [
       "Helps determine whether emotional closeness is optional, supportive, or close to a prerequisite for desire.",
     answerOptionsExplained: [
       {
-        option: "1 = not important at all",
-        explanation: "emotional closeness is not a major requirement for desire to show up",
+        option: "1 = Not important at all",
+        explanation: "emotional closeness is not a major requirement for desire to show up for you",
       },
       {
-        option: "4 = somewhat important",
-        explanation: "connection helps, but desire can also emerge without it",
+        option: "2 = Slightly important",
+        explanation:
+          "connection can help a little, but desire usually does not depend much on emotional closeness",
       },
       {
-        option: "7 = essential",
+        option: "3 = A little important",
+        explanation:
+          "emotional connection matters somewhat, though desire can still emerge without much of it",
+      },
+      {
+        option: "4 = Moderately important",
+        explanation:
+          "connection often helps desire, but it is not always required for you to feel engaged",
+      },
+      {
+        option: "5 = Quite important",
+        explanation:
+          "desire usually works better when you feel emotionally connected to the other person",
+      },
+      {
+        option: "6 = Very important",
+        explanation:
+          "emotional closeness strongly supports your ability to access, sustain, or enjoy desire",
+      },
+      {
+        option: "7 = Essential",
         explanation:
           "without emotional closeness, desire is often hard to access, sustain, or enjoy fully",
       },
@@ -516,8 +655,8 @@ export const surveyQuestions: SurveyQuestion[] = [
     hoverStates: {
       "1": "Not important at all",
       "2": "Slightly important",
-      "3": "Somewhat unimportant",
-      "4": "Somewhat important",
+      "3": "A little important",
+      "4": "Moderately important",
       "5": "Quite important",
       "6": "Very important",
       "7": "Essential",
@@ -604,19 +743,19 @@ export const surveyQuestions: SurveyQuestion[] = [
       "Helps distinguish guided, analytical, and intuitive approaches to sexual growth and exploration.",
     answerOptionsExplained: [
       {
-        option: "Taught / guided",
+        option: "Clear guidance & feedback",
         explanation:
-          "you like clear instruction, demonstration, feedback, examples, or guided learning",
+          "you learn best with structure, examples, language, and feedback that help you know what to try or refine",
       },
       {
-        option: "Optimizing / understanding",
+        option: "Trying things out & learning by doing",
         explanation:
-          "you are energized by patterns, experimenting, refining, and understanding how things work",
+          "experimentation helps you most; you prefer discovering through real experience, iteration, and noticing what actually works",
       },
       {
-        option: "No learning mode",
+        option: "Going with intuition & what feels natural",
         explanation:
-          "you prefer sexuality to feel intuitive, relational, and natural rather than studied, analyzed, or taught",
+          "you learn best when sexuality feels organic, embodied, and relational rather than heavily analyzed or turned into a project",
       },
     ],
     formatGuidance: "Select one option.",
@@ -633,32 +772,52 @@ export const surveyQuestions: SurveyQuestion[] = [
       "Think about the overall energy or emotional temperature you most enjoy sexually. Answer based on your preferred erotic tone across your real life, not one specific mood or one specific partner. This is about what your system most often wants to move toward.",
     supportAndGuidance:
       "Think about the overall energy or emotional temperature you most enjoy sexually. Answer based on your preferred erotic tone across your real life, not one specific mood or one specific partner. This is about what your system most often wants to move toward.",
-    scaleLabels: { low: "Calm / soft / gentle", high: "Intense / activated" },
+    scaleLabels: { low: "Very soft", high: "Very intense" },
     comment: "Helps position your erotic style on a calm-to-intense spectrum.",
     howAnswerIsUsed: "Helps position your erotic style on a calm-to-intense spectrum.",
     answerOptionsExplained: [
       {
-        option: "1 = calm, soft, gentle",
+        option: "1 = Very soft",
         explanation: "you tend to prefer slower, safer, softer, or more grounded sexual energy",
       },
       {
-        option: "4 = balanced",
-        explanation: "you enjoy a mix of softness and intensity depending on context",
+        option: "2 = Soft",
+        explanation:
+          "you usually lean toward gentle, low-pressure, tender, or calming sexual energy rather than strong intensity",
       },
       {
-        option: "7 = intense, activated, charged",
+        option: "3 = Soft-leaning",
+        explanation:
+          "you can enjoy some activation, but overall you still prefer sexuality to stay more soft than intense",
+      },
+      {
+        option: "4 = Balanced",
+        explanation:
+          "you enjoy a mix of softness and intensity, depending on context, mood, or partner dynamic",
+      },
+      {
+        option: "5 = Intense-leaning",
+        explanation:
+          "you often prefer more charge, edge, or activation, even if some softness still matters",
+      },
+      {
+        option: "6 = Intense",
+        explanation: "you are usually drawn to stronger, faster, or more charged erotic energy",
+      },
+      {
+        option: "7 = Very intense",
         explanation:
           "you tend to prefer stronger energy, more activation, or a higher-voltage erotic tone",
       },
     ],
     hoverStates: {
-      "1": "Calm / soft / gentle",
-      "2": "Mostly calm",
-      "3": "Slightly more calm than intense",
+      "1": "Very soft",
+      "2": "Soft",
+      "3": "Soft-leaning",
       "4": "Balanced",
-      "5": "Slightly more intense than calm",
-      "6": "Mostly intense",
-      "7": "Intense / activated",
+      "5": "Intense-leaning",
+      "6": "Intense",
+      "7": "Very intense",
     },
     formatGuidance: "Select one value from 1–7.",
   },
@@ -674,33 +833,54 @@ export const surveyQuestions: SurveyQuestion[] = [
       "Think about whether desire tends to grow through distance, teasing, anticipation, uncertainty, pursuit, or the energy of wanting and being wanted. Answer for what reliably works, not for occasional curiosity or fantasy that rarely matters in real life. This question is about erotic charge, not about unhealthy relationship dynamics.",
     supportAndGuidance:
       "Think about whether desire tends to grow through distance, teasing, anticipation, uncertainty, pursuit, or the energy of wanting and being wanted. Answer for what reliably works, not for occasional curiosity or fantasy that rarely matters in real life. This question is about erotic charge, not about unhealthy relationship dynamics.",
-    scaleLabels: { low: "Not true at all", high: "Very true" },
+    scaleLabels: { low: "Not at all true", high: "Very true" },
     comment:
       "Helps identify whether tension, pursuit, and anticipation are meaningful arousal drivers for you.",
     howAnswerIsUsed:
       "Helps identify whether tension, pursuit, and anticipation are meaningful arousal drivers for you.",
     answerOptionsExplained: [
       {
-        option: "1 = not true at all",
-        explanation: "chase energy or tension are not important ingredients in your turn-on",
+        option: "1 = Not at all true",
+        explanation:
+          "chase energy, tension, or pursuit are not important ingredients in your turn-on",
       },
       {
-        option: "4 = sometimes true",
-        explanation: "anticipation or pursuit can add spark, but they are not central",
+        option: "2 = Mostly not true",
+        explanation:
+          "you may notice some spark from anticipation now and then, but it is usually not central for you",
       },
       {
-        option: "7 = very true",
+        option: "3 = Slightly not true",
+        explanation:
+          "tension or pursuit can add something in certain moments, though they are not major turn-on drivers",
+      },
+      {
+        option: "4 = Mixed / depends",
+        explanation:
+          "anticipation or pursuit can add spark, but they are not central or consistently important",
+      },
+      {
+        option: "5 = Slightly true",
+        explanation: "some tension, teasing, or pursuit often helps create erotic charge for you",
+      },
+      {
+        option: "6 = Mostly true",
+        explanation:
+          "anticipation, longing, teasing, or pursuit are often meaningful parts of what turns you on",
+      },
+      {
+        option: "7 = Very true",
         explanation:
           "tension, longing, teasing, or the energy of pursuit are strong and recurring parts of what turns you on",
       },
     ],
     hoverStates: {
-      "1": "Not true at all",
-      "2": "Rarely true",
-      "3": "Slightly true",
-      "4": "Sometimes true",
-      "5": "True",
-      "6": "Often true",
+      "1": "Not at all true",
+      "2": "Mostly not true",
+      "3": "Slightly not true",
+      "4": "Mixed / depends",
+      "5": "Slightly true",
+      "6": "Mostly true",
       "7": "Very true",
     },
     formatGuidance: "Select one value from 1–7.",
@@ -729,26 +909,27 @@ export const surveyQuestions: SurveyQuestion[] = [
       "Strong signal for whether your style stays mostly safe and private or includes more edge, novelty, or taboo energy.",
     answerOptionsExplained: [
       {
-        option: "Very safe/private/predictable",
-        explanation: "you prefer a very secure, contained erotic space with minimal uncertainty",
+        option: "Very safe and predictable",
+        explanation: "you feel best in a highly secure, contained, low-uncertainty erotic space",
       },
       {
-        option: "Mostly safe with small novelty",
-        explanation: "a safe base matters most, but some light experimentation feels good",
+        option: "Mostly safe, with a little novelty",
+        explanation:
+          "a safe base matters most, but some light experimentation or freshness feels good",
       },
       {
         option: "Balanced",
         explanation: "familiar and novel, soft and edgy, both have a place for you",
       },
       {
-        option: "Adventurous but controlled",
+        option: "Adventurous, with clear boundaries",
         explanation:
-          "you enjoy more exploration, intensity, or edge when boundaries are clear and the container feels safe",
+          "you enjoy more exploration, intensity, or edge when limits are clear and the container feels safe",
       },
       {
-        option: "High-risk / edgy / taboo-leaning",
+        option: "Strong edge or taboo energy",
         explanation:
-          "thrill, transgression, stronger edge, or taboo-flavored energy add major arousal, always within consent and agreed limits",
+          "thrill, transgression, or stronger taboo-flavored energy add major arousal for you, always within consent and agreed limits",
       },
     ],
     formatGuidance: "Select one option.",
@@ -766,34 +947,55 @@ export const surveyQuestions: SurveyQuestion[] = [
       "Sacred or meaningful can refer to deep presence, reverence, intentionality, symbolism, spirituality, emotional depth, or a feeling that sex connects you to something larger than momentary pleasure. You do not need to be religious for this to fit. Answer from what makes sex feel most deeply fulfilling, not only most exciting.",
     supportAndGuidance:
       "Sacred or meaningful can refer to deep presence, reverence, intentionality, symbolism, spirituality, emotional depth, or a feeling that sex connects you to something larger than momentary pleasure. You do not need to be religious for this to fit. Answer from what makes sex feel most deeply fulfilling, not only most exciting.",
-    scaleLabels: { low: "Not true at all", high: "Very true" },
+    scaleLabels: { low: "Not at all true", high: "Very true" },
     comment:
       "Helps identify whether meaning, ritual, and depth are central to sexual fulfillment for you.",
     howAnswerIsUsed:
       "Helps identify whether meaning, ritual, and depth are central to sexual fulfillment for you.",
     answerOptionsExplained: [
       {
-        option: "1 = not true at all",
+        option: "1 = Not at all true",
         explanation:
           "sexual fulfillment is not strongly tied to ritual, meaning, or sacredness for you",
       },
       {
-        option: "4 = sometimes true",
-        explanation: "depth or meaning can enrich sex, but they are not always central",
+        option: "2 = Mostly not true",
+        explanation:
+          "meaning can be nice, but it is usually not a major factor in whether sex feels fulfilling",
       },
       {
-        option: "7 = very true",
+        option: "3 = Slightly not true",
+        explanation:
+          "depth or significance may enrich sex sometimes, though it is not usually central for you",
+      },
+      {
+        option: "4 = Mixed / depends",
+        explanation:
+          "meaning or ritual can enrich sex in some situations, but they are not always central",
+      },
+      {
+        option: "5 = Slightly true",
+        explanation:
+          "sex often feels more fulfilling when it carries some emotional, symbolic, or meaningful depth",
+      },
+      {
+        option: "6 = Mostly true",
+        explanation:
+          "significance, ritual, or a deeper sense of meaning are often important parts of fulfillment for you",
+      },
+      {
+        option: "7 = Very true",
         explanation:
           "sex feels most fulfilling when it carries significance, ritual, reverence, or a deeper sense of meaning",
       },
     ],
     hoverStates: {
-      "1": "Not true at all",
-      "2": "Rarely true",
-      "3": "Slightly true",
-      "4": "Sometimes true",
-      "5": "True",
-      "6": "Often true",
+      "1": "Not at all true",
+      "2": "Mostly not true",
+      "3": "Slightly not true",
+      "4": "Mixed / depends",
+      "5": "Slightly true",
+      "6": "Mostly true",
       "7": "Very true",
     },
     formatGuidance: "Select one value from 1–7.",
@@ -810,31 +1012,55 @@ export const surveyQuestions: SurveyQuestion[] = [
       "Edge or taboo here can mean stronger energy, daringness, power play, transgressive fantasy, risk flavor, intensity, or a sense of “charge” that goes beyond soft connection alone. Answer based on what keeps your sexuality engaged over time, not just what occasionally sounds exciting.",
     supportAndGuidance:
       "Edge or taboo here can mean stronger energy, daringness, power play, transgressive fantasy, risk flavor, intensity, or a sense of “charge” that goes beyond soft connection alone. Answer based on what keeps your sexuality engaged over time, not just what occasionally sounds exciting.",
-    scaleLabels: { low: "Not true at all", high: "Very true" },
+    scaleLabels: { low: "Not at all true", high: "Very true" },
     comment:
       "Key indicator of whether edge or taboo is part of your erotic baseline rather than occasional curiosity.",
     howAnswerIsUsed:
       "Key indicator of whether edge or taboo is part of your erotic baseline rather than occasional curiosity.",
     answerOptionsExplained: [
       {
-        option: "1 = not true at all",
+        option: "1 = Not at all true",
         explanation:
-          "gentle, straightforward, or emotionally connected sex can feel fully alive without strong edge",
+          "gentle, straightforward, or emotionally connected sex can feel fully alive for you without strong edge or taboo",
       },
-      { option: "4 = sometimes true", explanation: "edge can add spark, but it is not required" },
       {
-        option: "7 = very true",
+        option: "2 = Mostly not true",
+        explanation:
+          "some intensity may be enjoyable at times, but it is usually not needed for sex to feel engaging",
+      },
+      {
+        option: "3 = Slightly not true",
+        explanation:
+          "edge can add spark sometimes, though sex does not generally depend on it to feel alive",
+      },
+      {
+        option: "4 = Mixed / depends",
+        explanation:
+          "edge, taboo, or intensity can add excitement, but they are not required in every context",
+      },
+      {
+        option: "5 = Slightly true",
+        explanation:
+          "some edge or erotic intensity often helps sex feel more alive, even if it is not always necessary",
+      },
+      {
+        option: "6 = Mostly true",
+        explanation:
+          "without enough charge, edge, or intensity, sex often feels less engaging or less alive for you",
+      },
+      {
+        option: "7 = Very true",
         explanation:
           "without some intensity, taboo flavor, or erotic charge, sex often feels less alive or less engaging for you",
       },
     ],
     hoverStates: {
-      "1": "Not true at all",
-      "2": "Rarely true",
-      "3": "Slightly true",
-      "4": "Sometimes true",
-      "5": "True",
-      "6": "Often true",
+      "1": "Not at all true",
+      "2": "Mostly not true",
+      "3": "Slightly not true",
+      "4": "Mixed / depends",
+      "5": "Slightly true",
+      "6": "Mostly true",
       "7": "Very true",
     },
     formatGuidance: "Select one value from 1–7.",
@@ -890,7 +1116,7 @@ export const surveyQuestions: SurveyQuestion[] = [
       "Answer based on your typical partnered experience in recent months under reasonably good conditions. Include whatever kinds of stimulation you usually rely on or enjoy, such as manual, oral, toys, penetration, rhythm, or other forms of touch. This question is not about performance or success as a person, only about how orgasm tends to work in your real life.",
     supportAndGuidance:
       "Answer based on your typical partnered experience in recent months under reasonably good conditions. Include whatever kinds of stimulation you usually rely on or enjoy, such as manual, oral, toys, penetration, rhythm, or other forms of touch. This question is not about performance or success as a person, only about how orgasm tends to work in your real life.",
-    scaleLabels: { low: "Rarely or never", high: "Usually or almost always" },
+    scaleLabels: { low: "Rarely or never", high: "Almost always" },
     comment:
       "Used to tailor pacing, expectations, and guidance around orgasm and partnered pleasure. It does not directly define your archetype.",
     howAnswerIsUsed:
@@ -899,26 +1125,46 @@ export const surveyQuestions: SurveyQuestion[] = [
       {
         option: "1 = rarely or never",
         explanation:
-          "orgasm with a partner is uncommon, difficult, or unpredictable even when you want it",
+          "orgasm with a partner is very uncommon for you, even when you want it and conditions are reasonably supportive",
       },
       {
-        option: "4 = sometimes",
-        explanation: "orgasm is possible in some contexts but not reliable",
-      },
-      {
-        option: "7 = usually or almost always",
+        option: "2 = in exceptional cases",
         explanation:
-          "orgasm with a partner is generally accessible for you when you want it and conditions are decent",
+          "orgasm with a partner is possible, but only in rare or unusually favorable situations",
+      },
+      {
+        option: "3 = occasionally",
+        explanation:
+          "orgasm with a partner happens from time to time, but it is not something you can generally count on",
+      },
+      {
+        option: "4 = somewhat regularly",
+        explanation:
+          "orgasm with a partner happens with some consistency, though it still feels variable and not fully dependable",
+      },
+      {
+        option: "5 = regularly",
+        explanation:
+          "orgasm with a partner is available to you fairly often and feels like a recurring part of partnered sex",
+      },
+      {
+        option: "6 = usually",
+        explanation: "orgasm with a partner happens in most supportive situations when you want it",
+      },
+      {
+        option: "7 = almost always",
+        explanation:
+          "orgasm with a partner is highly accessible and reliably available to you when you want it",
       },
     ],
     hoverStates: {
       "1": "Rarely or never",
-      "2": "Seldom",
+      "2": "In exceptional cases",
       "3": "Occasionally",
-      "4": "Sometimes",
-      "5": "Often",
+      "4": "Somewhat regularly",
+      "5": "Regularly",
       "6": "Usually",
-      "7": "Usually or almost always",
+      "7": "Almost always",
     },
     formatGuidance: "Select one value from 1–7.",
   },
@@ -934,34 +1180,54 @@ export const surveyQuestions: SurveyQuestion[] = [
       "Think about your broader pattern across relationships, not only your current relationship on a difficult week. Feeling secure usually means closeness feels possible without losing yourself, distance does not automatically trigger panic, and conflict does not make you collapse or fully shut down. Answer from your most typical relational baseline.",
     supportAndGuidance:
       "Think about your broader pattern across relationships, not only your current relationship on a difficult week. Feeling secure usually means closeness feels possible without losing yourself, distance does not automatically trigger panic, and conflict does not make you collapse or fully shut down. Answer from your most typical relational baseline.",
-    scaleLabels: { low: "Not true at all", high: "Very true" },
+    scaleLabels: { low: "Not at all true", high: "Very true" },
     comment:
       "Gives baseline context for how safe and settled you tend to feel in closeness and attachment.",
     howAnswerIsUsed:
       "Gives baseline context for how safe and settled you tend to feel in closeness and attachment.",
     answerOptionsExplained: [
       {
-        option: "1 = not true at all",
-        explanation: "relationships often feel unstable, threatening, or hard to trust",
+        option: "1 = Not at all true",
+        explanation: "relationships often feel unstable, threatening, or hard to trust for you",
       },
       {
-        option: "4 = mixed",
+        option: "2 = Mostly not true",
         explanation:
-          "some parts of you feel secure, but other patterns such as worry, withdrawal, or instability still show up",
+          "security is often hard to sustain, and worry, distrust, or withdrawal tend to show up more than steadiness",
       },
       {
-        option: "7 = very true",
+        option: "3 = Slightly not true",
+        explanation:
+          "some parts of you can feel secure, but insecurity still outweighs steadiness overall",
+      },
+      {
+        option: "4 = Mixed / depends",
+        explanation:
+          "some parts of you feel secure, but worry, withdrawal, or instability still show up in meaningful ways",
+      },
+      {
+        option: "5 = Slightly true",
+        explanation:
+          "you often can feel secure, even though certain triggers or patterns still shake that steadiness",
+      },
+      {
+        option: "6 = Mostly true",
+        explanation:
+          "you usually feel relatively safe, trusting, and steady in relationships, even if not perfectly all the time",
+      },
+      {
+        option: "7 = Very true",
         explanation:
           "you generally feel worthy of love, able to trust closeness, and able to stay relatively steady through distance or conflict",
       },
     ],
     hoverStates: {
-      "1": "Not true at all",
-      "2": "Rarely true",
-      "3": "Slightly true",
-      "4": "Sometimes true",
-      "5": "True",
-      "6": "Often true",
+      "1": "Not at all true",
+      "2": "Mostly not true",
+      "3": "Slightly not true",
+      "4": "Mixed / depends",
+      "5": "Slightly true",
+      "6": "Mostly true",
       "7": "Very true",
     },
     formatGuidance: "Select one value from 1–7.",
@@ -1061,31 +1327,50 @@ export const surveyQuestions: SurveyQuestion[] = [
       "Emotional repair means a real moment of reconnection after tension: honesty, empathy, feeling seen, apology, reassurance, or mutual softening. Answer based on what actually happens in your system after repair, not what you wish would happen or what sounds ideal. This question is about whether reconnection genuinely reopens your body and desire.",
     supportAndGuidance:
       "Emotional repair means a real moment of reconnection after tension: honesty, empathy, feeling seen, apology, reassurance, or mutual softening. Answer based on what actually happens in your system after repair, not what you wish would happen or what sounds ideal. This question is about whether reconnection genuinely reopens your body and desire.",
-    scaleLabels: { low: "Not true at all", high: "Very true" },
+    scaleLabels: { low: "Not at all true", high: "Very true" },
     comment: "Strong clue for whether emotional reconnection reliably reopens desire for you.",
     howAnswerIsUsed:
       "Strong clue for whether emotional reconnection reliably reopens desire for you.",
     answerOptionsExplained: [
       {
-        option: "1 = not true at all",
+        option: "1 = Not at all true",
         explanation: "even after repair, desire usually does not increase much for you",
       },
       {
-        option: "4 = sometimes",
+        option: "2 = Mostly not true",
+        explanation:
+          "emotional repair may help a little at times, but it usually does not shift desire very much",
+      },
+      {
+        option: "3 = Slightly not true",
+        explanation:
+          "repair can help in some moments, though it does not reliably bring desire back for you",
+      },
+      {
+        option: "4 = Mixed / depends",
         explanation: "emotional repair helps in some situations, but not consistently",
       },
       {
-        option: "7 = very true",
+        option: "5 = Slightly true",
+        explanation: "a good repair conversation often helps desire return at least somewhat",
+      },
+      {
+        option: "6 = Mostly true",
+        explanation:
+          "when repair happens well, desire usually increases or becomes more accessible for you",
+      },
+      {
+        option: "7 = Very true",
         explanation: "when emotional repair happens well, desire often returns or rises noticeably",
       },
     ],
     hoverStates: {
-      "1": "Not true at all",
-      "2": "Rarely true",
-      "3": "Slightly true",
-      "4": "Sometimes true",
-      "5": "True",
-      "6": "Often true",
+      "1": "Not at all true",
+      "2": "Mostly not true",
+      "3": "Slightly not true",
+      "4": "Mixed / depends",
+      "5": "Slightly true",
+      "6": "Mostly true",
       "7": "Very true",
     },
     formatGuidance: "Select one value from 1–7.",
@@ -1103,33 +1388,52 @@ export const surveyQuestions: SurveyQuestion[] = [
       "Pressure can be obvious or subtle: being expected to perform, talk more, move faster, orgasm, reassure, respond the “right” way, or stay sexually open when your system is not there. Shut down can mean numbness, tension, losing desire, wanting to stop, disconnecting, or needing distance. Answer from what reliably happens in your nervous system, not from what you think should happen.",
     supportAndGuidance:
       "Pressure can be obvious or subtle: being expected to perform, talk more, move faster, orgasm, reassure, respond the “right” way, or stay sexually open when your system is not there. Shut down can mean numbness, tension, losing desire, wanting to stop, disconnecting, or needing distance. Answer from what reliably happens in your nervous system, not from what you think should happen.",
-    scaleLabels: { low: "Not true at all", high: "Very true" },
+    scaleLabels: { low: "Not at all true", high: "Very true" },
     comment:
       "High-weight indicator of pressure sensitivity, which strongly affects pacing, safety, and the kinds of recommendations that are likely to be useful.",
     howAnswerIsUsed:
       "High-weight indicator of pressure sensitivity, which strongly affects pacing, safety, and the kinds of recommendations that are likely to be useful.",
     answerOptionsExplained: [
       {
-        option: "1 = not true at all",
-        explanation: "pressure does not usually make you shut down or withdraw",
+        option: "1 = Not at all true",
+        explanation: "pressure does not usually make you shut down, withdraw, or lose openness",
       },
       {
-        option: "4 = sometimes",
-        explanation: "some forms of pressure affect you, but not always strongly",
+        option: "2 = Mostly not true",
+        explanation:
+          "some pressure may be unpleasant, but it usually does not cause a strong shutdown response",
       },
       {
-        option: "7 = very true",
+        option: "3 = Slightly not true",
+        explanation:
+          "pressure affects you at times, though it does not usually lead to major withdrawal",
+      },
+      {
+        option: "4 = Mixed / depends",
+        explanation: "some forms of pressure affect you, but not always strongly or consistently",
+      },
+      {
+        option: "5 = Slightly true",
+        explanation: "pressure often reduces your openness and can start to make you pull back",
+      },
+      {
+        option: "6 = Mostly true",
+        explanation:
+          "pressure fairly often makes your body or mind close down, withdraw, or lose desire",
+      },
+      {
+        option: "7 = Very true",
         explanation:
           "pressure reliably makes your body or mind close down, pull back, or lose openness",
       },
     ],
     hoverStates: {
-      "1": "Not true at all",
-      "2": "Rarely true",
-      "3": "Slightly true",
-      "4": "Sometimes true",
-      "5": "True",
-      "6": "Often true",
+      "1": "Not at all true",
+      "2": "Mostly not true",
+      "3": "Slightly not true",
+      "4": "Mixed / depends",
+      "5": "Slightly true",
+      "6": "Mostly true",
       "7": "Very true",
     },
     formatGuidance: "Select one value from 1–7.",
@@ -1146,35 +1450,55 @@ export const surveyQuestions: SurveyQuestion[] = [
       "Think about your typical response when a partner relies on you heavily for reassurance, stability, identity, or emotional regulation. This is not about normal closeness or healthy need; it is about moments when their dependence starts to feel like pressure, responsibility, or emotional over-reliance. Answer from what usually happens in your attraction and desire, not from what you think should happen.",
     supportAndGuidance:
       "Think about your typical response when a partner relies on you heavily for reassurance, stability, identity, or emotional regulation. This is not about normal closeness or healthy need; it is about moments when their dependence starts to feel like pressure, responsibility, or emotional over-reliance. Answer from what usually happens in your attraction and desire, not from what you think should happen.",
-    scaleLabels: { low: "Not true at all", high: "Very true" },
+    scaleLabels: { low: "Not at all true", high: "Very true" },
     comment:
       "We use this to tell whether too much emotional dependence or neediness tends to cool desire for you.",
     howAnswerIsUsed:
       "We use this to tell whether too much emotional dependence or neediness tends to cool desire for you.",
     answerOptionsExplained: [
       {
-        option: "1 = not true at all",
+        option: "1 = Not at all true",
         explanation:
           "a partner’s increased emotional dependence does not usually reduce your attraction or desire",
       },
       {
-        option: "4 = sometimes",
+        option: "2 = Mostly not true",
+        explanation:
+          "emotional dependence may feel challenging sometimes, but it does not usually cool your erotic interest",
+      },
+      {
+        option: "3 = Slightly not true",
+        explanation:
+          "too much dependence can affect attraction occasionally, though it is not a strong pattern for you",
+      },
+      {
+        option: "4 = Mixed / depends",
         explanation:
           "in some situations, too much dependence can cool desire, but not consistently",
       },
       {
-        option: "7 = very true",
+        option: "5 = Slightly true",
+        explanation:
+          "when a partner becomes more emotionally dependent, your attraction can start to drop in noticeable ways",
+      },
+      {
+        option: "6 = Mostly true",
+        explanation:
+          "emotional overdependence fairly often reduces your erotic interest or sense of attraction",
+      },
+      {
+        option: "7 = Very true",
         explanation:
           "when a partner becomes too emotionally dependent, your attraction or erotic interest often drops noticeably",
       },
     ],
     hoverStates: {
-      "1": "Not true at all",
-      "2": "Rarely true",
-      "3": "Slightly true",
-      "4": "Sometimes true",
-      "5": "True",
-      "6": "Often true",
+      "1": "Not at all true",
+      "2": "Mostly not true",
+      "3": "Slightly not true",
+      "4": "Mixed / depends",
+      "5": "Slightly true",
+      "6": "Mostly true",
       "7": "Very true",
     },
     formatGuidance: "Select one value from 1–7.",
@@ -1183,7 +1507,7 @@ export const surveyQuestions: SurveyQuestion[] = [
     qId: "09013",
     cId: 9,
     chapter: "Relational Patterns & Boundaries",
-    question: "I sometimes use flirtation/sex to influence the dynamic or get needs met.”",
+    question: "I sometimes use flirtation/sex to influence the dynamic or get needs met.",
     answerType: "scale",
     options: [],
     required: true,
@@ -1191,35 +1515,55 @@ export const surveyQuestions: SurveyQuestion[] = [
       "This question is about whether sexuality sometimes becomes a way of shaping the emotional dynamic: for example to gain closeness, reduce tension, get reassurance, avoid conflict, feel more secure, restore connection, or increase influence. It does not mean you are manipulative or “bad”; many people do this under stress without fully realizing it. Answer based on recognizable behavior patterns, not just your intentions or self-image.",
     supportAndGuidance:
       "This question is about whether sexuality sometimes becomes a way of shaping the emotional dynamic: for example to gain closeness, reduce tension, get reassurance, avoid conflict, feel more secure, restore connection, or increase influence. It does not mean you are manipulative or “bad”; many people do this under stress without fully realizing it. Answer based on recognizable behavior patterns, not just your intentions or self-image.",
-    scaleLabels: { low: "Not true at all", high: "Very true" },
+    scaleLabels: { low: "Not at all true", high: "Very true" },
     comment:
       "We use this carefully to tell apart ordinary flirtation from a more strategic or influence-based dynamic, so we do not over-read it.",
     howAnswerIsUsed:
       "We use this carefully to tell apart ordinary flirtation from a more strategic or influence-based dynamic, so we do not over-read it.",
     answerOptionsExplained: [
       {
-        option: "1 = not true at all",
+        option: "1 = Not at all true",
         explanation:
-          "flirtation or sex is rarely used by you to influence the relationship dynamic or get emotional needs met indirectly",
+          "flirtation or sex is rarely used by you to influence the relationship dynamic or get needs met indirectly",
       },
       {
-        option: "4 = sometimes",
+        option: "2 = Mostly not true",
+        explanation:
+          "this may happen once in a while, but it is not usually part of how you navigate the relationship",
+      },
+      {
+        option: "3 = Slightly not true",
+        explanation:
+          "under stress or in certain situations, you might do this a little, though it is not a strong pattern",
+      },
+      {
+        option: "4 = Mixed / depends",
         explanation:
           "this may happen in certain situations, especially under stress, but it is not a dominant pattern",
       },
       {
-        option: "7 = very true",
+        option: "5 = Slightly true",
+        explanation:
+          "you sometimes use flirtation or sexuality to shape the dynamic, gain reassurance, or get needs met",
+      },
+      {
+        option: "6 = Mostly true",
+        explanation:
+          "using flirtation or sexuality to influence the dynamic or secure something relational is a fairly common pattern for you",
+      },
+      {
+        option: "7 = Very true",
         explanation:
           "using flirtation or sexuality to shape the dynamic, secure closeness, or steer the relationship is a recurring pattern for you",
       },
     ],
     hoverStates: {
-      "1": "Not true at all",
-      "2": "Rarely true",
-      "3": "Slightly true",
-      "4": "Sometimes true",
-      "5": "True",
-      "6": "Often true",
+      "1": "Not at all true",
+      "2": "Mostly not true",
+      "3": "Slightly not true",
+      "4": "Mixed / depends",
+      "5": "Slightly true",
+      "6": "Mostly true",
       "7": "Very true",
     },
     formatGuidance: "Select one value from 1–7.",
@@ -1233,7 +1577,7 @@ export const surveyQuestions: SurveyQuestion[] = [
     options: [
       "Mostly silent / nonverbal",
       "Through touch & body movement",
-      'Short, direct phrases (e.g. "slower", "like that")',
+      "Short, direct phrases (e.g. “slower”, “like that”)",
       "Continuous verbal feedback",
       "Emotional check-ins & reassurance",
     ],
@@ -1250,7 +1594,7 @@ export const surveyQuestions: SurveyQuestion[] = [
       {
         option: "Mostly silent / nonverbal",
         explanation:
-          "you communicate mainly through sounds, presence, pauses, expression, and subtle cues rather than many words",
+          "you communicate mainly through sounds, pauses, facial expression, presence, and subtle cues rather than many words",
       },
       {
         option: "Through touch & body movement",
@@ -1258,9 +1602,14 @@ export const surveyQuestions: SurveyQuestion[] = [
           "your body language, repositioning, guiding touch, and physical response do most of the communicating",
       },
       {
-        option: "Short, direct phrases",
+        option: 'Short, direct phrases (e.g. "slower", "like that")',
         explanation:
-          "you prefer simple, direct prompts such as “slower,” “like that,” or “more of this.” Ongoing verbal feedback = frequent spoken communication feels natural and helpful during intimacy",
+          "you prefer simple, clear prompts that guide the moment without overtalking it",
+      },
+      {
+        option: "Continuous verbal feedback",
+        explanation:
+          "frequent spoken communication feels natural, grounding, or helpful during intimacy",
       },
       {
         option: "Emotional check-ins & reassurance",
@@ -1282,36 +1631,56 @@ export const surveyQuestions: SurveyQuestion[] = [
       "Think about your comfort in real situations: during sex, before sex, in texts, in conversation, or through guiding touch. This is about whether you can share your desires without strong shame, inhibition, embarrassment, or fear of being judged. Answer from your usual level of comfort, not from your most confident day or your ideal self-image.",
     supportAndGuidance:
       "Think about your comfort in real situations: during sex, before sex, in texts, in conversation, or through guiding touch. This is about whether you can share your desires without strong shame, inhibition, embarrassment, or fear of being judged. Answer from your usual level of comfort, not from your most confident day or your ideal self-image.",
-    scaleLabels: { low: "Not comfortable at all", high: "Very highly comfortable" },
+    scaleLabels: { low: "Not comfortable at all", high: "Very comfortable" },
     comment:
       "This shows how easily you can name and voice what turns you on, which changes the communication style we recommend.",
     howAnswerIsUsed:
       "This shows how easily you can name and voice what turns you on, which changes the communication style we recommend.",
     answerOptionsExplained: [
       {
-        option: "1 = not comfortable at all",
+        option: "1 = Not comfortable at all",
         explanation:
           "expressing what turns you on feels difficult, vulnerable, or highly inhibited",
       },
       {
-        option: "4 = somewhat comfortable",
+        option: "2 = Quite uncomfortable",
         explanation:
-          "you can express some desires, but only in certain situations or with some hesitation",
+          "you can sometimes sense what you want, but saying it out loud often feels awkward, exposed, or hard",
       },
       {
-        option: "7 = very highly comfortable",
+        option: "3 = Slightly uncomfortable",
+        explanation:
+          "you can express some desires, though it still takes effort and often comes with hesitation",
+      },
+      {
+        option: "4 = Mixed / depends",
+        explanation:
+          "you can express some desires in certain situations, but not always with ease or consistency",
+      },
+      {
+        option: "5 = Slightly comfortable",
+        explanation:
+          "you can often communicate what turns you on, even if some inhibition or self-consciousness remains",
+      },
+      {
+        option: "6 = Quite comfortable",
+        explanation:
+          "you are usually able to name, signal, or communicate what turns you on with relatively little hesitation",
+      },
+      {
+        option: "7 = Very comfortable",
         explanation:
           "you can usually name, signal, or communicate what turns you on with relative ease and low shame",
       },
     ],
     hoverStates: {
       "1": "Not comfortable at all",
-      "2": "Slightly comfortable",
-      "3": "Somewhat uncomfortable",
-      "4": "Somewhat comfortable",
-      "5": "Fairly comfortable",
-      "6": "Highly comfortable",
-      "7": "Very highly comfortable",
+      "2": "Quite uncomfortable",
+      "3": "Slightly uncomfortable",
+      "4": "Mixed / depends",
+      "5": "Slightly comfortable",
+      "6": "Quite comfortable",
+      "7": "Very comfortable",
     },
     formatGuidance: "Select one value from 1–7.",
   },
@@ -1327,35 +1696,56 @@ export const surveyQuestions: SurveyQuestion[] = [
       "This is about your ability to state limits clearly in real time: saying no, slowing something down, redirecting, pausing, or naming a boundary without freezing, fawning, apologizing excessively, or feeling responsible for the other person’s reaction. Think especially about in-the-moment sexual situations, not only what you believe intellectually about boundaries.",
     supportAndGuidance:
       "This is about your ability to state limits clearly in real time: saying no, slowing something down, redirecting, pausing, or naming a boundary without freezing, fawning, apologizing excessively, or feeling responsible for the other person’s reaction. Think especially about in-the-moment sexual situations, not only what you believe intellectually about boundaries.",
-    scaleLabels: { low: "Not comfortable at all", high: "Very highly comfortable" },
+    scaleLabels: { low: "Not comfortable at all", high: "Very comfortable" },
     comment:
       "This shows how easily you can protect your boundaries in sexual moments, which helps us avoid advice that assumes over-accommodating is fine.",
     howAnswerIsUsed:
       "This shows how easily you can protect your boundaries in sexual moments, which helps us avoid advice that assumes over-accommodating is fine.",
     answerOptionsExplained: [
       {
-        option: "1 = not comfortable at all",
+        option: "1 = Not comfortable at all",
         explanation:
           "expressing limits or saying no feels very difficult, especially in the moment",
       },
       {
-        option: "4 = somewhat comfortable",
-        explanation: "you can sometimes name boundaries, but not always clearly or easily",
+        option: "2 = Quite uncomfortable",
+        explanation:
+          "you may know your limits internally, but voicing them clearly often feels hard, risky, or guilt-provoking",
       },
       {
-        option: "7 = very highly comfortable",
+        option: "3 = Slightly uncomfortable",
+        explanation:
+          "you can sometimes name boundaries, though it still takes effort or comes with noticeable hesitation",
+      },
+      {
+        option: "4 = Mixed / depends",
+        explanation:
+          "you can express limits in some situations, but not always clearly, easily, or consistently",
+      },
+      {
+        option: "5 = Slightly comfortable",
+        explanation:
+          "you can often communicate what you do not want, even if some discomfort or self-consciousness remains",
+      },
+      {
+        option: "6 = Quite comfortable",
+        explanation:
+          "you are usually able to name limits and protect your boundaries with relatively little hesitation",
+      },
+      {
+        option: "7 = Very comfortable",
         explanation:
           "you can usually express what you do not want clearly and protect your boundaries without major shutdown or guilt",
       },
     ],
     hoverStates: {
       "1": "Not comfortable at all",
-      "2": "Slightly comfortable",
-      "3": "Somewhat uncomfortable",
-      "4": "Somewhat comfortable",
-      "5": "Fairly comfortable",
-      "6": "Highly comfortable",
-      "7": "Very highly comfortable",
+      "2": "Quite uncomfortable",
+      "3": "Slightly uncomfortable",
+      "4": "Mixed / depends",
+      "5": "Slightly comfortable",
+      "6": "Quite comfortable",
+      "7": "Very comfortable",
     },
     formatGuidance: "Select one value from 1–7.",
   },
@@ -1371,33 +1761,54 @@ export const surveyQuestions: SurveyQuestion[] = [
       "Quiet or neutral here means little visible feedback, few sounds, minimal expression, or being hard to read. Answer based on your nervous system response: does your body lose confidence, momentum, or erotic engagement when you are not getting much feedback? This is not about blaming your partner; it is about understanding how much your arousal depends on visible response and reciprocity.",
     supportAndGuidance:
       "Quiet or neutral here means little visible feedback, few sounds, minimal expression, or being hard to read. Answer based on your nervous system response: does your body lose confidence, momentum, or erotic engagement when you are not getting much feedback? This is not about blaming your partner; it is about understanding how much your arousal depends on visible response and reciprocity.",
-    scaleLabels: { low: "Not true at all", high: "Very true" },
+    scaleLabels: { low: "Not at all true", high: "Very true" },
     comment:
       "This is one of the strongest clues for whether your arousal depends on visible feedback, enthusiasm, and feeling responded to.",
     howAnswerIsUsed:
       "This is one of the strongest clues for whether your arousal depends on visible feedback, enthusiasm, and feeling responded to.",
     answerOptionsExplained: [
       {
-        option: "1 = not true at all",
-        explanation: "your arousal does not depend much on visible feedback from your partner",
+        option: "1 = Not at all true",
+        explanation:
+          "your arousal does not depend much on visible feedback or expressiveness from your partner",
       },
       {
-        option: "4 = sometimes",
+        option: "2 = Mostly not true",
+        explanation:
+          "a quiet or neutral partner may register a little, but it usually does not lower your arousal much",
+      },
+      {
+        option: "3 = Slightly not true",
+        explanation:
+          "feedback matters somewhat, though you can usually stay engaged even if your partner is hard to read",
+      },
+      {
+        option: "4 = Mixed / depends",
         explanation:
           "a quiet or neutral partner can affect your arousal in some situations, but not always strongly",
       },
       {
-        option: "7 = very true",
+        option: "5 = Slightly true",
+        explanation:
+          "when your partner is hard to read, your arousal often drops at least somewhat",
+      },
+      {
+        option: "6 = Mostly true",
+        explanation:
+          "visible feedback is usually important for your arousal, and neutrality often reduces your engagement",
+      },
+      {
+        option: "7 = Very true",
         explanation: "when your partner is hard to read, your arousal often drops noticeably",
       },
     ],
     hoverStates: {
-      "1": "Not true at all",
-      "2": "Rarely true",
-      "3": "Slightly true",
-      "4": "Sometimes true",
-      "5": "True",
-      "6": "Often true",
+      "1": "Not at all true",
+      "2": "Mostly not true",
+      "3": "Slightly not true",
+      "4": "Mixed / depends",
+      "5": "Slightly true",
+      "6": "Mostly true",
       "7": "Very true",
     },
     formatGuidance: "Select one value from 1–7.",
@@ -1462,34 +1873,55 @@ export const surveyQuestions: SurveyQuestion[] = [
       "Structure can mean something light, such as a routine, an agreed sequence, or asking before escalation, or something more explicit, such as rituals, roles, scripts, or clearly defined expectations. Answer based on whether structure tends to make intimacy feel easier, safer, hotter, or more freeing for you. This is about what supports your experience, not about being rigid or controlling.",
     supportAndGuidance:
       "Structure can mean something light, such as a routine, an agreed sequence, or asking before escalation, or something more explicit, such as rituals, roles, scripts, or clearly defined expectations. Answer based on whether structure tends to make intimacy feel easier, safer, hotter, or more freeing for you. This is about what supports your experience, not about being rigid or controlling.",
-    scaleLabels: { low: "Not true at all", high: "Very true" },
+    scaleLabels: { low: "Not at all true", high: "Very true" },
     comment:
       "We use this to tell whether rules, roles, and explicit agreements make sex feel freer for you rather than restrictive.",
     howAnswerIsUsed:
       "We use this to tell whether rules, roles, and explicit agreements make sex feel freer for you rather than restrictive.",
     answerOptionsExplained: [
       {
-        option: "1 = not true at all",
+        option: "1 = Not at all true",
         explanation:
           "structure, protocols, or explicit rules usually feel unnecessary or restrictive for you",
       },
       {
-        option: "4 = sometimes",
-        explanation: "some degree of structure can help, depending on context",
+        option: "2 = Mostly not true",
+        explanation:
+          "some clarity may help occasionally, but formal structure is usually not part of what makes sex work for you",
       },
       {
-        option: "7 = very true",
+        option: "3 = Slightly not true",
+        explanation:
+          "you can appreciate a little structure in some contexts, though you generally do not rely on it much",
+      },
+      {
+        option: "4 = Mixed / depends",
+        explanation:
+          "some degree of structure can help, depending on context, mood, or partner dynamic",
+      },
+      {
+        option: "5 = Slightly true",
+        explanation:
+          "clear roles, agreements, or structure often improve the experience, even if you do not always need them",
+      },
+      {
+        option: "6 = Mostly true",
+        explanation:
+          "clear rules, roles, or agreed structure usually make sex feel easier, safer, or more erotically alive for you",
+      },
+      {
+        option: "7 = Very true",
         explanation:
           "clear rules, roles, or agreed structure often make sex feel more open, safe, or erotically alive for you",
       },
     ],
     hoverStates: {
-      "1": "Not true at all",
-      "2": "Rarely true",
-      "3": "Slightly true",
-      "4": "Sometimes true",
-      "5": "True",
-      "6": "Often true",
+      "1": "Not at all true",
+      "2": "Mostly not true",
+      "3": "Slightly not true",
+      "4": "Mixed / depends",
+      "5": "Slightly true",
+      "6": "Mostly true",
       "7": "Very true",
     },
     formatGuidance: "Select one value from 1–7.",
@@ -1519,20 +1951,22 @@ export const surveyQuestions: SurveyQuestion[] = [
       {
         option: "Primarily focused on my partner",
         explanation:
-          "your attention naturally goes first toward pleasing, reading, or supporting the other person",
+          "your attention naturally goes first toward reading, pleasing, supporting, or prioritizing the other person’s experience",
       },
       {
         option: "A balance of giving and receiving",
-        explanation: "you feel best when giving and receiving stay relatively equal or reciprocal",
+        explanation:
+          "you feel best when attention, pleasure, and responsiveness move both ways in a fairly mutual rhythm",
       },
       {
         option: "Primarily focused on my own experience",
         explanation:
-          "being the focus, receiving attention, or being led feels most natural for you",
+          "your attention naturally goes first toward your own sensation, arousal, expression, or what feels most alive for you in the moment",
       },
       {
         option: "It changes depending on mood or partner",
-        explanation: "your erotic orientation changes significantly by mood, partner, or situation",
+        explanation:
+          "your erotic orientation shifts meaningfully depending on context, partner, power dynamic, or emotional state",
       },
     ],
     formatGuidance: "Select one option.",
@@ -1557,27 +1991,47 @@ export const surveyQuestions: SurveyQuestion[] = [
       "This is a very strong clue for whether caregiving and emotional soothing are part of what makes sex feel connecting for you.",
     answerOptionsExplained: [
       {
-        option: "1 = not true at all",
+        option: "1 = Not true at all",
         explanation:
           "soothing or emotionally stabilizing your partner does not usually increase sexual connection for you",
       },
       {
-        option: "4 = sometimes",
+        option: "2 = Mostly not true",
+        explanation:
+          "caregiving may matter relationally, but it is usually not what creates sexual connection for you",
+      },
+      {
+        option: "3 = Slightly not true",
+        explanation:
+          "this can feel connecting at times, though it is not usually a major source of erotic closeness",
+      },
+      {
+        option: "4 = Mixed / depends",
         explanation: "this can feel connecting in some contexts, but not consistently",
       },
       {
-        option: "7 = very true",
+        option: "5 = Slightly true",
+        explanation:
+          "caregiving, calming, or emotional holding often adds some sense of sexual connection for you",
+      },
+      {
+        option: "6 = Mostly true",
+        explanation:
+          "soothing or stabilizing your partner’s emotions is often part of what helps you feel sexually connected",
+      },
+      {
+        option: "7 = Very true",
         explanation:
           "caregiving, calming, or emotionally holding your partner often deepens your sense of sexual connection",
       },
     ],
     hoverStates: {
       "1": "Not true at all",
-      "2": "Rarely true",
-      "3": "Slightly true",
-      "4": "Sometimes true",
-      "5": "True",
-      "6": "Often true",
+      "2": "Mostly not true",
+      "3": "Slightly not true",
+      "4": "Mixed / depends",
+      "5": "Slightly true",
+      "6": "Mostly true",
       "7": "Very true",
     },
     formatGuidance: "Select one value from 1–7.",
@@ -1680,28 +2134,48 @@ export const surveyQuestions: SurveyQuestion[] = [
       "This does not define who you are sexually. We use it to notice when sex may be functioning more as stress relief or escape, so the recommendations stay supportive.",
     answerOptionsExplained: [
       {
-        option: "1 = not true at all",
+        option: "1 = Not true at all",
         explanation:
           "intense sex is not usually something you seek to regulate stress, numbness, or disconnection",
       },
       {
-        option: "4 = sometimes",
+        option: "2 = Mostly not true",
+        explanation:
+          "intensity may appeal for other reasons sometimes, but it is usually not about escaping numbness or stress",
+      },
+      {
+        option: "3 = Slightly not true",
+        explanation:
+          "under certain conditions intensity might serve that function a little, though it is not a strong pattern",
+      },
+      {
+        option: "4 = Mixed / depends",
         explanation:
           "under certain conditions, intensity can serve that role for you, but it is not a major pattern",
       },
       {
-        option: "7 = very true",
+        option: "5 = Slightly true",
+        explanation:
+          "when stressed, numb, or disconnected, you sometimes seek stronger sexual intensity to shift your state",
+      },
+      {
+        option: "6 = Mostly true",
+        explanation:
+          "intense sex fairly often functions as a way to feel more alive or move out of stress, numbness, or disconnection",
+      },
+      {
+        option: "7 = Very true",
         explanation:
           "when stressed, numb, or disconnected, you often seek stronger sexual intensity to shift your state or feel more alive",
       },
     ],
     hoverStates: {
       "1": "Not true at all",
-      "2": "Rarely true",
-      "3": "Slightly true",
-      "4": "Sometimes true",
-      "5": "True",
-      "6": "Often true",
+      "2": "Mostly not true",
+      "3": "Slightly not true",
+      "4": "Mixed / depends",
+      "5": "Slightly true",
+      "6": "Mostly true",
       "7": "Very true",
     },
     formatGuidance: "Select one value from 1–7.",
@@ -2122,71 +2596,78 @@ export const surveyQuestions: SurveyQuestion[] = [
     question: "Which changes would meaningfully improve your sex life over the next 3 months?",
     answerType: "multiple",
     options: [
-      "Desire & arousal",
-      "Pleasure & orgasm",
-      "Pain / physical barriers",
-      "Emotional safety & connection",
-      "Communication",
-      "Novelty & excitement",
-      "Confidence & body comfort",
-      "Healing / repair",
-      "Partner alignment",
-      "Other",
+      "Wanting sex more often (desire)",
+      "Feeling more pleasure or orgasm",
+      "Less pain or physical discomfort",
+      "Feeling more connected & close",
+      "Communicating needs more clearly",
+      "More excitement & novelty",
+      "Feeling more confident in my body",
+      "Healing past hurt or blocks",
+      "Being more aligned with my partner",
+      "Something else",
     ],
     required: true,
     guide:
-      "Choose the one shift that would create the biggest positive ripple effect over the next 3 months. If several feel important, pick the one that would make everything else easier or more likely to improve. This question is about your most meaningful current lever for change, not about your full story.",
+      "Select all changes that would meaningfully improve your sex life over the next 3 months. Choose the ones that feel genuinely relevant right now, even if they connect to each other. If several apply, select the few that would create the biggest positive ripple effects or make other areas easier to improve. This question is about your most meaningful current levers for change, not your full story.",
     supportAndGuidance:
-      "Choose the one shift that would create the biggest positive ripple effect over the next 3 months. If several feel important, pick the one that would make everything else easier or more likely to improve. This question is about your most meaningful current lever for change, not about your full story.",
+      "Select all changes that would meaningfully improve your sex life over the next 3 months. Choose the ones that feel genuinely relevant right now, even if they connect to each other. If several apply, select the few that would create the biggest positive ripple effects or make other areas easier to improve. This question is about your most meaningful current levers for change, not your full story.",
     comment:
       "This sets the main focus of your next-step suggestions, so the report starts with what matters most to you now.",
     howAnswerIsUsed:
       "This sets the main focus of your next-step suggestions, so the report starts with what matters most to you now.",
     answerOptionsExplained: [
       {
-        option: "Desire & arousal",
+        option: "Wanting sex more often (desire)",
         explanation:
-          "wanting sex more often or getting turned on more easily would make the biggest difference",
+          "wanting sex more often or getting turned on more easily would make the biggest difference right now",
       },
       {
-        option: "Pleasure & orgasm",
-        explanation: "greater enjoyment, responsiveness, or orgasm access is the key lever",
-      },
-      {
-        option: "Pain / physical barriers",
-        explanation: "reducing discomfort, pain, or body-level obstacles matters most",
-      },
-      {
-        option: "Emotional safety & connection",
-        explanation: "feeling safer, closer, and more open is the main need",
-      },
-      {
-        option: "Communication",
-        explanation: "clearer expression of needs, limits, and desires would change the most",
-      },
-      {
-        option: "Novelty & excitement",
-        explanation: "more aliveness, freshness, or erotic energy is the priority",
-      },
-      {
-        option: "Confidence & body comfort",
-        explanation: "feeling more at ease in your body and sexual self matters most",
-      },
-      {
-        option: "Healing / repair",
-        explanation: "shame, hurt, fear, or disconnection need attention first",
-      },
-      {
-        option: "Partner alignment",
+        option: "Feeling more pleasure or orgasm",
         explanation:
-          "mismatch in desire, timing, roles, expectations, or relationship rhythm is the main issue",
+          "greater enjoyment, responsiveness, or orgasm access feels like the main lever for improvement",
       },
       {
-        option: "Other",
-        explanation: "your most important lever for change is something else not listed here",
+        option: "Less pain or physical discomfort",
+        explanation:
+          "reducing pain, discomfort, or body-level barriers would improve your sexual life most",
+      },
+      {
+        option: "Feeling more connected & close",
+        explanation:
+          "more emotional safety, closeness, and openness would make the biggest difference",
+      },
+      {
+        option: "Communicating needs more clearly",
+        explanation:
+          "clearer expression of needs, boundaries, and desires would improve things most",
+      },
+      {
+        option: "More excitement & novelty",
+        explanation: "more aliveness, freshness, playfulness, or erotic energy feels most needed",
+      },
+      {
+        option: "Feeling more confident in my body",
+        explanation:
+          "feeling more at ease in your body and sexual self would make the biggest difference",
+      },
+      {
+        option: "Healing past hurt or blocks",
+        explanation:
+          "shame, fear, grief, hurt, or unresolved emotional blocks need attention first",
+      },
+      {
+        option: "Being more aligned with my partner",
+        explanation:
+          "mismatch in desire, timing, expectations, roles, or relational rhythm feels like the main issue",
+      },
+      {
+        option: "Something else",
+        explanation:
+          "your most important lever for change is something different from the options listed here",
       },
     ],
-    formatGuidance: "Select one option.",
+    formatGuidance: "Select all that apply.",
   },
   {
     qId: "16002",
@@ -2200,33 +2681,51 @@ export const surveyQuestions: SurveyQuestion[] = [
       "This is about your real priorities, not what you think you should care about. Some things matter deeply but are not workable right now; others are emotionally urgent and ready for attention. Answer from your genuine sense of importance in this season of life.",
     supportAndGuidance:
       "This is about your real priorities, not what you think you should care about. Some things matter deeply but are not workable right now; others are emotionally urgent and ready for attention. Answer from your genuine sense of importance in this season of life.",
-    scaleLabels: { low: "Not a priority", high: "Top priority" },
+    scaleLabels: { low: "Not important at all", high: "Essential" },
     comment:
       "This tells us whether to make your recommendations more immediate and action-oriented or more exploratory and low-pressure.",
     howAnswerIsUsed:
       "This tells us whether to make your recommendations more immediate and action-oriented or more exploratory and low-pressure.",
     answerOptionsExplained: [
       {
-        option: "1 = not a priority right now",
-        explanation: "this matters only a little, or other parts of life clearly come first",
+        option: "1 = Not important at all",
+        explanation: "this is not a priority right now, and other parts of life clearly come first",
       },
       {
-        option: "4 = somewhat important",
-        explanation: "this matters, but it is one priority among several",
+        option: "2 = Slightly important",
+        explanation: "this matters a little, but it is still low on your list of priorities",
       },
       {
-        option: "7 = top of mind",
+        option: "3 = A little important",
+        explanation: "this has some relevance for you, though it is not yet a strong focus",
+      },
+      {
+        option: "4 = Moderately important",
+        explanation: "this matters, but it is one priority among several rather than the main one",
+      },
+      {
+        option: "5 = Quite important",
+        explanation:
+          "this feels meaningfully worth your attention and is becoming a clear area to work on",
+      },
+      {
+        option: "6 = Very important",
+        explanation:
+          "this feels like a strong current priority and something you genuinely want to address",
+      },
+      {
+        option: "7 = Essential",
         explanation: "this feels urgent, central, or highly important to focus on now",
       },
     ],
     hoverStates: {
-      "1": "Not a priority",
-      "2": "Low priority",
-      "3": "Slightly important",
-      "4": "Somewhat important",
+      "1": "Not important at all",
+      "2": "Slightly important",
+      "3": "A little important",
+      "4": "Moderately important",
       "5": "Quite important",
       "6": "Very important",
-      "7": "Top priority",
+      "7": "Essential",
     },
     formatGuidance: "Select one value from 1–7.",
   },
@@ -2249,16 +2748,35 @@ export const surveyQuestions: SurveyQuestion[] = [
       "This helps us decide whether to emphasize momentum-building, confidence-building, or a slower, steadier path.",
     answerOptionsExplained: [
       {
-        option: "1 = feels out of reach",
+        option: "1 = Feels out of reach",
         explanation: "meaningful change currently feels unlikely, blocked, or hard to imagine",
       },
       {
-        option: "4 = maybe possible",
+        option: "2 = Very hard to imagine",
         explanation:
-          "some movement feels realistic, but there are clear uncertainties or obstacles",
+          "change feels technically possible, but it is difficult to picture it happening in your current circumstances",
       },
       {
-        option: "7 = feels genuinely doable",
+        option: "3 = Slightly possible",
+        explanation:
+          "some progress seems conceivable, though it still feels uncertain, limited, or hard to trust",
+      },
+      {
+        option: "4 = Maybe possible",
+        explanation:
+          "some movement feels realistic, but there are still clear uncertainties or obstacles",
+      },
+      {
+        option: "5 = Fairly possible",
+        explanation:
+          "change feels reasonably within reach if the right effort, support, or conditions come together",
+      },
+      {
+        option: "6 = Very possible",
+        explanation: "meaningful change feels realistic and achievable in your current life",
+      },
+      {
+        option: "7 = Feels genuinely doable",
         explanation: "progress feels believable, reachable, and workable in your current life",
       },
     ],
@@ -2501,9 +3019,10 @@ export const surveyQuestions: SurveyQuestion[] = [
     question: "Which of the following do you regularly use?",
     answerType: "multiple",
     options: [
-      "Spotify Premium",
       "Therapy / coaching",
+      "Books",
       "Meditation apps",
+      "Music or streaming subscriptions",
       "Other paid subscriptions",
       "Other",
       "None",
@@ -2519,25 +3038,36 @@ export const surveyQuestions: SurveyQuestion[] = [
       "This helps us understand the kinds of support tools and formats you already engage with.",
     answerOptionsExplained: [
       {
-        option: "Spotify Premium",
-        explanation: "you regularly use paid streaming or digital lifestyle tools",
-      },
-      {
         option: "Therapy / coaching",
         explanation:
-          "you currently engage in paid support with a therapist, coach, counselor, or mentor",
+          "you currently use paid support such as therapy, coaching, counseling, or mentoring on a reasonably regular basis",
+      },
+      {
+        option: "Books",
+        explanation:
+          "books are one of the ways you regularly learn, reflect, or support your growth",
       },
       {
         option: "Meditation apps",
-        explanation: "you use mindfulness, breathwork, meditation, or nervous-system support apps",
+        explanation:
+          "you use mindfulness, breathwork, meditation, sleep, or nervous-system support apps",
+      },
+      {
+        option: "Music or streaming subscriptions",
+        explanation:
+          "you already use paid digital subscriptions for audio, video, or lifestyle content in everyday life",
       },
       {
         option: "Other paid subscriptions",
         explanation:
-          "you use recurring paid services such as learning tools, memberships, or other digital products",
+          "you use other recurring paid tools, memberships, courses, or digital services not covered above",
       },
-      { option: "Other", explanation: "another regular support or subscription fits better" },
-      { option: "None", explanation: "none of these apply regularly right now" },
+      {
+        option: "Other",
+        explanation:
+          "another regular support tool, format, or subscription fits better than the listed options",
+      },
+      { option: "None", explanation: "none of these are a regular part of your life right now" },
     ],
     formatGuidance: "Select all that apply.",
   },
@@ -2548,7 +3078,7 @@ export const surveyQuestions: SurveyQuestion[] = [
     question:
       "About how much do you typically invest per year in personal growth (books, courses, therapy/coaching, apps)?",
     answerType: "single",
-    options: ["€0", "€50", "€200", "€1000+"],
+    options: ["€0", "€1–99", "€100–299", "€300–699", "€700–1,499", "€1,500+"],
     required: true,
     guide:
       "A rough estimate is enough. Include both one-off and recurring spending on things like books, courses, therapy, coaching, apps, memberships, or related tools that support your growth. This is not about judgment; it simply helps estimate what level of depth and commitment may feel realistic to you.",
@@ -2562,7 +3092,7 @@ export const surveyQuestions: SurveyQuestion[] = [
       {
         option: "€0",
         explanation:
-          "you currently spend little or nothing on paid personal-growth resources. €50 = you make occasional smaller investments. €200 = you are willing to invest at a moderate level over time. €1000+ = personal growth is something you are willing to invest in more seriously or consistently",
+          "you currently spend little or nothing on paid personal-growth resources.\n\n€1-99 = you make occasional smaller investments when something feels useful or timely.\n\n€100-299 = you are willing to invest at a modest but real level over time.\n\n€300-699 = personal growth is important enough that you invest in it fairly consistently.\n\n€700-1,499 = you are willing to make a substantial yearly investment in your growth.\n\n€1,500+ = personal growth is something you are willing to invest in seriously and at a high level",
       },
     ],
     formatGuidance: "Select one option.",
@@ -2579,34 +3109,53 @@ export const surveyQuestions: SurveyQuestion[] = [
       "Answer from the bigger picture of your life, not only from short-term curiosity. For some people sexuality is meaningful but not central right now; for others it is deeply tied to identity, wellbeing, relationships, vitality, or personal growth. Go with your broad sense of importance.",
     supportAndGuidance:
       "Answer from the bigger picture of your life, not only from short-term curiosity. For some people sexuality is meaningful but not central right now; for others it is deeply tied to identity, wellbeing, relationships, vitality, or personal growth. Go with your broad sense of importance.",
-    scaleLabels: { low: "Not important", high: "Extremely important" },
+    scaleLabels: { low: "Not important at all", high: "Essential" },
     comment:
       "This helps us decide how central this topic should be in your recommendations and how much depth to give it.",
     howAnswerIsUsed:
       "This helps us decide how central this topic should be in your recommendations and how much depth to give it.",
     answerOptionsExplained: [
       {
-        option: "1 = not important",
+        option: "1 = Not important at all",
         explanation: "understanding your sexuality does not feel central to your life right now",
       },
       {
-        option: "4 = somewhat important",
-        explanation: "it matters, but it is one meaningful area among several",
+        option: "2 = Slightly important",
+        explanation: "this matters a little, but it is not a major life priority for you",
       },
       {
-        option: "7 = extremely important",
+        option: "3 = A little important",
+        explanation:
+          "understanding your sexuality has some value, though it is not yet especially central",
+      },
+      {
+        option: "4 = Moderately important",
+        explanation: "it matters, but it is one meaningful area among several in your life",
+      },
+      {
+        option: "5 = Quite important",
+        explanation:
+          "understanding your sexuality feels meaningfully relevant to your wellbeing, relationships, or growth",
+      },
+      {
+        option: "6 = Very important",
+        explanation:
+          "this feels like a strong area of importance for your life and self-understanding",
+      },
+      {
+        option: "7 = Essential",
         explanation:
           "understanding your sexuality feels deeply important to your life, wellbeing, or growth",
       },
     ],
     hoverStates: {
-      "1": "Not important",
+      "1": "Not important at all",
       "2": "Slightly important",
-      "3": "Low importance",
-      "4": "Somewhat important",
+      "3": "A little important",
+      "4": "Moderately important",
       "5": "Quite important",
       "6": "Very important",
-      "7": "Extremely important",
+      "7": "Essential",
     },
     formatGuidance: "Select one value from 1–7.",
   },
@@ -2614,19 +3163,19 @@ export const surveyQuestions: SurveyQuestion[] = [
     qId: "16014",
     cId: 16,
     chapter: "Next Steps & Preferences",
-    question: "What most gets in the way of improving your sexuality? (Select all that apply)",
+    question: "What most gets in the way of improving your sexuality?",
     answerType: "multiple",
     options: [
-      "Not sure what would help",
-      "Time / energy is limited",
-      "Partner isn’t aligned / engaged",
-      "Emotional safety isn’t there yet",
-      "Shame / pressure / self-judgment",
-      "Physical pain / body issues",
-      "Cost / access",
-      "I lose motivation over time",
-      "No major obstacles",
-      "Other",
+      "I’m not sure what would actually help",
+      "I don’t have enough time or energy",
+      "My partner isn’t aligned or engaged",
+      "It doesn’t feel emotionally safe yet",
+      "Shame, pressure, or self-judgment get in the way",
+      "Physical pain or body-related issues",
+      "Support feels too expensive or hard to access",
+      "I struggle to stay consistent over time",
+      "Nothing major is in the way right now",
+      "Something else",
     ],
     required: true,
     guide:
@@ -2639,45 +3188,46 @@ export const surveyQuestions: SurveyQuestion[] = [
       "This tells us which obstacles to prioritize first so the report focuses on what is actually blocking progress.",
     answerOptionsExplained: [
       {
-        option: "Not sure what would help",
-        explanation: "the path forward feels unclear, even if the need for change is real",
+        option: "I’m not sure what would actually help",
+        explanation: "the path forward feels unclear, even if the need for change feels real",
       },
       {
-        option: "Time / energy is limited",
-        explanation: "life load leaves little bandwidth for focus, repair, or experimentation",
+        option: "I don’t have enough time or energy",
+        explanation: "life load leaves too little bandwidth for focus, repair, or experimentation",
       },
       {
-        option: "Partner isn’t aligned / engaged",
+        option: "My partner isn’t aligned or engaged",
         explanation:
-          "your partner does not feel available, willing, or on the same page enough for progress",
+          "your partner does not feel available, willing, or on the same page enough for meaningful progress",
       },
       {
-        option: "Emotional safety isn’t there yet",
-        explanation: "softness, trust, openness, or felt safety are not strong enough yet",
+        option: "It doesn’t feel emotionally safe yet",
+        explanation: "trust, softness, openness, or felt safety are not strong enough yet",
       },
       {
-        option: "Shame / pressure / self-judgment",
-        explanation: "inner criticism, embarrassment, pressure, or fear are significant blockers",
+        option: "Shame, pressure, or self-judgment get in the way",
+        explanation: "inner criticism, embarrassment, fear, or pressure are major blockers",
       },
       {
-        option: "Physical pain / body issues",
-        explanation: "discomfort, health, body-level obstacles, or physical barriers matter here",
+        option: "Physical pain or body-related issues",
+        explanation:
+          "discomfort, health factors, or body-level obstacles are significantly in the way",
       },
       {
-        option: "Cost / access",
-        explanation: "support feels too expensive, unavailable, or hard to reach",
+        option: "Support feels too expensive or hard to access",
+        explanation: "useful help feels financially out of reach, unavailable, or hard to find",
       },
       {
-        option: "I lose motivation over time",
-        explanation: "starting is easier than staying consistent",
+        option: "I struggle to stay consistent over time",
+        explanation: "starting is easier than sustaining effort, attention, or follow-through",
       },
       {
-        option: "No major obstacles",
-        explanation: "nothing significant currently seems to stand in the way",
+        option: "Nothing major is in the way right now",
+        explanation: "no significant obstacle currently seems to be blocking improvement",
       },
       {
-        option: "Other",
-        explanation: "another meaningful blocker matters more than the listed options",
+        option: "Something else",
+        explanation: "another meaningful blocker matters more than the options listed here",
       },
     ],
     formatGuidance: "Select all that apply.",
