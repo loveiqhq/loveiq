@@ -7,7 +7,16 @@ import { verifyCsrfToken } from "@/lib/csrf";
 import logger from "@/lib/logger";
 
 const schema = z.object({
-  method: z.enum(["email"]),
+  method: z.enum([
+    "email",
+    "copy_link",
+    "whatsapp",
+    "twitter",
+    "facebook",
+    "sms",
+    "telegram",
+    "email_client",
+  ]),
   referrerEmail: z.string().email().max(320).optional(),
 });
 

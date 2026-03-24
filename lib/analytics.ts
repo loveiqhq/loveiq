@@ -41,6 +41,6 @@ export const trackSurveyPause = (qId: string, progress: number) => {
   track("survey_pause", { question_id: qId, progress_pct: progress });
 };
 
-export const trackSurveyInvite = () => {
-  track("survey_invite", { method: "email" });
+export const trackSurveyInvite = (method: string = "email") => {
+  track("survey_invite", { method });
 };
