@@ -215,7 +215,7 @@ export async function GET(request: Request) {
     const headers = [
       "id",
       "email",
-      "first_name",
+      "name",
       "status",
       "utm_source",
       "started_at",

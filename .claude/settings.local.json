@@ -52,7 +52,14 @@
       "mcp__plugin_figma_figma__get_metadata",
       "mcp__plugin_figma_figma__get_design_context",
       "mcp__plugin_figma_figma__get_screenshot",
-      "Bash(typescript-language-server:*)"
+      "Bash(typescript-language-server:*)",
+      "mcp__plugin_supabase_supabase__execute_sql",
+      "Bash(npx tsx -e \":*)",
+      "Bash(for f:*)",
+      "Bash(do echo:*)",
+      "Read(//c/Users/Hamza Korkutovic/loveiq-web/**)",
+      "Bash(done)",
+      "Bash(split -l 7 C:/claude-home/rescore-updates.sql C:/claude-home/rescore-batch-)"
     ]
   }
 }

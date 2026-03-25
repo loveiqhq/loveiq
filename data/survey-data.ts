@@ -57,14 +57,14 @@ export const surveyQuestions: SurveyQuestion[] = [
     qId: "00001",
     cId: 15,
     chapter: "Background & Lifestyle",
-    question: "What is your first name?",
+    question: "What is your name?",
     answerType: "open",
     options: ["Free text"],
     required: true,
     guide:
-      "Enter the name you would like us to use when addressing you in your report. This can be your first name, a nickname, initials, or any label that feels comfortable and personal enough for you. The goal is simply to make the report feel more human and readable.",
+      "Enter the name you would like us to use when addressing you in your report. This can be your name, a nickname, initials, or any label that feels comfortable and personal enough for you. The goal is simply to make the report feel more human and readable.",
     supportAndGuidance:
-      "Enter the name you would like us to use when addressing you in your report. This can be your first name, a nickname, initials, or any label that feels comfortable and personal enough for you. The goal is simply to make the report feel more human and readable.",
+      "Enter the name you would like us to use when addressing you in your report. This can be your name, a nickname, initials, or any label that feels comfortable and personal enough for you. The goal is simply to make the report feel more human and readable.",
     inputType: "text",
     placeholder: "Banana Bandit",
     comment: "Used to personalize your report and communication.",
@@ -1116,7 +1116,7 @@ export const surveyQuestions: SurveyQuestion[] = [
       "Answer based on your typical partnered experience in recent months under reasonably good conditions. Include whatever kinds of stimulation you usually rely on or enjoy, such as manual, oral, toys, penetration, rhythm, or other forms of touch. This question is not about performance or success as a person, only about how orgasm tends to work in your real life.",
     supportAndGuidance:
       "Answer based on your typical partnered experience in recent months under reasonably good conditions. Include whatever kinds of stimulation you usually rely on or enjoy, such as manual, oral, toys, penetration, rhythm, or other forms of touch. This question is not about performance or success as a person, only about how orgasm tends to work in your real life.",
-    scaleLabels: { low: "Rarely or never", high: "Almost always" },
+    scaleLabels: { low: "Rarely or never", high: "Always" },
     comment:
       "Used to tailor pacing, expectations, and guidance around orgasm and partnered pleasure. It does not directly define your archetype.",
     howAnswerIsUsed:
@@ -1152,7 +1152,7 @@ export const surveyQuestions: SurveyQuestion[] = [
         explanation: "orgasm with a partner happens in most supportive situations when you want it",
       },
       {
-        option: "7 = almost always",
+        option: "7 = always",
         explanation:
           "orgasm with a partner is highly accessible and reliably available to you when you want it",
       },
@@ -1164,7 +1164,7 @@ export const surveyQuestions: SurveyQuestion[] = [
       "4": "Somewhat regularly",
       "5": "Regularly",
       "6": "Usually",
-      "7": "Almost always",
+      "7": "Always",
     },
     formatGuidance: "Select one value from 1–7.",
   },

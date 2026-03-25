@@ -73,7 +73,7 @@ describe("GET /api/admin/export", () => {
 
     const csv = await res.text();
     expect(csv).toContain(
-      "id,email,first_name,status,utm_source,started_at,completed_at,duration_sec,primary_archetype,engine_version"
+      "id,email,name,status,utm_source,started_at,completed_at,duration_sec,primary_archetype,engine_version"
     );
   });
 
