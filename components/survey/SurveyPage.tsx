@@ -1148,6 +1148,7 @@ const SurveyPage: FC = () => {
         localStorage.removeItem(ANSWERS_STORAGE_KEY);
         localStorage.removeItem("loveiq-survey-index");
         localStorage.removeItem("loveiq-survey-utm");
+        localStorage.removeItem("loveiq-utm");
       }
     } catch {
       /* ignore */

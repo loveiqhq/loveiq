@@ -1,8 +1,9 @@
 "use client";
 
 import Image from "next/image";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { trackWaitlistSignup } from "@/lib/analytics";
+import { getStoredUtm } from "@/lib/utm";
 
 const faqs = [
   {
@@ -92,6 +93,7 @@ export default function WaitlistPage() {
   const [website, setWebsite] = useState(""); // honeypot
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const utmTracker = useMemo(() => getStoredUtm(), []);
 
   const handleSubmit = async () => {
     if (!email || !email.includes("@")) {
@@ -114,7 +116,7 @@ export default function WaitlistPage() {
           "Content-Type": "application/json",
           "x-csrf-token": csrfToken,
         },
-        body: JSON.stringify({ email, source: "waitlist-page", website }),
+        body: JSON.stringify({ email, source: "waitlist-page", website, utmTracker }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));

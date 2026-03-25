@@ -13,6 +13,7 @@ type Payload = {
   source?: string;
   firstName?: string | null;
   website?: string | null; // honeypot
+  utmTracker?: string | null;
 };
 
 const tableName = "waitlist_user"; // matches Supabase table name
@@ -31,6 +32,7 @@ const waitlistSchema = z.object({
   source: z.string().max(120).optional(),
   firstName: z.string().max(80).optional().nullable(),
   website: z.string().max(0).optional().nullable(), // honeypot must be empty
+  utmTracker: z.string().max(500).optional().nullable(),
 });
 
 const RESEND_TIMEOUT_MS = 8_000;
@@ -90,10 +92,12 @@ const notifySlackWaitlist = async ({
   email,
   firstName,
   source,
+  utmSource,
 }: {
   email: string;
   firstName?: string | null;
   source?: string | null;
+  utmSource?: string | null;
 }) => {
   const url = process.env.SLACK_WAITLIST_WEBHOOK_URL;
 
@@ -104,7 +108,7 @@ const notifySlackWaitlist = async ({
 
   // Mask to avoid sending full PII to Slack
   const maskedEmail = email.replace(/^(.).+(@.+)$/, "$1***$2");
-  const text = `New waitlist signup: ${firstName ? `*${firstName}* ` : ""}${maskedEmail}${source ? ` (source: ${source})` : ""}`;
+  const text = `New waitlist signup: ${firstName ? `*${firstName}* ` : ""}${maskedEmail}${source ? ` (source: ${source})` : ""}${utmSource ? ` [utm: ${utmSource}]` : ""}`;
 
   try {
     logger.info({ maskedEmail, source: source || "n/a" }, "Sending Slack waitlist notification");
@@ -154,7 +158,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   }
 
-  const { email, source, firstName, website } = parsed.data;
+  const { email, source, firstName, website, utmTracker } = parsed.data;
   const normalizedEmail = email.trim().toLowerCase();
   const normalizedFirstName = firstName?.trim() || null;
 
@@ -181,10 +185,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Service unavailable." }, { status: 503 });
   }
 
+  // Parse UTM tracker JSON safely for JSONB storage
+  let parsedUtm: Record<string, string> | null = null;
+  if (utmTracker) {
+    try {
+      parsedUtm = JSON.parse(utmTracker);
+    } catch {
+      // Malformed UTM JSON — store null
+    }
+  }
+
   const insertPayload = {
     email: normalizedEmail,
     source: source?.trim() || "landing-modal",
     created_date_time: new Date().toISOString(),
+    ...(parsedUtm && { utm_tracker: parsedUtm }),
   };
 
   // Idempotency: if the email already exists, return success to avoid enumeration
@@ -259,7 +274,12 @@ export async function POST(request: Request) {
   // alive until they finish, but a failure never blocks or fails the response.
   scheduleAfterResponse(() => sendConfirmationEmail(normalizedEmail, normalizedFirstName));
   scheduleAfterResponse(() =>
-    notifySlackWaitlist({ email: normalizedEmail, firstName: normalizedFirstName, source })
+    notifySlackWaitlist({
+      email: normalizedEmail,
+      firstName: normalizedFirstName,
+      source,
+      utmSource: parsedUtm?.utm_source ?? null,
+    })
   );
 
   return NextResponse.json({ success: true });

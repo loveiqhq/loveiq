@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { surveyQuestions } from "@/data/survey-data";
 import { UTM_STORAGE_KEY } from "./useUtmCapture";
+import { GLOBAL_UTM_KEY } from "@/lib/utm";
 
 const STORAGE_KEY = "loveiq-survey-answers";
 const INDEX_KEY = "loveiq-survey-index";
@@ -69,6 +70,7 @@ export function useSurveyState() {
       localStorage.removeItem(STORAGE_KEY);
       localStorage.removeItem(INDEX_KEY);
       localStorage.removeItem(UTM_STORAGE_KEY);
+      localStorage.removeItem(GLOBAL_UTM_KEY);
     }
   }, []);
 

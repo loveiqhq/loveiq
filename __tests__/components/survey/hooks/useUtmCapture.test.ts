@@ -19,54 +19,34 @@ describe("useUtmCapture", () => {
     });
   });
 
-  function setUrl(search: string) {
-    // jsdom doesn't allow redefining window.location directly,
-    // but we can use delete + defineProperty pattern
-    Object.defineProperty(window, "location", {
-      value: { search, href: `http://localhost${search}` },
-      writable: true,
-      configurable: true,
-    });
-  }
-
-  it("extracts UTM params from URL and stores in localStorage", () => {
-    setUrl("?utm_source=google&utm_medium=cpc&utm_campaign=spring");
-
-    // Must reset module cache since useState captures initial value
+  it("returns stored UTM data from global key", () => {
+    const data = JSON.stringify({ utm_source: "google", utm_medium: "cpc" });
+    store["loveiq-utm"] = data;
     vi.resetModules();
 
     const { result } = renderHook(() => useUtmCapture());
-
-    const parsed = JSON.parse(result.current!);
-    expect(parsed).toEqual({
-      utm_source: "google",
-      utm_medium: "cpc",
-      utm_campaign: "spring",
-    });
-    expect(localStorage.setItem).toHaveBeenCalledWith("loveiq-survey-utm", expect.any(String));
+    expect(result.current).toBe(data);
   });
 
-  it("returns null when no UTM params in URL and nothing in localStorage", () => {
-    setUrl("");
+  it("falls back to legacy key when global key is absent", () => {
+    const data = JSON.stringify({ utm_source: "newsletter" });
+    store["loveiq-survey-utm"] = data;
+    vi.resetModules();
+
+    const { result } = renderHook(() => useUtmCapture());
+    expect(result.current).toBe(data);
+  });
+
+  it("returns null when nothing is stored", () => {
     vi.resetModules();
 
     const { result } = renderHook(() => useUtmCapture());
     expect(result.current).toBeNull();
   });
 
-  it("reads from localStorage when URL has no UTM params", () => {
-    const stored = JSON.stringify({ utm_source: "newsletter" });
-    store["loveiq-survey-utm"] = stored;
-    setUrl("");
-    vi.resetModules();
-
-    const { result } = renderHook(() => useUtmCapture());
-    expect(result.current).toBe(stored);
-  });
-
-  it("overwrites localStorage when URL has new UTM params", () => {
+  it("prefers global key over legacy key", () => {
+    store["loveiq-utm"] = JSON.stringify({ utm_source: "new" });
     store["loveiq-survey-utm"] = JSON.stringify({ utm_source: "old" });
-    setUrl("?utm_source=new");
     vi.resetModules();
 
     const { result } = renderHook(() => useUtmCapture());
@@ -74,17 +54,8 @@ describe("useUtmCapture", () => {
     expect(parsed.utm_source).toBe("new");
   });
 
-  it("only captures recognized UTM params", () => {
-    setUrl("?utm_source=google&not_utm=ignored&utm_content=banner");
-    vi.resetModules();
-
-    const { result } = renderHook(() => useUtmCapture());
-
-    const parsed = JSON.parse(result.current!);
-    expect(parsed).toEqual({
-      utm_source: "google",
-      utm_content: "banner",
-    });
-    expect(parsed.not_utm).toBeUndefined();
+  it("exports UTM_STORAGE_KEY for backward compatibility", async () => {
+    const mod = await import("../../../../components/survey/hooks/useUtmCapture");
+    expect(mod.UTM_STORAGE_KEY).toBe("loveiq-survey-utm");
   });
 });

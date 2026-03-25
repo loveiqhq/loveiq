@@ -1,42 +1,21 @@
 "use client";
 
 import { useState } from "react";
+import { getStoredUtm, LEGACY_UTM_KEY } from "@/lib/utm";
 
-export const UTM_STORAGE_KEY = "loveiq-survey-utm";
-const UTM_PARAMS = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"] as const;
+/**
+ * Legacy storage key — kept for backward compatibility.
+ * Used by useSurveyState.ts clearState() to clean up on survey reset.
+ */
+export const UTM_STORAGE_KEY = LEGACY_UTM_KEY;
 
-function captureUtm(): string | null {
-  if (typeof window === "undefined") return null;
-
-  // Try to extract UTM params from the current URL
-  const params = new URLSearchParams(window.location.search);
-  const utm: Record<string, string> = {};
-
-  for (const key of UTM_PARAMS) {
-    const value = params.get(key);
-    if (value) utm[key] = value;
-  }
-
-  if (Object.keys(utm).length > 0) {
-    // Found UTM params in URL — persist to localStorage
-    const json = JSON.stringify(utm);
-    try {
-      localStorage.setItem(UTM_STORAGE_KEY, json);
-    } catch {
-      // Storage full — continue with in-memory value
-    }
-    return json;
-  }
-
-  // No UTM params in URL — check localStorage (user may have refreshed)
-  try {
-    return localStorage.getItem(UTM_STORAGE_KEY);
-  } catch {
-    return null;
-  }
-}
-
+/**
+ * Hook that returns the stored UTM tracker JSON string (or null).
+ * The global `<UtmCapture />` component in root layout handles capturing
+ * UTM params from the URL on every page load. This hook simply reads
+ * whatever was stored.
+ */
 export function useUtmCapture(): string | null {
-  const [utmTracker] = useState(captureUtm);
+  const [utmTracker] = useState(getStoredUtm);
   return utmTracker;
 }

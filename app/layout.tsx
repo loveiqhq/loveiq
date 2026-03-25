@@ -6,6 +6,8 @@ import { headers } from "next/headers";
 import SmoothScroll from "@/components/SmoothScroll";
 import { NonceProvider } from "@/components/NonceProvider";
 import HydrationMarker from "@/components/HydrationMarker";
+import UtmCapture from "@/components/UtmCapture";
+import { GtmScript, GtmNoScript } from "@/components/GtmScript";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.loveiq.org";
 
@@ -268,6 +270,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           strategy="afterInteractive"
           nonce={nonce}
         />
+        <GtmScript nonce={nonce} />
         <Script
           src="https://www.googletagmanager.com/gtag/js?id=G-QTYY69L46N"
           strategy="lazyOnload"
@@ -301,6 +304,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         />
       </head>
       <body className="bg-white dark:bg-[#050208]">
+        <GtmNoScript />
         <a
           href="#main-content"
           className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:rounded-lg focus:bg-white focus:px-4 focus:py-2 focus:text-black focus:shadow-lg"
@@ -308,6 +312,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           Skip to main content
         </a>
         <HydrationMarker />
+        <UtmCapture />
         <NonceProvider nonce={nonce}>
           <SmoothScroll>{children}</SmoothScroll>
         </NonceProvider>
