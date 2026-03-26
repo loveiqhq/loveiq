@@ -452,9 +452,11 @@ const IntroScreen: FC<{
 
   return (
     <main
-      className={`relative flex flex-col items-center justify-center px-4 py-8 sm:py-10 md:py-16 ${transitioning ? "h-dvh overflow-hidden" : "min-h-dvh"}`}
+      className={`relative flex flex-col items-center justify-center overflow-x-hidden px-6 sm:px-8 py-8 sm:py-10 md:py-16 ${transitioning ? "h-dvh overflow-hidden" : "min-h-dvh"}`}
       style={{
         backgroundImage: "linear-gradient(180deg, #fff 0%, rgba(250,245,255,0.3) 50%, #fff 100%)",
+        paddingLeft: "max(1.5rem, env(safe-area-inset-left, 0px))",
+        paddingRight: "max(1.5rem, env(safe-area-inset-right, 0px))",
       }}
     >
       <div className="relative z-10 flex w-full max-w-[700px] flex-col items-center text-center">
@@ -660,7 +662,7 @@ const SlideScreen: FC<{
   );
 
   return (
-    <main className="relative flex min-h-screen flex-col overflow-hidden bg-[#140a1a]">
+    <main className="relative flex min-h-dvh flex-col overflow-hidden bg-[#140a1a]">
       {/* Orange corner blob */}
       <div className="pointer-events-none absolute bottom-0 left-0 -translate-x-1/2 translate-y-1/2">
         <div className="rounded-full bg-[#FE6839] w-[718px] h-[1895px] blur-[500px] sm:w-[1296px] sm:h-[1296px] animate-pulse-glow" />
@@ -672,7 +674,13 @@ const SlideScreen: FC<{
           style={{ animationDelay: "2s", animationFillMode: "backwards" }}
         />
       </div>
-      <div className="relative z-10 mx-auto flex w-full max-w-[1120px] flex-1 flex-col px-6 py-12 sm:px-10 sm:py-14">
+      <div
+        className="relative z-10 mx-auto flex w-full max-w-[1120px] flex-1 flex-col px-6 py-12 sm:px-10 sm:py-14"
+        style={{
+          paddingLeft: "max(1.5rem, env(safe-area-inset-left, 0px))",
+          paddingRight: "max(1.5rem, env(safe-area-inset-right, 0px))",
+        }}
+      >
         {/* Top bar */}
         <div
           className="survey-animate flex items-center justify-between"
@@ -831,7 +839,7 @@ const ConsentScreen: FC<{
 
   return (
     <main
-      className="relative flex min-h-screen items-center justify-center overflow-hidden px-4"
+      className="relative flex min-h-dvh items-center justify-center overflow-hidden px-4"
       style={{
         background:
           "linear-gradient(145deg, #d4a88a 0%, #c89888 25%, #b8909a 45%, #a890b0 65%, #9a8cb8 85%, #9088b0 100%)",
