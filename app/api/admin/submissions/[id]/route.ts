@@ -54,7 +54,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       ),
       // Scoring result (may not exist)
       supabaseFetch(
-        `/rest/v1/scoring_result?survey_submission_id=eq.${numericId}&select=primary_archetype,percentages,raw_scores,engine_version,scored_at&limit=1`
+        `/rest/v1/scoring_result?survey_submission_id=eq.${numericId}&select=primary_archetype,percentages,raw_scores,engine_version,scored_at,v5_primary_archetype,v5_percentages,v5_raw_scores&limit=1`
       ),
     ]);
 
@@ -72,6 +72,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         raw_scores: Record<string, number>;
         engine_version: string;
         scored_at: string;
+        v5_primary_archetype: string | null;
+        v5_percentages: Record<string, number> | null;
+        v5_raw_scores: Record<string, number> | null;
       }>;
       if (scoringRows.length > 0) {
         scoring = scoringRows[0];

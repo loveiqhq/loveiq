@@ -1,6 +1,6 @@
 # Technology Stack
 
-> **Last verified:** 2026-03-15 | **Verified against:** package.json dependencies and devDependencies
+> **Last verified:** 2026-03-27 | **Verified against:** package.json dependencies and devDependencies
 
 **Analysis Date:** 2026-02-25
 
@@ -95,7 +95,11 @@
   - `STAGING_PASSWORD` - Staging environment auth
   - `CONTACT_TO_EMAIL` - Contact form recipient
   - Note: Admin panel auth uses Supabase Auth (magic links), not an env var password
+  - `SURVEY_CLOSE_PASSWORD` - Survey pause/close protection
   - `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_RECAPTCHA_SITE_KEY` - Public client-side vars
+  - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` - Admin panel auth (browser-safe)
+  - `NEXT_PUBLIC_GTM_ID` - Google Tag Manager (optional)
+  - `LOG_LEVEL` - Pino log level (optional, default: info)
 
 **Build:**
 
@@ -122,5 +126,5 @@
 ---
 
 _Stack analysis: 2026-02-25_
-_Last updated: 2026-03-15_
+_Last updated: 2026-03-27_
 _Update after major dependency changes_

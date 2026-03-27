@@ -79,6 +79,7 @@ function main() {
   const archetypePrototypes = protoRows
     .filter((r) => r.archetype_name && r.dimension_id)
     .map((r) => ({
+      archetypeId: parseInt(r.archetype_id, 10),
       archetypeName: r.archetype_name.trim(),
       dimensionId: r.dimension_id.trim(),
       prototypeValue: toFloat(r.prototype_value, 0.5),
@@ -152,6 +153,38 @@ function main() {
       multiplier: toFloat(r.multiplier, 1.0),
     }));
 
+  // 11. V5 Independent Params
+  const v5IndependentParamsRows = readCsv("v5_independent_params.csv");
+  const v5IndependentParams = {};
+  for (const row of v5IndependentParamsRows) {
+    const key = (row.key || "").trim();
+    if (!key) continue;
+    v5IndependentParams[key] = (row.value || "").trim();
+  }
+
+  // 12. V5 Prototype Helpers
+  const v5HelperRows = readCsv("v5_prototype_helpers.csv");
+  const v5PrototypeHelpers = v5HelperRows
+    .filter((r) => r.archetype_name && r.dimension_id)
+    .map((r) => ({
+      archetypeId: parseInt(r.archetype_id, 10),
+      archetypeName: r.archetype_name.trim(),
+      dimensionId: r.dimension_id.trim(),
+      minCoeff: toFloat(r.min_coeff, 0),
+      meanUniformCoeff: toFloat(r.mean_uniform_coeff, 0.5),
+      maxCoeff: toFloat(r.max_coeff, 1.0),
+    }));
+
+  // 13. V5 Archetype Calibration
+  const v5CalibRows = readCsv("v5_archetype_calibration.csv");
+  const v5ArchetypeCalibration = v5CalibRows
+    .filter((r) => r.archetype_name)
+    .map((r) => ({
+      archetypeId: parseInt(r.archetype_id, 10),
+      archetypeName: r.archetype_name.trim(),
+      v5UsesBias: toBool(r.v5_uses_bias),
+    }));
+
   // ─── Build labelToCodeMap ──────────────────────────────────────────────────────
   // Maps { [questionId]: { [normalizedLabel]: answerCode } }
   // Built from categorical_map, categorical_boost_rules, enum_map
@@ -211,6 +244,7 @@ export const overlays: OverlayDef[] = ${JSON.stringify(overlays, null, 2)};
 
 // ─── Archetype Prototypes (${archetypePrototypes.length} rows) ───────────────
 export interface PrototypeDef {
+  archetypeId: number;
   archetypeName: string;
   dimensionId: string;
   prototypeValue: number;
@@ -283,6 +317,30 @@ export const weightModifiers: WeightModifierDef[] = ${JSON.stringify(weightModif
 // ─── Label-to-Code Map ──────────────────────────────────────────────────────
 // { [questionId]: { [normalizedLabel]: answerCode } }
 export const labelToCodeMap: Record<string, Record<string, string>> = ${JSON.stringify(labelToCodeMap, null, 2)};
+
+// ─── V5 Independent Params (${Object.keys(v5IndependentParams).length}) ──────────────────────
+export const v5IndependentParams: Record<string, string> = ${JSON.stringify(v5IndependentParams, null, 2)};
+
+// ─── V5 Prototype Helpers (${v5PrototypeHelpers.length} rows) ────────────────────────────────
+export interface V5PrototypeHelperDef {
+  archetypeId: number;
+  archetypeName: string;
+  dimensionId: string;
+  minCoeff: number;
+  meanUniformCoeff: number;
+  maxCoeff: number;
+}
+
+export const v5PrototypeHelpers: V5PrototypeHelperDef[] = ${JSON.stringify(v5PrototypeHelpers, null, 2)};
+
+// ─── V5 Archetype Calibration (${v5ArchetypeCalibration.length} rows) ────────────────────────
+export interface V5ArchetypeCalibrationDef {
+  archetypeId: number;
+  archetypeName: string;
+  v5UsesBias: boolean;
+}
+
+export const v5ArchetypeCalibration: V5ArchetypeCalibrationDef[] = ${JSON.stringify(v5ArchetypeCalibration, null, 2)};
 `;
 
   fs.writeFileSync(tsPath, output, "utf-8");
@@ -298,6 +356,9 @@ export const labelToCodeMap: Record<string, Record<string, string>> = ${JSON.str
   console.log(`  Enum map: ${enumMap.length}`);
   console.log(`  Weight modifiers: ${weightModifiers.length}`);
   console.log(`  Label-to-code questions: ${Object.keys(labelToCodeMap).length}`);
+  console.log(`  V5 independent params: ${Object.keys(v5IndependentParams).length}`);
+  console.log(`  V5 prototype helpers: ${v5PrototypeHelpers.length}`);
+  console.log(`  V5 archetype calibration: ${v5ArchetypeCalibration.length}`);
 }
 
 main();

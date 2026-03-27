@@ -37,6 +37,30 @@ export interface WeightModifierRule {
   multiplier: number;
 }
 
+/** V5 per-archetype-dimension coefficients for anchor computation */
+export interface V5PrototypeHelper {
+  archetypeId: number;
+  archetypeName: string;
+  dimensionId: string;
+  minCoeff: number;
+  meanUniformCoeff: number;
+  maxCoeff: number;
+}
+
+/** V5 scoring result (independent match percentages, NOT summing to 100) */
+export interface V5ScoringResult {
+  rawTotal: Record<string, number>;
+  rawPct: Record<string, number>;
+  finalPct: Record<string, number>;
+  ranking: string[];
+  primaryArchetype: string;
+  diagnostics: {
+    anchors: Record<string, { rawMin: number; rawMean: number; rawMax: number }>;
+    gaps: Record<string, number>;
+    payloadFingerprint: string;
+  };
+}
+
 /** Full compiled scoring config (ready for engine use) */
 export interface ScoringConfig {
   modelParams: Record<string, string>;
@@ -52,6 +76,13 @@ export interface ScoringConfig {
   weightModifiers: WeightModifierRule[];
   knownQids: Set<string>;
   labelToCode: Record<string, Record<string, string>>; // qid → { label → code }
+  // V5 additions
+  archetypeIds: Record<string, number>; // archetype name → numeric ID
+  v5Helpers: Map<string, V5PrototypeHelper>; // "archetype||dimId" → helper
+  v5Enabled: boolean;
+  v5SpacingGapMin: number;
+  v5SpacingGapMax: number;
+  v5RoundDigits: number;
 }
 
 /** Scoring result returned by the engine */
@@ -69,4 +100,5 @@ export interface ScoringResult {
     overlaysText: Record<string, unknown>;
     overlaysMissing: string[];
   };
+  v5?: V5ScoringResult;
 }

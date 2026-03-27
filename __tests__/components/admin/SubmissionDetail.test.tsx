@@ -178,6 +178,9 @@ describe("SubmissionDetail", () => {
           raw_scores: { "Spark Seeker": 22.5, "Romantic Idealist": 20.1 },
           engine_version: "v3",
           scored_at: "2025-01-01T10:05:00Z",
+          v5_primary_archetype: null,
+          v5_percentages: null,
+          v5_raw_scores: null,
         },
       },
       loading: false,
@@ -185,7 +188,7 @@ describe("SubmissionDetail", () => {
       refetch: mockRefetch,
     });
     render(<SubmissionDetail id="1" />);
-    expect(screen.getByText("Scoring Result")).toBeInTheDocument();
+    expect(screen.getByText(/Scoring Result \(V4/)).toBeInTheDocument();
     expect(screen.getByText("Spark Seeker")).toBeInTheDocument();
     expect(screen.getByText(/v3/)).toBeInTheDocument();
     expect(screen.getByTestId("bar-chart")).toBeInTheDocument();

@@ -31,6 +31,9 @@ loveiq-web/
 │   │   ├── staging-login/route.ts   # Staging environment auth
 │   │   ├── staging-logout/route.ts  # Staging environment auth
 │   │   ├── survey-tracking/route.ts # Survey behavior tracking → Supabase
+│   │   ├── invite/route.ts         # Invite email sending → Resend + Supabase
+│   │   ├── invite-tracking/route.ts # Invite share method tracking → Supabase
+│   │   ├── survey-partial/route.ts  # Partial survey save (draft) → Supabase
 │   │   └── admin/                   # Admin panel API routes
 │   │       ├── login/route.ts       # Admin login (magic link via Supabase Auth)
 │   │       ├── logout/route.ts      # Admin logout
@@ -110,6 +113,7 @@ loveiq-web/
 │   ├── circuit-breaker.ts      # Circuit breaker pattern for external calls
 │   ├── logger.ts               # pino structured logging
 │   ├── fetch-with-timeout.ts   # Fetch wrapper with timeout
+│   ├── utm.ts                  # UTM parameter handling
 │   ├── supabase-middleware.ts  # Supabase Auth client for middleware (proxy.ts)
 │   ├── admin/
 │   │   ├── auth.ts             # Admin session verification
@@ -120,6 +124,7 @@ loveiq-web/
 │   │   └── supabase-server.ts  # Server-side Supabase client
 │   └── emails/
 │       ├── admin-magic-link.ts # Admin magic link email template
+│       ├── invite.ts           # Invite email template
 │       └── waitlist.ts         # Waitlist confirmation email template
 ├── data/
 │   ├── glossary-data.ts        # Auto-generated glossary terms (688KB, from CSV)
@@ -166,6 +171,9 @@ loveiq-web/
 5. **Pre-Report Wizard:** Survey submit success → 3s success animation → fade to PreReportWizard (5 slides) → SurveyConfirmation final CTA
 6. **Survey Tracking:** Question transition → Buffer events → Flush batch → CSRF check → Rate limit → Zod validation → Supabase insert
 7. **Admin Panel:** `/admin/*` → Supabase Auth middleware gate (magic link session) → API routes with session + CSRF + rate limit → Supabase queries
+8. **Invite Send:** Form → CSRF check → Rate limit → Zod validation → Resend email (after response) → Supabase invite_event insert (after response)
+9. **Invite Tracking:** Share button click → CSRF check → Rate limit → Zod validation → Supabase invite_event insert
+10. **Survey Partial Save:** Auto-save on question transition → CSRF check (header or body for sendBeacon) → Rate limit → Zod validation → Supabase upsert (survey_partial_save)
 
 ### Key Boundaries
 
@@ -179,24 +187,26 @@ loveiq-web/
 
 Copy `.env.example` to `.env.local` and fill values:
 
-| Variable                         | Required    | Purpose                                                   |
-| -------------------------------- | ----------- | --------------------------------------------------------- |
-| `NEXT_PUBLIC_SITE_URL`           | Yes         | Canonical URL for metadata                                |
-| `SUPABASE_URL`                   | For forms   | Waitlist database                                         |
-| `SUPABASE_SERVICE_ROLE_KEY`      | For forms   | Supabase auth (server-only!)                              |
-| `RESEND_API_KEY`                 | For forms   | Email sending                                             |
-| `RESEND_FROM`                    | No          | From address (default: `LoveIQ <hello@send.loveiq.org>`)  |
-| `RESEND_REPLY_TO`                | No          | Reply-to address                                          |
-| `NEXT_PUBLIC_RECAPTCHA_SITE_KEY` | For contact | reCAPTCHA client key                                      |
-| `RECAPTCHA_SECRET_KEY`           | For contact | reCAPTCHA server key                                      |
-| `SLACK_WAITLIST_WEBHOOK_URL`     | No          | Slack notifications for waitlist signups                  |
-| `SLACK_CONTACT_WEBHOOK_URL`      | No          | Slack notifications for contact form                      |
-| `SLACK_SURVEY_WEBHOOK_URL`       | No          | Slack notifications for survey submissions                |
-| `STAGING_PASSWORD`               | For staging | Password gate for staging deployment                      |
-| `NEXT_PUBLIC_SUPABASE_URL`       | For admin   | Supabase project URL (browser-safe, for admin auth SDK)   |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY`  | For admin   | Supabase anon key (browser-safe, for admin auth SDK)      |
-| `SURVEY_CLOSE_PASSWORD`          | For admin   | Password required to close/pause the survey (server-only) |
-| `CONTACT_TO_EMAIL`               | For contact | Contact form recipient                                    |
+| Variable                         | Required    | Purpose                                                           |
+| -------------------------------- | ----------- | ----------------------------------------------------------------- |
+| `NEXT_PUBLIC_SITE_URL`           | Yes         | Canonical URL for metadata                                        |
+| `SUPABASE_URL`                   | For forms   | Waitlist database                                                 |
+| `SUPABASE_SERVICE_ROLE_KEY`      | For forms   | Supabase auth (server-only!)                                      |
+| `RESEND_API_KEY`                 | For forms   | Email sending                                                     |
+| `RESEND_FROM`                    | No          | From address (default: `LoveIQ <hello@send.loveiq.org>`)          |
+| `RESEND_REPLY_TO`                | No          | Reply-to address                                                  |
+| `NEXT_PUBLIC_RECAPTCHA_SITE_KEY` | For contact | reCAPTCHA client key                                              |
+| `RECAPTCHA_SECRET_KEY`           | For contact | reCAPTCHA server key                                              |
+| `SLACK_WAITLIST_WEBHOOK_URL`     | No          | Slack notifications for waitlist signups                          |
+| `SLACK_CONTACT_WEBHOOK_URL`      | No          | Slack notifications for contact form                              |
+| `SLACK_SURVEY_WEBHOOK_URL`       | No          | Slack notifications for survey submissions                        |
+| `STAGING_PASSWORD`               | For staging | Password gate for staging deployment                              |
+| `NEXT_PUBLIC_SUPABASE_URL`       | For admin   | Supabase project URL (browser-safe, for admin auth SDK)           |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY`  | For admin   | Supabase anon key (browser-safe, for admin auth SDK)              |
+| `SURVEY_CLOSE_PASSWORD`          | For admin   | Password required to close/pause the survey (server-only)         |
+| `CONTACT_TO_EMAIL`               | For contact | Contact form recipient                                            |
+| `NEXT_PUBLIC_GTM_ID`             | No          | GTM container ID (optional, falls back to direct gtag.js)         |
+| `LOG_LEVEL`                      | No          | Pino log level (fatal/error/warn/info/debug/trace; default: info) |
 
 **The site renders without env vars.** Forms will fail gracefully with error messages.
 
@@ -267,10 +277,12 @@ The middleware (`proxy.ts`) relaxes CSP in dev mode:
 - `ci.yml` — Build + lint + test on push/PR
 - `security.yml` — Security scanning (secrets, SAST, dependencies, SBOM)
 - `codeql.yml` — Advanced CodeQL analysis
+- `docs-truth.yml` — Documentation truth validation (links, scripts, env vars)
 - `release.yml` — Release workflow
 - `health-monitor.yml` — Health monitoring
 - `lighthouse.yml` — Lighthouse CI
 - `load-test.yml` — Load testing
+- `visual-regression.yml` — Visual regression testing (Playwright screenshots)
 
 Runs on push/PR to `main`.
 

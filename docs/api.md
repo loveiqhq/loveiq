@@ -137,6 +137,112 @@ Track survey behavior events (question transitions, time spent).
 | 429    | `{ "error": "Please try again later." }`    | Rate limited                  |
 | 500    | `{ "error": "Unable to process request." }` | Server error                  |
 
+## POST /api/invite
+
+Send an invite email to a friend with a UTM-tagged survey link.
+
+**Rate limit:** 5 requests/minute per IP.
+
+**Request body:**
+
+```json
+{
+  "recipientEmail": "friend@example.com",
+  "referrerEmail": "user@example.com",
+  "referrerName": "Jane"
+}
+```
+
+| Field            | Type   | Required | Notes                      |
+| ---------------- | ------ | -------- | -------------------------- |
+| `recipientEmail` | string | Yes      | Valid email, max 320 chars |
+| `referrerEmail`  | string | No       | Valid email, max 320 chars |
+| `referrerName`   | string | No       | Max 100 chars              |
+
+**Responses:**
+
+| Status | Body                                     | Meaning                       |
+| ------ | ---------------------------------------- | ----------------------------- |
+| 200    | `{ "success": true }`                    | Invite queued for sending     |
+| 400    | `{ "error": "Invalid input" }`           | Validation failed             |
+| 403    | `{ "error": "Invalid request." }`        | CSRF token missing or invalid |
+| 429    | `{ "error": "Please try again later." }` | Rate limited                  |
+| 503    | `{ "error": "Service unavailable." }`    | Missing Resend configuration  |
+
+**Note:** Email sending and Supabase tracking happen asynchronously after the response is returned (via `after()`).
+
+## POST /api/invite-tracking
+
+Track an invite share event (copy link, social share, etc.).
+
+**Rate limit:** 10 requests/minute per IP.
+
+**Request body:**
+
+```json
+{
+  "method": "whatsapp",
+  "referrerEmail": "user@example.com"
+}
+```
+
+| Field           | Type   | Required | Notes                                                                                              |
+| --------------- | ------ | -------- | -------------------------------------------------------------------------------------------------- |
+| `method`        | string | Yes      | One of: `email`, `copy_link`, `whatsapp`, `twitter`, `facebook`, `sms`, `telegram`, `email_client` |
+| `referrerEmail` | string | No       | Valid email, max 320 chars                                                                         |
+
+**Responses:**
+
+| Status | Body                                              | Meaning                       |
+| ------ | ------------------------------------------------- | ----------------------------- |
+| 200    | `{ "success": true }`                             | Event recorded                |
+| 400    | `{ "error": "Invalid input" }`                    | Validation failed             |
+| 403    | `{ "error": "Invalid request." }`                 | CSRF token missing or invalid |
+| 429    | `{ "error": "Please try again later." }`          | Rate limited                  |
+| 500    | `{ "error": "Unable to process request." }`       | Supabase insert failed        |
+| 503    | `{ "error": "Service unavailable." }`             | Missing Supabase config       |
+| 503    | `{ "error": "Service temporarily unavailable." }` | Circuit breaker open          |
+
+## POST /api/survey-partial
+
+Auto-save partial survey progress (draft). Uses upsert on `session_id`.
+
+**Rate limit:** 20 requests/minute per IP. Supports CSRF token in body `_csrf` field for `sendBeacon` compatibility.
+
+**Request body:**
+
+```json
+{
+  "sessionId": "uuid-v4",
+  "answers": { "q1": "answer", "q2": ["a", "b"] },
+  "currentIndex": 5,
+  "startedAt": "2026-01-01T00:00:00.000Z",
+  "utmTracker": "utm_source=referral&...",
+  "_csrf": "token"
+}
+```
+
+| Field          | Type   | Required | Notes                                            |
+| -------------- | ------ | -------- | ------------------------------------------------ |
+| `sessionId`    | string | Yes      | UUID v4                                          |
+| `answers`      | object | Yes      | Record of question ID → string, string[], or 1–7 |
+| `currentIndex` | number | Yes      | Current question index (0–200)                   |
+| `startedAt`    | string | Yes      | ISO 8601 datetime                                |
+| `utmTracker`   | string | No       | UTM parameters string, max 500 chars             |
+| `_csrf`        | string | No       | CSRF token (body fallback for sendBeacon)        |
+
+**Responses:**
+
+| Status | Body                                              | Meaning                       |
+| ------ | ------------------------------------------------- | ----------------------------- |
+| 200    | `{ "success": true }`                             | Draft saved                   |
+| 400    | `{ "error": "Invalid input" }`                    | Validation failed             |
+| 403    | `{ "error": "Invalid request." }`                 | CSRF token missing or invalid |
+| 429    | `{ "error": "Please try again later." }`          | Rate limited                  |
+| 500    | `{ "error": "Unable to process request." }`       | Supabase upsert failed        |
+| 503    | `{ "error": "Service unavailable." }`             | Missing Supabase config       |
+| 503    | `{ "error": "Service temporarily unavailable." }` | Circuit breaker open          |
+
 ## GET /api/health
 
 Health check endpoint.
@@ -202,3 +308,25 @@ Export submissions as CSV.
 ### POST /api/admin/survey-status
 
 Toggle survey active/closed state.
+
+### GET /api/admin/product-kpis
+
+Product KPI data (question-level and chapter-level metrics computed from survey tracking data).
+
+**Query params:**
+
+| Param  | Type   | Required | Notes                                           |
+| ------ | ------ | -------- | ----------------------------------------------- |
+| `days` | number | No       | Filter to last N days (0 or omitted = all time) |
+
+**Rate limit:** 30 requests/minute per IP.
+
+**Responses:**
+
+| Status | Body                                                                 | Meaning                |
+| ------ | -------------------------------------------------------------------- | ---------------------- |
+| 200    | `{ "reportSections": [...], "questions": [...], "chapters": [...] }` | KPI data               |
+| 401    | `{ "error": "Unauthorized." }`                                       | No valid admin session |
+| 403    | `{ "error": "Forbidden." }`                                          | Insufficient role      |
+| 429    | `{ "error": "Please try again later." }`                             | Rate limited           |
+| 500    | `{ "error": "Unable to load KPI data." }`                            | Supabase RPC error     |

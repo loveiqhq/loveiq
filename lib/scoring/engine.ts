@@ -1,11 +1,13 @@
 /**
- * V4 Archetype Scoring Engine
+ * V4 + V5 Archetype Scoring Engine
  *
- * Faithful TypeScript port of the reference JS implementation.
+ * V4: Faithful TypeScript port of the reference JS implementation.
+ * V5: Parallel anchor-calibrated independent match percentages with deterministic spacing.
  * Pure CPU, no I/O — safe for server-side use in API routes.
  */
 
-import type { ScoringConfig, ScoringResult } from "./types";
+import { createHash } from "crypto";
+import type { ScoringConfig, ScoringResult, V5ScoringResult } from "./types";
 
 // ─── Utility helpers ─────────────────────────────────────────────────────────
 
@@ -242,6 +244,186 @@ function transformTags(raw: unknown): string[] {
   return [...new Set(extractAnswerCodes(raw))];
 }
 
+// ─── V5: Canonical payload fingerprint ──────────────────────────────────────
+
+function buildCanonicalFingerprint(
+  responsesNorm: Record<string, unknown>,
+  knownQids: Set<string>
+): string {
+  const entries: [string, string][] = [];
+
+  for (const qid of [...knownQids].sort()) {
+    const raw = responsesNorm[qid];
+    if (raw == null) continue;
+
+    let repr: string;
+    if (Array.isArray(raw)) {
+      const codes = extractAnswerCodes(raw).sort();
+      if (codes.length === 0) continue;
+      repr = codes.join("+");
+    } else if (typeof raw === "number") {
+      repr = String(Math.round(raw));
+    } else {
+      const code = extractAnswerCode(raw);
+      if (!code) continue;
+      repr = code;
+    }
+
+    entries.push([qid, repr]);
+  }
+
+  return entries.map(([qid, repr]) => `${qid}=${repr}`).join("|");
+}
+
+// ─── V5: Compute independent match percentages ─────────────────────────────
+
+function computeV5Scores(
+  config: ScoringConfig,
+  weightsFinal: Record<string, number>,
+  uDimensions: Record<string, number>,
+  responsesNorm: Record<string, unknown>,
+  answeredPairs: [string, string][]
+): V5ScoringResult {
+  const archetypes = config.archetypes;
+
+  // Step 6 (V5): Base similarity — recompute independently from V4
+  const rawTotal: Record<string, number> = {};
+  for (const archetype of archetypes) {
+    let s = 0.0;
+    for (const dimId of Object.keys(weightsFinal)) {
+      const p = config.prototypes.get(`${archetype}||${dimId}`) ?? 0.5;
+      s += weightsFinal[dimId] * (1 - Math.abs(uDimensions[dimId] - p));
+    }
+    rawTotal[archetype] = s;
+  }
+
+  // Step 7 (V5): Apply gates — same logic as V4
+  for (const gate of config.gates) {
+    const val = uDimensions[gate.dimension] ?? 0.5;
+    let passes = false;
+    if (gate.operator === ">=") passes = val >= gate.value;
+    else if (gate.operator === "<=") passes = val <= gate.value;
+    else if (gate.operator === ">") passes = val > gate.value;
+    else if (gate.operator === "<") passes = val < gate.value;
+    else if (gate.operator === "==") passes = val === gate.value;
+    if (!passes) {
+      rawTotal[gate.archetype] += gate.scoreAdjustmentIfFail;
+    }
+  }
+
+  // Step 8 (V5): Categorical boosts WITHOUT centering
+  for (const [qid, answerCode] of answeredPairs) {
+    const rules = config.boosts.get(`${qid}||${answerCode}`) || [];
+    for (const rule of rules) {
+      rawTotal[rule.archetype] += rule.scoreAdd;
+    }
+  }
+
+  // V5: NO archetype bias, NO softmax
+
+  // Step 9: Compute per-archetype anchors with runtime-adjusted weights
+  const anchors: Record<string, { rawMin: number; rawMean: number; rawMax: number }> = {};
+
+  for (const archetype of archetypes) {
+    let rawMin = 0,
+      rawMean = 0,
+      rawMax = 0;
+    for (const dimId of Object.keys(weightsFinal)) {
+      const helper = config.v5Helpers.get(`${archetype}||${dimId}`);
+      const adjW = weightsFinal[dimId];
+
+      if (helper) {
+        rawMin += adjW * helper.minCoeff;
+        rawMean += adjW * helper.meanUniformCoeff;
+        rawMax += adjW * helper.maxCoeff;
+      } else {
+        // Fallback: compute from prototype value
+        const p = config.prototypes.get(`${archetype}||${dimId}`) ?? 0.5;
+        rawMin += adjW * Math.min(p, 1 - p);
+        rawMean += adjW * (0.5 + p - p * p);
+        rawMax += adjW * 1.0;
+      }
+    }
+    anchors[archetype] = { rawMin, rawMean, rawMax };
+  }
+
+  // Step 10: Map raw_total to 0-100 percentage
+  const rawPct: Record<string, number> = {};
+  for (const archetype of archetypes) {
+    const { rawMin, rawMean, rawMax } = anchors[archetype];
+    const rt = rawTotal[archetype];
+
+    let pct: number;
+    if (rawMean === rawMin) {
+      pct = rt >= rawMean ? 100 : 0;
+    } else if (rt <= rawMean) {
+      pct = (50 * (rt - rawMin)) / (rawMean - rawMin);
+    } else {
+      if (rawMax === rawMean) {
+        pct = 100;
+      } else {
+        pct = 50 + (50 * (rt - rawMean)) / (rawMax - rawMean);
+      }
+    }
+    rawPct[archetype] = clamp(pct, 0, 100);
+  }
+
+  // Step 11: Rank archetypes
+  const ranked = [...archetypes].sort((a, b) => {
+    if (rawPct[b] !== rawPct[a]) return rawPct[b] - rawPct[a];
+    if (rawTotal[b] !== rawTotal[a]) return rawTotal[b] - rawTotal[a];
+    return (config.archetypeIds[a] ?? 0) - (config.archetypeIds[b] ?? 0);
+  });
+
+  // Step 12: Deterministic seeded spacing
+  const payloadFingerprint = buildCanonicalFingerprint(responsesNorm, config.knownQids);
+
+  const finalPct: Record<string, number> = {};
+  const gaps: Record<string, number> = {};
+
+  finalPct[ranked[0]] = rawPct[ranked[0]]; // Rank 1 unchanged
+
+  for (let i = 1; i < ranked.length; i++) {
+    const prevArchetype = ranked[i - 1];
+    const currArchetype = ranked[i];
+
+    const prevId = config.archetypeIds[prevArchetype] ?? 0;
+    const currId = config.archetypeIds[currArchetype] ?? 0;
+
+    const seed = `${payloadFingerprint}|${prevId}|${currId}|v5_gap_v1`;
+    const hash = createHash("sha256").update(seed).digest("hex");
+    const first12 = hash.slice(0, 12);
+    const hash01 = parseInt(first12, 16) / (Math.pow(16, 12) - 1);
+
+    const gap = config.v5SpacingGapMin + hash01 * (config.v5SpacingGapMax - config.v5SpacingGapMin);
+    gaps[currArchetype] = gap;
+
+    finalPct[currArchetype] = Math.max(
+      0,
+      Math.min(rawPct[currArchetype], finalPct[prevArchetype] - gap)
+    );
+  }
+
+  // Step 13: Round final scores
+  const roundFactor = Math.pow(10, config.v5RoundDigits);
+  for (const a of archetypes) {
+    finalPct[a] = Math.round(finalPct[a] * roundFactor) / roundFactor;
+  }
+
+  return {
+    rawTotal,
+    rawPct,
+    finalPct,
+    ranking: ranked,
+    primaryArchetype: ranked[0],
+    diagnostics: {
+      anchors,
+      gaps,
+      payloadFingerprint,
+    },
+  };
+}
+
 // ─── Main scoring function ───────────────────────────────────────────────────
 
 export function scoreArchetypes(
@@ -440,6 +622,12 @@ export function scoreArchetypes(
     }
   }
 
+  // V5 scoring (parallel to V4)
+  let v5: V5ScoringResult | undefined;
+  if (config.v5Enabled) {
+    v5 = computeV5Scores(config, weightsFinal, uDimensions, responsesNorm, answeredPairs);
+  }
+
   return {
     rawScore,
     percent,
@@ -454,5 +642,6 @@ export function scoreArchetypes(
       overlaysText,
       overlaysMissing: [...overlaysMissing].sort(),
     },
+    ...(v5 ? { v5 } : {}),
   };
 }

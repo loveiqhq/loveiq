@@ -41,7 +41,7 @@ ci: pin GitHub Actions to SHA
 - Write tests for new utility functions in `__tests__/lib/`
 - Write tests for new API routes in `__tests__/api/`
 - Run `npm test` before pushing
-- Target 60%+ line coverage
+- Target 70%+ line coverage (enforced in `vitest.config.ts`)
 
 ## Security
 

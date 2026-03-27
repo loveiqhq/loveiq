@@ -135,11 +135,23 @@ async function main() {
 
       if (!DRY_RUN) {
         await supabasePatch(`scoring_result?id=eq.${sr.id}`, {
-          engine_version: "v4",
+          engine_version: result.v5 ? "v4+v5" : "v4",
           primary_archetype: result.primaryArchetype,
           percentages: result.percent,
           raw_scores: result.rawScore,
           diagnostics: result.diagnostics,
+          v5_primary_archetype: result.v5?.primaryArchetype ?? null,
+          v5_percentages: result.v5?.finalPct ?? null,
+          v5_raw_scores: result.v5?.rawTotal ?? null,
+          v5_diagnostics: result.v5
+            ? {
+                rawPct: result.v5.rawPct,
+                ranking: result.v5.ranking,
+                anchors: result.v5.diagnostics.anchors,
+                gaps: result.v5.diagnostics.gaps,
+                payloadFingerprint: result.v5.diagnostics.payloadFingerprint,
+              }
+            : null,
           scored_at: new Date().toISOString(),
         });
       }

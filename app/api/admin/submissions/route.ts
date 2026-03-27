@@ -40,8 +40,8 @@ export async function GET(request: Request) {
     ? "app_user!fk_survey_submission_user!inner(email,first_name)"
     : "app_user!fk_survey_submission_user(email,first_name)";
   const scoringJoin = archetype
-    ? "scoring_result!inner(primary_archetype)"
-    : "scoring_result(primary_archetype)";
+    ? "scoring_result!inner(primary_archetype,v5_primary_archetype)"
+    : "scoring_result(primary_archetype,v5_primary_archetype)";
 
   let query = `/rest/v1/survey_submission?select=id,status,start_date_time,created_date_time,duration_ms,${userJoin},${scoringJoin}&order=created_date_time.desc`;
 
@@ -72,7 +72,7 @@ export async function GET(request: Request) {
       created_date_time: string;
       duration_ms: number | null;
       app_user: { email: string; first_name: string } | null;
-      scoring_result: Array<{ primary_archetype: string }>;
+      scoring_result: Array<{ primary_archetype: string; v5_primary_archetype: string | null }>;
     }>;
 
     const submissions = raw.map((r) => ({
@@ -84,6 +84,7 @@ export async function GET(request: Request) {
       completed_at: r.created_date_time,
       duration_ms: r.duration_ms,
       primary_archetype: r.scoring_result?.[0]?.primary_archetype || null,
+      v5_primary_archetype: r.scoring_result?.[0]?.v5_primary_archetype || null,
     }));
 
     return NextResponse.json({ submissions, total, page, limit });

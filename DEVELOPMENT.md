@@ -29,15 +29,20 @@ npm run dev
 
 ### Optional
 
-| Variable                     | Purpose                                                  |
-| ---------------------------- | -------------------------------------------------------- |
-| `RESEND_FROM`                | From address (default: `LoveIQ <hello@send.loveiq.org>`) |
-| `RESEND_REPLY_TO`            | Reply-to address (default: `hello@loveiq.org`)           |
-| `CONTACT_TO_EMAIL`           | Contact form recipient email                             |
-| `SLACK_WAITLIST_WEBHOOK_URL` | Slack notifications for waitlist signups                 |
-| `SLACK_CONTACT_WEBHOOK_URL`  | Slack notifications for contact form                     |
-| `SLACK_SURVEY_WEBHOOK_URL`   | Slack notifications for survey submissions               |
-| `STAGING_PASSWORD`           | Password gate for staging deployment                     |
+| Variable                        | Purpose                                                   |
+| ------------------------------- | --------------------------------------------------------- |
+| `RESEND_FROM`                   | From address (default: `LoveIQ <hello@send.loveiq.org>`)  |
+| `RESEND_REPLY_TO`               | Reply-to address (default: `hello@loveiq.org`)            |
+| `CONTACT_TO_EMAIL`              | Contact form recipient email                              |
+| `SLACK_WAITLIST_WEBHOOK_URL`    | Slack notifications for waitlist signups                  |
+| `SLACK_CONTACT_WEBHOOK_URL`     | Slack notifications for contact form                      |
+| `SLACK_SURVEY_WEBHOOK_URL`      | Slack notifications for survey submissions                |
+| `STAGING_PASSWORD`              | Password gate for staging deployment                      |
+| `NEXT_PUBLIC_SUPABASE_URL`      | Supabase project URL (browser-safe, for admin auth SDK)   |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key (browser-safe, for admin auth SDK)      |
+| `SURVEY_CLOSE_PASSWORD`         | Password to close/pause the survey (server-only)          |
+| `NEXT_PUBLIC_GTM_ID`            | GTM container ID (optional, falls back to direct gtag.js) |
+| `LOG_LEVEL`                     | Pino log level (default: info)                            |
 
 **Tip:** You can run the site without any env vars set - the UI will render fine. Forms will fail gracefully with error messages.
 

@@ -23,6 +23,9 @@
 | Survey answer state         | `components/survey/hooks/useSurveyState.ts`                                                   |
 | Survey questions data       | `data/survey-data.ts` (compiled from `data/survey-source.csv` via `scripts/update-survey.js`) |
 | Country dropdown data       | `data/countries.ts`                                                                           |
+| Invite email sending        | `app/api/invite/route.ts`                                                                     |
+| Invite share tracking       | `app/api/invite-tracking/route.ts`                                                            |
+| Survey partial save (draft) | `app/api/survey-partial/route.ts`                                                             |
 
 ## Scoring Engine
 
@@ -129,6 +132,7 @@
 | --------------------------- | -------------------------------- |
 | Waitlist confirmation email | `lib/emails/waitlist.ts`         |
 | Admin magic link email      | `lib/emails/admin-magic-link.ts` |
+| Invite email template       | `lib/emails/invite.ts`           |
 
 ## Glossary
 
@@ -161,29 +165,32 @@
 
 ## CI/CD & Infrastructure
 
-| Task                              | Files                                  |
-| --------------------------------- | -------------------------------------- |
-| CI pipeline (build + lint + test) | `.github/workflows/ci.yml`             |
-| Security scanning                 | `.github/workflows/security.yml`       |
-| CodeQL analysis                   | `.github/workflows/codeql.yml`         |
-| Health monitoring                 | `.github/workflows/health-monitor.yml` |
-| Lighthouse CI                     | `.github/workflows/lighthouse.yml`     |
-| Load testing                      | `.github/workflows/load-test.yml`      |
-| Release workflow                  | `.github/workflows/release.yml`        |
+| Task                              | Files                                     |
+| --------------------------------- | ----------------------------------------- |
+| CI pipeline (build + lint + test) | `.github/workflows/ci.yml`                |
+| Security scanning                 | `.github/workflows/security.yml`          |
+| CodeQL analysis                   | `.github/workflows/codeql.yml`            |
+| Health monitoring                 | `.github/workflows/health-monitor.yml`    |
+| Lighthouse CI                     | `.github/workflows/lighthouse.yml`        |
+| Load testing                      | `.github/workflows/load-test.yml`         |
+| Release workflow                  | `.github/workflows/release.yml`           |
+| Documentation truth validation    | `.github/workflows/docs-truth.yml`        |
+| Visual regression testing         | `.github/workflows/visual-regression.yml` |
 
 ## Miscellaneous
 
-| Task                  | Files                                                                               |
-| --------------------- | ----------------------------------------------------------------------------------- |
-| Staging login gate    | `components/staging/StagingLoginForm.tsx`, `app/api/staging-login/route.ts`         |
-| 404 page              | `components/not-found/NotFoundPage.tsx`                                             |
-| Trust Zone page       | `components/trust-zone/TrustZonePage.tsx`                                           |
-| Legal page navigation | `components/legal/LegalNavSection.tsx`                                              |
-| Analytics helpers     | `lib/analytics.ts`                                                                  |
-| Structured logging    | `lib/logger.ts`                                                                     |
-| Circuit breaker       | `lib/circuit-breaker.ts`                                                            |
-| Fetch with timeout    | `lib/fetch-with-timeout.ts`                                                         |
-| Nonce provider (CSP)  | `components/NonceProvider.tsx`                                                      |
-| Hydration marker      | `components/HydrationMarker.tsx`                                                    |
-| Smooth scroll         | `components/SmoothScroll.tsx`                                                       |
-| Favicon / icons       | `public/favicon.svg`, `public/apple-touch-icon.png`, `public/images/LoveiqLogo.svg` |
+| Task                   | Files                                                                               |
+| ---------------------- | ----------------------------------------------------------------------------------- |
+| Staging login gate     | `components/staging/StagingLoginForm.tsx`, `app/api/staging-login/route.ts`         |
+| 404 page               | `components/not-found/NotFoundPage.tsx`                                             |
+| Trust Zone page        | `components/trust-zone/TrustZonePage.tsx`                                           |
+| Legal page navigation  | `components/legal/LegalNavSection.tsx`                                              |
+| Analytics helpers      | `lib/analytics.ts`                                                                  |
+| Structured logging     | `lib/logger.ts`                                                                     |
+| Circuit breaker        | `lib/circuit-breaker.ts`                                                            |
+| Fetch with timeout     | `lib/fetch-with-timeout.ts`                                                         |
+| UTM parameter handling | `lib/utm.ts`                                                                        |
+| Nonce provider (CSP)   | `components/NonceProvider.tsx`                                                      |
+| Hydration marker       | `components/HydrationMarker.tsx`                                                    |
+| Smooth scroll          | `components/SmoothScroll.tsx`                                                       |
+| Favicon / icons        | `public/favicon.svg`, `public/apple-touch-icon.png`, `public/images/LoveiqLogo.svg` |

@@ -54,6 +54,7 @@ interface StatsData {
   // Scoring analytics (nullable)
   scoredCount: number | null;
   archetypeDistribution: Array<{ archetype: string; count: number }> | null;
+  v5ArchetypeDistribution: Array<{ archetype: string; count: number }> | null;
   // Answer distribution (nullable)
   answerDistribution: Array<{
     qId: string;
@@ -451,7 +452,7 @@ export default function AdminDashboard() {
           <div className="grid gap-6 lg:grid-cols-2">
             <div className="rounded-xl border border-white/10 bg-surface p-5">
               <h3 className="mb-4 text-sm font-semibold text-text-primary">
-                Archetype Distribution
+                Archetype Distribution (V4)
               </h3>
               <BarChart
                 items={data.archetypeDistribution.map((d) => ({
@@ -461,7 +462,22 @@ export default function AdminDashboard() {
                 direction="horizontal"
               />
             </div>
-            <div />
+            <div className="rounded-xl border border-white/10 bg-surface p-5">
+              <h3 className="mb-4 text-sm font-semibold text-text-primary">
+                Archetype Distribution (V5)
+              </h3>
+              {data.v5ArchetypeDistribution && data.v5ArchetypeDistribution.length > 0 ? (
+                <BarChart
+                  items={data.v5ArchetypeDistribution.map((d) => ({
+                    label: d.archetype,
+                    value: d.count,
+                  }))}
+                  direction="horizontal"
+                />
+              ) : (
+                <p className="py-8 text-center text-sm text-text-muted">No V5 data yet</p>
+              )}
+            </div>
           </div>
         </>
       )}

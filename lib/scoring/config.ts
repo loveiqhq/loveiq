@@ -10,6 +10,7 @@ import {
   enumMap as enumMapDef,
   weightModifiers as weightModifiersDef,
   labelToCodeMap,
+  v5PrototypeHelpers,
 } from "@/data/scoring-config";
 import type {
   ScoringConfig,
@@ -18,9 +19,21 @@ import type {
   BoostEntry,
   GateRule,
   WeightModifierRule,
+  V5PrototypeHelper,
 } from "./types";
 
 let cachedConfig: ScoringConfig | null = null;
+
+function toBoolLocal(v: string | undefined, def: boolean): boolean {
+  if (v == null) return def;
+  return ["true", "1", "yes", "y", "t"].includes(v.trim().toLowerCase());
+}
+
+function toFloatLocal(v: string | undefined, def: number): number {
+  if (v == null || v === "") return def;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : def;
+}
 
 function buildConfig(): ScoringConfig {
   const knownQids = new Set<string>();
@@ -109,6 +122,32 @@ function buildConfig(): ScoringConfig {
     multiplier: r.multiplier,
   }));
 
+  // Archetype IDs (from prototypes)
+  const archetypeIds: Record<string, number> = {};
+  for (const p of archetypePrototypes) {
+    if (!(p.archetypeName in archetypeIds)) {
+      archetypeIds[p.archetypeName] = p.archetypeId;
+    }
+  }
+
+  // V5 prototype helpers map: "archetype||dimId" → helper
+  const v5Helpers = new Map<string, V5PrototypeHelper>();
+  for (const h of v5PrototypeHelpers) {
+    v5Helpers.set(`${h.archetypeName}||${h.dimensionId}`, {
+      archetypeId: h.archetypeId,
+      archetypeName: h.archetypeName,
+      dimensionId: h.dimensionId,
+      minCoeff: h.minCoeff,
+      meanUniformCoeff: h.meanUniformCoeff,
+      maxCoeff: h.maxCoeff,
+    });
+  }
+
+  const v5Enabled = toBoolLocal(modelParams.v5_final_match_enabled, false);
+  const v5SpacingGapMin = toFloatLocal(modelParams.v5_final_spacing_gap_min, 3.0);
+  const v5SpacingGapMax = toFloatLocal(modelParams.v5_final_spacing_gap_max, 4.0);
+  const v5RoundDigits = parseInt(modelParams.v5_final_round_digits || "1", 10);
+
   return {
     modelParams,
     archetypes,
@@ -123,6 +162,12 @@ function buildConfig(): ScoringConfig {
     weightModifiers: weightMods,
     knownQids,
     labelToCode: labelToCodeMap,
+    archetypeIds,
+    v5Helpers,
+    v5Enabled,
+    v5SpacingGapMin,
+    v5SpacingGapMax,
+    v5RoundDigits,
   };
 }
 

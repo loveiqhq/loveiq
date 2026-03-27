@@ -15,6 +15,7 @@ interface SubmissionsData {
     started_at: string;
     completed_at: string;
     primary_archetype: string | null;
+    v5_primary_archetype: string | null;
   }>;
   total: number;
   page: number;

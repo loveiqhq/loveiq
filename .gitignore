@@ -37,6 +37,7 @@ tsconfig.tsbuildinfo
 
 # Data source files
 *.csv
+*.docx
 
 # Playwright
 /test-results/

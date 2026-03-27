@@ -359,26 +359,37 @@ export async function GET(request: Request) {
     // Q6: Scoring analytics (graceful degradation)
     let scoredCount: number | null = null;
     let archetypeDistribution: Array<{ archetype: string; count: number }> | null = null;
+    let v5ArchetypeDistribution: Array<{ archetype: string; count: number }> | null = null;
 
     try {
       if (submissionIds.length === 0) {
         scoredCount = 0;
         archetypeDistribution = [];
+        v5ArchetypeDistribution = [];
       } else {
+        const scoringSelect = "primary_archetype,v5_primary_archetype";
         const scoringRes = await supabaseFetch(
-          `/rest/v1/scoring_result?select=primary_archetype&survey_submission_id=in.(${submissionIds.join(",")})`,
+          `/rest/v1/scoring_result?select=${scoringSelect}&survey_submission_id=in.(${submissionIds.join(",")})`,
           { headers: { Range: "0-49999" } }
         );
         if (scoringRes.ok) {
           const scoringRows = (await scoringRes.json()) as Array<{
             primary_archetype: string;
+            v5_primary_archetype: string | null;
           }>;
           scoredCount = scoringRows.length;
           const archMap: Record<string, number> = {};
+          const v5ArchMap: Record<string, number> = {};
           for (const row of scoringRows) {
             archMap[row.primary_archetype] = (archMap[row.primary_archetype] || 0) + 1;
+            if (row.v5_primary_archetype) {
+              v5ArchMap[row.v5_primary_archetype] = (v5ArchMap[row.v5_primary_archetype] || 0) + 1;
+            }
           }
           archetypeDistribution = Object.entries(archMap)
+            .map(([archetype, count]) => ({ archetype, count }))
+            .sort((a, b) => b.count - a.count);
+          v5ArchetypeDistribution = Object.entries(v5ArchMap)
             .map(([archetype, count]) => ({ archetype, count }))
             .sort((a, b) => b.count - a.count);
         }
@@ -492,6 +503,7 @@ export async function GET(request: Request) {
       // Scoring analytics (nullable)
       scoredCount,
       archetypeDistribution,
+      v5ArchetypeDistribution,
       // Answer distribution (nullable)
       answerDistribution,
       // Invite clicks (nullable)

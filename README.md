@@ -29,25 +29,26 @@ npm run dev
 
 ## Scripts
 
-| Command                 | Description                           |
-| ----------------------- | ------------------------------------- |
-| `npm run dev`           | Start dev server (Turbopack)          |
-| `npm run build`         | Production build                      |
-| `npm run start`         | Run production build locally          |
-| `npm run lint`          | Run ESLint                            |
-| `npm test`              | Run unit/integration tests            |
-| `npm run test:watch`    | Run tests in watch mode               |
-| `npm run test:coverage` | Run tests with coverage report        |
-| `npm run test:e2e`      | Run E2E tests (Playwright)            |
-| `npm run analyze`       | Bundle size analysis (visual treemap) |
-| `npm run check`         | Lint + test + build (full CI check)   |
-| `npm run setup`         | Install deps + create .env.local      |
+| Command                       | Description                           |
+| ----------------------------- | ------------------------------------- |
+| `npm run dev`                 | Start dev server (Turbopack)          |
+| `npm run build`               | Production build                      |
+| `npm run start`               | Run production build locally          |
+| `npm run lint`                | Run ESLint                            |
+| `npm test`                    | Run unit/integration tests            |
+| `npm run test:watch`          | Run tests in watch mode               |
+| `npm run test:coverage`       | Run tests with coverage report        |
+| `npm run test:e2e`            | Run E2E tests (Playwright)            |
+| `npm run analyze`             | Bundle size analysis (visual treemap) |
+| `npm run check`               | Lint + test + build (full CI check)   |
+| `npm run setup`               | Install deps + create .env.local      |
+| `npm run update:product-kpis` | Update product KPIs from CSV          |
 
 ## Project Structure
 
 ```
 app/                  # Next.js App Router (pages + API routes)
-  api/                # API endpoints (contact, waitlist, survey, health, staging-login, staging-logout)
+  api/                # API endpoints (contact, waitlist, survey, invite, invite-tracking, survey-partial, survey-tracking, health, staging-*, admin/*)
 components/           # React components
   landing/            # Landing page sections (S01-S14)
   about/              # About page sections

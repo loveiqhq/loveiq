@@ -34,6 +34,9 @@ interface SubmissionData {
     raw_scores: Record<string, number>;
     engine_version: string;
     scored_at: string;
+    v5_primary_archetype: string | null;
+    v5_percentages: Record<string, number> | null;
+    v5_raw_scores: Record<string, number> | null;
   } | null;
 }
 
@@ -168,10 +171,10 @@ export default function SubmissionDetail({ id }: { id: string }) {
         </div>
       </div>
 
-      {/* Scoring Result */}
+      {/* Scoring Result — V4 */}
       <div className="rounded-xl border border-white/10 bg-surface p-5">
         <h3 className="mb-4 text-sm font-semibold text-text-primary">
-          {scoring ? "Scoring Result" : "Not Scored"}
+          {scoring ? "Scoring Result (V4 — Probability %)" : "Not Scored"}
         </h3>
         {scoring ? (
           <>
@@ -204,6 +207,30 @@ export default function SubmissionDetail({ id }: { id: string }) {
           <p className="text-sm text-text-muted">No scoring data available for this submission.</p>
         )}
       </div>
+
+      {/* Scoring Result — V5 */}
+      {scoring?.v5_percentages && (
+        <div className="rounded-xl border border-white/10 bg-surface p-5">
+          <h3 className="mb-4 text-sm font-semibold text-text-primary">
+            Scoring Result (V5 — Match %)
+          </h3>
+          <div className="mb-4 flex items-baseline gap-3">
+            <span className="font-serif text-lg font-bold text-accent-orange">
+              {scoring.v5_primary_archetype}
+            </span>
+            <span className="text-xs text-text-muted">Independent scores (do not sum to 100)</span>
+          </div>
+          <BarChart
+            items={Object.entries(scoring.v5_percentages)
+              .sort(([, a], [, b]) => b - a)
+              .map(([label, value]) => ({
+                label,
+                value: Math.round(value * 10) / 10,
+              }))}
+            direction="horizontal"
+          />
+        </div>
+      )}
 
       {/* Actions */}
       {actionError && (

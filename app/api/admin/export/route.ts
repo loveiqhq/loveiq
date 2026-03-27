@@ -102,13 +102,15 @@ export async function GET(request: Request) {
         raw_scores: Record<string, number>;
         engine_version: string;
         scored_at: string;
+        v5_primary_archetype: string | null;
+        v5_percentages: Record<string, number> | null;
       }
     > = {};
 
     if (ids.length > 0) {
       try {
         const scoringRes = await supabaseFetch(
-          `/rest/v1/scoring_result?survey_submission_id=in.(${ids.join(",")})&select=survey_submission_id,primary_archetype,percentages,raw_scores,engine_version,scored_at`,
+          `/rest/v1/scoring_result?survey_submission_id=in.(${ids.join(",")})&select=survey_submission_id,primary_archetype,percentages,raw_scores,engine_version,scored_at,v5_primary_archetype,v5_percentages`,
           { headers: { Range: "0-99999" } }
         );
         if (scoringRes.ok) {
@@ -119,6 +121,8 @@ export async function GET(request: Request) {
             raw_scores: Record<string, number>;
             engine_version: string;
             scored_at: string;
+            v5_primary_archetype: string | null;
+            v5_percentages: Record<string, number> | null;
           }>;
           for (const row of scoringRows) {
             scoringMap[row.survey_submission_id] = row;
@@ -222,9 +226,11 @@ export async function GET(request: Request) {
       "completed_at",
       "duration_sec",
       "primary_archetype",
+      "v5_primary_archetype",
       "engine_version",
       "scored_at",
       ...sortedArchetypes.map((a) => `pct_${a}`),
+      ...sortedArchetypes.map((a) => `v5_pct_${a}`),
       ...sortedArchetypes.map((a) => `raw_${a}`),
       ...sortedQIds.flatMap((qId) => [
         qId,
@@ -248,10 +254,16 @@ export async function GET(request: Request) {
         s.completed_at,
         durationSec,
         scoring?.primary_archetype || "",
+        scoring?.v5_primary_archetype || "",
         scoring?.engine_version || "",
         scoring?.scored_at || "",
         ...sortedArchetypes.map((a) =>
           scoring?.percentages[a] != null ? Math.round(scoring.percentages[a] * 10) / 10 : ""
+        ),
+        ...sortedArchetypes.map((a) =>
+          scoring?.v5_percentages?.[a] != null
+            ? Math.round(scoring.v5_percentages[a] * 10) / 10
+            : ""
         ),
         ...sortedArchetypes.map((a) =>
           scoring?.raw_scores[a] != null ? Math.round(scoring.raw_scores[a] * 100) / 100 : ""

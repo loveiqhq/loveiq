@@ -39,7 +39,7 @@ All configuration files ensure AI assistants:
 4. **Reference documentation**
    - `SECURITY.md` - Security policy
    - `.github/SECURITY_CHECKLIST.md` - Developer checklist
-   - `SECURITY_SCANNING.md` - Security scanning details
+   - `.github/workflows/security.yml` - Security scanning workflow
    - `.github/SECURITY_QUICK_REFERENCE.md` - Quick reference
 
 ## 🔧 How to Use

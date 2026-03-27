@@ -249,6 +249,12 @@ describe("scoreArchetypes with minimal config", () => {
       weightModifiers: [],
       knownQids: new Set(["q1", "q2"]),
       labelToCode: {},
+      archetypeIds: { TypeA: 1, TypeB: 2 },
+      v5Helpers: new Map(),
+      v5Enabled: false,
+      v5SpacingGapMin: 3.0,
+      v5SpacingGapMax: 4.0,
+      v5RoundDigits: 1,
     };
 
     // User scores: q1=7 (→1.0), q2=1 (→0.0) → closer to TypeA

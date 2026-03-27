@@ -1,6 +1,6 @@
 # Codebase Structure
 
-> **Last verified:** 2026-03-15 | **Verified against:** full directory listing of app/, components/, lib/, data/, scripts/
+> **Last verified:** 2026-03-27 | **Verified against:** full directory listing of app/, components/, lib/, data/, scripts/
 
 **Analysis Date:** 2025-01-14
 
@@ -17,6 +17,9 @@ loveiq-web/
 │   │   ├── staging-login/route.ts   # Staging auth (staging only)
 │   │   ├── staging-logout/route.ts  # Staging auth (staging only)
 │   │   ├── survey-tracking/route.ts # Survey behavior tracking
+│   │   ├── invite/route.ts         # Invite email sending
+│   │   ├── invite-tracking/route.ts # Invite share method tracking
+│   │   ├── survey-partial/route.ts  # Partial survey save (draft)
 │   │   └── admin/                   # Admin panel API routes
 │   │       ├── login/route.ts       # Admin magic link login trigger
 │   │       ├── logout/route.ts      # Admin logout
@@ -97,6 +100,7 @@ loveiq-web/
 │   ├── circuit-breaker.ts      # Circuit breaker pattern
 │   ├── logger.ts               # pino structured logging
 │   ├── fetch-with-timeout.ts   # Fetch wrapper with timeout
+│   ├── utm.ts                  # UTM parameter handling
 │   ├── supabase-middleware.ts  # Supabase Auth client for middleware (proxy.ts)
 │   ├── csrf-client.ts          # Client-side CSRF token reader
 │   ├── admin/                  # Admin panel utilities
@@ -106,7 +110,14 @@ loveiq-web/
 │   │   ├── roles.ts            # Role-based access control
 │   │   ├── supabase.ts         # Supabase fetch helper for admin routes
 │   │   └── supabase-server.ts  # Server-side Supabase client (RSC/API routes)
+│   ├── scoring/                # Archetype scoring engine
+│   │   ├── engine.ts           # Core scoring algorithm
+│   │   ├── types.ts            # Scoring type definitions
+│   │   ├── config.ts           # Config loader
+│   │   └── index.ts            # Public API
 │   └── emails/                 # Email templates
+│       ├── admin-magic-link.ts # Admin magic link email
+│       ├── invite.ts           # Invite email template
 │       └── waitlist.ts         # Waitlist confirmation email
 ├── data/                       # Static data files
 │   ├── glossary-data.ts        # Auto-generated glossary terms (from CSV)
@@ -130,10 +141,12 @@ loveiq-web/
 │   ├── ci.yml                  # Build + lint + test
 │   ├── security.yml            # Security scanning (secrets, SAST, deps, SBOM)
 │   ├── codeql.yml              # Advanced CodeQL analysis
+│   ├── docs-truth.yml          # Documentation truth validation
 │   ├── release.yml             # Release workflow
 │   ├── health-monitor.yml      # Health monitoring
 │   ├── lighthouse.yml          # Lighthouse CI
-│   └── load-test.yml           # Load testing
+│   ├── load-test.yml           # Load testing
+│   └── visual-regression.yml   # Visual regression testing
 ├── .planning/                  # Architecture and planning docs
 │   └── codebase/               # Codebase analysis files
 ├── proxy.ts                    # Middleware: CSP headers, CSRF cookies, security logging
@@ -197,7 +210,7 @@ loveiq-web/
 - Purpose: Static data files for glossary, survey, scoring, and product KPIs
 - Contains: Auto-generated glossary terms, survey questions, country list, scoring config, product KPIs, source CSVs
 
-\***\*tests**/\*\*
+**\_\_tests\_\_/**
 
 - Purpose: Unit tests (Vitest)
 - Structure: Mirrors source directory layout
@@ -333,5 +346,5 @@ loveiq-web/
 ---
 
 _Structure analysis: 2025-01-14_
-_Last updated: 2026-03-15_
+_Last updated: 2026-03-27_
 _Update when directory structure changes_
