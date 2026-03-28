@@ -7,6 +7,7 @@ import TimeRangeSelector from "@/components/admin/TimeRangeSelector";
 import ReportSectionsTab from "@/components/admin/kpi-tabs/ReportSectionsTab";
 import QuestionsTab from "@/components/admin/kpi-tabs/QuestionsTab";
 import ChaptersTab from "@/components/admin/kpi-tabs/ChaptersTab";
+import DiscriminationTab from "@/components/admin/kpi-tabs/DiscriminationTab";
 import type { ReportSectionKpi, QuestionKpi, ChapterKpi } from "@/data/product-kpis";
 
 interface ProductKpiData {
@@ -15,7 +16,7 @@ interface ProductKpiData {
   chapters: ChapterKpi[];
 }
 
-const tabs = ["Report Sections", "Survey Questions", "Survey Chapters"] as const;
+const tabs = ["Report Sections", "Survey Questions", "Survey Chapters", "Discrimination"] as const;
 type Tab = (typeof tabs)[number];
 
 function escapeCSV(value: string): string {
@@ -197,6 +198,7 @@ export default function ProductKpiDashboard() {
         />
       )}
       {activeTab === "Survey Chapters" && <ChaptersTab data={data.chapters} />}
+      {activeTab === "Discrimination" && <DiscriminationTab days={days} />}
     </div>
   );
 }

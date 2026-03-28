@@ -64,6 +64,17 @@ export default function BulkActionBar({ selectedIds, onClear, onComplete }: Bulk
         >
           Restore
         </button>
+        {selectedIds.size === 2 && (
+          <>
+            <div className="h-4 w-px bg-white/10" />
+            <a
+              href={`/admin/submissions/compare?a=${Array.from(selectedIds)[0]}&b=${Array.from(selectedIds)[1]}`}
+              className="rounded-lg border border-accent-purple/20 px-3 py-1.5 text-xs font-medium text-accent-purple transition hover:bg-accent-purple/10"
+            >
+              Compare
+            </a>
+          </>
+        )}
         <div className="h-4 w-px bg-white/10" />
         <button
           onClick={onClear}

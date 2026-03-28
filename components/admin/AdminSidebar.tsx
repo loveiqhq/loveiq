@@ -42,6 +42,19 @@ const analyticsItems = [
     label: "Live Pulse",
     icon: "M13 10V3L4 14h7v7l9-11h-7z",
   },
+  {
+    href: "/admin/growth",
+    label: "Growth",
+    icon: "M13 7h8m0 0v8m0-8l-8 8-4-4-6 6",
+  },
+];
+
+const adminItems = [
+  {
+    href: "/admin/tools",
+    label: "Admin Tools",
+    icon: "M10.343 3.94c.09-.542.56-.94 1.11-.94h1.093c.55 0 1.02.398 1.11.94l.149.894c.07.424.384.764.78.93s.844.083 1.168-.142l.75-.535a1.14 1.14 0 011.57.165l.773.774c.43.43.501 1.1.165 1.57l-.535.75c-.225.324-.224.772-.142 1.168s.506.71.93.78l.894.15c.542.09.94.56.94 1.109v1.094c0 .55-.398 1.02-.94 1.11l-.894.149c-.424.07-.764.384-.93.78s-.083.844.142 1.168l.535.75a1.14 1.14 0 01-.165 1.57l-.773.773a1.14 1.14 0 01-1.57.165l-.75-.535c-.324-.225-.772-.224-1.168-.142s-.71.506-.78.93l-.15.894c-.09.542-.56.94-1.109.94h-1.094c-.55 0-1.02-.398-1.11-.94l-.148-.894c-.071-.424-.384-.764-.781-.93s-.844-.083-1.168.142l-.75.535a1.14 1.14 0 01-1.57-.165l-.773-.774a1.14 1.14 0 01-.165-1.57l.535-.75c.225-.324.224-.772.142-1.168s-.506-.71-.93-.78l-.894-.15c-.542-.09-.94-.56-.94-1.109v-1.094c0-.55.398-1.02.94-1.11l.894-.148c.424-.071.764-.384.93-.781s.083-.844-.142-1.168l-.535-.75a1.14 1.14 0 01.165-1.57l.774-.773a1.14 1.14 0 011.57-.165l.75.535c.324.225.772.224 1.168.142s.71-.506.78-.93l.15-.894zM15 12a3 3 0 11-6 0 3 3 0 016 0z",
+  },
 ];
 
 const dangerItem = {
@@ -121,6 +134,38 @@ export default function AdminSidebar({ open, onClose }: AdminSidebarProps) {
               Analytics
             </p>
             {analyticsItems.map((item) => (
+              <a
+                key={item.href}
+                href={item.href}
+                onClick={onClose}
+                className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${
+                  isActive(item.href)
+                    ? "bg-white/10 text-text-primary"
+                    : "text-text-muted hover:bg-white/5 hover:text-text-primary"
+                }`}
+              >
+                <svg
+                  className="h-5 w-5 shrink-0"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d={item.icon} />
+                </svg>
+                {item.label}
+              </a>
+            ))}
+          </div>
+
+          {/* Admin section */}
+          <div className="mt-4 border-t border-white/10 pt-4">
+            <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+              Admin
+            </p>
+            {adminItems.map((item) => (
               <a
                 key={item.href}
                 href={item.href}

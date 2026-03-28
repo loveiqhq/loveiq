@@ -7,6 +7,7 @@ import SubmissionTable from "./SubmissionTable";
 import Pagination from "./Pagination";
 import BulkActionBar from "./BulkActionBar";
 import SavedViewsBar from "./SavedViewsBar";
+import ExportPresetsBar from "./ExportPresetsBar";
 
 interface SubmissionsData {
   submissions: Array<{
@@ -86,6 +87,8 @@ export default function SubmissionBrowser() {
       </div>
 
       <SavedViewsBar filters={filters} onApplyView={handleApplyView} />
+
+      <ExportPresetsBar filters={filters} onApplyPreset={handleApplyView} />
 
       <FilterBar key={filterKey} onFilterChange={handleFilterChange} initialFilters={filters} />
 

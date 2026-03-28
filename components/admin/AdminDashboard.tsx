@@ -5,6 +5,8 @@ import { useAdminFetch } from "./hooks/useAdminFetch";
 import StatCard from "./StatCard";
 import BarChart from "./BarChart";
 import TimeRangeSelector from "./TimeRangeSelector";
+import WeeklyDigestButton from "./WeeklyDigestButton";
+import ChartWithAnnotations from "./ChartWithAnnotations";
 import { surveyQuestions } from "@/data/survey-data";
 
 interface StatsData {
@@ -189,7 +191,10 @@ export default function AdminDashboard() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="font-serif text-xl font-bold text-text-primary">Overview</h2>
-        <TimeRangeSelector value={days} onChange={setDays} />
+        <div className="flex items-center gap-3">
+          <WeeklyDigestButton />
+          <TimeRangeSelector value={days} onChange={setDays} />
+        </div>
       </div>
 
       {/* Row 1: Key metrics */}
@@ -260,7 +265,9 @@ export default function AdminDashboard() {
         <div className="rounded-xl border border-white/10 bg-surface p-5">
           <h3 className="mb-4 text-sm font-semibold text-text-primary">Submissions Over Time</h3>
           {dailyItems.length > 0 ? (
-            <BarChart items={dailyItems} direction="vertical" maxHeight={180} />
+            <ChartWithAnnotations chartKey="dashboard.daily" dates={dailyItems.map((d) => d.label)}>
+              <BarChart items={dailyItems} direction="vertical" maxHeight={180} />
+            </ChartWithAnnotations>
           ) : (
             <p className="py-8 text-center text-sm text-text-muted">No data yet</p>
           )}

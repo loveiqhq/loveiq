@@ -33,6 +33,12 @@ const ROUTE_PERMISSIONS: Record<string, AdminRole> = {
   "GET:/api/admin/pulse/activity": "viewer",
   "GET:/api/admin/pulse/at-risk": "viewer",
   "GET:/api/admin/views": "viewer",
+  "GET:/api/admin/growth/referrals": "viewer",
+  "GET:/api/admin/growth/geography": "viewer",
+  "GET:/api/admin/growth/waitlist-conversion": "viewer",
+  "GET:/api/admin/annotations": "viewer",
+  "GET:/api/admin/product-kpis/discrimination": "viewer",
+  "GET:/api/admin/export-presets": "viewer",
   // PATCH/POST endpoints — editor
   "PATCH:/api/admin/submissions/[id]": "editor",
   "PATCH:/api/admin/submissions/bulk": "editor",
@@ -41,8 +47,14 @@ const ROUTE_PERMISSIONS: Record<string, AdminRole> = {
   "DELETE:/api/admin/submissions/[id]/notes/[noteId]": "editor",
   "POST:/api/admin/views": "editor",
   "DELETE:/api/admin/views/[id]": "editor",
+  "POST:/api/admin/annotations": "editor",
+  "DELETE:/api/admin/annotations/[id]": "editor",
+  "POST:/api/admin/export-presets": "editor",
+  "DELETE:/api/admin/export-presets/[id]": "editor",
   // Admin-only actions
   "DELETE:/api/admin/submissions/[id]": "admin",
   "GET:/api/admin/export": "admin",
   "PATCH:/api/admin/survey-status": "admin",
+  "GET:/api/admin/digest": "admin",
+  "GET:/api/admin/audit": "admin",
 };

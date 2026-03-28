@@ -14,6 +14,9 @@ const pageTitles: Record<string, string> = {
   "/admin/comparisons": "Comparisons",
   "/admin/answers": "Answer Explorer",
   "/admin/pulse": "Live Pulse",
+  "/admin/growth": "Growth",
+  "/admin/tools": "Admin Tools",
+  "/admin/submissions/compare": "Compare Submissions",
 };
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
