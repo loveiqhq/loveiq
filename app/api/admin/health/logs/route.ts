@@ -28,16 +28,16 @@ export async function GET(request: Request) {
     // Rate limit hit counts from rate_limit table
     const since24h = new Date(Date.now() - 86_400_000).toISOString();
     const rateLimitRes = await supabaseFetch(
-      `/rest/v1/rate_limit?select=bucket,count&updated_at=gte.${since24h}`,
+      `/rest/v1/rate_limits?select=key,hits,updated_at&updated_at=gte.${since24h}`,
       { headers: { Range: "0-999" } }
     );
 
     let rateLimitHits: Array<{ bucket: string; totalHits: number }> = [];
     if (rateLimitRes.ok) {
-      const rows = (await rateLimitRes.json()) as Array<{ bucket: string; count: number }>;
+      const rows = (await rateLimitRes.json()) as Array<{ key: string; hits: number }>;
       const bucketMap: Record<string, number> = {};
       for (const r of rows) {
-        bucketMap[r.bucket] = (bucketMap[r.bucket] || 0) + r.count;
+        bucketMap[r.key] = (bucketMap[r.key] || 0) + r.hits;
       }
       rateLimitHits = Object.entries(bucketMap)
         .map(([bucket, totalHits]) => ({ bucket, totalHits }))

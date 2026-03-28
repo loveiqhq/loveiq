@@ -27,7 +27,9 @@ export async function GET(request: Request) {
   try {
     const [waitlistRes, submissionsRes, completedRes, reportsRes, sessionsRes, sharedRes] =
       await Promise.all([
-        supabaseFetch(`/rest/v1/waitlist?select=id`, { headers: { Prefer: "count=exact" } }),
+        supabaseFetch(`/rest/v1/waitlist_signups?select=id`, {
+          headers: { Prefer: "count=exact" },
+        }),
         supabaseFetch(`/rest/v1/survey_submission?select=id`, {
           headers: { Prefer: "count=exact" },
         }),

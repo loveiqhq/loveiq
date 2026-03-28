@@ -19,9 +19,10 @@ interface SessionRow {
 
 interface SectionRatingRow {
   id: number;
-  report_section_id: number;
+  personal_report_section_id: number;
   rating: number;
   comment: string | null;
+  personal_report_section: { report_section_id: number } | null;
 }
 
 interface AccessEmailRow {
@@ -78,10 +79,13 @@ export async function GET(request: Request) {
           `/rest/v1/report_session?select=id,personal_report_id,started_at,ended_at${sessionDateFilter}&order=started_at.asc`,
           { headers: { Range: "0-49999" } }
         ),
-        // Q3: Section ratings
-        supabaseFetch(`/rest/v1/report_section_rating?select=id,report_section_id,rating,comment`, {
-          headers: { Range: "0-49999" },
-        }),
+        // Q3: Section ratings (join through personal_report_section to get report_section_id)
+        supabaseFetch(
+          `/rest/v1/report_section_rating?select=id,personal_report_section_id,rating,comment,personal_report_section(report_section_id)`,
+          {
+            headers: { Range: "0-49999" },
+          }
+        ),
         // Q4: Access emails
         supabaseFetch(`/rest/v1/report_access_email?select=id,status`, {
           headers: { Prefer: "count=exact" },
@@ -159,16 +163,18 @@ export async function GET(request: Request) {
     if (ratingsRes.ok) {
       const ratings = (await ratingsRes.json()) as SectionRatingRow[];
 
-      // Group by section
+      // Group by report_section_id (resolved via join)
       const ratingMap: Record<number, { sum: number; count: number; comments: string[] }> = {};
       for (const r of ratings) {
-        if (!ratingMap[r.report_section_id]) {
-          ratingMap[r.report_section_id] = { sum: 0, count: 0, comments: [] };
+        const sectionId = r.personal_report_section?.report_section_id;
+        if (sectionId == null) continue;
+        if (!ratingMap[sectionId]) {
+          ratingMap[sectionId] = { sum: 0, count: 0, comments: [] };
         }
-        ratingMap[r.report_section_id].sum += r.rating;
-        ratingMap[r.report_section_id].count++;
+        ratingMap[sectionId].sum += r.rating;
+        ratingMap[sectionId].count++;
         if (r.comment?.trim()) {
-          ratingMap[r.report_section_id].comments.push(r.comment.trim());
+          ratingMap[sectionId].comments.push(r.comment.trim());
         }
       }
 
