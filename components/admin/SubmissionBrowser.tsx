@@ -5,6 +5,8 @@ import { useAdminFetch } from "./hooks/useAdminFetch";
 import FilterBar from "./FilterBar";
 import SubmissionTable from "./SubmissionTable";
 import Pagination from "./Pagination";
+import BulkActionBar from "./BulkActionBar";
+import SavedViewsBar from "./SavedViewsBar";
 
 interface SubmissionsData {
   submissions: Array<{
@@ -31,6 +33,8 @@ export default function SubmissionBrowser() {
     dateFrom: "",
     dateTo: "",
   });
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [filterKey, setFilterKey] = useState(0);
 
   const params = useMemo(() => {
     const p: Record<string, string> = { page: String(page), limit: "20" };
@@ -42,12 +46,28 @@ export default function SubmissionBrowser() {
     return p;
   }, [page, filters]);
 
-  const { data, loading, error } = useAdminFetch<SubmissionsData>("/api/admin/submissions", params);
+  const { data, loading, error, refetch } = useAdminFetch<SubmissionsData>(
+    "/api/admin/submissions",
+    params
+  );
 
   const handleFilterChange = useCallback((newFilters: typeof filters) => {
     setFilters(newFilters);
     setPage(1);
+    setSelectedIds(new Set());
   }, []);
+
+  const handleApplyView = useCallback((viewFilters: typeof filters) => {
+    setFilters(viewFilters);
+    setPage(1);
+    setSelectedIds(new Set());
+    setFilterKey((k) => k + 1);
+  }, []);
+
+  function handleBulkComplete() {
+    setSelectedIds(new Set());
+    refetch();
+  }
 
   return (
     <div className="space-y-4">
@@ -65,7 +85,9 @@ export default function SubmissionBrowser() {
         </a>
       </div>
 
-      <FilterBar onFilterChange={handleFilterChange} />
+      <SavedViewsBar filters={filters} onApplyView={handleApplyView} />
+
+      <FilterBar key={filterKey} onFilterChange={handleFilterChange} initialFilters={filters} />
 
       {loading && (
         <div className="flex items-center justify-center py-12">
@@ -81,7 +103,19 @@ export default function SubmissionBrowser() {
 
       {!loading && !error && data && (
         <>
-          <SubmissionTable submissions={data.submissions} />
+          <SubmissionTable
+            submissions={data.submissions}
+            selectable
+            selectedIds={selectedIds}
+            onSelectionChange={setSelectedIds}
+          />
+          {selectedIds.size > 0 && (
+            <BulkActionBar
+              selectedIds={selectedIds}
+              onClear={() => setSelectedIds(new Set())}
+              onComplete={handleBulkComplete}
+            />
+          )}
           <Pagination
             page={data.page}
             limit={data.limit}

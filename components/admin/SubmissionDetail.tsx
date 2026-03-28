@@ -5,6 +5,8 @@ import { useAdminFetch } from "./hooks/useAdminFetch";
 import AnswerDisplay from "./AnswerDisplay";
 import BarChart from "./BarChart";
 import ConfirmDialog from "./ConfirmDialog";
+import JourneyTimeline from "./JourneyTimeline";
+import NotesSection from "./NotesSection";
 import { getCsrfToken } from "@/lib/csrf-client";
 import { maskEmail } from "@/lib/admin/format";
 
@@ -171,6 +173,9 @@ export default function SubmissionDetail({ id }: { id: string }) {
         </div>
       </div>
 
+      {/* Journey Timeline */}
+      <JourneyTimeline id={id} />
+
       {/* Scoring Result — V4 */}
       <div className="rounded-xl border border-white/10 bg-surface p-5">
         <h3 className="mb-4 text-sm font-semibold text-text-primary">
@@ -272,6 +277,9 @@ export default function SubmissionDetail({ id }: { id: string }) {
           Delete
         </button>
       </div>
+
+      {/* Notes */}
+      <NotesSection submissionId={id} />
 
       {/* Answers */}
       <div className="rounded-xl border border-white/10 bg-surface p-5">

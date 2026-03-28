@@ -15,6 +15,9 @@ interface Submission {
 
 interface SubmissionTableProps {
   submissions: Submission[];
+  selectable?: boolean;
+  selectedIds?: Set<number>;
+  onSelectionChange?: (ids: Set<number>) => void;
 }
 
 function formatDate(iso: string): string {
@@ -33,7 +36,32 @@ const statusColors: Record<string, string> = {
   archived: "bg-white/5 text-text-muted",
 };
 
-export default function SubmissionTable({ submissions }: SubmissionTableProps) {
+export default function SubmissionTable({
+  submissions,
+  selectable = false,
+  selectedIds,
+  onSelectionChange,
+}: SubmissionTableProps) {
+  const allSelected =
+    selectable && submissions.length > 0 && submissions.every((s) => selectedIds?.has(s.id));
+
+  function toggleAll() {
+    if (!onSelectionChange) return;
+    if (allSelected) {
+      onSelectionChange(new Set());
+    } else {
+      onSelectionChange(new Set(submissions.map((s) => s.id)));
+    }
+  }
+
+  function toggleOne(id: number) {
+    if (!onSelectionChange || !selectedIds) return;
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    onSelectionChange(next);
+  }
+
   if (submissions.length === 0) {
     return (
       <div className="rounded-xl border border-white/10 bg-surface p-8 text-center text-sm text-text-muted">
@@ -47,6 +75,17 @@ export default function SubmissionTable({ submissions }: SubmissionTableProps) {
       <table className="w-full text-left text-sm">
         <thead>
           <tr className="border-b border-white/10 text-text-muted">
+            {selectable && (
+              <th className="px-4 py-3">
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  onChange={toggleAll}
+                  className="h-4 w-4 rounded border-white/20 bg-transparent accent-accent-purple"
+                  aria-label="Select all"
+                />
+              </th>
+            )}
             <th className="px-4 py-3 font-medium">Email</th>
             <th className="px-4 py-3 font-medium">Name</th>
             <th className="px-4 py-3 font-medium">Status</th>
@@ -60,6 +99,17 @@ export default function SubmissionTable({ submissions }: SubmissionTableProps) {
         <tbody>
           {submissions.map((s) => (
             <tr key={s.id} className="border-b border-white/5 hover:bg-white/[0.02]">
+              {selectable && (
+                <td className="px-4 py-3">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds?.has(s.id) || false}
+                    onChange={() => toggleOne(s.id)}
+                    className="h-4 w-4 rounded border-white/20 bg-transparent accent-accent-purple"
+                    aria-label={`Select submission ${s.id}`}
+                  />
+                </td>
+              )}
               <td className="px-4 py-3 text-text-primary">{maskEmail(s.email)}</td>
               <td className="px-4 py-3 text-text-primary">{s.first_name}</td>
               <td className="px-4 py-3">

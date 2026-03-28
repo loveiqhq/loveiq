@@ -21,6 +21,29 @@ const navItems = [
   },
 ];
 
+const analyticsItems = [
+  {
+    href: "/admin/funnels",
+    label: "Funnels & Cohorts",
+    icon: "M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12",
+  },
+  {
+    href: "/admin/comparisons",
+    label: "Comparisons",
+    icon: "M9 19V6l7 13V6",
+  },
+  {
+    href: "/admin/answers",
+    label: "Answer Explorer",
+    icon: "M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
+  },
+  {
+    href: "/admin/pulse",
+    label: "Live Pulse",
+    icon: "M13 10V3L4 14h7v7l9-11h-7z",
+  },
+];
+
 const dangerItem = {
   href: "/admin/survey-status",
   label: "Survey Status",
@@ -91,6 +114,38 @@ export default function AdminSidebar({ open, onClose }: AdminSidebarProps) {
               {item.label}
             </a>
           ))}
+
+          {/* Analytics section */}
+          <div className="mt-4 border-t border-white/10 pt-4">
+            <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+              Analytics
+            </p>
+            {analyticsItems.map((item) => (
+              <a
+                key={item.href}
+                href={item.href}
+                onClick={onClose}
+                className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${
+                  isActive(item.href)
+                    ? "bg-white/10 text-text-primary"
+                    : "text-text-muted hover:bg-white/5 hover:text-text-primary"
+                }`}
+              >
+                <svg
+                  className="h-5 w-5 shrink-0"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d={item.icon} />
+                </svg>
+                {item.label}
+              </a>
+            ))}
+          </div>
 
           {/* Survey Status — separated and styled as danger action */}
           <div className="mt-4 border-t border-white/10 pt-4">

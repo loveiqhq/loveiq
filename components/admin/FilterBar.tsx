@@ -19,22 +19,25 @@ const ARCHETYPES = [
   "Erotic Intellectual",
 ] as const;
 
-interface FilterBarProps {
-  onFilterChange: (filters: {
-    status: string;
-    email: string;
-    archetype: string;
-    dateFrom: string;
-    dateTo: string;
-  }) => void;
+interface Filters {
+  status: string;
+  email: string;
+  archetype: string;
+  dateFrom: string;
+  dateTo: string;
 }
 
-export default function FilterBar({ onFilterChange }: FilterBarProps) {
-  const [status, setStatus] = useState("");
-  const [email, setEmail] = useState("");
-  const [archetype, setArchetype] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+interface FilterBarProps {
+  onFilterChange: (filters: Filters) => void;
+  initialFilters?: Filters;
+}
+
+export default function FilterBar({ onFilterChange, initialFilters }: FilterBarProps) {
+  const [status, setStatus] = useState(initialFilters?.status || "");
+  const [email, setEmail] = useState(initialFilters?.email || "");
+  const [archetype, setArchetype] = useState(initialFilters?.archetype || "");
+  const [dateFrom, setDateFrom] = useState(initialFilters?.dateFrom || "");
+  const [dateTo, setDateTo] = useState(initialFilters?.dateTo || "");
 
   // Debounce email search
   useEffect(() => {
