@@ -27,6 +27,15 @@ const pageTitles: Record<string, string> = {
   "/admin/archetypes": "Archetypes",
   "/admin/journey": "User Journey",
   "/admin/health": "Data Health",
+  "/admin/abandonment": "Abandonment Recovery",
+  "/admin/replay": "Session Replay",
+  "/admin/profiles": "User Profiles",
+  "/admin/question-effectiveness": "Question Effectiveness",
+  "/admin/invite-network": "Invite Network",
+  "/admin/risk-score": "Risk Score",
+  "/admin/changelog": "Product Changelog",
+  "/admin/tags": "Submission Tags",
+  "/admin/language-analytics": "Language Analytics",
 };
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
