@@ -17,6 +17,16 @@ const pageTitles: Record<string, string> = {
   "/admin/growth": "Growth",
   "/admin/tools": "Admin Tools",
   "/admin/submissions/compare": "Compare Submissions",
+  "/admin/scoring": "Scoring V4↔V5",
+  "/admin/reports": "Report Engagement",
+  "/admin/revenue": "Revenue",
+  "/admin/retention": "Retention",
+  "/admin/scorecard": "Question Scorecard",
+  "/admin/text-analysis": "Text Analysis",
+  "/admin/activity": "Admin Activity",
+  "/admin/archetypes": "Archetypes",
+  "/admin/journey": "User Journey",
+  "/admin/health": "Data Health",
 };
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -30,7 +40,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   const title =
     pageTitles[pathname] ||
-    (pathname.startsWith("/admin/submissions/") ? "Submission Detail" : "Admin");
+    (pathname.startsWith("/admin/submissions/")
+      ? "Submission Detail"
+      : pathname.startsWith("/admin/archetypes/")
+        ? "Archetype Profile"
+        : "Admin");
 
   return (
     <div className="flex h-screen bg-page text-text-primary">

@@ -59,7 +59,6 @@ export default function DiscriminationTab({ days }: { days: number }) {
     }));
   }, [data, questionMap]);
 
-   
   const columns: Column<Record<string, any>>[] = [
     { key: "q_id", label: "qId", sortable: true },
     {
