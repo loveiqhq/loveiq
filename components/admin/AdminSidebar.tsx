@@ -87,9 +87,54 @@ const analyticsItems = [
     label: "User Journey",
     icon: "M13 5l7 7-7 7M5 5l7 7-7 7",
   },
+  {
+    href: "/admin/abandonment",
+    label: "Abandonment",
+    icon: "M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636",
+  },
+  {
+    href: "/admin/replay",
+    label: "Session Replay",
+    icon: "M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z",
+  },
+  {
+    href: "/admin/profiles",
+    label: "User Profiles",
+    icon: "M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z",
+  },
+  {
+    href: "/admin/question-effectiveness",
+    label: "Q Effectiveness",
+    icon: "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z",
+  },
+  {
+    href: "/admin/invite-network",
+    label: "Invite Network",
+    icon: "M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9",
+  },
+  {
+    href: "/admin/risk-score",
+    label: "Risk Score",
+    icon: "M12 9v2m0 4h.01M5.07 19H19a2 2 0 001.75-2.97l-6.93-12a2 2 0 00-3.5 0l-6.93 12A2 2 0 005.07 19z",
+  },
+  {
+    href: "/admin/language-analytics",
+    label: "Language Analytics",
+    icon: "M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129",
+  },
 ];
 
 const adminItems = [
+  {
+    href: "/admin/changelog",
+    label: "Changelog",
+    icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2",
+  },
+  {
+    href: "/admin/tags",
+    label: "Submission Tags",
+    icon: "M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z",
+  },
   {
     href: "/admin/tools",
     label: "Admin Tools",
