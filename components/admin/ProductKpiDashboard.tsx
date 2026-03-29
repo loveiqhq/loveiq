@@ -14,6 +14,31 @@ interface ProductKpiData {
   reportSections: ReportSectionKpi[];
   questions: QuestionKpi[];
   chapters: ChapterKpi[];
+  meta?: {
+    windowDays: number;
+    windowLabel: string;
+    totalSessions: number;
+    dataSources: {
+      reportSections: {
+        source: "sample";
+        itemCount: number;
+        label: string;
+      };
+      questions: {
+        source: "live";
+        itemCount: number;
+        coveragePct: number;
+        label: string;
+      };
+      chapters: {
+        source: "live";
+        itemCount: number;
+        coveragePct: number;
+        label: string;
+      };
+    };
+    warnings: string[];
+  };
 }
 
 const tabs = ["Report Sections", "Survey Questions", "Survey Chapters", "Discrimination"] as const;
@@ -43,6 +68,12 @@ function downloadCsv(rows: Record<string, unknown>[], filename: string) {
   a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+function sourceBadge(source: "live" | "sample") {
+  return source === "live"
+    ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-300"
+    : "border-amber-500/20 bg-amber-500/10 text-amber-300";
 }
 
 export default function ProductKpiDashboard() {
@@ -130,6 +161,69 @@ export default function ProductKpiDashboard() {
         <TimeRangeSelector value={days} onChange={setDays} />
       </div>
 
+      {data.meta && (
+        <div className="rounded-xl border border-white/10 bg-surface p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold text-text-primary">Data Trust & Coverage</h3>
+              <p className="mt-1 text-xs text-text-muted">
+                {data.meta.windowLabel} · {data.meta.totalSessions.toLocaleString()} sessions
+              </p>
+            </div>
+            <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-medium text-text-muted">
+              Mixed live + sample sources
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-3 lg:grid-cols-3">
+            {Object.entries(data.meta.dataSources).map(([key, source]) => (
+              <div key={key} className="rounded-lg border border-white/10 bg-white/5 p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-medium text-text-primary">
+                    {key === "reportSections"
+                      ? "Report Sections"
+                      : key === "questions"
+                        ? "Survey Questions"
+                        : "Survey Chapters"}
+                  </p>
+                  <span
+                    className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${sourceBadge(
+                      source.source
+                    )}`}
+                  >
+                    {source.source}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-text-muted">{source.label}</p>
+                <p className="mt-3 text-lg font-semibold text-text-primary">
+                  {source.itemCount.toLocaleString()}
+                  {"coveragePct" in source && (
+                    <span className="ml-2 text-xs font-medium text-text-muted">
+                      {source.coveragePct}% coverage
+                    </span>
+                  )}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          {data.meta.warnings.length > 0 && (
+            <div className="mt-4 rounded-lg border border-amber-500/20 bg-amber-500/5 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-amber-300">
+                Warnings
+              </p>
+              <div className="mt-2 space-y-2">
+                {data.meta.warnings.map((warning) => (
+                  <p key={warning} className="text-sm text-amber-100/90">
+                    {warning}
+                  </p>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Summary stats */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard label="Report Sections" value={stats?.totalSections ?? 0} />
@@ -161,9 +255,20 @@ export default function ProductKpiDashboard() {
               }`}
             >
               {tab}
-              {tab === "Report Sections" && (
-                <span className="ml-1.5 rounded bg-yellow-500/20 px-1.5 py-0.5 text-[10px] font-medium text-yellow-400">
-                  sample data
+              {tab === "Report Sections" &&
+                data.meta?.dataSources.reportSections.source === "sample" && (
+                  <span className="ml-1.5 rounded bg-yellow-500/20 px-1.5 py-0.5 text-[10px] font-medium text-yellow-400">
+                    sample
+                  </span>
+                )}
+              {tab === "Survey Questions" && data.meta?.dataSources.questions.source === "live" && (
+                <span className="ml-1.5 rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-medium text-emerald-300">
+                  live
+                </span>
+              )}
+              {tab === "Survey Chapters" && data.meta?.dataSources.chapters.source === "live" && (
+                <span className="ml-1.5 rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-medium text-emerald-300">
+                  live
                 </span>
               )}
             </button>

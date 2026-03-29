@@ -5,8 +5,16 @@ import TimeRangeSelector from "@/components/admin/TimeRangeSelector";
 import ReferralChainsTab from "@/components/admin/growth-tabs/ReferralChainsTab";
 import GeographicMapTab from "@/components/admin/growth-tabs/GeographicMapTab";
 import WaitlistConversionTab from "@/components/admin/growth-tabs/WaitlistConversionTab";
+import AcquisitionQualityTab from "@/components/admin/growth-tabs/AcquisitionQualityTab";
+import RecoveryCohortsTab from "@/components/admin/growth-tabs/RecoveryCohortsTab";
 
-const tabs = ["Referral Chains", "Geographic Map", "Waitlist Conversion"] as const;
+const tabs = [
+  "Referral Chains",
+  "Geographic Map",
+  "Waitlist Conversion",
+  "Acquisition Quality",
+  "Recovery & Cohorts",
+] as const;
 type Tab = (typeof tabs)[number];
 
 export default function GrowthDashboard() {
@@ -41,6 +49,8 @@ export default function GrowthDashboard() {
       {activeTab === "Referral Chains" && <ReferralChainsTab days={days} />}
       {activeTab === "Geographic Map" && <GeographicMapTab days={days} />}
       {activeTab === "Waitlist Conversion" && <WaitlistConversionTab days={days} />}
+      {activeTab === "Acquisition Quality" && <AcquisitionQualityTab days={days} />}
+      {activeTab === "Recovery & Cohorts" && <RecoveryCohortsTab days={days} />}
     </div>
   );
 }

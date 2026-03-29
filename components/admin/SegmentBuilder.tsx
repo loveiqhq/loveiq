@@ -2,6 +2,8 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useAdminFetch } from "./hooks/useAdminFetch";
 import { getCsrfToken } from "@/lib/csrf-client";
+import { hasSegmentConditionValue } from "@/lib/admin/segment-preview";
+import SegmentDeltaMonitor from "./SegmentDeltaMonitor";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -379,9 +381,7 @@ export default function SegmentBuilder() {
       clearTimeout(previewTimerRef.current);
     }
 
-    const filledConditions = conditions.filter(
-      (c) => c.value !== "" && c.value !== 0 && c.value !== false
-    );
+    const filledConditions = conditions.filter((c) => hasSegmentConditionValue(c.value));
 
     if (filledConditions.length === 0) {
       setPreviewData(null);
@@ -733,7 +733,7 @@ export default function SegmentBuilder() {
           {/* Preview */}
           <div className="space-y-2">
             <div className="flex items-center gap-2">
-              <label className="block text-sm font-medium text-text-primary">Live Preview</label>
+              <label className="block text-sm font-medium text-text-primary">Preview</label>
               {previewLoading && (
                 <div className="h-4 w-4 animate-spin rounded-full border-2 border-accent-purple border-t-transparent" />
               )}
@@ -744,6 +744,11 @@ export default function SegmentBuilder() {
                 </span>
               )}
             </div>
+
+            <p className="text-xs text-text-muted">
+              Preview and saved match counts use the refreshed analytics snapshot, so new
+              submissions can take a few minutes to appear.
+            </p>
 
             {previewData !== null && previewData.sample.length > 0 && (
               <div className="overflow-x-auto rounded-lg border border-white/10">
@@ -859,6 +864,8 @@ export default function SegmentBuilder() {
 
   return (
     <div className="space-y-6">
+      <SegmentDeltaMonitor />
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <h2 className="font-serif text-xl text-text-primary">Segments</h2>

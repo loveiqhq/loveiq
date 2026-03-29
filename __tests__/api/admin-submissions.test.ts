@@ -57,6 +57,10 @@ function mockSubmissionsOk(rows = sampleRows, total = rows.length) {
     headers: new Headers({ "content-range": `0-${rows.length - 1}/${total}` }),
     json: async () => rows,
   });
+  mockSupabaseFetch.mockResolvedValueOnce({
+    ok: true,
+    json: async () => [],
+  });
 }
 
 // --- Tests ---
@@ -96,13 +100,21 @@ describe("GET /api/admin/submissions", () => {
     expect(json.total).toBe(2);
     expect(json.page).toBe(1);
     expect(json.limit).toBe(20);
-    expect(json.submissions[0]).toMatchObject({
-      id: 1,
-      email: "alice@test.com",
-      first_name: "Alice",
-      primary_archetype: "Spark Seeker",
-    });
-    expect(json.submissions[1].primary_archetype).toBeNull();
+    expect(json.submissions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 1,
+          email: "alice@test.com",
+          first_name: "Alice",
+          primary_archetype: "Spark Seeker",
+          priority_label: "low",
+        }),
+        expect.objectContaining({
+          id: 2,
+          primary_archetype: null,
+        }),
+      ])
+    );
   });
 
   it("includes email filter in PostgREST query with inner join", async () => {

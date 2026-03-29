@@ -17,6 +17,20 @@ interface CohortRow {
   invite_sent: number;
 }
 
+interface CohortResponse {
+  rows: CohortRow[];
+  summary: {
+    strongestCompletionLabel: string | null;
+    strongestCompletionRate: number | null;
+    weakestCompletionLabel: string | null;
+    weakestCompletionRate: number | null;
+  };
+  trust: {
+    sampleSize: number;
+    warning: string | null;
+  };
+}
+
 const GROUP_BY_OPTIONS = [
   { value: "week", label: "Week" },
   { value: "utm", label: "UTM Source" },
@@ -56,11 +70,14 @@ export default function CohortAnalysisTab({ days }: CohortAnalysisTabProps) {
     return p;
   }, [days, groupBy]);
 
-  const { data, loading, error } = useAdminFetch<CohortRow[]>("/api/admin/funnels/cohorts", params);
+  const { data, loading, error } = useAdminFetch<CohortResponse>(
+    "/api/admin/funnels/cohorts",
+    params
+  );
 
   const rows = useMemo(() => {
-    if (!data || !Array.isArray(data)) return [];
-    return data.map((row) => ({
+    if (!data?.rows || !Array.isArray(data.rows)) return [];
+    return data.rows.map((row) => ({
       ...row,
       completion_rate:
         row.total_users > 0 ? Math.round((row.survey_completed / row.total_users) * 100) : 0,
@@ -85,6 +102,41 @@ export default function CohortAnalysisTab({ days }: CohortAnalysisTabProps) {
 
   return (
     <div className="space-y-6">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="rounded-xl border border-white/10 bg-surface p-4">
+          <p className="text-xs font-medium uppercase tracking-wider text-text-muted">
+            Strongest Completion
+          </p>
+          <p className="mt-2 text-sm font-semibold text-text-primary">
+            {data?.summary.strongestCompletionLabel ?? "No data"}
+          </p>
+          {data?.summary.strongestCompletionRate != null && (
+            <p className="mt-1 text-xs text-text-muted">
+              {data.summary.strongestCompletionRate}% completion
+            </p>
+          )}
+        </div>
+        <div className="rounded-xl border border-white/10 bg-surface p-4">
+          <p className="text-xs font-medium uppercase tracking-wider text-text-muted">
+            Weakest Completion
+          </p>
+          <p className="mt-2 text-sm font-semibold text-text-primary">
+            {data?.summary.weakestCompletionLabel ?? "No data"}
+          </p>
+          {data?.summary.weakestCompletionRate != null && (
+            <p className="mt-1 text-xs text-text-muted">
+              {data.summary.weakestCompletionRate}% completion
+            </p>
+          )}
+        </div>
+      </div>
+
+      {data?.trust.warning && (
+        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-amber-100/90">
+          {data.trust.warning}
+        </div>
+      )}
+
       {/* Group-by selector */}
       <div className="rounded-xl border border-white/10 bg-surface p-4">
         <label className="mb-2 block text-xs font-medium text-text-muted">Group By</label>

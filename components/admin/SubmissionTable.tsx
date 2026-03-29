@@ -9,8 +9,12 @@ interface Submission {
   status: string;
   started_at: string;
   completed_at: string;
+  duration_ms: number | null;
   primary_archetype: string | null;
   v5_primary_archetype?: string | null;
+  priority_score: number;
+  priority_label: "high" | "medium" | "low";
+  review_reasons: string[];
 }
 
 interface SubmissionTableProps {
@@ -34,6 +38,12 @@ const statusColors: Record<string, string> = {
   completed: "bg-green-500/10 text-green-400",
   flagged: "bg-yellow-500/10 text-yellow-400",
   archived: "bg-white/5 text-text-muted",
+};
+
+const priorityColors: Record<Submission["priority_label"], string> = {
+  high: "bg-red-500/10 text-red-300",
+  medium: "bg-yellow-500/10 text-yellow-300",
+  low: "bg-emerald-500/10 text-emerald-300",
 };
 
 export default function SubmissionTable({
@@ -89,8 +99,10 @@ export default function SubmissionTable({
             <th className="px-4 py-3 font-medium">Email</th>
             <th className="px-4 py-3 font-medium">Name</th>
             <th className="px-4 py-3 font-medium">Status</th>
+            <th className="px-4 py-3 font-medium">Priority</th>
             <th className="px-4 py-3 font-medium">Archetype (V4)</th>
             <th className="px-4 py-3 font-medium">Archetype (V5)</th>
+            <th className="px-4 py-3 font-medium">Review Signals</th>
             <th className="px-4 py-3 font-medium">Started</th>
             <th className="px-4 py-3 font-medium">Completed</th>
             <th className="px-4 py-3 font-medium">Actions</th>
@@ -119,6 +131,16 @@ export default function SubmissionTable({
                   {s.status}
                 </span>
               </td>
+              <td className="px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-xs font-medium uppercase ${priorityColors[s.priority_label]}`}
+                  >
+                    {s.priority_label}
+                  </span>
+                  <span className="text-xs text-text-muted">{s.priority_score}</span>
+                </div>
+              </td>
               <td className="px-4 py-3 text-text-muted">
                 {s.primary_archetype ? (
                   <span className="rounded-full bg-accent-purple/10 px-2 py-0.5 text-xs font-medium text-accent-purple">
@@ -133,6 +155,27 @@ export default function SubmissionTable({
                   <span className="rounded-full bg-accent-orange/10 px-2 py-0.5 text-xs font-medium text-accent-orange">
                     {s.v5_primary_archetype}
                   </span>
+                ) : (
+                  <span className="text-xs text-text-muted">&mdash;</span>
+                )}
+              </td>
+              <td className="max-w-[260px] px-4 py-3">
+                {s.review_reasons.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {s.review_reasons.slice(0, 2).map((reason) => (
+                      <span
+                        key={reason}
+                        className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] text-text-muted"
+                      >
+                        {reason}
+                      </span>
+                    ))}
+                    {s.review_reasons.length > 2 && (
+                      <span className="text-[11px] text-text-muted">
+                        +{s.review_reasons.length - 2} more
+                      </span>
+                    )}
+                  </div>
                 ) : (
                   <span className="text-xs text-text-muted">&mdash;</span>
                 )}

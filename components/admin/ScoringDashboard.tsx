@@ -6,8 +6,9 @@ import AgreementTab from "@/components/admin/scoring-tabs/AgreementTab";
 import DistributionTab from "@/components/admin/scoring-tabs/DistributionTab";
 import DriftTab from "@/components/admin/scoring-tabs/DriftTab";
 import DisagreementsTab from "@/components/admin/scoring-tabs/DisagreementsTab";
+import ConfidenceTab from "@/components/admin/scoring-tabs/ConfidenceTab";
 
-const tabs = ["Agreement", "Distribution", "Drift", "Disagreements"] as const;
+const tabs = ["Agreement", "Confidence", "Distribution", "Drift", "Disagreements"] as const;
 type Tab = (typeof tabs)[number];
 
 export default function ScoringDashboard() {
@@ -35,6 +36,7 @@ export default function ScoringDashboard() {
         ))}
       </div>
       {activeTab === "Agreement" && <AgreementTab days={days} />}
+      {activeTab === "Confidence" && <ConfidenceTab days={days} />}
       {activeTab === "Distribution" && <DistributionTab days={days} />}
       {activeTab === "Drift" && <DriftTab days={days} />}
       {activeTab === "Disagreements" && <DisagreementsTab days={days} />}

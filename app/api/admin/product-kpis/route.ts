@@ -71,6 +71,32 @@ interface RpcResult {
   totalSessions: number;
 }
 
+interface ProductKpiMeta {
+  windowDays: number;
+  windowLabel: string;
+  totalSessions: number;
+  dataSources: {
+    reportSections: {
+      source: "sample";
+      itemCount: number;
+      label: string;
+    };
+    questions: {
+      source: "live";
+      itemCount: number;
+      coveragePct: number;
+      label: string;
+    };
+    chapters: {
+      source: "live";
+      itemCount: number;
+      coveragePct: number;
+      label: string;
+    };
+  };
+  warnings: string[];
+}
+
 // ─── Route handler ──────────────────────────────────────────
 
 export async function GET(request: Request) {
@@ -248,7 +274,60 @@ export async function GET(request: Request) {
       );
     }
 
-    return NextResponse.json({ reportSections, questions, chapters });
+    const nonIntroQuestions = surveyQuestions.filter((q) => !q.qId.startsWith("00"));
+    const chaptersWithData = chapters.filter((c) => c.entryN != null);
+    const questionCoveragePct =
+      nonIntroQuestions.length > 0
+        ? round1((questions.length / nonIntroQuestions.length) * 100)
+        : 0;
+    const chapterCoveragePct =
+      allChapterIds.length > 0 ? round1((chaptersWithData.length / allChapterIds.length) * 100) : 0;
+
+    const warnings: string[] = [];
+    warnings.push(
+      "Report section KPIs are currently static sample data, not live production metrics."
+    );
+    if (totalSessions < 25) {
+      warnings.push("Question and chapter metrics are based on a small sample in this window.");
+    }
+    if (questionCoveragePct < 100) {
+      warnings.push(
+        `${nonIntroQuestions.length - questions.length} survey questions have no live behavior coverage in this window.`
+      );
+    }
+    if (chapterCoveragePct < 100) {
+      warnings.push(
+        `${allChapterIds.length - chaptersWithData.length} chapters have no live behavior coverage in this window.`
+      );
+    }
+
+    const meta: ProductKpiMeta = {
+      windowDays: days,
+      windowLabel: days > 0 ? `Last ${days} days` : "All time",
+      totalSessions,
+      dataSources: {
+        reportSections: {
+          source: "sample",
+          itemCount: reportSections.length,
+          label: "Static report-section benchmark dataset",
+        },
+        questions: {
+          source: "live",
+          itemCount: questions.length,
+          coveragePct: questionCoveragePct,
+          label: "Live behavior-derived question metrics",
+        },
+        chapters: {
+          source: "live",
+          itemCount: chaptersWithData.length,
+          coveragePct: chapterCoveragePct,
+          label: "Live chapter aggregates from question metrics",
+        },
+      },
+      warnings,
+    };
+
+    return NextResponse.json({ reportSections, questions, chapters, meta });
   } catch (err) {
     logger.error({ err }, "Product KPIs error");
     return NextResponse.json({ error: "Unable to load KPI data." }, { status: 500 });

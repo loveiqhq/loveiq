@@ -20,6 +20,27 @@ interface ScoringRow {
   } | null;
 }
 
+function topGap(values: Record<string, number> | null): number | null {
+  if (!values) return null;
+  const sorted = Object.values(values)
+    .filter((value) => Number.isFinite(value))
+    .sort((a, b) => b - a);
+  if (sorted.length === 0) return null;
+  if (sorted.length === 1) return Math.round(sorted[0] * 10) / 10;
+  return Math.round((sorted[0] - sorted[1]) * 10) / 10;
+}
+
+function confidenceBucket(
+  v4Gap: number | null,
+  v5Gap: number | null,
+  agreement: boolean
+): "high" | "medium" | "low" {
+  const minGap = Math.min(v4Gap ?? 0, v5Gap ?? 0);
+  if (agreement && minGap >= 20) return "high";
+  if (minGap >= 10) return "medium";
+  return "low";
+}
+
 export async function GET(request: Request) {
   const admin = await verifyAdminSession();
   if (!admin) {
@@ -104,23 +125,45 @@ export async function GET(request: Request) {
     });
 
     // 5. Disagreements (limit 100)
-    const disagreements = dualRows
-      .filter((r) => r.primary_archetype !== r.v5_primary_archetype)
-      .slice(0, 100)
-      .map((r) => {
-        const email = r.survey_submission?.app_user?.email || "";
-        const v4Pct = r.percentages?.[r.primary_archetype] ?? null;
-        const v5Pct = r.v5_percentages?.[r.v5_primary_archetype!] ?? null;
-        return {
-          id: r.id,
-          submissionId: r.survey_submission_id,
-          email: email ? maskEmail(email) : "",
-          v4Archetype: r.primary_archetype,
-          v5Archetype: r.v5_primary_archetype,
-          v4TopPct: v4Pct != null ? Math.round(v4Pct * 10) / 10 : null,
-          v5TopPct: v5Pct != null ? Math.round(v5Pct * 10) / 10 : null,
-        };
-      });
+    const ambiguityRows = dualRows.map((r) => {
+      const email = r.survey_submission?.app_user?.email || "";
+      const v4Pct = r.percentages?.[r.primary_archetype] ?? null;
+      const v5Pct = r.v5_percentages?.[r.v5_primary_archetype!] ?? null;
+      const v4Gap = topGap(r.percentages);
+      const v5Gap = topGap(r.v5_percentages);
+      const agreement = r.primary_archetype === r.v5_primary_archetype;
+      const confidence = confidenceBucket(v4Gap, v5Gap, agreement);
+      const ambiguityScore = Math.round(
+        Math.max(0, 30 - (v4Gap ?? 0)) + Math.max(0, 30 - (v5Gap ?? 0)) + (agreement ? 0 : 20)
+      );
+
+      return {
+        id: r.id,
+        submissionId: r.survey_submission_id,
+        email: email ? maskEmail(email) : "",
+        v4Archetype: r.primary_archetype,
+        v5Archetype: r.v5_primary_archetype,
+        v4TopPct: v4Pct != null ? Math.round(v4Pct * 10) / 10 : null,
+        v5TopPct: v5Pct != null ? Math.round(v5Pct * 10) / 10 : null,
+        v4Gap,
+        v5Gap,
+        agreement,
+        confidence,
+        ambiguityScore,
+      };
+    });
+
+    const disagreements = ambiguityRows.filter((row) => !row.agreement).slice(0, 100);
+    const ambiguousCases = [...ambiguityRows]
+      .sort((a, b) => b.ambiguityScore - a.ambiguityScore)
+      .slice(0, 100);
+
+    const confidenceSummary = {
+      high: ambiguityRows.filter((row) => row.confidence === "high").length,
+      medium: ambiguityRows.filter((row) => row.confidence === "medium").length,
+      low: ambiguityRows.filter((row) => row.confidence === "low").length,
+      ambiguous: ambiguityRows.filter((row) => row.ambiguityScore >= 40).length,
+    };
 
     // Count V4-only and V5-only for stats
     const v4Only = rows.filter((r) => r.primary_archetype && !r.v5_primary_archetype).length;
@@ -135,6 +178,8 @@ export async function GET(request: Request) {
       v5Distribution,
       driftMatrix,
       disagreements,
+      ambiguousCases,
+      confidenceSummary,
     });
   } catch (err) {
     logger.error({ err }, "Scoring comparison error");

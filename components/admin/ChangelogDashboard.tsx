@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useAdminFetch } from "@/components/admin/hooks/useAdminFetch";
 import { getCsrfToken } from "@/lib/csrf-client";
 
@@ -47,6 +47,8 @@ const CATEGORIES = ["survey-change", "site-update", "marketing", "bug-fix", "fea
 export default function ChangelogDashboard() {
   const [activeTab, setActiveTab] = useState<Tab>("Timeline");
   const { data, loading, error, refetch } = useAdminFetch<ChangelogData>("/api/admin/changelog");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [search, setSearch] = useState("");
 
   // Form state
   const [title, setTitle] = useState("");
@@ -85,6 +87,64 @@ export default function ChangelogDashboard() {
     }
   }
 
+  const timeline = useMemo(() => {
+    if (!data) {
+      return [];
+    }
+
+    return [
+      ...data.changelog.map((c) => ({
+        type: "changelog" as const,
+        date: c.eventDate,
+        ...c,
+      })),
+      ...data.annotations.map((a) => ({
+        type: "annotation" as const,
+        date: a.annotationDate,
+        id: a.id,
+        title: a.note,
+        description: null as string | null,
+        category: "annotation",
+        adminEmail: a.adminEmail,
+        eventDate: a.annotationDate,
+        createdAt: a.createdAt,
+        chartKey: a.chartKey,
+      })),
+    ].sort((a, b) => b.date.localeCompare(a.date));
+  }, [data]);
+
+  const filteredTimeline = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    return timeline.filter((item) => {
+      const matchesCategory =
+        categoryFilter === "all"
+          ? true
+          : categoryFilter === "annotation"
+            ? item.type === "annotation"
+            : item.category === categoryFilter;
+      const matchesSearch =
+        needle.length === 0
+          ? true
+          : [
+              item.title,
+              item.description,
+              item.category,
+              item.type === "annotation" ? item.chartKey : "",
+            ]
+              .filter(Boolean)
+              .some((value) => value?.toLowerCase().includes(needle));
+      return matchesCategory && matchesSearch;
+    });
+  }, [categoryFilter, search, timeline]);
+
+  const last30DayCutoff = new Date();
+  last30DayCutoff.setDate(last30DayCutoff.getDate() - 30);
+  const recentCount = timeline.filter(
+    (item) => item.eventDate >= last30DayCutoff.toISOString().slice(0, 10)
+  ).length;
+  const changelogCount = timeline.filter((item) => item.type === "changelog").length;
+  const annotationCount = timeline.filter((item) => item.type === "annotation").length;
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24">
@@ -100,27 +160,6 @@ export default function ChangelogDashboard() {
       </div>
     );
   }
-
-  // Merge changelog + annotations into a single timeline, sorted by date desc
-  const timeline = [
-    ...data.changelog.map((c) => ({
-      type: "changelog" as const,
-      date: c.eventDate,
-      ...c,
-    })),
-    ...data.annotations.map((a) => ({
-      type: "annotation" as const,
-      date: a.annotationDate,
-      id: a.id,
-      title: a.note,
-      description: null as string | null,
-      category: "annotation",
-      adminEmail: a.adminEmail,
-      eventDate: a.annotationDate,
-      createdAt: a.createdAt,
-      chartKey: a.chartKey,
-    })),
-  ].sort((a, b) => b.date.localeCompare(a.date));
 
   return (
     <div className="space-y-6">
@@ -141,34 +180,94 @@ export default function ChangelogDashboard() {
       </div>
 
       {activeTab === "Timeline" && (
-        <div className="space-y-0">
-          {timeline.length === 0 && (
-            <p className="py-12 text-center text-sm text-text-muted">
-              No changelog entries yet. Add one from the &quot;Add Entry&quot; tab.
-            </p>
-          )}
-          {timeline.map((item) => (
-            <div
-              key={`${item.type}-${item.id}`}
-              className="flex gap-4 border-l-2 border-white/10 pb-6 pl-4"
-            >
-              <div className="w-24 shrink-0 text-xs text-text-muted">{item.eventDate}</div>
-              <div className="flex-1">
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${categoryColors[item.category] || categoryColors.other}`}
-                  >
-                    {item.category}
-                  </span>
-                  <span className="font-medium text-text-primary">{item.title}</span>
-                </div>
-                {item.description && (
-                  <p className="mt-1 text-sm text-text-muted">{item.description}</p>
-                )}
-                <p className="mt-1 text-xs text-text-muted/60">Added by {item.adminEmail}</p>
-              </div>
+        <div className="space-y-6">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-lg border border-white/10 bg-surface p-4">
+              <p className="text-xs font-medium uppercase tracking-wider text-text-muted">
+                Total Entries
+              </p>
+              <p className="mt-1 text-2xl font-bold text-text-primary">{timeline.length}</p>
             </div>
-          ))}
+            <div className="rounded-lg border border-white/10 bg-surface p-4">
+              <p className="text-xs font-medium uppercase tracking-wider text-text-muted">
+                Product Changes
+              </p>
+              <p className="mt-1 text-2xl font-bold text-text-primary">{changelogCount}</p>
+            </div>
+            <div className="rounded-lg border border-white/10 bg-surface p-4">
+              <p className="text-xs font-medium uppercase tracking-wider text-text-muted">
+                Chart Notes
+              </p>
+              <p className="mt-1 text-2xl font-bold text-text-primary">{annotationCount}</p>
+            </div>
+            <div className="rounded-lg border border-white/10 bg-surface p-4">
+              <p className="text-xs font-medium uppercase tracking-wider text-text-muted">
+                Last 30 Days
+              </p>
+              <p className="mt-1 text-2xl font-bold text-text-primary">{recentCount}</p>
+            </div>
+          </div>
+
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search decision journal..."
+              className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm text-text-primary placeholder-text-muted/50 focus:border-accent-purple focus:outline-none"
+            />
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm text-text-primary focus:border-accent-purple focus:outline-none"
+            >
+              <option value="all">All entries</option>
+              <option value="annotation">Annotations</option>
+              {CATEGORIES.map((value) => (
+                <option key={value} value={value}>
+                  {value}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-0">
+            {timeline.length === 0 && (
+              <p className="py-12 text-center text-sm text-text-muted">
+                No changelog entries yet. Add one from the &quot;Add Entry&quot; tab.
+              </p>
+            )}
+            {timeline.length > 0 && filteredTimeline.length === 0 && (
+              <p className="py-12 text-center text-sm text-text-muted">
+                No entries match the current filters.
+              </p>
+            )}
+            {filteredTimeline.map((item) => (
+              <div
+                key={`${item.type}-${item.id}`}
+                className="flex gap-4 border-l-2 border-white/10 pb-6 pl-4"
+              >
+                <div className="w-24 shrink-0 text-xs text-text-muted">{item.eventDate}</div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs font-medium ${categoryColors[item.category] || categoryColors.other}`}
+                    >
+                      {item.category}
+                    </span>
+                    <span className="font-medium text-text-primary">{item.title}</span>
+                  </div>
+                  {item.description && (
+                    <p className="mt-1 text-sm text-text-muted">{item.description}</p>
+                  )}
+                  {item.type === "annotation" && item.chartKey && (
+                    <p className="mt-1 text-xs text-cyan-300">Chart: {item.chartKey}</p>
+                  )}
+                  <p className="mt-1 text-xs text-text-muted/60">Added by {item.adminEmail}</p>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

@@ -7,6 +7,15 @@ import logger from "@/lib/logger";
 
 const VALID_GROUP_BY = new Set(["week", "utm", "archetype"]);
 
+interface CohortRow {
+  label: string;
+  total_users: number;
+  survey_started: number;
+  survey_completed: number;
+  scored: number;
+  invite_sent: number;
+}
+
 export async function GET(request: Request) {
   const admin = await verifyAdminSession();
   if (!admin) {
@@ -50,8 +59,33 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Unable to load data." }, { status: 500 });
     }
 
-    const data = await res.json();
-    return NextResponse.json(data);
+    const rows = (await res.json()) as CohortRow[];
+    const enriched = rows.map((row) => ({
+      ...row,
+      completion_rate:
+        row.total_users > 0 ? Math.round((row.survey_completed / row.total_users) * 100) : 0,
+    }));
+    const strongest =
+      [...enriched].sort((a, b) => b.completion_rate - a.completion_rate)[0] ?? null;
+    const weakest = [...enriched].sort((a, b) => a.completion_rate - b.completion_rate)[0] ?? null;
+    const sampleSize = rows.reduce((sum, row) => sum + row.total_users, 0);
+
+    return NextResponse.json({
+      rows,
+      summary: {
+        strongestCompletionLabel: strongest?.label ?? null,
+        strongestCompletionRate: strongest?.completion_rate ?? null,
+        weakestCompletionLabel: weakest?.label ?? null,
+        weakestCompletionRate: weakest?.completion_rate ?? null,
+      },
+      trust: {
+        sampleSize,
+        warning:
+          sampleSize < 20
+            ? "Cohort analysis is directional only because the sample is small."
+            : null,
+      },
+    });
   } catch (err) {
     logger.error({ err }, "Admin funnels cohorts error");
     return NextResponse.json({ error: "Unable to process request." }, { status: 500 });

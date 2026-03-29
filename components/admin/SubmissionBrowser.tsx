@@ -17,8 +17,12 @@ interface SubmissionsData {
     status: string;
     started_at: string;
     completed_at: string;
+    duration_ms: number | null;
     primary_archetype: string | null;
     v5_primary_archetype: string | null;
+    priority_score: number;
+    priority_label: "high" | "medium" | "low";
+    review_reasons: string[];
   }>;
   total: number;
   page: number;
@@ -70,6 +74,28 @@ export default function SubmissionBrowser() {
     refetch();
   }
 
+  const visibleSummary = useMemo(() => {
+    const submissions = data?.submissions ?? [];
+    const high = submissions.filter((submission) => submission.priority_label === "high").length;
+    const medium = submissions.filter(
+      (submission) => submission.priority_label === "medium"
+    ).length;
+    const flagged = submissions.filter((submission) => submission.status === "flagged").length;
+
+    return {
+      high,
+      medium,
+      flagged,
+      avgPriority:
+        submissions.length > 0
+          ? Math.round(
+              submissions.reduce((sum, submission) => sum + submission.priority_score, 0) /
+                submissions.length
+            )
+          : 0,
+    };
+  }, [data]);
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -91,6 +117,45 @@ export default function SubmissionBrowser() {
       <ExportPresetsBar filters={filters} onApplyPreset={handleApplyView} />
 
       <FilterBar key={filterKey} onFilterChange={handleFilterChange} initialFilters={filters} />
+
+      {!loading && !error && data && (
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-4">
+            <p className="text-xs font-medium uppercase tracking-wider text-red-300">
+              High-Priority Review
+            </p>
+            <p className="mt-2 text-2xl font-bold text-text-primary">{visibleSummary.high}</p>
+            <p className="mt-1 text-xs text-text-muted">
+              Visible submissions ranked for manual review
+            </p>
+          </div>
+          <div className="rounded-xl border border-yellow-500/20 bg-yellow-500/5 p-4">
+            <p className="text-xs font-medium uppercase tracking-wider text-yellow-300">
+              Medium Priority
+            </p>
+            <p className="mt-2 text-2xl font-bold text-text-primary">{visibleSummary.medium}</p>
+            <p className="mt-1 text-xs text-text-muted">Borderline or watchlist candidates</p>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-surface p-4">
+            <p className="text-xs font-medium uppercase tracking-wider text-text-muted">
+              Flagged Status
+            </p>
+            <p className="mt-2 text-2xl font-bold text-text-primary">{visibleSummary.flagged}</p>
+            <p className="mt-1 text-xs text-text-muted">
+              Already marked flagged in the current page
+            </p>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-surface p-4">
+            <p className="text-xs font-medium uppercase tracking-wider text-text-muted">
+              Avg Priority Score
+            </p>
+            <p className="mt-2 text-2xl font-bold text-text-primary">
+              {visibleSummary.avgPriority}
+            </p>
+            <p className="mt-1 text-xs text-text-muted">Sorted by review urgency before recency</p>
+          </div>
+        </div>
+      )}
 
       {loading && (
         <div className="flex items-center justify-center py-12">

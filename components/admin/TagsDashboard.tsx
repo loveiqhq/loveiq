@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useAdminFetch } from "@/components/admin/hooks/useAdminFetch";
 import { getCsrfToken } from "@/lib/csrf-client";
+import InvestigationCasesPanel from "@/components/admin/InvestigationCasesPanel";
 
 interface Tag {
   id: number;
@@ -27,9 +28,30 @@ interface TagsData {
   submissionTags: Record<number, number[]>;
   totalTags: number;
   totalAssignments: number;
+  workflow: {
+    stages: Array<{
+      name: string;
+      label: string;
+      color: string;
+      description: string;
+      exists: boolean;
+      assignmentCount: number;
+      submissionCount: number;
+    }>;
+    missingStages: string[];
+    coverage: number;
+    recentQueue: Array<{
+      submissionId: number;
+      tagName: string;
+      tagLabel: string;
+      color: string;
+      assignedBy: string;
+      assignedAt: string;
+    }>;
+  };
 }
 
-const TABS = ["Tags", "Create Tag", "Assign"] as const;
+const TABS = ["Tags", "Workflow", "Create Tag", "Assign"] as const;
 type Tab = (typeof TABS)[number];
 
 const PRESET_COLORS = [
@@ -114,6 +136,34 @@ export default function TagsDashboard() {
     }
   }
 
+  async function handleInstallWorkflowTags() {
+    setFormMsg(null);
+    try {
+      const res = await fetch("/api/admin/tags", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-csrf-token": getCsrfToken() },
+        body: JSON.stringify({ action: "seed_workflow_tags" }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(
+          (body as { error?: string } | null)?.error || "Failed to create workflow tags."
+        );
+      }
+      const body = (await res.json()) as { created?: string[] };
+      setFormMsg({
+        type: "success",
+        text:
+          body.created && body.created.length > 0
+            ? `Created workflow tags: ${body.created.join(", ")}.`
+            : "Workflow tags already installed.",
+      });
+      refetch();
+    } catch (err) {
+      setFormMsg({ type: "error", text: err instanceof Error ? err.message : "Unknown error." });
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24">
@@ -132,7 +182,7 @@ export default function TagsDashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-lg border border-white/10 bg-surface p-4">
           <p className="text-xs font-medium uppercase tracking-wider text-text-muted">Total Tags</p>
           <p className="mt-1 text-2xl font-bold text-text-primary">{data.totalTags}</p>
@@ -150,6 +200,12 @@ export default function TagsDashboard() {
           <p className="mt-1 text-2xl font-bold text-text-primary">
             {Object.keys(data.submissionTags).length}
           </p>
+        </div>
+        <div className="rounded-lg border border-white/10 bg-surface p-4">
+          <p className="text-xs font-medium uppercase tracking-wider text-text-muted">
+            Workflow Cases
+          </p>
+          <p className="mt-1 text-2xl font-bold text-text-primary">{data.workflow.coverage}</p>
         </div>
       </div>
 
@@ -199,6 +255,11 @@ export default function TagsDashboard() {
               <div className="flex items-center gap-3">
                 <span className="h-4 w-4 rounded-full" style={{ backgroundColor: tag.color }} />
                 <span className="font-medium text-text-primary">{tag.name}</span>
+                {data.workflow.stages.some((stage) => stage.name === tag.name) && (
+                  <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] uppercase tracking-wider text-text-muted">
+                    Workflow
+                  </span>
+                )}
               </div>
               <div className="flex items-center gap-4 text-xs text-text-muted">
                 <span>{tag.usageCount} uses</span>
@@ -206,6 +267,110 @@ export default function TagsDashboard() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {activeTab === "Workflow" && (
+        <div className="space-y-5">
+          <div className="flex flex-col gap-3 rounded-xl border border-white/10 bg-surface p-5 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h3 className="font-serif text-base text-text-primary">Investigation Workflow</h3>
+              <p className="mt-1 text-sm text-text-muted">
+                Use standardized tags to move submissions from review into diagnosis, change
+                candidates, and monitoring.
+              </p>
+            </div>
+            <button
+              onClick={handleInstallWorkflowTags}
+              className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-white/10"
+            >
+              Install Recommended Workflow Tags
+            </button>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {data.workflow.stages.map((stage) => (
+              <div key={stage.name} className="rounded-xl border border-white/10 bg-surface p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="h-3 w-3 rounded-full"
+                      style={{ backgroundColor: stage.color }}
+                    />
+                    <p className="text-sm font-semibold text-text-primary">{stage.label}</p>
+                  </div>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[11px] uppercase tracking-wider ${
+                      stage.exists
+                        ? "bg-green-500/10 text-green-400"
+                        : "bg-yellow-500/10 text-yellow-300"
+                    }`}
+                  >
+                    {stage.exists ? "Installed" : "Missing"}
+                  </span>
+                </div>
+                <p className="mt-2 text-sm text-text-muted">{stage.description}</p>
+                <div className="mt-4 flex items-baseline justify-between">
+                  <div>
+                    <p className="text-xs uppercase tracking-wider text-text-muted">Submissions</p>
+                    <p className="mt-1 text-xl font-bold text-text-primary">
+                      {stage.submissionCount}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs uppercase tracking-wider text-text-muted">Assignments</p>
+                    <p className="mt-1 text-sm font-medium text-text-primary">
+                      {stage.assignmentCount}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="rounded-xl border border-white/10 bg-surface p-5">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-text-primary">Recent Workflow Queue</h3>
+              {data.workflow.missingStages.length > 0 && (
+                <span className="text-xs text-yellow-300">
+                  Missing stages: {data.workflow.missingStages.join(", ")}
+                </span>
+              )}
+            </div>
+
+            {data.workflow.recentQueue.length === 0 ? (
+              <p className="text-sm text-text-muted">
+                No workflow-tagged submissions yet. Assign tags to start managing investigations.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {data.workflow.recentQueue.map((item) => (
+                  <div
+                    key={`${item.submissionId}-${item.tagName}-${item.assignedAt}`}
+                    className="flex flex-col gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-3 md:flex-row md:items-center md:justify-between"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span
+                        className="h-3 w-3 rounded-full"
+                        style={{ backgroundColor: item.color }}
+                      />
+                      <span className="font-medium text-text-primary">
+                        Submission #{item.submissionId}
+                      </span>
+                      <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] uppercase tracking-wider text-text-muted">
+                        {item.tagLabel}
+                      </span>
+                    </div>
+                    <div className="text-xs text-text-muted">
+                      {item.assignedBy} · {new Date(item.assignedAt).toLocaleString()}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <InvestigationCasesPanel />
         </div>
       )}
 

@@ -7,6 +7,7 @@ import { supabaseFetch } from "@/lib/admin/supabase";
 import { logAdminAction } from "@/lib/admin/audit";
 import logger from "@/lib/logger";
 import { z } from "zod";
+import { WORKFLOW_TAGS, isWorkflowTagName } from "@/lib/admin/workflow-tags";
 
 const createTagSchema = z.object({
   name: z.string().min(1).max(50),
@@ -73,11 +74,70 @@ export async function GET(request: Request) {
     // Group assignments by tag
     const tagUsage: Record<number, number> = {};
     const submissionTags: Record<number, number[]> = {};
+    const tagById = new Map(tags.map((tag) => [tag.id, tag]));
+    const workflowStages = new Map(
+      WORKFLOW_TAGS.map((tag) => [
+        tag.name,
+        {
+          ...tag,
+          exists: false,
+          assignmentCount: 0,
+          submissionIds: new Set<number>(),
+        },
+      ])
+    );
+    const recentWorkflowQueue: Array<{
+      submissionId: number;
+      tagName: string;
+      tagLabel: string;
+      color: string;
+      assignedBy: string;
+      assignedAt: string;
+    }> = [];
+
+    for (const tag of tags) {
+      if (isWorkflowTagName(tag.name)) {
+        workflowStages.get(tag.name)!.exists = true;
+      }
+    }
+
     for (const a of assignments) {
       tagUsage[a.tag_id] = (tagUsage[a.tag_id] || 0) + 1;
       if (!submissionTags[a.submission_id]) submissionTags[a.submission_id] = [];
       submissionTags[a.submission_id].push(a.tag_id);
+
+      const tagName = tagById.get(a.tag_id)?.name;
+      if (tagName && isWorkflowTagName(tagName)) {
+        const stage = workflowStages.get(tagName);
+        if (stage) {
+          stage.assignmentCount += 1;
+          stage.submissionIds.add(a.submission_id);
+          if (recentWorkflowQueue.length < 12) {
+            recentWorkflowQueue.push({
+              submissionId: a.submission_id,
+              tagName: stage.name,
+              tagLabel: stage.label,
+              color: stage.color,
+              assignedBy: a.assigned_by,
+              assignedAt: a.assigned_at,
+            });
+          }
+        }
+      }
     }
+
+    const workflowStageList = [...workflowStages.values()].map((stage) => ({
+      name: stage.name,
+      label: stage.label,
+      color: stage.color,
+      description: stage.description,
+      exists: stage.exists,
+      assignmentCount: stage.assignmentCount,
+      submissionCount: stage.submissionIds.size,
+    }));
+    const workflowCoverage = new Set(
+      [...workflowStages.values()].flatMap((stage) => [...stage.submissionIds])
+    ).size;
 
     return NextResponse.json({
       tags: tags.map((t) => ({
@@ -98,6 +158,14 @@ export async function GET(request: Request) {
       submissionTags,
       totalTags: tags.length,
       totalAssignments: assignments.length,
+      workflow: {
+        stages: workflowStageList,
+        missingStages: workflowStageList
+          .filter((stage) => !stage.exists)
+          .map((stage) => stage.name),
+        coverage: workflowCoverage,
+        recentQueue: recentWorkflowQueue,
+      },
     });
   } catch (err) {
     logger.error({ err }, "Tags GET error");
@@ -188,6 +256,58 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true });
     } catch (err) {
       logger.error({ err }, "Tags unassign error");
+      return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
+    }
+  }
+
+  if (action === "seed_workflow_tags") {
+    try {
+      const existingRes = await supabaseFetch(`/rest/v1/submission_tag?select=name`, {
+        headers: { Range: "0-999" },
+      });
+
+      if (!existingRes.ok) {
+        logger.error("Tags: workflow seed read failed");
+        return NextResponse.json({ error: "Unable to create workflow tags." }, { status: 500 });
+      }
+
+      const existingNames = new Set(
+        ((await existingRes.json()) as Array<{ name: string }>).map((row) => row.name)
+      );
+      const missing = WORKFLOW_TAGS.filter((tag) => !existingNames.has(tag.name));
+
+      if (missing.length === 0) {
+        return NextResponse.json({ success: true, created: [] });
+      }
+
+      const res = await supabaseFetch("/rest/v1/submission_tag", {
+        method: "POST",
+        headers: { Prefer: "return=representation" },
+        body: JSON.stringify(
+          missing.map((tag) => ({
+            name: tag.name,
+            color: tag.color,
+            created_by: admin.email,
+          }))
+        ),
+      });
+
+      if (!res.ok) {
+        logger.error("Tags: workflow seed insert failed");
+        return NextResponse.json({ error: "Unable to create workflow tags." }, { status: 500 });
+      }
+
+      await logAdminAction({
+        admin_email: admin.email,
+        action: "seed_workflow_tags",
+        resource_type: "submission_tag",
+        metadata: { created: missing.map((tag) => tag.name) },
+        ip,
+      });
+
+      return NextResponse.json({ success: true, created: missing.map((tag) => tag.name) });
+    } catch (err) {
+      logger.error({ err }, "Tags workflow seed error");
       return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
     }
   }

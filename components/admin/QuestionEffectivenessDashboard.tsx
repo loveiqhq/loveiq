@@ -4,6 +4,22 @@ import { useState, useMemo } from "react";
 import { useAdminFetch } from "@/components/admin/hooks/useAdminFetch";
 import TimeRangeSelector from "@/components/admin/TimeRangeSelector";
 
+interface ComparisonSnapshot {
+  completionRate: number;
+  avgActiveTimeS: number;
+  backtrackRate: number;
+  skipRate: number;
+  avgRevisions: number;
+}
+
+interface ComparisonDeltas {
+  completionRate: number;
+  avgActiveTimeS: number;
+  backtrackRate: number;
+  skipRate: number;
+  avgRevisions: number;
+}
+
 interface Question {
   qId: string;
   chapterId: string;
@@ -15,20 +31,35 @@ interface Question {
   backtrackN: number;
   backtrackRate: number;
   skipRate: number;
+  avgRevisions: number;
   frictionIndex: number;
   effectivenessScore: number;
   grade: "A" | "B" | "C" | "D" | "F";
   recommendation: string;
+  confidence: "high" | "medium" | "low";
+  regressionScore: number;
+  watchStatus: "regressed" | "stable" | "improved";
+  comparisonWindowDays: number;
+  comparisonBaseline: ComparisonSnapshot;
+  comparisonDeltas: ComparisonDeltas;
+  regressionReasons: string[];
 }
 
 interface EffectivenessData {
   questions: Question[];
+  watchlist: Question[];
   avgScore: number;
   totalQuestions: number;
   totalSessions: number;
+  summary: {
+    regressedCount: number;
+    improvedCount: number;
+    lowConfidenceCount: number;
+    comparisonWindowDays: number;
+  };
 }
 
-const TABS = ["Scorecard", "Details"] as const;
+const TABS = ["Regression Watchlist", "Scorecard", "Details"] as const;
 type Tab = (typeof TABS)[number];
 
 const gradeColors: Record<string, string> = {
@@ -39,14 +70,39 @@ const gradeColors: Record<string, string> = {
   F: "bg-red-500/20 text-red-400",
 };
 
+const confidenceColors: Record<string, string> = {
+  high: "bg-emerald-500/20 text-emerald-300",
+  medium: "bg-amber-500/20 text-amber-300",
+  low: "bg-white/10 text-text-muted",
+};
+
+const watchStatusColors: Record<string, string> = {
+  regressed: "bg-red-500/20 text-red-300",
+  stable: "bg-white/10 text-text-muted",
+  improved: "bg-emerald-500/20 text-emerald-300",
+};
+
+function deltaClasses(value: number, invert = false) {
+  if (value === 0) return "text-text-muted";
+  const isGood = invert ? value < 0 : value > 0;
+  return isGood ? "text-red-300" : "text-emerald-300";
+}
+
+function formatDelta(value: number, suffix: string) {
+  if (value === 0) return `0${suffix}`;
+  return `${value > 0 ? "+" : ""}${value}${suffix}`;
+}
+
 export default function QuestionEffectivenessDashboard() {
-  const [days, setDays] = useState(0);
-  const [activeTab, setActiveTab] = useState<Tab>("Scorecard");
-  const [sortKey, setSortKey] = useState<"effectivenessScore" | "qId">("effectivenessScore");
-  const [sortAsc, setSortAsc] = useState(true);
+  const [days, setDays] = useState(30);
+  const [activeTab, setActiveTab] = useState<Tab>("Regression Watchlist");
+  const [sortKey, setSortKey] = useState<"effectivenessScore" | "qId" | "regressionScore">(
+    "regressionScore"
+  );
+  const [sortAsc, setSortAsc] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  const params = useMemo(() => (days > 0 ? { days: String(days) } : undefined), [days]);
+  const params = useMemo(() => ({ days: String(days) }), [days]);
   const { data, loading, error } = useAdminFetch<EffectivenessData>(
     "/api/admin/question-effectiveness",
     params
@@ -71,15 +127,16 @@ export default function QuestionEffectivenessDashboard() {
   const sorted = [...data.questions].sort((a, b) => {
     const av = a[sortKey];
     const bv = b[sortKey];
-    if (typeof av === "string" && typeof bv === "string")
+    if (typeof av === "string" && typeof bv === "string") {
       return sortAsc ? av.localeCompare(bv) : bv.localeCompare(av);
+    }
     return sortAsc ? Number(av) - Number(bv) : Number(bv) - Number(av);
   });
 
   const goodCount = data.questions.filter((q) => q.grade === "A" || q.grade === "B").length;
   const badCount = data.questions.filter((q) => q.grade === "D" || q.grade === "F").length;
 
-  function toggleSort(key: "effectivenessScore" | "qId") {
+  function toggleSort(key: "effectivenessScore" | "qId" | "regressionScore") {
     if (sortKey === key) setSortAsc(!sortAsc);
     else {
       setSortKey(key);
@@ -91,6 +148,59 @@ export default function QuestionEffectivenessDashboard() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <TimeRangeSelector value={days} onChange={setDays} />
+      </div>
+
+      <div className="rounded-xl border border-white/10 bg-surface p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-text-primary">Regression Watch</h2>
+            <p className="mt-1 text-xs text-text-muted">
+              Last {data.summary.comparisonWindowDays} days compared against the all-time baseline
+            </p>
+          </div>
+          <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-medium text-text-muted">
+            {data.totalSessions.toLocaleString()} sessions in range
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
+          <div className="rounded-lg border border-white/10 bg-white/5 p-4">
+            <p className="text-xs font-medium uppercase tracking-wider text-text-muted">
+              Avg Effectiveness
+            </p>
+            <p className="mt-1 text-2xl font-bold text-text-primary">{data.avgScore}</p>
+          </div>
+          <div className="rounded-lg border border-white/10 bg-white/5 p-4">
+            <p className="text-xs font-medium uppercase tracking-wider text-text-muted">
+              Regressed
+            </p>
+            <p className="mt-1 text-2xl font-bold text-red-300">{data.summary.regressedCount}</p>
+          </div>
+          <div className="rounded-lg border border-white/10 bg-white/5 p-4">
+            <p className="text-xs font-medium uppercase tracking-wider text-text-muted">Improved</p>
+            <p className="mt-1 text-2xl font-bold text-emerald-300">{data.summary.improvedCount}</p>
+          </div>
+          <div className="rounded-lg border border-white/10 bg-white/5 p-4">
+            <p className="text-xs font-medium uppercase tracking-wider text-text-muted">
+              Low Confidence
+            </p>
+            <p className="mt-1 text-2xl font-bold text-text-primary">
+              {data.summary.lowConfidenceCount}
+            </p>
+          </div>
+          <div className="rounded-lg border border-white/10 bg-white/5 p-4">
+            <p className="text-xs font-medium uppercase tracking-wider text-text-muted">
+              Graded A/B
+            </p>
+            <p className="mt-1 text-2xl font-bold text-emerald-300">{goodCount}</p>
+          </div>
+          <div className="rounded-lg border border-white/10 bg-white/5 p-4">
+            <p className="text-xs font-medium uppercase tracking-wider text-text-muted">
+              Graded D/F
+            </p>
+            <p className="mt-1 text-2xl font-bold text-red-300">{badCount}</p>
+          </div>
+        </div>
       </div>
 
       <div className="flex gap-1 rounded-lg border border-white/10 bg-surface p-1">
@@ -109,132 +219,273 @@ export default function QuestionEffectivenessDashboard() {
         ))}
       </div>
 
-      {activeTab === "Scorecard" && (
-        <div className="space-y-6">
-          <div className="grid gap-4 sm:grid-cols-3">
-            <div className="rounded-lg border border-white/10 bg-surface p-4">
-              <p className="text-xs font-medium uppercase tracking-wider text-text-muted">
-                Avg Effectiveness
-              </p>
-              <p className="mt-1 text-2xl font-bold text-text-primary">{data.avgScore}</p>
+      {activeTab === "Regression Watchlist" && (
+        <div className="space-y-3">
+          {data.watchlist.length === 0 && (
+            <div className="rounded-xl border border-white/10 bg-surface p-6 text-center text-sm text-text-muted">
+              No regressed questions detected in the selected window.
             </div>
-            <div className="rounded-lg border border-white/10 bg-surface p-4">
-              <p className="text-xs font-medium uppercase tracking-wider text-text-muted">
-                Graded A/B
-              </p>
-              <p className="mt-1 text-2xl font-bold text-green-400">{goodCount}</p>
-            </div>
-            <div className="rounded-lg border border-white/10 bg-surface p-4">
-              <p className="text-xs font-medium uppercase tracking-wider text-text-muted">
-                Graded D/F
-              </p>
-              <p className="mt-1 text-2xl font-bold text-red-400">{badCount}</p>
-            </div>
-          </div>
+          )}
 
-          <div className="rounded-xl border border-white/10 bg-surface overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="border-b border-white/10 text-xs uppercase tracking-wider text-text-muted">
-                  <th
-                    className="cursor-pointer px-4 py-3 hover:text-text-primary"
-                    onClick={() => toggleSort("qId")}
+          {data.watchlist.map((question) => (
+            <div key={question.qId} className="rounded-xl border border-white/10 bg-surface p-5">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs font-medium ${watchStatusColors[question.watchStatus]}`}
+                    >
+                      {question.watchStatus}
+                    </span>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs font-medium ${confidenceColors[question.confidence]}`}
+                    >
+                      {question.confidence} confidence
+                    </span>
+                    <span className="rounded-full bg-white/5 px-2 py-0.5 text-xs font-medium text-text-muted">
+                      {question.qId}
+                    </span>
+                  </div>
+                  <p className="mt-3 text-sm font-semibold text-text-primary">
+                    {question.questionText}
+                  </p>
+                  <p className="mt-1 text-xs text-text-muted">
+                    Chapter {question.chapterId} · reach {question.reachN}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs uppercase tracking-wide text-text-muted">Regression</p>
+                  <p className="mt-1 text-2xl font-bold text-red-300">
+                    {question.regressionScore.toFixed(1)}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                <div className="rounded-lg border border-white/10 bg-white/5 p-3">
+                  <p className="text-xs text-text-muted">Completion</p>
+                  <p className="mt-1 text-sm font-medium text-text-primary">
+                    {question.completionRate}%
+                  </p>
+                  <p
+                    className={`mt-1 text-xs ${deltaClasses(question.comparisonDeltas.completionRate, true)}`}
                   >
-                    Q ID {sortKey === "qId" && (sortAsc ? "↑" : "↓")}
-                  </th>
-                  <th className="px-4 py-3">Chapter</th>
-                  <th
-                    className="cursor-pointer px-4 py-3 hover:text-text-primary"
-                    onClick={() => toggleSort("effectivenessScore")}
+                    {formatDelta(question.comparisonDeltas.completionRate, "pp")}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-white/10 bg-white/5 p-3">
+                  <p className="text-xs text-text-muted">Avg Time</p>
+                  <p className="mt-1 text-sm font-medium text-text-primary">
+                    {question.avgActiveTimeS}s
+                  </p>
+                  <p
+                    className={`mt-1 text-xs ${deltaClasses(question.comparisonDeltas.avgActiveTimeS)}`}
                   >
-                    Score {sortKey === "effectivenessScore" && (sortAsc ? "↑" : "↓")}
-                  </th>
-                  <th className="px-4 py-3">Grade</th>
-                  <th className="px-4 py-3">Recommendation</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sorted.map((q) => (
-                  <tr key={q.qId} className="border-b border-white/5 hover:bg-white/5">
-                    <td className="px-4 py-3 font-medium text-text-primary">{q.qId}</td>
-                    <td className="px-4 py-3 text-text-muted">{q.chapterId}</td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`font-bold ${
-                          q.effectivenessScore >= 65
-                            ? "text-green-400"
-                            : q.effectivenessScore >= 50
-                              ? "text-yellow-400"
-                              : "text-red-400"
-                        }`}
-                      >
-                        {q.effectivenessScore}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${gradeColors[q.grade]}`}
-                      >
-                        {q.grade}
-                      </span>
-                    </td>
-                    <td className="max-w-xs truncate px-4 py-3 text-xs text-text-muted">
-                      {q.recommendation}
-                    </td>
-                  </tr>
+                    {formatDelta(question.comparisonDeltas.avgActiveTimeS, "s")}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-white/10 bg-white/5 p-3">
+                  <p className="text-xs text-text-muted">Backtrack</p>
+                  <p className="mt-1 text-sm font-medium text-text-primary">
+                    {question.backtrackRate}%
+                  </p>
+                  <p
+                    className={`mt-1 text-xs ${deltaClasses(question.comparisonDeltas.backtrackRate)}`}
+                  >
+                    {formatDelta(question.comparisonDeltas.backtrackRate, "pp")}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-white/10 bg-white/5 p-3">
+                  <p className="text-xs text-text-muted">Skip Rate</p>
+                  <p className="mt-1 text-sm font-medium text-text-primary">{question.skipRate}%</p>
+                  <p className={`mt-1 text-xs ${deltaClasses(question.comparisonDeltas.skipRate)}`}>
+                    {formatDelta(question.comparisonDeltas.skipRate, "pp")}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-white/10 bg-white/5 p-3">
+                  <p className="text-xs text-text-muted">Avg Revisions</p>
+                  <p className="mt-1 text-sm font-medium text-text-primary">
+                    {question.avgRevisions}
+                  </p>
+                  <p
+                    className={`mt-1 text-xs ${deltaClasses(question.comparisonDeltas.avgRevisions)}`}
+                  >
+                    {formatDelta(question.comparisonDeltas.avgRevisions, "")}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4 space-y-2">
+                {question.regressionReasons.map((reason) => (
+                  <p key={reason} className="text-sm text-text-muted">
+                    {reason}
+                  </p>
                 ))}
-              </tbody>
-            </table>
-          </div>
+                <p className="text-sm text-text-primary">{question.recommendation}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {activeTab === "Scorecard" && (
+        <div className="rounded-xl overflow-x-auto border border-white/10 bg-surface">
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="border-b border-white/10 text-xs uppercase tracking-wider text-text-muted">
+                <th
+                  className="cursor-pointer px-4 py-3 hover:text-text-primary"
+                  onClick={() => toggleSort("qId")}
+                >
+                  Q ID {sortKey === "qId" && (sortAsc ? "↑" : "↓")}
+                </th>
+                <th className="px-4 py-3">Status</th>
+                <th
+                  className="cursor-pointer px-4 py-3 hover:text-text-primary"
+                  onClick={() => toggleSort("effectivenessScore")}
+                >
+                  Score {sortKey === "effectivenessScore" && (sortAsc ? "↑" : "↓")}
+                </th>
+                <th
+                  className="cursor-pointer px-4 py-3 hover:text-text-primary"
+                  onClick={() => toggleSort("regressionScore")}
+                >
+                  Regression {sortKey === "regressionScore" && (sortAsc ? "↑" : "↓")}
+                </th>
+                <th className="px-4 py-3">Recommendation</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.map((question) => (
+                <tr key={question.qId} className="border-b border-white/5 hover:bg-white/5">
+                  <td className="px-4 py-3 font-medium text-text-primary">{question.qId}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap gap-2">
+                      <span
+                        className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${gradeColors[question.grade]}`}
+                      >
+                        {question.grade}
+                      </span>
+                      <span
+                        className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${watchStatusColors[question.watchStatus]}`}
+                      >
+                        {question.watchStatus}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={`font-bold ${
+                        question.effectivenessScore >= 65
+                          ? "text-green-400"
+                          : question.effectivenessScore >= 50
+                            ? "text-yellow-400"
+                            : "text-red-400"
+                      }`}
+                    >
+                      {question.effectivenessScore}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-red-300">{question.regressionScore.toFixed(1)}</td>
+                  <td className="max-w-xs truncate px-4 py-3 text-xs text-text-muted">
+                    {question.recommendation}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 
       {activeTab === "Details" && (
         <div className="space-y-2">
-          {sorted.map((q) => (
-            <div key={q.qId} className="rounded-xl border border-white/10 bg-surface">
+          {sorted.map((question) => (
+            <div key={question.qId} className="rounded-xl border border-white/10 bg-surface">
               <button
-                onClick={() => setExpanded(expanded === q.qId ? null : q.qId)}
+                onClick={() => setExpanded(expanded === question.qId ? null : question.qId)}
                 className="flex w-full items-center justify-between px-5 py-3 text-left"
               >
                 <div className="flex items-center gap-3">
                   <span
-                    className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${gradeColors[q.grade]}`}
+                    className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${gradeColors[question.grade]}`}
                   >
-                    {q.grade}
+                    {question.grade}
                   </span>
-                  <span className="text-sm font-medium text-text-primary">{q.qId}</span>
+                  <span
+                    className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${watchStatusColors[question.watchStatus]}`}
+                  >
+                    {question.watchStatus}
+                  </span>
+                  <span className="text-sm font-medium text-text-primary">{question.qId}</span>
                   <span className="max-w-md truncate text-xs text-text-muted">
-                    {q.questionText}
+                    {question.questionText}
                   </span>
                 </div>
-                <span className="text-sm font-bold text-text-primary">{q.effectivenessScore}</span>
+                <span className="text-sm font-bold text-text-primary">
+                  {question.effectivenessScore}
+                </span>
               </button>
-              {expanded === q.qId && (
+              {expanded === question.qId && (
                 <div className="border-t border-white/10 px-5 py-4">
-                  <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-5">
+                  <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
                     {[
-                      { label: "Completion", value: `${q.completionRate}%`, max: 100 },
-                      { label: "Avg Time", value: `${q.avgActiveTimeS}s`, max: 60 },
-                      { label: "Backtrack Rate", value: `${q.backtrackRate}%`, max: 100 },
-                      { label: "Skip Rate", value: `${q.skipRate}%`, max: 100 },
-                      { label: "Friction Index", value: q.frictionIndex.toFixed(1), max: 50 },
-                    ].map((m) => (
-                      <div key={m.label}>
-                        <p className="text-xs text-text-muted">{m.label}</p>
-                        <p className="mt-1 text-sm font-medium text-text-primary">{m.value}</p>
-                        <div className="mt-1 h-1.5 rounded bg-white/10">
-                          <div
-                            className="h-full rounded bg-accent-purple/60"
-                            style={{
-                              width: `${Math.min((parseFloat(m.value) / m.max) * 100, 100)}%`,
-                            }}
-                          />
-                        </div>
+                      {
+                        label: "Completion",
+                        current: `${question.completionRate}%`,
+                        baseline: `${question.comparisonBaseline.completionRate}%`,
+                        delta: formatDelta(question.comparisonDeltas.completionRate, "pp"),
+                        deltaClass: deltaClasses(question.comparisonDeltas.completionRate, true),
+                      },
+                      {
+                        label: "Avg Time",
+                        current: `${question.avgActiveTimeS}s`,
+                        baseline: `${question.comparisonBaseline.avgActiveTimeS}s`,
+                        delta: formatDelta(question.comparisonDeltas.avgActiveTimeS, "s"),
+                        deltaClass: deltaClasses(question.comparisonDeltas.avgActiveTimeS),
+                      },
+                      {
+                        label: "Backtrack",
+                        current: `${question.backtrackRate}%`,
+                        baseline: `${question.comparisonBaseline.backtrackRate}%`,
+                        delta: formatDelta(question.comparisonDeltas.backtrackRate, "pp"),
+                        deltaClass: deltaClasses(question.comparisonDeltas.backtrackRate),
+                      },
+                      {
+                        label: "Skip Rate",
+                        current: `${question.skipRate}%`,
+                        baseline: `${question.comparisonBaseline.skipRate}%`,
+                        delta: formatDelta(question.comparisonDeltas.skipRate, "pp"),
+                        deltaClass: deltaClasses(question.comparisonDeltas.skipRate),
+                      },
+                      {
+                        label: "Avg Revisions",
+                        current: `${question.avgRevisions}`,
+                        baseline: `${question.comparisonBaseline.avgRevisions}`,
+                        delta: formatDelta(question.comparisonDeltas.avgRevisions, ""),
+                        deltaClass: deltaClasses(question.comparisonDeltas.avgRevisions),
+                      },
+                    ].map((metric) => (
+                      <div
+                        key={metric.label}
+                        className="rounded-lg border border-white/10 bg-white/5 p-4"
+                      >
+                        <p className="text-xs text-text-muted">{metric.label}</p>
+                        <p className="mt-1 text-sm font-medium text-text-primary">
+                          {metric.current}
+                        </p>
+                        <p className="mt-1 text-xs text-text-muted">Baseline {metric.baseline}</p>
+                        <p className={`mt-1 text-xs ${metric.deltaClass}`}>{metric.delta}</p>
                       </div>
                     ))}
                   </div>
-                  <p className="mt-3 text-xs text-text-muted">{q.recommendation}</p>
+                  <div className="mt-4 space-y-2">
+                    {question.regressionReasons.map((reason) => (
+                      <p key={reason} className="text-sm text-text-muted">
+                        {reason}
+                      </p>
+                    ))}
+                    <p className="text-sm text-text-primary">{question.recommendation}</p>
+                  </div>
                 </div>
               )}
             </div>

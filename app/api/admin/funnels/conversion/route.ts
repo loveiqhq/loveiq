@@ -5,6 +5,15 @@ import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
 import { supabaseFetch } from "@/lib/admin/supabase";
 import logger from "@/lib/logger";
 
+interface FunnelStage {
+  name: string;
+  count: number;
+}
+
+function toStageMap(stages: FunnelStage[]) {
+  return new Map(stages.map((stage) => [stage.name, stage.count]));
+}
+
 export async function GET(request: Request) {
   const admin = await verifyAdminSession();
   if (!admin) {
@@ -32,20 +41,93 @@ export async function GET(request: Request) {
     days > 0
       ? new Date(Date.now() - days * 86_400_000).toISOString()
       : new Date("2000-01-01").toISOString();
+  const previousSince =
+    days > 0 ? new Date(Date.now() - days * 2 * 86_400_000).toISOString() : null;
 
   try {
-    const res = await supabaseFetch("/rest/v1/rpc/get_conversion_funnel", {
+    const currentRes = await supabaseFetch("/rest/v1/rpc/get_conversion_funnel", {
       method: "POST",
       body: JSON.stringify({ since_ts: since, utm_filter: utm || null }),
     });
 
-    if (!res.ok) {
-      logger.error({ status: res.status }, "Admin funnels conversion query failed");
+    if (!currentRes.ok) {
+      logger.error({ currentStatus: currentRes.status }, "Admin funnels conversion query failed");
       return NextResponse.json({ error: "Unable to load data." }, { status: 500 });
     }
 
-    const data = await res.json();
-    return NextResponse.json(data);
+    const currentStages = (await currentRes.json()) as FunnelStage[];
+    const sampleSize = currentStages[0]?.count ?? 0;
+    if (days <= 0 || !previousSince) {
+      return NextResponse.json({
+        stages: currentStages,
+        previousStages: [],
+        anomalies: [],
+        trust: {
+          sampleSize,
+          warning: sampleSize < 20 ? "Funnel counts are based on a small all-time sample." : null,
+          comparisonAvailable: false,
+          comparisonMessage:
+            "Change detection requires a bounded time window such as 7d, 30d, or 90d.",
+        },
+      });
+    }
+
+    const previousRes = await supabaseFetch("/rest/v1/rpc/get_conversion_funnel", {
+      method: "POST",
+      body: JSON.stringify({ since_ts: previousSince, utm_filter: utm || null }),
+    });
+
+    if (!previousRes.ok) {
+      logger.error(
+        { currentStatus: currentRes.status, previousStatus: previousRes.status },
+        "Admin funnels conversion previous-window query failed"
+      );
+      return NextResponse.json({ error: "Unable to load data." }, { status: 500 });
+    }
+
+    const previousAggregateStages = (await previousRes.json()) as FunnelStage[];
+    const currentMap = toStageMap(currentStages);
+    const previousAggregateMap = toStageMap(previousAggregateStages);
+    const previousStages = [...previousAggregateMap.entries()].map(([name, count]) => ({
+      name,
+      count: Math.max(0, count - (currentMap.get(name) ?? 0)),
+    }));
+    const previousMap = toStageMap(previousStages);
+    const allStageNames = [...new Set([...currentMap.keys(), ...previousMap.keys()])];
+    const anomalies = allStageNames
+      .map((name) => {
+        const currentCount = currentMap.get(name) ?? 0;
+        const previousCount = previousMap.get(name) ?? 0;
+        const deltaPct =
+          previousCount > 0
+            ? Math.round(((currentCount - previousCount) / previousCount) * 100)
+            : currentCount > 0
+              ? 100
+              : 0;
+
+        return {
+          stage: name,
+          currentCount,
+          previousCount,
+          deltaPct,
+          severity: deltaPct <= -15 ? "warning" : deltaPct >= 15 ? "positive" : "neutral",
+        };
+      })
+      .filter((item) => Math.abs(item.deltaPct) >= 15)
+      .sort((a, b) => Math.abs(b.deltaPct) - Math.abs(a.deltaPct));
+
+    return NextResponse.json({
+      stages: currentStages,
+      previousStages,
+      anomalies,
+      trust: {
+        sampleSize,
+        warning:
+          sampleSize < 20 ? "Funnel deltas are based on a small current-window sample." : null,
+        comparisonAvailable: true,
+        comparisonMessage: null,
+      },
+    });
   } catch (err) {
     logger.error({ err }, "Admin funnels conversion error");
     return NextResponse.json({ error: "Unable to process request." }, { status: 500 });

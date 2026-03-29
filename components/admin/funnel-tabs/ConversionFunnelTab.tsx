@@ -13,6 +13,24 @@ interface FunnelStage {
   count: number;
 }
 
+interface ConversionFunnelResponse {
+  stages: FunnelStage[];
+  previousStages: FunnelStage[];
+  anomalies: Array<{
+    stage: string;
+    currentCount: number;
+    previousCount: number;
+    deltaPct: number;
+    severity: "warning" | "positive" | "neutral";
+  }>;
+  trust: {
+    sampleSize: number;
+    warning: string | null;
+    comparisonAvailable: boolean;
+    comparisonMessage: string | null;
+  };
+}
+
 const DEFAULT_STAGES: FunnelStage[] = [
   { name: "waitlist_signups", count: 0 },
   { name: "survey_started", count: 0 },
@@ -30,14 +48,14 @@ export default function ConversionFunnelTab({ days }: ConversionFunnelTabProps) 
     return Object.keys(p).length > 0 ? p : undefined;
   }, [days, utmFilter]);
 
-  const { data, loading, error } = useAdminFetch<FunnelStage[]>(
+  const { data, loading, error } = useAdminFetch<ConversionFunnelResponse>(
     "/api/admin/funnels/conversion",
     params
   );
 
   const stages = useMemo(() => {
-    if (!data || !Array.isArray(data) || data.length === 0) return DEFAULT_STAGES;
-    return data;
+    if (!data?.stages || data.stages.length === 0) return DEFAULT_STAGES;
+    return data.stages;
   }, [data]);
 
   if (loading) {
@@ -76,6 +94,60 @@ export default function ConversionFunnelTab({ days }: ConversionFunnelTabProps) 
       <div className="rounded-xl border border-white/10 bg-surface p-6">
         <h3 className="mb-4 font-serif text-lg font-bold text-text-primary">Conversion Funnel</h3>
         <FunnelChart stages={stages} />
+      </div>
+
+      {data?.trust.warning && (
+        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-amber-100/90">
+          {data.trust.warning}
+        </div>
+      )}
+
+      <div className="rounded-xl border border-white/10 bg-surface p-6">
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="font-serif text-lg font-bold text-text-primary">Change Detection</h3>
+          {data?.trust.sampleSize != null && (
+            <span className="text-xs text-text-muted">
+              Current window sample: {data.trust.sampleSize.toLocaleString()}
+            </span>
+          )}
+        </div>
+        {!data?.trust.comparisonAvailable && data?.trust.comparisonMessage ? (
+          <p className="text-sm text-text-muted">{data.trust.comparisonMessage}</p>
+        ) : data?.anomalies.length ? (
+          <div className="space-y-2">
+            {data.anomalies.map((item) => (
+              <div
+                key={item.stage}
+                className="flex flex-col gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-3 md:flex-row md:items-center md:justify-between"
+              >
+                <div>
+                  <p className="font-medium capitalize text-text-primary">
+                    {item.stage.replaceAll("_", " ")}
+                  </p>
+                  <p className="text-xs text-text-muted">
+                    {item.currentCount} now vs {item.previousCount} in the matched previous window
+                  </p>
+                </div>
+                <span
+                  className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                    item.severity === "warning"
+                      ? "bg-red-500/10 text-red-300"
+                      : item.severity === "positive"
+                        ? "bg-emerald-500/10 text-emerald-300"
+                        : "bg-white/10 text-text-muted"
+                  }`}
+                >
+                  {item.deltaPct > 0 ? "+" : ""}
+                  {item.deltaPct}%
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-text-muted">
+            No material funnel-stage movement detected for this window.
+          </p>
+        )}
       </div>
     </div>
   );

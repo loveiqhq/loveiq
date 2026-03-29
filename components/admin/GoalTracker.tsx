@@ -25,6 +25,10 @@ const METRIC_OPTIONS = [
   { value: "completion_rate", label: "Completion Rate (%)" },
   { value: "waitlist_signups", label: "Waitlist Signups" },
   { value: "scored_count", label: "Scored Count" },
+  { value: "workflow_needs_review", label: "Needs Review Queue" },
+  { value: "workflow_root_cause_found", label: "Root Cause Found" },
+  { value: "workflow_question_change_candidate", label: "Question Change Candidates" },
+  { value: "workflow_monitoring", label: "Monitoring Queue" },
 ];
 
 function metricLabel(key: string): string {

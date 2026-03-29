@@ -21,7 +21,13 @@ const ARCHETYPES = [
   "Erotic Intellectual",
 ] as const;
 
-type SegmentType = "utm" | "dateRange" | "archetype";
+type SegmentType = "utm" | "dateRange" | "archetype" | "sessionState" | "savedSegment";
+type SegmentOption = {
+  id: number;
+  name: string;
+  match_count: number | null;
+};
+type SessionState = "fresh" | "resumed";
 
 interface DateRange {
   since: string;
@@ -38,6 +44,16 @@ interface SegmentMetrics {
 interface SegmentResponse {
   segmentA: SegmentMetrics;
   segmentB: SegmentMetrics;
+  trust?: {
+    sampleSize?: number;
+    segmentCount?: number;
+    source?: string;
+    refreshCadenceMinutes?: number;
+  };
+}
+
+interface SavedSegmentsResponse {
+  segments: SegmentOption[];
 }
 
 function formatDuration(ms: number | null | undefined): string {
@@ -70,7 +86,14 @@ export default function ABComparisonTab() {
   const [dateB, setDateB] = useState<DateRange>({ since: "", until: "" });
   const [archetypeA, setArchetypeA] = useState("");
   const [archetypeB, setArchetypeB] = useState("");
+  const [sessionStateA, setSessionStateA] = useState<SessionState>("fresh");
+  const [sessionStateB, setSessionStateB] = useState<SessionState>("resumed");
+  const [savedSegmentA, setSavedSegmentA] = useState("");
+  const [savedSegmentB, setSavedSegmentB] = useState("");
   const [fetchKey, setFetchKey] = useState(0);
+
+  const { data: savedSegmentsData } = useAdminFetch<SavedSegmentsResponse>("/api/admin/segments");
+  const savedSegments = savedSegmentsData?.segments ?? [];
 
   const params = useMemo(() => {
     if (fetchKey === 0) return undefined;
@@ -83,17 +106,38 @@ export default function ABComparisonTab() {
       if (dateA.until) p.untilA = dateA.until;
       if (dateB.since) p.sinceB = dateB.since;
       if (dateB.until) p.untilB = dateB.until;
-    } else {
+    } else if (segmentType === "archetype") {
       if (archetypeA) p.archetypeA = archetypeA;
       if (archetypeB) p.archetypeB = archetypeB;
+    } else if (segmentType === "sessionState") {
+      p.sessionStateA = sessionStateA;
+      p.sessionStateB = sessionStateB;
+    } else {
+      if (savedSegmentA) p.savedSegmentA = savedSegmentA;
+      if (savedSegmentB) p.savedSegmentB = savedSegmentB;
     }
     return p;
-  }, [fetchKey, segmentType, utmA, utmB, dateA, dateB, archetypeA, archetypeB]);
+  }, [
+    fetchKey,
+    segmentType,
+    utmA,
+    utmB,
+    dateA,
+    dateB,
+    archetypeA,
+    archetypeB,
+    sessionStateA,
+    sessionStateB,
+    savedSegmentA,
+    savedSegmentB,
+  ]);
 
   const { data, loading, error } = useAdminFetch<SegmentResponse>(
     "/api/admin/comparisons/segment",
     params
   );
+
+  const compareDisabled = segmentType === "savedSegment" ? !savedSegmentA || !savedSegmentB : false;
 
   const handleCompare = useCallback(() => {
     setFetchKey((k) => k + 1);
@@ -105,8 +149,16 @@ export default function ABComparisonTab() {
       const parts = [dateA.since, dateA.until].filter(Boolean).join(" to ");
       return parts || "Segment A";
     }
+    if (segmentType === "sessionState") {
+      return sessionStateA === "resumed" ? "Resumed Sessions" : "Fresh Sessions";
+    }
+    if (segmentType === "savedSegment") {
+      return (
+        savedSegments.find((segment) => String(segment.id) === savedSegmentA)?.name || "Segment A"
+      );
+    }
     return archetypeA || "Segment A";
-  }, [segmentType, utmA, dateA, archetypeA]);
+  }, [segmentType, utmA, dateA, archetypeA, sessionStateA, savedSegments, savedSegmentA]);
 
   const segmentBLabel = useMemo(() => {
     if (segmentType === "utm") return utmB || "Segment B";
@@ -114,8 +166,16 @@ export default function ABComparisonTab() {
       const parts = [dateB.since, dateB.until].filter(Boolean).join(" to ");
       return parts || "Segment B";
     }
+    if (segmentType === "sessionState") {
+      return sessionStateB === "resumed" ? "Resumed Sessions" : "Fresh Sessions";
+    }
+    if (segmentType === "savedSegment") {
+      return (
+        savedSegments.find((segment) => String(segment.id) === savedSegmentB)?.name || "Segment B"
+      );
+    }
     return archetypeB || "Segment B";
-  }, [segmentType, utmB, dateB, archetypeB]);
+  }, [segmentType, utmB, dateB, archetypeB, sessionStateB, savedSegments, savedSegmentB]);
 
   // Compute the max archetype count across both segments for bar scaling
   const maxArchCount = useMemo(() => {
@@ -127,6 +187,13 @@ export default function ABComparisonTab() {
     return Math.max(1, ...allCounts);
   }, [data]);
 
+  const lowSampleWarning = useMemo(() => {
+    if (!data) return false;
+    return (
+      (data.segmentA?.total_submissions ?? 0) < 20 || (data.segmentB?.total_submissions ?? 0) < 20
+    );
+  }, [data]);
+
   return (
     <div className="space-y-6">
       {/* Segment configurator */}
@@ -135,19 +202,29 @@ export default function ABComparisonTab() {
 
         {/* Segment type selector */}
         <div className="mb-4 flex gap-4">
-          {(["utm", "dateRange", "archetype"] as const).map((type) => (
-            <label key={type} className="flex items-center gap-2 text-sm text-text-muted">
-              <input
-                type="radio"
-                name="segmentType"
-                value={type}
-                checked={segmentType === type}
-                onChange={() => setSegmentType(type)}
-                className="accent-accent-purple"
-              />
-              {type === "utm" ? "UTM Source" : type === "dateRange" ? "Date Range" : "Archetype"}
-            </label>
-          ))}
+          {(["utm", "dateRange", "archetype", "sessionState", "savedSegment"] as const).map(
+            (type) => (
+              <label key={type} className="flex items-center gap-2 text-sm text-text-muted">
+                <input
+                  type="radio"
+                  name="segmentType"
+                  value={type}
+                  checked={segmentType === type}
+                  onChange={() => setSegmentType(type)}
+                  className="accent-accent-purple"
+                />
+                {type === "utm"
+                  ? "UTM Source"
+                  : type === "dateRange"
+                    ? "Date Range"
+                    : type === "archetype"
+                      ? "Archetype"
+                      : type === "sessionState"
+                        ? "Session State"
+                        : "Saved Segment"}
+              </label>
+            )
+          )}
         </div>
 
         {/* Inputs based on segment type */}
@@ -262,14 +339,98 @@ export default function ABComparisonTab() {
               </div>
             </>
           )}
+
+          {segmentType === "sessionState" && (
+            <>
+              <div>
+                <label className="mb-1 block text-xs text-text-muted">Segment A</label>
+                <select
+                  value={sessionStateA}
+                  onChange={(e) => setSessionStateA(e.target.value as SessionState)}
+                  className="w-full rounded-lg border border-white/10 bg-[#1a1025] px-3 py-2 text-sm text-text-primary outline-none"
+                >
+                  <option value="fresh">Fresh Sessions</option>
+                  <option value="resumed">Resumed Sessions</option>
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-text-muted">Segment B</label>
+                <select
+                  value={sessionStateB}
+                  onChange={(e) => setSessionStateB(e.target.value as SessionState)}
+                  className="w-full rounded-lg border border-white/10 bg-[#1a1025] px-3 py-2 text-sm text-text-primary outline-none"
+                >
+                  <option value="fresh">Fresh Sessions</option>
+                  <option value="resumed">Resumed Sessions</option>
+                </select>
+              </div>
+            </>
+          )}
+
+          {segmentType === "savedSegment" && (
+            <>
+              <div>
+                <label className="mb-1 block text-xs text-text-muted">Saved Segment A</label>
+                <select
+                  value={savedSegmentA}
+                  onChange={(e) => setSavedSegmentA(e.target.value)}
+                  className="w-full rounded-lg border border-white/10 bg-[#1a1025] px-3 py-2 text-sm text-text-primary outline-none"
+                >
+                  <option value="">Select saved segment</option>
+                  {savedSegments.map((segment) => (
+                    <option key={segment.id} value={String(segment.id)}>
+                      {segment.name}
+                      {segment.match_count != null ? ` (${segment.match_count})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-text-muted">Saved Segment B</label>
+                <select
+                  value={savedSegmentB}
+                  onChange={(e) => setSavedSegmentB(e.target.value)}
+                  className="w-full rounded-lg border border-white/10 bg-[#1a1025] px-3 py-2 text-sm text-text-primary outline-none"
+                >
+                  <option value="">Select saved segment</option>
+                  {savedSegments.map((segment) => (
+                    <option key={segment.id} value={String(segment.id)}>
+                      {segment.name}
+                      {segment.match_count != null ? ` (${segment.match_count})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </>
+          )}
         </div>
 
         <button
           onClick={handleCompare}
+          disabled={compareDisabled}
           className="mt-4 rounded-lg border border-white/10 bg-accent-purple/20 px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-accent-purple/30"
         >
           Compare
         </button>
+
+        {segmentType === "sessionState" && (
+          <p className="mt-3 text-xs text-text-muted">
+            Session state compares submissions that never hit a partial save against sessions that
+            were resumed after a save event.
+          </p>
+        )}
+        {segmentType === "savedSegment" && (
+          <p className="mt-3 text-xs text-text-muted">
+            Saved segment comparison evaluates the same DB-side rules defined in Segment Builder and
+            runs against the refreshed analytics snapshot, so new submissions can take a few minutes
+            to appear.
+          </p>
+        )}
+        {segmentType === "savedSegment" && compareDisabled && (
+          <p className="mt-2 text-xs text-amber-200">
+            Select both saved segments before running the comparison.
+          </p>
+        )}
       </div>
 
       {/* Loading */}
@@ -296,6 +457,27 @@ export default function ABComparisonTab() {
       {/* Results */}
       {data && !loading && (
         <div className="space-y-6">
+          {(data.trust?.sampleSize != null || data.trust?.source === "materialized_snapshot") && (
+            <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-text-muted">
+              {data.trust?.source === "materialized_snapshot" ? (
+                <>
+                  Comparison uses a refreshed analytics snapshot.
+                  {data.trust.refreshCadenceMinutes != null &&
+                    ` Updates about every ${data.trust.refreshCadenceMinutes} minutes.`}
+                </>
+              ) : (
+                <>
+                  Comparison sample scanned: {data.trust.sampleSize?.toLocaleString()} submissions.
+                </>
+              )}
+              {lowSampleWarning && (
+                <span className="ml-2 text-amber-200">
+                  Interpret the deltas directionally only.
+                </span>
+              )}
+            </div>
+          )}
+
           {/* Side-by-side stat cards */}
           <div className="grid gap-4 sm:grid-cols-2">
             {/* Segment A stats */}
