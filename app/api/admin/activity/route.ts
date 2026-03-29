@@ -3,7 +3,6 @@ import { verifyAdminSession } from "@/lib/admin/auth";
 import { hasRole } from "@/lib/admin/roles";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
 import { supabaseFetch } from "@/lib/admin/supabase";
-import { maskEmail } from "@/lib/admin/format";
 import logger from "@/lib/logger";
 
 interface AuditRow {
@@ -75,7 +74,7 @@ export async function GET(request: Request) {
       .map(([email, d]) => {
         const topAction = Object.entries(d.actions).sort((a, b) => b[1] - a[1])[0];
         return {
-          email: maskEmail(email),
+          email,
           actionCount: d.count,
           topAction: topAction ? topAction[0] : "—",
           lastActive: d.lastActive,
