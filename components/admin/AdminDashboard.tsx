@@ -7,6 +7,7 @@ import BarChart from "./BarChart";
 import TimeRangeSelector from "./TimeRangeSelector";
 import WeeklyDigestButton from "./WeeklyDigestButton";
 import ChartWithAnnotations from "./ChartWithAnnotations";
+import InsightCards from "./InsightCards";
 import { surveyQuestions } from "@/data/survey-data";
 
 interface StatsData {
@@ -67,6 +68,14 @@ interface StatsData {
     total: number;
     today: number;
     daily: Array<{ date: string; count: number }>;
+  } | null;
+  // Period-over-period deltas (nullable)
+  deltas?: {
+    submissions: number;
+    completionRate: number;
+    avgDuration: number;
+    waitlist: number | null;
+    inviteClicks: number | null;
   } | null;
 }
 
@@ -199,19 +208,38 @@ export default function AdminDashboard() {
 
       {/* Row 1: Key metrics */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
-        <StatCard label="Total Submissions" value={data.totalSubmissions} />
+        <StatCard
+          label="Total Submissions"
+          value={data.totalSubmissions}
+          delta={data.deltas?.submissions}
+          deltaLabel="vs prev period"
+        />
         <StatCard label="Today" value={data.todayCount} />
-        <StatCard label="Completion Rate" value={`${data.completionRate}%`} />
-        <StatCard label="Avg Duration" value={avgDuration} />
+        <StatCard
+          label="Completion Rate"
+          value={`${data.completionRate}%`}
+          delta={data.deltas?.completionRate}
+          deltaLabel="vs prev period"
+        />
+        <StatCard
+          label="Avg Duration"
+          value={avgDuration}
+          delta={data.deltas?.avgDuration}
+          deltaLabel="vs prev period"
+        />
         <StatCard
           label="Waitlist Signups"
           value={data.waitlistTotal ?? "\u2014"}
           sub={data.waitlistToday != null ? `${data.waitlistToday} today` : undefined}
+          delta={data.deltas?.waitlist}
+          deltaLabel="vs prev period"
         />
         <StatCard
           label="Invite Clicks"
           value={data.inviteClicks?.total ?? "\u2014"}
           sub={data.inviteClicks?.today != null ? `${data.inviteClicks.today} today` : undefined}
+          delta={data.deltas?.inviteClicks}
+          deltaLabel="vs prev period"
         />
         <StatCard
           label="Scored"
@@ -259,6 +287,9 @@ export default function AdminDashboard() {
           </div>
         </div>
       </div>
+
+      {/* Automated Insights */}
+      <InsightCards days={days} />
 
       {/* Row 3: Submissions Over Time + Peak Hours */}
       <div className="grid gap-6 lg:grid-cols-2">

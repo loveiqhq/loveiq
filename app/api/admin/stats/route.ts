@@ -469,6 +469,107 @@ export async function GET(request: Request) {
       logger.error({ err }, "Admin stats: invite click query failed (non-blocking)");
     }
 
+    // Period-over-period deltas (graceful degradation)
+    let deltas: {
+      submissions: number;
+      completionRate: number;
+      avgDuration: number;
+      waitlist: number | null;
+      inviteClicks: number | null;
+    } | null = null;
+
+    try {
+      const prevSince = new Date(Date.now() - days * 2 * 86_400_000).toISOString();
+      const prevUntil = since;
+
+      const prevSubmissionsRes = await supabaseFetch(
+        `/rest/v1/survey_submission?select=id,status,duration_ms&created_date_time=gte.${prevSince}&created_date_time=lt.${prevUntil}`,
+        { headers: { Prefer: "count=exact", Range: "0-49999" } }
+      );
+
+      if (prevSubmissionsRes.ok) {
+        const prevTotal = parseInt(
+          prevSubmissionsRes.headers.get("content-range")?.split("/")[1] || "0",
+          10
+        );
+        const prevRows = (await prevSubmissionsRes.json()) as Array<{
+          id: number;
+          status: string;
+          duration_ms: number | null;
+        }>;
+        const prevCompleted = prevRows.filter((s) => s.status === "completed").length;
+        const prevCompletionRate =
+          prevTotal > 0 ? Math.round((prevCompleted / prevTotal) * 100) : 0;
+        const prevDurationsMs = prevRows
+          .map((s) => s.duration_ms)
+          .filter((d): d is number => d != null && d > 0);
+        const prevAvgDurationMs =
+          prevDurationsMs.length > 0
+            ? Math.round(prevDurationsMs.reduce((a, b) => a + b, 0) / prevDurationsMs.length)
+            : null;
+
+        const pctChange = (curr: number, prev: number) =>
+          Math.round(((curr - prev) / Math.max(prev, 1)) * 100);
+
+        const submissionsDelta = pctChange(totalCount, prevTotal);
+        const completionRateDelta = completionRate - prevCompletionRate;
+        const avgDurationDelta =
+          avgDurationMs != null && prevAvgDurationMs != null
+            ? pctChange(avgDurationMs, prevAvgDurationMs)
+            : 0;
+
+        // Waitlist delta
+        let waitlistDelta: number | null = null;
+        if (waitlistTotal != null) {
+          try {
+            const prevWaitlistRes = await supabaseFetch(
+              `/rest/v1/waitlist_user?select=id&created_date_time=gte.${prevSince}&created_date_time=lt.${prevUntil}`,
+              { headers: { Prefer: "count=exact" } }
+            );
+            if (prevWaitlistRes.ok) {
+              const prevWaitlistTotal = parseInt(
+                prevWaitlistRes.headers.get("content-range")?.split("/")[1] || "0",
+                10
+              );
+              waitlistDelta = pctChange(waitlistTotal, prevWaitlistTotal);
+            }
+          } catch {
+            // non-blocking
+          }
+        }
+
+        // Invite clicks delta
+        let inviteClicksDelta: number | null = null;
+        if (inviteClicks != null) {
+          try {
+            const prevInviteRes = await supabaseFetch(
+              `/rest/v1/invite_event?select=id&created_at=gte.${prevSince}&created_at=lt.${prevUntil}`,
+              { headers: { Prefer: "count=exact" } }
+            );
+            if (prevInviteRes.ok) {
+              const prevInviteTotal = parseInt(
+                prevInviteRes.headers.get("content-range")?.split("/")[1] || "0",
+                10
+              );
+              inviteClicksDelta = pctChange(inviteClicks.total, prevInviteTotal);
+            }
+          } catch {
+            // non-blocking
+          }
+        }
+
+        deltas = {
+          submissions: submissionsDelta,
+          completionRate: completionRateDelta,
+          avgDuration: avgDurationDelta,
+          waitlist: waitlistDelta,
+          inviteClicks: inviteClicksDelta,
+        };
+      }
+    } catch (err) {
+      logger.error({ err }, "Admin stats: delta computation failed (non-blocking)");
+    }
+
     return NextResponse.json({
       totalSubmissions: totalCount,
       completionRate,
@@ -508,6 +609,8 @@ export async function GET(request: Request) {
       answerDistribution,
       // Invite clicks (nullable)
       inviteClicks,
+      // Period-over-period deltas (nullable)
+      deltas,
     });
   } catch (err) {
     logger.error({ err }, "Admin stats error");

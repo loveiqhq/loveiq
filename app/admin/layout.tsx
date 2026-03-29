@@ -4,6 +4,7 @@ import { useState } from "react";
 import { usePathname } from "next/navigation";
 import AdminSidebar from "@/components/admin/AdminSidebar";
 import AdminHeader from "@/components/admin/AdminHeader";
+import PagePresence from "@/components/admin/PagePresence";
 
 const pageTitles: Record<string, string> = {
   "/admin": "Dashboard",
@@ -35,7 +36,12 @@ const pageTitles: Record<string, string> = {
   "/admin/risk-score": "Risk Score",
   "/admin/changelog": "Product Changelog",
   "/admin/tags": "Submission Tags",
+  "/admin/auto-tag-rules": "Auto-Tag Rules",
   "/admin/language-analytics": "Language Analytics",
+  "/admin/goals": "Goals & Targets",
+  "/admin/report-builder": "Report Builder",
+  "/admin/archetypes/compare": "Compare Archetypes",
+  "/admin/pipeline": "Conversion Pipeline",
 };
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -60,7 +66,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <AdminSidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className="flex flex-1 flex-col overflow-hidden">
         <AdminHeader title={title} onMenuToggle={() => setSidebarOpen((o) => !o)} />
-        <main className="flex-1 overflow-y-auto p-4 lg:p-6">{children}</main>
+        <main className="flex-1 overflow-y-auto p-4 lg:p-6">
+          <div className="mb-4 flex justify-end">
+            <PagePresence />
+          </div>
+          {children}
+        </main>
       </div>
     </div>
   );

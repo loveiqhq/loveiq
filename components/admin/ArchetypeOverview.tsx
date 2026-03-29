@@ -64,9 +64,17 @@ export default function ArchetypeOverview() {
 
   return (
     <div className="space-y-6">
-      <p className="text-sm text-text-muted">
-        {data.totalScored} scored submissions across 14 archetypes
-      </p>
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-text-muted">
+          {data.totalScored} scored submissions across 14 archetypes
+        </p>
+        <a
+          href="/admin/archetypes/compare"
+          className="rounded-lg bg-accent-purple/10 px-4 py-2 text-sm font-medium text-accent-purple transition hover:bg-accent-purple/20"
+        >
+          Compare Archetypes
+        </a>
+      </div>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {sorted.map((arch) => (
           <a

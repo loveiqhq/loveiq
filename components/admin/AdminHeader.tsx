@@ -1,5 +1,7 @@
 "use client";
 
+import PresenceIndicator from "./PresenceIndicator";
+
 interface AdminHeaderProps {
   title: string;
   onMenuToggle: () => void;
@@ -26,6 +28,9 @@ export default function AdminHeader({ title, onMenuToggle }: AdminHeaderProps) {
         </svg>
       </button>
       <h1 className="font-serif text-lg font-semibold text-text-primary">{title}</h1>
+      <div className="ml-auto">
+        <PresenceIndicator />
+      </div>
     </header>
   );
 }
