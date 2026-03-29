@@ -40,6 +40,7 @@ const ROUTE_PERMISSIONS: Record<string, AdminRole> = {
   "GET:/api/admin/product-kpis/discrimination": "viewer",
   "GET:/api/admin/export-presets": "viewer",
   "GET:/api/admin/scoring/comparison": "viewer",
+  "GET:/api/admin/predictions": "viewer",
   // PATCH/POST endpoints — editor
   "PATCH:/api/admin/submissions/[id]": "editor",
   "PATCH:/api/admin/submissions/bulk": "editor",

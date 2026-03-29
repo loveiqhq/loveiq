@@ -42,6 +42,8 @@ const pageTitles: Record<string, string> = {
   "/admin/report-builder": "Report Builder",
   "/admin/archetypes/compare": "Compare Archetypes",
   "/admin/pipeline": "Conversion Pipeline",
+  "/admin/segments": "Segments",
+  "/admin/predictions": "Predictive Insights",
 };
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
