@@ -875,6 +875,119 @@ export async function buildStrategySnapshot(inputDays: number) {
     );
   }
 
+  const guardrails = [
+    {
+      label: "Completion",
+      current: completionRate(submissionsCurrent as any[]),
+      target: 65,
+      status:
+        completionRate(submissionsCurrent as any[]) >= 65
+          ? "good"
+          : completionRate(submissionsCurrent as any[]) >= 50
+            ? "watch"
+            : "risk",
+      detail: `${(submissionsCurrent as any[]).filter((row) => row.status === "completed").length}/${(submissionsCurrent as any[]).length} starts completed`,
+      href: buildProductKpiHref({ days, tab: "Survey Chapters" }),
+    },
+    {
+      label: "Scoring Agreement",
+      current: scoringAgreementCurrent ?? 0,
+      target: 95,
+      status:
+        scoringAgreementCurrent == null
+          ? "watch"
+          : scoringAgreementCurrent >= 95
+            ? "good"
+            : scoringAgreementCurrent >= 85
+              ? "watch"
+              : "risk",
+      detail:
+        scoringAgreementCurrent == null
+          ? "No comparable scored submissions yet"
+          : `${scoringAgreementCurrent}% agreement across engines`,
+      href: buildScorecardHref({ days, tab: "Scorecard" }),
+    },
+    {
+      label: "High-Priority Queue",
+      current: highPriorityCases,
+      target: 3,
+      status: highPriorityCases <= 3 ? "good" : highPriorityCases <= 6 ? "watch" : "risk",
+      detail: `${highPriorityCases} high-priority investigations open`,
+      href: buildGoalsHref({ status: "active", metricKey: "open_high_priority_cases" }),
+    },
+    {
+      label: "Ambiguous Scoring",
+      current: ambiguousCases.length,
+      target: 5,
+      status: ambiguousCases.length <= 5 ? "good" : ambiguousCases.length <= 10 ? "watch" : "risk",
+      detail: `${ambiguousCases.length} submissions need manual scoring review`,
+      href: buildScorecardHref({ days, tab: "Trends" }),
+    },
+  ];
+
+  const triage = [
+    topLeakage
+      ? {
+          title: `${topLeakage.from} -> ${topLeakage.to} needs investigation`,
+          cause: topLeakage.likelyCause,
+          confidence: "high" as const,
+          evidence: `${topLeakage.lossCount} users lost (${topLeakage.lossRate}%) in the current window.`,
+          href: topLeakage.href,
+        }
+      : null,
+    releaseImpactEntries.find(
+      (entry) => entry.deltaCompletionRate < 0 || entry.deltaSubmissions < 0
+    )
+      ? {
+          title: "Recent release shows regression signal",
+          cause: "release-regression",
+          confidence: "medium" as const,
+          evidence: `${releaseImpactEntries.find((entry) => entry.deltaCompletionRate < 0 || entry.deltaSubmissions < 0)?.title} moved completion or starts negatively.`,
+          href: "/admin/changelog",
+        }
+      : null,
+    scoringCurrent.some(
+      (item: any) =>
+        item.v5_primary_archetype && item.primary_archetype !== item.v5_primary_archetype
+    )
+      ? {
+          title: "Scoring disagreement pressure is rising",
+          cause: "scoring-mismatch",
+          confidence: "medium" as const,
+          evidence: `${(scoringCurrent as any[]).filter((item) => item.v5_primary_archetype && item.primary_archetype !== item.v5_primary_archetype).length} disagreements in the current window.`,
+          href: "/admin/scoring",
+        }
+      : null,
+  ].filter(Boolean);
+
+  const analystBriefs = [
+    {
+      role: "Product",
+      summary: topLeakage
+        ? `The most urgent UX issue is ${topLeakage.from} -> ${topLeakage.to}; inspect question friction before shipping more funnel changes.`
+        : "No dominant product leak is visible in the current window.",
+    },
+    {
+      role: "Strategy",
+      summary: atRiskGoal
+        ? `${atRiskGoal.label} is off track, so planning should bias toward completion and trust improvements rather than new surface area.`
+        : "Current goals are not materially off track in this window.",
+    },
+    {
+      role: "Tech",
+      summary:
+        scoringAgreementCurrent != null && scoringAgreementCurrent < 95
+          ? `Engine trust is below guardrail at ${scoringAgreementCurrent}%; scoring governance and validation should stay active.`
+          : "No acute scoring-governance risk is visible in the current window.",
+    },
+    {
+      role: "Growth",
+      summary: topChannel
+        ? `${topChannel.source} is the strongest current source; compare it against low-quality channels before scaling spend.`
+        : "Source quality needs more tracked volume before growth decisions should rely on it.",
+    },
+  ];
+
   return {
     days,
     generatedAt: new Date().toISOString(),
@@ -965,5 +1078,14 @@ export async function buildStrategySnapshot(inputDays: number) {
       })),
     },
     narrative,
+    analyst: {
+      briefs: analystBriefs,
+    },
+    guardrails: {
+      healthy: guardrails.filter((item) => item.status === "good").length,
+      breached: guardrails.filter((item) => item.status === "risk").length,
+      items: guardrails,
+    },
+    triage,
   };
 }

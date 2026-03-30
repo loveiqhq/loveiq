@@ -48,6 +48,35 @@ interface Question {
 interface EffectivenessData {
   questions: Question[];
   watchlist: Question[];
+  dropoffDeepView: {
+    contextCoverage: {
+      source: boolean;
+      embed: boolean;
+      browser: boolean;
+      device: boolean;
+    };
+    trust: {
+      source: string;
+      mode: string;
+      sampleSize: number;
+      warning: string | null;
+    };
+    questions: Array<{
+      qId: string;
+      chapterId: string;
+      questionText: string;
+      reachN: number;
+      dropoffN: number;
+      dropoffRate: number;
+      medianDwellS: number | null;
+      bounceAfterQuestionRate: number;
+      sourceSplit: Array<{ label: string; count: number }>;
+      embedSplit: Array<{ label: string; count: number }>;
+      deviceSplit: Array<{ label: string; count: number }>;
+      browserSplit: Array<{ label: string; count: number }>;
+      trustNote: string | null;
+    }>;
+  };
   avgScore: number;
   totalQuestions: number;
   totalSessions: number;
@@ -59,7 +88,7 @@ interface EffectivenessData {
   };
 }
 
-const TABS = ["Regression Watchlist", "Scorecard", "Details"] as const;
+const TABS = ["Regression Watchlist", "Scorecard", "Details", "Drop-off Deep View"] as const;
 type Tab = (typeof TABS)[number];
 
 const gradeColors: Record<string, string> = {
@@ -81,6 +110,11 @@ const watchStatusColors: Record<string, string> = {
   stable: "bg-white/10 text-text-muted",
   improved: "bg-emerald-500/20 text-emerald-300",
 };
+const questionRangeOptions = [
+  { days: 7, label: "7d", ariaLabel: "Last 7 days" },
+  { days: 30, label: "30d", ariaLabel: "Last 30 days" },
+  { days: 90, label: "90d", ariaLabel: "Last 90 days" },
+] as const;
 
 function deltaClasses(value: number, invert = false) {
   if (value === 0) return "text-text-muted";
@@ -147,7 +181,7 @@ export default function QuestionEffectivenessDashboard() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <TimeRangeSelector value={days} onChange={setDays} />
+        <TimeRangeSelector value={days} onChange={setDays} options={questionRangeOptions} />
       </div>
 
       <div className="rounded-xl border border-white/10 bg-surface p-5">
@@ -490,6 +524,124 @@ export default function QuestionEffectivenessDashboard() {
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {activeTab === "Drop-off Deep View" && (
+        <div className="space-y-6">
+          {data.dropoffDeepView.trust.warning && (
+            <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-amber-100/90">
+              {data.dropoffDeepView.trust.warning}
+            </div>
+          )}
+
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-lg border border-white/10 bg-surface p-4">
+              <p className="text-xs font-medium uppercase tracking-wider text-text-muted">
+                Context Source
+              </p>
+              <p className="mt-1 text-sm font-semibold text-text-primary">
+                {data.dropoffDeepView.trust.source}
+              </p>
+            </div>
+            <div className="rounded-lg border border-white/10 bg-surface p-4">
+              <p className="text-xs font-medium uppercase tracking-wider text-text-muted">
+                Context Rows
+              </p>
+              <p className="mt-1 text-2xl font-bold text-text-primary">
+                {data.dropoffDeepView.trust.sampleSize}
+              </p>
+            </div>
+            <div className="rounded-lg border border-white/10 bg-surface p-4">
+              <p className="text-xs font-medium uppercase tracking-wider text-text-muted">
+                Device Coverage
+              </p>
+              <p className="mt-1 text-sm font-semibold text-text-primary">
+                {data.dropoffDeepView.contextCoverage.device ? "Captured" : "Missing"}
+              </p>
+            </div>
+            <div className="rounded-lg border border-white/10 bg-surface p-4">
+              <p className="text-xs font-medium uppercase tracking-wider text-text-muted">
+                Browser Coverage
+              </p>
+              <p className="mt-1 text-sm font-semibold text-text-primary">
+                {data.dropoffDeepView.contextCoverage.browser ? "Captured" : "Missing"}
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {data.dropoffDeepView.questions.map((question) => (
+              <div key={question.qId} className="rounded-xl border border-white/10 bg-surface p-5">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs text-text-muted">
+                        {question.qId}
+                      </span>
+                      <span className="rounded-full bg-red-500/10 px-2 py-0.5 text-xs text-red-300">
+                        {question.dropoffRate}% drop-off
+                      </span>
+                    </div>
+                    <p className="mt-2 text-sm font-semibold text-text-primary">
+                      {question.questionText}
+                    </p>
+                    <p className="mt-1 text-xs text-text-muted">
+                      Chapter {question.chapterId} · reach {question.reachN} · drop-offs{" "}
+                      {question.dropoffN}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs uppercase tracking-wide text-text-muted">Median dwell</p>
+                    <p className="mt-1 text-lg font-semibold text-text-primary">
+                      {question.medianDwellS != null ? `${question.medianDwellS}s` : "—"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-4 grid gap-3 lg:grid-cols-3">
+                  <div className="rounded-lg border border-white/10 bg-white/5 p-4">
+                    <p className="text-xs font-medium uppercase tracking-wide text-text-muted">
+                      Top Sources
+                    </p>
+                    <div className="mt-3 space-y-2">
+                      {question.sourceSplit.length === 0 && (
+                        <p className="text-sm text-text-muted">No source context available.</p>
+                      )}
+                      {question.sourceSplit.map((item) => (
+                        <div key={item.label} className="flex items-center justify-between gap-3">
+                          <span className="text-sm text-text-primary">{item.label}</span>
+                          <span className="text-xs text-text-muted">{item.count}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-white/10 bg-white/5 p-4">
+                    <p className="text-xs font-medium uppercase tracking-wide text-text-muted">
+                      Placement Split
+                    </p>
+                    <div className="mt-3 space-y-2">
+                      {question.embedSplit.length === 0 && (
+                        <p className="text-sm text-text-muted">No placement markers yet.</p>
+                      )}
+                      {question.embedSplit.map((item) => (
+                        <div key={item.label} className="flex items-center justify-between gap-3">
+                          <span className="text-sm text-text-primary">{item.label}</span>
+                          <span className="text-xs text-text-muted">{item.count}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-white/10 bg-white/5 p-4">
+                    <p className="text-xs font-medium uppercase tracking-wide text-text-muted">
+                      Instrumentation Gaps
+                    </p>
+                    <p className="mt-3 text-sm text-text-muted">{question.trustNote}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>

@@ -5,9 +5,14 @@ import PresenceIndicator from "./PresenceIndicator";
 interface AdminHeaderProps {
   title: string;
   onMenuToggle: () => void;
+  onCommandPaletteOpen: () => void;
 }
 
-export default function AdminHeader({ title, onMenuToggle }: AdminHeaderProps) {
+export default function AdminHeader({
+  title,
+  onMenuToggle,
+  onCommandPaletteOpen,
+}: AdminHeaderProps) {
   return (
     <header className="flex h-16 items-center gap-4 border-b border-white/10 px-4 lg:px-6">
       <button
@@ -28,7 +33,16 @@ export default function AdminHeader({ title, onMenuToggle }: AdminHeaderProps) {
         </svg>
       </button>
       <h1 className="font-serif text-lg font-semibold text-text-primary">{title}</h1>
-      <div className="ml-auto">
+      <div className="ml-auto flex items-center gap-3">
+        <button
+          onClick={onCommandPaletteOpen}
+          className="hidden items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-text-muted transition hover:border-white/20 hover:bg-white/[0.07] hover:text-text-primary md:inline-flex"
+        >
+          Search Admin
+          <span className="rounded border border-white/10 px-1.5 py-0.5 text-[10px] text-text-muted">
+            Ctrl K
+          </span>
+        </button>
         <PresenceIndicator />
       </div>
     </header>

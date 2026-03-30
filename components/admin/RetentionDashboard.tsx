@@ -5,8 +5,9 @@ import TimeRangeSelector from "@/components/admin/TimeRangeSelector";
 import RetentionFunnelTab from "@/components/admin/retention-tabs/RetentionFunnelTab";
 import RetentionCohortsTab from "@/components/admin/retention-tabs/RetentionCohortsTab";
 import ViralityTab from "@/components/admin/retention-tabs/ViralityTab";
+import EntryPathsTab from "@/components/admin/retention-tabs/EntryPathsTab";
 
-const tabs = ["Funnel", "Cohorts", "Virality"] as const;
+const tabs = ["Funnel", "Cohorts", "Entry Paths", "Virality"] as const;
 type Tab = (typeof tabs)[number];
 
 export default function RetentionDashboard() {
@@ -35,6 +36,7 @@ export default function RetentionDashboard() {
       </div>
       {activeTab === "Funnel" && <RetentionFunnelTab days={days} />}
       {activeTab === "Cohorts" && <RetentionCohortsTab days={days} />}
+      {activeTab === "Entry Paths" && <EntryPathsTab days={days} />}
       {activeTab === "Virality" && <ViralityTab days={days} />}
     </div>
   );

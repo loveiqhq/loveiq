@@ -7,12 +7,16 @@ import GeographicMapTab from "@/components/admin/growth-tabs/GeographicMapTab";
 import WaitlistConversionTab from "@/components/admin/growth-tabs/WaitlistConversionTab";
 import AcquisitionQualityTab from "@/components/admin/growth-tabs/AcquisitionQualityTab";
 import RecoveryCohortsTab from "@/components/admin/growth-tabs/RecoveryCohortsTab";
+import EmbedPerformanceTab from "@/components/admin/growth-tabs/EmbedPerformanceTab";
+import ValueAttributionTab from "@/components/admin/growth-tabs/ValueAttributionTab";
 
 const tabs = [
   "Referral Chains",
   "Geographic Map",
   "Waitlist Conversion",
-  "Acquisition Quality",
+  "Channel Quality",
+  "Embed Performance",
+  "Value Attribution",
   "Recovery & Cohorts",
 ] as const;
 type Tab = (typeof tabs)[number];
@@ -49,7 +53,9 @@ export default function GrowthDashboard() {
       {activeTab === "Referral Chains" && <ReferralChainsTab days={days} />}
       {activeTab === "Geographic Map" && <GeographicMapTab days={days} />}
       {activeTab === "Waitlist Conversion" && <WaitlistConversionTab days={days} />}
-      {activeTab === "Acquisition Quality" && <AcquisitionQualityTab days={days} />}
+      {activeTab === "Channel Quality" && <AcquisitionQualityTab days={days} />}
+      {activeTab === "Embed Performance" && <EmbedPerformanceTab days={days} />}
+      {activeTab === "Value Attribution" && <ValueAttributionTab days={days} />}
       {activeTab === "Recovery & Cohorts" && <RecoveryCohortsTab days={days} />}
     </div>
   );

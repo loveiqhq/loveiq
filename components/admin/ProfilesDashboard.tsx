@@ -35,9 +35,16 @@ interface Demographics {
 interface ProfilesData {
   profiles: Profile[];
   demographics: Demographics;
+  timelines: Array<{
+    profileId: number;
+    label: string;
+    source: string;
+    archetype: string | null;
+    events: Array<{ label: string; at: string | null; detail: string }>;
+  }>;
 }
 
-const TABS = ["Demographics", "Profiles"] as const;
+const TABS = ["Demographics", "Profiles", "Enrichment Timeline"] as const;
 type Tab = (typeof TABS)[number];
 
 function DistributionBars({
@@ -226,6 +233,39 @@ export default function ProfilesDashboard() {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {activeTab === "Enrichment Timeline" && (
+        <div className="space-y-4">
+          {data.timelines.map((timeline) => (
+            <div
+              key={timeline.profileId}
+              className="rounded-xl border border-white/10 bg-surface p-5"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-text-primary">{timeline.label}</p>
+                  <p className="mt-1 text-xs text-text-muted">
+                    {timeline.source} · {timeline.archetype || "No archetype"}
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4 space-y-3">
+                {timeline.events.map((event) => (
+                  <div key={`${timeline.profileId}-${event.label}`} className="flex gap-3">
+                    <div className="w-28 shrink-0 text-xs text-text-muted">
+                      {event.at ? new Date(event.at).toLocaleDateString() : "Pending"}
+                    </div>
+                    <div className="flex-1 rounded-lg border border-white/10 bg-white/5 px-4 py-3">
+                      <p className="text-sm font-medium text-text-primary">{event.label}</p>
+                      <p className="mt-1 text-xs text-text-muted">{event.detail}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>

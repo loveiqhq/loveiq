@@ -4,6 +4,7 @@ import { useState } from "react";
 import { usePathname } from "next/navigation";
 import AdminSidebar from "@/components/admin/AdminSidebar";
 import AdminHeader from "@/components/admin/AdminHeader";
+import AdminCommandPalette from "@/components/admin/AdminCommandPalette";
 import PagePresence from "@/components/admin/PagePresence";
 
 const pageTitles: Record<string, string> = {
@@ -48,6 +49,7 @@ const pageTitles: Record<string, string> = {
   "/admin/experiments": "Experiment Registry",
   "/admin/question-lifecycle": "Question Lifecycle",
   "/admin/benchmarks": "Benchmark Registry",
+  "/admin/org": "Org Directory",
 };
 
 const pageDescriptions: Record<string, string> = {
@@ -121,11 +123,14 @@ const pageDescriptions: Record<string, string> = {
     "Decide which questions to keep, revise, replace, or retire using friction, regression, and predictive signals.",
   "/admin/benchmarks":
     "Manage internal, category, and competitive benchmark references used across strategy views.",
+  "/admin/org":
+    "Org-wide control plane for admin assets, data freshness, ownership gaps, and operational watchpoints.",
 };
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
 
   // Login page renders without the admin shell
   if (pathname === "/admin/login") {
@@ -151,8 +156,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   return (
     <div className="flex h-screen bg-page text-text-primary">
       <AdminSidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <AdminCommandPalette
+        open={commandPaletteOpen}
+        onOpen={() => setCommandPaletteOpen(true)}
+        onClose={() => setCommandPaletteOpen(false)}
+      />
       <div className="flex flex-1 flex-col overflow-hidden">
-        <AdminHeader title={title} onMenuToggle={() => setSidebarOpen((o) => !o)} />
+        <AdminHeader
+          title={title}
+          onMenuToggle={() => setSidebarOpen((o) => !o)}
+          onCommandPaletteOpen={() => setCommandPaletteOpen(true)}
+        />
         <main className="flex-1 overflow-y-auto p-4 lg:p-6">
           {description && <p className="mb-3 text-sm text-text-muted">{description}</p>}
           <div className="mb-4 flex justify-end">

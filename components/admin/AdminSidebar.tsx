@@ -30,6 +30,11 @@ const navItems = [
     icon: "M4 6h16M7 12h10M10 18h4",
   },
   {
+    href: "/admin/org",
+    label: "Org Directory",
+    icon: "M4 6h16M4 12h10M4 18h7m9-8h.01M18 18h.01",
+  },
+  {
     href: "/admin/experiments",
     label: "Experiments",
     icon: "M7 7h10M12 7v10M8 17h8",

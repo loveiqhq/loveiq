@@ -88,6 +88,7 @@ export async function GET(request: Request) {
       const maxQ = Math.max(...events.map((e) => e.question_index));
       const completed = events.some((e) => e.direction === "complete");
       const abandoned = events.some((e) => e.direction === "abandon");
+      const backtracks = events.filter((e) => e.direction === "back").length;
       return {
         sessionId: sid,
         eventCount: events.length,
@@ -95,6 +96,7 @@ export async function GET(request: Request) {
         lastEvent: events[events.length - 1].event_time,
         totalTimeMs,
         maxQuestionReached: maxQ,
+        backtracks,
         completed,
         abandoned,
       };
@@ -103,7 +105,67 @@ export async function GET(request: Request) {
     // Sort by most recent first
     sessions.sort((a, b) => new Date(b.firstEvent).getTime() - new Date(a.firstEvent).getTime());
 
-    return NextResponse.json({ sessions, totalSessions: sessions.length });
+    const clusters = new Map<
+      string,
+      {
+        label: string;
+        likelyCause: string;
+        sessions: number;
+        abandoned: number;
+        avgDurationMs: number;
+        maxQuestionReached: number;
+      }
+    >();
+
+    for (const session of sessions) {
+      const label = session.completed
+        ? "Completed Cleanly"
+        : session.abandoned && session.maxQuestionReached <= 10
+          ? "Early Abandon"
+          : session.abandoned && session.backtracks >= 4
+            ? "Backtrack Loop"
+            : session.totalTimeMs >= 300_000
+              ? "Slow-Step Stall"
+              : "Late-Stage Friction";
+      const likelyCause =
+        label === "Early Abandon"
+          ? "Early value communication or acquisition mismatch"
+          : label === "Backtrack Loop"
+            ? "Question confusion or answer uncertainty"
+            : label === "Slow-Step Stall"
+              ? "High cognitive load or technical hesitation"
+              : label === "Late-Stage Friction"
+                ? "Sensitive late questions or commitment friction"
+                : "Healthy completion pattern";
+
+      const current = clusters.get(label) ?? {
+        label,
+        likelyCause,
+        sessions: 0,
+        abandoned: 0,
+        avgDurationMs: 0,
+        maxQuestionReached: 0,
+      };
+      current.sessions += 1;
+      if (session.abandoned) current.abandoned += 1;
+      current.avgDurationMs += session.totalTimeMs;
+      current.maxQuestionReached = Math.max(current.maxQuestionReached, session.maxQuestionReached);
+      clusters.set(label, current);
+    }
+
+    return NextResponse.json({
+      sessions,
+      clusters: [...clusters.values()]
+        .map((cluster) => ({
+          ...cluster,
+          avgDurationMs:
+            cluster.sessions > 0 ? Math.round(cluster.avgDurationMs / cluster.sessions) : 0,
+          abandonmentRate:
+            cluster.sessions > 0 ? Math.round((cluster.abandoned / cluster.sessions) * 100) : 0,
+        }))
+        .sort((a, b) => b.sessions - a.sessions),
+      totalSessions: sessions.length,
+    });
   } catch (err) {
     logger.error({ err }, "Replay dashboard error");
     return NextResponse.json({ error: "Unable to process request." }, { status: 500 });

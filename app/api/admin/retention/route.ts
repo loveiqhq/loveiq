@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { verifyAdminSession } from "@/lib/admin/auth";
 import { hasRole } from "@/lib/admin/roles";
+import { parseUtmCampaign, sourceLabel } from "@/lib/admin/next-level";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
 import { supabaseFetch } from "@/lib/admin/supabase";
 import logger from "@/lib/logger";
@@ -31,30 +32,35 @@ export async function GET(request: Request) {
   try {
     const completedFilter = since ? `&created_date_time=gte.${since}` : "";
 
-    const [submissionsRes, reportsRes, sessionsRes, accessRes, inviteRes] = await Promise.all([
-      supabaseFetch(
-        `/rest/v1/survey_submission?select=id,created_date_time&status=eq.completed${completedFilter}&order=created_date_time.asc`,
-        { headers: { Prefer: "count=exact", Range: "0-49999" } }
-      ),
-      supabaseFetch(`/rest/v1/personal_report?select=id,survey_submission_id,created_date_time`, {
-        headers: { Range: "0-49999" },
-      }),
-      supabaseFetch(`/rest/v1/report_session?select=id,personal_report_id,started_at`, {
-        headers: { Range: "0-49999" },
-      }),
-      supabaseFetch(`/rest/v1/report_access_email?select=id,personal_report_id`, {
-        headers: { Prefer: "count=exact" },
-      }),
-      supabaseFetch(`/rest/v1/invite_event?select=id,referrer_email,created_at`, {
-        headers: { Prefer: "count=exact", Range: "0-49999" },
-      }),
-    ]);
+    const [submissionsRes, reportsRes, sessionsRes, accessRes, inviteRes, paymentsRes] =
+      await Promise.all([
+        supabaseFetch(
+          `/rest/v1/survey_submission?select=id,created_date_time,utm_tracker&status=eq.completed${completedFilter}&order=created_date_time.asc`,
+          { headers: { Prefer: "count=exact", Range: "0-49999" } }
+        ),
+        supabaseFetch(`/rest/v1/personal_report?select=id,survey_submission_id,created_date_time`, {
+          headers: { Range: "0-49999" },
+        }),
+        supabaseFetch(`/rest/v1/report_session?select=id,personal_report_id,started_at`, {
+          headers: { Range: "0-49999" },
+        }),
+        supabaseFetch(`/rest/v1/report_access_email?select=id,personal_report_id`, {
+          headers: { Prefer: "count=exact" },
+        }),
+        supabaseFetch(`/rest/v1/invite_event?select=id,referrer_email,created_at`, {
+          headers: { Prefer: "count=exact", Range: "0-49999" },
+        }),
+        supabaseFetch(`/rest/v1/payment?select=personal_report_id,status`, {
+          headers: { Range: "0-49999" },
+        }),
+      ]);
 
     const submissions = submissionsRes.ok ? await submissionsRes.json() : [];
     const reports = reportsRes.ok ? await reportsRes.json() : [];
     const sessions = sessionsRes.ok ? await sessionsRes.json() : [];
     const accessEmails = accessRes.ok ? await accessRes.json() : [];
     const invites = inviteRes.ok ? await inviteRes.json() : [];
+    const payments = paymentsRes.ok ? await paymentsRes.json() : [];
 
     const completedCount = submissions.length;
     const reportGeneratedCount = reports.length;
@@ -126,12 +132,54 @@ export async function GET(request: Request) {
     const viralCoefficient =
       completedCount > 0 ? Math.round((inviteConversionCount / completedCount) * 100) / 100 : 0;
 
+    const paidReportIds = new Set(
+      (payments as Array<{ personal_report_id: number; status: string }>)
+        .filter((payment) => payment.status === "succeeded")
+        .map((payment) => payment.personal_report_id)
+    );
+    const entryPathMap: Record<string, { total: number; viewed: number; paid: number }> = {};
+    const reportBySubmission = new Map(
+      (reports as Array<{ id: number; survey_submission_id: number }>).map((report) => [
+        report.survey_submission_id,
+        report.id,
+      ])
+    );
+
+    for (const submission of submissions as Array<{
+      id: number;
+      created_date_time: string;
+      utm_tracker: string | null;
+    }>) {
+      const label = `${sourceLabel(submission.utm_tracker)} · ${
+        parseUtmCampaign(submission.utm_tracker) === "unknown"
+          ? "organic"
+          : parseUtmCampaign(submission.utm_tracker)
+      }`;
+      if (!entryPathMap[label]) {
+        entryPathMap[label] = { total: 0, viewed: 0, paid: 0 };
+      }
+      entryPathMap[label].total += 1;
+      const reportId = reportBySubmission.get(submission.id);
+      if (reportId && reportIdsViewed.has(reportId)) entryPathMap[label].viewed += 1;
+      if (reportId && paidReportIds.has(reportId)) entryPathMap[label].paid += 1;
+    }
+
     return NextResponse.json({
       funnel,
       returnVisitors,
       cohorts,
       viralCoefficient,
       uniqueReferrers,
+      entryPaths: Object.entries(entryPathMap)
+        .map(([path, value]) => ({
+          path,
+          total: value.total,
+          viewed: value.viewed,
+          paid: value.paid,
+          viewRate: value.total > 0 ? Math.round((value.viewed / value.total) * 100) : 0,
+          paidRate: value.total > 0 ? Math.round((value.paid / value.total) * 100) : 0,
+        }))
+        .sort((a, b) => b.total - a.total),
     });
   } catch (err) {
     logger.error({ err }, "Retention analytics error");

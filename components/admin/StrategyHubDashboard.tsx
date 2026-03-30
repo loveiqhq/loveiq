@@ -144,9 +144,31 @@ interface StrategyData {
     }>;
   };
   narrative: string[];
+  analyst: {
+    briefs: Array<{ role: string; summary: string }>;
+  };
+  guardrails: {
+    healthy: number;
+    breached: number;
+    items: Array<{
+      label: string;
+      current: number;
+      target: number;
+      status: BenchmarkStatus;
+      detail: string;
+      href: string;
+    }>;
+  };
+  triage: Array<{
+    title: string;
+    cause: string;
+    confidence: Confidence;
+    evidence: string;
+    href: string;
+  }>;
 }
 
-const TABS = ["North Star", "Work Queue", "Release Impact", "Opportunities"] as const;
+const TABS = ["North Star", "Work Queue", "Release Impact", "Opportunities", "Guardrails"] as const;
 const benchmarkStatusClasses: Record<BenchmarkStatus, string> = {
   good: "border-emerald-500/20 bg-emerald-500/10 text-emerald-300",
   watch: "border-amber-500/20 bg-amber-500/10 text-amber-200",
@@ -167,6 +189,11 @@ const confidenceClasses: Record<Confidence, string> = {
   medium: "bg-amber-500/10 text-amber-200",
   low: "bg-white/10 text-text-muted",
 };
+const strategyRangeOptions = [
+  { days: 7, label: "7d", ariaLabel: "Last 7 days" },
+  { days: 30, label: "30d", ariaLabel: "Last 30 days" },
+  { days: 90, label: "90d", ariaLabel: "Last 90 days" },
+] as const;
 
 const deltaColor = (delta: number) =>
   delta > 0 ? "text-emerald-300" : delta < 0 ? "text-red-300" : "text-text-muted";
@@ -256,6 +283,7 @@ export default function StrategyHubDashboard() {
         <TimeRangeSelector
           value={days}
           onChange={(value) => startTransition(() => setDays(value))}
+          options={strategyRangeOptions}
         />
       </div>
 
@@ -312,6 +340,17 @@ export default function StrategyHubDashboard() {
               className="rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm text-text-primary"
             >
               {line}
+            </div>
+          ))}
+        </div>
+        <div className="mt-4 grid gap-3 lg:grid-cols-2">
+          {data.analyst.briefs.map((brief) => (
+            <div
+              key={brief.role}
+              className="rounded-lg border border-white/10 bg-page px-4 py-3 text-sm text-text-primary"
+            >
+              <p className="text-[11px] uppercase tracking-wide text-text-muted">{brief.role}</p>
+              <p className="mt-2">{brief.summary}</p>
             </div>
           ))}
         </div>
@@ -857,6 +896,75 @@ export default function StrategyHubDashboard() {
                   </div>
                 ))}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === "Guardrails" && (
+        <div className="space-y-6">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <StatCard label="Healthy" value={data.guardrails.healthy} />
+            <StatCard label="Breached" value={data.guardrails.breached} />
+            <StatCard label="Triage Cases" value={data.triage.length} />
+            <StatCard label="Narrative Lines" value={data.narrative.length} />
+          </div>
+
+          <div className="rounded-xl border border-white/10 bg-surface p-5">
+            <h3 className="mb-4 text-sm font-semibold text-text-primary">Conversion Guardrails</h3>
+            <div className="space-y-3">
+              {data.guardrails.items.map((item) => (
+                <a
+                  key={item.label}
+                  href={item.href}
+                  className="block rounded-lg border border-white/10 bg-white/5 p-4 transition hover:border-white/20 hover:bg-white/10"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-semibold text-text-primary">{item.label}</p>
+                        <span
+                          className={`rounded-full border px-2 py-0.5 text-[11px] uppercase tracking-wide ${benchmarkStatusClasses[item.status]}`}
+                        >
+                          {item.status}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-sm text-text-muted">{item.detail}</p>
+                    </div>
+                    <p className="text-sm font-semibold text-text-primary">
+                      {item.current}/{item.target}
+                    </p>
+                  </div>
+                </a>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-white/10 bg-surface p-5">
+            <h3 className="mb-4 text-sm font-semibold text-text-primary">
+              Root-Cause Triage Assistant
+            </h3>
+            <div className="space-y-3">
+              {data.triage.map((item) => (
+                <a
+                  key={item.title}
+                  href={item.href}
+                  className="block rounded-lg border border-white/10 bg-white/5 p-4 transition hover:border-white/20 hover:bg-white/10"
+                >
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[11px] uppercase tracking-wide ${confidenceClasses[item.confidence]}`}
+                    >
+                      {item.confidence}
+                    </span>
+                    <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] uppercase tracking-wide text-text-muted">
+                      {item.cause}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-sm font-semibold text-text-primary">{item.title}</p>
+                  <p className="mt-1 text-sm text-text-muted">{item.evidence}</p>
+                </a>
+              ))}
             </div>
           </div>
         </div>

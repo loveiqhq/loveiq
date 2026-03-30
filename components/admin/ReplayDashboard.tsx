@@ -10,6 +10,7 @@ interface SessionSummary {
   lastEvent: string;
   totalTimeMs: number;
   maxQuestionReached: number;
+  backtracks: number;
   completed: boolean;
   abandoned: boolean;
 }
@@ -26,6 +27,15 @@ interface SessionEvent {
 
 interface SessionListData {
   sessions: SessionSummary[];
+  clusters: Array<{
+    label: string;
+    likelyCause: string;
+    sessions: number;
+    abandoned: number;
+    avgDurationMs: number;
+    maxQuestionReached: number;
+    abandonmentRate: number;
+  }>;
   totalSessions: number;
 }
 
@@ -43,6 +53,7 @@ const directionConfig: Record<string, { icon: string; color: string; label: stri
 
 export default function ReplayDashboard() {
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"Sessions" | "Clusters">("Sessions");
 
   const listParams = useMemo(() => undefined, []);
   const detailParams = useMemo(
@@ -81,6 +92,22 @@ export default function ReplayDashboard() {
 
     return (
       <div className="space-y-6">
+        <div className="flex gap-1 rounded-lg border border-white/10 bg-surface p-1">
+          {(["Sessions", "Clusters"] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`flex-1 rounded-md px-4 py-2 text-sm font-medium transition ${
+                activeTab === tab
+                  ? "bg-white/10 text-text-primary"
+                  : "text-text-muted hover:bg-white/5 hover:text-text-primary"
+              }`}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
+
         <div className="grid gap-4 sm:grid-cols-3">
           <div className="rounded-lg border border-white/10 bg-surface p-4">
             <p className="text-xs font-medium uppercase tracking-wider text-text-muted">
@@ -106,52 +133,94 @@ export default function ReplayDashboard() {
           </div>
         </div>
 
-        <div className="rounded-xl border border-white/10 bg-surface overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="border-b border-white/10 text-xs uppercase tracking-wider text-text-muted">
-                <th className="px-4 py-3">Session</th>
-                <th className="px-4 py-3">Events</th>
-                <th className="px-4 py-3">Duration</th>
-                <th className="px-4 py-3">Max Q</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Started</th>
-              </tr>
-            </thead>
-            <tbody>
-              {listData.sessions.map((s) => (
-                <tr
-                  key={s.sessionId}
-                  onClick={() => setSelectedSession(s.sessionId)}
-                  className="cursor-pointer border-b border-white/5 hover:bg-white/5"
-                >
-                  <td className="px-4 py-3 font-mono text-xs text-text-muted">
-                    {s.sessionId.slice(0, 8)}...
-                  </td>
-                  <td className="px-4 py-3 text-text-muted">{s.eventCount}</td>
-                  <td className="px-4 py-3 text-text-muted">{Math.round(s.totalTimeMs / 1000)}s</td>
-                  <td className="px-4 py-3 text-text-muted">Q{s.maxQuestionReached}</td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
-                        s.completed
-                          ? "bg-green-500/20 text-green-400"
-                          : s.abandoned
-                            ? "bg-red-500/20 text-red-400"
-                            : "bg-yellow-500/20 text-yellow-400"
-                      }`}
-                    >
-                      {s.completed ? "Completed" : s.abandoned ? "Abandoned" : "In Progress"}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-xs text-text-muted">
-                    {new Date(s.firstEvent).toLocaleDateString()}
-                  </td>
+        {activeTab === "Sessions" && (
+          <div className="rounded-xl border border-white/10 bg-surface overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-white/10 text-xs uppercase tracking-wider text-text-muted">
+                  <th className="px-4 py-3">Session</th>
+                  <th className="px-4 py-3">Events</th>
+                  <th className="px-4 py-3">Duration</th>
+                  <th className="px-4 py-3">Max Q</th>
+                  <th className="px-4 py-3">Backtracks</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Started</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {listData.sessions.map((s) => (
+                  <tr
+                    key={s.sessionId}
+                    onClick={() => setSelectedSession(s.sessionId)}
+                    className="cursor-pointer border-b border-white/5 hover:bg-white/5"
+                  >
+                    <td className="px-4 py-3 font-mono text-xs text-text-muted">
+                      {s.sessionId.slice(0, 8)}...
+                    </td>
+                    <td className="px-4 py-3 text-text-muted">{s.eventCount}</td>
+                    <td className="px-4 py-3 text-text-muted">
+                      {Math.round(s.totalTimeMs / 1000)}s
+                    </td>
+                    <td className="px-4 py-3 text-text-muted">Q{s.maxQuestionReached}</td>
+                    <td className="px-4 py-3 text-text-muted">{s.backtracks}</td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                          s.completed
+                            ? "bg-green-500/20 text-green-400"
+                            : s.abandoned
+                              ? "bg-red-500/20 text-red-400"
+                              : "bg-yellow-500/20 text-yellow-400"
+                        }`}
+                      >
+                        {s.completed ? "Completed" : s.abandoned ? "Abandoned" : "In Progress"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-xs text-text-muted">
+                      {new Date(s.firstEvent).toLocaleDateString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {activeTab === "Clusters" && (
+          <div className="grid gap-4 xl:grid-cols-2">
+            {listData.clusters.map((cluster) => (
+              <div key={cluster.label} className="rounded-xl border border-white/10 bg-surface p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-semibold text-text-primary">{cluster.label}</h3>
+                    <p className="mt-1 text-sm text-text-muted">{cluster.likelyCause}</p>
+                  </div>
+                  <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs text-text-muted">
+                    {cluster.sessions} sessions
+                  </span>
+                </div>
+                <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-3">
+                    <p className="text-[11px] uppercase tracking-wide text-text-muted">Abandon</p>
+                    <p className="mt-1 text-sm text-text-primary">{cluster.abandonmentRate}%</p>
+                  </div>
+                  <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-3">
+                    <p className="text-[11px] uppercase tracking-wide text-text-muted">Avg Time</p>
+                    <p className="mt-1 text-sm text-text-primary">
+                      {Math.round(cluster.avgDurationMs / 1000)}s
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-3">
+                    <p className="text-[11px] uppercase tracking-wide text-text-muted">
+                      Furthest Q
+                    </p>
+                    <p className="mt-1 text-sm text-text-primary">Q{cluster.maxQuestionReached}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     );
   }

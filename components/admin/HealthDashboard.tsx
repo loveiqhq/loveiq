@@ -4,8 +4,10 @@ import { useState } from "react";
 import ServicesTab from "@/components/admin/health-tabs/ServicesTab";
 import ErrorsTab from "@/components/admin/health-tabs/ErrorsTab";
 import PerformanceTab from "@/components/admin/health-tabs/PerformanceTab";
+import IntegrationsTab from "@/components/admin/health-tabs/IntegrationsTab";
+import TrustTrackingTab from "@/components/admin/health-tabs/TrustTrackingTab";
 
-const tabs = ["Services", "Errors", "Performance"] as const;
+const tabs = ["Services", "Integrations", "Trust & Tracking", "Errors", "Performance"] as const;
 type Tab = (typeof tabs)[number];
 
 export default function HealthDashboard() {
@@ -29,6 +31,8 @@ export default function HealthDashboard() {
         ))}
       </div>
       {activeTab === "Services" && <ServicesTab />}
+      {activeTab === "Integrations" && <IntegrationsTab />}
+      {activeTab === "Trust & Tracking" && <TrustTrackingTab />}
       {activeTab === "Errors" && <ErrorsTab />}
       {activeTab === "Performance" && <PerformanceTab />}
     </div>

@@ -1,11 +1,18 @@
 "use client";
 
+export interface TimeRangeOption {
+  days: number;
+  label: string;
+  ariaLabel: string;
+}
+
 interface TimeRangeSelectorProps {
   value: number;
   onChange: (days: number) => void;
+  options?: readonly TimeRangeOption[];
 }
 
-const options = [
+const defaultOptions: TimeRangeOption[] = [
   { days: 1, label: "1d", ariaLabel: "Last 1 day" },
   { days: 7, label: "7d", ariaLabel: "Last 7 days" },
   { days: 30, label: "30d", ariaLabel: "Last 30 days" },
@@ -14,12 +21,17 @@ const options = [
   { days: 0, label: "All", ariaLabel: "All time" },
 ];
 
-export default function TimeRangeSelector({ value, onChange }: TimeRangeSelectorProps) {
+export default function TimeRangeSelector({
+  value,
+  onChange,
+  options = defaultOptions,
+}: TimeRangeSelectorProps) {
   return (
     <div className="flex gap-1 rounded-lg bg-white/5 p-1">
       {options.map((option) => (
         <button
-          key={option.days}
+          key={`${option.days}-${option.label}`}
+          type="button"
           onClick={() => onChange(option.days)}
           aria-label={option.ariaLabel}
           aria-pressed={value === option.days}

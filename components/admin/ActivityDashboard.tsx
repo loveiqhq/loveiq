@@ -5,8 +5,9 @@ import TimeRangeSelector from "@/components/admin/TimeRangeSelector";
 import ActivityOverviewTab from "@/components/admin/activity-tabs/ActivityOverviewTab";
 import PerAdminTab from "@/components/admin/activity-tabs/PerAdminTab";
 import BacklogTab from "@/components/admin/activity-tabs/BacklogTab";
+import OrgLogTab from "@/components/admin/activity-tabs/OrgLogTab";
 
-const tabs = ["Overview", "Per Admin", "Backlog"] as const;
+const tabs = ["Overview", "Per Admin", "Org Log", "Backlog"] as const;
 type Tab = (typeof tabs)[number];
 
 export default function ActivityDashboard() {
@@ -35,6 +36,7 @@ export default function ActivityDashboard() {
       </div>
       {activeTab === "Overview" && <ActivityOverviewTab days={days} />}
       {activeTab === "Per Admin" && <PerAdminTab days={days} />}
+      {activeTab === "Org Log" && <OrgLogTab days={days} />}
       {activeTab === "Backlog" && <BacklogTab days={days} />}
     </div>
   );

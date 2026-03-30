@@ -74,6 +74,11 @@ const columns: Column<LifecycleItem>[] = [
     align: "right",
   },
 ];
+const questionRangeOptions = [
+  { days: 7, label: "7d", ariaLabel: "Last 7 days" },
+  { days: 30, label: "30d", ariaLabel: "Last 30 days" },
+  { days: 90, label: "90d", ariaLabel: "Last 90 days" },
+] as const;
 
 export default function QuestionLifecyclePanel() {
   const [days, setDays] = useState(30);
@@ -128,6 +133,7 @@ export default function QuestionLifecyclePanel() {
         <TimeRangeSelector
           value={days}
           onChange={(value) => startTransition(() => setDays(value))}
+          options={questionRangeOptions}
         />
       </div>
 

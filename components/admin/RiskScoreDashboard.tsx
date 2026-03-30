@@ -22,9 +22,24 @@ interface RiskData {
   totalSessions: number;
   avgRiskScore: number;
   distribution: { critical: number; high: number; medium: number; low: number };
+  fraudSummary: {
+    reviewQueue: number;
+    duplicateIpGroups: number;
+    disposableEmails: number;
+    duplicateAnswerPatterns: number;
+  };
+  fraudSignals: Array<{
+    sessionId: string;
+    submissionId: number | null;
+    email: string | null;
+    clientIp: string | null;
+    fraudScore: number;
+    reasons: string[];
+    reviewState: string;
+  }>;
 }
 
-const TABS = ["Overview", "Sessions"] as const;
+const TABS = ["Overview", "Sessions", "Fraud"] as const;
 type Tab = (typeof TABS)[number];
 
 const riskColors: Record<string, string> = {
@@ -245,6 +260,88 @@ export default function RiskScoreDashboard() {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {activeTab === "Fraud" && (
+        <div className="space-y-6">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-lg border border-white/10 bg-surface p-4">
+              <p className="text-xs font-medium uppercase tracking-wider text-text-muted">
+                Review Queue
+              </p>
+              <p className="mt-1 text-2xl font-bold text-red-400">
+                {data.fraudSummary.reviewQueue}
+              </p>
+            </div>
+            <div className="rounded-lg border border-white/10 bg-surface p-4">
+              <p className="text-xs font-medium uppercase tracking-wider text-text-muted">
+                Duplicate IP Groups
+              </p>
+              <p className="mt-1 text-2xl font-bold text-text-primary">
+                {data.fraudSummary.duplicateIpGroups}
+              </p>
+            </div>
+            <div className="rounded-lg border border-white/10 bg-surface p-4">
+              <p className="text-xs font-medium uppercase tracking-wider text-text-muted">
+                Disposable Emails
+              </p>
+              <p className="mt-1 text-2xl font-bold text-text-primary">
+                {data.fraudSummary.disposableEmails}
+              </p>
+            </div>
+            <div className="rounded-lg border border-white/10 bg-surface p-4">
+              <p className="text-xs font-medium uppercase tracking-wider text-text-muted">
+                Duplicate Patterns
+              </p>
+              <p className="mt-1 text-2xl font-bold text-text-primary">
+                {data.fraudSummary.duplicateAnswerPatterns}
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {data.fraudSignals.map((signal) => (
+              <div
+                key={signal.sessionId}
+                className="rounded-xl border border-white/10 bg-surface p-5"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-full bg-red-500/10 px-2 py-0.5 text-xs uppercase tracking-wide text-red-300">
+                        {signal.fraudScore}
+                      </span>
+                      <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs uppercase tracking-wide text-text-muted">
+                        {signal.reviewState}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-sm font-semibold text-text-primary">
+                      Session {signal.sessionId.slice(0, 12)}...
+                    </p>
+                    <p className="mt-1 text-xs text-text-muted">
+                      {signal.email ?? "No email"} · {signal.clientIp ?? "No IP"}
+                    </p>
+                  </div>
+                  {signal.submissionId && (
+                    <a
+                      href={`/admin/submissions/${signal.submissionId}`}
+                      className="text-xs text-accent-purple hover:underline"
+                    >
+                      Open submission
+                    </a>
+                  )}
+                </div>
+                <ul className="mt-4 space-y-2">
+                  {signal.reasons.map((reason) => (
+                    <li key={reason} className="text-sm text-text-muted">
+                      {reason}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
           </div>
         </div>
       )}

@@ -34,6 +34,7 @@ interface ScoringResult {
 interface Submission {
   id: number;
   user_id: number;
+  created_date_time: string;
 }
 
 function calculateAge(birthday: string | null): number | null {
@@ -76,7 +77,15 @@ export async function GET(request: Request) {
   }
 
   try {
-    const [profilesRes, usersRes, submissionsRes, scoringRes] = await Promise.all([
+    const [
+      profilesRes,
+      usersRes,
+      submissionsRes,
+      scoringRes,
+      waitlistRes,
+      reportsRes,
+      paymentsRes,
+    ] = await Promise.all([
       supabaseFetch(
         `/rest/v1/user_profile?select=id,gender,birthday,sexual_orientation,relationship_status,location_primary,language_primary,goals,challenges,created_date_time&order=created_date_time.desc`,
         { headers: { Range: "0-999" } }
@@ -91,6 +100,18 @@ export async function GET(request: Request) {
       supabaseFetch(`/rest/v1/scoring_result?select=survey_submission_id,primary_archetype`, {
         headers: { Range: "0-999" },
       }),
+      supabaseFetch(`/rest/v1/waitlist_user?select=email,source,created_date_time,utm_tracker`, {
+        headers: { Range: "0-9999" },
+      }),
+      supabaseFetch(
+        `/rest/v1/personal_report?select=id,survey_submission_id,created_date_time,payment_status`,
+        {
+          headers: { Range: "0-9999" },
+        }
+      ),
+      supabaseFetch(`/rest/v1/payment?select=personal_report_id,status,payment_date_time,amount`, {
+        headers: { Range: "0-9999" },
+      }),
     ]);
 
     if (!profilesRes.ok || !usersRes.ok) {
@@ -102,6 +123,30 @@ export async function GET(request: Request) {
     const users = (await usersRes.json()) as AppUser[];
     const submissions = submissionsRes.ok ? ((await submissionsRes.json()) as Submission[]) : [];
     const scoring = scoringRes.ok ? ((await scoringRes.json()) as ScoringResult[]) : [];
+    const waitlist = waitlistRes.ok
+      ? ((await waitlistRes.json()) as Array<{
+          email: string;
+          source: string | null;
+          created_date_time: string;
+          utm_tracker: string | null;
+        }>)
+      : [];
+    const reports = reportsRes.ok
+      ? ((await reportsRes.json()) as Array<{
+          id: number;
+          survey_submission_id: number;
+          created_date_time: string;
+          payment_status: string | null;
+        }>)
+      : [];
+    const payments = paymentsRes.ok
+      ? ((await paymentsRes.json()) as Array<{
+          personal_report_id: number;
+          status: string;
+          payment_date_time: string | null;
+          amount: number | null;
+        }>)
+      : [];
 
     // Build lookup maps
     const userMap = new Map(users.map((u) => [u.id, u]));
@@ -109,6 +154,15 @@ export async function GET(request: Request) {
     for (const s of submissions) submissionsByUser.set(s.user_id, s.id);
     const archetypeBySubmission = new Map(
       scoring.map((s) => [s.survey_submission_id, s.primary_archetype])
+    );
+    const waitlistByEmail = new Map(waitlist.map((row) => [row.email.toLowerCase(), row]));
+    const reportBySubmission = new Map(
+      reports.map((report) => [report.survey_submission_id, report])
+    );
+    const paymentByReport = new Map(
+      payments
+        .filter((payment) => payment.status === "succeeded")
+        .map((payment) => [payment.personal_report_id, payment])
     );
 
     // Build profiles list
@@ -177,6 +231,59 @@ export async function GET(request: Request) {
         withSubmission,
         topLocation,
       },
+      timelines: profileList
+        .map((profile) => {
+          const waitlistRow = waitlistByEmail.get(
+            users.find((user) => user.id === profile.id)?.email.toLowerCase() ?? ""
+          );
+          const submissionId = submissionsByUser.get(profile.id);
+          const submission = submissions.find((row) => row.id === submissionId);
+          const report = submissionId ? (reportBySubmission.get(submissionId) ?? null) : null;
+          const payment = report ? (paymentByReport.get(report.id) ?? null) : null;
+
+          return {
+            profileId: profile.id,
+            label: profile.firstName || profile.email,
+            source: waitlistRow?.source || "Direct",
+            archetype: profile.archetype,
+            events: [
+              waitlistRow
+                ? {
+                    label: "Waitlist",
+                    at: waitlistRow.created_date_time,
+                    detail: waitlistRow.source || "Unknown source",
+                  }
+                : null,
+              {
+                label: "Profile Created",
+                at: profile.createdAt,
+                detail: profile.location || "Unknown location",
+              },
+              submission
+                ? {
+                    label: "Survey Completed",
+                    at: submission.created_date_time,
+                    detail: profile.archetype || "No archetype yet",
+                  }
+                : null,
+              report
+                ? {
+                    label: "Report Generated",
+                    at: report.created_date_time,
+                    detail: report.payment_status || "No payment status",
+                  }
+                : null,
+              payment
+                ? {
+                    label: "Payment",
+                    at: payment.payment_date_time,
+                    detail: payment.amount != null ? `$${payment.amount}` : "Succeeded",
+                  }
+                : null,
+            ].filter(Boolean),
+          };
+        })
+        .slice(0, 30),
     });
   } catch (err) {
     logger.error({ err }, "Profiles dashboard error");

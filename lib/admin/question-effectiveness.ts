@@ -1,4 +1,10 @@
 import { surveyQuestions } from "@/data/survey-data";
+import {
+  buildTrustDescriptor,
+  classifyPlacement,
+  median,
+  sourceLabel,
+} from "@/lib/admin/next-level";
 import { supabaseFetch } from "@/lib/admin/supabase";
 import logger from "@/lib/logger";
 
@@ -14,6 +20,14 @@ interface RpcQuestion {
 interface QuestionMetricSnapshot {
   skipRate: number;
   avgRevisions: number;
+}
+
+interface BehaviorContextRow {
+  session_id: string;
+  q_id: string;
+  chapter: string;
+  time_spent_ms: number | null;
+  direction: string;
 }
 
 interface ComparisonSnapshot {
@@ -52,6 +66,30 @@ export interface QuestionEffectivenessQuestion {
 export interface QuestionEffectivenessSnapshot {
   questions: QuestionEffectivenessQuestion[];
   watchlist: QuestionEffectivenessQuestion[];
+  dropoffDeepView: {
+    contextCoverage: {
+      source: boolean;
+      embed: boolean;
+      browser: boolean;
+      device: boolean;
+    };
+    trust: ReturnType<typeof buildTrustDescriptor>;
+    questions: Array<{
+      qId: string;
+      chapterId: string;
+      questionText: string;
+      reachN: number;
+      dropoffN: number;
+      dropoffRate: number;
+      medianDwellS: number | null;
+      bounceAfterQuestionRate: number;
+      sourceSplit: Array<{ label: string; count: number }>;
+      embedSplit: Array<{ label: string; count: number }>;
+      deviceSplit: Array<{ label: string; count: number }>;
+      browserSplit: Array<{ label: string; count: number }>;
+      trustNote: string | null;
+    }>;
+  };
   avgScore: number;
   totalQuestions: number;
   totalSessions: number;
@@ -217,18 +255,101 @@ async function fetchDiscriminationMap(sinceTs: string | null) {
   return result;
 }
 
+async function fetchBehaviorContext(sinceTs: string | null) {
+  const eventFilter = sinceTs ? `&event_time=gte.${sinceTs}` : "";
+  const submissionFilter = sinceTs ? `&created_date_time=gte.${sinceTs}` : "";
+
+  const [eventsRes, submissionsRes] = await Promise.all([
+    supabaseFetch(
+      `/rest/v1/survey_behavior_event?select=session_id,q_id,chapter,time_spent_ms,direction${eventFilter}&order=event_time.desc`,
+      { headers: { Range: "0-99999" } }
+    ),
+    supabaseFetch(
+      `/rest/v1/survey_submission?select=session_id,utm_tracker${submissionFilter}&order=created_date_time.desc`,
+      { headers: { Range: "0-49999" } }
+    ),
+  ]);
+
+  if (!eventsRes?.ok || !submissionsRes?.ok) {
+    logger.warn(
+      { eventStatus: eventsRes?.status, submissionStatus: submissionsRes?.status },
+      "Question effectiveness: context query failed"
+    );
+    return {
+      byQuestion: new Map<
+        string,
+        {
+          dwellTimesS: number[];
+          sourceCounts: Map<string, number>;
+          embedCounts: Map<string, number>;
+        }
+      >(),
+      sampleSize: 0,
+    };
+  }
+
+  const events = (await eventsRes.json()) as BehaviorContextRow[];
+  const submissions = (await submissionsRes.json()) as Array<{
+    session_id: string | null;
+    utm_tracker: string | null;
+  }>;
+  const sessionContext = new Map<string, { source: string; placement: string }>();
+  for (const submission of submissions) {
+    if (!submission.session_id) continue;
+    sessionContext.set(submission.session_id, {
+      source: sourceLabel(submission.utm_tracker),
+      placement: classifyPlacement(submission.utm_tracker),
+    });
+  }
+
+  const byQuestion = new Map<
+    string,
+    {
+      dwellTimesS: number[];
+      sourceCounts: Map<string, number>;
+      embedCounts: Map<string, number>;
+    }
+  >();
+
+  for (const event of events) {
+    if (!event.q_id || event.q_id.startsWith("00")) continue;
+    const current = byQuestion.get(event.q_id) ?? {
+      dwellTimesS: [],
+      sourceCounts: new Map<string, number>(),
+      embedCounts: new Map<string, number>(),
+    };
+    if (event.time_spent_ms != null && event.time_spent_ms > 0) {
+      current.dwellTimesS.push(event.time_spent_ms / 1000);
+    }
+
+    const context = sessionContext.get(event.session_id);
+    if (context) {
+      current.sourceCounts.set(context.source, (current.sourceCounts.get(context.source) ?? 0) + 1);
+      current.embedCounts.set(
+        context.placement,
+        (current.embedCounts.get(context.placement) ?? 0) + 1
+      );
+    }
+    byQuestion.set(event.q_id, current);
+  }
+
+  return { byQuestion, sampleSize: events.length };
+}
+
 export async function buildQuestionEffectivenessSnapshot(
   rawDays: number
 ): Promise<QuestionEffectivenessSnapshot> {
   const days = Math.min(Math.max(Number.isNaN(rawDays) ? 30 : rawDays, 7), 90);
   const since = makeSince(days);
 
-  const [currentKpi, baselineKpi, currentAnswerMetrics, baselineAnswerMetrics] = await Promise.all([
-    fetchQuestionKpis(since),
-    fetchQuestionKpis(null),
-    fetchAnswerMetrics(since),
-    fetchAnswerMetrics(null),
-  ]);
+  const [currentKpi, baselineKpi, currentAnswerMetrics, baselineAnswerMetrics, behaviorContext] =
+    await Promise.all([
+      fetchQuestionKpis(since),
+      fetchQuestionKpis(null),
+      fetchAnswerMetrics(since),
+      fetchAnswerMetrics(null),
+      fetchBehaviorContext(since),
+    ]);
 
   const questionTextMap = new Map(
     surveyQuestions
@@ -417,9 +538,61 @@ export async function buildQuestionEffectivenessSnapshot(
     .sort((a, b) => b.regressionScore - a.regressionScore)
     .slice(0, 12);
 
+  const dropoffQuestions = questions
+    .map((question) => {
+      const context = behaviorContext.byQuestion.get(question.qId);
+      return {
+        qId: question.qId,
+        chapterId: question.chapterId,
+        questionText: question.questionText,
+        reachN: question.reachN,
+        dropoffN: question.dropoffN,
+        dropoffRate: round1(question.reachN > 0 ? (question.dropoffN / question.reachN) * 100 : 0),
+        medianDwellS: context ? median(context.dwellTimesS) : null,
+        bounceAfterQuestionRate: round1(
+          question.reachN > 0 ? (question.dropoffN / question.reachN) * 100 : 0
+        ),
+        sourceSplit: [...(context?.sourceCounts.entries() ?? [])]
+          .map(([label, count]) => ({ label, count }))
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 4),
+        embedSplit: [...(context?.embedCounts.entries() ?? [])]
+          .map(([label, count]) => ({ label, count }))
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 4),
+        deviceSplit: [] as Array<{ label: string; count: number }>,
+        browserSplit: [] as Array<{ label: string; count: number }>,
+        trustNote:
+          context && context.sourceCounts.size > 0
+            ? "Browser and device context are not instrumented on survey events yet."
+            : "Only source and placement context are available for this question.",
+      };
+    })
+    .sort((a, b) => b.dropoffN - a.dropoffN || b.dropoffRate - a.dropoffRate)
+    .slice(0, 20);
+
   return {
     questions,
     watchlist,
+    dropoffDeepView: {
+      contextCoverage: {
+        source: true,
+        embed: true,
+        browser: false,
+        device: false,
+      },
+      trust: buildTrustDescriptor({
+        source: "survey_behavior_event + survey_submission",
+        mode: "derived",
+        sampleSize: behaviorContext.sampleSize,
+        lastUpdated: since ?? new Date().toISOString(),
+        warning:
+          behaviorContext.sampleSize === 0
+            ? "Question context needs more survey behavior events before the deep view is reliable."
+            : "Browser and device slices are unavailable until survey instrumentation captures user agents.",
+      }),
+      questions: dropoffQuestions,
+    },
     avgScore,
     totalQuestions: questions.length,
     totalSessions: currentKpi.totalSessions,
