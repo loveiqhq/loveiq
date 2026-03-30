@@ -313,6 +313,12 @@ Toggle survey active/closed state.
 
 Product KPI data (question-level and chapter-level metrics computed from survey tracking data).
 
+### GET /api/admin/strategy
+
+Cross-functional strategy snapshot for the admin panel. Returns north-star metrics, goal explainers,
+benchmark status, unified work queue items, release impact review, opportunity ranking, and
+narrative summaries.
+
 **Query params:**
 
 | Param  | Type   | Required | Notes                                           |
@@ -330,3 +336,31 @@ Product KPI data (question-level and chapter-level metrics computed from survey 
 | 403    | `{ "error": "Forbidden." }`                                          | Insufficient role      |
 | 429    | `{ "error": "Please try again later." }`                             | Rate limited           |
 | 500    | `{ "error": "Unable to load KPI data." }`                            | Supabase RPC error     |
+
+### GET /api/admin/predictions
+
+Forecasting payload for the admin forecasting surface. Returns reusable forecast modules, archetype mix
+projections, and ranked predictive insight cards.
+
+### GET /api/admin/question-lifecycle
+
+Question lifecycle decisions for the survey. Returns keep / revise / replace / retire recommendations,
+chapter pressure summaries, and top candidate questions.
+
+### GET /api/admin/experiments
+
+Experiment registry payload. Returns experiment summaries, registry items, available segments, and
+available metric options.
+
+### POST /api/admin/experiments
+
+Create, update, or delete experiment registry entries. Requires CSRF and editor role.
+
+### GET /api/admin/benchmarks
+
+Managed benchmark registry payload. Returns stored manual benchmarks, current live metric values, and
+available metric options.
+
+### POST /api/admin/benchmarks
+
+Create, update, or delete managed benchmark entries. Requires CSRF and editor role.

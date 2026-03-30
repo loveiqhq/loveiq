@@ -233,10 +233,7 @@ export default function WaitlistPage() {
                   required
                 />
                 <button
-                  type="button"
-                  onClick={() => {
-                    if (status !== "loading") handleSubmit();
-                  }}
+                  type="submit"
                   className="justify-self-end whitespace-nowrap rounded-full bg-gradient-brand px-4 py-2.5 text-sm font-semibold text-white shadow-pill transition-colors sm:px-7 sm:py-3 sm:text-base disabled:opacity-100 disabled:cursor-pointer"
                   disabled={status === "loading"}
                 >

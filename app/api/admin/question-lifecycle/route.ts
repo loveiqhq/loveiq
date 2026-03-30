@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { verifyAdminSession } from "@/lib/admin/auth";
-import { buildQuestionEffectivenessSnapshot } from "@/lib/admin/question-effectiveness";
+import { buildQuestionLifecycleSnapshot } from "@/lib/admin/question-effectiveness";
 import { hasRole } from "@/lib/admin/roles";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
 import logger from "@/lib/logger";
@@ -16,7 +16,7 @@ export async function GET(request: Request) {
 
   const ip = getClientIp(request);
   const rateLimit = await checkRateLimit(ip, {
-    bucket: "admin-question-effectiveness",
+    bucket: "admin-question-lifecycle",
     limit: 30,
     windowMs: 60_000,
   });
@@ -28,10 +28,10 @@ export async function GET(request: Request) {
   const rawDays = parseInt(url.searchParams.get("days") || "30", 10);
 
   try {
-    const snapshot = await buildQuestionEffectivenessSnapshot(rawDays);
+    const snapshot = await buildQuestionLifecycleSnapshot(rawDays);
     return NextResponse.json(snapshot);
   } catch (err) {
-    logger.error({ err }, "Question effectiveness error");
+    logger.error({ err }, "Question lifecycle error");
     return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
   }
 }

@@ -17,6 +17,15 @@ const statusEnum = z.enum([
 ]);
 
 const priorityEnum = z.enum(["low", "medium", "high"]);
+const rootCauseEnum = z.enum([
+  "question-friction",
+  "traffic-quality",
+  "scoring-mismatch",
+  "release-regression",
+  "report-engagement",
+  "data-quality",
+  "unknown",
+]);
 
 const createSchema = z.object({
   action: z.literal("create"),
@@ -28,6 +37,10 @@ const createSchema = z.object({
   due_date: z.string().optional().nullable(),
   submission_id: z.number().int().positive().optional().nullable(),
   segment_id: z.number().int().positive().optional().nullable(),
+  root_cause: rootCauseEnum.optional().nullable(),
+  linked_chart_key: z.string().max(120).optional().nullable(),
+  action_taken: z.string().max(2000).optional().nullable(),
+  outcome_summary: z.string().max(2000).optional().nullable(),
 });
 
 const updateSchema = z.object({
@@ -41,6 +54,10 @@ const updateSchema = z.object({
   due_date: z.string().optional().nullable(),
   submission_id: z.number().int().positive().optional().nullable(),
   segment_id: z.number().int().positive().optional().nullable(),
+  root_cause: rootCauseEnum.optional().nullable(),
+  linked_chart_key: z.string().max(120).optional().nullable(),
+  action_taken: z.string().max(2000).optional().nullable(),
+  outcome_summary: z.string().max(2000).optional().nullable(),
 });
 
 const deleteSchema = z.object({
@@ -90,6 +107,10 @@ export async function GET(request: Request) {
       due_date: string | null;
       submission_id: number | null;
       segment_id: number | null;
+      root_cause: z.infer<typeof rootCauseEnum> | null;
+      linked_chart_key: string | null;
+      action_taken: string | null;
+      outcome_summary: string | null;
       created_by: string;
       created_at: string;
       updated_at: string;
@@ -152,6 +173,10 @@ export async function POST(request: Request) {
           due_date: parsed.data.due_date ?? null,
           submission_id: parsed.data.submission_id ?? null,
           segment_id: parsed.data.segment_id ?? null,
+          root_cause: parsed.data.root_cause ?? null,
+          linked_chart_key: parsed.data.linked_chart_key ?? null,
+          action_taken: parsed.data.action_taken ?? null,
+          outcome_summary: parsed.data.outcome_summary ?? null,
           created_by: admin.email,
         }),
       });
@@ -188,6 +213,13 @@ export async function POST(request: Request) {
       if (parsed.data.submission_id !== undefined)
         patch.submission_id = parsed.data.submission_id ?? null;
       if (parsed.data.segment_id !== undefined) patch.segment_id = parsed.data.segment_id ?? null;
+      if (parsed.data.root_cause !== undefined) patch.root_cause = parsed.data.root_cause ?? null;
+      if (parsed.data.linked_chart_key !== undefined)
+        patch.linked_chart_key = parsed.data.linked_chart_key ?? null;
+      if (parsed.data.action_taken !== undefined)
+        patch.action_taken = parsed.data.action_taken ?? null;
+      if (parsed.data.outcome_summary !== undefined)
+        patch.outcome_summary = parsed.data.outcome_summary ?? null;
 
       const res = await supabaseFetch(
         `/rest/v1/admin_investigation_case?id=eq.${parsed.data.caseId}`,

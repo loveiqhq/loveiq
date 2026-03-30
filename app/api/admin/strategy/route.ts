@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { verifyAdminSession } from "@/lib/admin/auth";
-import { buildQuestionEffectivenessSnapshot } from "@/lib/admin/question-effectiveness";
 import { hasRole } from "@/lib/admin/roles";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
+import { buildStrategySnapshot } from "@/lib/admin/strategy";
 import logger from "@/lib/logger";
 
 export async function GET(request: Request) {
@@ -16,8 +16,8 @@ export async function GET(request: Request) {
 
   const ip = getClientIp(request);
   const rateLimit = await checkRateLimit(ip, {
-    bucket: "admin-question-effectiveness",
-    limit: 30,
+    bucket: "admin-strategy",
+    limit: 20,
     windowMs: 60_000,
   });
   if (!rateLimit.allowed) {
@@ -28,10 +28,10 @@ export async function GET(request: Request) {
   const rawDays = parseInt(url.searchParams.get("days") || "30", 10);
 
   try {
-    const snapshot = await buildQuestionEffectivenessSnapshot(rawDays);
+    const snapshot = await buildStrategySnapshot(rawDays);
     return NextResponse.json(snapshot);
   } catch (err) {
-    logger.error({ err }, "Question effectiveness error");
-    return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
+    logger.error({ err }, "Strategy snapshot error");
+    return NextResponse.json({ error: "Unable to load strategy snapshot." }, { status: 500 });
   }
 }

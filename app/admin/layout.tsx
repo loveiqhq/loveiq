@@ -44,6 +44,10 @@ const pageTitles: Record<string, string> = {
   "/admin/pipeline": "Conversion Pipeline",
   "/admin/segments": "Segments",
   "/admin/predictions": "Predictive Insights",
+  "/admin/strategy": "Strategy Hub",
+  "/admin/experiments": "Experiment Registry",
+  "/admin/question-lifecycle": "Question Lifecycle",
+  "/admin/benchmarks": "Benchmark Registry",
 };
 
 const pageDescriptions: Record<string, string> = {
@@ -109,6 +113,14 @@ const pageDescriptions: Record<string, string> = {
     "Build custom user segments with AND/OR filters and preview matching submissions.",
   "/admin/predictions":
     "AI-generated forecasts for volume, abandonment, conversions, and archetype trends.",
+  "/admin/strategy":
+    "Cross-functional strategy and operations hub: north star metrics, work queue, release impact, opportunities, and benchmark tracking.",
+  "/admin/experiments":
+    "Track active and planned experiments with owners, target metrics, guardrails, and decision dates.",
+  "/admin/question-lifecycle":
+    "Decide which questions to keep, revise, replace, or retire using friction, regression, and predictive signals.",
+  "/admin/benchmarks":
+    "Manage internal, category, and competitive benchmark references used across strategy views.",
 };
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {

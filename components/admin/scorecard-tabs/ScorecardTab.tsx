@@ -25,9 +25,24 @@ const statusIcon: Record<string, string> = {
   red: "text-red-400",
 };
 
-export default function ScorecardTab({ days }: { days: number }) {
+export default function ScorecardTab({
+  days,
+  question,
+}: {
+  days: number;
+  question?: string | null;
+}) {
   const params = useMemo(() => (days > 0 ? { days: String(days) } : undefined), [days]);
   const { data, loading, error } = useAdminFetch<ScorecardData>("/api/admin/scorecard", params);
+  const focusedRows = useMemo(() => {
+    const rows = data?.scorecard ?? [];
+    if (!question) return rows;
+    const needle = question.toLowerCase();
+    return rows.filter(
+      (row) =>
+        row.frontendQid.toLowerCase() === needle || row.questionText.toLowerCase().includes(needle)
+    );
+  }, [data, question]);
 
   if (loading) {
     return (
@@ -60,26 +75,43 @@ export default function ScorecardTab({ days }: { days: number }) {
           </tr>
         </thead>
         <tbody>
-          {data.scorecard.map((q) => (
-            <tr key={q.questionId} className="border-b border-white/5 transition hover:bg-white/5">
+          {focusedRows.map((questionRow) => (
+            <tr
+              key={questionRow.questionId}
+              className={`border-b border-white/5 transition hover:bg-white/5 ${
+                question &&
+                (questionRow.frontendQid.toLowerCase() === question.toLowerCase() ||
+                  questionRow.questionText.toLowerCase().includes(question.toLowerCase()))
+                  ? "bg-accent-purple/5"
+                  : ""
+              }`}
+            >
               <td className="px-3 py-2">
-                <span className={`text-lg ${statusIcon[q.status]}`}>●</span>
+                <span className={`text-lg ${statusIcon[questionRow.status]}`}>●</span>
               </td>
-              <td className="max-w-xs truncate px-3 py-2 text-text-primary" title={q.questionText}>
-                <span className="mr-2 text-text-muted">{q.frontendQid}</span>
-                {q.questionText}
+              <td
+                className="max-w-xs truncate px-3 py-2 text-text-primary"
+                title={questionRow.questionText}
+              >
+                <span className="mr-2 text-text-muted">{questionRow.frontendQid}</span>
+                {questionRow.questionText}
               </td>
-              <td className={`px-3 py-2 text-right font-medium ${statusIcon[q.status]}`}>
-                {q.compositeScore}
+              <td className={`px-3 py-2 text-right font-medium ${statusIcon[questionRow.status]}`}>
+                {questionRow.compositeScore}
               </td>
-              <td className="px-3 py-2 text-right text-text-primary">{q.skipRate}%</td>
-              <td className="px-3 py-2 text-right text-text-primary">{q.avgTimeSec}s</td>
-              <td className="px-3 py-2 text-right text-text-primary">{q.avgRevisions}</td>
-              <td className="px-3 py-2 text-right text-text-muted">{q.totalAnswers}</td>
+              <td className="px-3 py-2 text-right text-text-primary">{questionRow.skipRate}%</td>
+              <td className="px-3 py-2 text-right text-text-primary">{questionRow.avgTimeSec}s</td>
+              <td className="px-3 py-2 text-right text-text-primary">{questionRow.avgRevisions}</td>
+              <td className="px-3 py-2 text-right text-text-muted">{questionRow.totalAnswers}</td>
             </tr>
           ))}
         </tbody>
       </table>
+      {question && focusedRows.length === 0 && (
+        <div className="border-t border-white/10 px-4 py-3 text-sm text-text-muted">
+          No scorecard rows matched the focused question.
+        </div>
+      )}
     </div>
   );
 }

@@ -41,6 +41,10 @@ const ROUTE_PERMISSIONS: Record<string, AdminRole> = {
   "GET:/api/admin/export-presets": "viewer",
   "GET:/api/admin/scoring/comparison": "viewer",
   "GET:/api/admin/predictions": "viewer",
+  "GET:/api/admin/strategy": "viewer",
+  "GET:/api/admin/question-lifecycle": "viewer",
+  "GET:/api/admin/experiments": "viewer",
+  "GET:/api/admin/benchmarks": "viewer",
   // PATCH/POST endpoints — editor
   "PATCH:/api/admin/submissions/[id]": "editor",
   "PATCH:/api/admin/submissions/bulk": "editor",
@@ -53,6 +57,8 @@ const ROUTE_PERMISSIONS: Record<string, AdminRole> = {
   "DELETE:/api/admin/annotations/[id]": "editor",
   "POST:/api/admin/export-presets": "editor",
   "DELETE:/api/admin/export-presets/[id]": "editor",
+  "POST:/api/admin/experiments": "editor",
+  "POST:/api/admin/benchmarks": "editor",
   // Admin-only actions
   "DELETE:/api/admin/submissions/[id]": "admin",
   "GET:/api/admin/export": "admin",

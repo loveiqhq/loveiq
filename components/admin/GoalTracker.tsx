@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useAdminFetch } from "./hooks/useAdminFetch";
+import { useAdminQueryState } from "./hooks/useAdminQueryState";
+import { buildMetricDrilldownHref } from "@/lib/admin/drilldowns";
 import { getCsrfToken } from "@/lib/csrf-client";
 
 interface Goal {
@@ -71,6 +73,7 @@ function daysRemaining(deadline: string | null): string | null {
 
 export default function GoalTracker() {
   const { data, loading, error, refetch } = useAdminFetch<GoalsData>("/api/admin/goals");
+  const { searchParams, setQueryState } = useAdminQueryState();
   const [showForm, setShowForm] = useState(false);
   const [formLabel, setFormLabel] = useState("");
   const [formMetric, setFormMetric] = useState(METRIC_OPTIONS[0].value);
@@ -78,6 +81,12 @@ export default function GoalTracker() {
   const [formDeadline, setFormDeadline] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const statusFilter = (() => {
+    const value = searchParams.get("status");
+    return value === "active" || value === "achieved" || value === "cancelled" ? value : "all";
+  })();
+  const metricFilter = searchParams.get("metric") || "all";
+  const highlightedGoalId = Number.parseInt(searchParams.get("goal") || "", 10);
 
   async function handleCreate() {
     if (!formLabel.trim() || !formTarget) return;
@@ -136,6 +145,20 @@ export default function GoalTracker() {
     }
   }
 
+  const filteredGoals = useMemo(() => {
+    const goals = data?.goals ?? [];
+    return goals.filter((goal) => {
+      if (statusFilter !== "all" && goal.status !== statusFilter) return false;
+      if (metricFilter !== "all" && goal.metricKey !== metricFilter) return false;
+      return true;
+    });
+  }, [data?.goals, metricFilter, statusFilter]);
+
+  const activeGoals = filteredGoals.filter((g) => g.status === "active");
+  const completedGoals = filteredGoals.filter(
+    (g) => g.status === "achieved" || g.status === "cancelled"
+  );
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -152,11 +175,6 @@ export default function GoalTracker() {
     );
   }
 
-  const activeGoals = data.goals.filter((g) => g.status === "active");
-  const completedGoals = data.goals.filter(
-    (g) => g.status === "achieved" || g.status === "cancelled"
-  );
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -167,6 +185,47 @@ export default function GoalTracker() {
         >
           {showForm ? "Cancel" : "Add Goal"}
         </button>
+      </div>
+
+      <div className="grid gap-3 rounded-xl border border-white/10 bg-surface p-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <div>
+          <label className="mb-1 block text-xs font-medium text-text-muted">Status Filter</label>
+          <select
+            value={statusFilter}
+            onChange={(event) =>
+              setQueryState({
+                status: event.target.value === "all" ? null : event.target.value,
+                goal: null,
+              })
+            }
+            className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-text-primary focus:border-white/20 focus:outline-none"
+          >
+            <option value="all">All statuses</option>
+            <option value="active">Active</option>
+            <option value="achieved">Achieved</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-text-muted">Metric Filter</label>
+          <select
+            value={metricFilter}
+            onChange={(event) =>
+              setQueryState({
+                metric: event.target.value === "all" ? null : event.target.value,
+                goal: null,
+              })
+            }
+            className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-text-primary focus:border-white/20 focus:outline-none"
+          >
+            <option value="all">All metrics</option>
+            {METRIC_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {actionError && (
@@ -252,7 +311,11 @@ export default function GoalTracker() {
           return (
             <div
               key={goal.id}
-              className="rounded-xl border border-white/10 bg-surface p-5 space-y-3"
+              className={`rounded-xl border bg-surface p-5 space-y-3 ${
+                goal.id === highlightedGoalId
+                  ? "border-accent-purple/40 shadow-[0_0_0_1px_rgba(169,96,255,0.2)]"
+                  : "border-white/10"
+              }`}
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
@@ -295,6 +358,12 @@ export default function GoalTracker() {
               )}
 
               <div className="flex gap-2 pt-1">
+                <a
+                  href={buildMetricDrilldownHref(goal.metricKey)}
+                  className="rounded-lg border border-accent-purple/20 bg-accent-purple/10 px-3 py-1.5 text-xs font-medium text-accent-purple transition hover:bg-accent-purple/20"
+                >
+                  Open Drilldown
+                </a>
                 <button
                   onClick={() => handleStatusChange(goal.id, "achieved")}
                   className="rounded-lg border border-green-500/30 px-3 py-1.5 text-xs font-medium text-green-400 transition hover:bg-green-500/10"
@@ -324,7 +393,9 @@ export default function GoalTracker() {
               return (
                 <div
                   key={goal.id}
-                  className="rounded-xl border border-white/5 bg-surface/50 p-4 opacity-70 space-y-2"
+                  className={`rounded-xl border bg-surface/50 p-4 opacity-70 space-y-2 ${
+                    goal.id === highlightedGoalId ? "border-accent-purple/30" : "border-white/5"
+                  }`}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <h4 className="font-serif text-sm font-semibold text-text-muted truncate">
@@ -344,6 +415,14 @@ export default function GoalTracker() {
                       className={`h-full rounded-full ${progressColor(pct)}`}
                       style={{ width: `${pct}%` }}
                     />
+                  </div>
+                  <div className="pt-1">
+                    <a
+                      href={buildMetricDrilldownHref(goal.metricKey)}
+                      className="text-xs font-medium text-accent-purple transition hover:text-accent-purple/80"
+                    >
+                      Open Drilldown
+                    </a>
                   </div>
                 </div>
               );

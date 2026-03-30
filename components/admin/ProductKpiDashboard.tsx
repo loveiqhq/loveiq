@@ -1,13 +1,20 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useMemo, useCallback } from "react";
 import { useAdminFetch } from "@/components/admin/hooks/useAdminFetch";
+import { useAdminQueryState } from "@/components/admin/hooks/useAdminQueryState";
 import StatCard from "@/components/admin/StatCard";
 import TimeRangeSelector from "@/components/admin/TimeRangeSelector";
 import ReportSectionsTab from "@/components/admin/kpi-tabs/ReportSectionsTab";
 import QuestionsTab from "@/components/admin/kpi-tabs/QuestionsTab";
 import ChaptersTab from "@/components/admin/kpi-tabs/ChaptersTab";
 import DiscriminationTab from "@/components/admin/kpi-tabs/DiscriminationTab";
+import {
+  buildFunnelsHref,
+  buildScorecardHref,
+  parseAdminDays,
+  parseProductKpiTab,
+} from "@/lib/admin/drilldowns";
 import type { ReportSectionKpi, QuestionKpi, ChapterKpi } from "@/data/product-kpis";
 
 interface ProductKpiData {
@@ -42,7 +49,6 @@ interface ProductKpiData {
 }
 
 const tabs = ["Report Sections", "Survey Questions", "Survey Chapters", "Discrimination"] as const;
-type Tab = (typeof tabs)[number];
 
 function escapeCSV(value: string): string {
   if (/^[=+\-@]/.test(value)) value = "'" + value;
@@ -77,11 +83,12 @@ function sourceBadge(source: "live" | "sample") {
 }
 
 export default function ProductKpiDashboard() {
-  const [days, setDays] = useState(0);
+  const { searchParams, setQueryState } = useAdminQueryState();
+  const days = parseAdminDays(searchParams.get("days"));
+  const activeTab = parseProductKpiTab(searchParams.get("tab"));
+  const selectedChapter = searchParams.get("chapter") || "all";
   const params = useMemo(() => (days > 0 ? { days: String(days) } : undefined), [days]);
   const { data, loading, error } = useAdminFetch<ProductKpiData>("/api/admin/product-kpis", params);
-  const [activeTab, setActiveTab] = useState<Tab>("Report Sections");
-  const [selectedChapter, setSelectedChapter] = useState("all");
 
   const stats = useMemo(() => {
     if (!data) return null;
@@ -158,7 +165,58 @@ export default function ProductKpiDashboard() {
     <div className="space-y-6">
       {/* Time range */}
       <div className="flex items-center justify-between">
-        <TimeRangeSelector value={days} onChange={setDays} />
+        <TimeRangeSelector
+          value={days}
+          onChange={(value) => setQueryState({ days: value > 0 ? value : null })}
+        />
+      </div>
+
+      <div className="grid gap-3 rounded-xl border border-white/10 bg-surface p-4 sm:grid-cols-2 xl:grid-cols-3">
+        <a
+          href={buildScorecardHref({
+            days,
+            tab: activeTab === "Discrimination" ? "Trends" : "Scorecard",
+          })}
+          className="rounded-lg border border-white/10 bg-white/5 px-4 py-3 transition hover:border-white/20 hover:bg-white/10"
+        >
+          <p className="text-[11px] uppercase tracking-wide text-text-muted">Cross Drilldown</p>
+          <p className="mt-1 text-sm font-semibold text-text-primary">Open Question Scorecard</p>
+          <p className="mt-1 text-xs text-text-muted">
+            Carry the current time window into question quality diagnostics.
+          </p>
+        </a>
+        <a
+          href={buildFunnelsHref({
+            days,
+            tab:
+              activeTab === "Survey Questions" || activeTab === "Survey Chapters"
+                ? "Cohort Analysis"
+                : "Conversion Funnel",
+            groupBy:
+              activeTab === "Survey Questions" || activeTab === "Survey Chapters"
+                ? "utm"
+                : undefined,
+          })}
+          className="rounded-lg border border-white/10 bg-white/5 px-4 py-3 transition hover:border-white/20 hover:bg-white/10"
+        >
+          <p className="text-[11px] uppercase tracking-wide text-text-muted">Cross Drilldown</p>
+          <p className="mt-1 text-sm font-semibold text-text-primary">Open Funnel View</p>
+          <p className="mt-1 text-xs text-text-muted">
+            Jump from question friction into conversion or cohort movement.
+          </p>
+        </a>
+        <div className="rounded-lg border border-white/10 bg-white/5 px-4 py-3">
+          <p className="text-[11px] uppercase tracking-wide text-text-muted">Focused State</p>
+          <p className="mt-1 text-sm font-semibold text-text-primary">
+            {activeTab}
+            {activeTab === "Survey Questions" && selectedChapter !== "all"
+              ? ` · Chapter ${selectedChapter}`
+              : ""}
+          </p>
+          <p className="mt-1 text-xs text-text-muted">
+            The current tab and chapter filter now persist in the URL for shareable drilldowns.
+          </p>
+        </div>
       </div>
 
       {data.meta && (
@@ -247,7 +305,7 @@ export default function ProductKpiDashboard() {
           {tabs.map((tab) => (
             <button
               key={tab}
-              onClick={() => setActiveTab(tab)}
+              onClick={() => setQueryState({ tab })}
               className={`flex-1 rounded-md px-4 py-2 text-sm font-medium transition ${
                 activeTab === tab
                   ? "bg-white/10 text-text-primary"
@@ -299,7 +357,9 @@ export default function ProductKpiDashboard() {
         <QuestionsTab
           data={data.questions}
           selectedChapter={selectedChapter}
-          onChapterChange={setSelectedChapter}
+          onChapterChange={(chapter) =>
+            setQueryState({ chapter: chapter === "all" ? null : chapter, tab: "Survey Questions" })
+          }
         />
       )}
       {activeTab === "Survey Chapters" && <ChaptersTab data={data.chapters} />}

@@ -55,32 +55,38 @@
 
 ## Admin Panel
 
-| Task                          | Files                                                                                           |
-| ----------------------------- | ----------------------------------------------------------------------------------------------- |
-| Admin auth (session check)    | `lib/admin/auth.ts`                                                                             |
-| Admin audit logging           | `lib/admin/audit.ts`                                                                            |
-| Admin roles (email allowlist) | `lib/admin/roles.ts`                                                                            |
-| Admin Supabase fetch helper   | `lib/admin/supabase.ts`                                                                         |
-| Admin Supabase Auth (server)  | `lib/admin/supabase-server.ts`                                                                  |
-| Admin display formatting      | `lib/admin/format.ts` (`maskEmail`)                                                             |
-| Admin magic link email        | `lib/emails/admin-magic-link.ts`                                                                |
-| Admin login page              | `components/admin/AdminLoginForm.tsx`, `app/admin/login/page.tsx`                               |
-| Admin login API               | `app/api/admin/login/route.ts`                                                                  |
-| Admin logout API              | `app/api/admin/logout/route.ts`                                                                 |
-| Admin magic link callback     | `app/admin/auth/callback/route.ts`                                                              |
-| Admin dashboard               | `components/admin/AdminDashboard.tsx`, `app/api/admin/stats/route.ts`                           |
-| Admin submission list         | `components/admin/SubmissionBrowser.tsx`, `components/admin/SubmissionTable.tsx`                |
-| Admin submission detail       | `components/admin/SubmissionDetail.tsx`                                                         |
-| Admin submissions API         | `app/api/admin/submissions/route.ts`, `app/api/admin/submissions/[id]/route.ts`                 |
-| Admin CSV export              | `app/api/admin/export/route.ts`                                                                 |
-| Admin survey toggle           | `components/admin/SurveyStatus.tsx`, `app/api/admin/survey-status/route.ts`                     |
-| Admin Product KPIs dashboard  | `components/admin/ProductKpiDashboard.tsx`, `app/api/admin/product-kpis/route.ts`               |
-| Admin KPI tab components      | `components/admin/kpi-tabs/ReportSectionsTab.tsx`, `QuestionsTab.tsx`, `ChaptersTab.tsx`        |
-| Admin KPI sortable table      | `components/admin/kpi-tabs/KpiDataTable.tsx`                                                    |
-| Product KPI data              | `data/product-kpis.ts` (auto-generated from `data/product-kpis/*.csv`)                          |
-| Regenerate product KPIs       | `node scripts/update-product-kpis.js`                                                           |
-| Admin layout (sidebar/header) | `components/admin/AdminSidebar.tsx`, `components/admin/AdminHeader.tsx`, `app/admin/layout.tsx` |
-| Admin data fetching hook      | `components/admin/hooks/useAdminFetch.ts`                                                       |
+| Task                          | Files                                                                                                                               |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Admin auth (session check)    | `lib/admin/auth.ts`                                                                                                                 |
+| Admin audit logging           | `lib/admin/audit.ts`                                                                                                                |
+| Admin roles (email allowlist) | `lib/admin/roles.ts`                                                                                                                |
+| Admin Supabase fetch helper   | `lib/admin/supabase.ts`                                                                                                             |
+| Admin Supabase Auth (server)  | `lib/admin/supabase-server.ts`                                                                                                      |
+| Admin display formatting      | `lib/admin/format.ts` (`maskEmail`)                                                                                                 |
+| Admin magic link email        | `lib/emails/admin-magic-link.ts`                                                                                                    |
+| Admin login page              | `components/admin/AdminLoginForm.tsx`, `app/admin/login/page.tsx`                                                                   |
+| Admin login API               | `app/api/admin/login/route.ts`                                                                                                      |
+| Admin logout API              | `app/api/admin/logout/route.ts`                                                                                                     |
+| Admin magic link callback     | `app/admin/auth/callback/route.ts`                                                                                                  |
+| Admin dashboard               | `components/admin/AdminDashboard.tsx`, `app/api/admin/stats/route.ts`                                                               |
+| Admin strategy hub            | `components/admin/StrategyHubDashboard.tsx`, `app/api/admin/strategy/route.ts`                                                      |
+| Admin experiments             | `components/admin/ExperimentRegistry.tsx`, `app/admin/experiments/page.tsx`, `app/api/admin/experiments/route.ts`                   |
+| Admin benchmarks              | `components/admin/BenchmarkRegistry.tsx`, `app/admin/benchmarks/page.tsx`, `app/api/admin/benchmarks/route.ts`                      |
+| Admin question lifecycle      | `components/admin/QuestionLifecyclePanel.tsx`, `app/admin/question-lifecycle/page.tsx`, `app/api/admin/question-lifecycle/route.ts` |
+| Admin forecasting             | `components/admin/PredictiveInsights.tsx`, `app/api/admin/predictions/route.ts`, `lib/admin/forecasting.ts`                         |
+| Admin submission list         | `components/admin/SubmissionBrowser.tsx`, `components/admin/SubmissionTable.tsx`                                                    |
+| Admin submission detail       | `components/admin/SubmissionDetail.tsx`                                                                                             |
+| Admin submissions API         | `app/api/admin/submissions/route.ts`, `app/api/admin/submissions/[id]/route.ts`                                                     |
+| Admin CSV export              | `app/api/admin/export/route.ts`                                                                                                     |
+| Admin survey toggle           | `components/admin/SurveyStatus.tsx`, `app/api/admin/survey-status/route.ts`                                                         |
+| Admin Product KPIs dashboard  | `components/admin/ProductKpiDashboard.tsx`, `app/api/admin/product-kpis/route.ts`                                                   |
+| Admin KPI tab components      | `components/admin/kpi-tabs/ReportSectionsTab.tsx`, `QuestionsTab.tsx`, `ChaptersTab.tsx`                                            |
+| Admin KPI sortable table      | `components/admin/kpi-tabs/KpiDataTable.tsx`                                                                                        |
+| Admin question scoring logic  | `lib/admin/question-effectiveness.ts`, `app/api/admin/question-effectiveness/route.ts`                                              |
+| Product KPI data              | `data/product-kpis.ts` (auto-generated from `data/product-kpis/*.csv`)                                                              |
+| Regenerate product KPIs       | `node scripts/update-product-kpis.js`                                                                                               |
+| Admin layout (sidebar/header) | `components/admin/AdminSidebar.tsx`, `components/admin/AdminHeader.tsx`, `app/admin/layout.tsx`                                     |
+| Admin data fetching hook      | `components/admin/hooks/useAdminFetch.ts`                                                                                           |
 
 ## Landing Page
 

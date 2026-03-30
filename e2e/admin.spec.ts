@@ -57,10 +57,8 @@ test.describe("Admin Panel", () => {
     // Without a valid Supabase Auth session, admin pages should redirect to login
     test("redirects to login when not authenticated", async ({ page }) => {
       await page.goto("/admin");
-      // Should either show login form or redirect to /admin/login
-      const emailInput = page.getByPlaceholder(/enter your email/i);
-      const loginHeading = page.getByText(/admin/i).first();
-      await expect(emailInput.or(loginHeading)).toBeVisible({ timeout: 10000 });
+      await expect(page).toHaveURL(/\/admin\/login(?:\?|$)/, { timeout: 10000 });
+      await expect(page.getByPlaceholder(/enter your email/i)).toBeVisible();
     });
   });
 

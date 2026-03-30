@@ -23,6 +23,12 @@ async function disableAnimations(page: import("@playwright/test").Page) {
 
 test.describe("Visual Regression", () => {
   test.use({ viewport: { width: 1280, height: 720 } });
+  test.beforeEach(({}, testInfo) => {
+    test.skip(
+      testInfo.project.name !== "Desktop Chrome",
+      "Visual baselines are maintained for Desktop Chrome only."
+    );
+  });
 
   test("landing page full screenshot", async ({ page }) => {
     await page.goto("/");
@@ -102,6 +108,12 @@ test.describe("Visual Regression", () => {
 
 test.describe("Component Visual Regression", () => {
   test.use({ viewport: { width: 412, height: 915 } }); // Mobile viewport
+  test.beforeEach(({}, testInfo) => {
+    test.skip(
+      testInfo.project.name !== "Mobile Chrome",
+      "Component visual baselines are maintained for Mobile Chrome only."
+    );
+  });
 
   test("nav mobile menu open state", async ({ page }) => {
     await page.goto("/");

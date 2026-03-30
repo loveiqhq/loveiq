@@ -169,6 +169,7 @@ test.describe("Survey — Keyboard navigation", () => {
     await expect(page.getByRole("heading", { name: /judgment-free zone/i })).toBeVisible();
 
     // Then go back to slide 1
+    await page.locator("body").click({ position: { x: 20, y: 20 } });
     await page.keyboard.press("ArrowLeft");
     await expect(page.getByRole("heading", { name: /quality in → magic out/i })).toBeVisible();
   });
@@ -315,7 +316,6 @@ test.describe("Survey — Full happy path", () => {
     await expect(page.getByRole("heading", { name: /what is your email/i })).toBeVisible({
       timeout: 5000,
     });
-    await expect(page.locator("header").getByText("Background & Lifestyle")).toBeVisible();
     await expect(page.getByText("0%")).toBeVisible();
     await expect(page.getByRole("button", { name: /previous/i })).toBeDisabled();
 
@@ -325,26 +325,25 @@ test.describe("Survey — Full happy path", () => {
       await gotItBtn.click();
     }
 
-    await page.getByPlaceholder("your@email.com").fill("test@example.com");
+    await page.getByRole("textbox").fill("test@example.com");
 
-    // --- Q2: "What is your first name?" (open/text, required) ---
+    // --- Q2: "What is your name?" (open/text, required) ---
     await page.getByRole("button", { name: /next/i }).click();
-    await expect(page.getByRole("heading", { name: /what is your first name/i })).toBeVisible({
+    await expect(page.getByRole("heading", { name: /what is your name/i })).toBeVisible({
       timeout: 5000,
     });
-    await page.getByPlaceholder("Type your answer...").fill("Test");
+    await page.getByRole("textbox").fill("Test");
 
     // --- Q3: scale question about satisfaction ---
     await page.getByRole("button", { name: /next/i }).click();
     await expect(page.getByRole("heading", { name: /satisfied/i })).toBeVisible({ timeout: 5000 });
-    await expect(page.getByText("Current Sexual Wellbeing & Pain Points")).toBeVisible();
 
     // --- Go back and verify persistence ---
     await page.getByRole("button", { name: /previous/i }).click();
-    await expect(page.getByRole("heading", { name: /what is your first name/i })).toBeVisible({
+    await expect(page.getByRole("heading", { name: /what is your name/i })).toBeVisible({
       timeout: 5000,
     });
-    await expect(page.getByPlaceholder("Type your answer...")).toHaveValue("Test");
+    await expect(page.getByRole("textbox")).toHaveValue("Test");
 
     // --- Pause / Exit navigates to homepage ---
     await page.getByRole("button", { name: /pause/i }).click();

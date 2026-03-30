@@ -11,6 +11,14 @@ type CaseStatus =
   | "monitoring"
   | "closed";
 type CasePriority = "low" | "medium" | "high";
+type RootCause =
+  | "question-friction"
+  | "traffic-quality"
+  | "scoring-mismatch"
+  | "release-regression"
+  | "report-engagement"
+  | "data-quality"
+  | "unknown";
 
 interface InvestigationCase {
   id: number;
@@ -22,6 +30,10 @@ interface InvestigationCase {
   due_date: string | null;
   submission_id: number | null;
   segment_id: number | null;
+  root_cause: RootCause | null;
+  linked_chart_key: string | null;
+  action_taken: string | null;
+  outcome_summary: string | null;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -51,6 +63,16 @@ const PRIORITY_OPTIONS: Array<{ value: CasePriority; label: string }> = [
   { value: "high", label: "High" },
 ];
 
+const ROOT_CAUSE_OPTIONS: Array<{ value: RootCause; label: string }> = [
+  { value: "question-friction", label: "Question Friction" },
+  { value: "traffic-quality", label: "Traffic Quality" },
+  { value: "scoring-mismatch", label: "Scoring Mismatch" },
+  { value: "release-regression", label: "Release Regression" },
+  { value: "report-engagement", label: "Report Engagement" },
+  { value: "data-quality", label: "Data Quality" },
+  { value: "unknown", label: "Unknown" },
+];
+
 const statusClasses: Record<CaseStatus, string> = {
   "needs-review": "bg-red-500/10 text-red-300",
   "root-cause-found": "bg-blue-500/10 text-blue-300",
@@ -63,6 +85,16 @@ const priorityClasses: Record<CasePriority, string> = {
   low: "bg-white/10 text-text-muted",
   medium: "bg-amber-500/10 text-amber-200",
   high: "bg-red-500/10 text-red-300",
+};
+
+const rootCauseLabel: Record<RootCause, string> = {
+  "question-friction": "Question friction",
+  "traffic-quality": "Traffic quality",
+  "scoring-mismatch": "Scoring mismatch",
+  "release-regression": "Release regression",
+  "report-engagement": "Report engagement",
+  "data-quality": "Data quality",
+  unknown: "Unknown",
 };
 
 export default function InvestigationCasesPanel() {
@@ -83,26 +115,36 @@ export default function InvestigationCasesPanel() {
     due_date: "",
     submission_id: "",
     segment_id: "",
+    root_cause: "unknown" as RootCause,
+    linked_chart_key: "",
+    action_taken: "",
+    outcome_summary: "",
   });
 
   const [edits, setEdits] = useState<
     Record<
       number,
-      { status: CaseStatus; priority: CasePriority; owner_email: string; due_date: string }
+      {
+        status: CaseStatus;
+        priority: CasePriority;
+        owner_email: string;
+        due_date: string;
+        root_cause: RootCause;
+        linked_chart_key: string;
+        action_taken: string;
+        outcome_summary: string;
+      }
     >
   >({});
 
-  const cases = data?.cases ?? [];
-
-  const orderedCases = useMemo(
-    () =>
-      [...cases].sort((a, b) => {
-        if (a.status === "closed" && b.status !== "closed") return 1;
-        if (a.status !== "closed" && b.status === "closed") return -1;
-        return new Date(a.updated_at).getTime() - new Date(b.updated_at).getTime() > 0 ? -1 : 1;
-      }),
-    [cases]
-  );
+  const orderedCases = useMemo(() => {
+    const cases = data?.cases ?? [];
+    return [...cases].sort((a, b) => {
+      if (a.status === "closed" && b.status !== "closed") return 1;
+      if (a.status !== "closed" && b.status === "closed") return -1;
+      return new Date(a.updated_at).getTime() - new Date(b.updated_at).getTime() > 0 ? -1 : 1;
+    });
+  }, [data?.cases]);
 
   async function createCase() {
     if (!form.title.trim()) return;
@@ -125,6 +167,10 @@ export default function InvestigationCasesPanel() {
           due_date: form.due_date || null,
           submission_id: form.submission_id ? Number(form.submission_id) : null,
           segment_id: form.segment_id ? Number(form.segment_id) : null,
+          root_cause: form.root_cause,
+          linked_chart_key: form.linked_chart_key.trim() || null,
+          action_taken: form.action_taken.trim() || null,
+          outcome_summary: form.outcome_summary.trim() || null,
         }),
       });
 
@@ -142,6 +188,10 @@ export default function InvestigationCasesPanel() {
         due_date: "",
         submission_id: "",
         segment_id: "",
+        root_cause: "unknown",
+        linked_chart_key: "",
+        action_taken: "",
+        outcome_summary: "",
       });
       setShowForm(false);
       setMessage({ type: "success", text: "Investigation case created." });
@@ -159,6 +209,10 @@ export default function InvestigationCasesPanel() {
       priority: item.priority,
       owner_email: item.owner_email ?? "",
       due_date: item.due_date ?? "",
+      root_cause: item.root_cause ?? "unknown",
+      linked_chart_key: item.linked_chart_key ?? "",
+      action_taken: item.action_taken ?? "",
+      outcome_summary: item.outcome_summary ?? "",
     };
 
     setSavingId(item.id);
@@ -177,6 +231,10 @@ export default function InvestigationCasesPanel() {
           priority: edit.priority,
           owner_email: edit.owner_email.trim() || null,
           due_date: edit.due_date || null,
+          root_cause: edit.root_cause,
+          linked_chart_key: edit.linked_chart_key.trim() || null,
+          action_taken: edit.action_taken.trim() || null,
+          outcome_summary: edit.outcome_summary.trim() || null,
         }),
       });
 
@@ -319,6 +377,22 @@ export default function InvestigationCasesPanel() {
             </select>
           </div>
           <div>
+            <label className="mb-1 block text-xs text-text-muted">Root Cause</label>
+            <select
+              value={form.root_cause}
+              onChange={(e) =>
+                setForm((current) => ({ ...current, root_cause: e.target.value as RootCause }))
+              }
+              className="w-full rounded-lg border border-white/10 bg-surface px-3 py-2 text-sm text-text-primary focus:border-white/20 focus:outline-none"
+            >
+              {ROOT_CAUSE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
             <label className="mb-1 block text-xs text-text-muted">Owner Email</label>
             <input
               type="email"
@@ -359,6 +433,38 @@ export default function InvestigationCasesPanel() {
               className="w-full rounded-lg border border-white/10 bg-surface px-3 py-2 text-sm text-text-primary focus:border-white/20 focus:outline-none"
             />
           </div>
+          <div className="lg:col-span-2">
+            <label className="mb-1 block text-xs text-text-muted">Linked Chart Key</label>
+            <input
+              type="text"
+              value={form.linked_chart_key}
+              onChange={(e) =>
+                setForm((current) => ({ ...current, linked_chart_key: e.target.value }))
+              }
+              className="w-full rounded-lg border border-white/10 bg-surface px-3 py-2 text-sm text-text-primary focus:border-white/20 focus:outline-none"
+              placeholder="e.g. dashboard.daily or pipeline.conversion"
+            />
+          </div>
+          <div className="lg:col-span-2">
+            <label className="mb-1 block text-xs text-text-muted">Action Taken</label>
+            <textarea
+              value={form.action_taken}
+              onChange={(e) => setForm((current) => ({ ...current, action_taken: e.target.value }))}
+              className="min-h-20 w-full rounded-lg border border-white/10 bg-surface px-3 py-2 text-sm text-text-primary focus:border-white/20 focus:outline-none"
+              placeholder="What was changed, tested, escalated, or decided?"
+            />
+          </div>
+          <div className="lg:col-span-2">
+            <label className="mb-1 block text-xs text-text-muted">Outcome Summary</label>
+            <textarea
+              value={form.outcome_summary}
+              onChange={(e) =>
+                setForm((current) => ({ ...current, outcome_summary: e.target.value }))
+              }
+              className="min-h-20 w-full rounded-lg border border-white/10 bg-surface px-3 py-2 text-sm text-text-primary focus:border-white/20 focus:outline-none"
+              placeholder="What happened, what was learned, and what should happen next?"
+            />
+          </div>
           <div className="lg:col-span-2 flex justify-end">
             <button
               onClick={createCase}
@@ -381,6 +487,10 @@ export default function InvestigationCasesPanel() {
               priority: item.priority,
               owner_email: item.owner_email ?? "",
               due_date: item.due_date ?? "",
+              root_cause: item.root_cause ?? "unknown",
+              linked_chart_key: item.linked_chart_key ?? "",
+              action_taken: item.action_taken ?? "",
+              outcome_summary: item.outcome_summary ?? "",
             };
 
             return (
@@ -400,19 +510,45 @@ export default function InvestigationCasesPanel() {
                       >
                         {item.priority}
                       </span>
+                      {item.root_cause && (
+                        <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] uppercase tracking-wider text-text-muted">
+                          {rootCauseLabel[item.root_cause]}
+                        </span>
+                      )}
                     </div>
                     {item.summary && (
                       <p className="max-w-3xl text-sm text-text-muted">{item.summary}</p>
+                    )}
+                    {(item.action_taken || item.outcome_summary) && (
+                      <div className="grid gap-3 lg:grid-cols-2">
+                        {item.action_taken && (
+                          <div className="rounded-lg border border-white/10 bg-surface px-3 py-3">
+                            <p className="text-[11px] uppercase tracking-wide text-text-muted">
+                              Action Taken
+                            </p>
+                            <p className="mt-1 text-sm text-text-primary">{item.action_taken}</p>
+                          </div>
+                        )}
+                        {item.outcome_summary && (
+                          <div className="rounded-lg border border-white/10 bg-surface px-3 py-3">
+                            <p className="text-[11px] uppercase tracking-wide text-text-muted">
+                              Outcome
+                            </p>
+                            <p className="mt-1 text-sm text-text-primary">{item.outcome_summary}</p>
+                          </div>
+                        )}
+                      </div>
                     )}
                     <div className="flex flex-wrap gap-3 text-xs text-text-muted">
                       <span>Created by {item.created_by}</span>
                       {item.submission_id && <span>Submission #{item.submission_id}</span>}
                       {item.segment_id && <span>Segment #{item.segment_id}</span>}
+                      {item.linked_chart_key && <span>Chart {item.linked_chart_key}</span>}
                       <span>Updated {new Date(item.updated_at).toLocaleString()}</span>
                     </div>
                   </div>
 
-                  <div className="grid gap-2 md:grid-cols-4 xl:w-[540px]">
+                  <div className="grid gap-2 md:grid-cols-4 xl:w-[640px]">
                     <select
                       value={edit.status}
                       onChange={(e) =>
@@ -445,6 +581,22 @@ export default function InvestigationCasesPanel() {
                         </option>
                       ))}
                     </select>
+                    <select
+                      value={edit.root_cause}
+                      onChange={(e) =>
+                        setEdits((current) => ({
+                          ...current,
+                          [item.id]: { ...edit, root_cause: e.target.value as RootCause },
+                        }))
+                      }
+                      className="rounded-lg border border-white/10 bg-surface px-3 py-2 text-sm text-text-primary focus:border-white/20 focus:outline-none"
+                    >
+                      {ROOT_CAUSE_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
                     <input
                       type="email"
                       value={edit.owner_email}
@@ -467,6 +619,40 @@ export default function InvestigationCasesPanel() {
                         }))
                       }
                       className="rounded-lg border border-white/10 bg-surface px-3 py-2 text-sm text-text-primary focus:border-white/20 focus:outline-none"
+                    />
+                    <input
+                      type="text"
+                      value={edit.linked_chart_key}
+                      onChange={(e) =>
+                        setEdits((current) => ({
+                          ...current,
+                          [item.id]: { ...edit, linked_chart_key: e.target.value },
+                        }))
+                      }
+                      placeholder="Chart key"
+                      className="md:col-span-2 rounded-lg border border-white/10 bg-surface px-3 py-2 text-sm text-text-primary focus:border-white/20 focus:outline-none"
+                    />
+                    <textarea
+                      value={edit.action_taken}
+                      onChange={(e) =>
+                        setEdits((current) => ({
+                          ...current,
+                          [item.id]: { ...edit, action_taken: e.target.value },
+                        }))
+                      }
+                      placeholder="Action taken"
+                      className="md:col-span-4 min-h-20 rounded-lg border border-white/10 bg-surface px-3 py-2 text-sm text-text-primary focus:border-white/20 focus:outline-none"
+                    />
+                    <textarea
+                      value={edit.outcome_summary}
+                      onChange={(e) =>
+                        setEdits((current) => ({
+                          ...current,
+                          [item.id]: { ...edit, outcome_summary: e.target.value },
+                        }))
+                      }
+                      placeholder="Outcome summary"
+                      className="md:col-span-4 min-h-20 rounded-lg border border-white/10 bg-surface px-3 py-2 text-sm text-text-primary focus:border-white/20 focus:outline-none"
                     />
                     <div className="md:col-span-4 flex justify-end">
                       <button

@@ -533,7 +533,7 @@ const IntroScreen: FC<{
             type="button"
             onClick={onContinue}
             disabled={transitioning}
-            className="mt-10 inline-flex h-[54px] items-center justify-center gap-3 rounded-full bg-[#fe6839] px-8 text-[16px] font-bold uppercase tracking-[0.1em] text-white shadow-[0_15px_22px_rgba(254,104,57,0.2),0_6px_9px_rgba(254,104,57,0.2)] transition hover:-translate-y-[2px] hover:shadow-[0_18px_28px_rgba(254,104,57,0.28),0_8px_12px_rgba(254,104,57,0.24)] focus-visible-ring sm:h-[60px] sm:gap-4 sm:px-9 sm:text-[18px] disabled:opacity-70"
+            className="mt-10 inline-flex h-[54px] items-center justify-center gap-3 rounded-full bg-[#fe6839] px-8 text-[16px] font-bold uppercase tracking-[0.1em] text-[#1a1025] shadow-[0_15px_22px_rgba(254,104,57,0.2),0_6px_9px_rgba(254,104,57,0.2)] transition hover:-translate-y-[2px] hover:shadow-[0_18px_28px_rgba(254,104,57,0.28),0_8px_12px_rgba(254,104,57,0.24)] focus-visible-ring sm:h-[60px] sm:gap-4 sm:px-9 sm:text-[18px] disabled:opacity-70"
             style={{ animation: "survey-fade-up 700ms cubic-bezier(0.16,1,0.3,1) 300ms both" }}
           >
             Continue

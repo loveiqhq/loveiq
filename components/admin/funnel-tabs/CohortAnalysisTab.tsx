@@ -1,11 +1,14 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useMemo } from "react";
 import { useAdminFetch } from "@/components/admin/hooks/useAdminFetch";
 import KpiDataTable, { type Column } from "@/components/admin/kpi-tabs/KpiDataTable";
+import type { CohortGroupBy } from "@/lib/admin/drilldowns";
 
 interface CohortAnalysisTabProps {
   days: number;
+  groupBy: CohortGroupBy;
+  onGroupByChange: (value: CohortGroupBy) => void;
 }
 
 interface CohortRow {
@@ -37,8 +40,6 @@ const GROUP_BY_OPTIONS = [
   { value: "archetype", label: "Archetype" },
 ] as const;
 
-type GroupBy = (typeof GROUP_BY_OPTIONS)[number]["value"];
-
 function completionRateColor(rate: number): string {
   if (rate >= 70) return "text-emerald-400";
   if (rate >= 40) return "text-yellow-300";
@@ -61,13 +62,15 @@ const columns: Column<CohortRow & { completion_rate: number }>[] = [
   },
 ];
 
-export default function CohortAnalysisTab({ days }: CohortAnalysisTabProps) {
-  const [groupBy, setGroupBy] = useState<GroupBy>("week");
-
+export default function CohortAnalysisTab({
+  days,
+  groupBy,
+  onGroupByChange,
+}: CohortAnalysisTabProps) {
   const params = useMemo(() => {
-    const p: Record<string, string> = { groupBy };
-    if (days > 0) p.days = String(days);
-    return p;
+    const nextParams: Record<string, string> = { groupBy };
+    if (days > 0) nextParams.days = String(days);
+    return nextParams;
   }, [days, groupBy]);
 
   const { data, loading, error } = useAdminFetch<CohortResponse>(
@@ -137,28 +140,26 @@ export default function CohortAnalysisTab({ days }: CohortAnalysisTabProps) {
         </div>
       )}
 
-      {/* Group-by selector */}
       <div className="rounded-xl border border-white/10 bg-surface p-4">
         <label className="mb-2 block text-xs font-medium text-text-muted">Group By</label>
         <div className="flex gap-1 rounded-lg bg-white/5 p-1">
-          {GROUP_BY_OPTIONS.map((opt) => (
+          {GROUP_BY_OPTIONS.map((option) => (
             <button
-              key={opt.value}
-              onClick={() => setGroupBy(opt.value)}
-              aria-pressed={groupBy === opt.value}
+              key={option.value}
+              onClick={() => onGroupByChange(option.value)}
+              aria-pressed={groupBy === option.value}
               className={`rounded-md px-4 py-1.5 text-xs font-medium transition ${
-                groupBy === opt.value
+                groupBy === option.value
                   ? "bg-white/10 text-text-primary"
                   : "text-text-muted hover:text-text-primary"
               }`}
             >
-              {opt.label}
+              {option.label}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Cohort table */}
       <div className="rounded-xl border border-white/10 bg-surface p-6">
         <h3 className="mb-4 font-serif text-lg font-bold text-text-primary">Cohort Analysis</h3>
         {rows.length === 0 ? (
@@ -171,12 +172,11 @@ export default function CohortAnalysisTab({ days }: CohortAnalysisTabProps) {
               defaultSortKey="label"
               defaultSortDir="asc"
             />
-            {/* Color legend */}
             <div className="mt-3 flex items-center gap-4 text-xs text-text-muted">
               <span>
-                Completion rate: <span className={completionRateColor(80)}>&#9679; &ge;70%</span>{" "}
-                <span className={completionRateColor(50)}>&#9679; 40-69%</span>{" "}
-                <span className={completionRateColor(20)}>&#9679; &lt;40%</span>
+                Completion rate: <span className={completionRateColor(80)}>● ≥70%</span>{" "}
+                <span className={completionRateColor(50)}>● 40-69%</span>{" "}
+                <span className={completionRateColor(20)}>● &lt;40%</span>
               </span>
             </div>
           </>

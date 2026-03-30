@@ -17,7 +17,7 @@ interface ScorecardData {
   scorecard: QuestionScore[];
 }
 
-export default function TrendsTab({ days }: { days: number }) {
+export default function TrendsTab({ days, question }: { days: number; question?: string | null }) {
   const params = useMemo(() => (days > 0 ? { days: String(days) } : undefined), [days]);
   const { data, loading, error } = useAdminFetch<ScorecardData>("/api/admin/scorecard", params);
 
@@ -37,21 +37,32 @@ export default function TrendsTab({ days }: { days: number }) {
     );
   }
 
-  const scoreItems = data.scorecard.map((q) => ({
-    label: q.frontendQid,
-    value: q.compositeScore,
+  const scoreRows = question
+    ? data.scorecard.filter(
+        (row) =>
+          row.frontendQid.toLowerCase() === question.toLowerCase() ||
+          row.questionText.toLowerCase().includes(question.toLowerCase())
+      )
+    : data.scorecard;
+
+  const scoreItems = scoreRows.map((row) => ({
+    label: row.frontendQid,
+    value: row.compositeScore,
   }));
 
-  const skipItems = data.scorecard
-    .filter((q) => q.skipRate > 0)
+  const skipItems = scoreRows
+    .filter((row) => row.skipRate > 0)
     .sort((a, b) => b.skipRate - a.skipRate)
     .slice(0, 15)
-    .map((q) => ({ label: q.frontendQid, value: q.skipRate }));
+    .map((row) => ({ label: row.frontendQid, value: row.skipRate }));
 
   return (
     <div className="space-y-6">
       <div className="rounded-xl border border-white/10 bg-surface p-5">
-        <h3 className="mb-4 text-sm font-medium text-text-primary">Composite Score by Question</h3>
+        <h3 className="mb-4 text-sm font-medium text-text-primary">
+          Composite Score by Question
+          {question ? ` · ${question}` : ""}
+        </h3>
         <BarChart items={scoreItems} direction="vertical" />
       </div>
 

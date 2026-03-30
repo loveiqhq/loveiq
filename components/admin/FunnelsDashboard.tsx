@@ -1,30 +1,82 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo } from "react";
+import { useAdminQueryState } from "@/components/admin/hooks/useAdminQueryState";
 import TimeRangeSelector from "@/components/admin/TimeRangeSelector";
 import ConversionFunnelTab from "@/components/admin/funnel-tabs/ConversionFunnelTab";
 import CohortAnalysisTab from "@/components/admin/funnel-tabs/CohortAnalysisTab";
+import {
+  buildProductKpiHref,
+  buildScorecardHref,
+  parseAdminDays,
+  parseCohortGroupBy,
+  parseFunnelTab,
+} from "@/lib/admin/drilldowns";
 
 const tabs = ["Conversion Funnel", "Cohort Analysis"] as const;
-type Tab = (typeof tabs)[number];
 
 export default function FunnelsDashboard() {
-  const [days, setDays] = useState(0);
-  const [activeTab, setActiveTab] = useState<Tab>("Conversion Funnel");
+  const { searchParams, setQueryState } = useAdminQueryState();
+  const days = parseAdminDays(searchParams.get("days"));
+  const activeTab = parseFunnelTab(searchParams.get("tab"));
+  const utmFilter = searchParams.get("utm") || "";
+  const groupBy = parseCohortGroupBy(searchParams.get("groupBy"));
+  const focusedState = useMemo(() => {
+    if (activeTab === "Conversion Funnel" && utmFilter) return `UTM filter: ${utmFilter}`;
+    if (activeTab === "Cohort Analysis") return `Grouped by ${groupBy}`;
+    return "Current time window is shareable by URL.";
+  }, [activeTab, groupBy, utmFilter]);
 
   return (
     <div className="space-y-6">
-      {/* Time range */}
       <div className="flex items-center justify-between">
-        <TimeRangeSelector value={days} onChange={setDays} />
+        <TimeRangeSelector
+          value={days}
+          onChange={(value) => setQueryState({ days: value > 0 ? value : null })}
+        />
       </div>
 
-      {/* Tab selector */}
+      <div className="grid gap-3 rounded-xl border border-white/10 bg-surface p-4 sm:grid-cols-2 xl:grid-cols-3">
+        <a
+          href={buildProductKpiHref({
+            days,
+            tab: activeTab === "Conversion Funnel" ? "Survey Chapters" : "Survey Questions",
+          })}
+          className="rounded-lg border border-white/10 bg-white/5 px-4 py-3 transition hover:border-white/20 hover:bg-white/10"
+        >
+          <p className="text-[11px] uppercase tracking-wide text-text-muted">Cross Drilldown</p>
+          <p className="mt-1 text-sm font-semibold text-text-primary">Open Product KPIs</p>
+          <p className="mt-1 text-xs text-text-muted">
+            Move from funnel loss into the survey stages and question friction behind it.
+          </p>
+        </a>
+        <a
+          href={buildScorecardHref({
+            days,
+            tab: activeTab === "Cohort Analysis" ? "Trends" : "Scorecard",
+          })}
+          className="rounded-lg border border-white/10 bg-white/5 px-4 py-3 transition hover:border-white/20 hover:bg-white/10"
+        >
+          <p className="text-[11px] uppercase tracking-wide text-text-muted">Cross Drilldown</p>
+          <p className="mt-1 text-sm font-semibold text-text-primary">Open Question Scorecard</p>
+          <p className="mt-1 text-xs text-text-muted">
+            Check whether conversion loss lines up with weak question scores or skip behavior.
+          </p>
+        </a>
+        <div className="rounded-lg border border-white/10 bg-white/5 px-4 py-3">
+          <p className="text-[11px] uppercase tracking-wide text-text-muted">Focused State</p>
+          <p className="mt-1 text-sm font-semibold text-text-primary">{focusedState}</p>
+          <p className="mt-1 text-xs text-text-muted">
+            Tabs, groupings, time windows, and UTM filters now persist in the URL.
+          </p>
+        </div>
+      </div>
+
       <div className="flex gap-1 rounded-lg border border-white/10 bg-surface p-1">
         {tabs.map((tab) => (
           <button
             key={tab}
-            onClick={() => setActiveTab(tab)}
+            onClick={() => setQueryState({ tab })}
             className={`flex-1 rounded-md px-4 py-2 text-sm font-medium transition ${
               activeTab === tab
                 ? "bg-white/10 text-text-primary"
@@ -36,9 +88,22 @@ export default function FunnelsDashboard() {
         ))}
       </div>
 
-      {/* Active tab */}
-      {activeTab === "Conversion Funnel" && <ConversionFunnelTab days={days} />}
-      {activeTab === "Cohort Analysis" && <CohortAnalysisTab days={days} />}
+      {activeTab === "Conversion Funnel" && (
+        <ConversionFunnelTab
+          days={days}
+          utmFilter={utmFilter}
+          onUtmFilterChange={(value) =>
+            setQueryState({ utm: value || null, tab: "Conversion Funnel" })
+          }
+        />
+      )}
+      {activeTab === "Cohort Analysis" && (
+        <CohortAnalysisTab
+          days={days}
+          groupBy={groupBy}
+          onGroupByChange={(value) => setQueryState({ groupBy: value, tab: "Cohort Analysis" })}
+        />
+      )}
     </div>
   );
 }

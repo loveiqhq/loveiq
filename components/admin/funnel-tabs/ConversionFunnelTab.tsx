@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useMemo } from "react";
 import { useAdminFetch } from "@/components/admin/hooks/useAdminFetch";
 import FunnelChart from "@/components/admin/funnel-tabs/FunnelChart";
 
 interface ConversionFunnelTabProps {
   days: number;
+  utmFilter: string;
+  onUtmFilterChange: (value: string) => void;
 }
 
 interface FunnelStage {
@@ -38,14 +40,16 @@ const DEFAULT_STAGES: FunnelStage[] = [
   { name: "invite_sent", count: 0 },
 ];
 
-export default function ConversionFunnelTab({ days }: ConversionFunnelTabProps) {
-  const [utmFilter, setUtmFilter] = useState("");
-
+export default function ConversionFunnelTab({
+  days,
+  utmFilter,
+  onUtmFilterChange,
+}: ConversionFunnelTabProps) {
   const params = useMemo(() => {
-    const p: Record<string, string> = {};
-    if (days > 0) p.days = String(days);
-    if (utmFilter.trim()) p.utm = utmFilter.trim();
-    return Object.keys(p).length > 0 ? p : undefined;
+    const nextParams: Record<string, string> = {};
+    if (days > 0) nextParams.days = String(days);
+    if (utmFilter.trim()) nextParams.utm = utmFilter.trim();
+    return Object.keys(nextParams).length > 0 ? nextParams : undefined;
   }, [days, utmFilter]);
 
   const { data, loading, error } = useAdminFetch<ConversionFunnelResponse>(
@@ -76,7 +80,6 @@ export default function ConversionFunnelTab({ days }: ConversionFunnelTabProps) 
 
   return (
     <div className="space-y-6">
-      {/* UTM filter */}
       <div className="rounded-xl border border-white/10 bg-surface p-4">
         <label className="mb-2 block text-xs font-medium text-text-muted">
           Filter by UTM Source
@@ -84,13 +87,12 @@ export default function ConversionFunnelTab({ days }: ConversionFunnelTabProps) 
         <input
           type="text"
           value={utmFilter}
-          onChange={(e) => setUtmFilter(e.target.value)}
+          onChange={(event) => onUtmFilterChange(event.target.value)}
           placeholder="e.g. google, tiktok, newsletter"
           className="w-full max-w-xs rounded-lg border border-white/10 bg-[#1a1025] px-3 py-2 text-sm text-text-primary outline-none placeholder:text-text-muted/50 focus:border-accent-purple/50"
         />
       </div>
 
-      {/* Funnel visualization */}
       <div className="rounded-xl border border-white/10 bg-surface p-6">
         <h3 className="mb-4 font-serif text-lg font-bold text-text-primary">Conversion Funnel</h3>
         <FunnelChart stages={stages} />

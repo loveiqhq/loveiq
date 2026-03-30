@@ -5,20 +5,9 @@ import { verifyCsrfToken } from "@/lib/csrf";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
 import { supabaseFetch } from "@/lib/admin/supabase";
 import { logAdminAction } from "@/lib/admin/audit";
-import { WORKFLOW_TAGS } from "@/lib/admin/workflow-tags";
+import { fetchMetricValue } from "@/lib/admin/metric-library";
 import logger from "@/lib/logger";
 import { z } from "zod";
-
-const WORKFLOW_QUESTION_CHANGE_CANDIDATE_KEY = ["workflow", "question", "change", "candidate"].join(
-  "_"
-);
-
-const WORKFLOW_METRIC_TO_TAG_NAME = {
-  workflow_needs_review: WORKFLOW_TAGS[0].name,
-  workflow_root_cause_found: WORKFLOW_TAGS[1].name,
-  [WORKFLOW_QUESTION_CHANGE_CANDIDATE_KEY]: WORKFLOW_TAGS[2].name,
-  workflow_monitoring: WORKFLOW_TAGS[3].name,
-} as const;
 
 const createGoalSchema = z.object({
   label: z.string().min(1).max(100),
@@ -37,103 +26,6 @@ const deleteGoalSchema = z.object({
   action: z.literal("delete"),
   goalId: z.number().int().positive(),
 });
-
-async function fetchMetricValue(metricKey: string): Promise<number | null> {
-  try {
-    switch (metricKey) {
-      case "total_submissions": {
-        const res = await supabaseFetch(`/rest/v1/survey_submission?select=id&limit=1`, {
-          method: "HEAD",
-          headers: { Prefer: "count=exact" },
-        });
-        const range = res.headers.get("content-range");
-        if (range) {
-          const total = range.split("/")[1];
-          return total && total !== "*" ? parseInt(total, 10) : 0;
-        }
-        return 0;
-      }
-      case "completion_rate": {
-        const [totalRes, completedRes] = await Promise.all([
-          supabaseFetch(`/rest/v1/survey_submission?select=id&limit=1`, {
-            method: "HEAD",
-            headers: { Prefer: "count=exact" },
-          }),
-          supabaseFetch(`/rest/v1/survey_submission?select=id&status=eq.completed&limit=1`, {
-            method: "HEAD",
-            headers: { Prefer: "count=exact" },
-          }),
-        ]);
-        const totalRange = totalRes.headers.get("content-range");
-        const completedRange = completedRes.headers.get("content-range");
-        const total =
-          totalRange && totalRange.split("/")[1] !== "*"
-            ? parseInt(totalRange.split("/")[1], 10)
-            : 0;
-        const completed =
-          completedRange && completedRange.split("/")[1] !== "*"
-            ? parseInt(completedRange.split("/")[1], 10)
-            : 0;
-        if (total === 0) return 0;
-        return Math.round((completed / total) * 100);
-      }
-      case "waitlist_signups": {
-        const res = await supabaseFetch(`/rest/v1/waitlist_user?select=id&limit=1`, {
-          method: "HEAD",
-          headers: { Prefer: "count=exact" },
-        });
-        const range = res.headers.get("content-range");
-        if (range) {
-          const total = range.split("/")[1];
-          return total && total !== "*" ? parseInt(total, 10) : 0;
-        }
-        return 0;
-      }
-      case "scored_count": {
-        const res = await supabaseFetch(`/rest/v1/scoring_result?select=id&limit=1`, {
-          method: "HEAD",
-          headers: { Prefer: "count=exact" },
-        });
-        const range = res.headers.get("content-range");
-        if (range) {
-          const total = range.split("/")[1];
-          return total && total !== "*" ? parseInt(total, 10) : 0;
-        }
-        return 0;
-      }
-      case "workflow_needs_review":
-      case "workflow_root_cause_found":
-      case WORKFLOW_QUESTION_CHANGE_CANDIDATE_KEY:
-      case "workflow_monitoring": {
-        const workflowName =
-          WORKFLOW_METRIC_TO_TAG_NAME[metricKey as keyof typeof WORKFLOW_METRIC_TO_TAG_NAME];
-
-        const tagRes = await supabaseFetch(
-          `/rest/v1/submission_tag?select=id&name=eq.${encodeURIComponent(workflowName)}`,
-          { headers: { Range: "0-1" } }
-        );
-        if (!tagRes.ok) return null;
-
-        const tags = (await tagRes.json()) as Array<{ id: number }>;
-        if (tags.length === 0) return 0;
-
-        const assignmentRes = await supabaseFetch(
-          `/rest/v1/submission_tag_assignment?select=submission_id&tag_id=eq.${tags[0].id}`,
-          { headers: { Range: "0-9999" } }
-        );
-        if (!assignmentRes.ok) return null;
-
-        const assignments = (await assignmentRes.json()) as Array<{ submission_id: number }>;
-        return new Set(assignments.map((row) => row.submission_id)).size;
-      }
-      default:
-        return null;
-    }
-  } catch (err) {
-    logger.warn({ err, metricKey }, "Failed to fetch metric value");
-    return null;
-  }
-}
 
 export async function GET(request: Request) {
   const admin = await verifyAdminSession();
