@@ -2,12 +2,24 @@
 
 import { useState } from "react";
 import ServicesTab from "@/components/admin/health-tabs/ServicesTab";
+import AnomalyCenterTab from "@/components/admin/health-tabs/AnomalyCenterTab";
+import IncidentCorrelationTab from "@/components/admin/health-tabs/IncidentCorrelationTab";
+import DriftDetectorTab from "@/components/admin/health-tabs/DriftDetectorTab";
 import ErrorsTab from "@/components/admin/health-tabs/ErrorsTab";
 import PerformanceTab from "@/components/admin/health-tabs/PerformanceTab";
 import IntegrationsTab from "@/components/admin/health-tabs/IntegrationsTab";
 import TrustTrackingTab from "@/components/admin/health-tabs/TrustTrackingTab";
 
-const tabs = ["Services", "Integrations", "Trust & Tracking", "Errors", "Performance"] as const;
+const tabs = [
+  "Services",
+  "Integrations",
+  "Trust & Tracking",
+  "Anomalies",
+  "Incident Correlation",
+  "Drift Detector",
+  "Errors",
+  "Performance",
+] as const;
 type Tab = (typeof tabs)[number];
 
 export default function HealthDashboard() {
@@ -33,6 +45,9 @@ export default function HealthDashboard() {
       {activeTab === "Services" && <ServicesTab />}
       {activeTab === "Integrations" && <IntegrationsTab />}
       {activeTab === "Trust & Tracking" && <TrustTrackingTab />}
+      {activeTab === "Anomalies" && <AnomalyCenterTab />}
+      {activeTab === "Incident Correlation" && <IncidentCorrelationTab />}
+      {activeTab === "Drift Detector" && <DriftDetectorTab />}
       {activeTab === "Errors" && <ErrorsTab />}
       {activeTab === "Performance" && <PerformanceTab />}
     </div>

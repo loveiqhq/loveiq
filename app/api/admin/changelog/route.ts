@@ -4,6 +4,7 @@ import { verifyAdminSession } from "@/lib/admin/auth";
 import { hasRole } from "@/lib/admin/roles";
 import { verifyCsrfToken } from "@/lib/csrf";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
+import { ADMIN_METRIC_OPTIONS } from "@/lib/admin/metric-library";
 import { supabaseFetch } from "@/lib/admin/supabase";
 import { logAdminAction } from "@/lib/admin/audit";
 import { maskEmail } from "@/lib/admin/format";
@@ -15,6 +16,15 @@ const changelogSchema = z.object({
   description: z.string().trim().max(2000).optional(),
   category: z.enum(["survey-change", "site-update", "marketing", "bug-fix", "feature", "other"]),
   eventDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  ownerEmail: z.string().trim().email().optional().nullable(),
+  primaryMetricKey: z.string().trim().max(80).optional().nullable(),
+  expectedImpact: z.string().trim().max(1500).optional().nullable(),
+  reviewDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional()
+    .nullable(),
+  measuredOutcome: z.string().trim().max(1500).optional().nullable(),
 });
 
 const decisionStatusSchema = z.enum([
@@ -35,6 +45,7 @@ const decisionSchema = z.object({
   entryType: z.enum(["decision", "scoring-change", "memo"]),
   title: z.string().trim().min(1).max(200),
   ownerEmail: z.string().trim().email().optional().nullable(),
+  primaryMetricKey: z.string().trim().max(80).optional().nullable(),
   status: decisionStatusSchema.optional(),
   rationale: z.string().trim().min(1).max(2000),
   expectedImpact: z.string().trim().max(1500).optional().nullable(),
@@ -50,6 +61,7 @@ const patchSchema = z.object({
   id: z.number().int().positive(),
   status: decisionStatusSchema.optional(),
   ownerEmail: z.string().trim().email().optional().nullable(),
+  primaryMetricKey: z.string().trim().max(80).optional().nullable(),
   rationale: z.string().trim().min(1).max(2000).optional(),
   expectedImpact: z.string().trim().max(1500).optional().nullable(),
   observedEffect: z.string().trim().max(1500).optional().nullable(),
@@ -66,8 +78,14 @@ type ChangelogRow = {
   description: string | null;
   category: string;
   admin_email: string;
+  owner_email: string | null;
+  primary_metric_key: string | null;
+  expected_impact: string | null;
+  review_date: string | null;
+  measured_outcome: string | null;
   event_date: string;
   created_at: string;
+  updated_at: string;
 };
 
 type AnnotationRow = {
@@ -86,6 +104,7 @@ type DecisionRow = {
   title: string;
   entry_type: "decision" | "scoring-change" | "memo";
   status: z.infer<typeof decisionStatusSchema>;
+  primary_metric_key: string | null;
   rationale: string;
   expected_impact: string | null;
   observed_effect: string | null;
@@ -208,8 +227,14 @@ export async function GET(request: Request) {
         description: entry.description,
         category: entry.category,
         adminEmail: maskEmail(entry.admin_email),
+        ownerEmail: entry.owner_email ? maskEmail(entry.owner_email) : null,
+        primaryMetricKey: entry.primary_metric_key,
+        expectedImpact: entry.expected_impact,
+        reviewDate: entry.review_date,
+        measuredOutcome: entry.measured_outcome,
         eventDate: entry.event_date,
         createdAt: entry.created_at,
+        updatedAt: entry.updated_at,
       })),
       annotations: annotations.map((entry) => ({
         id: entry.id,
@@ -224,6 +249,7 @@ export async function GET(request: Request) {
         title: entry.title,
         entryType: entry.entry_type,
         status: entry.status,
+        primaryMetricKey: entry.primary_metric_key,
         rationale: entry.rationale,
         expectedImpact: entry.expected_impact,
         observedEffect: entry.observed_effect,
@@ -237,6 +263,7 @@ export async function GET(request: Request) {
         createdAt: entry.created_at,
         updatedAt: entry.updated_at,
       })),
+      metrics: ADMIN_METRIC_OPTIONS,
       summary: {
         changelogCount: changelog.length,
         annotationCount: annotations.length,
@@ -274,7 +301,17 @@ export async function POST(request: Request) {
 
   try {
     if (parsed.data.kind === "changelog") {
-      const { title, description, category, eventDate } = parsed.data;
+      const {
+        title,
+        description,
+        category,
+        eventDate,
+        ownerEmail,
+        primaryMetricKey,
+        expectedImpact,
+        reviewDate,
+        measuredOutcome,
+      } = parsed.data;
       const res = await supabaseFetch("/rest/v1/product_changelog", {
         method: "POST",
         headers: { Prefer: "return=representation" },
@@ -282,6 +319,11 @@ export async function POST(request: Request) {
           title,
           description: description || null,
           category,
+          owner_email: ownerEmail ?? admin.email,
+          primary_metric_key: primaryMetricKey ?? null,
+          expected_impact: expectedImpact ?? null,
+          review_date: reviewDate ?? null,
+          measured_outcome: measuredOutcome ?? null,
           event_date: eventDate,
           admin_email: admin.email,
         }),
@@ -298,7 +340,7 @@ export async function POST(request: Request) {
         action: "create_changelog_entry",
         resource_type: "product_changelog",
         resource_id: String(rows[0]?.id),
-        metadata: { title, category },
+        metadata: { title, category, primaryMetricKey: primaryMetricKey ?? null },
         ip,
       });
 
@@ -309,6 +351,7 @@ export async function POST(request: Request) {
       title,
       entryType,
       ownerEmail,
+      primaryMetricKey,
       status,
       rationale,
       expectedImpact,
@@ -329,6 +372,7 @@ export async function POST(request: Request) {
         title,
         entry_type: entryType,
         status: status ?? "draft",
+        primary_metric_key: primaryMetricKey ?? null,
         rationale,
         expected_impact: expectedImpact ?? null,
         observed_effect: observedEffect ?? null,
@@ -385,6 +429,8 @@ export async function PATCH(request: Request) {
 
   if (rest.status !== undefined) updates.status = rest.status;
   if (rest.ownerEmail !== undefined) updates.owner_email = rest.ownerEmail;
+  if (rest.primaryMetricKey !== undefined)
+    updates.primary_metric_key = rest.primaryMetricKey ?? null;
   if (rest.rationale !== undefined) updates.rationale = rest.rationale;
   if (rest.expectedImpact !== undefined) updates.expected_impact = rest.expectedImpact ?? null;
   if (rest.observedEffect !== undefined) updates.observed_effect = rest.observedEffect ?? null;

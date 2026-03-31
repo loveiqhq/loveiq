@@ -63,6 +63,7 @@ const LEAKAGE_HINTS: Record<string, { cause: string }> = {
 };
 
 const round1 = (value: number) => Math.round(value * 10) / 10;
+const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 const clampDays = (days: number) => (Number.isNaN(days) ? 30 : Math.min(Math.max(days, 7), 90));
 const shiftDays = (base: Date, days: number) => {
   const copy = new Date(base);
@@ -119,6 +120,23 @@ const topGap = (values: Record<string, number> | null | undefined) => {
   if (sorted.length === 0) return null;
   if (sorted.length === 1) return Math.round(sorted[0] * 10) / 10;
   return Math.round((sorted[0] - sorted[1]) * 10) / 10;
+};
+const confidenceToScore = (value: "high" | "medium" | "low") =>
+  value === "high" ? 90 : value === "medium" ? 65 : 40;
+const effortToScore = (value: "low" | "medium" | "high") =>
+  value === "low" ? 85 : value === "medium" ? 60 : 35;
+const timeToSignalScore = (value: "fast" | "medium" | "slow") =>
+  value === "fast" ? 85 : value === "medium" ? 60 : 35;
+const daysUntilDate = (value: string | null) => {
+  if (!value) return null;
+  const parsed = new Date(`${value}T00:00:00.000Z`).getTime();
+  if (Number.isNaN(parsed)) return null;
+  return Math.ceil((parsed - Date.now()) / 86_400_000);
+};
+const daysSinceIso = (value: string) => {
+  const parsed = new Date(value).getTime();
+  if (Number.isNaN(parsed)) return 0;
+  return Math.max(0, Math.floor((Date.now() - parsed) / 86_400_000));
 };
 
 function goalDrivers(
@@ -292,6 +310,30 @@ export async function buildStrategySnapshot(inputDays: number) {
       `/rest/v1/admin_experiment?select=id,name,status,primary_metric_key,decision_date,segment_id,owner_email,updated_at&order=updated_at.desc`,
       { headers: { Range: "0-49" } }
     ),
+    supabaseFetch(
+      [
+        "/rest/v1/admin_decision_entry?select=",
+        [
+          "id",
+          "title",
+          "entry_type",
+          "status",
+          "primary_metric_key",
+          "owner_email",
+          "expected_impact",
+          "observed_effect",
+          "review_window_days",
+          "created_at",
+          "updated_at",
+        ].join(","),
+        "&order=updated_at.desc",
+      ].join(""),
+      { headers: { Range: "0-199" } }
+    ),
+    supabaseFetch(
+      "/rest/v1/admin_review_request?select=id,resource_id,resource_type,status&resource_type=eq.decision-entry&order=updated_at.desc",
+      { headers: { Range: "0-999" } }
+    ),
     supabaseFetch("/rest/v1/rpc/get_predictive_insights", {
       method: "POST",
       body: JSON.stringify({ p_days: days }),
@@ -326,6 +368,8 @@ export async function buildStrategySnapshot(inputDays: number) {
     assignments,
     adminNotes,
     experiments,
+    decisionEntries,
+    decisionReviews,
     predictiveInsights,
     pipeline,
     forecastSnapshot,
@@ -601,28 +645,58 @@ export async function buildStrategySnapshot(inputDays: number) {
     .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
     .slice(0, 8);
 
+  const opportunityFormula = "45% impact + 25% confidence + 15% effort + 15% time-to-signal";
   const opportunityBacklog = [
     ...(predictiveInsights as any[]).map((insight) => {
-      const confidenceBonus =
-        insight.confidence === "high" ? 16 : insight.confidence === "medium" ? 8 : 0;
+      const confidence = insight.confidence as "high" | "medium" | "low";
+      const effort =
+        insight.type === "utm_conversion" ||
+        insight.type === "abandonment_predictor" ||
+        insight.type === "friction_zone" ||
+        insight.type === "completion_time"
+          ? "low"
+          : insight.type === "archetype_trend"
+            ? "medium"
+            : "high";
+      const timeToSignal =
+        insight.type === "revenue_forecast"
+          ? "slow"
+          : insight.type === "archetype_trend"
+            ? "medium"
+            : "fast";
+      const impactBase = 42 + Math.max(0, 5 - insight.priority) * 9;
       const trendBonus =
         insight.trend === "down" &&
         (insight.type === "abandonment_predictor" ||
           insight.type === "friction_zone" ||
           insight.type === "completion_time")
-          ? 10
-          : 0;
-      const score = Math.min(
-        99,
-        42 + Math.max(0, 5 - insight.priority) * 10 + confidenceBonus + trendBonus
+          ? 12
+          : insight.trend === "up" && insight.type === "utm_conversion"
+            ? 8
+            : 0;
+      const impactScore = clamp(impactBase + trendBonus, 35, 95);
+      const confidenceScore = confidenceToScore(confidence);
+      const effortScore = effortToScore(effort);
+      const timeScore = timeToSignalScore(timeToSignal);
+      const score = round1(
+        impactScore * 0.45 + confidenceScore * 0.25 + effortScore * 0.15 + timeScore * 0.15
       );
       return {
         title: insight.title,
         source: PREDICTION_LABELS[insight.type] ?? insight.type,
-        confidence: insight.confidence,
+        confidence,
+        effort,
+        timeToSignal,
         score,
-        impact: score >= 80 ? "high" : score >= 60 ? "medium" : "low",
+        impact: score >= 75 ? "high" : score >= 55 ? "medium" : "low",
         detail: insight.description,
+        scoreInputs: {
+          impact: impactScore,
+          confidence: confidenceScore,
+          effort: effortScore,
+          timeToSignal: timeScore,
+          formula: opportunityFormula,
+        },
         href:
           insight.type === "utm_conversion"
             ? "/admin/pipeline"
@@ -635,21 +709,43 @@ export async function buildStrategySnapshot(inputDays: number) {
     }),
     ...releaseImpactEntries
       .filter((entry) => entry.deltaCompletionRate < 0 || entry.deltaSubmissions < 0)
-      .map((entry) => ({
-        title: `Review impact of "${entry.title}"`,
-        source: "Release Impact",
-        confidence: "medium",
-        score: Math.min(
-          95,
-          58 + Math.abs(entry.deltaCompletionRate) * 4 + Math.max(0, -entry.deltaSubmissions)
-        ),
-        impact:
-          Math.abs(entry.deltaCompletionRate) >= 5 || entry.deltaSubmissions <= -5
-            ? "high"
-            : "medium",
-        detail: `Post-release window shows ${entry.deltaCompletionRate}pp completion change and ${entry.deltaSubmissions} submission change.`,
-        href: entry.href,
-      })),
+      .map((entry) => {
+        const confidence = "medium" as const;
+        const effort =
+          Math.abs(entry.deltaCompletionRate) >= 5 || entry.deltaSubmissions <= -8
+            ? "low"
+            : "medium";
+        const timeToSignal = "fast" as const;
+        const impactScore = clamp(
+          48 + Math.abs(entry.deltaCompletionRate) * 7 + Math.max(0, -entry.deltaSubmissions) * 2,
+          35,
+          95
+        );
+        const confidenceScore = confidenceToScore(confidence);
+        const effortScore = effortToScore(effort);
+        const timeScore = timeToSignalScore(timeToSignal);
+        const score = round1(
+          impactScore * 0.45 + confidenceScore * 0.25 + effortScore * 0.15 + timeScore * 0.15
+        );
+        return {
+          title: `Review impact of "${entry.title}"`,
+          source: "Release Impact",
+          confidence,
+          effort,
+          timeToSignal,
+          score,
+          impact: score >= 75 ? "high" : "medium",
+          detail: `Post-release window shows ${entry.deltaCompletionRate}pp completion change and ${entry.deltaSubmissions} submission change.`,
+          scoreInputs: {
+            impact: impactScore,
+            confidence: confidenceScore,
+            effort: effortScore,
+            timeToSignal: timeScore,
+            formula: opportunityFormula,
+          },
+          href: entry.href,
+        };
+      }),
   ]
     .sort((a: any, b: any) => b.score - a.score)
     .slice(0, 10);
@@ -988,6 +1084,297 @@ export async function buildStrategySnapshot(inputDays: number) {
     },
   ];
 
+  const openDecisionReviews = new Map<number, number>();
+  for (const review of decisionReviews as Array<{
+    resource_id: number | null;
+    status: string;
+  }>) {
+    if (
+      review.resource_id == null ||
+      review.status === "approved" ||
+      review.status === "rejected"
+    ) {
+      continue;
+    }
+    openDecisionReviews.set(
+      review.resource_id,
+      (openDecisionReviews.get(review.resource_id) ?? 0) + 1
+    );
+  }
+
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const allDecisionReviewItems = (
+    decisionEntries as Array<{
+      id: number;
+      title: string;
+      entry_type: "decision" | "scoring-change" | "memo";
+      status: "draft" | "approved" | "monitoring" | "validated" | "rolled-back";
+      primary_metric_key: string | null;
+      owner_email: string | null;
+      expected_impact: string | null;
+      observed_effect: string | null;
+      review_window_days: number | null;
+      created_at: string;
+      updated_at: string;
+    }>
+  )
+    .map((entry) => {
+      const reviewDate =
+        entry.review_window_days != null
+          ? shiftDays(new Date(entry.updated_at), entry.review_window_days)
+              .toISOString()
+              .slice(0, 10)
+          : null;
+      const daysUntilReview = daysUntilDate(reviewDate);
+      const daysSinceUpdate = daysSinceIso(entry.updated_at);
+      const openReviewCount = openDecisionReviews.get(entry.id) ?? 0;
+      const awaitingOutcome = !!entry.expected_impact && !entry.observed_effect;
+      const stale =
+        awaitingOutcome &&
+        entry.status !== "validated" &&
+        entry.status !== "rolled-back" &&
+        daysSinceUpdate >= 21;
+      const reviewState =
+        entry.status === "validated"
+          ? "validated"
+          : stale
+            ? "stale"
+            : awaitingOutcome && reviewDate != null && reviewDate <= todayIso
+              ? "due"
+              : awaitingOutcome
+                ? "missing-outcome"
+                : "upcoming";
+      const comparisonLabel =
+        entry.expected_impact && entry.observed_effect
+          ? `Expected: ${entry.expected_impact} | Observed: ${entry.observed_effect}`
+          : entry.expected_impact
+            ? `Expected: ${entry.expected_impact} | Observed outcome missing`
+            : entry.observed_effect
+              ? `Observed: ${entry.observed_effect}`
+              : "No expected or measured outcome captured yet.";
+      return {
+        id: entry.id,
+        title: entry.title,
+        entryType: entry.entry_type,
+        status: entry.status,
+        primaryMetricKey: entry.primary_metric_key,
+        ownerEmail: entry.owner_email,
+        reviewDate,
+        daysUntilReview,
+        daysSinceUpdate,
+        openReviewCount,
+        expectedImpact: entry.expected_impact,
+        measuredOutcome: entry.observed_effect,
+        comparisonLabel,
+        detail: [
+          `${entry.entry_type} is ${entry.status}`,
+          entry.owner_email ? `owner ${entry.owner_email}` : "unassigned",
+          reviewDate ? `review ${reviewDate}` : "no review date",
+          openReviewCount > 0
+            ? `${openReviewCount} open review${openReviewCount === 1 ? "" : "s"}`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(" | "),
+        reviewState,
+        href: "/admin/changelog",
+      };
+    })
+    .sort((a, b) => {
+      const rankA =
+        a.reviewState === "stale"
+          ? 0
+          : a.reviewState === "due"
+            ? 1
+            : a.reviewState === "missing-outcome"
+              ? 2
+              : a.reviewState === "upcoming"
+                ? 3
+                : 4;
+      const rankB =
+        b.reviewState === "stale"
+          ? 0
+          : b.reviewState === "due"
+            ? 1
+            : b.reviewState === "missing-outcome"
+              ? 2
+              : b.reviewState === "upcoming"
+                ? 3
+                : 4;
+      return (
+        rankA - rankB ||
+        (a.daysUntilReview ?? 999) - (b.daysUntilReview ?? 999) ||
+        b.daysSinceUpdate - a.daysSinceUpdate
+      );
+    });
+  const decisionReviewItems = allDecisionReviewItems.slice(0, 12);
+
+  const decisionReviewSummary = {
+    total: allDecisionReviewItems.length,
+    due: allDecisionReviewItems.filter((item) => item.reviewState === "due").length,
+    stale: allDecisionReviewItems.filter((item) => item.reviewState === "stale").length,
+    awaitingOutcome: allDecisionReviewItems.filter(
+      (item) =>
+        item.reviewState === "due" ||
+        item.reviewState === "missing-outcome" ||
+        item.reviewState === "stale"
+    ).length,
+    openReviews: allDecisionReviewItems.reduce((sum, item) => sum + item.openReviewCount, 0),
+  };
+
+  const topDecisionGap = decisionReviewItems.find(
+    (item) => item.reviewState === "stale" || item.reviewState === "due"
+  );
+  const topOpportunity = opportunityBacklog[0];
+  const topReleaseRisk = releaseImpactEntries.find(
+    (entry) => entry.deltaCompletionRate < 0 || entry.deltaSubmissions < 0
+  );
+  const strategyBriefPacks = [
+    {
+      audience: "Executive" as const,
+      tone: atRiskGoal || topDecisionGap ? ("risk" as const) : ("watch" as const),
+      headline:
+        narrative[0] ??
+        "Core business state is stable enough to shift leadership time toward follow-through.",
+      summary: [
+        topOpportunity
+          ? `Top opportunity is ${topOpportunity.title} (score ${topOpportunity.score}).`
+          : null,
+        topDecisionGap ? `${topDecisionGap.title} needs review follow-through.` : null,
+        topReleaseRisk ? `"${topReleaseRisk.title}" still shows measurable downside.` : null,
+      ]
+        .filter(Boolean)
+        .join(" "),
+      bullets: [
+        atRiskGoal
+          ? `${atRiskGoal.label} is off track at ${atRiskGoal.progressPct}% of target.`
+          : "No active goal is materially off track in the selected window.",
+        topOpportunity
+          ? `${topOpportunity.source} opportunity score is ${topOpportunity.score} using the shared scoring formula.`
+          : "No opportunity backlog items are ranked yet.",
+        `${decisionReviewSummary.awaitingOutcome} decision entries still need measured-outcome follow-through.`,
+      ],
+      actions: [
+        topDecisionGap
+          ? `Review ${topDecisionGap.title} and capture measured outcome.`
+          : "Keep decision follow-through current.",
+        topOpportunity
+          ? `Sponsor the next move on ${topOpportunity.title}.`
+          : "Keep the opportunity backlog ranked.",
+      ],
+      href: "/admin/operating-review",
+    },
+    {
+      audience: "Strategy" as const,
+      tone: atRiskGoal ? ("risk" as const) : ("watch" as const),
+      headline: atRiskGoal
+        ? `${atRiskGoal.label} is the strategic gap to close first.`
+        : "Strategy can bias toward leverage, not emergency stabilization.",
+      summary: topOpportunity
+        ? `The backlog is led by ${topOpportunity.title}, scored with explicit impact, confidence, effort, and time-to-signal inputs.`
+        : "Keep the strategy backlog ranked so planning does not drift into ad hoc prioritization.",
+      bullets: [
+        `${decisionReviewSummary.stale} stale decisions and ${decisionReviewSummary.due} due reviews are on the board.`,
+        topOpportunity
+          ? `${topOpportunity.scoreInputs.formula}.`
+          : "Opportunity scoring formula is available once backlog items are present.",
+        atRiskGoal
+          ? `${atRiskGoal.metricLabel} is below target and should anchor planning.`
+          : "No goal currently requires emergency reprioritization.",
+      ],
+      actions: [
+        "Push stale decisions to validated, rolled-back, or explicitly monitored states.",
+        "Use the scored opportunity backlog to choose the next strategic bet.",
+      ],
+      href: "/admin/strategy",
+    },
+    {
+      audience: "Product" as const,
+      tone: topLeakage ? ("watch" as const) : ("good" as const),
+      headline: topLeakage
+        ? `${topLeakage.from} -> ${topLeakage.to} remains the clearest product drag.`
+        : "No single product leak dominates this window.",
+      summary: topReleaseRisk
+        ? `"${topReleaseRisk.title}" still needs product attribution review.`
+        : "Recent releases are not showing a clear product regression signal.",
+      bullets: [
+        topLeakage
+          ? `${topLeakage.lossCount} users are currently lost in the top leak path.`
+          : "Leakage is not concentrated in one dominant handoff.",
+        `${(experiments as any[]).filter((item) => item.status === "active").length} experiments are active in the registry.`,
+        `${decisionReviewSummary.awaitingOutcome} logged decisions still need measured product outcomes.`,
+      ],
+      actions: [
+        topLeakage
+          ? `Investigate ${topLeakage.from} -> ${topLeakage.to} before shipping adjacent changes.`
+          : "Keep monitoring release and funnel movement together.",
+        "Close decision loops by pairing expected impact with measured outcome.",
+      ],
+      href: "/admin/product-kpis",
+    },
+    {
+      audience: "Growth" as const,
+      tone: topChannel ? ("good" as const) : ("watch" as const),
+      headline: topChannel
+        ? `${topChannel.source} is the strongest current growth source.`
+        : "Growth source quality still needs more reliable signal.",
+      summary: topOpportunity
+        ? `${topOpportunity.title} is currently the highest-leverage scored growth move on the backlog.`
+        : "No scored growth move is leading the backlog yet.",
+      bullets: [
+        `${(waitlistCurrent as any[]).length} demand events landed in the current window.`,
+        topOpportunity
+          ? `Time-to-signal is ${topOpportunity.timeToSignal}, effort is ${topOpportunity.effort}.`
+          : "Opportunity scoring inputs will show effort and time-to-signal once backlog items exist.",
+        topLeakage
+          ? `Top funnel leak is ${topLeakage.lossRate}% on ${topLeakage.from} -> ${topLeakage.to}.`
+          : "No dominant leak path is visible.",
+      ],
+      actions: [
+        topChannel
+          ? `Benchmark weaker channels against ${topChannel.source} before scaling.`
+          : "Improve channel-quality instrumentation before budget moves.",
+        "Use the opportunity scoring framework to prioritize the next test or channel fix.",
+      ],
+      href: "/admin/growth",
+    },
+    {
+      audience: "Tech" as const,
+      tone:
+        scoringAgreementCurrent != null && scoringAgreementCurrent < 95
+          ? ("risk" as const)
+          : ("watch" as const),
+      headline:
+        scoringAgreementCurrent != null && scoringAgreementCurrent < 95
+          ? `Scoring trust is below guardrail at ${scoringAgreementCurrent}%.`
+          : "Technical risk is concentrated in follow-through, not acute breakage.",
+      summary: `${guardrails.filter((item) => item.status === "risk").length} strategy guardrails are currently breached.`,
+      bullets: [
+        `${highPriorityCases} high-priority investigations are still open.`,
+        `${decisionReviewSummary.openReviews} open review requests are attached to decision entries.`,
+        `${ambiguousCases.length} ambiguous scoring cases remain in the current window.`,
+      ],
+      actions: [
+        "Keep scoring validation and investigation closure tied to decision follow-through.",
+        "Use the decision board to prove whether technical changes delivered their expected effect.",
+      ],
+      href: "/admin/health",
+    },
+  ].map((pack) => ({
+    ...pack,
+    copyText: [
+      `${pack.audience} Brief`,
+      `Headline: ${pack.headline}`,
+      `Summary: ${pack.summary}`,
+      "",
+      "Signals:",
+      ...pack.bullets.map((line) => `- ${line}`),
+      "",
+      "Actions:",
+      ...pack.actions.map((line) => `- ${line}`),
+    ].join("\n"),
+  }));
+
   return {
     days,
     generatedAt: new Date().toISOString(),
@@ -1076,6 +1463,14 @@ export async function buildStrategySnapshot(inputDays: number) {
         decisionDate: item.decision_date,
         href: "/admin/experiments",
       })),
+    },
+    decisionReview: {
+      summary: decisionReviewSummary,
+      items: decisionReviewItems,
+    },
+    briefGenerator: {
+      generatedAt: new Date().toISOString(),
+      packs: strategyBriefPacks,
     },
     narrative,
     analyst: {

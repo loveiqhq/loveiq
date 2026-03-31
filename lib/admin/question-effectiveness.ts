@@ -672,9 +672,11 @@ function buildLifecyclePriority(
 }
 
 export async function buildQuestionLifecycleSnapshot(
-  rawDays: number
+  rawDays: number,
+  precomputedEffectiveness?: QuestionEffectivenessSnapshot
 ): Promise<QuestionLifecycleSnapshot> {
-  const effectiveness = await buildQuestionEffectivenessSnapshot(rawDays);
+  const effectiveness =
+    precomputedEffectiveness ?? (await buildQuestionEffectivenessSnapshot(rawDays));
   const discrimination = await fetchDiscriminationMap(
     makeSince(effectiveness.summary.comparisonWindowDays)
   );

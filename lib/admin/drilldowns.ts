@@ -1,20 +1,26 @@
 export const PRODUCT_KPI_TABS = [
   "Report Sections",
+  "Experience Health",
+  "Issue Radar",
+  "Question Portfolio",
   "Survey Questions",
   "Survey Chapters",
   "Discrimination",
+  "Feature Adoption",
 ] as const;
 
 export const SCORECARD_TABS = ["Scorecard", "Trends"] as const;
 
-export const FUNNEL_TABS = ["Conversion Funnel", "Cohort Analysis"] as const;
+export const FUNNEL_TABS = ["Conversion Funnel", "Cohort Analysis", "Impact Comparison"] as const;
 
 export const COHORT_GROUP_BY_OPTIONS = ["week", "utm", "archetype"] as const;
+export const COHORT_COMPARISON_OPTIONS = ["release", "version", "experiment"] as const;
 
 export type ProductKpiTab = (typeof PRODUCT_KPI_TABS)[number];
 export type ScorecardTab = (typeof SCORECARD_TABS)[number];
 export type FunnelTab = (typeof FUNNEL_TABS)[number];
 export type CohortGroupBy = (typeof COHORT_GROUP_BY_OPTIONS)[number];
+export type CohortComparisonMode = (typeof COHORT_COMPARISON_OPTIONS)[number];
 
 type QueryValue = string | number | null | undefined;
 
@@ -22,6 +28,7 @@ const DEFAULT_PRODUCT_KPI_TAB: ProductKpiTab = "Report Sections";
 const DEFAULT_SCORECARD_TAB: ScorecardTab = "Scorecard";
 const DEFAULT_FUNNEL_TAB: FunnelTab = "Conversion Funnel";
 const DEFAULT_GROUP_BY: CohortGroupBy = "week";
+const DEFAULT_COMPARISON: CohortComparisonMode = "release";
 const WORKFLOW_QUESTION_CHANGE_CANDIDATE_KEY = ["workflow", "question", "change", "candidate"].join(
   "_"
 );
@@ -65,6 +72,10 @@ export function parseCohortGroupBy(value: string | null) {
   return parseAllowedValue(value, COHORT_GROUP_BY_OPTIONS, DEFAULT_GROUP_BY);
 }
 
+export function parseCohortComparisonMode(value: string | null) {
+  return parseAllowedValue(value, COHORT_COMPARISON_OPTIONS, DEFAULT_COMPARISON);
+}
+
 export function buildGoalsHref(options?: {
   goalId?: number | null;
   metricKey?: string | null;
@@ -106,12 +117,14 @@ export function buildFunnelsHref(options?: {
   tab?: FunnelTab;
   utm?: string | null;
   groupBy?: CohortGroupBy;
+  comparison?: CohortComparisonMode;
 }) {
   return buildHref("/admin/funnels", {
     days: options?.days ?? null,
     tab: options?.tab ?? null,
     utm: options?.utm ?? null,
     groupBy: options?.groupBy ?? null,
+    comparison: options?.comparison ?? null,
   });
 }
 

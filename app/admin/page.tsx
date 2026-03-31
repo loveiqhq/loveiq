@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import AdminDashboard from "@/components/admin/AdminDashboard";
+import CommandCenterDashboard from "@/components/admin/CommandCenterDashboard";
 
 export const metadata: Metadata = {
-  title: "Admin Dashboard | LoveIQ",
+  title: "Command Center | LoveIQ Admin",
   robots: { index: false, follow: false },
 };
 
 export default function AdminPage() {
-  return <AdminDashboard />;
+  return <CommandCenterDashboard />;
 }

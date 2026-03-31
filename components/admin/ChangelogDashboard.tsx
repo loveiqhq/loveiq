@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import AdminCommentsThread from "@/components/admin/AdminCommentsThread";
+import ReleaseImpactCenterTab from "@/components/admin/ReleaseImpactCenterTab";
 import { useAdminFetch } from "@/components/admin/hooks/useAdminFetch";
 import { getCsrfToken } from "@/lib/csrf-client";
 
@@ -10,8 +12,14 @@ interface ChangelogEntry {
   description: string | null;
   category: string;
   adminEmail: string;
+  ownerEmail: string | null;
+  primaryMetricKey: string | null;
+  expectedImpact: string | null;
+  reviewDate: string | null;
+  measuredOutcome: string | null;
   eventDate: string;
   createdAt: string;
+  updatedAt: string;
 }
 
 interface Annotation {
@@ -28,6 +36,7 @@ interface DecisionEntry {
   title: string;
   entryType: "decision" | "scoring-change" | "memo";
   status: "draft" | "approved" | "monitoring" | "validated" | "rolled-back";
+  primaryMetricKey: string | null;
   rationale: string;
   expectedImpact: string | null;
   observedEffect: string | null;
@@ -42,10 +51,18 @@ interface DecisionEntry {
   updatedAt: string;
 }
 
+interface MetricOption {
+  key: string;
+  label: string;
+  description: string;
+  href: string;
+}
+
 interface ChangelogData {
   changelog: ChangelogEntry[];
   annotations: Annotation[];
   decisions: DecisionEntry[];
+  metrics: MetricOption[];
   summary: {
     changelogCount: number;
     annotationCount: number;
@@ -57,11 +74,7 @@ interface ChangelogData {
 }
 
 type TimelineItem =
-  | (ChangelogEntry & {
-      type: "changelog";
-      date: string;
-      badge: string;
-    })
+  | (ChangelogEntry & { type: "changelog"; date: string; badge: string })
   | (Annotation & {
       type: "annotation";
       date: string;
@@ -70,19 +83,14 @@ type TimelineItem =
       category: string;
       badge: string;
     })
-  | (DecisionEntry & {
-      type: "decision";
-      date: string;
-      category: string;
-      badge: string;
-    });
+  | (DecisionEntry & { type: "decision"; date: string; category: string; badge: string });
 
 type FormMode = "changelog" | "decision" | "scoring-change" | "memo";
+type Tab = "Timeline" | "Release Impact" | "Decision Journal" | "Governance" | "Add Entry";
 
-const TABS = ["Timeline", "Decision Journal", "Governance", "Add Entry"] as const;
-type Tab = (typeof TABS)[number];
-
+const TABS: Tab[] = ["Timeline", "Release Impact", "Decision Journal", "Governance", "Add Entry"];
 const DECISION_STATUSES = ["draft", "approved", "monitoring", "validated", "rolled-back"] as const;
+const CATEGORIES = ["survey-change", "site-update", "marketing", "bug-fix", "feature", "other"];
 
 const categoryColors: Record<string, string> = {
   "survey-change": "bg-purple-500/20 text-purple-300",
@@ -96,8 +104,6 @@ const categoryColors: Record<string, string> = {
   "scoring-change": "bg-orange-500/20 text-orange-300",
   memo: "bg-indigo-500/20 text-indigo-300",
 };
-
-const CATEGORIES = ["survey-change", "site-update", "marketing", "bug-fix", "feature", "other"];
 
 const FORM_MODE_LABELS: Record<FormMode, string> = {
   changelog: "Product Changelog",
@@ -140,9 +146,12 @@ export default function ChangelogDashboard() {
   const [category, setCategory] = useState("other");
   const [eventDate, setEventDate] = useState(new Date().toISOString().slice(0, 10));
   const [ownerEmail, setOwnerEmail] = useState("");
+  const [primaryMetricKey, setPrimaryMetricKey] = useState("");
+  const [reviewDate, setReviewDate] = useState("");
   const [status, setStatus] = useState<(typeof DECISION_STATUSES)[number]>("draft");
   const [rationale, setRationale] = useState("");
   const [expectedImpact, setExpectedImpact] = useState("");
+  const [measuredOutcome, setMeasuredOutcome] = useState("");
   const [observedEffect, setObservedEffect] = useState("");
   const [changeSummary, setChangeSummary] = useState("");
   const [reviewWindowDays, setReviewWindowDays] = useState("14");
@@ -174,9 +183,12 @@ export default function ChangelogDashboard() {
     setCategory("other");
     setEventDate(new Date().toISOString().slice(0, 10));
     setOwnerEmail("");
+    setPrimaryMetricKey("");
+    setReviewDate("");
     setStatus("draft");
     setRationale("");
     setExpectedImpact("");
+    setMeasuredOutcome("");
     setObservedEffect("");
     setChangeSummary("");
     setReviewWindowDays("14");
@@ -197,12 +209,18 @@ export default function ChangelogDashboard() {
             description: description || undefined,
             category,
             eventDate,
+            ownerEmail: ownerEmail || undefined,
+            primaryMetricKey: primaryMetricKey || undefined,
+            expectedImpact: expectedImpact || undefined,
+            reviewDate: reviewDate || undefined,
+            measuredOutcome: measuredOutcome || undefined,
           }
         : {
             kind: "decision" as const,
             entryType: formMode,
             title,
             ownerEmail: ownerEmail || undefined,
+            primaryMetricKey: primaryMetricKey || undefined,
             status,
             rationale,
             expectedImpact: expectedImpact || undefined,
@@ -230,7 +248,7 @@ export default function ChangelogDashboard() {
         type: "success",
         text:
           formMode === "changelog"
-            ? "Changelog entry added."
+            ? "Release entry added."
             : formMode === "scoring-change"
               ? "Scoring governance entry added."
               : "Decision journal entry added.",
@@ -277,9 +295,74 @@ export default function ChangelogDashboard() {
     }
   }
 
+  async function queueDecisionReview(entry: DecisionEntry) {
+    setUpdatingId(entry.id);
+    setFormMsg(null);
+    try {
+      const res = await fetch("/api/admin/reviews", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-csrf-token": getCsrfToken(),
+        },
+        body: JSON.stringify({
+          title: `Review governance entry: ${entry.title}`,
+          description: entry.changeSummary || entry.rationale,
+          resource_type: "decision-entry",
+          resource_id: entry.id,
+          linked_metric_key: entry.primaryMetricKey || null,
+          impact_level: entry.entryType === "scoring-change" ? "high" : "medium",
+          reviewer_email: entry.ownerEmail || null,
+          source_href: "/admin/changelog",
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error((body as { error?: string } | null)?.error || "Failed to queue review.");
+      }
+      setFormMsg({ type: "success", text: `Queued review for entry #${entry.id}.` });
+    } catch (err) {
+      setFormMsg({ type: "error", text: err instanceof Error ? err.message : "Unknown error." });
+    } finally {
+      setUpdatingId(null);
+    }
+  }
+
+  async function queueReleaseReview(entry: ChangelogEntry) {
+    setUpdatingId(entry.id);
+    setFormMsg(null);
+    try {
+      const res = await fetch("/api/admin/reviews", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-csrf-token": getCsrfToken(),
+        },
+        body: JSON.stringify({
+          title: `Review release entry: ${entry.title}`,
+          description: entry.description || entry.expectedImpact || null,
+          resource_type: "release-entry",
+          resource_id: entry.id,
+          linked_metric_key: entry.primaryMetricKey || null,
+          impact_level: entry.primaryMetricKey ? "high" : "medium",
+          reviewer_email: entry.ownerEmail || null,
+          source_href: "/admin/changelog",
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error((body as { error?: string } | null)?.error || "Failed to queue review.");
+      }
+      setFormMsg({ type: "success", text: `Queued review for release #${entry.id}.` });
+    } catch (err) {
+      setFormMsg({ type: "error", text: err instanceof Error ? err.message : "Unknown error." });
+    } finally {
+      setUpdatingId(null);
+    }
+  }
+
   const timeline = useMemo<TimelineItem[]>(() => {
     if (!data) return [];
-
     return [
       ...data.changelog.map((entry) => ({
         ...entry,
@@ -301,7 +384,7 @@ export default function ChangelogDashboard() {
         type: "decision" as const,
         date: entry.updatedAt.slice(0, 10),
         category: entry.entryType,
-        badge: `${entry.entryType} · ${entry.status}`,
+        badge: `${entry.entryType} | ${entry.status}`,
       })),
     ].sort((left, right) => right.date.localeCompare(left.date));
   }, [data]);
@@ -315,11 +398,13 @@ export default function ChangelogDashboard() {
           : item.type === "decision"
             ? item.entryType === timelineFilter || item.status === timelineFilter
             : item.category === timelineFilter;
+
       const haystack =
         item.type === "decision"
           ? [
               item.title,
               item.rationale,
+              item.primaryMetricKey,
               item.expectedImpact,
               item.observedEffect,
               item.changeSummary,
@@ -330,8 +415,12 @@ export default function ChangelogDashboard() {
               item.title,
               item.description,
               item.badge,
+              item.type === "changelog" ? item.primaryMetricKey : "",
+              item.type === "changelog" ? item.expectedImpact : "",
+              item.type === "changelog" ? item.measuredOutcome : "",
               item.type === "annotation" ? item.chartKey : "",
             ];
+
       const matchesSearch =
         needle.length === 0
           ? true
@@ -359,6 +448,7 @@ export default function ChangelogDashboard() {
           : [
               entry.title,
               entry.rationale,
+              entry.primaryMetricKey,
               entry.expectedImpact,
               entry.observedEffect,
               entry.changeSummary,
@@ -488,14 +578,51 @@ export default function ChangelogDashboard() {
                     </span>
                     <span className="font-medium text-text-primary">{item.title}</span>
                   </div>
+
                   {"description" in item && item.description && (
                     <p className="text-sm text-text-muted">{item.description}</p>
                   )}
+
                   {item.type === "annotation" && (
                     <p className="text-xs text-cyan-300">Chart: {item.chartKey}</p>
                   )}
-                  {item.type === "decision" && (
+
+                  {item.type === "changelog" && (
                     <div className="grid gap-2 lg:grid-cols-3">
+                      <MiniMetric label="Metric" value={item.primaryMetricKey ?? "Not linked"} />
+                      <MiniMetric
+                        label="Expected Impact"
+                        value={item.expectedImpact ?? "Not set"}
+                      />
+                      <MiniMetric
+                        label="Measured Outcome"
+                        value={item.measuredOutcome ?? "Monitoring"}
+                      />
+                    </div>
+                  )}
+                  {item.type === "changelog" && (
+                    <div>
+                      <button
+                        onClick={() => void queueReleaseReview(item)}
+                        disabled={updatingId === item.id}
+                        className="rounded-lg border border-white/10 px-3 py-2 text-xs text-text-muted transition hover:bg-white/5 hover:text-text-primary disabled:opacity-50"
+                      >
+                        Queue review
+                      </button>
+                    </div>
+                  )}
+
+                  {item.type === "changelog" && (
+                    <AdminCommentsThread
+                      resourceType="release-entry"
+                      resourceId={item.id}
+                      title="Release Discussion"
+                    />
+                  )}
+
+                  {item.type === "decision" && (
+                    <div className="grid gap-2 lg:grid-cols-4">
+                      <MiniMetric label="Metric" value={item.primaryMetricKey ?? "Not linked"} />
                       <MiniMetric label="Rationale" value={item.rationale} />
                       <MiniMetric
                         label="Expected Impact"
@@ -507,18 +634,35 @@ export default function ChangelogDashboard() {
                       />
                     </div>
                   )}
+
                   <p className="text-xs text-text-muted/60">
                     Added by {item.adminEmail}
+                    {item.type === "changelog" && item.ownerEmail
+                      ? ` | owner ${item.ownerEmail}`
+                      : ""}
                     {item.type === "decision" && item.ownerEmail
-                      ? ` · owner ${item.ownerEmail}`
+                      ? ` | owner ${item.ownerEmail}`
+                      : ""}
+                    {item.type === "changelog" && item.reviewDate
+                      ? ` | review ${item.reviewDate}`
                       : ""}
                   </p>
+
+                  {item.type === "annotation" && (
+                    <AdminCommentsThread
+                      resourceType="chart-annotation"
+                      resourceId={item.id}
+                      title="Annotation Discussion"
+                    />
+                  )}
                 </div>
               </div>
             ))}
           </div>
         </div>
       )}
+
+      {activeTab === "Release Impact" && <ReleaseImpactCenterTab />}
 
       {activeTab === "Decision Journal" && (
         <div className="space-y-6">
@@ -588,6 +732,11 @@ export default function ChangelogDashboard() {
                         <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs text-text-muted">
                           {entry.status}
                         </span>
+                        {entry.primaryMetricKey && (
+                          <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs text-text-muted">
+                            {entry.primaryMetricKey}
+                          </span>
+                        )}
                       </div>
                       <h3 className="mt-2 font-serif text-lg font-semibold text-text-primary">
                         {entry.title}
@@ -600,7 +749,8 @@ export default function ChangelogDashboard() {
                     </div>
                   </div>
 
-                  <div className="mt-4 grid gap-3 lg:grid-cols-3">
+                  <div className="mt-4 grid gap-3 lg:grid-cols-4">
+                    <MiniMetric label="Metric" value={entry.primaryMetricKey ?? "Not linked"} />
                     <MiniMetric
                       label="Expected Impact"
                       value={entry.expectedImpact ?? "Not recorded"}
@@ -702,6 +852,12 @@ export default function ChangelogDashboard() {
                       {updatingId === entry.id ? "Saving..." : "Save"}
                     </button>
                   </div>
+
+                  <AdminCommentsThread
+                    resourceType="decision-entry"
+                    resourceId={entry.id}
+                    title="Decision Discussion"
+                  />
                 </div>
               );
             })}
@@ -752,6 +908,11 @@ export default function ChangelogDashboard() {
                       <span className="rounded-full bg-orange-500/20 px-2 py-0.5 text-xs text-orange-300">
                         {entry.status}
                       </span>
+                      {entry.primaryMetricKey && (
+                        <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs text-text-muted">
+                          {entry.primaryMetricKey}
+                        </span>
+                      )}
                       <span className="text-xs text-text-muted">
                         Review window {entry.reviewWindowDays ?? "not set"} days
                       </span>
@@ -766,8 +927,16 @@ export default function ChangelogDashboard() {
                   >
                     Open in journal
                   </button>
+                  <button
+                    onClick={() => void queueDecisionReview(entry)}
+                    disabled={updatingId === entry.id}
+                    className="rounded-lg border border-white/10 px-3 py-2 text-xs text-text-muted transition hover:bg-white/5 hover:text-text-primary disabled:opacity-50"
+                  >
+                    Queue review
+                  </button>
                 </div>
-                <div className="mt-4 grid gap-3 lg:grid-cols-3">
+                <div className="mt-4 grid gap-3 lg:grid-cols-4">
+                  <MiniMetric label="Metric" value={entry.primaryMetricKey ?? "Not linked"} />
                   <MiniMetric label="Rationale" value={entry.rationale} />
                   <MiniMetric
                     label="Change Summary"
@@ -785,7 +954,7 @@ export default function ChangelogDashboard() {
       )}
 
       {activeTab === "Add Entry" && (
-        <form onSubmit={handleSubmit} className="mx-auto max-w-3xl space-y-5">
+        <form onSubmit={handleSubmit} className="mx-auto max-w-4xl space-y-5">
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {Object.entries(FORM_MODE_LABELS).map(([value, label]) => (
               <button
@@ -823,7 +992,6 @@ export default function ChangelogDashboard() {
                   }
                 />
               </div>
-
               {formMode === "changelog" ? (
                 <>
                   <div>
@@ -839,7 +1007,7 @@ export default function ChangelogDashboard() {
                       placeholder="Describe what changed and why."
                     />
                   </div>
-                  <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                     <div>
                       <label className="mb-1 block text-xs font-medium uppercase text-text-muted">
                         Category
@@ -868,11 +1036,6 @@ export default function ChangelogDashboard() {
                         className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm text-text-primary focus:border-accent-purple focus:outline-none"
                       />
                     </div>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="grid gap-4 sm:grid-cols-2">
                     <div>
                       <label className="mb-1 block text-xs font-medium uppercase text-text-muted">
                         Owner Email
@@ -884,6 +1047,94 @@ export default function ChangelogDashboard() {
                         className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm text-text-primary placeholder-text-muted/50 focus:border-accent-purple focus:outline-none"
                         placeholder="owner@loveiq.com"
                       />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium uppercase text-text-muted">
+                        Review Date
+                      </label>
+                      <input
+                        type="date"
+                        value={reviewDate}
+                        onChange={(event) => setReviewDate(event.target.value)}
+                        className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm text-text-primary focus:border-accent-purple focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div>
+                      <label className="mb-1 block text-xs font-medium uppercase text-text-muted">
+                        Primary Metric
+                      </label>
+                      <select
+                        value={primaryMetricKey}
+                        onChange={(event) => setPrimaryMetricKey(event.target.value)}
+                        className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm text-text-primary focus:border-accent-purple focus:outline-none"
+                      >
+                        <option value="">No metric link</option>
+                        {data.metrics.map((metric) => (
+                          <option key={metric.key} value={metric.key}>
+                            {metric.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium uppercase text-text-muted">
+                        Expected Impact
+                      </label>
+                      <textarea
+                        value={expectedImpact}
+                        onChange={(event) => setExpectedImpact(event.target.value)}
+                        rows={3}
+                        className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm text-text-primary placeholder-text-muted/50 focus:border-accent-purple focus:outline-none"
+                        placeholder="What KPI movement do you expect from this release?"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium uppercase text-text-muted">
+                      Measured Outcome
+                    </label>
+                    <textarea
+                      value={measuredOutcome}
+                      onChange={(event) => setMeasuredOutcome(event.target.value)}
+                      rows={3}
+                      className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm text-text-primary placeholder-text-muted/50 focus:border-accent-purple focus:outline-none"
+                      placeholder="Observed KPI movement or monitoring note."
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    <div>
+                      <label className="mb-1 block text-xs font-medium uppercase text-text-muted">
+                        Owner Email
+                      </label>
+                      <input
+                        type="email"
+                        value={ownerEmail}
+                        onChange={(event) => setOwnerEmail(event.target.value)}
+                        className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm text-text-primary placeholder-text-muted/50 focus:border-accent-purple focus:outline-none"
+                        placeholder="owner@loveiq.com"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium uppercase text-text-muted">
+                        Primary Metric
+                      </label>
+                      <select
+                        value={primaryMetricKey}
+                        onChange={(event) => setPrimaryMetricKey(event.target.value)}
+                        className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm text-text-primary focus:border-accent-purple focus:outline-none"
+                      >
+                        <option value="">No metric link</option>
+                        {data.metrics.map((metric) => (
+                          <option key={metric.key} value={metric.key}>
+                            {metric.label}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                     <div>
                       <label className="mb-1 block text-xs font-medium uppercase text-text-muted">
@@ -904,7 +1155,6 @@ export default function ChangelogDashboard() {
                       </select>
                     </div>
                   </div>
-
                   <div>
                     <label className="mb-1 block text-xs font-medium uppercase text-text-muted">
                       Rationale
@@ -918,7 +1168,6 @@ export default function ChangelogDashboard() {
                       placeholder="Why was this decision or scoring release made?"
                     />
                   </div>
-
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div>
                       <label className="mb-1 block text-xs font-medium uppercase text-text-muted">
@@ -945,7 +1194,6 @@ export default function ChangelogDashboard() {
                       />
                     </div>
                   </div>
-
                   <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                     <div>
                       <label className="mb-1 block text-xs font-medium uppercase text-text-muted">

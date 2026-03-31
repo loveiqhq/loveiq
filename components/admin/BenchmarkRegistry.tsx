@@ -1,6 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import MetricImpactTab from "@/components/admin/MetricImpactTab";
+import MetricLineageTab from "@/components/admin/MetricLineageTab";
+import MetricRegistryTab from "@/components/admin/MetricRegistryTab";
+import MetricStatusBoardTab from "@/components/admin/MetricStatusBoardTab";
 import { useAdminFetch } from "@/components/admin/hooks/useAdminFetch";
 import { getCsrfToken } from "@/lib/csrf-client";
 
@@ -35,6 +39,16 @@ interface BenchmarksData {
 }
 
 export default function BenchmarkRegistry() {
+  const [activeTab, setActiveTab] = useState<
+    "Metric Registry" | "Status & Leading" | "Metric Impact" | "Lineage & Trust" | "Benchmarks"
+  >("Metric Registry");
+  const tabs = [
+    "Metric Registry",
+    "Status & Leading",
+    "Metric Impact",
+    "Lineage & Trust",
+    "Benchmarks",
+  ] as const;
   const { data, loading, error, refetch } = useAdminFetch<BenchmarksData>("/api/admin/benchmarks");
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
@@ -50,6 +64,98 @@ export default function BenchmarkRegistry() {
     direction: "higher" as "higher" | "lower",
     unit: "percent" as "percent" | "minutes" | "count",
   });
+
+  if (activeTab === "Metric Registry") {
+    return (
+      <div className="space-y-6">
+        <div className="inline-flex rounded-lg border border-white/10 bg-surface p-1">
+          {tabs.map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`rounded-md px-4 py-2 text-sm font-medium transition ${
+                activeTab === tab
+                  ? "bg-white/10 text-text-primary"
+                  : "text-text-muted hover:text-text-primary"
+              }`}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
+        <MetricRegistryTab />
+      </div>
+    );
+  }
+
+  if (activeTab === "Status & Leading") {
+    return (
+      <div className="space-y-6">
+        <div className="inline-flex rounded-lg border border-white/10 bg-surface p-1">
+          {tabs.map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`rounded-md px-4 py-2 text-sm font-medium transition ${
+                activeTab === tab
+                  ? "bg-white/10 text-text-primary"
+                  : "text-text-muted hover:text-text-primary"
+              }`}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
+        <MetricStatusBoardTab />
+      </div>
+    );
+  }
+
+  if (activeTab === "Metric Impact") {
+    return (
+      <div className="space-y-6">
+        <div className="inline-flex rounded-lg border border-white/10 bg-surface p-1">
+          {tabs.map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`rounded-md px-4 py-2 text-sm font-medium transition ${
+                activeTab === tab
+                  ? "bg-white/10 text-text-primary"
+                  : "text-text-muted hover:text-text-primary"
+              }`}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
+        <MetricImpactTab />
+      </div>
+    );
+  }
+
+  if (activeTab === "Lineage & Trust") {
+    return (
+      <div className="space-y-6">
+        <div className="inline-flex rounded-lg border border-white/10 bg-surface p-1">
+          {tabs.map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`rounded-md px-4 py-2 text-sm font-medium transition ${
+                activeTab === tab
+                  ? "bg-white/10 text-text-primary"
+                  : "text-text-muted hover:text-text-primary"
+              }`}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
+        <MetricLineageTab />
+      </div>
+    );
+  }
 
   if (loading) {
     return (
@@ -183,11 +289,26 @@ export default function BenchmarkRegistry() {
 
   return (
     <div className="space-y-6">
+      <div className="inline-flex rounded-lg border border-white/10 bg-surface p-1">
+        {tabs.map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={`rounded-md px-4 py-2 text-sm font-medium transition ${
+              activeTab === tab
+                ? "bg-white/10 text-text-primary"
+                : "text-text-muted hover:text-text-primary"
+            }`}
+          >
+            {tab}
+          </button>
+        ))}
+      </div>
       <div>
-        <h2 className="font-serif text-xl font-bold text-text-primary">Benchmark Registry</h2>
+        <h2 className="font-serif text-xl font-bold text-text-primary">Benchmarks</h2>
         <p className="mt-1 text-sm text-text-muted">
-          Store manual category and competitive reference points, then let Strategy Hub use them
-          instead of only hardcoded starter thresholds.
+          Store manual category and competitive reference points after the canonical metric
+          definition is documented in the registry.
         </p>
       </div>
 

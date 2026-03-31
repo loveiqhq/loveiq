@@ -3,12 +3,16 @@
 import { startTransition, useDeferredValue, useMemo, useState } from "react";
 import { useAdminFetch } from "@/components/admin/hooks/useAdminFetch";
 import StatCard from "@/components/admin/StatCard";
+import StrategyPlanningTab from "@/components/admin/StrategyPlanningTab";
 import TimeRangeSelector from "@/components/admin/TimeRangeSelector";
 import KpiDataTable, { type Column } from "@/components/admin/kpi-tabs/KpiDataTable";
 
 type BenchmarkStatus = "good" | "watch" | "risk";
 type QueuePriority = "high" | "medium" | "low";
 type Confidence = "high" | "medium" | "low";
+type OpportunityEffort = "low" | "medium" | "high";
+type TimeToSignal = "fast" | "medium" | "slow";
+type DecisionReviewState = "due" | "upcoming" | "stale" | "validated" | "missing-outcome";
 
 interface StrategyData {
   days: number;
@@ -89,9 +93,18 @@ interface StrategyData {
       title: string;
       source: string;
       confidence: Confidence;
+      effort: OpportunityEffort;
+      timeToSignal: TimeToSignal;
       score: number;
       impact: string;
       detail: string;
+      scoreInputs: {
+        impact: number;
+        confidence: number;
+        effort: number;
+        timeToSignal: number;
+        formula: string;
+      };
       href: string;
     }>;
     funnelLeakage: Array<{
@@ -143,6 +156,46 @@ interface StrategyData {
       href: string;
     }>;
   };
+  decisionReview: {
+    summary: {
+      total: number;
+      due: number;
+      stale: number;
+      awaitingOutcome: number;
+      openReviews: number;
+    };
+    items: Array<{
+      id: number;
+      title: string;
+      entryType: "decision" | "scoring-change" | "memo";
+      status: "draft" | "approved" | "monitoring" | "validated" | "rolled-back";
+      primaryMetricKey: string | null;
+      ownerEmail: string | null;
+      reviewDate: string | null;
+      daysUntilReview: number | null;
+      daysSinceUpdate: number;
+      openReviewCount: number;
+      expectedImpact: string | null;
+      measuredOutcome: string | null;
+      comparisonLabel: string;
+      detail: string;
+      reviewState: DecisionReviewState;
+      href: string;
+    }>;
+  };
+  briefGenerator: {
+    generatedAt: string;
+    packs: Array<{
+      audience: "Executive" | "Strategy" | "Product" | "Growth" | "Tech";
+      tone: BenchmarkStatus;
+      headline: string;
+      summary: string;
+      bullets: string[];
+      actions: string[];
+      href: string;
+      copyText: string;
+    }>;
+  };
   narrative: string[];
   analyst: {
     briefs: Array<{ role: string; summary: string }>;
@@ -168,7 +221,16 @@ interface StrategyData {
   }>;
 }
 
-const TABS = ["North Star", "Work Queue", "Release Impact", "Opportunities", "Guardrails"] as const;
+const TABS = [
+  "North Star",
+  "Work Queue",
+  "Release Impact",
+  "Opportunities",
+  "Guardrails",
+  "Decision Review",
+  "Auto Briefs",
+  "Strategy Planning",
+] as const;
 const benchmarkStatusClasses: Record<BenchmarkStatus, string> = {
   good: "border-emerald-500/20 bg-emerald-500/10 text-emerald-300",
   watch: "border-amber-500/20 bg-amber-500/10 text-amber-200",
@@ -189,6 +251,23 @@ const confidenceClasses: Record<Confidence, string> = {
   medium: "bg-amber-500/10 text-amber-200",
   low: "bg-white/10 text-text-muted",
 };
+const effortClasses: Record<OpportunityEffort, string> = {
+  low: "bg-emerald-500/10 text-emerald-300",
+  medium: "bg-amber-500/10 text-amber-200",
+  high: "bg-red-500/10 text-red-300",
+};
+const timeToSignalClasses: Record<TimeToSignal, string> = {
+  fast: "bg-emerald-500/10 text-emerald-300",
+  medium: "bg-amber-500/10 text-amber-200",
+  slow: "bg-white/10 text-text-muted",
+};
+const decisionReviewClasses: Record<DecisionReviewState, string> = {
+  due: "bg-amber-500/10 text-amber-200",
+  upcoming: "bg-white/10 text-text-muted",
+  stale: "bg-red-500/10 text-red-300",
+  validated: "bg-emerald-500/10 text-emerald-300",
+  "missing-outcome": "bg-cyan-500/10 text-cyan-300",
+};
 const strategyRangeOptions = [
   { days: 7, label: "7d", ariaLabel: "Last 7 days" },
   { days: 30, label: "30d", ariaLabel: "Last 30 days" },
@@ -203,9 +282,11 @@ const signed = (value: number, suffix = "") =>
 const opportunityColumns = (): Column<StrategyData["opportunities"]["backlog"][number]>[] => [
   { key: "title", label: "Opportunity" },
   { key: "source", label: "Source" },
-  { key: "score", label: "Score", align: "right" },
   { key: "impact", label: "Impact" },
   { key: "confidence", label: "Confidence" },
+  { key: "effort", label: "Effort" },
+  { key: "timeToSignal", label: "Time To Signal" },
+  { key: "score", label: "Score", align: "right" },
 ];
 
 const channelColumns = (): Column<
@@ -230,6 +311,7 @@ export default function StrategyHubDashboard() {
   const [activeTab, setActiveTab] = useState<(typeof TABS)[number]>("North Star");
   const [queueSearch, setQueueSearch] = useState("");
   const [impactSearch, setImpactSearch] = useState("");
+  const [copiedAudience, setCopiedAudience] = useState<string | null>(null);
   const params = useMemo(() => ({ days: String(days) }), [days]);
   const { data, loading, error } = useAdminFetch<StrategyData>("/api/admin/strategy", params);
   const deferredQueueSearch = useDeferredValue(queueSearch);
@@ -254,6 +336,22 @@ export default function StrategyHubDashboard() {
         item.title.toLowerCase().includes(needle) || item.category.toLowerCase().includes(needle)
     );
   }, [data, deferredImpactSearch]);
+
+  async function copyBriefPack(
+    audience: StrategyData["briefGenerator"]["packs"][number]["audience"],
+    text: string
+  ) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedAudience(audience);
+      window.setTimeout(
+        () => setCopiedAudience((current) => (current === audience ? null : current)),
+        2000
+      );
+    } catch {
+      setCopiedAudience(null);
+    }
+  }
 
   if (loading) {
     return (
@@ -753,10 +851,44 @@ export default function StrategyHubDashboard() {
 
       {activeTab === "Opportunities" && (
         <div className="space-y-6">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+            <StatCard label="Backlog Items" value={data.opportunities.backlog.length} />
+            <StatCard
+              label="Avg Score"
+              value={
+                data.opportunities.backlog.length === 0
+                  ? 0
+                  : Math.round(
+                      data.opportunities.backlog.reduce((sum, item) => sum + item.score, 0) /
+                        data.opportunities.backlog.length
+                    )
+              }
+            />
+            <StatCard
+              label="High Impact"
+              value={data.opportunities.backlog.filter((item) => item.impact === "high").length}
+            />
+            <StatCard
+              label="Low Effort"
+              value={data.opportunities.backlog.filter((item) => item.effort === "low").length}
+            />
+            <StatCard
+              label="Fast Signal"
+              value={
+                data.opportunities.backlog.filter((item) => item.timeToSignal === "fast").length
+              }
+            />
+          </div>
+
           <div className="grid gap-6 xl:grid-cols-[1.3fr_1fr]">
             <div className="rounded-xl border border-white/10 bg-surface p-5">
               <div className="flex items-center justify-between gap-3">
-                <h3 className="text-sm font-semibold text-text-primary">Opportunity Backlog</h3>
+                <div>
+                  <h3 className="text-sm font-semibold text-text-primary">Opportunity Backlog</h3>
+                  <p className="mt-1 text-xs text-text-muted">
+                    Ranked using impact, confidence, effort, and time-to-signal.
+                  </p>
+                </div>
                 <a
                   href="/admin/predictions"
                   className="text-xs text-text-muted transition hover:text-text-primary"
@@ -794,6 +926,30 @@ export default function StrategyHubDashboard() {
                     </div>
                     <p className="mt-2 text-sm font-semibold text-text-primary">{item.title}</p>
                     <p className="mt-1 text-sm text-text-muted">{item.detail}</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[11px] uppercase tracking-wide ${effortClasses[item.effort]}`}
+                      >
+                        effort {item.effort}
+                      </span>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[11px] uppercase tracking-wide ${timeToSignalClasses[item.timeToSignal]}`}
+                      >
+                        {item.timeToSignal} signal
+                      </span>
+                    </div>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                      <ScoreInputPill label="Impact" value={item.scoreInputs.impact} />
+                      <ScoreInputPill label="Confidence" value={item.scoreInputs.confidence} />
+                      <ScoreInputPill label="Effort" value={item.scoreInputs.effort} />
+                      <ScoreInputPill
+                        label="Time To Signal"
+                        value={item.scoreInputs.timeToSignal}
+                      />
+                    </div>
+                    <p className="mt-3 text-[11px] uppercase tracking-wide text-text-muted">
+                      {item.scoreInputs.formula}
+                    </p>
                   </a>
                 ))}
               </div>
@@ -969,6 +1125,228 @@ export default function StrategyHubDashboard() {
           </div>
         </div>
       )}
+
+      {activeTab === "Decision Review" && (
+        <div className="space-y-6">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+            <StatCard label="Tracked Decisions" value={data.decisionReview.summary.total} />
+            <StatCard label="Due Reviews" value={data.decisionReview.summary.due} />
+            <StatCard label="Stale" value={data.decisionReview.summary.stale} />
+            <StatCard
+              label="Awaiting Outcome"
+              value={data.decisionReview.summary.awaitingOutcome}
+            />
+            <StatCard label="Open Reviews" value={data.decisionReview.summary.openReviews} />
+          </div>
+
+          <div className="rounded-xl border border-white/10 bg-surface p-5">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-text-primary">
+                  Decision Lifecycle Board
+                </h3>
+                <p className="mt-1 text-xs text-text-muted">
+                  Sorted by stale follow-through, due review dates, and missing measured outcomes.
+                </p>
+              </div>
+              <a
+                href="/admin/changelog"
+                className="text-xs text-text-muted transition hover:text-text-primary"
+              >
+                Open decision journal
+              </a>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              {data.decisionReview.items.length === 0 && (
+                <div className="rounded-lg border border-dashed border-white/10 px-4 py-6 text-sm text-text-muted">
+                  No decision review items in the selected window.
+                </div>
+              )}
+              {data.decisionReview.items.map((item) => (
+                <a
+                  key={item.id}
+                  href={item.href}
+                  className="block rounded-lg border border-white/10 bg-white/5 p-4 transition hover:border-white/20 hover:bg-white/10"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <ReviewStateBadge state={item.reviewState} />
+                        <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] uppercase tracking-wide text-text-muted">
+                          {item.entryType}
+                        </span>
+                        {item.primaryMetricKey && (
+                          <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] uppercase tracking-wide text-text-muted">
+                            {item.primaryMetricKey}
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-2 text-sm font-semibold text-text-primary">{item.title}</p>
+                      <p className="mt-1 text-sm text-text-muted">{item.detail}</p>
+                    </div>
+                    <div className="grid gap-2 text-right sm:grid-cols-2 xl:grid-cols-4">
+                      <MiniMetric label="Review Date" value={item.reviewDate ?? "Not set"} />
+                      <MiniMetric
+                        label="Days Until Review"
+                        value={
+                          item.daysUntilReview == null
+                            ? "None"
+                            : item.daysUntilReview >= 0
+                              ? `${item.daysUntilReview}d`
+                              : `${Math.abs(item.daysUntilReview)}d overdue`
+                        }
+                      />
+                      <MiniMetric label="Open Reviews" value={String(item.openReviewCount)} />
+                      <MiniMetric label="Updated" value={`${item.daysSinceUpdate}d ago`} />
+                    </div>
+                  </div>
+                  <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                    <NarrativeCard label="Expected vs Measured" value={item.comparisonLabel} />
+                    <NarrativeCard
+                      label="Measured Outcome"
+                      value={item.measuredOutcome ?? "Measured outcome still missing."}
+                    />
+                  </div>
+                </a>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === "Auto Briefs" && (
+        <div className="space-y-6">
+          <div className="rounded-xl border border-white/10 bg-surface p-5">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-text-primary">Auto Brief Generator</h3>
+                <p className="mt-1 text-xs text-text-muted">
+                  Role-specific brief packs generated from goals, opportunity scores, release
+                  impact, guardrails, and decision follow-through in the selected window.
+                </p>
+              </div>
+              <p className="text-xs text-text-muted">
+                Generated {new Date(data.briefGenerator.generatedAt).toLocaleString()}
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-2">
+            {data.briefGenerator.packs.map((pack) => (
+              <div key={pack.audience} className="rounded-xl border border-white/10 bg-surface p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`rounded-full border px-2 py-0.5 text-[11px] uppercase tracking-wide ${benchmarkStatusClasses[pack.tone]}`}
+                      >
+                        {pack.tone}
+                      </span>
+                      <span className="text-xs uppercase tracking-wide text-text-muted">
+                        {pack.audience}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-lg font-semibold text-text-primary">{pack.headline}</p>
+                    <p className="mt-2 text-sm text-text-muted">{pack.summary}</p>
+                  </div>
+                  <div className="flex flex-col items-end gap-2">
+                    <a
+                      href={pack.href}
+                      className="text-xs text-text-muted transition hover:text-text-primary"
+                    >
+                      Open source
+                    </a>
+                    <button
+                      onClick={() => void copyBriefPack(pack.audience, pack.copyText)}
+                      className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-text-primary transition hover:bg-white/10"
+                    >
+                      {copiedAudience === pack.audience ? "Copied" : "Copy Brief"}
+                    </button>
+                  </div>
+                </div>
+                <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wide text-text-muted">Signals</p>
+                    <div className="mt-3 space-y-2">
+                      {pack.bullets.map((line) => (
+                        <div
+                          key={line}
+                          className="rounded-lg border border-white/10 bg-white/5 px-3 py-3 text-sm text-text-primary"
+                        >
+                          {line}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wide text-text-muted">Actions</p>
+                    <div className="mt-3 space-y-2">
+                      {pack.actions.map((line) => (
+                        <div
+                          key={line}
+                          className="rounded-lg border border-white/10 bg-white/5 px-3 py-3 text-sm text-text-primary"
+                        >
+                          {line}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-4 rounded-lg border border-white/10 bg-page px-4 py-3">
+                  <p className="text-[11px] uppercase tracking-wide text-text-muted">
+                    Copy Preview
+                  </p>
+                  <pre className="mt-2 whitespace-pre-wrap text-sm text-text-primary">
+                    {pack.copyText}
+                  </pre>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {activeTab === "Strategy Planning" && <StrategyPlanningTab />}
+    </div>
+  );
+}
+
+function ScoreInputPill({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-lg border border-white/10 bg-surface px-3 py-2">
+      <p className="text-[10px] uppercase tracking-wide text-text-muted">{label}</p>
+      <p className="mt-1 text-sm font-medium text-text-primary">{Math.round(value)}</p>
+    </div>
+  );
+}
+
+function ReviewStateBadge({ state }: { state: DecisionReviewState }) {
+  return (
+    <span
+      className={`rounded-full px-2 py-0.5 text-[11px] uppercase tracking-wide ${decisionReviewClasses[state]}`}
+    >
+      {state.replace("-", " ")}
+    </span>
+  );
+}
+
+function MiniMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-white/10 bg-surface px-3 py-2">
+      <p className="text-[10px] uppercase tracking-wide text-text-muted">{label}</p>
+      <p className="mt-1 text-sm text-text-primary">{value}</p>
+    </div>
+  );
+}
+
+function NarrativeCard({ label, value }: { label: string; value: string | null }) {
+  if (!value) return null;
+
+  return (
+    <div className="rounded-lg border border-white/10 bg-surface px-3 py-3">
+      <p className="text-[10px] uppercase tracking-wide text-text-muted">{label}</p>
+      <p className="mt-2 text-sm text-text-primary">{value}</p>
     </div>
   );
 }

@@ -1,10 +1,23 @@
 "use client";
 
 import { useState } from "react";
+import AccessRiskTab from "@/components/admin/tools-tabs/AccessRiskTab";
 import AuditLogTab from "@/components/admin/tools-tabs/AuditLogTab";
+import AlertPoliciesTab from "@/components/admin/tools-tabs/AlertPoliciesTab";
+import DashboardSubscriptionsTab from "@/components/admin/tools-tabs/DashboardSubscriptionsTab";
 import ExportPresetsTab from "@/components/admin/tools-tabs/ExportPresetsTab";
+import ReviewQueueTab from "@/components/admin/tools-tabs/ReviewQueueTab";
+import WorkspaceMaturityTab from "@/components/admin/tools-tabs/WorkspaceMaturityTab";
 
-const TABS = ["Audit Log", "Export Presets"] as const;
+const TABS = [
+  "Audit Log",
+  "Access & Risk",
+  "Review Queue",
+  "Alert Policies",
+  "Dashboard Subscriptions",
+  "Workspace Maturity",
+  "Export Presets",
+] as const;
 type Tab = (typeof TABS)[number];
 
 export default function AdminToolsDashboard() {
@@ -33,6 +46,11 @@ export default function AdminToolsDashboard() {
 
       {/* Tab content */}
       {activeTab === "Audit Log" && <AuditLogTab />}
+      {activeTab === "Access & Risk" && <AccessRiskTab />}
+      {activeTab === "Review Queue" && <ReviewQueueTab />}
+      {activeTab === "Alert Policies" && <AlertPoliciesTab />}
+      {activeTab === "Dashboard Subscriptions" && <DashboardSubscriptionsTab />}
+      {activeTab === "Workspace Maturity" && <WorkspaceMaturityTab />}
       {activeTab === "Export Presets" && <ExportPresetsTab />}
     </div>
   );

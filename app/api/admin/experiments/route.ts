@@ -2,7 +2,14 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { verifyAdminSession } from "@/lib/admin/auth";
 import { logAdminAction } from "@/lib/admin/audit";
-import { ADMIN_METRIC_OPTIONS, fetchMetricValue } from "@/lib/admin/metric-library";
+import {
+  buildExperimentRegistrySnapshot,
+  EXPERIMENT_SELECT,
+  normalizeExperimentMetrics,
+  normalizeGuardrails,
+  type ExperimentRow,
+} from "@/lib/admin/experiment-registry";
+import { ADMIN_METRIC_OPTIONS } from "@/lib/admin/metric-library";
 import { hasRole } from "@/lib/admin/roles";
 import { supabaseFetch } from "@/lib/admin/supabase";
 import { verifyCsrfToken } from "@/lib/csrf";
@@ -10,6 +17,9 @@ import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
 import logger from "@/lib/logger";
 
 const experimentStatusSchema = z.enum(["draft", "active", "paused", "completed", "archived"]);
+const experimentReadoutMethodSchema = z.enum(["conversion-rate", "count-delta", "average-value"]);
+const nonNegativeInt = z.number().int().min(0);
+const nonNegativeNumber = z.number().min(0);
 
 const createSchema = z.object({
   action: z.literal("create"),
@@ -25,6 +35,16 @@ const createSchema = z.object({
   expected_impact: z.string().trim().max(500).optional().nullable(),
   result_summary: z.string().trim().max(1000).optional().nullable(),
   outcome: z.string().trim().max(1000).optional().nullable(),
+  readout_method: experimentReadoutMethodSchema.optional().nullable(),
+  control_sample_size: nonNegativeInt.optional().nullable(),
+  control_success_count: nonNegativeInt.optional().nullable(),
+  variant_sample_size: nonNegativeInt.optional().nullable(),
+  variant_success_count: nonNegativeInt.optional().nullable(),
+  control_metric_value: nonNegativeNumber.optional().nullable(),
+  variant_metric_value: nonNegativeNumber.optional().nullable(),
+  control_stddev_value: nonNegativeNumber.optional().nullable(),
+  variant_stddev_value: nonNegativeNumber.optional().nullable(),
+  readout_notes: z.string().trim().max(1000).optional().nullable(),
 });
 
 const updateSchema = createSchema
@@ -45,6 +65,16 @@ const updateSchema = createSchema
     expected_impact: true,
     result_summary: true,
     outcome: true,
+    readout_method: true,
+    control_sample_size: true,
+    control_success_count: true,
+    variant_sample_size: true,
+    variant_success_count: true,
+    control_metric_value: true,
+    variant_metric_value: true,
+    control_stddev_value: true,
+    variant_stddev_value: true,
+    readout_notes: true,
   });
 
 const deleteSchema = z.object({
@@ -54,71 +84,9 @@ const deleteSchema = z.object({
 
 const postSchema = z.discriminatedUnion("action", [createSchema, updateSchema, deleteSchema]);
 
-const experimentSelect = [
-  "id",
-  "name",
-  "hypothesis",
-  "owner_email",
-  "segment_id",
-  "primary_metric_key",
-  "status",
-  "start_date",
-  "decision_date",
-  "expected_impact",
-  "result_summary",
-  "outcome",
-  "created_at",
-  "updated_at",
-  "admin_email",
-  "admin_experiment_metric(metric_key,metric_role)",
-].join(",");
-
-type ExperimentMetricRow = {
-  metric_key: string;
-  metric_role: "primary" | "guardrail";
-};
-
-type ExperimentRow = {
-  id: number;
-  name: string;
-  hypothesis: string;
-  owner_email: string | null;
-  segment_id: number | null;
-  primary_metric_key: string;
-  status: z.infer<typeof experimentStatusSchema>;
-  start_date: string | null;
-  decision_date: string | null;
-  expected_impact: string | null;
-  result_summary: string | null;
-  outcome: string | null;
-  created_at: string;
-  updated_at: string;
-  admin_email: string;
-  admin_experiment_metric?: ExperimentMetricRow[] | null;
-};
-
-function normalizeGuardrails(primaryMetricKey: string, guardrailMetricKeys: string[] | undefined) {
-  return [...new Set((guardrailMetricKeys ?? []).map((key) => key.trim()).filter(Boolean))].filter(
-    (key) => key !== primaryMetricKey
-  );
-}
-
-function normalizeExperimentMetrics(experiment: ExperimentRow) {
-  const metricRows = experiment.admin_experiment_metric ?? [];
-  const primaryMetricKey =
-    metricRows.find((row) => row.metric_role === "primary")?.metric_key ??
-    experiment.primary_metric_key;
-  const guardrailMetricKeys = normalizeGuardrails(
-    primaryMetricKey,
-    metricRows.filter((row) => row.metric_role === "guardrail").map((row) => row.metric_key)
-  );
-
-  return { primaryMetricKey, guardrailMetricKeys };
-}
-
 async function loadExperiment(experimentId: number) {
   const response = await supabaseFetch(
-    `/rest/v1/admin_experiment?id=eq.${experimentId}&select=${experimentSelect}`,
+    `/rest/v1/admin_experiment?id=eq.${experimentId}&select=${EXPERIMENT_SELECT}`,
     { headers: { Range: "0-0" } }
   );
   if (!response.ok) return null;
@@ -146,69 +114,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const [experimentsRes, segmentsRes] = await Promise.all([
-      supabaseFetch(`/rest/v1/admin_experiment?select=${experimentSelect}&order=updated_at.desc`, {
-        headers: { Range: "0-999" },
-      }),
-      supabaseFetch(
-        `/rest/v1/admin_segment?or=(admin_email.eq.${encodeURIComponent(admin.email)},is_shared.eq.true)&select=id,name&order=name.asc`,
-        { headers: { Range: "0-999" } }
-      ),
-    ]);
-
-    if (!experimentsRes.ok || !segmentsRes.ok) {
-      logger.error(
-        { statuses: [experimentsRes.status, segmentsRes.status] },
-        "Experiments query failed"
-      );
-      return NextResponse.json({ error: "Unable to load data." }, { status: 500 });
-    }
-
-    const experiments = (await experimentsRes.json()) as ExperimentRow[];
-    const segments = (await segmentsRes.json()) as Array<{ id: number; name: string }>;
-    const segmentMap = new Map(segments.map((segment) => [segment.id, segment.name]));
-    const normalizedExperiments = experiments.map((experiment) => {
-      const metrics = normalizeExperimentMetrics(experiment);
-      return {
-        ...experiment,
-        primary_metric_key: metrics.primaryMetricKey,
-        guardrail_metric_keys: metrics.guardrailMetricKeys,
-      };
-    });
-
-    const metricKeys = [
-      ...new Set(normalizedExperiments.map((experiment) => experiment.primary_metric_key)),
-    ];
-    const metricValues: Record<string, number | null> = {};
-    await Promise.all(
-      metricKeys.map(async (key) => {
-        metricValues[key] = await fetchMetricValue(key);
-      })
-    );
-
-    return NextResponse.json({
-      summary: {
-        total: normalizedExperiments.length,
-        active: normalizedExperiments.filter((experiment) => experiment.status === "active").length,
-        completed: normalizedExperiments.filter((experiment) => experiment.status === "completed")
-          .length,
-        pendingDecision: normalizedExperiments.filter(
-          (experiment) =>
-            experiment.status !== "archived" &&
-            experiment.decision_date != null &&
-            experiment.decision_date <= new Date().toISOString().slice(0, 10)
-        ).length,
-      },
-      experiments: normalizedExperiments.map((experiment) => ({
-        ...experiment,
-        segment_name: experiment.segment_id
-          ? (segmentMap.get(experiment.segment_id) ?? null)
-          : null,
-        metric_value: metricValues[experiment.primary_metric_key] ?? null,
-      })),
-      segments,
-      metrics: ADMIN_METRIC_OPTIONS,
-    });
+    return NextResponse.json(await buildExperimentRegistrySnapshot(admin.email));
   } catch (err) {
     logger.error({ err }, "Experiments GET error");
     return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
@@ -265,6 +171,16 @@ export async function POST(request: Request) {
           p_expected_impact: parsed.data.expected_impact ?? null,
           p_result_summary: parsed.data.result_summary ?? null,
           p_outcome: parsed.data.outcome ?? null,
+          p_readout_method: parsed.data.readout_method ?? "conversion-rate",
+          p_control_sample_size: parsed.data.control_sample_size ?? null,
+          p_control_success_count: parsed.data.control_success_count ?? null,
+          p_variant_sample_size: parsed.data.variant_sample_size ?? null,
+          p_variant_success_count: parsed.data.variant_success_count ?? null,
+          p_control_metric_value: parsed.data.control_metric_value ?? null,
+          p_variant_metric_value: parsed.data.variant_metric_value ?? null,
+          p_control_stddev_value: parsed.data.control_stddev_value ?? null,
+          p_variant_stddev_value: parsed.data.variant_stddev_value ?? null,
+          p_readout_notes: parsed.data.readout_notes ?? null,
         }),
       });
 
@@ -335,6 +251,46 @@ export async function POST(request: Request) {
               : existing.result_summary,
           p_outcome:
             parsed.data.outcome !== undefined ? (parsed.data.outcome ?? null) : existing.outcome,
+          p_readout_method:
+            parsed.data.readout_method !== undefined
+              ? (parsed.data.readout_method ?? "conversion-rate")
+              : existing.readout_method,
+          p_control_sample_size:
+            parsed.data.control_sample_size !== undefined
+              ? (parsed.data.control_sample_size ?? null)
+              : existing.control_sample_size,
+          p_control_success_count:
+            parsed.data.control_success_count !== undefined
+              ? (parsed.data.control_success_count ?? null)
+              : existing.control_success_count,
+          p_control_metric_value:
+            parsed.data.control_metric_value !== undefined
+              ? (parsed.data.control_metric_value ?? null)
+              : existing.control_metric_value,
+          p_control_stddev_value:
+            parsed.data.control_stddev_value !== undefined
+              ? (parsed.data.control_stddev_value ?? null)
+              : existing.control_stddev_value,
+          p_variant_sample_size:
+            parsed.data.variant_sample_size !== undefined
+              ? (parsed.data.variant_sample_size ?? null)
+              : existing.variant_sample_size,
+          p_variant_success_count:
+            parsed.data.variant_success_count !== undefined
+              ? (parsed.data.variant_success_count ?? null)
+              : existing.variant_success_count,
+          p_variant_metric_value:
+            parsed.data.variant_metric_value !== undefined
+              ? (parsed.data.variant_metric_value ?? null)
+              : existing.variant_metric_value,
+          p_variant_stddev_value:
+            parsed.data.variant_stddev_value !== undefined
+              ? (parsed.data.variant_stddev_value ?? null)
+              : existing.variant_stddev_value,
+          p_readout_notes:
+            parsed.data.readout_notes !== undefined
+              ? (parsed.data.readout_notes ?? null)
+              : existing.readout_notes,
         }),
       });
 

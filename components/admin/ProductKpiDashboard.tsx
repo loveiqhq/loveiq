@@ -9,13 +9,20 @@ import ReportSectionsTab from "@/components/admin/kpi-tabs/ReportSectionsTab";
 import QuestionsTab from "@/components/admin/kpi-tabs/QuestionsTab";
 import ChaptersTab from "@/components/admin/kpi-tabs/ChaptersTab";
 import DiscriminationTab from "@/components/admin/kpi-tabs/DiscriminationTab";
+import ExperienceHealthTab from "@/components/admin/kpi-tabs/ExperienceHealthTab";
+import FeatureAdoptionTab from "@/components/admin/kpi-tabs/FeatureAdoptionTab";
+import ProductIssueRadarTab from "@/components/admin/kpi-tabs/ProductIssueRadarTab";
+import QuestionPortfolioTab from "@/components/admin/kpi-tabs/QuestionPortfolioTab";
+import WhatChangedOverlay from "@/components/admin/WhatChangedOverlay";
 import {
+  PRODUCT_KPI_TABS,
   buildFunnelsHref,
   buildScorecardHref,
   parseAdminDays,
   parseProductKpiTab,
 } from "@/lib/admin/drilldowns";
 import type { ReportSectionKpi, QuestionKpi, ChapterKpi } from "@/data/product-kpis";
+import type { ProductIssueRadarSnapshot } from "@/lib/admin/product-issue-types";
 
 interface ProductKpiData {
   reportSections: ReportSectionKpi[];
@@ -47,8 +54,6 @@ interface ProductKpiData {
     warnings: string[];
   };
 }
-
-const tabs = ["Report Sections", "Survey Questions", "Survey Chapters", "Discrimination"] as const;
 
 function escapeCSV(value: string): string {
   if (/^[=+\-@]/.test(value)) value = "'" + value;
@@ -89,6 +94,11 @@ export default function ProductKpiDashboard() {
   const selectedChapter = searchParams.get("chapter") || "all";
   const params = useMemo(() => (days > 0 ? { days: String(days) } : undefined), [days]);
   const { data, loading, error } = useAdminFetch<ProductKpiData>("/api/admin/product-kpis", params);
+  const {
+    data: issueRadarData,
+    loading: issueRadarLoading,
+    error: issueRadarError,
+  } = useAdminFetch<ProductIssueRadarSnapshot>("/api/admin/product-kpis/issues", params);
 
   const stats = useMemo(() => {
     if (!data) return null;
@@ -137,7 +147,7 @@ export default function ProductKpiDashboard() {
         filtered as unknown as Record<string, unknown>[],
         `kpi-questions${suffix}-${dateStr}.csv`
       );
-    } else {
+    } else if (activeTab === "Survey Chapters") {
       downloadCsv(
         data.chapters as unknown as Record<string, unknown>[],
         `kpi-chapters-${dateStr}.csv`
@@ -165,10 +175,13 @@ export default function ProductKpiDashboard() {
     <div className="space-y-6">
       {/* Time range */}
       <div className="flex items-center justify-between">
-        <TimeRangeSelector
-          value={days}
-          onChange={(value) => setQueryState({ days: value > 0 ? value : null })}
-        />
+        <div className="flex items-center gap-3">
+          <WhatChangedOverlay days={days} triggerLabel="What changed?" />
+          <TimeRangeSelector
+            value={days}
+            onChange={(value) => setQueryState({ days: value > 0 ? value : null })}
+          />
+        </div>
       </div>
 
       <div className="grid gap-3 rounded-xl border border-white/10 bg-surface p-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -189,20 +202,29 @@ export default function ProductKpiDashboard() {
           href={buildFunnelsHref({
             days,
             tab:
-              activeTab === "Survey Questions" || activeTab === "Survey Chapters"
-                ? "Cohort Analysis"
-                : "Conversion Funnel",
+              activeTab === "Feature Adoption" || activeTab === "Discrimination"
+                ? "Impact Comparison"
+                : activeTab === "Survey Questions" || activeTab === "Survey Chapters"
+                  ? "Cohort Analysis"
+                  : "Conversion Funnel",
             groupBy:
               activeTab === "Survey Questions" || activeTab === "Survey Chapters"
                 ? "utm"
                 : undefined,
+            comparison:
+              activeTab === "Feature Adoption"
+                ? "release"
+                : activeTab === "Discrimination"
+                  ? "version"
+                  : undefined,
           })}
           className="rounded-lg border border-white/10 bg-white/5 px-4 py-3 transition hover:border-white/20 hover:bg-white/10"
         >
           <p className="text-[11px] uppercase tracking-wide text-text-muted">Cross Drilldown</p>
           <p className="mt-1 text-sm font-semibold text-text-primary">Open Funnel View</p>
           <p className="mt-1 text-xs text-text-muted">
-            Jump from question friction into conversion or cohort movement.
+            Jump from product friction into funnel cohorts, launch impact, or scoring-version
+            comparison.
           </p>
         </a>
         <div className="rounded-lg border border-white/10 bg-white/5 px-4 py-3">
@@ -302,7 +324,7 @@ export default function ProductKpiDashboard() {
       {/* Tab selector + download */}
       <div className="flex items-center gap-3">
         <div className="flex flex-1 gap-1 rounded-lg border border-white/10 bg-surface p-1">
-          {tabs.map((tab) => (
+          {PRODUCT_KPI_TABS.map((tab) => (
             <button
               key={tab}
               onClick={() => setQueryState({ tab })}
@@ -334,7 +356,13 @@ export default function ProductKpiDashboard() {
         </div>
         <button
           onClick={handleDownload}
-          className="flex shrink-0 items-center gap-2 rounded-lg border border-white/10 bg-surface px-4 py-2 text-sm font-medium text-text-muted transition hover:bg-white/5 hover:text-text-primary"
+          disabled={
+            activeTab === "Experience Health" ||
+            activeTab === "Feature Adoption" ||
+            activeTab === "Issue Radar" ||
+            activeTab === "Question Portfolio"
+          }
+          className="flex shrink-0 items-center gap-2 rounded-lg border border-white/10 bg-surface px-4 py-2 text-sm font-medium text-text-muted transition hover:bg-white/5 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-40"
         >
           <svg
             className="h-4 w-4"
@@ -353,6 +381,21 @@ export default function ProductKpiDashboard() {
 
       {/* Active tab */}
       {activeTab === "Report Sections" && <ReportSectionsTab data={data.reportSections} />}
+      {activeTab === "Experience Health" && <ExperienceHealthTab days={days} />}
+      {activeTab === "Issue Radar" && (
+        <ProductIssueRadarTab
+          data={issueRadarData}
+          loading={issueRadarLoading}
+          error={issueRadarError}
+        />
+      )}
+      {activeTab === "Question Portfolio" && (
+        <QuestionPortfolioTab
+          data={issueRadarData}
+          loading={issueRadarLoading}
+          error={issueRadarError}
+        />
+      )}
       {activeTab === "Survey Questions" && (
         <QuestionsTab
           data={data.questions}
@@ -364,6 +407,7 @@ export default function ProductKpiDashboard() {
       )}
       {activeTab === "Survey Chapters" && <ChaptersTab data={data.chapters} />}
       {activeTab === "Discrimination" && <DiscriminationTab days={days} />}
+      {activeTab === "Feature Adoption" && <FeatureAdoptionTab days={days} />}
     </div>
   );
 }

@@ -3,8 +3,9 @@
 import { useState } from "react";
 import ABComparisonTab from "@/components/admin/comparison-tabs/ABComparisonTab";
 import ArchetypeCorrelationTab from "@/components/admin/comparison-tabs/ArchetypeCorrelationTab";
+import SegmentMigrationTab from "@/components/admin/comparison-tabs/SegmentMigrationTab";
 
-const tabs = ["A/B Comparison", "Archetype Correlation"] as const;
+const tabs = ["A/B Comparison", "Segment Migration", "Archetype Correlation"] as const;
 type Tab = (typeof tabs)[number];
 
 export default function ComparisonsDashboard() {
@@ -31,6 +32,7 @@ export default function ComparisonsDashboard() {
 
       {/* Active tab */}
       {activeTab === "A/B Comparison" && <ABComparisonTab />}
+      {activeTab === "Segment Migration" && <SegmentMigrationTab />}
       {activeTab === "Archetype Correlation" && <ArchetypeCorrelationTab />}
     </div>
   );

@@ -39,8 +39,12 @@ export default function DriftTab({ days }: { days: number }) {
   return (
     <div className="rounded-xl border border-white/10 bg-surface p-5">
       <h3 className="mb-2 text-sm font-medium text-text-primary">V4 → V5 Migration Matrix</h3>
-      <p className="mb-4 text-xs text-text-muted">
+      <p className="mb-3 text-xs text-text-muted">
         Rows = V4 archetype, Columns = V5 archetype. Cells show how many users migrated.
+      </p>
+      <p className="mb-4 text-xs text-text-muted">
+        This view is only for V4 versus V5 scoring migration. Cross-system taxonomy, event, config,
+        answer-mapping, and experiment setup drift now lives in Health -&gt; Drift Detector.
       </p>
       <HeatmapGrid rows={rows} cols={cols} data={data.driftMatrix} />
     </div>

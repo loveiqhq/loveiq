@@ -17,6 +17,7 @@ interface Insight {
   title: string;
   description: string;
   metric?: string;
+  metricKey?: string | null;
   category: InsightCategory;
   priority: number;
   confidence: Confidence;
@@ -177,6 +178,7 @@ export async function GET(request: Request) {
             submissionDelta < 0 ? "drop" : "increase"
           } vs the previous ${days}-day window (${periodComparison.current_submissions} vs ${periodComparison.previous_submissions}).`,
           metric: `${submissionDelta > 0 ? "+" : ""}${submissionDelta}%`,
+          metricKey: "total_submissions",
           category: "volume",
           priority: submissionDelta < 0 ? 1 : 4,
           confidence: confidenceFromSampleSize(
@@ -202,6 +204,7 @@ export async function GET(request: Request) {
               completionDelta < 0 ? "Completion rate needs attention" : "Completion rate improved",
             description: `${periodComparison.current_completion_rate}% now vs ${periodComparison.previous_completion_rate}% previously.`,
             metric: `${completionDelta > 0 ? "+" : ""}${completionDelta.toFixed(1)}pp`,
+            metricKey: "completion_rate",
             category: "completion",
             priority: completionDelta < 0 ? 1 : 5,
             confidence: confidenceFromSampleSize(
@@ -228,6 +231,7 @@ export async function GET(request: Request) {
             title: durationDelta > 0 ? "Survey duration increased" : "Survey duration improved",
             description: `${periodComparison.current_avg_duration_min} min now vs ${periodComparison.previous_avg_duration_min} min previously.`,
             metric: `${durationDelta > 0 ? "+" : ""}${durationDelta.toFixed(1)}m`,
+            metricKey: "avg_duration_minutes",
             category: "completion",
             priority: durationDelta > 0 ? 3 : 6,
             confidence: confidenceFromSampleSize(
@@ -261,6 +265,7 @@ export async function GET(request: Request) {
               waitlistDelta < 0 ? "Waitlist growth softened" : "Waitlist growth is accelerating",
             description: `${periodComparison.current_waitlist} signups in the current window vs ${periodComparison.previous_waitlist} previously.`,
             metric: `${waitlistDelta > 0 ? "+" : ""}${waitlistDelta}%`,
+            metricKey: "waitlist_signups",
             category: "volume",
             priority: waitlistDelta < 0 ? 4 : 7,
             confidence: confidenceFromSampleSize(
@@ -284,6 +289,7 @@ export async function GET(request: Request) {
           worst.backtrack_count > 0 ? ` with ${worst.backtrack_count} backtracks` : ""
         }.`,
         metric: `${worst.avg_time_sec}s`,
+        metricKey: "avg_duration_minutes",
         category: "question",
         priority: 2,
         confidence: confidenceFromSampleSize(sampleSize),
@@ -301,6 +307,7 @@ export async function GET(request: Request) {
         title: "Largest abandonment point found",
         description: `${formatQuestionLabel(top.q_id)} caused ${top.abandon_count} exits in the last ${days} days.`,
         metric: `${top.abandon_count} exits`,
+        metricKey: "completion_rate",
         category: "question",
         priority: 1,
         confidence: confidenceFromSampleSize(top.abandon_count),
@@ -322,6 +329,7 @@ export async function GET(request: Request) {
         title: `${data.fastest_growing_archetype.archetype} is gaining share`,
         description: `${data.fastest_growing_archetype.current} current-period results vs ${data.fastest_growing_archetype.previous} previously.`,
         metric: `+${growth}`,
+        metricKey: null,
         category: "archetype",
         priority: 6,
         confidence: confidenceFromSampleSize(
@@ -377,6 +385,7 @@ export async function GET(request: Request) {
           title: "Channel quality gap widened",
           description: `${bestSource.source} is converting at ${bestSource.completionRate}% while ${worstSource.source} is at ${worstSource.completionRate}%.`,
           metric: `${bestSource.completionRate - worstSource.completionRate}pp gap`,
+          metricKey: "waitlist_to_start_rate",
           category: "acquisition",
           priority: 3,
           confidence: confidenceFromSampleSize(bestSource.total + worstSource.total),
@@ -394,6 +403,7 @@ export async function GET(request: Request) {
         title: "Small sample size in current window",
         description: `Only ${sampleSize} submissions were captured in the last ${days} days. Treat changes as directional rather than decisive.`,
         metric: `${sampleSize} subs`,
+        metricKey: null,
         category: "trust",
         priority: 2,
         confidence: "low",
@@ -409,6 +419,7 @@ export async function GET(request: Request) {
         severity: "neutral",
         title: "No material changes detected",
         description: `The last ${days} days look broadly stable across volume, completion, and question behavior.`,
+        metricKey: null,
         category: "trust",
         priority: 9,
         confidence: confidenceFromSampleSize(sampleSize),

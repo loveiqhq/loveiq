@@ -25,6 +25,7 @@ const pageTitles: Record<string, string> = {
   "/admin/retention": "Retention",
   "/admin/scorecard": "Question Scorecard",
   "/admin/text-analysis": "Text Analysis",
+  "/admin/research": "Research Intelligence",
   "/admin/activity": "Admin Activity",
   "/admin/archetypes": "Archetypes",
   "/admin/journey": "User Journey",
@@ -80,6 +81,8 @@ const pageDescriptions: Record<string, string> = {
     "Grade each survey question (A\u2013F) on drop-off, friction, completion, and discrimination.",
   "/admin/text-analysis":
     "Analyze free-text responses: word clouds, keyword frequency, and per-question breakdowns.",
+  "/admin/research":
+    "Research operating surface for signal synthesis, pain severity, emerging language, and persona drift.",
   "/admin/activity":
     "Audit trail of all admin actions, broken down by admin, action type, and date.",
   "/admin/archetypes":

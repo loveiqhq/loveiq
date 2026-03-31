@@ -5,19 +5,19 @@ export interface AdminUser {
   role: AdminRole;
 }
 
-const ROLE_HIERARCHY: Record<AdminRole, number> = {
-  viewer: 0,
-  editor: 1,
-  admin: 2,
-};
+const ROLE_HIERARCHY = new Map<AdminRole, number>([
+  ["viewer", 0],
+  ["editor", 1],
+  ["admin", 2],
+]);
 
 /** Check if user's role meets or exceeds the required minimum. */
 export function hasRole(userRole: AdminRole, requiredRole: AdminRole): boolean {
-  return ROLE_HIERARCHY[userRole] >= ROLE_HIERARCHY[requiredRole];
+  return (ROLE_HIERARCHY.get(userRole) ?? -1) >= (ROLE_HIERARCHY.get(requiredRole) ?? -1);
 }
 
 /** Route-action to minimum role mapping. */
-const ROUTE_PERMISSIONS: Record<string, AdminRole> = {
+export const ROUTE_PERMISSIONS: Record<string, AdminRole> = {
   // GET endpoints — viewer
   "GET:/api/admin/stats": "viewer",
   "GET:/api/admin/submissions": "viewer",
@@ -27,7 +27,9 @@ const ROUTE_PERMISSIONS: Record<string, AdminRole> = {
   "GET:/api/admin/survey-status": "viewer",
   "GET:/api/admin/funnels/conversion": "viewer",
   "GET:/api/admin/funnels/cohorts": "viewer",
+  "GET:/api/admin/funnels/impact-comparison": "viewer",
   "GET:/api/admin/comparisons/segment": "viewer",
+  "GET:/api/admin/comparisons/segment-migration": "viewer",
   "GET:/api/admin/comparisons/correlation": "viewer",
   "GET:/api/admin/answers/distribution": "viewer",
   "GET:/api/admin/pulse/activity": "viewer",
@@ -36,7 +38,17 @@ const ROUTE_PERMISSIONS: Record<string, AdminRole> = {
   "GET:/api/admin/growth/referrals": "viewer",
   "GET:/api/admin/growth/geography": "viewer",
   "GET:/api/admin/growth/waitlist-conversion": "viewer",
+  "GET:/api/admin/growth/acquisition-quality": "viewer",
+  "GET:/api/admin/growth/leak-debugger": "viewer",
+  "GET:/api/admin/growth/creative-intelligence": "viewer",
+  "GET:/api/admin/growth/control-tower": "viewer",
+  "GET:/api/admin/growth/embed-performance": "viewer",
+  "GET:/api/admin/growth/recovery": "viewer",
+  "GET:/api/admin/growth/value-attribution": "viewer",
+  "GET:/api/admin/drift-detector": "viewer",
   "GET:/api/admin/annotations": "viewer",
+  "GET:/api/admin/incidents/correlation": "viewer",
+  "GET:/api/admin/product-kpis/issues": "viewer",
   "GET:/api/admin/product-kpis/discrimination": "viewer",
   "GET:/api/admin/export-presets": "viewer",
   "GET:/api/admin/scoring/comparison": "viewer",
@@ -45,6 +57,9 @@ const ROUTE_PERMISSIONS: Record<string, AdminRole> = {
   "GET:/api/admin/question-lifecycle": "viewer",
   "GET:/api/admin/experiments": "viewer",
   "GET:/api/admin/benchmarks": "viewer",
+  "GET:/api/admin/metric-status": "viewer",
+  "GET:/api/admin/release-impact": "viewer",
+  "GET:/api/admin/what-changed": "viewer",
   // PATCH/POST endpoints — editor
   "PATCH:/api/admin/submissions/[id]": "editor",
   "PATCH:/api/admin/submissions/bulk": "editor",
@@ -59,6 +74,7 @@ const ROUTE_PERMISSIONS: Record<string, AdminRole> = {
   "DELETE:/api/admin/export-presets/[id]": "editor",
   "POST:/api/admin/experiments": "editor",
   "POST:/api/admin/benchmarks": "editor",
+  "POST:/api/admin/metric-status": "editor",
   // Admin-only actions
   "DELETE:/api/admin/submissions/[id]": "admin",
   "GET:/api/admin/export": "admin",

@@ -5,15 +5,16 @@ import { useAdminQueryState } from "@/components/admin/hooks/useAdminQueryState"
 import TimeRangeSelector from "@/components/admin/TimeRangeSelector";
 import ConversionFunnelTab from "@/components/admin/funnel-tabs/ConversionFunnelTab";
 import CohortAnalysisTab from "@/components/admin/funnel-tabs/CohortAnalysisTab";
+import ImpactComparisonTab from "@/components/admin/funnel-tabs/ImpactComparisonTab";
 import {
+  FUNNEL_TABS,
   buildProductKpiHref,
   buildScorecardHref,
   parseAdminDays,
+  parseCohortComparisonMode,
   parseCohortGroupBy,
   parseFunnelTab,
 } from "@/lib/admin/drilldowns";
-
-const tabs = ["Conversion Funnel", "Cohort Analysis"] as const;
 
 export default function FunnelsDashboard() {
   const { searchParams, setQueryState } = useAdminQueryState();
@@ -21,11 +22,13 @@ export default function FunnelsDashboard() {
   const activeTab = parseFunnelTab(searchParams.get("tab"));
   const utmFilter = searchParams.get("utm") || "";
   const groupBy = parseCohortGroupBy(searchParams.get("groupBy"));
+  const comparisonMode = parseCohortComparisonMode(searchParams.get("comparison"));
   const focusedState = useMemo(() => {
     if (activeTab === "Conversion Funnel" && utmFilter) return `UTM filter: ${utmFilter}`;
     if (activeTab === "Cohort Analysis") return `Grouped by ${groupBy}`;
+    if (activeTab === "Impact Comparison") return `Comparing ${comparisonMode}`;
     return "Current time window is shareable by URL.";
-  }, [activeTab, groupBy, utmFilter]);
+  }, [activeTab, comparisonMode, groupBy, utmFilter]);
 
   return (
     <div className="space-y-6">
@@ -73,7 +76,7 @@ export default function FunnelsDashboard() {
       </div>
 
       <div className="flex gap-1 rounded-lg border border-white/10 bg-surface p-1">
-        {tabs.map((tab) => (
+        {FUNNEL_TABS.map((tab) => (
           <button
             key={tab}
             onClick={() => setQueryState({ tab })}
@@ -102,6 +105,15 @@ export default function FunnelsDashboard() {
           days={days}
           groupBy={groupBy}
           onGroupByChange={(value) => setQueryState({ groupBy: value, tab: "Cohort Analysis" })}
+        />
+      )}
+      {activeTab === "Impact Comparison" && (
+        <ImpactComparisonTab
+          days={days}
+          comparisonMode={comparisonMode}
+          onComparisonModeChange={(value) =>
+            setQueryState({ comparison: value, tab: "Impact Comparison" })
+          }
         />
       )}
     </div>
