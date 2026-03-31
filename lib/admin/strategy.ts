@@ -62,6 +62,16 @@ const LEAKAGE_HINTS: Record<string, { cause: string }> = {
   },
 };
 
+const PIPELINE_STAGE_ORDER = [
+  { key: "waitlist_signups", label: "Waitlist Signups" },
+  { key: "survey_started", label: "Survey Started" },
+  { key: "survey_completed", label: "Survey Completed" },
+  { key: "scored", label: "Scored" },
+  { key: "report_generated", label: "Report Generated" },
+  { key: "report_viewed", label: "Report Viewed" },
+  { key: "payment_completed", label: "Payment Completed" },
+] as const;
+
 const round1 = (value: number) => Math.round(value * 10) / 10;
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 const clampDays = (days: number) => (Number.isNaN(days) ? 30 : Math.min(Math.max(days, 7), 90));
@@ -82,6 +92,33 @@ const durationMinutes = (rows: Array<{ duration_ms: number | null }>) => {
     ? null
     : round1(durations.reduce((sum, value) => sum + value, 0) / durations.length / 60_000);
 };
+
+interface StrategyPipelineStage {
+  key: string;
+  label: string;
+  value: number;
+}
+
+interface StrategyPipelineConversionRate {
+  from: string;
+  to: string;
+  rate: number;
+}
+
+interface StrategyPipelineUtmSource {
+  source: string;
+  signups: number;
+  started: number;
+  total: number;
+  completed: number;
+  conversionRate: number;
+}
+
+interface StrategyPipelineSnapshot {
+  stages: StrategyPipelineStage[];
+  conversionRates: StrategyPipelineConversionRate[];
+  utmSources: StrategyPipelineUtmSource[];
+}
 const formatMetric = (value: number | null, unit: "percent" | "minutes" | "count") =>
   value == null
     ? "—"
@@ -109,7 +146,58 @@ const countInRange = (rows: Array<{ created_date_time: string }>, start: string,
   rows.filter((row) => inRange(row.created_date_time, start, end)).length;
 const completionInRange = (rows: any[], start: string, end: string) =>
   completionRate(rows.filter((row) => inRange(row.created_date_time, start, end)));
-const stageValue = (pipeline: any, label: string) =>
+function normalizeConversionPipeline(raw: any): StrategyPipelineSnapshot {
+  const rawStages =
+    raw?.stages && !Array.isArray(raw.stages) && typeof raw.stages === "object" ? raw.stages : {};
+  const existingStages = Array.isArray(raw?.stages) ? raw.stages : [];
+  const stages = PIPELINE_STAGE_ORDER.map(({ key, label }) => {
+    const existing = existingStages.find((item: any) => item?.label === label);
+    return {
+      key,
+      label,
+      value: Number(existing?.value ?? rawStages[key] ?? 0),
+    };
+  });
+
+  const conversionRates = Array.isArray(raw?.conversionRates)
+    ? raw.conversionRates.map((item: any) => ({
+        from: String(item?.from ?? ""),
+        to: String(item?.to ?? ""),
+        rate: Number(item?.rate ?? 0),
+      }))
+    : stages.slice(0, -1).map((fromStage, index) => {
+        const toStage = stages[index + 1];
+        return {
+          from: fromStage.label,
+          to: toStage.label,
+          rate: fromStage.value > 0 ? round1((toStage.value / fromStage.value) * 100) : 0,
+        };
+      });
+
+  const utmSources = Array.isArray(raw?.utmSources)
+    ? raw.utmSources.map((item: any) => ({
+        source: String(item?.source ?? "Direct"),
+        signups: Number(item?.signups ?? item?.total ?? item?.count ?? 0),
+        started: Number(item?.started ?? item?.total ?? item?.count ?? 0),
+        total: Number(item?.total ?? item?.count ?? 0),
+        completed: Number(item?.completed ?? 0),
+        conversionRate: Number(item?.conversionRate ?? 0),
+      }))
+    : Array.isArray(raw?.by_utm)
+      ? raw.by_utm.map((item: any) => ({
+          source: String(item?.source ?? "Direct"),
+          signups: Number(item?.signups ?? item?.total ?? 0),
+          started: Number(item?.started ?? item?.total ?? 0),
+          total: Number(item?.total ?? 0),
+          completed: Number(item?.completed ?? 0),
+          conversionRate: Number(item?.conversion_rate ?? 0),
+        }))
+      : [];
+
+  return { stages, conversionRates, utmSources };
+}
+
+const stageValue = (pipeline: StrategyPipelineSnapshot, label: string) =>
   pipeline.stages.find((stage: any) => stage.label === label)?.value ?? 0;
 const metricLabel = (key: string) => METRIC_LABELS[key] ?? key;
 const topGap = (values: Record<string, number> | null | undefined) => {
@@ -142,7 +230,7 @@ const daysSinceIso = (value: string) => {
 function goalDrivers(
   metricKey: string,
   days: number,
-  pipeline: any,
+  pipeline: StrategyPipelineSnapshot,
   topChannel: any,
   topLeakage: any,
   highPriorityCases: number,
@@ -416,17 +504,18 @@ export async function buildStrategySnapshot(inputDays: number) {
     const v5Gap = topGap(row.v5_percentages);
     return (v4Gap != null && v4Gap < 15) || (v5Gap != null && v5Gap < 15);
   });
-  const topChannel = [...(pipeline as any).utmSources].sort(
+  const normalizedPipeline = normalizeConversionPipeline(pipeline);
+  const topChannel = [...normalizedPipeline.utmSources].sort(
     (a: any, b: any) => b.conversionRate - a.conversionRate
   )[0];
   const highPriorityCases = (investigations as any[]).filter(
     (item) => item.status !== "closed" && item.priority === "high"
   ).length;
 
-  const leakage = (pipeline as any).conversionRates
+  const leakage = normalizedPipeline.conversionRates
     .map((item: any) => {
-      const from = stageValue(pipeline, item.from);
-      const to = stageValue(pipeline, item.to);
+      const from = stageValue(normalizedPipeline, item.from);
+      const to = stageValue(normalizedPipeline, item.to);
       const pairKey = `${item.from}->${item.to}`;
       const hint = LEAKAGE_HINTS[pairKey];
       const lossCount = Math.max(from - to, 0);
@@ -476,7 +565,7 @@ export async function buildStrategySnapshot(inputDays: number) {
       drivers: goalDrivers(
         goal.metric_key,
         days,
-        pipeline,
+        normalizedPipeline,
         topChannel,
         topLeakage,
         highPriorityCases,
@@ -755,10 +844,10 @@ export async function buildStrategySnapshot(inputDays: number) {
       benchmark.key === "completion_rate"
         ? completionRate(submissionsCurrent as any[])
         : benchmark.key === "waitlist_to_start_rate"
-          ? stageValue(pipeline, "Waitlist Signups") > 0
+          ? stageValue(normalizedPipeline, "Waitlist Signups") > 0
             ? round1(
-                (stageValue(pipeline, "Survey Started") /
-                  stageValue(pipeline, "Waitlist Signups")) *
+                (stageValue(normalizedPipeline, "Survey Started") /
+                  stageValue(normalizedPipeline, "Waitlist Signups")) *
                   100
               )
             : null
@@ -1419,7 +1508,7 @@ export async function buildStrategySnapshot(inputDays: number) {
       funnelLeakage: leakage,
       archetypeMomentum,
       leaderboards: {
-        channels: [...(pipeline as any).utmSources]
+        channels: [...normalizedPipeline.utmSources]
           .sort((a: any, b: any) => b.conversionRate - a.conversionRate)
           .slice(0, 8),
         archetypes: Object.entries(archetypeCurrent)
