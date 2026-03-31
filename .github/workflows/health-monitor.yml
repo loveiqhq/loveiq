@@ -44,12 +44,3 @@ jobs:
           fi
 
           echo "$TARGET_NAME health check passed"
-
-      - name: Alert Slack on failure
-        if: failure()
-        run: |
-          curl -s -X POST "${{ secrets.SLACK_WAITLIST_WEBHOOK_URL }}" \
-            -H "Content-Type: application/json" \
-            -d "{
-              \"text\": \":rotating_light: *${TARGET_NAME} health check FAILED*\nStatus: ${{ steps.health.outputs.http_status }}\nResponse: ${{ steps.health.outputs.body }}\nCheck: ${TARGET_URL}/api/health\"
-            }"
