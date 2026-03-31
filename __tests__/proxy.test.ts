@@ -69,6 +69,7 @@ describe("proxy middleware", () => {
     mockResponseHeaders.clear();
     mockCookiesSet.mockClear();
     (logger.info as ReturnType<typeof vi.fn>).mockClear();
+    delete process.env.STAGING_PASSWORD;
   });
 
   it("sets Content-Security-Policy header", () => {
@@ -159,5 +160,19 @@ describe("proxy middleware", () => {
     proxy(makeNextRequest());
     const csp = mockResponseHeaders.get("Content-Security-Policy");
     expect(csp).toContain("frame-ancestors 'none'");
+  });
+
+  it("allows /api/health through the staging gate", async () => {
+    process.env.STAGING_PASSWORD = "test-staging-pw";
+
+    await proxy(makeNextRequest("http://localhost:3000/api/health"));
+
+    expect(mockResponseHeaders.get("X-Frame-Options")).toBe("DENY");
+    expect(logger.info).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "api_request",
+        path: "/api/health",
+      })
+    );
   });
 });
