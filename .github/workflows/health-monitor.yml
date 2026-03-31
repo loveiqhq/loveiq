@@ -13,8 +13,13 @@ permissions:
 
 jobs:
   health-check:
-    name: Production Health Check
+    name: Environment Health Check
     runs-on: ubuntu-latest
+    env:
+      TARGET_NAME: >-
+        ${{ github.event_name == 'push' && github.ref == 'refs/heads/staging' && 'staging' || 'production' }}
+      TARGET_URL: >-
+        ${{ github.event_name == 'push' && github.ref == 'refs/heads/staging' && 'https://staging.loveiq.org' || 'https://www.loveiq.org' }}
     steps:
       - name: Wait for Vercel deployment
         # Only wait after a push — scheduled/manual runs check current prod state
@@ -24,7 +29,7 @@ jobs:
       - name: Check /api/health
         id: health
         run: |
-          RESPONSE=$(curl -s -w "\n%{http_code}" https://www.loveiq.org/api/health)
+          RESPONSE=$(curl -s -w "\n%{http_code}" "$TARGET_URL/api/health")
           HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
           BODY=$(echo "$RESPONSE" | head -n-1)
 
@@ -38,7 +43,7 @@ jobs:
             exit 1
           fi
 
-          echo "Health check passed"
+          echo "$TARGET_NAME health check passed"
 
       - name: Alert Slack on failure
         if: failure()
@@ -46,5 +51,5 @@ jobs:
           curl -s -X POST "${{ secrets.SLACK_WAITLIST_WEBHOOK_URL }}" \
             -H "Content-Type: application/json" \
             -d "{
-              \"text\": \":rotating_light: *loveiq.org health check FAILED*\nStatus: ${{ steps.health.outputs.http_status }}\nResponse: ${{ steps.health.outputs.body }}\nCheck: https://www.loveiq.org/api/health\"
+              \"text\": \":rotating_light: *${TARGET_NAME} health check FAILED*\nStatus: ${{ steps.health.outputs.http_status }}\nResponse: ${{ steps.health.outputs.body }}\nCheck: ${TARGET_URL}/api/health\"
             }"
