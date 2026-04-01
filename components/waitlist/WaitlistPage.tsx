@@ -11,7 +11,7 @@ const faqs = [
       "Early Access members get priority entry to our platform before the public launch, exclusive content, and a locked-in lifetime discount on premium features.",
   },
   {
-    question: "What's included in the survey?",
+    question: "What's included in the test?",
     answer:
       "Our comprehensive assessment covers 5 key psychological dimensions of intimacy. You'll receive a detailed report outlining your unique profile immediately after completion.",
   },

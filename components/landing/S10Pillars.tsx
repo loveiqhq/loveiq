@@ -4,7 +4,7 @@ const cards = [
   {
     title: "Instant Results",
     description:
-      "No waiting. Receive your comprehensive analysis immediately upon completing the survey.",
+      "No waiting. Receive your comprehensive analysis immediately upon completing the test.",
     tone: "from-[#ff8a5a] to-[#f26d4f]",
   },
   {

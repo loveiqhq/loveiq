@@ -433,7 +433,7 @@ const ProcessSection: FC = () => {
     {
       title: "Reports",
       description:
-        "Fueled by our survey inputs we transform personal insights into highly informative reports that help us better understand ourselves.",
+        "Fueled by our test inputs we transform personal insights into highly informative reports that help us better understand ourselves.",
       icon: <ChartIcon />,
     },
     {

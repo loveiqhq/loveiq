@@ -661,12 +661,12 @@ const TeaserCard: FC = () => (
     {/* Bottom section */}
     <div className="relative flex flex-col items-center">
       <p className="font-sans text-[11px] sm:text-[14px] lg:text-[16px] font-medium leading-[15px] sm:leading-[19.5px] text-center text-[#D1D5DB] max-w-[240px] sm:max-w-[444px] mb-3 sm:mb-5">
-        To explore all 14 archetypes, start our survey and discover which ones fit you best.
+        To explore all 14 archetypes, start our test and discover which ones fit you best.
       </p>
 
       <Link
         href="/waitlist"
-        aria-label="Start survey now - discover your archetype"
+        aria-label="Start test now - discover your archetype"
         className="group relative inline-flex items-center justify-center gap-2 overflow-hidden rounded-full bg-gradient-brand px-5 py-2.5 sm:px-6 sm:py-3 text-[12px] sm:text-[14px] font-semibold text-white shadow-pill transition hover:translate-y-[-2px] focus-visible-ring"
         onClick={() => trackStartSurvey("archetype-teaser")}
       >
@@ -675,7 +675,7 @@ const TeaserCard: FC = () => (
           className="pointer-events-none absolute inset-0 bg-white opacity-0 transition-opacity duration-500 group-hover:opacity-100"
         />
         <span className="relative z-10 transition-colors duration-500 group-hover:text-black">
-          Start survey now
+          Start test now
         </span>
         <svg
           aria-hidden

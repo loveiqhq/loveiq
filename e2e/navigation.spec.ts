@@ -28,11 +28,11 @@ test.describe("Desktop navigation", () => {
   });
 
   test("CTA button is visible", async ({ page }) => {
-    // The "Start survey now" CTA in the nav
+    // The "Start test now" CTA in the nav
     await expect(
       page
         .locator("nav")
-        .getByRole("link", { name: /start survey now/i })
+        .getByRole("link", { name: /start test now/i })
         .first()
     ).toBeVisible();
   });
