@@ -322,7 +322,7 @@ export default function StrategyHubDashboard() {
   const deferredImpactSearch = useDeferredValue(impactSearch);
 
   const filteredQueue = useMemo(() => {
-    const items = data?.workQueue.items ?? [];
+    const items = data?.workQueue?.items ?? [];
     const needle = deferredQueueSearch.trim().toLowerCase();
     if (!needle) return items;
     return items.filter(
@@ -332,7 +332,7 @@ export default function StrategyHubDashboard() {
   }, [data, deferredQueueSearch]);
 
   const filteredReleaseImpact = useMemo(() => {
-    const items = data?.releaseImpact.entries ?? [];
+    const items = data?.releaseImpact?.entries ?? [];
     const needle = deferredImpactSearch.trim().toLowerCase();
     if (!needle) return items;
     return items.filter(

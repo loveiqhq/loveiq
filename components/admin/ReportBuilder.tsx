@@ -191,7 +191,7 @@ export default function ReportBuilder() {
     setTimeout(() => setCopied(false), 2000);
   }, [activeTab, data, memo]);
 
-  const effectivePeriodDays = memo?.period.days ?? data?.period.days ?? days;
+  const effectivePeriodDays = memo?.period?.days ?? data?.period?.days ?? days;
   const periodLabel = formatPeriodLabel(effectivePeriodDays);
 
   const memoMetricCards = useMemo(

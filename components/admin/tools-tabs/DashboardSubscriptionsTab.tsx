@@ -79,7 +79,7 @@ export default function DashboardSubscriptionsTab() {
   >({});
 
   const adminHint = useMemo(
-    () => data?.admins.map((entry) => entry.email).join(", ") ?? "",
+    () => (data?.admins ?? []).map((entry) => entry.email).join(", "),
     [data?.admins]
   );
 

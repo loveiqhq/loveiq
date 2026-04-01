@@ -43,6 +43,10 @@ export default function AlertPoliciesTab() {
     event.preventDefault();
     setSavingId(-1);
     setMessage(null);
+    const linkedTargetHref =
+      (data?.targets ?? []).find(
+        (item) => item.key === draft.target_key && item.type === draft.target_type
+      )?.href ?? null;
 
     const res = await fetch("/api/admin/alerts", {
       method: "POST",
@@ -54,10 +58,7 @@ export default function AlertPoliciesTab() {
         ...draft,
         owner_email: draft.owner_email || null,
         threshold_numeric: Number(draft.threshold_numeric),
-        linked_href:
-          data?.targets.find(
-            (item) => item.key === draft.target_key && item.type === draft.target_type
-          )?.href ?? null,
+        linked_href: linkedTargetHref,
       }),
     });
 
@@ -132,7 +133,7 @@ export default function AlertPoliciesTab() {
     setMessage(`Queued review for alert policy #${rule.id}.`);
   }
 
-  const targets = data?.targets.filter((item) => item.type === draft.target_type) ?? [];
+  const targets = (data?.targets ?? []).filter((item) => item.type === draft.target_type);
 
   if (loading) {
     return (

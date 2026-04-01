@@ -90,7 +90,7 @@ export default function MetricRegistryTab() {
   });
 
   function fillFromMetric(metricKey: string) {
-    const metric = data?.availableMetrics.find((item) => item.key === metricKey);
+    const metric = (data?.availableMetrics ?? []).find((item) => item.key === metricKey);
     setForm((current) => ({
       ...current,
       metric_key: metricKey,

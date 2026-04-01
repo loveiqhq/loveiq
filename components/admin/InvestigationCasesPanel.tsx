@@ -268,6 +268,13 @@ export default function InvestigationCasesPanel() {
     );
   }
 
+  const summary = {
+    total: data?.summary?.total ?? 0,
+    open: data?.summary?.open ?? 0,
+    overdue: data?.summary?.overdue ?? 0,
+    highPriority: data?.summary?.highPriority ?? 0,
+  };
+
   return (
     <div className="space-y-5 rounded-xl border border-white/10 bg-surface p-5">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -303,23 +310,21 @@ export default function InvestigationCasesPanel() {
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-xl border border-white/10 bg-white/5 p-4">
           <p className="text-xs font-medium uppercase tracking-wider text-text-muted">Total</p>
-          <p className="mt-2 text-2xl font-bold text-text-primary">{data?.summary.total ?? 0}</p>
+          <p className="mt-2 text-2xl font-bold text-text-primary">{summary.total}</p>
         </div>
         <div className="rounded-xl border border-white/10 bg-white/5 p-4">
           <p className="text-xs font-medium uppercase tracking-wider text-text-muted">Open</p>
-          <p className="mt-2 text-2xl font-bold text-text-primary">{data?.summary.open ?? 0}</p>
+          <p className="mt-2 text-2xl font-bold text-text-primary">{summary.open}</p>
         </div>
         <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-4">
           <p className="text-xs font-medium uppercase tracking-wider text-red-300">Overdue</p>
-          <p className="mt-2 text-2xl font-bold text-text-primary">{data?.summary.overdue ?? 0}</p>
+          <p className="mt-2 text-2xl font-bold text-text-primary">{summary.overdue}</p>
         </div>
         <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
           <p className="text-xs font-medium uppercase tracking-wider text-amber-200">
             High Priority
           </p>
-          <p className="mt-2 text-2xl font-bold text-text-primary">
-            {data?.summary.highPriority ?? 0}
-          </p>
+          <p className="mt-2 text-2xl font-bold text-text-primary">{summary.highPriority}</p>
         </div>
       </div>
 

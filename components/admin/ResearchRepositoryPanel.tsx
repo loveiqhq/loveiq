@@ -320,7 +320,7 @@ export default function ResearchRepositoryPanel({
     });
   }, [draft, onDraftConsumed]);
 
-  const entryCount = data?.entries.length ?? 0;
+  const entryCount = data?.entries?.length ?? 0;
   const latestUpdateLabel = useMemo(() => {
     if (!data) return null;
     return new Date(data.generatedAt).toLocaleString();

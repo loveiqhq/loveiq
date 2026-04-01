@@ -55,12 +55,10 @@ export default function MetricStatusBoardTab() {
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const metricOptions = useMemo(() => {
-    return (
-      data?.statuses.map((entry) => ({
-        key: entry.metricKey,
-        label: entry.label,
-      })) ?? []
-    );
+    return (data?.statuses ?? []).map((entry) => ({
+      key: entry.metricKey,
+      label: entry.label,
+    }));
   }, [data]);
 
   function draftFor(entry: MetricStatusBoardEntry): DraftState {
