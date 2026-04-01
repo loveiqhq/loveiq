@@ -37,17 +37,21 @@ describe("GET /api/admin/funnels/conversion", () => {
     mockSupabaseFetch
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => [
-          { name: "survey_started", count: 10 },
-          { name: "survey_completed", count: 5 },
-        ],
+        json: async () => ({
+          stages: [
+            { name: "survey_started", count: 10 },
+            { name: "survey_completed", count: 5 },
+          ],
+        }),
       })
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => [
-          { name: "survey_started", count: 25 },
-          { name: "survey_completed", count: 15 },
-        ],
+        json: async () => ({
+          stages: [
+            { name: "survey_started", count: 25 },
+            { name: "survey_completed", count: 15 },
+          ],
+        }),
       });
 
     const res = await GET(makeRequest("?days=30&utm=google"));
@@ -79,10 +83,12 @@ describe("GET /api/admin/funnels/conversion", () => {
   it("disables change detection in all-time mode", async () => {
     mockSupabaseFetch.mockResolvedValueOnce({
       ok: true,
-      json: async () => [
-        { name: "survey_started", count: 100 },
-        { name: "survey_completed", count: 60 },
-      ],
+      json: async () => ({
+        stages: [
+          { name: "survey_started", count: 100 },
+          { name: "survey_completed", count: 60 },
+        ],
+      }),
     });
 
     const res = await GET(makeRequest());
@@ -94,5 +100,64 @@ describe("GET /api/admin/funnels/conversion", () => {
     expect(json.trust.comparisonAvailable).toBe(false);
     expect(json.trust.comparisonMessage).toContain("bounded time window");
     expect(mockSupabaseFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("accepts mixed RPC payload shapes without throwing", async () => {
+    mockSupabaseFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          stages: [
+            { name: "waitlist_signups", count: 40 },
+            { name: "survey_started", count: 20 },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          { name: "waitlist_signups", count: 70 },
+          { name: "survey_started", count: 35 },
+        ],
+      });
+
+    const res = await GET(makeRequest("?days=30"));
+    expect(res.status).toBe(200);
+
+    const json = await res.json();
+    expect(json.stages).toEqual([
+      { name: "waitlist_signups", count: 40 },
+      { name: "survey_started", count: 20 },
+    ]);
+    expect(json.previousStages).toEqual([
+      { name: "waitlist_signups", count: 30 },
+      { name: "survey_started", count: 15 },
+    ]);
+  });
+
+  it("falls back safely when the RPC returns malformed data", async () => {
+    mockSupabaseFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ stages: [{ name: "survey_started", count: "bad" }] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ unexpected: true }),
+      });
+
+    const res = await GET(makeRequest("?days=30"));
+    expect(res.status).toBe(200);
+
+    const json = await res.json();
+    expect(json.stages).toEqual([{ name: "survey_started", count: 0 }]);
+    expect(json.previousStages).toEqual([]);
+    expect(json.anomalies).toEqual([]);
+    expect(json.trust).toEqual({
+      sampleSize: 0,
+      warning: "Funnel deltas are based on a small current-window sample.",
+      comparisonAvailable: true,
+      comparisonMessage: null,
+    });
   });
 });

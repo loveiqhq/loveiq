@@ -10,6 +10,31 @@ interface FunnelStage {
   count: number;
 }
 
+function normalizeFunnelStages(raw: unknown): FunnelStage[] {
+  const rawStages = Array.isArray(raw)
+    ? raw
+    : raw && typeof raw === "object" && Array.isArray((raw as { stages?: unknown }).stages)
+      ? (raw as { stages: unknown[] }).stages
+      : [];
+
+  return rawStages.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+
+    const name =
+      typeof (item as { name?: unknown }).name === "string" ? (item as { name: string }).name : "";
+    const countValue = Number((item as { count?: unknown }).count ?? 0);
+
+    if (!name) return [];
+
+    return [
+      {
+        name,
+        count: Number.isFinite(countValue) ? countValue : 0,
+      },
+    ];
+  });
+}
+
 function toStageMap(stages: FunnelStage[]) {
   return new Map(stages.map((stage) => [stage.name, stage.count]));
 }
@@ -55,7 +80,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Unable to load data." }, { status: 500 });
     }
 
-    const currentStages = (await currentRes.json()) as FunnelStage[];
+    const currentStages = normalizeFunnelStages(await currentRes.json());
     const sampleSize = currentStages[0]?.count ?? 0;
     if (days <= 0 || !previousSince) {
       return NextResponse.json({
@@ -85,7 +110,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Unable to load data." }, { status: 500 });
     }
 
-    const previousAggregateStages = (await previousRes.json()) as FunnelStage[];
+    const previousAggregateStages = normalizeFunnelStages(await previousRes.json());
     const currentMap = toStageMap(currentStages);
     const previousAggregateMap = toStageMap(previousAggregateStages);
     const previousStages = [...previousAggregateMap.entries()].map(([name, count]) => ({
