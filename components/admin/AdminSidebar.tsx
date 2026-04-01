@@ -186,6 +186,11 @@ const adminItems = [
     icon: "M4 6h16M4 12h10M4 18h7m9-8h.01M18 18h.01",
   },
   {
+    href: "/admin/submissions",
+    label: "Submissions",
+    icon: "M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01",
+  },
+  {
     href: "/admin/report-builder",
     label: "Report Builder",
     icon: "M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z",
