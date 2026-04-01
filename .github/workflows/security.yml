@@ -129,7 +129,7 @@ jobs:
         run: |
           curl -sSfL "https://github.com/google/osv-scanner/releases/download/v1.9.2/osv-scanner_linux_amd64" -o /tmp/osv-scanner
           chmod +x /tmp/osv-scanner
-          /tmp/osv-scanner --lockfile=package-lock.json
+          /tmp/osv-scanner --config=.osv-scanner.toml --lockfile=package-lock.json
 
   # Enhanced linting with security rules
   security-lint:
