@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import { useAdminFetch } from "@/components/admin/hooks/useAdminFetch";
 
 interface SessionSummary {
@@ -52,7 +53,9 @@ const directionConfig: Record<string, { icon: string; color: string; label: stri
 };
 
 export default function ReplayDashboard() {
-  const [selectedSession, setSelectedSession] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  const initialSessionId = searchParams.get("sessionId");
+  const [selectedSession, setSelectedSession] = useState<string | null>(initialSessionId);
   const [activeTab, setActiveTab] = useState<"Sessions" | "Clusters">("Sessions");
 
   const listParams = useMemo(() => undefined, []);

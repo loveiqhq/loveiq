@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { verifyAdminSession } from "@/lib/admin/auth";
+import { buildAllAdminIntelligenceEntries } from "@/lib/admin/intelligence";
+import { buildAllAdminKnowledgeArtifacts } from "@/lib/admin/knowledge";
 import { hasRole } from "@/lib/admin/roles";
 import { excerpt, semanticScore } from "@/lib/admin/next-level";
 import { supabaseFetch } from "@/lib/admin/supabase";
@@ -63,32 +65,42 @@ export async function GET(request: Request) {
   }
 
   try {
-    const [answersRes, notesRes, investigationsRes, changelogRes, decisionsRes, experimentsRes] =
-      await Promise.all([
-        supabaseFetch(ANSWERS_SEARCH_PATH, { headers: { Range: "0-9999" } }),
-        supabaseFetch(
-          "/rest/v1/admin_note?select=id,submission_id,content,admin_email,updated_at&order=updated_at.desc",
-          {
-            headers: { Range: "0-999" },
-          }
-        ),
-        supabaseFetch(
-          "/rest/v1/admin_investigation_case?select=id,title,summary,root_cause,status,submission_id,updated_at&order=updated_at.desc",
-          { headers: { Range: "0-999" } }
-        ),
-        supabaseFetch(
-          "/rest/v1/product_changelog?select=id,title,description,category,event_date&order=event_date.desc",
-          { headers: { Range: "0-499" } }
-        ),
-        supabaseFetch(
-          "/rest/v1/admin_decision_entry?select=id,title,entry_type,status,rationale,expected_impact,observed_effect,updated_at&order=updated_at.desc",
-          { headers: { Range: "0-499" } }
-        ),
-        supabaseFetch(
-          "/rest/v1/admin_experiment?select=id,name,hypothesis,status,expected_impact,result_summary,updated_at&order=updated_at.desc",
-          { headers: { Range: "0-499" } }
-        ),
-      ]);
+    const [
+      answersRes,
+      notesRes,
+      investigationsRes,
+      changelogRes,
+      decisionsRes,
+      experimentsRes,
+      intelligenceEntries,
+      knowledgeArtifacts,
+    ] = await Promise.all([
+      supabaseFetch(ANSWERS_SEARCH_PATH, { headers: { Range: "0-9999" } }),
+      supabaseFetch(
+        "/rest/v1/admin_note?select=id,submission_id,content,admin_email,updated_at&order=updated_at.desc",
+        {
+          headers: { Range: "0-999" },
+        }
+      ),
+      supabaseFetch(
+        "/rest/v1/admin_investigation_case?select=id,title,summary,root_cause,status,submission_id,updated_at&order=updated_at.desc",
+        { headers: { Range: "0-999" } }
+      ),
+      supabaseFetch(
+        "/rest/v1/product_changelog?select=id,title,description,category,event_date&order=event_date.desc",
+        { headers: { Range: "0-499" } }
+      ),
+      supabaseFetch(
+        "/rest/v1/admin_decision_entry?select=id,title,entry_type,status,rationale,expected_impact,observed_effect,updated_at&order=updated_at.desc",
+        { headers: { Range: "0-499" } }
+      ),
+      supabaseFetch(
+        "/rest/v1/admin_experiment?select=id,name,hypothesis,status,expected_impact,result_summary,updated_at&order=updated_at.desc",
+        { headers: { Range: "0-499" } }
+      ),
+      buildAllAdminIntelligenceEntries(30, admin.email),
+      buildAllAdminKnowledgeArtifacts(30, admin.email, query),
+    ]);
 
     const results: Array<{
       type: string;
@@ -251,6 +263,49 @@ export async function GET(request: Request) {
           meta: row.status,
         });
       }
+    }
+
+    for (const entry of intelligenceEntries) {
+      const text = [
+        entry.sectionTitle,
+        entry.item.title,
+        entry.item.detail,
+        entry.item.recommendation,
+        ...entry.item.capabilities,
+        ...entry.item.evidence.map((evidence) => evidence.value),
+      ]
+        .filter(Boolean)
+        .join(" ");
+      const score = semanticScore(query, text, [entry.surface, entry.sectionTitle]);
+      if (score <= 0) continue;
+      results.push({
+        type: "intelligence",
+        title: entry.item.title,
+        snippet: excerpt(entry.item.detail || entry.item.recommendation),
+        href: entry.item.href,
+        score,
+        meta: `${entry.surface} · ${entry.sectionTitle}`,
+      });
+    }
+
+    for (const artifact of knowledgeArtifacts) {
+      const text = [
+        artifact.title,
+        artifact.summary,
+        ...artifact.evidence.map((entry) => entry.value),
+      ]
+        .filter(Boolean)
+        .join(" ");
+      const score = semanticScore(query, text, [artifact.type]);
+      if (score <= 0) continue;
+      results.push({
+        type: "knowledge",
+        title: artifact.title,
+        snippet: excerpt(artifact.summary),
+        href: artifact.href,
+        score,
+        meta: artifact.type,
+      });
     }
 
     const pages = PAGE_INDEX.map((page) => ({

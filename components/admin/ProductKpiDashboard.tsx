@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useCallback } from "react";
+import EmbeddedIntelligencePanel from "@/components/admin/EmbeddedIntelligencePanel";
 import { useAdminFetch } from "@/components/admin/hooks/useAdminFetch";
 import { useAdminQueryState } from "@/components/admin/hooks/useAdminQueryState";
 import StatCard from "@/components/admin/StatCard";
@@ -240,6 +241,26 @@ export default function ProductKpiDashboard() {
           </p>
         </div>
       </div>
+
+      <EmbeddedIntelligencePanel surface="product" days={days || 30} title="Product Copilot" />
+      <EmbeddedIntelligencePanel
+        endpoint="/api/admin/explanations"
+        surface="product"
+        days={days || 30}
+        title="Product Explanations"
+      />
+      <EmbeddedIntelligencePanel
+        endpoint="/api/admin/path-intelligence"
+        surface="product"
+        days={days || 30}
+        title="Product Path Intelligence"
+      />
+      <EmbeddedIntelligencePanel
+        endpoint="/api/admin/lifecycle-intelligence"
+        surface="product"
+        days={days || 30}
+        title="Product Lifecycle Intelligence"
+      />
 
       {data.meta && (
         <div className="rounded-xl border border-white/10 bg-surface p-5">

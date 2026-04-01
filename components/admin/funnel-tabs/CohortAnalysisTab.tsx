@@ -86,6 +86,22 @@ export default function CohortAnalysisTab({
         row.total_users > 0 ? Math.round((row.survey_completed / row.total_users) * 100) : 0,
     }));
   }, [data]);
+  const summary = useMemo(
+    () => ({
+      strongestCompletionLabel: data?.summary?.strongestCompletionLabel ?? null,
+      strongestCompletionRate: data?.summary?.strongestCompletionRate ?? null,
+      weakestCompletionLabel: data?.summary?.weakestCompletionLabel ?? null,
+      weakestCompletionRate: data?.summary?.weakestCompletionRate ?? null,
+    }),
+    [data]
+  );
+  const trust = useMemo(
+    () => ({
+      sampleSize: data?.trust?.sampleSize ?? 0,
+      warning: data?.trust?.warning ?? null,
+    }),
+    [data]
+  );
 
   if (loading) {
     return (
@@ -111,11 +127,11 @@ export default function CohortAnalysisTab({
             Strongest Completion
           </p>
           <p className="mt-2 text-sm font-semibold text-text-primary">
-            {data?.summary.strongestCompletionLabel ?? "No data"}
+            {summary.strongestCompletionLabel ?? "No data"}
           </p>
-          {data?.summary.strongestCompletionRate != null && (
+          {summary.strongestCompletionRate != null && (
             <p className="mt-1 text-xs text-text-muted">
-              {data.summary.strongestCompletionRate}% completion
+              {summary.strongestCompletionRate}% completion
             </p>
           )}
         </div>
@@ -124,19 +140,19 @@ export default function CohortAnalysisTab({
             Weakest Completion
           </p>
           <p className="mt-2 text-sm font-semibold text-text-primary">
-            {data?.summary.weakestCompletionLabel ?? "No data"}
+            {summary.weakestCompletionLabel ?? "No data"}
           </p>
-          {data?.summary.weakestCompletionRate != null && (
+          {summary.weakestCompletionRate != null && (
             <p className="mt-1 text-xs text-text-muted">
-              {data.summary.weakestCompletionRate}% completion
+              {summary.weakestCompletionRate}% completion
             </p>
           )}
         </div>
       </div>
 
-      {data?.trust.warning && (
+      {trust.warning && (
         <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-amber-100/90">
-          {data.trust.warning}
+          {trust.warning}
         </div>
       )}
 

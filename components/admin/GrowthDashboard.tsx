@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import EmbeddedIntelligencePanel from "@/components/admin/EmbeddedIntelligencePanel";
+import AdminSimulationPanel from "@/components/admin/AdminSimulationPanel";
 import TimeRangeSelector from "@/components/admin/TimeRangeSelector";
 import AcquisitionQualityTab from "@/components/admin/growth-tabs/AcquisitionQualityTab";
 import ConversionLeakDebuggerTab from "@/components/admin/growth-tabs/ConversionLeakDebuggerTab";
@@ -75,6 +77,57 @@ export default function GrowthDashboard() {
           </p>
         </div>
       </div>
+
+      <EmbeddedIntelligencePanel surface="growth" days={days || 30} title="Growth Copilot" />
+      <EmbeddedIntelligencePanel
+        endpoint="/api/admin/explanations"
+        surface="growth"
+        days={days || 30}
+        title="Growth Explanations"
+      />
+      <EmbeddedIntelligencePanel
+        endpoint="/api/admin/path-intelligence"
+        surface="growth"
+        days={days || 30}
+        title="Growth Path Intelligence"
+      />
+      <EmbeddedIntelligencePanel
+        endpoint="/api/admin/growth-opportunities"
+        surface="growth"
+        days={days || 30}
+        title="Growth Opportunity Intelligence"
+      />
+      <EmbeddedIntelligencePanel
+        endpoint="/api/admin/growth-signal-intelligence"
+        surface="growth"
+        days={days || 30}
+        title="Growth Signal Intelligence"
+      />
+      <EmbeddedIntelligencePanel
+        endpoint="/api/admin/lifecycle-intelligence"
+        surface="growth"
+        days={days || 30}
+        title="Growth Lifecycle Intelligence"
+      />
+      <EmbeddedIntelligencePanel
+        endpoint="/api/admin/resilience-intelligence"
+        surface="growth"
+        days={days || 30}
+        title="Growth Resilience Intelligence"
+      />
+      <EmbeddedIntelligencePanel
+        endpoint="/api/admin/optimization-intelligence"
+        surface="growth"
+        days={days || 30}
+        title="Growth Pricing Intelligence"
+      />
+      <EmbeddedIntelligencePanel
+        endpoint="/api/admin/network-strategy-intelligence"
+        surface="growth"
+        days={days || 30}
+        title="Network Intelligence"
+      />
+      <AdminSimulationPanel surface="growth" days={days || 30} title="Growth Scenarios" />
 
       <div className="flex gap-1 rounded-lg border border-white/10 bg-surface p-1">
         {tabs.map((tab) => (

@@ -2,6 +2,10 @@
 
 import { useState, type FormEvent } from "react";
 import { getCsrfToken } from "@/lib/csrf-client";
+import EmbeddedIntelligencePanel from "@/components/admin/EmbeddedIntelligencePanel";
+import AdminKnowledgePanel from "@/components/admin/AdminKnowledgePanel";
+import AdminSignalGraphPanel from "@/components/admin/AdminSignalGraphPanel";
+import AdminSimulationPanel from "@/components/admin/AdminSimulationPanel";
 import type {
   AdminActionItem,
   AdminActionPriority,
@@ -242,6 +246,17 @@ export default function CommandCenterDashboard() {
           </div>
         ))}
       </div>
+
+      <EmbeddedIntelligencePanel surface="command-center" days={days} />
+      <EmbeddedIntelligencePanel
+        surface="command-center"
+        days={days}
+        title="Leadership Decision Copilot"
+        endpoint="/api/admin/decision-intelligence"
+      />
+      <AdminKnowledgePanel surface="command-center" days={days} title="Command Memory" />
+      <AdminSignalGraphPanel surface="command-center" days={days} title="Operating Graph" />
+      <AdminSimulationPanel surface="command-center" days={days} title="Operating Scenarios" />
 
       <section className="space-y-3">
         <div className="flex items-center justify-between">

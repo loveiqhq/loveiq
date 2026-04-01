@@ -1,10 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import EmbeddedIntelligencePanel from "@/components/admin/EmbeddedIntelligencePanel";
 import type { LeadCockpitRole, LeadCockpitSnapshot } from "@/lib/admin/os-types";
 import { useAdminFetch } from "@/components/admin/hooks/useAdminFetch";
 import StatCard from "@/components/admin/StatCard";
 import TimeRangeSelector from "@/components/admin/TimeRangeSelector";
+
+function decisionSurfaceForRole(role: LeadCockpitRole) {
+  return role === "tech" ? "health" : role;
+}
 
 export default function RoleCockpitDashboard({ role }: { role: LeadCockpitRole }) {
   const [days, setDays] = useState(30);
@@ -52,6 +57,13 @@ export default function RoleCockpitDashboard({ role }: { role: LeadCockpitRole }
           />
         ))}
       </div>
+
+      <EmbeddedIntelligencePanel
+        surface={decisionSurfaceForRole(role)}
+        days={days}
+        title={`${data.label} Decision Copilot`}
+        endpoint="/api/admin/decision-intelligence"
+      />
 
       <div className="grid gap-6 xl:grid-cols-[1.2fr,0.8fr]">
         <section>

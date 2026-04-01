@@ -73,21 +73,51 @@ export default function ImpactComparisonTab({
     "/api/admin/funnels/impact-comparison",
     params
   );
+  const summary = useMemo(
+    () => ({
+      releaseComparisons: data?.summary?.releaseComparisons ?? 0,
+      versionComparisons: data?.summary?.versionComparisons ?? 0,
+      experimentComparisons: data?.summary?.experimentComparisons ?? 0,
+      strongestRelease: data?.summary?.strongestRelease ?? null,
+      strongestVersion: data?.summary?.strongestVersion ?? null,
+      strongestExperiment: data?.summary?.strongestExperiment ?? null,
+    }),
+    [data]
+  );
+  const trust = useMemo(
+    () => ({
+      warning: data?.trust?.warning ?? null,
+      notes: Array.isArray(data?.trust?.notes) ? data.trust.notes : [],
+    }),
+    [data]
+  );
+  const releaseComparisons = useMemo(
+    () => (Array.isArray(data?.releaseComparisons) ? data.releaseComparisons : []),
+    [data]
+  );
+  const versionComparisons = useMemo(
+    () => (Array.isArray(data?.versionComparisons) ? data.versionComparisons : []),
+    [data]
+  );
+  const experimentComparisons = useMemo(
+    () => (Array.isArray(data?.experimentComparisons) ? data.experimentComparisons : []),
+    [data]
+  );
 
   const summaryCards = useMemo(() => {
     if (!data) return [];
 
     if (comparisonMode === "release") {
-      const lifts = data.releaseComparisons.filter((entry) => entry.attention === "lift").length;
-      const regressions = data.releaseComparisons.filter(
+      const lifts = releaseComparisons.filter((entry) => entry.attention === "lift").length;
+      const regressions = releaseComparisons.filter(
         (entry) => entry.attention === "regression"
       ).length;
-      const linkedExperiments = data.releaseComparisons.reduce(
+      const linkedExperiments = releaseComparisons.reduce(
         (sum, entry) => sum + entry.linkedExperimentCount,
         0
       );
       return [
-        { label: "Compared Releases", value: data.summary.releaseComparisons },
+        { label: "Compared Releases", value: summary.releaseComparisons },
         { label: "Lift Windows", value: lifts },
         { label: "Regression Windows", value: regressions },
         { label: "Linked Experiments", value: linkedExperiments },
@@ -95,12 +125,12 @@ export default function ImpactComparisonTab({
     }
 
     if (comparisonMode === "version") {
-      const totalSample = data.versionComparisons.reduce((sum, entry) => sum + entry.sampleSize, 0);
-      const hybridAgreement = data.versionComparisons.find((entry) => entry.versionKey === "v4+v5");
+      const totalSample = versionComparisons.reduce((sum, entry) => sum + entry.sampleSize, 0);
+      const hybridAgreement = versionComparisons.find((entry) => entry.versionKey === "v4+v5");
       return [
-        { label: "Version Buckets", value: data.summary.versionComparisons },
+        { label: "Version Buckets", value: summary.versionComparisons },
         { label: "Scored Sample", value: totalSample.toLocaleString() },
-        { label: "Top Completion", value: data.summary.strongestVersion ?? "No data" },
+        { label: "Top Completion", value: summary.strongestVersion ?? "No data" },
         {
           label: "Hybrid Agreement",
           value:
@@ -111,22 +141,29 @@ export default function ImpactComparisonTab({
       ];
     }
 
-    const significantResults = data.experimentComparisons.filter(
+    const significantResults = experimentComparisons.filter(
       (entry) =>
         entry.significance === "significant-lift" || entry.significance === "significant-regression"
     ).length;
-    const guardrailRisks = data.experimentComparisons.reduce(
+    const guardrailRisks = experimentComparisons.reduce(
       (sum, entry) => sum + entry.guardrailRiskCount,
       0
     );
 
     return [
-      { label: "Compared Experiments", value: data.summary.experimentComparisons },
+      { label: "Compared Experiments", value: summary.experimentComparisons },
       { label: "Significant Readouts", value: significantResults },
       { label: "Guardrail Risks", value: guardrailRisks },
-      { label: "Top Signal", value: data.summary.strongestExperiment ?? "No data" },
+      { label: "Top Signal", value: summary.strongestExperiment ?? "No data" },
     ];
-  }, [comparisonMode, data]);
+  }, [
+    comparisonMode,
+    data,
+    experimentComparisons,
+    releaseComparisons,
+    summary,
+    versionComparisons,
+  ]);
 
   if (loading) {
     return (
@@ -159,9 +196,9 @@ export default function ImpactComparisonTab({
         </p>
       </div>
 
-      {data.trust.warning && (
+      {trust.warning && (
         <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-amber-100/90">
-          {data.trust.warning}
+          {trust.warning}
         </div>
       )}
 
@@ -189,7 +226,7 @@ export default function ImpactComparisonTab({
       </div>
 
       <div className="grid gap-3 lg:grid-cols-3">
-        {data.trust.notes.map((note) => (
+        {trust.notes.map((note) => (
           <div
             key={note}
             className="rounded-xl border border-white/10 bg-surface p-4 text-sm text-text-muted"
@@ -201,7 +238,7 @@ export default function ImpactComparisonTab({
 
       {comparisonMode === "release" && (
         <div className="grid gap-4 xl:grid-cols-2">
-          {data.releaseComparisons.map((entry) => (
+          {releaseComparisons.map((entry) => (
             <a
               key={entry.id}
               href={entry.href}
@@ -254,7 +291,7 @@ export default function ImpactComparisonTab({
 
       {comparisonMode === "version" && (
         <div className="grid gap-4 xl:grid-cols-2">
-          {data.versionComparisons.map((entry) => (
+          {versionComparisons.map((entry) => (
             <a
               key={entry.versionKey}
               href={entry.href}
@@ -313,7 +350,7 @@ export default function ImpactComparisonTab({
 
       {comparisonMode === "experiment" && (
         <div className="grid gap-4 xl:grid-cols-2">
-          {data.experimentComparisons.map((entry) => (
+          {experimentComparisons.map((entry) => (
             <a
               key={entry.id}
               href={entry.href}

@@ -1,5 +1,6 @@
 "use client";
 
+import EmbeddedIntelligencePanel from "@/components/admin/EmbeddedIntelligencePanel";
 import { useState } from "react";
 import ResearchRepositoryPanel, {
   type ResearchRepositoryDraftInput,
@@ -257,6 +258,25 @@ export default function ResearchIntelligenceDashboard() {
       <ResearchRepositoryPanel
         draft={repositoryDraft}
         onDraftConsumed={() => setRepositoryDraft(null)}
+      />
+
+      <EmbeddedIntelligencePanel
+        endpoint="/api/admin/optimization-intelligence"
+        surface="research"
+        days={days || 30}
+        title="Research Sentiment Intelligence"
+      />
+      <EmbeddedIntelligencePanel
+        endpoint="/api/admin/lifecycle-intelligence"
+        surface="research"
+        days={days || 30}
+        title="Customer Intent Memory"
+      />
+      <EmbeddedIntelligencePanel
+        endpoint="/api/admin/growth-signal-intelligence"
+        surface="research"
+        days={days || 30}
+        title="Objection & Persona Intelligence"
       />
 
       <ResearchTaxonomyPanel themes={data.themes} unknownUnknowns={data.unknownUnknowns} />

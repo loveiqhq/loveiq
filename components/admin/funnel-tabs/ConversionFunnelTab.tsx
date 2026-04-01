@@ -61,6 +61,18 @@ export default function ConversionFunnelTab({
     if (!data?.stages || data.stages.length === 0) return DEFAULT_STAGES;
     return data.stages;
   }, [data]);
+  const anomalies = useMemo(() => (Array.isArray(data?.anomalies) ? data.anomalies : []), [data]);
+  const trust = useMemo(
+    () => ({
+      sampleSize: data?.trust?.sampleSize ?? 0,
+      warning: data?.trust?.warning ?? null,
+      comparisonAvailable: data?.trust?.comparisonAvailable ?? false,
+      comparisonMessage:
+        data?.trust?.comparisonMessage ??
+        "No comparison data is available for this funnel window yet.",
+    }),
+    [data]
+  );
 
   if (loading) {
     return (
@@ -98,26 +110,26 @@ export default function ConversionFunnelTab({
         <FunnelChart stages={stages} />
       </div>
 
-      {data?.trust.warning && (
+      {trust.warning && (
         <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-amber-100/90">
-          {data.trust.warning}
+          {trust.warning}
         </div>
       )}
 
       <div className="rounded-xl border border-white/10 bg-surface p-6">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="font-serif text-lg font-bold text-text-primary">Change Detection</h3>
-          {data?.trust.sampleSize != null && (
+          {trust.sampleSize > 0 && (
             <span className="text-xs text-text-muted">
-              Current window sample: {data.trust.sampleSize.toLocaleString()}
+              Current window sample: {trust.sampleSize.toLocaleString()}
             </span>
           )}
         </div>
-        {!data?.trust.comparisonAvailable && data?.trust.comparisonMessage ? (
-          <p className="text-sm text-text-muted">{data.trust.comparisonMessage}</p>
-        ) : data?.anomalies.length ? (
+        {!trust.comparisonAvailable && trust.comparisonMessage ? (
+          <p className="text-sm text-text-muted">{trust.comparisonMessage}</p>
+        ) : anomalies.length ? (
           <div className="space-y-2">
-            {data.anomalies.map((item) => (
+            {anomalies.map((item) => (
               <div
                 key={item.stage}
                 className="flex flex-col gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-3 md:flex-row md:items-center md:justify-between"

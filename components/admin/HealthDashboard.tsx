@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import EmbeddedIntelligencePanel from "@/components/admin/EmbeddedIntelligencePanel";
+import AdminKnowledgePanel from "@/components/admin/AdminKnowledgePanel";
+import AdminSignalGraphPanel from "@/components/admin/AdminSignalGraphPanel";
 import ServicesTab from "@/components/admin/health-tabs/ServicesTab";
 import AnomalyCenterTab from "@/components/admin/health-tabs/AnomalyCenterTab";
 import IncidentCorrelationTab from "@/components/admin/health-tabs/IncidentCorrelationTab";
@@ -27,6 +30,28 @@ export default function HealthDashboard() {
 
   return (
     <div className="space-y-6">
+      <EmbeddedIntelligencePanel surface="health" days={30} title="Health Copilot" />
+      <EmbeddedIntelligencePanel
+        endpoint="/api/admin/resilience-intelligence"
+        surface="health"
+        days={30}
+        title="Health Resilience Intelligence"
+      />
+      <EmbeddedIntelligencePanel
+        endpoint="/api/admin/optimization-intelligence"
+        surface="health"
+        days={30}
+        title="Compliance Drift Intelligence"
+      />
+      <EmbeddedIntelligencePanel
+        endpoint="/api/admin/tech-intelligence"
+        surface="health"
+        days={30}
+        title="Tech Root-Cause Intelligence"
+      />
+      <AdminKnowledgePanel surface="health" days={30} title="Health Memory" />
+      <AdminSignalGraphPanel surface="health" days={30} title="Root-Cause Graph" />
+
       <div className="flex gap-1 rounded-lg border border-white/10 bg-surface p-1">
         {tabs.map((tab) => (
           <button

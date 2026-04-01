@@ -16,90 +16,96 @@ vi.mock("../../lib/admin/supabase", () => ({
   supabaseFetch: (...args: unknown[]) => mockSupabaseFetch(...args),
 }));
 
+const mockBuildAllAdminKnowledgeArtifacts = vi.fn();
+vi.mock("../../lib/admin/knowledge", async () => {
+  const actual = await vi.importActual<typeof import("../../lib/admin/knowledge")>(
+    "../../lib/admin/knowledge"
+  );
+  return {
+    ...actual,
+    buildAllAdminKnowledgeArtifacts: (...args: unknown[]) =>
+      mockBuildAllAdminKnowledgeArtifacts(...args),
+  };
+});
+
+const mockBuildAllAdminIntelligenceEntries = vi.fn();
+vi.mock("../../lib/admin/intelligence", async () => {
+  const actual = await vi.importActual<typeof import("../../lib/admin/intelligence")>(
+    "../../lib/admin/intelligence"
+  );
+  return {
+    ...actual,
+    buildAllAdminIntelligenceEntries: (...args: unknown[]) =>
+      mockBuildAllAdminIntelligenceEntries(...args),
+  };
+});
+
 vi.mock("../../lib/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
 import { GET } from "../../app/api/admin/search/semantic/route";
 
-describe("admin semantic search route", () => {
+describe("GET /api/admin/search/semantic", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     mockVerifyAdminSession.mockResolvedValue({ email: "admin@test.com", role: "admin" });
     mockCheckRateLimit.mockResolvedValue({ allowed: true, remaining: 19, resetAt: new Date() });
-    mockSupabaseFetch.mockImplementation((path: string) => {
-      if (path.includes("survey_submission_answer")) {
-        return Promise.resolve({
-          ok: true,
-          json: async () => [
-            {
-              survey_submission_id: 77,
-              answer_text: "I feel uncertain and want more confidence.",
-              survey_question: { frontend_qid: "q12" },
-              answer_option: null,
-            },
-          ],
-        });
-      }
-      if (path.includes("admin_note")) {
-        return Promise.resolve({
-          ok: true,
-          json: async () => [
-            {
-              id: 1,
-              submission_id: 77,
-              content: "Confidence theme shows up repeatedly.",
-              admin_email: "admin@test.com",
-              updated_at: "2026-03-30T12:00:00.000Z",
-            },
-          ],
-        });
-      }
-      if (path.includes("admin_investigation_case")) {
-        return Promise.resolve({
-          ok: true,
-          json: async () => [],
-        });
-      }
-      if (path.includes("product_changelog")) {
-        return Promise.resolve({
-          ok: true,
-          json: async () => [],
-        });
-      }
-      if (path.includes("admin_decision_entry")) {
-        return Promise.resolve({
-          ok: true,
-          json: async () => [],
-        });
-      }
-      if (path.includes("admin_experiment")) {
-        return Promise.resolve({
-          ok: true,
-          json: async () => [],
-        });
-      }
-
-      return Promise.resolve({ ok: true, json: async () => [] });
+    mockSupabaseFetch.mockResolvedValue({
+      ok: true,
+      json: async () => [],
     });
+    mockBuildAllAdminKnowledgeArtifacts.mockResolvedValue([
+      {
+        id: "knowledge-1",
+        type: "decision-graph",
+        title: "Decision graph artifact",
+        summary: "Decision memory graph for growth and strategy.",
+        tone: "watch",
+        confidence: "medium",
+        href: "/admin/strategy",
+        evidence: [{ label: "Metric", value: "conversion", href: "/admin/strategy" }],
+      },
+    ]);
+    mockBuildAllAdminIntelligenceEntries.mockResolvedValue([
+      {
+        surface: "growth",
+        sectionKey: "drivers",
+        sectionTitle: "Driver Decomposition",
+        item: {
+          id: "item-1",
+          title: "Growth driver signal",
+          detail: "Paid traffic quality is slipping.",
+          tone: "risk",
+          confidence: "high",
+          capabilities: ["driver decomposition"],
+          recommendation: "Rebalance channel mix.",
+          caveat: null,
+          href: "/admin/growth",
+          evidence: [{ label: "Channel", value: "paid-search", href: "/admin/growth" }],
+          draft: null,
+        },
+      },
+    ]);
   });
 
-  it("returns semantic matches and page suggestions", async () => {
-    const res = await GET(new Request("http://localhost/api/admin/search/semantic?q=confidence"));
-    expect(res.status).toBe(200);
+  it("returns knowledge and intelligence matches", async () => {
+    const res = await GET(
+      new Request("http://localhost/api/admin/search/semantic?q=growth&limit=10")
+    );
 
-    const json = await res.json();
-    expect(json.results.length).toBeGreaterThan(0);
-    expect(json.results.some((item: { type: string }) => item.type === "response")).toBe(true);
-    expect(json.results.some((item: { type: string }) => item.type === "note")).toBe(true);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      results: Array<{ type: string; title: string; meta: string }>;
+    };
+    expect(body.results.some((result) => result.type === "knowledge")).toBe(true);
+    expect(body.results.some((result) => result.type === "intelligence")).toBe(true);
   });
 
-  it("returns default pages for short queries", async () => {
-    const res = await GET(new Request("http://localhost/api/admin/search/semantic?q=c"));
+  it("returns empty semantic results for short queries", async () => {
+    const res = await GET(new Request("http://localhost/api/admin/search/semantic?q=a"));
     expect(res.status).toBe(200);
-
-    const json = await res.json();
-    expect(json.results).toEqual([]);
-    expect(json.pages.length).toBeGreaterThan(0);
+    const body = (await res.json()) as { results: unknown[] };
+    expect(body.results).toEqual([]);
   });
 });

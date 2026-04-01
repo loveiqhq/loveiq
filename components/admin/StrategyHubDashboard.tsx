@@ -1,6 +1,10 @@
 "use client";
 
 import { startTransition, useDeferredValue, useMemo, useState } from "react";
+import EmbeddedIntelligencePanel from "@/components/admin/EmbeddedIntelligencePanel";
+import AdminKnowledgePanel from "@/components/admin/AdminKnowledgePanel";
+import AdminSignalGraphPanel from "@/components/admin/AdminSignalGraphPanel";
+import AdminSimulationPanel from "@/components/admin/AdminSimulationPanel";
 import { useAdminFetch } from "@/components/admin/hooks/useAdminFetch";
 import StatCard from "@/components/admin/StatCard";
 import StrategyPlanningTab from "@/components/admin/StrategyPlanningTab";
@@ -453,6 +457,23 @@ export default function StrategyHubDashboard() {
           ))}
         </div>
       </div>
+
+      <EmbeddedIntelligencePanel surface="strategy" days={days} title="Strategy Copilot" />
+      <EmbeddedIntelligencePanel
+        endpoint="/api/admin/network-strategy-intelligence"
+        surface="strategy"
+        days={days}
+        title="Competitive Response Intelligence"
+      />
+      <EmbeddedIntelligencePanel
+        endpoint="/api/admin/strategy-intelligence"
+        surface="strategy"
+        days={days}
+        title="Strategy Simulation Intelligence"
+      />
+      <AdminKnowledgePanel surface="strategy" days={days} title="Strategy Memory" />
+      <AdminSignalGraphPanel surface="strategy" days={days} title="Strategy Graph" />
+      <AdminSimulationPanel surface="strategy" days={days} title="Strategy Scenarios" />
 
       <div className="flex gap-1 rounded-lg border border-white/10 bg-surface p-1">
         {TABS.map((tab) => (

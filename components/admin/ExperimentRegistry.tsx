@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from "react";
 import AdminCommentsThread from "@/components/admin/AdminCommentsThread";
+import EmbeddedIntelligencePanel from "@/components/admin/EmbeddedIntelligencePanel";
+import AdminSimulationPanel from "@/components/admin/AdminSimulationPanel";
 import { useAdminFetch } from "@/components/admin/hooks/useAdminFetch";
 import KpiDataTable, { type Column } from "@/components/admin/kpi-tabs/KpiDataTable";
 import { getCsrfToken } from "@/lib/csrf-client";
@@ -669,6 +671,21 @@ export default function ExperimentRegistry() {
         <SummaryCard label="High Confidence" value={data.summary.highConfidence} tone="cyan" />
         <SummaryCard label="Blindspots" value={data.summary.blindspots} tone="slate" />
       </div>
+
+      <EmbeddedIntelligencePanel surface="experiments" days={30} title="Experiment Copilot" />
+      <EmbeddedIntelligencePanel
+        endpoint="/api/admin/experiment-strategy"
+        surface="experiments"
+        days={30}
+        title="Experiment Strategy Intelligence"
+      />
+      <EmbeddedIntelligencePanel
+        endpoint="/api/admin/optimization-intelligence"
+        surface="experiments"
+        days={30}
+        title="Experiment Optimization Intelligence"
+      />
+      <AdminSimulationPanel surface="experiments" days={30} title="Experiment Scenarios" />
 
       <div className="grid gap-4 xl:grid-cols-3">
         <ScorecardColumn

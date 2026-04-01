@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import AdminKnowledgePanel from "@/components/admin/AdminKnowledgePanel";
 import { useAdminFetch } from "@/components/admin/hooks/useAdminFetch";
 import StatCard from "@/components/admin/StatCard";
 import TimeRangeSelector from "@/components/admin/TimeRangeSelector";
@@ -223,6 +224,8 @@ export default function OperatingReviewDashboard() {
           ))}
         </div>
       </section>
+
+      <AdminKnowledgePanel surface="command-center" days={days} title="Review Memory" />
 
       <div className="grid gap-6 xl:grid-cols-2">
         <SectionCard title="Wins" items={memo.data.sections.wins} />
