@@ -60,7 +60,7 @@ const OpenResponseQuestion: FC<OpenResponseQuestionProps> = ({
     <div className="flex flex-col gap-5">
       {/* Question title */}
       <div className="flex flex-col gap-2">
-        <h2 className="font-serif text-[31px] font-medium leading-[1.2] text-white sm:text-[39px]">
+        <h2 className="font-serif text-[31px] font-medium leading-[1.2] text-white break-words sm:text-[39px]">
           {question.question}
         </h2>
         {subtitle && <p className="font-sans text-[15px] font-medium text-[#a78bfa]">{subtitle}</p>}

@@ -5,6 +5,8 @@ import type { FC } from "react";
 interface SurveyHeaderProps {
   progress: number;
   onPause: () => void;
+  autoAdvance: boolean;
+  onToggleAutoAdvance: () => void;
 }
 
 const TOTAL_MINUTES = 15;
@@ -40,13 +42,38 @@ const ClockIcon: FC = () => (
   </svg>
 );
 
-const SurveyHeader: FC<SurveyHeaderProps> = ({ progress, onPause }) => {
+const SurveyHeader: FC<SurveyHeaderProps> = ({
+  progress,
+  onPause,
+  autoAdvance,
+  onToggleAutoAdvance,
+}) => {
   const minutesLeft = Math.ceil((TOTAL_MINUTES * (100 - progress)) / 100);
 
   return (
     <header className="flex flex-col gap-6">
-      {/* Pause button — top right */}
-      <div className="flex justify-end">
+      {/* Auto-advance toggle + Pause button — top right */}
+      <div className="flex items-center justify-end gap-3">
+        <button
+          type="button"
+          onClick={onToggleAutoAdvance}
+          className="flex items-center gap-2 rounded-full border border-white/10 px-3 py-1.5 font-sans text-[12px] font-medium text-white/50 transition hover:border-white/20 hover:text-white/60"
+          aria-pressed={autoAdvance}
+          title={autoAdvance ? "Auto-advance is on" : "Auto-advance is off"}
+        >
+          <span
+            className={`relative inline-flex h-[18px] w-[32px] shrink-0 items-center rounded-full transition-colors duration-200 ${
+              autoAdvance ? "bg-[#a78bfa]" : "bg-white/15"
+            }`}
+          >
+            <span
+              className={`inline-block h-[14px] w-[14px] rounded-full bg-white shadow-sm transition-transform duration-200 ${
+                autoAdvance ? "translate-x-[16px]" : "translate-x-[2px]"
+              }`}
+            />
+          </span>
+          <span className="hidden sm:inline">Auto</span>
+        </button>
         <button
           type="button"
           onClick={onPause}

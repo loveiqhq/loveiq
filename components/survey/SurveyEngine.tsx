@@ -21,6 +21,7 @@ import { useSubmitSurvey } from "./hooks/useSubmitSurvey";
 import { useSurveyTracking } from "./hooks/useSurveyTracking";
 import { useUtmCapture } from "./hooks/useUtmCapture";
 import { usePartialSave } from "./hooks/usePartialSave";
+import { useAutoAdvance } from "./hooks/useAutoAdvance";
 import SurveyConfirmation from "./SurveyConfirmation";
 import PreReportWizard from "./PreReportWizard";
 import ProcessingSequence from "./ProcessingSequence";
@@ -40,10 +41,13 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
   const utmTracker = useUtmCapture();
   const { savePartial } = usePartialSave(answers, currentIndex, startedAt, utmTracker);
 
+  const { autoAdvance, toggleAutoAdvance } = useAutoAdvance();
+
   const [animKey, setAnimKey] = useState(0);
   const hasTrackedStart = useRef(false);
   const hasCompleted = useRef(false);
   const touchStartX = useRef<number | null>(null);
+  const autoAdvanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Post-survey completion phase management
   const [completionPhase, setCompletionPhase] = useState<CompletionPhase>("processing");
@@ -90,16 +94,24 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
 
   const { trackNavigation } = useSurveyTracking(currentIndex, hasAnswer, question);
 
+  const cancelAutoAdvance = useCallback(() => {
+    if (autoAdvanceTimer.current) {
+      clearTimeout(autoAdvanceTimer.current);
+      autoAdvanceTimer.current = null;
+    }
+  }, []);
+
   // Navigation
   const goTo = useCallback(
     (index: number) => {
       if (index < 0 || index > totalQuestions) return;
+      cancelAutoAdvance();
       setAnimKey((k) => k + 1);
       setAttemptedNext(false);
       setCurrentIndex(index);
       window.scrollTo({ top: 0, behavior: "instant" });
     },
-    [totalQuestions, setCurrentIndex]
+    [totalQuestions, setCurrentIndex, cancelAutoAdvance]
   );
 
   const goNext = useCallback(() => {
@@ -156,8 +168,29 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
     (value: AnswerValue) => {
       if (!question) return;
       setAnswer(question.qId, value);
+
+      // Auto-advance for single-selection question types
+      cancelAutoAdvance();
+      if (
+        autoAdvance &&
+        (question.answerType === "single" ||
+          question.answerType === "scale" ||
+          question.answerType === "country")
+      ) {
+        // Skip auto-advance when "Other" is selected (user needs to type)
+        if (
+          question.answerType === "single" &&
+          typeof value === "string" &&
+          /^other\b/i.test(value)
+        ) {
+          return;
+        }
+        autoAdvanceTimer.current = setTimeout(() => {
+          goNext();
+        }, 350);
+      }
     },
-    [question, setAnswer]
+    [question, setAnswer, autoAdvance, cancelAutoAdvance, goNext]
   );
 
   // Keyboard navigation
@@ -197,6 +230,13 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
       window.removeEventListener("touchend", handleTouchEnd);
     };
   }, [hasAnswer, question, goNext, goPrev]);
+
+  // Clean up auto-advance timer on unmount
+  useEffect(() => {
+    return () => {
+      cancelAutoAdvance();
+    };
+  }, [cancelAutoAdvance]);
 
   // Survey complete — phase-based rendering
   if (!question || currentIndex >= totalQuestions) {
@@ -251,7 +291,12 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
       {/* Content */}
       <div className="relative z-10 mx-auto flex w-full max-w-[768px] flex-1 flex-col gap-6 px-6 pb-[100px] pt-6 sm:pb-32 sm:pt-10">
         {/* Header */}
-        <SurveyHeader progress={progress} onPause={handlePause} />
+        <SurveyHeader
+          progress={progress}
+          onPause={handlePause}
+          autoAdvance={autoAdvance}
+          onToggleAutoAdvance={toggleAutoAdvance}
+        />
 
         {/* Question with animation */}
         <div

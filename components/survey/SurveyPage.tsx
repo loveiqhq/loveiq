@@ -452,11 +452,11 @@ const IntroScreen: FC<{
 
   return (
     <main
-      className={`relative flex flex-col items-center justify-center overflow-x-hidden px-6 sm:px-8 py-8 sm:py-10 md:py-16 ${transitioning ? "h-dvh overflow-hidden" : "min-h-dvh"}`}
+      className={`relative flex flex-col items-center justify-center overflow-x-hidden px-7 sm:px-8 py-8 sm:py-10 md:py-16 ${transitioning ? "h-dvh overflow-hidden" : "min-h-dvh"}`}
       style={{
         backgroundImage: "linear-gradient(180deg, #fff 0%, rgba(250,245,255,0.3) 50%, #fff 100%)",
-        paddingLeft: "max(1.5rem, env(safe-area-inset-left, 0px))",
-        paddingRight: "max(1.5rem, env(safe-area-inset-right, 0px))",
+        paddingLeft: "max(1.75rem, env(safe-area-inset-left, 0px))",
+        paddingRight: "max(1.75rem, env(safe-area-inset-right, 0px))",
       }}
     >
       <div className="relative z-10 flex w-full max-w-[700px] flex-col items-center text-center">
@@ -675,10 +675,10 @@ const SlideScreen: FC<{
         />
       </div>
       <div
-        className="relative z-10 mx-auto flex w-full max-w-[1120px] flex-1 flex-col px-6 py-12 sm:px-10 sm:py-14"
+        className="relative z-10 mx-auto flex w-full max-w-[1120px] flex-1 flex-col px-7 py-12 sm:px-10 sm:py-14"
         style={{
-          paddingLeft: "max(1.5rem, env(safe-area-inset-left, 0px))",
-          paddingRight: "max(1.5rem, env(safe-area-inset-right, 0px))",
+          paddingLeft: "max(1.75rem, env(safe-area-inset-left, 0px))",
+          paddingRight: "max(1.75rem, env(safe-area-inset-right, 0px))",
         }}
       >
         {/* Top bar */}
@@ -727,7 +727,7 @@ const SlideScreen: FC<{
             </div>
 
             <h2
-              className="survey-animate mt-6 sm:mt-2 font-serif text-[36px] font-medium leading-[45px] sm:text-[52px] sm:leading-[64px] lg:text-[72px] lg:leading-[90px] text-white"
+              className="survey-animate mt-6 sm:mt-2 font-serif text-[36px] font-medium leading-[45px] sm:text-[52px] sm:leading-[64px] lg:text-[72px] lg:leading-[90px] text-white break-words"
               style={{
                 opacity: 0,
                 animation: "survey-fade-up 700ms cubic-bezier(0.16,1,0.3,1) 150ms both",
@@ -973,7 +973,7 @@ const ConsentScreen: FC<{
                 href="/privacy-policy"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="no-underline decoration-white/50 underline-offset-2 transition-all duration-300 hover:text-white hover:underline"
+                className="text-[#A78BFA] no-underline decoration-white/50 underline-offset-2 transition-all duration-300 hover:text-white hover:underline"
               >
                 Privacy Policy
               </Link>
@@ -982,7 +982,7 @@ const ConsentScreen: FC<{
                 href="/terms-and-conditions"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="no-underline decoration-white/50 underline-offset-2 transition-all duration-300 hover:text-white hover:underline"
+                className="text-[#A78BFA] no-underline decoration-white/50 underline-offset-2 transition-all duration-300 hover:text-white hover:underline"
               >
                 Terms &amp; Conditions
               </Link>
@@ -991,7 +991,7 @@ const ConsentScreen: FC<{
                 href="/terms-of-use"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="no-underline decoration-white/50 underline-offset-2 transition-all duration-300 hover:text-white hover:underline"
+                className="text-[#A78BFA] no-underline decoration-white/50 underline-offset-2 transition-all duration-300 hover:text-white hover:underline"
               >
                 Terms of Use
               </Link>
@@ -1000,7 +1000,7 @@ const ConsentScreen: FC<{
                 href="/digital-content-terms"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="no-underline decoration-white/50 underline-offset-2 transition-all duration-300 hover:text-white hover:underline"
+                className="text-[#A78BFA] no-underline decoration-white/50 underline-offset-2 transition-all duration-300 hover:text-white hover:underline"
               >
                 Digital Content &amp; Subscription Terms
               </Link>{" "}
@@ -1009,7 +1009,7 @@ const ConsentScreen: FC<{
                 href="/medical-disclaimer"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="no-underline decoration-white/50 underline-offset-2 transition-all duration-300 hover:text-white hover:underline"
+                className="text-[#A78BFA] no-underline decoration-white/50 underline-offset-2 transition-all duration-300 hover:text-white hover:underline"
               >
                 Medical &amp; Psychological Disclaimer
               </Link>
