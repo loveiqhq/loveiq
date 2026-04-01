@@ -2,7 +2,7 @@
 
 Date: 2026-04-01
 
-This file tracks the second 56-item AI / zero-cost intelligence roadmap that sits on top of the already-complete admin operating-system roadmap.
+This file tracks the second 56-item admin intelligence roadmap that sits on top of the already-complete admin operating-system roadmap.
 
 Rules for this phase:
 

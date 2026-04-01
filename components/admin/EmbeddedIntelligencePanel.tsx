@@ -112,7 +112,7 @@ export default function EmbeddedIntelligencePanel({
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.24em] text-text-muted">
-            Zero-Cost Intelligence
+            Admin Intelligence
           </p>
           <h3 className="mt-2 font-serif text-2xl font-semibold text-text-primary">
             {title || data.title}
