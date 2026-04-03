@@ -68,7 +68,7 @@ export default function DisagreementsTab({ days }: { days: number }) {
   if (data.disagreements.length === 0) {
     return (
       <div className="rounded-xl border border-white/10 bg-surface p-8 text-center text-sm text-text-muted">
-        No disagreements found — V4 and V5 agree on all submissions.
+        No disagreements found — V4 and V5 agree on all submissions (V6 questionnaire).
       </div>
     );
   }

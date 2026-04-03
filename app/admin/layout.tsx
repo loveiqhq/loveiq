@@ -19,7 +19,7 @@ const pageTitles: Record<string, string> = {
   "/admin/growth": "Growth",
   "/admin/tools": "Admin Tools",
   "/admin/submissions/compare": "Compare Submissions",
-  "/admin/scoring": "Scoring V4↔V5",
+  "/admin/scoring": "Scoring V4↔V5 (V6Q)",
   "/admin/reports": "Report Engagement",
   "/admin/revenue": "Revenue",
   "/admin/retention": "Retention",
@@ -72,7 +72,7 @@ const pageDescriptions: Record<string, string> = {
   "/admin/submissions/compare":
     "Place two submissions side by side to compare answers, scores, and timing.",
   "/admin/scoring":
-    "Compare V4 and V5 scoring engines: agreement rates, distribution drift, and disagreements.",
+    "Compare V4 and V5 scoring engines on V6 questionnaire: agreement rates, distribution drift, and disagreements.",
   "/admin/reports":
     "Monitor how users engage with their generated reports: views, ratings, and shares.",
   "/admin/revenue": "Track revenue, payment transactions, and failed payment analysis.",
@@ -86,7 +86,7 @@ const pageDescriptions: Record<string, string> = {
   "/admin/activity":
     "Audit trail of all admin actions, broken down by admin, action type, and date.",
   "/admin/archetypes":
-    "View all 14 archetypes with V4/V5 distribution, weekly trends, and scored submission counts.",
+    "View all 14 archetypes with V4/V5 distribution (V6 questionnaire), weekly trends, and scored submission counts.",
   "/admin/journey":
     "Sankey diagram of user flow through survey stages, with drop-off and conversion rates.",
   "/admin/health": "Monitor service status, error rates, and system performance metrics.",

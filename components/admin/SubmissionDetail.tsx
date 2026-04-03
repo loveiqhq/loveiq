@@ -188,7 +188,7 @@ export default function SubmissionDetail({ id }: { id: string }) {
                 {scoring.primary_archetype}
               </span>
               <span className="text-xs text-text-muted">
-                {scoring.engine_version} &middot;{" "}
+                {scoring.engine_version} (V6Q) &middot;{" "}
                 {new Date(scoring.scored_at).toLocaleDateString("en-US", {
                   month: "short",
                   day: "numeric",
