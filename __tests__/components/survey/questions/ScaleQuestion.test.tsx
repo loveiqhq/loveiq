@@ -61,16 +61,6 @@ describe("ScaleQuestion", () => {
     expect(screen.getByText("Strongly Disagree")).toBeInTheDocument();
   });
 
-  it("shows 'Level X of 7' badge for selected value", () => {
-    render(<ScaleQuestion question={QUESTION} value={5} onChange={vi.fn()} />);
-    expect(screen.getByText("Level 5 of 7")).toBeInTheDocument();
-  });
-
-  it("shows 'Level 1 of 7' badge when value is 1", () => {
-    render(<ScaleQuestion question={QUESTION} value={1} onChange={vi.fn()} />);
-    expect(screen.getByText("Level 1 of 7")).toBeInTheDocument();
-  });
-
   it("uses intensity labels when scaleLabels.low contains 'not at all'", () => {
     const intensityQuestion = {
       ...QUESTION,
@@ -79,8 +69,6 @@ describe("ScaleQuestion", () => {
     render(<ScaleQuestion question={intensityQuestion} value={7} onChange={vi.fn()} />);
     // "Extremely" appears as both value label and scale end label
     expect(screen.getAllByText("Extremely").length).toBeGreaterThanOrEqual(1);
-    // Level badge confirms the value label rendered
-    expect(screen.getByText("Level 7 of 7")).toBeInTheDocument();
   });
 
   it("shows 'Not at all' intensity label for value 1 when low is 'Not at all'", () => {
@@ -91,13 +79,10 @@ describe("ScaleQuestion", () => {
     render(<ScaleQuestion question={intensityQuestion} value={1} onChange={vi.fn()} />);
     // "Not at all" appears as both value label and scale end label
     expect(screen.getAllByText("Not at all").length).toBeGreaterThanOrEqual(1);
-    // Level badge confirms the value label rendered
-    expect(screen.getByText("Level 1 of 7")).toBeInTheDocument();
   });
 
   it("shows no value label when value is null", () => {
     render(<ScaleQuestion question={QUESTION} value={null} onChange={vi.fn()} />);
-    expect(screen.queryByText(/Level \d of 7/)).not.toBeInTheDocument();
     expect(screen.queryByText("Strongly Agree")).not.toBeInTheDocument();
     expect(screen.queryByText("Strongly Disagree")).not.toBeInTheDocument();
   });

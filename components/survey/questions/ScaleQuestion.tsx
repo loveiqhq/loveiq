@@ -26,6 +26,11 @@ function getValueLabel(value: number, question: SurveyQuestion): string {
   return FALLBACK_LABELS[value] || "";
 }
 
+function getValueExplanation(value: number, question: SurveyQuestion): string | null {
+  const entry = question.answerOptionsExplained?.[value - 1];
+  return entry?.explanation ?? null;
+}
+
 const ScaleQuestion: FC<ScaleQuestionProps> = ({ question, value, onChange }) => {
   const [hoveredValue, setHoveredValue] = useState<number | null>(null);
 
@@ -36,7 +41,8 @@ const ScaleQuestion: FC<ScaleQuestionProps> = ({ question, value, onChange }) =>
     [onChange]
   );
 
-  const selectedLabel = value ? getValueLabel(value, question) : null;
+  const activeValue = value ?? hoveredValue;
+  const selectedExplanation = activeValue ? getValueExplanation(activeValue, question) : null;
 
   // Subtitle from formatGuidance or construct from scale labels
   const subtitle =
@@ -53,34 +59,6 @@ const ScaleQuestion: FC<ScaleQuestionProps> = ({ question, value, onChange }) =>
           {question.question}
         </h2>
         <p className="font-sans text-[15px] font-medium text-[#a78bfa]">{subtitle}</p>
-      </div>
-
-      {/* Selected value display OR awaiting selection */}
-      <div className="flex flex-col items-center gap-2 py-2">
-        {selectedLabel ? (
-          <>
-            <span className="font-sans text-[18px] font-medium text-white/70 sm:text-[20px]">
-              {selectedLabel}
-            </span>
-            <span className="rounded-full border border-[rgba(167,139,250,0.25)] bg-[rgba(167,139,250,0.1)] px-3 py-1 font-sans text-[11px] font-semibold uppercase tracking-wider text-[#a78bfa]">
-              Level {value} of 7
-            </span>
-          </>
-        ) : hoveredValue !== null ? (
-          <span
-            className="font-sans text-[16px] font-medium text-white/40"
-            style={{
-              transition:
-                "opacity 250ms cubic-bezier(0.16, 1, 0.3, 1), transform 250ms cubic-bezier(0.16, 1, 0.3, 1)",
-            }}
-          >
-            {getValueLabel(hoveredValue, question)}
-          </span>
-        ) : (
-          <span className="font-sans text-[16px] font-medium text-white/30">
-            Awaiting selection
-          </span>
-        )}
       </div>
 
       {/* Dot scale */}
@@ -187,6 +165,24 @@ const ScaleQuestion: FC<ScaleQuestionProps> = ({ question, value, onChange }) =>
             {question.scaleLabels?.high || "Strongly Agree"}
           </span>
         </div>
+
+        {/* Selected label + explanation (below scale) */}
+        {(value !== null || hoveredValue !== null) && (
+          <div className="flex flex-col items-center gap-1 pt-2">
+            <span
+              className={`font-sans text-[18px] font-medium sm:text-[20px] ${
+                value !== null ? "text-white/70" : "text-white/40"
+              }`}
+            >
+              {getValueLabel(activeValue!, question)}
+            </span>
+            {selectedExplanation && (
+              <p className="text-center font-sans text-[14px] leading-relaxed text-white/50 sm:text-[15px]">
+                {selectedExplanation}
+              </p>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
