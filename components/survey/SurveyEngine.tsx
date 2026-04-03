@@ -92,8 +92,15 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
   }, [submitStatus, answers, clearState]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  // Current answer
-  const currentAnswer = question ? getAnswer(question.qId) : null;
+  // Current answer — discard stale data whose type doesn't match the question
+  const rawAnswer = question ? getAnswer(question.qId) : null;
+  const currentAnswer = useMemo(() => {
+    if (!question || rawAnswer === null || rawAnswer === undefined) return rawAnswer;
+    // V6 migrated some questions from single→multiple; clear mismatched types
+    if (question.answerType === "multiple" && !Array.isArray(rawAnswer)) return null;
+    if (question.answerType === "scale" && typeof rawAnswer !== "number") return null;
+    return rawAnswer;
+  }, [question, rawAnswer]);
 
   // "Other" companion text
   const otherText = question ? ((getAnswer(question.qId + "_other") as string | null) ?? "") : "";
