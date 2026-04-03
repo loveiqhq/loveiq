@@ -73,7 +73,7 @@ const GlossaryPage: FC = () => {
       clearTimeout(timeoutId);
       observer.disconnect();
     };
-  }, [activeFilter, searchQuery]);
+  }, [activeFilter, searchQuery, filteredTerms]);
 
   // Group terms by first letter
   const termsByLetter = useMemo(() => {
