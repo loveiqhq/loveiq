@@ -210,7 +210,7 @@ function main() {
     const answerOptions = (row["Answer options"] || row["Answer Options"] || "").trim();
     const answerTypeRaw = (row["Answer format"] || row["Answer Type"] || "").trim();
     const howAnswerIsUsed = cleanText(row["How this answer will be used"] || row["Comment"] || "");
-    const required = (row["Required"] || "").trim().toLowerCase() === "yes";
+    const required = true;
     const supportAndGuidance = cleanText(
       row["Support and guidance"] || row["Guide (display)"] || ""
     );
