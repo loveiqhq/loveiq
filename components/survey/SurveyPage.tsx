@@ -1152,6 +1152,7 @@ const SurveyPage: FC = () => {
   const handleReturn = useCallback((clearAnswers?: boolean) => {
     try {
       sessionStorage.removeItem(STEP_STORAGE_KEY);
+      sessionStorage.removeItem("loveiq-survey-session");
       if (clearAnswers) {
         localStorage.removeItem(ANSWERS_STORAGE_KEY);
         localStorage.removeItem("loveiq-survey-index");

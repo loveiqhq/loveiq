@@ -19,7 +19,8 @@ const MultipleChoiceQuestion: FC<MultipleChoiceQuestionProps> = ({
   otherText,
   onOtherTextChange,
 }) => {
-  const selected = value ?? [];
+  // Coerce stale localStorage strings (from pre-V6 single→multiple migration) to arrays
+  const selected = Array.isArray(value) ? value : value ? [value] : [];
 
   const toggle = (option: string) => {
     if (selected.includes(option)) {

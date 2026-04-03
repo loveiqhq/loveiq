@@ -35,8 +35,16 @@ interface SurveyEngineProps {
 }
 
 const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
-  const { answers, currentIndex, startedAt, progress, setAnswer, getAnswer, setCurrentIndex } =
-    useSurveyState();
+  const {
+    answers,
+    currentIndex,
+    startedAt,
+    progress,
+    setAnswer,
+    getAnswer,
+    setCurrentIndex,
+    clearState,
+  } = useSurveyState();
   const { submit: submitSurvey, status: submitStatus } = useSubmitSurvey();
   const utmTracker = useUtmCapture();
   const { savePartial } = usePartialSave(answers, currentIndex, startedAt, utmTracker);
@@ -47,7 +55,13 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
   const hasTrackedStart = useRef(false);
   const hasCompleted = useRef(false);
   const touchStartX = useRef<number | null>(null);
+  const touchStartY = useRef<number | null>(null);
   const autoAdvanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Cache name/email before clearing state so completion screens can still display them
+  const [completedName, setCompletedName] = useState("");
+  const [completedEmail, setCompletedEmail] = useState("");
+  const hasCleared = useRef(false);
 
   // Post-survey completion phase management
   const [completionPhase, setCompletionPhase] = useState<CompletionPhase>("processing");
@@ -62,6 +76,21 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
       trackSurveyStart();
     }
   }, []);
+
+  // Clear persisted answers after successful submission so future visits start fresh.
+  // Cache name/email first since completion screens still display them.
+  // setState in this effect is intentional — we must snapshot name/email before clearState
+  // wipes the answers, same pattern as SurveyPage's loadInitialStep hydration.
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (submitStatus === "success" && !hasCleared.current) {
+      hasCleared.current = true;
+      setCompletedName((answers["00001"] as string) || "");
+      setCompletedEmail((answers["00000"] as string) || "");
+      clearState();
+    }
+  }, [submitStatus, answers, clearState]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Current answer
   const currentAnswer = question ? getAnswer(question.qId) : null;
@@ -210,18 +239,23 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
     return () => window.removeEventListener("keydown", handleKey);
   }, [hasAnswer, question, goNext, goPrev]);
 
-  // Touch swipe
+  // Touch swipe — only trigger on primarily horizontal gestures
   useEffect(() => {
     const handleTouchStart = (e: TouchEvent) => {
       touchStartX.current = e.touches[0].clientX;
+      touchStartY.current = e.touches[0].clientY;
     };
     const handleTouchEnd = (e: TouchEvent) => {
-      if (touchStartX.current === null) return;
-      const diff = e.changedTouches[0].clientX - touchStartX.current;
+      if (touchStartX.current === null || touchStartY.current === null) return;
+      const diffX = e.changedTouches[0].clientX - touchStartX.current;
+      const diffY = e.changedTouches[0].clientY - touchStartY.current;
       touchStartX.current = null;
-      if (Math.abs(diff) < 50) return;
-      if (diff < 0 && (hasAnswer || !question?.required)) goNext();
-      if (diff > 0) goPrev();
+      touchStartY.current = null;
+      if (Math.abs(diffX) < 50) return;
+      // Ignore if gesture is more vertical than horizontal (prevents false triggers on scroll)
+      if (Math.abs(diffY) >= Math.abs(diffX)) return;
+      if (diffX < 0 && (hasAnswer || !question?.required)) goNext();
+      if (diffX > 0) goPrev();
     };
     window.addEventListener("touchstart", handleTouchStart, { passive: true });
     window.addEventListener("touchend", handleTouchEnd, { passive: true });
@@ -260,8 +294,8 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
     if (completionPhase === "ready") {
       return (
         <ReportReady
-          name={(answers["00001"] as string) || ""}
-          email={(answers["00000"] as string) || ""}
+          name={completedName || (answers["00001"] as string) || ""}
+          email={completedEmail || (answers["00000"] as string) || ""}
           onContinue={() => setCompletionPhase("wizard")}
         />
       );
@@ -281,7 +315,10 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
   const canGoNext = (hasAnswer && isEmailValid) || !question.required;
 
   return (
-    <main className="relative flex min-h-screen flex-col bg-[#0a0510]">
+    <main
+      className="relative flex min-h-screen flex-col bg-[#0a0510]"
+      style={{ touchAction: "pan-y" }}
+    >
       {/* Background gradient blurs */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
         <div className="absolute -left-40 -top-40 h-[500px] w-[500px] rounded-full bg-[rgba(167,139,250,0.06)] blur-[120px]" />

@@ -332,6 +332,7 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete }) => {
   const [hasEntered, setHasEntered] = useState(false);
   const [isExiting, setIsExiting] = useState(false);
   const touchStartX = useRef<number | null>(null);
+  const touchStartY = useRef<number | null>(null);
 
   // Entrance fade-in
   useEffect(() => {
@@ -381,18 +382,23 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete }) => {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleNext, handlePrev, slideIndex, isLeaving]);
 
-  // Touch swipe
+  // Touch swipe — only trigger on primarily horizontal gestures
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
   }, []);
 
   const handleTouchEnd = useCallback(
     (e: React.TouchEvent) => {
-      if (touchStartX.current === null) return;
-      const delta = touchStartX.current - e.changedTouches[0].clientX;
+      if (touchStartX.current === null || touchStartY.current === null) return;
+      const deltaX = touchStartX.current - e.changedTouches[0].clientX;
+      const deltaY = touchStartY.current - e.changedTouches[0].clientY;
       touchStartX.current = null;
-      if (Math.abs(delta) < 50) return;
-      if (delta > 0) handleNext();
+      touchStartY.current = null;
+      if (Math.abs(deltaX) < 50) return;
+      // Ignore if gesture is more vertical than horizontal
+      if (Math.abs(deltaY) >= Math.abs(deltaX)) return;
+      if (deltaX > 0) handleNext();
       else if (slideIndex > 0) handlePrev();
     },
     [handleNext, handlePrev, slideIndex]
@@ -402,6 +408,7 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete }) => {
     <main
       className="relative flex min-h-screen flex-col overflow-hidden bg-[#140a1a]"
       style={{
+        touchAction: "pan-y",
         opacity: isExiting ? 0 : hasEntered ? 1 : 0,
         transition: isExiting
           ? "opacity 600ms cubic-bezier(0.16, 1, 0.3, 1)"
