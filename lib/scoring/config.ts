@@ -11,6 +11,7 @@ import {
   weightModifiers as weightModifiersDef,
   labelToCodeMap,
   v5PrototypeHelpers,
+  multiselectScoringQuestions as multiselectScoringQids,
 } from "@/data/scoring-config";
 import type {
   ScoringConfig,
@@ -164,6 +165,7 @@ function buildConfig(): ScoringConfig {
     labelToCode: labelToCodeMap,
     archetypeIds,
     v5Helpers,
+    multiselectScoringQuestions: new Set(multiselectScoringQids),
     v5Enabled,
     v5SpacingGapMin,
     v5SpacingGapMax,

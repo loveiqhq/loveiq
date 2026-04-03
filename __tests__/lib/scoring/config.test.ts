@@ -23,11 +23,36 @@ describe("getScoringConfig", () => {
     expect(config.archetypes).toHaveLength(14);
   });
 
-  it("has 19 dimensions", () => {
-    expect(Object.keys(config.dimensions)).toHaveLength(19);
+  it("has 21 dimensions", () => {
+    expect(Object.keys(config.dimensions)).toHaveLength(21);
   });
 
-  it("every archetype has all 19 prototype values", () => {
+  it("includes the two new V6 dimensions", () => {
+    expect(config.dimensions["DIM_CLOSENESS_ORIENTATION"]).toBeDefined();
+    expect(config.dimensions["DIM_CLOSENESS_ORIENTATION"].qid).toBe("08004");
+    expect(config.dimensions["DIM_CLOSENESS_ORIENTATION"].weight).toBe(1.0);
+    expect(config.dimensions["DIM_PARTNER_FOCUS"]).toBeDefined();
+    expect(config.dimensions["DIM_PARTNER_FOCUS"].qid).toBe("11003");
+    expect(config.dimensions["DIM_PARTNER_FOCUS"].weight).toBe(1.2);
+  });
+
+  it("has multiselectScoringQuestions with 3 questions", () => {
+    expect(config.multiselectScoringQuestions).toBeInstanceOf(Set);
+    expect(config.multiselectScoringQuestions.size).toBe(3);
+    expect(config.multiselectScoringQuestions.has("03003")).toBe(true);
+    expect(config.multiselectScoringQuestions.has("10002")).toBe(true);
+    expect(config.multiselectScoringQuestions.has("14020")).toBe(true);
+  });
+
+  it("has no categorical boost rules for Q08004 or Q11003", () => {
+    for (const key of config.boosts.keys()) {
+      const qid = key.split("||")[0];
+      expect(qid).not.toBe("08004");
+      expect(qid).not.toBe("11003");
+    }
+  });
+
+  it("every archetype has all 21 prototype values", () => {
     const dimIds = Object.keys(config.dimensions);
     for (const archetype of config.archetypes) {
       for (const dimId of dimIds) {

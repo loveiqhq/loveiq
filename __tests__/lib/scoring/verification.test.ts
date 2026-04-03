@@ -48,63 +48,60 @@ function buildIdealResponses(archetype: string): Record<string, unknown> {
 }
 
 // Archetype-specific categorical boosts to push each archetype to #1
-const archetypeBoosts: Record<string, Record<string, string | string[]>> = {
+const archetypeBoosts: Record<string, Record<string, unknown>> = {
   "Sensual Connector": {
     "02001": "responsive",
     "02004": "partner_starts",
     "03005": "connection",
     "03013": "absorbed",
-    "10002": "reassurance",
+    "10002": ["reassurance"],
     "11001": "egalitarian",
-    "11003": "balanced",
-    "14020": "bonding",
+    "14020": ["bonding"],
   },
   "Spark Seeker": {
     "02001": "spontaneous",
     "02004": "i_start",
-    "03003": "spontaneous",
+    "03003": ["spontaneous"],
     "03005": "novelty",
     "03013": "watched",
-    "10002": "expressive",
+    "10002": ["expressive"],
     "11001": "switch",
-    "14020": "pleasure",
+    "14020": ["pleasure"],
   },
   "Relational Nurturer": {
     "02001": "responsive",
     "02004": "partner_starts",
     "03005": "connection",
     "08003": "pursue",
-    "10002": "reassurance",
-    "11003": "partner_focused",
-    "14020": "healing",
+    "10002": ["reassurance"],
+    "14020": ["healing"],
   },
   "Exhibitionist Performer": {
     "02001": "spontaneous",
-    "03003": "public_risk",
+    "03003": ["visible_semipublic"],
     "03005": "sensation",
     "03013": "watched",
-    "10002": "expressive",
+    "10002": ["expressive"],
     "11001": "switch",
-    "14020": "validation",
+    "14020": ["validation"],
   },
   "Explorer of Edges": {
     "02004": "i_start",
-    "03003": "adventurous",
+    "03003": ["adventurous", "edge_taboo"],
     "03005": "fantasy",
     "03010": "edge_taboo",
     "03013": "watching",
-    "08004": "distance",
     "11001": "lead",
-    "14020": "escape",
+    "14020": ["escape", "intensity"],
   },
   "Curious Apprentice": {
     "02001": "varies",
-    "03003": "adventurous",
+    "03003": ["adventurous"],
     "03005": "novelty",
     "03006": "guidance",
     "08003": "calm",
     "11001": "switch",
-    "14020": "novelty",
+    "14020": ["novelty"],
     "16005": "awakening",
   },
   "Spiritual Lover": {
@@ -113,80 +110,71 @@ const archetypeBoosts: Record<string, Record<string, string | string[]>> = {
     "03005": "connection",
     "03013": "absorbed",
     "08003": "calm",
-    "10002": "reassurance",
-    "14020": "meaning",
+    "10002": ["reassurance"],
+    "14020": ["meaning"],
     "16005": "evolving",
   },
   "Minimalist Companion": {
     "01003": "not_focus",
     "02001": "planned",
-    "03003": "private",
+    "03003": ["private"],
     "03005": "safety",
     "08003": "withdraw",
-    "10002": "nonverbal",
-    "11003": "self_focused",
-    "14020": "comfort",
+    "10002": ["nonverbal", "very_little"],
+    "14020": ["comfort"],
   },
   "Emotional Voyeur": {
     "01003": "not_focus",
     "03005": "fantasy",
     "03013": "watching",
     "08003": "withdraw",
-    "08004": "distance",
-    "10002": "nonverbal",
-    "11003": "self_focused",
-    "14020": "escape",
+    "10002": ["nonverbal", "very_little"],
+    "14020": ["escape"],
   },
   "Power Orchestrator": {
     "02001": "spontaneous",
     "02004": "i_start",
-    "03003": "ritualized",
+    "03003": ["ritualized"],
     "08003": "angry",
-    "08004": "distance",
-    "10002": "direct_phrases",
+    "10002": ["direct_phrases"],
     "11001": "lead",
-    "14020": "power",
+    "14020": ["power"],
   },
   "Loyal Ritualist": {
     "02001": "planned",
     "02004": "plan_window",
-    "03003": "ritualized",
+    "03003": ["ritualized"],
     "03010": "safe_novelty",
     "08003": "calm",
-    "08004": "balance",
     "11001": "egalitarian",
-    "14020": "comfort",
+    "14020": ["comfort"],
   },
   "Approval Seeker": {
     "02001": "responsive",
     "03005": "connection",
     "08003": "pursue",
-    "08004": "crave",
-    "10002": "expressive",
+    "10002": ["expressive"],
     "11001": "surrender",
-    "11003": "partner_focused",
-    "14020": "validation",
+    "14020": ["validation"],
   },
   "Analytical Sexualist": {
     "02001": "planned",
     "02004": "plan_window",
     "03005": "mastery",
     "03006": "learning_by_doing",
-    "10002": "direct_phrases",
+    "10002": ["direct_phrases"],
     "11001": "egalitarian",
-    "14020": "novelty",
+    "14020": ["novelty"],
   },
   "Quiet Withdrawer": {
     "01003": "not_focus",
     "02001": "low_lately",
-    "03003": "private",
+    "03003": ["private"],
     "03005": "safety",
     "08003": "withdraw",
-    "08004": "distance",
-    "10002": "nonverbal",
-    "11003": "self_focused",
+    "10002": ["nonverbal"],
     "16005": "recharging",
-    "14020": "escape",
+    "14020": ["escape"],
   },
 };
 
@@ -232,8 +220,21 @@ const categoricalQuestions: Record<string, string[]> = {
     "Varies by partner/context",
     "Desire has been low lately",
   ],
-  "02004": ["I start it", "My partner starts", "Planned window", "Playful either-way"],
-  "03003": ["Private", "Adventurous", "Ritualized", "Spontaneous", "Public-risk", "Other"],
+  "02004": [
+    "I initiate",
+    "My partner initiates",
+    "We make space for it intentionally",
+    "It unfolds naturally and either of us may begin",
+  ],
+  "03003": [
+    "Private and protected",
+    "Novel or adventurous",
+    "Deliberate or ritualized",
+    "Spontaneous or unplanned",
+    "Edge, taboo, or transgression",
+    "Visible or semi-public",
+    "Something else",
+  ],
   "03005": [
     "Sensation-led",
     "Safety/context-led",
@@ -244,9 +245,10 @@ const categoricalQuestions: Record<string, string[]> = {
     "Not sure / varies",
   ],
   "03006": [
-    "Clear guidance & feedback",
-    "Trying things out & learning by doing",
-    "Going with intuition & what feels natural",
+    "Structure and feedback",
+    "Curiosity and experimentation",
+    "Natural flow and spontaneity",
+    "I prefer not to make it a deliberate process",
   ],
   "03010": [
     "Very safe and predictable",
@@ -268,13 +270,13 @@ const categoricalQuestions: Record<string, string[]> = {
     "Self-soothe / stay grounded",
     "Varies",
   ],
-  "08004": ["Crave closeness", "Keep distance", "Balance both"],
   "10002": [
-    "Mostly silent / nonverbal",
-    "Through touch & body movement",
-    'Short, direct phrases (e.g. "slower", "like that")',
-    "Continuous verbal feedback",
-    "Emotional check-ins & reassurance",
+    "Touch and body cues",
+    "Brief direct words",
+    "Ongoing verbal feedback",
+    "Emotional check-ins",
+    "Mostly nonverbal cues",
+    "I communicate very little",
   ],
   "11001": [
     "Lead / direct",
@@ -283,33 +285,26 @@ const categoricalQuestions: Record<string, string[]> = {
     "Egalitarian / no roles",
     "Not sure / depends",
   ],
-  "11003": [
-    "Primarily focused on my partner",
-    "A balance of giving and receiving",
-    "Primarily focused on my own experience",
-    "It changes depending on mood or partner",
-  ],
   "14020": [
-    "Bonding / intimacy",
-    "Pleasure / play",
-    "Novelty / exploration",
-    "Intensity / edge",
-    "Validation / being desired",
-    "Power",
-    "Meaning / spiritual union",
-    "Comfort / routine closeness",
-    "Service",
-    "Healing / soothing",
-    "Escape / switching off",
+    "Bonding and closeness",
+    "Pleasure and play",
+    "Novelty and discovery",
+    "Intensity and edge",
+    "Feeling desired",
+    "Power and polarity",
+    "Meaning and devotion",
+    "Comfort and familiarity",
+    "Giving and service",
+    "Healing and soothing",
+    "Escape and relief",
   ],
   "15005": [
     "No",
-    "Yes, youngest is 0\u20133",
-    "Yes, youngest is 4\u201310",
-    "Yes, youngest is 11\u201317",
+    "Yes, youngest child is 0\u20133 years",
+    "Yes, youngest child is 4\u201310 years",
+    "Yes, youngest child is 11\u201317 years",
     "Yes, children are 18+ and live with me",
     "Yes, children are 18+ and do not live with me",
-    "Prefer not to answer",
   ],
   "15006": ["Very low", "Low", "Medium", "High", "Very high"],
   "15007": ["Very rested", "Rather rested", "In between", "Rather tired", "Very tired"],
@@ -379,7 +374,7 @@ describe("Label-to-code mapping resolves every survey option", () => {
 // ─── 3. All dimensions and overlays get correct data ─────────────────────────
 
 describe("Dimension transforms produce correct values", () => {
-  it("all 19 scale dimensions transform correctly", () => {
+  it("all 21 scale dimensions transform correctly", () => {
     const responses: Record<string, number> = {};
     for (const dim of Object.values(config.dimensions)) {
       if (dim.transform === "scale_1_7_to_0_1") {
@@ -468,8 +463,8 @@ describe("Overlay transforms produce correct values", () => {
   it("OVL_PARENTING_LOAD maps label to correct numeric", () => {
     const parentMap = [
       { label: "No", expected: 0 },
-      { label: "Yes, youngest is 0\u20133", expected: 1 },
-      { label: "Yes, youngest is 4\u201310", expected: 0.75 },
+      { label: "Yes, youngest child is 0\u20133 years", expected: 1 },
+      { label: "Yes, youngest child is 4\u201310 years", expected: 0.75 },
     ];
 
     for (const { label, expected } of parentMap) {
@@ -515,17 +510,17 @@ describe("Full realistic survey response", () => {
       // Categorical boost questions
       "01003": "Present but often deprioritized",
       "02001": "Responsive",
-      "02004": "My partner starts",
-      "03003": "Private",
+      "02004": "My partner initiates",
+      "03003": ["Private and protected"],
       "03005": "Connection-led",
-      "03006": "Going with intuition & what feels natural",
+      "03006": "Natural flow and spontaneity",
       "03013": "Absorbed in sensation / connection",
       "08003": "Self-soothe / stay grounded",
-      "08004": "Balance both",
-      "10002": "Emotional check-ins & reassurance",
+      "08004": 5, // DIM_CLOSENESS_ORIENTATION (scale 1-7)
+      "10002": ["Emotional check-ins"],
       "11001": "Egalitarian / no roles",
-      "11003": "A balance of giving and receiving",
-      "14020": "Bonding / intimacy",
+      "11003": 5, // DIM_PARTNER_FOCUS (scale 1-7)
+      "14020": ["Bonding and closeness"],
 
       // Overlays (scale)
       "14021": 3, // Escape
@@ -572,9 +567,9 @@ describe("Full realistic survey response", () => {
     expect(config.archetypes).toContain(result.primaryArchetype);
 
     // Diagnostics populated
-    expect(Object.keys(result.diagnostics.uDimensions)).toHaveLength(19);
-    expect(Object.keys(result.diagnostics.dimensionWeightsBase)).toHaveLength(19);
-    expect(Object.keys(result.diagnostics.dimensionWeightsFinal)).toHaveLength(19);
+    expect(Object.keys(result.diagnostics.uDimensions)).toHaveLength(21);
+    expect(Object.keys(result.diagnostics.dimensionWeightsBase)).toHaveLength(21);
+    expect(Object.keys(result.diagnostics.dimensionWeightsFinal)).toHaveLength(21);
 
     // Specific dimension values
     expect(result.diagnostics.uDimensions.DIM_NOVELTY).toBeCloseTo((5 - 1) / 6, 6); // 0.667

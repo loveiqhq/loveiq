@@ -244,6 +244,43 @@ function transformTags(raw: unknown): string[] {
   return [...new Set(extractAnswerCodes(raw))];
 }
 
+// ─── Multiselect-aware boost application (non-centered) ────────────────────
+
+function applyBoostsNonCentered(
+  config: ScoringConfig,
+  answeredPairs: [string, string][],
+  scores: Record<string, number>
+): void {
+  // Group by question
+  const pairsByQuestion = new Map<string, string[]>();
+  for (const [qid, ac] of answeredPairs) {
+    const arr = pairsByQuestion.get(qid) || [];
+    arr.push(ac);
+    pairsByQuestion.set(qid, arr);
+  }
+
+  for (const [qid, answerCodes] of pairsByQuestion) {
+    if (config.multiselectScoringQuestions.has(qid) && answerCodes.length > 1) {
+      // Multiselect MAX: per-archetype MAX across selected answer-code boosts
+      const maxBoost: Record<string, number> = {};
+      for (const a of config.archetypes) maxBoost[a] = 0;
+      for (const ac of answerCodes) {
+        for (const rule of config.boosts.get(`${qid}||${ac}`) || []) {
+          maxBoost[rule.archetype] = Math.max(maxBoost[rule.archetype], rule.scoreAdd);
+        }
+      }
+      for (const a of config.archetypes) scores[a] += maxBoost[a];
+    } else {
+      // Single-select or non-multiselect: apply each boost directly
+      for (const ac of answerCodes) {
+        for (const rule of config.boosts.get(`${qid}||${ac}`) || []) {
+          scores[rule.archetype] += rule.scoreAdd;
+        }
+      }
+    }
+  }
+}
+
 // ─── V5: Canonical payload fingerprint ──────────────────────────────────────
 
 function buildCanonicalFingerprint(
@@ -311,13 +348,8 @@ function computeV5Scores(
     }
   }
 
-  // Step 8 (V5): Categorical boosts WITHOUT centering
-  for (const [qid, answerCode] of answeredPairs) {
-    const rules = config.boosts.get(`${qid}||${answerCode}`) || [];
-    for (const rule of rules) {
-      rawTotal[rule.archetype] += rule.scoreAdd;
-    }
-  }
+  // Step 8 (V5): Categorical boosts WITHOUT centering (multiselect-aware)
+  applyBoostsNonCentered(config, answeredPairs, rawTotal);
 
   // V5: NO archetype bias, NO softmax
 
@@ -552,7 +584,7 @@ export function scoreArchetypes(
     }
   }
 
-  // Step 8: Categorical boosts
+  // Step 8: Categorical boosts (multiselect-aware)
   const answeredPairs: [string, string][] = [];
   for (const [qid, raw] of Object.entries(responsesNorm)) {
     for (const ac of extractAnswerCodes(raw)) {
@@ -561,31 +593,64 @@ export function scoreArchetypes(
   }
 
   if (centerBoosts) {
+    // Group by question for multiselect handling
+    const pairsByQuestion = new Map<string, string[]>();
+    for (const [qid, ac] of answeredPairs) {
+      const arr = pairsByQuestion.get(qid) || [];
+      arr.push(ac);
+      pairsByQuestion.set(qid, arr);
+    }
+
     const nArchetypes = config.archetypes.length || 1;
-    for (const [qid, answerCode] of answeredPairs) {
-      const rules = config.boosts.get(`${qid}||${answerCode}`) || [];
-      if (!rules.length) continue;
+    for (const [qid, answerCodes] of pairsByQuestion) {
+      if (config.multiselectScoringQuestions.has(qid) && answerCodes.length > 1) {
+        // Multiselect MAX with centering: take element-wise MAX across answers, then center
+        const maxBoostPerArchetype: Record<string, number> = {};
+        for (const a of config.archetypes) {
+          maxBoostPerArchetype[a] = centerMissingDefault;
+        }
+        for (const answerCode of answerCodes) {
+          const rules = config.boosts.get(`${qid}||${answerCode}`) || [];
+          const answerBoost: Record<string, number> = {};
+          for (const a of config.archetypes) {
+            answerBoost[a] = centerMissingDefault;
+          }
+          for (const rule of rules) {
+            answerBoost[rule.archetype] = rule.scoreAdd;
+          }
+          for (const a of config.archetypes) {
+            maxBoostPerArchetype[a] = Math.max(maxBoostPerArchetype[a], answerBoost[a]);
+          }
+        }
+        const meanBoost =
+          Object.values(maxBoostPerArchetype).reduce((a, b) => a + b, 0) / nArchetypes;
+        for (const a of config.archetypes) {
+          rawScore[a] += maxBoostPerArchetype[a] - meanBoost;
+        }
+      } else {
+        // Single-select or non-multiselect: existing centering behavior
+        for (const answerCode of answerCodes) {
+          const rules = config.boosts.get(`${qid}||${answerCode}`) || [];
+          if (!rules.length) continue;
 
-      const boostVector: Record<string, number> = {};
-      for (const a of config.archetypes) {
-        boostVector[a] = centerMissingDefault;
-      }
-      for (const rule of rules) {
-        boostVector[rule.archetype] = rule.scoreAdd;
-      }
+          const boostVector: Record<string, number> = {};
+          for (const a of config.archetypes) {
+            boostVector[a] = centerMissingDefault;
+          }
+          for (const rule of rules) {
+            boostVector[rule.archetype] = rule.scoreAdd;
+          }
 
-      const meanBoost = Object.values(boostVector).reduce((a, b) => a + b, 0) / nArchetypes;
-      for (const a of config.archetypes) {
-        rawScore[a] += boostVector[a] - meanBoost;
+          const meanBoost = Object.values(boostVector).reduce((a, b) => a + b, 0) / nArchetypes;
+          for (const a of config.archetypes) {
+            rawScore[a] += boostVector[a] - meanBoost;
+          }
+        }
       }
     }
   } else {
-    for (const [qid, answerCode] of answeredPairs) {
-      const rules = config.boosts.get(`${qid}||${answerCode}`) || [];
-      for (const rule of rules) {
-        rawScore[rule.archetype] += rule.scoreAdd;
-      }
-    }
+    // Non-centered: use the shared multiselect-aware helper
+    applyBoostsNonCentered(config, answeredPairs, rawScore);
   }
 
   // Step 9: Archetype bias

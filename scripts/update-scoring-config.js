@@ -185,6 +185,16 @@ function main() {
       v5UsesBias: toBool(r.v5_uses_bias),
     }));
 
+  // 14. V6 Question Logic
+  const v6QuestionLogicRows = readCsv("v6_question_logic.csv");
+  const multiselectScoringQuestions = v6QuestionLogicRows
+    .filter(
+      (r) =>
+        r.question_id &&
+        (r.v6_categorical_aggregation || "").trim() === "max_selected_answer_boost_per_archetype"
+    )
+    .map((r) => (r.question_id || "").trim());
+
   // ─── Build labelToCodeMap ──────────────────────────────────────────────────────
   // Maps { [questionId]: { [normalizedLabel]: answerCode } }
   // Built from categorical_map, categorical_boost_rules, enum_map
@@ -341,6 +351,10 @@ export interface V5ArchetypeCalibrationDef {
 }
 
 export const v5ArchetypeCalibration: V5ArchetypeCalibrationDef[] = ${JSON.stringify(v5ArchetypeCalibration, null, 2)};
+
+// ─── Multiselect Scoring Questions (${multiselectScoringQuestions.length}) ──────────────────
+// Questions that use per-archetype MAX across selected answer-code boosts (not sum)
+export const multiselectScoringQuestions: string[] = ${JSON.stringify(multiselectScoringQuestions, null, 2)};
 `;
 
   fs.writeFileSync(tsPath, output, "utf-8");
@@ -359,6 +373,9 @@ export const v5ArchetypeCalibration: V5ArchetypeCalibrationDef[] = ${JSON.string
   console.log(`  V5 independent params: ${Object.keys(v5IndependentParams).length}`);
   console.log(`  V5 prototype helpers: ${v5PrototypeHelpers.length}`);
   console.log(`  V5 archetype calibration: ${v5ArchetypeCalibration.length}`);
+  console.log(
+    `  Multiselect scoring questions: ${multiselectScoringQuestions.length} (${multiselectScoringQuestions.join(", ")})`
+  );
 }
 
 main();

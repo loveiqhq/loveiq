@@ -515,9 +515,14 @@ export const surveyQuestions: SurveyQuestion[] = [
     qId: "02004",
     cId: 2,
     chapter: "Spontaneous Desire VS Responsive Desire",
-    question: "In a good scenario, initiation feels best when…",
+    question: "What kind of initiation tends to work best for you?",
     answerType: "single",
-    options: ["I start it", "My partner starts", "Planned window", "Playful either-way"],
+    options: [
+      "I initiate",
+      "My partner initiates",
+      "We make space for it intentionally",
+      "It unfolds naturally and either of us may begin",
+    ],
     required: true,
     guide:
       "Choose the scenario that most often leads to your best sexual experience: relaxed, wanted, open, and connected. This is not about fairness, ideals, or who “should” initiate more. If multiple options fit, pick the one with the highest success rate in helping desire unfold well.",
@@ -529,21 +534,21 @@ export const surveyQuestions: SurveyQuestion[] = [
       "Helps distinguish self-starting, partner-led, mutual, and planned initiation patterns.",
     answerOptionsExplained: [
       {
-        option: "I start it",
+        option: "I initiate",
         explanation: "initiation feels best when desire begins inside you and you open the door",
       },
       {
-        option: "My partner starts",
+        option: "My partner initiates",
         explanation:
           "you often warm up best when someone else initiates and helps activate the moment",
       },
       {
-        option: "Planned window",
+        option: "We make space for it intentionally",
         explanation:
           "initiation works best when intimacy happens in an intentional time container rather than out of nowhere",
       },
       {
-        option: "Playful either-way",
+        option: "It unfolds naturally and either of us may begin",
         explanation: "the best initiation feels mutual, relaxed, light, and not overly structured",
       },
     ],
@@ -553,9 +558,17 @@ export const surveyQuestions: SurveyQuestion[] = [
     qId: "03003",
     cId: 3,
     chapter: "Arousal Styles — Cues, Conditions & Brakes",
-    question: "What kind of erotic environment feels most alive for you?",
-    answerType: "single",
-    options: ["Private", "Adventurous", "Ritualized", "Spontaneous", "Public-risk", "Other"],
+    question: "What kinds of erotic settings or atmosphere feel most alive or activating for you?",
+    answerType: "multiple",
+    options: [
+      "Private and protected",
+      "Novel or adventurous",
+      "Deliberate or ritualized",
+      "Spontaneous or unplanned",
+      "Edge, taboo, or transgression",
+      "Visible or semi-public",
+      "Something else",
+    ],
     required: true,
     guide:
       "Choose the setting that feels most naturally supportive, comfortable, or arousing for you when things are going well. If your preference varies, choose the one that most often helps your body and mind open. This is about your erotic environment, not about what you think is most socially acceptable.",
@@ -567,37 +580,42 @@ export const surveyQuestions: SurveyQuestion[] = [
       "Helps identify whether privacy, ritual, spontaneity, adventure, or edge is part of your arousal style.",
     answerOptionsExplained: [
       {
-        option: "Private",
+        option: "Private and protected",
         explanation:
           "a contained, safe, low-interruption setting helps you relax and turn toward intimacy",
       },
       {
-        option: "Adventurous",
+        option: "Novel or adventurous",
         explanation:
           "different places, exploratory atmospheres, or a sense of discovery add energy for you",
       },
       {
-        option: "Ritualized",
+        option: "Deliberate or ritualized",
         explanation:
           "familiar setup, repeated cues, sequence, or mood help your system settle into arousal",
       },
       {
-        option: "Spontaneous",
+        option: "Spontaneous or unplanned",
         explanation:
           "what feels most alive is something naturally arising in the moment without much setup",
       },
       {
-        option: "Public-risk",
+        option: "Edge, taboo, or transgression",
         explanation:
-          "near-exposure, being almost noticed, or risk-flavored context adds excitement, always within consent and safety",
+          "taboo-flavored or boundary-testing context adds excitement, always within consent and safety",
       },
       {
-        option: "Other",
+        option: "Visible or semi-public",
+        explanation:
+          "near-exposure, being almost noticed, or risk-of-being-seen context adds excitement",
+      },
+      {
+        option: "Something else",
         explanation:
           "your strongest preferred setting is more specific or does not fit these categories well",
       },
     ],
-    formatGuidance: "Select one option.",
+    formatGuidance: "Select all that apply.",
   },
   {
     qId: "03004",
@@ -725,12 +743,14 @@ export const surveyQuestions: SurveyQuestion[] = [
     qId: "03006",
     cId: 3,
     chapter: "Arousal Styles — Cues, Conditions & Brakes",
-    question: 'Which "learning mode" best fits you?',
+    question:
+      "When it comes to figuring out what works for you sexually, which approach fits you best?",
     answerType: "single",
     options: [
-      "Clear guidance & feedback",
-      "Trying things out & learning by doing",
-      "Going with intuition & what feels natural",
+      "Structure and feedback",
+      "Curiosity and experimentation",
+      "Natural flow and spontaneity",
+      "I prefer not to make it a deliberate process",
     ],
     required: true,
     guide:
@@ -743,19 +763,24 @@ export const surveyQuestions: SurveyQuestion[] = [
       "Helps distinguish guided, analytical, and intuitive approaches to sexual growth and exploration.",
     answerOptionsExplained: [
       {
-        option: "Clear guidance & feedback",
+        option: "Structure and feedback",
         explanation:
           "you learn best with structure, examples, language, and feedback that help you know what to try or refine",
       },
       {
-        option: "Trying things out & learning by doing",
+        option: "Curiosity and experimentation",
         explanation:
           "experimentation helps you most; you prefer discovering through real experience, iteration, and noticing what actually works",
       },
       {
-        option: "Going with intuition & what feels natural",
+        option: "Natural flow and spontaneity",
         explanation:
           "you learn best when sexuality feels organic, embodied, and relational rather than heavily analyzed or turned into a project",
+      },
+      {
+        option: "I prefer not to make it a deliberate process",
+        explanation:
+          "you prefer not to turn sexuality into a project; it should happen naturally without deliberate effort",
       },
     ],
     formatGuidance: "Select one option.",
@@ -1285,35 +1310,30 @@ export const surveyQuestions: SurveyQuestion[] = [
     qId: "08004",
     cId: 8,
     chapter: "Attachment Style & Emotional Safety",
-    question: "Regarding interdependence in relationships, I tend to...",
-    answerType: "single",
-    options: ["Crave closeness", "Keep distance", "Balance both"],
+    question:
+      "In relationships, I usually want more closeness and togetherness than space and independence.",
+    answerType: "scale",
+    options: [],
     required: true,
     guide:
-      "Interdependence means being close while still remaining your own person. Answer from your deeper relational tendency, not from what you think a healthy relationship should look like. If you move between closeness and distance, choose the side that tends to dominate under real emotional conditions.",
+      "Answer from your deeper relational tendency, not from what you think a healthy relationship should look like. If you move between closeness and distance, choose the side that tends to dominate under real emotional conditions.",
     supportAndGuidance:
-      "Interdependence means being close while still remaining your own person. Answer from your deeper relational tendency, not from what you think a healthy relationship should look like. If you move between closeness and distance, choose the side that tends to dominate under real emotional conditions.",
+      "Answer from your deeper relational tendency, not from what you think a healthy relationship should look like. If you move between closeness and distance, choose the side that tends to dominate under real emotional conditions.",
+    scaleLabels: { low: "Strongly disagree", high: "Strongly agree" },
     comment:
-      "Places you on a closeness-versus-distance pattern that shapes intimacy recommendations.",
+      "Places you on a closeness-versus-independence dimension that shapes intimacy recommendations.",
     howAnswerIsUsed:
-      "Places you on a closeness-versus-distance pattern that shapes intimacy recommendations.",
-    answerOptionsExplained: [
-      {
-        option: "Crave closeness",
-        explanation:
-          "you usually want more togetherness, reassurance, contact, or emotional merging",
-      },
-      {
-        option: "Keep distance",
-        explanation: "you tend to protect your space, autonomy, or emotional breathing room",
-      },
-      {
-        option: "Balance both",
-        explanation:
-          "both closeness and independence matter, and neither strongly dominates your relational style most of the time",
-      },
-    ],
-    formatGuidance: "Select one option.",
+      "Places you on a closeness-versus-independence dimension that shapes intimacy recommendations.",
+    hoverStates: {
+      1: "Strongly disagree",
+      2: "Disagree",
+      3: "Slightly disagree",
+      4: "Neutral",
+      5: "Slightly agree",
+      6: "Agree",
+      7: "Strongly agree",
+    },
+    formatGuidance: "Rate on a scale of 1 (Strongly disagree) to 7 (Strongly agree).",
   },
   {
     qId: "08005",
@@ -1572,14 +1592,15 @@ export const surveyQuestions: SurveyQuestion[] = [
     qId: "10002",
     cId: 10,
     chapter: "Communication Style",
-    question: "During intimacy, how do you prefer to communicate your needs and desires?",
-    answerType: "single",
+    question: "During intimacy, how do you most naturally communicate what you want?",
+    answerType: "multiple",
     options: [
-      "Mostly silent / nonverbal",
-      "Through touch & body movement",
-      "Short, direct phrases (e.g. “slower”, “like that”)",
-      "Continuous verbal feedback",
-      "Emotional check-ins & reassurance",
+      "Touch and body cues",
+      "Brief direct words",
+      "Ongoing verbal feedback",
+      "Emotional check-ins",
+      "Mostly nonverbal cues",
+      "I communicate very little",
     ],
     required: true,
     guide:
@@ -1592,32 +1613,37 @@ export const surveyQuestions: SurveyQuestion[] = [
       "This tells us whether your communication style is more quiet, embodied, concise, expressive, or emotionally transparent.",
     answerOptionsExplained: [
       {
-        option: "Mostly silent / nonverbal",
-        explanation:
-          "you communicate mainly through sounds, pauses, facial expression, presence, and subtle cues rather than many words",
-      },
-      {
-        option: "Through touch & body movement",
+        option: "Touch and body cues",
         explanation:
           "your body language, repositioning, guiding touch, and physical response do most of the communicating",
       },
       {
-        option: 'Short, direct phrases (e.g. "slower", "like that")',
+        option: "Brief direct words",
         explanation:
           "you prefer simple, clear prompts that guide the moment without overtalking it",
       },
       {
-        option: "Continuous verbal feedback",
+        option: "Ongoing verbal feedback",
         explanation:
           "frequent spoken communication feels natural, grounding, or helpful during intimacy",
       },
       {
-        option: "Emotional check-ins & reassurance",
+        option: "Emotional check-ins",
         explanation:
           "emotional clarity, reassurance, and checking how both people feel matter most to you during sex",
       },
+      {
+        option: "Mostly nonverbal cues",
+        explanation:
+          "you communicate mainly through sounds, pauses, facial expression, presence, and subtle cues rather than many words",
+      },
+      {
+        option: "I communicate very little",
+        explanation:
+          "you tend to stay quiet during intimacy and let the experience unfold without much communication",
+      },
     ],
-    formatGuidance: "Select one option.",
+    formatGuidance: "Select all that apply.",
   },
   {
     qId: "10003",
@@ -1930,46 +1956,30 @@ export const surveyQuestions: SurveyQuestion[] = [
     qId: "11003",
     cId: 11,
     chapter: "Partner-Related Needs",
-    question: "In sex I most naturally…",
-    answerType: "single",
-    options: [
-      "Primarily focused on my partner",
-      "A balance of giving and receiving",
-      "Primarily focused on my own experience",
-      "It changes depending on mood or partner",
-    ],
+    question:
+      "In sex, my attention naturally goes more toward my partner\u2019s experience than toward my own.",
+    answerType: "scale",
+    options: [],
     required: true,
     guide:
-      "Answer from what feels most natural in real intimate situations, not from what sounds generous, fair, or desirable. This question is about your default relational orientation in sex: whether you tend to focus more on giving, balancing, receiving, or shifting depending on context. If you vary a lot, choose the option that best reflects your most common pattern.",
+      "Answer from what feels most natural in real intimate situations, not from what sounds generous, fair, or desirable. This is about whether your attention tends to focus more on your partner’s experience or your own.",
     supportAndGuidance:
-      "Answer from what feels most natural in real intimate situations, not from what sounds generous, fair, or desirable. This question is about your default relational orientation in sex: whether you tend to focus more on giving, balancing, receiving, or shifting depending on context. If you vary a lot, choose the option that best reflects your most common pattern.",
+      "Answer from what feels most natural in real intimate situations, not from what sounds generous, fair, or desirable. This is about whether your attention tends to focus more on your partner’s experience or your own.",
+    scaleLabels: { low: "Strongly disagree", high: "Strongly agree" },
     comment:
-      "This helps us distinguish giving-focused, balanced, and receiving-or-guided dynamics in the way you naturally relate during sex.",
+      "This helps us understand whether your attention during sex tends toward your partner’s experience or your own.",
     howAnswerIsUsed:
-      "This helps us distinguish giving-focused, balanced, and receiving-or-guided dynamics in the way you naturally relate during sex.",
-    answerOptionsExplained: [
-      {
-        option: "Primarily focused on my partner",
-        explanation:
-          "your attention naturally goes first toward reading, pleasing, supporting, or prioritizing the other person’s experience",
-      },
-      {
-        option: "A balance of giving and receiving",
-        explanation:
-          "you feel best when attention, pleasure, and responsiveness move both ways in a fairly mutual rhythm",
-      },
-      {
-        option: "Primarily focused on my own experience",
-        explanation:
-          "your attention naturally goes first toward your own sensation, arousal, expression, or what feels most alive for you in the moment",
-      },
-      {
-        option: "It changes depending on mood or partner",
-        explanation:
-          "your erotic orientation shifts meaningfully depending on context, partner, power dynamic, or emotional state",
-      },
-    ],
-    formatGuidance: "Select one option.",
+      "This helps us understand whether your attention during sex tends toward your partner’s experience or your own.",
+    hoverStates: {
+      1: "Strongly disagree",
+      2: "Disagree",
+      3: "Slightly disagree",
+      4: "Neutral",
+      5: "Slightly agree",
+      6: "Agree",
+      7: "Strongly agree",
+    },
+    formatGuidance: "Rate on a scale of 1 (Strongly disagree) to 7 (Strongly agree).",
   },
   {
     qId: "11004",
@@ -2041,19 +2051,19 @@ export const surveyQuestions: SurveyQuestion[] = [
     cId: 14,
     chapter: "Identity & Conditioning",
     question: "What most reliably motivates you to want sex?",
-    answerType: "single",
+    answerType: "multiple",
     options: [
-      "Bonding / intimacy",
-      "Pleasure / play",
-      "Novelty / exploration",
-      "Intensity / edge",
-      "Validation / being desired",
-      "Power",
-      "Meaning / spiritual union",
-      "Comfort / routine closeness",
-      "Service",
-      "Healing / soothing",
-      "Escape / switching off",
+      "Bonding and closeness",
+      "Pleasure and play",
+      "Novelty and discovery",
+      "Intensity and edge",
+      "Feeling desired",
+      "Power and polarity",
+      "Meaning and devotion",
+      "Comfort and familiarity",
+      "Giving and service",
+      "Healing and soothing",
+      "Escape and relief",
     ],
     required: true,
     guide:
@@ -2066,54 +2076,54 @@ export const surveyQuestions: SurveyQuestion[] = [
       "This is one of the most important direct questions in the survey because it tells us what actually pulls desire online for you: bonding, play, novelty, power, meaning, repair, comfort, intensity, escape, or service.",
     answerOptionsExplained: [
       {
-        option: "Bonding / intimacy",
+        option: "Bonding and closeness",
         explanation:
           "closeness, affection, and emotional connection are the strongest pull toward sex",
       },
       {
-        option: "Pleasure / play",
+        option: "Pleasure and play",
         explanation: "fun, enjoyment, sensation, and lightness motivate you most",
       },
       {
-        option: "Novelty / exploration",
+        option: "Novelty and discovery",
         explanation: "desire rises through discovery, experimentation, and variety",
       },
       {
-        option: "Intensity / edge",
+        option: "Intensity and edge",
         explanation: "risk, adrenaline, taboo flavor, or stronger charge add core erotic energy",
       },
       {
-        option: "Validation / being desired",
+        option: "Feeling desired",
         explanation: "feeling wanted, chosen, admired, or longed for is a major driver",
       },
       {
-        option: "Power",
+        option: "Power and polarity",
         explanation:
           "polarity, control, surrender, or directional energy are central to your turn-on",
       },
       {
-        option: "Meaning / spiritual union",
+        option: "Meaning and devotion",
         explanation: "sex feels most compelling when it carries depth, devotion, or transcendence",
       },
       {
-        option: "Comfort / routine closeness",
+        option: "Comfort and familiarity",
         explanation: "familiarity, ease, and steady connection are most motivating",
       },
       {
-        option: "Service",
+        option: "Giving and service",
         explanation:
           "giving pleasure or being deeply attentive to a partner is itself highly rewarding",
       },
       {
-        option: "Healing / soothing",
+        option: "Healing and soothing",
         explanation: "sex helps regulate, reconnect, restore, or soften emotional strain",
       },
       {
-        option: "Escape / switching off",
+        option: "Escape and relief",
         explanation: "sex functions partly as relief from stress, numbness, or overthinking",
       },
     ],
-    formatGuidance: "Select one option.",
+    formatGuidance: "Select all that apply.",
   },
   {
     qId: "14021",

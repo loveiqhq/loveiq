@@ -79,6 +79,7 @@ export interface ScoringConfig {
   // V5 additions
   archetypeIds: Record<string, number>; // archetype name → numeric ID
   v5Helpers: Map<string, V5PrototypeHelper>; // "archetype||dimId" → helper
+  multiselectScoringQuestions: Set<string>; // QIDs using per-archetype MAX aggregation
   v5Enabled: boolean;
   v5SpacingGapMin: number;
   v5SpacingGapMax: number;

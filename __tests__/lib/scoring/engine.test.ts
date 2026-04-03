@@ -251,6 +251,7 @@ describe("scoreArchetypes with minimal config", () => {
       labelToCode: {},
       archetypeIds: { TypeA: 1, TypeB: 2 },
       v5Helpers: new Map(),
+      multiselectScoringQuestions: new Set<string>(),
       v5Enabled: false,
       v5SpacingGapMin: 3.0,
       v5SpacingGapMax: 4.0,
@@ -266,5 +267,89 @@ describe("scoreArchetypes with minimal config", () => {
     expect(result.rawScore.TypeB).toBeCloseTo(0.0, 6);
     expect(result.primaryArchetype).toBe("TypeA");
     expect(result.percent.TypeA).toBeGreaterThan(result.percent.TypeB);
+  });
+});
+
+// ─── Multiselect MAX boost aggregation ──────────────────────────────────────
+
+describe("multiselect MAX boost aggregation", () => {
+  function buildMultiselectConfig(): ScoringConfig {
+    return {
+      modelParams: {
+        softmax_temperature: "1.0",
+        softmax_floor: "0",
+        archetype_bias_enabled: "FALSE",
+        categorical_boost_centering_enabled: "FALSE",
+        weight_modifiers_enabled: "FALSE",
+      },
+      archetypes: ["TypeA", "TypeB"],
+      dimensions: {
+        DIM_X: { id: "DIM_X", qid: "q_dim", transform: "scale_1_7_to_0_1", weight: 1.0 },
+      },
+      overlays: {},
+      prototypes: new Map([
+        ["TypeA||DIM_X", 0.5],
+        ["TypeB||DIM_X", 0.5],
+      ]),
+      bias: { TypeA: 0, TypeB: 0 },
+      boosts: new Map([
+        [
+          "q_multi||code_a",
+          [
+            { archetype: "TypeA", scoreAdd: 0.5 },
+            { archetype: "TypeB", scoreAdd: 0.3 },
+          ],
+        ],
+        [
+          "q_multi||code_b",
+          [
+            { archetype: "TypeA", scoreAdd: 0.8 },
+            { archetype: "TypeB", scoreAdd: 0.1 },
+          ],
+        ],
+      ]),
+      gates: [],
+      scalarMap: new Map(),
+      enumMap: new Map(),
+      weightModifiers: [],
+      knownQids: new Set(["q_dim", "q_multi"]),
+      labelToCode: {},
+      archetypeIds: { TypeA: 1, TypeB: 2 },
+      v5Helpers: new Map(),
+      multiselectScoringQuestions: new Set(["q_multi"]),
+      v5Enabled: false,
+      v5SpacingGapMin: 3.0,
+      v5SpacingGapMax: 4.0,
+      v5RoundDigits: 1,
+    };
+  }
+
+  it("takes MAX boost per archetype for multiselect questions, not sum", () => {
+    const cfg = buildMultiselectConfig();
+    // Two answers selected for multiselect question
+    const result = scoreArchetypes(cfg, { q_multi: ["code_a", "code_b"] });
+    // TypeA should get MAX(0.5, 0.8) = 0.8, not 0.5+0.8 = 1.3
+    // Base similarity is the same for both types (prototype=0.5, answer defaults to 0.5)
+    const baseSim = 1.0; // w * (1 - |0.5 - 0.5|) = 1.0
+    expect(result.rawScore.TypeA).toBeCloseTo(baseSim + 0.8, 6);
+    expect(result.rawScore.TypeB).toBeCloseTo(baseSim + 0.3, 6);
+  });
+
+  it("single answer in multiselect question behaves like single-select", () => {
+    const cfg = buildMultiselectConfig();
+    const multiResult = scoreArchetypes(cfg, { q_multi: ["code_a"] });
+    const singleResult = scoreArchetypes(cfg, { q_multi: "code_a" });
+    expect(multiResult.rawScore.TypeA).toBeCloseTo(singleResult.rawScore.TypeA, 6);
+    expect(multiResult.rawScore.TypeB).toBeCloseTo(singleResult.rawScore.TypeB, 6);
+  });
+
+  it("non-multiselect question sums boosts even with arrays", () => {
+    const cfg = buildMultiselectConfig();
+    // Remove q_multi from multiselect set
+    cfg.multiselectScoringQuestions = new Set();
+    const result = scoreArchetypes(cfg, { q_multi: ["code_a", "code_b"] });
+    // Should SUM: TypeA = baseSim + 0.5 + 0.8 = 2.3
+    const baseSim = 1.0;
+    expect(result.rawScore.TypeA).toBeCloseTo(baseSim + 0.5 + 0.8, 6);
   });
 });
