@@ -42,7 +42,8 @@ const ScaleQuestion: FC<ScaleQuestionProps> = ({ question, value, onChange }) =>
   );
 
   const activeValue = value ?? hoveredValue;
-  const selectedExplanation = activeValue ? getValueExplanation(activeValue, question) : null;
+  const displayValue = value;
+  const selectedExplanation = displayValue ? getValueExplanation(displayValue, question) : null;
 
   // Subtitle from formatGuidance or construct from scale labels
   const subtitle =
@@ -167,14 +168,10 @@ const ScaleQuestion: FC<ScaleQuestionProps> = ({ question, value, onChange }) =>
         </div>
 
         {/* Selected label + explanation (below scale) */}
-        {(value !== null || hoveredValue !== null) && (
+        {displayValue !== null && (
           <div className="flex flex-col items-center gap-1 pt-2">
-            <span
-              className={`font-sans text-[18px] font-medium sm:text-[20px] ${
-                value !== null ? "text-white/70" : "text-white/40"
-              }`}
-            >
-              {getValueLabel(activeValue!, question)}
+            <span className="font-sans text-[18px] font-medium text-white/70 sm:text-[20px]">
+              {getValueLabel(displayValue, question)}
             </span>
             {selectedExplanation && (
               <p className="text-center font-sans text-[14px] leading-relaxed text-white/50 sm:text-[15px]">
