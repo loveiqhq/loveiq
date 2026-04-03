@@ -35,16 +35,8 @@ interface SurveyEngineProps {
 }
 
 const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
-  const {
-    answers,
-    currentIndex,
-    startedAt,
-    progress,
-    setAnswer,
-    getAnswer,
-    setCurrentIndex,
-    clearState,
-  } = useSurveyState();
+  const { answers, currentIndex, startedAt, progress, setAnswer, getAnswer, setCurrentIndex } =
+    useSurveyState();
   const { submit: submitSurvey, status: submitStatus } = useSubmitSurvey();
   const utmTracker = useUtmCapture();
   const { savePartial } = usePartialSave(answers, currentIndex, startedAt, utmTracker);
@@ -58,9 +50,6 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
   const touchStartY = useRef<number | null>(null);
   const autoAdvanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Cache name/email before clearing state so completion screens can still display them
-  const [completedName, setCompletedName] = useState("");
-  const [completedEmail, setCompletedEmail] = useState("");
   const hasCleared = useRef(false);
 
   // Post-survey completion phase management
@@ -77,20 +66,24 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
     }
   }, []);
 
-  // Clear persisted answers after successful submission so future visits start fresh.
-  // Cache name/email first since completion screens still display them.
-  // setState in this effect is intentional — we must snapshot name/email before clearState
-  // wipes the answers, same pattern as SurveyPage's loadInitialStep hydration.
-  /* eslint-disable react-hooks/set-state-in-effect */
+  // Clear persisted storage after successful submission so future visits start fresh.
+  // Only clear localStorage/sessionStorage — NOT in-memory state, because the
+  // completion screens still need currentIndex >= totalQuestions and answers for name/email.
   useEffect(() => {
     if (submitStatus === "success" && !hasCleared.current) {
       hasCleared.current = true;
-      setCompletedName((answers["00001"] as string) || "");
-      setCompletedEmail((answers["00000"] as string) || "");
-      clearState();
+      try {
+        localStorage.removeItem("loveiq-survey-answers");
+        localStorage.removeItem("loveiq-survey-index");
+        localStorage.removeItem("loveiq-survey-utm");
+        localStorage.removeItem("loveiq-utm");
+        sessionStorage.removeItem("loveiq-survey-step");
+        sessionStorage.removeItem("loveiq-survey-session");
+      } catch {
+        /* storage unavailable */
+      }
     }
-  }, [submitStatus, answers, clearState]);
-  /* eslint-enable react-hooks/set-state-in-effect */
+  }, [submitStatus]);
 
   // Current answer — discard stale data whose type doesn't match the question
   const rawAnswer = question ? getAnswer(question.qId) : null;
@@ -301,8 +294,8 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
     if (completionPhase === "ready") {
       return (
         <ReportReady
-          name={completedName || (answers["00001"] as string) || ""}
-          email={completedEmail || (answers["00000"] as string) || ""}
+          name={(answers["00001"] as string) || ""}
+          email={(answers["00000"] as string) || ""}
           onContinue={() => setCompletionPhase("wizard")}
         />
       );
