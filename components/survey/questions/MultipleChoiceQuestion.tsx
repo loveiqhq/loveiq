@@ -3,6 +3,7 @@
 import type { FC } from "react";
 import type { SurveyQuestion } from "@/data/survey-data";
 import ChoiceCard from "./ChoiceCard";
+import { getOptionExplanation } from "./getOptionExplanation";
 
 interface MultipleChoiceQuestionProps {
   question: SurveyQuestion;
@@ -54,6 +55,7 @@ const MultipleChoiceQuestion: FC<MultipleChoiceQuestionProps> = ({
           <ChoiceCard
             key={option}
             label={option}
+            description={getOptionExplanation(question, option)}
             selected={selected.includes(option)}
             onClick={() => toggle(option)}
             multi

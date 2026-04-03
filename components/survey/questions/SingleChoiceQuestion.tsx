@@ -3,6 +3,7 @@
 import type { FC } from "react";
 import type { SurveyQuestion } from "@/data/survey-data";
 import ChoiceCard from "./ChoiceCard";
+import { getOptionExplanation } from "./getOptionExplanation";
 
 interface SingleChoiceQuestionProps {
   question: SurveyQuestion;
@@ -38,6 +39,7 @@ const SingleChoiceQuestion: FC<SingleChoiceQuestionProps> = ({
           <ChoiceCard
             key={option}
             label={option}
+            description={value === option ? getOptionExplanation(question, option) : undefined}
             selected={value === option}
             onClick={() => onChange(option)}
           />

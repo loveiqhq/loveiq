@@ -4,14 +4,22 @@ import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, afterEach } from "vitest";
 
 vi.mock("@/components/survey/questions/ChoiceCard", () => ({
-  default: (props: { label: string; selected: boolean; onClick: () => void }) => (
+  default: (props: {
+    label: string;
+    description?: string;
+    selected: boolean;
+    onClick: () => void;
+  }) => (
     <button
       data-testid={`choice-${props.label}`}
       onClick={props.onClick}
       aria-checked={props.selected}
       role="radio"
     >
-      {props.label}
+      <span>{props.label}</span>
+      {props.description && (
+        <span data-testid={`description-${props.label}`}>{props.description}</span>
+      )}
     </button>
   ),
 }));
@@ -26,6 +34,10 @@ const question = {
   question: "Pick one",
   answerType: "single",
   options: ["Option A", "Option B", "Other"],
+  answerOptionsExplained: [
+    { option: "Option A", explanation: "Explanation for A" },
+    { option: "Option B", explanation: "Explanation for B" },
+  ],
   chapter: "ch1",
   required: true,
 } as unknown as SurveyQuestion;
@@ -41,6 +53,23 @@ describe("SingleChoiceQuestion", () => {
   it("renders question text", () => {
     render(<SingleChoiceQuestion question={question} value={null} onChange={vi.fn()} />);
     expect(screen.getByText("Pick one")).toBeInTheDocument();
+  });
+
+  it("does not render option descriptions before a selection is made", () => {
+    render(<SingleChoiceQuestion question={question} value={null} onChange={vi.fn()} />);
+    expect(screen.queryByTestId("description-Option A")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("description-Option B")).not.toBeInTheDocument();
+  });
+
+  it("renders a description only for the selected option", () => {
+    render(<SingleChoiceQuestion question={question} value="Option A" onChange={vi.fn()} />);
+    expect(screen.getByTestId("description-Option A")).toHaveTextContent("Explanation for A");
+    expect(screen.queryByTestId("description-Option B")).not.toBeInTheDocument();
+  });
+
+  it("does not render description UI for options without explanations", () => {
+    render(<SingleChoiceQuestion question={question} value="Other" onChange={vi.fn()} />);
+    expect(screen.queryByTestId("description-Other")).not.toBeInTheDocument();
   });
 
   it("clicking option calls onChange", async () => {

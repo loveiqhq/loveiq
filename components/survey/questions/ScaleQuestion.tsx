@@ -158,11 +158,11 @@ const ScaleQuestion: FC<ScaleQuestionProps> = ({ question, value, onChange }) =>
         </div>
 
         {/* Scale labels */}
-        <div className="flex justify-between px-1">
-          <span className="max-w-[120px] font-sans text-[11px] font-medium uppercase tracking-wider text-white/35 sm:text-[12px]">
+        <div className="flex justify-between gap-4 px-1">
+          <span className="max-w-[150px] font-sans text-[15px] font-bold leading-[20px] capitalize text-white sm:max-w-[180px] sm:text-[16px] sm:leading-[21.138px]">
             {question.scaleLabels?.low || "Strongly Disagree"}
           </span>
-          <span className="max-w-[120px] text-right font-sans text-[11px] font-medium uppercase tracking-wider text-white/35 sm:text-[12px]">
+          <span className="max-w-[150px] text-right font-sans text-[15px] font-bold leading-[20px] capitalize text-[#FFE390] sm:max-w-[180px] sm:text-[16px] sm:leading-[21.138px]">
             {question.scaleLabels?.high || "Strongly Agree"}
           </span>
         </div>
