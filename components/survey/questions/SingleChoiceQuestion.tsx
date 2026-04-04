@@ -55,7 +55,7 @@ const SingleChoiceQuestion: FC<SingleChoiceQuestionProps> = ({
           value={otherText ?? ""}
           onChange={(e) => onOtherTextChange?.(e.target.value)}
           placeholder="Please specify…"
-          className="w-full border-b-2 border-[rgba(254,104,57,0.2)] bg-transparent pb-3 pt-2 font-sans text-[18px] text-white placeholder:text-white/30 focus:border-[rgba(254,104,57,0.4)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(254,104,57,0.2)]"
+          className="w-full border-b-2 border-[rgba(254,104,57,0.2)] bg-transparent pb-3 pt-2 font-sans text-[18px] text-white placeholder:text-white/30 focus:border-[rgba(254,104,57,0.4)] focus:outline-none"
           autoFocus
         />
       )}
