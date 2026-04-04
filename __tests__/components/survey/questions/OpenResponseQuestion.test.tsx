@@ -26,7 +26,7 @@ describe("OpenResponseQuestion", () => {
 
   it("renders text input with placeholder", () => {
     render(<OpenResponseQuestion question={baseQuestion} value={null} onChange={vi.fn()} />);
-    expect(screen.getByPlaceholderText("Type your answer...")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Type your answer…")).toBeInTheDocument();
   });
 
   it("uses custom placeholder when provided", () => {
@@ -40,14 +40,14 @@ describe("OpenResponseQuestion", () => {
     const onChange = vi.fn();
     render(<OpenResponseQuestion question={baseQuestion} value="" onChange={onChange} />);
 
-    await user.type(screen.getByPlaceholderText("Type your answer..."), "a");
+    await user.type(screen.getByPlaceholderText("Type your answer…"), "a");
     expect(onChange).toHaveBeenCalledWith("a");
   });
 
   it("renders email input when inputType is email", () => {
     const q = { ...baseQuestion, inputType: "email" } as SurveyQuestion;
     render(<OpenResponseQuestion question={q} value={null} onChange={vi.fn()} />);
-    const input = screen.getByPlaceholderText("Type your answer...");
+    const input = screen.getByPlaceholderText("Type your answer…");
     expect(input).toHaveAttribute("type", "email");
     expect(input).toHaveAttribute("autocomplete", "email");
   });

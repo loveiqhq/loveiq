@@ -117,6 +117,13 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(currentAnswer);
   }, [question, currentAnswer]);
 
+  const isSelectionCountValid = useMemo(() => {
+    if (question?.answerType !== "multiple") return true;
+    if (!Array.isArray(currentAnswer)) return true;
+    if (typeof question.maxSelections !== "number") return true;
+    return currentAnswer.length <= question.maxSelections;
+  }, [question, currentAnswer]);
+
   const [attemptedNext, setAttemptedNext] = useState(false);
 
   const { trackNavigation } = useSurveyTracking(currentIndex, hasAnswer, question);
@@ -142,7 +149,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
   );
 
   const goNext = useCallback(() => {
-    if (!isEmailValid) {
+    if (!isEmailValid || !isSelectionCountValid) {
       setAttemptedNext(true);
       return;
     }
@@ -172,6 +179,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
     answers,
     trackNavigation,
     isEmailValid,
+    isSelectionCountValid,
     utmTracker,
     savePartial,
   ]);
@@ -322,7 +330,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
   // Status text for nav
   const statusText = `Question ${currentIndex + 1} of ${totalQuestions}`;
 
-  const canGoNext = (hasAnswer && isEmailValid) || !question.required;
+  const canGoNext = (hasAnswer && isEmailValid && isSelectionCountValid) || !question.required;
 
   return (
     <main
@@ -386,6 +394,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
                 onChange={handleChange}
                 otherText={otherText}
                 onOtherTextChange={handleOtherTextChange}
+                forceValidation={attemptedNext}
               />
             )}
             {question.answerType === "country" && (

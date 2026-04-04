@@ -136,7 +136,7 @@ const GuidancePanel: FC<GuidancePanelProps> = ({ question }) => {
 
           {/* Helper text below button */}
           {!insightOpen && (
-            <p className="font-sans text-[10px] tracking-[0.25px] text-white/25">
+            <p className="font-sans text-[10px] tracking-[0.25px] text-white/55">
               Tap to explore context, tips &amp; reassurance
             </p>
           )}

@@ -26,6 +26,7 @@ export interface SurveyQuestion {
   answerOptionsExplained?: AnswerOptionExplained[];
   hoverStates?: Record<number, string>;
   formatGuidance?: string;
+  maxSelections?: number;
 }
 
 export interface ChapterIntro {
@@ -586,6 +587,7 @@ export const surveyQuestions: SurveyQuestion[] = [
       { option: "Something else", explanation: "My strongest cue is different" },
     ],
     formatGuidance: "Select up to 3 options.",
+    maxSelections: 3,
   },
   {
     qId: "03004",
@@ -1639,6 +1641,7 @@ export const surveyQuestions: SurveyQuestion[] = [
       },
     ],
     formatGuidance: "Select up to 3 options.",
+    maxSelections: 3,
   },
   {
     qId: "10003",
@@ -2147,6 +2150,7 @@ export const surveyQuestions: SurveyQuestion[] = [
       },
     ],
     formatGuidance: "Select up to 3 options.",
+    maxSelections: 3,
   },
   {
     qId: "14021",

@@ -1,4 +1,4 @@
-Q_ID,C_ID,Category & chapter,Question ,Answer format,Answer format guidance,Default input / placeholder,Support and guidance,Answer options,Answer option(s) explained,Hover states,How this answer will be used,Background info
+Q_ID,C_ID,Category & chapter,Question ,Answer format,Answer format guidance,Default input / placeholder,Support and guidance,Answer options,Answer option(s) explained,Hover states,How this answer will be used,Background info,Max selections
 00000,15,Background & Lifestyle,What is your email?,Open response,Enter a valid email address.,nickname@example.com,"Use an email you can access easily. We’ll send your report here, so a private address may feel best if you want to keep this separate from work or shared accounts.",Email address,,,Used to deliver your report and any relevant LoveIQ communication.,N/A
 00001,15,Background & Lifestyle,What is your name?,Open response,Enter a name or nickname.,Banana Bandit,"Enter the name you’d like us to use in your report. It can be your first name, initials, a nickname, or anything that feels comfortable and personal.",Free text,,,Used to personalize your report and communication.,N/A
 01002,1,Current Sexual Wellbeing & Pain Points,"Right now, I feel satisfied with my sex life.",1-7 scale,Select how true this statement is for you.,N/A,"Think about the past 4–8 weeks, not one unusually good or hard moment. If you’re not sexually active right now, answer based on how satisfied you feel with that reality overall.",1→7,"1 = Not at all true: your current sexual life feels clearly unfulfilling, frustrating, painful, absent, or far from what you want.
@@ -154,7 +154,7 @@ Deliberate or ritualized = Preparation and intention matter.
 Spontaneous or unplanned = Unplanned moments feel hottest.
 Edge, taboo, or transgression = Rule-bending or edge adds charge.
 Visible or semi-public = Being seen, or almost seen, adds charge.
-Something else = My strongest cue is different.",,"Helps identify whether privacy, ritual, spontaneity, adventure, or edge is part of your arousal style.",N/A
+Something else = My strongest cue is different.",,"Helps identify whether privacy, ritual, spontaneity, adventure, or edge is part of your arousal style.",N/A,3
 03004,3,"Arousal Styles — Cues, Conditions & Brakes",Emotional connection is important for me to feel sexual desire.,1-7 scale,Select how true this statement is for you.,N/A,"Answer from your real pattern. This is about whether emotional connection helps your desire open, not whether you value connection in general.",1→7,"1 = Not at all true: emotional closeness is not a major requirement for desire to show up for you.
 
 2 = Mostly not true: connection can help a little, but desire usually does not depend much on emotional closeness.
@@ -432,7 +432,7 @@ Brief direct words = I use short, clear verbal cues.
 Ongoing verbal feedback = I keep communicating throughout the experience.
 Emotional check-ins = I check connection, safety, or reassurance.
 Mostly nonverbal cues = I communicate mainly through touch, movement, tone, or response rather than words.
-I communicate very little = I say or signal very little in real time.",,"This tells us whether your communication style is more quiet, embodied, concise, expressive, or emotionally transparent.",N/A
+I communicate very little = I say or signal very little in real time.",,"This tells us whether your communication style is more quiet, embodied, concise, expressive, or emotionally transparent.",N/A,3
 10003,10,Communication Style,I’m comfortable expressing what turns me on.,1-7 scale,Select how true this statement is for you.,N/A,"Think about real situations, not just private thoughts. This is about whether you can share what turns you on without strong shame, fear, or inhibition.",1→7,"1 = Not true at all: expressing what turns you on feels difficult, vulnerable, or highly inhibited.
 
 2 = Mostly not true: you can sometimes sense what you want, but saying it out loud often feels awkward, exposed, or hard.
@@ -593,7 +593,7 @@ Healing and soothing
 = It feels valuable when it comforts, regulates, or restores.
 
 Escape and relief
-= It offers a break from pressure, stress, or mental overload.",,"This is one of the most important direct questions in the survey because it tells us what actually pulls desire online for you: bonding, play, novelty, power, meaning, repair, comfort, intensity, escape, or service.",N/A
+= It offers a break from pressure, stress, or mental overload.",,"This is one of the most important direct questions in the survey because it tells us what actually pulls desire online for you: bonding, play, novelty, power, meaning, repair, comfort, intensity, escape, or service.",N/A,3
 14021,14,Identity & Conditioning,"I seek intense sex to escape numbness, stress or to feel something.",1-7 scale,Select how true this statement is for you.,N/A,"Answer from your current sexual baseline. If intensity has become a stable way you move through stress, numbness, or disconnection in recent years, let that count. If it is specific to this dynamic, lean toward your broader pattern.",1→7,"1 = Not true at all: intense sex is not usually something you seek to regulate stress, numbness, or disconnection.
 
 2 = Mostly not true: intensity may appeal for other reasons sometimes, but it is usually not about escaping numbness or stress.

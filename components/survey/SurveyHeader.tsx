@@ -87,7 +87,7 @@ const SurveyHeader: FC<SurveyHeaderProps> = ({
       {/* Progress row + bar */}
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between">
-          <span className="font-sans text-[13px] font-semibold uppercase tracking-[0.1em] text-white/40">
+          <span className="font-sans text-[13px] font-semibold uppercase tracking-[0.1em] text-white/60">
             Progress
           </span>
 

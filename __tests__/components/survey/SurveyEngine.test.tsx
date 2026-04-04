@@ -1,8 +1,6 @@
 // @vitest-environment jsdom
-import { render, screen, fireEvent, cleanup, act } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
-
-// --- Mutable mock state ---
 
 const mockSetAnswer = vi.fn();
 const mockGetAnswer = vi.fn().mockReturnValue(null);
@@ -12,7 +10,7 @@ const mockSubmit = vi.fn();
 
 let mockCurrentIndex = 0;
 let mockProgress = 0;
-let mockSubmitStatus: string = "idle";
+let mockSubmitStatus = "idle";
 
 vi.mock("@/components/survey/hooks/useSurveyState", () => ({
   useSurveyState: () => ({
@@ -34,6 +32,8 @@ vi.mock("@/components/survey/hooks/useSurveyState", () => ({
 vi.mock("@/components/survey/hooks/useSubmitSurvey", () => ({
   useSubmitSurvey: () => ({
     submit: mockSubmit,
+    retryPending: vi.fn(),
+    hasPendingCompletion: false,
     get status() {
       return mockSubmitStatus;
     },
@@ -77,6 +77,17 @@ vi.mock("@/data/survey-data", () => ({
       options: [],
       guide: "",
     },
+    {
+      qId: "q4",
+      cId: 2,
+      question: "Q4?",
+      answerType: "multiple",
+      chapter: "ch2",
+      required: true,
+      options: ["A", "B", "C", "D"],
+      guide: "",
+      maxSelections: 3,
+    },
   ],
   chapterIntros: [],
 }));
@@ -93,21 +104,28 @@ vi.mock("@/components/survey/questions/SingleChoiceQuestion", () => ({
     <div data-testid="single-choice">{props.question.question}</div>
   ),
 }));
+
 vi.mock("@/components/survey/questions/ScaleQuestion", () => ({
   default: (props: { question: { question: string } }) => (
     <div data-testid="scale-question">{props.question.question}</div>
   ),
 }));
+
 vi.mock("@/components/survey/questions/OpenResponseQuestion", () => ({
   default: (props: { question: { question: string } }) => (
     <div data-testid="open-response">{props.question.question}</div>
   ),
 }));
+
 vi.mock("@/components/survey/questions/MultipleChoiceQuestion", () => ({
-  default: (props: { question: { question: string } }) => (
-    <div data-testid="multiple-choice">{props.question.question}</div>
+  default: (props: { question: { question: string }; forceValidation?: boolean }) => (
+    <div data-testid="multiple-choice">
+      {props.question.question}
+      {props.forceValidation ? " (validated)" : ""}
+    </div>
   ),
 }));
+
 vi.mock("@/components/survey/questions/CountryQuestion", () => ({
   default: (props: { question: { question: string } }) => (
     <div data-testid="country-question">{props.question.question}</div>
@@ -117,15 +135,28 @@ vi.mock("@/components/survey/questions/CountryQuestion", () => ({
 vi.mock("@/components/survey/SurveyHeader", () => ({
   default: () => <div data-testid="survey-header" />,
 }));
+
 vi.mock("@/components/survey/SurveyNav", () => ({
-  default: () => <div data-testid="survey-nav" />,
+  default: (props: { canGoNext: boolean; onNext: () => void; onPrevious: () => void }) => (
+    <div data-testid="survey-nav">
+      <button data-testid="survey-nav-prev" onClick={props.onPrevious}>
+        Previous
+      </button>
+      <button data-testid="survey-nav-next" onClick={props.onNext} disabled={!props.canGoNext}>
+        Next
+      </button>
+    </div>
+  ),
 }));
+
 vi.mock("@/components/survey/GuideAvatar", () => ({
   default: () => <div data-testid="guide-avatar" />,
 }));
+
 vi.mock("@/components/survey/GuidancePanel", () => ({
   default: () => <div data-testid="guidance-panel" />,
 }));
+
 vi.mock("@/components/survey/PreReportWizard", () => ({
   default: ({ onComplete }: { onComplete: () => void }) => (
     <div data-testid="pre-report-wizard">
@@ -133,6 +164,7 @@ vi.mock("@/components/survey/PreReportWizard", () => ({
     </div>
   ),
 }));
+
 vi.mock("@/components/survey/ProcessingSequence", () => ({
   default: ({ onComplete }: { onComplete: () => void; submitDone: boolean }) => (
     <div data-testid="processing-sequence">
@@ -141,6 +173,7 @@ vi.mock("@/components/survey/ProcessingSequence", () => ({
     </div>
   ),
 }));
+
 vi.mock("@/components/survey/ReportReady", () => ({
   default: ({ onContinue }: { onContinue: () => void; name: string; email: string }) => (
     <div data-testid="report-ready">
@@ -183,7 +216,7 @@ describe("SurveyEngine", () => {
   });
 
   it("shows processing sequence when currentIndex >= total questions", () => {
-    mockCurrentIndex = 3;
+    mockCurrentIndex = 4;
     mockProgress = 100;
 
     render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
@@ -192,22 +225,19 @@ describe("SurveyEngine", () => {
   });
 
   it("calls onComplete when wizard completes after report ready screen", () => {
-    mockCurrentIndex = 3;
+    mockCurrentIndex = 4;
     mockProgress = 100;
 
     const onComplete = vi.fn();
     mockSubmitStatus = "success";
     render(<SurveyEngine onExit={vi.fn()} onComplete={onComplete} />);
 
-    // Complete processing → report ready
     fireEvent.click(screen.getByRole("button", { name: /finish processing/i }));
     expect(screen.getByTestId("report-ready")).toBeInTheDocument();
 
-    // Continue from report ready → wizard
     fireEvent.click(screen.getByRole("button", { name: /view your free report/i }));
     expect(screen.getByTestId("pre-report-wizard")).toBeInTheDocument();
 
-    // Complete wizard → calls onComplete (clears survey state)
     fireEvent.click(screen.getByRole("button", { name: /complete wizard/i }));
     expect(onComplete).toHaveBeenCalledTimes(1);
   });
@@ -228,69 +258,102 @@ describe("SurveyEngine", () => {
     expect(screen.getByText("Q3?")).toBeInTheDocument();
   });
 
+  it("renders multiple choice question component for answerType multiple", () => {
+    mockCurrentIndex = 3;
+
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+    expect(screen.getByTestId("multiple-choice")).toBeInTheDocument();
+    expect(screen.getByText("Q4?")).toBeInTheDocument();
+  });
+
   it("shows survey header and nav when in question view", () => {
     render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
     expect(screen.getByTestId("survey-header")).toBeInTheDocument();
     expect(screen.getByTestId("survey-nav")).toBeInTheDocument();
   });
+
+  it("blocks progressing when a persisted multiselect answer exceeds maxSelections", () => {
+    mockCurrentIndex = 3;
+    mockGetAnswer.mockImplementation((qId: string) => {
+      if (qId === "q4") return ["A", "B", "C", "D"];
+      return null;
+    });
+
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+
+    expect(screen.getByTestId("survey-nav-next")).toBeDisabled();
+
+    fireEvent.keyDown(window, { key: "Enter" });
+
+    expect(mockSetCurrentIndex).not.toHaveBeenCalled();
+    expect(screen.getByText("Q4? (validated)")).toBeInTheDocument();
+  });
+
+  it("allows a capped multiselect answer at the limit to proceed normally", () => {
+    mockCurrentIndex = 3;
+    mockGetAnswer.mockImplementation((qId: string) => {
+      if (qId === "q4") return ["A", "B", "C"];
+      return null;
+    });
+
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+
+    expect(screen.getByTestId("survey-nav-next")).not.toBeDisabled();
+
+    fireEvent.click(screen.getByTestId("survey-nav-next"));
+
+    expect(mockSubmit).toHaveBeenCalledTimes(1);
+    expect(mockSetCurrentIndex).toHaveBeenCalledWith(4);
+  });
 });
 
-describe("SurveyEngine — completion phases", () => {
+describe("SurveyEngine completion phases", () => {
   it("transitions from processing to report ready screen on success", () => {
-    mockCurrentIndex = 3;
+    mockCurrentIndex = 4;
     mockProgress = 100;
     mockSubmitStatus = "success";
 
     render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
 
-    // Initially shows processing sequence
     expect(screen.getByTestId("processing-sequence")).toBeInTheDocument();
     expect(screen.queryByTestId("report-ready")).not.toBeInTheDocument();
 
-    // Complete processing
     fireEvent.click(screen.getByRole("button", { name: /finish processing/i }));
 
-    // Now shows report ready (not wizard directly)
     expect(screen.getByTestId("report-ready")).toBeInTheDocument();
     expect(screen.queryByTestId("processing-sequence")).not.toBeInTheDocument();
   });
 
-  it("transitions through full success flow: processing → ready → wizard → complete", () => {
-    mockCurrentIndex = 3;
+  it("transitions through full success flow: processing -> ready -> wizard -> complete", () => {
+    mockCurrentIndex = 4;
     mockProgress = 100;
     mockSubmitStatus = "success";
 
     const onComplete = vi.fn();
     render(<SurveyEngine onExit={vi.fn()} onComplete={onComplete} />);
 
-    // Complete processing → report ready
     fireEvent.click(screen.getByRole("button", { name: /finish processing/i }));
     expect(screen.getByTestId("report-ready")).toBeInTheDocument();
 
-    // Continue → wizard
     fireEvent.click(screen.getByRole("button", { name: /view your free report/i }));
     expect(screen.getByTestId("pre-report-wizard")).toBeInTheDocument();
     expect(screen.queryByTestId("report-ready")).not.toBeInTheDocument();
 
-    // Complete wizard → calls onComplete (clears survey state)
     fireEvent.click(screen.getByRole("button", { name: /complete wizard/i }));
     expect(onComplete).toHaveBeenCalledTimes(1);
   });
 
   it("skips wizard and shows error confirmation on error", () => {
-    mockCurrentIndex = 3;
+    mockCurrentIndex = 4;
     mockProgress = 100;
     mockSubmitStatus = "error";
 
     render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
 
-    // Initially shows processing
     expect(screen.getByTestId("processing-sequence")).toBeInTheDocument();
 
-    // Complete processing (error path skips wizard)
     fireEvent.click(screen.getByRole("button", { name: /finish processing/i }));
 
-    // Shows error confirmation directly, no wizard
     expect(screen.getByText("Submission Interrupted")).toBeInTheDocument();
     expect(screen.queryByTestId("pre-report-wizard")).not.toBeInTheDocument();
   });

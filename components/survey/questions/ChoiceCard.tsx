@@ -40,7 +40,7 @@ const ChoiceCard: FC<ChoiceCardProps> = ({
       role={multi ? "checkbox" : "radio"}
       aria-checked={selected}
       onClick={onClick}
-      className={`relative flex min-h-[60px] w-full justify-between gap-3 rounded-[16px] border px-[21px] text-left font-sans transition-all duration-200 ${
+      className={`relative flex min-h-[60px] w-full justify-between gap-3 rounded-[16px] border px-[21px] text-left font-sans transition-[background-color,border-color,box-shadow,transform] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#fe6839]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0510] ${
         hasDescription ? "items-start py-4 sm:py-[18px]" : "items-center py-3.5"
       } ${
         selected

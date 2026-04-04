@@ -86,8 +86,8 @@ function detectPlaceholder(defaultInput, options, question) {
   // Fallback to old detection logic
   const lower = (options || "").toLowerCase();
   if (lower.includes("email")) return "your@email.com";
-  if (lower.includes("free text") || lower.includes("text")) return "Type your answer...";
-  return "Type your answer...";
+  if (lower.includes("free text") || lower.includes("text")) return "Type your answer…";
+  return "Type your answer…";
 }
 
 // ─── Parse "Answer option(s) explained" column ──────────────────────────────────
@@ -180,7 +180,15 @@ function cleanText(val) {
   if (!val) return "";
   const trimmed = val.trim();
   if (trimmed.toLowerCase() === "n/a") return "";
-  return trimmed;
+  return trimmed.replace(/\r\n?/g, "\n");
+}
+
+function parseMaxSelections(val) {
+  if (!val) return null;
+  const trimmed = val.trim();
+  if (!trimmed || trimmed.toLowerCase() === "n/a") return null;
+  const parsed = Number.parseInt(trimmed, 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
 // ─── Main ──────────────────────────────────────────────────────────────────────
@@ -215,6 +223,7 @@ function main() {
       row["Support and guidance"] || row["Guide (display)"] || ""
     );
     const formatGuidance = cleanText(row["Answer format guidance"] || "");
+    const maxSelections = parseMaxSelections(row["Max selections"] || "");
     const defaultInput = cleanText(row["Default input / placeholder"] || "");
     const answerOptionsExplainedRaw = cleanText(row["Answer option(s) explained"] || "");
     const hoverStatesRaw = cleanText(row["Hover states"] || "");
@@ -275,6 +284,10 @@ function main() {
       q.formatGuidance = formatGuidance;
     }
 
+    if (answerType === "multiple" && maxSelections) {
+      q.maxSelections = maxSelections;
+    }
+
     // Answer options explained
     const parsedExplained = parseAnswerOptionsExplained(answerOptionsExplainedRaw);
     if (parsedExplained) {
@@ -326,6 +339,7 @@ export interface SurveyQuestion {
   answerOptionsExplained?: AnswerOptionExplained[];
   hoverStates?: Record<number, string>;
   formatGuidance?: string;
+  maxSelections?: number;
 }
 
 export interface ChapterIntro {
@@ -372,6 +386,9 @@ export const surveyQuestions: SurveyQuestion[] = [\n`;
     }
     if (q.formatGuidance) {
       output += `    formatGuidance: ${JSON.stringify(q.formatGuidance)},\n`;
+    }
+    if (q.maxSelections) {
+      output += `    maxSelections: ${q.maxSelections},\n`;
     }
     output += `  }${comma}\n`;
   }

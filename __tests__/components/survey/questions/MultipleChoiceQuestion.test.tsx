@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { useState } from "react";
 import { render, screen, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, afterEach } from "vitest";
@@ -30,11 +31,11 @@ import type { SurveyQuestion } from "@/data/survey-data";
 
 afterEach(cleanup);
 
-const question = {
+const baseQuestion = {
   qId: "q1",
   question: "Pick your favorites",
   answerType: "multiple",
-  options: ["A", "B", "C", "Other"],
+  options: ["A", "B", "C", "D", "Other"],
   answerOptionsExplained: [
     { option: "A", explanation: "Explanation for A" },
     { option: "B", explanation: "Explanation for B" },
@@ -44,9 +45,20 @@ const question = {
   required: false,
 } as unknown as SurveyQuestion;
 
+function ControlledQuestion({
+  question = baseQuestion,
+  initialValue = [],
+}: {
+  question?: SurveyQuestion;
+  initialValue?: string[];
+}) {
+  const [value, setValue] = useState<string[]>(initialValue);
+  return <MultipleChoiceQuestion question={question} value={value} onChange={setValue} />;
+}
+
 describe("MultipleChoiceQuestion", () => {
   it("renders all options", () => {
-    render(<MultipleChoiceQuestion question={question} value={null} onChange={vi.fn()} />);
+    render(<MultipleChoiceQuestion question={baseQuestion} value={null} onChange={vi.fn()} />);
     expect(screen.getByTestId("choice-A")).toBeInTheDocument();
     expect(screen.getByTestId("choice-B")).toBeInTheDocument();
     expect(screen.getByTestId("choice-C")).toBeInTheDocument();
@@ -54,27 +66,27 @@ describe("MultipleChoiceQuestion", () => {
   });
 
   it("renders question text and subtitle", () => {
-    render(<MultipleChoiceQuestion question={question} value={null} onChange={vi.fn()} />);
+    render(<MultipleChoiceQuestion question={baseQuestion} value={null} onChange={vi.fn()} />);
     expect(screen.getByText("Pick your favorites")).toBeInTheDocument();
     expect(screen.getByText(/select all that apply/i)).toBeInTheDocument();
   });
 
   it("renders descriptions for explained options", () => {
-    render(<MultipleChoiceQuestion question={question} value={null} onChange={vi.fn()} />);
+    render(<MultipleChoiceQuestion question={baseQuestion} value={null} onChange={vi.fn()} />);
     expect(screen.getByTestId("description-A")).toHaveTextContent("Explanation for A");
     expect(screen.getByTestId("description-B")).toHaveTextContent("Explanation for B");
     expect(screen.getByTestId("description-C")).toHaveTextContent("Explanation for C");
   });
 
   it("does not render description UI for options without explanations", () => {
-    render(<MultipleChoiceQuestion question={question} value={null} onChange={vi.fn()} />);
+    render(<MultipleChoiceQuestion question={baseQuestion} value={null} onChange={vi.fn()} />);
     expect(screen.queryByTestId("description-Other")).not.toBeInTheDocument();
   });
 
   it("clicking adds to selection", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
-    render(<MultipleChoiceQuestion question={question} value={[]} onChange={onChange} />);
+    render(<MultipleChoiceQuestion question={baseQuestion} value={[]} onChange={onChange} />);
 
     await user.click(screen.getByTestId("choice-A"));
     expect(onChange).toHaveBeenCalledWith(["A"]);
@@ -83,19 +95,23 @@ describe("MultipleChoiceQuestion", () => {
   it("clicking selected item removes it", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
-    render(<MultipleChoiceQuestion question={question} value={["A", "B"]} onChange={onChange} />);
+    render(
+      <MultipleChoiceQuestion question={baseQuestion} value={["A", "B"]} onChange={onChange} />
+    );
 
     await user.click(screen.getByTestId("choice-A"));
     expect(onChange).toHaveBeenCalledWith(["B"]);
   });
 
   it("shows selection count", () => {
-    render(<MultipleChoiceQuestion question={question} value={["A", "C"]} onChange={vi.fn()} />);
+    render(
+      <MultipleChoiceQuestion question={baseQuestion} value={["A", "C"]} onChange={vi.fn()} />
+    );
     expect(screen.getByText("(2 selected)")).toBeInTheDocument();
   });
 
   it("handles null value gracefully", () => {
-    render(<MultipleChoiceQuestion question={question} value={null} onChange={vi.fn()} />);
+    render(<MultipleChoiceQuestion question={baseQuestion} value={null} onChange={vi.fn()} />);
     expect(screen.queryByText(/selected/)).not.toBeInTheDocument();
   });
 
@@ -104,7 +120,7 @@ describe("MultipleChoiceQuestion", () => {
     const onChange = vi.fn();
     render(
       <MultipleChoiceQuestion
-        question={question}
+        question={baseQuestion}
         value={"A" as unknown as string[] | null}
         onChange={onChange}
       />
@@ -117,7 +133,7 @@ describe("MultipleChoiceQuestion", () => {
   it("shows text input when Other is selected", () => {
     render(
       <MultipleChoiceQuestion
-        question={question}
+        question={baseQuestion}
         value={["Other"]}
         onChange={vi.fn()}
         otherText=""
@@ -128,7 +144,7 @@ describe("MultipleChoiceQuestion", () => {
   });
 
   it("does not show text input when Other is not selected", () => {
-    render(<MultipleChoiceQuestion question={question} value={["A"]} onChange={vi.fn()} />);
+    render(<MultipleChoiceQuestion question={baseQuestion} value={["A"]} onChange={vi.fn()} />);
     expect(screen.queryByPlaceholderText("Please specify…")).not.toBeInTheDocument();
   });
 
@@ -137,7 +153,7 @@ describe("MultipleChoiceQuestion", () => {
     const onOtherTextChange = vi.fn();
     render(
       <MultipleChoiceQuestion
-        question={question}
+        question={baseQuestion}
         value={["Other"]}
         onChange={vi.fn()}
         otherText=""
@@ -147,5 +163,53 @@ describe("MultipleChoiceQuestion", () => {
 
     await user.type(screen.getByPlaceholderText("Please specify…"), "x");
     expect(onOtherTextChange).toHaveBeenCalledWith("x");
+  });
+
+  it("shows capped count for questions with maxSelections", () => {
+    const cappedQuestion = { ...baseQuestion, maxSelections: 3 };
+    render(
+      <MultipleChoiceQuestion question={cappedQuestion} value={["A", "C"]} onChange={vi.fn()} />
+    );
+
+    expect(screen.getByText("(2 / 3 selected)")).toBeInTheDocument();
+  });
+
+  it("blocks selecting more than the configured max", async () => {
+    const user = userEvent.setup();
+    const cappedQuestion = { ...baseQuestion, maxSelections: 3 };
+    render(<ControlledQuestion question={cappedQuestion} initialValue={["A", "B", "C"]} />);
+
+    await user.click(screen.getByTestId("choice-D"));
+
+    expect(screen.getByRole("alert")).toHaveTextContent(/up to 3 options/i);
+    expect(screen.getByText("(3 / 3 selected)")).toBeInTheDocument();
+    expect(screen.getByTestId("choice-D")).toHaveAttribute("aria-checked", "false");
+  });
+
+  it("allows deselecting after the limit is reached", async () => {
+    const user = userEvent.setup();
+    const cappedQuestion = { ...baseQuestion, maxSelections: 3 };
+    render(<ControlledQuestion question={cappedQuestion} initialValue={["A", "B", "C"]} />);
+
+    await user.click(screen.getByTestId("choice-A"));
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByText("(2 / 3 selected)")).toBeInTheDocument();
+    expect(screen.getByTestId("choice-A")).toHaveAttribute("aria-checked", "false");
+  });
+
+  it("shows limit guidance when forced validation finds an over-limit persisted state", () => {
+    const cappedQuestion = { ...baseQuestion, maxSelections: 3 };
+    render(
+      <MultipleChoiceQuestion
+        question={cappedQuestion}
+        value={["A", "B", "C", "D"]}
+        onChange={vi.fn()}
+        forceValidation
+      />
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent(/up to 3 options/i);
+    expect(screen.getByText("(4 / 3 selected)")).toBeInTheDocument();
   });
 });

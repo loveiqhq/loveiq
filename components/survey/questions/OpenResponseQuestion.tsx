@@ -70,13 +70,16 @@ const OpenResponseQuestion: FC<OpenResponseQuestionProps> = ({
       <div className="flex flex-col gap-2">
         <input
           type={question.inputType === "email" ? "email" : "text"}
+          name={question.qId}
+          aria-label={question.question}
           value={currentValue}
           onChange={(e) => onChange(e.target.value)}
           onBlur={() => setTouched(true)}
-          placeholder={question.placeholder || "Type your answer..."}
+          placeholder={question.placeholder || "Type your answer…"}
           autoComplete={question.inputType === "email" ? "email" : "off"}
+          spellCheck={question.inputType === "email" ? false : undefined}
           maxLength={MAX_LENGTH}
-          className={`w-full border-b-2 bg-transparent pb-3 pt-2 font-sans text-[22px] text-white placeholder:text-white/30 focus:outline-none sm:text-[24px] ${
+          className={`w-full border-b-2 bg-transparent pb-3 pt-2 font-sans text-[22px] text-white placeholder:text-white/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(254,104,57,0.2)] sm:text-[24px] ${
             error
               ? "border-[#ef4444]"
               : "border-[rgba(254,104,57,0.2)] focus:border-[rgba(254,104,57,0.4)]"
@@ -86,7 +89,7 @@ const OpenResponseQuestion: FC<OpenResponseQuestionProps> = ({
         {/* Below input: error message left, char count right */}
         <div className="flex items-start justify-between gap-4">
           {/* Error message */}
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5" aria-live="polite">
             {error && (
               <>
                 <span className="text-[#ef4444]">
