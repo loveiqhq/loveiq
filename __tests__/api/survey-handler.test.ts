@@ -72,7 +72,7 @@ function allowCooldown() {
   mockCheckCooldown.mockResolvedValue({ allowed: true, retryAfterMs: 0 });
 }
 
-function mockSupabaseRpcOk(result: unknown = { success: true }) {
+function mockSupabaseRpcOk(result: unknown = { success: true, submission_id: 123 }) {
   mockFetchWithTimeout.mockResolvedValueOnce({
     ok: true,
     json: async () => result,
@@ -87,6 +87,10 @@ describe("POST /api/survey", () => {
     process.env.SUPABASE_URL = "https://test.supabase.co";
     process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-key";
     mockGetClientIp.mockReturnValue("1.2.3.4");
+    mockFetchWithTimeout.mockResolvedValue({
+      ok: true,
+      json: async () => [],
+    });
   });
 
   it("returns 403 when CSRF token is invalid", async () => {

@@ -22,6 +22,7 @@ import { useSurveyTracking } from "./hooks/useSurveyTracking";
 import { useUtmCapture } from "./hooks/useUtmCapture";
 import { usePartialSave } from "./hooks/usePartialSave";
 import { useAutoAdvance } from "./hooks/useAutoAdvance";
+import { clearPersistedSurveyState } from "./hooks/surveyStorage";
 import SurveyConfirmation from "./SurveyConfirmation";
 import PreReportWizard from "./PreReportWizard";
 import ProcessingSequence from "./ProcessingSequence";
@@ -37,7 +38,12 @@ interface SurveyEngineProps {
 const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
   const { answers, currentIndex, startedAt, progress, setAnswer, getAnswer, setCurrentIndex } =
     useSurveyState();
-  const { submit: submitSurvey, status: submitStatus } = useSubmitSurvey();
+  const {
+    submit: submitSurvey,
+    retryPending,
+    hasPendingCompletion,
+    status: submitStatus,
+  } = useSubmitSurvey();
   const utmTracker = useUtmCapture();
   const { savePartial } = usePartialSave(answers, currentIndex, startedAt, utmTracker);
 
@@ -51,12 +57,13 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
   const autoAdvanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const hasCleared = useRef(false);
+  const totalQuestions = surveyQuestions.length;
+  const question = surveyQuestions[currentIndex];
 
   // Post-survey completion phase management
-  const [completionPhase, setCompletionPhase] = useState<CompletionPhase>("processing");
-
-  const question = surveyQuestions[currentIndex];
-  const totalQuestions = surveyQuestions.length;
+  const [completionPhase, setCompletionPhase] = useState<CompletionPhase>(() =>
+    currentIndex >= totalQuestions && hasPendingCompletion ? "done" : "processing"
+  );
 
   // Track survey start once
   useEffect(() => {
@@ -72,16 +79,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
   useEffect(() => {
     if (submitStatus === "success" && !hasCleared.current) {
       hasCleared.current = true;
-      try {
-        localStorage.removeItem("loveiq-survey-answers");
-        localStorage.removeItem("loveiq-survey-index");
-        localStorage.removeItem("loveiq-survey-utm");
-        localStorage.removeItem("loveiq-utm");
-        sessionStorage.removeItem("loveiq-survey-step");
-        sessionStorage.removeItem("loveiq-survey-session");
-      } catch {
-        /* storage unavailable */
-      }
+      clearPersistedSurveyState({ clearPendingCompletion: true });
     }
   }, [submitStatus]);
 
@@ -273,6 +271,11 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
   }, [cancelAutoAdvance]);
 
   // Survey complete — phase-based rendering
+  const handleRetry = useCallback(async () => {
+    setCompletionPhase("processing");
+    await retryPending();
+  }, [retryPending]);
+
   if (!question || currentIndex >= totalQuestions) {
     // Processing sequence phase (5 animated steps)
     if (completionPhase === "processing") {
@@ -307,7 +310,14 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
     }
 
     // Error confirmation only
-    return <SurveyConfirmation status={submitStatus} onExit={onComplete} />;
+    return (
+      <SurveyConfirmation
+        status={submitStatus === "idle" && hasPendingCompletion ? "error" : submitStatus}
+        onExit={onExit}
+        onRetry={handleRetry}
+        onStartOver={onComplete}
+      />
+    );
   }
   // Status text for nav
   const statusText = `Question ${currentIndex + 1} of ${totalQuestions}`;

@@ -8,6 +8,7 @@ interface SurveyConfirmationProps {
   status: SubmitStatus;
   onExit: () => void;
   onRetry?: () => void;
+  onStartOver?: () => void;
 }
 
 const EASING = "cubic-bezier(0.16, 1, 0.3, 1)";
@@ -138,7 +139,12 @@ const PulsingDots: FC = () => (
   </div>
 );
 
-const SurveyConfirmation: FC<SurveyConfirmationProps> = ({ status, onExit, onRetry }) => {
+const SurveyConfirmation: FC<SurveyConfirmationProps> = ({
+  status,
+  onExit,
+  onRetry,
+  onStartOver,
+}) => {
   const isSuccess = status === "success";
   const isSubmitting = status === "submitting" || status === "idle";
   const isError = status === "error";
@@ -163,7 +169,7 @@ const SurveyConfirmation: FC<SurveyConfirmationProps> = ({ status, onExit, onRet
               style={{ animation: isSubmitting ? "pulse 1.5s ease-in-out infinite" : undefined }}
             />
             <span className="font-sans text-[11px] font-medium uppercase tracking-[0.15em] text-white/50">
-              {isSubmitting ? "Processing" : isError ? "Saved Locally" : "Assessment Complete"}
+              {isSubmitting ? "Processing" : isError ? "Retry Needed" : "Assessment Complete"}
             </span>
           </div>
         </div>
@@ -194,7 +200,7 @@ const SurveyConfirmation: FC<SurveyConfirmationProps> = ({ status, onExit, onRet
         >
           {isSubmitting && "Processing Your Answers…"}
           {isSuccess && "Your Journey Begins"}
-          {isError && "Answers Saved Locally"}
+          {isError && "Submission Interrupted"}
         </h2>
 
         {/* Body text */}
@@ -207,7 +213,7 @@ const SurveyConfirmation: FC<SurveyConfirmationProps> = ({ status, onExit, onRet
           {isSuccess &&
             "Thank you for sharing your story. Your personalized intimacy profile is being prepared — a deep, science-backed mirror of your desires, patterns, and potential."}
           {isError &&
-            "We couldn’t reach our servers right now, but your answers are safely stored. You can try again later or return to the site."}
+            "We lost connection before your results could be submitted. Your answers are still on this device, so you can retry now or come back later."}
         </p>
 
         {/* Decorative divider */}
@@ -265,14 +271,14 @@ const SurveyConfirmation: FC<SurveyConfirmationProps> = ({ status, onExit, onRet
         )}
 
         {isError && (
-          <div className="flex items-center gap-3" {...fadeUp(1200)}>
+          <div className="flex flex-wrap items-center justify-center gap-3" {...fadeUp(1200)}>
             {onRetry && (
               <button
                 type="button"
                 onClick={onRetry}
                 className="rounded-full border border-white/15 bg-transparent px-6 py-3 font-sans text-[14px] font-medium text-white/80 transition-all duration-300 hover:border-white/30 hover:bg-white/5 focus-visible-ring"
               >
-                Try Again
+                Retry Submission
               </button>
             )}
             <button
@@ -282,6 +288,15 @@ const SurveyConfirmation: FC<SurveyConfirmationProps> = ({ status, onExit, onRet
             >
               Return to Site
             </button>
+            {onStartOver && (
+              <button
+                type="button"
+                onClick={onStartOver}
+                className="rounded-full border border-red-500/20 px-6 py-3 font-sans text-[14px] font-medium text-red-300 transition-all duration-300 hover:bg-red-500/10 focus-visible-ring"
+              >
+                Start Over
+              </button>
+            )}
           </div>
         )}
 

@@ -4,6 +4,12 @@ import { useState, useCallback, useEffect, useRef, type FC, type ReactNode } fro
 import Image from "next/image";
 import Link from "next/link";
 import SurveyEngine from "./SurveyEngine";
+import {
+  ANSWERS_STORAGE_KEY,
+  SURVEY_STEP_KEY,
+  clearPersistedSurveyState,
+  loadPendingCompletion,
+} from "./hooks/surveyStorage";
 
 /* ------------------------------------------------------------------ */
 /*  Shared icons                                                       */
@@ -304,9 +310,6 @@ const slideIcons: Record<string, FC> = {
 /*  Slide data                                                         */
 /* ------------------------------------------------------------------ */
 const TOTAL_STEPS = 4;
-const STEP_STORAGE_KEY = "loveiq-survey-step";
-const ANSWERS_STORAGE_KEY = "loveiq-survey-answers";
-
 interface Slide {
   icon: string;
   heading: string;
@@ -1046,9 +1049,17 @@ const ConsentScreen: FC<{
 function loadInitialStep(): number {
   if (typeof window === "undefined") return 0;
 
+  try {
+    if (loadPendingCompletion()) {
+      return TOTAL_STEPS + 2;
+    }
+  } catch {
+    /* blocked or unavailable */
+  }
+
   // 1. Try sessionStorage (same-tab refresh)
   try {
-    const stored = sessionStorage.getItem(STEP_STORAGE_KEY);
+    const stored = sessionStorage.getItem(SURVEY_STEP_KEY);
     if (stored !== null) {
       const parsed = parseInt(stored, 10);
       if (Number.isFinite(parsed) && parsed >= 0 && parsed <= TOTAL_STEPS + 2) {
@@ -1100,7 +1111,7 @@ const SurveyPage: FC = () => {
   useEffect(() => {
     if (!hydrated) return;
     try {
-      sessionStorage.setItem(STEP_STORAGE_KEY, String(step));
+      sessionStorage.setItem(SURVEY_STEP_KEY, String(step));
     } catch {
       /* ignore */
     }
@@ -1151,13 +1162,9 @@ const SurveyPage: FC = () => {
 
   const handleReturn = useCallback((clearAnswers?: boolean) => {
     try {
-      sessionStorage.removeItem(STEP_STORAGE_KEY);
-      sessionStorage.removeItem("loveiq-survey-session");
+      sessionStorage.removeItem(SURVEY_STEP_KEY);
       if (clearAnswers) {
-        localStorage.removeItem(ANSWERS_STORAGE_KEY);
-        localStorage.removeItem("loveiq-survey-index");
-        localStorage.removeItem("loveiq-survey-utm");
-        localStorage.removeItem("loveiq-utm");
+        clearPersistedSurveyState({ clearPendingCompletion: true });
       }
     } catch {
       /* ignore */

@@ -3,18 +3,28 @@
 import { maskEmail } from "@/lib/admin/format";
 
 interface Submission {
-  id: number;
+  id: number | string;
+  record_type: "submission" | "partial";
+  submission_id: number | null;
+  session_id: string | null;
+  detail_href: string;
+  selectable: boolean;
   email: string;
   first_name: string;
   status: string;
   started_at: string;
   completed_at: string;
+  saved_at: string;
   duration_ms: number | null;
+  utm_source: string | null;
   primary_archetype: string | null;
   v5_primary_archetype?: string | null;
   priority_score: number;
   priority_label: "high" | "medium" | "low";
   review_reasons: string[];
+  answer_count: number | null;
+  current_index: number | null;
+  recoverable: boolean;
 }
 
 interface SubmissionTableProps {
@@ -36,6 +46,8 @@ function formatDate(iso: string): string {
 
 const statusColors: Record<string, string> = {
   completed: "bg-green-500/10 text-green-400",
+  pending_completion: "bg-orange-500/10 text-orange-300",
+  partial: "bg-blue-500/10 text-blue-300",
   flagged: "bg-yellow-500/10 text-yellow-400",
   archived: "bg-white/5 text-text-muted",
 };
@@ -53,14 +65,24 @@ export default function SubmissionTable({
   onSelectionChange,
 }: SubmissionTableProps) {
   const allSelected =
-    selectable && submissions.length > 0 && submissions.every((s) => selectedIds?.has(s.id));
+    selectable &&
+    submissions.some((submission) => submission.selectable && typeof submission.id === "number") &&
+    submissions
+      .filter((submission) => submission.selectable && typeof submission.id === "number")
+      .every((submission) => selectedIds?.has(submission.id as number));
 
   function toggleAll() {
     if (!onSelectionChange) return;
     if (allSelected) {
       onSelectionChange(new Set());
     } else {
-      onSelectionChange(new Set(submissions.map((s) => s.id)));
+      onSelectionChange(
+        new Set(
+          submissions
+            .filter((submission) => submission.selectable && typeof submission.id === "number")
+            .map((submission) => submission.id as number)
+        )
+      );
     }
   }
 
@@ -104,94 +126,106 @@ export default function SubmissionTable({
             <th className="px-4 py-3 font-medium">Archetype (V5)</th>
             <th className="px-4 py-3 font-medium">Review Signals</th>
             <th className="px-4 py-3 font-medium">Started</th>
-            <th className="px-4 py-3 font-medium">Completed</th>
+            <th className="px-4 py-3 font-medium">Completed / Saved</th>
             <th className="px-4 py-3 font-medium">Actions</th>
           </tr>
         </thead>
         <tbody>
-          {submissions.map((s) => (
-            <tr key={s.id} className="border-b border-white/5 hover:bg-white/[0.02]">
-              {selectable && (
-                <td className="px-4 py-3">
-                  <input
-                    type="checkbox"
-                    checked={selectedIds?.has(s.id) || false}
-                    onChange={() => toggleOne(s.id)}
-                    className="h-4 w-4 rounded border-white/20 bg-transparent accent-accent-purple"
-                    aria-label={`Select submission ${s.id}`}
-                  />
-                </td>
-              )}
-              <td className="px-4 py-3 text-text-primary">{maskEmail(s.email)}</td>
-              <td className="px-4 py-3 text-text-primary">{s.first_name}</td>
-              <td className="px-4 py-3">
-                <span
-                  className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusColors[s.status] || "bg-white/5 text-text-muted"}`}
-                >
-                  {s.status}
-                </span>
-              </td>
-              <td className="px-4 py-3">
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-xs font-medium uppercase ${priorityColors[s.priority_label]}`}
-                  >
-                    {s.priority_label}
-                  </span>
-                  <span className="text-xs text-text-muted">{s.priority_score}</span>
-                </div>
-              </td>
-              <td className="px-4 py-3 text-text-muted">
-                {s.primary_archetype ? (
-                  <span className="rounded-full bg-accent-purple/10 px-2 py-0.5 text-xs font-medium text-accent-purple">
-                    {s.primary_archetype}
-                  </span>
-                ) : (
-                  <span className="text-xs text-text-muted">&mdash;</span>
-                )}
-              </td>
-              <td className="px-4 py-3 text-text-muted">
-                {s.v5_primary_archetype ? (
-                  <span className="rounded-full bg-accent-orange/10 px-2 py-0.5 text-xs font-medium text-accent-orange">
-                    {s.v5_primary_archetype}
-                  </span>
-                ) : (
-                  <span className="text-xs text-text-muted">&mdash;</span>
-                )}
-              </td>
-              <td className="max-w-[260px] px-4 py-3">
-                {s.review_reasons.length > 0 ? (
-                  <div className="flex flex-wrap gap-1.5">
-                    {s.review_reasons.slice(0, 2).map((reason) => (
-                      <span
-                        key={reason}
-                        className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] text-text-muted"
-                      >
-                        {reason}
-                      </span>
-                    ))}
-                    {s.review_reasons.length > 2 && (
-                      <span className="text-[11px] text-text-muted">
-                        +{s.review_reasons.length - 2} more
-                      </span>
+          {submissions.map((submission) => {
+            const submissionId = typeof submission.id === "number" ? submission.id : null;
+            const isSelectableSubmission = submission.selectable && submissionId !== null;
+
+            return (
+              <tr key={submission.id} className="border-b border-white/5 hover:bg-white/[0.02]">
+                {selectable && (
+                  <td className="px-4 py-3">
+                    {isSelectableSubmission ? (
+                      <input
+                        type="checkbox"
+                        checked={selectedIds?.has(submissionId) || false}
+                        onChange={() => toggleOne(submissionId)}
+                        className="h-4 w-4 rounded border-white/20 bg-transparent accent-accent-purple"
+                        aria-label={`Select submission ${submissionId}`}
+                      />
+                    ) : (
+                      <span className="text-xs text-text-muted">-</span>
                     )}
-                  </div>
-                ) : (
-                  <span className="text-xs text-text-muted">&mdash;</span>
+                  </td>
                 )}
-              </td>
-              <td className="px-4 py-3 text-text-muted">{formatDate(s.started_at)}</td>
-              <td className="px-4 py-3 text-text-muted">{formatDate(s.completed_at)}</td>
-              <td className="px-4 py-3">
-                <a
-                  href={`/admin/submissions/${s.id}`}
-                  className="text-accent-purple hover:underline"
-                >
-                  View
-                </a>
-              </td>
-            </tr>
-          ))}
+                <td className="px-4 py-3 text-text-primary">{maskEmail(submission.email)}</td>
+                <td className="px-4 py-3 text-text-primary">{submission.first_name}</td>
+                <td className="px-4 py-3">
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusColors[submission.status] || "bg-white/5 text-text-muted"}`}
+                  >
+                    {submission.status}
+                  </span>
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs font-medium uppercase ${priorityColors[submission.priority_label]}`}
+                    >
+                      {submission.priority_label}
+                    </span>
+                    <span className="text-xs text-text-muted">{submission.priority_score}</span>
+                  </div>
+                </td>
+                <td className="px-4 py-3 text-text-muted">
+                  {submission.primary_archetype ? (
+                    <span className="rounded-full bg-accent-purple/10 px-2 py-0.5 text-xs font-medium text-accent-purple">
+                      {submission.primary_archetype}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-text-muted">&mdash;</span>
+                  )}
+                </td>
+                <td className="px-4 py-3 text-text-muted">
+                  {submission.v5_primary_archetype ? (
+                    <span className="rounded-full bg-accent-orange/10 px-2 py-0.5 text-xs font-medium text-accent-orange">
+                      {submission.v5_primary_archetype}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-text-muted">&mdash;</span>
+                  )}
+                </td>
+                <td className="max-w-[260px] px-4 py-3">
+                  {submission.review_reasons.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {submission.review_reasons.slice(0, 2).map((reason) => (
+                        <span
+                          key={reason}
+                          className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] text-text-muted"
+                        >
+                          {reason}
+                        </span>
+                      ))}
+                      {submission.review_reasons.length > 2 && (
+                        <span className="text-[11px] text-text-muted">
+                          +{submission.review_reasons.length - 2} more
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-xs text-text-muted">&mdash;</span>
+                  )}
+                </td>
+                <td className="px-4 py-3 text-text-muted">{formatDate(submission.started_at)}</td>
+                <td className="px-4 py-3 text-text-muted">
+                  {formatDate(
+                    submission.record_type === "partial"
+                      ? submission.saved_at
+                      : submission.completed_at
+                  )}
+                </td>
+                <td className="px-4 py-3">
+                  <a href={submission.detail_href} className="text-accent-purple hover:underline">
+                    View
+                  </a>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

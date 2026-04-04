@@ -2,13 +2,14 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { surveyQuestions } from "@/data/survey-data";
-import { UTM_STORAGE_KEY } from "./useUtmCapture";
-import { GLOBAL_UTM_KEY } from "@/lib/utm";
+import type { SurveyAnswerValue } from "@/lib/survey/types";
+import {
+  SURVEY_STATE_KEY,
+  clearPersistedSurveyState,
+  loadPendingCompletion,
+} from "./surveyStorage";
 
-const STORAGE_KEY = "loveiq-survey-answers";
-const INDEX_KEY = "loveiq-survey-index";
-
-export type AnswerValue = string | string[] | number;
+export type AnswerValue = SurveyAnswerValue;
 
 interface SurveyState {
   answers: Record<string, AnswerValue>;
@@ -20,8 +21,18 @@ function loadState(): SurveyState {
   if (typeof window === "undefined") {
     return { answers: {}, currentIndex: 0, startedAt: new Date().toISOString() };
   }
+
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const pendingCompletion = loadPendingCompletion();
+    if (pendingCompletion) {
+      return {
+        answers: pendingCompletion.answers || {},
+        currentIndex: pendingCompletion.currentIndex || 0,
+        startedAt: pendingCompletion.startedAt || new Date().toISOString(),
+      };
+    }
+
+    const raw = localStorage.getItem(SURVEY_STATE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
       return {
@@ -31,21 +42,21 @@ function loadState(): SurveyState {
       };
     }
   } catch {
-    // Corrupted data — start fresh
+    // Corrupted data - start fresh
   }
+
   return { answers: {}, currentIndex: 0, startedAt: new Date().toISOString() };
 }
 
 export function useSurveyState() {
   const [state, setState] = useState<SurveyState>(loadState);
 
-  // Persist to localStorage on every change
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      localStorage.setItem(SURVEY_STATE_KEY, JSON.stringify(state));
     } catch {
-      // Storage full — silently ignore
+      // Storage full - silently ignore
     }
   }, [state]);
 
@@ -66,18 +77,13 @@ export function useSurveyState() {
 
   const clearState = useCallback(() => {
     setState({ answers: {}, currentIndex: 0, startedAt: new Date().toISOString() });
-    if (typeof window !== "undefined") {
-      localStorage.removeItem(STORAGE_KEY);
-      localStorage.removeItem(INDEX_KEY);
-      localStorage.removeItem(UTM_STORAGE_KEY);
-      localStorage.removeItem(GLOBAL_UTM_KEY);
-    }
+    clearPersistedSurveyState({ clearPendingCompletion: true });
   }, []);
 
   const progress = useMemo(() => {
     const total = surveyQuestions.length;
     if (total === 0) return 0;
-    const answered = Object.keys(state.answers).filter((k) => !k.endsWith("_other")).length;
+    const answered = Object.keys(state.answers).filter((key) => !key.endsWith("_other")).length;
     return Math.min(100, Math.round((answered / total) * 100));
   }, [state.answers]);
 

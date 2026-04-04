@@ -54,6 +54,11 @@ const sampleRows = [
 function mockSubmissionsOk(rows = sampleRows, total = rows.length) {
   mockSupabaseFetch.mockResolvedValueOnce({
     ok: true,
+    headers: new Headers({ "content-range": "0-0/0" }),
+    json: async () => [],
+  });
+  mockSupabaseFetch.mockResolvedValueOnce({
+    ok: true,
     headers: new Headers({ "content-range": `0-${rows.length - 1}/${total}` }),
     json: async () => rows,
   });
@@ -123,7 +128,7 @@ describe("GET /api/admin/submissions", () => {
     const res = await GET(makeRequest("?email=alice"));
     expect(res.status).toBe(200);
 
-    const queryUrl = mockSupabaseFetch.mock.calls[0][0] as string;
+    const queryUrl = mockSupabaseFetch.mock.calls[1][0] as string;
     expect(queryUrl).toContain("app_user!fk_survey_submission_user!inner");
     expect(queryUrl).toContain("app_user.email=ilike.*alice*");
   });
@@ -134,7 +139,11 @@ describe("GET /api/admin/submissions", () => {
     const res = await GET(makeRequest("?archetype=Spark%20Seeker"));
     expect(res.status).toBe(200);
 
-    const queryUrl = mockSupabaseFetch.mock.calls[0][0] as string;
+    const queryUrl = mockSupabaseFetch.mock.calls.find(
+      ([url]) => typeof url === "string" && url.includes("/rest/v1/survey_submission?select=")
+    )?.[0] as string | undefined;
+
+    expect(queryUrl).toBeDefined();
     expect(queryUrl).toContain("scoring_result!inner");
     expect(queryUrl).toContain("scoring_result.primary_archetype=eq.Spark%20Seeker");
   });

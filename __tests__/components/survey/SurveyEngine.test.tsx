@@ -291,7 +291,7 @@ describe("SurveyEngine — completion phases", () => {
     fireEvent.click(screen.getByRole("button", { name: /finish processing/i }));
 
     // Shows error confirmation directly, no wizard
-    expect(screen.getByText("Answers Saved Locally")).toBeInTheDocument();
+    expect(screen.getByText("Submission Interrupted")).toBeInTheDocument();
     expect(screen.queryByTestId("pre-report-wizard")).not.toBeInTheDocument();
   });
 });

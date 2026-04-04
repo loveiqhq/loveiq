@@ -61,6 +61,12 @@ export default function FilterBar({ onFilterChange, initialFilters }: FilterBarP
         <option value="completed" className="bg-[#1a1025] text-gray-200">
           Completed
         </option>
+        <option value="pending_completion" className="bg-[#1a1025] text-gray-200">
+          Pending Completion
+        </option>
+        <option value="partial" className="bg-[#1a1025] text-gray-200">
+          Partial
+        </option>
         <option value="flagged" className="bg-[#1a1025] text-gray-200">
           Flagged
         </option>

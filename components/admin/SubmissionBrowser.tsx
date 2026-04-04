@@ -11,18 +11,28 @@ import ExportPresetsBar from "./ExportPresetsBar";
 
 interface SubmissionsData {
   submissions: Array<{
-    id: number;
+    id: number | string;
+    record_type: "submission" | "partial";
+    submission_id: number | null;
+    session_id: string | null;
+    detail_href: string;
+    selectable: boolean;
     email: string;
     first_name: string;
     status: string;
     started_at: string;
     completed_at: string;
+    saved_at: string;
     duration_ms: number | null;
+    utm_source: string | null;
     primary_archetype: string | null;
     v5_primary_archetype: string | null;
     priority_score: number;
     priority_label: "high" | "medium" | "low";
     review_reasons: string[];
+    answer_count: number | null;
+    current_index: number | null;
+    recoverable: boolean;
   }>;
   total: number;
   page: number;

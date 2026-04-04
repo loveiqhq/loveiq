@@ -26,6 +26,10 @@ function mockFetchNetworkError() {
   return vi.fn().mockRejectedValue(new Error("Network failure"));
 }
 
+function findSurveyCall(mockFetch: ReturnType<typeof vi.fn>) {
+  return mockFetch.mock.calls.find((call) => call[0] === "/api/survey");
+}
+
 // --- Tests ---
 
 describe("useSubmitSurvey", () => {
@@ -158,7 +162,10 @@ describe("useSubmitSurvey", () => {
       expect.objectContaining({ method: "POST" })
     );
 
-    const bodyStr = (mockFetch.mock.calls[0][1] as RequestInit).body as string;
+    const surveyCall = findSurveyCall(mockFetch);
+    expect(surveyCall).toBeDefined();
+
+    const bodyStr = (surveyCall?.[1] as RequestInit).body as string;
     const body = JSON.parse(bodyStr);
 
     // Email must be trimmed + lowercased
@@ -196,8 +203,8 @@ describe("useSubmitSurvey", () => {
       await result.current.submit(makeAnswers(), startedAt);
     });
 
-    // fetch should only have been called once
-    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(mockFetch.mock.calls.filter((call) => call[0] === "/api/survey")).toHaveLength(1);
 
     // Resolve to clean up
     resolveFetch();
