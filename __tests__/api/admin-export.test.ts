@@ -263,4 +263,46 @@ describe("GET /api/admin/export", () => {
 
     vi.useRealTimers();
   });
+
+  it("preserves legacy single-answer rows after single-to-multiple migrations", async () => {
+    mockSupabaseFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => [
+        {
+          id: 3,
+          status: "completed",
+          start_date_time: "2025-01-01T00:00:00Z",
+          created_date_time: "2025-01-01T00:05:00Z",
+          duration_ms: 120000,
+          app_user: { email: "legacy@test.com", first_name: "Legacy" },
+        },
+      ],
+    });
+    mockSupabaseFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => [],
+    });
+    mockSupabaseFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => [
+        {
+          survey_submission_id: 3,
+          answer_text: null,
+          answer_option_id: 7,
+          normalized_value: null,
+          time_spent_seconds: null,
+          revision_count: null,
+          was_skipped: false,
+          survey_question: { frontend_qid: "q_legacy_multi", type: "multiple" },
+          answer_option: { option_text: "Legacy single option" },
+          survey_submission_answer_options: [],
+        },
+      ],
+    });
+
+    const res = await GET(makeRequest());
+    const csv = await res.text();
+
+    expect(csv).toContain("Legacy single option");
+  });
 });

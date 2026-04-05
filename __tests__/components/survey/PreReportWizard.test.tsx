@@ -3,7 +3,14 @@ import { render, screen, fireEvent, cleanup, act } from "@testing-library/react"
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
 
 vi.mock("next/image", () => ({
-  default: (props: Record<string, unknown>) => <img {...props} />,
+  default: ({
+    alt = "",
+    unoptimized: _unoptimized,
+    ...props
+  }: Record<string, unknown> & { alt?: string; unoptimized?: boolean }) => (
+    // eslint-disable-next-line @next/next/no-img-element -- test-only mock for next/image
+    <img {...props} alt={alt} />
+  ),
 }));
 
 import PreReportWizard from "@/components/survey/PreReportWizard";

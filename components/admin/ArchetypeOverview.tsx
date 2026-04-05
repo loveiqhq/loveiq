@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo } from "react";
 import { useAdminFetch } from "@/components/admin/hooks/useAdminFetch";
 
@@ -68,16 +69,16 @@ export default function ArchetypeOverview() {
         <p className="text-sm text-text-muted">
           {data.totalScored} scored submissions across 14 archetypes
         </p>
-        <a
+        <Link
           href="/admin/archetypes/compare"
           className="rounded-lg bg-accent-purple/10 px-4 py-2 text-sm font-medium text-accent-purple transition hover:bg-accent-purple/20"
         >
           Compare Archetypes
-        </a>
+        </Link>
       </div>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {sorted.map((arch) => (
-          <a
+          <Link
             key={arch.slug}
             href={`/admin/archetypes/${arch.slug}`}
             className="group rounded-xl border border-white/10 bg-surface p-5 transition hover:border-accent-purple/40 hover:bg-white/5"
@@ -93,7 +94,7 @@ export default function ArchetypeOverview() {
             <div className="mt-2">
               <Sparkline data={arch.weeklyTrend} />
             </div>
-          </a>
+          </Link>
         ))}
       </div>
     </div>

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useAdminFetch } from "./hooks/useAdminFetch";
 import AnswerDisplay from "./AnswerDisplay";
@@ -167,9 +168,9 @@ export default function SubmissionDetail({ id, mode = "submission" }: Submission
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
-        <a href="/admin/submissions" className="text-sm text-text-muted hover:text-text-primary">
+        <Link href="/admin/submissions" className="text-sm text-text-muted hover:text-text-primary">
           &larr; Back
-        </a>
+        </Link>
         <h2 className="font-serif text-xl font-bold text-text-primary">
           {isPartial ? "Saved Session" : `Submission #${submission.id}`}
         </h2>

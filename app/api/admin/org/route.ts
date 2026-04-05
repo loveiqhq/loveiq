@@ -145,7 +145,9 @@ async function fetchLatest(path: string, field: string): Promise<string | null> 
   const res = await supabaseFetch(path, { headers: { Range: "0-0" } });
   if (!res.ok) return null;
   const rows = (await res.json()) as Array<Record<string, string | null>>;
-  return rows[0]?.[field] ?? null;
+  const row = rows[0];
+  if (!row) return null;
+  return new Map(Object.entries(row)).get(field) ?? null;
 }
 
 async function fetchOwner(
@@ -156,7 +158,9 @@ async function fetchOwner(
   const res = await supabaseFetch(path, { headers: { Range: "0-0" } });
   if (!res.ok) return null;
   const rows = (await res.json()) as Array<Record<string, string | null>>;
-  return rows[0]?.[field] ?? null;
+  const row = rows[0];
+  if (!row) return null;
+  return new Map(Object.entries(row)).get(field) ?? null;
 }
 
 function statusFromAsset(asset: {

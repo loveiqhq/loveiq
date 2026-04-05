@@ -1,115 +1,135 @@
 # Development Guide
 
+> Owner: CODEOWNERS default
+> Last verified: 2026-04-05
+> Verified against: `package.json`, `.env.example`, `.github/workflows/ci.yml`, `app/api/**`, `proxy.ts`
+
+## Prerequisites
+
+- Node.js `20` as used in CI. See [docs/versions.md](docs/versions.md) for the pinned toolchain list.
+- npm from the bundled Node.js installation.
+- Optional service credentials only when you need live integrations.
+
 ## Quick Start
 
+Recommended:
+
 ```bash
-# Install dependencies
-npm install
-
-# Copy environment variables
-cp .env.example .env.local
-# Edit .env.local with your values
-
-# Start development server
+npm run setup
 npm run dev
 ```
 
-## Environment Setup
+Manual:
 
-### Required for full functionality
+```bash
+npm install
+npm run dev
+```
 
-| Variable                         | Purpose              | Required for dev?         |
-| -------------------------------- | -------------------- | ------------------------- |
-| `NEXT_PUBLIC_SITE_URL`           | Canonical URL        | Only for metadata         |
-| `SUPABASE_URL`                   | Waitlist database    | Only for form submissions |
-| `SUPABASE_SERVICE_ROLE_KEY`      | Supabase auth        | Only for form submissions |
-| `RESEND_API_KEY`                 | Email sending        | Only for form submissions |
-| `NEXT_PUBLIC_RECAPTCHA_SITE_KEY` | Contact form captcha | Only for contact form     |
-| `RECAPTCHA_SECRET_KEY`           | Captcha verification | Only for contact form     |
+`npm run setup` creates `.env.local` from `.env.example` if the file does not already exist.
+
+## Expected Local State
+
+After startup:
+
+1. The site responds at `http://localhost:3000`.
+2. The middleware sets a `__csrf` cookie on first request.
+3. Public pages render without local env vars.
+4. Form submissions and admin flows require the relevant env vars below.
+
+## Environment Variables
+
+### Required for specific features
+
+| Variable                         | Purpose                                  | Required for local dev?                                                      |
+| -------------------------------- | ---------------------------------------- | ---------------------------------------------------------------------------- |
+| `NEXT_PUBLIC_SITE_URL`           | Canonical URL, metadata, and email links | Recommended                                                                  |
+| `SUPABASE_URL`                   | Supabase REST base URL                   | Required for waitlist, survey, admin data, and health checks                 |
+| `SUPABASE_SERVICE_ROLE_KEY`      | Server-side Supabase access              | Required for waitlist, survey, tracking, and health checks                   |
+| `RESEND_API_KEY`                 | Transactional email delivery             | Required for waitlist emails, contact email, invite email, and health checks |
+| `NEXT_PUBLIC_RECAPTCHA_SITE_KEY` | Contact form reCAPTCHA client key        | Required for contact form UI                                                 |
+| `RECAPTCHA_SECRET_KEY`           | Contact form reCAPTCHA verification      | Required for contact form submissions                                        |
+| `NEXT_PUBLIC_SUPABASE_URL`       | Browser-safe Supabase auth URL           | Required for admin auth UI                                                   |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY`  | Browser-safe Supabase auth key           | Required for admin auth UI                                                   |
 
 ### Optional
 
-| Variable                        | Purpose                                                   |
-| ------------------------------- | --------------------------------------------------------- |
-| `RESEND_FROM`                   | From address (default: `LoveIQ <hello@send.loveiq.org>`)  |
-| `RESEND_REPLY_TO`               | Reply-to address (default: `hello@loveiq.org`)            |
-| `CONTACT_TO_EMAIL`              | Contact form recipient email                              |
-| `SLACK_WAITLIST_WEBHOOK_URL`    | Slack notifications for waitlist signups                  |
-| `SLACK_CONTACT_WEBHOOK_URL`     | Slack notifications for contact form                      |
-| `SLACK_SURVEY_WEBHOOK_URL`      | Slack notifications for survey submissions                |
-| `STAGING_PASSWORD`              | Password gate for staging deployment                      |
-| `NEXT_PUBLIC_SUPABASE_URL`      | Supabase project URL (browser-safe, for admin auth SDK)   |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key (browser-safe, for admin auth SDK)      |
-| `SURVEY_CLOSE_PASSWORD`         | Password to close/pause the survey (server-only)          |
-| `NEXT_PUBLIC_GTM_ID`            | GTM container ID (optional, falls back to direct gtag.js) |
-| `LOG_LEVEL`                     | Pino log level (default: info)                            |
+| Variable                     | Purpose                                                     |
+| ---------------------------- | ----------------------------------------------------------- |
+| `RESEND_FROM`                | Override sender identity for LoveIQ emails                  |
+| `RESEND_REPLY_TO`            | Override reply-to address for outbound email                |
+| `CONTACT_TO_EMAIL`           | Destination inbox for `/api/contact`                        |
+| `SLACK_WAITLIST_WEBHOOK_URL` | Waitlist signup notifications                               |
+| `SLACK_CONTACT_WEBHOOK_URL`  | Contact form notifications                                  |
+| `SLACK_SURVEY_WEBHOOK_URL`   | Survey completion notifications                             |
+| `STAGING_PASSWORD`           | Enables the staging password gate and `/api/staging-login`  |
+| `SURVEY_CLOSE_PASSWORD`      | Required to close the survey via `/api/admin/survey-status` |
+| `NEXT_PUBLIC_GTM_ID`         | Optional Google Tag Manager container ID                    |
+| `LOG_LEVEL`                  | Pino log level override                                     |
 
-**Tip:** You can run the site without any env vars set - the UI will render fine. Forms will fail gracefully with error messages.
-
-## Development vs Production
-
-### CSP (Content Security Policy)
-
-The middleware applies different CSP rules based on environment:
-
-| Directive                   | Development                      | Production         |
-| --------------------------- | -------------------------------- | ------------------ |
-| `script-src`                | Includes `'unsafe-eval'` for HMR | No `'unsafe-eval'` |
-| `connect-src`               | Allows `ws://localhost:*`        | HTTPS only         |
-| `upgrade-insecure-requests` | Disabled                         | Enabled            |
-
-This is handled automatically - no configuration needed.
-
-### Third-Party Scripts
-
-In development, these scripts still load but may not function fully without keys:
-
-- **Google Analytics** - Loads but won't track without valid ID
-- **CookieYes** - Cookie consent banner loads
-- **reCAPTCHA** - Requires `NEXT_PUBLIC_RECAPTCHA_SITE_KEY`
-
-## Testing
+## Validation Commands
 
 ```bash
-npm test              # Run unit tests (Vitest)
-npm run test:watch    # Run tests in watch mode
-npm run test:coverage # Run tests with coverage report
-npm run test:e2e      # Run E2E tests (Playwright) — builds prod first
+npm run lint
+npm test
+npm run build
+npm run docs:truth
 ```
 
-Unit tests live in `__tests__/` and E2E tests in `e2e/`. See `.planning/codebase/TESTING.md` for full test reference.
+Use `npm run check` for the first three in one command. Run `npm run docs:truth` when you touch docs, API routes, env vars, scripts, or CI workflows.
 
-## Common Issues
+## CSP and Runtime Behavior
 
-### Blank sections / CSP errors in dev
+`proxy.ts` applies different CSP behavior by environment:
 
-If you see `EvalError: call to eval() blocked by CSP` in the console, ensure you're running the latest `proxy.ts` which relaxes CSP in development.
+| Directive area            | Development                            | Production         |
+| ------------------------- | -------------------------------------- | ------------------ |
+| Script execution          | Includes `'unsafe-eval'` for local HMR | No `'unsafe-eval'` |
+| Local websocket access    | Allows localhost websocket connections | HTTPS only         |
+| Upgrade insecure requests | Disabled                               | Enabled            |
 
-### Form submissions fail with 403
+No extra configuration is required when switching between local and production builds.
 
-The CSRF token is set via a cookie (`__csrf`). If forms return 403:
+## Third-Party Integrations
 
-1. Clear cookies for localhost
-2. Refresh the page (middleware sets the cookie on first request)
-3. Try submitting again
+- Google Analytics and GTM only become active when the matching public IDs are configured.
+- CookieYes can load in development, but banner behavior still depends on its external script.
+- The contact form requires both reCAPTCHA keys and `CONTACT_TO_EMAIL`.
+- The health endpoint returns `503` until `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `RESEND_API_KEY` are configured and Supabase is reachable.
 
-### reCAPTCHA not loading
+## Troubleshooting
 
-1. Ensure `NEXT_PUBLIC_RECAPTCHA_SITE_KEY` is set in `.env.local`
-2. The site key must be registered for `localhost` in Google reCAPTCHA admin
-3. Check browser console for CSP or network errors
+### Forms return `403 Invalid request.`
 
-## Scripts
+1. Clear cookies for `localhost`.
+2. Reload the page so middleware can reissue the `__csrf` cookie.
+3. Retry the request with the `x-csrf-token` header that matches the cookie.
 
-```bash
-npm run dev      # Start dev server (http://localhost:3000)
-npm run build    # Production build
-npm run start    # Run production build locally
-npm run lint     # Run ESLint
-npm run analyze  # Bundle size analysis (visual treemap)
-npm run check    # Lint + test + build (full CI check)
-```
+### Local dev shows CSP `EvalError`
 
-## Project Structure
+Run against the current `proxy.ts`. Development CSP must allow `'unsafe-eval'` for Next.js HMR.
 
-See `CLAUDE.md` for architecture overview and `SECURITY.md` for security guidelines.
+### reCAPTCHA does not load
+
+1. Set `NEXT_PUBLIC_RECAPTCHA_SITE_KEY` in `.env.local`.
+2. Register `localhost` in the Google reCAPTCHA admin console.
+3. Check the browser console for CSP or network errors.
+
+### `/api/health` returns `503`
+
+The route requires:
+
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `RESEND_API_KEY`
+
+It also checks live Supabase reachability, so invalid credentials or a down Supabase project still return `503`.
+
+## Related Docs
+
+- [README.md](README.md)
+- [CONTRIBUTING.md](CONTRIBUTING.md)
+- [SECURITY.md](SECURITY.md)
+- [docs/api.md](docs/api.md)
+- [docs/admin-api.md](docs/admin-api.md)
+- [.planning/codebase/TESTING.md](.planning/codebase/TESTING.md)

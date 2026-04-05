@@ -14,6 +14,10 @@ interface InviteEvent {
   created_at: string;
 }
 
+function incrementCount<K>(map: Map<K, number>, key: K, amount = 1) {
+  map.set(key, (map.get(key) ?? 0) + amount);
+}
+
 export async function GET(request: Request) {
   const admin = await verifyAdminSession();
   if (!admin) {
@@ -60,7 +64,7 @@ export async function GET(request: Request) {
     };
 
     const edges: Array<{ from: string; to: string; method: string; date: string }> = [];
-    const methodCounts: Record<string, number> = {};
+    const methodCounts = new Map<string, number>();
 
     for (const e of events) {
       const referrer = ensureNode(e.referrer_email);
@@ -79,7 +83,7 @@ export async function GET(request: Request) {
       });
 
       const method = e.invite_method || "unknown";
-      methodCounts[method] = (methodCounts[method] || 0) + 1;
+      incrementCount(methodCounts, method);
     }
 
     const nodes = Array.from(nodeMap.entries()).map(([email, data]) => ({
@@ -114,7 +118,7 @@ export async function GET(request: Request) {
         uniqueRecipients,
         avgInvitesPerReferrer:
           uniqueReferrers > 0 ? Math.round((events.length / uniqueReferrers) * 10) / 10 : 0,
-        methodBreakdown: methodCounts,
+        methodBreakdown: Object.fromEntries(methodCounts),
       },
     });
   } catch (err) {

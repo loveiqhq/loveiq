@@ -23,6 +23,18 @@ interface BehaviorEvent {
   session_id: string;
 }
 
+function incrementCount<K>(map: Map<K, number>, key: K, amount = 1) {
+  map.set(key, (map.get(key) ?? 0) + amount);
+}
+
+function getOrCreate<K, V>(map: Map<K, V>, key: K, create: () => V): V {
+  const existing = map.get(key);
+  if (existing) return existing;
+  const value = create();
+  map.set(key, value);
+  return value;
+}
+
 export async function GET(request: Request) {
   const admin = await verifyAdminSession();
   if (!admin) {
@@ -96,12 +108,12 @@ export async function GET(request: Request) {
     });
 
     // Kill questions — group abandon events by q_id
-    const killMap: Record<string, { count: number; chapter: string }> = {};
+    const killMap = new Map<string, { count: number; chapter: string }>();
     for (const e of abandons) {
-      if (!killMap[e.q_id]) killMap[e.q_id] = { count: 0, chapter: e.chapter };
-      killMap[e.q_id].count++;
+      const entry = getOrCreate(killMap, e.q_id, () => ({ count: 0, chapter: e.chapter }));
+      entry.count++;
     }
-    const killQuestions = Object.entries(killMap)
+    const killQuestions = [...killMap.entries()]
       .map(([qId, { count, chapter }]) => ({ qId, abandonCount: count, chapter }))
       .sort((a, b) => b.abandonCount - a.abandonCount);
 
@@ -111,14 +123,14 @@ export async function GET(request: Request) {
       partials.length > 0 ? Math.round((totalProgress / partials.length) * 10) / 10 : 0;
 
     // Hourly abandon pattern
-    const hourMap: Record<number, number> = {};
+    const hourMap = new Map<number, number>();
     for (const e of abandons) {
       const hour = new Date(e.event_time).getUTCHours();
-      hourMap[hour] = (hourMap[hour] || 0) + 1;
+      incrementCount(hourMap, hour);
     }
     const hourlyPattern = Array.from({ length: 24 }, (_, h) => ({
       hour: h,
-      count: hourMap[h] || 0,
+      count: hourMap.get(h) ?? 0,
     }));
 
     const totalPartialSaves = partials.length;

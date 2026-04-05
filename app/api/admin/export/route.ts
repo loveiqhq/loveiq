@@ -17,6 +17,40 @@ function parseUtmSource(tracker: string | null, fallback = "Direct"): string {
   }
 }
 
+interface ExportAnswerMeta {
+  time_spent: number | null;
+  revisions: number | null;
+  skipped: boolean;
+}
+
+interface ExportScoringResult {
+  primary_archetype: string;
+  percentages: Map<string, number>;
+  raw_scores: Map<string, number>;
+  engine_version: string;
+  scored_at: string;
+  v5_primary_archetype: string | null;
+  v5_percentages: Map<string, number> | null;
+}
+
+const EMPTY_ANSWER_VALUES = new Map<string, string>();
+const EMPTY_ANSWER_META = new Map<string, ExportAnswerMeta>();
+
+function getOrCreate<K, V>(map: Map<K, V>, key: K, create: () => V): V {
+  const existing = map.get(key);
+  if (existing) return existing;
+  const value = create();
+  map.set(key, value);
+  return value;
+}
+
+function toNumberMap(values: Record<string, number> | null | undefined): Map<string, number> {
+  if (!values) return new Map<string, number>();
+  return new Map(
+    Object.entries(values).filter((entry): entry is [string, number] => Number.isFinite(entry[1]))
+  );
+}
+
 export async function GET(request: Request) {
   const admin = await verifyAdminSession();
   if (!admin) {
@@ -94,18 +128,7 @@ export async function GET(request: Request) {
 
     // Fetch scoring results for all submissions
     const ids = submissions.map((s) => s.id);
-    const scoringMap: Record<
-      number,
-      {
-        primary_archetype: string;
-        percentages: Record<string, number>;
-        raw_scores: Record<string, number>;
-        engine_version: string;
-        scored_at: string;
-        v5_primary_archetype: string | null;
-        v5_percentages: Record<string, number> | null;
-      }
-    > = {};
+    const scoringMap = new Map<number, ExportScoringResult>();
 
     if (ids.length > 0) {
       try {
@@ -125,7 +148,15 @@ export async function GET(request: Request) {
             v5_percentages: Record<string, number> | null;
           }>;
           for (const row of scoringRows) {
-            scoringMap[row.survey_submission_id] = row;
+            scoringMap.set(row.survey_submission_id, {
+              primary_archetype: row.primary_archetype,
+              percentages: toNumberMap(row.percentages),
+              raw_scores: toNumberMap(row.raw_scores),
+              engine_version: row.engine_version,
+              scored_at: row.scored_at,
+              v5_primary_archetype: row.v5_primary_archetype,
+              v5_percentages: row.v5_percentages ? toNumberMap(row.v5_percentages) : null,
+            });
           }
         }
       } catch {
@@ -138,19 +169,16 @@ export async function GET(request: Request) {
 
     // Collect all unique archetype names from percentages for CSV columns
     const allArchetypes = new Set<string>();
-    for (const s of Object.values(scoringMap)) {
-      for (const key of Object.keys(s.percentages)) {
+    for (const s of scoringMap.values()) {
+      for (const key of s.percentages.keys()) {
         allArchetypes.add(key);
       }
     }
     const sortedArchetypes = Array.from(allArchetypes).sort();
 
     // Fetch answers for all submissions with question info and per-answer metadata
-    const answersMap: Record<number, Record<string, string>> = {};
-    const answerMetaMap: Record<
-      number,
-      Record<string, { time_spent: number | null; revisions: number | null; skipped: boolean }>
-    > = {};
+    const answersMap = new Map<number, Map<string, string>>();
+    const answerMetaMap = new Map<number, Map<string, ExportAnswerMeta>>();
 
     if (ids.length > 0) {
       const answersRes = await supabaseFetch(
@@ -187,29 +215,40 @@ export async function GET(request: Request) {
             const options = (a.survey_submission_answer_options || [])
               .map((o) => o.answer_option?.option_text)
               .filter((t): t is string => !!t);
+            if (options.length === 0 && a.answer_option?.option_text) {
+              options.push(a.answer_option.option_text);
+            }
             if (a.answer_text) options.push(a.answer_text);
             value = options.join("; ");
           } else {
             value = a.normalized_value != null ? String(a.normalized_value) : a.answer_text || "";
           }
 
-          if (!answersMap[a.survey_submission_id]) answersMap[a.survey_submission_id] = {};
-          answersMap[a.survey_submission_id][qId] = value;
+          const submissionAnswers = getOrCreate(
+            answersMap,
+            a.survey_submission_id,
+            () => new Map()
+          );
+          submissionAnswers.set(qId, value);
 
-          if (!answerMetaMap[a.survey_submission_id]) answerMetaMap[a.survey_submission_id] = {};
-          answerMetaMap[a.survey_submission_id][qId] = {
+          const submissionMeta = getOrCreate(
+            answerMetaMap,
+            a.survey_submission_id,
+            () => new Map()
+          );
+          submissionMeta.set(qId, {
             time_spent: a.time_spent_seconds,
             revisions: a.revision_count,
             skipped: a.was_skipped ?? false,
-          };
+          });
         }
       }
     }
 
     // Collect all unique question IDs for headers
     const allQIds = new Set<string>();
-    for (const map of Object.values(answersMap)) {
-      for (const qId of Object.keys(map)) {
+    for (const map of answersMap.values()) {
+      for (const qId of map.keys()) {
         allQIds.add(qId);
       }
     }
@@ -240,9 +279,9 @@ export async function GET(request: Request) {
       ]),
     ];
     const rows = filteredSubmissions.map((s) => {
-      const answers = answersMap[s.id] || {};
-      const meta = answerMetaMap[s.id] || {};
-      const scoring = scoringMap[s.id];
+      const answers = answersMap.get(s.id) ?? EMPTY_ANSWER_VALUES;
+      const meta = answerMetaMap.get(s.id) ?? EMPTY_ANSWER_META;
+      const scoring = scoringMap.get(s.id);
       const durationSec = s.duration_ms != null ? Math.round(s.duration_ms / 1000) : "";
       return [
         s.id,
@@ -257,22 +296,23 @@ export async function GET(request: Request) {
         scoring?.v5_primary_archetype || "",
         scoring?.engine_version || "",
         scoring?.scored_at || "",
-        ...sortedArchetypes.map((a) =>
-          scoring?.percentages[a] != null ? Math.round(scoring.percentages[a] * 10) / 10 : ""
-        ),
-        ...sortedArchetypes.map((a) =>
-          scoring?.v5_percentages?.[a] != null
-            ? Math.round(scoring.v5_percentages[a] * 10) / 10
-            : ""
-        ),
-        ...sortedArchetypes.map((a) =>
-          scoring?.raw_scores[a] != null ? Math.round(scoring.raw_scores[a] * 100) / 100 : ""
-        ),
+        ...sortedArchetypes.map((a) => {
+          const value = scoring?.percentages.get(a);
+          return value != null ? Math.round(value * 10) / 10 : "";
+        }),
+        ...sortedArchetypes.map((a) => {
+          const value = scoring?.v5_percentages?.get(a);
+          return value != null ? Math.round(value * 10) / 10 : "";
+        }),
+        ...sortedArchetypes.map((a) => {
+          const value = scoring?.raw_scores.get(a);
+          return value != null ? Math.round(value * 100) / 100 : "";
+        }),
         ...sortedQIds.flatMap((qId) => [
-          answers[qId] || "",
-          meta[qId]?.time_spent ?? "",
-          meta[qId]?.revisions ?? "",
-          meta[qId]?.skipped ? "yes" : "",
+          answers.get(qId) ?? "",
+          meta.get(qId)?.time_spent ?? "",
+          meta.get(qId)?.revisions ?? "",
+          meta.get(qId)?.skipped ? "yes" : "",
         ]),
       ];
     });

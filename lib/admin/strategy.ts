@@ -10,57 +10,65 @@ import { supabaseFetch } from "@/lib/admin/supabase";
 import { WORKFLOW_TAGS, isWorkflowTagName } from "@/lib/admin/workflow-tags";
 import logger from "@/lib/logger";
 
-const METRIC_LABELS: Record<string, string> = {
-  total_submissions: "Total Submissions",
-  completion_rate: "Completion Rate",
-  waitlist_signups: "Waitlist Signups",
-  scored_count: "Scored Submissions",
-  workflow_needs_review: "Needs Review Queue",
-  workflow_root_cause_found: "Root Cause Found",
-  workflow_question_change_candidate: "Question Change Candidates",
-  workflow_monitoring: "Monitoring Queue",
-};
+const METRIC_LABELS = new Map<string, string>(
+  Object.entries({
+    total_submissions: "Total Submissions",
+    completion_rate: "Completion Rate",
+    waitlist_signups: "Waitlist Signups",
+    scored_count: "Scored Submissions",
+    workflow_needs_review: "Needs Review Queue",
+    workflow_root_cause_found: "Root Cause Found",
+    workflow_question_change_candidate: "Question Change Candidates",
+    workflow_monitoring: "Monitoring Queue",
+  })
+);
 
-const PREDICTION_LABELS: Record<string, string> = {
-  volume_projection: "Volume Projection",
-  abandonment_predictor: "Abandonment Predictor",
-  utm_conversion: "UTM Conversion",
-  archetype_trend: "Archetype Trend",
-  friction_zone: "Friction Zone",
-  completion_time: "Completion Time",
-  revenue_forecast: "Revenue Forecast",
-};
+const PREDICTION_LABELS = new Map<string, string>(
+  Object.entries({
+    volume_projection: "Volume Projection",
+    abandonment_predictor: "Abandonment Predictor",
+    utm_conversion: "UTM Conversion",
+    archetype_trend: "Archetype Trend",
+    friction_zone: "Friction Zone",
+    completion_time: "Completion Time",
+    revenue_forecast: "Revenue Forecast",
+  })
+);
 
-const ROOT_CAUSE_LABELS: Record<string, string> = {
-  "question-friction": "Question friction",
-  "traffic-quality": "Traffic quality",
-  "scoring-mismatch": "Scoring mismatch",
-  "release-regression": "Release regression",
-  "report-engagement": "Report engagement",
-  "data-quality": "Data quality",
-  unknown: "Unknown",
-};
+const ROOT_CAUSE_LABELS = new Map<string, string>(
+  Object.entries({
+    "question-friction": "Question friction",
+    "traffic-quality": "Traffic quality",
+    "scoring-mismatch": "Scoring mismatch",
+    "release-regression": "Release regression",
+    "report-engagement": "Report engagement",
+    "data-quality": "Data quality",
+    unknown: "Unknown",
+  })
+);
 
-const LEAKAGE_HINTS: Record<string, { cause: string }> = {
-  "Waitlist Signups->Survey Started": {
-    cause: "Activation friction or traffic quality",
-  },
-  "Survey Started->Survey Completed": {
-    cause: "Survey friction and abandonment pressure",
-  },
-  "Survey Completed->Scored": {
-    cause: "Scoring lag or failed scoring runs",
-  },
-  "Scored->Report Generated": {
-    cause: "Report generation or delivery gap",
-  },
-  "Report Generated->Report Viewed": {
-    cause: "Engagement or distribution gap",
-  },
-  "Report Viewed->Payment Completed": {
-    cause: "Pricing or value communication gap",
-  },
-};
+const LEAKAGE_HINTS = new Map<string, { cause: string }>(
+  Object.entries({
+    "Waitlist Signups->Survey Started": {
+      cause: "Activation friction or traffic quality",
+    },
+    "Survey Started->Survey Completed": {
+      cause: "Survey friction and abandonment pressure",
+    },
+    "Survey Completed->Scored": {
+      cause: "Scoring lag or failed scoring runs",
+    },
+    "Scored->Report Generated": {
+      cause: "Report generation or delivery gap",
+    },
+    "Report Generated->Report Viewed": {
+      cause: "Engagement or distribution gap",
+    },
+    "Report Viewed->Payment Completed": {
+      cause: "Pricing or value communication gap",
+    },
+  })
+);
 
 const PIPELINE_STAGE_ORDER = [
   { key: "waitlist_signups", label: "Waitlist Signups" },
@@ -148,14 +156,16 @@ const completionInRange = (rows: any[], start: string, end: string) =>
   completionRate(rows.filter((row) => inRange(row.created_date_time, start, end)));
 function normalizeConversionPipeline(raw: any): StrategyPipelineSnapshot {
   const rawStages =
-    raw?.stages && !Array.isArray(raw.stages) && typeof raw.stages === "object" ? raw.stages : {};
+    raw?.stages && !Array.isArray(raw.stages) && typeof raw.stages === "object"
+      ? new Map(Object.entries(raw.stages as Record<string, unknown>))
+      : new Map<string, unknown>();
   const existingStages = Array.isArray(raw?.stages) ? raw.stages : [];
   const stages = PIPELINE_STAGE_ORDER.map(({ key, label }) => {
     const existing = existingStages.find((item: any) => item?.label === label);
     return {
       key,
       label,
-      value: Number(existing?.value ?? rawStages[key] ?? 0),
+      value: Number(existing?.value ?? rawStages.get(key) ?? 0),
     };
   });
 
@@ -199,7 +209,7 @@ function normalizeConversionPipeline(raw: any): StrategyPipelineSnapshot {
 
 const stageValue = (pipeline: StrategyPipelineSnapshot, label: string) =>
   pipeline.stages.find((stage: any) => stage.label === label)?.value ?? 0;
-const metricLabel = (key: string) => METRIC_LABELS[key] ?? key;
+const metricLabel = (key: string) => METRIC_LABELS.get(key) ?? key;
 const topGap = (values: Record<string, number> | null | undefined) => {
   if (!values) return null;
   const sorted = Object.values(values)
@@ -517,7 +527,7 @@ export async function buildStrategySnapshot(inputDays: number) {
       const from = stageValue(normalizedPipeline, item.from);
       const to = stageValue(normalizedPipeline, item.to);
       const pairKey = `${item.from}->${item.to}`;
-      const hint = LEAKAGE_HINTS[pairKey];
+      const hint = LEAKAGE_HINTS.get(pairKey);
       const lossCount = Math.max(from - to, 0);
       return {
         from: item.from,
@@ -608,7 +618,7 @@ export async function buildStrategySnapshot(inputDays: number) {
       .filter((item) => item.status !== "closed")
       .map((item) => ({
         title: item.title,
-        detail: `${ROOT_CAUSE_LABELS[item.root_cause ?? "unknown"] ?? "Unknown"} · ${
+        detail: `${ROOT_CAUSE_LABELS.get(item.root_cause ?? "unknown") ?? "Unknown"} | ${
           item.owner_email ? `Owner ${item.owner_email}` : "Unassigned"
         }`,
         priority: item.priority,
@@ -709,28 +719,31 @@ export async function buildStrategySnapshot(inputDays: number) {
     };
   });
 
-  const archetypeCurrent: Record<string, number> = {};
-  const archetypePrevious: Record<string, number> = {};
+  const archetypeCurrent = new Map<string, number>();
+  const archetypePrevious = new Map<string, number>();
   for (const row of scoringCurrent as any[]) {
-    archetypeCurrent[row.primary_archetype] = (archetypeCurrent[row.primary_archetype] || 0) + 1;
+    const archetype = row.primary_archetype;
+    if (!archetype) continue;
+    archetypeCurrent.set(archetype, (archetypeCurrent.get(archetype) ?? 0) + 1);
   }
   for (const row of scoringPrevious as any[]) {
-    archetypePrevious[row.primary_archetype] = (archetypePrevious[row.primary_archetype] || 0) + 1;
+    const archetype = row.primary_archetype;
+    if (!archetype) continue;
+    archetypePrevious.set(archetype, (archetypePrevious.get(archetype) ?? 0) + 1);
   }
-  const archetypeMomentum = Object.entries(archetypeCurrent)
-    .map(([archetype, currentCount]) => ({
-      archetype,
-      currentCount,
-      previousCount: archetypePrevious[archetype] || 0,
-      delta: currentCount - (archetypePrevious[archetype] || 0),
-      trend:
-        Math.abs(currentCount - (archetypePrevious[archetype] || 0)) < 1
-          ? "stable"
-          : currentCount > (archetypePrevious[archetype] || 0)
-            ? "up"
-            : "down",
-      href: "/admin/archetypes",
-    }))
+  const archetypeMomentum = [...archetypeCurrent.entries()]
+    .map(([archetype, currentCount]) => {
+      const previousCount = archetypePrevious.get(archetype) ?? 0;
+      const deltaValue = currentCount - previousCount;
+      return {
+        archetype,
+        currentCount,
+        previousCount,
+        delta: deltaValue,
+        trend: Math.abs(deltaValue) < 1 ? "stable" : deltaValue > 0 ? "up" : "down",
+        href: "/admin/archetypes",
+      };
+    })
     .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
     .slice(0, 8);
 
@@ -772,7 +785,7 @@ export async function buildStrategySnapshot(inputDays: number) {
       );
       return {
         title: insight.title,
-        source: PREDICTION_LABELS[insight.type] ?? insight.type,
+        source: PREDICTION_LABELS.get(insight.type) ?? insight.type,
         confidence,
         effort,
         timeToSignal,
@@ -1511,11 +1524,11 @@ export async function buildStrategySnapshot(inputDays: number) {
         channels: [...normalizedPipeline.utmSources]
           .sort((a: any, b: any) => b.conversionRate - a.conversionRate)
           .slice(0, 8),
-        archetypes: Object.entries(archetypeCurrent)
+        archetypes: [...archetypeCurrent.entries()]
           .map(([archetype, count]) => ({
             archetype,
             count,
-            delta: count - (archetypePrevious[archetype] || 0),
+            delta: count - (archetypePrevious.get(archetype) ?? 0),
           }))
           .sort((a, b) => b.count - a.count)
           .slice(0, 8),

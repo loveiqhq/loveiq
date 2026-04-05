@@ -15,6 +15,18 @@ interface AuditRow {
   created_at: string;
 }
 
+function incrementCount<K>(map: Map<K, number>, key: K, amount = 1) {
+  map.set(key, (map.get(key) ?? 0) + amount);
+}
+
+function getOrCreate<K, V>(map: Map<K, V>, key: K, create: () => V): V {
+  const existing = map.get(key);
+  if (existing) return existing;
+  const value = create();
+  map.set(key, value);
+  return value;
+}
+
 function classifySeverity(action: string, resourceType: string): "high" | "medium" | "low" {
   const normalized = `${action} ${resourceType}`.toLowerCase();
   if (
@@ -82,22 +94,24 @@ export async function GET(request: Request) {
     );
 
     // Per-admin stats
-    const adminMap: Record<
+    const adminMap = new Map<
       string,
-      { count: number; actions: Record<string, number>; lastActive: string }
-    > = {};
+      { count: number; actions: Map<string, number>; lastActive: string }
+    >();
     for (const log of auditLogs) {
-      if (!adminMap[log.admin_email]) {
-        adminMap[log.admin_email] = { count: 0, actions: {}, lastActive: log.created_at };
-      }
-      adminMap[log.admin_email].count++;
-      adminMap[log.admin_email].actions[log.action] =
-        (adminMap[log.admin_email].actions[log.action] || 0) + 1;
+      const adminStats = getOrCreate(adminMap, log.admin_email, () => ({
+        count: 0,
+        actions: new Map<string, number>(),
+        lastActive: log.created_at,
+      }));
+      adminStats.count++;
+      incrementCount(adminStats.actions, log.action);
+      if (log.created_at > adminStats.lastActive) adminStats.lastActive = log.created_at;
     }
 
-    const perAdmin = Object.entries(adminMap)
+    const perAdmin = [...adminMap.entries()]
       .map(([email, d]) => {
-        const topAction = Object.entries(d.actions).sort((a, b) => b[1] - a[1])[0];
+        const topAction = [...d.actions.entries()].sort((a, b) => b[1] - a[1])[0];
         return {
           email,
           actionCount: d.count,
@@ -108,41 +122,44 @@ export async function GET(request: Request) {
       .sort((a, b) => b.actionCount - a.actionCount);
 
     // Action type distribution
-    const actionMap: Record<string, number> = {};
+    const actionMap = new Map<string, number>();
     for (const log of auditLogs) {
-      actionMap[log.action] = (actionMap[log.action] || 0) + 1;
+      incrementCount(actionMap, log.action);
     }
-    const actionDistribution = Object.entries(actionMap)
+    const actionDistribution = [...actionMap.entries()]
       .map(([action, count]) => ({ action, count }))
       .sort((a, b) => b.count - a.count);
 
-    const severityMap: Record<string, number> = { high: 0, medium: 0, low: 0 };
-    const resourceMap: Record<
+    const severityMap = new Map<string, number>([
+      ["high", 0],
+      ["medium", 0],
+      ["low", 0],
+    ]);
+    const resourceMap = new Map<
       string,
       { count: number; lastTouched: string; highSeverityCount: number }
-    > = {};
+    >();
     for (const log of auditLogs) {
       const severity = classifySeverity(log.action, log.resource_type);
-      severityMap[severity] += 1;
+      incrementCount(severityMap, severity);
       const resourceType = log.resource_type || "unknown";
-      const current = resourceMap[resourceType] ?? {
+      const current = getOrCreate(resourceMap, resourceType, () => ({
         count: 0,
         lastTouched: log.created_at,
         highSeverityCount: 0,
-      };
+      }));
       current.count += 1;
       if (severity === "high") current.highSeverityCount += 1;
       if (log.created_at > current.lastTouched) current.lastTouched = log.created_at;
-      resourceMap[resourceType] = current;
     }
 
     // Daily actions
-    const dailyMap: Record<string, number> = {};
+    const dailyMap = new Map<string, number>();
     for (const log of auditLogs) {
       const day = log.created_at.slice(0, 10);
-      dailyMap[day] = (dailyMap[day] || 0) + 1;
+      incrementCount(dailyMap, day);
     }
-    const dailyActions = Object.entries(dailyMap)
+    const dailyActions = [...dailyMap.entries()]
       .map(([date, count]) => ({ date, count }))
       .sort((a, b) => a.date.localeCompare(b.date));
 
@@ -169,13 +186,17 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       totalActions: auditLogs.length,
-      activeAdmins: Object.keys(adminMap).length,
+      activeAdmins: adminMap.size,
       unreviewedCount: unreviewedTotal,
       perAdmin,
       actionDistribution,
       dailyActions,
-      severitySummary: severityMap,
-      resourceHotspots: Object.entries(resourceMap)
+      severitySummary: {
+        high: severityMap.get("high") ?? 0,
+        medium: severityMap.get("medium") ?? 0,
+        low: severityMap.get("low") ?? 0,
+      },
+      resourceHotspots: [...resourceMap.entries()]
         .map(([resourceType, value]) => ({
           resourceType,
           count: value.count,

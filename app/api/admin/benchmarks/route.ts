@@ -54,6 +54,10 @@ const deleteSchema = z.object({
 
 const postSchema = z.discriminatedUnion("action", [createSchema, updateSchema, deleteSchema]);
 
+function createMetricValues(keys: string[]) {
+  return new Map<string, number | null>(keys.map((key) => [key, null]));
+}
+
 export async function GET(request: Request) {
   const admin = await verifyAdminSession();
   if (!admin) {
@@ -105,17 +109,17 @@ export async function GET(request: Request) {
     }>;
 
     const metricKeys = [...new Set(benchmarks.map((benchmark) => benchmark.metric_key))];
-    const metricValues: Record<string, number | null> = {};
+    const metricValues = createMetricValues(metricKeys);
     await Promise.all(
       metricKeys.map(async (key) => {
-        metricValues[key] = await fetchMetricValue(key);
+        metricValues.set(key, await fetchMetricValue(key));
       })
     );
 
     return NextResponse.json({
       benchmarks: benchmarks.map((benchmark) => ({
         ...benchmark,
-        current_value: metricValues[benchmark.metric_key] ?? null,
+        current_value: metricValues.get(benchmark.metric_key) ?? null,
       })),
       activeDefinitions: mergedDefinitions,
       metrics: ADMIN_METRIC_OPTIONS,
@@ -186,13 +190,12 @@ export async function POST(request: Request) {
     }
 
     if (parsed.data.action === "update") {
-      const patch: Record<string, unknown> = {
-        updated_at: new Date().toISOString(),
-      };
+      const patchEntries: Array<[string, unknown]> = [["updated_at", new Date().toISOString()]];
       for (const [key, value] of Object.entries(parsed.data)) {
         if (key === "action" || key === "benchmarkId") continue;
-        patch[key] = value ?? null;
+        patchEntries.push([key, value ?? null]);
       }
+      const patch = Object.fromEntries(patchEntries);
 
       const updateRes = await supabaseFetch(
         `/rest/v1/admin_metric_benchmark?id=eq.${parsed.data.benchmarkId}`,
@@ -212,7 +215,7 @@ export async function POST(request: Request) {
         action: "update_metric_benchmark",
         resource_type: "admin_metric_benchmark",
         resource_id: String(parsed.data.benchmarkId),
-        metadata: { fields: Object.keys(patch) },
+        metadata: { fields: patchEntries.map(([field]) => field) },
         ip,
       });
 

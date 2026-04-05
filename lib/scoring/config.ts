@@ -72,11 +72,11 @@ function buildConfig(): ScoringConfig {
   }
 
   // Bias map
-  const bias: Record<string, number> = {};
-  for (const a of archetypes) bias[a] = 0.0;
+  const biasEntries = new Map<string, number>(archetypes.map((archetype) => [archetype, 0.0]));
   for (const b of archetypeBias) {
-    bias[b.archetypeName] = b.biasAddToRawScore;
+    biasEntries.set(b.archetypeName, b.biasAddToRawScore);
   }
+  const bias = Object.fromEntries(biasEntries) as Record<string, number>;
 
   // Boost map: "qid||answerCode" → entries[]
   const boosts = new Map<string, BoostEntry[]>();

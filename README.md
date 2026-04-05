@@ -1,75 +1,105 @@
 # LoveIQ
 
-Marketing website for LoveIQ — a science-backed relationship intelligence platform.
+> Owner: CODEOWNERS default
+> Last verified: 2026-04-05
+> Verified against: `package.json`, `.env.example`, `.github/workflows/ci.yml`, `app/api/**`, `proxy.ts`
 
-## Tech Stack
+Marketing site and survey platform for LoveIQ, a relationship intelligence product with a public site, survey flow, and an authenticated admin surface.
 
-- **Framework:** Next.js 16 (App Router)
-- **Language:** TypeScript
-- **Styling:** Tailwind CSS 3.4 + CSS custom properties
-- **Email:** Resend
-- **Database:** Supabase (waitlist storage + rate limiting)
-- **Deployment:** Vercel
-- **Testing:** Vitest + Playwright
+## Stack
+
+- Next.js App Router
+- React + TypeScript
+- Tailwind CSS + CSS custom properties
+- Supabase for data, auth, and rate-limit persistence
+- Resend for transactional email
+- Vitest + Playwright for test coverage
+
+Exact pinned versions live in [docs/versions.md](docs/versions.md).
 
 ## Quick Start
 
-```bash
-npm install
-cp .env.example .env.local   # Edit with your values (optional for UI work)
-npm run dev                   # http://localhost:3000
-```
-
-Or use the setup script:
+Recommended setup:
 
 ```bash
-npm run setup                 # Install deps + create .env.local
+npm run setup
 npm run dev
 ```
 
+Manual setup:
+
+```bash
+npm install
+npm run dev
+```
+
+`npm run setup` installs dependencies and creates `.env.local` from `.env.example` when the file is missing.
+
+## Validation
+
+After `npm run dev`, confirm:
+
+1. `http://localhost:3000` loads.
+2. The app sets a `__csrf` cookie on first page load.
+3. `npm run check` passes before you open a PR.
+4. `npm run docs:truth` passes when you changed docs, API routes, env vars, scripts, or workflows.
+
 ## Scripts
 
-| Command                       | Description                           |
-| ----------------------------- | ------------------------------------- |
-| `npm run dev`                 | Start dev server (Turbopack)          |
-| `npm run build`               | Production build                      |
-| `npm run start`               | Run production build locally          |
-| `npm run lint`                | Run ESLint                            |
-| `npm test`                    | Run unit/integration tests            |
-| `npm run test:watch`          | Run tests in watch mode               |
-| `npm run test:coverage`       | Run tests with coverage report        |
-| `npm run test:e2e`            | Run E2E tests (Playwright)            |
-| `npm run analyze`             | Bundle size analysis (visual treemap) |
-| `npm run check`               | Lint + test + build (full CI check)   |
-| `npm run setup`               | Install deps + create .env.local      |
-| `npm run update:product-kpis` | Update product KPIs from CSV          |
+| Command                       | Description                                                                            |
+| ----------------------------- | -------------------------------------------------------------------------------------- |
+| `npm run dev`                 | Start the local Next.js dev server.                                                    |
+| `npm run build`               | Build the production app.                                                              |
+| `npm run start`               | Serve the production build locally.                                                    |
+| `npm run lint`                | Run ESLint across the repo.                                                            |
+| `npm test`                    | Run unit and integration tests once.                                                   |
+| `npm run test:watch`          | Run Vitest in watch mode.                                                              |
+| `npm run test:coverage`       | Run tests with coverage output.                                                        |
+| `npm run test:e2e`            | Run Playwright end-to-end tests.                                                       |
+| `npm run analyze`             | Build with bundle analysis enabled.                                                    |
+| `npm run check`               | Run lint, tests, and build.                                                            |
+| `npm run setup`               | Install dependencies and create `.env.local` when missing.                             |
+| `npm run docs:truth`          | Verify markdown links, documented scripts/env vars, pinned versions, and API coverage. |
+| `npm run update:product-kpis` | Refresh generated KPI data from CSV inputs.                                            |
 
-## Project Structure
+## Project Layout
 
+```text
+app/                  Next.js routes, pages, and API handlers
+components/           Shared UI components, including the admin surface
+lib/                  Shared server and client utilities
+data/                 Generated and source data files
+docs/                 Canonical developer documentation
+scripts/              Repo automation and maintenance scripts
+supabase/             Supabase SQL and related assets
+proxy.ts              Security headers, CSP, and CSRF cookie management
 ```
-app/                  # Next.js App Router (pages + API routes)
-  api/                # API endpoints (contact, waitlist, survey, invite, invite-tracking, survey-partial, survey-tracking, health, staging-*, admin/*)
-components/           # React components
-  landing/            # Landing page sections (S01-S14)
-  about/              # About page sections
-  glossary/           # Glossary components
-lib/                  # Shared utilities (analytics, CSRF, rate limiting)
-public/               # Static assets
-proxy.ts              # Middleware (CSP, security headers, CSRF cookies)
-```
 
-## Documentation
+See [FILE_INDEX.md](FILE_INDEX.md) for task-based file lookup.
 
-- [Development Guide](DEVELOPMENT.md) — Setup, environment variables, common issues
-- [Security Guide](SECURITY.md) — Secrets, rotation, scanning, incident response
-- [Contributing](CONTRIBUTING.md) — PR process, coding standards, commit conventions
-- [Architecture](.planning/codebase/ARCHITECTURE.md) — System design and data flows
-- [Conventions](.planning/codebase/CONVENTIONS.md) — Code patterns and naming
-- [API Reference](docs/api.md) — API endpoint documentation
+For admin work, start with [docs/admin/AGENT_README.md](docs/admin/AGENT_README.md) instead of scanning the full admin tree.
+
+## Canonical Docs
+
+- [DEVELOPMENT.md](DEVELOPMENT.md) - local setup, env vars, and troubleshooting
+- [CONTRIBUTING.md](CONTRIBUTING.md) - branch, testing, and PR expectations
+- [SECURITY.md](SECURITY.md) - secrets, rotation, scanning, and response guidance
+- [docs/api.md](docs/api.md) - public API reference
+- [docs/survey.md](docs/survey.md) - survey runtime, persistence, and recovery flow
+- [docs/admin-api.md](docs/admin-api.md) - admin API route catalog
+- [docs/admin-dashboard.md](docs/admin-dashboard.md) - admin shell, command center, and stats dashboard reference
+- [docs/admin/AGENT_README.md](docs/admin/AGENT_README.md) - admin domain router across routes, APIs, UI, and logic
+- [docs/versions.md](docs/versions.md) - single source of truth for pinned versions
+- [docs/doc-inventory.md](docs/doc-inventory.md) - project documentation inventory
+- [docs/knowledge-ledger.md](docs/knowledge-ledger.md) - verified documentation updates and why they matter
+- [.planning/codebase/ARCHITECTURE.md](.planning/codebase/ARCHITECTURE.md) - codebase architecture reference
+- [.planning/codebase/CONVENTIONS.md](.planning/codebase/CONVENTIONS.md) - implementation conventions
 
 ## Environment Variables
 
-Copy `.env.example` to `.env.local`. The site renders without env vars — forms will fail gracefully with error messages. See [Development Guide](DEVELOPMENT.md) for details.
+Copy `.env.example` to `.env.local` only if you need local integrations. The UI renders without env vars, but form submissions, admin auth, and health checks degrade when required services are unconfigured.
+
+Environment variable details live in [DEVELOPMENT.md](DEVELOPMENT.md). Secret handling and rotation policy live in [SECURITY.md](SECURITY.md).
 
 ## License
 

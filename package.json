@@ -13,6 +13,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "docs:truth": "node scripts/check-docs-truth.mjs",
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",

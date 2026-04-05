@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useMemo, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAdminFetch } from "./hooks/useAdminFetch";
@@ -106,12 +107,12 @@ export default function SubmissionComparison() {
 
   return (
     <div className="space-y-6">
-      <a
+      <Link
         href="/admin/submissions"
         className="inline-flex items-center gap-1 text-sm text-text-muted transition hover:text-text-primary"
       >
         ← Back to Submissions
-      </a>
+      </Link>
 
       {/* ID Inputs */}
       <div className="rounded-xl border border-white/10 bg-surface p-5">

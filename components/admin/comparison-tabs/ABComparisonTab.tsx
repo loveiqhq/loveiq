@@ -56,6 +56,8 @@ interface SavedSegmentsResponse {
   segments: SegmentOption[];
 }
 
+const EMPTY_SEGMENTS: SegmentOption[] = [];
+
 function formatDuration(ms: number | null | undefined): string {
   if (ms == null) return "--";
   const minutes = Math.floor(ms / 60_000);
@@ -93,7 +95,10 @@ export default function ABComparisonTab() {
   const [fetchKey, setFetchKey] = useState(0);
 
   const { data: savedSegmentsData } = useAdminFetch<SavedSegmentsResponse>("/api/admin/segments");
-  const savedSegments = savedSegmentsData?.segments ?? [];
+  const savedSegments = useMemo(
+    () => savedSegmentsData?.segments ?? EMPTY_SEGMENTS,
+    [savedSegmentsData?.segments]
+  );
 
   const params = useMemo(() => {
     if (fetchKey === 0) return undefined;

@@ -138,6 +138,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         const options = (a.survey_submission_answer_options || [])
           .map((o) => o.answer_option?.option_text)
           .filter((t): t is string => !!t);
+        if (options.length === 0 && a.answer_option?.option_text) {
+          options.push(a.answer_option.option_text);
+        }
         if (a.answer_text) options.push(a.answer_text);
         answer_value = options.length > 0 ? options : null;
       } else {

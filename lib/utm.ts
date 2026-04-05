@@ -31,16 +31,16 @@ export function captureUtmFromUrl(): string | null {
   if (typeof window === "undefined") return null;
 
   const params = new URLSearchParams(window.location.search);
-  const utm: Record<string, string> = {};
+  const utm = new Map<string, string>();
 
   for (const key of UTM_KEYS) {
     const value = params.get(key);
-    if (value) utm[key] = value;
+    if (value) utm.set(key, value);
   }
 
-  if (Object.keys(utm).length === 0) return null;
+  if (utm.size === 0) return null;
 
-  const json = JSON.stringify(utm);
+  const json = JSON.stringify(Object.fromEntries(utm));
   try {
     localStorage.setItem(GLOBAL_UTM_KEY, json);
     // Also write to the legacy key so older survey hooks pick it up

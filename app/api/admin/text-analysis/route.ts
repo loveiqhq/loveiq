@@ -104,6 +104,18 @@ interface AnswerRow {
   } | null;
 }
 
+function incrementCount<K>(map: Map<K, number>, key: K, amount = 1) {
+  map.set(key, (map.get(key) ?? 0) + amount);
+}
+
+function getOrCreate<K, V>(map: Map<K, V>, key: K, create: () => V): V {
+  const existing = map.get(key);
+  if (existing) return existing;
+  const value = create();
+  map.set(key, value);
+  return value;
+}
+
 export async function GET(request: Request) {
   const admin = await verifyAdminSession();
   if (!admin) {
@@ -142,22 +154,25 @@ export async function GET(request: Request) {
     const rows = (await res.json()) as AnswerRow[];
 
     // Group by question for summary
-    const questionMap: Record<
+    const questionMap = new Map<
       string,
       { text: string; qid: string; count: number; totalLen: number }
-    > = {};
+    >();
     for (const r of rows) {
       const q = r.survey_question;
       if (!q) continue;
       const key = String(q.id);
-      if (!questionMap[key]) {
-        questionMap[key] = { text: q.question_text, qid: q.frontend_qid, count: 0, totalLen: 0 };
-      }
-      questionMap[key].count++;
-      questionMap[key].totalLen += r.answer_text.length;
+      const question = getOrCreate(questionMap, key, () => ({
+        text: q.question_text,
+        qid: q.frontend_qid,
+        count: 0,
+        totalLen: 0,
+      }));
+      question.count++;
+      question.totalLen += r.answer_text.length;
     }
 
-    const questions = Object.entries(questionMap).map(([id, d]) => ({
+    const questions = [...questionMap.entries()].map(([id, d]) => ({
       questionId: id,
       questionText: d.text?.slice(0, 80) || d.qid,
       responseCount: d.count,
@@ -165,7 +180,7 @@ export async function GET(request: Request) {
     }));
 
     // Word frequency
-    const wordCounts: Record<string, number> = {};
+    const wordCounts = new Map<string, number>();
     for (const r of rows) {
       const words = r.answer_text
         .toLowerCase()
@@ -173,10 +188,10 @@ export async function GET(request: Request) {
         .split(/\s+/)
         .filter((w) => w.length > 2 && !STOP_WORDS.has(w));
       for (const w of words) {
-        wordCounts[w] = (wordCounts[w] || 0) + 1;
+        incrementCount(wordCounts, w);
       }
     }
-    const keywords = Object.entries(wordCounts)
+    const keywords = [...wordCounts.entries()]
       .map(([word, count]) => ({ word, count }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 50);

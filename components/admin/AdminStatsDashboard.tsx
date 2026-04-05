@@ -83,7 +83,7 @@ function truncateLabel(text: string, max = 50): string {
   return text.length > max ? text.slice(0, max - 3) + "\u2026" : text;
 }
 
-export default function AdminDashboard() {
+export default function AdminStatsDashboard() {
   const [days, setDays] = useState(30);
   const params = useMemo(() => ({ days: String(days) }), [days]);
   const { data, loading, error } = useAdminFetch<StatsData>("/api/admin/stats", params);

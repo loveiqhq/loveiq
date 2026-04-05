@@ -49,16 +49,16 @@ const STOP_WORDS = new Set([
   "your",
 ]);
 
-const SEMANTIC_EXPANSIONS: Record<string, string[]> = {
-  shame: ["judgment", "self-judgment", "embarrassment", "insecure"],
-  uncertainty: ["unsure", "not sure", "confused", "depends", "unclear"],
-  desire: ["libido", "wanting sex", "sex drive", "want more"],
-  confidence: ["body confidence", "self-worth", "secure"],
-  reconnecting: ["repairing", "close", "connection", "repair"],
-  pain: ["discomfort", "hurt", "physical pain"],
-  slow: ["hesitation", "stalled", "delay", "inactive"],
-  fraud: ["duplicate", "bot", "spam", "suspicious"],
-};
+const SEMANTIC_EXPANSIONS = new Map<string, string[]>([
+  ["shame", ["judgment", "self-judgment", "embarrassment", "insecure"]],
+  ["uncertainty", ["unsure", "not sure", "confused", "depends", "unclear"]],
+  ["desire", ["libido", "wanting sex", "sex drive", "want more"]],
+  ["confidence", ["body confidence", "self-worth", "secure"]],
+  ["reconnecting", ["repairing", "close", "connection", "repair"]],
+  ["pain", ["discomfort", "hurt", "physical pain"]],
+  ["slow", ["hesitation", "stalled", "delay", "inactive"]],
+  ["fraud", ["duplicate", "bot", "spam", "suspicious"]],
+]);
 
 export function round1(value: number): number {
   return Math.round(value * 10) / 10;
@@ -187,9 +187,15 @@ export function median(values: number[]): number | null {
   if (values.length === 0) return null;
   const sorted = [...values].sort((a, b) => a - b);
   const middle = Math.floor(sorted.length / 2);
+  const lower = sorted.at(middle - 1);
+  const upper = sorted.at(middle);
   return sorted.length % 2 === 0
-    ? round1((sorted[middle - 1] + sorted[middle]) / 2)
-    : round1(sorted[middle]);
+    ? lower != null && upper != null
+      ? round1((lower + upper) / 2)
+      : null
+    : upper != null
+      ? round1(upper)
+      : null;
 }
 
 export function formatSigned(value: number, suffix = ""): string {
@@ -214,12 +220,13 @@ export function tokenizeSemantic(value: string): string[] {
   const expanded = new Set(baseTokens);
 
   for (const token of baseTokens) {
-    for (const expansion of SEMANTIC_EXPANSIONS[token] ?? []) {
+    const expansions: string[] = SEMANTIC_EXPANSIONS.get(token) ?? [];
+    for (const expansion of expansions) {
       expanded.add(expansion);
     }
   }
 
-  for (const [root, expansions] of Object.entries(SEMANTIC_EXPANSIONS)) {
+  for (const [root, expansions] of SEMANTIC_EXPANSIONS.entries()) {
     if (expansions.some((expansion) => normalized.includes(expansion))) {
       expanded.add(root);
     }

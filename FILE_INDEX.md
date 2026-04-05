@@ -55,38 +55,16 @@
 
 ## Admin Panel
 
-| Task                          | Files                                                                                                                               |
-| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| Admin auth (session check)    | `lib/admin/auth.ts`                                                                                                                 |
-| Admin audit logging           | `lib/admin/audit.ts`                                                                                                                |
-| Admin roles (email allowlist) | `lib/admin/roles.ts`                                                                                                                |
-| Admin Supabase fetch helper   | `lib/admin/supabase.ts`                                                                                                             |
-| Admin Supabase Auth (server)  | `lib/admin/supabase-server.ts`                                                                                                      |
-| Admin display formatting      | `lib/admin/format.ts` (`maskEmail`)                                                                                                 |
-| Admin magic link email        | `lib/emails/admin-magic-link.ts`                                                                                                    |
-| Admin login page              | `components/admin/AdminLoginForm.tsx`, `app/admin/login/page.tsx`                                                                   |
-| Admin login API               | `app/api/admin/login/route.ts`                                                                                                      |
-| Admin logout API              | `app/api/admin/logout/route.ts`                                                                                                     |
-| Admin magic link callback     | `app/admin/auth/callback/route.ts`                                                                                                  |
-| Admin dashboard               | `components/admin/AdminDashboard.tsx`, `app/api/admin/stats/route.ts`                                                               |
-| Admin strategy hub            | `components/admin/StrategyHubDashboard.tsx`, `app/api/admin/strategy/route.ts`                                                      |
-| Admin experiments             | `components/admin/ExperimentRegistry.tsx`, `app/admin/experiments/page.tsx`, `app/api/admin/experiments/route.ts`                   |
-| Admin benchmarks              | `components/admin/BenchmarkRegistry.tsx`, `app/admin/benchmarks/page.tsx`, `app/api/admin/benchmarks/route.ts`                      |
-| Admin question lifecycle      | `components/admin/QuestionLifecyclePanel.tsx`, `app/admin/question-lifecycle/page.tsx`, `app/api/admin/question-lifecycle/route.ts` |
-| Admin forecasting             | `components/admin/PredictiveInsights.tsx`, `app/api/admin/predictions/route.ts`, `lib/admin/forecasting.ts`                         |
-| Admin submission list         | `components/admin/SubmissionBrowser.tsx`, `components/admin/SubmissionTable.tsx`                                                    |
-| Admin submission detail       | `components/admin/SubmissionDetail.tsx`                                                                                             |
-| Admin submissions API         | `app/api/admin/submissions/route.ts`, `app/api/admin/submissions/[id]/route.ts`                                                     |
-| Admin CSV export              | `app/api/admin/export/route.ts`                                                                                                     |
-| Admin survey toggle           | `components/admin/SurveyStatus.tsx`, `app/api/admin/survey-status/route.ts`                                                         |
-| Admin Product KPIs dashboard  | `components/admin/ProductKpiDashboard.tsx`, `app/api/admin/product-kpis/route.ts`                                                   |
-| Admin KPI tab components      | `components/admin/kpi-tabs/ReportSectionsTab.tsx`, `QuestionsTab.tsx`, `ChaptersTab.tsx`                                            |
-| Admin KPI sortable table      | `components/admin/kpi-tabs/KpiDataTable.tsx`                                                                                        |
-| Admin question scoring logic  | `lib/admin/question-effectiveness.ts`, `app/api/admin/question-effectiveness/route.ts`                                              |
-| Product KPI data              | `data/product-kpis.ts` (auto-generated from `data/product-kpis/*.csv`)                                                              |
-| Regenerate product KPIs       | `node scripts/update-product-kpis.js`                                                                                               |
-| Admin layout (sidebar/header) | `components/admin/AdminSidebar.tsx`, `components/admin/AdminHeader.tsx`, `app/admin/layout.tsx`                                     |
-| Admin data fetching hook      | `components/admin/hooks/useAdminFetch.ts`                                                                                           |
+| Task                                        | Files                                                                                                                                                                  |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Admin route router                          | `docs/admin/AGENT_README.md`, `docs/admin/domains/AGENT_README.md`                                                                                                     |
+| Admin shell and command center              | `docs/admin/domains/command-center.md`, `app/admin/AGENT_README.md`, `app/api/admin/AGENT_README.md`, `components/admin/AGENT_README.md`, `lib/admin/AGENT_README.md`  |
+| Admin submissions and moderation            | `docs/admin/domains/submissions.md`                                                                                                                                    |
+| Admin scoring, profiles, reports, and stats | `docs/admin/domains/scoring.md`                                                                                                                                        |
+| Admin growth, funnels, journey, and revenue | `docs/admin/domains/growth.md`                                                                                                                                         |
+| Admin research, strategy, and intelligence  | `docs/admin/domains/research.md`                                                                                                                                       |
+| Admin health and operational diagnostics    | `docs/admin/domains/health.md`                                                                                                                                         |
+| Admin auth entrypoints                      | `components/admin/AdminLoginForm.tsx`, `app/admin/login/page.tsx`, `app/api/admin/login/route.ts`, `app/api/admin/logout/route.ts`, `app/admin/auth/callback/route.ts` |
 
 ## Landing Page
 
@@ -200,3 +178,18 @@
 | Hydration marker       | `components/HydrationMarker.tsx`                                                    |
 | Smooth scroll          | `components/SmoothScroll.tsx`                                                       |
 | Favicon / icons        | `public/favicon.svg`, `public/apple-touch-icon.png`, `public/images/LoveiqLogo.svg` |
+
+## Documentation
+
+| Task                       | Files                                                                                                                                                             |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public API docs            | `docs/api.md`, `app/api/**/route.ts` outside `app/api/admin/**`                                                                                                   |
+| Survey flow docs           | `docs/survey.md`, `app/survey/page.tsx`, `components/survey/**`, `app/api/survey/route.ts`, `app/api/survey-partial/route.ts`, `app/api/survey-tracking/route.ts` |
+| Admin domain router        | `docs/admin/AGENT_README.md`, `docs/admin/domains/AGENT_README.md`                                                                                                |
+| Admin API docs             | `docs/admin-api.md`, `app/api/admin/**/route.ts`, `lib/admin/roles.ts`                                                                                            |
+| Admin shell/dashboard docs | `docs/admin-dashboard.md`, `app/admin/**`, `components/admin/**`, `app/api/admin/os/route.ts`, `app/api/admin/stats/route.ts`                                     |
+| Pinned versions            | `docs/versions.md`, `package.json`, `.github/workflows/ci.yml`                                                                                                    |
+| Doc inventory              | `docs/doc-inventory.md`, `.github/CODEOWNERS`                                                                                                                     |
+| Documentation ledger       | `docs/knowledge-ledger.md`                                                                                                                                        |
+| Docs truth automation      | `scripts/check-docs-truth.mjs`, `.github/workflows/docs-truth.yml`                                                                                                |
+| Docs impact PR gate        | `scripts/check-docs-impact.sh`, `.github/workflows/ci.yml`, `.github/pull_request_template.md`                                                                    |

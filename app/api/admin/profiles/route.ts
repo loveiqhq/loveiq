@@ -57,6 +57,10 @@ function ageBracket(age: number | null): string {
   return "55+";
 }
 
+function incrementCount<K>(map: Map<K, number>, key: K, amount = 1) {
+  map.set(key, (map.get(key) ?? 0) + amount);
+}
+
 export async function GET(request: Request) {
   const admin = await verifyAdminSession();
   if (!admin) {
@@ -190,23 +194,23 @@ export async function GET(request: Request) {
     });
 
     // Demographics distributions
-    const genderDist: Record<string, number> = {};
-    const ageDist: Record<string, number> = {};
-    const orientationDist: Record<string, number> = {};
-    const relationshipDist: Record<string, number> = {};
-    const locationDist: Record<string, number> = {};
+    const genderDist = new Map<string, number>();
+    const ageDist = new Map<string, number>();
+    const orientationDist = new Map<string, number>();
+    const relationshipDist = new Map<string, number>();
+    const locationDist = new Map<string, number>();
 
     for (const p of profileList) {
       const g = p.gender || "Not specified";
-      genderDist[g] = (genderDist[g] || 0) + 1;
+      incrementCount(genderDist, g);
       const ab = ageBracket(p.age);
-      ageDist[ab] = (ageDist[ab] || 0) + 1;
+      incrementCount(ageDist, ab);
       const o = p.sexualOrientation || "Not specified";
-      orientationDist[o] = (orientationDist[o] || 0) + 1;
+      incrementCount(orientationDist, o);
       const r = p.relationshipStatus || "Not specified";
-      relationshipDist[r] = (relationshipDist[r] || 0) + 1;
+      incrementCount(relationshipDist, r);
       const l = p.location || "Not specified";
-      locationDist[l] = (locationDist[l] || 0) + 1;
+      incrementCount(locationDist, l);
     }
 
     const ages = profileList.map((p) => p.age).filter((a): a is number => a != null);
@@ -214,18 +218,18 @@ export async function GET(request: Request) {
       ages.length > 0 ? Math.round(ages.reduce((s, a) => s + a, 0) / ages.length) : null;
     const withSubmission = profileList.filter((p) => p.hasSubmission).length;
     const topLocation =
-      Object.entries(locationDist)
+      [...locationDist.entries()]
         .filter(([k]) => k !== "Not specified")
         .sort(([, a], [, b]) => b - a)[0]?.[0] || "—";
 
     return NextResponse.json({
       profiles: profileList,
       demographics: {
-        genderDistribution: genderDist,
-        ageDistribution: ageDist,
-        orientationDistribution: orientationDist,
-        relationshipDistribution: relationshipDist,
-        locationDistribution: locationDist,
+        genderDistribution: Object.fromEntries(genderDist),
+        ageDistribution: Object.fromEntries(ageDist),
+        orientationDistribution: Object.fromEntries(orientationDist),
+        relationshipDistribution: Object.fromEntries(relationshipDist),
+        locationDistribution: Object.fromEntries(locationDist),
         totalProfiles: profiles.length,
         avgAge,
         withSubmission,

@@ -27,6 +27,10 @@ const deleteGoalSchema = z.object({
   goalId: z.number().int().positive(),
 });
 
+function createMetricValues(keys: string[]) {
+  return new Map<string, number | null>(keys.map((key) => [key, null]));
+}
+
 export async function GET(request: Request) {
   const admin = await verifyAdminSession();
   if (!admin) {
@@ -68,10 +72,10 @@ export async function GET(request: Request) {
     }>;
 
     const metricKeys = [...new Set(goals.map((g) => g.metric_key))];
-    const metricValues: Record<string, number | null> = {};
+    const metricValues = createMetricValues(metricKeys);
     await Promise.all(
       metricKeys.map(async (key) => {
-        metricValues[key] = await fetchMetricValue(key);
+        metricValues.set(key, await fetchMetricValue(key));
       })
     );
 
@@ -81,7 +85,7 @@ export async function GET(request: Request) {
         label: g.label,
         metricKey: g.metric_key,
         targetValue: g.target_value,
-        currentValue: metricValues[g.metric_key] ?? null,
+        currentValue: metricValues.get(g.metric_key) ?? null,
         status: g.status,
         deadline: g.deadline,
         createdBy: g.admin_email,

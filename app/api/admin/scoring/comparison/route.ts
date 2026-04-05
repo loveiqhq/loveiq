@@ -41,6 +41,15 @@ function confidenceBucket(
   return "low";
 }
 
+function incrementCount<K>(map: Map<K, number>, key: K, amount = 1) {
+  map.set(key, (map.get(key) ?? 0) + amount);
+}
+
+function getRecordValue(values: Record<string, number> | null, key: string | null): number | null {
+  if (!values || !key) return null;
+  return new Map(Object.entries(values)).get(key) ?? null;
+}
+
 export async function GET(request: Request) {
   const admin = await verifyAdminSession();
   if (!admin) {
@@ -96,30 +105,30 @@ export async function GET(request: Request) {
     const agreementRate = totalScored > 0 ? Math.round((agreements / totalScored) * 100) : 0;
 
     // 2. V4 distribution
-    const v4Map: Record<string, number> = {};
+    const v4Map = new Map<string, number>();
     for (const r of dualRows) {
-      v4Map[r.primary_archetype] = (v4Map[r.primary_archetype] || 0) + 1;
+      incrementCount(v4Map, r.primary_archetype);
     }
-    const v4Distribution = Object.entries(v4Map)
+    const v4Distribution = [...v4Map.entries()]
       .map(([archetype, count]) => ({ archetype, count }))
       .sort((a, b) => b.count - a.count);
 
     // 3. V5 distribution
-    const v5Map: Record<string, number> = {};
+    const v5Map = new Map<string, number>();
     for (const r of dualRows) {
-      v5Map[r.v5_primary_archetype!] = (v5Map[r.v5_primary_archetype!] || 0) + 1;
+      if (r.v5_primary_archetype) incrementCount(v5Map, r.v5_primary_archetype);
     }
-    const v5Distribution = Object.entries(v5Map)
+    const v5Distribution = [...v5Map.entries()]
       .map(([archetype, count]) => ({ archetype, count }))
       .sort((a, b) => b.count - a.count);
 
     // 4. Drift matrix
-    const driftMap: Record<string, number> = {};
+    const driftMap = new Map<string, number>();
     for (const r of dualRows) {
       const key = `${r.primary_archetype}::${r.v5_primary_archetype}`;
-      driftMap[key] = (driftMap[key] || 0) + 1;
+      incrementCount(driftMap, key);
     }
-    const driftMatrix = Object.entries(driftMap).map(([key, count]) => {
+    const driftMatrix = [...driftMap.entries()].map(([key, count]) => {
       const [v4, v5] = key.split("::");
       return { v4, v5, count };
     });
@@ -127,8 +136,8 @@ export async function GET(request: Request) {
     // 5. Disagreements (limit 100)
     const ambiguityRows = dualRows.map((r) => {
       const email = r.survey_submission?.app_user?.email || "";
-      const v4Pct = r.percentages?.[r.primary_archetype] ?? null;
-      const v5Pct = r.v5_percentages?.[r.v5_primary_archetype!] ?? null;
+      const v4Pct = getRecordValue(r.percentages, r.primary_archetype);
+      const v5Pct = getRecordValue(r.v5_percentages, r.v5_primary_archetype);
       const v4Gap = topGap(r.percentages);
       const v5Gap = topGap(r.v5_percentages);
       const agreement = r.primary_archetype === r.v5_primary_archetype;

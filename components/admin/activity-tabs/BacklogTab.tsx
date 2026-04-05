@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo } from "react";
 import { useAdminFetch } from "@/components/admin/hooks/useAdminFetch";
 import StatCard from "@/components/admin/StatCard";
@@ -39,9 +40,9 @@ export default function BacklogTab({ days }: { days: number }) {
         <p className="text-sm text-text-muted">
           There are <strong className="text-text-primary">{data.unreviewedCount}</strong> completed
           submissions that have not been viewed, flagged, or noted by any admin. Visit the{" "}
-          <a href="/admin/submissions" className="text-accent-purple hover:underline">
+          <Link href="/admin/submissions" className="text-accent-purple hover:underline">
             Submissions
-          </a>{" "}
+          </Link>{" "}
           page to review them.
         </p>
       </div>

@@ -157,6 +157,7 @@ const CountryQuestion: FC<CountryQuestionProps> = ({ question, value, onChange }
         <div className="relative">
           {/* Selected flag */}
           {value && !isEditing && getCountryFlagUrl(value) && (
+            // eslint-disable-next-line @next/next/no-img-element -- tiny decorative external flag icon
             <img
               aria-hidden="true"
               src={getCountryFlagUrl(value)}
@@ -224,6 +225,7 @@ const CountryQuestion: FC<CountryQuestionProps> = ({ question, value, onChange }
                 onMouseEnter={() => setHighlightIndex(i)}
               >
                 {getCountryFlagUrl(country) && (
+                  // eslint-disable-next-line @next/next/no-img-element -- tiny decorative external flag icon
                   <img
                     aria-hidden="true"
                     src={getCountryFlagUrl(country)}

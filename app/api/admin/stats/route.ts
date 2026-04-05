@@ -16,6 +16,20 @@ function parseUtmSource(tracker: string | null, fallback = "Direct"): string {
   }
 }
 
+function incrementCount<K>(map: Map<K, number>, key: K, amount = 1) {
+  map.set(key, (map.get(key) ?? 0) + amount);
+}
+
+function getOrCreate<K, V>(map: Map<K, V>, key: K, create: () => V): V {
+  if (map.has(key)) {
+    return map.get(key) as V;
+  }
+
+  const value = create();
+  map.set(key, value);
+  return value;
+}
+
 export async function GET(request: Request) {
   const admin = await verifyAdminSession();
   if (!admin) {
@@ -146,25 +160,28 @@ export async function GET(request: Request) {
     }
 
     // UTM source breakdown (top 10)
-    const utmMap: Record<string, number> = {};
+    const utmMap = new Map<string, number>();
     for (const s of submissions) {
       const source = parseUtmSource(s.utm_tracker);
-      utmMap[source] = (utmMap[source] || 0) + 1;
+      incrementCount(utmMap, source);
     }
-    const utmSources = Object.entries(utmMap)
+    const utmSources = [...utmMap.entries()]
       .map(([source, count]) => ({ source, count }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 10);
 
     // Completion rate by UTM source (min 2 submissions per source)
-    const utmCompletionMap: Record<string, { completed: number; total: number }> = {};
+    const utmCompletionMap = new Map<string, { completed: number; total: number }>();
     for (const s of submissions) {
       const source = parseUtmSource(s.utm_tracker);
-      if (!utmCompletionMap[source]) utmCompletionMap[source] = { completed: 0, total: 0 };
-      utmCompletionMap[source].total++;
-      if (s.status === "completed") utmCompletionMap[source].completed++;
+      const completionStats = getOrCreate(utmCompletionMap, source, () => ({
+        completed: 0,
+        total: 0,
+      }));
+      completionStats.total++;
+      if (s.status === "completed") completionStats.completed++;
     }
-    const completionByUtm = Object.entries(utmCompletionMap)
+    const completionByUtm = [...utmCompletionMap.entries()]
       .filter(([, v]) => v.total >= 2)
       .map(([source, v]) => ({
         source,
@@ -175,23 +192,23 @@ export async function GET(request: Request) {
       .sort((a, b) => b.rate - a.rate);
 
     // Peak submission hours (0-23)
-    const hourMap: Record<number, number> = {};
+    const hourMap = new Map<number, number>();
     for (const s of submissions) {
       const hour = new Date(s.created_date_time).getUTCHours();
-      hourMap[hour] = (hourMap[hour] || 0) + 1;
+      incrementCount(hourMap, hour);
     }
-    const hourly = Object.entries(hourMap)
-      .map(([h, count]) => ({ hour: Number(h), count }))
+    const hourly = [...hourMap.entries()]
+      .map(([hour, count]) => ({ hour, count }))
       .sort((a, b) => a.hour - b.hour);
 
     // Daily submission counts
     const recentSubmissions = (await recentRes.json()) as Array<{ created_date_time: string }>;
-    const dailyMap: Record<string, number> = {};
+    const dailyMap = new Map<string, number>();
     for (const s of recentSubmissions) {
       const day = s.created_date_time.slice(0, 10);
-      dailyMap[day] = (dailyMap[day] || 0) + 1;
+      incrementCount(dailyMap, day);
     }
-    const daily = Object.entries(dailyMap).map(([date, count]) => ({ date, count }));
+    const daily = [...dailyMap.entries()].map(([date, count]) => ({ date, count }));
 
     // Q4: Waitlist data (graceful degradation)
     let waitlistTotal: number | null = null;
@@ -219,30 +236,30 @@ export async function GET(request: Request) {
           (w) => w.created_date_time.slice(0, 10) === todayStr
         ).length;
         // Daily trend
-        const wDailyMap: Record<string, number> = {};
+        const wDailyMap = new Map<string, number>();
         for (const w of waitlistRows) {
           const day = w.created_date_time.slice(0, 10);
-          wDailyMap[day] = (wDailyMap[day] || 0) + 1;
+          incrementCount(wDailyMap, day);
         }
-        waitlistDaily = Object.entries(wDailyMap).map(([date, count]) => ({ date, count }));
+        waitlistDaily = [...wDailyMap.entries()].map(([date, count]) => ({ date, count }));
         // UTM sources
-        const wUtmMap: Record<string, number> = {};
+        const wUtmMap = new Map<string, number>();
         for (const w of waitlistRows) {
           const source = parseUtmSource(w.utm_tracker);
-          wUtmMap[source] = (wUtmMap[source] || 0) + 1;
+          incrementCount(wUtmMap, source);
         }
-        waitlistUtmSources = Object.entries(wUtmMap)
+        waitlistUtmSources = [...wUtmMap.entries()]
           .map(([source, count]) => ({ source, count }))
           .sort((a, b) => b.count - a.count)
           .slice(0, 10);
         // Waitlist peak hours
-        const wHourMap: Record<number, number> = {};
+        const wHourMap = new Map<number, number>();
         for (const w of waitlistRows) {
           const hour = new Date(w.created_date_time).getUTCHours();
-          wHourMap[hour] = (wHourMap[hour] || 0) + 1;
+          incrementCount(wHourMap, hour);
         }
-        waitlistHourly = Object.entries(wHourMap)
-          .map(([h, count]) => ({ hour: Number(h), count }))
+        waitlistHourly = [...wHourMap.entries()]
+          .map(([hour, count]) => ({ hour, count }))
           .sort((a, b) => a.hour - b.hour);
       }
     } catch (err) {
@@ -289,29 +306,29 @@ export async function GET(request: Request) {
         }>;
 
         // Country distribution (qId 15001) — includes both free-text and option-based answers
-        const countryMap: Record<string, number> = {};
+        const countryMap = new Map<string, number>();
         for (const a of answers) {
           if (a.survey_question?.frontend_qid === "15001") {
             const country = (a.answer_text || a.answer_option?.option_text || "").trim();
-            if (country) countryMap[country] = (countryMap[country] || 0) + 1;
+            if (country) incrementCount(countryMap, country);
           }
         }
-        countryDistribution = Object.entries(countryMap)
+        countryDistribution = [...countryMap.entries()]
           .map(([country, count]) => ({ country, count }))
           .sort((a, b) => b.count - a.count)
           .slice(0, 15);
 
         // Scale question averages
-        const scaleMap: Record<string, { sum: number; count: number }> = {};
+        const scaleMap = new Map<string, { sum: number; count: number }>();
         for (const a of answers) {
           if (a.survey_question?.type === "scale" && a.normalized_value != null) {
             const qId = a.survey_question.frontend_qid;
-            if (!scaleMap[qId]) scaleMap[qId] = { sum: 0, count: 0 };
-            scaleMap[qId].sum += a.normalized_value;
-            scaleMap[qId].count++;
+            const scaleStats = getOrCreate(scaleMap, qId, () => ({ sum: 0, count: 0 }));
+            scaleStats.sum += a.normalized_value;
+            scaleStats.count++;
           }
         }
-        scaleAvg = Object.entries(scaleMap)
+        scaleAvg = [...scaleMap.entries()]
           .map(([qId, { sum, count }]) => ({
             qId,
             avg: Math.round((sum / count) * 10) / 10,
@@ -320,30 +337,33 @@ export async function GET(request: Request) {
           .slice(0, 15);
 
         // Skip rate per question
-        const skipMap: Record<string, { skipped: number; total: number }> = {};
+        const skipMap = new Map<string, { skipped: number; total: number }>();
         for (const a of answers) {
           const qId = a.survey_question?.frontend_qid;
           if (!qId) continue;
-          if (!skipMap[qId]) skipMap[qId] = { skipped: 0, total: 0 };
-          skipMap[qId].total++;
-          if (a.was_skipped) skipMap[qId].skipped++;
+          const skipStats = getOrCreate(skipMap, qId, () => ({ skipped: 0, total: 0 }));
+          skipStats.total++;
+          if (a.was_skipped) skipStats.skipped++;
         }
-        skipRate = Object.entries(skipMap)
+        skipRate = [...skipMap.entries()]
           .filter(([, v]) => v.skipped > 0)
           .map(([qId, v]) => ({ qId, skipped: v.skipped, total: v.total }))
           .sort((a, b) => b.skipped - a.skipped)
           .slice(0, 15);
 
         // Revision hotspots (most revised questions)
-        const revisionMap: Record<string, { totalRevisions: number; count: number }> = {};
+        const revisionMap = new Map<string, { totalRevisions: number; count: number }>();
         for (const a of answers) {
           const qId = a.survey_question?.frontend_qid;
           if (!qId || !a.revision_count || a.revision_count <= 0) continue;
-          if (!revisionMap[qId]) revisionMap[qId] = { totalRevisions: 0, count: 0 };
-          revisionMap[qId].totalRevisions += a.revision_count;
-          revisionMap[qId].count++;
+          const revisionStats = getOrCreate(revisionMap, qId, () => ({
+            totalRevisions: 0,
+            count: 0,
+          }));
+          revisionStats.totalRevisions += a.revision_count;
+          revisionStats.count++;
         }
-        revisionHotspots = Object.entries(revisionMap)
+        revisionHotspots = [...revisionMap.entries()]
           .map(([qId, v]) => ({
             qId,
             avgRevisions: Math.round((v.totalRevisions / v.count) * 10) / 10,
@@ -378,18 +398,18 @@ export async function GET(request: Request) {
             v5_primary_archetype: string | null;
           }>;
           scoredCount = scoringRows.length;
-          const archMap: Record<string, number> = {};
-          const v5ArchMap: Record<string, number> = {};
+          const archMap = new Map<string, number>();
+          const v5ArchMap = new Map<string, number>();
           for (const row of scoringRows) {
-            archMap[row.primary_archetype] = (archMap[row.primary_archetype] || 0) + 1;
+            incrementCount(archMap, row.primary_archetype);
             if (row.v5_primary_archetype) {
-              v5ArchMap[row.v5_primary_archetype] = (v5ArchMap[row.v5_primary_archetype] || 0) + 1;
+              incrementCount(v5ArchMap, row.v5_primary_archetype);
             }
           }
-          archetypeDistribution = Object.entries(archMap)
+          archetypeDistribution = [...archMap.entries()]
             .map(([archetype, count]) => ({ archetype, count }))
             .sort((a, b) => b.count - a.count);
-          v5ArchetypeDistribution = Object.entries(v5ArchMap)
+          v5ArchetypeDistribution = [...v5ArchMap.entries()]
             .map(([archetype, count]) => ({ archetype, count }))
             .sort((a, b) => b.count - a.count);
         }
@@ -418,13 +438,13 @@ export async function GET(request: Request) {
             []),
         ];
         // Group by qId
-        const distMap: Record<string, Array<{ option: string; count: number }>> = {};
+        const distMap = new Map<string, Array<{ option: string; count: number }>>();
         for (const row of allRows) {
-          if (!distMap[row.q_id]) distMap[row.q_id] = [];
-          distMap[row.q_id].push({ option: row.option_text, count: row.count });
+          const options = getOrCreate(distMap, row.q_id, () => []);
+          options.push({ option: row.option_text, count: row.count });
         }
         // Sort by total responses, take top 5 questions
-        answerDistribution = Object.entries(distMap)
+        answerDistribution = [...distMap.entries()]
           .map(([qId, options]) => ({ qId, options }))
           .sort(
             (a, b) =>
@@ -454,15 +474,15 @@ export async function GET(request: Request) {
           created_at: string;
         }>;
         const today = inviteRows.filter((r) => r.created_at.slice(0, 10) === todayStr).length;
-        const iDailyMap: Record<string, number> = {};
+        const iDailyMap = new Map<string, number>();
         for (const r of inviteRows) {
           const day = r.created_at.slice(0, 10);
-          iDailyMap[day] = (iDailyMap[day] || 0) + 1;
+          incrementCount(iDailyMap, day);
         }
         inviteClicks = {
           total: inviteRows.length,
           today,
-          daily: Object.entries(iDailyMap).map(([date, count]) => ({ date, count })),
+          daily: [...iDailyMap.entries()].map(([date, count]) => ({ date, count })),
         };
       }
     } catch (err) {

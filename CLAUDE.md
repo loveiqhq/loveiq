@@ -87,7 +87,7 @@ loveiq-web/
 │   │   ├── AdminLoginForm.tsx  # Admin login form
 │   │   ├── AdminSidebar.tsx    # Sidebar navigation
 │   │   ├── AdminHeader.tsx     # Mobile header with hamburger
-│   │   ├── AdminDashboard.tsx  # Dashboard with stats + charts
+│   │   ├── AdminStatsDashboard.tsx  # Standalone stats dashboard component
 │   │   ├── SubmissionBrowser.tsx # Filterable submission list
 │   │   ├── SubmissionDetail.tsx # Single submission view + actions
 │   │   ├── SurveyStatus.tsx    # Survey active/closed toggle

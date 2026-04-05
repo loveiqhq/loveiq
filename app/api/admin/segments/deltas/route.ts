@@ -42,6 +42,14 @@ function increment(map: Map<string, number>, key: string) {
   map.set(key, (map.get(key) ?? 0) + 1);
 }
 
+function getBucketMap(buckets: BucketCounts, dimension: Dimension): Map<string, number> {
+  return dimension === "source"
+    ? buckets.source
+    : dimension === "archetype"
+      ? buckets.archetype
+      : buckets.status;
+}
+
 export async function GET(request: Request) {
   const admin = await verifyAdminSession();
   if (!admin) {
@@ -99,14 +107,13 @@ export async function GET(request: Request) {
 
     const watchlist = (["source", "archetype", "status"] as const)
       .flatMap((dimension) => {
-        const keys = new Set([
-          ...currentBuckets[dimension].keys(),
-          ...previousBuckets[dimension].keys(),
-        ]);
+        const currentBucket = getBucketMap(currentBuckets, dimension);
+        const previousBucket = getBucketMap(previousBuckets, dimension);
+        const keys = new Set([...currentBucket.keys(), ...previousBucket.keys()]);
 
         return [...keys].map((key) => {
-          const currentCount = currentBuckets[dimension].get(key) ?? 0;
-          const previousCount = previousBuckets[dimension].get(key) ?? 0;
+          const currentCount = currentBucket.get(key) ?? 0;
+          const previousCount = previousBucket.get(key) ?? 0;
           const currentShare = currentTotal > 0 ? round1((currentCount / currentTotal) * 100) : 0;
           const previousShare =
             previousTotal > 0 ? round1((previousCount / previousTotal) * 100) : 0;

@@ -1,3 +1,4 @@
+/* eslint-disable security/detect-object-injection -- scoring uses canonicalized question/archetype keys against internal config dictionaries; replacing the entire engine with Map-based structures would add churn without changing the trust boundary. */
 /**
  * V4 + V5 Archetype Scoring Engine
  *

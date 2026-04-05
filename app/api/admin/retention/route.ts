@@ -6,6 +6,14 @@ import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
 import { supabaseFetch } from "@/lib/admin/supabase";
 import logger from "@/lib/logger";
 
+function getOrCreate<K, V>(map: Map<K, V>, key: K, create: () => V): V {
+  const existing = map.get(key);
+  if (existing) return existing;
+  const value = create();
+  map.set(key, value);
+  return value;
+}
+
 export async function GET(request: Request) {
   const admin = await verifyAdminSession();
   if (!admin) {
@@ -89,34 +97,32 @@ export async function GET(request: Request) {
     ];
 
     // Return visits (users with >1 session on different days)
-    const sessionsByReport: Record<number, Set<string>> = {};
+    const sessionsByReport = new Map<number, Set<string>>();
     for (const s of sessions as Array<{ personal_report_id: number; started_at: string }>) {
-      if (!sessionsByReport[s.personal_report_id]) {
-        sessionsByReport[s.personal_report_id] = new Set();
-      }
-      sessionsByReport[s.personal_report_id].add(s.started_at.slice(0, 10));
+      const daysByReport = getOrCreate(sessionsByReport, s.personal_report_id, () => new Set());
+      daysByReport.add(s.started_at.slice(0, 10));
     }
-    const returnVisitors = Object.values(sessionsByReport).filter((days) => days.size > 1).length;
+    const returnVisitors = [...sessionsByReport.values()].filter((days) => days.size > 1).length;
 
     // Weekly cohorts from completion date
-    const cohortMap: Record<string, { total: number; viewed: number }> = {};
+    const cohortMap = new Map<string, { total: number; viewed: number }>();
     for (const sub of submissions as Array<{ id: number; created_date_time: string }>) {
       const d = new Date(sub.created_date_time);
       const weekStart = new Date(d);
       weekStart.setDate(d.getDate() - d.getDay());
       const weekKey = weekStart.toISOString().slice(0, 10);
-      if (!cohortMap[weekKey]) cohortMap[weekKey] = { total: 0, viewed: 0 };
-      cohortMap[weekKey].total++;
+      const cohort = getOrCreate(cohortMap, weekKey, () => ({ total: 0, viewed: 0 }));
+      cohort.total++;
 
       // Check if this submission's report was viewed
       const report = reports.find(
         (r: { survey_submission_id: number }) => r.survey_submission_id === sub.id
       );
       if (report && reportIdsViewed.has(report.id)) {
-        cohortMap[weekKey].viewed++;
+        cohort.viewed++;
       }
     }
-    const cohorts = Object.entries(cohortMap)
+    const cohorts = [...cohortMap.entries()]
       .map(([week, d]) => ({
         week,
         total: d.total,
@@ -137,7 +143,7 @@ export async function GET(request: Request) {
         .filter((payment) => payment.status === "succeeded")
         .map((payment) => payment.personal_report_id)
     );
-    const entryPathMap: Record<string, { total: number; viewed: number; paid: number }> = {};
+    const entryPathMap = new Map<string, { total: number; viewed: number; paid: number }>();
     const reportBySubmission = new Map(
       (reports as Array<{ id: number; survey_submission_id: number }>).map((report) => [
         report.survey_submission_id,
@@ -155,13 +161,11 @@ export async function GET(request: Request) {
           ? "organic"
           : parseUtmCampaign(submission.utm_tracker)
       }`;
-      if (!entryPathMap[label]) {
-        entryPathMap[label] = { total: 0, viewed: 0, paid: 0 };
-      }
-      entryPathMap[label].total += 1;
+      const entryPath = getOrCreate(entryPathMap, label, () => ({ total: 0, viewed: 0, paid: 0 }));
+      entryPath.total += 1;
       const reportId = reportBySubmission.get(submission.id);
-      if (reportId && reportIdsViewed.has(reportId)) entryPathMap[label].viewed += 1;
-      if (reportId && paidReportIds.has(reportId)) entryPathMap[label].paid += 1;
+      if (reportId && reportIdsViewed.has(reportId)) entryPath.viewed += 1;
+      if (reportId && paidReportIds.has(reportId)) entryPath.paid += 1;
     }
 
     return NextResponse.json({
@@ -170,7 +174,7 @@ export async function GET(request: Request) {
       cohorts,
       viralCoefficient,
       uniqueReferrers,
-      entryPaths: Object.entries(entryPathMap)
+      entryPaths: [...entryPathMap.entries()]
         .map(([path, value]) => ({
           path,
           total: value.total,

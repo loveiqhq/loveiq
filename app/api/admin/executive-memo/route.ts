@@ -16,13 +16,17 @@ function inCurrentWindow(dateValue: string | null | undefined, since: string): b
   return !!dateValue && dateValue >= since;
 }
 
+function windowValue(row: WindowedRow, field: PropertyKey): string {
+  return String(new Map(Object.entries(row)).get(String(field)) ?? "");
+}
+
 function splitWindow<T extends WindowedRow>(
   rows: T[],
   field: keyof T,
   since: string
 ): { current: T[]; prior: T[] } {
-  const current = rows.filter((row) => inCurrentWindow(String(row[field] ?? ""), since));
-  const prior = rows.filter((row) => !inCurrentWindow(String(row[field] ?? ""), since));
+  const current = rows.filter((row) => inCurrentWindow(windowValue(row, field), since));
+  const prior = rows.filter((row) => !inCurrentWindow(windowValue(row, field), since));
   return { current, prior };
 }
 

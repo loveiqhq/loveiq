@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# check-docs-impact.sh — Advisory check for documentation freshness.
+# check-docs-impact.sh - Blocking check for documentation freshness.
 #
-# Prints warnings when code changes in certain areas are not accompanied
-# by documentation updates. Always exits 0 (advisory only, never blocks PRs).
+# Fails when high-risk code or config changes land without either:
+# 1. a markdown documentation update in the same PR, or
+# 2. an explicit checked "No doc impact" box in the PR body.
 #
 # Usage:
 #   scripts/check-docs-impact.sh            # compares HEAD against origin/main
@@ -11,11 +12,10 @@
 set -euo pipefail
 
 BASE_REF="${1:-origin/main}"
+PR_BODY="${PR_BODY:-}"
 
-# Ensure we have the base ref available (CI may do a shallow clone)
 git fetch origin main --depth=1 2>/dev/null || true
 
-# Get the list of changed files relative to the base
 CHANGED_FILES=$(git diff --name-only "$BASE_REF"...HEAD 2>/dev/null || git diff --name-only "$BASE_REF" HEAD 2>/dev/null || echo "")
 
 if [ -z "$CHANGED_FILES" ]; then
@@ -23,113 +23,92 @@ if [ -z "$CHANGED_FILES" ]; then
   exit 0
 fi
 
-WARNINGS=0
+FAILURES=0
+MD_CHANGES=$(echo "$CHANGED_FILES" | grep -E '\.md$' || true)
+DOCS_UPDATED_CHECKED=0
+NO_DOC_IMPACT_CHECKED=0
 
-print_warning() {
-  if [ "$WARNINGS" -eq 0 ]; then
+if printf '%s\n' "$PR_BODY" | grep -qiE '^[[:space:]]*-[[:space:]]*\[[xX]\][[:space:]]+Documentation updated\b'; then
+  DOCS_UPDATED_CHECKED=1
+fi
+
+if printf '%s\n' "$PR_BODY" | grep -qiE '^[[:space:]]*-[[:space:]]*\[[xX]\][[:space:]]+No doc impact\b'; then
+  NO_DOC_IMPACT_CHECKED=1
+fi
+
+print_failure() {
+  if [ "$FAILURES" -eq 0 ]; then
     echo ""
     echo "============================================================"
-    echo "  Documentation Impact Warnings (advisory, non-blocking)"
+    echo "  Documentation Impact Failures"
     echo "============================================================"
   fi
-  WARNINGS=$((WARNINGS + 1))
+
+  FAILURES=$((FAILURES + 1))
   echo ""
-  echo "  WARNING #${WARNINGS}: $1"
+  echo "  FAILURE #${FAILURES}: $1"
   echo "  -> $2"
 }
 
-# ---------------------------------------------------------------------------
-# Check 1: Admin code changed without any .md file update
-# ---------------------------------------------------------------------------
-ADMIN_CHANGES=$(echo "$CHANGED_FILES" | grep -E '^(lib/admin/|app/admin/|app/api/admin/|components/admin/)' || true)
+check_requires_docs() {
+  local title="$1"
+  local pattern="$2"
+  local guidance="$3"
+  local matches
 
-if [ -n "$ADMIN_CHANGES" ]; then
-  MD_CHANGES=$(echo "$CHANGED_FILES" | grep -E '\.md$' || true)
-  if [ -z "$MD_CHANGES" ]; then
-    print_warning "Admin code changed but no documentation updated" \
-      "Changed admin files:
-$(echo "$ADMIN_CHANGES" | sed 's/^/           /')
-         Consider updating CLAUDE.md, DEVELOPMENT.md, or relevant .planning/ docs
-         if the admin panel API, auth flow, or UI structure changed."
+  matches=$(echo "$CHANGED_FILES" | grep -E "$pattern" || true)
+  if [ -n "$matches" ] && [ -z "$MD_CHANGES" ] && [ "$NO_DOC_IMPACT_CHECKED" -ne 1 ]; then
+    print_failure "$title changed without a documentation update" \
+"Changed files:
+$(echo "$matches" | sed 's/^/           /')
+         $guidance"
   fi
+}
+
+if [ "$DOCS_UPDATED_CHECKED" -eq 1 ] && [ "$NO_DOC_IMPACT_CHECKED" -eq 1 ]; then
+  print_failure "PR body is contradictory" \
+"Check either 'Documentation updated' or 'No doc impact', not both."
 fi
 
-# ---------------------------------------------------------------------------
-# Check 2: package.json scripts section changed without CLAUDE.md update
-# ---------------------------------------------------------------------------
-PACKAGE_CHANGED=$(echo "$CHANGED_FILES" | grep -E '^package\.json$' || true)
-
-if [ -n "$PACKAGE_CHANGED" ]; then
-  # Check if the scripts section actually changed
-  SCRIPTS_DIFF=$(git diff "$BASE_REF"...HEAD -- package.json 2>/dev/null | grep -E '^\+.*"scripts"' || git diff "$BASE_REF" HEAD -- package.json 2>/dev/null | grep -E '^\+.*"(dev|build|start|lint|test|check|setup|analyze|prepare)"' || true)
-
-  if [ -n "$SCRIPTS_DIFF" ]; then
-    CLAUDE_MD_CHANGED=$(echo "$CHANGED_FILES" | grep -E '^CLAUDE\.md$' || true)
-    if [ -z "$CLAUDE_MD_CHANGED" ]; then
-      print_warning "package.json scripts changed but CLAUDE.md was not updated" \
-        "The Quick Commands section in CLAUDE.md should reflect any new or modified npm scripts."
-    fi
-  fi
+if [ -n "$MD_CHANGES" ] && [ "$NO_DOC_IMPACT_CHECKED" -eq 1 ]; then
+  print_failure "'No doc impact' was checked but markdown files changed" \
+"Markdown changes were detected:
+$(echo "$MD_CHANGES" | sed 's/^/           /')"
 fi
 
-# ---------------------------------------------------------------------------
-# Check 3: .env.example changed without CLAUDE.md update
-# ---------------------------------------------------------------------------
-ENV_EXAMPLE_CHANGED=$(echo "$CHANGED_FILES" | grep -E '^\.env\.example$' || true)
-
-if [ -n "$ENV_EXAMPLE_CHANGED" ]; then
-  CLAUDE_MD_CHANGED=$(echo "$CHANGED_FILES" | grep -E '^CLAUDE\.md$' || true)
-  if [ -z "$CLAUDE_MD_CHANGED" ]; then
-    print_warning ".env.example changed but CLAUDE.md was not updated" \
-      "The Environment Variables table in CLAUDE.md should list any new or removed variables."
-  fi
+if [ -z "$MD_CHANGES" ] && [ "$DOCS_UPDATED_CHECKED" -eq 1 ]; then
+  print_failure "'Documentation updated' was checked but no markdown files changed" \
+"Update the docs in this PR or switch the checkbox to 'No doc impact'."
 fi
 
-# ---------------------------------------------------------------------------
-# Check 4: API routes changed without CLAUDE.md repo map update
-# ---------------------------------------------------------------------------
-NEW_API_ROUTES=$(echo "$CHANGED_FILES" | grep -E '^app/api/.*route\.ts$' || true)
+check_requires_docs \
+  "Admin surface" \
+  '^(lib/admin/|app/admin/|app/api/admin/|components/admin/)' \
+  "Update docs/admin-api.md, README.md, DEVELOPMENT.md, or another canonical markdown file."
 
-if [ -n "$NEW_API_ROUTES" ]; then
-  # Only warn for new files (added, not modified)
-  NEW_API_FILES=$(git diff --name-status "$BASE_REF"...HEAD 2>/dev/null | grep -E '^A.*app/api/.*route\.ts$' || git diff --name-status "$BASE_REF" HEAD 2>/dev/null | grep -E '^A.*app/api/.*route\.ts$' || true)
-  if [ -n "$NEW_API_FILES" ]; then
-    CLAUDE_MD_CHANGED=$(echo "$CHANGED_FILES" | grep -E '^CLAUDE\.md$' || true)
-    if [ -z "$CLAUDE_MD_CHANGED" ]; then
-      print_warning "New API route(s) added but CLAUDE.md was not updated" \
-        "New routes:
-$(echo "$NEW_API_FILES" | awk '{print $2}' | sed 's/^/           /')
-         Add them to the Repo Map in CLAUDE.md."
-    fi
-  fi
-fi
+check_requires_docs \
+  "Public API surface" \
+  '^app/api/(contact/|health/|invite/|invite-tracking/|staging-login/|staging-logout/|survey/|survey-partial/|survey-tracking/|waitlist/)' \
+  "Update docs/api.md or another canonical markdown file."
 
-# ---------------------------------------------------------------------------
-# Check 5: proxy.ts (middleware/CSP) changed without SECURITY.md update
-# ---------------------------------------------------------------------------
-PROXY_CHANGED=$(echo "$CHANGED_FILES" | grep -E '^proxy\.ts$' || true)
+check_requires_docs \
+  "Security and middleware surface" \
+  '^(proxy\.ts|lib/csrf\.ts|lib/ratelimit\.ts)' \
+  "Update SECURITY.md, DEVELOPMENT.md, or the relevant API documentation."
 
-if [ -n "$PROXY_CHANGED" ]; then
-  SECURITY_MD_CHANGED=$(echo "$CHANGED_FILES" | grep -E '^SECURITY\.md$' || true)
-  if [ -z "$SECURITY_MD_CHANGED" ]; then
-    print_warning "proxy.ts changed but SECURITY.md was not updated" \
-      "CSP or middleware changes should be reflected in SECURITY.md."
-  fi
-fi
+check_requires_docs \
+  "Toolchain and environment surface" \
+  '^(package\.json|package-lock\.json|\.env\.example|\.github/workflows/|scripts/check-docs-truth\.mjs|scripts/check-docs-impact\.sh)' \
+  "Update README.md, DEVELOPMENT.md, docs/versions.md, or the relevant workflow/docs references."
 
-# ---------------------------------------------------------------------------
-# Summary
-# ---------------------------------------------------------------------------
 echo ""
-if [ "$WARNINGS" -gt 0 ]; then
+if [ "$FAILURES" -gt 0 ]; then
   echo "============================================================"
-  echo "  ${WARNINGS} documentation warning(s) found."
-  echo "  These are advisory only and do not block the PR."
+  echo "  ${FAILURES} documentation impact failure(s) found."
+  echo "  Add markdown updates or check 'No doc impact' in the PR."
   echo "============================================================"
-else
-  echo "[docs-impact] All checks passed. No documentation warnings."
+  exit 1
 fi
-echo ""
 
-# Always exit 0 — this is advisory only
-exit 0
+echo "[docs-impact] All checks passed."
+echo ""

@@ -76,6 +76,8 @@ jobs:
         with:
           fetch-depth: 0
       - run: bash scripts/check-docs-impact.sh origin/${{ github.base_ref }}
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
 
   smoke-test:
     name: Smoke Test (Production)

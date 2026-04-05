@@ -4,7 +4,13 @@ import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 const REQUIRED_ENV_VARS = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "RESEND_API_KEY"];
 
 export async function GET() {
-  const missingEnv = REQUIRED_ENV_VARS.filter((v) => !process.env[v]);
+  const envConfig = {
+    SUPABASE_URL: process.env.SUPABASE_URL,
+    SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
+    RESEND_API_KEY: process.env.RESEND_API_KEY,
+  };
+  const envMap = new Map(Object.entries(envConfig));
+  const missingEnv = REQUIRED_ENV_VARS.filter((envName) => !envMap.get(envName));
 
   let supabaseStatus: "ok" | "error" | "unconfigured" = "unconfigured";
   if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {

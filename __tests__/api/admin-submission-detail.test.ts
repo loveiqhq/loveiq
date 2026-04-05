@@ -161,6 +161,35 @@ describe("GET /api/admin/submissions/[id]", () => {
       engine_version: "v3",
     });
   });
+
+  it("keeps legacy single-answer data for questions now marked as multiple", async () => {
+    const sampleAnswer = {
+      survey_question: { frontend_qid: "03003", question: "Legacy multi", type: "multiple" },
+      answer_text: null,
+      normalized_value: null,
+      answer_option: { option_text: "Legacy single option" },
+      survey_submission_answer_options: [],
+    };
+
+    mockSupabaseFetch
+      .mockResolvedValueOnce({ ok: true, json: async () => [sampleSubmission] })
+      .mockResolvedValueOnce({ ok: true, json: async () => [sampleAnswer] })
+      .mockResolvedValueOnce({ ok: true, json: async () => [] });
+
+    const res = await GET(makeGetRequest("1"), makeParams("1"));
+    expect(res.status).toBe(200);
+
+    const json = await res.json();
+    expect(json.answers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          q_id: "03003",
+          answer_type: "multiple",
+          answer_value: ["Legacy single option"],
+        }),
+      ])
+    );
+  });
 });
 
 describe("PATCH /api/admin/submissions/[id]", () => {

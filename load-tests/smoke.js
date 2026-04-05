@@ -21,7 +21,7 @@ export const options = {
   },
 };
 
-export default function () {
+export default function smokeTest() {
   const pages = ["/", "/waitlist", "/about", "/api/health"];
 
   for (const path of pages) {

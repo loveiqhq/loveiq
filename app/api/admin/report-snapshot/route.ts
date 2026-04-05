@@ -5,6 +5,10 @@ import { supabaseFetch } from "@/lib/admin/supabase";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
 import logger from "@/lib/logger";
 
+function incrementCount<K>(map: Map<K, number>, key: K, amount = 1) {
+  map.set(key, (map.get(key) ?? 0) + amount);
+}
+
 export async function GET(request: Request) {
   const admin = await verifyAdminSession();
   if (!admin) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
@@ -56,18 +60,18 @@ export async function GET(request: Request) {
 
     const waitlistTotal = parseInt(wlRes.headers.get("content-range")?.split("/")[1] || "0", 10);
 
-    const archetypes: Record<string, number> = {};
+    const archetypes = new Map<string, number>();
     if (scoreRes.ok) {
       const scores: Array<{ primary_archetype: string }> = await scoreRes.json();
       for (const s of scores) {
-        archetypes[s.primary_archetype] = (archetypes[s.primary_archetype] || 0) + 1;
+        incrementCount(archetypes, s.primary_archetype);
       }
     }
 
-    const dailyMap: Record<string, number> = {};
+    const dailyMap = new Map<string, number>();
     for (const s of submissions) {
       const day = s.created_date_time.slice(0, 10);
-      dailyMap[day] = (dailyMap[day] || 0) + 1;
+      incrementCount(dailyMap, day);
     }
 
     return NextResponse.json({
@@ -80,12 +84,12 @@ export async function GET(request: Request) {
         completionRate,
         avgDurationMin,
         waitlistTotal,
-        scoredCount: Object.values(archetypes).reduce((a, b) => a + b, 0),
+        scoredCount: [...archetypes.values()].reduce((a, b) => a + b, 0),
       },
-      archetypeBreakdown: Object.entries(archetypes)
+      archetypeBreakdown: [...archetypes.entries()]
         .map(([name, count]) => ({ name, count }))
         .sort((a, b) => b.count - a.count),
-      dailyTrend: Object.entries(dailyMap)
+      dailyTrend: [...dailyMap.entries()]
         .map(([date, count]) => ({ date, count }))
         .sort((a, b) => a.date.localeCompare(b.date)),
     });

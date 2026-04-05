@@ -31,7 +31,7 @@ export const options = {
   },
 };
 
-export default function () {
+export default function spikeTest() {
   // Mix of page loads and API health checks under spike conditions
   const path = Math.random() < 0.8 ? "/" : "/api/health";
   const res = http.get(`${BASE_URL}${path}`, {

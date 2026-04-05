@@ -1,5 +1,9 @@
 # Security Guide
 
+> Owner: CODEOWNERS default
+> Last verified: 2026-04-05
+> Verified against: `.env.example`, `proxy.ts`, `lib/csrf.ts`, `lib/ratelimit.ts`, `.github/workflows/security.yml`
+
 ## Environment & secrets
 
 - **Server-only secrets** (set only in Vercel env vars, never in client bundles): `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`, `RECAPTCHA_SECRET_KEY`, `SLACK_WAITLIST_WEBHOOK_URL`, `SLACK_CONTACT_WEBHOOK_URL`, `SLACK_SURVEY_WEBHOOK_URL`, `STAGING_PASSWORD`, `SURVEY_CLOSE_PASSWORD`.

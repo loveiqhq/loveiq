@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import TimeRangeSelector from "@/components/admin/TimeRangeSelector";
 import DemographicsTab from "@/components/admin/archetype-tabs/DemographicsTab";
@@ -28,9 +29,9 @@ export default function ArchetypeProfile({ slug }: ArchetypeProfileProps) {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <a href="/admin/archetypes" className="text-xs text-accent-purple hover:underline">
+          <Link href="/admin/archetypes" className="text-xs text-accent-purple hover:underline">
             ← All Archetypes
-          </a>
+          </Link>
           <h2 className="mt-1 font-serif text-xl font-bold text-text-primary">{name}</h2>
         </div>
         <TimeRangeSelector value={days} onChange={setDays} />

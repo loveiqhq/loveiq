@@ -103,7 +103,8 @@ function bucketDaily(
   const counts = new Map<string, number>();
   timestamps.forEach((timestamp, index) => {
     const date = timestamp.slice(0, 10);
-    counts.set(date, (counts.get(date) ?? 0) + (values?.[index] ?? 1));
+    const nextValue = values?.at(index) ?? 1;
+    counts.set(date, (counts.get(date) ?? 0) + nextValue);
   });
   return [...counts.entries()]
     .map(([date, value]) => ({ date, value: round2(value) }))

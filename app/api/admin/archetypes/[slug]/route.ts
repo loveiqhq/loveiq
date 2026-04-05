@@ -5,6 +5,10 @@ import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
 import { supabaseFetch } from "@/lib/admin/supabase";
 import logger from "@/lib/logger";
 
+function incrementCount<K>(map: Map<K, number>, key: K, amount = 1) {
+  map.set(key, (map.get(key) ?? 0) + amount);
+}
+
 export async function GET(request: Request, { params }: { params: Promise<{ slug: string }> }) {
   const admin = await verifyAdminSession();
   if (!admin) {
@@ -47,41 +51,37 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
     const total = rows.length;
 
     // Demographics
-    const genderMap: Record<string, number> = {};
-    const orientationMap: Record<string, number> = {};
-    const relationshipMap: Record<string, number> = {};
-    const locationMap: Record<string, number> = {};
+    const genderMap = new Map<string, number>();
+    const orientationMap = new Map<string, number>();
+    const relationshipMap = new Map<string, number>();
+    const locationMap = new Map<string, number>();
 
     // Behavior
     let totalDuration = 0;
     let durationCount = 0;
 
     // Dimensions
-    const dimensionSums: Record<string, number> = {};
-    const dimensionCounts: Record<string, number> = {};
+    const dimensionSums = new Map<string, number>();
+    const dimensionCounts = new Map<string, number>();
 
     // V4/V5 agreement
     let v5Agree = 0;
     let v5Total = 0;
 
     // Weekly growth
-    const weeklyMap: Record<string, number> = {};
+    const weeklyMap = new Map<string, number>();
 
     // Secondary archetypes
-    const secondaryMap: Record<string, number> = {};
+    const secondaryMap = new Map<string, number>();
 
     for (const r of rows) {
       const profile = r.survey_submission?.app_user?.user_profile;
       if (profile) {
-        if (profile.gender) genderMap[profile.gender] = (genderMap[profile.gender] || 0) + 1;
-        if (profile.sexual_orientation)
-          orientationMap[profile.sexual_orientation] =
-            (orientationMap[profile.sexual_orientation] || 0) + 1;
+        if (profile.gender) incrementCount(genderMap, profile.gender);
+        if (profile.sexual_orientation) incrementCount(orientationMap, profile.sexual_orientation);
         if (profile.relationship_status)
-          relationshipMap[profile.relationship_status] =
-            (relationshipMap[profile.relationship_status] || 0) + 1;
-        if (profile.location_primary)
-          locationMap[profile.location_primary] = (locationMap[profile.location_primary] || 0) + 1;
+          incrementCount(relationshipMap, profile.relationship_status);
+        if (profile.location_primary) incrementCount(locationMap, profile.location_primary);
       }
 
       // Duration
@@ -94,8 +94,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
       if (r.raw_scores && typeof r.raw_scores === "object") {
         for (const [dim, score] of Object.entries(r.raw_scores)) {
           if (typeof score === "number") {
-            dimensionSums[dim] = (dimensionSums[dim] || 0) + score;
-            dimensionCounts[dim] = (dimensionCounts[dim] || 0) + 1;
+            dimensionSums.set(dim, (dimensionSums.get(dim) ?? 0) + score);
+            incrementCount(dimensionCounts, dim);
           }
         }
       }
@@ -112,7 +112,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
         const weekStart = new Date(d);
         weekStart.setDate(d.getDate() - d.getDay());
         const weekKey = weekStart.toISOString().slice(0, 10);
-        weeklyMap[weekKey] = (weeklyMap[weekKey] || 0) + 1;
+        incrementCount(weeklyMap, weekKey);
       }
 
       // Secondary archetype
@@ -122,25 +122,25 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
           .sort((a, b) => (b[1] as number) - (a[1] as number));
         if (sorted.length > 0) {
           const second = sorted[0][0];
-          secondaryMap[second] = (secondaryMap[second] || 0) + 1;
+          incrementCount(secondaryMap, second);
         }
       }
     }
 
-    const toDistribution = (map: Record<string, number>) =>
-      Object.entries(map)
+    const toDistribution = (map: Map<string, number>) =>
+      [...map.entries()]
         .map(([label, count]) => ({ label, count }))
         .sort((a, b) => b.count - a.count)
         .slice(0, 10);
 
-    const dimensions = Object.entries(dimensionSums)
+    const dimensions = [...dimensionSums.entries()]
       .map(([dim, sum]) => ({
         dimension: dim,
-        avgScore: Math.round((sum / (dimensionCounts[dim] || 1)) * 100) / 100,
+        avgScore: Math.round((sum / (dimensionCounts.get(dim) ?? 1)) * 100) / 100,
       }))
       .sort((a, b) => b.avgScore - a.avgScore);
 
-    const weeklyGrowth = Object.entries(weeklyMap)
+    const weeklyGrowth = [...weeklyMap.entries()]
       .map(([week, count]) => ({ week, count }))
       .sort((a, b) => a.week.localeCompare(b.week));
 

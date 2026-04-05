@@ -39,6 +39,18 @@ interface SectionMeta {
   title: string;
 }
 
+function incrementCount<K>(map: Map<K, number>, key: K, amount = 1) {
+  map.set(key, (map.get(key) ?? 0) + amount);
+}
+
+function getOrCreate<K, V>(map: Map<K, V>, key: K, create: () => V): V {
+  const existing = map.get(key);
+  if (existing) return existing;
+  const value = create();
+  map.set(key, value);
+  return value;
+}
+
 export async function GET(request: Request) {
   const admin = await verifyAdminSession();
   if (!admin) {
@@ -111,12 +123,12 @@ export async function GET(request: Request) {
     );
 
     // Daily opens
-    const dailyMap: Record<string, number> = {};
+    const dailyMap = new Map<string, number>();
     for (const r of reports) {
       const day = r.created_date_time.slice(0, 10);
-      dailyMap[day] = (dailyMap[day] || 0) + 1;
+      incrementCount(dailyMap, day);
     }
-    const dailyOpens = Object.entries(dailyMap).map(([date, count]) => ({ date, count }));
+    const dailyOpens = [...dailyMap.entries()].map(([date, count]) => ({ date, count }));
 
     // --- Sessions ---
     const sessions = (await sessionsRes.json()) as SessionRow[];
@@ -152,11 +164,11 @@ export async function GET(request: Request) {
     }> = [];
 
     // Build section name lookup
-    const sectionNameMap: Record<number, string> = {};
+    const sectionNameMap = new Map<number, string>();
     if (sectionMetaRes.ok) {
       const sectionMeta = (await sectionMetaRes.json()) as SectionMeta[];
       for (const s of sectionMeta) {
-        sectionNameMap[s.id] = s.title;
+        sectionNameMap.set(s.id, s.title);
       }
     }
 
@@ -164,26 +176,27 @@ export async function GET(request: Request) {
       const ratings = (await ratingsRes.json()) as SectionRatingRow[];
 
       // Group by report_section_id (resolved via join)
-      const ratingMap: Record<number, { sum: number; count: number; comments: string[] }> = {};
+      const ratingMap = new Map<number, { sum: number; count: number; comments: string[] }>();
       for (const r of ratings) {
         const sectionId = r.personal_report_section?.report_section_id;
         if (sectionId == null) continue;
-        if (!ratingMap[sectionId]) {
-          ratingMap[sectionId] = { sum: 0, count: 0, comments: [] };
-        }
-        ratingMap[sectionId].sum += r.rating;
-        ratingMap[sectionId].count++;
+        const ratingStats = getOrCreate(ratingMap, sectionId, () => ({
+          sum: 0,
+          count: 0,
+          comments: [],
+        }));
+        ratingStats.sum += r.rating;
+        ratingStats.count++;
         if (r.comment?.trim()) {
-          ratingMap[sectionId].comments.push(r.comment.trim());
+          ratingStats.comments.push(r.comment.trim());
         }
       }
 
-      sectionRatings = Object.entries(ratingMap)
-        .map(([sectionIdStr, data]) => {
-          const sectionId = Number(sectionIdStr);
+      sectionRatings = [...ratingMap.entries()]
+        .map(([sectionId, data]) => {
           return {
             sectionId,
-            sectionName: sectionNameMap[sectionId] || `Section ${sectionId}`,
+            sectionName: sectionNameMap.get(sectionId) || `Section ${sectionId}`,
             avgRating: Math.round((data.sum / data.count) * 10) / 10,
             ratingCount: data.count,
             topComments: data.comments.slice(0, 5),
@@ -213,18 +226,17 @@ export async function GET(request: Request) {
     // --- Section-level metrics (graceful degradation) ---
     if (sectionCountsRes.ok) {
       const sectionCounts = (await sectionCountsRes.json()) as ReportSectionRow[];
-      const countMap: Record<number, number> = {};
+      const countMap = new Map<number, number>();
       for (const sc of sectionCounts) {
-        countMap[sc.report_section_id] = (countMap[sc.report_section_id] || 0) + 1;
+        incrementCount(countMap, sc.report_section_id);
       }
       // Enrich sectionRatings with view counts if we have section counts but no ratings yet
-      for (const sectionIdStr of Object.keys(countMap)) {
-        const sectionId = Number(sectionIdStr);
+      for (const sectionId of countMap.keys()) {
         const existing = sectionRatings.find((sr) => sr.sectionId === sectionId);
         if (!existing) {
           sectionRatings.push({
             sectionId,
-            sectionName: sectionNameMap[sectionId] || `Section ${sectionId}`,
+            sectionName: sectionNameMap.get(sectionId) || `Section ${sectionId}`,
             avgRating: 0,
             ratingCount: 0,
             topComments: [],

@@ -11,6 +11,18 @@ interface ScoringRow {
   scored_at: string;
 }
 
+function incrementCount<K>(map: Map<K, number>, key: K, amount = 1) {
+  map.set(key, (map.get(key) ?? 0) + amount);
+}
+
+function getOrCreate<K, V>(map: Map<K, V>, key: K, create: () => V): V {
+  const existing = map.get(key);
+  if (existing) return existing;
+  const value = create();
+  map.set(key, value);
+  return value;
+}
+
 export async function GET(request: Request) {
   const admin = await verifyAdminSession();
   if (!admin) {
@@ -45,13 +57,13 @@ export async function GET(request: Request) {
     const totalScored = rows.length;
 
     // Count per archetype
-    const v4Map: Record<string, number> = {};
-    const v5Map: Record<string, number> = {};
-    const weeklyMap: Record<string, Record<string, number>> = {};
+    const v4Map = new Map<string, number>();
+    const v5Map = new Map<string, number>();
+    const weeklyMap = new Map<string, Map<string, number>>();
 
     for (const r of rows) {
       if (r.primary_archetype) {
-        v4Map[r.primary_archetype] = (v4Map[r.primary_archetype] || 0) + 1;
+        incrementCount(v4Map, r.primary_archetype);
 
         // Weekly trend (last 4 weeks)
         const week = r.scored_at?.slice(0, 10) || "";
@@ -60,30 +72,30 @@ export async function GET(request: Request) {
         weekStart.setDate(d.getDate() - d.getDay());
         const weekKey = weekStart.toISOString().slice(0, 10);
 
-        if (!weeklyMap[r.primary_archetype]) weeklyMap[r.primary_archetype] = {};
-        weeklyMap[r.primary_archetype][weekKey] =
-          (weeklyMap[r.primary_archetype][weekKey] || 0) + 1;
+        const weeklyCounts = getOrCreate(weeklyMap, r.primary_archetype, () => new Map());
+        incrementCount(weeklyCounts, weekKey);
       }
       if (r.v5_primary_archetype) {
-        v5Map[r.v5_primary_archetype] = (v5Map[r.v5_primary_archetype] || 0) + 1;
+        incrementCount(v5Map, r.v5_primary_archetype);
       }
     }
 
     // Get last 4 week keys
     const allWeeks = new Set<string>();
-    for (const wm of Object.values(weeklyMap)) {
-      for (const w of Object.keys(wm)) allWeeks.add(w);
+    for (const wm of weeklyMap.values()) {
+      for (const w of wm.keys()) allWeeks.add(w);
     }
     const recentWeeks = Array.from(allWeeks).sort().slice(-4);
 
-    const allArchetypes = new Set([...Object.keys(v4Map), ...Object.keys(v5Map)]);
+    const allArchetypes = new Set([...v4Map.keys(), ...v5Map.keys()]);
     const archetypes = Array.from(allArchetypes).map((name) => ({
       slug: name.toLowerCase().replace(/\s+/g, "-"),
       name,
-      v4Count: v4Map[name] || 0,
-      v5Count: v5Map[name] || 0,
-      pctOfTotal: totalScored > 0 ? Math.round(((v4Map[name] || 0) / totalScored) * 1000) / 10 : 0,
-      weeklyTrend: recentWeeks.map((w) => weeklyMap[name]?.[w] || 0),
+      v4Count: v4Map.get(name) ?? 0,
+      v5Count: v5Map.get(name) ?? 0,
+      pctOfTotal:
+        totalScored > 0 ? Math.round(((v4Map.get(name) ?? 0) / totalScored) * 1000) / 10 : 0,
+      weeklyTrend: recentWeeks.map((w) => weeklyMap.get(name)?.get(w) ?? 0),
     }));
 
     return NextResponse.json({ archetypes, totalScored });

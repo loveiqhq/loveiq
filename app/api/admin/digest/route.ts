@@ -16,6 +16,10 @@ function parseUtmSource(tracker: string | null): string {
   }
 }
 
+function incrementCount<K>(map: Map<K, number>, key: K, amount = 1) {
+  map.set(key, (map.get(key) ?? 0) + amount);
+}
+
 async function fetchPeriodStats(since: string, until: string) {
   // Submissions
   const subRes = await supabaseFetch(
@@ -56,25 +60,21 @@ async function fetchPeriodStats(since: string, until: string) {
     ? ((await scoreRes.json()) as Array<{ primary_archetype: string }>)
     : [];
 
-  const archetypeCounts: Record<string, number> = {};
+  const archetypeCounts = new Map<string, number>();
   for (const s of scores) {
     if (s.primary_archetype) {
-      archetypeCounts[s.primary_archetype] = (archetypeCounts[s.primary_archetype] || 0) + 1;
+      incrementCount(archetypeCounts, s.primary_archetype);
     }
   }
-  const topArchetypes = Object.entries(archetypeCounts)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5);
+  const topArchetypes = [...archetypeCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
 
   // UTM sources
-  const utmCounts: Record<string, number> = {};
+  const utmCounts = new Map<string, number>();
   for (const s of subs) {
     const src = parseUtmSource(s.utm_tracker);
-    utmCounts[src] = (utmCounts[src] || 0) + 1;
+    incrementCount(utmCounts, src);
   }
-  const topUtm = Object.entries(utmCounts)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5);
+  const topUtm = [...utmCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
 
   return {
     total,

@@ -22,6 +22,18 @@ interface PaymentItemRow {
   total_price: number;
 }
 
+function incrementCount<K>(map: Map<K, number>, key: K, amount = 1) {
+  map.set(key, (map.get(key) ?? 0) + amount);
+}
+
+function getOrCreate<K, V>(map: Map<K, V>, key: K, create: () => V): V {
+  const existing = map.get(key);
+  if (existing) return existing;
+  const value = create();
+  map.set(key, value);
+  return value;
+}
+
 export async function GET(request: Request) {
   const admin = await verifyAdminSession();
   if (!admin) {
@@ -79,31 +91,31 @@ export async function GET(request: Request) {
       transactionCount > 0 ? Math.round((succeeded.length / transactionCount) * 100 * 10) / 10 : 0;
 
     // Daily revenue
-    const dailyMap: Record<string, { amount: number; count: number }> = {};
+    const dailyMap = new Map<string, { amount: number; count: number }>();
     for (const p of succeeded) {
       const day = p.payment_date_time?.slice(0, 10) || "unknown";
-      if (!dailyMap[day]) dailyMap[day] = { amount: 0, count: 0 };
-      dailyMap[day].amount += p.amount || 0;
-      dailyMap[day].count++;
+      const dailyStats = getOrCreate(dailyMap, day, () => ({ amount: 0, count: 0 }));
+      dailyStats.amount += p.amount || 0;
+      dailyStats.count++;
     }
-    const dailyRevenue = Object.entries(dailyMap)
+    const dailyRevenue = [...dailyMap.entries()]
       .map(([date, d]) => ({ date, amount: Math.round(d.amount * 100) / 100, count: d.count }))
       .sort((a, b) => a.date.localeCompare(b.date));
 
     // Status breakdown
-    const statusMap: Record<string, number> = {};
+    const statusMap = new Map<string, number>();
     for (const p of payments) {
-      statusMap[p.status] = (statusMap[p.status] || 0) + 1;
+      incrementCount(statusMap, p.status);
     }
-    const statusBreakdown = Object.entries(statusMap).map(([status, count]) => ({ status, count }));
+    const statusBreakdown = [...statusMap.entries()].map(([status, count]) => ({ status, count }));
 
     // Failure codes
-    const failureMap: Record<string, number> = {};
+    const failureMap = new Map<string, number>();
     for (const p of payments.filter((p) => p.status === "failed" && p.failure_code)) {
       const key = `${p.failure_code}||${p.failure_message || ""}`;
-      failureMap[key] = (failureMap[key] || 0) + 1;
+      incrementCount(failureMap, key);
     }
-    const failureCodes = Object.entries(failureMap)
+    const failureCodes = [...failureMap.entries()]
       .map(([key, count]) => {
         const [code, message] = key.split("||");
         return { code, message, count };
@@ -111,11 +123,11 @@ export async function GET(request: Request) {
       .sort((a, b) => b.count - a.count);
 
     // Card brands
-    const brandMap: Record<string, number> = {};
+    const brandMap = new Map<string, number>();
     for (const p of succeeded.filter((p) => p.card_brand)) {
-      brandMap[p.card_brand!] = (brandMap[p.card_brand!] || 0) + 1;
+      if (p.card_brand) incrementCount(brandMap, p.card_brand);
     }
-    const cardBrands = Object.entries(brandMap)
+    const cardBrands = [...brandMap.entries()]
       .map(([brand, count]) => ({ brand, count }))
       .sort((a, b) => b.count - a.count);
 
@@ -126,13 +138,16 @@ export async function GET(request: Request) {
       transactionCount > 0 ? Math.round((refunded.length / transactionCount) * 100 * 10) / 10 : 0;
 
     // Section revenue
-    const sectionMap: Record<string, { revenue: number; count: number }> = {};
+    const sectionMap = new Map<string, { revenue: number; count: number }>();
     for (const item of items) {
-      if (!sectionMap[item.item_name]) sectionMap[item.item_name] = { revenue: 0, count: 0 };
-      sectionMap[item.item_name].revenue += item.total_price || 0;
-      sectionMap[item.item_name].count++;
+      const sectionStats = getOrCreate(sectionMap, item.item_name, () => ({
+        revenue: 0,
+        count: 0,
+      }));
+      sectionStats.revenue += item.total_price || 0;
+      sectionStats.count++;
     }
-    const sectionRevenue = Object.entries(sectionMap)
+    const sectionRevenue = [...sectionMap.entries()]
       .map(([name, d]) => ({
         name,
         revenue: Math.round(d.revenue * 100) / 100,

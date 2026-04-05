@@ -44,16 +44,19 @@ export async function GET(request: Request) {
       { key: "payment_completed", label: "Payment Completed" },
     ];
 
-    const rawStages = raw.stages ?? {};
+    const rawStages =
+      raw?.stages && typeof raw.stages === "object" && !Array.isArray(raw.stages)
+        ? new Map(Object.entries(raw.stages as Record<string, unknown>))
+        : new Map<string, unknown>();
     const stages = stageOrder.map((s) => ({
       label: s.label,
-      value: (rawStages[s.key] as number) ?? 0,
+      value: Number(rawStages.get(s.key) ?? 0),
     }));
 
     const conversionRates = [];
-    for (let i = 0; i < stages.length - 1; i++) {
-      const from = stages[i];
-      const to = stages[i + 1];
+    for (const [index, from] of stages.entries()) {
+      const to = stages.at(index + 1);
+      if (!to) continue;
       conversionRates.push({
         from: from.label,
         to: to.label,
