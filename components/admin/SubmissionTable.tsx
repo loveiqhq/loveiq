@@ -1,6 +1,7 @@
 "use client";
 
 import { maskEmail } from "@/lib/admin/format";
+import { isScoringPendingSubmission } from "@/lib/admin/submission-scoring";
 
 interface Submission {
   id: number | string;
@@ -134,6 +135,12 @@ export default function SubmissionTable({
           {submissions.map((submission) => {
             const submissionId = typeof submission.id === "number" ? submission.id : null;
             const isSelectableSubmission = submission.selectable && submissionId !== null;
+            const scoringPending = isScoringPendingSubmission({
+              completedAt: submission.completed_at,
+              primaryArchetype: submission.primary_archetype,
+              recordType: submission.record_type,
+              status: submission.status,
+            });
 
             return (
               <tr key={submission.id} className="border-b border-white/5 hover:bg-white/[0.02]">
@@ -175,6 +182,10 @@ export default function SubmissionTable({
                   {submission.primary_archetype ? (
                     <span className="rounded-full bg-accent-purple/10 px-2 py-0.5 text-xs font-medium text-accent-purple">
                       {submission.primary_archetype}
+                    </span>
+                  ) : scoringPending ? (
+                    <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-xs font-medium text-text-muted">
+                      Pending
                     </span>
                   ) : (
                     <span className="text-xs text-text-muted">&mdash;</span>

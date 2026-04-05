@@ -153,10 +153,13 @@ export async function POST(request: Request) {
       utmTracker,
       sessionId,
     });
+    const scoringSummary = await ensureSubmissionScored(
+      submissionId,
+      answers as SurveyAnswers,
+      scoringResult
+    );
 
     scheduleAfterResponse(async () => {
-      await ensureSubmissionScored(submissionId, answers as SurveyAnswers, scoringResult);
-
       if (!isExisting) {
         await notifySlackSurvey({
           email: normalizedEmail,
@@ -169,10 +172,12 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
-      ...(scoringResult
+      ...(scoringSummary
         ? {
-            primaryArchetype: scoringResult.primaryArchetype,
-            ...(scoringResult.v5 ? { v5PrimaryArchetype: scoringResult.v5.primaryArchetype } : {}),
+            primaryArchetype: scoringSummary.primaryArchetype,
+            ...(scoringSummary.v5PrimaryArchetype
+              ? { v5PrimaryArchetype: scoringSummary.v5PrimaryArchetype }
+              : {}),
           }
         : {}),
     });

@@ -1,13 +1,16 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { useAdminFetch } from "./hooks/useAdminFetch";
+import { isScoringPendingSubmission } from "@/lib/admin/submission-scoring";
 import FilterBar from "./FilterBar";
 import SubmissionTable from "./SubmissionTable";
 import Pagination from "./Pagination";
 import BulkActionBar from "./BulkActionBar";
 import SavedViewsBar from "./SavedViewsBar";
 import ExportPresetsBar from "./ExportPresetsBar";
+
+const PENDING_SCORING_REFRESH_MS = 5000;
 
 interface SubmissionsData {
   submissions: Array<{
@@ -83,6 +86,33 @@ export default function SubmissionBrowser() {
     setSelectedIds(new Set());
     refetch();
   }
+
+  const hasPendingScoring = useMemo(
+    () =>
+      (data?.submissions ?? []).some((submission) =>
+        isScoringPendingSubmission({
+          completedAt: submission.completed_at,
+          primaryArchetype: submission.primary_archetype,
+          recordType: submission.record_type,
+          status: submission.status,
+        })
+      ),
+    [data]
+  );
+
+  useEffect(() => {
+    if (loading || !hasPendingScoring) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      refetch();
+    }, PENDING_SCORING_REFRESH_MS);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [hasPendingScoring, loading, refetch]);
 
   const visibleSummary = useMemo(() => {
     const submissions = data?.submissions ?? [];

@@ -187,4 +187,25 @@ describe("GET /api/admin/submissions", () => {
     expect(json.submissions[0].first_name).toBe("");
     expect(json.submissions[0].started_at).toBe("2025-01-03T00:00:00Z");
   });
+
+  it("treats recent unscored completions as scoring pending instead of missing", async () => {
+    mockSubmissionsOk([
+      {
+        id: 4,
+        status: "completed",
+        start_date_time: new Date(Date.now() - 60_000).toISOString(),
+        created_date_time: new Date(Date.now() - 30_000).toISOString(),
+        duration_ms: 45_000,
+        app_user: { email: "pending@test.com", first_name: "Pending" },
+        scoring_result: [],
+      },
+    ]);
+
+    const res = await GET(makeRequest());
+    const json = await res.json();
+
+    expect(json.submissions[0].review_reasons).toContain("Scoring pending");
+    expect(json.submissions[0].review_reasons).not.toContain("Missing scoring");
+    expect(json.submissions[0].priority_label).toBe("low");
+  });
 });

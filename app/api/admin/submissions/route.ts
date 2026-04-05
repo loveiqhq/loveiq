@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { verifyAdminSession } from "@/lib/admin/auth";
 import { hasRole } from "@/lib/admin/roles";
+import {
+  isScoringPendingSubmission,
+  MISSING_SCORING_REASON,
+  SCORING_PENDING_REASON,
+} from "@/lib/admin/submission-scoring";
 import { supabaseFetch } from "@/lib/admin/supabase";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
 import logger from "@/lib/logger";
@@ -220,6 +225,11 @@ export async function GET(request: Request) {
         const metrics = answerMetrics.get(row.id) ?? { skipped: 0, revisions: 0 };
         const v4Gap = topGap(scoring?.percentages);
         const v5Gap = topGap(scoring?.v5_percentages);
+        const scoringPending = isScoringPendingSubmission({
+          completedAt: row.created_date_time,
+          primaryArchetype: scoring?.primary_archetype ?? null,
+          status: row.status,
+        });
         const hasDisagreement =
           !!scoring?.primary_archetype &&
           !!scoring?.v5_primary_archetype &&
@@ -259,8 +269,12 @@ export async function GET(request: Request) {
           reviewReasons.push("Long completion time");
         }
         if (!scoring?.primary_archetype) {
-          priorityScore += 8;
-          reviewReasons.push("Missing scoring");
+          if (scoringPending) {
+            reviewReasons.push(SCORING_PENDING_REASON);
+          } else {
+            priorityScore += 8;
+            reviewReasons.push(MISSING_SCORING_REASON);
+          }
         }
 
         const priorityLabel = priorityScore >= 60 ? "high" : priorityScore >= 30 ? "medium" : "low";

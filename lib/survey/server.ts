@@ -166,33 +166,36 @@ export async function fetchScoringSummary(
 }
 
 async function storeScoringResult(submissionId: number, scoringResult: ScoringResult) {
-  const response = await supabaseServiceFetch("/rest/v1/scoring_result", {
-    method: "POST",
-    headers: {
-      Prefer: "return=minimal",
-    },
-    body: JSON.stringify({
-      survey_submission_id: submissionId,
-      engine_version: scoringResult.v5 ? "v4+v5" : "v4",
-      primary_archetype: scoringResult.primaryArchetype,
-      percentages: scoringResult.percent,
-      raw_scores: scoringResult.rawScore,
-      diagnostics: scoringResult.diagnostics,
-      v5_primary_archetype: scoringResult.v5?.primaryArchetype ?? null,
-      v5_percentages: scoringResult.v5?.finalPct ?? null,
-      v5_raw_scores: scoringResult.v5?.rawTotal ?? null,
-      v5_diagnostics: scoringResult.v5
-        ? {
-            rawPct: scoringResult.v5.rawPct,
-            ranking: scoringResult.v5.ranking,
-            anchors: scoringResult.v5.diagnostics.anchors,
-            gaps: scoringResult.v5.diagnostics.gaps,
-            payloadFingerprint: scoringResult.v5.diagnostics.payloadFingerprint,
-          }
-        : null,
-    }),
-    timeoutMs: 5000,
-  });
+  const response = await supabaseServiceFetch(
+    "/rest/v1/scoring_result?on_conflict=survey_submission_id",
+    {
+      method: "POST",
+      headers: {
+        Prefer: "resolution=merge-duplicates,return=minimal",
+      },
+      body: JSON.stringify({
+        survey_submission_id: submissionId,
+        engine_version: scoringResult.v5 ? "v4+v5" : "v4",
+        primary_archetype: scoringResult.primaryArchetype,
+        percentages: scoringResult.percent,
+        raw_scores: scoringResult.rawScore,
+        diagnostics: scoringResult.diagnostics,
+        v5_primary_archetype: scoringResult.v5?.primaryArchetype ?? null,
+        v5_percentages: scoringResult.v5?.finalPct ?? null,
+        v5_raw_scores: scoringResult.v5?.rawTotal ?? null,
+        v5_diagnostics: scoringResult.v5
+          ? {
+              rawPct: scoringResult.v5.rawPct,
+              ranking: scoringResult.v5.ranking,
+              anchors: scoringResult.v5.diagnostics.anchors,
+              gaps: scoringResult.v5.diagnostics.gaps,
+              payloadFingerprint: scoringResult.v5.diagnostics.payloadFingerprint,
+            }
+          : null,
+      }),
+      timeoutMs: 5000,
+    }
+  );
 
   if (!response.ok) {
     logger.error({ status: response.status }, "Failed to store scoring result");

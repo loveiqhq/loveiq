@@ -63,6 +63,9 @@ beforeEach(() => {
 });
 
 afterEach(cleanup);
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe("SubmissionBrowser", () => {
   it("renders heading, export button, filter bar, table, and pagination", () => {
@@ -108,5 +111,50 @@ describe("SubmissionBrowser", () => {
     expect(href).toContain("/api/admin/export");
     expect(href).not.toContain("page=");
     expect(href).not.toContain("limit=");
+  });
+
+  it("refetches while recent submissions are still awaiting scoring", () => {
+    vi.useFakeTimers();
+    vi.mocked(useAdminFetch).mockReturnValueOnce({
+      data: {
+        submissions: [
+          {
+            id: 2,
+            record_type: "submission",
+            submission_id: 2,
+            session_id: null,
+            detail_href: "/admin/submissions/2",
+            selectable: true,
+            email: "pending@test.com",
+            first_name: "Pending",
+            status: "completed",
+            started_at: new Date(Date.now() - 60_000).toISOString(),
+            completed_at: new Date(Date.now() - 30_000).toISOString(),
+            saved_at: new Date(Date.now() - 30_000).toISOString(),
+            duration_ms: 45_000,
+            utm_source: null,
+            primary_archetype: null,
+            v5_primary_archetype: null,
+            priority_score: 0,
+            priority_label: "low",
+            review_reasons: ["Scoring pending"],
+            answer_count: null,
+            current_index: null,
+            recoverable: false,
+          },
+        ],
+        total: 1,
+        page: 1,
+        limit: 20,
+      },
+      loading: false,
+      error: null,
+      refetch: mockRefetch,
+    });
+
+    render(<SubmissionBrowser />);
+    vi.advanceTimersByTime(5000);
+
+    expect(mockRefetch).toHaveBeenCalledTimes(1);
   });
 });
