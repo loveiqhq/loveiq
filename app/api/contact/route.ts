@@ -1,7 +1,8 @@
-import { NextResponse, after } from "next/server";
+import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import { z } from "zod";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
+import { scheduleAfterResponse } from "@/lib/after-response";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { getBreaker, CircuitOpenError } from "@/lib/circuit-breaker";
 import { verifyCsrfToken } from "@/lib/csrf";
@@ -10,14 +11,6 @@ import logger from "@/lib/logger";
 const RESEND_TIMEOUT_MS = 3_000;
 
 /** See waitlist/route.ts — same pattern. */
-function scheduleAfterResponse(fn: () => Promise<void>): void {
-  try {
-    after(fn);
-  } catch {
-    void fn();
-  }
-}
-
 // Lazy initialization to avoid build-time errors when env vars are not set
 let _resend: Resend | null = null;
 function getResend(): Resend {
@@ -223,7 +216,7 @@ export async function POST(request: Request) {
   }
 
   // Slack runs after the response — keeps the function alive but never blocks it
-  scheduleAfterResponse(() =>
+  scheduleAfterResponse("contact-slack-notification", () =>
     sendSlackContactNotification({ firstName, lastName, email, phone, message })
   );
 

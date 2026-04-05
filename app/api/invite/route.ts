@@ -1,8 +1,9 @@
-import { NextResponse, after } from "next/server";
+import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import { inviteEmail } from "@/lib/emails/invite";
 import { z } from "zod";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
+import { scheduleAfterResponse } from "@/lib/after-response";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { getBreaker, CircuitOpenError } from "@/lib/circuit-breaker";
 import { verifyCsrfToken } from "@/lib/csrf";
@@ -81,7 +82,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Service unavailable." }, { status: 503 });
   }
 
-  after(async () => {
+  scheduleAfterResponse("invite-email-and-tracking", async () => {
     // Send email
     try {
       const { error } = await Promise.race([

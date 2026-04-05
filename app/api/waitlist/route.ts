@@ -1,8 +1,9 @@
-import { NextResponse, after } from "next/server";
+import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import { waitlistEmail } from "@/lib/emails/waitlist";
 import { z } from "zod";
 import { checkRateLimit, checkCooldown, getClientIp } from "@/lib/ratelimit";
+import { scheduleAfterResponse } from "@/lib/after-response";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { getBreaker, CircuitOpenError } from "@/lib/circuit-breaker";
 import { verifyCsrfToken } from "@/lib/csrf";
@@ -45,22 +46,6 @@ const RATE_LIMIT_CONFIG = {
 };
 
 const EMAIL_COOLDOWN_MS = 60_000; // 1 minute per email
-
-/**
- * Schedule a side-effect to run after the response is sent.
- * Uses Next.js `after()` so the serverless function stays alive until the work
- * completes instead of being killed the moment the response is flushed.
- * Falls back to fire-and-forget `void` in test environments where the
- * Next.js request lifecycle is not active.
- */
-function scheduleAfterResponse(fn: () => Promise<void>): void {
-  try {
-    after(fn);
-  } catch {
-    void fn();
-  }
-}
-
 async function sendConfirmationEmail(to: string, firstName: string | null) {
   const from = process.env.RESEND_FROM || "LoveIQ <hello@send.loveiq.org>";
   const replyTo = process.env.RESEND_REPLY_TO || "hello@loveiq.org";
@@ -272,8 +257,10 @@ export async function POST(request: Request) {
   // DB insert succeeded — return success immediately.
   // Email and Slack run after the response so the serverless function stays
   // alive until they finish, but a failure never blocks or fails the response.
-  scheduleAfterResponse(() => sendConfirmationEmail(normalizedEmail, normalizedFirstName));
-  scheduleAfterResponse(() =>
+  scheduleAfterResponse("waitlist-confirmation-email", () =>
+    sendConfirmationEmail(normalizedEmail, normalizedFirstName)
+  );
+  scheduleAfterResponse("waitlist-slack-notification", () =>
     notifySlackWaitlist({
       email: normalizedEmail,
       firstName: normalizedFirstName,

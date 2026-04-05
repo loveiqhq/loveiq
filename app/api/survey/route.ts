@@ -1,6 +1,7 @@
-import { NextResponse, after } from "next/server";
+import { NextResponse } from "next/server";
 import { z } from "zod";
 import { checkRateLimit, checkCooldown, getClientIp } from "@/lib/ratelimit";
+import { scheduleAfterResponse } from "@/lib/after-response";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { verifyCsrfToken } from "@/lib/csrf";
 import logger from "@/lib/logger";
@@ -39,26 +40,16 @@ const RATE_LIMIT_CONFIG = {
 
 const EMAIL_COOLDOWN_MS = 300_000;
 
-function scheduleAfterResponse(fn: () => Promise<void>): void {
-  try {
-    after(() => {
-      void fn().catch((err) => {
-        logger.error({ err }, "Post-submit background task failed");
-      });
-    });
-  } catch {
-    void fn().catch((err) => {
-      logger.error({ err }, "Post-submit background task failed");
-    });
-  }
-}
-
 const notifySlackSurvey = async ({
+  submissionId,
+  sessionId,
   email,
   firstName,
   questionCount,
   durationMs,
 }: {
+  submissionId: number;
+  sessionId: string | null;
   email: string;
   firstName: string;
   questionCount: number;
@@ -67,7 +58,10 @@ const notifySlackSurvey = async ({
   const url = process.env.SLACK_SURVEY_WEBHOOK_URL;
 
   if (!url) {
-    logger.warn("Slack webhook missing: set SLACK_SURVEY_WEBHOOK_URL to enable survey alerts.");
+    logger.warn(
+      { submissionId, sessionId },
+      "Slack webhook missing: set SLACK_SURVEY_WEBHOOK_URL to enable survey alerts."
+    );
     return;
   }
 
@@ -76,7 +70,7 @@ const notifySlackSurvey = async ({
   const text = `Survey completed: *${firstName}* (${maskedEmail}) - ${questionCount} questions in ~${minutes} min`;
 
   try {
-    logger.info({ maskedEmail }, "Sending Slack survey notification");
+    logger.info({ submissionId, sessionId, maskedEmail }, "Sending Slack survey notification");
     const res = await fetchWithTimeout(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -86,12 +80,15 @@ const notifySlackSurvey = async ({
 
     if (!res.ok) {
       const body = await res.text().catch(() => "");
-      logger.error({ status: res.status, body }, "Slack survey webhook failed");
+      logger.error(
+        { submissionId, sessionId, status: res.status, body },
+        "Slack survey webhook failed"
+      );
     } else {
-      logger.info({ status: res.status }, "Slack survey webhook sent");
+      logger.info({ submissionId, sessionId, status: res.status }, "Slack survey webhook sent");
     }
   } catch (err) {
-    logger.error({ err }, "Slack survey webhook error");
+    logger.error({ err, submissionId, sessionId }, "Slack survey webhook error");
   }
 };
 
@@ -159,15 +156,23 @@ export async function POST(request: Request) {
       scoringResult
     );
 
-    scheduleAfterResponse(async () => {
-      if (!isExisting) {
-        await notifySlackSurvey({
-          email: normalizedEmail,
-          firstName: normalizedFirstName,
-          questionCount,
-          durationMs,
-        });
+    scheduleAfterResponse("survey-slack-notification", async () => {
+      if (isExisting) {
+        logger.info(
+          { submissionId, sessionId: sessionId ?? null, isExisting },
+          "Skipping survey Slack notification for existing submission"
+        );
+        return;
       }
+
+      await notifySlackSurvey({
+        submissionId,
+        sessionId: sessionId ?? null,
+        email: normalizedEmail,
+        firstName: normalizedFirstName,
+        questionCount,
+        durationMs,
+      });
     });
 
     return NextResponse.json({
