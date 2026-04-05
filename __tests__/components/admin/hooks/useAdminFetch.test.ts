@@ -24,7 +24,7 @@ describe("useAdminFetch", () => {
     renderHook(() => useAdminFetch("/api/admin/stats"));
 
     await waitFor(() => {
-      expect(mockFetch).toHaveBeenCalledWith("/api/admin/stats");
+      expect(mockFetch).toHaveBeenCalledWith("/api/admin/stats", { cache: "no-store" });
     });
   });
 
@@ -110,7 +110,9 @@ describe("useAdminFetch", () => {
     renderHook(() => useAdminFetch("/api/test", { status: "completed", page: "1" }));
 
     await waitFor(() => {
-      expect(mockFetch).toHaveBeenCalledWith("/api/test?status=completed&page=1");
+      expect(mockFetch).toHaveBeenCalledWith("/api/test?status=completed&page=1", {
+        cache: "no-store",
+      });
     });
   });
 

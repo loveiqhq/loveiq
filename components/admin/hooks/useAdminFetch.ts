@@ -34,7 +34,7 @@ export function useAdminFetch<T>(
       ? "?" + new URLSearchParams(JSON.parse(serializedParams) as Record<string, string>).toString()
       : "";
 
-    fetch(`${url}${queryString}`)
+    fetch(`${url}${queryString}`, { cache: "no-store" })
       .then(async (res) => {
         if (!res.ok) {
           const body = await res.json().catch(() => null);

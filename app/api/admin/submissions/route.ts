@@ -11,6 +11,8 @@ import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
 import logger from "@/lib/logger";
 import { buildPartialSubmissionRecord, type SurveyPartialRow } from "@/lib/admin/survey-partials";
 
+export const dynamic = "force-dynamic";
+
 function topGap(values: Record<string, number> | null | undefined): number | null {
   if (!values) return null;
   const sorted = Object.values(values)
@@ -314,12 +316,19 @@ export async function GET(request: Request) {
       )
       .slice(offset, offset + limit);
 
-    return NextResponse.json({
-      submissions,
-      total: completedTotal + partialRecords.length,
-      page,
-      limit,
-    });
+    return NextResponse.json(
+      {
+        submissions,
+        total: completedTotal + partialRecords.length,
+        page,
+        limit,
+      },
+      {
+        headers: {
+          "Cache-Control": "no-store, max-age=0",
+        },
+      }
+    );
   } catch (err) {
     logger.error({ err }, "Admin submissions error");
     return NextResponse.json({ error: "Unable to load submissions." }, { status: 500 });
