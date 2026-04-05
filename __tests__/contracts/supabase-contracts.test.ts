@@ -270,6 +270,12 @@ describe("SubmissionListResponseSchema", () => {
     created_date_time: "2024-01-01T10:30:00.000Z",
     duration_ms: 1800000,
     app_user: { email: "alice@example.com", first_name: "Alice" },
+    scoring_result: {
+      primary_archetype: "Spark Seeker",
+      v5_primary_archetype: "Spark Seeker",
+      percentages: { "Spark Seeker": 82.5 },
+      v5_percentages: { "Spark Seeker": 83.1 },
+    },
   };
 
   it("accepts array with full record", () => {
@@ -281,8 +287,8 @@ describe("SubmissionListResponseSchema", () => {
     expect(() => SubmissionListResponseSchema.parse(data)).not.toThrow();
   });
 
-  it("accepts null app_user (user deleted)", () => {
-    const data = [{ ...validRow, app_user: null }];
+  it("accepts null app_user and null scoring_result", () => {
+    const data = [{ ...validRow, app_user: null, scoring_result: null }];
     expect(() => SubmissionListResponseSchema.parse(data)).not.toThrow();
   });
 
@@ -298,6 +304,11 @@ describe("SubmissionListResponseSchema", () => {
   it("rejects non-numeric id", () => {
     const data = [{ ...validRow, id: "not-a-number" }];
     expect(() => SubmissionListResponseSchema.parse(data)).toThrow();
+  });
+
+  it("rejects missing scoring_result field", () => {
+    const { scoring_result: _scoringResult, ...rest } = validRow;
+    expect(() => SubmissionListResponseSchema.parse([rest])).toThrow();
   });
 });
 

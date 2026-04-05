@@ -38,7 +38,12 @@ const sampleRows = [
     created_date_time: "2025-01-01T00:05:00Z",
     duration_ms: 60000,
     app_user: { email: "alice@test.com", first_name: "Alice" },
-    scoring_result: [{ primary_archetype: "Spark Seeker" }],
+    scoring_result: {
+      primary_archetype: "Spark Seeker",
+      v5_primary_archetype: "Spark Seeker",
+      percentages: { "Spark Seeker": 80, "Approval Seeker": 20 },
+      v5_percentages: { "Spark Seeker": 81, "Approval Seeker": 19 },
+    },
   },
   {
     id: 2,
@@ -47,7 +52,7 @@ const sampleRows = [
     created_date_time: "2025-01-02T00:05:00Z",
     duration_ms: 90000,
     app_user: { email: "bob@test.com", first_name: "Bob" },
-    scoring_result: [],
+    scoring_result: null,
   },
 ];
 
@@ -176,7 +181,7 @@ describe("GET /api/admin/submissions", () => {
         created_date_time: "2025-01-03T00:00:00Z",
         duration_ms: null,
         app_user: null,
-        scoring_result: [],
+        scoring_result: null,
       },
     ]);
 
@@ -197,7 +202,7 @@ describe("GET /api/admin/submissions", () => {
         created_date_time: new Date(Date.now() - 30_000).toISOString(),
         duration_ms: 45_000,
         app_user: { email: "pending@test.com", first_name: "Pending" },
-        scoring_result: [],
+        scoring_result: null,
       },
     ]);
 
@@ -207,5 +212,33 @@ describe("GET /api/admin/submissions", () => {
     expect(json.submissions[0].review_reasons).toContain("Scoring pending");
     expect(json.submissions[0].review_reasons).not.toContain("Missing scoring");
     expect(json.submissions[0].priority_label).toBe("low");
+  });
+
+  it("reads embedded scoring objects and exposes both archetype columns", async () => {
+    mockSubmissionsOk([
+      {
+        id: 5,
+        status: "completed",
+        start_date_time: "2025-01-05T00:00:00Z",
+        created_date_time: "2025-01-05T00:05:00Z",
+        duration_ms: 60_000,
+        app_user: { email: "charlie@test.com", first_name: "Charlie" },
+        scoring_result: {
+          primary_archetype: "Approval Seeker",
+          v5_primary_archetype: "Sensual Connector",
+          percentages: { "Approval Seeker": 55, "Sensual Connector": 45 },
+          v5_percentages: { "Approval Seeker": 49, "Sensual Connector": 51 },
+        },
+      },
+    ]);
+
+    const res = await GET(makeRequest());
+    const json = await res.json();
+
+    expect(json.submissions[0]).toMatchObject({
+      primary_archetype: "Approval Seeker",
+      v5_primary_archetype: "Sensual Connector",
+    });
+    expect(json.submissions[0].review_reasons).toContain("V4 and V5 disagree");
   });
 });

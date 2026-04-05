@@ -186,12 +186,12 @@ export async function GET(request: Request) {
         created_date_time: string;
         duration_ms: number | null;
         app_user: { email: string; first_name: string } | null;
-        scoring_result: Array<{
+        scoring_result: {
           primary_archetype: string;
           v5_primary_archetype: string | null;
           percentages?: Record<string, number> | null;
           v5_percentages?: Record<string, number> | null;
-        }>;
+        } | null;
       }>;
 
       const submissionIds = raw.map((row) => row.id);
@@ -223,7 +223,7 @@ export async function GET(request: Request) {
       }
 
       completedRows = raw.map((row) => {
-        const scoring = row.scoring_result?.[0];
+        const scoring = row.scoring_result;
         const metrics = answerMetrics.get(row.id) ?? { skipped: 0, revisions: 0 };
         const v4Gap = topGap(scoring?.percentages);
         const v5Gap = topGap(scoring?.v5_percentages);

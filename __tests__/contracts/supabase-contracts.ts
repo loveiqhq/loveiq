@@ -154,9 +154,9 @@ export const AnswerDistributionResponseSchema = z.object({
 // ---------------------------------------------------------------------------
 // 8. SubmissionListResponseSchema
 //    Source: app/api/admin/submissions/route.ts — survey_submission SELECT with
-//            embedded app_user join
+//            embedded app_user + scoring_result joins
 //    Code:   raw as Array<{ id, status, start_date_time, created_date_time,
-//                           duration_ms, app_user }>
+//                           duration_ms, app_user, scoring_result }>
 // ---------------------------------------------------------------------------
 export const SubmissionListResponseSchema = z.array(
   z.object({
@@ -169,6 +169,14 @@ export const SubmissionListResponseSchema = z.array(
       .object({
         email: z.string(),
         first_name: z.string(),
+      })
+      .nullable(),
+    scoring_result: z
+      .object({
+        primary_archetype: z.string(),
+        v5_primary_archetype: z.string().nullable(),
+        percentages: z.record(z.string(), z.number()).nullable(),
+        v5_percentages: z.record(z.string(), z.number()).nullable(),
       })
       .nullable(),
   })
