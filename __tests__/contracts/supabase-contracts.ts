@@ -307,3 +307,80 @@ export const WaitlistStatsResponseSchema = z.array(
     created_date_time: z.string(),
   })
 );
+
+// ---------------------------------------------------------------------------
+// 14. TextAnalysisAnswerResponseSchema
+//     Source: app/api/admin/text-analysis/route.ts — survey_submission_answer
+//             SELECT with embedded survey_submission(scoring_result(...))
+// ---------------------------------------------------------------------------
+export const TextAnalysisAnswerResponseSchema = z.array(
+  z.object({
+    id: z.number(),
+    answer_text: z.string(),
+    survey_question: z
+      .object({
+        id: z.number(),
+        frontend_qid: z.string(),
+        question_text: z.string(),
+      })
+      .nullable(),
+    survey_submission: z
+      .object({
+        scoring_result: z
+          .object({
+            primary_archetype: z.string().nullable(),
+          })
+          .nullable(),
+      })
+      .nullable(),
+  })
+);
+
+// ---------------------------------------------------------------------------
+// 15. SegmentDeltaSubmissionResponseSchema
+//     Source: app/api/admin/segments/deltas/route.ts — survey_submission SELECT
+//             with embedded scoring_result(primary_archetype)
+// ---------------------------------------------------------------------------
+export const SegmentDeltaSubmissionResponseSchema = z.array(
+  z.object({
+    id: z.number(),
+    status: z.string(),
+    utm_tracker: z.string().nullable(),
+    created_date_time: z.string(),
+    scoring_result: z
+      .object({
+        primary_archetype: z.string().nullable(),
+      })
+      .nullable(),
+  })
+);
+
+// ---------------------------------------------------------------------------
+// 16. ResearchIntelligenceAnswerResponseSchema
+//     Source: lib/admin/research-intelligence.ts — survey_submission_answer
+//             SELECT with embedded survey_submission(created_date_time,
+//             scoring_result(primary_archetype))
+// ---------------------------------------------------------------------------
+export const ResearchIntelligenceAnswerResponseSchema = z.array(
+  z.object({
+    id: z.number(),
+    answer_text: z.string(),
+    survey_question: z
+      .object({
+        id: z.number(),
+        frontend_qid: z.string(),
+        question_text: z.string(),
+      })
+      .nullable(),
+    survey_submission: z
+      .object({
+        created_date_time: z.string(),
+        scoring_result: z
+          .object({
+            primary_archetype: z.string().nullable(),
+          })
+          .nullable(),
+      })
+      .nullable(),
+  })
+);

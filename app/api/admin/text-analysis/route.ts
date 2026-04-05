@@ -5,6 +5,12 @@ import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
 import { supabaseFetch } from "@/lib/admin/supabase";
 import logger from "@/lib/logger";
 
+export const dynamic = "force-dynamic";
+
+const responseHeaders = {
+  "Cache-Control": "no-store, max-age=0",
+};
+
 const STOP_WORDS = new Set([
   "the",
   "a",
@@ -100,7 +106,7 @@ interface AnswerRow {
   answer_text: string;
   survey_question: { id: number; frontend_qid: string; question_text: string } | null;
   survey_submission: {
-    scoring_result: Array<{ primary_archetype: string }> | null;
+    scoring_result: { primary_archetype: string | null } | null;
   } | null;
 }
 
@@ -200,20 +206,25 @@ export async function GET(request: Request) {
     const responses = rows.slice(0, 200).map((r) => ({
       id: r.id,
       text: r.answer_text,
-      archetype: r.survey_submission?.scoring_result?.[0]?.primary_archetype || "",
+      archetype: r.survey_submission?.scoring_result?.primary_archetype || "",
     }));
 
     const totalLen = rows.reduce((s, r) => s + r.answer_text.length, 0);
     const avgLength = rows.length > 0 ? Math.round(totalLen / rows.length) : 0;
 
-    return NextResponse.json({
-      questions,
-      keywords,
-      responses,
-      totalResponses: rows.length,
-      avgLength,
-      responseCount: responses.length,
-    });
+    return NextResponse.json(
+      {
+        questions,
+        keywords,
+        responses,
+        totalResponses: rows.length,
+        avgLength,
+        responseCount: responses.length,
+      },
+      {
+        headers: responseHeaders,
+      }
+    );
   } catch (err) {
     logger.error({ err }, "Text analysis error");
     return NextResponse.json({ error: "Unable to process request." }, { status: 500 });

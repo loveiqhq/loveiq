@@ -5,6 +5,12 @@ import { hasRole } from "@/lib/admin/roles";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
 import logger from "@/lib/logger";
 
+export const dynamic = "force-dynamic";
+
+const responseHeaders = {
+  "Cache-Control": "no-store, max-age=0",
+};
+
 export async function GET(request: Request) {
   const admin = await verifyAdminSession();
   if (!admin) {
@@ -28,7 +34,9 @@ export async function GET(request: Request) {
   const rawDays = Number.parseInt(url.searchParams.get("days") ?? "30", 10);
 
   try {
-    return NextResponse.json(await buildResearchIntelligenceSnapshot(rawDays));
+    return NextResponse.json(await buildResearchIntelligenceSnapshot(rawDays), {
+      headers: responseHeaders,
+    });
   } catch (err) {
     logger.error({ err }, "Research intelligence GET error");
     return NextResponse.json({ error: "Unable to load research intelligence." }, { status: 500 });

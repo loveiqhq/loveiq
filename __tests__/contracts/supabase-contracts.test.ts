@@ -25,6 +25,9 @@ import {
   ExportAnswerResponseSchema,
   SurveyStatusResponseSchema,
   WaitlistStatsResponseSchema,
+  TextAnalysisAnswerResponseSchema,
+  SegmentDeltaSubmissionResponseSchema,
+  ResearchIntelligenceAnswerResponseSchema,
 } from "./supabase-contracts";
 
 // ---------------------------------------------------------------------------
@@ -538,5 +541,121 @@ describe("WaitlistStatsResponseSchema", () => {
   it("rejects non-numeric id", () => {
     const data = [{ id: "uuid", utm_tracker: null, created_date_time: "2024-01-01T00:00:00.000Z" }];
     expect(() => WaitlistStatsResponseSchema.parse(data)).toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 14. TextAnalysisAnswerResponseSchema
+// ---------------------------------------------------------------------------
+describe("TextAnalysisAnswerResponseSchema", () => {
+  const validRow = {
+    id: 1,
+    answer_text: "I want more trust.",
+    survey_question: {
+      id: 10,
+      frontend_qid: "01002",
+      question_text: "What feels hardest right now?",
+    },
+    survey_submission: {
+      scoring_result: {
+        primary_archetype: "Approval Seeker",
+      },
+    },
+  };
+
+  it("accepts embedded scoring_result as an object", () => {
+    expect(() => TextAnalysisAnswerResponseSchema.parse([validRow])).not.toThrow();
+  });
+
+  it("accepts null scoring_result and null survey_submission", () => {
+    expect(() =>
+      TextAnalysisAnswerResponseSchema.parse([
+        { ...validRow, survey_submission: { scoring_result: null } },
+        { ...validRow, id: 2, survey_submission: null },
+      ])
+    ).not.toThrow();
+  });
+
+  it("rejects array-shaped scoring_result embeds", () => {
+    const data = [
+      { ...validRow, survey_submission: { scoring_result: [{ primary_archetype: "X" }] } },
+    ];
+    expect(() => TextAnalysisAnswerResponseSchema.parse(data)).toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 15. SegmentDeltaSubmissionResponseSchema
+// ---------------------------------------------------------------------------
+describe("SegmentDeltaSubmissionResponseSchema", () => {
+  const validRow = {
+    id: 1,
+    status: "completed",
+    utm_tracker: null,
+    created_date_time: "2026-04-05T10:00:00.000Z",
+    scoring_result: {
+      primary_archetype: "Spark Seeker",
+    },
+  };
+
+  it("accepts embedded scoring_result as an object", () => {
+    expect(() => SegmentDeltaSubmissionResponseSchema.parse([validRow])).not.toThrow();
+  });
+
+  it("accepts null scoring_result", () => {
+    expect(() =>
+      SegmentDeltaSubmissionResponseSchema.parse([{ ...validRow, scoring_result: null }])
+    ).not.toThrow();
+  });
+
+  it("rejects array-shaped scoring_result embeds", () => {
+    const data = [{ ...validRow, scoring_result: [{ primary_archetype: "Spark Seeker" }] }];
+    expect(() => SegmentDeltaSubmissionResponseSchema.parse(data)).toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 16. ResearchIntelligenceAnswerResponseSchema
+// ---------------------------------------------------------------------------
+describe("ResearchIntelligenceAnswerResponseSchema", () => {
+  const validRow = {
+    id: 1,
+    answer_text: "Trust matters most.",
+    survey_question: {
+      id: 10,
+      frontend_qid: "01002",
+      question_text: "What feels hardest right now?",
+    },
+    survey_submission: {
+      created_date_time: "2026-04-05T10:00:00.000Z",
+      scoring_result: {
+        primary_archetype: "Approval Seeker",
+      },
+    },
+  };
+
+  it("accepts nested scoring_result as an object", () => {
+    expect(() => ResearchIntelligenceAnswerResponseSchema.parse([validRow])).not.toThrow();
+  });
+
+  it("accepts null scoring_result", () => {
+    expect(() =>
+      ResearchIntelligenceAnswerResponseSchema.parse([
+        { ...validRow, survey_submission: { ...validRow.survey_submission, scoring_result: null } },
+      ])
+    ).not.toThrow();
+  });
+
+  it("rejects array-shaped scoring_result embeds", () => {
+    const data = [
+      {
+        ...validRow,
+        survey_submission: {
+          ...validRow.survey_submission,
+          scoring_result: [{ primary_archetype: "Approval Seeker" }],
+        },
+      },
+    ];
+    expect(() => ResearchIntelligenceAnswerResponseSchema.parse(data)).toThrow();
   });
 });

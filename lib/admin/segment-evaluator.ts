@@ -28,10 +28,10 @@ export interface SegmentComparableRow {
   duration_ms: number | null;
   created_date_time: string;
   utm_tracker: string | null;
-  scoring_result: Array<{
+  scoring_result: {
     primary_archetype: string | null;
     v5_primary_archetype: string | null;
-  }> | null;
+  } | null;
   app_user: {
     user_profile: {
       gender: string | null;
@@ -146,7 +146,7 @@ function compareValues(
 
 function getFieldValue(row: SegmentComparableRow, field: SegmentCondition["field"]) {
   const profile = row.app_user?.user_profile;
-  const scoring = row.scoring_result?.[0];
+  const scoring = row.scoring_result;
   const utm = parseUtmTracker(row.utm_tracker);
 
   switch (field) {
@@ -208,7 +208,7 @@ export function buildSegmentMetrics(rows: SegmentComparableRow[]): SegmentMetric
       durationTotal += row.duration_ms;
       durationCount += 1;
     }
-    const archetype = row.scoring_result?.[0]?.primary_archetype;
+    const archetype = row.scoring_result?.primary_archetype;
     if (archetype) {
       archetypeMap.set(archetype, (archetypeMap.get(archetype) ?? 0) + 1);
     }

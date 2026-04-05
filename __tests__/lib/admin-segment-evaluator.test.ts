@@ -12,12 +12,10 @@ const sampleRow: SegmentComparableRow = {
   duration_ms: 120000,
   created_date_time: "2026-03-01T12:00:00.000Z",
   utm_tracker: JSON.stringify({ utm_source: "google", utm_medium: "cpc" }),
-  scoring_result: [
-    {
-      primary_archetype: "Spark Seeker",
-      v5_primary_archetype: "Spark Seeker",
-    },
-  ],
+  scoring_result: {
+    primary_archetype: "Spark Seeker",
+    v5_primary_archetype: "Spark Seeker",
+  },
   app_user: {
     user_profile: {
       gender: "Female",
@@ -52,7 +50,10 @@ describe("segment evaluator", () => {
         id: 2,
         status: "flagged",
         duration_ms: 60000,
-        scoring_result: [{ primary_archetype: "Romantic Idealist", v5_primary_archetype: null }],
+        scoring_result: {
+          primary_archetype: "Romantic Idealist",
+          v5_primary_archetype: null,
+        },
       },
     ]);
 

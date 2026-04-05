@@ -5,12 +5,18 @@ import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
 import { supabaseFetch } from "@/lib/admin/supabase";
 import logger from "@/lib/logger";
 
+export const dynamic = "force-dynamic";
+
+const responseHeaders = {
+  "Cache-Control": "no-store, max-age=0",
+};
+
 interface SubmissionRow {
   id: number;
   status: string;
   utm_tracker: string | null;
   created_date_time: string;
-  scoring_result: Array<{ primary_archetype: string | null }> | null;
+  scoring_result: { primary_archetype: string | null } | null;
 }
 
 function parseUtmSource(tracker: string | null): string {
@@ -101,7 +107,7 @@ export async function GET(request: Request) {
       else previousTotal += 1;
 
       increment(buckets.source, parseUtmSource(row.utm_tracker));
-      increment(buckets.archetype, row.scoring_result?.[0]?.primary_archetype || "Unscored");
+      increment(buckets.archetype, row.scoring_result?.primary_archetype || "Unscored");
       increment(buckets.status, row.status || "unknown");
     }
 
@@ -147,23 +153,28 @@ export async function GET(request: Request) {
     const risers = watchlist.filter((item) => item.deltaShare > 0);
     const fallers = watchlist.filter((item) => item.deltaShare < 0);
 
-    return NextResponse.json({
-      summary: {
-        windowDays: days,
-        currentTotal,
-        previousTotal,
-        biggestRiser: risers[0] != null ? `${risers[0].dimension}: ${risers[0].key}` : null,
-        biggestFaller: fallers[0] != null ? `${fallers[0].dimension}: ${fallers[0].key}` : null,
+    return NextResponse.json(
+      {
+        summary: {
+          windowDays: days,
+          currentTotal,
+          previousTotal,
+          biggestRiser: risers[0] != null ? `${risers[0].dimension}: ${risers[0].key}` : null,
+          biggestFaller: fallers[0] != null ? `${fallers[0].dimension}: ${fallers[0].key}` : null,
+        },
+        watchlist,
+        trust: {
+          sampleSize: currentTotal + previousTotal,
+          warning:
+            currentTotal < 10 || previousTotal < 10
+              ? "Segment movement is based on a small comparison window."
+              : null,
+        },
       },
-      watchlist,
-      trust: {
-        sampleSize: currentTotal + previousTotal,
-        warning:
-          currentTotal < 10 || previousTotal < 10
-            ? "Segment movement is based on a small comparison window."
-            : null,
-      },
-    });
+      {
+        headers: responseHeaders,
+      }
+    );
   } catch (err) {
     logger.error({ err }, "Segment deltas error");
     return NextResponse.json({ error: "Unable to process request." }, { status: 500 });

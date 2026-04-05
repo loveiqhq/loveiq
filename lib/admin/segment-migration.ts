@@ -283,13 +283,11 @@ function toSegmentComparableRow(input: {
     utm_tracker: input.submission.utm_tracker,
     scoring_result:
       input.archetype || input.v5Archetype
-        ? [
-            {
-              primary_archetype: input.archetype,
-              v5_primary_archetype: input.v5Archetype,
-            },
-          ]
-        : [],
+        ? {
+            primary_archetype: input.archetype,
+            v5_primary_archetype: input.v5Archetype,
+          }
+        : null,
     app_user: input.profile
       ? {
           user_profile: {

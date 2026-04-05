@@ -172,7 +172,7 @@ interface AnswerRow {
   survey_question: { id: number; frontend_qid: string; question_text: string } | null;
   survey_submission: {
     created_date_time: string;
-    scoring_result: Array<{ primary_archetype: string | null }> | null;
+    scoring_result: { primary_archetype: string | null } | null;
   } | null;
 }
 
@@ -1128,8 +1128,7 @@ export async function buildResearchIntelligenceSnapshot(
       const text = answer.answer_text ?? "";
       const words = normalizeWords(text);
       const tokens = new Set(tokenizeSemantic(text));
-      const archetype =
-        answer.survey_submission?.scoring_result?.[0]?.primary_archetype ?? "Unknown";
+      const archetype = answer.survey_submission?.scoring_result?.primary_archetype ?? "Unknown";
       const frontendQid = answer.survey_question?.frontend_qid ?? "unknown";
 
       for (const word of words) {

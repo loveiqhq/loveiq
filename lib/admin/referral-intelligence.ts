@@ -208,12 +208,12 @@ function toComparableRow(input: {
     duration_ms: input.submission.duration_ms,
     created_date_time: input.submission.created_date_time,
     utm_tracker: input.submission.utm_tracker,
-    scoring_result: [
-      {
-        primary_archetype: input.scoring?.primary_archetype ?? null,
-        v5_primary_archetype: input.scoring?.v5_primary_archetype ?? null,
-      },
-    ],
+    scoring_result: input.scoring
+      ? {
+          primary_archetype: input.scoring.primary_archetype,
+          v5_primary_archetype: input.scoring.v5_primary_archetype,
+        }
+      : null,
     app_user: {
       user_profile: {
         gender: input.profile?.gender ?? null,

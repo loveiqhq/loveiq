@@ -379,12 +379,13 @@ function toSegmentComparableRow(context: SubmissionContext): SegmentComparableRo
       utm_source: context.source === "Direct" ? null : context.source,
       utm_medium: context.medium === "unknown" ? null : context.medium,
     }),
-    scoring_result: [
-      {
-        primary_archetype: context.archetype,
-        v5_primary_archetype: context.v5Archetype,
-      },
-    ],
+    scoring_result:
+      context.archetype || context.v5Archetype
+        ? {
+            primary_archetype: context.archetype,
+            v5_primary_archetype: context.v5Archetype,
+          }
+        : null,
     app_user: {
       user_profile: {
         gender: context.gender,
