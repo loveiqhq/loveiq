@@ -71,16 +71,47 @@ describe("MultipleChoiceQuestion", () => {
     expect(screen.getByText(/select all that apply/i)).toBeInTheDocument();
   });
 
-  it("renders descriptions for explained options", () => {
+  it("does not render descriptions for unselected explained options", () => {
     render(<MultipleChoiceQuestion question={baseQuestion} value={null} onChange={vi.fn()} />);
+    expect(screen.queryByTestId("description-A")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("description-B")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("description-C")).not.toBeInTheDocument();
+  });
+
+  it("renders descriptions for selected explained options", () => {
+    render(
+      <MultipleChoiceQuestion question={baseQuestion} value={["A", "C"]} onChange={vi.fn()} />
+    );
+
     expect(screen.getByTestId("description-A")).toHaveTextContent("Explanation for A");
-    expect(screen.getByTestId("description-B")).toHaveTextContent("Explanation for B");
+    expect(screen.queryByTestId("description-B")).not.toBeInTheDocument();
     expect(screen.getByTestId("description-C")).toHaveTextContent("Explanation for C");
   });
 
   it("does not render description UI for options without explanations", () => {
-    render(<MultipleChoiceQuestion question={baseQuestion} value={null} onChange={vi.fn()} />);
+    render(<MultipleChoiceQuestion question={baseQuestion} value={["Other"]} onChange={vi.fn()} />);
     expect(screen.queryByTestId("description-Other")).not.toBeInTheDocument();
+  });
+
+  it("shows an option description after selecting it", async () => {
+    const user = userEvent.setup();
+    render(<ControlledQuestion />);
+
+    await user.click(screen.getByTestId("choice-A"));
+
+    expect(screen.getByTestId("description-A")).toHaveTextContent("Explanation for A");
+    expect(screen.queryByTestId("description-B")).not.toBeInTheDocument();
+  });
+
+  it("hides an option description after deselecting it", async () => {
+    const user = userEvent.setup();
+    render(<ControlledQuestion initialValue={["A"]} />);
+
+    expect(screen.getByTestId("description-A")).toHaveTextContent("Explanation for A");
+
+    await user.click(screen.getByTestId("choice-A"));
+
+    expect(screen.queryByTestId("description-A")).not.toBeInTheDocument();
   });
 
   it("clicking adds to selection", async () => {

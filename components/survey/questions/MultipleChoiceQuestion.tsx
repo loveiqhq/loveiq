@@ -78,16 +78,20 @@ const MultipleChoiceQuestion: FC<MultipleChoiceQuestionProps> = ({
       )}
 
       <div className="flex flex-col gap-3">
-        {question.options.map((option) => (
-          <ChoiceCard
-            key={option}
-            label={option}
-            description={getOptionExplanation(question, option)}
-            selected={selected.includes(option)}
-            onClick={() => toggle(option)}
-            multi
-          />
-        ))}
+        {question.options.map((option) => {
+          const isSelected = selected.includes(option);
+
+          return (
+            <ChoiceCard
+              key={option}
+              label={option}
+              description={isSelected ? getOptionExplanation(question, option) : undefined}
+              selected={isSelected}
+              onClick={() => toggle(option)}
+              multi
+            />
+          );
+        })}
       </div>
 
       {selected.some((s) => /^other\b/i.test(s)) && (
