@@ -256,18 +256,53 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           nonce={nonce}
         />
         <Script
+          id="ga-loader"
           src="https://www.googletagmanager.com/gtag/js?id=G-QTYY69L46N"
           strategy="lazyOnload"
           nonce={nonce}
+          data-cookieyes="cookieyes-analytics"
         />
-        <Script id="ga-init" strategy="lazyOnload" nonce={nonce}>
+        <Script
+          id="ga-init"
+          strategy="lazyOnload"
+          nonce={nonce}
+          data-cookieyes="cookieyes-analytics"
+        >
           {`
             window.dataLayer = window.dataLayer || [];
-            function gtag(){dataLayer.push(arguments);}
-            gtag('js', new Date());
-            gtag('config', 'G-QTYY69L46N', {
+            window.gtag = window.gtag || function(){window.dataLayer.push(arguments);}
+            if (!window.__loveiqGtagBootstrapped) {
+              window.gtag('js', new Date());
+              window.__loveiqGtagBootstrapped = true;
+            }
+            window.__loveiqAnalyticsEnabled = true;
+            window.gtag('config', 'G-QTYY69L46N', {
               page_path: window.location.pathname,
             });
+          `}
+        </Script>
+        <Script
+          id="google-ads-loader"
+          src="https://www.googletagmanager.com/gtag/js?id=AW-18068690553"
+          strategy="lazyOnload"
+          nonce={nonce}
+          data-cookieyes="cookieyes-advertisement"
+        />
+        <Script
+          id="google-ads-init"
+          strategy="lazyOnload"
+          nonce={nonce}
+          data-cookieyes="cookieyes-advertisement"
+        >
+          {`
+            window.dataLayer = window.dataLayer || [];
+            window.gtag = window.gtag || function(){window.dataLayer.push(arguments);}
+            if (!window.__loveiqGtagBootstrapped) {
+              window.gtag('js', new Date());
+              window.__loveiqGtagBootstrapped = true;
+            }
+            window.__loveiqGoogleAdsEnabled = true;
+            window.gtag('config', 'AW-18068690553');
           `}
         </Script>
         <script

@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useState } from "react";
-import { trackWaitlistSignup } from "@/lib/analytics";
+import { trackGoogleAdsWaitlistConversion, trackWaitlistSignup } from "@/lib/analytics";
 
 const faqs = [
   {
@@ -120,8 +120,12 @@ export default function WaitlistPage() {
         const data = await res.json().catch(() => ({}));
         throw new Error(data?.error || "Something went wrong");
       }
+      const data = (await res.json().catch(() => ({}))) as { already?: boolean };
       setStatus("success");
-      trackWaitlistSignup("waitlist_page");
+      if (!data.already) {
+        trackWaitlistSignup("waitlist_page");
+        trackGoogleAdsWaitlistConversion();
+      }
     } catch (err) {
       setStatus("error");
       setErrorMessage(err instanceof Error ? err.message : "Unable to join waitlist.");
