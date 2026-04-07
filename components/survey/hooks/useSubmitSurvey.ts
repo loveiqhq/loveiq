@@ -6,7 +6,7 @@ import { getCsrfToken } from "@/lib/csrf-client";
 import type { SurveyAnswers } from "@/lib/survey/types";
 import { getSurveyContactInfo } from "@/lib/survey/utils";
 import type { AnswerValue } from "./useSurveyState";
-import { getSessionId } from "./surveySession";
+import { getSessionId, setReportSessionId } from "./surveySession";
 import {
   clearPendingCompletion,
   loadPendingCompletion,
@@ -76,6 +76,7 @@ export function useSubmitSurvey() {
         });
 
         if (res.ok) {
+          setReportSessionId(payload.sessionId);
           syncPendingCompletion(null);
           setStatus("success");
           return;

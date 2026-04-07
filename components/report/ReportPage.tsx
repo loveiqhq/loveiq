@@ -7,6 +7,7 @@ import ReportFooter from "./ReportFooter";
 import ReportNavigation from "./ReportNavigation";
 import ReportSection from "./ReportSection";
 import SectionFeedback from "./SectionFeedback";
+import { getReportSessionId } from "@/components/survey/hooks/surveySession";
 import { useReportData } from "./hooks/useReportData";
 import { useSectionFeedback } from "./hooks/useSectionFeedback";
 import { getReportTheme, getReportThemeStyle } from "./reportTheme";
@@ -21,11 +22,6 @@ interface SnapshotContent {
   satisfactionLabel: string;
   satisfactionValue: number | null;
   stage: string | null;
-}
-
-function getSessionId() {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem("loveiq-report-session");
 }
 
 const subscribeNoop = () => () => {};
@@ -111,7 +107,7 @@ function replacePlaceholders(
 }
 
 const ReportPage: FC = () => {
-  const sessionId = useSyncExternalStore(subscribeNoop, getSessionId, () => null);
+  const sessionId = useSyncExternalStore(subscribeNoop, getReportSessionId, () => null);
   const [activeSectionId, setActiveSectionId] = useState(reportSections[0]?.id ?? "welcome");
 
   const { data, status } = useReportData(sessionId);

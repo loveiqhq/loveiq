@@ -1,6 +1,7 @@
 "use client";
 
 import { GLOBAL_UTM_KEY } from "@/lib/utm";
+import { SURVEY_SESSION_KEY } from "./surveySession";
 import type { SurveyAnswers } from "@/lib/survey/types";
 import { UTM_STORAGE_KEY } from "./useUtmCapture";
 
@@ -71,7 +72,7 @@ export function clearPersistedSurveyState(options?: { clearPendingCompletion?: b
       localStorage.removeItem(PENDING_COMPLETION_KEY);
     }
     sessionStorage.removeItem(SURVEY_STEP_KEY);
-    sessionStorage.removeItem("loveiq-survey-session");
+    sessionStorage.removeItem(SURVEY_SESSION_KEY);
   } catch {
     /* storage unavailable */
   }

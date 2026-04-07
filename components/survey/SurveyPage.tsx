@@ -10,6 +10,7 @@ import {
   clearPersistedSurveyState,
   loadPendingCompletion,
 } from "./hooks/surveyStorage";
+import { copySurveySessionToReportSession } from "./hooks/surveySession";
 
 /* ------------------------------------------------------------------ */
 /*  Shared icons                                                       */
@@ -1163,11 +1164,7 @@ const SurveyPage: FC = () => {
   const handleReturn = useCallback((clearAnswers?: boolean) => {
     try {
       if (clearAnswers) {
-        // Preserve session ID for the report page before clearing survey state
-        const sessionId = sessionStorage.getItem("loveiq-survey-session");
-        if (sessionId) {
-          localStorage.setItem("loveiq-report-session", sessionId);
-        }
+        copySurveySessionToReportSession();
         clearPersistedSurveyState({ clearPendingCompletion: true });
       }
       sessionStorage.removeItem(SURVEY_STEP_KEY);

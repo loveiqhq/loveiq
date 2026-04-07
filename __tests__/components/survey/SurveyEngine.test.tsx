@@ -186,6 +186,8 @@ import SurveyEngine from "@/components/survey/SurveyEngine";
 
 beforeEach(() => {
   vi.useFakeTimers();
+  localStorage.clear();
+  sessionStorage.clear();
   mockCurrentIndex = 0;
   mockProgress = 0;
   mockSubmitStatus = "idle";
@@ -240,6 +242,18 @@ describe("SurveyEngine", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /complete wizard/i }));
     expect(onComplete).toHaveBeenCalledTimes(1);
+  });
+
+  it("persists the report session before clearing survey storage on success", () => {
+    mockCurrentIndex = 4;
+    mockProgress = 100;
+    mockSubmitStatus = "success";
+    sessionStorage.setItem("loveiq-survey-session", "session-123");
+
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+
+    expect(localStorage.getItem("loveiq-report-session")).toBe("session-123");
+    expect(sessionStorage.getItem("loveiq-survey-session")).toBeNull();
   });
 
   it("renders scale question component for answerType scale", () => {

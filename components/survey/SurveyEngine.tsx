@@ -23,6 +23,7 @@ import { useUtmCapture } from "./hooks/useUtmCapture";
 import { usePartialSave } from "./hooks/usePartialSave";
 import { useAutoAdvance } from "./hooks/useAutoAdvance";
 import { clearPersistedSurveyState } from "./hooks/surveyStorage";
+import { copySurveySessionToReportSession } from "./hooks/surveySession";
 import SurveyConfirmation from "./SurveyConfirmation";
 import PreReportWizard from "./PreReportWizard";
 import ProcessingSequence from "./ProcessingSequence";
@@ -79,6 +80,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
   useEffect(() => {
     if (submitStatus === "success" && !hasCleared.current) {
       hasCleared.current = true;
+      copySurveySessionToReportSession();
       clearPersistedSurveyState({ clearPendingCompletion: true });
     }
   }, [submitStatus]);
