@@ -37,18 +37,31 @@ export function copySurveySessionToReportSession(): string | null {
   }
 }
 
+export function finalizeReportSession(sessionId: string): void {
+  if (!canUseStorage()) return;
+
+  try {
+    setReportSessionId(sessionId);
+
+    if (sessionStorage.getItem(SURVEY_SESSION_KEY) === sessionId) {
+      sessionStorage.removeItem(SURVEY_SESSION_KEY);
+    }
+  } catch {
+    /* storage unavailable */
+  }
+}
+
 export function getReportSessionId(): string | null {
   if (!canUseStorage()) return null;
 
   try {
-    const reportSessionId = localStorage.getItem(REPORT_SESSION_KEY);
-    if (reportSessionId) return reportSessionId;
-
     const surveySessionId = sessionStorage.getItem(SURVEY_SESSION_KEY);
-    if (!surveySessionId) return null;
+    if (surveySessionId) {
+      setReportSessionId(surveySessionId);
+      return surveySessionId;
+    }
 
-    setReportSessionId(surveySessionId);
-    return surveySessionId;
+    return localStorage.getItem(REPORT_SESSION_KEY);
   } catch {
     return null;
   }

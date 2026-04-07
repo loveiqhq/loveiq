@@ -84,4 +84,14 @@ describe("surveyStorage", () => {
 
     expect(localStorage.getItem(PENDING_COMPLETION_KEY)).toBeNull();
   });
+
+  it("can preserve the survey session for report handoff cleanup", () => {
+    sessionStorage.setItem(SURVEY_STEP_KEY, "5");
+    sessionStorage.setItem("loveiq-survey-session", "session-123");
+
+    clearPersistedSurveyState({ clearSurveySession: false });
+
+    expect(sessionStorage.getItem(SURVEY_STEP_KEY)).toBeNull();
+    expect(sessionStorage.getItem("loveiq-survey-session")).toBe("session-123");
+  });
 });

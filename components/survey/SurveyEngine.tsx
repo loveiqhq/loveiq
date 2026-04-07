@@ -81,7 +81,10 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
     if (submitStatus === "success" && !hasCleared.current) {
       hasCleared.current = true;
       copySurveySessionToReportSession();
-      clearPersistedSurveyState({ clearPendingCompletion: true });
+      clearPersistedSurveyState({
+        clearPendingCompletion: true,
+        clearSurveySession: false,
+      });
     }
   }, [submitStatus]);
 

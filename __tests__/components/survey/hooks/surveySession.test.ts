@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  finalizeReportSession,
   REPORT_SESSION_KEY,
   SURVEY_SESSION_KEY,
   copySurveySessionToReportSession,
@@ -42,9 +43,16 @@ describe("surveySession", () => {
     expect(localStorage.getItem(REPORT_SESSION_KEY)).toBe("existing-session");
   });
 
-  it("prefers the saved report session when loading the report", () => {
+  it("prefers the active survey session when loading the report", () => {
     setReportSessionId("report-session");
     sessionStorage.setItem(SURVEY_SESSION_KEY, "survey-session");
+
+    expect(getReportSessionId()).toBe("survey-session");
+    expect(localStorage.getItem(REPORT_SESSION_KEY)).toBe("survey-session");
+  });
+
+  it("falls back to the saved report session when no active survey session exists", () => {
+    setReportSessionId("report-session");
 
     expect(getReportSessionId()).toBe("report-session");
   });
@@ -54,5 +62,15 @@ describe("surveySession", () => {
 
     expect(getReportSessionId()).toBe("survey-session");
     expect(localStorage.getItem(REPORT_SESSION_KEY)).toBe("survey-session");
+  });
+
+  it("finalizes the report session and clears the matching survey session", () => {
+    sessionStorage.setItem(SURVEY_SESSION_KEY, "survey-session");
+    localStorage.setItem(REPORT_SESSION_KEY, "stale-report-session");
+
+    finalizeReportSession("survey-session");
+
+    expect(localStorage.getItem(REPORT_SESSION_KEY)).toBe("survey-session");
+    expect(sessionStorage.getItem(SURVEY_SESSION_KEY)).toBeNull();
   });
 });

@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 import { useReportData } from "@/components/report/hooks/useReportData";
+import { REPORT_SESSION_KEY, SURVEY_SESSION_KEY } from "@/components/survey/hooks/surveySession";
 
 describe("useReportData", () => {
   let originalFetch: typeof globalThis.fetch;
@@ -27,6 +28,8 @@ describe("useReportData", () => {
   });
 
   it("returns report data on a successful fetch", async () => {
+    sessionStorage.setItem(SURVEY_SESSION_KEY, "02d88f31-eceb-4402-940d-c8cd98d01848");
+    localStorage.setItem(REPORT_SESSION_KEY, "stale-report-session");
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -47,6 +50,8 @@ describe("useReportData", () => {
 
     expect(result.current.data?.primaryArchetype).toBe("Emotional Voyeur");
     expect(result.current.error).toBeNull();
+    expect(localStorage.getItem(REPORT_SESSION_KEY)).toBe("02d88f31-eceb-4402-940d-c8cd98d01848");
+    expect(sessionStorage.getItem(SURVEY_SESSION_KEY)).toBeNull();
     expect(mockFetch).toHaveBeenCalledWith(
       "/api/report?sessionId=02d88f31-eceb-4402-940d-c8cd98d01848",
       expect.objectContaining({

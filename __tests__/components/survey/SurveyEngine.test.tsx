@@ -244,16 +244,17 @@ describe("SurveyEngine", () => {
     expect(onComplete).toHaveBeenCalledTimes(1);
   });
 
-  it("persists the report session before clearing survey storage on success", () => {
+  it("persists the report session while preserving the survey session for report handoff", () => {
     mockCurrentIndex = 4;
     mockProgress = 100;
     mockSubmitStatus = "success";
     sessionStorage.setItem("loveiq-survey-session", "session-123");
+    localStorage.setItem("loveiq-report-session", "stale-session");
 
     render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
 
     expect(localStorage.getItem("loveiq-report-session")).toBe("session-123");
-    expect(sessionStorage.getItem("loveiq-survey-session")).toBeNull();
+    expect(sessionStorage.getItem("loveiq-survey-session")).toBe("session-123");
   });
 
   it("renders scale question component for answerType scale", () => {

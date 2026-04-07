@@ -60,7 +60,10 @@ export function clearPendingCompletion(): void {
   }
 }
 
-export function clearPersistedSurveyState(options?: { clearPendingCompletion?: boolean }): void {
+export function clearPersistedSurveyState(options?: {
+  clearPendingCompletion?: boolean;
+  clearSurveySession?: boolean;
+}): void {
   if (!canUseStorage()) return;
 
   try {
@@ -72,7 +75,9 @@ export function clearPersistedSurveyState(options?: { clearPendingCompletion?: b
       localStorage.removeItem(PENDING_COMPLETION_KEY);
     }
     sessionStorage.removeItem(SURVEY_STEP_KEY);
-    sessionStorage.removeItem(SURVEY_SESSION_KEY);
+    if (options?.clearSurveySession !== false) {
+      sessionStorage.removeItem(SURVEY_SESSION_KEY);
+    }
   } catch {
     /* storage unavailable */
   }

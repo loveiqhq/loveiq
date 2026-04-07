@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getCsrfToken } from "@/lib/csrf-client";
+import { finalizeReportSession } from "@/components/survey/hooks/surveySession";
 
 export interface ReportData {
   userName: string | null;
@@ -68,6 +69,7 @@ export function useReportData(sessionId: string | null) {
         }
 
         const json = (await res.json()) as ReportData;
+        finalizeReportSession(activeSessionId);
         setState({ data: json, status: "success", error: null });
       } catch {
         if (!cancelled) {

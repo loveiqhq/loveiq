@@ -1165,7 +1165,10 @@ const SurveyPage: FC = () => {
     try {
       if (clearAnswers) {
         copySurveySessionToReportSession();
-        clearPersistedSurveyState({ clearPendingCompletion: true });
+        clearPersistedSurveyState({
+          clearPendingCompletion: true,
+          clearSurveySession: false,
+        });
       }
       sessionStorage.removeItem(SURVEY_STEP_KEY);
     } catch {
