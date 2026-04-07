@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { getCsrfToken } from "@/lib/csrf-client";
 
 export interface ReportData {
@@ -11,48 +11,88 @@ export interface ReportData {
   diagnostics: Record<string, unknown> | null;
 }
 
-type Status = "idle" | "loading" | "error" | "success";
+export interface ReportRequestError {
+  statusCode: number | null;
+  message: string | null;
+}
+
+type Status = "idle" | "loading" | "error" | "success" | "missing";
+
+async function parseErrorResponse(res: Response): Promise<ReportRequestError> {
+  try {
+    const json = (await res.json()) as { error?: unknown };
+    return {
+      statusCode: res.status,
+      message: typeof json.error === "string" ? json.error : null,
+    };
+  } catch {
+    return {
+      statusCode: res.status,
+      message: null,
+    };
+  }
+}
 
 export function useReportData(sessionId: string | null) {
-  const [state, setState] = useState<{ data: ReportData | null; status: Status }>({
+  const [state, setState] = useState<{
+    data: ReportData | null;
+    status: Status;
+    error: ReportRequestError | null;
+  }>({
     data: null,
     status: "idle",
+    error: null,
   });
 
   useEffect(() => {
     if (!sessionId) return;
 
+    const activeSessionId = sessionId;
     let cancelled = false;
 
     async function fetchReport() {
+      setState({ data: null, status: "loading", error: null });
+
       try {
         const csrfToken = getCsrfToken();
-        const res = await fetch(`/api/report?sessionId=${encodeURIComponent(sessionId!)}`, {
+        const res = await fetch(`/api/report?sessionId=${encodeURIComponent(activeSessionId)}`, {
           headers: { "x-csrf-token": csrfToken },
         });
 
         if (cancelled) return;
 
         if (!res.ok) {
-          setState({ data: null, status: "error" });
+          const error = await parseErrorResponse(res);
+          setState({ data: null, status: "error", error });
           return;
         }
 
         const json = (await res.json()) as ReportData;
-        setState({ data: json, status: "success" });
+        setState({ data: json, status: "success", error: null });
       } catch {
-        if (!cancelled) setState({ data: null, status: "error" });
+        if (!cancelled) {
+          setState({
+            data: null,
+            status: "error",
+            error: { statusCode: null, message: null },
+          });
+        }
       }
     }
 
-    fetchReport();
+    void fetchReport();
     return () => {
       cancelled = true;
     };
   }, [sessionId]);
 
-  // No sessionId → error; idle with sessionId → loading (fetch is pending)
-  if (!sessionId) return { data: null, status: "error" as const };
-  if (state.status === "idle") return { data: null, status: "loading" as const };
-  return { data: state.data, status: state.status };
+  if (!sessionId) {
+    return { data: null, status: "missing" as const, error: null };
+  }
+
+  if (state.status === "idle") {
+    return { data: null, status: "loading" as const, error: null };
+  }
+
+  return { data: state.data, status: state.status, error: state.error };
 }

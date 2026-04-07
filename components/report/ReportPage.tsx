@@ -8,7 +8,7 @@ import ReportNavigation from "./ReportNavigation";
 import ReportSection from "./ReportSection";
 import SectionFeedback from "./SectionFeedback";
 import { getReportSessionId } from "@/components/survey/hooks/surveySession";
-import { useReportData } from "./hooks/useReportData";
+import { useReportData, type ReportRequestError } from "./hooks/useReportData";
 import { useSectionFeedback } from "./hooks/useSectionFeedback";
 import { getReportTheme, getReportThemeStyle } from "./reportTheme";
 import ArchetypeProbabilitySection from "./sections/ArchetypeProbabilitySection";
@@ -106,11 +106,51 @@ function replacePlaceholders(
     .replace(/\{\{SEXUAL_SATISFACTION\}\}/g, values.snapshot.satisfactionLabel);
 }
 
+interface ReportStatusState {
+  title: string;
+  copy: string;
+  actionHref: string;
+  actionLabel: string;
+}
+
+function getErrorState(error: ReportRequestError | null): ReportStatusState {
+  switch (error?.statusCode) {
+    case 403:
+      return {
+        title: "Unable to load report",
+        copy: "Your secure report session expired or the request was rejected. Reload the report and try again.",
+        actionHref: "/report",
+        actionLabel: "Reload report",
+      };
+    case 404:
+      return {
+        title: "Report not found",
+        copy: "We could not find a saved report for this survey session. Complete the survey again to generate a fresh report.",
+        actionHref: "/survey",
+        actionLabel: "Take the survey",
+      };
+    case 429:
+      return {
+        title: "Too many attempts",
+        copy: "You have opened the report too many times in a short window. Wait a minute, then reload the report.",
+        actionHref: "/report",
+        actionLabel: "Reload report",
+      };
+    default:
+      return {
+        title: "Report temporarily unavailable",
+        copy: "The report service failed while loading your results. Reload the report and try again in a moment.",
+        actionHref: "/report",
+        actionLabel: "Reload report",
+      };
+  }
+}
+
 const ReportPage: FC = () => {
   const sessionId = useSyncExternalStore(subscribeNoop, getReportSessionId, () => null);
   const [activeSectionId, setActiveSectionId] = useState(reportSections[0]?.id ?? "welcome");
 
-  const { data, status } = useReportData(sessionId);
+  const { data, status, error } = useReportData(sessionId);
   const { feedbacks, submitFeedback } = useSectionFeedback(sessionId);
 
   useEffect(() => {
@@ -153,18 +193,35 @@ const ReportPage: FC = () => {
     );
   }
 
-  if (status === "error" || !data) {
+  if (status === "missing") {
     return (
       <main className="report-status-screen">
         <div className="report-status-card report-card">
           <p className="report-overline">LoveIQ report</p>
-          <h1 className="report-status-card__title">Report not found</h1>
+          <h1 className="report-status-card__title">No saved report session</h1>
           <p className="report-status-card__copy">
-            We could not find a saved report session. Complete the survey again to generate a fresh
-            report.
+            We could not find a saved report session in this browser. Complete the survey again to
+            generate a fresh report.
           </p>
           <a href="/survey" className="report-button mt-3 inline-flex">
             Take the survey
+          </a>
+        </div>
+      </main>
+    );
+  }
+
+  if (status === "error" || !data) {
+    const statusState = getErrorState(error);
+
+    return (
+      <main className="report-status-screen">
+        <div className="report-status-card report-card">
+          <p className="report-overline">LoveIQ report</p>
+          <h1 className="report-status-card__title">{statusState.title}</h1>
+          <p className="report-status-card__copy">{statusState.copy}</p>
+          <a href={statusState.actionHref} className="report-button mt-3 inline-flex">
+            {statusState.actionLabel}
           </a>
         </div>
       </main>

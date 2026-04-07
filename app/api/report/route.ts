@@ -18,6 +18,24 @@ const RATE_LIMIT_CONFIG = {
 
 const SUPABASE_TIMEOUT_MS = 5_000;
 
+interface SubmissionUser {
+  first_name: string | null;
+}
+
+interface SubmissionRow {
+  id: number;
+  created_date_time: string;
+  app_user: SubmissionUser | SubmissionUser[] | null;
+}
+
+function getSubmissionUserName(submission: SubmissionRow): string | null {
+  if (Array.isArray(submission.app_user)) {
+    return submission.app_user[0]?.first_name ?? null;
+  }
+
+  return submission.app_user?.first_name ?? null;
+}
+
 export async function GET(request: Request) {
   // 1. CSRF verification
   if (!(await verifyCsrfToken(request))) {
@@ -68,7 +86,7 @@ export async function GET(request: Request) {
     // 5. Look up survey_submission by session_id
     const submissionRes = await getBreaker("supabase").fire(() =>
       fetchWithTimeout(
-        `${supabaseUrl}/rest/v1/survey_submission?session_id=eq.${encodeURIComponent(sessionId)}&select=id,first_name,created_at&limit=1`,
+        `${supabaseUrl}/rest/v1/survey_submission?session_id=eq.${encodeURIComponent(sessionId)}&select=id,created_date_time,app_user!fk_survey_submission_user(first_name)&limit=1`,
         {
           headers,
           cache: "no-store",
@@ -82,11 +100,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
     }
 
-    const submissions = (await submissionRes.json()) as Array<{
-      id: number;
-      first_name: string | null;
-      created_at: string;
-    }>;
+    const submissions = (await submissionRes.json()) as SubmissionRow[];
 
     if (!Array.isArray(submissions) || submissions.length === 0) {
       return NextResponse.json({ error: "Report not found." }, { status: 404 });
@@ -127,10 +141,10 @@ export async function GET(request: Request) {
 
     // 7. Build response — prefer v5 fields, fall back to v4
     return NextResponse.json({
-      userName: submission.first_name ?? null,
+      userName: getSubmissionUserName(submission),
       primaryArchetype: scoring.v5_primary_archetype || scoring.primary_archetype,
       percentages: scoring.v5_percentages || scoring.percentages || {},
-      reportDate: submission.created_at,
+      reportDate: submission.created_date_time,
       diagnostics: scoring.diagnostics ?? null,
     });
   } catch (err) {
