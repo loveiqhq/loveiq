@@ -47,11 +47,7 @@ const ArchetypeProbabilitySection: FC<Props> = ({
               </div>
 
               <div className="report-probability-card__identity">
-                <div
-                  className="report-probability-card__dot"
-                  style={{ backgroundColor: `rgb(${rowTheme.accentRgb})` }}
-                  aria-hidden="true"
-                />
+                <div className="report-probability-card__dot" aria-hidden="true" />
                 <div>
                   <p className="report-probability-card__name">{name}</p>
                   <p className="report-probability-card__motto">{rowTheme.motto}</p>
@@ -60,9 +56,9 @@ const ArchetypeProbabilitySection: FC<Props> = ({
 
               <div className="report-probability-card__cta">
                 {isPrimary ? (
-                  <span className="report-sidebar__badge is-free">Unlocked</span>
+                  <span className="report-nav-chip is-free">Unlocked</span>
                 ) : (
-                  <span className="report-sidebar__badge is-premium">Full Report</span>
+                  <span className="report-nav-chip is-premium">Full Report</span>
                 )}
               </div>
             </div>

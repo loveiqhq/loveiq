@@ -14,6 +14,7 @@ import { getReportTheme, getReportThemeStyle } from "./reportTheme";
 import ArchetypeProbabilitySection from "./sections/ArchetypeProbabilitySection";
 import CoreArchetypeSection from "./sections/CoreArchetypeSection";
 import DimensionSection from "./sections/DimensionSection";
+import ImportanceOfSexualitySection from "./sections/ImportanceOfSexualitySection";
 import WelcomeSection from "./sections/WelcomeSection";
 
 interface SnapshotContent {
@@ -255,11 +256,9 @@ const ReportPage: FC = () => {
       <div className="report-shell">
         <ReportNavigation
           activeSectionId={activeSectionId}
-          matchScore={matchScore}
           primaryArchetype={primaryArchetype}
           reportDate={reportDate}
           sections={reportSections}
-          theme={theme}
         />
 
         <div className="report-content">
@@ -316,6 +315,23 @@ const ReportPage: FC = () => {
                     percentages={percentages}
                     primaryArchetype={primaryArchetype}
                     ranking={ranking}
+                  />
+                </ReportSection>
+              );
+            }
+
+            if (section.sectionNumber === 7) {
+              return (
+                <ReportSection
+                  key={section.id}
+                  feedbackWidget={feedbackWidget}
+                  sectionId={section.id}
+                  title={title}
+                >
+                  <ImportanceOfSexualitySection
+                    generalHtml={generalHtml}
+                    importanceLabel={snapshot.importanceLabel}
+                    importanceValue={snapshot.importanceValue}
                   />
                 </ReportSection>
               );

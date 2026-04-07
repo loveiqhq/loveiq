@@ -9,21 +9,15 @@ interface Props {
 }
 
 const CoreArchetypeSection: FC<Props> = ({ archetypeHtml, theme }) => {
-  const { Icon } = theme;
-
   return (
     <div className="space-y-10">
       <article className="report-hero-card report-card">
-        <div className="report-hero-card__header">
-          <div className="report-hero-card__icon-frame" aria-hidden="true">
-            <Icon className="report-archetype-icon" />
-          </div>
-
-          <div className="report-hero-card__identity">
-            <h3 className="report-hero-card__title">{theme.archetype}</h3>
-            <p className="report-hero-card__motto">{theme.motto}</p>
-          </div>
-        </div>
+        <p className="report-hero-card__pill">Your Core Archetype</p>
+        <h3 className="report-hero-card__title">{theme.archetype}</h3>
+        <p className="report-hero-card__motto">
+          <span className="report-hero-card__motto-label">Motto:</span>{" "}
+          <span className="report-hero-card__motto-copy">{theme.motto}</span>
+        </p>
 
         <div className="report-hero-card__content">
           <p className="report-hero-card__label">Behavioral tendencies:</p>
@@ -49,8 +43,8 @@ const CoreArchetypeSection: FC<Props> = ({ archetypeHtml, theme }) => {
                 />
               </svg>
             </div>
-            <div>
-              <p className="report-card__eyebrow report-card__eyebrow--accent">Core motivation:</p>
+            <div className="report-hero-card__motivation-copy">
+              <p className="report-hero-card__motivation-label">Core motivation:</p>
               <p className="report-hero-card__motivation-value">{theme.motivation}</p>
             </div>
           </div>

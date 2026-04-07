@@ -1,42 +1,26 @@
 import type { FC } from "react";
 import type { ReportSection } from "@/data/report-general";
-import type { ReportTheme } from "./reportTheme";
 
 interface Props {
   activeSectionId: string;
-  matchScore: number;
   primaryArchetype: string;
   reportDate: string;
   sections: ReportSection[];
-  theme: ReportTheme;
 }
 
 const ReportNavigation: FC<Props> = ({
   activeSectionId,
-  matchScore,
   primaryArchetype,
   reportDate,
   sections,
-  theme,
 }) => {
-  const { Icon } = theme;
-
   return (
     <>
       <div className="report-mobile-overview xl:hidden">
-        <div className="report-mobile-card report-card">
-          <div className="report-mobile-card__icon" aria-hidden="true">
-            <Icon className="report-archetype-icon" />
-          </div>
-          <div className="min-w-0">
-            <p className="report-overline">Your report theme</p>
-            <h1 className="report-mobile-card__title">{primaryArchetype}</h1>
-            <p className="report-mobile-card__meta">{reportDate}</p>
-          </div>
-          <div className="report-mobile-card__score">
-            <span className="report-mobile-card__score-value">{Math.round(matchScore)}%</span>
-            <span className="report-mobile-card__score-label">match</span>
-          </div>
+        <div className="report-mobile-overview__header">
+          <p className="report-overline">LoveIQ report</p>
+          <h1 className="report-mobile-overview__title">{primaryArchetype}</h1>
+          <p className="report-mobile-overview__meta">{reportDate}</p>
         </div>
 
         <nav aria-label="Report sections" className="report-mobile-nav">
@@ -45,72 +29,50 @@ const ReportNavigation: FC<Props> = ({
               key={section.id}
               href={`#${section.id}`}
               aria-current={activeSectionId === section.id ? "location" : undefined}
-              className={`report-mobile-nav__link ${
-                activeSectionId === section.id ? "is-active" : ""
-              }`}
+              className={`report-mobile-nav__link ${activeSectionId === section.id ? "is-active" : ""}`}
             >
-              <span className="report-mobile-nav__number">
-                {String(section.sectionNumber).padStart(2, "0")}
+              <span className="report-mobile-nav__copy">
+                <span className="report-mobile-nav__number">
+                  {String(section.sectionNumber).padStart(2, "0")}
+                </span>
+                <span className="report-mobile-nav__label">{section.title}</span>
               </span>
-              <span className="report-mobile-nav__label">{section.title}</span>
+              <span className="report-mobile-nav__meta">
+                <span className={`report-nav-chip ${section.isPremium ? "is-premium" : "is-free"}`}>
+                  {section.isPremium ? "Full Report" : "Free"}
+                </span>
+                {section.isPremium ? <LockBadge /> : null}
+              </span>
             </a>
           ))}
         </nav>
       </div>
 
-      <aside className="report-sidebar hidden xl:flex">
+      <aside className="report-sidebar hidden xl:block">
         <div className="report-sidebar__frame">
-          <div className="report-sidebar__summary report-card">
-            <div className="report-sidebar__brand">
-              <div className="report-sidebar__icon" aria-hidden="true">
-                <Icon className="report-archetype-icon" />
-              </div>
-              <div>
-                <p className="report-overline">LoveIQ report</p>
-                <h2 className="report-sidebar__title">{primaryArchetype}</h2>
-              </div>
-            </div>
-
-            <div className="report-sidebar__stats">
-              <div>
-                <p className="report-stat__label">Dominant match</p>
-                <p className="report-stat__value">{Math.round(matchScore)}%</p>
-              </div>
-              <div>
-                <p className="report-stat__label">Generated</p>
-                <p className="report-stat__value report-stat__value--small">{reportDate}</p>
-              </div>
-            </div>
-          </div>
-
-          <nav aria-label="Report sections" className="report-sidebar__nav report-card">
-            <div className="report-sidebar__nav-header">
-              <p className="report-overline">Chapters</p>
-              <p className="report-sidebar__nav-copy">{sections.length} sections</p>
-            </div>
-
+          <p className="report-overline">LoveIQ report</p>
+          <nav aria-label="Report sections" className="report-sidebar__nav">
             <div className="report-sidebar__nav-list">
               {sections.map((section) => (
                 <a
                   key={section.id}
                   href={`#${section.id}`}
                   aria-current={activeSectionId === section.id ? "location" : undefined}
-                  className={`report-sidebar__link ${
-                    activeSectionId === section.id ? "is-active" : ""
-                  }`}
+                  className={`report-sidebar__link ${activeSectionId === section.id ? "is-active" : ""}`}
                 >
-                  <div className="report-sidebar__link-copy">
+                  <span className="report-sidebar__copy">
                     <span className="report-sidebar__number">
                       {String(section.sectionNumber).padStart(2, "0")}
                     </span>
                     <span className="report-sidebar__label">{section.title}</span>
-                  </div>
-                  <span
-                    className={`report-sidebar__badge ${
-                      section.isPremium ? "is-premium" : "is-free"
-                    }`}
-                  >
-                    {section.isPremium ? "Full Report" : "Free"}
+                  </span>
+                  <span className="report-sidebar__meta">
+                    <span
+                      className={`report-nav-chip ${section.isPremium ? "is-premium" : "is-free"}`}
+                    >
+                      {section.isPremium ? "Full Report" : "Free"}
+                    </span>
+                    {section.isPremium ? <LockBadge /> : null}
                   </span>
                 </a>
               ))}
@@ -121,5 +83,14 @@ const ReportNavigation: FC<Props> = ({
     </>
   );
 };
+
+const LockBadge: FC = () => (
+  <span className="report-nav-lock" aria-hidden="true">
+    <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.15">
+      <rect x="2.1" y="5.2" width="7.8" height="4.7" rx="1.2" />
+      <path d="M3.6 5.2V3.9a2.4 2.4 0 1 1 4.8 0v1.3" />
+    </svg>
+  </span>
+);
 
 export default ReportNavigation;

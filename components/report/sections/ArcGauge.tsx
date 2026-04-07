@@ -4,11 +4,12 @@ import type { FC } from "react";
 
 interface Props {
   animate?: boolean;
+  tone?: "accent" | "shared";
   max: number;
   value: number;
 }
 
-const ArcGauge: FC<Props> = ({ animate = false, max, value }) => {
+const ArcGauge: FC<Props> = ({ animate = false, tone = "accent", max, value }) => {
   const ratio = Math.min(Math.max(value / max, 0), 1);
   const radius = 80;
   const arcLength = Math.PI * radius;
@@ -26,8 +27,10 @@ const ArcGauge: FC<Props> = ({ animate = false, max, value }) => {
       {valuePath ? (
         <path
           d={valuePath}
-          className={animate ? "report-gauge__value is-animated" : "report-gauge__value"}
-          stroke="rgb(var(--report-accent-rgb))"
+          className={`report-gauge__value ${tone === "shared" ? "is-shared" : "is-accent"} ${
+            animate ? "is-animated" : ""
+          }`}
+          stroke="currentColor"
           strokeWidth="12"
           strokeLinecap="round"
           style={{

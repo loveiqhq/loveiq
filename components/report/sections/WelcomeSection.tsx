@@ -90,17 +90,26 @@ const WelcomeSection: FC<Props> = ({ feedbackWidget, generalHtml, sectionId, sna
       data-report-section="true"
       className={`report-section report-section--welcome ${isVisible ? "is-visible" : ""}`}
     >
+      <div className="report-section__actions-row">
+        <a href="/survey" className="report-button">
+          <svg
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+          >
+            <path d="M15 6h3v3" />
+            <path d="M10 14 18 6" />
+            <path d="M18 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
+          </svg>
+          <span>Invite a Friend</span>
+        </a>
+      </div>
+
       <div className="report-section__header report-section__header--welcome">
-        <div>
-          <p className="report-overline">Your report</p>
-          <h2 className="report-section__title">Welcome</h2>
-        </div>
-        <div className="report-section__header-actions">
-          {feedbackWidget}
-          <a href="/survey" className="report-button report-button--secondary">
-            Invite a friend
-          </a>
-        </div>
+        <h2 className="report-section__title">Welcome</h2>
+        {feedbackWidget}
       </div>
 
       <div
@@ -145,7 +154,7 @@ const MetricCard: FC<{
 }> = ({ animate, description, label, value }) => (
   <article className="report-card report-card--metric">
     <p className="report-card__eyebrow">{label}</p>
-    <ArcGauge animate={animate} max={7} value={value ?? 0} />
+    <ArcGauge animate={animate} max={7} tone="shared" value={value ?? 0} />
     <div className="report-card__metric-value">
       <span>{value ?? "--"}</span>
       <small>/7</small>

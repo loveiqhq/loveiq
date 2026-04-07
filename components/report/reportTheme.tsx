@@ -245,9 +245,9 @@ export const reportThemes: Record<string, ReportTheme> = {
   }),
   "Spark Seeker": makeTheme({
     archetype: "Spark Seeker",
-    accent: "#FF6D45",
-    iconBackground: "#FF6D45",
-    motto: '"Let\'s find the spark-then turn it into a blaze."',
+    accent: "#FF6A3D",
+    iconBackground: "#FF6A3D",
+    motto: '"Let\'s find the spark - then turn it into a blaze."',
     motivation: "Pleasure & play",
     communication: "Charming",
     initiation: "Active",
