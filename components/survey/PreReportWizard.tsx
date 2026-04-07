@@ -552,11 +552,11 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete }) => {
               type="button"
               onClick={handleNext}
               aria-label={
-                slideIndex >= TOTAL_SLIDES - 1 ? "Continue to report" : "Continue to next slide"
+                slideIndex >= TOTAL_SLIDES - 1 ? "View your report" : "Continue to next slide"
               }
               className="inline-flex h-[48px] items-center gap-3 rounded-full bg-[#FE6839] px-7 text-[14px] font-bold uppercase leading-[20px] tracking-[1.4px] text-white shadow-[0_10px_15px_-3px_rgba(254,104,57,0.2),0_4px_6px_-4px_rgba(254,104,57,0.2)] transition hover:-translate-y-[1px] hover:shadow-[0_14px_20px_-3px_rgba(254,104,57,0.28)] focus-visible-ring sm:px-8"
             >
-              Continue
+              {slideIndex >= TOTAL_SLIDES - 1 ? "View Report" : "Continue"}
               <ArrowRight className="h-[18px] w-[18px]" />
             </button>
           </div>

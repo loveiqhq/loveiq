@@ -1162,14 +1162,19 @@ const SurveyPage: FC = () => {
 
   const handleReturn = useCallback((clearAnswers?: boolean) => {
     try {
-      sessionStorage.removeItem(SURVEY_STEP_KEY);
       if (clearAnswers) {
+        // Preserve session ID for the report page before clearing survey state
+        const sessionId = sessionStorage.getItem("loveiq-survey-session");
+        if (sessionId) {
+          localStorage.setItem("loveiq-report-session", sessionId);
+        }
         clearPersistedSurveyState({ clearPendingCompletion: true });
       }
+      sessionStorage.removeItem(SURVEY_STEP_KEY);
     } catch {
       /* ignore */
     }
-    window.location.href = "/";
+    window.location.href = clearAnswers ? "/report" : "/";
   }, []);
 
   const handleAgree = useCallback(() => {

@@ -96,7 +96,7 @@ describe("PreReportWizard", () => {
     expect(screen.getByText("Invite your friends to grow.")).toBeInTheDocument();
 
     // Click continue on last slide — 250ms leave animation + 600ms exit fade
-    clickAndFlush(screen.getByRole("button", { name: /continue to report/i }));
+    clickAndFlush(screen.getByRole("button", { name: /view your report/i }));
     act(() => {
       vi.advanceTimersByTime(650);
     });
