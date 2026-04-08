@@ -14,7 +14,7 @@ describe("CoreArchetypeSection", () => {
     );
 
     expect(screen.getByRole("heading", { name: /power orchestrator/i })).toBeInTheDocument();
-    expect(screen.getByText(/i set the frame-and we play inside it/i)).toBeInTheDocument();
+    expect(screen.getByText(/i set the frame.and we play inside it/i)).toBeInTheDocument();
     expect(screen.getByText(/^power$/i)).toBeInTheDocument();
     expect(screen.getByText(/commanding/i)).toBeInTheDocument();
     expect(screen.getByText(/dominant/i)).toBeInTheDocument();
