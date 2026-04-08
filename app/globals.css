@@ -1227,11 +1227,13 @@ h3,
   transition: color 180ms ease;
 }
 
-.report-fb__thumb:first-child:hover {
+.report-fb__thumb:first-child:hover,
+.report-fb__thumb:first-child.is-selected {
   color: #2aff8f;
 }
 
-.report-fb__thumb:last-child:hover {
+.report-fb__thumb:last-child:hover,
+.report-fb__thumb:last-child.is-selected {
   color: #ff4d4d;
 }
 
