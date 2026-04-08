@@ -3147,7 +3147,7 @@ h3,
 .report-importance__overline-line {
   width: 32px;
   height: 1px;
-  background: rgba(111, 174, 217, 0.5);
+  background: rgb(var(--report-accent-rgb) / 0.5);
 }
 
 .report-importance__result {
@@ -3162,7 +3162,7 @@ h3,
   font-size: 72px;
   line-height: 72px;
   letter-spacing: -3.6px;
-  color: #6faed9;
+  color: rgb(var(--report-accent-rgb));
   text-shadow: 0 1px 1px rgba(0, 0, 0, 0.05);
   flex-shrink: 0;
 }
@@ -3284,7 +3284,7 @@ h3,
 }
 
 .report-importance__bar-fill--user {
-  background: #6faed9;
+  background: rgb(var(--report-accent-rgb));
   border-top-color: rgba(255, 255, 255, 0.2);
 }
 
@@ -3299,7 +3299,7 @@ h3,
   padding: 9px 17px;
   border: 1px solid #fff;
   border-radius: 9999px;
-  background: #6faed9;
+  background: rgb(var(--report-accent-rgb));
   color: #fff;
   font-family: var(--font-sans);
   font-size: 12px;
@@ -3322,7 +3322,7 @@ h3,
   transform: translateX(-50%) rotate(45deg);
   width: 10px;
   height: 10px;
-  background: #6faed9;
+  background: rgb(var(--report-accent-rgb));
   border-right: 1px solid #fff;
   border-bottom: 1px solid #fff;
 }

@@ -8,9 +8,6 @@ interface Props {
   importanceValue: number | null;
 }
 
-const CHART_HEIGHT = 260;
-const ACCENT = "#6faed9";
-
 function getBand(value: number | null): { label: string; description: string } {
   if (value === null) return { label: "—", description: "" };
   if (value <= 2)
@@ -32,17 +29,21 @@ function getBand(value: number | null): { label: string; description: string } {
   };
 }
 
-/** Map 1-7 value to bar height as percentage of chart */
+/**
+ * Map 1-7 value to bar height percentage.
+ * 1 → 10%, 4 → 50%, 7 → 92%
+ */
 function valueToHeight(v: number): number {
-  return Math.round(((v - 1) / 6) * 85 + 15);
+  return Math.round(((v - 1) / 6) * 82 + 10);
 }
 
-/** Reference bars: fixed archetypes at typical levels */
-const REF_BARS = [
-  { value: 2, label: "Low ref" },
-  { value: 3.5, label: "Low-mid ref" },
+/** Fixed reference bars at known positions */
+const BARS = [
+  { value: 1.8, isUser: false },
+  { value: 3.2, isUser: false },
+  // User bar is inserted dynamically
+  { value: 6.5, isUser: false },
 ];
-const HIGH_BAR = { value: 6.5, label: "High ref" };
 
 function stripResultParagraph(html: string) {
   return html.replace(/<p><strong>Your result:\s*<\/strong>.*?<\/p>/i, "").trim();
@@ -54,12 +55,14 @@ const ImportanceOfSexualitySection: FC<Props> = ({
   importanceValue,
 }) => {
   const band = getBand(importanceValue);
-  const userHeight = importanceValue !== null ? valueToHeight(importanceValue) : 0;
+  const userValue = importanceValue ?? 4;
+
+  // Build bar list: insert user bar in sorted position among reference bars
+  const allBars = [...BARS, { value: userValue, isUser: true }].sort((a, b) => a.value - b.value);
 
   return (
     <div className="space-y-10">
       <article className="report-importance">
-        {/* Top highlight line */}
         <div className="report-importance__highlight" aria-hidden="true" />
 
         {/* Header */}
@@ -81,48 +84,28 @@ const ImportanceOfSexualitySection: FC<Props> = ({
 
         {/* Bar chart */}
         <div className="report-importance__chart">
-          {/* Y-axis */}
           <div className="report-importance__yaxis">
             <span>High</span>
             <span>Medium</span>
             <span>Low</span>
           </div>
 
-          {/* Chart area */}
           <div className="report-importance__bars">
-            {/* Grid lines */}
             <div className="report-importance__grid">
               <div className="report-importance__gridline report-importance__gridline--dashed" />
               <div className="report-importance__gridline report-importance__gridline--faint" />
               <div className="report-importance__gridline report-importance__gridline--faint" />
             </div>
 
-            {/* Bars */}
-            {REF_BARS.map((bar, i) => (
+            {allBars.map((bar, i) => (
               <div key={i} className="report-importance__bar">
+                {bar.isUser && <div className="report-importance__tooltip">You</div>}
                 <div
-                  className="report-importance__bar-fill report-importance__bar-fill--ref"
+                  className={`report-importance__bar-fill ${bar.isUser ? "report-importance__bar-fill--user" : "report-importance__bar-fill--ref"}`}
                   style={{ height: `${valueToHeight(bar.value)}%` }}
                 />
               </div>
             ))}
-
-            {/* User bar */}
-            <div className="report-importance__bar">
-              <div className="report-importance__tooltip">You</div>
-              <div
-                className="report-importance__bar-fill report-importance__bar-fill--user"
-                style={{ height: `${userHeight}%` }}
-              />
-            </div>
-
-            {/* High reference bar */}
-            <div className="report-importance__bar">
-              <div
-                className="report-importance__bar-fill report-importance__bar-fill--ref report-importance__bar-fill--tall"
-                style={{ height: `${valueToHeight(HIGH_BAR.value)}%` }}
-              />
-            </div>
           </div>
         </div>
       </article>
