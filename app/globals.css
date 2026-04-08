@@ -2120,12 +2120,7 @@ h3,
   gap: 40px;
   height: 100%;
   padding: 32px 21px 32px 20px;
-  overflow-y: auto;
-  scrollbar-width: none;
-}
-
-.report-sidebar__inner::-webkit-scrollbar {
-  display: none;
+  overflow: hidden;
 }
 
 /* Brand / Logo */
@@ -2134,6 +2129,7 @@ h3,
   gap: 12px;
   align-items: center;
   padding: 0 8px;
+  flex-shrink: 0;
 }
 
 .report-sidebar__logo {
@@ -2158,6 +2154,7 @@ h3,
   flex-direction: column;
   gap: 8px;
   padding: 16px 0;
+  flex-shrink: 0;
 }
 
 .report-sidebar__btn {
@@ -2197,17 +2194,20 @@ h3,
   color: rgba(255, 255, 255, 0.74);
 }
 
-/* Chapters section */
+/* Chapters section — fills remaining space, scrolls independently */
 .report-sidebar__chapters {
   display: flex;
   flex-direction: column;
   gap: 18px;
+  flex: 1;
   min-height: 0;
+  overflow: hidden;
 }
 
 .report-sidebar__chapters-label {
   margin: 0;
   padding-left: 12px;
+  flex-shrink: 0;
   color: #d1d5db;
   font-family: var(--font-sans);
   font-size: 12px;
@@ -2221,6 +2221,34 @@ h3,
   display: flex;
   flex-direction: column;
   gap: 18px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+  padding-bottom: 24px;
+
+  /* Firefox */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(192, 132, 252, 0.35) transparent;
+}
+
+/* Webkit (Chrome, Safari, Edge) */
+.report-sidebar__nav::-webkit-scrollbar {
+  width: 5px;
+}
+
+.report-sidebar__nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.report-sidebar__nav::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(192, 132, 252, 0.3);
+  transition: background 180ms ease;
+}
+
+.report-sidebar__nav::-webkit-scrollbar-thumb:hover {
+  background: rgba(192, 132, 252, 0.55);
 }
 
 /* Chapter item (link) */
