@@ -4,6 +4,7 @@ import type { AccessTier, DisplayReportSection } from "./reportTitles";
 
 interface Props {
   activeSectionId: string;
+  onSectionClick?: (sectionId: string) => void;
   primaryArchetype: string;
   reportDate: string;
   sections: DisplayReportSection[];
@@ -11,6 +12,7 @@ interface Props {
 
 const ReportNavigation: FC<Props> = ({
   activeSectionId,
+  onSectionClick,
   primaryArchetype,
   reportDate,
   sections,
@@ -33,6 +35,7 @@ const ReportNavigation: FC<Props> = ({
               aria-current={activeSectionId === section.id ? "location" : undefined}
               title={section.displayTitle}
               className={`report-mobile-nav__link ${activeSectionId === section.id ? "is-active" : ""}`}
+              onClick={() => onSectionClick?.(section.id)}
             >
               <span className="report-mobile-nav__copy">
                 <span className="report-mobile-nav__number">
@@ -92,6 +95,7 @@ const ReportNavigation: FC<Props> = ({
                     href={`#${section.id}`}
                     aria-current={isActive ? "location" : undefined}
                     title={section.displayTitle}
+                    onClick={() => onSectionClick?.(section.id)}
                     className={[
                       "report-sidebar__item",
                       isActive && "is-active",

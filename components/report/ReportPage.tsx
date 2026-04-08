@@ -258,6 +258,7 @@ const ReportPage: FC = () => {
       <div className="report-shell">
         <ReportNavigation
           activeSectionId={activeSectionId}
+          onSectionClick={setActiveSectionId}
           primaryArchetype={primaryArchetype}
           reportDate={reportDate}
           sections={resolvedSections}
