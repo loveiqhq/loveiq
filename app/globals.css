@@ -1320,148 +1320,7 @@ h3,
   transition: stroke-dashoffset 1.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.report-hero-card {
-  position: relative;
-  overflow: hidden;
-  padding: clamp(1.4rem, 3vw, 2.5rem);
-  background:
-    radial-gradient(circle at 88% 12%, rgb(var(--report-accent-rgb) / 0.24), transparent 0 28%),
-    radial-gradient(circle at 12% 96%, rgb(var(--report-accent-rgb) / 0.16), transparent 0 26%),
-    rgba(20, 11, 28, 0.9);
-}
-
-.report-hero-card__header {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 1.25rem;
-  align-items: start;
-}
-
-.report-hero-card__icon-frame {
-  width: clamp(4.75rem, 10vw, 5.95rem);
-  height: clamp(4.75rem, 10vw, 5.95rem);
-  border-radius: 1.2rem;
-}
-
-.report-hero-card__title {
-  margin: 0;
-  font-family: var(--font-serif);
-  font-size: clamp(2.6rem, 6vw, 4rem);
-  line-height: 0.95;
-  letter-spacing: -0.055em;
-  color: #fff;
-}
-
-.report-hero-card__motto {
-  margin: 0.65rem 0 0;
-  max-width: 28rem;
-  font-family: var(--font-serif);
-  font-size: clamp(1.45rem, 4vw, 2.2rem);
-  font-style: italic;
-  line-height: 1.08;
-  color: rgba(255, 255, 255, 0.56);
-}
-
-.report-hero-card__content {
-  display: grid;
-  gap: 1.7rem;
-  margin-top: 2rem;
-}
-
-.report-hero-card__label {
-  margin: 0;
-  font-size: 1rem;
-  color: rgba(255, 255, 255, 0.66);
-}
-
-.report-hero-card__motivation {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 1rem;
-  align-items: center;
-  padding: 1.15rem 1.3rem;
-  border: 1px solid rgb(var(--report-accent-rgb) / 0.82);
-  border-radius: 1.2rem;
-  background: rgba(18, 10, 23, 0.72);
-}
-
-.report-hero-card__motivation-icon {
-  width: 2.55rem;
-  height: 2.55rem;
-}
-
-.report-hero-card__motivation-value {
-  margin: 0.2rem 0 0;
-  font-size: clamp(2rem, 4vw, 3rem);
-  line-height: 0.94;
-  letter-spacing: -0.04em;
-  color: #fff;
-}
-
-.report-hero-card__traits {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1.4rem 2rem;
-}
-
-.report-trait__label {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  margin: 0;
-  font-size: 0.95rem;
-  color: rgba(255, 255, 255, 0.56);
-}
-
-.report-trait__icon {
-  width: 1rem;
-  height: 1rem;
-  color: rgb(var(--report-accent-rgb));
-}
-
-.report-trait__value {
-  margin: 0.35rem 0 0;
-  font-size: clamp(1.65rem, 3vw, 2.3rem);
-  line-height: 1;
-  letter-spacing: -0.03em;
-  color: #fff;
-}
-
-.report-hero-card__progress {
-  display: grid;
-  gap: 1rem;
-}
-
-.report-progress__header {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 0.55rem;
-  color: rgba(255, 255, 255, 0.62);
-}
-
-.report-progress__header strong {
-  font-size: 1.05rem;
-  font-weight: 500;
-  color: #fff;
-}
-
-.report-progress__segments {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.35rem;
-}
-
-.report-progress__segments span {
-  height: 0.4rem;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.report-progress__segments span.is-filled {
-  background: rgb(var(--report-accent-rgb));
-  box-shadow: 0 0 18px rgb(var(--report-accent-rgb) / 0.22);
-}
+/* Legacy hero-card base styles removed — new Figma-matched styles in responsive section */
 
 .report-probability-card {
   overflow: hidden;
@@ -1822,9 +1681,7 @@ h3,
 @media (max-width: 767px) {
   .report-section__header,
   .report-probability-card__header,
-  .report-probability-card__row,
-  .report-hero-card__header,
-  .report-hero-card__traits {
+  .report-probability-card__row {
     grid-template-columns: 1fr;
   }
 
@@ -1842,10 +1699,6 @@ h3,
 
   .report-probability-card__cta {
     justify-self: start;
-  }
-
-  .report-hero-card__motivation {
-    grid-template-columns: 1fr;
   }
 }
 
@@ -2449,136 +2302,226 @@ h3,
   filter: drop-shadow(0 0 6px rgb(var(--report-premium-rgb) / 0.5));
 }
 
+/* ── Core Archetype Hero Card (Figma-matched) ── */
 .report-hero-card {
   position: relative;
   overflow: hidden;
-  padding: 41px;
-  border: 1px solid rgb(var(--report-accent-rgb));
-  background:
-    radial-gradient(circle at 96% 6%, rgb(var(--report-accent-rgb) / 0.2), transparent 0 30%),
-    radial-gradient(circle at 0% 100%, rgb(var(--report-accent-rgb) / 0.18), transparent 0 30%),
-    var(--report-surface);
+  max-width: 594px;
+  padding: 48px;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-radius: 24px;
+  background: #130b17;
 }
 
-.report-hero-card__pill {
-  display: inline-flex;
-  align-items: center;
-  margin: 0 0 1rem;
-  padding: 0.3125rem 0.8125rem;
-  border: 1px solid rgb(var(--report-accent-rgb) / 0.2);
-  border-radius: 999px;
-  background: rgb(var(--report-accent-rgb) / 0.1);
-  color: rgb(var(--report-accent-rgb));
-  font-size: 0.75rem;
-  font-weight: 500;
-  line-height: 1rem;
+/* Glow orbs — the blurred accent blobs in corners */
+.report-hero-card__orb {
+  position: absolute;
+  width: 335px;
+  height: 320px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgb(var(--report-accent-rgb) / 0.38) 0%,
+    rgb(var(--report-accent-rgb) / 0.12) 40%,
+    transparent 70%
+  );
+  filter: blur(40px);
+  pointer-events: none;
+}
+
+.report-hero-card__orb--tr {
+  top: -222px;
+  right: -100px;
+}
+
+.report-hero-card__orb--bl {
+  bottom: -200px;
+  left: -147px;
+}
+
+/* Header: icon + archetype name + motto */
+.report-hero-card__header {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+  margin-bottom: 24px;
+}
+
+.report-hero-card__icon-frame {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 98px;
+  height: 98px;
+  border-radius: 16px;
+  background: rgb(var(--report-accent-rgb));
+}
+
+.report-hero-card__icon {
+  width: 60px;
+  height: 60px;
+  color: #130b17;
+}
+
+.report-hero-card__header-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  justify-content: center;
+  min-height: 98px;
 }
 
 .report-hero-card__title {
-  font-size: clamp(3rem, 5vw, 3.75rem);
-  line-height: 1;
-  letter-spacing: -0.04em;
+  margin: 0;
+  color: #fff;
+  font-family: var(--font-serif);
+  font-size: 39px;
+  line-height: 40px;
+  letter-spacing: -0.01em;
 }
 
 .report-hero-card__motto {
-  margin: 1rem 0 0;
-  color: var(--report-copy);
-  font-size: clamp(1.5rem, 3vw, 1.875rem);
-  line-height: 1.2;
+  margin: 0;
+  color: #9ca3af;
+  font-family: var(--font-serif);
+  font-size: 25px;
+  font-style: italic;
+  line-height: 24px;
 }
 
-.report-hero-card__motto-label {
-  font-weight: 200;
-}
-
-.report-hero-card__motto-copy {
-  color: #fff;
-  font-weight: 400;
-}
-
+/* Body content */
 .report-hero-card__content {
-  max-width: 813px;
-  margin-top: 1.5rem;
-  gap: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  max-width: 498px;
+  padding-top: 24px;
 }
 
 .report-hero-card__label {
-  color: var(--report-muted);
-  font-size: 1.25rem;
+  margin: 0;
+  color: #9ca3af;
+  font-family: var(--font-sans);
+  font-size: 20px;
+  line-height: 16px;
 }
 
+/* Core motivation sub-card */
 .report-hero-card__motivation {
+  display: flex;
+  gap: 16px;
+  align-items: center;
   width: 100%;
-  gap: 1rem;
-  padding: 1.5rem;
+  padding: 24px;
   border: 1px solid rgb(var(--report-accent-rgb));
   border-radius: 16px;
-  background: transparent;
+  background: #130b17;
 }
 
 .report-hero-card__motivation-icon {
+  flex-shrink: 0;
   width: 56px;
   height: 56px;
+}
+
+.report-hero-card__motivation-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .report-hero-card__motivation-label {
   margin: 0;
   color: rgb(var(--report-accent-rgb));
-  font-size: 1rem;
-  font-weight: 700;
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 15px;
 }
 
 .report-hero-card__motivation-value {
-  margin-top: 0.75rem;
-  font-size: clamp(2rem, 4vw, 2.35rem);
-  line-height: 1.05;
+  margin: 0;
+  color: #fff;
+  font-family: var(--font-serif);
+  font-size: 31px;
+  font-weight: 500;
+  line-height: 20px;
 }
 
+/* Traits 2×2 grid */
 .report-hero-card__traits {
-  width: 813px;
-  gap: 2rem 7.5rem;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 33px 120px;
+  width: 100%;
 }
 
 .report-trait__label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin: 0;
-  color: var(--report-muted);
-  font-size: 1rem;
-  line-height: 1rem;
+  color: #9ca3af;
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 16px;
 }
 
 .report-trait__icon {
+  width: 16px;
+  height: 16px;
   color: rgb(var(--report-accent-rgb));
 }
 
 .report-trait__value {
-  margin-top: 0.5rem;
+  margin: 8px 0 0;
+  color: #fff;
+  font-family: var(--font-serif);
   font-size: 25px;
+  font-weight: 500;
   line-height: 28px;
 }
 
+/* Progress bars (risk + confidence) */
 .report-hero-card__progress {
-  width: 803px;
-  gap: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  width: 100%;
 }
 
 .report-progress__header {
-  margin-bottom: 1.5rem;
-  color: var(--report-muted);
-  font-size: 1.25rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-bottom: 24px;
+  color: #9ca3af;
+  font-family: var(--font-sans);
+  font-size: 20px;
+  line-height: 16px;
 }
 
 .report-progress__header strong {
-  font-size: 1.25rem;
+  color: #fff;
+  font-family: var(--font-serif);
+  font-size: 20px;
   font-weight: 500;
+  line-height: 19.556px;
 }
 
 .report-progress__segments {
+  display: flex;
   gap: 5px;
 }
 
-.report-progress__segments span,
-.report-progress__segments span.is-filled {
+.report-progress__segments span {
+  flex: 1;
   height: 7.333px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.report-progress__segments span.is-filled {
+  background: rgb(var(--report-accent-rgb));
 }
 
 .report-probability-card {
@@ -2777,9 +2720,13 @@ h3,
   }
 
   .report-card--metric,
-  .report-hero-card,
   .report-importance-card {
     padding: 1.5rem;
+  }
+
+  .report-hero-card {
+    max-width: 100%;
+    padding: 24px;
   }
 
   .report-card--metric {
@@ -2790,22 +2737,51 @@ h3,
     width: min(100%, 208px);
   }
 
-  .report-hero-card__motto {
-    font-size: 1.5rem;
-    line-height: 1.3;
+  .report-hero-card__header {
+    gap: 16px;
   }
 
-  .report-hero-card__motivation,
-  .report-importance-card__value-wrap {
-    grid-template-columns: 1fr;
+  .report-hero-card__icon-frame {
+    width: 64px;
+    height: 64px;
+  }
+
+  .report-hero-card__icon {
+    width: 40px;
+    height: 40px;
+  }
+
+  .report-hero-card__header-copy {
+    min-height: 64px;
+    gap: 8px;
+  }
+
+  .report-hero-card__title {
+    font-size: 28px;
+    line-height: 32px;
+  }
+
+  .report-hero-card__motto {
+    font-size: 18px;
+    line-height: 22px;
+  }
+
+  .report-hero-card__motivation {
     flex-direction: column;
     align-items: flex-start;
   }
 
-  .report-hero-card__traits,
-  .report-hero-card__progress {
-    width: 100%;
-    gap: 1.5rem;
+  .report-importance-card__value-wrap {
+    grid-template-columns: 1fr;
+  }
+
+  .report-hero-card__traits {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+
+  .report-hero-card__content {
+    max-width: 100%;
   }
 
   .report-probability-card__header {

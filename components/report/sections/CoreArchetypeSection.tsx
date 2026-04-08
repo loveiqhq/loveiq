@@ -9,16 +9,27 @@ interface Props {
 }
 
 const CoreArchetypeSection: FC<Props> = ({ archetypeHtml, theme }) => {
+  const { Icon } = theme;
+
   return (
     <div className="space-y-10">
-      <article className="report-hero-card report-card">
-        <p className="report-hero-card__pill">Your Core Archetype</p>
-        <h3 className="report-hero-card__title">{theme.archetype}</h3>
-        <p className="report-hero-card__motto">
-          <span className="report-hero-card__motto-label">Motto:</span>{" "}
-          <span className="report-hero-card__motto-copy">{theme.motto}</span>
-        </p>
+      <article className="report-hero-card">
+        {/* Glow orbs */}
+        <span className="report-hero-card__orb report-hero-card__orb--tr" aria-hidden="true" />
+        <span className="report-hero-card__orb report-hero-card__orb--bl" aria-hidden="true" />
 
+        {/* Header: icon + name + motto */}
+        <div className="report-hero-card__header">
+          <div className="report-hero-card__icon-frame">
+            <Icon className="report-hero-card__icon" />
+          </div>
+          <div className="report-hero-card__header-copy">
+            <h3 className="report-hero-card__title">{theme.archetype}</h3>
+            <p className="report-hero-card__motto">{theme.motto}</p>
+          </div>
+        </div>
+
+        {/* Body */}
         <div className="report-hero-card__content">
           <p className="report-hero-card__label">Behavioral tendencies:</p>
 
