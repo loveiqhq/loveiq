@@ -115,7 +115,10 @@ function replacePlaceholders(
 ) {
   return html
     .replace(/\{\{USER_NAME\}\}/g, values.userName)
-    .replace(/\{\{CORE_ARCHETYPE\}\}/g, values.archetype)
+    .replace(
+      /\{\{CORE_ARCHETYPE\}\}/g,
+      `<span class="report-archetype-name">${values.archetype}</span>`
+    )
     .replace(/\{\{CORE_ARCHETYPE_SCORE\}\}/g, String(Math.round(values.matchScore)))
     .replace(/\{\{CORE_ARCHETYPE_MOTTO\}\}/g, values.motto)
     .replace(/\{\{REPORT_DATE\}\}/g, values.reportDate)

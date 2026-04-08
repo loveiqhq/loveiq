@@ -2122,6 +2122,11 @@ h3,
   font-weight: 700;
 }
 
+/* Archetype name in subtitles like "The motivation of the Spark Seeker" */
+.report-archetype-name {
+  color: rgb(var(--report-accent-rgb));
+}
+
 .report-prose em {
   color: rgba(255, 255, 255, 0.62);
 }
