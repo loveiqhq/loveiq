@@ -10,6 +10,7 @@ import SectionFeedback from "./SectionFeedback";
 import { getReportSessionId } from "@/components/survey/hooks/surveySession";
 import { useReportData, type ReportRequestError } from "./hooks/useReportData";
 import { useSectionFeedback } from "./hooks/useSectionFeedback";
+import { resolveReportSections } from "./reportTitles";
 import { getReportTheme, getReportThemeStyle } from "./reportTheme";
 import ArchetypeProbabilitySection from "./sections/ArchetypeProbabilitySection";
 import CoreArchetypeSection from "./sections/CoreArchetypeSection";
@@ -250,6 +251,7 @@ const ReportPage: FC = () => {
     snapshot,
     userName: data.userName ?? "Friend",
   };
+  const resolvedSections = resolveReportSections(reportSections, primaryArchetype);
 
   return (
     <main id="main-content" className="report-page" style={getReportThemeStyle(theme)}>
@@ -258,12 +260,12 @@ const ReportPage: FC = () => {
           activeSectionId={activeSectionId}
           primaryArchetype={primaryArchetype}
           reportDate={reportDate}
-          sections={reportSections}
+          sections={resolvedSections}
         />
 
         <div className="report-content">
-          {reportSections.map((section) => {
-            const title = section.title.replace(/\{\{CORE_ARCHETYPE\}\}/g, primaryArchetype);
+          {resolvedSections.map((section) => {
+            const title = section.displayTitle;
             const generalHtml = replacePlaceholders(section.generalContent, placeholderValues);
             const archetypeHtml = section.archetypeBlockId
               ? (archetypeContent[section.archetypeBlockId]?.[primaryArchetype] ?? null)
