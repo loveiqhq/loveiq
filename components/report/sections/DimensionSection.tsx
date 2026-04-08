@@ -1,6 +1,6 @@
 "use client";
 
-import type { FC } from "react";
+import { useState, type FC } from "react";
 import PremiumOverlay from "./PremiumOverlay";
 
 interface Props {
@@ -17,27 +17,35 @@ const DimensionSection: FC<Props> = ({
   generalHtml,
   isPremium,
   sectionTitle,
-}) => (
-  <div className="space-y-10">
-    <div className="report-prose" dangerouslySetInnerHTML={{ __html: generalHtml }} />
+}) => {
+  const [unlocked, setUnlocked] = useState(false);
 
-    {archetypeHtml ? (
-      <div className="report-themed-block">
-        {isPremium ? (
-          <div className="report-themed-block__preview">
-            <div
-              className="report-prose report-themed-block__blurred"
-              aria-hidden="true"
-              dangerouslySetInnerHTML={{ __html: archetypeHtml }}
-            />
-            <PremiumOverlay archetype={archetype} sectionTitle={sectionTitle} />
-          </div>
-        ) : (
-          <div className="report-prose" dangerouslySetInnerHTML={{ __html: archetypeHtml }} />
-        )}
-      </div>
-    ) : null}
-  </div>
-);
+  return (
+    <div className="space-y-10">
+      <div className="report-prose" dangerouslySetInnerHTML={{ __html: generalHtml }} />
+
+      {archetypeHtml ? (
+        <div className="report-themed-block">
+          {isPremium && !unlocked ? (
+            <div className="report-themed-block__preview">
+              <div
+                className="report-prose report-themed-block__blurred"
+                aria-hidden="true"
+                dangerouslySetInnerHTML={{ __html: archetypeHtml }}
+              />
+              <PremiumOverlay
+                archetype={archetype}
+                sectionTitle={sectionTitle}
+                onUnlock={() => setUnlocked(true)}
+              />
+            </div>
+          ) : (
+            <div className="report-prose" dangerouslySetInnerHTML={{ __html: archetypeHtml }} />
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+};
 
 export default DimensionSection;

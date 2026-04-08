@@ -5,9 +5,10 @@ import type { FC } from "react";
 interface Props {
   archetype: string;
   sectionTitle: string;
+  onUnlock?: () => void;
 }
 
-const PremiumOverlay: FC<Props> = ({ archetype, sectionTitle }) => (
+const PremiumOverlay: FC<Props> = ({ archetype, sectionTitle, onUnlock }) => (
   <div className="report-premium-overlay">
     <div className="report-premium-overlay__card">
       <div className="report-premium-overlay__icon" aria-hidden="true">
@@ -24,7 +25,7 @@ const PremiumOverlay: FC<Props> = ({ archetype, sectionTitle }) => (
         To read this section unlock the full report of the <strong>{archetype}</strong>
       </p>
 
-      <button type="button" className="report-premium-overlay__cta">
+      <button type="button" className="report-premium-overlay__cta" onClick={onUnlock}>
         Unlock full report
       </button>
     </div>
