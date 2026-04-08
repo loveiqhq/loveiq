@@ -129,7 +129,6 @@ const ReportNavigation: FC<Props> = ({
                         .join(" ")}
                     >
                       <span className="report-sidebar__item-label">
-                        {isActive && <span className="report-sidebar__dot" aria-hidden="true" />}
                         <span>{section.navTitle}</span>
                       </span>
                       <span className="report-sidebar__item-meta">

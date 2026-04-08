@@ -2695,11 +2695,9 @@ h3,
     color 180ms ease;
 }
 
-/* Active item */
+/* Active item — contrast only, no layout change */
 .report-sidebar__item.is-active {
-  background: rgba(192, 132, 252, 0.1);
-  border-radius: 12px;
-  padding: 10px 12px 12px;
+  /* no background, padding, or border-radius change */
 }
 
 /* Subheading style */
@@ -2727,16 +2725,6 @@ h3,
 .report-sidebar__item.is-active .report-sidebar__item-label {
   color: #fff;
   font-weight: 500;
-}
-
-/* Purple dot indicator for active item */
-.report-sidebar__dot {
-  flex-shrink: 0;
-  width: 6px;
-  height: 6px;
-  border-radius: 9999px;
-  background: #c084fc;
-  box-shadow: 0 0 8px rgba(192, 132, 252, 0.8);
 }
 
 /* Item meta (badge + lock) */
