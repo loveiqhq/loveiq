@@ -102,10 +102,6 @@ function getSnapshotContent(diagnostics: Record<string, unknown> | null): Snapsh
   };
 }
 
-function stripProbabilityTable(html: string) {
-  return html.replace(/<table>[\s\S]*?<\/table>/g, "").trim();
-}
-
 function replacePlaceholders(
   html: string,
   values: {
@@ -125,7 +121,8 @@ function replacePlaceholders(
     .replace(/\{\{REPORT_DATE\}\}/g, values.reportDate)
     .replace(/\{\{SEXUAL_STAGE\}\}/g, values.snapshot.stage ?? "")
     .replace(/\{\{IMPORTANCE_OF_SEX\}\}/g, values.snapshot.importanceLabel)
-    .replace(/\{\{SEXUAL_SATISFACTION\}\}/g, values.snapshot.satisfactionLabel);
+    .replace(/\{\{SEXUAL_SATISFACTION\}\}/g, values.snapshot.satisfactionLabel)
+    .replace(/<table>[\s\S]*?<\/table>/g, "");
 }
 
 interface ReportStatusState {
@@ -335,7 +332,7 @@ const ReportPage: FC = () => {
                   title={title}
                 >
                   <ArchetypeProbabilitySection
-                    generalHtml={stripProbabilityTable(generalHtml)}
+                    generalHtml={generalHtml}
                     percentages={percentages}
                     primaryArchetype={primaryArchetype}
                     ranking={ranking}
