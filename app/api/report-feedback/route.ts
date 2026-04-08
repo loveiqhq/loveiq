@@ -10,6 +10,8 @@ const schema = z.object({
   sessionId: z.string().uuid(),
   sectionId: z.string().min(1).max(100),
   feedback: z.enum(["up", "down"]),
+  comment: z.string().max(1000).optional(),
+  issue: z.string().max(100).optional(),
 });
 
 const RATE_LIMIT_CONFIG = {
@@ -53,11 +55,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Service unavailable." }, { status: 503 });
   }
 
-  const row = {
+  const row: Record<string, string> = {
     session_id: parsed.data.sessionId,
     section_id: parsed.data.sectionId,
     feedback: parsed.data.feedback,
   };
+  if (parsed.data.comment) row.comment = parsed.data.comment;
+  if (parsed.data.issue) row.issue = parsed.data.issue;
 
   try {
     const response = await getBreaker("supabase-tracking").fire(() =>

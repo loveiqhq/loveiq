@@ -1189,48 +1189,243 @@ h3,
   min-width: 0;
 }
 
-.report-feedback {
-  display: inline-flex;
+/* ── Feedback widget (Figma-matched) ── */
+.report-fb {
+  display: flex;
   align-items: center;
-  gap: 0.65rem;
-  min-height: 2.4rem;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
-.report-feedback__label {
-  font-size: 0.82rem;
-  color: rgba(255, 255, 255, 0.44);
+.report-fb__label {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 300;
+  line-height: 16px;
+  color: #6b7280;
 }
 
-.report-feedback__controls {
-  display: inline-flex;
-  gap: 0.2rem;
+.report-fb__thumbs {
+  display: flex;
   align-items: center;
+  gap: 0;
 }
 
-.report-feedback__button {
-  display: inline-flex;
+.report-fb__thumb {
+  display: flex;
   align-items: center;
   justify-content: center;
-  width: 2rem;
-  height: 2rem;
+  width: 26px;
+  height: 26px;
+  padding: 4px;
   border: 0;
-  border-radius: 999px;
+  border-radius: 0;
   background: transparent;
-  color: rgba(255, 255, 255, 0.36);
-  transition:
-    color 180ms ease,
-    background-color 180ms ease;
+  color: #6b7280;
+  cursor: pointer;
+  transition: color 180ms ease;
 }
 
-.report-feedback__button:hover,
-.report-feedback__button.is-selected {
-  color: rgb(var(--report-accent-rgb));
-  background: rgb(var(--report-accent-rgb) / 0.12);
+.report-fb__thumb:hover {
+  color: #d1d5db;
 }
 
-.report-feedback__icon {
-  width: 1.1rem;
-  height: 1.1rem;
+.report-fb__thumb svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Expanded state (positive / negative) */
+.report-fb--expanded {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: min(100%, 380px);
+  padding: 20px;
+  border-radius: 16px;
+  background: #1a1024;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.report-fb__textarea {
+  width: 100%;
+  min-height: 60px;
+  padding: 12px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  color: #d1d5db;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 300;
+  line-height: 22px;
+  resize: vertical;
+}
+
+.report-fb__textarea::placeholder {
+  color: rgba(255, 255, 255, 0.25);
+}
+
+.report-fb__textarea:focus {
+  outline: none;
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.report-fb__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.report-fb__cancel {
+  padding: 8px 16px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #9ca3af;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 400;
+  cursor: pointer;
+}
+
+.report-fb__cancel:hover {
+  color: #d1d5db;
+}
+
+.report-fb__send {
+  padding: 8px 20px;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 180ms ease;
+}
+
+.report-fb__send:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+/* Issue dropdown */
+.report-fb__dropdown-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  color: #d1d5db;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 400;
+  cursor: pointer;
+}
+
+.report-fb__dropdown-trigger svg {
+  width: 10px;
+  height: 6px;
+  color: #6b7280;
+}
+
+.report-fb__dropdown-text {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.report-fb__dropdown-check svg {
+  width: 20px;
+  height: 20px;
+}
+
+.report-fb__dropdown-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 8px 0;
+  border-radius: 12px;
+  background: #1e1329;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.report-fb__dropdown-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 16px;
+  border: 0;
+  background: transparent;
+  color: #d1d5db;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.report-fb__dropdown-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.report-fb__dropdown-item strong {
+  display: block;
+  font-weight: 600;
+  color: #fff;
+  margin-bottom: 2px;
+}
+
+.report-fb__dropdown-desc {
+  display: block;
+  font-size: 13px;
+  font-weight: 300;
+  line-height: 18px;
+  color: #9ca3af;
+}
+
+.report-fb__dropdown-radio svg {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+/* Toast confirmation */
+.report-fb--toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-radius: 12px;
+  background: #1a1024;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.report-fb__toast-check {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.report-fb__toast-title {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.report-fb__toast-sub {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 300;
+  color: #6b7280;
 }
 
 .report-welcome-grid {
@@ -2057,7 +2252,7 @@ h3,
   .report-sidebar__item,
   .report-sidebar__btn,
   .report-mobile-nav__link,
-  .report-feedback__button {
+  .report-fb__thumb {
     transition-duration: 0.01ms !important;
     animation: none !important;
   }
@@ -2544,37 +2739,7 @@ h3,
   letter-spacing: -0.05em;
 }
 
-.report-feedback {
-  gap: 0.5rem;
-  min-height: 26px;
-}
-
-.report-feedback__label {
-  font-size: 0.8125rem;
-  line-height: 1rem;
-  color: var(--report-subtle);
-}
-
-.report-feedback__controls {
-  gap: 0;
-}
-
-.report-feedback__button {
-  width: 26px;
-  height: 26px;
-  color: rgba(255, 255, 255, 0.38);
-}
-
-.report-feedback__button:hover,
-.report-feedback__button.is-selected {
-  color: rgb(var(--report-brand-rgb));
-  background: rgb(var(--report-brand-rgb) / 0.08);
-}
-
-.report-feedback__icon {
-  width: 18px;
-  height: 18px;
-}
+/* Old .report-feedback styles removed — replaced by .report-fb */
 
 .report-welcome-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));

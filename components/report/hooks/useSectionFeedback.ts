@@ -5,24 +5,24 @@ import { getCsrfToken } from "@/lib/csrf-client";
 
 type FeedbackValue = "up" | "down" | null;
 
+export interface FeedbackPayload {
+  feedback: "up" | "down";
+  comment?: string;
+  issue?: string;
+}
+
 export function useSectionFeedback(sessionId: string | null) {
   const [feedbacks, setFeedbacks] = useState<Record<string, FeedbackValue>>({});
+  const [submitted, setSubmitted] = useState<Record<string, boolean>>({});
 
   const submitFeedback = useCallback(
-    async (sectionId: string, feedback: "up" | "down") => {
+    async (sectionId: string, payload: FeedbackPayload) => {
       if (!sessionId) return;
 
-      let previousValue: FeedbackValue = null;
-
       startTransition(() => {
-        setFeedbacks((current) => {
-          previousValue = current[sectionId] ?? null;
-          if (previousValue === feedback) return current;
-          return { ...current, [sectionId]: feedback };
-        });
+        setFeedbacks((current) => ({ ...current, [sectionId]: payload.feedback }));
+        setSubmitted((current) => ({ ...current, [sectionId]: true }));
       });
-
-      if (previousValue === feedback) return;
 
       try {
         const csrfToken = getCsrfToken();
@@ -32,16 +32,16 @@ export function useSectionFeedback(sessionId: string | null) {
             "Content-Type": "application/json",
             "x-csrf-token": csrfToken,
           },
-          body: JSON.stringify({ feedback, sectionId, sessionId }),
+          body: JSON.stringify({ ...payload, sectionId, sessionId }),
         });
       } catch {
         startTransition(() => {
-          setFeedbacks((current) => ({ ...current, [sectionId]: previousValue }));
+          setSubmitted((current) => ({ ...current, [sectionId]: false }));
         });
       }
     },
     [sessionId]
   );
 
-  return { feedbacks, submitFeedback };
+  return { feedbacks, submitted, submitFeedback };
 }

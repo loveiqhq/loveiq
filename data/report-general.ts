@@ -27,7 +27,7 @@ export const reportSections: ReportSection[] = [
       "<p><strong>{{USER_NAME}}, </strong>thank you for your trust and congratulations on having the courage to look inward.</p><p>We hope this report helps you gain clarity and supports you in living a more conscious and fulfilling sexual life.</p><p><strong>This report is not an exact science, but a psychometric approximation. </strong>It does not describe you in a fixed or absolute way, but highlights tendencies, patterns, and possible directions of your personality and sexual identity. Take it as guidance rather than a definition and feel free not to take everything too seriously.</p><p><strong>To deepen your self-understanding even further, </strong>we invite you to continue exploring by reading, learning, reflecting, or engaging with additional assessments we offer.</p><p>Self-knowledge grows over time, and this is one step along that path.</p><p><strong>Based on your submitted survey, your highest archetype match is: </strong>{{CORE_ARCHETYPE}}</p><p><em>{{CORE_ARCHETYPE_MOTTO}}</em></p><p>Your snapshot</p><table><thead><tr><th><p><strong>Current sexual satisfaction</strong></p></th><th><p><strong>Importance of sex</strong></p></th><th><p><strong>Likely current sexual stage</strong></p></th></tr><tr><th><p>{{SEXUAL_SATISFACTION}}</p></th><th><p>{{IMPORTANCE_OF_SEX}}</p></th><th><p>{{SEXUAL_STAGE}}</p></th></tr></thead></table>",
     archetypeBlockId: null,
     isPremium: false,
-    hasResonatesFeedback: false,
+    hasResonatesFeedback: true,
   },
   {
     id: "the_loveiq_concept",

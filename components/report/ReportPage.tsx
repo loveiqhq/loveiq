@@ -173,7 +173,7 @@ const ReportPage: FC = () => {
   const [activeSectionId, setActiveSectionId] = useState(reportSections[0]?.id ?? "welcome");
 
   const { data, status, error } = useReportData(sessionId);
-  const { feedbacks, submitFeedback } = useSectionFeedback(sessionId);
+  const { feedbacks, submitted, submitFeedback } = useSectionFeedback(sessionId);
 
   useEffect(() => {
     if (status !== "success") return;
@@ -296,7 +296,8 @@ const ReportPage: FC = () => {
               <SectionFeedback
                 sectionTitle={title}
                 value={feedbacks[section.id] ?? null}
-                onFeedback={(feedback) => submitFeedback(section.id, feedback)}
+                isSent={submitted[section.id] ?? false}
+                onFeedback={(payload) => submitFeedback(section.id, payload)}
               />
             ) : null;
 
