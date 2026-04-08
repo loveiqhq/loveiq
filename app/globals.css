@@ -1416,6 +1416,17 @@ h3,
   background: #1a1024;
   border: 1px solid rgba(255, 255, 255, 0.06);
   white-space: nowrap;
+  animation: fb-toast-fade 3s ease forwards;
+}
+
+@keyframes fb-toast-fade {
+  0%,
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
 }
 
 .report-fb__toast-check {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FC } from "react";
+import { useEffect, useState, type FC } from "react";
 import type { FeedbackPayload } from "./hooks/useSectionFeedback";
 
 const NEGATIVE_ISSUES = [
@@ -47,6 +47,13 @@ const SectionFeedback: FC<Props> = ({ onFeedback, sectionTitle, value, isSent })
   const [selectedIssue, setSelectedIssue] = useState<string | null>(null);
   const [issueDropdownOpen, setIssueDropdownOpen] = useState(false);
 
+  // Auto-dismiss toast after 3 seconds
+  useEffect(() => {
+    if (step !== "sent") return;
+    const id = setTimeout(() => setStep("idle"), 3000);
+    return () => clearTimeout(id);
+  }, [step]);
+
   const selectedItem = NEGATIVE_ISSUES.find((i) => i.id === selectedIssue);
 
   return (
@@ -77,7 +84,7 @@ const SectionFeedback: FC<Props> = ({ onFeedback, sectionTitle, value, isSent })
       </div>
 
       {/* Floating panels — absolutely positioned */}
-      {(step === "sent" || isSent) && (
+      {step === "sent" && (
         <div className="report-fb__panel report-fb--toast">
           <CheckIcon />
           <div className="report-fb__toast-copy">
