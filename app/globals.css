@@ -2616,7 +2616,6 @@ h3,
   gap: 18px;
   flex: 1;
   min-height: 0;
-  overflow: hidden;
 }
 
 .report-sidebar__chapters-label {
