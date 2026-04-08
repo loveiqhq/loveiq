@@ -47,170 +47,167 @@ const SectionFeedback: FC<Props> = ({ onFeedback, sectionTitle, value, isSent })
   const [selectedIssue, setSelectedIssue] = useState<string | null>(null);
   const [issueDropdownOpen, setIssueDropdownOpen] = useState(false);
 
-  if (step === "sent" || isSent) {
-    return (
-      <div className="report-fb report-fb--toast">
-        <CheckIcon />
-        <div className="report-fb__toast-copy">
-          <p className="report-fb__toast-title">Feedback sent!</p>
-          <p className="report-fb__toast-sub">Thank you for helping us improve.</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (step === "idle") {
-    return (
-      <div className="report-fb">
-        <span className="report-fb__label">Does this resonate?</span>
-        <div className="report-fb__thumbs">
-          <button
-            type="button"
-            aria-label={`This resonates: ${sectionTitle}`}
-            className={`report-fb__thumb ${value === "up" ? "is-selected" : ""}`}
-            onClick={() => setStep("positive")}
-          >
-            <ThumbUpIcon />
-          </button>
-          <button
-            type="button"
-            aria-label={`This does not resonate: ${sectionTitle}`}
-            className={`report-fb__thumb ${value === "down" ? "is-selected" : ""}`}
-            onClick={() => setStep("negative-pick")}
-          >
-            <ThumbDownIcon />
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (step === "positive") {
-    return (
-      <div className="report-fb report-fb--expanded">
-        <textarea
-          className="report-fb__textarea"
-          placeholder="Add a comment (optional)..."
-          value={comment}
-          onChange={(e) => setComment(e.target.value)}
-          rows={3}
-        />
-        <div className="report-fb__actions">
-          <button
-            type="button"
-            className="report-fb__cancel"
-            onClick={() => {
-              setStep("idle");
-              setComment("");
-            }}
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            className="report-fb__send"
-            onClick={() => {
-              onFeedback({ feedback: "up", comment: comment || undefined });
-              setStep("sent");
-            }}
-          >
-            Send
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // negative-pick or negative-comment
   const selectedItem = NEGATIVE_ISSUES.find((i) => i.id === selectedIssue);
 
   return (
-    <div className="report-fb report-fb--expanded">
-      {/* Issue dropdown */}
-      <button
-        type="button"
-        className="report-fb__dropdown-trigger"
-        onClick={() => setIssueDropdownOpen((v) => !v)}
-      >
-        <span className="report-fb__dropdown-text">
-          {selectedItem ? (
-            <>
-              <span className="report-fb__dropdown-check">
-                <CheckCircleIcon />
-              </span>
-              {selectedItem.label}
-            </>
-          ) : (
-            "Select an issue..."
-          )}
-        </span>
-        <ChevronIcon up={issueDropdownOpen} />
-      </button>
+    <div className="report-fb">
+      {/* Thumbs row — always in flow to anchor layout */}
+      <span className="report-fb__label">Does this resonate?</span>
+      <div className="report-fb__thumbs">
+        <button
+          type="button"
+          aria-label={`This resonates: ${sectionTitle}`}
+          className={`report-fb__thumb ${value === "up" ? "is-selected" : ""}`}
+          onClick={() => setStep(step === "positive" ? "idle" : "positive")}
+        >
+          <ThumbUpIcon />
+        </button>
+        <button
+          type="button"
+          aria-label={`This does not resonate: ${sectionTitle}`}
+          className={`report-fb__thumb ${value === "down" ? "is-selected" : ""}`}
+          onClick={() =>
+            setStep(
+              step === "negative-pick" || step === "negative-comment" ? "idle" : "negative-pick"
+            )
+          }
+        >
+          <ThumbDownIcon />
+        </button>
+      </div>
 
-      {issueDropdownOpen && (
-        <div className="report-fb__dropdown-list">
-          {NEGATIVE_ISSUES.map((issue) => (
-            <button
-              key={issue.id}
-              type="button"
-              className={`report-fb__dropdown-item ${selectedIssue === issue.id ? "is-selected" : ""}`}
-              onClick={() => {
-                setSelectedIssue(issue.id);
-                setIssueDropdownOpen(false);
-                setStep("negative-comment");
-              }}
-            >
-              <span className="report-fb__dropdown-radio">
-                {selectedIssue === issue.id ? <CheckCircleIcon /> : <EmptyCircleIcon />}
-              </span>
-              <span>
-                <strong>{issue.label}</strong>
-                <span className="report-fb__dropdown-desc">{issue.desc}</span>
-              </span>
-            </button>
-          ))}
+      {/* Floating panels — absolutely positioned */}
+      {(step === "sent" || isSent) && (
+        <div className="report-fb__panel report-fb--toast">
+          <CheckIcon />
+          <div className="report-fb__toast-copy">
+            <p className="report-fb__toast-title">Feedback sent!</p>
+            <p className="report-fb__toast-sub">Thank you for helping us improve.</p>
+          </div>
         </div>
       )}
 
-      {/* Comment area (shows after picking issue or always for negative-comment) */}
-      {(step === "negative-comment" || !issueDropdownOpen) && (
-        <textarea
-          className="report-fb__textarea"
-          placeholder="Add a comment (optional)..."
-          value={comment}
-          onChange={(e) => setComment(e.target.value)}
-          rows={3}
-        />
+      {step === "positive" && (
+        <div className="report-fb__panel report-fb--expanded">
+          <textarea
+            className="report-fb__textarea"
+            placeholder="Add a comment (optional)..."
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            rows={3}
+          />
+          <div className="report-fb__actions">
+            <button
+              type="button"
+              className="report-fb__cancel"
+              onClick={() => {
+                setStep("idle");
+                setComment("");
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="report-fb__send"
+              onClick={() => {
+                onFeedback({ feedback: "up", comment: comment || undefined });
+                setStep("sent");
+              }}
+            >
+              Send
+            </button>
+          </div>
+        </div>
       )}
 
-      <div className="report-fb__actions">
-        <button
-          type="button"
-          className="report-fb__cancel"
-          onClick={() => {
-            setStep("idle");
-            setComment("");
-            setSelectedIssue(null);
-            setIssueDropdownOpen(false);
-          }}
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          className="report-fb__send"
-          onClick={() => {
-            onFeedback({
-              feedback: "down",
-              issue: selectedIssue ?? undefined,
-              comment: comment || undefined,
-            });
-            setStep("sent");
-          }}
-        >
-          Send
-        </button>
-      </div>
+      {(step === "negative-pick" || step === "negative-comment") && (
+        <div className="report-fb__panel report-fb--expanded">
+          <button
+            type="button"
+            className="report-fb__dropdown-trigger"
+            onClick={() => setIssueDropdownOpen((v) => !v)}
+          >
+            <span className="report-fb__dropdown-text">
+              {selectedItem ? (
+                <>
+                  <span className="report-fb__dropdown-check">
+                    <CheckCircleIcon />
+                  </span>
+                  {selectedItem.label}
+                </>
+              ) : (
+                "Select an issue..."
+              )}
+            </span>
+            <ChevronIcon up={issueDropdownOpen} />
+          </button>
+
+          {issueDropdownOpen && (
+            <div className="report-fb__dropdown-list">
+              {NEGATIVE_ISSUES.map((issue) => (
+                <button
+                  key={issue.id}
+                  type="button"
+                  className={`report-fb__dropdown-item ${selectedIssue === issue.id ? "is-selected" : ""}`}
+                  onClick={() => {
+                    setSelectedIssue(issue.id);
+                    setIssueDropdownOpen(false);
+                    setStep("negative-comment");
+                  }}
+                >
+                  <span className="report-fb__dropdown-radio">
+                    {selectedIssue === issue.id ? <CheckCircleIcon /> : <EmptyCircleIcon />}
+                  </span>
+                  <span>
+                    <strong>{issue.label}</strong>
+                    <span className="report-fb__dropdown-desc">{issue.desc}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {(step === "negative-comment" || !issueDropdownOpen) && (
+            <textarea
+              className="report-fb__textarea"
+              placeholder="Add a comment (optional)..."
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              rows={3}
+            />
+          )}
+
+          <div className="report-fb__actions">
+            <button
+              type="button"
+              className="report-fb__cancel"
+              onClick={() => {
+                setStep("idle");
+                setComment("");
+                setSelectedIssue(null);
+                setIssueDropdownOpen(false);
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="report-fb__send"
+              onClick={() => {
+                onFeedback({
+                  feedback: "down",
+                  issue: selectedIssue ?? undefined,
+                  comment: comment || undefined,
+                });
+                setStep("sent");
+              }}
+            >
+              Send
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

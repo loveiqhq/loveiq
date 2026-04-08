@@ -1236,13 +1236,18 @@ h3,
   height: 18px;
 }
 
-/* Expanded state (positive / negative) — floats over content */
-.report-fb--expanded {
+/* Floating panel — anchored below the thumbs row */
+.report-fb__panel {
   position: absolute;
   top: 100%;
   right: 0;
   z-index: 10;
   margin-top: 8px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+}
+
+/* Expanded state (positive / negative) */
+.report-fb--expanded {
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -1251,7 +1256,6 @@ h3,
   border-radius: 16px;
   background: #1a1024;
   border: 1px solid rgba(255, 255, 255, 0.06);
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
 }
 
 .report-fb__textarea {
@@ -1402,13 +1406,8 @@ h3,
   margin-top: 2px;
 }
 
-/* Toast confirmation — floats over content */
+/* Toast confirmation */
 .report-fb--toast {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  z-index: 10;
-  margin-top: 8px;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -1416,7 +1415,6 @@ h3,
   border-radius: 12px;
   background: #1a1024;
   border: 1px solid rgba(255, 255, 255, 0.06);
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
   white-space: nowrap;
 }
 
