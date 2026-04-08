@@ -2680,11 +2680,12 @@ h3,
 
 /* Chapter item (link) */
 .report-sidebar__item {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 0;
+  padding: 0 0 0 16px;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -2695,14 +2696,15 @@ h3,
     color 180ms ease;
 }
 
-/* Active dot — positioned outside text flow via negative margin */
+/* Active dot — absolutely positioned, no layout shift */
 .report-sidebar__item::before {
   content: "";
-  flex-shrink: 0;
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
   width: 6px;
   height: 6px;
-  margin-left: -14px;
-  margin-right: 8px;
   border-radius: 9999px;
   background: transparent;
   transition:
