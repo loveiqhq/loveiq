@@ -67,6 +67,7 @@ function describeScalarValue(label: string, value: number | null) {
 const WelcomeSection: FC<Props> = ({ feedbackWidget, generalHtml, sectionId, snapshot }) => {
   const ref = useRef<HTMLElement>(null);
   const [isVisible, setIsVisible] = useState(false);
+  const [animateReady, setAnimateReady] = useState(false);
 
   useEffect(() => {
     const element = ref.current;
@@ -85,6 +86,13 @@ const WelcomeSection: FC<Props> = ({ feedbackWidget, generalHtml, sectionId, sna
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
+
+  // Delay animation start so the initial "0" / empty state renders first
+  useEffect(() => {
+    if (!isVisible) return;
+    const id = setTimeout(() => setAnimateReady(true), 300);
+    return () => clearTimeout(id);
+  }, [isVisible]);
 
   const cleanHtml = generalHtml
     .replace(/<table>[\s\S]*?<\/table>/g, "")
@@ -127,7 +135,7 @@ const WelcomeSection: FC<Props> = ({ feedbackWidget, generalHtml, sectionId, sna
 
       <div className="report-welcome-grid">
         <MetricCard
-          animate={isVisible}
+          animate={animateReady}
           description={describeScalarValue(
             "Current Sexual Satisfaction",
             snapshot.satisfactionValue
@@ -136,7 +144,7 @@ const WelcomeSection: FC<Props> = ({ feedbackWidget, generalHtml, sectionId, sna
           value={snapshot.satisfactionValue}
         />
         <MetricCard
-          animate={isVisible}
+          animate={animateReady}
           description={describeScalarValue("Importance of Sex", snapshot.importanceValue)}
           label="Importance of Sex"
           value={snapshot.importanceValue}
@@ -162,20 +170,15 @@ const CountUp: FC<{ value: number; animate: boolean }> = ({ value, animate }) =>
   useEffect(() => {
     if (!animate || hasRun.current) return;
     hasRun.current = true;
-    // Double-rAF delay so the "0" renders first, then we animate
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        const duration = 1200;
-        const start = performance.now();
-        const step = (now: number) => {
-          const progress = Math.min((now - start) / duration, 1);
-          const eased = 1 - Math.pow(1 - progress, 3);
-          setDisplay(Math.round(eased * value));
-          if (progress < 1) requestAnimationFrame(step);
-        };
-        requestAnimationFrame(step);
-      });
-    });
+    const duration = 1200;
+    const start = performance.now();
+    const step = (now: number) => {
+      const progress = Math.min((now - start) / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setDisplay(Math.round(eased * value));
+      if (progress < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
   }, [animate, value]);
 
   return <>{display}</>;
