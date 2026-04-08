@@ -154,6 +154,28 @@ const WelcomeSection: FC<Props> = ({ feedbackWidget, generalHtml, sectionId, sna
   );
 };
 
+/** Animates a number counting up from 0 to target */
+const CountUp: FC<{ value: number; animate: boolean }> = ({ value, animate }) => {
+  const [display, setDisplay] = useState(0);
+  const hasRun = useRef(false);
+
+  useEffect(() => {
+    if (!animate || hasRun.current) return;
+    hasRun.current = true;
+    const duration = 1200;
+    const start = performance.now();
+    const step = (now: number) => {
+      const progress = Math.min((now - start) / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3); // ease-out cubic
+      setDisplay(Math.round(eased * value));
+      if (progress < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }, [animate, value]);
+
+  return <>{animate ? display : value}</>;
+};
+
 const MetricCard: FC<{
   animate: boolean;
   description: string;
@@ -164,7 +186,7 @@ const MetricCard: FC<{
     <p className="report-card__eyebrow">{label}</p>
     <ArcGauge animate={animate} max={7} tone="shared" value={value ?? 0} />
     <div className="report-card__metric-value">
-      <span>{value ?? "--"}</span>
+      <span>{value !== null ? <CountUp value={value} animate={animate} /> : "--"}</span>
       <small>/7</small>
     </div>
     <p className="report-card__description">{description}</p>

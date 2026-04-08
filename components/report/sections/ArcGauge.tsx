@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FC } from "react";
+import { useEffect, useRef, useState, type FC } from "react";
 
 interface Props {
   animate?: boolean;
@@ -12,33 +12,31 @@ interface Props {
 const RADIUS = 80;
 const ARC_LENGTH = Math.PI * RADIUS;
 
-/** Full semicircle path (180° → 0°) used by both background and value arcs */
+/** Full semicircle path (180deg to 0deg) */
 const FULL_ARC = describeArc(104, 100, RADIUS, 180, 0);
 
 const ArcGauge: FC<Props> = ({ animate = false, tone = "accent", max, value }) => {
   const ratio = Math.min(Math.max(value / max, 0), 1);
   const targetOffset = ARC_LENGTH * (1 - ratio);
-
-  // Start fully hidden, then reveal when animate triggers
   const [offset, setOffset] = useState(ARC_LENGTH);
+  const hasAnimated = useRef(false);
 
   useEffect(() => {
-    if (!animate) return;
-    // Small delay so the transition actually plays (from hidden → target)
+    if (!animate || hasAnimated.current) return;
+    hasAnimated.current = true;
+    // Next frame so browser paints the hidden state first
     const id = requestAnimationFrame(() => setOffset(targetOffset));
     return () => cancelAnimationFrame(id);
   }, [animate, targetOffset]);
 
   return (
     <svg className="report-gauge" viewBox="0 0 208 114" fill="none" aria-hidden="true">
-      {/* Background track */}
       <path
         d={FULL_ARC}
         stroke="rgba(255, 255, 255, 0.09)"
         strokeWidth="12"
         strokeLinecap="round"
       />
-      {/* Value arc */}
       {ratio > 0 && (
         <path
           d={FULL_ARC}
@@ -48,7 +46,7 @@ const ArcGauge: FC<Props> = ({ animate = false, tone = "accent", max, value }) =
           strokeLinecap="round"
           style={{
             strokeDasharray: ARC_LENGTH,
-            strokeDashoffset: animate ? offset : targetOffset,
+            strokeDashoffset: offset,
           }}
         />
       )}
