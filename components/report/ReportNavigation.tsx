@@ -1,6 +1,6 @@
 import Image from "next/image";
 import type { FC } from "react";
-import type { DisplayReportSection } from "./reportTitles";
+import type { AccessTier, DisplayReportSection } from "./reportTitles";
 
 interface Props {
   activeSectionId: string;
@@ -17,6 +17,7 @@ const ReportNavigation: FC<Props> = ({
 }) => {
   return (
     <>
+      {/* ── Mobile nav (below xl) ── */}
       <div className="report-mobile-overview xl:hidden">
         <div className="report-mobile-overview__header">
           <p className="report-overline">LoveIQ report</p>
@@ -40,88 +41,91 @@ const ReportNavigation: FC<Props> = ({
                 <span className="report-mobile-nav__label">{section.navTitle}</span>
               </span>
               <span className="report-mobile-nav__meta">
-                <span className={`report-nav-chip ${section.isPremium ? "is-premium" : "is-free"}`}>
-                  {section.isPremium ? "Full Report" : "Free"}
-                </span>
-                {section.isPremium ? <LockBadge /> : null}
+                <NavBadge tier={section.accessTier} />
+                {section.accessTier !== "free" ? <LockBadge /> : null}
               </span>
             </a>
           ))}
         </nav>
       </div>
 
+      {/* ── Desktop sidebar (xl+) ── */}
       <aside className="report-sidebar hidden xl:block">
-        <div className="report-sidebar__frame">
-          <div className="report-sidebar__brand-panel report-card">
-            <div className="report-sidebar__brand">
-              <Image
-                alt="LoveIQ"
-                className="report-sidebar__logo"
-                height={44}
-                priority
-                src="/images/LoveiqLogo.svg"
-                width={44}
-              />
-              <div className="report-sidebar__brand-copy">
-                <p className="report-overline">LoveIQ</p>
-                <p className="report-sidebar__brand-title">Report</p>
-              </div>
-            </div>
-
-            <div className="report-sidebar__utilities">
-              <button className="report-sidebar__utility" type="button">
-                <ShareIcon />
-                <span>Share report</span>
-              </button>
-              <button className="report-sidebar__utility" type="button">
-                <ReferIcon />
-                <span>Refer a friend</span>
-              </button>
-            </div>
+        <div className="report-sidebar__inner">
+          {/* Logo */}
+          <div className="report-sidebar__brand">
+            <Image
+              alt="LoveIQ"
+              className="report-sidebar__logo"
+              height={40}
+              priority
+              src="/images/LoveiqLogo.svg"
+              width={40}
+            />
+            <span className="report-sidebar__brand-text">LoveIQ Report</span>
           </div>
 
-          <div className="report-sidebar__nav-panel report-card">
-            <div className="report-sidebar__nav-header">
-              <div>
-                <p className="report-overline">Chapters</p>
-                <p className="report-sidebar__nav-subtitle">{primaryArchetype} report</p>
-              </div>
-              <p className="report-sidebar__nav-date">{reportDate}</p>
-            </div>
+          {/* Action buttons */}
+          <div className="report-sidebar__actions">
+            <button className="report-sidebar__btn" type="button">
+              <ShareIcon />
+              <span>Share Report</span>
+            </button>
+            <button className="report-sidebar__btn" type="button">
+              <ReferIcon />
+              <span>Refer a Friend</span>
+            </button>
+          </div>
+
+          {/* Chapters nav */}
+          <div className="report-sidebar__chapters">
+            <p className="report-sidebar__chapters-label">Chapters</p>
 
             <nav aria-label="Report sections" className="report-sidebar__nav">
-              <div className="report-sidebar__nav-list">
-                {sections.map((section) => (
+              {sections.map((section) => {
+                const isActive = activeSectionId === section.id;
+                const isSubheading = section.navType === "subheading";
+
+                return (
                   <a
                     key={section.id}
                     href={`#${section.id}`}
-                    aria-current={activeSectionId === section.id ? "location" : undefined}
+                    aria-current={isActive ? "location" : undefined}
                     title={section.displayTitle}
-                    className={`report-sidebar__link ${activeSectionId === section.id ? "is-active" : ""}`}
+                    className={[
+                      "report-sidebar__item",
+                      isActive && "is-active",
+                      isSubheading && "is-subheading",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
                   >
-                    <span className="report-sidebar__copy">
-                      <span className="report-sidebar__number">
-                        {String(section.sectionNumber).padStart(2, "0")}
-                      </span>
-                      <span className="report-sidebar__label">{section.navTitle}</span>
+                    <span className="report-sidebar__item-label">
+                      {isActive && <span className="report-sidebar__dot" aria-hidden="true" />}
+                      <span>{section.navTitle}</span>
                     </span>
-                    <span className="report-sidebar__meta">
-                      <span
-                        className={`report-nav-chip ${section.isPremium ? "is-premium" : "is-free"}`}
-                      >
-                        {section.isPremium ? "Full Report" : "Free"}
-                      </span>
-                      {section.isPremium ? <LockBadge /> : null}
+                    <span className="report-sidebar__item-meta">
+                      <NavBadge tier={section.accessTier} />
+                      {section.accessTier !== "free" ? <LockBadge /> : null}
                     </span>
                   </a>
-                ))}
-              </div>
+                );
+              })}
             </nav>
           </div>
         </div>
       </aside>
     </>
   );
+};
+
+/* ── Shared sub-components ── */
+
+const NavBadge: FC<{ tier: AccessTier }> = ({ tier }) => {
+  const label =
+    tier === "essentials" ? "Essentials" : tier === "full_report" ? "Full Report" : "Free";
+  const cls = tier === "free" ? "report-nav-chip is-free" : "report-nav-chip is-premium";
+  return <span className={cls}>{label}</span>;
 };
 
 const LockBadge: FC = () => (

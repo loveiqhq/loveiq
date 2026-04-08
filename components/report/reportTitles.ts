@@ -1,8 +1,13 @@
 import type { ReportSection } from "@/data/report-general";
 
+export type AccessTier = "free" | "essentials" | "full_report";
+export type NavType = "link" | "subheading";
+
 export interface DisplayReportSection extends ReportSection {
   displayTitle: string;
   navTitle: string;
+  accessTier: AccessTier;
+  navType: NavType;
 }
 
 const TITLE_OVERRIDES: Record<string, string> = {
@@ -46,6 +51,31 @@ const NAV_TITLE_OVERRIDES: Record<string, string> = {
   typical_growth_potentials_for_the_core_archetype: "Growth Potentials",
 };
 
+/** Sections that show "Essentials" badge instead of "Full Report" */
+const ESSENTIALS_SECTIONS = new Set([
+  "probability_of_other_archetypes",
+  "core_motivation",
+  "sexual_stage",
+  "confidence_level_how_secure_a_person_feels_in_their_sexual_self",
+]);
+
+/** Sections rendered as category subheadings in sidebar nav */
+const SUBHEADING_SECTIONS = new Set([
+  "core_archetype",
+  "core_motivation",
+  "core_insecurities_the_hidden_fears_that_shape_desire_protection_and_erotic_expression",
+]);
+
+function resolveAccessTier(section: ReportSection): AccessTier {
+  if (ESSENTIALS_SECTIONS.has(section.id)) return "essentials";
+  if (section.isPremium) return "full_report";
+  return "free";
+}
+
+function resolveNavType(section: ReportSection): NavType {
+  return SUBHEADING_SECTIONS.has(section.id) ? "subheading" : "link";
+}
+
 function decodeTitleEntities(value: string) {
   return value
     .replace(/&amp;/g, "&")
@@ -76,5 +106,7 @@ export function resolveReportSections(
     ...section,
     displayTitle: resolveReportSectionTitle(section, primaryArchetype),
     navTitle: resolveReportNavTitle(section, primaryArchetype),
+    accessTier: resolveAccessTier(section),
+    navType: resolveNavType(section),
   }));
 }
