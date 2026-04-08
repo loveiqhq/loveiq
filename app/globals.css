@@ -2739,7 +2739,8 @@ h3,
   line-height: 20px;
 }
 
-.report-sidebar__item.is-active .report-sidebar__item-label {
+.report-sidebar__item.is-active .report-sidebar__item-label,
+.report-sidebar__item.is-active .report-sidebar__item-label > span {
   color: #fff;
   font-weight: 500;
 }
