@@ -32,14 +32,22 @@ function getScalarOverlay(diagnostics: Record<string, unknown> | null, key: stri
   const overlays = diagnostics?.overlaysScalar;
   if (!overlays || typeof overlays !== "object") return null;
   const value = (overlays as Record<string, unknown>)[key];
-  return typeof value === "number" ? value : null;
+  if (typeof value !== "number") return null;
+  // Scoring engine stores 0-1 (scale_1_7_to_0_1). Convert back to 1-7.
+  return Math.round(value * 6 + 1);
 }
 
 function getEnumOverlay(diagnostics: Record<string, unknown> | null, key: string) {
   const overlays = diagnostics?.overlaysEnum;
   if (!overlays || typeof overlays !== "object") return null;
-  const value = (overlays as Record<string, unknown>)[key];
-  return typeof value === "string" ? value : null;
+  const entry = (overlays as Record<string, unknown>)[key];
+  // Plain string (legacy) or {answer_code: string, one_hot: {...}}
+  if (typeof entry === "string") return entry;
+  if (entry && typeof entry === "object" && "answer_code" in entry) {
+    const code = (entry as Record<string, unknown>).answer_code;
+    return typeof code === "string" ? code : null;
+  }
+  return null;
 }
 
 function toTitleCase(value: string) {
@@ -64,10 +72,22 @@ function describeBand(value: number | null) {
   return "High";
 }
 
+/** Maps scoring engine answer codes to display labels */
+const STAGE_CODE_TO_LABEL: Record<string, string> = {
+  recharging: "Recharging / Pausing",
+  repairing: "Repairing / Reconnecting",
+  awakening: "Awakening / Exploring",
+  expanding: "Expanding / Experimenting",
+  grounded: "Grounded / Integrated",
+  evolving: "Evolving / Transcending",
+};
+
 function getSnapshotContent(diagnostics: Record<string, unknown> | null): SnapshotContent {
-  const satisfactionValue = getScalarOverlay(diagnostics, "sexual_satisfaction");
-  const importanceValue = getScalarOverlay(diagnostics, "importance_of_sex");
-  const stage = getEnumOverlay(diagnostics, "sexual_stage");
+  const satisfactionValue = getScalarOverlay(diagnostics, "OVL_SATISFACTION");
+  const importanceValue = getScalarOverlay(diagnostics, "OVL_TOPIC_IMPORTANCE");
+  const stageCode = getEnumOverlay(diagnostics, "OVL_PHASE_NOW");
+
+  const stage = stageCode ? (STAGE_CODE_TO_LABEL[stageCode] ?? toTitleCase(stageCode)) : null;
 
   return {
     satisfactionValue,
@@ -78,7 +98,7 @@ function getSnapshotContent(diagnostics: Record<string, unknown> | null): Snapsh
     importanceValue,
     importanceLabel:
       importanceValue === null ? "" : `${describeBand(importanceValue)} (${importanceValue}/7)`,
-    stage: stage ? toTitleCase(stage) : null,
+    stage,
   };
 }
 

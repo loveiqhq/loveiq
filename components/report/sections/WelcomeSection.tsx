@@ -20,40 +20,48 @@ interface Props {
 
 const stageDescriptions: Record<string, string> = {
   "Recharging / Pausing":
-    "Your system is asking for less pressure, more rest, and room to recover.",
+    "Sexuality feels quieter right now, and rest, lower pressure, or recovery matter most.",
   "Repairing / Reconnecting":
-    "Tenderness, repair, and restoring trust matter more than intensity right now.",
+    "You are rebuilding trust, safety, openness, or connection after stress, pain, shame, or disconnection.",
   "Awakening / Exploring":
-    "Curiosity is returning and your system wants low-stakes discovery rather than certainty.",
+    "Desire feels curious and alive, and you are discovering what fits with lower-pressure exploration.",
   "Expanding / Experimenting":
     "You feel more confident and want greater expression, communication, novelty, or play.",
   "Grounded / Integrated":
-    "Pleasure works best when it feels steady, embodied, and sustainably connected to daily life.",
+    "Sexuality feels steadier and more established, with fulfillment coming through consistency, rhythm, and presence.",
   "Evolving / Transcending":
-    "Intimacy feels most alive when it carries meaning, devotion, and a sense of expansion.",
+    "Sexuality feels expansive, meaningful, and connected to deeper emotional, creative, or spiritual dimensions.",
+};
+
+/** Per-value descriptions from survey question 01002 (scale 1-7) */
+const satisfactionDescriptions: Record<number, string> = {
+  1: "Your current sexual life feels clearly unfulfilling, frustrating, painful, absent, or far from what you want.",
+  2: "More of your current experience feels lacking than fulfilling, and dissatisfaction is a noticeable part of your reality.",
+  3: "Some parts may work, but there is enough frustration, inconsistency, or disappointment to pull your overall satisfaction down.",
+  4: "Some parts feel okay or satisfying, while others feel lacking, unclear, inconsistent, or only partly fulfilling.",
+  5: "Your sexual life feels more satisfying than not, even if some frustrations, gaps, or unmet needs remain.",
+  6: "Most of your sexual life feels good, aligned, and meaningfully fulfilling, with only limited dissatisfaction.",
+  7: "Your current sexual life feels deeply fulfilling, aligned, and broadly good for you overall.",
+};
+
+/** Per-value descriptions from survey question 16013 (scale 1-7) */
+const importanceDescriptions: Record<number, string> = {
+  1: "Understanding your sexuality does not feel central to your life right now.",
+  2: "This matters a little, but it is not a major life priority for you.",
+  3: "It has some relevance, but is not among your primary concerns right now.",
+  4: "It matters, but it is one meaningful area among several in your life.",
+  5: "Understanding your sexuality feels meaningfully relevant to your wellbeing, relationships, or growth.",
+  6: "This feels like a strong area of importance for your life and self-understanding.",
+  7: "Understanding your sexuality feels deeply important to your life, wellbeing, or growth.",
 };
 
 function describeScalarValue(label: string, value: number | null) {
   if (value === null)
     return "We do not have enough signal yet to place this part of your snapshot.";
 
-  if (label === "Current Sexual Satisfaction") {
-    if (value <= 2) {
-      return "Sex currently feels distant, frustrating, or emotionally expensive more often than nourishing.";
-    }
-    if (value <= 5) {
-      return "Some parts work, but frustration, inconsistency, or disappointment still pulls satisfaction down.";
-    }
-    return "Your sexual life currently feels like a meaningful source of pleasure, alignment, and connection.";
-  }
-
-  if (value <= 2) {
-    return "Sex is not the main organizing force in life right now and may matter mostly in specific contexts.";
-  }
-  if (value <= 5) {
-    return "Sex matters, but it shares space with other priorities and tends to depend on context and timing.";
-  }
-  return "Sex feels like a strong area of importance for your life, identity, and sense of connection.";
+  const descriptions =
+    label === "Current Sexual Satisfaction" ? satisfactionDescriptions : importanceDescriptions;
+  return descriptions[value] ?? descriptions[4]!;
 }
 
 const WelcomeSection: FC<Props> = ({ feedbackWidget, generalHtml, sectionId, snapshot }) => {
