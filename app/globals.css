@@ -880,7 +880,7 @@ h3,
 .report-page {
   position: relative;
   min-height: 100vh;
-  overflow: clip;
+  overflow-x: clip;
   background:
     radial-gradient(circle at 10% 20%, rgb(var(--report-accent-rgb) / 0.12), transparent 0 32%),
     radial-gradient(circle at 92% 12%, rgb(var(--report-accent-rgb) / 0.22), transparent 0 28%),
