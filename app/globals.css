@@ -2495,15 +2495,22 @@ h3,
   white-space: nowrap;
 }
 
-.report-nav-chip.is-premium {
-  border-color: rgb(var(--report-premium-rgb) / 0.2);
-  background: rgb(var(--report-premium-rgb) / 0.1);
-  color: rgb(var(--report-premium-rgb));
+.report-nav-chip.is-free {
+  border-color: rgba(42, 255, 143, 0.15);
+  background: rgba(42, 255, 143, 0.06);
+  color: rgba(42, 255, 143, 0.7);
 }
 
-.report-nav-chip.is-free {
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--report-copy);
+.report-nav-chip.is-essentials {
+  border-color: rgba(250, 204, 21, 0.15);
+  background: rgba(250, 204, 21, 0.06);
+  color: rgba(250, 204, 21, 0.7);
+}
+
+.report-nav-chip.is-full {
+  border-color: rgba(254, 104, 57, 0.15);
+  background: rgba(254, 104, 57, 0.06);
+  color: rgba(254, 104, 57, 0.7);
 }
 
 .report-nav-lock {

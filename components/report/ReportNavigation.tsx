@@ -152,8 +152,9 @@ const ReportNavigation: FC<Props> = ({
 const NavBadge: FC<{ tier: AccessTier }> = ({ tier }) => {
   const label =
     tier === "essentials" ? "Essentials" : tier === "full_report" ? "Full Report" : "Free";
-  const cls = tier === "free" ? "report-nav-chip is-free" : "report-nav-chip is-premium";
-  return <span className={cls}>{label}</span>;
+  const modifier =
+    tier === "free" ? "is-free" : tier === "essentials" ? "is-essentials" : "is-full";
+  return <span className={`report-nav-chip ${modifier}`}>{label}</span>;
 };
 
 const LockBadge: FC = () => (
