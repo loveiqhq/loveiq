@@ -1742,11 +1742,16 @@ h3,
 .report-premium-overlay__card {
   width: min(100%, 694px);
   padding: 35px;
-  border: 2px solid rgb(var(--report-accent-rgb));
+  border: 2px solid transparent;
   border-radius: 16px;
-  background: #130d1a;
+  background:
+    linear-gradient(#130d1a, #130d1a) padding-box,
+    linear-gradient(135deg, rgb(var(--report-accent-rgb)) 0%, #a78bfa 55%, #e9d5ff 100%) border-box;
   overflow: hidden;
   text-align: center;
+  box-shadow:
+    0 0 40px rgba(var(--report-accent-rgb) / 0.15),
+    0 0 80px rgba(167, 139, 250, 0.08);
 }
 
 .report-premium-overlay__icon {
