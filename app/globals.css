@@ -1191,6 +1191,7 @@ h3,
 
 /* ── Feedback widget (Figma-matched) ── */
 .report-fb {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1235,16 +1236,22 @@ h3,
   height: 18px;
 }
 
-/* Expanded state (positive / negative) */
+/* Expanded state (positive / negative) — floats over content */
 .report-fb--expanded {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 10;
+  margin-top: 8px;
   display: flex;
   flex-direction: column;
   gap: 16px;
-  width: min(100%, 380px);
+  width: 380px;
   padding: 20px;
   border-radius: 16px;
   background: #1a1024;
   border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
 }
 
 .report-fb__textarea {
@@ -1395,8 +1402,13 @@ h3,
   margin-top: 2px;
 }
 
-/* Toast confirmation */
+/* Toast confirmation — floats over content */
 .report-fb--toast {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 10;
+  margin-top: 8px;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -1404,6 +1416,8 @@ h3,
   border-radius: 12px;
   background: #1a1024;
   border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+  white-space: nowrap;
 }
 
 .report-fb__toast-check {
