@@ -59,7 +59,13 @@
       "Bash(do echo:*)",
       "Read(//c/Users/Hamza Korkutovic/loveiq-web/**)",
       "Bash(done)",
-      "Bash(split -l 7 C:/claude-home/rescore-updates.sql C:/claude-home/rescore-batch-)"
+      "Bash(split -l 7 C:/claude-home/rescore-updates.sql C:/claude-home/rescore-batch-)",
+      "Bash(pandoc --version)",
+      "Bash(pip3 install:*)",
+      "Read(//home/ferhad/Downloads/**)",
+      "Read(//home/ferhad/Downloads/reportdocuments/**)",
+      "Skill(commit-commands:commit)",
+      "Bash(node_modules/.bin/eslint components/report/ReportPage.tsx)"
     ]
   }
 }

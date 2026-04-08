@@ -5,11 +5,12 @@ import { TraitIcons, type ReportTheme } from "../reportTheme";
 
 interface Props {
   archetypeHtml: string | null;
+  matchScore: number;
   theme: ReportTheme;
 }
 
-const CoreArchetypeSection: FC<Props> = ({ archetypeHtml, theme }) => {
-  const { Icon } = theme;
+const CoreArchetypeSection: FC<Props> = ({ archetypeHtml, matchScore, theme }) => {
+  const matchPct = Math.round(matchScore);
 
   return (
     <div className="space-y-10">
@@ -18,14 +19,27 @@ const CoreArchetypeSection: FC<Props> = ({ archetypeHtml, theme }) => {
         <span className="report-hero-card__orb report-hero-card__orb--tr" aria-hidden="true" />
         <span className="report-hero-card__orb report-hero-card__orb--bl" aria-hidden="true" />
 
-        {/* Header: icon + name + motto */}
+        {/* Header: badge + name + motto (left) + match strength (right) */}
         <div className="report-hero-card__header">
-          <div className="report-hero-card__icon-frame">
-            <Icon className="report-hero-card__icon" />
-          </div>
           <div className="report-hero-card__header-copy">
+            <div className="report-hero-card__badge">Your Core Archetype</div>
             <h3 className="report-hero-card__title">{theme.archetype}</h3>
-            <p className="report-hero-card__motto">{theme.motto}</p>
+            <p className="report-hero-card__motto">
+              <span className="report-hero-card__motto-prefix">Motto: </span>
+              {theme.motto}
+            </p>
+          </div>
+          <div className="report-hero-card__match">
+            <div className="report-hero-card__match-header">
+              <span className="report-hero-card__match-label">Match Strength</span>
+              <span className="report-hero-card__match-value">{matchPct}%</span>
+            </div>
+            <div
+              className="report-hero-card__match-bar"
+              aria-label={`Match strength: ${matchPct}%`}
+            >
+              <div className="report-hero-card__match-fill" style={{ width: `${matchPct}%` }} />
+            </div>
           </div>
         </div>
 

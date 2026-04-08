@@ -1,5 +1,5 @@
 // Auto-generated from report .docx files — do not edit manually.
-// Run: node scripts/convert-report-content.js
+// Run: node scripts/regenerate-archetypes.js
 
 /**
  * Archetype-specific report content.

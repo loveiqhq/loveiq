@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useSyncExternalStore, type FC } from "react";
+import { useSearchParams } from "next/navigation";
 import { archetypeContent } from "@/data/report-archetypes";
 import { reportSections } from "@/data/report-general";
 import ReportFooter from "./ReportFooter";
@@ -169,7 +170,14 @@ function getErrorState(error: ReportRequestError | null): ReportStatusState {
 }
 
 const ReportPage: FC = () => {
-  const sessionId = useSyncExternalStore(subscribeNoop, getReportSessionId, () => null);
+  const searchParams = useSearchParams();
+  const storedSessionId = useSyncExternalStore(subscribeNoop, getReportSessionId, () => null);
+  // NODE_ENV is statically replaced at build time by Next.js/webpack — safe in client components
+  /* eslint-disable no-restricted-syntax */
+  const devParam =
+    process.env.NODE_ENV === "development" ? (searchParams.get("dev_session") ?? null) : null;
+  /* eslint-enable no-restricted-syntax */
+  const sessionId = devParam ?? storedSessionId;
   const [activeSectionId, setActiveSectionId] = useState(reportSections[0]?.id ?? "welcome");
 
   const { data, status, error } = useReportData(sessionId);
@@ -275,6 +283,25 @@ const ReportPage: FC = () => {
 
   return (
     <main id="main-content" className="report-page" style={getReportThemeStyle(theme)}>
+      {devParam && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            background: "#f59e0b",
+            color: "#000",
+            textAlign: "center",
+            padding: "4px 8px",
+            fontSize: "12px",
+            zIndex: 9999,
+            fontFamily: "monospace",
+          }}
+        >
+          DEV — report loaded via ?dev_session URL param ({devParam.slice(0, 8)}...)
+        </div>
+      )}
       <div className="report-shell">
         <ReportNavigation
           activeSectionId={activeSectionId}
@@ -321,7 +348,11 @@ const ReportPage: FC = () => {
                   sectionId={section.id}
                   title={title}
                 >
-                  <CoreArchetypeSection archetypeHtml={archetypeHtml} theme={theme} />
+                  <CoreArchetypeSection
+                    archetypeHtml={archetypeHtml}
+                    matchScore={matchScore}
+                    theme={theme}
+                  />
                 </ReportSection>
               );
             }
