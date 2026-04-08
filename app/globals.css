@@ -1746,11 +1746,11 @@ h3,
   border-radius: 16px;
   background:
     linear-gradient(#130d1a, #130d1a) padding-box,
-    linear-gradient(135deg, rgb(var(--report-accent-rgb)) 0%, #a78bfa 55%, #e9d5ff 100%) border-box;
+    linear-gradient(135deg, #fe6839 0%, #a78bfa 55%, #e9d5ff 100%) border-box;
   overflow: hidden;
   text-align: center;
   box-shadow:
-    0 0 40px rgba(var(--report-accent-rgb) / 0.15),
+    0 0 40px rgba(254, 104, 57, 0.12),
     0 0 80px rgba(167, 139, 250, 0.08);
 }
 
@@ -1762,7 +1762,7 @@ h3,
   margin: 0 auto 26px;
   padding: 9px;
   border-radius: 9999px;
-  background: linear-gradient(133deg, rgb(var(--report-accent-rgb)) 2%, #a78bfa 69%, #e9d5ff 122%);
+  background: linear-gradient(133deg, #fe6839 2%, #a78bfa 69%, #e9d5ff 122%);
   box-shadow: 0 4px 4px rgba(0, 0, 0, 0.25);
 }
 
@@ -1791,7 +1791,7 @@ h3,
 }
 
 .report-premium-overlay__copy strong {
-  color: rgb(var(--report-accent-rgb));
+  color: #fe6839;
   font-weight: 600;
 }
 
@@ -1802,7 +1802,7 @@ h3,
   padding: 9px 24px;
   border: 0;
   border-radius: 9999px;
-  background: rgb(var(--report-accent-rgb));
+  background: #ff6a3d;
   color: #fff;
   font-family: var(--font-sans);
   font-size: 13px;
