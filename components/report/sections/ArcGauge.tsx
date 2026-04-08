@@ -24,8 +24,12 @@ const ArcGauge: FC<Props> = ({ animate = false, tone = "accent", max, value }) =
   useEffect(() => {
     if (!animate || hasAnimated.current) return;
     hasAnimated.current = true;
-    // Next frame so browser paints the hidden state first
-    const id = requestAnimationFrame(() => setOffset(targetOffset));
+    // Double-rAF: first frame paints the hidden state,
+    // second frame triggers the CSS transition to target
+    let id: number;
+    requestAnimationFrame(() => {
+      id = requestAnimationFrame(() => setOffset(targetOffset));
+    });
     return () => cancelAnimationFrame(id);
   }, [animate, targetOffset]);
 

@@ -162,18 +162,23 @@ const CountUp: FC<{ value: number; animate: boolean }> = ({ value, animate }) =>
   useEffect(() => {
     if (!animate || hasRun.current) return;
     hasRun.current = true;
-    const duration = 1200;
-    const start = performance.now();
-    const step = (now: number) => {
-      const progress = Math.min((now - start) / duration, 1);
-      const eased = 1 - Math.pow(1 - progress, 3); // ease-out cubic
-      setDisplay(Math.round(eased * value));
-      if (progress < 1) requestAnimationFrame(step);
-    };
-    requestAnimationFrame(step);
+    // Double-rAF delay so the "0" renders first, then we animate
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const duration = 1200;
+        const start = performance.now();
+        const step = (now: number) => {
+          const progress = Math.min((now - start) / duration, 1);
+          const eased = 1 - Math.pow(1 - progress, 3);
+          setDisplay(Math.round(eased * value));
+          if (progress < 1) requestAnimationFrame(step);
+        };
+        requestAnimationFrame(step);
+      });
+    });
   }, [animate, value]);
 
-  return <>{animate ? display : value}</>;
+  return <>{display}</>;
 };
 
 const MetricCard: FC<{
