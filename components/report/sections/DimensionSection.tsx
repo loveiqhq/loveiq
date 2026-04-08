@@ -33,10 +33,7 @@ const DimensionSection: FC<Props> = ({
             <PremiumOverlay archetype={archetype} sectionTitle={sectionTitle} />
           </div>
         ) : (
-          <div
-            className="report-prose report-prose--secondary"
-            dangerouslySetInnerHTML={{ __html: archetypeHtml }}
-          />
+          <div className="report-prose" dangerouslySetInnerHTML={{ __html: archetypeHtml }} />
         )}
       </div>
     ) : null}

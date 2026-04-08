@@ -91,10 +91,7 @@ const CoreArchetypeSection: FC<Props> = ({ archetypeHtml, theme }) => {
       </article>
 
       {archetypeHtml ? (
-        <div
-          className="report-prose report-prose--secondary"
-          dangerouslySetInnerHTML={{ __html: archetypeHtml }}
-        />
+        <div className="report-prose" dangerouslySetInnerHTML={{ __html: archetypeHtml }} />
       ) : null}
     </div>
   );
