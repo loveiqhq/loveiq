@@ -1719,19 +1719,15 @@ h3,
   height: 6px;
 }
 
+/* ── Premium paywall (Figma-matched) ── */
 .report-themed-block__preview {
   position: relative;
-  min-height: 320px;
 }
 
 .report-themed-block__blurred {
   user-select: none;
-  filter: blur(5px);
-  opacity: 0.45;
-  max-height: 280px;
-  overflow: hidden;
-  mask-image: linear-gradient(to bottom, #000 0%, #000 30%, transparent 100%);
-  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 30%, transparent 100%);
+  filter: blur(4.55px);
+  opacity: 0.5;
 }
 
 .report-premium-overlay {
@@ -1741,53 +1737,78 @@ h3,
   align-items: center;
   justify-content: center;
   padding: 2rem 1rem;
-  background: radial-gradient(ellipse at 50% 60%, rgba(19, 11, 23, 0.7) 0%, transparent 70%);
 }
 
 .report-premium-overlay__card {
-  width: min(100%, 28rem);
-  padding: 2.5rem 2rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 24px;
-  background: rgba(19, 11, 23, 0.92);
-  backdrop-filter: blur(20px);
-  box-shadow:
-    0 0 80px rgba(0, 0, 0, 0.5),
-    0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+  width: min(100%, 694px);
+  padding: 35px;
+  border: 2px solid rgb(var(--report-accent-rgb));
+  border-radius: 16px;
+  background: #130d1a;
+  overflow: hidden;
   text-align: center;
 }
 
 .report-premium-overlay__icon {
   display: grid;
   place-items: center;
-  width: 3.2rem;
-  height: 3.2rem;
-  margin: 0 auto 1rem;
-  border-radius: 12px;
-  background: rgb(var(--report-premium-rgb) / 0.1);
-  color: rgb(var(--report-premium-rgb));
+  width: 42px;
+  height: 42px;
+  margin: 0 auto 26px;
+  padding: 9px;
+  border-radius: 9999px;
+  background: linear-gradient(133deg, rgb(var(--report-accent-rgb)) 2%, #a78bfa 69%, #e9d5ff 122%);
+  box-shadow: 0 4px 4px rgba(0, 0, 0, 0.25);
 }
 
 .report-premium-overlay__icon svg {
-  width: 1.45rem;
-  height: 1.45rem;
+  width: 24px;
+  height: 24px;
 }
 
 .report-premium-overlay__title {
-  margin: 0.4rem 0 0.8rem;
+  margin: 0 0 26px;
   font-family: var(--font-serif);
-  font-size: clamp(1.75rem, 4vw, 2.4rem);
-  line-height: 1.05;
-  letter-spacing: -0.03em;
+  font-size: 31px;
+  font-weight: 500;
+  line-height: 29.554px;
   color: #fff;
 }
 
 .report-premium-overlay__copy {
-  margin: 0 auto 1.5rem;
-  max-width: 22rem;
-  color: rgba(255, 255, 255, 0.6);
-  font-size: 0.9375rem;
-  line-height: 1.7;
+  margin: 0 auto 26px;
+  max-width: 496px;
+  color: #d1d5db;
+  font-family: var(--font-sans);
+  font-size: 16px;
+  font-weight: 300;
+  line-height: 19.21px;
+}
+
+.report-premium-overlay__copy strong {
+  color: rgb(var(--report-accent-rgb));
+  font-weight: 600;
+}
+
+.report-premium-overlay__cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 9px 24px;
+  border: 0;
+  border-radius: 9999px;
+  background: rgb(var(--report-accent-rgb));
+  color: #fff;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 17.7px;
+  cursor: pointer;
+  transition: filter 180ms ease;
+}
+
+.report-premium-overlay__cta:hover {
+  filter: brightness(1.1);
 }
 
 .report-footer {
@@ -2085,8 +2106,7 @@ h3,
 }
 
 .report-card,
-.report-status-card,
-.report-premium-overlay__card {
+.report-status-card {
   border-radius: 24px;
 }
 
@@ -2845,16 +2865,6 @@ h3,
 /* Old probability card styles removed — replaced by .report-prob */
 
 /* Archetype text and premium preview render as plain prose, no box */
-
-.report-premium-overlay__card {
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(15, 9, 20, 0.95);
-}
-
-.report-premium-overlay__icon {
-  background: rgb(var(--report-premium-rgb) / 0.1);
-  color: rgb(var(--report-premium-rgb));
-}
 
 .report-footer {
   margin-top: 5.5rem;
