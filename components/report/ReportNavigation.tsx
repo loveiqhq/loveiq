@@ -45,7 +45,6 @@ const ReportNavigation: FC<Props> = ({
               </span>
               <span className="report-mobile-nav__meta">
                 <NavBadge tier={section.accessTier} />
-                {section.accessTier !== "free" ? <LockBadge /> : null}
               </span>
             </a>
           ))}
@@ -110,7 +109,6 @@ const ReportNavigation: FC<Props> = ({
                     </span>
                     <span className="report-sidebar__item-meta">
                       <NavBadge tier={section.accessTier} />
-                      {section.accessTier !== "free" ? <LockBadge /> : null}
                     </span>
                   </a>
                 );
