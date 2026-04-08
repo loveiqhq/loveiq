@@ -2695,9 +2695,24 @@ h3,
     color 180ms ease;
 }
 
-/* Active item — contrast only, no layout change */
-.report-sidebar__item.is-active {
-  /* no background, padding, or border-radius change */
+/* Active dot — positioned outside text flow via negative margin */
+.report-sidebar__item::before {
+  content: "";
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  margin-left: -14px;
+  margin-right: 8px;
+  border-radius: 9999px;
+  background: transparent;
+  transition:
+    background 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.report-sidebar__item.is-active::before {
+  background: #c084fc;
+  box-shadow: 0 0 8px rgba(192, 132, 252, 0.8);
 }
 
 /* Subheading style */
