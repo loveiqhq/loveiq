@@ -2909,58 +2909,263 @@ h3,
   color: rgb(var(--report-brand-rgb));
 }
 
-.report-importance-card {
-  padding: 2rem;
-  border: 1px solid rgb(var(--report-accent-rgb));
-  background:
-    radial-gradient(circle at 94% 8%, rgb(var(--report-accent-rgb) / 0.18), transparent 0 30%),
-    radial-gradient(circle at 0% 100%, rgb(var(--report-accent-rgb) / 0.14), transparent 0 30%),
-    var(--report-surface);
+/* ── Importance of Sexuality chart card (Figma-matched) ── */
+.report-importance {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 56px;
+  overflow: hidden;
+  padding: 49px 49px 33px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 24px;
+  background: #130b17;
+  box-shadow: 0 20px 80px -20px rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(20px);
 }
 
-.report-importance-card__value-wrap {
+.report-importance__highlight {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2) 50%, transparent);
+}
+
+/* Header */
+.report-importance__header {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.report-importance__overline {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 2.1px;
+  text-transform: uppercase;
+  color: #6b7280;
+}
+
+.report-importance__overline-line {
+  width: 32px;
+  height: 1px;
+  background: rgba(111, 174, 217, 0.5);
+}
+
+.report-importance__result {
+  display: flex;
+  align-items: center;
+  gap: 40px;
+}
+
+.report-importance__band {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 72px;
+  line-height: 72px;
+  letter-spacing: -3.6px;
+  color: #6faed9;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.05);
+  flex-shrink: 0;
+}
+
+.report-importance__divider {
+  width: 1px;
+  height: 64px;
+  flex-shrink: 0;
+  background: linear-gradient(to bottom, transparent, rgba(255, 255, 255, 0.1) 50%, transparent);
+}
+
+.report-importance__desc {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 20px;
+  font-weight: 300;
+  line-height: 28px;
+  color: #d1d5db;
+}
+
+.report-importance__desc strong {
+  font-weight: 700;
+  color: #d1d5db;
+}
+
+/* Bar chart */
+.report-importance__chart {
+  display: flex;
+  gap: 0;
+}
+
+.report-importance__yaxis {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  width: 85px;
+  height: 260px;
+  padding-right: 16px;
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #6b7280;
+  text-align: right;
+}
+
+.report-importance__bars {
+  position: relative;
   display: flex;
   align-items: flex-end;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-top: 1.25rem;
-  padding-top: 1.5rem;
-  border-top: 1px solid rgb(var(--report-accent-rgb) / 0.18);
+  gap: 0;
+  flex: 1;
+  height: 260px;
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-left: 25px;
 }
 
-.report-importance-card__value {
-  margin: 0;
-  font-family: var(--font-serif);
-  font-size: clamp(2.4rem, 5vw, 3.4rem);
-  line-height: 0.96;
-  letter-spacing: -0.04em;
-  color: #fff;
-}
-
-.report-importance-card__score {
+/* Grid lines */
+.report-importance__grid {
+  position: absolute;
+  inset: 0;
   display: flex;
-  align-items: baseline;
-  gap: 0.18rem;
-  margin: 0;
+  flex-direction: column;
+  justify-content: space-between;
+  padding-left: 25px;
+  pointer-events: none;
+}
+
+.report-importance__gridline {
+  height: 1px;
+  width: 100%;
+}
+
+.report-importance__gridline--dashed {
+  border-top: 1px dashed rgba(255, 255, 255, 0.1);
+}
+
+.report-importance__gridline--faint {
+  border-top: 1px dashed rgba(255, 255, 255, 0.05);
+}
+
+/* Individual bars */
+.report-importance__bar {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  height: 100%;
+}
+
+.report-importance__bar-fill {
+  width: 100%;
+  border-radius: 8px 8px 0 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+  position: relative;
+}
+
+.report-importance__bar-fill--ref {
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02));
+  backdrop-filter: blur(2px);
+}
+
+.report-importance__bar-fill--ref::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.05), transparent);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.05);
+  border-radius: inherit;
+}
+
+.report-importance__bar-fill--tall {
+  border-top-color: rgba(255, 255, 255, 0.1);
+}
+
+.report-importance__bar-fill--user {
+  background: #6faed9;
+  border-top-color: rgba(255, 255, 255, 0.2);
+}
+
+/* YOU tooltip */
+.report-importance__tooltip {
+  position: absolute;
+  top: -8px;
+  transform: translateY(-100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 9px 17px;
+  border: 1px solid #fff;
+  border-radius: 9999px;
+  background: #6faed9;
   color: #fff;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  line-height: 16px;
+  white-space: nowrap;
+  box-shadow:
+    0 2px 2px rgba(0, 0, 0, 0.06),
+    0 4px 3px rgba(0, 0, 0, 0.07);
+  z-index: 2;
 }
 
-.report-importance-card__score span {
-  font-family: var(--font-serif);
-  font-size: 3rem;
-  line-height: 1;
+.report-importance__tooltip::after {
+  content: "";
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  transform: translateX(-50%) rotate(45deg);
+  width: 10px;
+  height: 10px;
+  background: #6faed9;
+  border-right: 1px solid #fff;
+  border-bottom: 1px solid #fff;
 }
 
-.report-importance-card__score small {
-  color: rgba(255, 255, 255, 0.42);
-  font-size: 1.125rem;
-}
+@media (max-width: 767px) {
+  .report-importance {
+    padding: 24px;
+    gap: 32px;
+  }
 
-.report-importance-card__copy {
-  max-width: 42rem;
-  margin: 1.25rem 0 0;
-  color: rgba(255, 255, 255, 0.72);
-  line-height: 1.7;
+  .report-importance__band {
+    font-size: 48px;
+    line-height: 48px;
+  }
+
+  .report-importance__result {
+    flex-direction: column;
+    gap: 16px;
+    align-items: flex-start;
+  }
+
+  .report-importance__divider {
+    width: 64px;
+    height: 1px;
+  }
+
+  .report-importance__desc {
+    font-size: 16px;
+    line-height: 24px;
+  }
+
+  .report-importance__yaxis {
+    width: 50px;
+    font-size: 8px;
+  }
 }
 
 @media (min-width: 768px) {
@@ -3011,8 +3216,7 @@ h3,
     grid-template-columns: 1fr;
   }
 
-  .report-card--metric,
-  .report-importance-card {
+  .report-card--metric {
     padding: 1.5rem;
   }
 
@@ -3061,10 +3265,6 @@ h3,
   .report-hero-card__motivation {
     flex-direction: column;
     align-items: flex-start;
-  }
-
-  .report-importance-card__value-wrap {
-    grid-template-columns: 1fr;
   }
 
   .report-hero-card__traits {
