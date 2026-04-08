@@ -2122,9 +2122,22 @@ h3,
   font-weight: 700;
 }
 
-/* Archetype name in subtitles like "The motivation of the Spark Seeker" */
+/* Archetype subtitle — the paragraph containing the archetype name */
+.report-prose p:has(.report-archetype-name) {
+  font-family: var(--font-serif);
+  font-size: 31px;
+  font-weight: 500;
+  line-height: 32px;
+  color: #fff;
+  margin-top: 40px;
+}
+
 .report-archetype-name {
   color: rgb(var(--report-accent-rgb));
+  font-family: var(--font-serif);
+  font-size: 31px;
+  font-weight: 500;
+  line-height: 32px;
 }
 
 .report-prose em {
