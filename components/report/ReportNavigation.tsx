@@ -84,35 +84,37 @@ const ReportNavigation: FC<Props> = ({
             <p className="report-sidebar__chapters-label">Chapters</p>
 
             <nav aria-label="Report sections" className="report-sidebar__nav">
-              {sections.map((section) => {
-                const isActive = activeSectionId === section.id;
-                const isSubheading = section.navType === "subheading";
+              <div className="report-sidebar__nav-list">
+                {sections.map((section) => {
+                  const isActive = activeSectionId === section.id;
+                  const isSubheading = section.navType === "subheading";
 
-                return (
-                  <a
-                    key={section.id}
-                    href={`#${section.id}`}
-                    aria-current={isActive ? "location" : undefined}
-                    title={section.displayTitle}
-                    onClick={() => onSectionClick?.(section.id)}
-                    className={[
-                      "report-sidebar__item",
-                      isActive && "is-active",
-                      isSubheading && "is-subheading",
-                    ]
-                      .filter(Boolean)
-                      .join(" ")}
-                  >
-                    <span className="report-sidebar__item-label">
-                      {isActive && <span className="report-sidebar__dot" aria-hidden="true" />}
-                      <span>{section.navTitle}</span>
-                    </span>
-                    <span className="report-sidebar__item-meta">
-                      <NavBadge tier={section.accessTier} />
-                    </span>
-                  </a>
-                );
-              })}
+                  return (
+                    <a
+                      key={section.id}
+                      href={`#${section.id}`}
+                      aria-current={isActive ? "location" : undefined}
+                      title={section.displayTitle}
+                      onClick={() => onSectionClick?.(section.id)}
+                      className={[
+                        "report-sidebar__item",
+                        isActive && "is-active",
+                        isSubheading && "is-subheading",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                    >
+                      <span className="report-sidebar__item-label">
+                        {isActive && <span className="report-sidebar__dot" aria-hidden="true" />}
+                        <span>{section.navTitle}</span>
+                      </span>
+                      <span className="report-sidebar__item-meta">
+                        <NavBadge tier={section.accessTier} />
+                      </span>
+                    </a>
+                  );
+                })}
+              </div>
             </nav>
           </div>
         </div>
