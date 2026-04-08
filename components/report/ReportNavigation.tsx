@@ -1,5 +1,7 @@
+"use client";
+
 import Image from "next/image";
-import type { FC } from "react";
+import { useEffect, useRef, type FC } from "react";
 import type { AccessTier, DisplayReportSection } from "./reportTitles";
 
 interface Props {
@@ -17,6 +19,28 @@ const ReportNavigation: FC<Props> = ({
   reportDate,
   sections,
 }) => {
+  const navRef = useRef<HTMLElement>(null);
+
+  // Capture wheel events on the nav so the page doesn't scroll instead
+  useEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+
+    const onWheel = (e: WheelEvent) => {
+      const { scrollTop, scrollHeight, clientHeight } = nav;
+      const atTop = scrollTop <= 0 && e.deltaY < 0;
+      const atBottom = scrollTop + clientHeight >= scrollHeight - 1 && e.deltaY > 0;
+      if (!atTop && !atBottom) {
+        e.preventDefault();
+        e.stopPropagation();
+        nav.scrollTop += e.deltaY;
+      }
+    };
+
+    nav.addEventListener("wheel", onWheel, { passive: false });
+    return () => nav.removeEventListener("wheel", onWheel);
+  }, []);
+
   return (
     <>
       {/* ── Mobile nav (below xl) ── */}
@@ -83,7 +107,7 @@ const ReportNavigation: FC<Props> = ({
           <div className="report-sidebar__chapters">
             <p className="report-sidebar__chapters-label">Chapters</p>
 
-            <nav aria-label="Report sections" className="report-sidebar__nav">
+            <nav ref={navRef} aria-label="Report sections" className="report-sidebar__nav">
               <div className="report-sidebar__nav-list">
                 {sections.map((section) => {
                   const isActive = activeSectionId === section.id;
