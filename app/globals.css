@@ -1545,7 +1545,7 @@ h3,
   gap: 24px;
   align-items: center;
   padding: 24px 0;
-  opacity: 0.5;
+  opacity: 0.6;
   transition: opacity 200ms ease;
 }
 
@@ -1553,12 +1553,8 @@ h3,
   opacity: 1;
 }
 
-.report-prob__row-desat {
-  position: absolute;
-  inset: 0;
-  background: rgba(255, 255, 255, 0.3);
-  mix-blend-mode: saturation;
-  pointer-events: none;
+.report-prob__row.is-fading {
+  opacity: 0.35;
 }
 
 .report-prob__row-border {

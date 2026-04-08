@@ -113,11 +113,15 @@ const ArchetypeProbabilitySection: FC<Props> = ({
             const ArchIcon = theme.Icon;
             const isHovered = hoveredName === name;
             const isLast = i === secondaryItems.length - 1;
+            // 3rd item (i===1) fades more in collapsed view
+            const isFading = !expanded && i === 1;
 
             return (
               <div
                 key={name}
-                className={`report-prob__row ${isHovered ? "is-active" : ""}`}
+                className={["report-prob__row", isHovered && "is-active", isFading && "is-fading"]
+                  .filter(Boolean)
+                  .join(" ")}
                 style={
                   isHovered
                     ? {
@@ -129,8 +133,6 @@ const ArchetypeProbabilitySection: FC<Props> = ({
                 onMouseEnter={() => setHoveredName(name)}
                 onMouseLeave={() => setHoveredName(null)}
               >
-                {!isHovered && <div className="report-prob__row-desat" aria-hidden="true" />}
-
                 <div className="report-prob__row-score">
                   <div className="report-prob__row-value">
                     <span>{score}</span>
