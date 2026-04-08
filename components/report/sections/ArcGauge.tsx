@@ -1,6 +1,6 @@
 "use client";
 
-import type { FC } from "react";
+import { useEffect, useState, type FC } from "react";
 
 interface Props {
   animate?: boolean;
@@ -9,36 +9,49 @@ interface Props {
   value: number;
 }
 
+const RADIUS = 80;
+const ARC_LENGTH = Math.PI * RADIUS;
+
+/** Full semicircle path (180° → 0°) used by both background and value arcs */
+const FULL_ARC = describeArc(104, 100, RADIUS, 180, 0);
+
 const ArcGauge: FC<Props> = ({ animate = false, tone = "accent", max, value }) => {
   const ratio = Math.min(Math.max(value / max, 0), 1);
-  const radius = 80;
-  const arcLength = Math.PI * radius;
-  const endAngle = 180 - ratio * 180;
-  const valuePath = ratio > 0 ? describeArc(104, 100, radius, 180, endAngle) : "";
+  const targetOffset = ARC_LENGTH * (1 - ratio);
+
+  // Start fully hidden, then reveal when animate triggers
+  const [offset, setOffset] = useState(ARC_LENGTH);
+
+  useEffect(() => {
+    if (!animate) return;
+    // Small delay so the transition actually plays (from hidden → target)
+    const id = requestAnimationFrame(() => setOffset(targetOffset));
+    return () => cancelAnimationFrame(id);
+  }, [animate, targetOffset]);
 
   return (
     <svg className="report-gauge" viewBox="0 0 208 114" fill="none" aria-hidden="true">
+      {/* Background track */}
       <path
-        d={describeArc(104, 100, radius, 180, 0)}
+        d={FULL_ARC}
         stroke="rgba(255, 255, 255, 0.09)"
         strokeWidth="12"
         strokeLinecap="round"
       />
-      {valuePath ? (
+      {/* Value arc */}
+      {ratio > 0 && (
         <path
-          d={valuePath}
-          className={`report-gauge__value ${tone === "shared" ? "is-shared" : "is-accent"} ${
-            animate ? "is-animated" : ""
-          }`}
+          d={FULL_ARC}
+          className={`report-gauge__value ${tone === "shared" ? "is-shared" : "is-accent"}`}
           stroke="currentColor"
           strokeWidth="12"
           strokeLinecap="round"
           style={{
-            strokeDasharray: `${arcLength}`,
-            strokeDashoffset: `${arcLength * (1 - ratio)}`,
+            strokeDasharray: ARC_LENGTH,
+            strokeDashoffset: animate ? offset : targetOffset,
           }}
         />
-      ) : null}
+      )}
     </svg>
   );
 };

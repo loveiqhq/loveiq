@@ -1317,11 +1317,7 @@ h3,
 }
 
 .report-gauge__value {
-  filter: drop-shadow(0 0 18px rgb(var(--report-accent-rgb) / 0.35));
-}
-
-.report-gauge__value.is-animated {
-  transition: stroke-dashoffset 1s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: stroke-dashoffset 1.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .report-hero-card {
@@ -2445,12 +2441,12 @@ h3,
 
 .report-gauge__value.is-accent {
   color: rgb(var(--report-accent-rgb));
-  filter: drop-shadow(0 0 18px rgb(var(--report-accent-rgb) / 0.35));
+  filter: drop-shadow(0 0 6px rgb(var(--report-accent-rgb) / 0.5));
 }
 
 .report-gauge__value.is-shared {
   color: rgb(var(--report-premium-rgb));
-  filter: drop-shadow(0 0 18px rgb(var(--report-premium-rgb) / 0.35));
+  filter: drop-shadow(0 0 6px rgb(var(--report-premium-rgb) / 0.5));
 }
 
 .report-hero-card {
