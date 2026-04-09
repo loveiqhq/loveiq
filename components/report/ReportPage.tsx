@@ -21,8 +21,10 @@ import WelcomeSection from "./sections/WelcomeSection";
 
 interface SnapshotContent {
   importanceLabel: string;
+  importancePct: number | null;
   importanceValue: number | null;
   satisfactionLabel: string;
+  satisfactionPct: number | null;
   satisfactionValue: number | null;
   stage: string | null;
 }
@@ -73,6 +75,22 @@ function describeBand(value: number | null) {
   return "High";
 }
 
+/** Maps 1-7 scale values to display percentages */
+const SCALE_TO_PERCENT: Record<number, number> = {
+  1: 14,
+  2: 29,
+  3: 43,
+  4: 57,
+  5: 71,
+  6: 86,
+  7: 97,
+};
+
+function scaleToPercent(value: number | null): number | null {
+  if (value === null) return null;
+  return SCALE_TO_PERCENT[value] ?? null;
+}
+
 /** Maps scoring engine answer codes to display labels */
 const STAGE_CODE_TO_LABEL: Record<string, string> = {
   recharging: "Recharging / Pausing",
@@ -92,11 +110,13 @@ function getSnapshotContent(diagnostics: Record<string, unknown> | null): Snapsh
 
   return {
     satisfactionValue,
+    satisfactionPct: scaleToPercent(satisfactionValue),
     satisfactionLabel:
       satisfactionValue === null
         ? ""
         : `${describeBand(satisfactionValue)} (${satisfactionValue}/7)`,
     importanceValue,
+    importancePct: scaleToPercent(importanceValue),
     importanceLabel:
       importanceValue === null ? "" : `${describeBand(importanceValue)} (${importanceValue}/7)`,
     stage,

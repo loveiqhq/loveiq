@@ -1492,8 +1492,6 @@ h3,
 .report-card__metric-value {
   display: flex;
   justify-content: center;
-  align-items: baseline;
-  gap: 0.18rem;
   margin-top: -0.2rem;
 }
 
@@ -1506,14 +1504,9 @@ h3,
 }
 
 .report-card__metric-value span {
-  font-size: clamp(3rem, 8vw, 3.75rem);
-  line-height: 0.9;
+  font-size: clamp(1.8rem, 6vw, 2.44rem);
+  line-height: 1;
   color: #fff;
-}
-
-.report-card__metric-value small {
-  font-size: 1.3rem;
-  color: rgba(255, 255, 255, 0.42);
 }
 
 .report-card__description {
@@ -1562,6 +1555,23 @@ h3,
   font-weight: 500;
   color: #fff;
   line-height: 1.2;
+}
+
+.report-gauge-wrap {
+  position: relative;
+  width: 100%;
+}
+
+/* Overlay the metric value inside the arc's interior space */
+.report-gauge-wrap .report-card__metric-value {
+  position: absolute;
+  left: 0;
+  right: 0;
+  /* Arc SVG viewBox 0 0 208 114; arc endpoints at y=100 (87.7% from top).
+     top: 74% places the number's centre at ~y=84 — inside the arc opening. */
+  top: 74%;
+  transform: translateY(-50%);
+  margin-top: 0;
 }
 
 .report-gauge {
@@ -3125,15 +3135,9 @@ h3,
 
 .report-card__metric-value span {
   font-family: var(--font-sans);
-  font-size: 60px;
+  font-size: 39px;
   font-weight: 400;
-  line-height: 60px;
-}
-
-.report-card__metric-value small {
-  font-size: 20px;
-  line-height: 28px;
-  color: var(--report-subtle);
+  line-height: 39px;
 }
 
 .report-card__description {
@@ -3145,7 +3149,8 @@ h3,
 }
 
 .report-stage-card__body {
-  min-height: 170px;
+  /* Matches gauge wrap height (SVG is 208×114px) so stage card aligns with metric cards */
+  min-height: 114px;
   align-content: center;
   gap: 2rem;
   padding: 1.5rem 0 2rem;

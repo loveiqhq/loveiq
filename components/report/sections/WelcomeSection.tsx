@@ -5,8 +5,10 @@ import ArcGauge from "./ArcGauge";
 
 interface SnapshotContent {
   importanceLabel: string;
+  importancePct: number | null;
   importanceValue: number | null;
   satisfactionLabel: string;
+  satisfactionPct: number | null;
   satisfactionValue: number | null;
   stage: string | null;
 }
@@ -156,12 +158,14 @@ const WelcomeSection: FC<Props> = ({ feedbackWidget, generalHtml, sectionId, sna
             snapshot.satisfactionValue
           )}
           label="Current Sexual Satisfaction"
+          pct={snapshot.satisfactionPct}
           value={snapshot.satisfactionValue}
         />
         <MetricCard
           animate={animateReady}
           description={describeScalarValue("Importance of Sex", snapshot.importanceValue)}
           label="Importance of Sex"
+          pct={snapshot.importancePct}
           value={snapshot.importanceValue}
         />
         <StageCard
@@ -203,14 +207,24 @@ const MetricCard: FC<{
   animate: boolean;
   description: string;
   label: string;
+  pct: number | null;
   value: number | null;
-}> = ({ animate, description, label, value }) => (
+}> = ({ animate, description, label, pct, value }) => (
   <article className="report-card report-card--metric">
     <p className="report-card__eyebrow">{label}</p>
-    <ArcGauge animate={animate} max={7} tone="shared" value={value ?? 0} />
-    <div className="report-card__metric-value">
-      <span>{value !== null ? <CountUp value={value} animate={animate} /> : "--"}</span>
-      <small>/7</small>
+    <div className="report-gauge-wrap">
+      <ArcGauge animate={animate} max={7} tone="shared" value={value ?? 0} />
+      <div className="report-card__metric-value">
+        <span>
+          {pct !== null ? (
+            <>
+              <CountUp value={pct} animate={animate} />%
+            </>
+          ) : (
+            "--"
+          )}
+        </span>
+      </div>
     </div>
     <p className="report-card__description">{description}</p>
   </article>
