@@ -16,7 +16,7 @@ const tokenSchema = z.object({
 
 const RATE_LIMIT_CONFIG = {
   bucket: "report-view",
-  limit: 10,
+  limit: 30,
   windowMs: 60_000,
 };
 
