@@ -169,7 +169,11 @@ function getErrorState(error: ReportRequestError | null): ReportStatusState {
   }
 }
 
-const ReportPage: FC = () => {
+interface ReportPageProps {
+  token?: string;
+}
+
+const ReportPage: FC<ReportPageProps> = ({ token }) => {
   const searchParams = useSearchParams();
   const storedSessionId = useSyncExternalStore(subscribeNoop, getReportSessionId, () => null);
   // NODE_ENV is statically replaced at build time by Next.js/webpack — safe in client components
@@ -180,7 +184,7 @@ const ReportPage: FC = () => {
   const sessionId = devParam ?? storedSessionId;
   const [activeSectionId, setActiveSectionId] = useState(reportSections[0]?.id ?? "welcome");
 
-  const { data, status, error } = useReportData(sessionId);
+  const { data, status, error } = useReportData({ token, sessionId: token ? null : sessionId });
   const { feedbacks, submitted, submitFeedback } = useSectionFeedback(sessionId);
 
   useEffect(() => {

@@ -19,6 +19,11 @@ export interface ReportRequestError {
 
 type Status = "idle" | "loading" | "error" | "success" | "missing";
 
+interface ReportIdentifier {
+  sessionId?: string | null;
+  token?: string | null;
+}
+
 async function parseErrorResponse(res: Response): Promise<ReportRequestError> {
   try {
     const json = (await res.json()) as { error?: unknown };
@@ -34,7 +39,10 @@ async function parseErrorResponse(res: Response): Promise<ReportRequestError> {
   }
 }
 
-export function useReportData(sessionId: string | null) {
+export function useReportData(identifier: ReportIdentifier) {
+  const { sessionId, token } = identifier;
+  const hasIdentifier = !!(sessionId || token);
+
   const [state, setState] = useState<{
     data: ReportData | null;
     status: Status;
@@ -46,9 +54,8 @@ export function useReportData(sessionId: string | null) {
   });
 
   useEffect(() => {
-    if (!sessionId) return;
+    if (!hasIdentifier) return;
 
-    const activeSessionId = sessionId;
     let cancelled = false;
 
     async function fetchReport() {
@@ -56,7 +63,11 @@ export function useReportData(sessionId: string | null) {
 
       try {
         const csrfToken = getCsrfToken();
-        const res = await fetch(`/api/report?sessionId=${encodeURIComponent(activeSessionId)}`, {
+        const param = token
+          ? `token=${encodeURIComponent(token)}`
+          : `sessionId=${encodeURIComponent(sessionId!)}`;
+
+        const res = await fetch(`/api/report?${param}`, {
           headers: { "x-csrf-token": csrfToken },
         });
 
@@ -69,7 +80,7 @@ export function useReportData(sessionId: string | null) {
         }
 
         const json = (await res.json()) as ReportData;
-        finalizeReportSession(activeSessionId);
+        if (sessionId) finalizeReportSession(sessionId);
         setState({ data: json, status: "success", error: null });
       } catch {
         if (!cancelled) {
@@ -86,9 +97,9 @@ export function useReportData(sessionId: string | null) {
     return () => {
       cancelled = true;
     };
-  }, [sessionId]);
+  }, [sessionId, token, hasIdentifier]);
 
-  if (!sessionId) {
+  if (!hasIdentifier) {
     return { data: null, status: "missing" as const, error: null };
   }
 

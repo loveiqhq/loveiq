@@ -18,7 +18,7 @@ describe("useReportData", () => {
   });
 
   it("returns a missing status when no report session id exists", () => {
-    const { result } = renderHook(() => useReportData(null));
+    const { result } = renderHook(() => useReportData({ sessionId: null }));
 
     expect(result.current).toEqual({
       data: null,
@@ -42,7 +42,9 @@ describe("useReportData", () => {
     });
     globalThis.fetch = mockFetch;
 
-    const { result } = renderHook(() => useReportData("02d88f31-eceb-4402-940d-c8cd98d01848"));
+    const { result } = renderHook(() =>
+      useReportData({ sessionId: "02d88f31-eceb-4402-940d-c8cd98d01848" })
+    );
 
     await waitFor(() => {
       expect(result.current.status).toBe("success");
@@ -67,7 +69,9 @@ describe("useReportData", () => {
       json: async () => ({ error: "Unable to process request." }),
     });
 
-    const { result } = renderHook(() => useReportData("02d88f31-eceb-4402-940d-c8cd98d01848"));
+    const { result } = renderHook(() =>
+      useReportData({ sessionId: "02d88f31-eceb-4402-940d-c8cd98d01848" })
+    );
 
     await waitFor(() => {
       expect(result.current.status).toBe("error");

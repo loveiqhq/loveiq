@@ -1,5 +1,6 @@
 export const SURVEY_SESSION_KEY = "loveiq-survey-session";
 export const REPORT_SESSION_KEY = "loveiq-report-session";
+export const REPORT_TOKEN_KEY = "loveiq-report-token";
 
 function canUseStorage() {
   return typeof window !== "undefined";
@@ -48,6 +49,24 @@ export function finalizeReportSession(sessionId: string): void {
     }
   } catch {
     /* storage unavailable */
+  }
+}
+
+export function setReportToken(token: string): void {
+  if (!canUseStorage()) return;
+  try {
+    localStorage.setItem(REPORT_TOKEN_KEY, token);
+  } catch {
+    /* storage unavailable */
+  }
+}
+
+export function getReportToken(): string | null {
+  if (!canUseStorage()) return null;
+  try {
+    return localStorage.getItem(REPORT_TOKEN_KEY);
+  } catch {
+    return null;
   }
 }
 

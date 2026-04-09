@@ -10,6 +10,10 @@ const sessionIdSchema = z.object({
   sessionId: z.string().uuid(),
 });
 
+const tokenSchema = z.object({
+  token: z.string().regex(/^rpt_[a-zA-Z0-9]{20}$/),
+});
+
 const RATE_LIMIT_CONFIG = {
   bucket: "report-view",
   limit: 10,
@@ -57,16 +61,19 @@ export async function GET(request: Request) {
     );
   }
 
-  // 3. Validate query param
+  // 3. Validate query param — accept either sessionId or token
   const url = new URL(request.url);
-  const parsed = sessionIdSchema.safeParse({
-    sessionId: url.searchParams.get("sessionId"),
-  });
-  if (!parsed.success) {
+  const rawToken = url.searchParams.get("token");
+  const rawSessionId = url.searchParams.get("sessionId");
+
+  const tokenParsed = rawToken ? tokenSchema.safeParse({ token: rawToken }) : null;
+  const sessionParsed = rawSessionId
+    ? sessionIdSchema.safeParse({ sessionId: rawSessionId })
+    : null;
+
+  if (!tokenParsed?.success && !sessionParsed?.success) {
     return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   }
-
-  const { sessionId } = parsed.data;
 
   // 4. Supabase config
   const supabaseUrl = process.env.SUPABASE_URL;
@@ -83,16 +90,40 @@ export async function GET(request: Request) {
   };
 
   try {
-    // 5. Look up survey_submission by session_id
+    // 5. Look up survey_submission — by token or session_id
+    let submissionQuery: string;
+
+    if (tokenParsed?.success) {
+      // Token-based: look up report_access_token → get submission_id → get submission
+      const tokenRes = await getBreaker("supabase").fire(() =>
+        fetchWithTimeout(
+          `${supabaseUrl}/rest/v1/report_access_token?token=eq.${encodeURIComponent(tokenParsed.data.token)}&select=survey_submission_id&limit=1`,
+          { headers, cache: "no-store", timeoutMs: SUPABASE_TIMEOUT_MS }
+        )
+      );
+
+      if (!tokenRes.ok) {
+        logger.error({ status: tokenRes.status }, "Token lookup failed");
+        return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
+      }
+
+      const tokenRows = (await tokenRes.json()) as Array<{ survey_submission_id: number }>;
+      if (!Array.isArray(tokenRows) || tokenRows.length === 0) {
+        return NextResponse.json({ error: "Report not found." }, { status: 404 });
+      }
+
+      submissionQuery = `${supabaseUrl}/rest/v1/survey_submission?id=eq.${tokenRows[0].survey_submission_id}&select=id,created_date_time,app_user!fk_survey_submission_user(first_name)&limit=1`;
+    } else {
+      const sid = (sessionParsed as { success: true; data: { sessionId: string } }).data.sessionId;
+      submissionQuery = `${supabaseUrl}/rest/v1/survey_submission?session_id=eq.${encodeURIComponent(sid)}&select=id,created_date_time,app_user!fk_survey_submission_user(first_name)&limit=1`;
+    }
+
     const submissionRes = await getBreaker("supabase").fire(() =>
-      fetchWithTimeout(
-        `${supabaseUrl}/rest/v1/survey_submission?session_id=eq.${encodeURIComponent(sessionId)}&select=id,created_date_time,app_user!fk_survey_submission_user(first_name)&limit=1`,
-        {
-          headers,
-          cache: "no-store",
-          timeoutMs: SUPABASE_TIMEOUT_MS,
-        }
-      )
+      fetchWithTimeout(submissionQuery, {
+        headers,
+        cache: "no-store",
+        timeoutMs: SUPABASE_TIMEOUT_MS,
+      })
     );
 
     if (!submissionRes.ok) {

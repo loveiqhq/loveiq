@@ -1,3 +1,4 @@
+import { randomBytes } from "crypto";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { checkRateLimit, checkCooldown, getClientIp } from "@/lib/ratelimit";
@@ -11,6 +12,16 @@ import {
   ensureSubmissionScored,
   submitSurveyOnce,
 } from "@/lib/survey/server";
+
+// eslint-disable-next-line no-secrets/no-secrets
+const BASE62 = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+
+function generateReportToken(): string {
+  const bytes = randomBytes(20);
+  let token = "rpt_";
+  for (const b of bytes) token += BASE62[b % BASE62.length];
+  return token;
+}
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -156,6 +167,37 @@ export async function POST(request: Request) {
       scoringResult
     );
 
+    // Generate permanent report access token (non-blocking — fire and forget)
+    let reportToken: string | undefined;
+    try {
+      const supabaseUrl = process.env.SUPABASE_URL;
+      const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (supabaseUrl && serviceKey) {
+        reportToken = generateReportToken();
+        const tokenRes = await fetchWithTimeout(`${supabaseUrl}/rest/v1/report_access_token`, {
+          method: "POST",
+          headers: {
+            apikey: serviceKey,
+            Authorization: `Bearer ${serviceKey}`,
+            "Content-Type": "application/json",
+            Prefer: "return=minimal",
+          },
+          body: JSON.stringify({
+            token: reportToken,
+            survey_submission_id: submissionId,
+          }),
+          timeoutMs: 5000,
+        });
+        if (!tokenRes.ok) {
+          logger.error({ status: tokenRes.status }, "Failed to create report access token");
+          reportToken = undefined;
+        }
+      }
+    } catch (err) {
+      logger.error({ err }, "Error creating report access token");
+      reportToken = undefined;
+    }
+
     scheduleAfterResponse("survey-slack-notification", async () => {
       if (isExisting) {
         logger.info(
@@ -177,6 +219,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
+      ...(reportToken ? { reportToken } : {}),
       ...(scoringSummary
         ? {
             primaryArchetype: scoringSummary.primaryArchetype,
