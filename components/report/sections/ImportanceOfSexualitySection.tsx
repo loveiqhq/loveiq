@@ -118,11 +118,12 @@ const ImportanceOfSexualitySection: FC<Props> = ({
 
             {/* Bar 3: USER — always in position 3 with tooltip */}
             <div className="report-importance__bar">
-              <div className="report-importance__tooltip">You</div>
               <div
                 className="report-importance__bar-fill report-importance__bar-fill--user"
                 style={{ height: `${userHeight}%` }}
-              />
+              >
+                <div className="report-importance__tooltip">You</div>
+              </div>
             </div>
 
             {/* Bar 4: High reference */}

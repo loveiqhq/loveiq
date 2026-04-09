@@ -3365,11 +3365,10 @@ h3,
 }
 
 .report-importance__bar-fill {
+  position: relative;
   width: 100%;
   border-radius: 8px 8px 0 0;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
-  overflow: hidden;
-  position: relative;
 }
 
 .report-importance__bar-fill--ref {
@@ -3398,8 +3397,9 @@ h3,
 /* YOU tooltip */
 .report-importance__tooltip {
   position: absolute;
-  top: -8px;
-  transform: translateY(-100%);
+  top: 0;
+  left: 50%;
+  transform: translate(-50%, -100%) translateY(-8px);
   display: flex;
   align-items: center;
   justify-content: center;
