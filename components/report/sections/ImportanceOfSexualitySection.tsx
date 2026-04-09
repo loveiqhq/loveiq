@@ -30,25 +30,30 @@ function getBand(value: number | null): { label: string; description: string } {
 }
 
 /**
- * Map 1-7 value to bar height percentage.
- * 1 → 10%, 4 → 50%, 7 → 92%
+ * Map 1-7 value to bar height percentage of the chart.
+ * Low zone: 1→12%, 2→25%
+ * Medium zone: 3→40%, 4→52%, 5→65%
+ * High zone: 6→78%, 7→92%
  */
 function valueToHeight(v: number): number {
-  return Math.round(((v - 1) / 6) * 82 + 10);
+  return Math.round(((v - 1) / 6) * 80 + 12);
 }
-
-/** Fixed reference bars at known positions */
-const BARS = [
-  { value: 1.8, isUser: false },
-  { value: 3.2, isUser: false },
-  // User bar is inserted dynamically
-  { value: 6.5, isUser: false },
-];
 
 function stripResultParagraph(html: string) {
   return html.replace(/<p><strong>Your result:\s*<\/strong>.*?<\/p>/i, "").trim();
 }
 
+/**
+ * Fixed chart bars:
+ * Position 0: Low reference (always short)
+ * Position 1: Low-medium reference
+ * Position 2: User bar (colored, with tooltip)
+ * Position 3: High reference (always tall)
+ *
+ * If user is Low, their bar is short and clearly in the low zone.
+ * If user is Medium, bar is mid-height.
+ * If user is High, bar is tall.
+ */
 const ImportanceOfSexualitySection: FC<Props> = ({
   generalHtml,
   importanceLabel,
@@ -56,9 +61,7 @@ const ImportanceOfSexualitySection: FC<Props> = ({
 }) => {
   const band = getBand(importanceValue);
   const userValue = importanceValue ?? 4;
-
-  // Build bar list: insert user bar in sorted position among reference bars
-  const allBars = [...BARS, { value: userValue, isUser: true }].sort((a, b) => a.value - b.value);
+  const userHeight = valueToHeight(userValue);
 
   return (
     <div className="space-y-10">
@@ -97,15 +100,38 @@ const ImportanceOfSexualitySection: FC<Props> = ({
               <div className="report-importance__gridline report-importance__gridline--faint" />
             </div>
 
-            {allBars.map((bar, i) => (
-              <div key={i} className="report-importance__bar">
-                {bar.isUser && <div className="report-importance__tooltip">You</div>}
-                <div
-                  className={`report-importance__bar-fill ${bar.isUser ? "report-importance__bar-fill--user" : "report-importance__bar-fill--ref"}`}
-                  style={{ height: `${valueToHeight(bar.value)}%` }}
-                />
-              </div>
-            ))}
+            {/* Bar 1: Low reference */}
+            <div className="report-importance__bar">
+              <div
+                className="report-importance__bar-fill report-importance__bar-fill--ref"
+                style={{ height: `${valueToHeight(1.5)}%` }}
+              />
+            </div>
+
+            {/* Bar 2: Low-medium reference */}
+            <div className="report-importance__bar">
+              <div
+                className="report-importance__bar-fill report-importance__bar-fill--ref"
+                style={{ height: `${valueToHeight(3.5)}%` }}
+              />
+            </div>
+
+            {/* Bar 3: USER — always in position 3 with tooltip */}
+            <div className="report-importance__bar">
+              <div className="report-importance__tooltip">You</div>
+              <div
+                className="report-importance__bar-fill report-importance__bar-fill--user"
+                style={{ height: `${userHeight}%` }}
+              />
+            </div>
+
+            {/* Bar 4: High reference */}
+            <div className="report-importance__bar">
+              <div
+                className="report-importance__bar-fill report-importance__bar-fill--ref report-importance__bar-fill--tall"
+                style={{ height: `${valueToHeight(6.5)}%` }}
+              />
+            </div>
           </div>
         </div>
       </article>
