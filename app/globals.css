@@ -1493,8 +1493,7 @@ h3,
 .report-stage-card__title,
 .report-hero-card__motivation-value,
 .report-trait__value,
-.report-progress__header strong,
-.report-footer__title {
+.report-progress__header strong {
   font-family: var(--font-serif);
 }
 
@@ -2066,57 +2065,7 @@ h3,
   filter: brightness(1.1);
 }
 
-.report-footer {
-  display: grid;
-  gap: 1.25rem;
-  padding: 1.4rem;
-  margin-top: 2rem;
-}
-
-.report-footer__brand {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 0.9rem;
-  align-items: center;
-}
-
-.report-footer__mark {
-  width: 3rem;
-  height: 3rem;
-  background: rgb(var(--report-accent-rgb) / 0.12);
-  color: rgb(var(--report-accent-rgb));
-}
-
-.report-footer__mark svg {
-  width: 1.35rem;
-  height: 1.35rem;
-}
-
-.report-footer__title {
-  margin: 0.2rem 0 0;
-  font-size: 2rem;
-  line-height: 1;
-  letter-spacing: -0.035em;
-  color: #fff;
-}
-
-.report-footer__meta {
-  display: grid;
-  gap: 1rem;
-  color: rgba(255, 255, 255, 0.66);
-  line-height: 1.7;
-}
-
-.report-footer__links {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
-}
-
-.report-footer__links a {
-  color: rgba(255, 255, 255, 0.72);
-  text-decoration: none;
-}
+/* Old footer base styles removed — replaced in responsive section */
 
 .report-prose {
   position: relative;
@@ -3178,18 +3127,61 @@ h3,
 
 /* Archetype text and premium preview render as plain prose, no box */
 
+/* ── Report Footer (Figma-matched) ── */
 .report-footer {
-  margin-top: 5.5rem;
-  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  margin-top: 80px;
+  padding: 40px 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  text-align: center;
 }
 
-.report-footer__mark {
-  background: rgb(var(--report-brand-rgb) / 0.1);
-  color: rgb(var(--report-brand-rgb));
+.report-footer__brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.report-footer__meta,
+.report-footer__heart {
+  width: 20px;
+  height: 20px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.report-footer__logo {
+  font-family: var(--font-serif);
+  font-size: 20px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.report-footer__disclaimer {
+  margin: 0;
+  max-width: 600px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 300;
+  line-height: 20px;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.report-footer__links {
+  display: flex;
+  gap: 32px;
+}
+
 .report-footer__links a {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 300;
+  color: rgba(255, 255, 255, 0.45);
+  text-decoration: none;
+  transition: color 180ms ease;
+}
+
+.report-footer__links a:hover {
   color: rgba(255, 255, 255, 0.7);
 }
 

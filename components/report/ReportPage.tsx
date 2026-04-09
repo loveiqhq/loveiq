@@ -410,7 +410,7 @@ const ReportPage: FC = () => {
             );
           })}
 
-          <ReportFooter reportDate={reportDate} theme={theme} />
+          <ReportFooter />
         </div>
       </div>
     </main>
