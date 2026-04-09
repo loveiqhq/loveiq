@@ -65,12 +65,14 @@ function describeScalarValue(label: string, value: number | null) {
 }
 
 const WelcomeSection: FC<Props> = ({ feedbackWidget, generalHtml, sectionId, snapshot }) => {
-  const ref = useRef<HTMLElement>(null);
+  const sectionRef = useRef<HTMLElement>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
   const [isVisible, setIsVisible] = useState(false);
   const [animateReady, setAnimateReady] = useState(false);
 
+  // Fade-in for the whole section
   useEffect(() => {
-    const element = ref.current;
+    const element = sectionRef.current;
     if (!element) return;
 
     const observer = new IntersectionObserver(
@@ -87,12 +89,25 @@ const WelcomeSection: FC<Props> = ({ feedbackWidget, generalHtml, sectionId, sna
     return () => observer.disconnect();
   }, []);
 
-  // Delay animation start so the initial "0" / empty state renders first
+  // Trigger gauge animations only when the cards grid scrolls into view
   useEffect(() => {
-    if (!isVisible) return;
-    const id = setTimeout(() => setAnimateReady(true), 300);
-    return () => clearTimeout(id);
-  }, [isVisible]);
+    const grid = gridRef.current;
+    if (!grid) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          // Short delay so the "0" state renders first
+          setTimeout(() => setAnimateReady(true), 300);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.2 }
+    );
+
+    observer.observe(grid);
+    return () => observer.disconnect();
+  }, []);
 
   const cleanHtml = generalHtml
     .replace(/<table>[\s\S]*?<\/table>/g, "")
@@ -101,7 +116,7 @@ const WelcomeSection: FC<Props> = ({ feedbackWidget, generalHtml, sectionId, sna
 
   return (
     <section
-      ref={ref}
+      ref={sectionRef}
       id={sectionId}
       data-report-section="true"
       className={`report-section report-section--welcome ${isVisible ? "is-visible" : ""}`}
@@ -133,7 +148,7 @@ const WelcomeSection: FC<Props> = ({ feedbackWidget, generalHtml, sectionId, sna
         dangerouslySetInnerHTML={{ __html: cleanHtml }}
       />
 
-      <div className="report-welcome-grid">
+      <div ref={gridRef} className="report-welcome-grid">
         <MetricCard
           animate={animateReady}
           description={describeScalarValue(
