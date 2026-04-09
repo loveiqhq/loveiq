@@ -41,12 +41,18 @@ function getSubmissionUserName(submission: SubmissionRow): string | null {
 }
 
 export async function GET(request: Request) {
-  // 1. CSRF verification
-  if (!(await verifyCsrfToken(request))) {
+  // 1. Parse params first to decide auth strategy
+  const url = new URL(request.url);
+  const rawToken = url.searchParams.get("token");
+  const rawSessionId = url.searchParams.get("sessionId");
+  const isTokenAccess = !!rawToken;
+
+  // 2. CSRF verification — skip for token-based access (email links won't have CSRF cookie)
+  if (!isTokenAccess && !(await verifyCsrfToken(request))) {
     return NextResponse.json({ error: "Invalid request." }, { status: 403 });
   }
 
-  // 2. Rate limiting
+  // 3. Rate limiting
   const ip = getClientIp(request);
   const rateLimit = await checkRateLimit(ip, RATE_LIMIT_CONFIG);
   if (!rateLimit.allowed) {
@@ -60,11 +66,6 @@ export async function GET(request: Request) {
       }
     );
   }
-
-  // 3. Validate query param — accept either sessionId or token
-  const url = new URL(request.url);
-  const rawToken = url.searchParams.get("token");
-  const rawSessionId = url.searchParams.get("sessionId");
 
   const tokenParsed = rawToken ? tokenSchema.safeParse({ token: rawToken }) : null;
   const sessionParsed = rawSessionId
