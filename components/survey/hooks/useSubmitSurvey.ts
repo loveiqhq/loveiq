@@ -6,7 +6,7 @@ import { getCsrfToken } from "@/lib/csrf-client";
 import type { SurveyAnswers } from "@/lib/survey/types";
 import { getSurveyContactInfo } from "@/lib/survey/utils";
 import type { AnswerValue } from "./useSurveyState";
-import { getSessionId, setReportSessionId } from "./surveySession";
+import { getSessionId, setReportSessionId, setReportToken } from "./surveySession";
 import {
   clearPendingCompletion,
   loadPendingCompletion,
@@ -18,6 +18,7 @@ type SubmitStatus = "idle" | "submitting" | "success" | "error";
 
 export function useSubmitSurvey() {
   const [status, setStatus] = useState<SubmitStatus>("idle");
+  const [reportToken, setReportTokenState] = useState<string | null>(null);
   const [pendingCompletion, setPendingCompletion] = useState<PendingSurveyCompletion | null>(() =>
     loadPendingCompletion()
   );
@@ -77,6 +78,15 @@ export function useSubmitSurvey() {
 
         if (res.ok) {
           setReportSessionId(payload.sessionId);
+          try {
+            const json = (await res.json()) as { reportToken?: string };
+            if (json.reportToken) {
+              setReportToken(json.reportToken);
+              setReportTokenState(json.reportToken);
+            }
+          } catch {
+            /* token extraction is best-effort */
+          }
           syncPendingCompletion(null);
           setStatus("success");
           return;
@@ -139,6 +149,7 @@ export function useSubmitSurvey() {
     retryPending,
     clearPendingCompletion: () => syncPendingCompletion(null),
     hasPendingCompletion: !!pendingCompletion,
+    reportToken,
     status,
   };
 }

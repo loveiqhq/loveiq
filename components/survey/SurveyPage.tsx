@@ -1161,7 +1161,7 @@ const SurveyPage: FC = () => {
     setStep(TOTAL_STEPS + 1); // jump to consent
   }, []);
 
-  const handleReturn = useCallback((clearAnswers?: boolean) => {
+  const handleReturn = useCallback((clearAnswers?: boolean, reportToken?: string | null) => {
     try {
       if (clearAnswers) {
         copySurveySessionToReportSession();
@@ -1174,7 +1174,11 @@ const SurveyPage: FC = () => {
     } catch {
       /* ignore */
     }
-    window.location.href = clearAnswers ? "/report" : "/";
+    if (clearAnswers && reportToken) {
+      window.location.href = `/report/${reportToken}`;
+    } else {
+      window.location.href = clearAnswers ? "/report" : "/";
+    }
   }, []);
 
   const handleAgree = useCallback(() => {
@@ -1208,7 +1212,9 @@ const SurveyPage: FC = () => {
   }
 
   // Survey engine
-  return <SurveyEngine onExit={() => handleReturn()} onComplete={() => handleReturn(true)} />;
+  return (
+    <SurveyEngine onExit={() => handleReturn()} onComplete={(token) => handleReturn(true, token)} />
+  );
 };
 
 export default SurveyPage;

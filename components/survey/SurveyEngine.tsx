@@ -33,7 +33,7 @@ type CompletionPhase = "processing" | "ready" | "wizard" | "done";
 
 interface SurveyEngineProps {
   onExit: () => void;
-  onComplete: () => void;
+  onComplete: (reportToken?: string | null) => void;
 }
 
 const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
@@ -43,6 +43,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
     submit: submitSurvey,
     retryPending,
     hasPendingCompletion,
+    reportToken,
     status: submitStatus,
   } = useSubmitSurvey();
   const utmTracker = useUtmCapture();
@@ -319,7 +320,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
 
     // Pre-report wizard phase
     if (completionPhase === "wizard") {
-      return <PreReportWizard onComplete={onComplete} />;
+      return <PreReportWizard onComplete={() => onComplete(reportToken)} />;
     }
 
     // Error confirmation only
