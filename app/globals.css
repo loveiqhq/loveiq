@@ -28,6 +28,11 @@ html {
   scroll-behavior: smooth;
   min-height: 100%;
   overflow-x: hidden;
+  /* Consistent font rendering across WebKit/Blink and Gecko */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Remove tap highlight flash on iOS/Android */
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
@@ -880,6 +885,7 @@ h3,
 .report-page {
   position: relative;
   min-height: 100vh;
+  min-height: 100svh; /* svh: excludes browser chrome — prevents iOS Safari jump */
   overflow-x: clip;
   background:
     radial-gradient(circle at 10% 20%, rgb(var(--report-accent-rgb) / 0.12), transparent 0 32%),
@@ -930,6 +936,7 @@ h3,
 .report-status-screen {
   display: grid;
   min-height: 100vh;
+  min-height: 100svh;
   place-items: center;
   padding: 1.5rem;
   background: linear-gradient(180deg, #150c23 0%, #120919 100%);
@@ -943,6 +950,7 @@ h3,
     0 30px 90px rgba(0, 0, 0, 0.4),
     inset 0 1px 0 rgba(255, 255, 255, 0.04);
   backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
 }
 
 .report-card {
@@ -1643,6 +1651,7 @@ h3,
   left: -380px;
   top: 35px;
   background: var(--prob-accent, #9333ea);
+  opacity: 0.8;
   filter: blur(200px);
 }
 
@@ -1650,7 +1659,7 @@ h3,
   right: -200px;
   top: -61px;
   background: var(--prob-accent, #9333ea);
-  opacity: 0.5;
+  opacity: 0.4;
   filter: blur(120px);
 }
 
@@ -2230,6 +2239,23 @@ h3,
     justify-content: flex-start;
   }
 
+  /* Feedback panel: escape the relative ancestor and center in viewport */
+  .report-fb__panel {
+    position: fixed;
+    right: 16px;
+    left: 16px;
+    top: 20vh;
+    width: auto;
+    margin-top: 0;
+    max-height: 70vh;
+    overflow-y: auto;
+    z-index: 55;
+  }
+
+  .report-fb--expanded {
+    width: auto;
+  }
+
   .report-prob {
     padding: 20px;
   }
@@ -2241,20 +2267,52 @@ h3,
 
   .report-prob__hero {
     flex-direction: column;
-    padding: 24px;
-    width: calc(100% + 40px);
-    margin: 0 -20px;
+    align-items: center;
+    width: 100%;
+    margin: 0;
+    padding: 32px 20px 28px;
     gap: 20px;
   }
 
+  /* Pull glows back to card edges so they don't flood the narrow mobile card */
+  .report-prob__hero-glow--l {
+    left: -430px;
+    opacity: 0.45;
+  }
+
+  .report-prob__hero-glow--r {
+    right: -350px;
+    opacity: 0.3;
+  }
+
+  .report-prob__hero-score {
+    width: 100%;
+  }
+
+  .report-prob__hero-bar {
+    width: min(200px, 100%);
+  }
+
+  .report-prob__hero-profile {
+    flex: none;
+    width: 100%;
+    text-align: center;
+  }
+
   .report-prob__hero-value span {
-    font-size: 40px;
-    line-height: 40px;
+    font-size: 48px;
+    line-height: 48px;
   }
 
   .report-prob__hero-profile h4 {
-    font-size: 24px;
-    line-height: 28px;
+    font-size: 28px;
+    line-height: 32px;
+  }
+
+  .report-prob__hero-icon {
+    width: 88px;
+    height: 88px;
+    border-radius: 20px;
   }
 
   .report-prob__hero-cta {
@@ -2332,6 +2390,7 @@ h3,
   background: var(--report-surface);
   box-shadow: none;
   backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 .report-card,
@@ -2594,7 +2653,8 @@ h3,
 
 .report-mobile-sticky {
   position: fixed;
-  top: 0;
+  /* Push bar below the status-bar/notch on notched phones (viewport-fit: cover) */
+  top: env(safe-area-inset-top, 0px);
   right: 0;
   left: 0;
   z-index: 50;
@@ -2703,7 +2763,8 @@ h3,
   left: 0;
   display: flex;
   flex-direction: column;
-  max-height: 85dvh;
+  max-height: 85vh;
+  max-height: 85dvh; /* dvh fallback for older Safari/Android */
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-bottom: 0;
   border-radius: 20px 20px 0 0;
@@ -2764,6 +2825,7 @@ h3,
   padding: 0.5rem 1rem max(2rem, env(safe-area-inset-bottom));
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain; /* prevent scroll chaining to page on iOS */
   scrollbar-width: thin;
   scrollbar-color: rgba(192, 132, 252, 0.25) transparent;
 }
@@ -2783,6 +2845,7 @@ h3,
   top: 0;
   width: 288px;
   height: 100vh;
+  height: 100dvh; /* dvh tracks current viewport size — correct for sticky sidebar */
   border-right: 1px solid rgba(255, 255, 255, 0.05);
 }
 
@@ -3002,7 +3065,8 @@ h3,
 
 .report-section {
   padding: 0;
-  scroll-margin-top: 2rem;
+  /* 4rem (64px) clears the 52px mobile sticky bar + 12px buffer */
+  scroll-margin-top: 4rem;
 }
 
 .report-section + .report-section {
