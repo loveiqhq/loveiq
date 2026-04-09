@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useRef, type FC } from "react";
+import { useEffect, useMemo, useRef, useState, type FC } from "react";
 import type { AccessTier, DisplayReportSection } from "./reportTitles";
 
 interface Props {
@@ -20,8 +20,22 @@ const ReportNavigation: FC<Props> = ({
   sections,
 }) => {
   const navRef = useRef<HTMLElement>(null);
+  const introRef = useRef<HTMLDivElement>(null);
+  const browseButtonRef = useRef<HTMLButtonElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const drawerRef = useRef<HTMLDivElement>(null);
 
-  // Capture wheel events on the nav so the page doesn't scroll instead
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [stickyVisible, setStickyVisible] = useState(false);
+
+  // Derived section progress values
+  const linkSections = useMemo(() => sections.filter((s) => s.navType === "link"), [sections]);
+  const activeSection = sections.find((s) => s.id === activeSectionId);
+  const activeProgress = activeSection?.sectionNumber ?? 1;
+  const totalLinks = linkSections.length;
+  const progressLabel = `${String(activeProgress).padStart(2, "0")} / ${String(totalLinks).padStart(2, "0")}`;
+
+  // Capture wheel events on the desktop nav so the page doesn't scroll instead
   useEffect(() => {
     const nav = navRef.current;
     if (!nav) return;
@@ -41,38 +55,172 @@ const ReportNavigation: FC<Props> = ({
     return () => nav.removeEventListener("wheel", onWheel);
   }, []);
 
+  // Show sticky bar once the intro block leaves the viewport
+  useEffect(() => {
+    const intro = introRef.current;
+    if (!intro || typeof IntersectionObserver === "undefined") return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => setStickyVisible(!entry.isIntersecting),
+      { threshold: 0 }
+    );
+
+    observer.observe(intro);
+    return () => observer.disconnect();
+  }, []);
+
+  // Lock body scroll while the drawer is open
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [drawerOpen]);
+
+  // Close drawer on Escape
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setDrawerOpen(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [drawerOpen]);
+
+  // Return focus to the trigger that opened the drawer
+  useEffect(() => {
+    if (drawerOpen) {
+      closeButtonRef.current?.focus();
+    } else {
+      browseButtonRef.current?.focus();
+    }
+  }, [drawerOpen]);
+
   return (
     <>
       {/* ── Mobile nav (below xl) ── */}
-      <div className="report-mobile-overview xl:hidden">
-        <div className="report-mobile-overview__header">
-          <p className="report-overline">LoveIQ report</p>
-          <h1 className="report-mobile-overview__title">{primaryArchetype}</h1>
-          <p className="report-mobile-overview__meta">{reportDate}</p>
+      <div className="xl:hidden">
+        {/* LAYER 1 — Compact intro block */}
+        <div ref={introRef} className="report-mobile-intro">
+          <div className="report-mobile-intro__meta">
+            <p className="report-overline">LoveIQ report</p>
+            {totalLinks > 0 && (
+              <span
+                className="report-mobile-intro__progress"
+                aria-label={`Section ${activeProgress} of ${totalLinks}`}
+              >
+                {progressLabel}
+              </span>
+            )}
+          </div>
+          <h1 className="report-mobile-intro__title">{primaryArchetype}</h1>
+          <p className="report-mobile-intro__date">{reportDate}</p>
+          <button
+            ref={browseButtonRef}
+            type="button"
+            className="report-mobile-intro__browse-btn"
+            aria-expanded={drawerOpen}
+            aria-controls="report-chapter-drawer"
+            onClick={() => setDrawerOpen(true)}
+          >
+            Browse chapters
+          </button>
         </div>
 
-        <nav aria-label="Report sections" className="report-mobile-nav">
-          {sections.map((section) => (
-            <a
-              key={section.id}
-              href={`#${section.id}`}
-              aria-current={activeSectionId === section.id ? "location" : undefined}
-              title={section.displayTitle}
-              className={`report-mobile-nav__link ${activeSectionId === section.id ? "is-active" : ""}`}
-              onClick={() => onSectionClick?.(section.id)}
+        {/* LAYER 2 — Slim sticky bar (appears once intro scrolls away) */}
+        <div
+          className={`report-mobile-sticky${stickyVisible ? " is-visible" : ""}`}
+          aria-hidden={!stickyVisible}
+        >
+          <div className="report-mobile-sticky__section">
+            <span className="report-mobile-sticky__number">
+              {String(activeProgress).padStart(2, "0")}
+            </span>
+            <span className="report-mobile-sticky__label">{activeSection?.navTitle ?? ""}</span>
+          </div>
+          <button
+            type="button"
+            className="report-mobile-sticky__chapters-btn"
+            tabIndex={stickyVisible ? 0 : -1}
+            aria-expanded={drawerOpen}
+            aria-controls="report-chapter-drawer"
+            onClick={() => setDrawerOpen(true)}
+          >
+            ≡ Chapters
+          </button>
+        </div>
+
+        {/* LAYER 3 — Chapter drawer */}
+        {drawerOpen && (
+          <div className="report-chapter-drawer-root">
+            <div
+              className="report-chapter-backdrop"
+              aria-hidden="true"
+              onClick={() => setDrawerOpen(false)}
+            />
+            <div
+              ref={drawerRef}
+              id="report-chapter-drawer"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Report chapters"
+              className="report-chapter-panel"
             >
-              <span className="report-mobile-nav__copy">
-                <span className="report-mobile-nav__number">
-                  {String(section.sectionNumber).padStart(2, "0")}
-                </span>
-                <span className="report-mobile-nav__label">{section.navTitle}</span>
-              </span>
-              <span className="report-mobile-nav__meta">
-                <NavBadge tier={section.accessTier} />
-              </span>
-            </a>
-          ))}
-        </nav>
+              <div className="report-chapter-panel__header">
+                <span className="report-chapter-panel__heading">Chapters</span>
+                <button
+                  ref={closeButtonRef}
+                  type="button"
+                  className="report-chapter-panel__close"
+                  aria-label="Close chapter list"
+                  onClick={() => setDrawerOpen(false)}
+                >
+                  <svg
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    aria-hidden="true"
+                  >
+                    <path d="M3 3l10 10M13 3L3 13" strokeLinecap="round" />
+                  </svg>
+                </button>
+              </div>
+              <nav aria-label="Report sections" className="report-chapter-panel__nav">
+                {sections.map((section) => (
+                  <a
+                    key={section.id}
+                    href={`#${section.id}`}
+                    aria-current={activeSectionId === section.id ? "location" : undefined}
+                    title={section.displayTitle}
+                    className={[
+                      "report-mobile-nav__link",
+                      activeSectionId === section.id && "is-active",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                    onClick={() => {
+                      onSectionClick?.(section.id);
+                      setDrawerOpen(false);
+                    }}
+                  >
+                    <span className="report-mobile-nav__copy">
+                      <span className="report-mobile-nav__number">
+                        {String(section.sectionNumber).padStart(2, "0")}
+                      </span>
+                      <span className="report-mobile-nav__label">{section.navTitle}</span>
+                    </span>
+                    <span className="report-mobile-nav__meta">
+                      <NavBadge tier={section.accessTier} />
+                    </span>
+                  </a>
+                ))}
+              </nav>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── Desktop sidebar (xl+) ── */}

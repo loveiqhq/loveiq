@@ -190,30 +190,60 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   useEffect(() => {
     if (status !== "success") return;
 
-    const observedSections = reportSections
-      .map((section) => document.getElementById(section.id))
-      .filter((element): element is HTMLElement => element instanceof HTMLElement);
+    // Activation line: the scroll position offset (px from viewport top) at which
+    // a section is considered "entered". 90px clears the sticky nav bar.
+    const ACTIVATION_LINE = 90;
 
-    if (observedSections.length === 0) return;
+    function buildSectionTops() {
+      return reportSections
+        .map((section) => {
+          const el = document.getElementById(section.id);
+          if (!el) return null;
+          return { id: section.id, top: el.getBoundingClientRect().top + window.scrollY };
+        })
+        .filter((s): s is { id: string; top: number } => s !== null);
+    }
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const visible = entries
-          .filter((entry) => entry.isIntersecting)
-          .sort((left, right) => right.intersectionRatio - left.intersectionRatio);
+    let sectionTops = buildSectionTops();
+    let rafId: number | null = null;
 
-        if (visible.length > 0) {
-          setActiveSectionId(visible[0].target.id);
+    function updateActive() {
+      const threshold = window.scrollY + ACTIVATION_LINE;
+      let activeId = sectionTops[0]?.id ?? reportSections[0]?.id ?? "welcome";
+      for (const section of sectionTops) {
+        if (section.top <= threshold) {
+          activeId = section.id;
+        } else {
+          break;
         }
-      },
-      {
-        rootMargin: "-18% 0px -58% 0px",
-        threshold: [0.15, 0.3, 0.55],
       }
-    );
+      setActiveSectionId(activeId);
+    }
 
-    observedSections.forEach((section) => observer.observe(section));
-    return () => observer.disconnect();
+    function onScroll() {
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        updateActive();
+      });
+    }
+
+    function onResize() {
+      sectionTops = buildSectionTops();
+      updateActive();
+    }
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onResize, { passive: true });
+
+    // Compute initial active section after render
+    updateActive();
+
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onResize);
+      if (rafId !== null) cancelAnimationFrame(rafId);
+    };
   }, [status]);
 
   if (status === "loading") {
