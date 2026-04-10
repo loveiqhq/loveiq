@@ -1,109 +1,77 @@
-import type { FC, ReactNode } from "react";
+import type { FC } from "react";
 
-interface FragmentProps {
-  children: ReactNode;
-  height: number;
-  viewBox: string;
-  width: number;
-  x: number;
-  y: number;
-}
-
-const FigmaFragment: FC<FragmentProps> = ({ children, height, viewBox, width, x, y }) => (
-  <svg
-    x={x}
-    y={y}
-    width={width}
-    height={height}
-    viewBox={viewBox}
-    fill="none"
-    overflow="visible"
-    aria-hidden="true"
-  >
-    {children}
-  </svg>
-);
-
-export const ShareReportIcon: FC = () => (
-  <svg viewBox="0 0 11.1 12.6" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-    <FigmaFragment x={0} y={0} width={2.667} height={2.229} viewBox="0 0 4 4">
-      <path
-        d="M0.5 0.5H1.83333C2.18696 0.5 2.52609 0.640476 2.77614 0.890524C3.02619 1.14057 3.16667 1.47971 3.16667 1.83333V2.72933"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </FigmaFragment>
-    <FigmaFragment x={0.833} y={4.667} width={5.333} height={2.667} viewBox="0 0 7 4">
-      <path
-        d="M5.16667 0.5H1.16667C0.798477 0.5 0.5 0.798477 0.5 1.16667V2.5C0.5 2.86819 0.798477 3.16667 1.16667 3.16667H5.16667C5.53486 3.16667 5.83333 2.86819 5.83333 2.5V1.16667C5.83333 0.798477 5.53486 0.5 5.16667 0.5Z"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </FigmaFragment>
-    <FigmaFragment x={0} y={0} width={10.529} height={12} viewBox="0 0 12 13">
-      <path
-        d="M3.16667 0.5H1.83333C1.47971 0.5 1.14057 0.640476 0.890524 0.890524C0.640476 1.14057 0.5 1.47971 0.5 1.83333V11.1667C0.5 11.5203 0.640476 11.8594 0.890524 12.1095C1.14057 12.3595 1.47971 12.5 1.83333 12.5H9.83333C10.0819 12.5001 10.3256 12.4306 10.5368 12.2995C10.7481 12.1684 10.9184 11.9808 11.0287 11.758"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </FigmaFragment>
-    <FigmaFragment x={2.167} y={7.833} width={6.667} height={1} viewBox="0 0 8 1">
-      <path
-        d="M0.5 0.5H7.16667"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </FigmaFragment>
-    <FigmaFragment x={8.167} y={4.667} width={2.667} height={5.333} viewBox="0 0 4 7">
-      <path
-        d="M0.5 5.83333L3.16667 3.16667L0.5 0.5"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </FigmaFragment>
-  </svg>
-);
-
-const FriendBaseIcon: FC = () => (
+const FriendPlusPaths: FC = () => (
   <>
-    <FigmaFragment x={0} y={0} width={5.333} height={5.333} viewBox="0 0 7 7">
-      <path
-        d="M3.16667 5.83333C4.63943 5.83333 5.83333 4.63943 5.83333 3.16667C5.83333 1.69391 4.63943 0.5 3.16667 0.5C1.69391 0.5 0.5 1.69391 0.5 3.16667C0.5 4.63943 1.69391 5.83333 3.16667 5.83333Z"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </FigmaFragment>
-    <FigmaFragment x={0.333} y={1} width={9.333} height={4} viewBox="0 0 11 5">
-      <path
-        d="M9.83333 4.5V3.16667C9.83333 2.45942 9.55238 1.78115 9.05228 1.28105C8.55219 0.780952 7.87391 0.5 7.16667 0.5H3.16667C2.45942 0.5 1.78115 0.780952 1.28105 1.28105C0.780952 1.78115 0.5 2.45942 0.5 3.16667V4.5"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </FigmaFragment>
-    <FigmaFragment x={5.833} y={3.167} width={4} height={1} viewBox="0 0 5 1">
-      <path d="M4.5 0.5H0.5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
-    </FigmaFragment>
-    <FigmaFragment x={7.833} y={1.167} width={1} height={4} viewBox="0 0 1 5">
-      <path d="M0.5 0.5V4.5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
-    </FigmaFragment>
+    <path
+      d="M10.6673 14V12.6667C10.6673 11.9594 10.3864 11.2811 9.88627 10.781C9.38617 10.281 8.70789 10 8.00065 10H4.00065C3.29341 10 2.61513 10.281 2.11503 10.781C1.61494 11.2811 1.33398 11.9594 1.33398 12.6667V14"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M6.00065 7.33333C7.47341 7.33333 8.66732 6.13943 8.66732 4.66667C8.66732 3.19391 7.47341 2 6.00065 2C4.52789 2 3.33398 3.19391 3.33398 4.66667C3.33398 6.13943 4.52789 7.33333 6.00065 7.33333Z"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M12.666 5.33331V9.33331"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M14.666 7.33331H10.666"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
   </>
 );
 
+export const ShareReportIcon: FC = () => (
+  <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <path
+      d="M7.33398 9.33331H14.0007"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M10.666 2.66669H11.9993C12.353 2.66669 12.6921 2.80716 12.9422 3.05721C13.1922 3.30726 13.3327 3.6464 13.3327 4.00002V4.89602"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M11.334 12L14.0007 9.33335L11.334 6.66669"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M5.33268 2.66669H3.99935C3.64573 2.66669 3.30659 2.80716 3.05654 3.05721C2.80649 3.30726 2.66602 3.6464 2.66602 4.00002V13.3334C2.66602 13.687 2.80649 14.0261 3.05654 14.2762C3.30659 14.5262 3.64573 14.6667 3.99935 14.6667H11.9993C12.248 14.6667 12.4916 14.5973 12.7028 14.4662C12.9141 14.3351 13.0844 14.1475 13.1947 13.9247"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M10.0007 1.33331H6.00065C5.63246 1.33331 5.33398 1.63179 5.33398 1.99998V3.33331C5.33398 3.7015 5.63246 3.99998 6.00065 3.99998H10.0007C10.3688 3.99998 10.6673 3.7015 10.6673 3.33331V1.99998C10.6673 1.63179 10.3688 1.33331 10.0007 1.33331Z"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
 export const ReferFriendIcon: FC = () => (
-  <svg viewBox="0 0 9.9 5.9" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-    <FriendBaseIcon />
+  <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <FriendPlusPaths />
   </svg>
 );
 
 export const InviteFriendIcon: FC = () => (
-  <svg viewBox="0 0 9.9 5.9" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-    <FriendBaseIcon />
+  <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <FriendPlusPaths />
   </svg>
 );
