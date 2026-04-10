@@ -3120,11 +3120,19 @@ h3,
 }
 
 .report-card--metric {
+  display: flex;
+  flex-direction: column;
   min-height: 392px;
   padding: 32px;
+  text-align: center;
 }
 
 .report-card__eyebrow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  width: 100%;
+  min-height: 3rem;
   margin-bottom: 1rem;
   color: var(--report-copy);
   font-size: 1rem;
@@ -3866,6 +3874,10 @@ h3,
   }
 
   .report-card--metric {
+    min-height: 0;
+  }
+
+  .report-card__eyebrow {
     min-height: 0;
   }
 
