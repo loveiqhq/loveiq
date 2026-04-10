@@ -321,12 +321,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareApplicationSchema) }}
         />
-        <Script
-          id="hotjar-contentsquare"
-          src="https://t.contentsquare.net/uxa/f1a8d593041c0.js"
-          strategy="afterInteractive"
-          nonce={nonce}
-        />
+        { }
+        <script src="https://t.contentsquare.net/uxa/f1a8d593041c0.js" async />
       </head>
       <body className="bg-white dark:bg-[#050208]">
         <a
