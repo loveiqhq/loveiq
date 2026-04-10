@@ -167,16 +167,34 @@ const WelcomeSection: FC<Props> = ({ feedbackWidget, generalHtml, sectionId, sna
     >
       <div className="report-section__actions-row">
         <a href="/survey" className="report-button">
-          <svg
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.8"
-          >
-            <path d="M15 6h3v3" />
-            <path d="M10 14 18 6" />
-            <path d="M18 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
+          <svg viewBox="0 0 11 7" aria-hidden="true" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path
+              d="M3.16667 5.83333C4.63943 5.83333 5.83333 4.63943 5.83333 3.16667C5.83333 1.69391 4.63943 0.5 3.16667 0.5C1.69391 0.5 0.5 1.69391 0.5 3.16667C0.5 4.63943 1.69391 5.83333 3.16667 5.83333Z"
+              stroke="currentColor"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <path
+              d="M9.83333 4.5V3.16667C9.83333 2.45942 9.55238 1.78115 9.05228 1.28105C8.55219 0.780952 7.87391 0.5 7.16667 0.5H3.16667C2.45942 0.5 1.78115 0.780952 1.28105 1.28105C0.780952 1.78115 0.5 2.45942 0.5 3.16667V4.5"
+              transform="translate(0.333 1)"
+              stroke="currentColor"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <path
+              d="M4.5 0.5H0.5"
+              transform="translate(5.833 3.167)"
+              stroke="currentColor"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <path
+              d="M0.5 0.5V4.5"
+              transform="translate(7.833 1.167)"
+              stroke="currentColor"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
           </svg>
           <span>Invite a Friend</span>
         </a>

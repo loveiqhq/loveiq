@@ -314,21 +314,72 @@ const LockBadge: FC = () => (
 );
 
 const ShareIcon: FC = () => (
-  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4">
-    <path d="M8 10.4V3.1" strokeLinecap="round" />
-    <path d="m5.3 5.8 2.7-2.7 2.7 2.7" strokeLinecap="round" strokeLinejoin="round" />
-    <path d="M3.2 10.1v1.3c0 .8.6 1.4 1.4 1.4h6.8c.8 0 1.4-.6 1.4-1.4v-1.3" strokeLinecap="round" />
+  <svg viewBox="0 0 12 13" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <path
+      d="M0.5 0.5H1.83333C2.18696 0.5 2.52609 0.640476 2.77614 0.890524C3.02619 1.14057 3.16667 1.47971 3.16667 1.83333V2.72933"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M5.16667 0.5H1.16667C0.798477 0.5 0.5 0.798477 0.5 1.16667V2.5C0.5 2.86819 0.798477 3.16667 1.16667 3.16667H5.16667C5.53486 3.16667 5.83333 2.86819 5.83333 2.5V1.16667C5.83333 0.798477 5.53486 0.5 5.16667 0.5Z"
+      transform="translate(0.833 4.667)"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M3.16667 0.5H1.83333C1.47971 0.5 1.14057 0.640476 0.890524 0.890524C0.640476 1.14057 0.5 1.47971 0.5 1.83333V11.1667C0.5 11.5203 0.640476 11.8594 0.890524 12.1095C1.14057 12.3595 1.47971 12.5 1.83333 12.5H9.83333C10.0819 12.5001 10.3256 12.4306 10.5368 12.2995C10.7481 12.1684 10.9184 11.9808 11.0287 11.758"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M0.5 0.5H7.16667"
+      transform="translate(2.167 7.833)"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M0.5 5.83333L3.16667 3.16667L0.5 0.5"
+      transform="translate(8.167 4.667)"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
   </svg>
 );
 
 const ReferIcon: FC = () => (
-  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.35">
+  <svg viewBox="0 0 11 7" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
     <path
-      d="M8 12.3c-.2 0-.4-.1-.6-.2C4.3 9.9 2.4 8 2.4 5.8c0-1.6 1.2-2.8 2.7-2.8 1 0 1.8.5 2.3 1.2C8 3.5 8.8 3 9.8 3c1.5 0 2.7 1.2 2.7 2.8 0 2.2-1.9 4.1-5 6.3-.1.1-.3.2-.5.2Z"
+      d="M3.16667 5.83333C4.63943 5.83333 5.83333 4.63943 5.83333 3.16667C5.83333 1.69391 4.63943 0.5 3.16667 0.5C1.69391 0.5 0.5 1.69391 0.5 3.16667C0.5 4.63943 1.69391 5.83333 3.16667 5.83333Z"
+      stroke="currentColor"
+      strokeLinecap="round"
       strokeLinejoin="round"
     />
-    <path d="M13 3.5v3.5" strokeLinecap="round" />
-    <path d="M11.2 5.3h3.6" strokeLinecap="round" />
+    <path
+      d="M9.83333 4.5V3.16667C9.83333 2.45942 9.55238 1.78115 9.05228 1.28105C8.55219 0.780952 7.87391 0.5 7.16667 0.5H3.16667C2.45942 0.5 1.78115 0.780952 1.28105 1.28105C0.780952 1.78115 0.5 2.45942 0.5 3.16667V4.5"
+      transform="translate(0.333 1)"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M4.5 0.5H0.5"
+      transform="translate(5.833 3.167)"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M0.5 0.5V4.5"
+      transform="translate(7.833 1.167)"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
   </svg>
 );
 
