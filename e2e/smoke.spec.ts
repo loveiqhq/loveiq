@@ -44,6 +44,23 @@ test.describe("smoke tests", () => {
     expect(headers["strict-transport-security"]).toBeDefined();
   });
 
+  test("Contentsquare tag is present in the server-rendered head", async ({ request }) => {
+    const res = await request.get("/");
+    expect(res.status()).toBe(200);
+
+    const html = await res.text();
+    const head = html.match(/<head[^>]*>([\s\S]*?)<\/head>/i)?.[1];
+
+    expect(head).toBeDefined();
+    expect(head).toContain('src="https://t.contentsquare.net/uxa/f1a8d593041c0.js"');
+    expect(head).not.toMatch(
+      /https:\/\/t\.contentsquare\.net\/uxa\/f1a8d593041c0\.js"[^>]*data-cookieyes=/i
+    );
+    expect(head).not.toMatch(
+      /https:\/\/t\.contentsquare\.net\/uxa\/f1a8d593041c0\.js"[^>]*type="text\/plain"/i
+    );
+  });
+
   test("404 page handles unknown routes", async ({ page }) => {
     const res = await page.goto("/this-page-does-not-exist");
     // Next.js returns 404 for unknown routes

@@ -1,0 +1,54 @@
+What’s going on
+Sessions increasing (16 / 7k) = your tag is definitely firing somewhere
+Verification failing = Contentsquare can’t detect the tag the way it expects
+
+Those two things can coexist.
+
+Why verification fails even when sessions go up
+
+Here are the most common causes:
+
+1. Tag is not in <head>
+
+They explicitly require:
+
+“Paste into the <head> of every page”
+
+If you:
+
+put it in <body>
+inject it late (e.g., via JS)
+load it after user interaction
+
+👉 Sessions may still track, but verification will fail
+
+2. Tag is behind a condition
+
+If the script only loads:
+
+after consent
+only on certain pages
+only for logged-in users
+
+👉 Their verifier (which is basically a bot) might not trigger it
+
+3. Using a tag manager (GTM etc.)
+
+If you're loading via GTM:
+
+It might fire after page load
+Or require triggers that the verifier doesn’t meet
+
+👉 Again: tracking works, verification fails
+
+4. Environment mismatch
+
+Check:
+
+Are you verifying on the same domain where the tag is installed?
+Any staging vs prod mismatch?
+The key insight
+
+👉 Sessions increasing = your install basically works
+
+Verification is just a convenience check — not the source of truth.

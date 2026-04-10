@@ -245,6 +245,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html lang="en" className={`${manrope.variable} ${lora.variable}`}>
       <head>
         <link rel="preconnect" href="https://cdn-cookieyes.com" />
+        <link rel="preconnect" href="https://t.contentsquare.net" />
         <link rel="preconnect" href="https://www.googletagmanager.com" />
         <link rel="dns-prefetch" href="https://www.google.com" />
         <link rel="dns-prefetch" href="https://www.gstatic.com" />
@@ -321,7 +322,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareApplicationSchema) }}
         />
-        {}
+        {/* Keep this as a raw head script so vendor verification can detect it reliably. */}
         <script src="https://t.contentsquare.net/uxa/f1a8d593041c0.js" async />
       </head>
       <body className="bg-white dark:bg-[#050208]">
