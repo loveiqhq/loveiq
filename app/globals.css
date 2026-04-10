@@ -3195,7 +3195,7 @@ h3,
   margin: 0;
   color: #fff;
   font-family: var(--font-serif);
-  font-size: clamp(2rem, 1.3rem + 1.8vw, 3.2rem);
+  font-size: 31px;
   font-weight: 500;
   line-height: 1.04;
   letter-spacing: -0.03em;
@@ -3982,7 +3982,7 @@ h3,
   }
 
   .report-rich-heading p {
-    font-size: 2rem;
+    font-size: 28px;
     line-height: 1.08;
   }
 

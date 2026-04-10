@@ -29,6 +29,11 @@ export function getReportBlockText(block: string) {
     .trim();
 }
 
+export function hasMeaningfulReportHtml(html: string | null | undefined) {
+  if (!html) return false;
+  return getReportBlockText(html).length > 0;
+}
+
 export function isStandaloneHeadingBlock(block: string) {
   if (!/^\s*<p\b/i.test(block)) return false;
 

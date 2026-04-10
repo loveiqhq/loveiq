@@ -4,6 +4,7 @@ import { useState, type FC } from "react";
 import PremiumOverlay from "./PremiumOverlay";
 import {
   extractReportHtmlBlocks,
+  hasMeaningfulReportHtml,
   joinReportHtmlBlocks,
   splitTrailingHeadingBlock,
 } from "../reportContent";
@@ -16,6 +17,9 @@ interface Props {
   sectionId: string;
   sectionTitle: string;
 }
+
+const RECOMMENDATIONS_PLACEHOLDER_HTML =
+  "<p>Recommendations for this archetype are being finalized. Check back soon for tailored resources.</p>";
 
 const DimensionSection: FC<Props> = ({
   archetype,
@@ -51,6 +55,11 @@ const DimensionSection: FC<Props> = ({
   const archetypeContentStackClassName = headingBlock
     ? "report-flow__stack report-flow__stack--md"
     : "report-flow__stack report-flow__stack--lg";
+  const shouldUseRecommendationsFallback =
+    sectionId === "recommendations" && !hasMeaningfulReportHtml(archetypeHtml);
+  const resolvedArchetypeHtml = shouldUseRecommendationsFallback
+    ? RECOMMENDATIONS_PLACEHOLDER_HTML
+    : archetypeHtml;
 
   return (
     <div className="report-flow report-flow--gap-xl">
@@ -65,7 +74,7 @@ const DimensionSection: FC<Props> = ({
         <div className="report-prose" dangerouslySetInnerHTML={{ __html: panelHtml }} />
       ) : null}
 
-      {archetypeHtml ? (
+      {resolvedArchetypeHtml ? (
         <div className={archetypeContentStackClassName}>
           {headingBlock ? (
             <div
@@ -80,7 +89,7 @@ const DimensionSection: FC<Props> = ({
                 <div
                   className="report-prose report-themed-block__blurred"
                   aria-hidden="true"
-                  dangerouslySetInnerHTML={{ __html: archetypeHtml }}
+                  dangerouslySetInnerHTML={{ __html: resolvedArchetypeHtml }}
                 />
                 <PremiumOverlay
                   archetype={archetype}
@@ -89,7 +98,10 @@ const DimensionSection: FC<Props> = ({
                 />
               </div>
             ) : (
-              <div className="report-prose" dangerouslySetInnerHTML={{ __html: archetypeHtml }} />
+              <div
+                className="report-prose"
+                dangerouslySetInnerHTML={{ __html: resolvedArchetypeHtml }}
+              />
             )}
           </div>
         </div>

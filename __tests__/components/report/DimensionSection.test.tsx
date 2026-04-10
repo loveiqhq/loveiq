@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import DimensionSection from "@/components/report/sections/DimensionSection";
+import { archetypeContent } from "@/data/report-archetypes";
 
 describe("DimensionSection", () => {
   it("splits the LoveIQ concept intro into a lead paragraph and left-aligned body flow", () => {
@@ -132,5 +134,50 @@ describe("DimensionSection", () => {
     expect(container.querySelectorAll(".report-prose")[1]).toHaveTextContent(
       "The LoveIQ Sexual Stages (6-Stage Model)"
     );
+  });
+
+  it("reveals the restored Explorer of Edges recommendations after unlock", async () => {
+    const user = userEvent.setup();
+
+    const { container } = render(
+      <DimensionSection
+        archetype="Explorer of Edges"
+        archetypeHtml={archetypeContent.recommendations["Explorer of Edges"]}
+        generalHtml="<p>A curated set of resources to deepen understanding and support practical growth.</p>"
+        isPremium={true}
+        sectionId="recommendations"
+        sectionTitle="Recommendations"
+      />
+    );
+
+    const scoped = within(container);
+
+    await user.click(scoped.getByRole("button", { name: /unlock full report/i }));
+
+    expect(scoped.queryByRole("button", { name: /unlock full report/i })).not.toBeInTheDocument();
+    expect(scoped.getByText(/The Deep Psychology of BDSM and Kink/i)).toBeInTheDocument();
+  });
+
+  it("shows a placeholder note instead of a blank unlocked recommendations panel", async () => {
+    const user = userEvent.setup();
+
+    const { container } = render(
+      <DimensionSection
+        archetype="Explorer of Edges"
+        archetypeHtml="<h2></h2>"
+        generalHtml="<p>A curated set of resources to deepen understanding and support practical growth.</p>"
+        isPremium={true}
+        sectionId="recommendations"
+        sectionTitle="Recommendations"
+      />
+    );
+
+    const scoped = within(container);
+
+    await user.click(scoped.getByRole("button", { name: /unlock full report/i }));
+
+    expect(
+      scoped.getByText(/Recommendations for this archetype are being finalized/i)
+    ).toBeInTheDocument();
   });
 });

@@ -152,6 +152,20 @@ function splitSequentialH1Blocks(rawHtml, orderedKeys) {
   return result;
 }
 
+function findNearestOpenTag(html, pos) {
+  const windowStart = Math.max(0, pos - 300);
+  const preceding = html.substring(windowStart, pos);
+  const openTagMatches = [...preceding.matchAll(/<(h[123]|p)[^>]*>/g)];
+  const nearest = openTagMatches.at(-1);
+
+  if (!nearest || nearest.index === undefined) return null;
+
+  return {
+    tagName: nearest[1],
+    tagStart: windowStart + nearest.index,
+  };
+}
+
 /**
  * Split archetype-specific .docx HTML into per-archetype content.
  *
@@ -187,27 +201,21 @@ function splitByArchetype(rawHtml) {
     while ((nameMatch = nameRegex.exec(html)) !== null) {
       const pos = nameMatch.index;
 
-      // Walk backwards to find the enclosing tag
-      const preceding = html.substring(Math.max(0, pos - 300), pos);
-
       // Check if this occurrence is inside or just after a heading/title context:
       // 1. Inside <h1>...</h1>, <h2>...</h2>, or <h3>...</h3>
       // 2. Inside a <p> that looks like a section title (short, starts with a label)
       // 3. Inside a <p> where this is the subject (e.g., "The <strong>Archetype</strong> experiences...")
 
-      const lastOpenTag = preceding.match(/<(h[123]|p)[^>]*>[^]*$/);
-      if (!lastOpenTag) continue;
+      const nearestOpenTag = findNearestOpenTag(html, pos);
+      if (!nearestOpenTag) continue;
 
-      const tagName = lastOpenTag[1];
-      const tagContent = lastOpenTag[0];
+      const { tagName, tagStart } = nearestOpenTag;
 
       // For <h1>/<h2>/<h3>: always counts as heading context
       if (tagName.startsWith("h")) {
-        // Find the start of this heading tag
-        const tagStart = pos - tagContent.length;
         // Find the end of the heading tag
         const closeTag = `</${tagName}>`;
-        const closeIdx = html.indexOf(closeTag, pos);
+        const closeIdx = html.indexOf(closeTag, tagStart);
         const headingEnd = closeIdx !== -1 ? closeIdx + closeTag.length : pos + archetype.length;
 
         markers.push({ archetype, headingStart: tagStart, headingEnd });
@@ -217,9 +225,9 @@ function splitByArchetype(rawHtml) {
       // For <p>: only counts if it's a title-like paragraph
       if (tagName === "p") {
         // Find the end of this <p>
-        const closeIdx = html.indexOf("</p>", pos);
+        const closeIdx = html.indexOf("</p>", tagStart);
         if (closeIdx === -1) continue;
-        const pContent = html.substring(pos - tagContent.length, closeIdx + 4);
+        const pContent = html.substring(tagStart, closeIdx + 4);
         const plainP = pContent.replace(/<[^>]+>/g, "");
 
         // Title patterns: short paragraph OR starts with "The {Archetype}" OR contains "of the/for the"
@@ -229,7 +237,6 @@ function splitByArchetype(rawHtml) {
           plainP.match(new RegExp(`(?:of the|for the)\\s+${escaped}`, "i"));
 
         if (isTitle) {
-          const tagStart = pos - tagContent.length;
           markers.push({ archetype, headingStart: tagStart, headingEnd: closeIdx + 4 });
           break;
         }
@@ -358,7 +365,15 @@ export const archetypeContent: Record<string, Record<string, string>> = ${JSON.s
   console.log(`  data/report-archetypes.ts (${Object.keys(archetypeContent).length} blocks)`);
 }
 
-main().catch((err) => {
-  console.error("Error:", err);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((err) => {
+    console.error("Error:", err);
+    process.exit(1);
+  });
+}
+
+module.exports = {
+  splitByArchetype,
+  splitSequentialH1Blocks,
+  findNearestOpenTag,
+};
