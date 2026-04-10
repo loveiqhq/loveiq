@@ -321,7 +321,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareApplicationSchema) }}
         />
-        { }
+        {}
         <script src="https://t.contentsquare.net/uxa/f1a8d593041c0.js" async />
       </head>
       <body className="bg-white dark:bg-[#050208]">
