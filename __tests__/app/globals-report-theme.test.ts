@@ -26,6 +26,12 @@ describe("report theme css contract", () => {
     );
   });
 
+  it("keeps the match strength fill as the shared multicolor gradient", () => {
+    expect(globalsCss).toMatch(
+      /\.report-hero-card__match-fill\s*\{[\s\S]*?background:\s*linear-gradient\(90deg,\s*#fe6839 27%,\s*#a78bfa 77%,\s*#e9d5ff 100%\);/
+    );
+  });
+
   it("pins the attachment icon to the 16x14 figma footprint", () => {
     expect(globalsCss).toMatch(
       /\.report-trait__icon--attachment\s*\{[\s\S]*?width:\s*16px;[\s\S]*?height:\s*14px;[\s\S]*?aspect-ratio:\s*8 \/ 7;/

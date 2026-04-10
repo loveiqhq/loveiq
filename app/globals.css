@@ -3432,12 +3432,7 @@ h3,
 
 .report-hero-card__match-fill {
   height: 100%;
-  background: linear-gradient(
-    90deg,
-    rgb(var(--report-accent-rgb) / 0.5) 0%,
-    rgb(var(--report-accent-rgb) / 0.82) 55%,
-    rgb(var(--report-accent-rgb)) 100%
-  );
+  background: linear-gradient(90deg, #fe6839 27%, #a78bfa 77%, #e9d5ff 100%);
   border-radius: 9999px;
 }
 
