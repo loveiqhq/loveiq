@@ -77,7 +77,7 @@ const ImportanceOfSexualitySection: FC<Props> = ({
   if (userBar) userBar.height = userHeight;
 
   return (
-    <div className="space-y-10">
+    <div className="report-flow report-flow--gap-xl">
       <article className="report-importance">
         <div className="report-importance__highlight" aria-hidden="true" />
 

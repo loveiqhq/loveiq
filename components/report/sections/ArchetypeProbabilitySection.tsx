@@ -54,7 +54,7 @@ const ArchetypeProbabilitySection: FC<Props> = ({
   const secondaryItems = ranking.filter((n) => n !== primaryArchetype).slice(0, visibleCount - 1);
 
   return (
-    <div className="space-y-10">
+    <div className="report-flow report-flow--gap-xl">
       <div className="report-prose" dangerouslySetInnerHTML={{ __html: generalHtml }} />
 
       <div className="report-prob">

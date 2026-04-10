@@ -458,6 +458,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
                   archetypeHtml={archetypeHtml}
                   generalHtml={generalHtml}
                   isPremium={section.isPremium}
+                  sectionId={section.id}
                   sectionTitle={title}
                 />
               </ReportSection>

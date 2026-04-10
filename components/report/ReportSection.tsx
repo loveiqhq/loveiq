@@ -12,6 +12,9 @@ interface Props {
 const ReportSection: FC<Props> = ({ children, feedbackWidget, sectionId, title }) => {
   const ref = useRef<HTMLElement>(null);
   const [isVisible, setIsVisible] = useState(false);
+  const [eyebrow, ...titleSegments] = title.split(/:\s+/);
+  const hasSplitTitle = titleSegments.length > 0;
+  const resolvedTitle = hasSplitTitle ? titleSegments.join(": ").trim() : title;
 
   useEffect(() => {
     const element = ref.current;
@@ -39,7 +42,10 @@ const ReportSection: FC<Props> = ({ children, feedbackWidget, sectionId, title }
       className={`report-section ${isVisible ? "is-visible" : ""}`}
     >
       <header className="report-section__header">
-        <h2 className="report-section__title">{title}</h2>
+        <div className={`report-section__title-stack ${hasSplitTitle ? "is-split" : ""}`}>
+          {hasSplitTitle ? <p className="report-section__eyebrow">{eyebrow}</p> : null}
+          <h2 className="report-section__title">{resolvedTitle}</h2>
+        </div>
         {feedbackWidget}
       </header>
       <div className="report-section__body">{children}</div>

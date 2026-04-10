@@ -13,7 +13,7 @@ const CoreArchetypeSection: FC<Props> = ({ archetypeHtml, matchScore, theme }) =
   const matchPct = Math.round(matchScore);
 
   return (
-    <div className="space-y-10">
+    <div className="report-flow report-flow--gap-xl">
       <article className="report-hero-card">
         {/* Glow orbs */}
         <span className="report-hero-card__orb report-hero-card__orb--tr" aria-hidden="true" />
