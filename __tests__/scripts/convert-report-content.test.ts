@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-const { splitByArchetype } = require("../../scripts/convert-report-content.js");
+const { cleanHtml, splitByArchetype } = require("../../scripts/convert-report-content.js");
 
 describe("convert-report-content splitByArchetype", () => {
   it("keeps recommendation sections aligned when empty h2 or h3 tags precede the heading paragraph", () => {
@@ -27,5 +27,15 @@ describe("convert-report-content splitByArchetype", () => {
     expect(result["Explorer of Edges"]).toContain("Explorer copy.");
     expect(result["Explorer of Edges"]).not.toBe("<h2></h2>");
     expect(result["Quiet Withdrawer"]).toContain("Quiet book");
+  });
+
+  it("strips Google Docs footnote references during docx cleanup", () => {
+    const cleaned = cleanHtml(
+      '<p><strong>Common Thought:</strong> "What do I actually like?"<a href="https://docs.google.com/document/d/example/edit">1</a></p>'
+    );
+
+    expect(cleaned).toContain('"What do I actually like?"');
+    expect(cleaned).not.toContain(">1</a>");
+    expect(cleaned).not.toContain("docs.google.com/document");
   });
 });

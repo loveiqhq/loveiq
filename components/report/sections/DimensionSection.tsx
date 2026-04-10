@@ -3,9 +3,11 @@
 import { useState, type FC } from "react";
 import PremiumOverlay from "./PremiumOverlay";
 import {
+  ensureSexualStageHighlight,
   extractReportHtmlBlocks,
   hasMeaningfulReportHtml,
   joinReportHtmlBlocks,
+  normalizeReportHtml,
   splitTrailingHeadingBlock,
 } from "../reportContent";
 
@@ -30,7 +32,9 @@ const DimensionSection: FC<Props> = ({
   sectionTitle,
 }) => {
   const [unlocked, setUnlocked] = useState(false);
-  const rawBlocks = extractReportHtmlBlocks(generalHtml);
+  const normalizedGeneralHtml =
+    sectionId === "sexual_stage" ? ensureSexualStageHighlight(generalHtml) : generalHtml;
+  const rawBlocks = extractReportHtmlBlocks(normalizedGeneralHtml);
   const { bodyBlocks, headingBlock } = splitTrailingHeadingBlock(rawBlocks);
 
   let introBlocks = bodyBlocks;
@@ -60,6 +64,7 @@ const DimensionSection: FC<Props> = ({
   const resolvedArchetypeHtml = shouldUseRecommendationsFallback
     ? RECOMMENDATIONS_PLACEHOLDER_HTML
     : archetypeHtml;
+  const normalizedArchetypeHtml = normalizeReportHtml(resolvedArchetypeHtml);
 
   return (
     <div className="report-flow report-flow--gap-xl">
@@ -74,7 +79,7 @@ const DimensionSection: FC<Props> = ({
         <div className="report-prose" dangerouslySetInnerHTML={{ __html: panelHtml }} />
       ) : null}
 
-      {resolvedArchetypeHtml ? (
+      {normalizedArchetypeHtml ? (
         <div className={archetypeContentStackClassName}>
           {headingBlock ? (
             <div
@@ -89,7 +94,7 @@ const DimensionSection: FC<Props> = ({
                 <div
                   className="report-prose report-themed-block__blurred"
                   aria-hidden="true"
-                  dangerouslySetInnerHTML={{ __html: resolvedArchetypeHtml }}
+                  dangerouslySetInnerHTML={{ __html: normalizedArchetypeHtml }}
                 />
                 <PremiumOverlay
                   archetype={archetype}
@@ -100,7 +105,7 @@ const DimensionSection: FC<Props> = ({
             ) : (
               <div
                 className="report-prose"
-                dangerouslySetInnerHTML={{ __html: resolvedArchetypeHtml }}
+                dangerouslySetInnerHTML={{ __html: normalizedArchetypeHtml }}
               />
             )}
           </div>

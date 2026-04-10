@@ -18,10 +18,12 @@ import CoreArchetypeSection from "./sections/CoreArchetypeSection";
 import DimensionSection from "./sections/DimensionSection";
 import ImportanceOfSexualitySection from "./sections/ImportanceOfSexualitySection";
 import WelcomeSection from "./sections/WelcomeSection";
+import { normalizeReportHtml } from "./reportContent";
 
 interface SnapshotContent {
   importanceLabel: string;
   importancePct: number | null;
+  importanceStatusLabel: string;
   importanceValue: number | null;
   satisfactionLabel: string;
   satisfactionPct: number | null;
@@ -32,6 +34,7 @@ interface SnapshotContent {
 
 interface SnapshotAnswers {
   currentSexualSatisfaction: number | null;
+  importanceOfSex: number | null;
 }
 
 const subscribeNoop = () => () => {};
@@ -101,6 +104,16 @@ const SATISFACTION_STATUS_LABELS: Record<number, string> = {
   7: "Very satisfied",
 };
 
+const IMPORTANCE_STATUS_LABELS: Record<number, string> = {
+  1: "Not important",
+  2: "Mostly unimportant",
+  3: "Slightly unimportant",
+  4: "Mixed / in-between",
+  5: "Slightly important",
+  6: "Mostly important",
+  7: "Very important",
+};
+
 function scaleToPercent(value: number | null): number | null {
   if (value === null) return null;
   return SCALE_TO_PERCENT[value] ?? null;
@@ -119,6 +132,11 @@ const STAGE_CODE_TO_LABEL: Record<string, string> = {
 function describeSatisfactionStatus(value: number | null) {
   if (value === null) return "Still calibrating";
   return SATISFACTION_STATUS_LABELS[value] ?? "Still calibrating";
+}
+
+function describeImportanceStatus(value: number | null) {
+  if (value === null) return "Still calibrating";
+  return IMPORTANCE_STATUS_LABELS[value] ?? "Still calibrating";
 }
 
 function getSnapshotContent(
@@ -143,6 +161,7 @@ function getSnapshotContent(
     ),
     importanceValue,
     importancePct: scaleToPercent(importanceValue),
+    importanceStatusLabel: describeImportanceStatus(snapshotAnswers?.importanceOfSex ?? null),
     importanceLabel:
       importanceValue === null ? "" : `${describeBand(importanceValue)} (${importanceValue}/7)`,
     stage,
@@ -160,19 +179,21 @@ function replacePlaceholders(
     userName: string;
   }
 ) {
-  return html
-    .replace(/\{\{USER_NAME\}\}/g, values.userName)
-    .replace(
-      /\{\{CORE_ARCHETYPE\}\}/g,
-      `<span class="report-archetype-name">${values.archetype}</span>`
-    )
-    .replace(/\{\{CORE_ARCHETYPE_SCORE\}\}/g, String(Math.round(values.matchScore)))
-    .replace(/\{\{CORE_ARCHETYPE_MOTTO\}\}/g, values.motto)
-    .replace(/\{\{REPORT_DATE\}\}/g, values.reportDate)
-    .replace(/\{\{SEXUAL_STAGE\}\}/g, values.snapshot.stage ?? "")
-    .replace(/\{\{IMPORTANCE_OF_SEX\}\}/g, values.snapshot.importanceLabel)
-    .replace(/\{\{SEXUAL_SATISFACTION\}\}/g, values.snapshot.satisfactionLabel)
-    .replace(/<table>[\s\S]*?<\/table>/g, "");
+  return normalizeReportHtml(
+    html
+      .replace(/\{\{USER_NAME\}\}/g, values.userName)
+      .replace(
+        /\{\{CORE_ARCHETYPE\}\}/g,
+        `<span class="report-archetype-name">${values.archetype}</span>`
+      )
+      .replace(/\{\{CORE_ARCHETYPE_SCORE\}\}/g, String(Math.round(values.matchScore)))
+      .replace(/\{\{CORE_ARCHETYPE_MOTTO\}\}/g, values.motto)
+      .replace(/\{\{REPORT_DATE\}\}/g, values.reportDate)
+      .replace(/\{\{SEXUAL_STAGE\}\}/g, values.snapshot.stage ?? "")
+      .replace(/\{\{IMPORTANCE_OF_SEX\}\}/g, values.snapshot.importanceLabel)
+      .replace(/\{\{SEXUAL_SATISFACTION\}\}/g, values.snapshot.satisfactionLabel)
+      .replace(/<table>[\s\S]*?<\/table>/g, "")
+  );
 }
 
 interface ReportStatusState {
@@ -395,9 +416,11 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
           {resolvedSections.map((section) => {
             const title = section.displayTitle;
             const generalHtml = replacePlaceholders(section.generalContent, placeholderValues);
-            const archetypeHtml = section.archetypeBlockId
-              ? (archetypeContent[section.archetypeBlockId]?.[primaryArchetype] ?? null)
-              : null;
+            const archetypeHtml = normalizeReportHtml(
+              section.archetypeBlockId
+                ? (archetypeContent[section.archetypeBlockId]?.[primaryArchetype] ?? null)
+                : null
+            );
 
             const feedbackWidget = section.hasResonatesFeedback ? (
               <SectionFeedback

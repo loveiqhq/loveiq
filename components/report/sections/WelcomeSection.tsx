@@ -7,6 +7,7 @@ import ArcGauge from "./ArcGauge";
 interface SnapshotContent {
   importanceLabel: string;
   importancePct: number | null;
+  importanceStatusLabel: string;
   importanceValue: number | null;
   satisfactionLabel: string;
   satisfactionPct: number | null;
@@ -201,6 +202,7 @@ const WelcomeSection: FC<Props> = ({ feedbackWidget, generalHtml, sectionId, sna
           description={describeScalarValue("Importance of Sex", snapshot.importanceValue)}
           label="Importance of Sex"
           pct={snapshot.importancePct}
+          status={snapshot.importanceStatusLabel}
           value={snapshot.importanceValue}
         />
         <StageCard

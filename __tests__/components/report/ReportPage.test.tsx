@@ -117,7 +117,10 @@ describe("ReportPage", () => {
             OVL_PHASE_NOW: "grounded",
           },
         },
-        snapshotAnswers: { currentSexualSatisfaction: 3 },
+        snapshotAnswers: {
+          currentSexualSatisfaction: 3,
+          importanceOfSex: 5,
+        },
       },
       status: "success",
       error: null,
@@ -126,6 +129,7 @@ describe("ReportPage", () => {
     render(<ReportPage />);
 
     expect(screen.getByText("Slightly dissatisfied")).toBeInTheDocument();
+    expect(screen.getByText("Slightly important")).toBeInTheDocument();
     expect(
       screen.getByText(/enough frustration, inconsistency, or disappointment/i)
     ).toBeInTheDocument();

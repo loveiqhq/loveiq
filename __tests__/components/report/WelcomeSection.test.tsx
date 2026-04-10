@@ -111,6 +111,7 @@ describe("WelcomeSection", () => {
         snapshot={{
           importanceLabel: "Importance of Sex",
           importancePct: 71,
+          importanceStatusLabel: "Slightly important",
           importanceValue: 5,
           satisfactionLabel: "Current Sexual Satisfaction",
           satisfactionPct: 86,
@@ -122,6 +123,7 @@ describe("WelcomeSection", () => {
     );
 
     expect(screen.getByText("Mostly satisfied")).toBeInTheDocument();
+    expect(screen.getByText("Slightly important")).toBeInTheDocument();
 
     expect(getMetricTexts()).toEqual(["0%", "0%"]);
     expect(MockIntersectionObserver.instances).toHaveLength(1);
@@ -167,6 +169,7 @@ describe("WelcomeSection", () => {
         snapshot={{
           importanceLabel: "Importance of Sex",
           importancePct: 71,
+          importanceStatusLabel: "Slightly important",
           importanceValue: 5,
           satisfactionLabel: "Current Sexual Satisfaction",
           satisfactionPct: 86,

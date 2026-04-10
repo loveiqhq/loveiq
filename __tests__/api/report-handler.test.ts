@@ -165,7 +165,16 @@ describe("GET /api/report", () => {
       })
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => [{ normalized_value: 3 }],
+        json: async () => [
+          {
+            normalized_value: 3,
+            survey_question: { frontend_qid: "01002" },
+          },
+          {
+            normalized_value: 5,
+            survey_question: { frontend_qid: "16013" },
+          },
+        ],
       });
 
     const res = await GET(makeRequest("02d88f31-eceb-4402-940d-c8cd98d01848"));
@@ -178,7 +187,10 @@ describe("GET /api/report", () => {
       percentages: { "Emotional Voyeur": 63 },
       reportDate: "2026-04-07T22:23:16.851299+00:00",
       diagnostics: { overlaysEnum: { sexual_stage: "exploring" } },
-      snapshotAnswers: { currentSexualSatisfaction: 3 },
+      snapshotAnswers: {
+        currentSexualSatisfaction: 3,
+        importanceOfSex: 5,
+      },
     });
 
     const submissionLookupUrl = mockFetchWithTimeout.mock.calls[0][0] as string;
@@ -187,7 +199,7 @@ describe("GET /api/report", () => {
     expect(submissionLookupUrl).toContain("app_user!fk_survey_submission_user(first_name)");
     expect(submissionLookupUrl).not.toContain("select=id,first_name,created_at");
     expect(snapshotAnswerLookupUrl).toContain("survey_question!inner(frontend_qid)");
-    expect(snapshotAnswerLookupUrl).toContain("survey_question.frontend_qid=eq.01002");
+    expect(snapshotAnswerLookupUrl).toContain("survey_question.frontend_qid=in.(01002,16013)");
   });
 
   it("returns a null satisfaction snapshot answer when question 01002 is missing", async () => {
@@ -225,6 +237,9 @@ describe("GET /api/report", () => {
     expect(res.status).toBe(200);
 
     const json = await res.json();
-    expect(json.snapshotAnswers).toEqual({ currentSexualSatisfaction: null });
+    expect(json.snapshotAnswers).toEqual({
+      currentSexualSatisfaction: null,
+      importanceOfSex: null,
+    });
   });
 });

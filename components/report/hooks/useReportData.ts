@@ -12,6 +12,7 @@ export interface ReportData {
   diagnostics: Record<string, unknown> | null;
   snapshotAnswers: {
     currentSexualSatisfaction: number | null;
+    importanceOfSex: number | null;
   };
 }
 

@@ -21,7 +21,9 @@ const RATE_LIMIT_CONFIG = {
 };
 
 const SUPABASE_TIMEOUT_MS = 5_000;
-const SNAPSHOT_QUESTION_QID = "01002";
+const SNAPSHOT_QUESTION_QIDS = ["01002", "16013"] as const;
+
+type SnapshotQuestionQid = (typeof SNAPSHOT_QUESTION_QIDS)[number];
 
 interface SubmissionUser {
   first_name: string | null;
@@ -35,6 +37,7 @@ interface SubmissionRow {
 
 interface SnapshotAnswers {
   currentSexualSatisfaction: number | null;
+  importanceOfSex: number | null;
 }
 
 function getSubmissionUserName(submission: SubmissionRow): string | null {
@@ -153,6 +156,7 @@ export async function GET(request: Request) {
     const submission = submissions[0];
 
     // 6. Look up scoring_result by survey_submission_id
+    const snapshotAnswerQids = SNAPSHOT_QUESTION_QIDS.join(",");
     const snapshotAnswersSelect = ["normalized_value", "survey_question!inner(frontend_qid)"].join(
       ","
     );
@@ -160,8 +164,7 @@ export async function GET(request: Request) {
       `${supabaseUrl}/rest/v1/survey_submission_answer` +
       `?survey_submission_id=eq.${submission.id}` +
       `&select=${snapshotAnswersSelect}` +
-      `&survey_question.frontend_qid=eq.${SNAPSHOT_QUESTION_QID}` +
-      "&limit=1";
+      `&survey_question.frontend_qid=in.(${snapshotAnswerQids})`;
 
     const [scoringRes, snapshotAnswersRes] = await Promise.all([
       getBreaker("supabase").fire(() =>
@@ -206,17 +209,34 @@ export async function GET(request: Request) {
     }
 
     const scoring = scoringRows[0];
-    let snapshotAnswers: SnapshotAnswers = { currentSexualSatisfaction: null };
+    let snapshotAnswers: SnapshotAnswers = {
+      currentSexualSatisfaction: null,
+      importanceOfSex: null,
+    };
 
     if (snapshotAnswersRes?.ok) {
       const snapshotAnswerRows = (await snapshotAnswersRes.json()) as Array<{
         normalized_value: number | null;
+        survey_question: { frontend_qid: string } | null;
       }>;
-      snapshotAnswers = {
-        currentSexualSatisfaction: normalizeScaleAnswer(
-          snapshotAnswerRows[0]?.normalized_value ?? null
-        ),
-      };
+      snapshotAnswers = snapshotAnswerRows.reduce<SnapshotAnswers>(
+        (acc, row) => {
+          const normalized = normalizeScaleAnswer(row.normalized_value);
+          const qid = row.survey_question?.frontend_qid as SnapshotQuestionQid | undefined;
+
+          if (qid === "01002") {
+            acc.currentSexualSatisfaction = normalized;
+          } else if (qid === "16013") {
+            acc.importanceOfSex = normalized;
+          }
+
+          return acc;
+        },
+        {
+          currentSexualSatisfaction: null,
+          importanceOfSex: null,
+        }
+      );
     } else if (snapshotAnswersRes) {
       logger.warn(
         { status: snapshotAnswersRes.status, submissionId: submission.id },

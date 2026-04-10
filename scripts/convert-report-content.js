@@ -92,6 +92,18 @@ function slugify(title) {
 function cleanHtml(html) {
   return html
     .replace(/<a id="[^"]*"><\/a>/g, "") // remove Google Docs anchors
+    .replace(
+      /<a\b[^>]*href="https:\/\/docs\.google\.com\/document\/[^"]*"[^>]*>\s*(?:\d+|[*†‡]+)\s*<\/a>/gi,
+      ""
+    ) // remove Google Docs footnote links
+    .replace(
+      /<sup>\s*(?:<a\b[^>]*>\s*(?:\d+|[*†‡]+)\s*<\/a>|(?:\d+|[*†‡]+))\s*<\/sup>/gi,
+      ""
+    ) // remove superscript footnote markers
+    .replace(
+      /([?!.,:;"'")\]])\s*(?:<sup>\s*)?(?:\d+|[*†‡]+)(?:\s*<\/sup>)?(?=\s*<\/(?:p|li|h[1-6])>)/gi,
+      "$1"
+    ) // strip leaked trailing reference numbers
     .replace(/\u00a0/g, " ") // replace non-breaking spaces
     .replace(/[\u2018\u2019]/g, "'") // smart single quotes
     .replace(/[\u201c\u201d]/g, '"') // smart double quotes
@@ -373,6 +385,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  cleanHtml,
   splitByArchetype,
   splitSequentialH1Blocks,
   findNearestOpenTag,

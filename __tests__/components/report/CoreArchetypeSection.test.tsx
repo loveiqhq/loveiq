@@ -9,6 +9,7 @@ describe("CoreArchetypeSection", () => {
     render(
       <CoreArchetypeSection
         archetypeHtml="<p>Power-specific narrative.</p>"
+        matchScore={88}
         theme={reportThemes["Power Orchestrator"]}
       />
     );
@@ -19,5 +20,25 @@ describe("CoreArchetypeSection", () => {
     expect(screen.getByText(/commanding/i)).toBeInTheDocument();
     expect(screen.getByText(/dominant/i)).toBeInTheDocument();
     expect(screen.getByText(/power-specific narrative/i)).toBeInTheDocument();
+  });
+
+  it("uses the dedicated 16x14 attachment heart icon footprint", () => {
+    render(
+      <CoreArchetypeSection
+        archetypeHtml={null}
+        matchScore={76}
+        theme={reportThemes["Explorer of Edges"]}
+      />
+    );
+
+    const attachmentLabel = screen
+      .getAllByText(/^attachment$/i)
+      .find((node) => node.closest(".report-trait__label"))
+      ?.closest(".report-trait__label");
+    const icon = attachmentLabel?.querySelector("svg");
+
+    expect(icon).toBeInTheDocument();
+    expect(icon).toHaveClass("report-trait__icon", "report-trait__icon--attachment");
+    expect(icon).toHaveAttribute("viewBox", "0 0 16 14");
   });
 });

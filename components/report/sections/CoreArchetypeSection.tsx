@@ -81,7 +81,12 @@ const CoreArchetypeSection: FC<Props> = ({ archetypeHtml, matchScore, theme }) =
               icon={TraitIcons.communication}
             />
             <TraitItem label="Initiation" value={theme.initiation} icon={TraitIcons.initiation} />
-            <TraitItem label="Attachment" value={theme.attachment} icon={TraitIcons.attachment} />
+            <TraitItem
+              label="Attachment"
+              value={theme.attachment}
+              icon={TraitIcons.attachment}
+              iconClassName="report-trait__icon report-trait__icon--attachment"
+            />
             <TraitItem
               label="Power orientation"
               value={theme.powerOrientation}
@@ -113,12 +118,13 @@ const CoreArchetypeSection: FC<Props> = ({ archetypeHtml, matchScore, theme }) =
 
 const TraitItem: FC<{
   icon: FC<{ className?: string }>;
+  iconClassName?: string;
   label: string;
   value: string;
-}> = ({ icon: Icon, label, value }) => (
+}> = ({ icon: Icon, iconClassName = "report-trait__icon", label, value }) => (
   <div className="report-trait">
     <p className="report-trait__label">
-      <Icon className="report-trait__icon" />
+      <Icon className={iconClassName} />
       <span>{label}</span>
     </p>
     <p className="report-trait__value">{value}</p>

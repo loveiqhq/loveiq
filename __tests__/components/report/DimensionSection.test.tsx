@@ -136,6 +136,33 @@ describe("DimensionSection", () => {
     );
   });
 
+  it("upgrades the sexual stage summary paragraphs into the themed stage highlight block", () => {
+    const { container } = render(
+      <DimensionSection
+        archetype="Explorer of Edges"
+        archetypeHtml={null}
+        generalHtml={[
+          "<p>Human sexuality is dynamic.</p>",
+          "<p><strong>Your likely current sexual stage: </strong>Awakening / Exploring</p>",
+          "<p>(A snapshot of how your sexuality is organized right now, not a permanent identity.)</p>",
+          "<p>The LoveIQ Sexual Stages (6-Stage Model)</p>",
+        ].join("")}
+        isPremium={false}
+        sectionId="sexual_stage"
+        sectionTitle="Sexual Stage"
+      />
+    );
+
+    const highlight = container.querySelector(".report-stage-highlight");
+
+    expect(highlight).toBeInTheDocument();
+    expect(highlight).toHaveTextContent("Your likely current sexual stage:");
+    expect(highlight).toHaveTextContent("Awakening / Exploring");
+    expect(highlight).toHaveTextContent(
+      "(A snapshot of how your sexuality is organized right now, not a permanent identity.)"
+    );
+  });
+
   it("reveals the restored Explorer of Edges recommendations after unlock", async () => {
     const user = userEvent.setup();
 
