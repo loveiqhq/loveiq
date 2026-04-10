@@ -3167,22 +3167,6 @@ h3,
   gap: 56px;
 }
 
-.report-flow__panel {
-  display: flex;
-  width: 100%;
-  align-self: stretch;
-}
-
-.report-flow__panel--centered {
-  max-width: 1024px;
-  margin-inline: auto;
-  padding: 32px 64px 64px;
-  flex-direction: column;
-  align-items: center;
-  gap: 56px;
-  flex: 1 0 0;
-}
-
 .report-flow__stack {
   display: flex;
   flex-direction: column;
@@ -3934,10 +3918,6 @@ h3,
   .report-mobile-nav__meta {
     justify-content: flex-end;
   }
-
-  .report-flow__panel--centered {
-    padding: 28px 48px 48px;
-  }
 }
 
 @media (max-width: 767px) {
@@ -3989,11 +3969,6 @@ h3,
   }
 
   .report-flow--gap-xl {
-    gap: 40px;
-  }
-
-  .report-flow__panel--centered {
-    padding: 24px 20px 28px;
     gap: 40px;
   }
 

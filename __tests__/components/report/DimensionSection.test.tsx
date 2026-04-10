@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import DimensionSection from "@/components/report/sections/DimensionSection";
 
 describe("DimensionSection", () => {
-  it("splits the LoveIQ concept intro into a lead paragraph and centered panel", () => {
+  it("splits the LoveIQ concept intro into a lead paragraph and left-aligned body flow", () => {
     const { container } = render(
       <DimensionSection
         archetype="Spark Seeker"
@@ -17,16 +17,16 @@ describe("DimensionSection", () => {
     );
 
     const lead = container.querySelector(".report-prose--lead");
-    const panel = container.querySelector(".report-flow__panel--centered");
+    const proseBlocks = container.querySelectorAll(".report-prose");
 
     expect(lead).toBeInTheDocument();
     expect(lead).toHaveTextContent("Lead paragraph.");
-    expect(panel).toBeInTheDocument();
-    expect(panel).toHaveTextContent("Panel paragraph one.");
-    expect(panel).toHaveTextContent("Panel paragraph two.");
+    expect(proseBlocks).toHaveLength(2);
+    expect(proseBlocks[1]).toHaveTextContent("Panel paragraph one.");
+    expect(proseBlocks[1]).toHaveTextContent("Panel paragraph two.");
   });
 
-  it("extracts the trailing archetype heading into its own centered panel stack", () => {
+  it("extracts the trailing archetype heading into its own left-aligned stack", () => {
     const { container } = render(
       <DimensionSection
         archetype="Spark Seeker"
@@ -48,10 +48,10 @@ describe("DimensionSection", () => {
     expect(headings).toHaveLength(1);
     expect(headings[0]).toHaveTextContent("The motivation of the Spark Seeker");
     expect(screen.getByText("Archetype-specific narrative.")).toBeInTheDocument();
-    expect(container.querySelector(".report-flow__panel--editorial")).not.toBeInTheDocument();
+    expect(container.querySelector(".report-flow__panel")).not.toBeInTheDocument();
   });
 
-  it("does not push long paid sections into the editorial right-column layout by default", () => {
+  it("keeps long paid sections in the same left-aligned text column", () => {
     const { container } = render(
       <DimensionSection
         archetype="Spark Seeker"
@@ -74,11 +74,13 @@ describe("DimensionSection", () => {
       />
     );
 
-    expect(container.querySelector(".report-flow__panel--editorial")).not.toBeInTheDocument();
-    expect(container.querySelector(".report-flow__panel--centered")).toBeInTheDocument();
+    expect(container.querySelector(".report-flow__panel")).not.toBeInTheDocument();
+    expect(container.querySelector(".report-rich-heading")).toHaveTextContent(
+      "Core Insecurities of the Spark Seeker"
+    );
   });
 
-  it("keeps attachment style content on the standard centered layout instead of shifting right", () => {
+  it("keeps attachment style content in the standard left text flow", () => {
     const { container } = render(
       <DimensionSection
         archetype="Spark Seeker"
@@ -100,10 +102,35 @@ describe("DimensionSection", () => {
       />
     );
 
-    expect(container.querySelector(".report-flow__panel--editorial")).not.toBeInTheDocument();
-    expect(container.querySelectorAll(".report-flow__panel--centered")).toHaveLength(1);
+    expect(container.querySelector(".report-flow__panel")).not.toBeInTheDocument();
     expect(container.querySelector(".report-flow > .report-prose")).toHaveTextContent(
       "Common Attachment Style Patterns Across Archetypes"
+    );
+  });
+
+  it("keeps the sexual stage model content in the left-aligned prose flow", () => {
+    const { container } = render(
+      <DimensionSection
+        archetype="Spark Seeker"
+        archetypeHtml={null}
+        generalHtml={[
+          "<p>Intro one.</p>",
+          "<p>Intro two.</p>",
+          '<div class="report-stage-highlight"><p class="report-stage-highlight__label">Your likely current sexual stage:</p><p class="report-stage-highlight__value">Grounded / Integrated</p></div>',
+          "<p>The LoveIQ Sexual Stages (6-Stage Model)</p>",
+          "<p><strong>Recharging / Pausing</strong></p>",
+          "<p><strong>How it Feels:</strong> Quieter, lower-drive, restoring</p>",
+        ].join("")}
+        isPremium={false}
+        sectionId="sexual_stage"
+        sectionTitle="Sexual Stage"
+      />
+    );
+
+    expect(container.querySelector(".report-flow__panel")).not.toBeInTheDocument();
+    expect(container.querySelectorAll(".report-prose")).toHaveLength(2);
+    expect(container.querySelectorAll(".report-prose")[1]).toHaveTextContent(
+      "The LoveIQ Sexual Stages (6-Stage Model)"
     );
   });
 });

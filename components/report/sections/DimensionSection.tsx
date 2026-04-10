@@ -48,7 +48,7 @@ const DimensionSection: FC<Props> = ({
 
   const introHtml = joinReportHtmlBlocks(introBlocks);
   const panelHtml = joinReportHtmlBlocks(panelBlocks);
-  const archetypePanelStackClassName = headingBlock
+  const archetypeContentStackClassName = headingBlock
     ? "report-flow__stack report-flow__stack--md"
     : "report-flow__stack report-flow__stack--lg";
 
@@ -62,41 +62,35 @@ const DimensionSection: FC<Props> = ({
       ) : null}
 
       {panelHtml ? (
-        <div className="report-flow__panel report-flow__panel--centered">
-          <div className="report-flow__stack report-flow__stack--lg">
-            <div className="report-prose" dangerouslySetInnerHTML={{ __html: panelHtml }} />
-          </div>
-        </div>
+        <div className="report-prose" dangerouslySetInnerHTML={{ __html: panelHtml }} />
       ) : null}
 
       {archetypeHtml ? (
-        <div className="report-flow__panel report-flow__panel--centered">
-          <div className={archetypePanelStackClassName}>
-            {headingBlock ? (
-              <div
-                className="report-rich-heading"
-                dangerouslySetInnerHTML={{ __html: headingBlock }}
-              />
-            ) : null}
+        <div className={archetypeContentStackClassName}>
+          {headingBlock ? (
+            <div
+              className="report-rich-heading"
+              dangerouslySetInnerHTML={{ __html: headingBlock }}
+            />
+          ) : null}
 
-            <div className="report-themed-block">
-              {isPremium && !unlocked ? (
-                <div className="report-themed-block__preview">
-                  <div
-                    className="report-prose report-themed-block__blurred"
-                    aria-hidden="true"
-                    dangerouslySetInnerHTML={{ __html: archetypeHtml }}
-                  />
-                  <PremiumOverlay
-                    archetype={archetype}
-                    sectionTitle={sectionTitle}
-                    onUnlock={() => setUnlocked(true)}
-                  />
-                </div>
-              ) : (
-                <div className="report-prose" dangerouslySetInnerHTML={{ __html: archetypeHtml }} />
-              )}
-            </div>
+          <div className="report-themed-block">
+            {isPremium && !unlocked ? (
+              <div className="report-themed-block__preview">
+                <div
+                  className="report-prose report-themed-block__blurred"
+                  aria-hidden="true"
+                  dangerouslySetInnerHTML={{ __html: archetypeHtml }}
+                />
+                <PremiumOverlay
+                  archetype={archetype}
+                  sectionTitle={sectionTitle}
+                  onUnlock={() => setUnlocked(true)}
+                />
+              </div>
+            ) : (
+              <div className="report-prose" dangerouslySetInnerHTML={{ __html: archetypeHtml }} />
+            )}
           </div>
         </div>
       ) : null}
