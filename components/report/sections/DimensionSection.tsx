@@ -31,8 +31,6 @@ const DimensionSection: FC<Props> = ({
 
   let introBlocks = bodyBlocks;
   let panelBlocks: string[] = [];
-  let panelClassName = "report-flow__panel report-flow__panel--centered";
-  let panelStackClassName = "report-flow__stack report-flow__stack--lg";
 
   if (sectionId === "the_loveiq_concept") {
     introBlocks = bodyBlocks.slice(0, 1);
@@ -46,11 +44,6 @@ const DimensionSection: FC<Props> = ({
       introBlocks = bodyBlocks.slice(0, stagePanelIndex);
       panelBlocks = bodyBlocks.slice(stagePanelIndex);
     }
-  } else if (archetypeHtml && bodyBlocks.length >= 8) {
-    introBlocks = bodyBlocks.slice(0, 3);
-    panelBlocks = bodyBlocks.slice(3);
-    panelClassName = "report-flow__panel report-flow__panel--editorial";
-    panelStackClassName = "report-flow__stack report-flow__stack--md";
   }
 
   const introHtml = joinReportHtmlBlocks(introBlocks);
@@ -69,10 +62,8 @@ const DimensionSection: FC<Props> = ({
       ) : null}
 
       {panelHtml ? (
-        <div className={panelClassName}>
-          <div
-            className={`${panelStackClassName} ${panelClassName.includes("editorial") ? "report-flow__stack--stretch" : ""}`}
-          >
+        <div className="report-flow__panel report-flow__panel--centered">
+          <div className="report-flow__stack report-flow__stack--lg">
             <div className="report-prose" dangerouslySetInnerHTML={{ __html: panelHtml }} />
           </div>
         </div>
