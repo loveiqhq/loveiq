@@ -21,8 +21,10 @@ interface Props {
 }
 
 const COUNT_UP_DURATION_MS = 1800;
+const INITIAL_METRIC_REVEAL_DELAY_MS = 840;
 const METRIC_REVEAL_DELAY_MS = 120;
 const METRIC_REVEAL_THRESHOLD = 0.65;
+const METRIC_REVEAL_ROOT_MARGIN = "0px 0px -12% 0px";
 
 const stageDescriptions: Record<string, string> = {
   "Recharging / Pausing":
@@ -72,7 +74,9 @@ function describeScalarValue(label: string, value: number | null) {
 
 const WelcomeSection: FC<Props> = ({ feedbackWidget, generalHtml, sectionId, snapshot }) => {
   const sectionRef = useRef<HTMLElement>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
   const [isVisible, setIsVisible] = useState(false);
+  const [animateReady, setAnimateReady] = useState(false);
 
   // Fade-in for the whole section
   useEffect(() => {
@@ -92,6 +96,62 @@ const WelcomeSection: FC<Props> = ({ feedbackWidget, generalHtml, sectionId, sna
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
+
+  useEffect(() => {
+    if (!isVisible || animateReady) return;
+    const grid = gridRef.current;
+    if (!grid) return;
+
+    const prefersReducedMotion =
+      typeof window !== "undefined" &&
+      "matchMedia" in window &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    let timeoutId = 0;
+
+    const reveal = (delay: number) => {
+      timeoutId = window.setTimeout(
+        () => {
+          setAnimateReady(true);
+        },
+        prefersReducedMotion ? 0 : delay
+      );
+    };
+
+    const isAboveTheFoldOnLoad =
+      typeof window !== "undefined" &&
+      window.scrollY <= 16 &&
+      isElementVisibleEnough(grid, METRIC_REVEAL_THRESHOLD);
+
+    if (isAboveTheFoldOnLoad) {
+      reveal(INITIAL_METRIC_REVEAL_DELAY_MS);
+      return () => {
+        if (timeoutId) {
+          window.clearTimeout(timeoutId);
+        }
+      };
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting || entry.intersectionRatio < METRIC_REVEAL_THRESHOLD) return;
+        reveal(METRIC_REVEAL_DELAY_MS);
+        observer.disconnect();
+      },
+      {
+        threshold: [0, METRIC_REVEAL_THRESHOLD, 1],
+        rootMargin: METRIC_REVEAL_ROOT_MARGIN,
+      }
+    );
+
+    observer.observe(grid);
+    return () => {
+      observer.disconnect();
+      if (timeoutId) {
+        window.clearTimeout(timeoutId);
+      }
+    };
+  }, [animateReady, isVisible]);
 
   const cleanHtml = generalHtml
     .replace(/<table>[\s\S]*?<\/table>/g, "")
@@ -132,8 +192,9 @@ const WelcomeSection: FC<Props> = ({ feedbackWidget, generalHtml, sectionId, sna
         dangerouslySetInnerHTML={{ __html: cleanHtml }}
       />
 
-      <div className="report-welcome-grid">
+      <div ref={gridRef} className="report-welcome-grid">
         <MetricCard
+          animate={animateReady}
           description={describeScalarValue(
             "Current Sexual Satisfaction",
             snapshot.satisfactionValue
@@ -143,6 +204,7 @@ const WelcomeSection: FC<Props> = ({ feedbackWidget, generalHtml, sectionId, sna
           value={snapshot.satisfactionValue}
         />
         <MetricCard
+          animate={animateReady}
           description={describeScalarValue("Importance of Sex", snapshot.importanceValue)}
           label="Importance of Sex"
           pct={snapshot.importancePct}
@@ -200,34 +262,31 @@ const CountUp: FC<{ value: number; animate: boolean }> = ({ value, animate }) =>
 };
 
 const MetricCard: FC<{
+  animate: boolean;
   description: string;
   label: string;
   pct: number | null;
   value: number | null;
-}> = ({ description, label, pct, value }) => {
-  const [gaugeRef, animate] = useOneTimeReveal<HTMLDivElement>();
-
-  return (
-    <article className="report-card report-card--metric">
-      <p className="report-card__eyebrow">{label}</p>
-      <div ref={gaugeRef} className="report-gauge-wrap">
-        <ArcGauge animate={animate} max={7} tone="shared" value={value ?? 0} />
-        <div className="report-card__metric-value">
-          <span>
-            {pct !== null ? (
-              <>
-                <CountUp value={pct} animate={animate} />%
-              </>
-            ) : (
-              "--"
-            )}
-          </span>
-        </div>
+}> = ({ animate, description, label, pct, value }) => (
+  <article className="report-card report-card--metric">
+    <p className="report-card__eyebrow">{label}</p>
+    <div className="report-gauge-wrap">
+      <ArcGauge animate={animate} max={7} tone="shared" value={value ?? 0} />
+      <div className="report-card__metric-value">
+        <span>
+          {pct !== null ? (
+            <>
+              <CountUp value={pct} animate={animate} />%
+            </>
+          ) : (
+            "--"
+          )}
+        </span>
       </div>
-      <p className="report-card__description">{description}</p>
-    </article>
-  );
-};
+    </div>
+    <p className="report-card__description">{description}</p>
+  </article>
+);
 
 const StageCard: FC<{
   description: string;
@@ -244,41 +303,15 @@ const StageCard: FC<{
   </article>
 );
 
-function useOneTimeReveal<T extends Element>() {
-  const elementRef = useRef<T>(null);
-  const [isRevealed, setIsRevealed] = useState(false);
-
-  useEffect(() => {
-    if (isRevealed) return;
-    const element = elementRef.current;
-    if (!element) return;
-
-    let timeoutId = 0;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (!entry.isIntersecting) return;
-
-        timeoutId = window.setTimeout(() => {
-          setIsRevealed(true);
-        }, METRIC_REVEAL_DELAY_MS);
-        observer.disconnect();
-      },
-      {
-        threshold: METRIC_REVEAL_THRESHOLD,
-        rootMargin: "0px 0px -12% 0px",
-      }
-    );
-
-    observer.observe(element);
-    return () => {
-      observer.disconnect();
-      if (timeoutId) {
-        window.clearTimeout(timeoutId);
-      }
-    };
-  }, [isRevealed]);
-
-  return [elementRef, isRevealed] as const;
-}
-
 export default WelcomeSection;
+
+function isElementVisibleEnough(element: Element, threshold: number) {
+  const rect = element.getBoundingClientRect();
+  const viewportHeight =
+    typeof window !== "undefined" ? window.innerHeight || document.documentElement.clientHeight : 0;
+
+  if (rect.height <= 0 || viewportHeight <= 0) return false;
+
+  const visibleHeight = Math.min(rect.bottom, viewportHeight) - Math.max(rect.top, 0);
+  return visibleHeight / rect.height >= threshold;
+}

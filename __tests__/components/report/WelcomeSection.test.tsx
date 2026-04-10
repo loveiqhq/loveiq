@@ -1,9 +1,14 @@
 // @vitest-environment jsdom
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import WelcomeSection from "@/components/report/sections/WelcomeSection";
 
 let frameTime = 0;
+const SECTION_SELECTOR = 'section[data-report-section="true"]';
+const GRID_SELECTOR = ".report-welcome-grid";
+const GAUGE_SELECTOR = ".report-gauge__value";
+const INITIAL_METRIC_REVEAL_DELAY_MS = 840;
+const LATE_METRIC_REVEAL_DELAY_MS = 120;
 
 class MockIntersectionObserver implements IntersectionObserver {
   static instances: MockIntersectionObserver[] = [];
@@ -97,7 +102,7 @@ describe("WelcomeSection", () => {
     cleanup();
   });
 
-  it("animates the gauge and percentage only after the metric card becomes visible", async () => {
+  it("delays the above-the-fold metric animation until after the welcome section settles", async () => {
     render(
       <WelcomeSection
         feedbackWidget={null}
@@ -116,27 +121,30 @@ describe("WelcomeSection", () => {
     );
 
     expect(getMetricTexts()).toEqual(["0%", "0%"]);
+    expect(MockIntersectionObserver.instances).toHaveLength(1);
 
-    const gaugeWraps = Array.from(document.querySelectorAll(".report-gauge-wrap"));
-    expect(gaugeWraps).toHaveLength(2);
-    expect(MockIntersectionObserver.instances).toHaveLength(3);
+    const section = document.querySelector(SECTION_SELECTOR) as HTMLElement | null;
+    const grid = document.querySelector(GRID_SELECTOR) as HTMLDivElement | null;
+    expect(section).not.toBeNull();
+    expect(grid).not.toBeNull();
+    mockElementRect(grid!, { top: 160, bottom: 520, height: 360 });
 
-    const firstGaugeValue = document.querySelector(".report-gauge__value") as SVGPathElement | null;
+    const firstGaugeValue = document.querySelector(GAUGE_SELECTOR) as SVGPathElement | null;
     expect(firstGaugeValue).not.toBeNull();
     const initialOffset = Number(firstGaugeValue!.style.strokeDashoffset);
 
     act(() => {
-      gaugeWraps.forEach((element) => {
-        triggerIntersection(element, 1);
-      });
+      triggerIntersection(section!, 1);
     });
 
     await act(async () => {
-      vi.advanceTimersByTime(120);
+      vi.advanceTimersByTime(INITIAL_METRIC_REVEAL_DELAY_MS - 1);
     });
 
+    expect(getMetricTexts()).toEqual(["0%", "0%"]);
+
     await act(async () => {
-      await Promise.resolve();
+      vi.advanceTimersByTime(1);
     });
 
     await act(async () => {
@@ -145,6 +153,55 @@ describe("WelcomeSection", () => {
 
     expect(getMetricTexts()).toEqual(["86%", "71%"]);
     expect(Number(firstGaugeValue!.style.strokeDashoffset)).toBeLessThan(initialOffset);
+  });
+
+  it("animates after later intersection when the welcome metrics are not initially visible", async () => {
+    render(
+      <WelcomeSection
+        feedbackWidget={null}
+        generalHtml="<p>Your snapshot</p><p>Test intro.</p>"
+        sectionId="welcome"
+        snapshot={{
+          importanceLabel: "Importance of Sex",
+          importancePct: 71,
+          importanceValue: 5,
+          satisfactionLabel: "Current Sexual Satisfaction",
+          satisfactionPct: 86,
+          satisfactionValue: 6,
+          stage: "Grounded / Integrated",
+        }}
+      />
+    );
+
+    const section = document.querySelector(SECTION_SELECTOR) as HTMLElement | null;
+    const grid = document.querySelector(GRID_SELECTOR) as HTMLDivElement | null;
+    expect(section).not.toBeNull();
+    expect(grid).not.toBeNull();
+
+    mockElementRect(grid!, { top: 920, bottom: 1280, height: 360 });
+
+    act(() => {
+      triggerIntersection(section!, 1);
+    });
+
+    expect(getMetricTexts()).toEqual(["0%", "0%"]);
+    expect(MockIntersectionObserver.instances).toHaveLength(2);
+
+    mockElementRect(grid!, { top: 220, bottom: 580, height: 360 });
+
+    act(() => {
+      triggerIntersection(grid!, 1);
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(LATE_METRIC_REVEAL_DELAY_MS);
+    });
+
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+
+    expect(getMetricTexts()).toEqual(["86%", "71%"]);
   });
 });
 
@@ -175,4 +232,22 @@ function getMetricTexts() {
   return Array.from(document.querySelectorAll(".report-card__metric-value span")).map(
     (element) => element.textContent
   );
+}
+
+function mockElementRect(
+  element: Element,
+  { top, bottom, height }: { top: number; bottom: number; height: number }
+) {
+  const width = 320;
+  vi.spyOn(element, "getBoundingClientRect").mockReturnValue({
+    x: 0,
+    y: top,
+    top,
+    bottom,
+    left: 0,
+    right: width,
+    width,
+    height,
+    toJSON: () => ({}),
+  } as DOMRect);
 }
