@@ -25,8 +25,13 @@ interface SnapshotContent {
   importanceValue: number | null;
   satisfactionLabel: string;
   satisfactionPct: number | null;
+  satisfactionStatusLabel: string;
   satisfactionValue: number | null;
   stage: string | null;
+}
+
+interface SnapshotAnswers {
+  currentSexualSatisfaction: number | null;
 }
 
 const subscribeNoop = () => () => {};
@@ -86,6 +91,16 @@ const SCALE_TO_PERCENT: Record<number, number> = {
   7: 97,
 };
 
+const SATISFACTION_STATUS_LABELS: Record<number, string> = {
+  1: "Very dissatisfied",
+  2: "Mostly dissatisfied",
+  3: "Slightly dissatisfied",
+  4: "Mixed / in-between",
+  5: "Slightly satisfied",
+  6: "Mostly satisfied",
+  7: "Very satisfied",
+};
+
 function scaleToPercent(value: number | null): number | null {
   if (value === null) return null;
   return SCALE_TO_PERCENT[value] ?? null;
@@ -101,7 +116,15 @@ const STAGE_CODE_TO_LABEL: Record<string, string> = {
   evolving: "Evolving / Transcending",
 };
 
-function getSnapshotContent(diagnostics: Record<string, unknown> | null): SnapshotContent {
+function describeSatisfactionStatus(value: number | null) {
+  if (value === null) return "Still calibrating";
+  return SATISFACTION_STATUS_LABELS[value] ?? "Still calibrating";
+}
+
+function getSnapshotContent(
+  diagnostics: Record<string, unknown> | null,
+  snapshotAnswers: SnapshotAnswers | null
+): SnapshotContent {
   const satisfactionValue = getScalarOverlay(diagnostics, "OVL_SATISFACTION");
   const importanceValue = getScalarOverlay(diagnostics, "OVL_TOPIC_IMPORTANCE");
   const stageCode = getEnumOverlay(diagnostics, "OVL_PHASE_NOW");
@@ -115,6 +138,9 @@ function getSnapshotContent(diagnostics: Record<string, unknown> | null): Snapsh
       satisfactionValue === null
         ? ""
         : `${describeBand(satisfactionValue)} (${satisfactionValue}/7)`,
+    satisfactionStatusLabel: describeSatisfactionStatus(
+      snapshotAnswers?.currentSexualSatisfaction ?? null
+    ),
     importanceValue,
     importancePct: scaleToPercent(importanceValue),
     importanceLabel:
@@ -312,7 +338,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     );
   }
 
-  const { diagnostics, percentages, primaryArchetype } = data;
+  const { diagnostics, percentages, primaryArchetype, snapshotAnswers } = data;
   const theme = getReportTheme(primaryArchetype);
   const ranking = Object.entries(percentages)
     .sort(([, left], [, right]) => right - left)
@@ -323,7 +349,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     month: "long",
     day: "numeric",
   });
-  const snapshot = getSnapshotContent(diagnostics);
+  const snapshot = getSnapshotContent(diagnostics, snapshotAnswers ?? null);
 
   const placeholderValues = {
     archetype: primaryArchetype,

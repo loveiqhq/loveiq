@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, render } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import WelcomeSection from "@/components/report/sections/WelcomeSection";
 
@@ -114,11 +114,14 @@ describe("WelcomeSection", () => {
           importanceValue: 5,
           satisfactionLabel: "Current Sexual Satisfaction",
           satisfactionPct: 86,
+          satisfactionStatusLabel: "Mostly satisfied",
           satisfactionValue: 6,
           stage: "Grounded / Integrated",
         }}
       />
     );
+
+    expect(screen.getByText("Mostly satisfied")).toBeInTheDocument();
 
     expect(getMetricTexts()).toEqual(["0%", "0%"]);
     expect(MockIntersectionObserver.instances).toHaveLength(1);
@@ -167,6 +170,7 @@ describe("WelcomeSection", () => {
           importanceValue: 5,
           satisfactionLabel: "Current Sexual Satisfaction",
           satisfactionPct: 86,
+          satisfactionStatusLabel: "Mostly satisfied",
           satisfactionValue: 6,
           stage: "Grounded / Integrated",
         }}

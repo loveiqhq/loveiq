@@ -14,4 +14,16 @@ describe("report inline heading typography", () => {
       /@media \(max-width:\s*767px\)\s*\{[\s\S]*?\.report-rich-heading p\s*\{[\s\S]*?font-size:\s*28px;/
     );
   });
+
+  it("styles the sexual satisfaction status heading for desktop metric cards", () => {
+    expect(globalsCss).toMatch(
+      /\.report-card__status\s*\{[\s\S]*?font-family:\s*var\(--font-serif\);[\s\S]*?font-size:\s*clamp\(22px,\s*4\.2vw,\s*24\.875px\);/
+    );
+  });
+
+  it("sets a mobile override for the sexual satisfaction status heading", () => {
+    expect(globalsCss).toMatch(
+      /@media \(max-width:\s*767px\)\s*\{[\s\S]*?\.report-card__status\s*\{[\s\S]*?font-size:\s*22px;/
+    );
+  });
 });

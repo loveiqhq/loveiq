@@ -10,6 +10,9 @@ export interface ReportData {
   percentages: Record<string, number>;
   reportDate: string;
   diagnostics: Record<string, unknown> | null;
+  snapshotAnswers: {
+    currentSexualSatisfaction: number | null;
+  };
 }
 
 export interface ReportRequestError {

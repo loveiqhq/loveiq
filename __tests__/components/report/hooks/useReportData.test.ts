@@ -38,6 +38,7 @@ describe("useReportData", () => {
         percentages: { "Emotional Voyeur": 63 },
         reportDate: "2026-04-07T22:23:16.851299+00:00",
         diagnostics: null,
+        snapshotAnswers: { currentSexualSatisfaction: 3 },
       }),
     });
     globalThis.fetch = mockFetch;
@@ -51,6 +52,7 @@ describe("useReportData", () => {
     });
 
     expect(result.current.data?.primaryArchetype).toBe("Emotional Voyeur");
+    expect(result.current.data?.snapshotAnswers).toEqual({ currentSexualSatisfaction: 3 });
     expect(result.current.error).toBeNull();
     expect(localStorage.getItem(REPORT_SESSION_KEY)).toBe("02d88f31-eceb-4402-940d-c8cd98d01848");
     expect(sessionStorage.getItem(SURVEY_SESSION_KEY)).toBeNull();

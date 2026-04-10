@@ -15,6 +15,7 @@ vi.mock("@/components/report/hooks/useReportData", () => ({
 vi.mock("@/components/report/hooks/useSectionFeedback", () => ({
   useSectionFeedback: () => ({
     feedbacks: {},
+    submitted: {},
     submitFeedback: vi.fn(),
   }),
 }));
@@ -22,7 +23,39 @@ vi.mock("@/components/report/hooks/useSectionFeedback", () => ({
 import ReportPage from "@/components/report/ReportPage";
 
 describe("ReportPage", () => {
+  beforeEach(() => {
+    vi.stubGlobal(
+      "IntersectionObserver",
+      class MockIntersectionObserver implements IntersectionObserver {
+        readonly root = null;
+        readonly rootMargin = "0px";
+        readonly thresholds = [0];
+
+        disconnect() {}
+        observe(_target: Element) {}
+        takeRecords(): IntersectionObserverEntry[] {
+          return [];
+        }
+        unobserve(_target: Element) {}
+      }
+    );
+
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn().mockImplementation((query: string) => ({
+        matches: false,
+        media: query,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      }))
+    );
+  });
+
   afterEach(() => {
+    vi.unstubAllGlobals();
     cleanup();
   });
 
@@ -66,5 +99,35 @@ describe("ReportPage", () => {
     ).toBeInTheDocument();
     expect(screen.queryByText(/saved report session/i)).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /reload report/i })).toHaveAttribute("href", "/report");
+  });
+
+  it("renders the Figma-style satisfaction status from the stored 01002 answer", () => {
+    mockUseReportData.mockReturnValue({
+      data: {
+        userName: "Eman",
+        primaryArchetype: "Emotional Voyeur",
+        percentages: { "Emotional Voyeur": 63, "Explorer of Edges": 37 },
+        reportDate: "2026-04-07T22:23:16.851299+00:00",
+        diagnostics: {
+          overlaysScalar: {
+            OVL_SATISFACTION: (3 - 1) / 6,
+            OVL_TOPIC_IMPORTANCE: (5 - 1) / 6,
+          },
+          overlaysEnum: {
+            OVL_PHASE_NOW: "grounded",
+          },
+        },
+        snapshotAnswers: { currentSexualSatisfaction: 3 },
+      },
+      status: "success",
+      error: null,
+    });
+
+    render(<ReportPage />);
+
+    expect(screen.getByText("Slightly dissatisfied")).toBeInTheDocument();
+    expect(
+      screen.getByText(/enough frustration, inconsistency, or disappointment/i)
+    ).toBeInTheDocument();
   });
 });

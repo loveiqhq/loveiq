@@ -162,6 +162,10 @@ describe("GET /api/report", () => {
             diagnostics: { overlaysEnum: { sexual_stage: "exploring" } },
           },
         ],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [{ normalized_value: 3 }],
       });
 
     const res = await GET(makeRequest("02d88f31-eceb-4402-940d-c8cd98d01848"));
@@ -174,11 +178,53 @@ describe("GET /api/report", () => {
       percentages: { "Emotional Voyeur": 63 },
       reportDate: "2026-04-07T22:23:16.851299+00:00",
       diagnostics: { overlaysEnum: { sexual_stage: "exploring" } },
+      snapshotAnswers: { currentSexualSatisfaction: 3 },
     });
 
     const submissionLookupUrl = mockFetchWithTimeout.mock.calls[0][0] as string;
+    const snapshotAnswerLookupUrl = mockFetchWithTimeout.mock.calls[2][0] as string;
     expect(submissionLookupUrl).toContain("created_date_time");
     expect(submissionLookupUrl).toContain("app_user!fk_survey_submission_user(first_name)");
     expect(submissionLookupUrl).not.toContain("select=id,first_name,created_at");
+    expect(snapshotAnswerLookupUrl).toContain("survey_question!inner(frontend_qid)");
+    expect(snapshotAnswerLookupUrl).toContain("survey_question.frontend_qid=eq.01002");
+  });
+
+  it("returns a null satisfaction snapshot answer when question 01002 is missing", async () => {
+    allowCsrf();
+    allowRateLimit();
+    mockFetchWithTimeout
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          {
+            id: 55,
+            created_date_time: "2026-04-07T22:23:16.851299+00:00",
+            app_user: { first_name: "Eman" },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          {
+            primary_archetype: "Spark Seeker",
+            v5_primary_archetype: "Emotional Voyeur",
+            percentages: { "Spark Seeker": 41 },
+            v5_percentages: { "Emotional Voyeur": 63 },
+            diagnostics: null,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [],
+      });
+
+    const res = await GET(makeRequest("02d88f31-eceb-4402-940d-c8cd98d01848"));
+    expect(res.status).toBe(200);
+
+    const json = await res.json();
+    expect(json.snapshotAnswers).toEqual({ currentSexualSatisfaction: null });
   });
 });

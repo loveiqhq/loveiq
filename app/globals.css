@@ -3231,6 +3231,18 @@ h3,
   line-height: 1.5rem;
 }
 
+.report-card__status {
+  max-width: 13ch;
+  margin: 0 auto 1rem;
+  color: #fff;
+  font-family: var(--font-serif);
+  font-size: clamp(22px, 4.2vw, 24.875px);
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+
 .report-card__metric-value span {
   font-family: var(--font-sans);
   font-size: 39px;
@@ -4006,6 +4018,13 @@ h3,
 
   .report-card__eyebrow {
     min-height: 0;
+  }
+
+  .report-card__status {
+    max-width: 12ch;
+    margin-bottom: 0.875rem;
+    font-size: 22px;
+    line-height: 1.18;
   }
 
   .report-gauge {

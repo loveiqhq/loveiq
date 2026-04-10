@@ -10,6 +10,7 @@ interface SnapshotContent {
   importanceValue: number | null;
   satisfactionLabel: string;
   satisfactionPct: number | null;
+  satisfactionStatusLabel: string;
   satisfactionValue: number | null;
   stage: string | null;
 }
@@ -192,6 +193,7 @@ const WelcomeSection: FC<Props> = ({ feedbackWidget, generalHtml, sectionId, sna
           )}
           label="Current Sexual Satisfaction"
           pct={snapshot.satisfactionPct}
+          status={snapshot.satisfactionStatusLabel}
           value={snapshot.satisfactionValue}
         />
         <MetricCard
@@ -257,10 +259,14 @@ const MetricCard: FC<{
   description: string;
   label: string;
   pct: number | null;
+  status?: string;
   value: number | null;
-}> = ({ animate, description, label, pct, value }) => (
-  <article className="report-card report-card--metric">
+}> = ({ animate, description, label, pct, status, value }) => (
+  <article
+    className={`report-card report-card--metric${status ? " report-card--metric-has-status" : ""}`}
+  >
     <p className="report-card__eyebrow">{label}</p>
+    {status ? <p className="report-card__status">{status}</p> : null}
     <div className="report-gauge-wrap">
       <ArcGauge animate={animate} max={7} tone="shared" value={value ?? 0} />
       <div className="report-card__metric-value">

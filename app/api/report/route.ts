@@ -21,6 +21,7 @@ const RATE_LIMIT_CONFIG = {
 };
 
 const SUPABASE_TIMEOUT_MS = 5_000;
+const SNAPSHOT_QUESTION_QID = "01002";
 
 interface SubmissionUser {
   first_name: string | null;
@@ -32,12 +33,23 @@ interface SubmissionRow {
   app_user: SubmissionUser | SubmissionUser[] | null;
 }
 
+interface SnapshotAnswers {
+  currentSexualSatisfaction: number | null;
+}
+
 function getSubmissionUserName(submission: SubmissionRow): string | null {
   if (Array.isArray(submission.app_user)) {
     return submission.app_user[0]?.first_name ?? null;
   }
 
   return submission.app_user?.first_name ?? null;
+}
+
+function normalizeScaleAnswer(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  const rounded = Math.round(value);
+  if (rounded < 1 || rounded > 7) return null;
+  return rounded;
 }
 
 export async function GET(request: Request) {
@@ -141,16 +153,40 @@ export async function GET(request: Request) {
     const submission = submissions[0];
 
     // 6. Look up scoring_result by survey_submission_id
-    const scoringRes = await getBreaker("supabase").fire(() =>
-      fetchWithTimeout(
-        `${supabaseUrl}/rest/v1/scoring_result?survey_submission_id=eq.${submission.id}&select=primary_archetype,v5_primary_archetype,percentages,v5_percentages,diagnostics&limit=1`,
-        {
-          headers,
-          cache: "no-store",
-          timeoutMs: SUPABASE_TIMEOUT_MS,
-        }
-      )
+    const snapshotAnswersSelect = ["normalized_value", "survey_question!inner(frontend_qid)"].join(
+      ","
     );
+    const snapshotAnswersQuery =
+      `${supabaseUrl}/rest/v1/survey_submission_answer` +
+      `?survey_submission_id=eq.${submission.id}` +
+      `&select=${snapshotAnswersSelect}` +
+      `&survey_question.frontend_qid=eq.${SNAPSHOT_QUESTION_QID}` +
+      "&limit=1";
+
+    const [scoringRes, snapshotAnswersRes] = await Promise.all([
+      getBreaker("supabase").fire(() =>
+        fetchWithTimeout(
+          `${supabaseUrl}/rest/v1/scoring_result?survey_submission_id=eq.${submission.id}&select=primary_archetype,v5_primary_archetype,percentages,v5_percentages,diagnostics&limit=1`,
+          {
+            headers,
+            cache: "no-store",
+            timeoutMs: SUPABASE_TIMEOUT_MS,
+          }
+        )
+      ),
+      getBreaker("supabase")
+        .fire(() =>
+          fetchWithTimeout(snapshotAnswersQuery, {
+            headers,
+            cache: "no-store",
+            timeoutMs: SUPABASE_TIMEOUT_MS,
+          })
+        )
+        .catch((err) => {
+          logger.warn({ err, submissionId: submission.id }, "Snapshot answers lookup failed");
+          return null;
+        }),
+    ]);
 
     if (!scoringRes.ok) {
       logger.error({ status: scoringRes.status }, "Supabase scoring_result lookup failed");
@@ -170,6 +206,23 @@ export async function GET(request: Request) {
     }
 
     const scoring = scoringRows[0];
+    let snapshotAnswers: SnapshotAnswers = { currentSexualSatisfaction: null };
+
+    if (snapshotAnswersRes?.ok) {
+      const snapshotAnswerRows = (await snapshotAnswersRes.json()) as Array<{
+        normalized_value: number | null;
+      }>;
+      snapshotAnswers = {
+        currentSexualSatisfaction: normalizeScaleAnswer(
+          snapshotAnswerRows[0]?.normalized_value ?? null
+        ),
+      };
+    } else if (snapshotAnswersRes) {
+      logger.warn(
+        { status: snapshotAnswersRes.status, submissionId: submission.id },
+        "Snapshot answers lookup returned a non-OK response"
+      );
+    }
 
     // 7. Build response — prefer v5 fields, fall back to v4
     return NextResponse.json({
@@ -178,6 +231,7 @@ export async function GET(request: Request) {
       percentages: scoring.v5_percentages || scoring.percentages || {},
       reportDate: submission.created_date_time,
       diagnostics: scoring.diagnostics ?? null,
+      snapshotAnswers,
     });
   } catch (err) {
     if (err instanceof CircuitOpenError) {
