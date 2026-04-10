@@ -20,6 +20,8 @@ interface Props {
   snapshot: SnapshotContent;
 }
 
+const COUNT_UP_DURATION_MS = 1800;
+
 const stageDescriptions: Record<string, string> = {
   "Recharging / Pausing":
     "Sexuality feels quieter right now, and rest, lower pressure, or recovery matter most.",
@@ -91,7 +93,8 @@ const WelcomeSection: FC<Props> = ({ feedbackWidget, generalHtml, sectionId, sna
     return () => observer.disconnect();
   }, []);
 
-  // Trigger gauge animations only when the cards grid scrolls into view
+  // Start the metric animations only when the cards are mostly on screen.
+  // A low threshold made the arc animate before users actually reached the row.
   useEffect(() => {
     const grid = gridRef.current;
     if (!grid) return;
@@ -99,12 +102,15 @@ const WelcomeSection: FC<Props> = ({ feedbackWidget, generalHtml, sectionId, sna
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
-          // Short delay so the "0" state renders first
-          setTimeout(() => setAnimateReady(true), 300);
+          // Keep the idle state briefly visible once the row is actually in view.
+          setTimeout(() => setAnimateReady(true), 180);
           observer.disconnect();
         }
       },
-      { threshold: 0.2 }
+      {
+        threshold: 0.55,
+        rootMargin: "0px 0px -8% 0px",
+      }
     );
 
     observer.observe(grid);
@@ -189,15 +195,31 @@ const CountUp: FC<{ value: number; animate: boolean }> = ({ value, animate }) =>
   useEffect(() => {
     if (!animate || hasRun.current) return;
     hasRun.current = true;
-    const duration = 1200;
+    const prefersReducedMotion =
+      typeof window !== "undefined" &&
+      "matchMedia" in window &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    if (prefersReducedMotion) {
+      const reducedMotionFrame = requestAnimationFrame(() => setDisplay(value));
+      return () => cancelAnimationFrame(reducedMotionFrame);
+    }
+
     const start = performance.now();
+    let frameId = 0;
+
     const step = (now: number) => {
-      const progress = Math.min((now - start) / duration, 1);
+      const progress = Math.min((now - start) / COUNT_UP_DURATION_MS, 1);
       const eased = 1 - Math.pow(1 - progress, 3);
       setDisplay(Math.round(eased * value));
-      if (progress < 1) requestAnimationFrame(step);
+
+      if (progress < 1) {
+        frameId = requestAnimationFrame(step);
+      }
     };
-    requestAnimationFrame(step);
+
+    frameId = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(frameId);
   }, [animate, value]);
 
   return <>{display}</>;

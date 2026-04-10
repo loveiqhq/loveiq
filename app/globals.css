@@ -1579,10 +1579,6 @@ h3,
   margin: 0 auto;
 }
 
-.report-gauge__value {
-  transition: stroke-dashoffset 1.2s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
 /* Legacy hero-card base styles removed — new Figma-matched styles in responsive section */
 
 /* ── Archetype Probability (Figma-matched) ── */

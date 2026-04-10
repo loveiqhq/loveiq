@@ -11,6 +11,7 @@ interface Props {
 
 const RADIUS = 80;
 const ARC_LENGTH = Math.PI * RADIUS;
+const GAUGE_ANIMATION_DURATION_MS = 2200;
 
 /** Full semicircle path (180deg to 0deg) */
 const FULL_ARC = describeArc(104, 100, RADIUS, 180, 0);
@@ -24,8 +25,32 @@ const ArcGauge: FC<Props> = ({ animate = false, tone = "accent", max, value }) =
   useEffect(() => {
     if (!animate || hasAnimated.current) return;
     hasAnimated.current = true;
-    const id = requestAnimationFrame(() => setOffset(targetOffset));
-    return () => cancelAnimationFrame(id);
+    const prefersReducedMotion =
+      typeof window !== "undefined" &&
+      "matchMedia" in window &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    if (prefersReducedMotion) {
+      const reducedMotionFrame = requestAnimationFrame(() => setOffset(targetOffset));
+      return () => cancelAnimationFrame(reducedMotionFrame);
+    }
+
+    const startOffset = ARC_LENGTH;
+    const start = performance.now();
+    let frameId = 0;
+
+    const step = (now: number) => {
+      const progress = Math.min((now - start) / GAUGE_ANIMATION_DURATION_MS, 1);
+      const eased = easeInOutCubic(progress);
+      setOffset(startOffset + (targetOffset - startOffset) * eased);
+
+      if (progress < 1) {
+        frameId = requestAnimationFrame(step);
+      }
+    };
+
+    frameId = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(frameId);
   }, [animate, targetOffset]);
 
   return (
@@ -66,6 +91,12 @@ function polarToCartesian(cx: number, cy: number, radius: number, angleInDegrees
     x: cx + radius * Math.cos(radians),
     y: cy - radius * Math.sin(radians),
   };
+}
+
+function easeInOutCubic(progress: number) {
+  return progress < 0.5
+    ? 4 * progress * progress * progress
+    : 1 - Math.pow(-2 * progress + 2, 3) / 2;
 }
 
 export default ArcGauge;
