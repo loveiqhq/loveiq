@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FC } from "react";
-import { getReportTheme } from "../reportTheme";
+import { getReportTheme, getReportThemeIconStyle } from "../reportTheme";
 
 interface Props {
   generalHtml: string;
@@ -95,7 +95,10 @@ const ArchetypeProbabilitySection: FC<Props> = ({
             <p>{primaryTheme.motto}</p>
           </div>
 
-          <div className="report-prob__hero-icon">
+          <div
+            className="report-prob__hero-icon"
+            style={getReportThemeIconStyle(primaryTheme, "hero")}
+          >
             <PrimaryIcon className="report-prob__hero-icon-svg" />
           </div>
 
@@ -115,6 +118,10 @@ const ArchetypeProbabilitySection: FC<Props> = ({
             const isLast = i === secondaryItems.length - 1;
             // 3rd item (i===1) fades more in collapsed view
             const isFading = !expanded && i === 1;
+            const rowIconStyle = {
+              ...getReportThemeIconStyle(theme, "row"),
+              ...(isHovered ? { background: theme.accent } : {}),
+            };
 
             return (
               <div
@@ -149,10 +156,7 @@ const ArchetypeProbabilitySection: FC<Props> = ({
                 </div>
 
                 <div className="report-prob__row-profile">
-                  <div
-                    className="report-prob__row-icon"
-                    style={isHovered ? { background: theme.accent } : undefined}
-                  >
+                  <div className="report-prob__row-icon" style={rowIconStyle}>
                     <ArchIcon className="report-prob__row-icon-svg" />
                   </div>
                   <div>

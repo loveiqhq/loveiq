@@ -1766,8 +1766,11 @@ h3,
 }
 
 .report-prob__hero-icon-svg {
-  width: 40px;
-  height: 40px;
+  display: block;
+  width: var(--report-icon-width, 40px);
+  height: var(--report-icon-height, 40px);
+  max-width: 100%;
+  max-height: 100%;
   color: #130b17;
 }
 
@@ -1896,8 +1899,11 @@ h3,
 }
 
 .report-prob__row-icon-svg {
-  width: 40px;
-  height: 40px;
+  display: block;
+  width: var(--report-icon-width, 40px);
+  height: var(--report-icon-height, 40px);
+  max-width: 100%;
+  max-height: 100%;
   color: #130b17;
 }
 
@@ -2319,6 +2325,12 @@ h3,
     width: 88px;
     height: 88px;
     border-radius: 20px;
+  }
+
+  .report-prob__hero-icon-svg,
+  .report-prob__row-icon-svg {
+    width: var(--report-icon-width-mobile, var(--report-icon-width, 40px));
+    height: var(--report-icon-height-mobile, var(--report-icon-height, 40px));
   }
 
   .report-prob__hero-cta {
