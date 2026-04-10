@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState, type FC } from "react";
+import { ReferFriendIcon, ShareReportIcon } from "./ReportActionIcons";
 import type { AccessTier, DisplayReportSection } from "./reportTitles";
 
 interface Props {
@@ -242,11 +243,11 @@ const ReportNavigation: FC<Props> = ({
           {/* Action buttons */}
           <div className="report-sidebar__actions">
             <button className="report-sidebar__btn" type="button">
-              <ShareIcon />
+              <ShareReportIcon />
               <span>Share Report</span>
             </button>
             <button className="report-sidebar__btn" type="button">
-              <ReferIcon />
+              <ReferFriendIcon />
               <span>Refer a Friend</span>
             </button>
           </div>
@@ -311,76 +312,6 @@ const LockBadge: FC = () => (
       <path d="M3.6 5.2V3.9a2.4 2.4 0 1 1 4.8 0v1.3" />
     </svg>
   </span>
-);
-
-const ShareIcon: FC = () => (
-  <svg viewBox="0 0 12 13" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-    <path
-      d="M0.5 0.5H1.83333C2.18696 0.5 2.52609 0.640476 2.77614 0.890524C3.02619 1.14057 3.16667 1.47971 3.16667 1.83333V2.72933"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <path
-      d="M5.16667 0.5H1.16667C0.798477 0.5 0.5 0.798477 0.5 1.16667V2.5C0.5 2.86819 0.798477 3.16667 1.16667 3.16667H5.16667C5.53486 3.16667 5.83333 2.86819 5.83333 2.5V1.16667C5.83333 0.798477 5.53486 0.5 5.16667 0.5Z"
-      transform="translate(0.833 4.667)"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <path
-      d="M3.16667 0.5H1.83333C1.47971 0.5 1.14057 0.640476 0.890524 0.890524C0.640476 1.14057 0.5 1.47971 0.5 1.83333V11.1667C0.5 11.5203 0.640476 11.8594 0.890524 12.1095C1.14057 12.3595 1.47971 12.5 1.83333 12.5H9.83333C10.0819 12.5001 10.3256 12.4306 10.5368 12.2995C10.7481 12.1684 10.9184 11.9808 11.0287 11.758"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <path
-      d="M0.5 0.5H7.16667"
-      transform="translate(2.167 7.833)"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <path
-      d="M0.5 5.83333L3.16667 3.16667L0.5 0.5"
-      transform="translate(8.167 4.667)"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
-);
-
-const ReferIcon: FC = () => (
-  <svg viewBox="0 0 11 7" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-    <path
-      d="M3.16667 5.83333C4.63943 5.83333 5.83333 4.63943 5.83333 3.16667C5.83333 1.69391 4.63943 0.5 3.16667 0.5C1.69391 0.5 0.5 1.69391 0.5 3.16667C0.5 4.63943 1.69391 5.83333 3.16667 5.83333Z"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <path
-      d="M9.83333 4.5V3.16667C9.83333 2.45942 9.55238 1.78115 9.05228 1.28105C8.55219 0.780952 7.87391 0.5 7.16667 0.5H3.16667C2.45942 0.5 1.78115 0.780952 1.28105 1.28105C0.780952 1.78115 0.5 2.45942 0.5 3.16667V4.5"
-      transform="translate(0.333 1)"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <path
-      d="M4.5 0.5H0.5"
-      transform="translate(5.833 3.167)"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <path
-      d="M0.5 0.5V4.5"
-      transform="translate(7.833 1.167)"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
 );
 
 export default ReportNavigation;
