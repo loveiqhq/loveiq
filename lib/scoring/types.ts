@@ -47,6 +47,16 @@ export interface V5PrototypeHelper {
   maxCoeff: number;
 }
 
+/** V5 per-archetype calibration inputs */
+export interface V5ArchetypeCalibration {
+  archetypeId: number;
+  archetypeName: string;
+  v5UsesBias: boolean;
+  expectedCategoricalLiftAfterQuestionScaling: number;
+  v5CategoricalInterceptScale: number;
+  v5CategoricalInterceptSubtract: number;
+}
+
 /** V5 scoring result (independent match percentages, NOT summing to 100) */
 export interface V5ScoringResult {
   rawTotal: Record<string, number>;
@@ -67,20 +77,23 @@ export interface ScoringConfig {
   archetypes: string[];
   dimensions: Record<string, DimensionSpec>;
   overlays: Record<string, OverlaySpec>;
-  prototypes: Map<string, number>; // "archetype||dimId" → value
+  prototypes: Map<string, number>; // "archetype||dimId" -> value
   bias: Record<string, number>;
-  boosts: Map<string, BoostEntry[]>; // "qid||answerCode" → entries
+  boosts: Map<string, BoostEntry[]>; // "qid||answerCode" -> entries
   gates: GateRule[];
-  scalarMap: Map<string, number>; // "targetId||qid||answerCode" → numeric
-  enumMap: Map<string, Set<string>>; // "overlayId||qid" → valid codes
+  scalarMap: Map<string, number>; // "targetId||qid||answerCode" -> numeric
+  enumMap: Map<string, Set<string>>; // "overlayId||qid" -> valid codes
   weightModifiers: WeightModifierRule[];
   knownQids: Set<string>;
-  labelToCode: Record<string, Record<string, string>>; // qid → { label → code }
+  labelToCode: Record<string, Record<string, string>>; // qid -> { label -> code }
   // V5 additions
-  archetypeIds: Record<string, number>; // archetype name → numeric ID
-  v5Helpers: Map<string, V5PrototypeHelper>; // "archetype||dimId" → helper
+  archetypeIds: Record<string, number>; // archetype name -> numeric ID
+  v5Helpers: Map<string, V5PrototypeHelper>; // "archetype||dimId" -> helper
+  v5Calibration: Map<string, V5ArchetypeCalibration>; // archetype name -> calibration row
   multiselectScoringQuestions: Set<string>; // QIDs using per-archetype MAX aggregation
   v5Enabled: boolean;
+  v5CategoricalInterceptEnabled: boolean;
+  v5CategoricalInterceptByArchetype: Record<string, number>;
   v5SpacingGapMin: number;
   v5SpacingGapMax: number;
   v5RoundDigits: number;

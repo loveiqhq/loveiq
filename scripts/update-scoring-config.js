@@ -103,7 +103,7 @@ function main() {
       answerCode: (r.answer_code || "").trim(),
       answerLabel: (r.answer_label || "").trim(),
       archetypeName: r.archetype_name.trim(),
-      scoreAdd: toFloat(r.score_add, 0.0),
+      scoreAdd: toFloat(r.score_add_proposed, toFloat(r.score_add, 0.0)),
     }));
 
   // 7. Gates
@@ -183,6 +183,15 @@ function main() {
       archetypeId: parseInt(r.archetype_id, 10),
       archetypeName: r.archetype_name.trim(),
       v5UsesBias: toBool(r.v5_uses_bias),
+      expectedCategoricalLiftAfterQuestionScaling: toFloat(
+        r.expected_categorical_lift_after_question_scaling,
+        0.0
+      ),
+      v5CategoricalInterceptScale: toFloat(r.v5_categorical_intercept_scale, 0.0),
+      v5CategoricalInterceptSubtract: toFloat(
+        r["v5_categorical_intercept_subtract (J*K)"],
+        0.0
+      ),
     }));
 
   // 14. V6 Question Logic
@@ -348,6 +357,9 @@ export interface V5ArchetypeCalibrationDef {
   archetypeId: number;
   archetypeName: string;
   v5UsesBias: boolean;
+  expectedCategoricalLiftAfterQuestionScaling: number;
+  v5CategoricalInterceptScale: number;
+  v5CategoricalInterceptSubtract: number;
 }
 
 export const v5ArchetypeCalibration: V5ArchetypeCalibrationDef[] = ${JSON.stringify(v5ArchetypeCalibration, null, 2)};

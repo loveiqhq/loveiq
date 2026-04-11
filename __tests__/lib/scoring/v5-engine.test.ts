@@ -220,6 +220,32 @@ describe("V5 excludes V4-only features", () => {
     }
     expect(anyDifferent).toBe(true);
   });
+
+  it("applies the V5 categorical intercept before raw percentage mapping", () => {
+    const withoutIntercept: ScoringConfig = {
+      ...config,
+      v5CategoricalInterceptEnabled: false,
+    };
+    const answers = {
+      "02004": "I initiate",
+      "03003": ["Visible or semi-public", "Novel or adventurous"],
+      "03010": "Strong edge or taboo energy",
+      "10002": ["Brief direct words", "Ongoing verbal feedback"],
+      "14020": ["Novelty and discovery", "Pleasure and play"],
+    };
+
+    const withIntercept = scoreArchetypes(config, answers);
+    const without = scoreArchetypes(withoutIntercept, answers);
+
+    const sparkIntercept = config.v5CategoricalInterceptByArchetype["Spark Seeker"];
+    expect(sparkIntercept).toBeGreaterThan(0);
+    expect(
+      without.v5!.rawTotal["Spark Seeker"] - withIntercept.v5!.rawTotal["Spark Seeker"]
+    ).toBeCloseTo(sparkIntercept, 6);
+    expect(withIntercept.v5!.rawPct["Spark Seeker"]).toBeLessThan(
+      without.v5!.rawPct["Spark Seeker"]
+    );
+  });
 });
 
 // ─── V5 with weight modifiers ───────────────────────────────────────────────
@@ -236,6 +262,20 @@ describe("V5 with weight modifiers", () => {
 
     // rawMax = SUM(adj_w_d), which changes with weight modifiers
     expect(noStressAnchor.rawMax).not.toBe(highStressAnchor.rawMax);
+  });
+
+  it("medication impact now scalarizes and can trigger weight modifiers", () => {
+    const baseline = scoreArchetypes(config, { "15009": "No" });
+    const impacted = scoreArchetypes(config, { "15009": "Yes, lowers my drive" });
+
+    expect(baseline.diagnostics.overlaysScalar.OVL_MEDS_IMPACT).toBeCloseTo(0, 6);
+    expect(impacted.diagnostics.overlaysScalar.OVL_MEDS_IMPACT).toBeCloseTo(1, 6);
+    expect(impacted.diagnostics.dimensionWeightsFinal.DIM_RESPONSIVE).toBeLessThan(
+      baseline.diagnostics.dimensionWeightsFinal.DIM_RESPONSIVE
+    );
+    expect(impacted.diagnostics.dimensionWeightsFinal.DIM_INTENSITY).toBeLessThan(
+      baseline.diagnostics.dimensionWeightsFinal.DIM_INTENSITY
+    );
   });
 });
 

@@ -11,6 +11,7 @@ import {
   weightModifiers as weightModifiersDef,
   labelToCodeMap,
   v5PrototypeHelpers,
+  v5ArchetypeCalibration as v5ArchetypeCalibrationDef,
   multiselectScoringQuestions as multiselectScoringQids,
 } from "@/data/scoring-config";
 import type {
@@ -21,6 +22,7 @@ import type {
   GateRule,
   WeightModifierRule,
   V5PrototypeHelper,
+  V5ArchetypeCalibration,
 } from "./types";
 
 let cachedConfig: ScoringConfig | null = null;
@@ -144,7 +146,28 @@ function buildConfig(): ScoringConfig {
     });
   }
 
+  const v5Calibration = new Map<string, V5ArchetypeCalibration>();
+  const v5CategoricalInterceptByArchetype: Record<string, number> = Object.fromEntries(
+    archetypes.map((archetype) => [archetype, 0.0])
+  );
+  for (const row of v5ArchetypeCalibrationDef) {
+    const calibration: V5ArchetypeCalibration = {
+      archetypeId: row.archetypeId,
+      archetypeName: row.archetypeName,
+      v5UsesBias: row.v5UsesBias,
+      expectedCategoricalLiftAfterQuestionScaling: row.expectedCategoricalLiftAfterQuestionScaling,
+      v5CategoricalInterceptScale: row.v5CategoricalInterceptScale,
+      v5CategoricalInterceptSubtract: row.v5CategoricalInterceptSubtract,
+    };
+    v5Calibration.set(row.archetypeName, calibration);
+    v5CategoricalInterceptByArchetype[row.archetypeName] = row.v5CategoricalInterceptSubtract;
+  }
+
   const v5Enabled = toBoolLocal(modelParams.v5_final_match_enabled, false);
+  const v5CategoricalInterceptEnabled = toBoolLocal(
+    modelParams.v5_final_categorical_intercept_enabled,
+    false
+  );
   const v5SpacingGapMin = toFloatLocal(modelParams.v5_final_spacing_gap_min, 3.0);
   const v5SpacingGapMax = toFloatLocal(modelParams.v5_final_spacing_gap_max, 4.0);
   const v5RoundDigits = parseInt(modelParams.v5_final_round_digits || "1", 10);
@@ -165,8 +188,11 @@ function buildConfig(): ScoringConfig {
     labelToCode: labelToCodeMap,
     archetypeIds,
     v5Helpers,
+    v5Calibration,
     multiselectScoringQuestions: new Set(multiselectScoringQids),
     v5Enabled,
+    v5CategoricalInterceptEnabled,
+    v5CategoricalInterceptByArchetype,
     v5SpacingGapMin,
     v5SpacingGapMax,
     v5RoundDigits,

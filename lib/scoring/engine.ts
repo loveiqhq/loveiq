@@ -352,6 +352,13 @@ function computeV5Scores(
   // Step 8 (V5): Categorical boosts WITHOUT centering (multiselect-aware)
   applyBoostsNonCentered(config, answeredPairs, rawTotal);
 
+  // Step 8.5 (V5): Optional per-archetype categorical intercept correction
+  if (config.v5CategoricalInterceptEnabled) {
+    for (const archetype of archetypes) {
+      rawTotal[archetype] -= config.v5CategoricalInterceptByArchetype[archetype] ?? 0.0;
+    }
+  }
+
   // V5: NO archetype bias, NO softmax
 
   // Step 9: Compute per-archetype anchors with runtime-adjusted weights

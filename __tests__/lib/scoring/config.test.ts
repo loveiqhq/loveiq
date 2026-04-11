@@ -36,6 +36,24 @@ describe("getScoringConfig", () => {
     expect(config.dimensions["DIM_PARTNER_FOCUS"].weight).toBe(1.2);
   });
 
+  it("scalarizes the medication impact overlay and exposes its numeric map", () => {
+    expect(config.overlays["OVL_MEDS_IMPACT"]).toBeDefined();
+    expect(config.overlays["OVL_MEDS_IMPACT"].qid).toBe("15009");
+    expect(config.overlays["OVL_MEDS_IMPACT"].transform).toBe("categorical_to_numeric");
+    expect(config.scalarMap.get("OVL_MEDS_IMPACT||15009||no")).toBe(0);
+    expect(config.scalarMap.get("OVL_MEDS_IMPACT||15009||lowers_drive")).toBe(1);
+    expect(config.scalarMap.get("OVL_MEDS_IMPACT||15009||increases_drive")).toBe(1);
+    expect(config.scalarMap.get("OVL_MEDS_IMPACT||15009||not_sure_effect")).toBe(0.6);
+    expect(config.scalarMap.get("OVL_MEDS_IMPACT||15009||prefer_not")).toBe(0);
+  });
+
+  it("loads V5 categorical intercept calibration", () => {
+    expect(config.v5CategoricalInterceptEnabled).toBe(true);
+    expect(config.v5Calibration.size).toBe(14);
+    expect(config.v5CategoricalInterceptByArchetype["Sensual Connector"]).toBeCloseTo(1.132, 6);
+    expect(config.v5CategoricalInterceptByArchetype["Spark Seeker"]).toBeCloseTo(1.121, 6);
+  });
+
   it("has multiselectScoringQuestions with 3 questions", () => {
     expect(config.multiselectScoringQuestions).toBeInstanceOf(Set);
     expect(config.multiselectScoringQuestions.size).toBe(3);

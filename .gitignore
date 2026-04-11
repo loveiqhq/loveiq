@@ -39,6 +39,9 @@ supabase/.temp/
 # Data source files
 *.csv
 *.docx
+!.source-artifacts/
+!.source-artifacts/**/*.docx
+!.source-artifacts/**/*.xlsm
 
 # Playwright
 /test-results/
