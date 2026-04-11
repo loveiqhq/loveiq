@@ -9,8 +9,22 @@ interface Props {
   theme: ReportTheme;
 }
 
+function splitMottoForWrap(motto: string) {
+  const dashIndex = motto.indexOf("—");
+
+  if (dashIndex === -1) {
+    return [motto];
+  }
+
+  const leadSegment = `${motto.slice(0, dashIndex).trimEnd()}—`;
+  const trailingSegment = motto.slice(dashIndex + 1).trimStart();
+
+  return trailingSegment ? [leadSegment, trailingSegment] : [motto];
+}
+
 const CoreArchetypeSection: FC<Props> = ({ archetypeHtml, matchScore, theme }) => {
   const matchPct = Math.round(matchScore);
+  const mottoSegments = splitMottoForWrap(theme.motto);
 
   return (
     <div className="report-flow report-flow--gap-xl">
@@ -25,8 +39,18 @@ const CoreArchetypeSection: FC<Props> = ({ archetypeHtml, matchScore, theme }) =
             <div className="report-hero-card__badge">Your Core Archetype</div>
             <h3 className="report-hero-card__title">{theme.archetype}</h3>
             <p className="report-hero-card__motto">
-              <span className="report-hero-card__motto-prefix">Motto: </span>
-              {theme.motto}
+              <span className="report-hero-card__motto-chunk report-hero-card__motto-chunk--lead">
+                <span className="report-hero-card__motto-prefix">Motto: </span>
+                <span className="report-hero-card__motto-segment">{mottoSegments[0]}</span>
+              </span>
+              {mottoSegments.slice(1).map((segment, index) => (
+                <span key={`${theme.archetype}-motto-${index + 1}`}>
+                  <wbr />
+                  <span className="report-hero-card__motto-chunk">
+                    <span className="report-hero-card__motto-segment">{segment}</span>
+                  </span>
+                </span>
+              ))}
             </p>
           </div>
           <div className="report-hero-card__match">

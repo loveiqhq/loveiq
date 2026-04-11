@@ -6,7 +6,7 @@ import { reportThemes } from "@/components/report/reportTheme";
 
 describe("CoreArchetypeSection", () => {
   it("renders the archetype-specific theme content", () => {
-    render(
+    const { container } = render(
       <CoreArchetypeSection
         archetypeHtml="<p>Power-specific narrative.</p>"
         matchScore={88}
@@ -14,12 +14,42 @@ describe("CoreArchetypeSection", () => {
       />
     );
 
+    const motto = container.querySelector(".report-hero-card__motto");
+
     expect(screen.getByRole("heading", { name: /power orchestrator/i })).toBeInTheDocument();
-    expect(screen.getByText(/i set the frame.and we play inside it/i)).toBeInTheDocument();
+    expect(motto).toBeInTheDocument();
+    expect(motto).toHaveTextContent('Motto: "I set the frame—and we play inside it."');
     expect(screen.getByText(/^power$/i)).toBeInTheDocument();
     expect(screen.getByText(/commanding/i)).toBeInTheDocument();
     expect(screen.getByText(/dominant/i)).toBeInTheDocument();
     expect(screen.getByText(/power-specific narrative/i)).toBeInTheDocument();
+  });
+
+  it("groups long mottos at the dash so wrap points stay phrase-safe", () => {
+    for (const theme of Object.values(reportThemes)) {
+      const { container, unmount } = render(
+        <CoreArchetypeSection archetypeHtml={null} matchScore={80} theme={theme} />
+      );
+
+      const motto = container.querySelector(".report-hero-card__motto");
+      const chunks = container.querySelectorAll(".report-hero-card__motto-chunk");
+
+      expect(motto).toBeInTheDocument();
+      expect(motto).toHaveTextContent(`Motto: ${theme.motto}`);
+
+      if (theme.motto.includes("—")) {
+        const [lead, trailing] = theme.motto.split("—");
+
+        expect(chunks).toHaveLength(2);
+        expect(chunks[0]).toHaveTextContent(`Motto: ${lead}—`);
+        expect(chunks[1]).toHaveTextContent(trailing.trim());
+      } else {
+        expect(chunks).toHaveLength(1);
+        expect(chunks[0]).toHaveTextContent(`Motto: ${theme.motto}`);
+      }
+
+      unmount();
+    }
   });
 
   it("uses the dedicated 16x14 attachment heart icon footprint", () => {

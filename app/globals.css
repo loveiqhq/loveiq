@@ -2011,6 +2011,10 @@ h3,
   position: relative;
 }
 
+.report-themed-block__preview--practice {
+  overflow: hidden;
+}
+
 .report-themed-block__blurred {
   user-select: none;
   filter: blur(4.55px);
@@ -3353,6 +3357,7 @@ h3,
   flex-direction: column;
   gap: 16px;
   flex: 1;
+  min-width: 0;
   padding-bottom: 24px;
 }
 
@@ -3388,6 +3393,20 @@ h3,
   font-style: normal;
   line-height: 26px;
   color: #fff;
+  max-width: 100%;
+  text-wrap: pretty;
+}
+
+.report-hero-card__motto-chunk {
+  white-space: nowrap;
+}
+
+.report-hero-card__motto-chunk--lead {
+  white-space: nowrap;
+}
+
+.report-hero-card__motto-segment {
+  white-space: nowrap;
 }
 
 .report-hero-card__motto-prefix {
@@ -4294,6 +4313,17 @@ h3,
 }
 
 @media (max-width: 767px) {
+  .report-themed-block__preview--practice .report-premium-overlay {
+    align-items: flex-start;
+    padding: 0.75rem 0 0;
+  }
+
+  .report-themed-block__preview--practice .report-premium-overlay__card {
+    width: 100%;
+    padding: 24px 20px;
+    border-radius: 20px;
+  }
+
   .report-section__actions-row,
   .report-section__header-actions {
     justify-content: flex-start;
@@ -4425,6 +4455,10 @@ h3,
   .report-hero-card__motto {
     font-size: 20px;
     line-height: 26px;
+  }
+
+  .report-hero-card__motto-chunk--lead {
+    white-space: normal;
   }
 
   .report-hero-card__match {

@@ -112,7 +112,7 @@ const PracticeTendenciesSection: FC<Props> = ({
       {groups.length > 0 ? (
         <div className="report-themed-block">
           {isPremium && !unlocked ? (
-            <div className="report-themed-block__preview">
+            <div className="report-themed-block__preview report-themed-block__preview--practice">
               <div className="report-practice-grid report-themed-block__blurred" aria-hidden="true">
                 {groups.map((group) => (
                   <PracticeCard group={group} key={group.title} />

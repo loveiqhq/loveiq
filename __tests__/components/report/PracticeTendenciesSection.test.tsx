@@ -46,6 +46,8 @@ describe("PracticeTendenciesSection", () => {
     );
 
     expect(container.querySelector(".report-themed-block__blurred")).toBeInTheDocument();
+    expect(container.querySelector(".report-themed-block__preview--practice")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /unlock full report/i })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /unlock full report/i }));
 
