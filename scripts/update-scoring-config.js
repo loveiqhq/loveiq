@@ -188,10 +188,7 @@ function main() {
         0.0
       ),
       v5CategoricalInterceptScale: toFloat(r.v5_categorical_intercept_scale, 0.0),
-      v5CategoricalInterceptSubtract: toFloat(
-        r["v5_categorical_intercept_subtract (J*K)"],
-        0.0
-      ),
+      v5CategoricalInterceptSubtract: toFloat(r["v5_categorical_intercept_subtract (J*K)"], 0.0),
     }));
 
   // 14. V6 Question Logic

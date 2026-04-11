@@ -55,12 +55,33 @@ const ArcGauge: FC<Props> = ({ animate = false, tone = "accent", max, value }) =
 
   return (
     <svg className="report-gauge" viewBox="0 0 208 114" fill="none" aria-hidden="true">
+      {tone === "shared" && (
+        <defs>
+          <filter id="arc-glow" x="-15%" y="-40%" width="130%" height="180%">
+            <feGaussianBlur stdDeviation="5" />
+          </filter>
+        </defs>
+      )}
       <path
         d={FULL_ARC}
         stroke="rgba(255, 255, 255, 0.09)"
         strokeWidth="12"
         strokeLinecap="round"
       />
+      {ratio > 0 && tone === "shared" && (
+        <path
+          d={FULL_ARC}
+          className="report-gauge__glow"
+          stroke="currentColor"
+          strokeWidth="18"
+          strokeLinecap="round"
+          filter="url(#arc-glow)"
+          style={{
+            strokeDasharray: ARC_LENGTH,
+            strokeDashoffset: offset,
+          }}
+        />
+      )}
       {ratio > 0 && (
         <path
           d={FULL_ARC}

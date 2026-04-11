@@ -96,10 +96,7 @@ function cleanHtml(html) {
       /<a\b[^>]*href="https:\/\/docs\.google\.com\/document\/[^"]*"[^>]*>\s*(?:\d+|[*†‡]+)\s*<\/a>/gi,
       ""
     ) // remove Google Docs footnote links
-    .replace(
-      /<sup>\s*(?:<a\b[^>]*>\s*(?:\d+|[*†‡]+)\s*<\/a>|(?:\d+|[*†‡]+))\s*<\/sup>/gi,
-      ""
-    ) // remove superscript footnote markers
+    .replace(/<sup>\s*(?:<a\b[^>]*>\s*(?:\d+|[*†‡]+)\s*<\/a>|(?:\d+|[*†‡]+))\s*<\/sup>/gi, "") // remove superscript footnote markers
     .replace(
       /([?!.,:;"'")\]])\s*(?:<sup>\s*)?(?:\d+|[*†‡]+)(?:\s*<\/sup>)?(?=\s*<\/(?:p|li|h[1-6])>)/gi,
       "$1"

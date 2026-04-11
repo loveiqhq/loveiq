@@ -3304,6 +3304,11 @@ h3,
   filter: drop-shadow(0 0 6px rgb(var(--report-premium-rgb) / 0.5));
 }
 
+.report-gauge__glow {
+  color: rgb(var(--report-premium-rgb));
+  opacity: 0.35;
+}
+
 /* ── Core Archetype Hero Card (Figma-matched) ── */
 .report-hero-card {
   position: relative;
@@ -4471,8 +4476,17 @@ h3,
     white-space: normal;
   }
 
+  .report-hero-card__motto-chunk {
+    white-space: normal;
+  }
+
+  .report-hero-card__motto-segment {
+    white-space: normal;
+  }
+
   .report-hero-card__match {
     width: 100%;
+    justify-self: stretch;
   }
 
   .report-hero-card__motivation {

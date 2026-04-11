@@ -121,10 +121,19 @@ const WelcomeSection: FC<Props> = ({ feedbackWidget, generalHtml, sectionId, sna
       );
     };
 
+    // On mobile, cards stack vertically making the grid taller than the viewport.
+    // IntersectionObserver caps intersectionRatio at viewportHeight/elementHeight,
+    // so a fixed 0.65 threshold is unreachable. Compute the highest achievable
+    // ratio and use 90% of it so the animation triggers when meaningfully in view.
+    const gridRect = grid.getBoundingClientRect();
+    const maxAchievableRatio =
+      gridRect.height > 0 ? Math.min(1, window.innerHeight / gridRect.height) : 1;
+    const effectiveThreshold = Math.min(METRIC_REVEAL_THRESHOLD, maxAchievableRatio * 0.9);
+
     const isAboveTheFoldOnLoad =
       typeof window !== "undefined" &&
       window.scrollY <= 16 &&
-      isElementVisibleEnough(grid, METRIC_REVEAL_THRESHOLD);
+      isElementVisibleEnough(grid, effectiveThreshold);
 
     if (isAboveTheFoldOnLoad) {
       reveal(INITIAL_METRIC_REVEAL_DELAY_MS);
@@ -137,12 +146,12 @@ const WelcomeSection: FC<Props> = ({ feedbackWidget, generalHtml, sectionId, sna
 
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (!entry.isIntersecting || entry.intersectionRatio < METRIC_REVEAL_THRESHOLD) return;
+        if (!entry.isIntersecting || entry.intersectionRatio < effectiveThreshold) return;
         reveal(METRIC_REVEAL_DELAY_MS);
         observer.disconnect();
       },
       {
-        threshold: [0, METRIC_REVEAL_THRESHOLD, 1],
+        threshold: [0, effectiveThreshold, 1],
         rootMargin: METRIC_REVEAL_ROOT_MARGIN,
       }
     );

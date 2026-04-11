@@ -1,6 +1,6 @@
 "use client";
 
-import type { FC } from "react";
+import { useEffect, useRef, useState, type FC } from "react";
 import { TraitIcons, type ReportTheme } from "../reportTheme";
 
 interface Props {
@@ -8,6 +8,8 @@ interface Props {
   matchScore: number;
   theme: ReportTheme;
 }
+
+const ANIMATION_DURATION_MS = 1800;
 
 function splitMottoForWrap(motto: string) {
   const dashIndex = motto.indexOf("—");
@@ -25,10 +27,57 @@ function splitMottoForWrap(motto: string) {
 const CoreArchetypeSection: FC<Props> = ({ archetypeHtml, matchScore, theme }) => {
   const matchPct = Math.round(matchScore);
   const mottoSegments = splitMottoForWrap(theme.motto);
+  const cardRef = useRef<HTMLElement>(null);
+  const hasAnimated = useRef(false);
+  const [displayPct, setDisplayPct] = useState(0);
+
+  useEffect(() => {
+    const card = cardRef.current;
+    if (!card) return;
+    let frameId = 0;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting || hasAnimated.current) return;
+        observer.disconnect();
+        hasAnimated.current = true;
+
+        const prefersReducedMotion =
+          typeof window !== "undefined" &&
+          "matchMedia" in window &&
+          window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+        if (prefersReducedMotion) {
+          setDisplayPct(matchPct);
+          return;
+        }
+
+        const start = performance.now();
+
+        const step = (now: number) => {
+          const progress = Math.min((now - start) / ANIMATION_DURATION_MS, 1);
+          const eased = 1 - Math.pow(1 - progress, 3); // easeOutCubic
+          setDisplayPct(Math.round(eased * matchPct));
+          if (progress < 1) {
+            frameId = requestAnimationFrame(step);
+          }
+        };
+
+        frameId = requestAnimationFrame(step);
+      },
+      { threshold: 0.3 }
+    );
+
+    observer.observe(card);
+    return () => {
+      observer.disconnect();
+      if (frameId) cancelAnimationFrame(frameId);
+    };
+  }, [matchPct]);
 
   return (
     <div className="report-flow report-flow--gap-xl">
-      <article className="report-hero-card">
+      <article ref={cardRef} className="report-hero-card">
         {/* Glow orbs */}
         <span className="report-hero-card__orb report-hero-card__orb--tr" aria-hidden="true" />
         <span className="report-hero-card__orb report-hero-card__orb--bl" aria-hidden="true" />
@@ -56,13 +105,13 @@ const CoreArchetypeSection: FC<Props> = ({ archetypeHtml, matchScore, theme }) =
           <div className="report-hero-card__match">
             <div className="report-hero-card__match-header">
               <span className="report-hero-card__match-label">Match Strength</span>
-              <span className="report-hero-card__match-value">{matchPct}%</span>
+              <span className="report-hero-card__match-value">{displayPct}%</span>
             </div>
             <div
               className="report-hero-card__match-bar"
               aria-label={`Match strength: ${matchPct}%`}
             >
-              <div className="report-hero-card__match-fill" style={{ width: `${matchPct}%` }} />
+              <div className="report-hero-card__match-fill" style={{ width: `${displayPct}%` }} />
             </div>
           </div>
         </div>
