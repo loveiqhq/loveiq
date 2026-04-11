@@ -28,9 +28,9 @@ const CoreArchetypeSection: FC<Props> = ({ archetypeHtml, matchScore, theme }) =
   const matchPct = Math.round(matchScore);
   const mottoSegments = splitMottoForWrap(theme.motto);
   const cardRef = useRef<HTMLElement>(null);
+  const fillRef = useRef<HTMLDivElement>(null);
   const hasAnimated = useRef(false);
   const [displayPct, setDisplayPct] = useState(0);
-  const [barPct, setBarPct] = useState(0);
 
   useEffect(() => {
     const card = cardRef.current;
@@ -50,7 +50,7 @@ const CoreArchetypeSection: FC<Props> = ({ archetypeHtml, matchScore, theme }) =
 
         if (prefersReducedMotion) {
           setDisplayPct(matchPct);
-          setBarPct(matchPct);
+          if (fillRef.current) fillRef.current.style.width = `${matchPct}%`;
           return;
         }
 
@@ -58,9 +58,13 @@ const CoreArchetypeSection: FC<Props> = ({ archetypeHtml, matchScore, theme }) =
 
         const step = (now: number) => {
           const progress = Math.min((now - start) / ANIMATION_DURATION_MS, 1);
-          const eased = 1 - Math.pow(1 - progress, 3); // easeOutCubic
-          // Bar uses continuous float for smooth motion; label uses rounded integer
-          setBarPct(eased * matchPct);
+          // easeInOutCubic — matches arc gauge easing
+          const eased =
+            progress < 0.5
+              ? 4 * progress * progress * progress
+              : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+          // Bar driven directly via DOM ref — no React re-render, fully continuous
+          if (fillRef.current) fillRef.current.style.width = `${eased * matchPct}%`;
           setDisplayPct(Math.round(eased * matchPct));
           if (progress < 1) {
             frameId = requestAnimationFrame(step);
@@ -115,7 +119,7 @@ const CoreArchetypeSection: FC<Props> = ({ archetypeHtml, matchScore, theme }) =
               className="report-hero-card__match-bar"
               aria-label={`Match strength: ${matchPct}%`}
             >
-              <div className="report-hero-card__match-fill" style={{ width: `${barPct}%` }} />
+              <div ref={fillRef} className="report-hero-card__match-fill" style={{ width: "0%" }} />
             </div>
           </div>
         </div>
