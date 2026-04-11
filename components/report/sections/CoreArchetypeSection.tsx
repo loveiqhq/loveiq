@@ -54,17 +54,24 @@ const CoreArchetypeSection: FC<Props> = ({ archetypeHtml, matchScore, theme }) =
           return;
         }
 
+        // Bar: single CSS transition — compositor-driven, no JS per frame
+        if (fillRef.current) {
+          fillRef.current.style.transition = `width ${ANIMATION_DURATION_MS}ms cubic-bezier(0.645, 0.045, 0.355, 1)`;
+          // rAF ensures width:0% is painted before setting target, triggering the transition
+          frameId = requestAnimationFrame(() => {
+            if (fillRef.current) fillRef.current.style.width = `${matchPct}%`;
+          });
+        }
+
+        // Text count-up: independent RAF loop, does not touch the bar
         const start = performance.now();
 
         const step = (now: number) => {
           const progress = Math.min((now - start) / ANIMATION_DURATION_MS, 1);
-          // easeInOutCubic — matches arc gauge easing
           const eased =
             progress < 0.5
               ? 4 * progress * progress * progress
               : 1 - Math.pow(-2 * progress + 2, 3) / 2;
-          // Bar driven directly via DOM ref — no React re-render, fully continuous
-          if (fillRef.current) fillRef.current.style.width = `${eased * matchPct}%`;
           setDisplayPct(Math.round(eased * matchPct));
           if (progress < 1) {
             frameId = requestAnimationFrame(step);
