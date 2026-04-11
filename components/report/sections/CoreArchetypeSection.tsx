@@ -30,6 +30,7 @@ const CoreArchetypeSection: FC<Props> = ({ archetypeHtml, matchScore, theme }) =
   const cardRef = useRef<HTMLElement>(null);
   const hasAnimated = useRef(false);
   const [displayPct, setDisplayPct] = useState(0);
+  const [barPct, setBarPct] = useState(0);
 
   useEffect(() => {
     const card = cardRef.current;
@@ -49,6 +50,7 @@ const CoreArchetypeSection: FC<Props> = ({ archetypeHtml, matchScore, theme }) =
 
         if (prefersReducedMotion) {
           setDisplayPct(matchPct);
+          setBarPct(matchPct);
           return;
         }
 
@@ -57,6 +59,8 @@ const CoreArchetypeSection: FC<Props> = ({ archetypeHtml, matchScore, theme }) =
         const step = (now: number) => {
           const progress = Math.min((now - start) / ANIMATION_DURATION_MS, 1);
           const eased = 1 - Math.pow(1 - progress, 3); // easeOutCubic
+          // Bar uses continuous float for smooth motion; label uses rounded integer
+          setBarPct(eased * matchPct);
           setDisplayPct(Math.round(eased * matchPct));
           if (progress < 1) {
             frameId = requestAnimationFrame(step);
@@ -111,7 +115,7 @@ const CoreArchetypeSection: FC<Props> = ({ archetypeHtml, matchScore, theme }) =
               className="report-hero-card__match-bar"
               aria-label={`Match strength: ${matchPct}%`}
             >
-              <div className="report-hero-card__match-fill" style={{ width: `${displayPct}%` }} />
+              <div className="report-hero-card__match-fill" style={{ width: `${barPct}%` }} />
             </div>
           </div>
         </div>
@@ -122,23 +126,23 @@ const CoreArchetypeSection: FC<Props> = ({ archetypeHtml, matchScore, theme }) =
 
           <div className="report-hero-card__motivation">
             <div className="report-hero-card__motivation-icon" aria-hidden="true">
+              {/* Three concentric elements: outer ring → middle ring → inner filled circle */}
               <svg viewBox="0 0 40 40" fill="none" className="size-full">
                 <circle
                   cx="20"
                   cy="20"
-                  r="19.25"
+                  r="19.5"
                   stroke="rgb(var(--report-accent-rgb))"
-                  strokeOpacity="0.95"
-                  strokeWidth="1.5"
+                  strokeWidth="0.8"
                 />
                 <circle
                   cx="20"
                   cy="20"
-                  r="8"
+                  r="11.5"
                   stroke="rgb(var(--report-accent-rgb))"
-                  strokeOpacity="0.95"
-                  strokeWidth="3"
+                  strokeWidth="0.8"
                 />
+                <circle cx="20" cy="20" r="5" fill="rgb(var(--report-accent-rgb))" />
               </svg>
             </div>
             <div className="report-hero-card__motivation-copy">
