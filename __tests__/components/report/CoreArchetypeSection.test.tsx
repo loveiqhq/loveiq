@@ -52,6 +52,28 @@ describe("CoreArchetypeSection", () => {
     }
   });
 
+  it("renders the motto as its own header row instead of inside the title column", () => {
+    const { container } = render(
+      <CoreArchetypeSection
+        archetypeHtml={null}
+        matchScore={91}
+        theme={reportThemes["Power Orchestrator"]}
+      />
+    );
+
+    const header = container.querySelector(".report-hero-card__header");
+    const headerCopy = container.querySelector(".report-hero-card__header-copy");
+    const motto = container.querySelector(".report-hero-card__motto");
+    const match = container.querySelector(".report-hero-card__match");
+
+    expect(header).toBeInTheDocument();
+    expect(headerCopy).toBeInTheDocument();
+    expect(motto).toBeInTheDocument();
+    expect(match).toBeInTheDocument();
+    expect(headerCopy?.contains(motto)).toBe(false);
+    expect(Array.from(header?.children ?? [])).toEqual([headerCopy, motto, match]);
+  });
+
   it("uses the dedicated 16x14 attachment heart icon footprint", () => {
     render(
       <CoreArchetypeSection

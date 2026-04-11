@@ -26,4 +26,16 @@ describe("report inline heading typography", () => {
       /@media \(max-width:\s*767px\)\s*\{[\s\S]*?\.report-card__status\s*\{[\s\S]*?font-size:\s*22px;/
     );
   });
+
+  it("gives the desktop archetype hero header a full-width motto row", () => {
+    expect(globalsCss).toMatch(
+      /\.report-hero-card__header\s*\{[\s\S]*?display:\s*grid;[\s\S]*?grid-template-areas:\s*"copy match"\s*"motto motto";/
+    );
+  });
+
+  it("stacks the archetype hero header as copy, motto, then match on mobile", () => {
+    expect(globalsCss).toMatch(
+      /@media \(max-width:\s*767px\)\s*\{[\s\S]*?\.report-hero-card__header\s*\{[\s\S]*?grid-template-areas:\s*"copy"\s*"motto"\s*"match";/
+    );
+  });
 });

@@ -38,21 +38,21 @@ const CoreArchetypeSection: FC<Props> = ({ archetypeHtml, matchScore, theme }) =
           <div className="report-hero-card__header-copy">
             <div className="report-hero-card__badge">Your Core Archetype</div>
             <h3 className="report-hero-card__title">{theme.archetype}</h3>
-            <p className="report-hero-card__motto">
-              <span className="report-hero-card__motto-chunk report-hero-card__motto-chunk--lead">
-                <span className="report-hero-card__motto-prefix">Motto: </span>
-                <span className="report-hero-card__motto-segment">{mottoSegments[0]}</span>
-              </span>
-              {mottoSegments.slice(1).map((segment, index) => (
-                <span key={`${theme.archetype}-motto-${index + 1}`}>
-                  <wbr />
-                  <span className="report-hero-card__motto-chunk">
-                    <span className="report-hero-card__motto-segment">{segment}</span>
-                  </span>
-                </span>
-              ))}
-            </p>
           </div>
+          <p className="report-hero-card__motto">
+            <span className="report-hero-card__motto-chunk report-hero-card__motto-chunk--lead">
+              <span className="report-hero-card__motto-prefix">Motto: </span>
+              <span className="report-hero-card__motto-segment">{mottoSegments[0]}</span>
+            </span>
+            {mottoSegments.slice(1).map((segment, index) => (
+              <span key={`${theme.archetype}-motto-${index + 1}`}>
+                <wbr />
+                <span className="report-hero-card__motto-chunk">
+                  <span className="report-hero-card__motto-segment">{segment}</span>
+                </span>
+              </span>
+            ))}
+          </p>
           <div className="report-hero-card__match">
             <div className="report-hero-card__match-header">
               <span className="report-hero-card__match-label">Match Strength</span>

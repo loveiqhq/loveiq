@@ -3346,19 +3346,23 @@ h3,
 
 /* Header: badge + archetype name + motto (left) + match strength (right) */
 .report-hero-card__header {
-  display: flex;
-  gap: 24px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 288px;
+  grid-template-areas:
+    "copy match"
+    "motto motto";
+  column-gap: 24px;
+  row-gap: 16px;
   align-items: flex-start;
   margin-bottom: 24px;
 }
 
 .report-hero-card__header-copy {
+  grid-area: copy;
   display: flex;
   flex-direction: column;
   gap: 16px;
-  flex: 1;
   min-width: 0;
-  padding-bottom: 24px;
 }
 
 .report-hero-card__badge {
@@ -3386,7 +3390,9 @@ h3,
 }
 
 .report-hero-card__motto {
+  grid-area: motto;
   margin: 0;
+  width: 100%;
   font-family: var(--font-sans);
   font-size: 30px;
   font-weight: 400;
@@ -3416,7 +3422,8 @@ h3,
 
 /* Match Strength widget */
 .report-hero-card__match {
-  flex-shrink: 0;
+  grid-area: match;
+  justify-self: end;
   width: 288px;
   align-self: flex-start;
 }
@@ -4438,13 +4445,16 @@ h3,
   }
 
   .report-hero-card__header {
-    flex-direction: column;
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "copy"
+      "motto"
+      "match";
     gap: 16px;
   }
 
   .report-hero-card__header-copy {
     gap: 12px;
-    padding-bottom: 0;
   }
 
   .report-hero-card__title {
