@@ -17,6 +17,7 @@ import ArchetypeProbabilitySection from "./sections/ArchetypeProbabilitySection"
 import CoreArchetypeSection from "./sections/CoreArchetypeSection";
 import DimensionSection from "./sections/DimensionSection";
 import ImportanceOfSexualitySection from "./sections/ImportanceOfSexualitySection";
+import PracticeTendenciesSection from "./sections/PracticeTendenciesSection";
 import WelcomeSection from "./sections/WelcomeSection";
 import { normalizeReportHtml } from "./reportContent";
 
@@ -490,6 +491,25 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
                     generalHtml={generalHtml}
                     importanceLabel={snapshot.importanceLabel}
                     importanceValue={snapshot.importanceValue}
+                  />
+                </ReportSection>
+              );
+            }
+
+            if (section.sectionNumber === 27) {
+              return (
+                <ReportSection
+                  key={section.id}
+                  feedbackWidget={feedbackWidget}
+                  sectionId={section.id}
+                  title={title}
+                >
+                  <PracticeTendenciesSection
+                    archetype={primaryArchetype}
+                    archetypeHtml={archetypeHtml}
+                    generalHtml={generalHtml}
+                    isPremium={section.isPremium}
+                    sectionTitle={title}
                   />
                 </ReportSection>
               );

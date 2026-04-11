@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { ensureSexualStageHighlight, normalizeReportHtml } from "@/components/report/reportContent";
+import {
+  ensureSexualStageHighlight,
+  extractPracticeSectionIntroHtml,
+  normalizeReportHtml,
+  parsePracticeTendencyGroups,
+} from "@/components/report/reportContent";
+import { archetypeContent } from "@/data/report-archetypes";
 
 describe("reportContent normalization", () => {
   it("removes leaked Google Docs footnote links from prose", () => {
@@ -32,5 +38,32 @@ describe("reportContent normalization", () => {
     expect(normalized).toContain('class="report-stage-highlight__label"');
     expect(normalized).toContain("Grounded / Integrated");
     expect(normalized).toContain('class="report-stage-highlight__meta"');
+  });
+
+  it("removes the DOCX image heading from the practice tendencies intro flow", () => {
+    const introHtml = extractPracticeSectionIntroHtml(
+      [
+        "<p>Over time, most people develop recurring sexual scripts.</p>",
+        "<p>Looking at both dimensions together helps distinguish themes.</p>",
+        '<p>Typical Sexual Fantasy &amp; Practice Tendencies of the <span class="report-archetype-name">Spark Seeker</span><img src="data:image/png;base64,ABC" /></p>',
+      ].join("")
+    );
+
+    expect(introHtml).toContain("Over time, most people develop recurring sexual scripts.");
+    expect(introHtml).toContain("Looking at both dimensions together helps distinguish themes.");
+    expect(introHtml).not.toContain("data:image/png");
+    expect(introHtml).not.toContain("Typical Sexual Fantasy");
+  });
+
+  it("parses grouped practice tendency tables into structured row data", () => {
+    const groups = parsePracticeTendencyGroups(archetypeContent.practices["Spark Seeker"]);
+
+    expect(groups[0]?.title).toBe("Core Relational & Embodied");
+    expect(groups[0]?.rows[0]).toEqual({
+      practice: "Romantic lovemaking",
+      fantasyPull: 6,
+      actualPleasure: 6,
+    });
+    expect(groups.some((group) => group.title === "Technology & Distance")).toBe(true);
   });
 });

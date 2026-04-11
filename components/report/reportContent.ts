@@ -13,7 +13,29 @@ const REPORT_ENTITY_MAP: Record<string, string> = {
   "&quot;": '"',
   "&#39;": "'",
   "&nbsp;": " ",
+  "&ndash;": "\u2013",
+  "&mdash;": "\u2014",
 };
+
+const REPORT_IMAGE_TAG_PATTERN = /<img\b[^>]*>/gi;
+const REPORT_TABLE_ROW_PATTERN = /<tr\b[\s\S]*?<\/tr>/gi;
+const REPORT_TABLE_CELL_PATTERN = /<t[hd]\b[\s\S]*?<\/t[hd]>/gi;
+const PRACTICE_SECTION_TITLE_PATTERN = /^Typical Sexual Fantasy\s*&\s*Practice Tendencies of the/i;
+
+const practiceIntroCache = new Map<string, string>();
+const practiceGroupCache = new Map<string, ReportPracticeTendencyGroup[]>();
+
+export interface ReportPracticeTendencyRow {
+  actualPleasure: number;
+  description?: string | null;
+  fantasyPull: number;
+  practice: string;
+}
+
+export interface ReportPracticeTendencyGroup {
+  rows: ReportPracticeTendencyRow[];
+  title: string;
+}
 
 export function normalizeReportHtml(html: string | null | undefined) {
   if (!html) return html ?? "";
@@ -24,6 +46,10 @@ export function normalizeReportHtml(html: string | null | undefined) {
     .replace(REPORT_TRAILING_REFERENCE_PATTERN, "$1")
     .replace(/\s{2,}/g, " ")
     .trim();
+}
+
+function stripReportImages(html: string) {
+  return html.replace(REPORT_IMAGE_TAG_PATTERN, "");
 }
 
 export function ensureSexualStageHighlight(html: string | null | undefined) {
@@ -57,7 +83,7 @@ export function getReportBlockText(block: string) {
   return normalizeReportHtml(block)
     .replace(/<br\s*\/?>/gi, " ")
     .replace(/<[^>]+>/g, " ")
-    .replace(/&(amp|quot|#39|nbsp);/g, (entity) => REPORT_ENTITY_MAP[entity] ?? entity)
+    .replace(/&(amp|quot|#39|nbsp|ndash|mdash);/g, (entity) => REPORT_ENTITY_MAP[entity] ?? entity)
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -90,4 +116,89 @@ export function splitTrailingHeadingBlock(blocks: string[]) {
     bodyBlocks: blocks.slice(0, -1),
     headingBlock: lastBlock,
   };
+}
+
+function parsePracticeIntensity(value: string) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return null;
+  return Math.min(10, Math.max(1, parsed));
+}
+
+function parsePracticeTableRows(tableHtml: string): ReportPracticeTendencyRow[] {
+  const rows = tableHtml.match(REPORT_TABLE_ROW_PATTERN) ?? [];
+
+  return rows.flatMap((rowHtml) => {
+    const cells = rowHtml.match(REPORT_TABLE_CELL_PATTERN) ?? [];
+    if (cells.length < 3) return [];
+
+    const [practice, fantasyPullText, actualPleasureText] = cells.map((cell) =>
+      getReportBlockText(stripReportImages(cell))
+    );
+
+    if (!practice || /^practice$/i.test(practice)) return [];
+
+    const fantasyPull = parsePracticeIntensity(fantasyPullText);
+    const actualPleasure = parsePracticeIntensity(actualPleasureText);
+
+    if (fantasyPull === null || actualPleasure === null) return [];
+
+    return [{ practice, fantasyPull, actualPleasure }];
+  });
+}
+
+export function extractPracticeSectionIntroHtml(html: string | null | undefined) {
+  const normalizedHtml = normalizeReportHtml(html);
+  if (!normalizedHtml) return "";
+
+  const cached = practiceIntroCache.get(normalizedHtml);
+  if (cached !== undefined) return cached;
+
+  const introBlocks = extractReportHtmlBlocks(normalizedHtml).flatMap((block) => {
+    const cleanedBlock = stripReportImages(block).trim();
+    const text = getReportBlockText(cleanedBlock);
+
+    if (!text || PRACTICE_SECTION_TITLE_PATTERN.test(text)) {
+      return [];
+    }
+
+    return [cleanedBlock];
+  });
+
+  const introHtml = joinReportHtmlBlocks(introBlocks);
+  practiceIntroCache.set(normalizedHtml, introHtml);
+  return introHtml;
+}
+
+export function parsePracticeTendencyGroups(
+  html: string | null | undefined
+): ReportPracticeTendencyGroup[] {
+  const normalizedHtml = normalizeReportHtml(html);
+  if (!normalizedHtml) return [];
+
+  const cached = practiceGroupCache.get(normalizedHtml);
+  if (cached !== undefined) return cached;
+
+  const groups: ReportPracticeTendencyGroup[] = [];
+  let pendingTitle: string | null = null;
+
+  for (const block of extractReportHtmlBlocks(normalizedHtml)) {
+    if (/^\s*<table\b/i.test(block)) {
+      const rows = parsePracticeTableRows(block);
+
+      if (pendingTitle && rows.length > 0) {
+        groups.push({ title: pendingTitle, rows });
+      }
+
+      pendingTitle = null;
+      continue;
+    }
+
+    const text = getReportBlockText(stripReportImages(block));
+    if (text) {
+      pendingTitle = text;
+    }
+  }
+
+  practiceGroupCache.set(normalizedHtml, groups);
+  return groups;
 }
