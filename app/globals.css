@@ -2848,38 +2848,51 @@ h3,
 
 .report-pricing-modal__payment-method {
   display: inline-flex;
-  gap: 0.42rem;
   align-items: center;
+  justify-content: center;
+  min-height: 1.28rem;
   color: rgba(255, 255, 255, 0.82);
 }
 
-.report-pricing-modal__payment-icon {
-  display: inline-block;
-  position: relative;
+.report-pricing-modal__payment-method--text {
+  gap: 0.42rem;
+}
+
+.report-pricing-modal__payment-method--logo {
+  gap: 0;
+  line-height: 0;
+}
+
+.report-pricing-modal__payment-logo {
+  display: block;
   flex: 0 0 auto;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
 }
 
-.report-pricing-modal__payment-icon--apple {
-  width: 0.86rem;
-  height: 0.86rem;
-  border: 1.2px solid rgba(255, 255, 255, 0.82);
-  border-radius: 0.25rem;
+.report-pricing-modal__payment-logo--apple-pay {
+  width: 2.08rem;
+  height: 1.34rem;
+  background-image: url("/payment-logos/apple-pay.svg");
 }
 
-.report-pricing-modal__payment-icon--apple::after {
-  content: "";
-  position: absolute;
-  inset: 0.18rem 0.2rem;
-  border-top: 1.2px solid rgba(255, 255, 255, 0.82);
-  transform: rotate(-18deg);
-  transform-origin: center;
+.report-pricing-modal__payment-logo--google-pay {
+  width: 2.12rem;
+  height: 1.34rem;
+  background-image: url("/payment-logos/google-pay.svg");
 }
 
-.report-pricing-modal__payment-icon--google {
-  width: 0.82rem;
-  height: 0.82rem;
-  border: 1.8px solid #facc15;
-  border-radius: 9999px;
+.report-pricing-modal__payment-logo--visa {
+  width: 2.86rem;
+  height: 0.92rem;
+  background-image: url("/payment-logos/visa.png");
+}
+
+.report-pricing-modal__payment-logo--amex {
+  width: 4.18rem;
+  height: 0.92rem;
+  background-image: url("/payment-logos/amex.svg");
 }
 
 .report-pricing-modal__payment-mark {
@@ -2895,16 +2908,6 @@ h3,
 
 .report-pricing-modal__payment-method.report-pricing-modal__payment-mark--klarna {
   color: #f9a8d4;
-}
-
-.report-pricing-modal__payment-method.report-pricing-modal__payment-mark--visa {
-  color: #3b82f6;
-}
-
-.report-pricing-modal__payment-method.report-pricing-modal__payment-mark--visa
-  .report-pricing-modal__payment-mark {
-  font-size: 1rem;
-  letter-spacing: -0.04em;
 }
 
 .report-pricing-modal__mastercard {
@@ -2931,16 +2934,6 @@ h3,
 .report-pricing-modal__mastercard span:last-child {
   right: 0;
   background: rgba(234, 179, 8, 0.84);
-}
-
-.report-pricing-modal__amex {
-  padding: 0.14rem 0.34rem;
-  border: 1px solid rgba(59, 130, 246, 0.55);
-  border-radius: 0.25rem;
-  color: #60a5fa;
-  font-size: 0.64rem;
-  font-weight: 700;
-  letter-spacing: 0.05em;
 }
 
 .report-pricing-modal__testimonial {
@@ -3189,9 +3182,20 @@ h3,
     font-size: 0.78rem;
   }
 
-  .report-pricing-modal__payment-method.report-pricing-modal__payment-mark--visa
-    .report-pricing-modal__payment-mark {
-    font-size: 0.9rem;
+  .report-pricing-modal__payment-logo--apple-pay,
+  .report-pricing-modal__payment-logo--google-pay {
+    width: 1.84rem;
+    height: 1.18rem;
+  }
+
+  .report-pricing-modal__payment-logo--visa {
+    width: 2.52rem;
+    height: 0.82rem;
+  }
+
+  .report-pricing-modal__payment-logo--amex {
+    width: 3.72rem;
+    height: 0.82rem;
   }
 
   .report-pricing-modal__mastercard {
@@ -3202,10 +3206,6 @@ h3,
   .report-pricing-modal__mastercard span {
     width: 0.84rem;
     height: 0.84rem;
-  }
-
-  .report-pricing-modal__amex {
-    font-size: 0.58rem;
   }
 
   .report-pricing-modal__testimonial {
@@ -3405,6 +3405,10 @@ h3,
   }
 
   .report-pricing-modal__payment-method {
+    min-height: 1.02rem;
+  }
+
+  .report-pricing-modal__payment-method--text {
     gap: 0.22rem;
   }
 
@@ -3412,23 +3416,20 @@ h3,
     font-size: 0.64rem;
   }
 
-  .report-pricing-modal__payment-icon--apple {
-    width: 0.64rem;
-    height: 0.64rem;
+  .report-pricing-modal__payment-logo--apple-pay,
+  .report-pricing-modal__payment-logo--google-pay {
+    width: 1.46rem;
+    height: 0.92rem;
   }
 
-  .report-pricing-modal__payment-icon--apple::after {
-    inset: 0.12rem 0.14rem;
+  .report-pricing-modal__payment-logo--visa {
+    width: 2.04rem;
+    height: 0.66rem;
   }
 
-  .report-pricing-modal__payment-icon--google {
-    width: 0.6rem;
-    height: 0.6rem;
-  }
-
-  .report-pricing-modal__payment-method.report-pricing-modal__payment-mark--visa
-    .report-pricing-modal__payment-mark {
-    font-size: 0.72rem;
+  .report-pricing-modal__payment-logo--amex {
+    width: 3.08rem;
+    height: 0.66rem;
   }
 
   .report-pricing-modal__mastercard {
@@ -3439,11 +3440,6 @@ h3,
   .report-pricing-modal__mastercard span {
     width: 0.62rem;
     height: 0.62rem;
-  }
-
-  .report-pricing-modal__amex {
-    padding: 0.08rem 0.22rem;
-    font-size: 0.46rem;
   }
 
   .report-pricing-modal__testimonial {
@@ -5523,6 +5519,10 @@ h3,
   }
 
   .report-pricing-modal__payment-method {
+    min-height: 1.14rem;
+  }
+
+  .report-pricing-modal__payment-method--text {
     gap: 0.34rem;
   }
 
@@ -5530,9 +5530,20 @@ h3,
     font-size: 0.82rem;
   }
 
-  .report-pricing-modal__payment-method.report-pricing-modal__payment-mark--visa
-    .report-pricing-modal__payment-mark {
-    font-size: 0.92rem;
+  .report-pricing-modal__payment-logo--apple-pay,
+  .report-pricing-modal__payment-logo--google-pay {
+    width: 1.72rem;
+    height: 1.08rem;
+  }
+
+  .report-pricing-modal__payment-logo--visa {
+    width: 2.34rem;
+    height: 0.76rem;
+  }
+
+  .report-pricing-modal__payment-logo--amex {
+    width: 3.48rem;
+    height: 0.76rem;
   }
 
   .report-pricing-modal__mastercard {
