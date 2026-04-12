@@ -283,41 +283,43 @@ const ReportPricingModal: FC<Props> = ({ archetype, open, onClose, onUnlock, ret
             ))}
           </div>
 
-          <div className="report-pricing-modal__payments" aria-label="Accepted payment methods">
-            <PricingMethodMark>Apple Pay</PricingMethodMark>
-            <PricingMethodMark tone="paypal">PayPal</PricingMethodMark>
-            <PricingMethodMark>Google Pay</PricingMethodMark>
-            <PricingMethodMark tone="klarna">Klarna.</PricingMethodMark>
-            <span className="report-pricing-modal__mastercard" aria-label="Mastercard">
-              <span />
-              <span />
-            </span>
-            <PricingMethodMark tone="visa">VISA</PricingMethodMark>
-            <span className="report-pricing-modal__amex">AMEX</span>
-          </div>
-
-          <figure className="report-pricing-modal__testimonial">
-            <div className="report-pricing-modal__stars" aria-label="5 out of 5 stars">
-              {Array.from({ length: 5 }).map((_, index) => (
-                <svg key={index} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-                  <path d="m8 1.5 1.72 3.48 3.84.56-2.78 2.71.66 3.83L8 10.27l-3.44 1.81.66-3.83L2.44 5.54l3.84-.56L8 1.5Z" />
-                </svg>
-              ))}
+          <div className="report-pricing-modal__footer">
+            <div className="report-pricing-modal__payments" aria-label="Accepted payment methods">
+              <PricingMethodMark>Apple Pay</PricingMethodMark>
+              <PricingMethodMark tone="paypal">PayPal</PricingMethodMark>
+              <PricingMethodMark>Google Pay</PricingMethodMark>
+              <PricingMethodMark tone="klarna">Klarna.</PricingMethodMark>
+              <span className="report-pricing-modal__mastercard" aria-label="Mastercard">
+                <span />
+                <span />
+              </span>
+              <PricingMethodMark tone="visa">VISA</PricingMethodMark>
+              <span className="report-pricing-modal__amex">AMEX</span>
             </div>
-            <blockquote className="report-pricing-modal__quote">
-              &ldquo;Unlocking my report was one of the best investments made for my sexuality. It
-              is shockingly precise.&rdquo;
-            </blockquote>
-            <figcaption className="report-pricing-modal__author">
-              <span className="report-pricing-modal__avatar" aria-hidden="true">
-                TV
-              </span>
-              <span>
-                <strong>Dr. Tobias V.</strong>
-                <em>Berlin, Germany</em>
-              </span>
-            </figcaption>
-          </figure>
+
+            <figure className="report-pricing-modal__testimonial">
+              <div className="report-pricing-modal__stars" aria-label="5 out of 5 stars">
+                {Array.from({ length: 5 }).map((_, index) => (
+                  <svg key={index} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                    <path d="m8 1.5 1.72 3.48 3.84.56-2.78 2.71.66 3.83L8 10.27l-3.44 1.81.66-3.83L2.44 5.54l3.84-.56L8 1.5Z" />
+                  </svg>
+                ))}
+              </div>
+              <blockquote className="report-pricing-modal__quote">
+                &ldquo;Unlocking my report was one of the best investments made for my sexuality. It
+                is shockingly precise.&rdquo;
+              </blockquote>
+              <figcaption className="report-pricing-modal__author">
+                <span className="report-pricing-modal__avatar" aria-hidden="true">
+                  TV
+                </span>
+                <span>
+                  <strong>Dr. Tobias V.</strong>
+                  <em>Berlin, Germany</em>
+                </span>
+              </figcaption>
+            </figure>
+          </div>
         </div>
       </div>
     </div>
