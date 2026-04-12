@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, type FC, type MutableRefObject, type ReactNode } from "react";
+import { useEffect, useRef, type FC, type MutableRefObject } from "react";
 
 type UnlockPlan = "essentials" | "full_report" | "all_reports";
 
@@ -124,38 +124,22 @@ const pricingCards: PricingCard[] = [
 ];
 
 function PricingMethodMark({
-  children,
   logo,
   label,
-  tone,
 }: {
-  children?: ReactNode;
   label: string;
-  logo?: "apple-pay" | "google-pay" | "visa" | "amex";
-  tone?: "paypal" | "klarna";
+  logo: "apple-pay" | "paypal" | "google-pay" | "klarna" | "mastercard" | "visa" | "amex";
 }) {
   return (
     <span
-      className={[
-        "report-pricing-modal__payment-method",
-        logo
-          ? "report-pricing-modal__payment-method--logo"
-          : "report-pricing-modal__payment-method--text",
-        tone ? `report-pricing-modal__payment-mark--${tone}` : "",
-      ]
-        .filter(Boolean)
-        .join(" ")}
+      className="report-pricing-modal__payment-method report-pricing-modal__payment-method--logo"
       role="img"
       aria-label={label}
     >
-      {logo ? (
-        <span
-          className={`report-pricing-modal__payment-logo report-pricing-modal__payment-logo--${logo}`}
-          aria-hidden="true"
-        />
-      ) : (
-        <span className="report-pricing-modal__payment-mark">{children}</span>
-      )}
+      <span
+        className={`report-pricing-modal__payment-logo report-pricing-modal__payment-logo--${logo}`}
+        aria-hidden="true"
+      />
     </span>
   );
 }
@@ -379,17 +363,10 @@ const ReportPricingModal: FC<Props> = ({ archetype, open, onClose, onUnlock, ret
 
             <div className="report-pricing-modal__payments" aria-label="Accepted payment methods">
               <PricingMethodMark logo="apple-pay" label="Apple Pay" />
-              <PricingMethodMark label="PayPal" tone="paypal">
-                PayPal
-              </PricingMethodMark>
+              <PricingMethodMark logo="paypal" label="PayPal" />
               <PricingMethodMark logo="google-pay" label="Google Pay" />
-              <PricingMethodMark label="Klarna" tone="klarna">
-                Klarna.
-              </PricingMethodMark>
-              <span className="report-pricing-modal__mastercard" role="img" aria-label="Mastercard">
-                <span />
-                <span />
-              </span>
+              <PricingMethodMark logo="klarna" label="Klarna" />
+              <PricingMethodMark logo="mastercard" label="Mastercard" />
               <PricingMethodMark logo="visa" label="Visa" />
               <PricingMethodMark logo="amex" label="American Express" />
             </div>
