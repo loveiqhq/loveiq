@@ -2485,9 +2485,9 @@ h3,
 
 .report-pricing-modal__dialog {
   position: relative;
-  width: min(100%, 1010px);
+  width: min(100%, 1048px);
   margin: 0 auto;
-  padding: clamp(0.85rem, 1.4vw, 1.35rem);
+  padding: clamp(1.2rem, 1.7vw, 1.6rem);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 24px;
   background:
@@ -2505,6 +2505,12 @@ h3,
     transform 220ms ease;
 }
 
+.report-pricing-modal__inner {
+  width: min(100%, 57.5rem);
+  margin: 0 auto;
+  padding: 1.05rem 0 1rem;
+}
+
 .report-pricing-modal.is-visible .report-pricing-modal__backdrop {
   opacity: 1;
 }
@@ -2516,63 +2522,61 @@ h3,
 
 .report-pricing-modal__close {
   position: absolute;
-  top: 1.1rem;
-  right: 1.1rem;
+  top: 1rem;
+  right: 1rem;
   z-index: 2;
   display: grid;
   place-items: center;
-  width: 2.75rem;
-  height: 2.75rem;
+  width: 3rem;
+  height: 3rem;
   border: 0;
-  border-radius: 9999px;
-  background: rgba(255, 255, 255, 0.02);
-  color: rgba(192, 132, 252, 0.82);
+  border-radius: 0.9rem;
+  background: transparent;
+  color: rgba(192, 132, 252, 0.9);
   cursor: pointer;
   transition:
     background 180ms ease,
-    transform 180ms ease,
     color 180ms ease;
 }
 
 .report-pricing-modal__close:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.04);
   color: #e9d5ff;
-  transform: rotate(90deg);
 }
 
 .report-pricing-modal__close svg {
-  width: 1.25rem;
-  height: 1.25rem;
+  width: 1.45rem;
+  height: 1.45rem;
 }
 
 .report-pricing-modal__header {
   display: grid;
-  gap: 0.54rem;
-  max-width: 36rem;
+  gap: 0.72rem;
+  max-width: 42rem;
   margin: 0 auto;
-  padding-top: 0;
+  padding-bottom: 2rem;
   text-align: center;
 }
 
 .report-pricing-modal__eyebrow {
   justify-self: center;
-  padding: 0.38rem 0.72rem;
+  padding: 0.55rem 1rem;
   border: 1px solid rgba(168, 85, 247, 0.18);
   border-radius: 9999px;
   background: rgba(168, 85, 247, 0.08);
   color: #c084fc;
-  font-size: 0.64rem;
+  font-size: 0.74rem;
   font-weight: 500;
   letter-spacing: 0.025em;
-  line-height: 1;
+  line-height: 1.1;
 }
 
 .report-pricing-modal__title {
   margin: 0;
   font-family: var(--font-serif);
-  font-size: clamp(1.5rem, 2.3vw, 1.95rem);
+  font-size: clamp(1.95rem, 2.55vw, 2.35rem);
   font-weight: 500;
-  line-height: 0.98;
+  line-height: 1.08;
   letter-spacing: -0.04em;
   color: #fff;
   text-wrap: balance;
@@ -2580,120 +2584,146 @@ h3,
 
 .report-pricing-modal__copy {
   margin: 0 auto;
-  max-width: 31rem;
+  max-width: 38.5rem;
   color: var(--report-copy);
-  font-size: 0.78rem;
+  font-size: 0.95rem;
   font-weight: 300;
-  line-height: 1.24;
+  line-height: 1.5;
 }
 
 .report-pricing-modal__plans {
   display: grid;
-  gap: 0.7rem;
-  margin-top: 0.95rem;
+  gap: 1rem;
+  margin-top: 0;
   align-items: stretch;
 }
 
 .report-pricing-card {
   position: relative;
-  display: grid;
-  grid-template-rows: minmax(3rem, auto) auto auto 1fr;
-  gap: 0.56rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
   min-height: 100%;
-  padding: 0.95rem 0.82rem;
+  min-height: 24.25rem;
+  padding: 1.7rem 1.3rem 1.35rem;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 1rem;
-  background: rgba(255, 255, 255, 0.025);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.02);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
 
+.report-pricing-card--with-badge {
+  padding-top: 2rem;
+}
+
 .report-pricing-card--highlight {
-  border-color: rgba(168, 85, 247, 0.36);
+  border-color: rgba(168, 85, 247, 0.4);
   background:
-    radial-gradient(circle at 50% -30%, rgba(168, 85, 247, 0.16), transparent 0 56%),
+    radial-gradient(circle at 50% -30%, rgba(168, 85, 247, 0.16), transparent 0 58%),
     rgba(255, 255, 255, 0.04);
-  box-shadow: 0 0 30px rgba(168, 85, 247, 0.12);
+  box-shadow: 0 0 30px rgba(168, 85, 247, 0.1);
+}
+
+.report-pricing-card__badges {
+  position: absolute;
+  top: -0.78rem;
+  left: 1.15rem;
+  z-index: 1;
+  display: flex;
+  gap: 0.48rem;
+  align-items: center;
 }
 
 .report-pricing-card__badge {
-  position: absolute;
-  top: -0.58rem;
-  left: 0.78rem;
   display: inline-flex;
   align-items: center;
-  min-height: 1.28rem;
-  padding: 0.14rem 0.56rem;
+  min-height: 1.62rem;
+  padding: 0.28rem 0.78rem;
+  border: 1px solid rgba(254, 104, 57, 0.3);
   border-radius: 9999px;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   background: rgba(254, 104, 57, 0.2);
   color: #fe6839;
-  font-size: 0.6rem;
+  font-size: 0.68rem;
   font-weight: 600;
   letter-spacing: 0.025em;
+  line-height: 1.1;
 }
 
 .report-pricing-card__badge--accent {
-  background: rgba(192, 132, 252, 0.16);
-  color: #d8b4fe;
+  border-color: rgba(254, 104, 57, 0.3);
+  background: rgba(254, 104, 57, 0.2);
+  color: #fe6839;
+}
+
+.report-pricing-card__badge--featured {
+  border-color: transparent;
+  background: #fe6839;
+  color: #fff;
+  box-shadow: 0 10px 18px rgba(254, 104, 57, 0.18);
 }
 
 .report-pricing-card__heading {
   display: grid;
-  gap: 0.22rem;
+  gap: 0.34rem;
   align-content: start;
 }
 
 .report-pricing-card__title {
   margin: 0;
   color: #fff;
-  font-size: 0.84rem;
+  font-size: 1.04rem;
   font-weight: 500;
-  line-height: 1.25;
+  line-height: 1.45;
 }
 
 .report-pricing-card__description {
   margin: 0;
   color: rgba(255, 255, 255, 0.58);
-  font-size: 0.68rem;
+  min-height: 2.5rem;
+  font-size: 0.84rem;
   font-weight: 300;
-  line-height: 1.14;
+  line-height: 1.45;
 }
 
 .report-pricing-card__price {
   display: grid;
-  gap: 0.24rem;
+  gap: 0.32rem;
   align-content: start;
-  padding-top: 0.48rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .report-pricing-card__strike {
   color: rgba(255, 255, 255, 0.28);
-  font-family: var(--font-serif);
-  font-size: 0.66rem;
+  font-size: 0.76rem;
   line-height: 1;
   text-decoration: line-through;
 }
 
 .report-pricing-card__price-row {
   display: flex;
-  gap: 0.3rem;
+  gap: 0.26rem;
   align-items: flex-end;
 }
 
 .report-pricing-card__price-row strong {
   color: #fff;
   font-family: var(--font-serif);
-  font-size: clamp(1.18rem, 1.55vw, 1.46rem);
+  font-size: clamp(1.7rem, 2vw, 1.96rem);
   font-weight: 500;
   line-height: 1;
   letter-spacing: -0.04em;
 }
 
+.report-pricing-card--highlight .report-pricing-card__price-row strong {
+  font-size: clamp(1.9rem, 2.2vw, 2.18rem);
+}
+
 .report-pricing-card__price-row span {
-  padding-bottom: 0.08rem;
+  padding-bottom: 0.16rem;
   color: rgba(255, 255, 255, 0.44);
-  font-size: 0.62rem;
+  font-size: 0.76rem;
   font-weight: 300;
   line-height: 1.2;
 }
@@ -2703,14 +2733,15 @@ h3,
   align-items: center;
   justify-content: center;
   width: 100%;
-  height: 2.32rem;
-  min-height: 2.32rem;
-  padding: 0.5rem 0.8rem;
+  height: 2.8rem;
+  min-height: 2.8rem;
+  margin-top: 0.18rem;
+  padding: 0.75rem 1rem;
   border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: 9999px;
   background: rgba(255, 255, 255, 0.05);
   color: #fff;
-  font-size: 0.7rem;
+  font-size: 0.8rem;
   font-weight: 500;
   line-height: 1;
   white-space: nowrap;
@@ -2739,80 +2770,137 @@ h3,
 
 .report-pricing-card__features {
   display: grid;
-  gap: 0.34rem;
+  gap: 0.72rem;
   padding: 0;
-  margin: 0;
+  margin: auto 0 0;
   list-style: none;
 }
 
-.report-pricing-card__features li {
+.report-pricing-card__feature {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  gap: 0.4rem;
+  gap: 0.72rem;
   align-items: flex-start;
   color: rgba(255, 255, 255, 0.76);
-  font-size: 0.64rem;
+  font-size: 0.84rem;
   font-weight: 300;
-  line-height: 1.08;
+  line-height: 1.38;
+}
+
+.report-pricing-card__feature--subitem {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  padding-left: 1.65rem;
+}
+
+.report-pricing-card__feature--muted {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.report-pricing-card__feature--emphasis {
+  color: #fff;
+  font-weight: 500;
 }
 
 .report-pricing-card__feature-icon {
-  display: grid;
+  display: inline-grid;
   place-items: center;
-  width: 1rem;
-  height: 1rem;
-  margin-top: 0.15rem;
+  width: 0.96rem;
+  height: 0.96rem;
+  margin-top: 0.22rem;
+  border: 1px solid rgba(254, 104, 57, 0.65);
+  border-radius: 9999px;
   color: #fe6839;
 }
 
 .report-pricing-card__feature-icon svg {
-  width: 1rem;
-  height: 1rem;
+  width: 0.68rem;
+  height: 0.68rem;
 }
 
 .report-pricing-modal__payments {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem 0.78rem;
+  gap: 0.9rem 1.55rem;
   align-items: center;
   justify-content: center;
-  margin-top: 0.8rem;
+  margin-top: 1.75rem;
   color: rgba(255, 255, 255, 0.82);
 }
 
-.report-pricing-modal__payment-mark {
+.report-pricing-modal__payment-method {
+  display: inline-flex;
+  gap: 0.42rem;
+  align-items: center;
   color: rgba(255, 255, 255, 0.82);
-  font-size: 0.7rem;
+}
+
+.report-pricing-modal__payment-icon {
+  display: inline-block;
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.report-pricing-modal__payment-icon--apple {
+  width: 0.86rem;
+  height: 0.86rem;
+  border: 1.2px solid rgba(255, 255, 255, 0.82);
+  border-radius: 0.25rem;
+}
+
+.report-pricing-modal__payment-icon--apple::after {
+  content: "";
+  position: absolute;
+  inset: 0.18rem 0.2rem;
+  border-top: 1.2px solid rgba(255, 255, 255, 0.82);
+  transform: rotate(-18deg);
+  transform-origin: center;
+}
+
+.report-pricing-modal__payment-icon--google {
+  width: 0.82rem;
+  height: 0.82rem;
+  border: 1.8px solid #facc15;
+  border-radius: 9999px;
+}
+
+.report-pricing-modal__payment-mark {
+  color: inherit;
+  font-size: 0.86rem;
   font-weight: 500;
   line-height: 1;
 }
 
-.report-pricing-modal__payment-mark--paypal {
+.report-pricing-modal__payment-method.report-pricing-modal__payment-mark--paypal {
   color: #60a5fa;
 }
 
-.report-pricing-modal__payment-mark--klarna {
+.report-pricing-modal__payment-method.report-pricing-modal__payment-mark--klarna {
   color: #f9a8d4;
 }
 
-.report-pricing-modal__payment-mark--visa {
+.report-pricing-modal__payment-method.report-pricing-modal__payment-mark--visa {
   color: #3b82f6;
-  font-size: 0.82rem;
+}
+
+.report-pricing-modal__payment-method.report-pricing-modal__payment-mark--visa
+  .report-pricing-modal__payment-mark {
+  font-size: 1rem;
   letter-spacing: -0.04em;
 }
 
 .report-pricing-modal__mastercard {
   position: relative;
   display: inline-flex;
-  width: 1.48rem;
-  height: 0.78rem;
+  width: 1.75rem;
+  height: 0.96rem;
 }
 
 .report-pricing-modal__mastercard span {
   position: absolute;
   top: 0;
-  width: 0.78rem;
-  height: 0.78rem;
+  width: 0.96rem;
+  height: 0.96rem;
   border-radius: 9999px;
   mix-blend-mode: screen;
 }
@@ -2828,81 +2916,106 @@ h3,
 }
 
 .report-pricing-modal__amex {
-  padding: 0.1rem 0.24rem;
+  padding: 0.14rem 0.34rem;
   border: 1px solid rgba(59, 130, 246, 0.55);
   border-radius: 0.25rem;
   color: #60a5fa;
-  font-size: 0.52rem;
+  font-size: 0.64rem;
   font-weight: 700;
   letter-spacing: 0.05em;
 }
 
 .report-pricing-modal__testimonial {
   display: grid;
-  gap: 0.38rem;
-  max-width: 44rem;
-  margin: 0.78rem auto 0;
-  padding: 0.74rem 0.88rem;
+  gap: 0.9rem;
+  width: min(100%, 42rem);
+  margin: 1.85rem auto 0;
+  padding: 1.65rem 1.75rem;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 1rem;
-  background: rgba(10, 5, 16, 0.72);
+  border-radius: 16px;
+  background: rgba(12, 6, 20, 0.88);
+  box-shadow:
+    0 20px 25px -5px rgba(0, 0, 0, 0.1),
+    0 8px 10px -6px rgba(0, 0, 0, 0.1);
 }
 
 .report-pricing-modal__stars {
   display: flex;
-  gap: 0.12rem;
+  gap: 0.2rem;
   color: #fe6839;
 }
 
 .report-pricing-modal__stars svg {
-  width: 0.62rem;
-  height: 0.62rem;
+  width: 0.82rem;
+  height: 0.82rem;
 }
 
 .report-pricing-modal__quote {
   margin: 0;
-  color: rgba(255, 255, 255, 0.74);
+  color: #9ca3af;
   font-family: var(--font-serif);
-  font-size: clamp(0.72rem, 0.98vw, 0.86rem);
-  line-height: 1.14;
+  font-size: clamp(1rem, 1.2vw, 1.14rem);
+  line-height: 1.46;
+}
+
+.report-pricing-modal__quote em {
+  color: #fff;
+  font-style: italic;
+  font-weight: 500;
 }
 
 .report-pricing-modal__author {
   display: flex;
-  gap: 0.42rem;
+  gap: 0.72rem;
   align-items: center;
+  margin-top: 0.1rem;
 }
 
 .report-pricing-modal__avatar {
   display: grid;
   place-items: center;
-  width: 1.62rem;
-  height: 1.62rem;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  width: 2.4rem;
+  height: 2.4rem;
+  border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 9999px;
   background: linear-gradient(135deg, rgba(254, 104, 57, 0.35), rgba(192, 132, 252, 0.3));
   color: #fff;
-  font-size: 0.56rem;
+  box-shadow:
+    0 10px 15px -3px rgba(0, 0, 0, 0.1),
+    0 4px 6px -4px rgba(0, 0, 0, 0.1);
+  font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.04em;
 }
 
-.report-pricing-modal__author span:last-child {
+.report-pricing-modal__author-copy {
   display: grid;
   gap: 0.15rem;
 }
 
+.report-pricing-modal__author-line {
+  display: flex;
+  gap: 0.34rem;
+  align-items: baseline;
+}
+
 .report-pricing-modal__author strong {
   color: #fff;
-  font-size: 0.68rem;
+  font-size: 0.86rem;
   font-weight: 500;
+}
+
+.report-pricing-modal__author-age {
+  color: rgba(255, 255, 255, 0.38);
+  font-size: 0.76rem;
+  font-weight: 300;
 }
 
 .report-pricing-modal__author em {
   color: rgba(255, 255, 255, 0.42);
-  font-size: 0.56rem;
+  font-size: 0.7rem;
   font-style: normal;
-  line-height: 1.2;
+  line-height: 1.3;
 }
 
 @media (min-width: 960px) {
@@ -2913,113 +3026,180 @@ h3,
 
 @media (max-height: 980px) and (min-width: 960px) {
   .report-pricing-modal__viewport {
-    padding: 0.45rem 0.58rem;
+    padding: 0.7rem 0.78rem;
   }
 
   .report-pricing-modal__dialog {
-    width: min(100%, 940px);
-    padding: 0.7rem 0.68rem 0.76rem;
+    width: min(100%, 992px);
+    padding: 1rem 1rem 1.1rem;
   }
 
-  .report-pricing-modal__plans {
-    gap: 0.54rem;
-    margin-top: 0.76rem;
+  .report-pricing-modal__inner {
+    width: min(100%, 54.75rem);
+    padding: 0.85rem 0 0.78rem;
   }
 
-  .report-pricing-card {
-    grid-template-rows: minmax(2.7rem, auto) auto auto 1fr;
-    gap: 0.42rem;
-    padding: 0.8rem 0.68rem;
+  .report-pricing-modal__close {
+    width: 2.75rem;
+    height: 2.75rem;
+  }
+
+  .report-pricing-modal__header {
+    gap: 0.62rem;
+    padding-bottom: 1.6rem;
+  }
+
+  .report-pricing-modal__eyebrow {
+    padding: 0.46rem 0.88rem;
+    font-size: 0.67rem;
   }
 
   .report-pricing-modal__title {
-    font-size: 1.32rem;
+    font-size: 1.82rem;
   }
 
   .report-pricing-modal__copy {
-    max-width: 29rem;
-    font-size: 0.72rem;
-    line-height: 1.16;
+    max-width: 34rem;
+    font-size: 0.84rem;
+    line-height: 1.42;
+  }
+
+  .report-pricing-modal__plans {
+    gap: 0.84rem;
+  }
+
+  .report-pricing-card {
+    min-height: 22.45rem;
+    gap: 0.66rem;
+    padding: 1.4rem 1.08rem 1.15rem;
+  }
+
+  .report-pricing-card--with-badge {
+    padding-top: 1.72rem;
+  }
+
+  .report-pricing-card__badges {
+    left: 0.95rem;
+    gap: 0.34rem;
+  }
+
+  .report-pricing-card__badge {
+    min-height: 1.42rem;
+    padding: 0.24rem 0.64rem;
+    font-size: 0.61rem;
   }
 
   .report-pricing-card__title {
-    font-size: 0.78rem;
+    font-size: 0.94rem;
   }
 
   .report-pricing-card__description {
-    font-size: 0.64rem;
-    line-height: 1.08;
+    min-height: 2.15rem;
+    font-size: 0.76rem;
+    line-height: 1.34;
+  }
+
+  .report-pricing-card__strike {
+    font-size: 0.68rem;
   }
 
   .report-pricing-card__price-row strong {
-    font-size: 1.06rem;
+    font-size: 1.56rem;
+  }
+
+  .report-pricing-card--highlight .report-pricing-card__price-row strong {
+    font-size: 1.78rem;
   }
 
   .report-pricing-card__price-row span {
-    font-size: 0.58rem;
+    padding-bottom: 0.12rem;
+    font-size: 0.68rem;
   }
 
   .report-pricing-card__cta {
-    height: 2rem;
-    min-height: 2rem;
-    font-size: 0.64rem;
-  }
-
-  .report-pricing-card__features {
-    gap: 0.28rem;
-  }
-
-  .report-pricing-card__features li {
-    font-size: 0.58rem;
-    line-height: 1.02;
-  }
-
-  .report-pricing-modal__payments {
-    gap: 0.36rem 0.52rem;
-    margin-top: 0.62rem;
-  }
-
-  .report-pricing-modal__payment-mark {
-    font-size: 0.62rem;
-  }
-
-  .report-pricing-modal__payment-mark--visa {
+    height: 2.5rem;
+    min-height: 2.5rem;
     font-size: 0.74rem;
   }
 
+  .report-pricing-card__features {
+    gap: 0.62rem;
+  }
+
+  .report-pricing-card__feature {
+    gap: 0.58rem;
+    font-size: 0.76rem;
+    line-height: 1.3;
+  }
+
+  .report-pricing-card__feature--subitem {
+    padding-left: 1.38rem;
+  }
+
+  .report-pricing-card__feature-icon {
+    margin-top: 0.18rem;
+  }
+
+  .report-pricing-modal__payments {
+    gap: 0.82rem 1.25rem;
+    margin-top: 1.45rem;
+  }
+
+  .report-pricing-modal__payment-mark {
+    font-size: 0.78rem;
+  }
+
+  .report-pricing-modal__payment-method.report-pricing-modal__payment-mark--visa
+    .report-pricing-modal__payment-mark {
+    font-size: 0.9rem;
+  }
+
   .report-pricing-modal__mastercard {
-    width: 1.3rem;
-    height: 0.68rem;
+    width: 1.54rem;
+    height: 0.84rem;
   }
 
   .report-pricing-modal__mastercard span {
-    width: 0.68rem;
-    height: 0.68rem;
+    width: 0.84rem;
+    height: 0.84rem;
+  }
+
+  .report-pricing-modal__amex {
+    font-size: 0.58rem;
   }
 
   .report-pricing-modal__testimonial {
-    gap: 0.3rem;
-    margin-top: 0.58rem;
-    padding: 0.58rem 0.68rem;
+    width: min(100%, 38.5rem);
+    margin-top: 1.55rem;
+    padding: 1.35rem 1.45rem;
+  }
+
+  .report-pricing-modal__stars svg {
+    width: 0.72rem;
+    height: 0.72rem;
   }
 
   .report-pricing-modal__quote {
-    font-size: 0.66rem;
-    line-height: 1.02;
+    font-size: 0.94rem;
+    line-height: 1.38;
   }
 
   .report-pricing-modal__avatar {
-    width: 1.42rem;
-    height: 1.42rem;
-    font-size: 0.5rem;
-  }
-
-  .report-pricing-modal__author strong {
+    width: 2.12rem;
+    height: 2.12rem;
     font-size: 0.62rem;
   }
 
+  .report-pricing-modal__author strong {
+    font-size: 0.78rem;
+  }
+
+  .report-pricing-modal__author-age {
+    font-size: 0.68rem;
+  }
+
   .report-pricing-modal__author em {
-    font-size: 0.52rem;
+    font-size: 0.64rem;
   }
 }
 
@@ -4942,56 +5122,147 @@ h3,
   .report-pricing-modal__dialog {
     width: 100%;
     max-height: calc(100svh - 1.5rem);
-    padding: 3.75rem 1rem 1.1rem;
+    padding: 3.5rem 0.95rem 1.1rem;
     border-radius: 1.25rem;
   }
 
+  .report-pricing-modal__inner {
+    width: 100%;
+    padding: 0;
+  }
+
   .report-pricing-modal__close {
-    top: 0.7rem;
-    right: 0.7rem;
-    width: 2.5rem;
-    height: 2.5rem;
+    top: 0.55rem;
+    right: 0.55rem;
+    width: 2.7rem;
+    height: 2.7rem;
   }
 
   .report-pricing-modal__header {
-    gap: 0.8rem;
+    gap: 0.72rem;
+    padding-bottom: 1.55rem;
+  }
+
+  .report-pricing-modal__eyebrow {
+    padding: 0.46rem 0.88rem;
+    font-size: 0.68rem;
   }
 
   .report-pricing-modal__title {
-    font-size: 2rem;
+    font-size: 2.05rem;
   }
 
   .report-pricing-modal__copy {
-    font-size: 0.95rem;
-    line-height: 1.55;
+    max-width: 100%;
+    font-size: 0.92rem;
+    line-height: 1.5;
   }
 
   .report-pricing-modal__plans {
-    margin-top: 1.5rem;
+    gap: 0.95rem;
+    margin-top: 0;
   }
 
   .report-pricing-card {
-    grid-template-rows: auto auto auto 1fr;
+    min-height: auto;
+    gap: 0.72rem;
     padding: 1.45rem 1rem 1.2rem;
   }
 
+  .report-pricing-card--with-badge {
+    padding-top: 1.85rem;
+  }
+
+  .report-pricing-card__badges {
+    left: 1rem;
+    gap: 0.32rem;
+  }
+
+  .report-pricing-card__badge {
+    min-height: 1.4rem;
+    padding: 0.2rem 0.58rem;
+    font-size: 0.58rem;
+  }
+
+  .report-pricing-card__description {
+    min-height: 0;
+  }
+
+  .report-pricing-card__price-row strong {
+    font-size: 1.62rem;
+  }
+
+  .report-pricing-card--highlight .report-pricing-card__price-row strong {
+    font-size: 1.82rem;
+  }
+
+  .report-pricing-card__price-row span {
+    font-size: 0.72rem;
+  }
+
+  .report-pricing-card__cta {
+    height: 2.7rem;
+    min-height: 2.7rem;
+    font-size: 0.78rem;
+  }
+
+  .report-pricing-card__features {
+    gap: 0.58rem;
+  }
+
+  .report-pricing-card__feature {
+    gap: 0.58rem;
+    font-size: 0.79rem;
+    line-height: 1.32;
+  }
+
+  .report-pricing-card__feature--subitem {
+    padding-left: 1.34rem;
+  }
+
   .report-pricing-modal__payments {
-    gap: 0.8rem 1rem;
-    margin-top: 1.5rem;
+    gap: 0.68rem 1rem;
+    margin-top: 1.35rem;
+  }
+
+  .report-pricing-modal__payment-method {
+    gap: 0.34rem;
   }
 
   .report-pricing-modal__payment-mark {
-    font-size: 0.84rem;
+    font-size: 0.82rem;
+  }
+
+  .report-pricing-modal__payment-method.report-pricing-modal__payment-mark--visa
+    .report-pricing-modal__payment-mark {
+    font-size: 0.92rem;
+  }
+
+  .report-pricing-modal__mastercard {
+    width: 1.52rem;
+    height: 0.82rem;
+  }
+
+  .report-pricing-modal__mastercard span {
+    width: 0.82rem;
+    height: 0.82rem;
   }
 
   .report-pricing-modal__testimonial {
-    margin-top: 1.5rem;
-    padding: 1.25rem 1rem;
+    width: 100%;
+    margin-top: 1.4rem;
+    padding: 1.2rem 1rem;
   }
 
   .report-pricing-modal__quote {
-    font-size: 1rem;
-    line-height: 1.5;
+    font-size: 0.98rem;
+    line-height: 1.44;
+  }
+
+  .report-pricing-modal__avatar {
+    width: 2.08rem;
+    height: 2.08rem;
+    font-size: 0.62rem;
   }
 
   .report-themed-block__preview--practice .report-premium-overlay {
