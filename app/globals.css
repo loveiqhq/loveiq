@@ -3203,6 +3203,249 @@ h3,
   }
 }
 
+@media (max-height: 900px) and (min-width: 960px) {
+  .report-pricing-modal__viewport {
+    align-items: start;
+    padding: 0.4rem 0.62rem;
+  }
+
+  .report-pricing-modal__dialog {
+    width: min(100%, 936px);
+    padding: 0.78rem 0.84rem 0.84rem;
+  }
+
+  .report-pricing-modal__inner {
+    width: min(100%, 50.75rem);
+    padding: 0.54rem 0 0.48rem;
+  }
+
+  .report-pricing-modal__close {
+    top: 0.74rem;
+    right: 0.74rem;
+    width: 2.44rem;
+    height: 2.44rem;
+  }
+
+  .report-pricing-modal__close svg {
+    width: 1.16rem;
+    height: 1.16rem;
+  }
+
+  .report-pricing-modal__header {
+    gap: 0.42rem;
+    max-width: 31rem;
+    padding-bottom: 0.96rem;
+  }
+
+  .report-pricing-modal__eyebrow {
+    padding: 0.34rem 0.7rem;
+    font-size: 0.58rem;
+  }
+
+  .report-pricing-modal__title {
+    font-size: 1.48rem;
+  }
+
+  .report-pricing-modal__copy {
+    max-width: 31rem;
+    font-size: 0.72rem;
+    line-height: 1.22;
+  }
+
+  .report-pricing-modal__plans {
+    gap: 0.64rem;
+  }
+
+  .report-pricing-card {
+    min-height: 19.75rem;
+    gap: 0.44rem;
+    padding: 1.04rem 0.82rem 0.82rem;
+  }
+
+  .report-pricing-card--with-badge {
+    padding-top: 1.34rem;
+  }
+
+  .report-pricing-card__badges {
+    top: -0.58rem;
+    left: 0.72rem;
+    gap: 0.24rem;
+  }
+
+  .report-pricing-card__badge {
+    min-height: 1.14rem;
+    padding: 0.16rem 0.48rem;
+    font-size: 0.5rem;
+  }
+
+  .report-pricing-card__heading {
+    gap: 0.16rem;
+  }
+
+  .report-pricing-card__title {
+    font-size: 0.8rem;
+  }
+
+  .report-pricing-card__description {
+    min-height: 1.55rem;
+    font-size: 0.64rem;
+    line-height: 1.14;
+  }
+
+  .report-pricing-card__strike {
+    font-size: 0.56rem;
+  }
+
+  .report-pricing-card__price {
+    gap: 0.18rem;
+  }
+
+  .report-pricing-card__price-row strong {
+    font-size: 1.28rem;
+  }
+
+  .report-pricing-card--highlight .report-pricing-card__price-row strong {
+    font-size: 1.44rem;
+  }
+
+  .report-pricing-card__price-row span {
+    padding-bottom: 0.08rem;
+    font-size: 0.56rem;
+  }
+
+  .report-pricing-card__cta {
+    height: 2.08rem;
+    min-height: 2.08rem;
+    margin-top: 0;
+    font-size: 0.62rem;
+  }
+
+  .report-pricing-card__features {
+    gap: 0.36rem;
+  }
+
+  .report-pricing-card__feature {
+    gap: 0.38rem;
+    font-size: 0.62rem;
+    line-height: 1.1;
+  }
+
+  .report-pricing-card__feature--subitem {
+    padding-left: 1rem;
+  }
+
+  .report-pricing-card__feature-icon {
+    width: 0.72rem;
+    height: 0.72rem;
+    margin-top: 0.1rem;
+  }
+
+  .report-pricing-card__feature-icon svg {
+    width: 0.5rem;
+    height: 0.5rem;
+  }
+
+  .report-pricing-modal__payments {
+    gap: 0.48rem 0.82rem;
+    margin-top: 0.8rem;
+  }
+
+  .report-pricing-modal__payment-method {
+    gap: 0.22rem;
+  }
+
+  .report-pricing-modal__payment-mark {
+    font-size: 0.64rem;
+  }
+
+  .report-pricing-modal__payment-icon--apple {
+    width: 0.64rem;
+    height: 0.64rem;
+  }
+
+  .report-pricing-modal__payment-icon--apple::after {
+    inset: 0.12rem 0.14rem;
+  }
+
+  .report-pricing-modal__payment-icon--google {
+    width: 0.6rem;
+    height: 0.6rem;
+  }
+
+  .report-pricing-modal__payment-method.report-pricing-modal__payment-mark--visa
+    .report-pricing-modal__payment-mark {
+    font-size: 0.72rem;
+  }
+
+  .report-pricing-modal__mastercard {
+    width: 1.16rem;
+    height: 0.62rem;
+  }
+
+  .report-pricing-modal__mastercard span {
+    width: 0.62rem;
+    height: 0.62rem;
+  }
+
+  .report-pricing-modal__amex {
+    padding: 0.08rem 0.22rem;
+    font-size: 0.46rem;
+  }
+
+  .report-pricing-modal__testimonial {
+    width: min(100%, 36.5rem);
+    gap: 0.42rem;
+    margin-top: 0.84rem;
+    padding: 0.86rem 1rem;
+  }
+
+  .report-pricing-modal__stars {
+    gap: 0.12rem;
+  }
+
+  .report-pricing-modal__stars svg {
+    width: 0.58rem;
+    height: 0.58rem;
+  }
+
+  .report-pricing-modal__quote {
+    font-size: 0.76rem;
+    line-height: 1.16;
+  }
+
+  .report-pricing-modal__author {
+    gap: 0.42rem;
+    margin-top: 0;
+  }
+
+  .report-pricing-modal__avatar {
+    width: 1.6rem;
+    height: 1.6rem;
+    font-size: 0.48rem;
+  }
+
+  .report-pricing-modal__author-copy {
+    gap: 0.04rem;
+  }
+
+  .report-pricing-modal__author-line {
+    gap: 0.2rem;
+  }
+
+  .report-pricing-modal__author strong {
+    font-size: 0.62rem;
+  }
+
+  .report-pricing-modal__author-age {
+    font-size: 0.54rem;
+  }
+
+  .report-pricing-modal__author em {
+    font-size: 0.52rem;
+    line-height: 1.04;
+  }
+}
+
 .report-status-screen {
   background: linear-gradient(90deg, #160c22 0%, #160c22 100%);
 }
