@@ -267,6 +267,9 @@ const ReportPricingModal: FC<Props> = ({ archetype, open, onClose, onUnlock, ret
                   role="listitem"
                   className={[
                     "report-pricing-card",
+                    card.tone === "highlight"
+                      ? "report-pricing-card--hero"
+                      : "report-pricing-card--side",
                     card.badge || card.featuredLabel ? "report-pricing-card--with-badge" : "",
                     card.tone === "highlight" ? "report-pricing-card--highlight" : "",
                   ]
@@ -301,9 +304,17 @@ const ReportPricingModal: FC<Props> = ({ archetype, open, onClose, onUnlock, ret
                   </div>
 
                   <div className="report-pricing-card__price">
-                    {card.strikePrice ? (
-                      <span className="report-pricing-card__strike">{card.strikePrice}</span>
-                    ) : null}
+                    <span
+                      className={[
+                        "report-pricing-card__strike",
+                        !card.strikePrice ? "report-pricing-card__strike--placeholder" : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                      aria-hidden={card.strikePrice ? undefined : "true"}
+                    >
+                      {card.strikePrice ?? "\u00a0"}
+                    </span>
                     <div className="report-pricing-card__price-row">
                       <strong>{card.price}</strong>
                       <span>{card.priceSuffix}</span>

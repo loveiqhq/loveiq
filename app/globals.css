@@ -2595,7 +2595,7 @@ h3,
   display: grid;
   gap: 1rem;
   margin-top: 0;
-  align-items: stretch;
+  align-items: start;
 }
 
 .report-pricing-card {
@@ -2605,7 +2605,7 @@ h3,
   gap: 0.8rem;
   min-height: 100%;
   min-height: 24.25rem;
-  padding: 1.7rem 1.3rem 1.35rem;
+  padding: 1.92rem 1.3rem 1.35rem;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.02);
@@ -2614,7 +2614,12 @@ h3,
 }
 
 .report-pricing-card--with-badge {
-  padding-top: 2rem;
+  padding-top: 1.92rem;
+}
+
+.report-pricing-card--side {
+  margin-top: 0.92rem;
+  min-height: 23.35rem;
 }
 
 .report-pricing-card--highlight {
@@ -2623,6 +2628,12 @@ h3,
     radial-gradient(circle at 50% -30%, rgba(168, 85, 247, 0.16), transparent 0 58%),
     rgba(255, 255, 255, 0.04);
   box-shadow: 0 0 30px rgba(168, 85, 247, 0.1);
+}
+
+.report-pricing-card--hero {
+  min-height: 24.75rem;
+  padding-top: 2.06rem;
+  padding-bottom: 1.52rem;
 }
 
 .report-pricing-card__badges {
@@ -2669,6 +2680,7 @@ h3,
   display: grid;
   gap: 0.34rem;
   align-content: start;
+  min-height: 4.22rem;
 }
 
 .report-pricing-card__title {
@@ -2692,13 +2704,19 @@ h3,
   display: grid;
   gap: 0.32rem;
   align-content: start;
+  min-height: 4rem;
 }
 
 .report-pricing-card__strike {
   color: rgba(255, 255, 255, 0.28);
+  min-height: 0.82rem;
   font-size: 0.76rem;
   line-height: 1;
   text-decoration: line-through;
+}
+
+.report-pricing-card__strike--placeholder {
+  visibility: hidden;
 }
 
 .report-pricing-card__price-row {
@@ -2735,7 +2753,7 @@ h3,
   width: 100%;
   height: 2.8rem;
   min-height: 2.8rem;
-  margin-top: 0.18rem;
+  margin-top: 0;
   padding: 0.75rem 1rem;
   border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: 9999px;
@@ -3026,7 +3044,8 @@ h3,
 
 @media (max-height: 980px) and (min-width: 960px) {
   .report-pricing-modal__viewport {
-    padding: 0.7rem 0.78rem;
+    align-items: center;
+    padding: 0.64rem 0.78rem;
   }
 
   .report-pricing-modal__dialog {
@@ -3071,11 +3090,22 @@ h3,
   .report-pricing-card {
     min-height: 22.45rem;
     gap: 0.66rem;
-    padding: 1.4rem 1.08rem 1.15rem;
+    padding: 1.62rem 1.08rem 1.12rem;
   }
 
   .report-pricing-card--with-badge {
-    padding-top: 1.72rem;
+    padding-top: 1.62rem;
+  }
+
+  .report-pricing-card--side {
+    margin-top: 0.72rem;
+    min-height: 21.7rem;
+  }
+
+  .report-pricing-card--hero {
+    min-height: 22.55rem;
+    padding-top: 1.76rem;
+    padding-bottom: 1.28rem;
   }
 
   .report-pricing-card__badges {
@@ -3093,6 +3123,10 @@ h3,
     font-size: 0.94rem;
   }
 
+  .report-pricing-card__heading {
+    min-height: 3.62rem;
+  }
+
   .report-pricing-card__description {
     min-height: 2.15rem;
     font-size: 0.76rem;
@@ -3100,7 +3134,12 @@ h3,
   }
 
   .report-pricing-card__strike {
+    min-height: 0.72rem;
     font-size: 0.68rem;
+  }
+
+  .report-pricing-card__price {
+    min-height: 3.42rem;
   }
 
   .report-pricing-card__price-row strong {
@@ -3119,6 +3158,7 @@ h3,
   .report-pricing-card__cta {
     height: 2.5rem;
     min-height: 2.5rem;
+    margin-top: 0;
     font-size: 0.74rem;
   }
 
@@ -3205,8 +3245,8 @@ h3,
 
 @media (max-height: 900px) and (min-width: 960px) {
   .report-pricing-modal__viewport {
-    align-items: start;
-    padding: 0.4rem 0.62rem;
+    align-items: center;
+    padding: 0.42rem 0.62rem;
   }
 
   .report-pricing-modal__dialog {
@@ -3259,11 +3299,22 @@ h3,
   .report-pricing-card {
     min-height: 19.75rem;
     gap: 0.44rem;
-    padding: 1.04rem 0.82rem 0.82rem;
+    padding: 1.32rem 0.82rem 0.82rem;
   }
 
   .report-pricing-card--with-badge {
-    padding-top: 1.34rem;
+    padding-top: 1.32rem;
+  }
+
+  .report-pricing-card--side {
+    margin-top: 0.56rem;
+    min-height: 19.1rem;
+  }
+
+  .report-pricing-card--hero {
+    min-height: 19.95rem;
+    padding-top: 1.46rem;
+    padding-bottom: 0.98rem;
   }
 
   .report-pricing-card__badges {
@@ -3280,6 +3331,7 @@ h3,
 
   .report-pricing-card__heading {
     gap: 0.16rem;
+    min-height: 2.84rem;
   }
 
   .report-pricing-card__title {
@@ -3293,11 +3345,13 @@ h3,
   }
 
   .report-pricing-card__strike {
+    min-height: 0.58rem;
     font-size: 0.56rem;
   }
 
   .report-pricing-card__price {
     gap: 0.18rem;
+    min-height: 2.84rem;
   }
 
   .report-pricing-card__price-row strong {

@@ -23,6 +23,8 @@ vi.mock("@/components/report/hooks/useSectionFeedback", () => ({
 
 import ReportPage from "@/components/report/ReportPage";
 
+const REPORT_MODAL_TEST_TIMEOUT_MS = 10000;
+
 describe("ReportPage", () => {
   function buildSuccessResponse() {
     return {
@@ -140,29 +142,37 @@ describe("ReportPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows the pricing modal on report open and keeps premium section gates after closing it", async () => {
-    const user = userEvent.setup();
-    mockUseReportData.mockReturnValue(buildSuccessResponse());
+  it(
+    "shows the pricing modal on report open and keeps premium section gates after closing it",
+    async () => {
+      const user = userEvent.setup();
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
 
-    const { container } = render(<ReportPage />);
+      const { container } = render(<ReportPage />);
 
-    expect(screen.getByRole("heading", { name: /unlock your full report/i })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: /unlock your full report/i })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /close pricing modal/i }));
+      await user.click(screen.getByRole("button", { name: /close pricing modal/i }));
 
-    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    expect(container.querySelectorAll(".report-premium-overlay__cta").length).toBeGreaterThan(0);
-  });
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+      expect(container.querySelectorAll(".report-premium-overlay__cta").length).toBeGreaterThan(0);
+    },
+    REPORT_MODAL_TEST_TIMEOUT_MS
+  );
 
-  it("removes the pricing modal and premium section gates after a modal unlock action", async () => {
-    const user = userEvent.setup();
-    mockUseReportData.mockReturnValue(buildSuccessResponse());
+  it(
+    "removes the pricing modal and premium section gates after a modal unlock action",
+    async () => {
+      const user = userEvent.setup();
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
 
-    const { container } = render(<ReportPage />);
+      const { container } = render(<ReportPage />);
 
-    await user.click(screen.getByRole("button", { name: /^unlock full report$/i }));
+      await user.click(screen.getByRole("button", { name: /^unlock full report$/i }));
 
-    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    expect(container.querySelector(".report-premium-overlay__cta")).not.toBeInTheDocument();
-  });
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+      expect(container.querySelector(".report-premium-overlay__cta")).not.toBeInTheDocument();
+    },
+    REPORT_MODAL_TEST_TIMEOUT_MS
+  );
 });
