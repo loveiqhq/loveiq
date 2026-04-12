@@ -16,6 +16,8 @@ interface Props {
   archetypeHtml: string | null;
   generalHtml: string;
   isPremium: boolean;
+  isUnlocked?: boolean;
+  onUnlock?: () => void;
   sectionId: string;
   sectionTitle: string;
 }
@@ -28,10 +30,13 @@ const DimensionSection: FC<Props> = ({
   archetypeHtml,
   generalHtml,
   isPremium,
+  isUnlocked = false,
+  onUnlock,
   sectionId,
   sectionTitle,
 }) => {
-  const [unlocked, setUnlocked] = useState(false);
+  const [locallyUnlocked, setLocallyUnlocked] = useState(false);
+  const unlocked = isUnlocked || locallyUnlocked;
   const normalizedGeneralHtml =
     sectionId === "sexual_stage" ? ensureSexualStageHighlight(generalHtml) : generalHtml;
   const rawBlocks = extractReportHtmlBlocks(normalizedGeneralHtml);
@@ -66,6 +71,15 @@ const DimensionSection: FC<Props> = ({
     : archetypeHtml;
   const normalizedArchetypeHtml = normalizeReportHtml(resolvedArchetypeHtml);
 
+  function handleUnlock() {
+    if (onUnlock) {
+      onUnlock();
+      return;
+    }
+
+    setLocallyUnlocked(true);
+  }
+
   return (
     <div className="report-flow report-flow--gap-xl">
       {introHtml ? (
@@ -99,7 +113,7 @@ const DimensionSection: FC<Props> = ({
                 <PremiumOverlay
                   archetype={archetype}
                   sectionTitle={sectionTitle}
-                  onUnlock={() => setUnlocked(true)}
+                  onUnlock={handleUnlock}
                 />
               </div>
             ) : (

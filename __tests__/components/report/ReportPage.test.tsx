@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 
 const mockGetReportSessionId = vi.fn();
 vi.mock("@/components/survey/hooks/surveySession", () => ({
@@ -23,6 +24,32 @@ vi.mock("@/components/report/hooks/useSectionFeedback", () => ({
 import ReportPage from "@/components/report/ReportPage";
 
 describe("ReportPage", () => {
+  function buildSuccessResponse() {
+    return {
+      data: {
+        userName: "Eman",
+        primaryArchetype: "Emotional Voyeur",
+        percentages: { "Emotional Voyeur": 63, "Explorer of Edges": 37 },
+        reportDate: "2026-04-07T22:23:16.851299+00:00",
+        diagnostics: {
+          overlaysScalar: {
+            OVL_SATISFACTION: (3 - 1) / 6,
+            OVL_TOPIC_IMPORTANCE: (5 - 1) / 6,
+          },
+          overlaysEnum: {
+            OVL_PHASE_NOW: "grounded",
+          },
+        },
+        snapshotAnswers: {
+          currentSexualSatisfaction: 3,
+          importanceOfSex: 5,
+        },
+      },
+      status: "success",
+      error: null,
+    };
+  }
+
   beforeEach(() => {
     vi.stubGlobal(
       "IntersectionObserver",
@@ -102,29 +129,7 @@ describe("ReportPage", () => {
   });
 
   it("renders the Figma-style satisfaction status from the stored 01002 answer", () => {
-    mockUseReportData.mockReturnValue({
-      data: {
-        userName: "Eman",
-        primaryArchetype: "Emotional Voyeur",
-        percentages: { "Emotional Voyeur": 63, "Explorer of Edges": 37 },
-        reportDate: "2026-04-07T22:23:16.851299+00:00",
-        diagnostics: {
-          overlaysScalar: {
-            OVL_SATISFACTION: (3 - 1) / 6,
-            OVL_TOPIC_IMPORTANCE: (5 - 1) / 6,
-          },
-          overlaysEnum: {
-            OVL_PHASE_NOW: "grounded",
-          },
-        },
-        snapshotAnswers: {
-          currentSexualSatisfaction: 3,
-          importanceOfSex: 5,
-        },
-      },
-      status: "success",
-      error: null,
-    });
+    mockUseReportData.mockReturnValue(buildSuccessResponse());
 
     render(<ReportPage />);
 
@@ -133,5 +138,31 @@ describe("ReportPage", () => {
     expect(
       screen.getByText(/enough frustration, inconsistency, or disappointment/i)
     ).toBeInTheDocument();
+  });
+
+  it("shows the pricing modal on report open and keeps premium section gates after closing it", async () => {
+    const user = userEvent.setup();
+    mockUseReportData.mockReturnValue(buildSuccessResponse());
+
+    const { container } = render(<ReportPage />);
+
+    expect(screen.getByRole("heading", { name: /unlock your full report/i })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /close pricing modal/i }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(container.querySelectorAll(".report-premium-overlay__cta").length).toBeGreaterThan(0);
+  });
+
+  it("removes the pricing modal and premium section gates after a modal unlock action", async () => {
+    const user = userEvent.setup();
+    mockUseReportData.mockReturnValue(buildSuccessResponse());
+
+    const { container } = render(<ReportPage />);
+
+    await user.click(screen.getByRole("button", { name: /^unlock full report$/i }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(container.querySelector(".report-premium-overlay__cta")).not.toBeInTheDocument();
   });
 });

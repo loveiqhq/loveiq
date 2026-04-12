@@ -2372,13 +2372,18 @@ h3,
   .report-section,
   .report-gauge__value,
   .report-button,
+  .report-page__shell-wrap,
   .report-sidebar__item,
   .report-sidebar__btn,
   .report-mobile-nav__link,
   .report-fb__thumb,
   .report-mobile-sticky,
   .report-chapter-panel,
-  .report-chapter-backdrop {
+  .report-chapter-backdrop,
+  .report-pricing-modal__backdrop,
+  .report-pricing-modal__dialog,
+  .report-pricing-modal__close,
+  .report-pricing-card__cta {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
   }
@@ -2417,6 +2422,487 @@ h3,
 .report-content {
   max-width: 1024px;
   padding-inline: 0;
+}
+
+.report-page__shell-wrap {
+  position: relative;
+  z-index: 1;
+  transition:
+    filter 220ms ease,
+    transform 220ms ease,
+    opacity 220ms ease;
+}
+
+.report-page__shell-wrap--obscured {
+  filter: blur(18px) saturate(0.78) brightness(0.42);
+  opacity: 0.86;
+  pointer-events: none;
+  transform: scale(0.985);
+  transform-origin: center top;
+  user-select: none;
+}
+
+.report-pricing-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.report-pricing-modal.is-visible {
+  visibility: visible;
+}
+
+.report-pricing-modal.is-hidden .report-pricing-modal__backdrop,
+.report-pricing-modal.is-hidden .report-pricing-modal__dialog {
+  pointer-events: none;
+}
+
+.report-pricing-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background:
+    radial-gradient(circle at 50% 16%, rgba(192, 132, 252, 0.16), transparent 0 34%),
+    linear-gradient(180deg, rgba(7, 3, 11, 0.28) 0%, rgba(7, 3, 11, 0.7) 100%);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: auto;
+  transition: opacity 220ms ease;
+}
+
+.report-pricing-modal__viewport {
+  position: relative;
+  display: grid;
+  min-height: 100vh;
+  min-height: 100svh;
+  padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
+    max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+  overflow-y: auto;
+}
+
+.report-pricing-modal__dialog {
+  position: relative;
+  width: min(100%, 1160px);
+  margin: auto;
+  padding: clamp(1.4rem, 2.6vw, 2.8rem);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at 50% -10%, rgba(192, 132, 252, 0.08), transparent 0 42%),
+    linear-gradient(180deg, rgba(20, 11, 29, 0.98) 0%, rgba(15, 7, 23, 0.98) 100%);
+  box-shadow:
+    0 24px 161px rgba(167, 139, 250, 0.18),
+    0 18px 72px rgba(0, 0, 0, 0.42);
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: auto;
+  transform: translateY(32px) scale(0.975);
+  transition:
+    opacity 220ms ease,
+    transform 220ms ease;
+}
+
+.report-pricing-modal.is-visible .report-pricing-modal__backdrop {
+  opacity: 1;
+}
+
+.report-pricing-modal.is-visible .report-pricing-modal__dialog {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.report-pricing-modal__close {
+  position: absolute;
+  top: 1.1rem;
+  right: 1.1rem;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border: 0;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.02);
+  color: rgba(192, 132, 252, 0.82);
+  cursor: pointer;
+  transition:
+    background 180ms ease,
+    transform 180ms ease,
+    color 180ms ease;
+}
+
+.report-pricing-modal__close:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #e9d5ff;
+  transform: rotate(90deg);
+}
+
+.report-pricing-modal__close svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.report-pricing-modal__header {
+  display: grid;
+  gap: 1rem;
+  max-width: 42rem;
+  margin: 0 auto;
+  padding-top: 0.35rem;
+  text-align: center;
+}
+
+.report-pricing-modal__eyebrow {
+  justify-self: center;
+  padding: 0.55rem 1rem;
+  border: 1px solid rgba(168, 85, 247, 0.18);
+  border-radius: 9999px;
+  background: rgba(168, 85, 247, 0.08);
+  color: #c084fc;
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.025em;
+  line-height: 1;
+}
+
+.report-pricing-modal__title {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 500;
+  line-height: 0.98;
+  letter-spacing: -0.04em;
+  color: #fff;
+  text-wrap: balance;
+}
+
+.report-pricing-modal__copy {
+  margin: 0 auto;
+  max-width: 39rem;
+  color: var(--report-copy);
+  font-size: 1rem;
+  font-weight: 300;
+  line-height: 1.65;
+}
+
+.report-pricing-modal__plans {
+  display: grid;
+  gap: 1.25rem;
+  margin-top: 2.5rem;
+  align-items: stretch;
+}
+
+.report-pricing-card {
+  position: relative;
+  display: grid;
+  gap: 1.35rem;
+  min-height: 100%;
+  padding: 2rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.025);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.report-pricing-card--highlight {
+  border-color: rgba(168, 85, 247, 0.36);
+  background:
+    radial-gradient(circle at 50% -30%, rgba(168, 85, 247, 0.16), transparent 0 56%),
+    rgba(255, 255, 255, 0.04);
+  box-shadow: 0 0 30px rgba(168, 85, 247, 0.12);
+}
+
+.report-pricing-card__badge {
+  position: absolute;
+  top: -0.8rem;
+  left: 1.25rem;
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.625rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  background: rgba(254, 104, 57, 0.2);
+  color: #fe6839;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.025em;
+}
+
+.report-pricing-card__badge--accent {
+  background: rgba(192, 132, 252, 0.16);
+  color: #d8b4fe;
+}
+
+.report-pricing-card__heading {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.report-pricing-card__title {
+  margin: 0;
+  color: #fff;
+  font-size: 1.15rem;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.report-pricing-card__description {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 0.92rem;
+  font-weight: 300;
+  line-height: 1.55;
+}
+
+.report-pricing-card__price {
+  display: grid;
+  gap: 0.35rem;
+  padding-top: 1.15rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.report-pricing-card__strike {
+  color: rgba(255, 255, 255, 0.28);
+  font-family: var(--font-serif);
+  font-size: 0.92rem;
+  line-height: 1;
+  text-decoration: line-through;
+}
+
+.report-pricing-card__price-row {
+  display: flex;
+  gap: 0.3rem;
+  align-items: flex-end;
+}
+
+.report-pricing-card__price-row strong {
+  color: #fff;
+  font-family: var(--font-serif);
+  font-size: clamp(2rem, 4vw, 2.45rem);
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
+.report-pricing-card__price-row span {
+  padding-bottom: 0.2rem;
+  color: rgba(255, 255, 255, 0.44);
+  font-size: 0.85rem;
+  font-weight: 300;
+  line-height: 1.2;
+}
+
+.report-pricing-card__cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 3.2rem;
+  padding: 0.85rem 1.2rem;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+  font-size: 0.92rem;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    background 180ms ease;
+}
+
+.report-pricing-card__cta:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.16);
+  transform: translateY(-1px);
+}
+
+.report-pricing-card__cta--primary {
+  border-color: transparent;
+  background: linear-gradient(180deg, #ff7a50 0%, #ff6a3d 100%);
+  box-shadow: 0 10px 24px rgba(255, 106, 61, 0.2);
+}
+
+.report-pricing-card__cta--primary:hover {
+  background: linear-gradient(180deg, #ff845e 0%, #ff6a3d 100%);
+}
+
+.report-pricing-card__features {
+  display: grid;
+  gap: 0.9rem;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.report-pricing-card__features li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: flex-start;
+  color: rgba(255, 255, 255, 0.76);
+  font-size: 0.9rem;
+  font-weight: 300;
+  line-height: 1.5;
+}
+
+.report-pricing-card__feature-icon {
+  display: grid;
+  place-items: center;
+  width: 1rem;
+  height: 1rem;
+  margin-top: 0.15rem;
+  color: #fe6839;
+}
+
+.report-pricing-card__feature-icon svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.report-pricing-modal__payments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 1.4rem;
+  align-items: center;
+  justify-content: center;
+  margin-top: 2rem;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.report-pricing-modal__payment-mark {
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 0.95rem;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.report-pricing-modal__payment-mark--paypal {
+  color: #60a5fa;
+}
+
+.report-pricing-modal__payment-mark--klarna {
+  color: #f9a8d4;
+}
+
+.report-pricing-modal__payment-mark--visa {
+  color: #3b82f6;
+  font-size: 1.02rem;
+  letter-spacing: -0.04em;
+}
+
+.report-pricing-modal__mastercard {
+  position: relative;
+  display: inline-flex;
+  width: 1.9rem;
+  height: 1rem;
+}
+
+.report-pricing-modal__mastercard span {
+  position: absolute;
+  top: 0;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 9999px;
+  mix-blend-mode: screen;
+}
+
+.report-pricing-modal__mastercard span:first-child {
+  left: 0;
+  background: rgba(239, 68, 68, 0.84);
+}
+
+.report-pricing-modal__mastercard span:last-child {
+  right: 0;
+  background: rgba(234, 179, 8, 0.84);
+}
+
+.report-pricing-modal__amex {
+  padding: 0.16rem 0.34rem;
+  border: 1px solid rgba(59, 130, 246, 0.55);
+  border-radius: 0.25rem;
+  color: #60a5fa;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.report-pricing-modal__testimonial {
+  display: grid;
+  gap: 1rem;
+  max-width: 42rem;
+  margin: 2.25rem auto 0;
+  padding: 1.75rem 2rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 1rem;
+  background: rgba(10, 5, 16, 0.72);
+}
+
+.report-pricing-modal__stars {
+  display: flex;
+  gap: 0.3rem;
+  color: #fe6839;
+}
+
+.report-pricing-modal__stars svg {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.report-pricing-modal__quote {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.74);
+  font-family: var(--font-serif);
+  font-size: clamp(1.1rem, 2vw, 1.45rem);
+  line-height: 1.55;
+}
+
+.report-pricing-modal__author {
+  display: flex;
+  gap: 0.9rem;
+  align-items: center;
+}
+
+.report-pricing-modal__avatar {
+  display: grid;
+  place-items: center;
+  width: 2.6rem;
+  height: 2.6rem;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 9999px;
+  background: linear-gradient(135deg, rgba(254, 104, 57, 0.35), rgba(192, 132, 252, 0.3));
+  color: #fff;
+  font-size: 0.88rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.report-pricing-modal__author span:last-child {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.report-pricing-modal__author strong {
+  color: #fff;
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+.report-pricing-modal__author em {
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 0.78rem;
+  font-style: normal;
+  line-height: 1.4;
+}
+
+@media (min-width: 960px) {
+  .report-pricing-modal__plans {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 .report-status-screen {
@@ -4325,6 +4811,69 @@ h3,
 }
 
 @media (max-width: 767px) {
+  .report-page__shell-wrap--obscured {
+    filter: blur(12px) saturate(0.75) brightness(0.42);
+    transform: scale(0.992);
+  }
+
+  .report-pricing-modal__viewport {
+    padding: max(0.75rem, env(safe-area-inset-top)) max(0.75rem, env(safe-area-inset-right))
+      max(0.75rem, env(safe-area-inset-bottom)) max(0.75rem, env(safe-area-inset-left));
+  }
+
+  .report-pricing-modal__dialog {
+    width: 100%;
+    padding: 3.75rem 1rem 1.1rem;
+    border-radius: 1.25rem;
+  }
+
+  .report-pricing-modal__close {
+    top: 0.7rem;
+    right: 0.7rem;
+    width: 2.5rem;
+    height: 2.5rem;
+  }
+
+  .report-pricing-modal__header {
+    gap: 0.8rem;
+  }
+
+  .report-pricing-modal__title {
+    font-size: 2rem;
+  }
+
+  .report-pricing-modal__copy {
+    font-size: 0.95rem;
+    line-height: 1.55;
+  }
+
+  .report-pricing-modal__plans {
+    margin-top: 1.5rem;
+  }
+
+  .report-pricing-card {
+    padding: 1.45rem 1rem 1.2rem;
+  }
+
+  .report-pricing-modal__payments {
+    gap: 0.8rem 1rem;
+    margin-top: 1.5rem;
+  }
+
+  .report-pricing-modal__payment-mark {
+    font-size: 0.84rem;
+  }
+
+  .report-pricing-modal__testimonial {
+    margin-top: 1.5rem;
+    padding: 1.25rem 1rem;
+  }
+
+  .report-pricing-modal__quote {
+    font-size: 1rem;
+    line-height: 1.5;
+  }
+
   .report-themed-block__preview--practice .report-premium-overlay {
     align-items: flex-start;
     padding: 0.75rem 0 0;

@@ -1,16 +1,17 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore, type FC } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type FC } from "react";
 import { useSearchParams } from "next/navigation";
 import { archetypeContent } from "@/data/report-archetypes";
 import { reportSections } from "@/data/report-general";
 import ReportFooter from "./ReportFooter";
 import ReportNavigation from "./ReportNavigation";
+import ReportPricingModal from "./ReportPricingModal";
 import ReportSection from "./ReportSection";
 import SectionFeedback from "./SectionFeedback";
 import { getReportSessionId } from "@/components/survey/hooks/surveySession";
 import { useReportData, type ReportRequestError } from "./hooks/useReportData";
-import { useSectionFeedback } from "./hooks/useSectionFeedback";
+import { useSectionFeedback, type FeedbackPayload } from "./hooks/useSectionFeedback";
 import { resolveReportSections } from "./reportTitles";
 import { getReportTheme, getReportThemeStyle } from "./reportTheme";
 import ArchetypeProbabilitySection from "./sections/ArchetypeProbabilitySection";
@@ -241,35 +242,60 @@ interface ReportPageProps {
   token?: string;
 }
 
-const ReportPage: FC<ReportPageProps> = ({ token }) => {
-  const searchParams = useSearchParams();
-  const storedSessionId = useSyncExternalStore(subscribeNoop, getReportSessionId, () => null);
-  // NODE_ENV is statically replaced at build time by Next.js/webpack — safe in client components
-  /* eslint-disable no-restricted-syntax */
-  const devParam =
-    process.env.NODE_ENV === "development" ? (searchParams.get("dev_session") ?? null) : null;
-  /* eslint-enable no-restricted-syntax */
-  const sessionId = devParam ?? storedSessionId;
-  const [activeSectionId, setActiveSectionId] = useState(reportSections[0]?.id ?? "welcome");
+interface ReportExperienceProps {
+  devParam: string | null;
+  feedbacks: Record<string, "up" | "down" | null>;
+  matchScore: number;
+  percentages: Record<string, number>;
+  placeholderValues: {
+    archetype: string;
+    matchScore: number;
+    motto: string;
+    reportDate: string;
+    snapshot: SnapshotContent;
+    userName: string;
+  };
+  primaryArchetype: string;
+  ranking: string[];
+  reportDate: string;
+  resolvedSections: ReturnType<typeof resolveReportSections>;
+  snapshot: SnapshotContent;
+  submitFeedback: (sectionId: string, payload: FeedbackPayload) => void;
+  submitted: Record<string, boolean>;
+  theme: ReturnType<typeof getReportTheme>;
+}
 
-  const { data, status, error } = useReportData({ token, sessionId: token ? null : sessionId });
-  const { feedbacks, submitted, submitFeedback } = useSectionFeedback(sessionId);
+const ReportExperience: FC<ReportExperienceProps> = ({
+  devParam,
+  feedbacks,
+  matchScore,
+  percentages,
+  placeholderValues,
+  primaryArchetype,
+  ranking,
+  reportDate,
+  resolvedSections,
+  snapshot,
+  submitFeedback,
+  submitted,
+  theme,
+}) => {
+  const mainContentRef = useRef<HTMLElement | null>(null);
+  const [activeSectionId, setActiveSectionId] = useState(resolvedSections[0]?.id ?? "welcome");
+  const [isPricingModalOpen, setIsPricingModalOpen] = useState(true);
+  const [isPremiumUnlocked, setIsPremiumUnlocked] = useState(false);
 
   useEffect(() => {
-    if (status !== "success") return;
-
-    // Activation line: the scroll position offset (px from viewport top) at which
-    // a section is considered "entered". 90px clears the sticky nav bar.
     const ACTIVATION_LINE = 90;
 
     function buildSectionTops() {
-      return reportSections
+      return resolvedSections
         .map((section) => {
           const el = document.getElementById(section.id);
           if (!el) return null;
           return { id: section.id, top: el.getBoundingClientRect().top + window.scrollY };
         })
-        .filter((s): s is { id: string; top: number } => s !== null);
+        .filter((section): section is { id: string; top: number } => section !== null);
     }
 
     let sectionTops = buildSectionTops();
@@ -277,7 +303,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
 
     function updateActive() {
       const threshold = window.scrollY + ACTIVATION_LINE;
-      let activeId = sectionTops[0]?.id ?? reportSections[0]?.id ?? "welcome";
+      let activeId = sectionTops[0]?.id ?? resolvedSections[0]?.id ?? "welcome";
       for (const section of sectionTops) {
         if (section.top <= threshold) {
           activeId = section.id;
@@ -303,8 +329,6 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
 
     window.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("resize", onResize, { passive: true });
-
-    // Compute initial active section after render
     updateActive();
 
     return () => {
@@ -312,7 +336,209 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       window.removeEventListener("resize", onResize);
       if (rafId !== null) cancelAnimationFrame(rafId);
     };
-  }, [status]);
+  }, [resolvedSections]);
+
+  return (
+    <main
+      id="main-content"
+      ref={mainContentRef}
+      tabIndex={-1}
+      className="report-page"
+      style={getReportThemeStyle(theme)}
+    >
+      {devParam && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            background: "#f59e0b",
+            color: "#000",
+            textAlign: "center",
+            padding: "4px 8px",
+            fontSize: "12px",
+            zIndex: 9999,
+            fontFamily: "monospace",
+          }}
+        >
+          DEV — report loaded via ?dev_session URL param ({devParam.slice(0, 8)}...)
+        </div>
+      )}
+      <div
+        className={[
+          "report-page__shell-wrap",
+          isPricingModalOpen ? "report-page__shell-wrap--obscured" : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        aria-hidden={isPricingModalOpen}
+        inert={isPricingModalOpen}
+      >
+        <div className="report-shell">
+          <ReportNavigation
+            activeSectionId={activeSectionId}
+            onSectionClick={setActiveSectionId}
+            primaryArchetype={primaryArchetype}
+            reportDate={reportDate}
+            sections={resolvedSections}
+          />
+
+          <div className="report-content">
+            {resolvedSections.map((section) => {
+              const title = section.displayTitle;
+              const generalHtml = replacePlaceholders(section.generalContent, placeholderValues);
+              const archetypeHtml = normalizeReportHtml(
+                section.archetypeBlockId
+                  ? (archetypeContent[section.archetypeBlockId]?.[primaryArchetype] ?? null)
+                  : null
+              );
+
+              const feedbackWidget = section.hasResonatesFeedback ? (
+                <SectionFeedback
+                  sectionTitle={title}
+                  value={feedbacks[section.id] ?? null}
+                  isSent={submitted[section.id] ?? false}
+                  onFeedback={(payload) => submitFeedback(section.id, payload)}
+                />
+              ) : null;
+
+              if (section.sectionNumber === 1) {
+                return (
+                  <WelcomeSection
+                    key={section.id}
+                    feedbackWidget={feedbackWidget}
+                    generalHtml={generalHtml}
+                    sectionId={section.id}
+                    snapshot={snapshot}
+                  />
+                );
+              }
+
+              if (section.sectionNumber === 3) {
+                return (
+                  <ReportSection
+                    key={section.id}
+                    feedbackWidget={feedbackWidget}
+                    sectionId={section.id}
+                    title={title}
+                  >
+                    <CoreArchetypeSection
+                      archetypeHtml={archetypeHtml}
+                      matchScore={matchScore}
+                      theme={theme}
+                    />
+                  </ReportSection>
+                );
+              }
+
+              if (section.sectionNumber === 4) {
+                return (
+                  <ReportSection
+                    key={section.id}
+                    feedbackWidget={feedbackWidget}
+                    sectionId={section.id}
+                    title={title}
+                  >
+                    <ArchetypeProbabilitySection
+                      generalHtml={generalHtml}
+                      percentages={percentages}
+                      primaryArchetype={primaryArchetype}
+                      ranking={ranking}
+                    />
+                  </ReportSection>
+                );
+              }
+
+              if (section.sectionNumber === 7) {
+                return (
+                  <ReportSection
+                    key={section.id}
+                    feedbackWidget={feedbackWidget}
+                    sectionId={section.id}
+                    title={title}
+                  >
+                    <ImportanceOfSexualitySection
+                      generalHtml={generalHtml}
+                      importanceLabel={snapshot.importanceLabel}
+                      importanceValue={snapshot.importanceValue}
+                    />
+                  </ReportSection>
+                );
+              }
+
+              if (section.sectionNumber === 27) {
+                return (
+                  <ReportSection
+                    key={section.id}
+                    feedbackWidget={feedbackWidget}
+                    sectionId={section.id}
+                    title={title}
+                  >
+                    <PracticeTendenciesSection
+                      archetype={primaryArchetype}
+                      archetypeHtml={archetypeHtml}
+                      generalHtml={generalHtml}
+                      isPremium={section.isPremium}
+                      isUnlocked={isPremiumUnlocked}
+                      onUnlock={() => setIsPremiumUnlocked(true)}
+                      sectionTitle={title}
+                    />
+                  </ReportSection>
+                );
+              }
+
+              return (
+                <ReportSection
+                  key={section.id}
+                  feedbackWidget={feedbackWidget}
+                  sectionId={section.id}
+                  title={title}
+                >
+                  <DimensionSection
+                    archetype={primaryArchetype}
+                    archetypeHtml={archetypeHtml}
+                    generalHtml={generalHtml}
+                    isPremium={section.isPremium}
+                    isUnlocked={isPremiumUnlocked}
+                    onUnlock={() => setIsPremiumUnlocked(true)}
+                    sectionId={section.id}
+                    sectionTitle={title}
+                  />
+                </ReportSection>
+              );
+            })}
+
+            <ReportFooter />
+          </div>
+        </div>
+      </div>
+      <ReportPricingModal
+        archetype={primaryArchetype}
+        open={isPricingModalOpen}
+        onClose={() => setIsPricingModalOpen(false)}
+        onUnlock={() => {
+          setIsPremiumUnlocked(true);
+          setIsPricingModalOpen(false);
+        }}
+        returnFocusRef={mainContentRef}
+      />
+    </main>
+  );
+};
+
+const ReportPage: FC<ReportPageProps> = ({ token }) => {
+  const searchParams = useSearchParams();
+  const storedSessionId = useSyncExternalStore(subscribeNoop, getReportSessionId, () => null);
+  // NODE_ENV is statically replaced at build time by Next.js/webpack — safe in client components
+  /* eslint-disable no-restricted-syntax */
+  const devParam =
+    process.env.NODE_ENV === "development" ? (searchParams.get("dev_session") ?? null) : null;
+  /* eslint-enable no-restricted-syntax */
+  const sessionId = devParam ?? storedSessionId;
+
+  const { data, status, error } = useReportData({ token, sessionId: token ? null : sessionId });
+  const { feedbacks, submitted, submitFeedback } = useSectionFeedback(sessionId);
 
   if (status === "loading") {
     return (
@@ -384,160 +610,22 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   const resolvedSections = resolveReportSections(reportSections, primaryArchetype);
 
   return (
-    <main id="main-content" className="report-page" style={getReportThemeStyle(theme)}>
-      {devParam && (
-        <div
-          style={{
-            position: "fixed",
-            bottom: 0,
-            left: 0,
-            right: 0,
-            background: "#f59e0b",
-            color: "#000",
-            textAlign: "center",
-            padding: "4px 8px",
-            fontSize: "12px",
-            zIndex: 9999,
-            fontFamily: "monospace",
-          }}
-        >
-          DEV — report loaded via ?dev_session URL param ({devParam.slice(0, 8)}...)
-        </div>
-      )}
-      <div className="report-shell">
-        <ReportNavigation
-          activeSectionId={activeSectionId}
-          onSectionClick={setActiveSectionId}
-          primaryArchetype={primaryArchetype}
-          reportDate={reportDate}
-          sections={resolvedSections}
-        />
-
-        <div className="report-content">
-          {resolvedSections.map((section) => {
-            const title = section.displayTitle;
-            const generalHtml = replacePlaceholders(section.generalContent, placeholderValues);
-            const archetypeHtml = normalizeReportHtml(
-              section.archetypeBlockId
-                ? (archetypeContent[section.archetypeBlockId]?.[primaryArchetype] ?? null)
-                : null
-            );
-
-            const feedbackWidget = section.hasResonatesFeedback ? (
-              <SectionFeedback
-                sectionTitle={title}
-                value={feedbacks[section.id] ?? null}
-                isSent={submitted[section.id] ?? false}
-                onFeedback={(payload) => submitFeedback(section.id, payload)}
-              />
-            ) : null;
-
-            if (section.sectionNumber === 1) {
-              return (
-                <WelcomeSection
-                  key={section.id}
-                  feedbackWidget={feedbackWidget}
-                  generalHtml={generalHtml}
-                  sectionId={section.id}
-                  snapshot={snapshot}
-                />
-              );
-            }
-
-            if (section.sectionNumber === 3) {
-              return (
-                <ReportSection
-                  key={section.id}
-                  feedbackWidget={feedbackWidget}
-                  sectionId={section.id}
-                  title={title}
-                >
-                  <CoreArchetypeSection
-                    archetypeHtml={archetypeHtml}
-                    matchScore={matchScore}
-                    theme={theme}
-                  />
-                </ReportSection>
-              );
-            }
-
-            if (section.sectionNumber === 4) {
-              return (
-                <ReportSection
-                  key={section.id}
-                  feedbackWidget={feedbackWidget}
-                  sectionId={section.id}
-                  title={title}
-                >
-                  <ArchetypeProbabilitySection
-                    generalHtml={generalHtml}
-                    percentages={percentages}
-                    primaryArchetype={primaryArchetype}
-                    ranking={ranking}
-                  />
-                </ReportSection>
-              );
-            }
-
-            if (section.sectionNumber === 7) {
-              return (
-                <ReportSection
-                  key={section.id}
-                  feedbackWidget={feedbackWidget}
-                  sectionId={section.id}
-                  title={title}
-                >
-                  <ImportanceOfSexualitySection
-                    generalHtml={generalHtml}
-                    importanceLabel={snapshot.importanceLabel}
-                    importanceValue={snapshot.importanceValue}
-                  />
-                </ReportSection>
-              );
-            }
-
-            if (section.sectionNumber === 27) {
-              return (
-                <ReportSection
-                  key={section.id}
-                  feedbackWidget={feedbackWidget}
-                  sectionId={section.id}
-                  title={title}
-                >
-                  <PracticeTendenciesSection
-                    archetype={primaryArchetype}
-                    archetypeHtml={archetypeHtml}
-                    generalHtml={generalHtml}
-                    isPremium={section.isPremium}
-                    sectionTitle={title}
-                  />
-                </ReportSection>
-              );
-            }
-
-            return (
-              <ReportSection
-                key={section.id}
-                feedbackWidget={feedbackWidget}
-                sectionId={section.id}
-                title={title}
-              >
-                <DimensionSection
-                  archetype={primaryArchetype}
-                  archetypeHtml={archetypeHtml}
-                  generalHtml={generalHtml}
-                  isPremium={section.isPremium}
-                  sectionId={section.id}
-                  sectionTitle={title}
-                />
-              </ReportSection>
-            );
-          })}
-
-          <ReportFooter />
-        </div>
-      </div>
-    </main>
+    <ReportExperience
+      key={`${token ?? "browser"}:${sessionId ?? "anon"}`}
+      devParam={devParam}
+      feedbacks={feedbacks}
+      matchScore={matchScore}
+      percentages={percentages}
+      placeholderValues={placeholderValues}
+      primaryArchetype={primaryArchetype}
+      ranking={ranking}
+      reportDate={reportDate}
+      resolvedSections={resolvedSections}
+      snapshot={snapshot}
+      submitFeedback={submitFeedback}
+      submitted={submitted}
+      theme={theme}
+    />
   );
 };
 

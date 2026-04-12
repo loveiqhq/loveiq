@@ -13,6 +13,8 @@ interface Props {
   archetypeHtml: string | null;
   generalHtml: string;
   isPremium: boolean;
+  isUnlocked?: boolean;
+  onUnlock?: () => void;
   sectionTitle: string;
 }
 
@@ -97,11 +99,23 @@ const PracticeTendenciesSection: FC<Props> = ({
   archetypeHtml,
   generalHtml,
   isPremium,
+  isUnlocked = false,
+  onUnlock,
   sectionTitle,
 }) => {
-  const [unlocked, setUnlocked] = useState(false);
+  const [locallyUnlocked, setLocallyUnlocked] = useState(false);
+  const unlocked = isUnlocked || locallyUnlocked;
   const introHtml = extractPracticeSectionIntroHtml(generalHtml);
   const groups = parsePracticeTendencyGroups(archetypeHtml);
+
+  function handleUnlock() {
+    if (onUnlock) {
+      onUnlock();
+      return;
+    }
+
+    setLocallyUnlocked(true);
+  }
 
   return (
     <div className="report-flow report-flow--gap-xl">
@@ -121,7 +135,7 @@ const PracticeTendenciesSection: FC<Props> = ({
               <PremiumOverlay
                 archetype={archetype}
                 sectionTitle={sectionTitle}
-                onUnlock={() => setUnlocked(true)}
+                onUnlock={handleUnlock}
               />
             </div>
           ) : (
