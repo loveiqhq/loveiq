@@ -125,7 +125,12 @@ describe("POST /api/stripe/checkout-session", () => {
     });
     expect(createSession).toHaveBeenCalledWith(
       expect.objectContaining({
-        payment_method_types: ["card", "amazon_pay", "link"],
+        payment_method_options: {
+          us_bank_account: {
+            verification_method: "automatic",
+          },
+        },
+        payment_method_types: ["card", "us_bank_account", "amazon_pay", "link"],
         ui_mode: "elements",
       })
     );

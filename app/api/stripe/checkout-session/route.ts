@@ -33,8 +33,9 @@ const RATE_LIMIT_CONFIG = {
   limit: 10,
   windowMs: 60_000,
 };
-const CHECKOUT_PAYMENT_METHOD_TYPES: Array<"amazon_pay" | "card" | "link"> = [
+const CHECKOUT_PAYMENT_METHOD_TYPES: Array<"amazon_pay" | "card" | "link" | "us_bank_account"> = [
   "card",
+  "us_bank_account",
   "amazon_pay",
   "link",
 ];
@@ -111,6 +112,11 @@ export async function POST(request: Request) {
       },
       mode: "payment",
       payment_method_types: CHECKOUT_PAYMENT_METHOD_TYPES,
+      payment_method_options: {
+        us_bank_account: {
+          verification_method: "automatic",
+        },
+      },
       return_url: buildReturnUrl({
         origin: siteUrl,
         plan: parsed.data.plan,
