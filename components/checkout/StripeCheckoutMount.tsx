@@ -13,7 +13,7 @@ const stripePromise = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
   : null;
 const isPreviewMode = process.env.NEXT_PUBLIC_STRIPE_CHECKOUT_PREVIEW_MODE === "true";
 const previewModeMessage =
-  "Preview mode is active. This is Stripe's real test checkout form, but payment confirmation stays disabled here.";
+  "Preview mode is active. You can confirm Stripe test payments here, but purchases still do not unlock LoveIQ reports yet.";
 
 const checkoutElementFonts = [
   {
@@ -225,10 +225,6 @@ function StripeCheckoutForm() {
     event.preventDefault();
     setErrorMessage(null);
 
-    if (isPreviewMode) {
-      return;
-    }
-
     setIsSubmitting(true);
 
     const result = await checkout.confirm({ redirect: "always" });
@@ -279,7 +275,7 @@ function StripeCheckoutForm() {
       <button
         type="submit"
         className="checkout-submit"
-        disabled={isPreviewMode || !checkout.canConfirm || isSubmitting}
+        disabled={!checkout.canConfirm || isSubmitting}
       >
         <span className="checkout-submit__icon" aria-hidden="true">
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6">
