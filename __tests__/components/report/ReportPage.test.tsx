@@ -195,6 +195,43 @@ describe("ReportPage", () => {
   );
 
   it(
+    "reveals a clicked premium section locally instead of routing to checkout",
+    async () => {
+      const user = userEvent.setup();
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
+
+      const { container } = render(<ReportPage />);
+
+      await user.click(screen.getByRole("button", { name: /close pricing modal/i }));
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+      const firstSectionUnlockButton = container.querySelector(
+        ".report-section .report-premium-overlay__cta"
+      ) as HTMLButtonElement | null;
+      const lockedSection = firstSectionUnlockButton?.closest(
+        "[data-report-section='true']"
+      ) as HTMLElement | null;
+      const lockedSectionCount = container.querySelectorAll(".report-premium-overlay__cta").length;
+
+      expect(firstSectionUnlockButton).toBeTruthy();
+      expect(lockedSection).toBeTruthy();
+      expect(lockedSectionCount).toBeGreaterThan(1);
+
+      await user.click(firstSectionUnlockButton!);
+
+      await waitFor(() => {
+        expect(lockedSection?.querySelector(".report-premium-overlay")).not.toBeInTheDocument();
+      });
+
+      expect(container.querySelectorAll(".report-premium-overlay__cta")).toHaveLength(
+        lockedSectionCount - 1
+      );
+      expect(mockRouterPush).not.toHaveBeenCalled();
+    },
+    REPORT_MODAL_TEST_TIMEOUT_MS
+  );
+
+  it(
     "locks background scroll while the pricing modal is open and restores it on close",
     async () => {
       const user = userEvent.setup();

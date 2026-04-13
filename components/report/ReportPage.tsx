@@ -286,6 +286,17 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   const mainContentRef = useRef<HTMLElement | null>(null);
   const [activeSectionId, setActiveSectionId] = useState(resolvedSections[0]?.id ?? "welcome");
   const [isPricingModalOpen, setIsPricingModalOpen] = useState(true);
+  const [unlockedSections, setUnlockedSections] = useState<Record<string, boolean>>({});
+
+  const unlockSection = (sectionId: string) => {
+    setUnlockedSections((current) => {
+      if (current[sectionId]) return current;
+      return {
+        ...current,
+        [sectionId]: true,
+      };
+    });
+  };
 
   useEffect(() => {
     const ACTIVATION_LINE = 90;
@@ -482,8 +493,8 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                       archetypeHtml={archetypeHtml}
                       generalHtml={generalHtml}
                       isPremium={section.isPremium}
-                      isUnlocked={false}
-                      onUnlock={() => onBeginCheckout("full_report")}
+                      isUnlocked={unlockedSections[section.id] ?? false}
+                      onUnlock={() => unlockSection(section.id)}
                       sectionTitle={title}
                     />
                   </ReportSection>
@@ -502,8 +513,8 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     archetypeHtml={archetypeHtml}
                     generalHtml={generalHtml}
                     isPremium={section.isPremium}
-                    isUnlocked={false}
-                    onUnlock={() => onBeginCheckout("full_report")}
+                    isUnlocked={unlockedSections[section.id] ?? false}
+                    onUnlock={() => unlockSection(section.id)}
                     sectionId={section.id}
                     sectionTitle={title}
                   />
