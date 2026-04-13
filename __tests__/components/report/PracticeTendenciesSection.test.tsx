@@ -150,6 +150,40 @@ describe("PracticeTendenciesSection", () => {
     });
   }, 15000);
 
+  it("scales the metric fill gradient intensity with the score", () => {
+    const { container } = render(
+      <PracticeTendenciesSection
+        archetype="Spark Seeker"
+        archetypeHtml={null}
+        generalHtml={practiceGeneralHtml}
+        isPremium={false}
+        sectionTitle="Typical Sexual Fantasy & Practice Tendencies"
+      />
+    );
+
+    const rows = Array.from(container.querySelectorAll(".report-practice-table__row"));
+    const highRow = rows.find((row) => row.textContent?.includes("Passionate quickies")) ?? null;
+    const lowRow =
+      rows.find((row) => row.textContent?.includes("Crying or emotional release")) ?? null;
+
+    const highFill = highRow?.querySelector(
+      ".report-practice-table__metric--fantasy .report-practice-table__metric-bar span"
+    ) as HTMLElement | null;
+    const lowFill = lowRow?.querySelector(
+      ".report-practice-table__metric--fantasy .report-practice-table__metric-bar span"
+    ) as HTMLElement | null;
+
+    expect(
+      container.querySelectorAll(".report-practice-table__metric-bar span").length
+    ).toBeGreaterThan(0);
+    expect(highFill?.style.width).toBe("100%");
+    expect(lowFill?.style.width).toBe("10%");
+    expect(highFill?.style.getPropertyValue("--practice-fill-opacity-end")).toBe("0.940");
+    expect(lowFill?.style.getPropertyValue("--practice-fill-opacity-end")).toBe("0.508");
+    expect(highFill?.style.getPropertyValue("--practice-fill-shadow-opacity")).toBe("0.320");
+    expect(lowFill?.style.getPropertyValue("--practice-fill-shadow-opacity")).toBe("0.104");
+  });
+
   it("renders the premium overlay preview when the section is locked", () => {
     const { container } = render(
       <PracticeTendenciesSection

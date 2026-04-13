@@ -65,6 +65,22 @@ function toPercent(value: number) {
   return Math.min(10, Math.max(1, value)) * 10;
 }
 
+function buildPracticeMetricFillStyle(percent: number): CSSProperties {
+  const strength = Math.min(1, Math.max(0.1, percent / 100));
+  const startOpacity = 0.22 + strength * 0.28;
+  const midOpacity = 0.34 + strength * 0.42;
+  const endOpacity = 0.46 + strength * 0.48;
+  const shadowOpacity = 0.08 + strength * 0.24;
+
+  return {
+    width: `${percent}%`,
+    "--practice-fill-opacity-start": startOpacity.toFixed(3),
+    "--practice-fill-opacity-mid": midOpacity.toFixed(3),
+    "--practice-fill-opacity-end": endOpacity.toFixed(3),
+    "--practice-fill-shadow-opacity": shadowOpacity.toFixed(3),
+  } as CSSProperties;
+}
+
 function buildDesktopPopoverPosition(anchorRect: DOMRect, tooltipRect: DOMRect): CSSProperties {
   const viewportWidth = window.innerWidth;
   const viewportHeight = window.innerHeight;
@@ -109,6 +125,7 @@ const PracticeMetricCell: FC<{
   value: number;
 }> = ({ label, tone, value }) => {
   const percent = toPercent(value);
+  const fillStyle = buildPracticeMetricFillStyle(percent);
 
   return (
     <div
@@ -119,7 +136,7 @@ const PracticeMetricCell: FC<{
       <div className="report-practice-table__metric-content">
         <span className="report-practice-table__metric-value">{percent}%</span>
         <span className="report-practice-table__metric-bar" aria-hidden="true">
-          <span style={{ width: `${percent}%` }} />
+          <span style={fillStyle} />
         </span>
       </div>
     </div>

@@ -5229,14 +5229,25 @@ h3,
   display: block;
   height: 100%;
   border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    rgba(var(--practice-fill-rgb), var(--practice-fill-opacity-start, 0.34)) 0%,
+    rgba(var(--practice-fill-rgb), var(--practice-fill-opacity-mid, 0.56)) 58%,
+    rgba(var(--practice-fill-rgb), var(--practice-fill-opacity-end, 0.78)) 100%
+  );
+  box-shadow: 0 0 0.7rem rgba(var(--practice-fill-rgb), var(--practice-fill-shadow-opacity, 0.14));
+  transition:
+    width 220ms ease,
+    background 220ms ease,
+    box-shadow 220ms ease;
 }
 
 .report-practice-table__metric--fantasy .report-practice-table__metric-bar span {
-  background: rgba(168, 85, 247, 0.75);
+  --practice-fill-rgb: 168, 85, 247;
 }
 
 .report-practice-table__metric--pleasure .report-practice-table__metric-bar span {
-  background: rgba(254, 104, 57, 0.78);
+  --practice-fill-rgb: 254, 104, 57;
 }
 
 @media (max-width: 1024px) {
