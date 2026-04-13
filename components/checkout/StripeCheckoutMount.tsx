@@ -272,11 +272,7 @@ function StripeCheckoutForm() {
         ) : null}
       </div>
 
-      <button
-        type="submit"
-        className="checkout-submit"
-        disabled={!checkout.canConfirm || isSubmitting}
-      >
+      <button type="submit" className="checkout-submit" disabled={isSubmitting}>
         <span className="checkout-submit__icon" aria-hidden="true">
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6">
             <path d="M5.2 7V5.8a2.8 2.8 0 1 1 5.6 0V7" strokeLinecap="round" />
