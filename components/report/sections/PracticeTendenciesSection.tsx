@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type FC } from "react";
+import { createPortal } from "react-dom";
 import PremiumOverlay from "./PremiumOverlay";
 import {
   reportPracticeTendencies,
@@ -145,11 +146,27 @@ const PracticeRow: FC<{
       practice: row.practice,
     });
   };
+  const handleDesktopHoverOpen = () => {
+    if (!row.description) {
+      return;
+    }
+
+    onOpen(rowId, {
+      anchorEl: infoButtonRef.current,
+      description: row.description,
+      practice: row.practice,
+    });
+  };
 
   return (
     <div className="report-practice-table__row" role="row">
       <div className="report-practice-table__practice" role="cell">
-        <div className="report-practice-table__practice-stack" data-practice-popover-root>
+        <div
+          className="report-practice-table__practice-stack"
+          data-practice-popover-root
+          onMouseEnter={interactive && row.description ? handleDesktopHoverOpen : undefined}
+          onMouseLeave={interactive && row.description ? () => onClose(rowId) : undefined}
+        >
           <span className="report-practice-table__practice-label">{row.practice}</span>
 
           {interactive && row.description ? (
@@ -161,8 +178,6 @@ const PracticeRow: FC<{
               aria-controls={popoverId}
               aria-expanded={isOpen}
               onBlur={() => onClose(rowId)}
-              onMouseEnter={(event) => handleOpenFromAnchor(event.currentTarget)}
-              onMouseLeave={() => onClose(rowId)}
               onClick={(event) => handleOpenFromAnchor(event.currentTarget)}
               onFocus={(event) => handleOpenFromAnchor(event.currentTarget)}
             >
@@ -397,19 +412,22 @@ const PracticePanel: FC<{
   };
 
   const desktopPopoverNode =
-    interactive && useDesktopPopover && desktopPopover ? (
-      <div
-        id={`report-practice-popover-${desktopPopover.rowId}`}
-        ref={desktopPopoverRef}
-        role="tooltip"
-        data-practice-tooltip-root
-        className="report-practice-table__popover report-practice-table__popover--floating"
-        style={desktopPopoverPosition ?? { left: "24px", opacity: 0, top: "24px" }}
-      >
-        <p className="report-practice-table__popover-title">{desktopPopover.practice}</p>
-        <p className="report-practice-table__popover-copy">{desktopPopover.description}</p>
-      </div>
-    ) : null;
+    interactive && useDesktopPopover && desktopPopover && typeof document !== "undefined"
+      ? createPortal(
+          <div
+            id={`report-practice-popover-${desktopPopover.rowId}`}
+            ref={desktopPopoverRef}
+            role="tooltip"
+            data-practice-tooltip-root
+            className="report-practice-table__popover report-practice-table__popover--floating"
+            style={desktopPopoverPosition ?? { left: "24px", opacity: 0, top: "24px" }}
+          >
+            <p className="report-practice-table__popover-title">{desktopPopover.practice}</p>
+            <p className="report-practice-table__popover-copy">{desktopPopover.description}</p>
+          </div>,
+          document.body
+        )
+      : null;
 
   return (
     <div ref={rootRef} className="report-practice-panel">
