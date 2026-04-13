@@ -3,13 +3,16 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type FC } from "react";
 import { createPortal } from "react-dom";
 import PremiumOverlay from "./PremiumOverlay";
-import { reportPracticeIntroBlocks } from "@/data/report-practice-intro";
 import {
   reportPracticeTendencies,
   type ReportPracticeTendencyContent,
   type ReportPracticeTendencyGroup,
   type ReportPracticeTendencyRow,
 } from "@/data/report-practice-tendencies";
+import {
+  extractPracticeSectionIntroHtml,
+  extractReportHtmlBlocks,
+} from "@/components/report/reportContent";
 
 interface Props {
   archetype: string;
@@ -269,14 +272,16 @@ const PracticeGroupTable: FC<{
 const PracticePanel: FC<{
   archetype: string;
   content: ReportPracticeTendencyContent;
+  generalHtml: string;
   interactive: boolean;
-}> = ({ archetype, content, interactive }) => {
+}> = ({ archetype, content, generalHtml, interactive }) => {
   const rootRef = useRef<HTMLDivElement>(null);
   const desktopPopoverRef = useRef<HTMLDivElement | null>(null);
   const [openRowId, setOpenRowId] = useState<string | null>(null);
   const [desktopPopover, setDesktopPopover] = useState<DesktopPopoverState | null>(null);
   const [desktopPopoverPosition, setDesktopPopoverPosition] = useState<CSSProperties | null>(null);
   const [useDesktopPopover, setUseDesktopPopover] = useState(resolveDesktopPopoverMode);
+  const introBlocks = extractReportHtmlBlocks(extractPracticeSectionIntroHtml(generalHtml));
 
   useEffect(() => {
     if (!interactive || typeof window === "undefined") {
@@ -435,13 +440,8 @@ const PracticePanel: FC<{
   return (
     <div ref={rootRef} className="report-practice-panel">
       <div className="report-practice-panel__header">
-        <h2 className="report-practice-panel__title">
-          <span>Typical Sexual Fantasy &amp; Practice Tendencies of the </span>
-          <span className="report-practice-panel__title-accent">{archetype}</span>
-        </h2>
-
         <div className="report-practice-panel__intro">
-          {reportPracticeIntroBlocks.map((block, index) => (
+          {introBlocks.map((block, index) => (
             <div
               key={`${archetype}-practice-intro-${index}`}
               className="report-practice-panel__intro-block"
@@ -449,6 +449,11 @@ const PracticePanel: FC<{
             />
           ))}
         </div>
+
+        <h2 className="report-practice-panel__title">
+          <span>Typical Sexual Fantasy &amp; Practice Tendencies of the </span>
+          <span className="report-practice-panel__title-accent">{archetype}</span>
+        </h2>
       </div>
 
       <div className="report-practice-panel__groups">
@@ -472,6 +477,7 @@ const PracticePanel: FC<{
 
 const PracticeTendenciesSection: FC<Props> = ({
   archetype,
+  generalHtml,
   isPremium,
   isUnlocked = false,
   onUnlock,
@@ -504,7 +510,12 @@ const PracticeTendenciesSection: FC<Props> = ({
         {isPremium && !unlocked ? (
           <div className="report-themed-block__preview report-themed-block__preview--practice">
             <div className="report-practice-layout report-themed-block__blurred" aria-hidden="true">
-              <PracticePanel archetype={archetype} content={content} interactive={false} />
+              <PracticePanel
+                archetype={archetype}
+                content={content}
+                generalHtml={generalHtml}
+                interactive={false}
+              />
             </div>
             <PremiumOverlay
               archetype={archetype}
@@ -514,7 +525,12 @@ const PracticeTendenciesSection: FC<Props> = ({
           </div>
         ) : (
           <div className="report-practice-layout">
-            <PracticePanel archetype={archetype} content={content} interactive={true} />
+            <PracticePanel
+              archetype={archetype}
+              content={content}
+              generalHtml={generalHtml}
+              interactive={true}
+            />
           </div>
         )}
       </div>

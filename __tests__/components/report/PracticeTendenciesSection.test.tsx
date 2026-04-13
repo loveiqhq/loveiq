@@ -3,36 +3,43 @@ import userEvent from "@testing-library/user-event";
 import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import PracticeTendenciesSection from "@/components/report/sections/PracticeTendenciesSection";
+import { reportSections } from "@/data/report-general";
+
+const practiceGeneralHtml =
+  reportSections.find((section) => section.sectionNumber === 27)?.generalContent ?? "";
 
 afterEach(() => {
   vi.unstubAllGlobals();
 });
 
 describe("PracticeTendenciesSection", () => {
-  it("renders the figma-style practice panel with the new structured intro and groups", () => {
+  it("renders the shared practice intro from the report section before the archetype heading", () => {
     const { container } = render(
       <PracticeTendenciesSection
         archetype="Spark Seeker"
         archetypeHtml={null}
-        generalHtml=""
+        generalHtml={practiceGeneralHtml}
         isPremium={false}
         sectionTitle="Typical Sexual Fantasy & Practice Tendencies"
       />
     );
 
-    expect(
-      screen.getByText(/Typical Sexual Fantasy & Practice Tendencies of the/i)
-    ).toBeInTheDocument();
+    const intro = container.querySelector(".report-practice-panel__intro");
+    const heading = container.querySelector(".report-practice-panel__title");
+
+    expect(intro?.textContent).toContain("Over time, most people develop recurring sexual scripts");
+    expect(heading).toBeInTheDocument();
     expect(screen.getByText("Spark Seeker")).toBeInTheDocument();
     expect(
-      screen.getByText(/probability-based estimates derived from aggregated research/i)
-    ).toBeInTheDocument();
+      screen.queryByText(/probability-based estimates derived from aggregated research/i)
+    ).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Core Relational & Embodied" })).toBeInTheDocument();
     expect(screen.getByText("Romantic lovemaking")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Technology & Distance" })).toBeInTheDocument();
     expect(container.querySelector(".report-practice-table")).toBeInTheDocument();
     expect(container.querySelector(".report-practice-panel__glow")).not.toBeInTheDocument();
     expect(screen.getAllByText("60%").length).toBeGreaterThan(0);
+    expect(intro?.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("opens and closes explanation popovers from the row info affordance", async () => {
@@ -42,7 +49,7 @@ describe("PracticeTendenciesSection", () => {
       <PracticeTendenciesSection
         archetype="Spark Seeker"
         archetypeHtml={null}
-        generalHtml=""
+        generalHtml={practiceGeneralHtml}
         isPremium={false}
         sectionTitle="Typical Sexual Fantasy & Practice Tendencies"
       />
@@ -110,7 +117,7 @@ describe("PracticeTendenciesSection", () => {
       <PracticeTendenciesSection
         archetype="Spark Seeker"
         archetypeHtml={null}
-        generalHtml=""
+        generalHtml={practiceGeneralHtml}
         isPremium={false}
         sectionTitle="Typical Sexual Fantasy & Practice Tendencies"
       />
@@ -148,7 +155,7 @@ describe("PracticeTendenciesSection", () => {
       <PracticeTendenciesSection
         archetype="Spark Seeker"
         archetypeHtml={null}
-        generalHtml=""
+        generalHtml={practiceGeneralHtml}
         isPremium={true}
         sectionTitle="Typical Sexual Fantasy & Practice Tendencies"
       />
