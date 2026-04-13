@@ -5735,8 +5735,11 @@ h3,
 
 .checkout-page {
   min-height: 100svh;
-  padding: clamp(28px, 4vw, 48px) 20px 48px;
+  padding: clamp(24px, 4vw, 48px) 20px max(48px, calc(env(safe-area-inset-bottom) + 28px));
   color: #fff;
+  overflow-y: auto;
+  overscroll-behavior-y: auto;
+  -webkit-overflow-scrolling: touch;
   background:
     radial-gradient(circle at top, rgba(156, 125, 255, 0.12), transparent 34%),
     radial-gradient(circle at bottom, rgba(254, 104, 57, 0.08), transparent 28%), #0a0510;
@@ -5769,7 +5772,7 @@ h3,
 
 .checkout-page__header {
   width: min(100%, 586px);
-  margin: 44px auto 28px;
+  margin: 36px auto 24px;
   text-align: center;
 }
 
@@ -5900,6 +5903,7 @@ h3,
 
 .checkout-page__methods {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   width: min(100%, 576px);
   margin: 10px auto 0;
@@ -5914,6 +5918,7 @@ h3,
 
 .checkout-page__method {
   display: inline-flex;
+  flex: 1 1 135px;
   align-items: center;
   justify-content: center;
   gap: 8px;
@@ -5947,6 +5952,7 @@ h3,
 }
 
 .checkout-page__method--compact {
+  flex: 0 0 44px;
   min-width: 44px;
   width: 44px;
   padding: 0;
@@ -6029,6 +6035,7 @@ h3,
 .checkout-payment-panel__element-shell {
   margin-top: 18px;
   padding: 14px;
+  overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 18px;
   background:
@@ -6041,6 +6048,7 @@ h3,
   gap: 14px;
   margin-top: 18px;
   padding: 14px;
+  overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 18px;
   background:
@@ -6399,12 +6407,13 @@ h3,
 
 @media (max-width: 720px) {
   .checkout-page {
-    padding: max(20px, env(safe-area-inset-top)) 16px 40px;
+    padding: max(16px, env(safe-area-inset-top)) 14px
+      max(40px, calc(env(safe-area-inset-bottom) + 24px));
   }
 
   .checkout-page__header {
-    margin-top: 28px;
-    margin-bottom: 24px;
+    margin-top: 20px;
+    margin-bottom: 18px;
   }
 
   .checkout-page__summary,
@@ -6415,16 +6424,62 @@ h3,
   }
 
   .checkout-page__summary {
-    padding: 18px 18px 1px;
+    padding: 16px 16px 1px;
   }
 
   .checkout-page__summary-head {
     flex-direction: column;
     align-items: flex-start;
+    gap: 12px;
   }
 
   .checkout-payment-panel {
-    padding: 20px;
+    padding: 18px;
+  }
+
+  .checkout-payment-panel__element-shell,
+  .checkout-payment-panel__express-shell {
+    margin-top: 14px;
+    padding: 12px;
+  }
+
+  .checkout-payment-panel__divider {
+    margin-top: 14px;
+    gap: 10px;
+    font-size: 10px;
+  }
+
+  .checkout-page__methods {
+    gap: 8px;
+    margin-top: 8px;
+    overflow: visible;
+  }
+
+  .checkout-page__method {
+    min-width: 0;
+    height: 54px;
+    padding: 0 14px;
+  }
+
+  .checkout-page__method--compact {
+    flex: 0 0 54px;
+    min-width: 54px;
+    width: 54px;
+  }
+
+  .checkout-payment-stack__note {
+    padding: 11px 12px;
+    font-size: 12px;
+  }
+
+  .checkout-trust {
+    gap: 10px 12px;
+    font-size: 12px;
+  }
+
+  .checkout-powered {
+    margin-top: 8px;
+    padding-top: 12px;
   }
 
   .checkout-return {
@@ -6435,19 +6490,53 @@ h3,
 
 @media (max-width: 560px) {
   .checkout-page__title {
-    font-size: 36px;
+    font-size: 32px;
+    line-height: 1.05;
   }
 
   .checkout-page__subtitle {
+    font-size: 14px;
     line-height: 1.6;
   }
 
+  .checkout-page__summary-title {
+    font-size: 19px;
+  }
+
+  .checkout-page__summary-amount strong {
+    font-size: 34px;
+  }
+
+  .checkout-page__methods {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+  }
+
   .checkout-page__method {
-    min-width: 128px;
+    width: 100%;
+    justify-content: flex-start;
   }
 
   .checkout-page__method--compact {
-    min-width: 44px;
+    grid-column: span 2;
+    justify-content: center;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .checkout-payment-panel__secure {
+    gap: 10px;
+  }
+
+  .checkout-payment-panel__secure-title {
+    font-size: 13px;
+  }
+
+  .checkout-payment-panel__secure-subtitle,
+  .checkout-payment-panel__express-meta {
+    font-size: 11px;
+    line-height: 1.45;
   }
 
   .checkout-placeholder__row {

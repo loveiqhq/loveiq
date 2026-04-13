@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent, type FC } from "react";
+import { useEffect, useState, type FormEvent, type FC } from "react";
 import {
   loadStripe,
   type StripeExpressCheckoutElementConfirmEvent,
@@ -19,6 +19,7 @@ const stripePromise = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
 const isPreviewMode = process.env.NEXT_PUBLIC_STRIPE_CHECKOUT_PREVIEW_MODE === "true";
 const previewModeMessage =
   "Preview mode is active. You can confirm Stripe test payments here, but purchases still do not unlock LoveIQ reports yet.";
+const compactCheckoutMediaQuery = "(max-width: 640px)";
 
 const checkoutElementFonts = [
   {
@@ -39,11 +40,17 @@ const checkoutAppearance = {
     colorTextPlaceholder: "rgba(247,243,251,0.38)",
     colorDanger: "#fb7185",
     colorSuccess: "#34d399",
+    accessibleColorOnColorPrimary: "#f7f3fb",
+    buttonColorText: "#f7f3fb",
+    colorPrimaryText: "#f7f3fb",
     iconColor: "rgba(247,243,251,0.7)",
     iconHoverColor: "#f7f3fb",
     iconChevronDownColor: "rgba(247,243,251,0.66)",
     tabIconColor: "rgba(247,243,251,0.64)",
+    tabIconHoverColor: "#fff",
     tabIconSelectedColor: "#fff",
+    tabIconMoreColor: "rgba(247,243,251,0.64)",
+    tabIconMoreHoverColor: "#fff",
     logoColor: "light",
     tabLogoColor: "light",
     tabLogoSelectedColor: "light",
@@ -100,18 +107,27 @@ const checkoutAppearance = {
       border: "1px solid rgba(255,255,255,0.11)",
       boxShadow: "none",
       color: "#f7f3fb",
+      borderRadius: "14px",
       fontFamily: '"Manrope", "Helvetica Neue", Arial, sans-serif',
       fontSize: "14px",
       fontWeight: "500",
     },
     ".Tab:hover": {
       border: "1px solid rgba(254, 104, 57, 0.42)",
+      boxShadow: "0 0 0 1px rgba(254, 104, 57, 0.16)",
       color: "#ffffff",
     },
     ".Tab--selected": {
-      backgroundColor: "rgba(254,104,57,0.12)",
-      border: "1px solid rgba(254, 104, 57, 0.88)",
-      boxShadow: "0 18px 36px rgba(254, 104, 57, 0.12)",
+      backgroundColor: "rgba(254,104,57,0.18)",
+      border: "1px solid rgba(254, 104, 57, 0.92)",
+      boxShadow: "0 0 0 1px rgba(254, 104, 57, 0.24), 0 10px 18px rgba(254, 104, 57, 0.14)",
+      color: "#f7f3fb",
+    },
+    ".Tab--selected:hover": {
+      backgroundColor: "rgba(254,104,57,0.18)",
+      border: "1px solid rgba(254, 104, 57, 0.92)",
+      boxShadow: "0 0 0 1px rgba(254, 104, 57, 0.24), 0 10px 18px rgba(254, 104, 57, 0.14)",
+      color: "#f7f3fb",
     },
     ".PickerItem": {
       backgroundColor: "rgba(255,255,255,0.035)",
@@ -193,6 +209,37 @@ function hasAvailableExpressMethod(event: StripeExpressCheckoutElementReadyEvent
   );
 }
 
+function useCompactCheckoutLayout() {
+  const [isCompactLayout, setIsCompactLayout] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+      return;
+    }
+
+    const mediaQueryList = window.matchMedia(compactCheckoutMediaQuery);
+    const updateLayout = (event?: MediaQueryListEvent) => {
+      setIsCompactLayout(event ? event.matches : mediaQueryList.matches);
+    };
+
+    updateLayout();
+
+    if (typeof mediaQueryList.addEventListener === "function") {
+      mediaQueryList.addEventListener("change", updateLayout);
+      return () => {
+        mediaQueryList.removeEventListener("change", updateLayout);
+      };
+    }
+
+    mediaQueryList.addListener(updateLayout);
+    return () => {
+      mediaQueryList.removeListener(updateLayout);
+    };
+  }, []);
+
+  return isCompactLayout;
+}
+
 function StripeCheckoutForm() {
   const checkoutState = useCheckout();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -200,6 +247,7 @@ function StripeCheckoutForm() {
   const [expressCheckoutAvailability, setExpressCheckoutAvailability] = useState<
     "available" | "pending" | "unavailable"
   >("pending");
+  const isCompactLayout = useCompactCheckoutLayout();
 
   if (checkoutState.type === "loading") {
     return (
@@ -301,7 +349,7 @@ function StripeCheckoutForm() {
               );
             }}
             options={{
-              buttonHeight: 48,
+              buttonHeight: isCompactLayout ? 44 : 48,
               buttonTheme: {
                 applePay: "white",
                 googlePay: "white",
@@ -311,8 +359,8 @@ function StripeCheckoutForm() {
                 googlePay: "buy",
               },
               layout: {
-                maxColumns: 2,
-                maxRows: 2,
+                maxColumns: isCompactLayout ? 1 : 2,
+                maxRows: isCompactLayout ? 3 : 2,
                 overflow: "auto",
               },
               paymentMethodOrder: ["apple_pay", "google_pay", "link"],
@@ -336,8 +384,11 @@ function StripeCheckoutForm() {
           <PaymentElement
             options={{
               layout: {
-                type: "tabs",
-                defaultCollapsed: false,
+                type: isCompactLayout ? "accordion" : "tabs",
+                defaultCollapsed: isCompactLayout,
+                paymentMethodLogoPosition: isCompactLayout ? "end" : undefined,
+                spacedAccordionItems: isCompactLayout,
+                visibleAccordionItemsCount: isCompactLayout ? 3 : undefined,
               },
               paymentMethodOrder: ["card", "us_bank_account", "amazon_pay", "link"],
               wallets: {
