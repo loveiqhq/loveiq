@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useRef, type FC, type MutableRefObject } from "react";
+import {
+  useEffect,
+  useRef,
+  type FC,
+  type MutableRefObject,
+  type TouchEvent as ReactTouchEvent,
+} from "react";
 import { REPORT_PURCHASE_PLANS, type ReportPurchasePlanId } from "@/lib/checkout/reportPurchase";
 
 interface Props {
@@ -48,10 +54,12 @@ function PricingMethodMark({
 
 const ReportPricingModal: FC<Props> = ({ archetype, open, onClose, onUnlock, returnFocusRef }) => {
   const dialogRef = useRef<HTMLDivElement>(null);
+  const scrollRegionRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const didOpenRef = useRef(false);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
   const scrollLockRef = useRef<ScrollLockState | null>(null);
+  const touchStartYRef = useRef<number | null>(null);
 
   const subtitle = `Unlock your complete ${archetype} report \u2014 comprehensive coverage of your probabilities, sexual stage, attachment style, desire drivers, and growth paths.`;
 
@@ -124,7 +132,7 @@ const ReportPricingModal: FC<Props> = ({ archetype, open, onClose, onUnlock, ret
     };
 
     const handleTouchMove = (event: TouchEvent) => {
-      if (dialogRef.current?.contains(event.target as Node | null)) return;
+      if (scrollRegionRef.current?.contains(event.target as Node | null)) return;
       event.preventDefault();
     };
 
@@ -149,6 +157,32 @@ const ReportPricingModal: FC<Props> = ({ archetype, open, onClose, onUnlock, ret
     };
   }, [onClose, open]);
 
+  const handleScrollTouchStart = (event: ReactTouchEvent<HTMLDivElement>) => {
+    touchStartYRef.current = event.touches[0]?.clientY ?? null;
+  };
+
+  const handleScrollTouchMove = (event: ReactTouchEvent<HTMLDivElement>) => {
+    const scrollRegion = scrollRegionRef.current;
+    const touchStartY = touchStartYRef.current;
+    const currentY = event.touches[0]?.clientY;
+
+    if (!scrollRegion || touchStartY === null || currentY === undefined) return;
+
+    const deltaY = currentY - touchStartY;
+    const noOverflow = scrollRegion.scrollHeight <= scrollRegion.clientHeight + 1;
+    const atTop = scrollRegion.scrollTop <= 0;
+    const atBottom =
+      scrollRegion.scrollTop + scrollRegion.clientHeight >= scrollRegion.scrollHeight - 1;
+
+    if (noOverflow || (atTop && deltaY > 0) || (atBottom && deltaY < 0)) {
+      event.preventDefault();
+    }
+  };
+
+  const resetScrollTouchTracking = () => {
+    touchStartYRef.current = null;
+  };
+
   return (
     <div
       className={`report-pricing-modal ${open ? "is-visible" : "is-hidden"}`}
@@ -157,7 +191,7 @@ const ReportPricingModal: FC<Props> = ({ archetype, open, onClose, onUnlock, ret
     >
       <div className="report-pricing-modal__backdrop" aria-hidden="true" onClick={onClose} />
 
-      <div className="report-pricing-modal__viewport" data-lenis-prevent>
+      <div className="report-pricing-modal__viewport">
         <div
           ref={dialogRef}
           role={open ? "dialog" : undefined}
@@ -178,166 +212,178 @@ const ReportPricingModal: FC<Props> = ({ archetype, open, onClose, onUnlock, ret
             </svg>
           </button>
 
-          <div className="report-pricing-modal__inner">
-            <div className="report-pricing-modal__header">
-              <span className="report-pricing-modal__eyebrow">
-                Don&apos;t miss out on truly understanding your sexuality
-              </span>
-              <h2 id="report-pricing-modal-title" className="report-pricing-modal__title">
-                Unlock your full report
-              </h2>
-              <p id="report-pricing-modal-copy" className="report-pricing-modal__copy">
-                {subtitle}
-              </p>
-            </div>
+          <div
+            ref={scrollRegionRef}
+            className="report-pricing-modal__scroll-region"
+            data-lenis-prevent
+            onTouchCancel={resetScrollTouchTracking}
+            onTouchEnd={resetScrollTouchTracking}
+            onTouchMove={handleScrollTouchMove}
+            onTouchStart={handleScrollTouchStart}
+          >
+            <div className="report-pricing-modal__inner">
+              <div className="report-pricing-modal__header">
+                <span className="report-pricing-modal__eyebrow">
+                  Don&apos;t miss out on truly understanding your sexuality
+                </span>
+                <h2 id="report-pricing-modal-title" className="report-pricing-modal__title">
+                  Unlock your full report
+                </h2>
+                <p id="report-pricing-modal-copy" className="report-pricing-modal__copy">
+                  {subtitle}
+                </p>
+              </div>
 
-            <div className="report-pricing-modal__plans" role="list" aria-label="Pricing options">
-              {REPORT_PURCHASE_PLANS.map((card) => (
-                <article
-                  key={card.title}
-                  role="listitem"
-                  className={[
-                    "report-pricing-card",
-                    card.tone === "highlight"
-                      ? "report-pricing-card--hero"
-                      : "report-pricing-card--side",
-                    card.badge || card.featuredLabel ? "report-pricing-card--with-badge" : "",
-                    card.tone === "highlight" ? "report-pricing-card--highlight" : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" ")}
-                >
-                  {card.badge || card.featuredLabel ? (
-                    <div className="report-pricing-card__badges">
-                      {card.badge ? (
-                        <span
+              <div className="report-pricing-modal__plans" role="list" aria-label="Pricing options">
+                {REPORT_PURCHASE_PLANS.map((card) => (
+                  <article
+                    key={card.title}
+                    role="listitem"
+                    className={[
+                      "report-pricing-card",
+                      card.tone === "highlight"
+                        ? "report-pricing-card--hero"
+                        : "report-pricing-card--side",
+                      card.badge || card.featuredLabel ? "report-pricing-card--with-badge" : "",
+                      card.tone === "highlight" ? "report-pricing-card--highlight" : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                  >
+                    {card.badge || card.featuredLabel ? (
+                      <div className="report-pricing-card__badges">
+                        {card.badge ? (
+                          <span
+                            className={[
+                              "report-pricing-card__badge",
+                              card.badgeTone ? `report-pricing-card__badge--${card.badgeTone}` : "",
+                            ]
+                              .filter(Boolean)
+                              .join(" ")}
+                          >
+                            {card.badge}
+                          </span>
+                        ) : null}
+                        {card.featuredLabel ? (
+                          <span className="report-pricing-card__badge report-pricing-card__badge--featured">
+                            {card.featuredLabel}
+                          </span>
+                        ) : null}
+                      </div>
+                    ) : null}
+
+                    <div className="report-pricing-card__heading">
+                      <h3 className="report-pricing-card__title">{card.title}</h3>
+                      <p className="report-pricing-card__description">{card.description}</p>
+                    </div>
+
+                    <div className="report-pricing-card__price">
+                      <span
+                        className={[
+                          "report-pricing-card__strike",
+                          !card.strikePrice ? "report-pricing-card__strike--placeholder" : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" ")}
+                        aria-hidden={card.strikePrice ? undefined : "true"}
+                      >
+                        {card.strikePrice
+                          ? `${card.strikePrice} ${card.priceSuffix === "one-time" ? "one off" : card.priceSuffix}`
+                          : "\u00a0"}
+                      </span>
+                      <div className="report-pricing-card__price-row">
+                        <strong>{card.price}</strong>
+                        <span>
+                          /{card.priceSuffix === "one-time" ? "one off" : card.priceSuffix}
+                        </span>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      className={[
+                        "report-pricing-card__cta",
+                        card.tone === "highlight" ? "report-pricing-card__cta--primary" : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                      onClick={() => onUnlock(card.plan)}
+                    >
+                      {card.ctaLabel}
+                    </button>
+
+                    <ul className="report-pricing-card__features">
+                      {card.features.map((feature) => (
+                        <li
+                          key={feature.label}
                           className={[
-                            "report-pricing-card__badge",
-                            card.badgeTone ? `report-pricing-card__badge--${card.badgeTone}` : "",
+                            "report-pricing-card__feature",
+                            feature.icon === "none" ? "report-pricing-card__feature--subitem" : "",
+                            feature.tone === "emphasis"
+                              ? "report-pricing-card__feature--emphasis"
+                              : "",
+                            feature.tone === "muted" ? "report-pricing-card__feature--muted" : "",
                           ]
                             .filter(Boolean)
                             .join(" ")}
                         >
-                          {card.badge}
-                        </span>
-                      ) : null}
-                      {card.featuredLabel ? (
-                        <span className="report-pricing-card__badge report-pricing-card__badge--featured">
-                          {card.featuredLabel}
-                        </span>
-                      ) : null}
-                    </div>
-                  ) : null}
-
-                  <div className="report-pricing-card__heading">
-                    <h3 className="report-pricing-card__title">{card.title}</h3>
-                    <p className="report-pricing-card__description">{card.description}</p>
-                  </div>
-
-                  <div className="report-pricing-card__price">
-                    <span
-                      className={[
-                        "report-pricing-card__strike",
-                        !card.strikePrice ? "report-pricing-card__strike--placeholder" : "",
-                      ]
-                        .filter(Boolean)
-                        .join(" ")}
-                      aria-hidden={card.strikePrice ? undefined : "true"}
-                    >
-                      {card.strikePrice
-                        ? `${card.strikePrice} ${card.priceSuffix === "one-time" ? "one off" : card.priceSuffix}`
-                        : "\u00a0"}
-                    </span>
-                    <div className="report-pricing-card__price-row">
-                      <strong>{card.price}</strong>
-                      <span>/{card.priceSuffix === "one-time" ? "one off" : card.priceSuffix}</span>
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    className={[
-                      "report-pricing-card__cta",
-                      card.tone === "highlight" ? "report-pricing-card__cta--primary" : "",
-                    ]
-                      .filter(Boolean)
-                      .join(" ")}
-                    onClick={() => onUnlock(card.plan)}
-                  >
-                    {card.ctaLabel}
-                  </button>
-
-                  <ul className="report-pricing-card__features">
-                    {card.features.map((feature) => (
-                      <li
-                        key={feature.label}
-                        className={[
-                          "report-pricing-card__feature",
-                          feature.icon === "none" ? "report-pricing-card__feature--subitem" : "",
-                          feature.tone === "emphasis"
-                            ? "report-pricing-card__feature--emphasis"
-                            : "",
-                          feature.tone === "muted" ? "report-pricing-card__feature--muted" : "",
-                        ]
-                          .filter(Boolean)
-                          .join(" ")}
-                      >
-                        {feature.icon !== "none" ? (
-                          <span className="report-pricing-card__feature-icon" aria-hidden="true">
-                            <svg
-                              viewBox="0 0 16 16"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="1.6"
-                            >
-                              <path d="m4.1 8 2.2 2.25L11.9 4.9" strokeLinecap="round" />
-                            </svg>
-                          </span>
-                        ) : null}
-                        <span>{feature.label}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </article>
-              ))}
-            </div>
-
-            <div className="report-pricing-modal__payments" aria-label="Accepted payment methods">
-              <PricingMethodMark logo="apple-pay" label="Apple Pay" />
-              <PricingMethodMark logo="paypal" label="PayPal" />
-              <PricingMethodMark logo="google-pay" label="Google Pay" />
-              <PricingMethodMark logo="klarna" label="Klarna" />
-              <PricingMethodMark logo="mastercard" label="Mastercard" />
-              <PricingMethodMark logo="visa" label="Visa" />
-              <PricingMethodMark logo="amex" label="American Express" />
-            </div>
-
-            <figure className="report-pricing-modal__testimonial">
-              <div className="report-pricing-modal__stars" aria-label="5 out of 5 stars">
-                {Array.from({ length: 5 }).map((_, index) => (
-                  <svg key={index} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-                    <path d="m8 1.5 1.72 3.48 3.84.56-2.78 2.71.66 3.83L8 10.27l-3.44 1.81.66-3.83L2.44 5.54l3.84-.56L8 1.5Z" />
-                  </svg>
+                          {feature.icon !== "none" ? (
+                            <span className="report-pricing-card__feature-icon" aria-hidden="true">
+                              <svg
+                                viewBox="0 0 16 16"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="1.6"
+                              >
+                                <path d="m4.1 8 2.2 2.25L11.9 4.9" strokeLinecap="round" />
+                              </svg>
+                            </span>
+                          ) : null}
+                          <span>{feature.label}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </article>
                 ))}
               </div>
-              <blockquote className="report-pricing-modal__quote">
-                &ldquo;Unlocking my report was{" "}
-                <em>one of the best investments made for my sexuality.</em> It is shockingly
-                precise&rdquo;
-              </blockquote>
-              <figcaption className="report-pricing-modal__author">
-                <span className="report-pricing-modal__avatar" aria-hidden="true">
-                  TV
-                </span>
-                <span className="report-pricing-modal__author-copy">
-                  <span className="report-pricing-modal__author-line">
-                    <strong>Dr. Tobias V.</strong>
-                    <span className="report-pricing-modal__author-age">40</span>
+
+              <div className="report-pricing-modal__payments" aria-label="Accepted payment methods">
+                <PricingMethodMark logo="apple-pay" label="Apple Pay" />
+                <PricingMethodMark logo="paypal" label="PayPal" />
+                <PricingMethodMark logo="google-pay" label="Google Pay" />
+                <PricingMethodMark logo="klarna" label="Klarna" />
+                <PricingMethodMark logo="mastercard" label="Mastercard" />
+                <PricingMethodMark logo="visa" label="Visa" />
+                <PricingMethodMark logo="amex" label="American Express" />
+              </div>
+
+              <figure className="report-pricing-modal__testimonial">
+                <div className="report-pricing-modal__stars" aria-label="5 out of 5 stars">
+                  {Array.from({ length: 5 }).map((_, index) => (
+                    <svg key={index} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                      <path d="m8 1.5 1.72 3.48 3.84.56-2.78 2.71.66 3.83L8 10.27l-3.44 1.81.66-3.83L2.44 5.54l3.84-.56L8 1.5Z" />
+                    </svg>
+                  ))}
+                </div>
+                <blockquote className="report-pricing-modal__quote">
+                  &ldquo;Unlocking my report was{" "}
+                  <em>one of the best investments made for my sexuality.</em> It is shockingly
+                  precise&rdquo;
+                </blockquote>
+                <figcaption className="report-pricing-modal__author">
+                  <span className="report-pricing-modal__avatar" aria-hidden="true">
+                    TV
                   </span>
-                  <em>Berlin, Germany</em>
-                </span>
-              </figcaption>
-            </figure>
+                  <span className="report-pricing-modal__author-copy">
+                    <span className="report-pricing-modal__author-line">
+                      <strong>Dr. Tobias V.</strong>
+                      <span className="report-pricing-modal__author-age">40</span>
+                    </span>
+                    <em>Berlin, Germany</em>
+                  </span>
+                </figcaption>
+              </figure>
+            </div>
           </div>
         </div>
       </div>

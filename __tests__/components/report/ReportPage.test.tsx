@@ -174,6 +174,7 @@ describe("ReportPage", () => {
       const { container } = render(<ReportPage />);
 
       expect(screen.getByRole("heading", { name: /unlock your full report/i })).toBeInTheDocument();
+      expect(container.querySelector(".report-pricing-modal__scroll-region")).toBeInTheDocument();
 
       await user.click(screen.getByRole("button", { name: /close pricing modal/i }));
 
