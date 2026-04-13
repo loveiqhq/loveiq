@@ -4932,44 +4932,10 @@ h3,
 }
 
 .report-practice-panel {
-  position: relative;
-  isolation: isolate;
   display: flex;
   flex-direction: column;
   gap: clamp(2.25rem, 2vw + 1.5rem, 3rem);
-  overflow: visible;
   width: 100%;
-  padding: clamp(1.75rem, 2vw + 1.4rem, 2.6rem);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 32px;
-  background:
-    radial-gradient(
-      circle at calc(100% + 7rem) -7rem,
-      rgba(168, 85, 247, 0.18) 0%,
-      transparent 38%
-    ),
-    linear-gradient(180deg, #181121 0%, #0f0a16 100%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.05),
-    0 25px 50px -12px rgba(0, 0, 0, 0.25);
-}
-
-.report-practice-panel__glow {
-  position: absolute;
-  top: -7.5rem;
-  right: -7.5rem;
-  width: 31.25rem;
-  height: 31.25rem;
-  border-radius: 9999px;
-  background: rgba(147, 51, 234, 0.12);
-  filter: blur(60px);
-  pointer-events: none;
-}
-
-.report-practice-panel__header,
-.report-practice-panel__groups {
-  position: relative;
-  z-index: 1;
 }
 
 .report-practice-panel__header {
@@ -5213,6 +5179,11 @@ h3,
   margin-top: 0.75rem;
 }
 
+.report-practice-table__inline-popover {
+  grid-column: 1 / -1;
+  padding-top: 0.6rem;
+}
+
 .report-practice-table__popover-title {
   margin: 0 0 0.35rem;
   color: #fff;
@@ -5284,10 +5255,6 @@ h3,
 }
 
 @media (max-width: 1024px) {
-  .report-practice-panel {
-    border-radius: 28px;
-  }
-
   .report-practice-panel__groups {
     gap: 2rem;
   }
@@ -5298,12 +5265,6 @@ h3,
 }
 
 @media (max-width: 720px) {
-  .report-practice-panel {
-    padding: 1.5rem 1.15rem;
-    border-radius: 24px;
-    gap: 2rem;
-  }
-
   .report-practice-panel__title {
     font-size: clamp(1.85rem, 6.5vw, 2.45rem);
   }
@@ -5413,15 +5374,12 @@ h3,
   }
 
   .report-practice-table__popover--inline {
-    width: min(18rem, calc(100vw - 3rem));
+    width: 100%;
+    margin-top: 0;
   }
 }
 
 @media (max-width: 420px) {
-  .report-practice-panel {
-    padding: 1.35rem 1rem;
-  }
-
   .report-practice-table__header,
   .report-practice-table__row {
     grid-template-columns: minmax(0, 1.45fr) minmax(0, 0.9fr) minmax(0, 0.9fr);

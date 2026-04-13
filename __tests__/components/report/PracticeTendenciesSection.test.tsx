@@ -31,6 +31,7 @@ describe("PracticeTendenciesSection", () => {
     expect(screen.getByText("Romantic lovemaking")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Technology & Distance" })).toBeInTheDocument();
     expect(container.querySelector(".report-practice-table")).toBeInTheDocument();
+    expect(container.querySelector(".report-practice-panel__glow")).not.toBeInTheDocument();
     expect(screen.getAllByText("60%").length).toBeGreaterThan(0);
   });
 
@@ -55,6 +56,11 @@ describe("PracticeTendenciesSection", () => {
     await waitFor(() => {
       expect(screen.getByText(/chemistry, freedom, and playful connection/i)).toBeInTheDocument();
     });
+    const row = infoButton.closest(".report-practice-table__row");
+    const stack = infoButton.closest(".report-practice-table__practice-stack");
+
+    expect(row?.querySelector(".report-practice-table__inline-popover")).toBeInTheDocument();
+    expect(stack?.querySelector(".report-practice-table__popover")).not.toBeInTheDocument();
 
     await user.click(document.body);
 

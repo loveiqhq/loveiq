@@ -187,22 +187,24 @@ const PracticeRow: FC<{
           ) : (
             <InfoGlyph className="report-practice-table__info-glyph report-practice-table__info-glyph--muted" />
           )}
-
-          {interactive && row.description && isOpen && !useDesktopPopover ? (
-            <div
-              id={popoverId}
-              role="tooltip"
-              className="report-practice-table__popover report-practice-table__popover--inline"
-            >
-              <p className="report-practice-table__popover-title">{row.practice}</p>
-              <p className="report-practice-table__popover-copy">{row.description}</p>
-            </div>
-          ) : null}
         </div>
       </div>
 
       <PracticeMetricCell label="Fantasy Pull" tone="fantasy" value={row.fantasyPull} />
       <PracticeMetricCell label="Actual Pleasure" tone="pleasure" value={row.actualPleasure} />
+
+      {interactive && row.description && isOpen && !useDesktopPopover ? (
+        <div className="report-practice-table__inline-popover" data-practice-popover-root>
+          <div
+            id={popoverId}
+            role="tooltip"
+            className="report-practice-table__popover report-practice-table__popover--inline"
+          >
+            <p className="report-practice-table__popover-title">{row.practice}</p>
+            <p className="report-practice-table__popover-copy">{row.description}</p>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };
@@ -432,8 +434,6 @@ const PracticePanel: FC<{
 
   return (
     <div ref={rootRef} className="report-practice-panel">
-      <span className="report-practice-panel__glow" aria-hidden="true" />
-
       <div className="report-practice-panel__header">
         <h2 className="report-practice-panel__title">
           <span>Typical Sexual Fantasy &amp; Practice Tendencies of the </span>
