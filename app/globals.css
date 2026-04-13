@@ -5387,15 +5387,24 @@ h3,
   }
 
   .report-pricing-modal__viewport {
+    display: block;
+    height: 100%;
+    min-height: 100svh;
     padding: max(0.75rem, env(safe-area-inset-top)) max(0.75rem, env(safe-area-inset-right))
       max(0.75rem, env(safe-area-inset-bottom)) max(0.75rem, env(safe-area-inset-left));
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
   }
 
   .report-pricing-modal__dialog {
     width: 100%;
-    max-height: calc(100svh - 1.5rem);
+    max-height: none;
+    margin: 0 auto;
     padding: 3.5rem 0.95rem 1.1rem;
     border-radius: 1.25rem;
+    overflow: visible;
   }
 
   .report-pricing-modal__inner {
