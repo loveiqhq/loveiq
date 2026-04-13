@@ -14,6 +14,17 @@ interface Props {
 const FOCUSABLE_SELECTOR =
   'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
+interface ScrollLockState {
+  htmlOverflow: string;
+  bodyLeft: string;
+  bodyOverflow: string;
+  bodyPosition: string;
+  bodyRight: string;
+  bodyTop: string;
+  bodyWidth: string;
+  scrollY: number;
+}
+
 function PricingMethodMark({
   logo,
   label,
@@ -40,6 +51,7 @@ const ReportPricingModal: FC<Props> = ({ archetype, open, onClose, onUnlock, ret
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const didOpenRef = useRef(false);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
+  const scrollLockRef = useRef<ScrollLockState | null>(null);
 
   const subtitle = `Unlock your complete ${archetype} report \u2014 comprehensive coverage of your probabilities, sexual stage, attachment style, desire drivers, and growth paths.`;
 
@@ -66,7 +78,24 @@ const ReportPricingModal: FC<Props> = ({ archetype, open, onClose, onUnlock, ret
   useEffect(() => {
     if (!open) return;
 
-    const overflow = document.body.style.overflow;
+    const scrollY = window.scrollY;
+    scrollLockRef.current = {
+      htmlOverflow: document.documentElement.style.overflow,
+      bodyLeft: document.body.style.left,
+      bodyOverflow: document.body.style.overflow,
+      bodyPosition: document.body.style.position,
+      bodyRight: document.body.style.right,
+      bodyTop: document.body.style.top,
+      bodyWidth: document.body.style.width,
+      scrollY,
+    };
+
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.position = "fixed";
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.left = "0";
+    document.body.style.right = "0";
+    document.body.style.width = "100%";
     document.body.style.overflow = "hidden";
 
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -94,10 +123,29 @@ const ReportPricingModal: FC<Props> = ({ archetype, open, onClose, onUnlock, ret
       }
     };
 
+    const handleTouchMove = (event: TouchEvent) => {
+      if (dialogRef.current?.contains(event.target as Node | null)) return;
+      event.preventDefault();
+    };
+
     document.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("touchmove", handleTouchMove, { passive: false });
+
     return () => {
-      document.body.style.overflow = overflow;
+      const scrollLock = scrollLockRef.current;
+      document.documentElement.style.overflow = scrollLock?.htmlOverflow ?? "";
+      document.body.style.left = scrollLock?.bodyLeft ?? "";
+      document.body.style.overflow = scrollLock?.bodyOverflow ?? "";
+      document.body.style.position = scrollLock?.bodyPosition ?? "";
+      document.body.style.right = scrollLock?.bodyRight ?? "";
+      document.body.style.top = scrollLock?.bodyTop ?? "";
+      document.body.style.width = scrollLock?.bodyWidth ?? "";
+      if (scrollLock) {
+        window.scrollTo(0, scrollLock.scrollY);
+      }
+      scrollLockRef.current = null;
       document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("touchmove", handleTouchMove);
     };
   }, [onClose, open]);
 
@@ -109,7 +157,7 @@ const ReportPricingModal: FC<Props> = ({ archetype, open, onClose, onUnlock, ret
     >
       <div className="report-pricing-modal__backdrop" aria-hidden="true" onClick={onClose} />
 
-      <div className="report-pricing-modal__viewport">
+      <div className="report-pricing-modal__viewport" data-lenis-prevent>
         <div
           ref={dialogRef}
           role={open ? "dialog" : undefined}

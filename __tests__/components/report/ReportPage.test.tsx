@@ -31,6 +31,7 @@ vi.mock("@/components/report/hooks/useSectionFeedback", () => ({
 import ReportPage from "@/components/report/ReportPage";
 
 const REPORT_MODAL_TEST_TIMEOUT_MS = 10000;
+const mockScrollTo = vi.fn();
 
 describe("ReportPage", () => {
   function buildSuccessResponse() {
@@ -88,10 +89,24 @@ describe("ReportPage", () => {
         dispatchEvent: vi.fn(),
       }))
     );
+
+    vi.stubGlobal("scrollTo", mockScrollTo);
+    Object.defineProperty(window, "scrollY", {
+      configurable: true,
+      value: 240,
+    });
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    mockScrollTo.mockReset();
+    document.documentElement.style.overflow = "";
+    document.body.style.left = "";
+    document.body.style.overflow = "";
+    document.body.style.position = "";
+    document.body.style.right = "";
+    document.body.style.top = "";
+    document.body.style.width = "";
     cleanup();
   });
 
@@ -164,6 +179,37 @@ describe("ReportPage", () => {
 
       await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
       expect(container.querySelectorAll(".report-premium-overlay__cta").length).toBeGreaterThan(0);
+    },
+    REPORT_MODAL_TEST_TIMEOUT_MS
+  );
+
+  it(
+    "locks background scroll while the pricing modal is open and restores it on close",
+    async () => {
+      const user = userEvent.setup();
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
+
+      render(<ReportPage />);
+
+      expect(document.documentElement.style.overflow).toBe("hidden");
+      expect(document.body.style.position).toBe("fixed");
+      expect(document.body.style.top).toBe("-240px");
+      expect(document.body.style.left).toBe("0px");
+      expect(document.body.style.right).toBe("0px");
+      expect(document.body.style.width).toBe("100%");
+      expect(document.body.style.overflow).toBe("hidden");
+
+      await user.click(screen.getByRole("button", { name: /close pricing modal/i }));
+
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+      expect(document.documentElement.style.overflow).toBe("");
+      expect(document.body.style.position).toBe("");
+      expect(document.body.style.top).toBe("");
+      expect(document.body.style.left).toBe("");
+      expect(document.body.style.right).toBe("");
+      expect(document.body.style.width).toBe("");
+      expect(document.body.style.overflow).toBe("");
+      expect(mockScrollTo).toHaveBeenCalledWith(0, 240);
     },
     REPORT_MODAL_TEST_TIMEOUT_MS
   );
