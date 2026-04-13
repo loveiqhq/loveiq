@@ -5329,43 +5329,116 @@ h3,
     font-size: 1.55rem;
   }
 
+  .report-practice-group__table-shell {
+    overflow-x: visible;
+    padding-bottom: 0;
+  }
+
   .report-practice-table {
-    min-width: 640px;
+    min-width: 0;
+    gap: 0.35rem;
+  }
+
+  .report-practice-table__header,
+  .report-practice-table__row {
+    grid-template-columns: minmax(0, 1.6fr) minmax(0, 0.95fr) minmax(0, 0.95fr);
+    column-gap: 0.55rem;
   }
 
   .report-practice-table__header {
-    padding: 0 0.75rem 0.85rem;
+    padding: 0 0.55rem 0.75rem;
   }
 
   .report-practice-table__header-cell {
-    font-size: 0.74rem;
-    letter-spacing: 0.12em;
+    gap: 0.28rem;
+    font-size: 0.64rem;
+    line-height: 1.22;
+    letter-spacing: 0.08em;
+    white-space: normal;
   }
 
   .report-practice-table__row {
-    padding: 0.9rem 0.75rem;
+    padding: 0.78rem 0.55rem;
+    align-items: start;
+  }
+
+  .report-practice-table__practice {
+    padding-right: 0.35rem;
+  }
+
+  .report-practice-table__practice-stack {
+    align-items: flex-start;
+    gap: 0.35rem;
   }
 
   .report-practice-table__practice-label {
-    font-size: 1rem;
-    line-height: 1.45;
+    font-size: 0.94rem;
+    line-height: 1.35;
+  }
+
+  .report-practice-table__info-button {
+    width: 0.9rem;
+    height: 0.9rem;
+    margin-top: 0.2rem;
+  }
+
+  .report-practice-table__header-glyph,
+  .report-practice-table__info-glyph {
+    width: 0.68rem;
+    height: 0.68rem;
+  }
+
+  .report-practice-table__metric {
+    min-width: 0;
   }
 
   .report-practice-table__metric-content {
-    gap: 0.7rem;
+    width: 100%;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.38rem;
   }
 
   .report-practice-table__metric-value {
-    min-width: 3rem;
-    font-size: 1.12rem;
+    min-width: 0;
+    width: 100%;
+    font-size: 0.98rem;
+    text-align: left;
   }
 
   .report-practice-table__metric-bar {
-    width: 4.6rem;
+    width: 100%;
+    max-width: none;
+    height: 0.32rem;
   }
 
   .report-practice-table__popover--inline {
-    width: auto;
+    width: min(18rem, calc(100vw - 3rem));
+  }
+}
+
+@media (max-width: 420px) {
+  .report-practice-panel {
+    padding: 1.35rem 1rem;
+  }
+
+  .report-practice-table__header,
+  .report-practice-table__row {
+    grid-template-columns: minmax(0, 1.45fr) minmax(0, 0.9fr) minmax(0, 0.9fr);
+    column-gap: 0.45rem;
+  }
+
+  .report-practice-table__header-cell {
+    font-size: 0.58rem;
+    letter-spacing: 0.07em;
+  }
+
+  .report-practice-table__practice-label {
+    font-size: 0.88rem;
+  }
+
+  .report-practice-table__metric-value {
+    font-size: 0.92rem;
   }
 }
 

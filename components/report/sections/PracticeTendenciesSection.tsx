@@ -3,6 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type FC } from "react";
 import { createPortal } from "react-dom";
 import PremiumOverlay from "./PremiumOverlay";
+import { reportPracticeIntroBlocks } from "@/data/report-practice-intro";
 import {
   reportPracticeTendencies,
   type ReportPracticeTendencyContent,
@@ -440,7 +441,7 @@ const PracticePanel: FC<{
         </h2>
 
         <div className="report-practice-panel__intro">
-          {content.introBlocks.map((block, index) => (
+          {reportPracticeIntroBlocks.map((block, index) => (
             <div
               key={`${archetype}-practice-intro-${index}`}
               className="report-practice-panel__intro-block"
