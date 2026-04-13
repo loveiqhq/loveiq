@@ -1,9 +1,14 @@
 "use client";
 
 import { useState, type FormEvent, type FC } from "react";
-import { loadStripe } from "@stripe/stripe-js";
+import {
+  loadStripe,
+  type StripeExpressCheckoutElementConfirmEvent,
+  type StripeExpressCheckoutElementReadyEvent,
+} from "@stripe/stripe-js";
 import {
   CheckoutElementsProvider,
+  ExpressCheckoutElement,
   PaymentElement,
   useCheckout,
 } from "@stripe/react-stripe-js/checkout";
@@ -182,10 +187,19 @@ function TrustFooter() {
   );
 }
 
+function hasAvailableExpressMethod(event: StripeExpressCheckoutElementReadyEvent) {
+  return Boolean(
+    event.availablePaymentMethods && Object.values(event.availablePaymentMethods).some(Boolean)
+  );
+}
+
 function StripeCheckoutForm() {
   const checkoutState = useCheckout();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [expressCheckoutAvailability, setExpressCheckoutAvailability] = useState<
+    "available" | "pending" | "unavailable"
+  >("pending");
 
   if (checkoutState.type === "loading") {
     return (
@@ -221,16 +235,26 @@ function StripeCheckoutForm() {
 
   const { checkout } = checkoutState;
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function confirmCheckout(
+    options?: { expressCheckoutConfirmEvent?: StripeExpressCheckoutElementConfirmEvent },
+    formEvent?: FormEvent<HTMLFormElement>
+  ) {
+    formEvent?.preventDefault();
     setErrorMessage(null);
-
     setIsSubmitting(true);
 
-    const result = await checkout.confirm({ redirect: "always" });
+    const result = await checkout.confirm({
+      redirect: "always",
+      ...options,
+    });
 
     if (result.type === "error") {
-      setErrorMessage(result.error.message ?? "Unable to confirm payment right now.");
+      const message = result.error.message ?? "Unable to confirm payment right now.";
+      setErrorMessage(message);
+      options?.expressCheckoutConfirmEvent?.paymentFailed({
+        message,
+        reason: "fail",
+      });
       setIsSubmitting(false);
       return;
     }
@@ -238,10 +262,76 @@ function StripeCheckoutForm() {
     setIsSubmitting(false);
   }
 
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    await confirmCheckout(undefined, event);
+  }
+
+  async function handleExpressConfirm(event: StripeExpressCheckoutElementConfirmEvent) {
+    await confirmCheckout({ expressCheckoutConfirmEvent: event });
+  }
+
   return (
     <form className="checkout-payment-stack" onSubmit={handleSubmit}>
       <div className="checkout-payment-panel">
         <SecureHeader />
+        <div
+          className={[
+            "checkout-payment-panel__express-shell",
+            expressCheckoutAvailability === "unavailable"
+              ? "checkout-payment-panel__express-shell--hidden"
+              : "",
+          ]
+            .filter(Boolean)
+            .join(" ")}
+        >
+          <div className="checkout-payment-panel__express-copy">
+            <span className="checkout-payment-panel__express-label">Fast checkout</span>
+            <span className="checkout-payment-panel__express-meta">
+              Apple Pay, Google Pay, and Link appear here when Stripe says they are eligible.
+            </span>
+          </div>
+          <ExpressCheckoutElement
+            onConfirm={handleExpressConfirm}
+            onLoadError={() => {
+              setExpressCheckoutAvailability("unavailable");
+            }}
+            onReady={(event) => {
+              setExpressCheckoutAvailability(
+                hasAvailableExpressMethod(event) ? "available" : "unavailable"
+              );
+            }}
+            options={{
+              buttonHeight: 48,
+              buttonTheme: {
+                applePay: "white",
+                googlePay: "white",
+              },
+              buttonType: {
+                applePay: "buy",
+                googlePay: "buy",
+              },
+              layout: {
+                maxColumns: 2,
+                maxRows: 2,
+                overflow: "auto",
+              },
+              paymentMethodOrder: ["apple_pay", "google_pay", "link"],
+              paymentMethods: {
+                amazonPay: "never",
+                applePay: "always",
+                googlePay: "always",
+                klarna: "never",
+                link: "auto",
+                paypal: "never",
+              },
+            }}
+          />
+        </div>
+        {expressCheckoutAvailability !== "unavailable" ? (
+          <div className="checkout-payment-panel__divider" aria-hidden="true">
+            <span>Or pay manually</span>
+          </div>
+        ) : null}
         <div className="checkout-payment-panel__element-shell">
           <PaymentElement
             options={{
@@ -249,17 +339,10 @@ function StripeCheckoutForm() {
                 type: "tabs",
                 defaultCollapsed: false,
               },
-              paymentMethodOrder: [
-                "apple_pay",
-                "google_pay",
-                "card",
-                "us_bank_account",
-                "amazon_pay",
-                "link",
-              ],
+              paymentMethodOrder: ["card", "us_bank_account", "amazon_pay", "link"],
               wallets: {
-                applePay: "auto",
-                googlePay: "auto",
+                applePay: "never",
+                googlePay: "never",
                 link: "never",
               },
             }}
