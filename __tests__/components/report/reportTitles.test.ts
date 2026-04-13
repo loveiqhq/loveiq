@@ -45,4 +45,16 @@ describe("reportTitles", () => {
     expect(section.displayTitle).toBe("About Fantasies, Desire & Pleasure by Context");
     expect(section.navTitle).toBe("Fantasies by Context");
   });
+
+  it("treats Love Language as a free section in the resolved access tiers", () => {
+    const [section] = resolveReportSections(
+      reportSections.filter(
+        (entry) =>
+          entry.id === "love_language_how_affection_meaning_and_erotic_safety_are_communicated"
+      ),
+      "Spark Seeker"
+    );
+
+    expect(section.accessTier).toBe("free");
+  });
 });
