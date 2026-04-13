@@ -2011,10 +2011,6 @@ h3,
   position: relative;
 }
 
-.report-themed-block__preview--practice {
-  overflow: hidden;
-}
-
 .report-themed-block__blurred {
   user-select: none;
   filter: blur(4.55px);
@@ -4938,42 +4934,31 @@ h3,
   width: 100%;
 }
 
-.report-practice-panel__header {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
-
 .report-practice-panel__title {
   margin: 0;
-  max-width: 68rem;
+  max-width: 54rem;
   color: #fff;
   font-family: var(--font-serif);
-  font-size: clamp(2.15rem, 1.65rem + 1.45vw, 3.2rem);
-  font-weight: 400;
-  line-height: 1.12;
+  font-size: clamp(1.95rem, 1.82rem + 0.35vw, 2.2rem);
+  font-weight: 500;
+  line-height: 1.04;
   letter-spacing: -0.03em;
   text-wrap: balance;
 }
 
 .report-practice-panel__title-accent {
-  color: #fe6839;
+  color: rgb(var(--report-accent-rgb));
 }
 
 .report-practice-panel__intro {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 1.5rem;
   max-width: 68rem;
-  color: #d1d5db;
 }
 
 .report-practice-panel__intro-block {
-  font-family: var(--font-sans);
-  font-size: clamp(1rem, 0.92rem + 0.38vw, 1.25rem);
-  font-weight: 300;
-  line-height: 1.6;
-  color: #d1d5db;
+  color: inherit;
 }
 
 .report-practice-panel__intro-block p,
@@ -5266,16 +5251,11 @@ h3,
 
 @media (max-width: 720px) {
   .report-practice-panel__title {
-    font-size: clamp(1.85rem, 6.5vw, 2.45rem);
+    font-size: clamp(1.72rem, 5.9vw, 1.95rem);
   }
 
   .report-practice-panel__intro {
-    gap: 0.9rem;
-  }
-
-  .report-practice-panel__intro-block {
-    font-size: 0.98rem;
-    line-height: 1.7;
+    gap: 1.25rem;
   }
 
   .report-practice-panel__groups {

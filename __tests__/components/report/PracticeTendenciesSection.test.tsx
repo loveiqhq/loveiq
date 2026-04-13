@@ -161,8 +161,14 @@ describe("PracticeTendenciesSection", () => {
       />
     );
 
+    expect(container.querySelector(".report-practice-panel__intro")).toBeInTheDocument();
     expect(container.querySelector(".report-themed-block__blurred")).toBeInTheDocument();
     expect(container.querySelector(".report-themed-block__preview--practice")).toBeInTheDocument();
+    expect(
+      container.querySelector(
+        ".report-themed-block__preview--practice .report-practice-panel__intro"
+      )
+    ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /unlock full report/i })).toBeInTheDocument();
   }, 15000);
 });

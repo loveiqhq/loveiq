@@ -269,19 +269,40 @@ const PracticeGroupTable: FC<{
   </section>
 );
 
+const PracticeIntro: FC<{
+  archetype: string;
+  generalHtml: string;
+}> = ({ archetype, generalHtml }) => {
+  const introBlocks = extractReportHtmlBlocks(extractPracticeSectionIntroHtml(generalHtml));
+
+  if (!introBlocks.length) {
+    return null;
+  }
+
+  return (
+    <div className="report-practice-panel__intro report-prose">
+      {introBlocks.map((block, index) => (
+        <div
+          key={`${archetype}-practice-intro-${index}`}
+          className="report-practice-panel__intro-block"
+          dangerouslySetInnerHTML={{ __html: block }}
+        />
+      ))}
+    </div>
+  );
+};
+
 const PracticePanel: FC<{
   archetype: string;
   content: ReportPracticeTendencyContent;
-  generalHtml: string;
   interactive: boolean;
-}> = ({ archetype, content, generalHtml, interactive }) => {
+}> = ({ archetype, content, interactive }) => {
   const rootRef = useRef<HTMLDivElement>(null);
   const desktopPopoverRef = useRef<HTMLDivElement | null>(null);
   const [openRowId, setOpenRowId] = useState<string | null>(null);
   const [desktopPopover, setDesktopPopover] = useState<DesktopPopoverState | null>(null);
   const [desktopPopoverPosition, setDesktopPopoverPosition] = useState<CSSProperties | null>(null);
   const [useDesktopPopover, setUseDesktopPopover] = useState(resolveDesktopPopoverMode);
-  const introBlocks = extractReportHtmlBlocks(extractPracticeSectionIntroHtml(generalHtml));
 
   useEffect(() => {
     if (!interactive || typeof window === "undefined") {
@@ -439,22 +460,10 @@ const PracticePanel: FC<{
 
   return (
     <div ref={rootRef} className="report-practice-panel">
-      <div className="report-practice-panel__header">
-        <div className="report-practice-panel__intro">
-          {introBlocks.map((block, index) => (
-            <div
-              key={`${archetype}-practice-intro-${index}`}
-              className="report-practice-panel__intro-block"
-              dangerouslySetInnerHTML={{ __html: block }}
-            />
-          ))}
-        </div>
-
-        <h2 className="report-practice-panel__title">
-          <span>Typical Sexual Fantasy &amp; Practice Tendencies of the </span>
-          <span className="report-practice-panel__title-accent">{archetype}</span>
-        </h2>
-      </div>
+      <h2 className="report-practice-panel__title">
+        <span>Typical Sexual Fantasy &amp; Practice Tendencies of the </span>
+        <span className="report-practice-panel__title-accent">{archetype}</span>
+      </h2>
 
       <div className="report-practice-panel__groups">
         {content.groups.map((group) => (
@@ -505,17 +514,14 @@ const PracticeTendenciesSection: FC<Props> = ({
   }
 
   return (
-    <div className="report-flow report-flow--gap-xl">
+    <div className="report-flow__stack report-flow__stack--md report-practice-layout">
+      <PracticeIntro archetype={archetype} generalHtml={generalHtml} />
+
       <div className="report-themed-block">
         {isPremium && !unlocked ? (
           <div className="report-themed-block__preview report-themed-block__preview--practice">
-            <div className="report-practice-layout report-themed-block__blurred" aria-hidden="true">
-              <PracticePanel
-                archetype={archetype}
-                content={content}
-                generalHtml={generalHtml}
-                interactive={false}
-              />
+            <div className="report-practice-panel report-themed-block__blurred" aria-hidden="true">
+              <PracticePanel archetype={archetype} content={content} interactive={false} />
             </div>
             <PremiumOverlay
               archetype={archetype}
@@ -524,14 +530,7 @@ const PracticeTendenciesSection: FC<Props> = ({
             />
           </div>
         ) : (
-          <div className="report-practice-layout">
-            <PracticePanel
-              archetype={archetype}
-              content={content}
-              generalHtml={generalHtml}
-              interactive={true}
-            />
-          </div>
+          <PracticePanel archetype={archetype} content={content} interactive={true} />
         )}
       </div>
     </div>
