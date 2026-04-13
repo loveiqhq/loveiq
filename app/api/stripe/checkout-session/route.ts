@@ -7,6 +7,7 @@ import {
 } from "@/lib/checkout/reportPurchase";
 import {
   STRIPE_CHECKOUT_DISABLED_MESSAGE,
+  getStripeCheckoutCustomerEmail,
   getStripePriceId,
   getStripeServerClient,
   isStripeCheckoutEnabled,
@@ -96,14 +97,19 @@ export async function POST(request: Request) {
     const stripe = getStripeServerClient();
     const priceId = getStripePriceId(parsed.data.plan);
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || new URL(request.url).origin;
+    const customerEmail = await getStripeCheckoutCustomerEmail({
+      reportSessionId: parsed.data.reportSessionId ?? null,
+      reportToken: parsed.data.reportToken ?? null,
+    });
 
-    if (!stripe || !priceId) {
+    if (!stripe || !priceId || !customerEmail) {
       return NextResponse.json({ error: "Service unavailable." }, { status: 503 });
     }
 
     const session = await stripe.checkout.sessions.create({
       allow_promotion_codes: true,
       billing_address_collection: "auto",
+      customer_email: customerEmail,
       line_items: [{ price: priceId, quantity: 1 }],
       metadata: {
         plan: parsed.data.plan,
