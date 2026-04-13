@@ -55,7 +55,6 @@ function PricingMethodMark({
 const ReportPricingModal: FC<Props> = ({ archetype, open, onClose, onUnlock, returnFocusRef }) => {
   const dialogRef = useRef<HTMLDivElement>(null);
   const scrollRegionRef = useRef<HTMLDivElement>(null);
-  const closeButtonRef = useRef<HTMLButtonElement>(null);
   const didOpenRef = useRef(false);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
   const scrollLockRef = useRef<ScrollLockState | null>(null);
@@ -68,7 +67,7 @@ const ReportPricingModal: FC<Props> = ({ archetype, open, onClose, onUnlock, ret
       restoreFocusRef.current =
         document.activeElement instanceof HTMLElement ? document.activeElement : null;
       didOpenRef.current = true;
-      closeButtonRef.current?.focus();
+      dialogRef.current?.focus({ preventScroll: true });
       return;
     }
 
@@ -199,9 +198,9 @@ const ReportPricingModal: FC<Props> = ({ archetype, open, onClose, onUnlock, ret
           aria-labelledby={open ? "report-pricing-modal-title" : undefined}
           aria-describedby={open ? "report-pricing-modal-copy" : undefined}
           className="report-pricing-modal__dialog"
+          tabIndex={-1}
         >
           <button
-            ref={closeButtonRef}
             type="button"
             className="report-pricing-modal__close"
             aria-label="Close pricing modal"
