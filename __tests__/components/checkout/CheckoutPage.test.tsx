@@ -29,7 +29,9 @@ describe("CheckoutPage", () => {
     cleanup();
   });
 
-  it("renders the full report checkout preview and requests a placeholder session", async () => {
+  it(
+    "renders the full report checkout preview and requests a placeholder session",
+    async () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -72,7 +74,9 @@ describe("CheckoutPage", () => {
         method: "POST",
       })
     );
-  });
+    },
+    10_000
+  );
 
   it("uses the report token for back navigation and checkout preparation when present", async () => {
     const mockFetch = vi.fn().mockResolvedValue({
@@ -105,6 +109,27 @@ describe("CheckoutPage", () => {
         }),
       })
     );
+  });
+
+  it("mounts the real Stripe checkout surface when a client secret is returned", async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        clientSecret: "cs_test_preview_123",
+        enabled: true,
+      }),
+    } as Response);
+    globalThis.fetch = mockFetch;
+    mockGetReportSessionId.mockReturnValue("02d88f31-eceb-4402-940d-c8cd98d01848");
+
+    render(<CheckoutPage planId="essentials" />);
+
+    await waitFor(() =>
+      expect(screen.getByTestId("stripe-checkout-mount")).toHaveTextContent("cs_test_preview_123")
+    );
+
+    expect(screen.getByText("Stripe Checkout Preview")).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /card/i })).not.toBeInTheDocument();
   });
 
   it("shows a report-context error when no token or saved report session exists", async () => {

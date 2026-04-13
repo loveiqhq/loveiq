@@ -11,6 +11,9 @@ import {
 const stripePromise = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
   ? loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY)
   : null;
+const isPreviewMode = process.env.NEXT_PUBLIC_STRIPE_CHECKOUT_PREVIEW_MODE === "true";
+const previewModeMessage =
+  "Preview mode is active. Stripe's real test checkout is mounted, but payment confirmation is disabled here.";
 
 const checkoutAppearance = {
   theme: "night" as const,
@@ -145,6 +148,11 @@ function StripeCheckoutForm() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setErrorMessage(null);
+
+    if (isPreviewMode) {
+      return;
+    }
+
     setIsSubmitting(true);
 
     const result = await checkout.confirm({ redirect: "always" });
@@ -187,7 +195,7 @@ function StripeCheckoutForm() {
       <button
         type="submit"
         className="checkout-submit"
-        disabled={!checkout.canConfirm || isSubmitting}
+        disabled={isPreviewMode || !checkout.canConfirm || isSubmitting}
       >
         <span className="checkout-submit__icon" aria-hidden="true">
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6">
@@ -197,6 +205,12 @@ function StripeCheckoutForm() {
         </span>
         {isSubmitting ? "Processing payment…" : "Complete Payment"}
       </button>
+
+      {isPreviewMode ? (
+        <p className="checkout-payment-stack__note" role="status">
+          {previewModeMessage}
+        </p>
+      ) : null}
 
       <TrustFooter />
     </form>

@@ -449,31 +449,35 @@ const CheckoutPage: FC<Props> = ({ planId, token = null }) => {
           </div>
         </section>
 
-        <div className="checkout-page__payment-label">Payment Method</div>
-
-        <div className="checkout-page__methods" role="tablist" aria-label="Payment methods">
-          {paymentMethodOptions.map((method) => (
-            <button
-              key={method.id}
-              type="button"
-              role="tab"
-              aria-selected={selectedMethodId === method.id}
-              className={[
-                "checkout-page__method",
-                selectedMethodId === method.id ? "checkout-page__method--active" : "",
-                method.id === "more" ? "checkout-page__method--compact" : "",
-              ]
-                .filter(Boolean)
-                .join(" ")}
-              onClick={() => setSelectedMethodId(method.id)}
-            >
-              <span className="checkout-page__method-icon">
-                <PaymentMethodIcon icon={method.icon} />
-              </span>
-              <span>{method.label}</span>
-            </button>
-          ))}
+        <div className="checkout-page__payment-label">
+          {sessionState.status === "ready" ? "Stripe Checkout Preview" : "Payment Method"}
         </div>
+
+        {sessionState.status === "ready" ? null : (
+          <div className="checkout-page__methods" role="tablist" aria-label="Payment methods">
+            {paymentMethodOptions.map((method) => (
+              <button
+                key={method.id}
+                type="button"
+                role="tab"
+                aria-selected={selectedMethodId === method.id}
+                className={[
+                  "checkout-page__method",
+                  selectedMethodId === method.id ? "checkout-page__method--active" : "",
+                  method.id === "more" ? "checkout-page__method--compact" : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                onClick={() => setSelectedMethodId(method.id)}
+              >
+                <span className="checkout-page__method-icon">
+                  <PaymentMethodIcon icon={method.icon} />
+                </span>
+                <span>{method.label}</span>
+              </button>
+            ))}
+          </div>
+        )}
 
         {sessionState.status === "ready" ? (
           <StripeCheckoutMount clientSecret={sessionState.clientSecret} />
