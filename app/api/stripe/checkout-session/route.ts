@@ -33,6 +33,11 @@ const RATE_LIMIT_CONFIG = {
   limit: 10,
   windowMs: 60_000,
 };
+const CHECKOUT_PAYMENT_METHOD_TYPES: Array<"amazon_pay" | "card" | "link"> = [
+  "card",
+  "amazon_pay",
+  "link",
+];
 
 function buildReturnUrl({
   origin,
@@ -105,6 +110,7 @@ export async function POST(request: Request) {
         reportToken: parsed.data.reportToken ?? "",
       },
       mode: "payment",
+      payment_method_types: CHECKOUT_PAYMENT_METHOD_TYPES,
       return_url: buildReturnUrl({
         origin: siteUrl,
         plan: parsed.data.plan,

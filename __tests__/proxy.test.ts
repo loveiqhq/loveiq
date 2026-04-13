@@ -165,6 +165,13 @@ describe("proxy middleware", () => {
     expect(csp).toContain("https://checkout.stripe.com");
   });
 
+  it("CSP includes Google Fonts for Stripe iframe typography", () => {
+    proxy(makeNextRequest());
+    const csp = mockResponseHeaders.get("Content-Security-Policy");
+    expect(csp).toContain("https://fonts.googleapis.com");
+    expect(csp).toContain("https://fonts.gstatic.com");
+  });
+
   it("CSP includes frame-ancestors 'none'", () => {
     proxy(makeNextRequest());
     const csp = mockResponseHeaders.get("Content-Security-Policy");

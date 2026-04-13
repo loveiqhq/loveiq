@@ -24,7 +24,11 @@ vi.mock("../../lib/checkout/stripeCheckout", () => ({
 import { POST } from "../../app/api/stripe/checkout-session/route";
 import { verifyCsrfToken } from "../../lib/csrf";
 import { checkRateLimit } from "../../lib/ratelimit";
-import { isStripeCheckoutEnabled } from "../../lib/checkout/stripeCheckout";
+import {
+  getStripePriceId,
+  getStripeServerClient,
+  isStripeCheckoutEnabled,
+} from "../../lib/checkout/stripeCheckout";
 
 function makeRequest(body: unknown) {
   return new Request("http://localhost/api/stripe/checkout-session", {
@@ -89,5 +93,41 @@ describe("POST /api/stripe/checkout-session", () => {
 
     expect(res.status).toBe(403);
     await expect(res.json()).resolves.toEqual({ error: "Invalid request." });
+  });
+
+  it("creates an elements session with the curated payment method shortlist", async () => {
+    const createSession = vi.fn().mockResolvedValue({
+      client_secret: "cs_test_preview_123",
+      id: "cs_test_session_123",
+    });
+
+    vi.mocked(isStripeCheckoutEnabled).mockReturnValue(true);
+    vi.mocked(getStripePriceId).mockReturnValue("price_test_full_report");
+    vi.mocked(getStripeServerClient).mockReturnValue({
+      checkout: {
+        sessions: {
+          create: createSession,
+        },
+      },
+    } as never);
+
+    const res = await POST(
+      makeRequest({
+        plan: "full_report",
+        reportSessionId: "02d88f31-eceb-4402-940d-c8cd98d01848",
+      })
+    );
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toEqual({
+      clientSecret: "cs_test_preview_123",
+      enabled: true,
+    });
+    expect(createSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payment_method_types: ["card", "amazon_pay", "link"],
+        ui_mode: "elements",
+      })
+    );
   });
 });

@@ -13,49 +13,111 @@ const stripePromise = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
   : null;
 const isPreviewMode = process.env.NEXT_PUBLIC_STRIPE_CHECKOUT_PREVIEW_MODE === "true";
 const previewModeMessage =
-  "Preview mode is active. Stripe's real test checkout is mounted, but payment confirmation is disabled here.";
+  "Preview mode is active. This is Stripe's real test checkout form, but payment confirmation stays disabled here.";
+
+const checkoutElementFonts = [
+  {
+    cssSrc:
+      "https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap",
+  },
+];
 
 const checkoutAppearance = {
   theme: "night" as const,
+  labels: "above" as const,
+  inputs: "spaced" as const,
   variables: {
     colorPrimary: "#fe6839",
-    colorBackground: "#140d1b",
-    colorText: "#f4effb",
+    colorBackground: "#120c19",
+    colorText: "#f7f3fb",
+    colorTextSecondary: "rgba(247,243,251,0.7)",
+    colorTextPlaceholder: "rgba(247,243,251,0.38)",
     colorDanger: "#fb7185",
-    borderRadius: "14px",
-    fontFamily: "var(--font-manrope), Manrope, sans-serif",
+    colorSuccess: "#34d399",
+    iconColor: "rgba(247,243,251,0.7)",
+    iconHoverColor: "#f7f3fb",
+    iconChevronDownColor: "rgba(247,243,251,0.66)",
+    tabIconColor: "rgba(247,243,251,0.64)",
+    tabIconSelectedColor: "#fff",
+    logoColor: "light",
+    tabLogoColor: "light",
+    tabLogoSelectedColor: "light",
+    borderRadius: "16px",
+    buttonBorderRadius: "999px",
+    focusBoxShadow: "0 0 0 2px rgba(254, 104, 57, 0.24)",
+    fontFamily:
+      '"Manrope", var(--font-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    fontSmooth: "always",
+    fontLineHeight: "1.55",
+    fontSizeBase: "16px",
+    fontSizeSm: "14px",
+    fontSizeXs: "13px",
+    fontWeightNormal: "500",
+    fontWeightMedium: "600",
+    fontWeightBold: "700",
+    spacingUnit: "4px",
+    gridRowSpacing: "18px",
+    gridColumnSpacing: "14px",
+    tabSpacing: "10px",
+    accordionItemSpacing: "12px",
   },
   rules: {
     ".Input": {
-      backgroundColor: "rgba(255,255,255,0.04)",
-      border: "1px solid rgba(255,255,255,0.1)",
+      backgroundColor: "rgba(255,255,255,0.045)",
+      border: "1px solid rgba(255,255,255,0.12)",
       boxShadow: "none",
-      color: "#f4effb",
+      color: "#f7f3fb",
     },
     ".Input:focus": {
-      border: "1px solid rgba(168, 85, 247, 0.9)",
-      boxShadow: "0 0 0 1px rgba(168, 85, 247, 0.38)",
+      border: "1px solid rgba(254, 104, 57, 0.88)",
+      boxShadow: "0 0 0 2px rgba(254, 104, 57, 0.2)",
+    },
+    ".Input--invalid": {
+      border: "1px solid rgba(251, 113, 133, 0.72)",
+      boxShadow: "0 0 0 2px rgba(251, 113, 133, 0.14)",
     },
     ".Label": {
-      color: "rgba(255,255,255,0.76)",
-      fontWeight: "500",
+      color: "rgba(247,243,251,0.8)",
+      fontWeight: "600",
+      letterSpacing: "0.01em",
+    },
+    ".Text": {
+      color: "rgba(247,243,251,0.68)",
     },
     ".Tab": {
-      backgroundColor: "rgba(255,255,255,0.04)",
-      border: "1px solid rgba(255,255,255,0.1)",
-      color: "#f4effb",
+      backgroundColor: "rgba(255,255,255,0.035)",
+      border: "1px solid rgba(255,255,255,0.11)",
+      boxShadow: "none",
+      color: "#f7f3fb",
     },
     ".Tab:hover": {
-      border: "1px solid rgba(168, 85, 247, 0.75)",
+      border: "1px solid rgba(254, 104, 57, 0.42)",
+      color: "#ffffff",
     },
     ".Tab--selected": {
-      backgroundColor: "rgba(168,85,247,0.12)",
-      border: "1px solid rgba(168, 85, 247, 0.95)",
-      boxShadow: "0 0 20px rgba(168, 85, 247, 0.18)",
+      backgroundColor: "rgba(254,104,57,0.12)",
+      border: "1px solid rgba(254, 104, 57, 0.88)",
+      boxShadow: "0 18px 36px rgba(254, 104, 57, 0.12)",
     },
     ".PickerItem": {
-      backgroundColor: "rgba(255,255,255,0.04)",
-      border: "1px solid rgba(255,255,255,0.1)",
+      backgroundColor: "rgba(255,255,255,0.035)",
+      border: "1px solid rgba(255,255,255,0.11)",
+    },
+    ".PickerItem:hover": {
+      border: "1px solid rgba(254, 104, 57, 0.38)",
+    },
+    ".Block": {
+      backgroundColor: "rgba(255,255,255,0.02)",
+      border: "1px solid rgba(255,255,255,0.08)",
+      boxShadow: "none",
+    },
+    ".CodeInput": {
+      backgroundColor: "rgba(255,255,255,0.045)",
+      border: "1px solid rgba(255,255,255,0.12)",
+      boxShadow: "none",
+    },
+    ".Error": {
+      color: "#fecdd3",
     },
   },
 };
@@ -69,7 +131,12 @@ function SecureHeader() {
           <rect x="4.75" y="8.25" width="10.5" height="7" rx="2" />
         </svg>
       </span>
-      <span>Secure Payment</span>
+      <span className="checkout-payment-panel__secure-copy">
+        <span className="checkout-payment-panel__secure-title">Secure Payment</span>
+        <span className="checkout-payment-panel__secure-subtitle">
+          Hosted by Stripe with encrypted checkout fields.
+        </span>
+      </span>
     </div>
   );
 }
@@ -177,10 +244,11 @@ function StripeCheckoutForm() {
                 type: "tabs",
                 defaultCollapsed: false,
               },
+              paymentMethodOrder: ["card", "amazon_pay", "link"],
               wallets: {
                 applePay: "auto",
                 googlePay: "auto",
-                link: "auto",
+                link: "never",
               },
             }}
           />
@@ -208,7 +276,8 @@ function StripeCheckoutForm() {
 
       {isPreviewMode ? (
         <p className="checkout-payment-stack__note" role="status">
-          {previewModeMessage}
+          <span className="checkout-payment-stack__note-badge">Test mode</span>
+          <span>{previewModeMessage}</span>
         </p>
       ) : null}
 
@@ -246,6 +315,8 @@ const StripeCheckoutMount: FC<Props> = ({ clientSecret }) => {
         clientSecret,
         elementsOptions: {
           appearance: checkoutAppearance,
+          fonts: checkoutElementFonts,
+          loader: "auto",
         },
       }}
     >
