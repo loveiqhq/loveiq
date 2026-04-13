@@ -3,6 +3,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 
+const mockRouterPush = vi.fn();
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: mockRouterPush }),
+  useSearchParams: () => new URLSearchParams(),
+}));
+
 const mockGetReportSessionId = vi.fn();
 vi.mock("@/components/survey/hooks/surveySession", () => ({
   getReportSessionId: () => mockGetReportSessionId(),
@@ -90,6 +97,7 @@ describe("ReportPage", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockRouterPush.mockReset();
     mockGetReportSessionId.mockReturnValue("02d88f31-eceb-4402-940d-c8cd98d01848");
   });
 
@@ -161,7 +169,7 @@ describe("ReportPage", () => {
   );
 
   it(
-    "removes the pricing modal and premium section gates after a modal unlock action",
+    "routes to checkout when a pricing modal CTA is clicked",
     async () => {
       const user = userEvent.setup();
       mockUseReportData.mockReturnValue(buildSuccessResponse());
@@ -170,8 +178,10 @@ describe("ReportPage", () => {
 
       await user.click(screen.getByRole("button", { name: /^unlock full report$/i }));
 
-      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-      expect(container.querySelector(".report-premium-overlay__cta")).not.toBeInTheDocument();
+      await waitFor(() =>
+        expect(mockRouterPush).toHaveBeenCalledWith("/checkout?plan=full_report")
+      );
+      expect(container.querySelector(".report-premium-overlay__cta")).toBeInTheDocument();
     },
     REPORT_MODAL_TEST_TIMEOUT_MS
   );

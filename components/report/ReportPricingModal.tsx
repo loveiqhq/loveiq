@@ -1,127 +1,18 @@
 "use client";
 
 import { useEffect, useRef, type FC, type MutableRefObject } from "react";
-
-type UnlockPlan = "essentials" | "full_report" | "all_reports";
+import { REPORT_PURCHASE_PLANS, type ReportPurchasePlanId } from "@/lib/checkout/reportPurchase";
 
 interface Props {
   archetype: string;
   open: boolean;
   onClose: () => void;
-  onUnlock: (plan: UnlockPlan) => void;
+  onUnlock: (plan: ReportPurchasePlanId) => void;
   returnFocusRef?: MutableRefObject<HTMLElement | null>;
-}
-
-interface PricingCard {
-  badge?: string;
-  badgeTone?: "discount" | "accent";
-  ctaLabel: string;
-  description: string;
-  featuredLabel?: string;
-  features: PricingFeature[];
-  plan: UnlockPlan;
-  price: string;
-  priceSuffix: string;
-  strikePrice?: string;
-  title: string;
-  tone?: "highlight";
-}
-
-interface PricingFeature {
-  icon?: "check" | "none";
-  label: string;
-  tone?: "default" | "emphasis" | "muted";
 }
 
 const FOCUSABLE_SELECTOR =
   'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
-
-const pricingCards: PricingCard[] = [
-  {
-    ctaLabel: "Unlock Essentials",
-    description: "Built for those with limited time",
-    features: [
-      {
-        label: "Includes the following chapter:",
-      },
-      {
-        icon: "none",
-        label: "Basic Archetype Info",
-        tone: "muted",
-      },
-      {
-        icon: "none",
-        label: "Core Desire Drivers",
-        tone: "muted",
-      },
-      {
-        icon: "none",
-        label: "Initial Growth Paths",
-        tone: "muted",
-      },
-      {
-        label: "Share report with 1 extra email",
-      },
-    ],
-    plan: "essentials",
-    price: "\u20AC14.99",
-    priceSuffix: "/one off",
-    title: "Essentials only",
-  },
-  {
-    badge: "50% OFF",
-    badgeTone: "discount",
-    ctaLabel: "Unlock full report",
-    description: "Perfect for individuals who want to dive deep",
-    featuredLabel: "Most popular",
-    features: [
-      {
-        label: "14-day money-back guarantee",
-        tone: "emphasis",
-      },
-      {
-        label: "Get full access to the report",
-      },
-      {
-        label: "All sections unlocked",
-      },
-      {
-        label: "18 analysed dimensions",
-      },
-      {
-        label: "Share report with up to 2 emails",
-      },
-    ],
-    plan: "full_report",
-    price: "\u20AC29.99",
-    priceSuffix: "/one off",
-    strikePrice: "\u20AC59.00 one off",
-    title: "Full report",
-    tone: "highlight",
-  },
-  {
-    badge: "32% OFF",
-    badgeTone: "accent",
-    ctaLabel: "Unlock all reports",
-    description: "Built for those wanting to explore all archetypes",
-    features: [
-      {
-        label: "All 14 archetypes unlocked",
-      },
-      {
-        label: "All benefits as full report",
-      },
-      {
-        label: "Perfect for comparison across patterns",
-      },
-    ],
-    plan: "all_reports",
-    price: "\u20AC129.99",
-    priceSuffix: "/one off",
-    strikePrice: "\u20AC190.00 one off",
-    title: "All reports",
-  },
-];
 
 function PricingMethodMark({
   logo,
@@ -253,7 +144,7 @@ const ReportPricingModal: FC<Props> = ({ archetype, open, onClose, onUnlock, ret
             </div>
 
             <div className="report-pricing-modal__plans" role="list" aria-label="Pricing options">
-              {pricingCards.map((card) => (
+              {REPORT_PURCHASE_PLANS.map((card) => (
                 <article
                   key={card.title}
                   role="listitem"
@@ -305,11 +196,13 @@ const ReportPricingModal: FC<Props> = ({ archetype, open, onClose, onUnlock, ret
                         .join(" ")}
                       aria-hidden={card.strikePrice ? undefined : "true"}
                     >
-                      {card.strikePrice ?? "\u00a0"}
+                      {card.strikePrice
+                        ? `${card.strikePrice} ${card.priceSuffix === "one-time" ? "one off" : card.priceSuffix}`
+                        : "\u00a0"}
                     </span>
                     <div className="report-pricing-card__price-row">
                       <strong>{card.price}</strong>
-                      <span>{card.priceSuffix}</span>
+                      <span>/{card.priceSuffix === "one-time" ? "one off" : card.priceSuffix}</span>
                     </div>
                   </div>
 

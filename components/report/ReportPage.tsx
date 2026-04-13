@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState, useSyncExternalStore, type FC } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { archetypeContent } from "@/data/report-archetypes";
 import { reportSections } from "@/data/report-general";
+import { buildReportCheckoutHref, type ReportPurchasePlanId } from "@/lib/checkout/reportPurchase";
 import ReportFooter from "./ReportFooter";
 import ReportNavigation from "./ReportNavigation";
 import ReportPricingModal from "./ReportPricingModal";
@@ -246,6 +247,7 @@ interface ReportExperienceProps {
   devParam: string | null;
   feedbacks: Record<string, "up" | "down" | null>;
   matchScore: number;
+  onBeginCheckout: (plan: ReportPurchasePlanId) => void;
   percentages: Record<string, number>;
   placeholderValues: {
     archetype: string;
@@ -269,6 +271,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   devParam,
   feedbacks,
   matchScore,
+  onBeginCheckout,
   percentages,
   placeholderValues,
   primaryArchetype,
@@ -283,7 +286,6 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   const mainContentRef = useRef<HTMLElement | null>(null);
   const [activeSectionId, setActiveSectionId] = useState(resolvedSections[0]?.id ?? "welcome");
   const [isPricingModalOpen, setIsPricingModalOpen] = useState(true);
-  const [isPremiumUnlocked, setIsPremiumUnlocked] = useState(false);
 
   useEffect(() => {
     const ACTIVATION_LINE = 90;
@@ -480,8 +482,8 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                       archetypeHtml={archetypeHtml}
                       generalHtml={generalHtml}
                       isPremium={section.isPremium}
-                      isUnlocked={isPremiumUnlocked}
-                      onUnlock={() => setIsPremiumUnlocked(true)}
+                      isUnlocked={false}
+                      onUnlock={() => onBeginCheckout("full_report")}
                       sectionTitle={title}
                     />
                   </ReportSection>
@@ -500,8 +502,8 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     archetypeHtml={archetypeHtml}
                     generalHtml={generalHtml}
                     isPremium={section.isPremium}
-                    isUnlocked={isPremiumUnlocked}
-                    onUnlock={() => setIsPremiumUnlocked(true)}
+                    isUnlocked={false}
+                    onUnlock={() => onBeginCheckout("full_report")}
                     sectionId={section.id}
                     sectionTitle={title}
                   />
@@ -517,10 +519,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
         archetype={primaryArchetype}
         open={isPricingModalOpen}
         onClose={() => setIsPricingModalOpen(false)}
-        onUnlock={() => {
-          setIsPremiumUnlocked(true);
-          setIsPricingModalOpen(false);
-        }}
+        onUnlock={onBeginCheckout}
         returnFocusRef={mainContentRef}
       />
     </main>
@@ -528,6 +527,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
 };
 
 const ReportPage: FC<ReportPageProps> = ({ token }) => {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const storedSessionId = useSyncExternalStore(subscribeNoop, getReportSessionId, () => null);
   // NODE_ENV is statically replaced at build time by Next.js/webpack — safe in client components
@@ -539,6 +539,9 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
 
   const { data, status, error } = useReportData({ token, sessionId: token ? null : sessionId });
   const { feedbacks, submitted, submitFeedback } = useSectionFeedback(sessionId);
+  const beginCheckout = (plan: ReportPurchasePlanId) => {
+    router.push(buildReportCheckoutHref({ plan, token }));
+  };
 
   if (status === "loading") {
     return (
@@ -615,6 +618,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       devParam={devParam}
       feedbacks={feedbacks}
       matchScore={matchScore}
+      onBeginCheckout={beginCheckout}
       percentages={percentages}
       placeholderValues={placeholderValues}
       primaryArchetype={primaryArchetype}
