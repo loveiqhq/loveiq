@@ -1,8 +1,12 @@
 // @vitest-environment jsdom
 import userEvent from "@testing-library/user-event";
 import { render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import PracticeTendenciesSection from "@/components/report/sections/PracticeTendenciesSection";
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("PracticeTendenciesSection", () => {
   it("renders the figma-style practice panel with the new structured intro and groups", () => {
@@ -68,6 +72,67 @@ describe("PracticeTendenciesSection", () => {
     await waitFor(() => {
       expect(
         screen.queryByText(/chemistry, freedom, and playful connection/i)
+      ).not.toBeInTheDocument();
+    });
+  }, 15000);
+
+  it("renders desktop explanations in a floating layer instead of inside the table row", async () => {
+    const user = userEvent.setup();
+
+    const matchMediaMock = vi.fn().mockImplementation((query: string) => ({
+      matches: query === "(min-width: 1025px)",
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+    vi.stubGlobal("matchMedia", matchMediaMock);
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      value: matchMediaMock,
+      writable: true,
+    });
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 1440,
+      writable: true,
+    });
+
+    const { container } = render(
+      <PracticeTendenciesSection
+        archetype="Spark Seeker"
+        archetypeHtml={null}
+        generalHtml=""
+        isPremium={false}
+        sectionTitle="Typical Sexual Fantasy & Practice Tendencies"
+      />
+    );
+
+    const infoButton = screen.getAllByRole("button", {
+      name: /What Romantic lovemaking tends to organize/i,
+    })[0];
+    const row = infoButton.closest(".report-practice-table__row");
+
+    await user.click(infoButton);
+
+    await waitFor(() => {
+      expect(
+        document.body.querySelector(".report-practice-table__popover--floating")
+      ).toBeInTheDocument();
+    });
+
+    expect(row?.querySelector(".report-practice-table__popover")).not.toBeInTheDocument();
+    expect(
+      container.querySelector(".report-practice-table__popover--inline")
+    ).not.toBeInTheDocument();
+
+    await user.click(document.body);
+
+    await waitFor(() => {
+      expect(
+        document.body.querySelector(".report-practice-table__popover--floating")
       ).not.toBeInTheDocument();
     });
   }, 15000);

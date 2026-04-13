@@ -5192,11 +5192,6 @@ h3,
 }
 
 .report-practice-table__popover {
-  position: absolute;
-  top: calc(100% + 0.75rem);
-  left: 0;
-  z-index: 4;
-  width: min(22rem, calc(100vw - 6rem));
   padding: 0.9rem 1rem;
   border: 1px solid rgba(168, 85, 247, 0.25);
   border-radius: 18px;
@@ -5205,6 +5200,17 @@ h3,
     0 28px 60px -24px rgba(0, 0, 0, 0.75),
     0 0 0 1px rgba(255, 255, 255, 0.04) inset;
   backdrop-filter: blur(18px);
+}
+
+.report-practice-table__popover--floating {
+  position: fixed;
+  z-index: 48;
+  width: min(22rem, calc(100vw - 3rem));
+  pointer-events: none;
+}
+
+.report-practice-table__popover--inline {
+  margin-top: 0.75rem;
 }
 
 .report-practice-table__popover-title {
@@ -5358,10 +5364,8 @@ h3,
     width: 4.6rem;
   }
 
-  .report-practice-table__popover {
-    position: static;
+  .report-practice-table__popover--inline {
     width: auto;
-    margin-top: 0.75rem;
   }
 }
 

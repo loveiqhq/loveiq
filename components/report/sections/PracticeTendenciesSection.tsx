@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type FC } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type FC } from "react";
 import PremiumOverlay from "./PremiumOverlay";
 import {
   reportPracticeTendencies,
@@ -20,6 +20,34 @@ interface Props {
 }
 
 type MetricTone = "fantasy" | "pleasure";
+type PracticePopoverMeta = {
+  anchorEl: HTMLElement | null;
+  description: string;
+  practice: string;
+};
+
+type DesktopPopoverState = {
+  anchorEl: HTMLElement;
+  description: string;
+  practice: string;
+  rowId: string;
+};
+
+const DESKTOP_POPOVER_MEDIA_QUERY = "(min-width: 1025px)";
+const DESKTOP_POPOVER_EDGE_PADDING = 24;
+const DESKTOP_POPOVER_GAP = 18;
+
+function resolveDesktopPopoverMode() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  if (typeof window.matchMedia !== "function") {
+    return window.innerWidth >= 1025;
+  }
+
+  return window.matchMedia(DESKTOP_POPOVER_MEDIA_QUERY).matches;
+}
 
 function slugifyPracticeKey(value: string) {
   return value
@@ -30,6 +58,29 @@ function slugifyPracticeKey(value: string) {
 
 function toPercent(value: number) {
   return Math.min(10, Math.max(1, value)) * 10;
+}
+
+function buildDesktopPopoverPosition(anchorRect: DOMRect, tooltipRect: DOMRect): CSSProperties {
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+
+  let left = anchorRect.right + DESKTOP_POPOVER_GAP;
+  if (left + tooltipRect.width > viewportWidth - DESKTOP_POPOVER_EDGE_PADDING) {
+    left = anchorRect.left - tooltipRect.width - DESKTOP_POPOVER_GAP;
+  }
+
+  if (left < DESKTOP_POPOVER_EDGE_PADDING) {
+    left = DESKTOP_POPOVER_EDGE_PADDING;
+  }
+
+  let top = anchorRect.top + anchorRect.height / 2 - tooltipRect.height / 2;
+  const maxTop = viewportHeight - tooltipRect.height - DESKTOP_POPOVER_EDGE_PADDING;
+  top = Math.min(Math.max(DESKTOP_POPOVER_EDGE_PADDING, top), maxTop);
+
+  return {
+    left: `${Math.round(left)}px`,
+    top: `${Math.round(top)}px`,
+  };
 }
 
 const InfoGlyph: FC<{ className?: string }> = ({ className }) => (
@@ -73,36 +124,47 @@ const PracticeMetricCell: FC<{
 const PracticeRow: FC<{
   group: ReportPracticeTendencyGroup;
   interactive: boolean;
-  onOpen: (rowId: string) => void;
+  onOpen: (rowId: string, meta: PracticePopoverMeta) => void;
   onClose: (rowId: string) => void;
   openRowId: string | null;
   row: ReportPracticeTendencyRow;
-}> = ({ group, interactive, onOpen, onClose, openRowId, row }) => {
+  useDesktopPopover: boolean;
+}> = ({ group, interactive, onOpen, onClose, openRowId, row, useDesktopPopover }) => {
+  const infoButtonRef = useRef<HTMLButtonElement | null>(null);
   const rowId = `${slugifyPracticeKey(group.title)}-${slugifyPracticeKey(row.practice)}`;
   const popoverId = `report-practice-popover-${rowId}`;
   const isOpen = interactive && !!row.description && openRowId === rowId;
+  const handleOpenFromAnchor = (anchorEl: HTMLButtonElement) => {
+    if (!row.description) {
+      return;
+    }
+
+    onOpen(rowId, {
+      anchorEl,
+      description: row.description,
+      practice: row.practice,
+    });
+  };
 
   return (
     <div className="report-practice-table__row" role="row">
       <div className="report-practice-table__practice" role="cell">
-        <div
-          className="report-practice-table__practice-stack"
-          data-practice-popover-root
-          onMouseEnter={interactive && row.description ? () => onOpen(rowId) : undefined}
-          onMouseLeave={interactive && row.description ? () => onClose(rowId) : undefined}
-        >
+        <div className="report-practice-table__practice-stack" data-practice-popover-root>
           <span className="report-practice-table__practice-label">{row.practice}</span>
 
           {interactive && row.description ? (
             <button
+              ref={infoButtonRef}
               type="button"
               className="report-practice-table__info-button"
               aria-label={`What ${row.practice} tends to organize`}
               aria-controls={popoverId}
               aria-expanded={isOpen}
               onBlur={() => onClose(rowId)}
-              onClick={() => onOpen(rowId)}
-              onFocus={() => onOpen(rowId)}
+              onMouseEnter={(event) => handleOpenFromAnchor(event.currentTarget)}
+              onMouseLeave={() => onClose(rowId)}
+              onClick={(event) => handleOpenFromAnchor(event.currentTarget)}
+              onFocus={(event) => handleOpenFromAnchor(event.currentTarget)}
             >
               <InfoGlyph className="report-practice-table__info-glyph" />
             </button>
@@ -110,8 +172,12 @@ const PracticeRow: FC<{
             <InfoGlyph className="report-practice-table__info-glyph report-practice-table__info-glyph--muted" />
           )}
 
-          {interactive && row.description && isOpen ? (
-            <div id={popoverId} role="tooltip" className="report-practice-table__popover">
+          {interactive && row.description && isOpen && !useDesktopPopover ? (
+            <div
+              id={popoverId}
+              role="tooltip"
+              className="report-practice-table__popover report-practice-table__popover--inline"
+            >
               <p className="report-practice-table__popover-title">{row.practice}</p>
               <p className="report-practice-table__popover-copy">{row.description}</p>
             </div>
@@ -128,10 +194,11 @@ const PracticeRow: FC<{
 const PracticeGroupTable: FC<{
   group: ReportPracticeTendencyGroup;
   interactive: boolean;
-  onOpen: (rowId: string) => void;
+  onOpen: (rowId: string, meta: PracticePopoverMeta) => void;
   onClose: (rowId: string) => void;
   openRowId: string | null;
-}> = ({ group, interactive, onOpen, onClose, openRowId }) => (
+  useDesktopPopover: boolean;
+}> = ({ group, interactive, onOpen, onClose, openRowId, useDesktopPopover }) => (
   <section
     className="report-practice-group"
     aria-labelledby={`practice-group-${slugifyPracticeKey(group.title)}`}
@@ -172,6 +239,7 @@ const PracticeGroupTable: FC<{
               onClose={onClose}
               openRowId={openRowId}
               row={row}
+              useDesktopPopover={useDesktopPopover}
             />
           ))}
         </div>
@@ -186,10 +254,86 @@ const PracticePanel: FC<{
   interactive: boolean;
 }> = ({ archetype, content, interactive }) => {
   const rootRef = useRef<HTMLDivElement>(null);
+  const desktopPopoverRef = useRef<HTMLDivElement | null>(null);
   const [openRowId, setOpenRowId] = useState<string | null>(null);
+  const [desktopPopover, setDesktopPopover] = useState<DesktopPopoverState | null>(null);
+  const [desktopPopoverPosition, setDesktopPopoverPosition] = useState<CSSProperties | null>(null);
+  const [useDesktopPopover, setUseDesktopPopover] = useState(resolveDesktopPopoverMode);
 
   useEffect(() => {
-    if (!interactive || !openRowId) return;
+    if (!interactive || typeof window === "undefined") {
+      return;
+    }
+
+    const syncDesktopPopoverMode = () => {
+      const nextDesktopPopoverMode = resolveDesktopPopoverMode();
+      setUseDesktopPopover(nextDesktopPopoverMode);
+
+      if (!nextDesktopPopoverMode) {
+        setDesktopPopover(null);
+        setDesktopPopoverPosition(null);
+      }
+    };
+    syncDesktopPopoverMode();
+
+    if (typeof window.matchMedia === "function") {
+      const mediaQuery = window.matchMedia(DESKTOP_POPOVER_MEDIA_QUERY);
+
+      if (typeof mediaQuery.addEventListener === "function") {
+        mediaQuery.addEventListener("change", syncDesktopPopoverMode);
+        return () => mediaQuery.removeEventListener("change", syncDesktopPopoverMode);
+      }
+
+      mediaQuery.addListener(syncDesktopPopoverMode);
+      return () => mediaQuery.removeListener(syncDesktopPopoverMode);
+    }
+
+    window.addEventListener("resize", syncDesktopPopoverMode);
+    return () => window.removeEventListener("resize", syncDesktopPopoverMode);
+  }, [interactive]);
+
+  useLayoutEffect(() => {
+    if (!interactive || !useDesktopPopover || !desktopPopover) {
+      return;
+    }
+
+    let rafId = 0;
+
+    const updateDesktopPopoverPosition = () => {
+      const tooltipEl = desktopPopoverRef.current;
+      const anchorEl = desktopPopover.anchorEl;
+
+      if (!tooltipEl || !anchorEl.isConnected) {
+        setDesktopPopover(null);
+        setDesktopPopoverPosition(null);
+        return;
+      }
+
+      const anchorRect = anchorEl.getBoundingClientRect();
+      const tooltipRect = tooltipEl.getBoundingClientRect();
+      setDesktopPopoverPosition(buildDesktopPopoverPosition(anchorRect, tooltipRect));
+    };
+
+    const scheduleUpdate = () => {
+      cancelAnimationFrame(rafId);
+      rafId = window.requestAnimationFrame(updateDesktopPopoverPosition);
+    };
+
+    scheduleUpdate();
+    window.addEventListener("resize", scheduleUpdate);
+    window.addEventListener("scroll", scheduleUpdate, true);
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      window.removeEventListener("resize", scheduleUpdate);
+      window.removeEventListener("scroll", scheduleUpdate, true);
+    };
+  }, [desktopPopover, interactive, useDesktopPopover]);
+
+  useEffect(() => {
+    if (!interactive || !openRowId) {
+      return;
+    }
 
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target;
@@ -207,11 +351,13 @@ const PracticePanel: FC<{
       }
 
       setOpenRowId(null);
+      setDesktopPopover(null);
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setOpenRowId(null);
+        setDesktopPopover(null);
       }
     };
 
@@ -224,15 +370,46 @@ const PracticePanel: FC<{
     };
   }, [interactive, openRowId]);
 
-  const handleOpen = (rowId: string) => {
+  const handleOpen = (rowId: string, meta: PracticePopoverMeta) => {
     if (!interactive) return;
+
+    const shouldUseDesktopPopover = resolveDesktopPopoverMode();
+    setUseDesktopPopover(shouldUseDesktopPopover);
     setOpenRowId(rowId);
+
+    if (shouldUseDesktopPopover && meta.anchorEl) {
+      setDesktopPopover({
+        anchorEl: meta.anchorEl,
+        description: meta.description,
+        practice: meta.practice,
+        rowId,
+      });
+      return;
+    }
+
+    setDesktopPopover(null);
   };
 
   const handleClose = (rowId: string) => {
     if (!interactive) return;
     setOpenRowId((current) => (current === rowId ? null : current));
+    setDesktopPopover((current) => (current?.rowId === rowId ? null : current));
   };
+
+  const desktopPopoverNode =
+    interactive && useDesktopPopover && desktopPopover ? (
+      <div
+        id={`report-practice-popover-${desktopPopover.rowId}`}
+        ref={desktopPopoverRef}
+        role="tooltip"
+        data-practice-tooltip-root
+        className="report-practice-table__popover report-practice-table__popover--floating"
+        style={desktopPopoverPosition ?? { left: "24px", opacity: 0, top: "24px" }}
+      >
+        <p className="report-practice-table__popover-title">{desktopPopover.practice}</p>
+        <p className="report-practice-table__popover-copy">{desktopPopover.description}</p>
+      </div>
+    ) : null;
 
   return (
     <div ref={rootRef} className="report-practice-panel">
@@ -264,9 +441,12 @@ const PracticePanel: FC<{
             onOpen={handleOpen}
             onClose={handleClose}
             openRowId={openRowId}
+            useDesktopPopover={useDesktopPopover}
           />
         ))}
       </div>
+
+      {desktopPopoverNode}
     </div>
   );
 };
