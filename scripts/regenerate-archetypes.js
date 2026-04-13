@@ -33,7 +33,7 @@ const BLOCK_FILE_MAP = {
   initiation: "22 - Initiation Style.docx",
   turn_ons: "23 - Arousal Accelerators (Turn-ons).docx",
   turn_offs: "24 - Arousal Brakes (Turn-offs).docx",
-  practices: "27 - Typical Sexual Fantasy & Practice Tendencies.docx",
+  practices: "27 - Typical Sexual Fantasy & Practice Tendencies (1).docx",
   libido: "28 - Libido Challenges in Relationships.docx",
   challenges_enjoy: "29 - Challenges to Enjoy Sex.docx",
   challenges_sustain: "30 - Challenges to Sustain Partner.docx",

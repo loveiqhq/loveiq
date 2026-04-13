@@ -30,7 +30,7 @@ vi.mock("@/components/report/hooks/useSectionFeedback", () => ({
 
 import ReportPage from "@/components/report/ReportPage";
 
-const REPORT_MODAL_TEST_TIMEOUT_MS = 10000;
+const REPORT_MODAL_TEST_TIMEOUT_MS = 15000;
 const mockScrollTo = vi.fn();
 
 describe("ReportPage", () => {

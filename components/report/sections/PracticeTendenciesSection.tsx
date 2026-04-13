@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, type FC } from "react";
+import { useEffect, useRef, useState, type FC } from "react";
 import PremiumOverlay from "./PremiumOverlay";
 import {
-  extractPracticeSectionIntroHtml,
-  parsePracticeTendencyGroups,
+  reportPracticeTendencies,
+  type ReportPracticeTendencyContent,
   type ReportPracticeTendencyGroup,
-} from "../reportContent";
+  type ReportPracticeTendencyRow,
+} from "@/data/report-practice-tendencies";
 
 interface Props {
   archetype: string;
@@ -18,86 +19,260 @@ interface Props {
   sectionTitle: string;
 }
 
-const PRACTICE_SCALE_COPY =
-  "We use a 10-point scale to present these metrics. 10 represents the highest fantasy pull and actual pleasure, and 1 represents the lowest.";
+type MetricTone = "fantasy" | "pleasure";
 
-function toMeterWidth(value: number) {
-  return `${Math.min(10, Math.max(1, value)) * 10}%`;
+function slugifyPracticeKey(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 }
 
-const PracticeMetric: FC<{
-  label: string;
-  tone: "fantasy" | "pleasure";
-  value: number;
-}> = ({ label, tone, value }) => (
-  <div className={`report-practice-card__metric report-practice-card__metric--${tone}`} role="cell">
-    <span className="report-practice-card__metric-mobile-label">{label}</span>
-    <div className="report-practice-card__metric-content">
-      <span className="report-practice-card__metric-value">{value}</span>
-      <span className="report-practice-card__meter" aria-hidden="true">
-        <span className="report-practice-card__meter-fill" style={{ width: toMeterWidth(value) }} />
-      </span>
-    </div>
-  </div>
+function toPercent(value: number) {
+  return Math.min(10, Math.max(1, value)) * 10;
+}
+
+const InfoGlyph: FC<{ className?: string }> = ({ className }) => (
+  <span className={className} aria-hidden="true">
+    <svg viewBox="0 0 12 12" fill="none">
+      <circle cx="6" cy="6" r="5" stroke="currentColor" strokeWidth="1" />
+      <path
+        d="M6 5v2.2M6 3.55h.01"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1"
+      />
+    </svg>
+  </span>
 );
 
-const PracticeCard: FC<{
+const PracticeMetricCell: FC<{
+  label: string;
+  tone: MetricTone;
+  value: number;
+}> = ({ label, tone, value }) => {
+  const percent = toPercent(value);
+
+  return (
+    <div
+      className={`report-practice-table__metric report-practice-table__metric--${tone}`}
+      role="cell"
+    >
+      <span className="report-practice-table__metric-mobile-label">{label}</span>
+      <div className="report-practice-table__metric-content">
+        <span className="report-practice-table__metric-value">{percent}%</span>
+        <span className="report-practice-table__metric-bar" aria-hidden="true">
+          <span style={{ width: `${percent}%` }} />
+        </span>
+      </div>
+    </div>
+  );
+};
+
+const PracticeRow: FC<{
   group: ReportPracticeTendencyGroup;
-}> = ({ group }) => (
-  <article className="report-practice-card">
-    <span
-      className="report-practice-card__glow report-practice-card__glow--tr"
-      aria-hidden="true"
-    />
+  interactive: boolean;
+  onOpen: (rowId: string) => void;
+  onClose: (rowId: string) => void;
+  openRowId: string | null;
+  row: ReportPracticeTendencyRow;
+}> = ({ group, interactive, onOpen, onClose, openRowId, row }) => {
+  const rowId = `${slugifyPracticeKey(group.title)}-${slugifyPracticeKey(row.practice)}`;
+  const popoverId = `report-practice-popover-${rowId}`;
+  const isOpen = interactive && !!row.description && openRowId === rowId;
 
-    <div className="report-practice-card__header">
-      <p className="report-practice-card__eyebrow">
-        Typical Sexual Fantasy &amp; Practice Tendencies
-      </p>
-      <h3 className="report-practice-card__title">{group.title}</h3>
-      <p className="report-practice-card__copy">{PRACTICE_SCALE_COPY}</p>
-    </div>
+  return (
+    <div className="report-practice-table__row" role="row">
+      <div className="report-practice-table__practice" role="cell">
+        <div
+          className="report-practice-table__practice-stack"
+          data-practice-popover-root
+          onMouseEnter={interactive && row.description ? () => onOpen(rowId) : undefined}
+          onMouseLeave={interactive && row.description ? () => onClose(rowId) : undefined}
+        >
+          <span className="report-practice-table__practice-label">{row.practice}</span>
 
-    <div className="report-practice-card__scale">
-      <div className="report-practice-card__scale-labels">
-        <span>Lowest intensity</span>
-        <span>Highest intensity</span>
-      </div>
-      <div className="report-practice-card__scale-bar" aria-hidden="true" />
-      <div className="report-practice-card__scale-values">
-        <span>1</span>
-        <span>10</span>
-      </div>
-    </div>
+          {interactive && row.description ? (
+            <button
+              type="button"
+              className="report-practice-table__info-button"
+              aria-label={`What ${row.practice} tends to organize`}
+              aria-controls={popoverId}
+              aria-expanded={isOpen}
+              onBlur={() => onClose(rowId)}
+              onClick={() => onOpen(rowId)}
+              onFocus={() => onOpen(rowId)}
+            >
+              <InfoGlyph className="report-practice-table__info-glyph" />
+            </button>
+          ) : (
+            <InfoGlyph className="report-practice-table__info-glyph report-practice-table__info-glyph--muted" />
+          )}
 
-    <div className="report-practice-card__table" role="table" aria-label={`${group.title} metrics`}>
-      <div className="report-practice-card__table-header" role="row">
-        <span role="columnheader">Practice</span>
-        <span role="columnheader">Fantasy Pull</span>
-        <span role="columnheader">Actual Pleasure</span>
-      </div>
-
-      <div className="report-practice-card__table-body" role="rowgroup">
-        {group.rows.map((row) => (
-          <div className="report-practice-card__row" role="row" key={row.practice}>
-            <div className="report-practice-card__practice" role="cell">
-              <span className="report-practice-card__practice-dot" aria-hidden="true" />
-              <span className="report-practice-card__practice-label">{row.practice}</span>
+          {interactive && row.description && isOpen ? (
+            <div id={popoverId} role="tooltip" className="report-practice-table__popover">
+              <p className="report-practice-table__popover-title">{row.practice}</p>
+              <p className="report-practice-table__popover-copy">{row.description}</p>
             </div>
+          ) : null}
+        </div>
+      </div>
 
-            <PracticeMetric label="Fantasy Pull" tone="fantasy" value={row.fantasyPull} />
-            <PracticeMetric label="Actual Pleasure" tone="pleasure" value={row.actualPleasure} />
+      <PracticeMetricCell label="Fantasy Pull" tone="fantasy" value={row.fantasyPull} />
+      <PracticeMetricCell label="Actual Pleasure" tone="pleasure" value={row.actualPleasure} />
+    </div>
+  );
+};
+
+const PracticeGroupTable: FC<{
+  group: ReportPracticeTendencyGroup;
+  interactive: boolean;
+  onOpen: (rowId: string) => void;
+  onClose: (rowId: string) => void;
+  openRowId: string | null;
+}> = ({ group, interactive, onOpen, onClose, openRowId }) => (
+  <section
+    className="report-practice-group"
+    aria-labelledby={`practice-group-${slugifyPracticeKey(group.title)}`}
+  >
+    <h3
+      id={`practice-group-${slugifyPracticeKey(group.title)}`}
+      className="report-practice-group__title"
+    >
+      {group.title}
+    </h3>
+
+    <div className="report-practice-group__table-shell">
+      <div className="report-practice-table" role="table" aria-label={`${group.title} tendencies`}>
+        <div className="report-practice-table__header" role="row">
+          <div
+            className="report-practice-table__header-cell report-practice-table__header-cell--name"
+            role="columnheader"
+          >
+            Fantasy &amp; Practice
           </div>
+          <div className="report-practice-table__header-cell" role="columnheader">
+            <span>Fantasy Pull</span>
+            <InfoGlyph className="report-practice-table__header-glyph" />
+          </div>
+          <div className="report-practice-table__header-cell" role="columnheader">
+            <span>Actual Pleasure</span>
+            <InfoGlyph className="report-practice-table__header-glyph" />
+          </div>
+        </div>
+
+        <div className="report-practice-table__body" role="rowgroup">
+          {group.rows.map((row) => (
+            <PracticeRow
+              key={`${group.title}-${row.practice}`}
+              group={group}
+              interactive={interactive}
+              onOpen={onOpen}
+              onClose={onClose}
+              openRowId={openRowId}
+              row={row}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  </section>
+);
+
+const PracticePanel: FC<{
+  archetype: string;
+  content: ReportPracticeTendencyContent;
+  interactive: boolean;
+}> = ({ archetype, content, interactive }) => {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [openRowId, setOpenRowId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!interactive || !openRowId) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+
+      const root = rootRef.current;
+      if (!root) return;
+
+      const popoverRoot = (
+        target instanceof Element ? target.closest("[data-practice-popover-root]") : null
+      ) as Element | null;
+
+      if (popoverRoot && root.contains(popoverRoot)) {
+        return;
+      }
+
+      setOpenRowId(null);
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpenRowId(null);
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [interactive, openRowId]);
+
+  const handleOpen = (rowId: string) => {
+    if (!interactive) return;
+    setOpenRowId(rowId);
+  };
+
+  const handleClose = (rowId: string) => {
+    if (!interactive) return;
+    setOpenRowId((current) => (current === rowId ? null : current));
+  };
+
+  return (
+    <div ref={rootRef} className="report-practice-panel">
+      <span className="report-practice-panel__glow" aria-hidden="true" />
+
+      <div className="report-practice-panel__header">
+        <h2 className="report-practice-panel__title">
+          <span>Typical Sexual Fantasy &amp; Practice Tendencies of the </span>
+          <span className="report-practice-panel__title-accent">{archetype}</span>
+        </h2>
+
+        <div className="report-practice-panel__intro">
+          {content.introBlocks.map((block, index) => (
+            <div
+              key={`${archetype}-practice-intro-${index}`}
+              className="report-practice-panel__intro-block"
+              dangerouslySetInnerHTML={{ __html: block }}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div className="report-practice-panel__groups">
+        {content.groups.map((group) => (
+          <PracticeGroupTable
+            key={group.title}
+            group={group}
+            interactive={interactive}
+            onOpen={handleOpen}
+            onClose={handleClose}
+            openRowId={openRowId}
+          />
         ))}
       </div>
     </div>
-  </article>
-);
+  );
+};
 
 const PracticeTendenciesSection: FC<Props> = ({
   archetype,
-  archetypeHtml,
-  generalHtml,
   isPremium,
   isUnlocked = false,
   onUnlock,
@@ -105,8 +280,7 @@ const PracticeTendenciesSection: FC<Props> = ({
 }) => {
   const [locallyUnlocked, setLocallyUnlocked] = useState(false);
   const unlocked = isUnlocked || locallyUnlocked;
-  const introHtml = extractPracticeSectionIntroHtml(generalHtml);
-  const groups = parsePracticeTendencyGroups(archetypeHtml);
+  const content = reportPracticeTendencies[archetype];
 
   function handleUnlock() {
     if (onUnlock) {
@@ -117,40 +291,34 @@ const PracticeTendenciesSection: FC<Props> = ({
     setLocallyUnlocked(true);
   }
 
+  if (!content) {
+    return (
+      <p className="report-practice-empty">
+        Practice tendencies for this archetype are being prepared.
+      </p>
+    );
+  }
+
   return (
     <div className="report-flow report-flow--gap-xl">
-      {introHtml ? (
-        <div className="report-prose" dangerouslySetInnerHTML={{ __html: introHtml }} />
-      ) : null}
-
-      {groups.length > 0 ? (
-        <div className="report-themed-block">
-          {isPremium && !unlocked ? (
-            <div className="report-themed-block__preview report-themed-block__preview--practice">
-              <div className="report-practice-grid report-themed-block__blurred" aria-hidden="true">
-                {groups.map((group) => (
-                  <PracticeCard group={group} key={group.title} />
-                ))}
-              </div>
-              <PremiumOverlay
-                archetype={archetype}
-                sectionTitle={sectionTitle}
-                onUnlock={handleUnlock}
-              />
+      <div className="report-themed-block">
+        {isPremium && !unlocked ? (
+          <div className="report-themed-block__preview report-themed-block__preview--practice">
+            <div className="report-practice-layout report-themed-block__blurred" aria-hidden="true">
+              <PracticePanel archetype={archetype} content={content} interactive={false} />
             </div>
-          ) : (
-            <div className="report-practice-grid">
-              {groups.map((group) => (
-                <PracticeCard group={group} key={group.title} />
-              ))}
-            </div>
-          )}
-        </div>
-      ) : (
-        <p className="report-practice-empty">
-          Practice tendencies for this archetype are being prepared.
-        </p>
-      )}
+            <PremiumOverlay
+              archetype={archetype}
+              sectionTitle={sectionTitle}
+              onUnlock={handleUnlock}
+            />
+          </div>
+        ) : (
+          <div className="report-practice-layout">
+            <PracticePanel archetype={archetype} content={content} interactive={true} />
+          </div>
+        )}
+      </div>
     </div>
   );
 };
