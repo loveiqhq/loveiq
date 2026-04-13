@@ -156,6 +156,15 @@ describe("proxy middleware", () => {
     expect(csp).toContain("www.gstatic.com/recaptcha/");
   });
 
+  it("CSP includes Stripe domains for embedded checkout", () => {
+    proxy(makeNextRequest());
+    const csp = mockResponseHeaders.get("Content-Security-Policy");
+    expect(csp).toContain("https://js.stripe.com");
+    expect(csp).toContain("https://api.stripe.com");
+    expect(csp).toContain("https://hooks.stripe.com");
+    expect(csp).toContain("https://checkout.stripe.com");
+  });
+
   it("CSP includes frame-ancestors 'none'", () => {
     proxy(makeNextRequest());
     const csp = mockResponseHeaders.get("Content-Security-Policy");
