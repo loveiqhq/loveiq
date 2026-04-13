@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  useState,
   useEffect,
   useRef,
   type FC,
@@ -59,6 +60,7 @@ const ReportPricingModal: FC<Props> = ({ archetype, open, onClose, onUnlock, ret
   const restoreFocusRef = useRef<HTMLElement | null>(null);
   const scrollLockRef = useRef<ScrollLockState | null>(null);
   const touchStartYRef = useRef<number | null>(null);
+  const [focusMode, setFocusMode] = useState<"keyboard" | "pointer">("pointer");
 
   const subtitle = `Unlock your complete ${archetype} report \u2014 comprehensive coverage of your probabilities, sexual stage, attachment style, desire drivers, and growth paths.`;
 
@@ -67,7 +69,9 @@ const ReportPricingModal: FC<Props> = ({ archetype, open, onClose, onUnlock, ret
       restoreFocusRef.current =
         document.activeElement instanceof HTMLElement ? document.activeElement : null;
       didOpenRef.current = true;
-      dialogRef.current?.focus({ preventScroll: true });
+      requestAnimationFrame(() => {
+        dialogRef.current?.focus({ preventScroll: true });
+      });
       return;
     }
 
@@ -106,6 +110,10 @@ const ReportPricingModal: FC<Props> = ({ archetype, open, onClose, onUnlock, ret
     document.body.style.overflow = "hidden";
 
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Tab") {
+        setFocusMode("keyboard");
+      }
+
       if (event.key === "Escape") {
         event.preventDefault();
         onClose();
@@ -186,6 +194,7 @@ const ReportPricingModal: FC<Props> = ({ archetype, open, onClose, onUnlock, ret
     <div
       className={`report-pricing-modal ${open ? "is-visible" : "is-hidden"}`}
       data-state={open ? "open" : "closed"}
+      data-focus-mode={focusMode}
       aria-hidden={!open}
     >
       <div className="report-pricing-modal__backdrop" aria-hidden="true" onClick={onClose} />
@@ -199,6 +208,7 @@ const ReportPricingModal: FC<Props> = ({ archetype, open, onClose, onUnlock, ret
           aria-describedby={open ? "report-pricing-modal-copy" : undefined}
           className="report-pricing-modal__dialog"
           tabIndex={-1}
+          onPointerDown={() => setFocusMode("pointer")}
         >
           <button
             type="button"
