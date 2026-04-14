@@ -1,9 +1,28 @@
 export const SURVEY_SESSION_KEY = "loveiq-survey-session";
 export const REPORT_SESSION_KEY = "loveiq-report-session";
 export const REPORT_TOKEN_KEY = "loveiq-report-token";
+export const REPORT_PRICING_SESSION_PREFIX = "loveiq-report-pricing-session";
 
 function canUseStorage() {
   return typeof window !== "undefined";
+}
+
+function getReportPricingSessionStorageKey({
+  sessionId,
+  token,
+}: {
+  sessionId?: string | null;
+  token?: string | null;
+}) {
+  if (token) {
+    return `${REPORT_PRICING_SESSION_PREFIX}:token:${token}`;
+  }
+
+  if (sessionId) {
+    return `${REPORT_PRICING_SESSION_PREFIX}:session:${sessionId}`;
+  }
+
+  return null;
 }
 
 export function getSessionId(): string {
@@ -81,6 +100,33 @@ export function getReportSessionId(): string | null {
     }
 
     return localStorage.getItem(REPORT_SESSION_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function getReportPricingSessionId({
+  sessionId,
+  token,
+}: {
+  sessionId?: string | null;
+  token?: string | null;
+}): string | null {
+  if (!canUseStorage()) return null;
+
+  const storageKey = getReportPricingSessionStorageKey({ sessionId, token });
+  if (!storageKey) {
+    return null;
+  }
+
+  try {
+    let pricingSessionId = sessionStorage.getItem(storageKey);
+    if (!pricingSessionId) {
+      pricingSessionId = crypto.randomUUID();
+      sessionStorage.setItem(storageKey, pricingSessionId);
+    }
+
+    return pricingSessionId;
   } catch {
     return null;
   }

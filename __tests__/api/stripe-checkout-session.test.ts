@@ -17,9 +17,13 @@ vi.mock("../../lib/checkout/stripeCheckout", () => ({
   STRIPE_CHECKOUT_DISABLED_MESSAGE:
     "Checkout preview only. Payments are not enabled in this environment yet.",
   getStripeCheckoutCustomerEmail: vi.fn(),
-  getStripePriceId: vi.fn(),
   getStripeServerClient: vi.fn(),
   isStripeCheckoutEnabled: vi.fn().mockReturnValue(false),
+}));
+
+vi.mock("../../lib/pricing/reportPricing", () => ({
+  getReportPriceQuoteForContext: vi.fn(),
+  markReportPriceQuoteCheckoutStarted: vi.fn().mockResolvedValue(undefined),
 }));
 
 import { POST } from "../../app/api/stripe/checkout-session/route";
@@ -27,10 +31,13 @@ import { verifyCsrfToken } from "../../lib/csrf";
 import { checkRateLimit } from "../../lib/ratelimit";
 import {
   getStripeCheckoutCustomerEmail,
-  getStripePriceId,
   getStripeServerClient,
   isStripeCheckoutEnabled,
 } from "../../lib/checkout/stripeCheckout";
+import {
+  getReportPriceQuoteForContext,
+  markReportPriceQuoteCheckoutStarted,
+} from "../../lib/pricing/reportPricing";
 
 function makeRequest(body: unknown) {
   return new Request("http://localhost/api/stripe/checkout-session", {
@@ -54,6 +61,37 @@ describe("POST /api/stripe/checkout-session", () => {
     });
     vi.mocked(isStripeCheckoutEnabled).mockReturnValue(false);
     vi.mocked(getStripeCheckoutCustomerEmail).mockResolvedValue("test@example.com");
+    vi.mocked(getReportPriceQuoteForContext).mockResolvedValue({
+      id: 22,
+      plan: "full_report",
+      currency: "EUR",
+      experimentGroup: "B",
+      basePriceBucket: "full_center",
+      basePriceCents: 2999,
+      currentPriceCents: 2749,
+      initialPriceCents: 2999,
+      discountMultiplier: 1,
+      discountStep: 0,
+      pricingClusterId: "B-full_report-full_center-tier_2-desktop-google-serious-engaged-d0",
+      countryTier: "tier_2",
+      countryMultiplier: 1,
+      deviceType: "Desktop",
+      deviceMultiplier: 1.05,
+      trafficSource: "google",
+      trafficMultiplier: 1.1,
+      behavioralBucket: "serious",
+      behavioralMultiplier: 1.2,
+      engagementScore: 40,
+      engagementMultiplier: 1.1,
+      reportPreviewViews: 2,
+      fantasySignalCount: 1,
+      surveyDurationMs: 600000,
+      initialPriceTimestamp: "2026-04-14T10:00:00.000Z",
+      expiresAt: "2026-05-05T10:00:00.000Z",
+      checkoutStartedAt: null,
+      purchasedAt: null,
+      viewCount: 1,
+    });
   });
 
   it("returns the disabled placeholder payload while checkout is not enabled", async () => {
@@ -106,7 +144,6 @@ describe("POST /api/stripe/checkout-session", () => {
 
     vi.mocked(isStripeCheckoutEnabled).mockReturnValue(true);
     vi.mocked(getStripeCheckoutCustomerEmail).mockResolvedValue("test@example.com");
-    vi.mocked(getStripePriceId).mockReturnValue("price_test_full_report");
     vi.mocked(getStripeServerClient).mockReturnValue({
       checkout: {
         sessions: {
@@ -132,9 +169,18 @@ describe("POST /api/stripe/checkout-session", () => {
         allow_promotion_codes: true,
         cancel_url: "http://localhost/checkout?plan=full_report",
         customer_email: "test@example.com",
+        line_items: [
+          expect.objectContaining({
+            price_data: expect.objectContaining({
+              currency: "eur",
+              unit_amount: 2749,
+            }),
+          }),
+        ],
         success_url:
           "http://localhost/checkout/return?plan=full_report&session_id={CHECKOUT_SESSION_ID}",
       })
     );
+    expect(markReportPriceQuoteCheckoutStarted).toHaveBeenCalledWith({ quoteId: 22 });
   });
 });

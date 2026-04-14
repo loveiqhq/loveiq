@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { archetypeContent } from "@/data/report-archetypes";
 import { reportSections } from "@/data/report-general";
 import { buildReportCheckoutHref, type ReportPurchasePlanId } from "@/lib/checkout/reportPurchase";
+import type { ReportPriceQuoteSnapshot } from "@/lib/pricing/reportPricing";
 import ReportFooter from "./ReportFooter";
 import ReportNavigation from "./ReportNavigation";
 import ReportPricingModal from "./ReportPricingModal";
@@ -261,6 +262,7 @@ interface ReportExperienceProps {
     userName: string;
   };
   primaryArchetype: string;
+  pricingQuotes: Record<ReportPurchasePlanId, ReportPriceQuoteSnapshot> | null;
   ranking: string[];
   reportDate: string;
   resolvedSections: ReturnType<typeof resolveReportSections>;
@@ -279,6 +281,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   percentages,
   placeholderValues,
   primaryArchetype,
+  pricingQuotes,
   ranking,
   reportDate,
   resolvedSections,
@@ -574,6 +577,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
         open={isPricingModalOpen}
         onClose={() => setIsPricingModalOpen(false)}
         onUnlock={onBeginCheckout}
+        quotes={pricingQuotes}
         returnFocusRef={mainContentRef}
       />
     </main>
@@ -677,6 +681,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       percentages={percentages}
       placeholderValues={placeholderValues}
       primaryArchetype={primaryArchetype}
+      pricingQuotes={data.pricingQuotes}
       ranking={ranking}
       reportDate={reportDate}
       resolvedSections={resolvedSections}

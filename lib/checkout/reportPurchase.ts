@@ -18,9 +18,9 @@ export interface ReportPurchasePlan {
   featuredLabel?: string;
   features: ReportPurchaseFeature[];
   plan: ReportPurchasePlanId;
-  price: string;
+  priceCents: number;
   priceSuffix: string;
-  strikePrice?: string;
+  strikePriceCents?: number;
   title: string;
   tone?: "highlight";
 }
@@ -55,7 +55,7 @@ export const REPORT_PURCHASE_PLANS: ReportPurchasePlan[] = [
       },
     ],
     plan: "essentials",
-    price: "€14.99",
+    priceCents: 1499,
     priceSuffix: "one-time",
     title: "Essentials only",
   },
@@ -84,9 +84,9 @@ export const REPORT_PURCHASE_PLANS: ReportPurchasePlan[] = [
       },
     ],
     plan: "full_report",
-    price: "€29.99",
+    priceCents: 2999,
     priceSuffix: "one-time",
-    strikePrice: "€59.00",
+    strikePriceCents: 5900,
     title: "Full report",
     tone: "highlight",
   },
@@ -107,9 +107,9 @@ export const REPORT_PURCHASE_PLANS: ReportPurchasePlan[] = [
       },
     ],
     plan: "all_reports",
-    price: "€129.99",
+    priceCents: 12999,
     priceSuffix: "one-time",
-    strikePrice: "€190.00",
+    strikePriceCents: 19000,
     title: "All reports",
   },
 ];
@@ -151,4 +151,38 @@ export function buildReportCheckoutHref({
   }
 
   return `/checkout?${params.toString()}`;
+}
+
+export function formatReportPurchasePrice(cents: number, currency = "EUR") {
+  return new Intl.NumberFormat("en-IE", {
+    currency,
+    style: "currency",
+  }).format(cents / 100);
+}
+
+export function getReportPurchaseStrikePrice(plan: ReportPurchasePlan) {
+  return typeof plan.strikePriceCents === "number"
+    ? formatReportPurchasePrice(plan.strikePriceCents)
+    : null;
+}
+
+export function getReportPurchaseBadgeFromPrice({
+  plan,
+  priceCents,
+}: {
+  plan: ReportPurchasePlan;
+  priceCents: number;
+}) {
+  if (
+    typeof plan.strikePriceCents !== "number" ||
+    plan.strikePriceCents <= 0 ||
+    priceCents >= plan.strikePriceCents
+  ) {
+    return plan.badge;
+  }
+
+  const percentOff = Math.round(
+    ((plan.strikePriceCents - priceCents) / plan.strikePriceCents) * 100
+  );
+  return percentOff > 0 ? `${percentOff}% OFF` : plan.badge;
 }

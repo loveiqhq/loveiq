@@ -10,13 +10,18 @@ import {
   getReportAccessPlanForSubmission,
   recordReportSessionView,
 } from "@/lib/report/personalReport";
+import { getReportPriceQuotesForContext } from "@/lib/pricing/reportPricing";
 import logger from "@/lib/logger";
+import type { ReportPriceQuoteSnapshot } from "@/lib/pricing/reportPricing";
+import type { ReportPurchasePlanId } from "@/lib/checkout/reportPurchase";
 
 const sessionIdSchema = z.object({
+  pricingSessionId: z.string().uuid().optional(),
   sessionId: z.string().uuid(),
 });
 
 const tokenSchema = z.object({
+  pricingSessionId: z.string().uuid().optional(),
   token: z.string().regex(/^rpt_[a-zA-Z0-9]{20}$/),
 });
 
@@ -46,6 +51,8 @@ interface SnapshotAnswers {
   currentSexualSatisfaction: number | null;
   importanceOfSex: number | null;
 }
+
+type ReportPricingQuotesResponse = Record<ReportPurchasePlanId, ReportPriceQuoteSnapshot> | null;
 
 function getSubmissionUserName(submission: SubmissionRow): string | null {
   if (Array.isArray(submission.app_user)) {
@@ -89,9 +96,15 @@ export async function GET(request: Request) {
     );
   }
 
-  const tokenParsed = rawToken ? tokenSchema.safeParse({ token: rawToken }) : null;
+  const rawPricingSessionId = url.searchParams.get("pricingSessionId") ?? undefined;
+  const tokenParsed = rawToken
+    ? tokenSchema.safeParse({ pricingSessionId: rawPricingSessionId, token: rawToken })
+    : null;
   const sessionParsed = rawSessionId
-    ? sessionIdSchema.safeParse({ sessionId: rawSessionId })
+    ? sessionIdSchema.safeParse({
+        pricingSessionId: rawPricingSessionId,
+        sessionId: rawSessionId,
+      })
     : null;
 
   if (!tokenParsed?.success && !sessionParsed?.success) {
@@ -252,6 +265,7 @@ export async function GET(request: Request) {
     }
 
     let accessPlan: "essentials" | "full_report" | "all_reports" | null = null;
+    let pricingQuotes: ReportPricingQuotesResponse = null;
 
     try {
       await ensurePersonalReportForSubmission({
@@ -262,7 +276,12 @@ export async function GET(request: Request) {
       const access = await getReportAccessPlanForSubmission(submission.id);
       accessPlan = access.accessPlan;
 
-      if (access.personalReportId) {
+      if (access.personalReportId && !accessPlan) {
+        await recordReportSessionView({
+          personalReportId: access.personalReportId,
+          userId: submission.user_id,
+        });
+      } else if (access.personalReportId) {
         scheduleAfterResponse("report-session-capture", async () => {
           await recordReportSessionView({
             personalReportId: access.personalReportId!,
@@ -274,6 +293,24 @@ export async function GET(request: Request) {
       logger.warn({ err, submissionId: submission.id }, "Unable to sync report access state");
     }
 
+    if (!accessPlan) {
+      try {
+        pricingQuotes = await getReportPriceQuotesForContext({
+          pricingSessionId: tokenParsed?.success
+            ? (tokenParsed.data.pricingSessionId ?? null)
+            : sessionParsed?.success
+              ? (sessionParsed.data.pricingSessionId ?? null)
+              : null,
+          reportSessionId: sessionParsed?.success ? sessionParsed.data.sessionId : null,
+          reportToken: tokenParsed?.success ? tokenParsed.data.token : null,
+          submissionId: submission.id,
+          userAgent: request.headers.get("user-agent"),
+        });
+      } catch (err) {
+        logger.warn({ err, submissionId: submission.id }, "Unable to resolve report pricing");
+      }
+    }
+
     // 7. Build response — prefer v5 fields, fall back to v4
     return NextResponse.json({
       accessPlan,
@@ -283,6 +320,7 @@ export async function GET(request: Request) {
       reportDate: submission.created_date_time,
       diagnostics: scoring.diagnostics ?? null,
       snapshotAnswers,
+      pricingQuotes,
     });
   } catch (err) {
     if (err instanceof CircuitOpenError) {

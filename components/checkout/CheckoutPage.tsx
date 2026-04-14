@@ -1,11 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useSyncExternalStore, type FC } from "react";
-import { getReportSessionId } from "@/components/survey/hooks/surveySession";
+import { useEffect, useState, useSyncExternalStore, type FC } from "react";
+import {
+  getReportPricingSessionId,
+  getReportSessionId,
+} from "@/components/survey/hooks/surveySession";
 import { getCsrfToken } from "@/lib/csrf-client";
 import {
+  formatReportPurchasePrice,
+  getReportPurchaseBadgeFromPrice,
   getReportPurchasePlan,
+  getReportPurchaseStrikePrice,
   getReportReturnHref,
   type ReportPurchasePlanId,
 } from "@/lib/checkout/reportPurchase";
@@ -13,6 +19,7 @@ import {
   STRIPE_CHECKOUT_DISABLED_MESSAGE,
   type StripeCheckoutSessionResponse,
 } from "@/lib/checkout/stripeCheckout";
+import type { ReportPriceQuoteSnapshot } from "@/lib/pricing/reportPricing";
 
 const subscribeNoop = () => () => {};
 
@@ -31,6 +38,19 @@ type CheckoutSessionState =
   | {
       message: string;
       status: "missing-context";
+    };
+
+type QuoteState =
+  | {
+      status: "idle" | "loading";
+    }
+  | {
+      message: string;
+      status: "error";
+    }
+  | {
+      quote: ReportPriceQuoteSnapshot;
+      status: "ready";
     };
 
 function SecureHeader() {
@@ -133,10 +153,14 @@ function CheckoutFallbackSurface({
 }
 
 function CheckoutReviewSurface({
+  canContinue,
+  quote,
   errorMessage,
   isRedirecting,
   onContinue,
 }: {
+  canContinue: boolean;
+  quote: ReportPriceQuoteSnapshot | null;
   errorMessage?: string | null;
   isRedirecting: boolean;
   onContinue: () => void;
@@ -154,6 +178,13 @@ function CheckoutReviewSurface({
             </p>
           </div>
           <ul className="checkout-payment-panel__review-list">
+            <li>
+              Your current quoted total is{" "}
+              <strong>
+                {quote ? formatReportPurchasePrice(quote.currentPriceCents) : "loading..."}
+              </strong>
+              .
+            </li>
             <li>Promo codes are entered directly on Stripe.</li>
             <li>
               Apple Pay, Google Pay, and other methods appear when Stripe marks them eligible.
@@ -171,10 +202,14 @@ function CheckoutReviewSurface({
       <button
         type="button"
         className="checkout-submit"
-        disabled={isRedirecting}
+        disabled={isRedirecting || !canContinue}
         onClick={onContinue}
       >
-        {isRedirecting ? "Redirecting to Stripe…" : "Continue to secure checkout"}
+        {isRedirecting
+          ? "Redirecting to Stripe…"
+          : canContinue
+            ? "Continue to secure checkout"
+            : "Preparing secure checkout…"}
       </button>
 
       <p className="checkout-payment-stack__note" role="status">
@@ -195,9 +230,78 @@ interface Props {
 const CheckoutPage: FC<Props> = ({ planId, token = null }) => {
   const plan = getReportPurchasePlan(planId);
   const reportSessionId = useSyncExternalStore(subscribeNoop, getReportSessionId, () => null);
+  const pricingSessionId = getReportPricingSessionId({
+    sessionId: token ? null : reportSessionId,
+    token,
+  });
   const [sessionState, setSessionState] = useState<CheckoutSessionState>({ status: "idle" });
+  const [quoteState, setQuoteState] = useState<QuoteState>({ status: "idle" });
   const backHref = getReportReturnHref(token);
   const hasCheckoutContext = Boolean(token || reportSessionId);
+
+  useEffect(() => {
+    if (!hasCheckoutContext) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function fetchQuote() {
+      setQuoteState({ status: "loading" });
+
+      try {
+        const params = new URLSearchParams({ plan: planId });
+        if (token) {
+          params.set("token", token);
+        } else if (reportSessionId) {
+          params.set("reportSessionId", reportSessionId);
+        }
+        if (pricingSessionId) {
+          params.set("pricingSessionId", pricingSessionId);
+        }
+
+        const response = await fetch(`/api/price?${params.toString()}`, {
+          headers: {
+            "x-csrf-token": getCsrfToken(),
+          },
+        });
+        const json = (await response.json().catch(() => null)) as {
+          quote?: ReportPriceQuoteSnapshot;
+          error?: string;
+        } | null;
+
+        if (cancelled) {
+          return;
+        }
+
+        if (!response.ok || !json?.quote) {
+          setQuoteState({
+            message: json?.error ?? "We couldn't prepare your quoted price right now.",
+            status: "error",
+          });
+          return;
+        }
+
+        setQuoteState({
+          quote: json.quote,
+          status: "ready",
+        });
+      } catch {
+        if (!cancelled) {
+          setQuoteState({
+            message: "We couldn't prepare your quoted price right now.",
+            status: "error",
+          });
+        }
+      }
+    }
+
+    void fetchQuote();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [hasCheckoutContext, planId, pricingSessionId, reportSessionId, token]);
 
   async function handleContinueToStripe() {
     if (!hasCheckoutContext) {
@@ -205,6 +309,17 @@ const CheckoutPage: FC<Props> = ({ planId, token = null }) => {
         message:
           "This checkout is tied to a saved report. Open your report again and retry from there.",
         status: "missing-context",
+      });
+      return;
+    }
+
+    if (quoteState.status !== "ready") {
+      setSessionState({
+        message:
+          quoteState.status === "error"
+            ? quoteState.message
+            : "We're still preparing your quoted price. Try again in a moment.",
+        status: "error",
       });
       return;
     }
@@ -220,6 +335,8 @@ const CheckoutPage: FC<Props> = ({ planId, token = null }) => {
         },
         body: JSON.stringify({
           plan: planId,
+          pricingSessionId,
+          quoteId: quoteState.quote.id,
           reportSessionId: token ? null : reportSessionId,
           reportToken: token,
         }),
@@ -292,7 +409,13 @@ const CheckoutPage: FC<Props> = ({ planId, token = null }) => {
               <h2 className="checkout-page__summary-title">{plan.title}</h2>
               <p className="checkout-page__summary-copy">{plan.description}</p>
             </div>
-            {plan.badge ? (
+            {getReportPurchaseBadgeFromPrice({
+              plan,
+              priceCents:
+                quoteState.status === "ready"
+                  ? quoteState.quote.currentPriceCents
+                  : plan.priceCents,
+            }) ? (
               <span
                 className={[
                   "checkout-page__badge",
@@ -301,21 +424,33 @@ const CheckoutPage: FC<Props> = ({ planId, token = null }) => {
                   .filter(Boolean)
                   .join(" ")}
               >
-                {plan.badge}
+                {getReportPurchaseBadgeFromPrice({
+                  plan,
+                  priceCents:
+                    quoteState.status === "ready"
+                      ? quoteState.quote.currentPriceCents
+                      : plan.priceCents,
+                })}
               </span>
             ) : null}
           </div>
 
           <div className="checkout-page__summary-price">
-            {plan.strikePrice ? (
-              <span className="checkout-page__summary-strike">{plan.strikePrice}</span>
+            {getReportPurchaseStrikePrice(plan) ? (
+              <span className="checkout-page__summary-strike">
+                {getReportPurchaseStrikePrice(plan)}
+              </span>
             ) : (
               <span className="checkout-page__summary-strike checkout-page__summary-strike--placeholder">
                 &nbsp;
               </span>
             )}
             <div className="checkout-page__summary-amount">
-              <strong>{plan.price}</strong>
+              <strong>
+                {quoteState.status === "ready"
+                  ? formatReportPurchasePrice(quoteState.quote.currentPriceCents)
+                  : "Preparing quote..."}
+              </strong>
               <span>{plan.priceSuffix}</span>
             </div>
           </div>
@@ -336,7 +471,15 @@ const CheckoutPage: FC<Props> = ({ planId, token = null }) => {
           <CheckoutFallbackSurface backHref={backHref} sessionState={sessionState} />
         ) : (
           <CheckoutReviewSurface
-            errorMessage={sessionState.status === "error" ? sessionState.message : null}
+            canContinue={quoteState.status === "ready"}
+            quote={quoteState.status === "ready" ? quoteState.quote : null}
+            errorMessage={
+              sessionState.status === "error"
+                ? sessionState.message
+                : quoteState.status === "error"
+                  ? quoteState.message
+                  : null
+            }
             isRedirecting={sessionState.status === "redirecting"}
             onContinue={handleContinueToStripe}
           />

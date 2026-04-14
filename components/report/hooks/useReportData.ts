@@ -2,7 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { getCsrfToken } from "@/lib/csrf-client";
-import { finalizeReportSession } from "@/components/survey/hooks/surveySession";
+import {
+  finalizeReportSession,
+  getReportPricingSessionId,
+} from "@/components/survey/hooks/surveySession";
+import type { ReportPriceQuoteSnapshot } from "@/lib/pricing/reportPricing";
+import type { ReportPurchasePlanId } from "@/lib/checkout/reportPurchase";
 
 export interface ReportData {
   accessPlan: "essentials" | "full_report" | "all_reports" | null;
@@ -15,6 +20,7 @@ export interface ReportData {
     currentSexualSatisfaction: number | null;
     importanceOfSex: number | null;
   };
+  pricingQuotes: Record<ReportPurchasePlanId, ReportPriceQuoteSnapshot> | null;
 }
 
 export interface ReportRequestError {
@@ -68,11 +74,13 @@ export function useReportData(identifier: ReportIdentifier) {
 
       try {
         const csrfToken = getCsrfToken();
-        const param = token
-          ? `token=${encodeURIComponent(token)}`
-          : `sessionId=${encodeURIComponent(sessionId!)}`;
+        const params = new URLSearchParams(token ? { token } : { sessionId: sessionId ?? "" });
+        const pricingSessionId = getReportPricingSessionId({ sessionId, token });
+        if (pricingSessionId) {
+          params.set("pricingSessionId", pricingSessionId);
+        }
 
-        const res = await fetch(`/api/report?${param}`, {
+        const res = await fetch(`/api/report?${params.toString()}`, {
           headers: { "x-csrf-token": csrfToken },
         });
 

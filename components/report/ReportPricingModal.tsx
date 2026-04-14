@@ -8,13 +8,22 @@ import {
   type MutableRefObject,
   type TouchEvent as ReactTouchEvent,
 } from "react";
-import { REPORT_PURCHASE_PLANS, type ReportPurchasePlanId } from "@/lib/checkout/reportPurchase";
+import {
+  REPORT_PURCHASE_PLANS,
+  formatReportPurchasePrice,
+  getReportPurchaseBadgeFromPrice,
+  getReportPurchaseStrikePrice,
+  type ReportPurchasePlan,
+  type ReportPurchasePlanId,
+} from "@/lib/checkout/reportPurchase";
+import type { ReportPriceQuoteSnapshot } from "@/lib/pricing/reportPricing";
 
 interface Props {
   archetype: string;
   open: boolean;
   onClose: () => void;
   onUnlock: (plan: ReportPurchasePlanId) => void;
+  quotes: Record<ReportPurchasePlanId, ReportPriceQuoteSnapshot> | null;
   returnFocusRef?: MutableRefObject<HTMLElement | null>;
 }
 
@@ -53,7 +62,26 @@ function PricingMethodMark({
   );
 }
 
-const ReportPricingModal: FC<Props> = ({ archetype, open, onClose, onUnlock, returnFocusRef }) => {
+function getCardPricing(
+  card: ReportPurchasePlan,
+  quote: ReportPriceQuoteSnapshot | null | undefined
+) {
+  const priceCents = quote?.currentPriceCents ?? card.priceCents;
+  return {
+    badge: getReportPurchaseBadgeFromPrice({ plan: card, priceCents }),
+    priceLabel: formatReportPurchasePrice(priceCents),
+    strikePriceLabel: getReportPurchaseStrikePrice(card),
+  };
+}
+
+const ReportPricingModal: FC<Props> = ({
+  archetype,
+  open,
+  onClose,
+  onUnlock,
+  quotes,
+  returnFocusRef,
+}) => {
   const dialogRef = useRef<HTMLDivElement>(null);
   const scrollRegionRef = useRef<HTMLDivElement>(null);
   const didOpenRef = useRef(false);
@@ -244,116 +272,129 @@ const ReportPricingModal: FC<Props> = ({ archetype, open, onClose, onUnlock, ret
               </div>
 
               <div className="report-pricing-modal__plans" role="list" aria-label="Pricing options">
-                {REPORT_PURCHASE_PLANS.map((card) => (
-                  <article
-                    key={card.title}
-                    role="listitem"
-                    className={[
-                      "report-pricing-card",
-                      card.tone === "highlight"
-                        ? "report-pricing-card--hero"
-                        : "report-pricing-card--side",
-                      card.badge || card.featuredLabel ? "report-pricing-card--with-badge" : "",
-                      card.tone === "highlight" ? "report-pricing-card--highlight" : "",
-                    ]
-                      .filter(Boolean)
-                      .join(" ")}
-                  >
-                    {card.badge || card.featuredLabel ? (
-                      <div className="report-pricing-card__badges">
-                        {card.badge ? (
-                          <span
+                {REPORT_PURCHASE_PLANS.map((card) => {
+                  const pricing = getCardPricing(card, quotes?.[card.plan]);
+
+                  return (
+                    <article
+                      key={card.title}
+                      role="listitem"
+                      className={[
+                        "report-pricing-card",
+                        card.tone === "highlight"
+                          ? "report-pricing-card--hero"
+                          : "report-pricing-card--side",
+                        card.badge || card.featuredLabel ? "report-pricing-card--with-badge" : "",
+                        card.tone === "highlight" ? "report-pricing-card--highlight" : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                    >
+                      {pricing.badge || card.featuredLabel ? (
+                        <div className="report-pricing-card__badges">
+                          {pricing.badge ? (
+                            <span
+                              className={[
+                                "report-pricing-card__badge",
+                                card.badgeTone
+                                  ? `report-pricing-card__badge--${card.badgeTone}`
+                                  : "",
+                              ]
+                                .filter(Boolean)
+                                .join(" ")}
+                            >
+                              {pricing.badge}
+                            </span>
+                          ) : null}
+                          {card.featuredLabel ? (
+                            <span className="report-pricing-card__badge report-pricing-card__badge--featured">
+                              {card.featuredLabel}
+                            </span>
+                          ) : null}
+                        </div>
+                      ) : null}
+
+                      <div className="report-pricing-card__heading">
+                        <h3 className="report-pricing-card__title">{card.title}</h3>
+                        <p className="report-pricing-card__description">{card.description}</p>
+                      </div>
+
+                      <div className="report-pricing-card__price">
+                        <span
+                          className={[
+                            "report-pricing-card__strike",
+                            !pricing.strikePriceLabel
+                              ? "report-pricing-card__strike--placeholder"
+                              : "",
+                          ]
+                            .filter(Boolean)
+                            .join(" ")}
+                          aria-hidden={pricing.strikePriceLabel ? undefined : "true"}
+                        >
+                          {pricing.strikePriceLabel
+                            ? `${pricing.strikePriceLabel} ${card.priceSuffix === "one-time" ? "one off" : card.priceSuffix}`
+                            : "\u00a0"}
+                        </span>
+                        <div className="report-pricing-card__price-row">
+                          <strong>{pricing.priceLabel}</strong>
+                          <span>
+                            /{card.priceSuffix === "one-time" ? "one off" : card.priceSuffix}
+                          </span>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        className={[
+                          "report-pricing-card__cta",
+                          card.tone === "highlight" ? "report-pricing-card__cta--primary" : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" ")}
+                        onClick={() => onUnlock(card.plan)}
+                      >
+                        {card.ctaLabel}
+                      </button>
+
+                      <ul className="report-pricing-card__features">
+                        {card.features.map((feature) => (
+                          <li
+                            key={feature.label}
                             className={[
-                              "report-pricing-card__badge",
-                              card.badgeTone ? `report-pricing-card__badge--${card.badgeTone}` : "",
+                              "report-pricing-card__feature",
+                              feature.icon === "none"
+                                ? "report-pricing-card__feature--subitem"
+                                : "",
+                              feature.tone === "emphasis"
+                                ? "report-pricing-card__feature--emphasis"
+                                : "",
+                              feature.tone === "muted" ? "report-pricing-card__feature--muted" : "",
                             ]
                               .filter(Boolean)
                               .join(" ")}
                           >
-                            {card.badge}
-                          </span>
-                        ) : null}
-                        {card.featuredLabel ? (
-                          <span className="report-pricing-card__badge report-pricing-card__badge--featured">
-                            {card.featuredLabel}
-                          </span>
-                        ) : null}
-                      </div>
-                    ) : null}
-
-                    <div className="report-pricing-card__heading">
-                      <h3 className="report-pricing-card__title">{card.title}</h3>
-                      <p className="report-pricing-card__description">{card.description}</p>
-                    </div>
-
-                    <div className="report-pricing-card__price">
-                      <span
-                        className={[
-                          "report-pricing-card__strike",
-                          !card.strikePrice ? "report-pricing-card__strike--placeholder" : "",
-                        ]
-                          .filter(Boolean)
-                          .join(" ")}
-                        aria-hidden={card.strikePrice ? undefined : "true"}
-                      >
-                        {card.strikePrice
-                          ? `${card.strikePrice} ${card.priceSuffix === "one-time" ? "one off" : card.priceSuffix}`
-                          : "\u00a0"}
-                      </span>
-                      <div className="report-pricing-card__price-row">
-                        <strong>{card.price}</strong>
-                        <span>
-                          /{card.priceSuffix === "one-time" ? "one off" : card.priceSuffix}
-                        </span>
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      className={[
-                        "report-pricing-card__cta",
-                        card.tone === "highlight" ? "report-pricing-card__cta--primary" : "",
-                      ]
-                        .filter(Boolean)
-                        .join(" ")}
-                      onClick={() => onUnlock(card.plan)}
-                    >
-                      {card.ctaLabel}
-                    </button>
-
-                    <ul className="report-pricing-card__features">
-                      {card.features.map((feature) => (
-                        <li
-                          key={feature.label}
-                          className={[
-                            "report-pricing-card__feature",
-                            feature.icon === "none" ? "report-pricing-card__feature--subitem" : "",
-                            feature.tone === "emphasis"
-                              ? "report-pricing-card__feature--emphasis"
-                              : "",
-                            feature.tone === "muted" ? "report-pricing-card__feature--muted" : "",
-                          ]
-                            .filter(Boolean)
-                            .join(" ")}
-                        >
-                          {feature.icon !== "none" ? (
-                            <span className="report-pricing-card__feature-icon" aria-hidden="true">
-                              <svg
-                                viewBox="0 0 16 16"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="1.6"
+                            {feature.icon !== "none" ? (
+                              <span
+                                className="report-pricing-card__feature-icon"
+                                aria-hidden="true"
                               >
-                                <path d="m4.1 8 2.2 2.25L11.9 4.9" strokeLinecap="round" />
-                              </svg>
-                            </span>
-                          ) : null}
-                          <span>{feature.label}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </article>
-                ))}
+                                <svg
+                                  viewBox="0 0 16 16"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="1.6"
+                                >
+                                  <path d="m4.1 8 2.2 2.25L11.9 4.9" strokeLinecap="round" />
+                                </svg>
+                              </span>
+                            ) : null}
+                            <span>{feature.label}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </article>
+                  );
+                })}
               </div>
 
               <div className="report-pricing-modal__payments" aria-label="Accepted payment methods">

@@ -2,7 +2,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   finalizeReportSession,
+  getReportPricingSessionId,
   REPORT_SESSION_KEY,
+  REPORT_PRICING_SESSION_PREFIX,
   SURVEY_SESSION_KEY,
   copySurveySessionToReportSession,
   getReportSessionId,
@@ -72,5 +74,35 @@ describe("surveySession", () => {
 
     expect(localStorage.getItem(REPORT_SESSION_KEY)).toBe("survey-session");
     expect(sessionStorage.getItem(SURVEY_SESSION_KEY)).toBeNull();
+  });
+
+  it("creates and reuses a pricing session id per report session context", () => {
+    const randomUuid = vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue("pricing-123");
+
+    expect(getReportPricingSessionId({ sessionId: "02d88f31-eceb-4402-940d-c8cd98d01848" })).toBe(
+      "pricing-123"
+    );
+    expect(
+      sessionStorage.getItem(
+        `${REPORT_PRICING_SESSION_PREFIX}:session:02d88f31-eceb-4402-940d-c8cd98d01848`
+      )
+    ).toBe("pricing-123");
+    expect(getReportPricingSessionId({ sessionId: "02d88f31-eceb-4402-940d-c8cd98d01848" })).toBe(
+      "pricing-123"
+    );
+    expect(randomUuid).toHaveBeenCalledTimes(1);
+  });
+
+  it("isolates pricing session ids for token-based report access", () => {
+    const randomUuid = vi
+      .spyOn(globalThis.crypto, "randomUUID")
+      .mockReturnValueOnce("pricing-token")
+      .mockReturnValueOnce("pricing-session");
+
+    expect(getReportPricingSessionId({ token: "rpt_ABCDEFGHIJKLMNOPQRST" })).toBe("pricing-token");
+    expect(getReportPricingSessionId({ sessionId: "02d88f31-eceb-4402-940d-c8cd98d01848" })).toBe(
+      "pricing-session"
+    );
+    expect(randomUuid).toHaveBeenCalledTimes(2);
   });
 });

@@ -30,6 +30,7 @@ describe("useReportData", () => {
   it("returns report data on a successful fetch", async () => {
     sessionStorage.setItem(SURVEY_SESSION_KEY, "02d88f31-eceb-4402-940d-c8cd98d01848");
     localStorage.setItem(REPORT_SESSION_KEY, "stale-report-session");
+    vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue("pricing-session-123");
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -43,6 +44,7 @@ describe("useReportData", () => {
           currentSexualSatisfaction: 3,
           importanceOfSex: 5,
         },
+        pricingQuotes: null,
       }),
     });
     globalThis.fetch = mockFetch;
@@ -64,7 +66,7 @@ describe("useReportData", () => {
     expect(localStorage.getItem(REPORT_SESSION_KEY)).toBe("02d88f31-eceb-4402-940d-c8cd98d01848");
     expect(sessionStorage.getItem(SURVEY_SESSION_KEY)).toBeNull();
     expect(mockFetch).toHaveBeenCalledWith(
-      "/api/report?sessionId=02d88f31-eceb-4402-940d-c8cd98d01848",
+      "/api/report?sessionId=02d88f31-eceb-4402-940d-c8cd98d01848&pricingSessionId=pricing-session-123",
       expect.objectContaining({
         headers: expect.objectContaining({ "x-csrf-token": "test-csrf-token" }),
       })

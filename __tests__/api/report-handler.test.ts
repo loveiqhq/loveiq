@@ -35,11 +35,16 @@ vi.mock("../../lib/report/personalReport", () => ({
   recordReportSessionView: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("../../lib/pricing/reportPricing", () => ({
+  getReportPriceQuotesForContext: vi.fn().mockResolvedValue(null),
+}));
+
 process.env.SUPABASE_URL = "https://test.supabase.co";
 process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-key";
 
 import { GET } from "../../app/api/report/route";
 import { getReportAccessPlanForSubmission } from "../../lib/report/personalReport";
+import { getReportPriceQuotesForContext } from "../../lib/pricing/reportPricing";
 
 function makeRequest(sessionId = "550e8400-e29b-41d4-a716-446655440000") {
   return new Request(`http://localhost:3000/api/report?sessionId=${sessionId}`);
@@ -63,6 +68,7 @@ describe("GET /api/report", () => {
     process.env.SUPABASE_URL = "https://test.supabase.co";
     process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-key";
     mockGetClientIp.mockReturnValue("1.2.3.4");
+    vi.mocked(getReportPriceQuotesForContext).mockResolvedValue(null);
     mockFetchWithTimeout.mockResolvedValue({
       ok: true,
       json: async () => [],
@@ -204,6 +210,7 @@ describe("GET /api/report", () => {
         currentSexualSatisfaction: 3,
         importanceOfSex: 5,
       },
+      pricingQuotes: null,
     });
 
     const submissionLookupUrl = mockFetchWithTimeout.mock.calls[0][0] as string;
@@ -299,5 +306,139 @@ describe("GET /api/report", () => {
 
     const json = await res.json();
     expect(json.accessPlan).toBe("full_report");
+  });
+
+  it("returns pricing quotes for unpaid reports", async () => {
+    allowCsrf();
+    allowRateLimit();
+    vi.mocked(getReportPriceQuotesForContext).mockResolvedValueOnce({
+      all_reports: {
+        id: 3,
+        plan: "all_reports",
+        currency: "EUR",
+        experimentGroup: "B",
+        basePriceBucket: "all_center",
+        basePriceCents: 12999,
+        currentPriceCents: 11499,
+        initialPriceCents: 12999,
+        discountMultiplier: 1,
+        discountStep: 0,
+        pricingClusterId: "B-all_reports-all_center-tier_2-desktop-google-serious-engaged-d0",
+        countryTier: "tier_2",
+        countryMultiplier: 1,
+        deviceType: "Desktop",
+        deviceMultiplier: 1.05,
+        trafficSource: "google",
+        trafficMultiplier: 1.1,
+        behavioralBucket: "serious",
+        behavioralMultiplier: 1.2,
+        engagementScore: 40,
+        engagementMultiplier: 1.1,
+        reportPreviewViews: 2,
+        fantasySignalCount: 1,
+        surveyDurationMs: 600000,
+        initialPriceTimestamp: "2026-04-14T10:00:00.000Z",
+        expiresAt: "2026-05-05T10:00:00.000Z",
+        checkoutStartedAt: null,
+        purchasedAt: null,
+        viewCount: 1,
+      },
+      essentials: {
+        id: 1,
+        plan: "essentials",
+        currency: "EUR",
+        experimentGroup: "B",
+        basePriceBucket: "essentials_center",
+        basePriceCents: 1499,
+        currentPriceCents: 1499,
+        initialPriceCents: 1499,
+        discountMultiplier: 1,
+        discountStep: 0,
+        pricingClusterId: "B-essentials-essentials_center-tier_2-desktop-google-serious-engaged-d0",
+        countryTier: "tier_2",
+        countryMultiplier: 1,
+        deviceType: "Desktop",
+        deviceMultiplier: 1.05,
+        trafficSource: "google",
+        trafficMultiplier: 1.1,
+        behavioralBucket: "serious",
+        behavioralMultiplier: 1.2,
+        engagementScore: 40,
+        engagementMultiplier: 1.1,
+        reportPreviewViews: 2,
+        fantasySignalCount: 1,
+        surveyDurationMs: 600000,
+        initialPriceTimestamp: "2026-04-14T10:00:00.000Z",
+        expiresAt: "2026-05-05T10:00:00.000Z",
+        checkoutStartedAt: null,
+        purchasedAt: null,
+        viewCount: 1,
+      },
+      full_report: {
+        id: 2,
+        plan: "full_report",
+        currency: "EUR",
+        experimentGroup: "B",
+        basePriceBucket: "full_center",
+        basePriceCents: 2999,
+        currentPriceCents: 2749,
+        initialPriceCents: 2999,
+        discountMultiplier: 1,
+        discountStep: 0,
+        pricingClusterId: "B-full_report-full_center-tier_2-desktop-google-serious-engaged-d0",
+        countryTier: "tier_2",
+        countryMultiplier: 1,
+        deviceType: "Desktop",
+        deviceMultiplier: 1.05,
+        trafficSource: "google",
+        trafficMultiplier: 1.1,
+        behavioralBucket: "serious",
+        behavioralMultiplier: 1.2,
+        engagementScore: 40,
+        engagementMultiplier: 1.1,
+        reportPreviewViews: 2,
+        fantasySignalCount: 1,
+        surveyDurationMs: 600000,
+        initialPriceTimestamp: "2026-04-14T10:00:00.000Z",
+        expiresAt: "2026-05-05T10:00:00.000Z",
+        checkoutStartedAt: null,
+        purchasedAt: null,
+        viewCount: 1,
+      },
+    });
+
+    mockFetchWithTimeout
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          {
+            id: 55,
+            user_id: 77,
+            created_date_time: "2026-04-07T22:23:16.851299+00:00",
+            app_user: { first_name: "Eman" },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          {
+            primary_archetype: "Spark Seeker",
+            v5_primary_archetype: "Emotional Voyeur",
+            percentages: { "Spark Seeker": 41 },
+            v5_percentages: { "Emotional Voyeur": 63 },
+            diagnostics: null,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [],
+      });
+
+    const res = await GET(makeRequest("02d88f31-eceb-4402-940d-c8cd98d01848"));
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.pricingQuotes?.full_report?.currentPriceCents).toBe(2749);
   });
 });

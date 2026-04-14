@@ -8,20 +8,26 @@ import {
 import {
   STRIPE_CHECKOUT_DISABLED_MESSAGE,
   getStripeCheckoutCustomerEmail,
-  getStripePriceId,
   getStripeServerClient,
   isStripeCheckoutEnabled,
   type StripeCheckoutSessionResponse,
 } from "@/lib/checkout/stripeCheckout";
+import { getReportPurchasePlan } from "@/lib/checkout/reportPurchase";
 import { verifyCsrfToken } from "@/lib/csrf";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
 import logger from "@/lib/logger";
+import {
+  getReportPriceQuoteForContext,
+  markReportPriceQuoteCheckoutStarted,
+} from "@/lib/pricing/reportPricing";
 
 export const runtime = "nodejs";
 
 const createCheckoutSessionSchema = z
   .object({
     plan: z.enum(REPORT_PURCHASE_PLAN_IDS),
+    pricingSessionId: z.string().uuid().nullable().optional(),
+    quoteId: z.number().int().positive().nullable().optional(),
     reportSessionId: z.string().uuid().nullable().optional(),
     reportToken: z.string().regex(REPORT_ACCESS_TOKEN_REGEX).nullable().optional(),
   })
@@ -107,26 +113,58 @@ export async function POST(request: Request) {
     }
 
     const stripe = getStripeServerClient();
-    const priceId = getStripePriceId(parsed.data.plan);
     const siteUrl = new URL(request.url).origin;
     const customerEmail = await getStripeCheckoutCustomerEmail({
       reportSessionId: parsed.data.reportSessionId ?? null,
       reportToken: parsed.data.reportToken ?? null,
     });
+    const quote = await getReportPriceQuoteForContext({
+      plan: parsed.data.plan,
+      pricingSessionId: parsed.data.pricingSessionId ?? null,
+      quoteId: parsed.data.quoteId ?? undefined,
+      reportSessionId: parsed.data.reportSessionId ?? null,
+      reportToken: parsed.data.reportToken ?? null,
+      userAgent: request.headers.get("user-agent"),
+    });
 
-    if (!stripe || !priceId || !customerEmail) {
+    if (!stripe || !customerEmail || !quote) {
       return NextResponse.json({ error: "Service unavailable." }, { status: 503 });
     }
 
+    const plan = getReportPurchasePlan(parsed.data.plan);
     const session = await stripe.checkout.sessions.create({
       allow_promotion_codes: true,
       billing_address_collection: "auto",
       customer_email: customerEmail,
-      line_items: [{ price: priceId, quantity: 1 }],
+      line_items: [
+        {
+          price_data: {
+            currency: quote.currency.toLowerCase(),
+            product_data: {
+              description: plan.description,
+              name: `LoveIQ ${plan.title}`,
+            },
+            unit_amount: quote.currentPriceCents,
+          },
+          quantity: 1,
+        },
+      ],
       metadata: {
+        basePriceBucket: quote.basePriceBucket,
+        behavioralBucket: quote.behavioralBucket,
+        countryTier: quote.countryTier,
+        currentPrice: String((quote.currentPriceCents / 100).toFixed(2)),
+        deviceType: quote.deviceType,
+        discountStep: String(quote.discountStep),
+        engagementScore: String(quote.engagementScore),
+        experimentGroup: quote.experimentGroup,
+        initialPrice: String((quote.initialPriceCents / 100).toFixed(2)),
         plan: parsed.data.plan,
+        pricingClusterId: quote.pricingClusterId,
+        pricingQuoteId: String(quote.id),
         reportSessionId: parsed.data.reportSessionId ?? "",
         reportToken: parsed.data.reportToken ?? "",
+        trafficSource: quote.trafficSource,
       },
       mode: "payment",
       success_url: buildSuccessUrl({
@@ -140,6 +178,8 @@ export async function POST(request: Request) {
         reportToken: parsed.data.reportToken ?? null,
       }),
     });
+
+    await markReportPriceQuoteCheckoutStarted({ quoteId: quote.id });
 
     if (!session.url) {
       logger.error({ sessionId: session.id }, "Stripe checkout session missing hosted URL");

@@ -11,6 +11,7 @@ import {
   ensurePersonalReportForSubmission,
   resolveSubmissionAccessContext,
 } from "@/lib/report/personalReport";
+import { markReportPriceQuotePurchased } from "@/lib/pricing/reportPricing";
 
 const SUPABASE_TIMEOUT_MS = 8_000;
 
@@ -220,6 +221,7 @@ async function upsertPaymentRecord({
   paymentMethodId,
   paymentMethodType,
   personalReportId,
+  pricingQuoteId,
   receiptUrl,
   status,
   stripeChargeId,
@@ -242,6 +244,7 @@ async function upsertPaymentRecord({
   paymentMethodId: string | null;
   paymentMethodType: string | null;
   personalReportId: number;
+  pricingQuoteId: number | null;
   receiptUrl: string | null;
   status: PaymentStatus;
   stripeChargeId: string | null;
@@ -263,6 +266,7 @@ async function upsertPaymentRecord({
     payment_date_time: paymentDateTime,
     payment_method_type: paymentMethodType,
     personal_report_id: personalReportId,
+    pricing_quote_id: pricingQuoteId,
     receipt_url: receiptUrl,
     status,
     stripe_charge_id: stripeChargeId,
@@ -448,6 +452,11 @@ async function syncCheckoutSessionPayment({
   }
 
   const amount = toAmount(session.amount_total);
+  const pricingQuoteIdRaw = session.metadata?.pricingQuoteId;
+  const pricingQuoteId =
+    typeof pricingQuoteIdRaw === "string" && /^\d+$/.test(pricingQuoteIdRaw)
+      ? Number(pricingQuoteIdRaw)
+      : null;
   const chargeDetails = getChargeDetails(charge);
   const existingPayment = await fetchExistingPayment({
     stripeChargeId: charge?.id ?? null,
@@ -457,6 +466,18 @@ async function syncCheckoutSessionPayment({
   const metadata = {
     checkoutSessionId: session.id,
     plan,
+    pricingQuoteId,
+    pricingClusterId: session.metadata?.pricingClusterId ?? null,
+    experimentGroup: session.metadata?.experimentGroup ?? null,
+    basePriceBucket: session.metadata?.basePriceBucket ?? null,
+    discountStep: session.metadata?.discountStep ?? null,
+    currentPrice: session.metadata?.currentPrice ?? null,
+    initialPrice: session.metadata?.initialPrice ?? null,
+    countryTier: session.metadata?.countryTier ?? null,
+    deviceType: session.metadata?.deviceType ?? null,
+    trafficSource: session.metadata?.trafficSource ?? null,
+    engagementScore: session.metadata?.engagementScore ?? null,
+    behavioralBucket: session.metadata?.behavioralBucket ?? null,
     reportSessionId: session.metadata?.reportSessionId ?? null,
     reportToken: session.metadata?.reportToken ?? null,
     stripePaymentStatus: session.payment_status ?? null,
@@ -478,6 +499,7 @@ async function syncCheckoutSessionPayment({
     paymentMethodId,
     paymentMethodType: chargeDetails.paymentMethodType,
     personalReportId: personalReport.id,
+    pricingQuoteId,
     receiptUrl: chargeDetails.receiptUrl,
     status: eventStatus,
     stripeChargeId: charge?.id ?? null,
@@ -492,6 +514,9 @@ async function syncCheckoutSessionPayment({
 
   if (eventStatus === "succeeded") {
     await ensurePaymentItem({ amount, paymentId, plan });
+    if (pricingQuoteId) {
+      await markReportPriceQuotePurchased({ paymentId, quoteId: pricingQuoteId });
+    }
   }
 
   await updatePersonalReportPayment({
