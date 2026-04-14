@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import CheckoutPage from "@/components/checkout/CheckoutPage";
 
 const mockGetReportSessionId = vi.fn();
@@ -9,33 +9,32 @@ vi.mock("@/components/survey/hooks/surveySession", () => ({
   getReportSessionId: () => mockGetReportSessionId(),
 }));
 
-vi.mock("@/components/checkout/StripeCheckoutMount", () => ({
-  default: ({ clientSecret }: { clientSecret: string }) => (
-    <div data-testid="stripe-checkout-mount">{clientSecret}</div>
-  ),
-}));
-
 describe("CheckoutPage", () => {
   let originalFetch: typeof globalThis.fetch;
+  const originalLocation = window.location;
+  let mockedAssign: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     originalFetch = globalThis.fetch;
     document.cookie = "__csrf=test-csrf-token; path=/";
     mockGetReportSessionId.mockReset();
+    mockedAssign = vi.fn();
+    delete (window as Window & { location?: Location }).location;
+    window.location = { ...originalLocation, assign: mockedAssign } as Location;
   });
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
+    window.location = originalLocation;
     cleanup();
   });
 
-  it("renders the full report checkout preview and requests a placeholder session", async () => {
+  it("renders the review step and only requests Stripe checkout after clicking continue", async () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
-        enabled: false,
-        message: "Checkout preview only. Payments are not enabled in this environment yet.",
-        reason: "checkout_disabled",
+        enabled: true,
+        url: "https://checkout.stripe.com/c/pay/cs_test_123",
       }),
     } as Response);
     globalThis.fetch = mockFetch;
@@ -48,39 +47,41 @@ describe("CheckoutPage", () => {
       "href",
       "/report"
     );
-    expect(screen.getByText("Secure checkout")).toBeInTheDocument();
-    expect(screen.queryByRole("tab", { name: /card/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/stripe-hosted checkout/i)).toBeInTheDocument();
+    expect(screen.getByText(/promo codes are entered directly on stripe/i)).toBeInTheDocument();
+    expect(mockFetch).not.toHaveBeenCalled();
 
-    expect(
-      (await screen.findAllByText(/payments are not enabled in this environment yet/i)).length
-    ).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: /continue to secure checkout/i }));
 
-    expect(screen.getByText("Full report")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /secure checkout unavailable/i })).toBeDisabled();
-    expect(mockFetch).toHaveBeenCalledWith(
-      "/api/stripe/checkout-session",
-      expect.objectContaining({
-        body: JSON.stringify({
-          plan: "full_report",
-          reportSessionId: "02d88f31-eceb-4402-940d-c8cd98d01848",
-          reportToken: null,
-        }),
-        headers: expect.objectContaining({
-          "Content-Type": "application/json",
-          "x-csrf-token": "test-csrf-token",
-        }),
-        method: "POST",
-      })
+    await waitFor(() =>
+      expect(mockFetch).toHaveBeenCalledWith(
+        "/api/stripe/checkout-session",
+        expect.objectContaining({
+          body: JSON.stringify({
+            plan: "full_report",
+            reportSessionId: "02d88f31-eceb-4402-940d-c8cd98d01848",
+            reportToken: null,
+          }),
+          headers: expect.objectContaining({
+            "Content-Type": "application/json",
+            "x-csrf-token": "test-csrf-token",
+          }),
+          method: "POST",
+        })
+      )
     );
-  }, 10_000);
 
-  it("uses the report token for back navigation and checkout preparation when present", async () => {
+    await waitFor(() =>
+      expect(mockedAssign).toHaveBeenCalledWith("https://checkout.stripe.com/c/pay/cs_test_123")
+    );
+  });
+
+  it("uses the report token for back navigation and hosted checkout creation when present", async () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
-        enabled: false,
-        message: "Checkout preview only. Payments are not enabled in this environment yet.",
-        reason: "checkout_disabled",
+        enabled: true,
+        url: "https://checkout.stripe.com/c/pay/cs_test_token",
       }),
     } as Response);
     globalThis.fetch = mockFetch;
@@ -93,39 +94,20 @@ describe("CheckoutPage", () => {
       "/report/rpt_ABCDEFGHIJKLMNOPQRST"
     );
 
-    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
-
-    expect(mockFetch).toHaveBeenCalledWith(
-      "/api/stripe/checkout-session",
-      expect.objectContaining({
-        body: JSON.stringify({
-          plan: "all_reports",
-          reportSessionId: null,
-          reportToken: "rpt_ABCDEFGHIJKLMNOPQRST",
-        }),
-      })
-    );
-  });
-
-  it("mounts the real Stripe checkout surface when a client secret is returned", async () => {
-    const mockFetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        clientSecret: "cs_test_preview_123",
-        enabled: true,
-      }),
-    } as Response);
-    globalThis.fetch = mockFetch;
-    mockGetReportSessionId.mockReturnValue("02d88f31-eceb-4402-940d-c8cd98d01848");
-
-    render(<CheckoutPage planId="essentials" />);
+    fireEvent.click(screen.getByRole("button", { name: /continue to secure checkout/i }));
 
     await waitFor(() =>
-      expect(screen.getByTestId("stripe-checkout-mount")).toHaveTextContent("cs_test_preview_123")
+      expect(mockFetch).toHaveBeenCalledWith(
+        "/api/stripe/checkout-session",
+        expect.objectContaining({
+          body: JSON.stringify({
+            plan: "all_reports",
+            reportSessionId: null,
+            reportToken: "rpt_ABCDEFGHIJKLMNOPQRST",
+          }),
+        })
+      )
     );
-
-    expect(screen.getByText("Secure checkout")).toBeInTheDocument();
-    expect(screen.queryByRole("tab", { name: /card/i })).not.toBeInTheDocument();
   });
 
   it("shows a report-context error when no token or saved report session exists", async () => {
@@ -135,16 +117,34 @@ describe("CheckoutPage", () => {
 
     render(<CheckoutPage planId="essentials" />);
 
-    await waitFor(() =>
-      expect(
-        screen.getByText(/this checkout preview is tied to a saved report/i)
-      ).toBeInTheDocument()
-    );
-
+    expect(screen.getByText(/this checkout is tied to a saved report/i)).toBeInTheDocument();
     expect(mockFetch).not.toHaveBeenCalled();
     expect(screen.getByRole("link", { name: /return to your report/i })).toHaveAttribute(
       "href",
       "/report"
     );
+  });
+
+  it("shows the disabled fallback if hosted checkout is unavailable", async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        enabled: false,
+        message: "Checkout preview only. Payments are not enabled in this environment yet.",
+        reason: "checkout_disabled",
+      }),
+    } as Response);
+    globalThis.fetch = mockFetch;
+    mockGetReportSessionId.mockReturnValue("02d88f31-eceb-4402-940d-c8cd98d01848");
+
+    render(<CheckoutPage planId="essentials" />);
+
+    fireEvent.click(screen.getByRole("button", { name: /continue to secure checkout/i }));
+
+    expect(
+      (await screen.findAllByText(/payments are not enabled in this environment yet/i)).length
+    ).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: /secure checkout unavailable/i })).toBeDisabled();
+    expect(mockedAssign).not.toHaveBeenCalled();
   });
 });

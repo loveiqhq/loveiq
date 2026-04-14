@@ -98,10 +98,10 @@ describe("POST /api/stripe/checkout-session", () => {
     await expect(res.json()).resolves.toEqual({ error: "Invalid request." });
   });
 
-  it("creates an elements session with the curated payment method shortlist", async () => {
+  it("creates a hosted checkout session and returns the redirect URL", async () => {
     const createSession = vi.fn().mockResolvedValue({
-      client_secret: "cs_test_preview_123",
       id: "cs_test_session_123",
+      url: "https://checkout.stripe.com/c/pay/cs_test_session_123",
     });
 
     vi.mocked(isStripeCheckoutEnabled).mockReturnValue(true);
@@ -124,20 +124,16 @@ describe("POST /api/stripe/checkout-session", () => {
 
     expect(res.status).toBe(200);
     await expect(res.json()).resolves.toEqual({
-      clientSecret: "cs_test_preview_123",
       enabled: true,
+      url: "https://checkout.stripe.com/c/pay/cs_test_session_123",
     });
     expect(createSession).toHaveBeenCalledWith(
       expect.objectContaining({
         allow_promotion_codes: true,
+        cancel_url: "http://localhost/checkout?plan=full_report",
         customer_email: "test@example.com",
-        payment_method_options: {
-          us_bank_account: {
-            verification_method: "automatic",
-          },
-        },
-        payment_method_types: ["card", "us_bank_account", "amazon_pay", "link"],
-        ui_mode: "elements",
+        success_url:
+          "http://localhost/checkout/return?plan=full_report&session_id={CHECKOUT_SESSION_ID}",
       })
     );
   });

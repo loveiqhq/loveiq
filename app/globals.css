@@ -6573,6 +6573,65 @@ h3,
   line-height: 1.5;
 }
 
+.checkout-payment-panel__review {
+  display: grid;
+  gap: 16px;
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at top, rgba(254, 104, 57, 0.08), transparent 44%),
+    rgba(255, 255, 255, 0.02);
+}
+
+.checkout-payment-panel__review-copy {
+  display: grid;
+  gap: 6px;
+}
+
+.checkout-payment-panel__review-copy strong {
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.checkout-payment-panel__review-copy p {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.66);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.checkout-payment-panel__review-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.checkout-payment-panel__review-list li {
+  position: relative;
+  padding-left: 18px;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.checkout-payment-panel__review-list li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.55em;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(254, 104, 57, 0.9);
+  box-shadow: 0 0 0 4px rgba(254, 104, 57, 0.12);
+}
+
 .checkout-payment-panel__element-shell {
   margin-top: 18px;
   padding: 14px;
@@ -7131,7 +7190,8 @@ h3,
 
   .checkout-payment-panel__element-shell,
   .checkout-payment-panel__express-shell,
-  .checkout-payment-panel__promo-shell {
+  .checkout-payment-panel__promo-shell,
+  .checkout-payment-panel__review {
     margin-top: 14px;
     padding: 12px;
   }
@@ -7228,9 +7288,14 @@ h3,
 
   .checkout-payment-panel__secure-subtitle,
   .checkout-payment-panel__express-meta,
-  .checkout-payment-panel__promo-meta {
+  .checkout-payment-panel__promo-meta,
+  .checkout-payment-panel__review-copy p {
     font-size: 11px;
     line-height: 1.45;
+  }
+
+  .checkout-payment-panel__review-copy strong {
+    font-size: 14px;
   }
 
   .checkout-payment-panel__promo-actions {

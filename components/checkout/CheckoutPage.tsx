@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, useSyncExternalStore, type FC } from "react";
+import { useState, useSyncExternalStore, type FC } from "react";
 import { getReportSessionId } from "@/components/survey/hooks/surveySession";
 import { getCsrfToken } from "@/lib/csrf-client";
 import {
@@ -13,22 +13,24 @@ import {
   STRIPE_CHECKOUT_DISABLED_MESSAGE,
   type StripeCheckoutSessionResponse,
 } from "@/lib/checkout/stripeCheckout";
-import StripeCheckoutMount, { type StripeCheckoutSummary } from "./StripeCheckoutMount";
 
 const subscribeNoop = () => () => {};
 
 type CheckoutSessionState =
   | {
-      message?: string;
-      status: "loading";
-    }
-  | {
-      clientSecret: string;
-      status: "ready";
+      status: "idle" | "redirecting";
     }
   | {
       message: string;
-      status: "disabled" | "error" | "missing-context";
+      status: "disabled";
+    }
+  | {
+      message: string;
+      status: "error";
+    }
+  | {
+      message: string;
+      status: "missing-context";
     };
 
 function SecureHeader() {
@@ -40,7 +42,12 @@ function SecureHeader() {
           <rect x="4.75" y="8.25" width="10.5" height="7" rx="2" />
         </svg>
       </span>
-      <span>Secure Payment</span>
+      <span className="checkout-payment-panel__secure-copy">
+        <span className="checkout-payment-panel__secure-title">Secure Payment</span>
+        <span className="checkout-payment-panel__secure-subtitle">
+          LoveIQ will hand you off to Stripe to complete payment securely.
+        </span>
+      </span>
     </div>
   );
 }
@@ -82,7 +89,7 @@ function CheckoutFallbackSurface({
   sessionState,
 }: {
   backHref: string;
-  sessionState: Extract<CheckoutSessionState, { status: "disabled" | "error" | "missing-context" }>;
+  sessionState: Extract<CheckoutSessionState, { status: "disabled" | "missing-context" }>;
 }) {
   if (sessionState.status === "missing-context") {
     return (
@@ -103,56 +110,77 @@ function CheckoutFallbackSurface({
     );
   }
 
-  const isErrorState = sessionState.status === "error";
-
   return (
     <div className="checkout-payment-stack">
-      <div
-        className={["checkout-payment-panel", isErrorState ? "checkout-payment-panel--error" : ""]
-          .filter(Boolean)
-          .join(" ")}
-      >
+      <div className="checkout-payment-panel">
         <SecureHeader />
-        <div className="checkout-payment-panel__state" role={isErrorState ? "alert" : "status"}>
+        <div className="checkout-payment-panel__state" role="status">
           {sessionState.message}
         </div>
       </div>
 
       <button type="button" className="checkout-submit" disabled>
-        {isErrorState ? "Checkout unavailable" : "Secure checkout unavailable"}
+        Secure checkout unavailable
       </button>
 
-      {!isErrorState ? (
-        <p className="checkout-payment-stack__note" role="status">
-          {sessionState.message || STRIPE_CHECKOUT_DISABLED_MESSAGE}
-        </p>
-      ) : null}
+      <p className="checkout-payment-stack__note" role="status">
+        {sessionState.message || STRIPE_CHECKOUT_DISABLED_MESSAGE}
+      </p>
 
       <CheckoutTrustFooter />
     </div>
   );
 }
 
-function CheckoutLoadingSurface() {
+function CheckoutReviewSurface({
+  errorMessage,
+  isRedirecting,
+  onContinue,
+}: {
+  errorMessage?: string | null;
+  isRedirecting: boolean;
+  onContinue: () => void;
+}) {
   return (
     <div className="checkout-payment-stack">
       <div className="checkout-payment-panel">
         <SecureHeader />
-        <div className="checkout-placeholder">
-          <div className="checkout-placeholder__group">
-            <span className="checkout-placeholder__label">Preparing secure checkout</span>
-            <div className="checkout-placeholder__skeleton" />
+        <div className="checkout-payment-panel__review">
+          <div className="checkout-payment-panel__review-copy">
+            <strong>Stripe-hosted checkout</strong>
+            <p>
+              You&apos;ll continue to Stripe to enter payment details, choose your country, use any
+              available wallets, and finish the purchase on their hosted page.
+            </p>
           </div>
-          <div className="checkout-placeholder__group">
-            <span className="checkout-placeholder__label">Loading Stripe payment form</span>
-            <div className="checkout-placeholder__skeleton checkout-placeholder__skeleton--large" />
-          </div>
+          <ul className="checkout-payment-panel__review-list">
+            <li>Promo codes are entered directly on Stripe.</li>
+            <li>
+              Apple Pay, Google Pay, and other methods appear when Stripe marks them eligible.
+            </li>
+            <li>You&apos;ll return to LoveIQ after payment.</li>
+          </ul>
         </div>
+        {errorMessage ? (
+          <div className="checkout-payment-panel__inline-error" role="alert">
+            {errorMessage}
+          </div>
+        ) : null}
       </div>
 
-      <button type="button" className="checkout-submit" disabled>
-        Preparing Stripe checkout
+      <button
+        type="button"
+        className="checkout-submit"
+        disabled={isRedirecting}
+        onClick={onContinue}
+      >
+        {isRedirecting ? "Redirecting to Stripe…" : "Continue to secure checkout"}
       </button>
+
+      <p className="checkout-payment-stack__note" role="status">
+        Payment happens on Stripe&apos;s hosted checkout page for the most reliable experience
+        across browsers and devices.
+      </p>
 
       <CheckoutTrustFooter />
     </div>
@@ -167,93 +195,79 @@ interface Props {
 const CheckoutPage: FC<Props> = ({ planId, token = null }) => {
   const plan = getReportPurchasePlan(planId);
   const reportSessionId = useSyncExternalStore(subscribeNoop, getReportSessionId, () => null);
-  const [checkoutSummary, setCheckoutSummary] = useState<StripeCheckoutSummary | null>(null);
-  const [sessionState, setSessionState] = useState<CheckoutSessionState>({ status: "loading" });
+  const [sessionState, setSessionState] = useState<CheckoutSessionState>({ status: "idle" });
   const backHref = getReportReturnHref(token);
+  const hasCheckoutContext = Boolean(token || reportSessionId);
 
-  useEffect(() => {
-    let cancelled = false;
+  async function handleContinueToStripe() {
+    if (!hasCheckoutContext) {
+      setSessionState({
+        message:
+          "This checkout is tied to a saved report. Open your report again and retry from there.",
+        status: "missing-context",
+      });
+      return;
+    }
 
-    async function prepareCheckout() {
-      setCheckoutSummary(null);
+    setSessionState({ status: "redirecting" });
 
-      if (!token && !reportSessionId) {
+    try {
+      const response = await fetch("/api/stripe/checkout-session", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-csrf-token": getCsrfToken(),
+        },
+        body: JSON.stringify({
+          plan: planId,
+          reportSessionId: token ? null : reportSessionId,
+          reportToken: token,
+        }),
+      });
+
+      const json = (await response.json().catch(() => null)) as
+        | StripeCheckoutSessionResponse
+        | { error?: string }
+        | null;
+
+      if (!response.ok) {
         setSessionState({
           message:
-            "This checkout preview is tied to a saved report. Open your report again and retry.",
-          status: "missing-context",
+            json && "error" in json && typeof json.error === "string"
+              ? json.error
+              : "We couldn't prepare secure checkout right now. Please try again.",
+          status: "error",
         });
         return;
       }
 
-      setSessionState({ status: "loading" });
-
-      try {
-        const response = await fetch("/api/stripe/checkout-session", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-csrf-token": getCsrfToken(),
-          },
-          body: JSON.stringify({
-            plan: planId,
-            reportSessionId: token ? null : reportSessionId,
-            reportToken: token,
-          }),
-        });
-
-        const json = (await response.json().catch(() => null)) as
-          | StripeCheckoutSessionResponse
-          | { error?: string }
-          | null;
-
-        if (cancelled) return;
-
-        if (!response.ok) {
-          setSessionState({
-            message:
-              json && "error" in json && typeof json.error === "string"
-                ? json.error
-                : "We couldn't prepare checkout right now. Please try again later.",
-            status: "error",
-          });
-          return;
-        }
-
-        if (!json || !("enabled" in json) || !json.enabled) {
-          setSessionState({
-            message:
-              json && "message" in json && typeof json.message === "string"
-                ? json.message
-                : STRIPE_CHECKOUT_DISABLED_MESSAGE,
-            status: "disabled",
-          });
-          return;
-        }
-
+      if (!json || !("enabled" in json) || !json.enabled) {
         setSessionState({
-          clientSecret: json.clientSecret,
-          status: "ready",
+          message:
+            json && "message" in json && typeof json.message === "string"
+              ? json.message
+              : STRIPE_CHECKOUT_DISABLED_MESSAGE,
+          status: "disabled",
         });
-      } catch {
-        if (!cancelled) {
-          setSessionState({
-            message: "We couldn't reach checkout right now. Please try again later.",
-            status: "error",
-          });
-        }
+        return;
       }
+
+      if (!json.url) {
+        setSessionState({
+          message: "Stripe checkout could not be started right now. Please try again.",
+          status: "error",
+        });
+        return;
+      }
+
+      window.location.assign(json.url);
+    } catch {
+      setSessionState({
+        message: "We couldn't reach Stripe right now. Please try again.",
+        status: "error",
+      });
     }
-
-    void prepareCheckout();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [planId, reportSessionId, token]);
-
-  const hasAppliedDiscount = (checkoutSummary?.discountMinorUnitsAmount ?? 0) > 0;
-  const displayedPrice = checkoutSummary?.totalAmount ?? plan.price;
+  }
 
   return (
     <main className="checkout-page">
@@ -301,34 +315,31 @@ const CheckoutPage: FC<Props> = ({ planId, token = null }) => {
               </span>
             )}
             <div className="checkout-page__summary-amount">
-              <strong>{displayedPrice}</strong>
-              <span>{hasAppliedDiscount ? "after promo code" : plan.priceSuffix}</span>
+              <strong>{plan.price}</strong>
+              <span>{plan.priceSuffix}</span>
             </div>
           </div>
-
-          {hasAppliedDiscount ? (
-            <div className="checkout-page__summary-adjustment" role="status">
-              <span>
-                {checkoutSummary?.promotionCode
-                  ? `Promo code ${checkoutSummary.promotionCode}`
-                  : (checkoutSummary?.discountLabel ?? "Discount applied")}
-              </span>
-              <strong>-{checkoutSummary?.discountAmount}</strong>
-            </div>
-          ) : null}
         </section>
 
         <div className="checkout-page__payment-label">Secure checkout</div>
 
-        {sessionState.status === "ready" ? (
-          <StripeCheckoutMount
-            clientSecret={sessionState.clientSecret}
-            onSessionChange={setCheckoutSummary}
+        {!hasCheckoutContext || sessionState.status === "missing-context" ? (
+          <CheckoutFallbackSurface
+            backHref={backHref}
+            sessionState={{
+              message:
+                "This checkout is tied to a saved report. Open your report again and retry from there.",
+              status: "missing-context",
+            }}
           />
-        ) : sessionState.status === "loading" ? (
-          <CheckoutLoadingSurface />
-        ) : (
+        ) : sessionState.status === "disabled" ? (
           <CheckoutFallbackSurface backHref={backHref} sessionState={sessionState} />
+        ) : (
+          <CheckoutReviewSurface
+            errorMessage={sessionState.status === "error" ? sessionState.message : null}
+            isRedirecting={sessionState.status === "redirecting"}
+            onContinue={handleContinueToStripe}
+          />
         )}
       </div>
     </main>

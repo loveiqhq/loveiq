@@ -34,14 +34,8 @@ const RATE_LIMIT_CONFIG = {
   limit: 10,
   windowMs: 60_000,
 };
-const CHECKOUT_PAYMENT_METHOD_TYPES: Array<"amazon_pay" | "card" | "link" | "us_bank_account"> = [
-  "card",
-  "us_bank_account",
-  "amazon_pay",
-  "link",
-];
 
-function buildReturnUrl({
+function buildSuccessUrl({
   origin,
   plan,
   reportToken,
@@ -57,6 +51,24 @@ function buildReturnUrl({
   }
 
   return `${origin}/checkout/return?${params.join("&")}`;
+}
+
+function buildCancelUrl({
+  origin,
+  plan,
+  reportToken,
+}: {
+  origin: string;
+  plan: ReportPurchasePlanId;
+  reportToken?: string | null;
+}) {
+  const params = [`plan=${encodeURIComponent(plan)}`];
+
+  if (reportToken) {
+    params.push(`token=${encodeURIComponent(reportToken)}`);
+  }
+
+  return `${origin}/checkout?${params.join("&")}`;
 }
 
 export async function POST(request: Request) {
@@ -96,7 +108,7 @@ export async function POST(request: Request) {
 
     const stripe = getStripeServerClient();
     const priceId = getStripePriceId(parsed.data.plan);
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || new URL(request.url).origin;
+    const siteUrl = new URL(request.url).origin;
     const customerEmail = await getStripeCheckoutCustomerEmail({
       reportSessionId: parsed.data.reportSessionId ?? null,
       reportToken: parsed.data.reportToken ?? null,
@@ -117,28 +129,26 @@ export async function POST(request: Request) {
         reportToken: parsed.data.reportToken ?? "",
       },
       mode: "payment",
-      payment_method_types: CHECKOUT_PAYMENT_METHOD_TYPES,
-      payment_method_options: {
-        us_bank_account: {
-          verification_method: "automatic",
-        },
-      },
-      return_url: buildReturnUrl({
+      success_url: buildSuccessUrl({
         origin: siteUrl,
         plan: parsed.data.plan,
         reportToken: parsed.data.reportToken ?? null,
       }),
-      ui_mode: "elements",
+      cancel_url: buildCancelUrl({
+        origin: siteUrl,
+        plan: parsed.data.plan,
+        reportToken: parsed.data.reportToken ?? null,
+      }),
     });
 
-    if (!session.client_secret) {
-      logger.error({ sessionId: session.id }, "Stripe checkout session missing client secret");
+    if (!session.url) {
+      logger.error({ sessionId: session.id }, "Stripe checkout session missing hosted URL");
       return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
     }
 
     const successResponse: StripeCheckoutSessionResponse = {
-      clientSecret: session.client_secret,
       enabled: true,
+      url: session.url,
     };
 
     return NextResponse.json(successResponse);

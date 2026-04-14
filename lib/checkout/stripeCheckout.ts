@@ -14,8 +14,8 @@ export type StripeCheckoutSessionResponse =
       reason: "checkout_disabled";
     }
   | {
-      clientSecret: string;
       enabled: true;
+      url: string;
     };
 
 export type StripeCheckoutSessionStatusResponse =
