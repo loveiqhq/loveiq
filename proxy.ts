@@ -29,6 +29,7 @@ export async function proxy(request: NextRequest) {
     const isPublic =
       path === "/login" ||
       path === "/api/health" ||
+      path === "/api/stripe/webhook" ||
       path.startsWith("/api/staging-") ||
       path.startsWith("/admin") ||
       path.startsWith("/_next/") ||

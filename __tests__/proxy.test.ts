@@ -191,4 +191,18 @@ describe("proxy middleware", () => {
       })
     );
   });
+
+  it("allows /api/stripe/webhook through the staging gate", async () => {
+    process.env.STAGING_PASSWORD = "test-staging-pw";
+
+    await proxy(makeNextRequest("http://localhost:3000/api/stripe/webhook"));
+
+    expect(mockResponseHeaders.get("X-Frame-Options")).toBe("DENY");
+    expect(logger.info).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "api_request",
+        path: "/api/stripe/webhook",
+      })
+    );
+  });
 });
