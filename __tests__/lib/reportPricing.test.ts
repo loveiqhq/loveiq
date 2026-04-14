@@ -313,4 +313,114 @@ describe("reportPricing", () => {
       })
     );
   });
+
+  it("persists experiment_group when creating a new quote", async () => {
+    let createdPayload: Record<string, unknown> | null = null;
+
+    mockFetchWithTimeout.mockImplementation(
+      async (url: string, options?: { body?: string; method?: string }) => {
+        if (url.includes("/rest/v1/survey_submission?id=eq.42")) {
+          return createJsonResponse([
+            {
+              id: 42,
+              user_id: 7,
+              utm_tracker: "utm_source=google",
+              duration_ms: 600000,
+              app_user: {
+                id: 7,
+                email: "user@example.com",
+                utm_tracker: null,
+                user_profile: {
+                  location_primary: "Germany",
+                },
+              },
+            },
+          ]);
+        }
+
+        if (url.includes("/rest/v1/survey_submission_answer?survey_submission_id=eq.42")) {
+          return createJsonResponse([
+            {
+              answer_option: { option_text: "Germany" },
+              answer_text: null,
+              normalized_value: null,
+              survey_question: { frontend_qid: "15001" },
+            },
+            {
+              answer_option: { option_text: "I want to seriously invest in my sex life" },
+              answer_text: null,
+              normalized_value: null,
+              survey_question: { frontend_qid: "16012" },
+            },
+          ]);
+        }
+
+        if (url.includes("/rest/v1/report_session?personal_report_id=eq.9")) {
+          return createJsonResponse([{ id: 1 }, { id: 2 }]);
+        }
+
+        if (
+          url.includes("/rest/v1/report_price_quote?personal_report_id=eq.9&plan=eq.full_report")
+        ) {
+          return createJsonResponse([]);
+        }
+
+        if (options?.method === "POST" && url.includes("/rest/v1/report_price_quote")) {
+          createdPayload = JSON.parse(options.body ?? "{}") as Record<string, unknown>;
+          return createJsonResponse([
+            {
+              id: 91,
+              personal_report_id: 9,
+              survey_submission_id: 42,
+              user_id: 7,
+              plan: "full_report",
+              currency: "EUR",
+              experiment_group: createdPayload.experiment_group,
+              base_price_bucket: createdPayload.base_price_bucket,
+              base_price: createdPayload.base_price,
+              current_price: createdPayload.current_price,
+              initial_price: createdPayload.initial_price,
+              discount_step: createdPayload.discount_step,
+              discount_multiplier: createdPayload.discount_multiplier,
+              pricing_cluster_id: createdPayload.pricing_cluster_id,
+              country_tier: createdPayload.country_tier,
+              country_multiplier: createdPayload.country_multiplier,
+              device_type: createdPayload.device_type,
+              device_multiplier: createdPayload.device_multiplier,
+              traffic_source: createdPayload.traffic_source,
+              traffic_multiplier: createdPayload.traffic_multiplier,
+              behavioral_bucket: createdPayload.behavioral_bucket,
+              behavioral_multiplier: createdPayload.behavioral_multiplier,
+              engagement_score: createdPayload.engagement_score,
+              engagement_multiplier: createdPayload.engagement_multiplier,
+              report_preview_views: createdPayload.report_preview_views,
+              fantasy_signal_count: createdPayload.fantasy_signal_count,
+              survey_duration_ms: createdPayload.survey_duration_ms,
+              initial_price_timestamp: createdPayload.initial_price_timestamp,
+              expires_at: createdPayload.expires_at,
+              checkout_started_at: null,
+              purchased_at: null,
+              metadata: createdPayload.metadata,
+              view_count: createdPayload.view_count,
+            },
+          ]);
+        }
+
+        throw new Error(`Unexpected fetch call: ${options?.method ?? "GET"} ${url}`);
+      }
+    );
+
+    const quote = await getReportPriceQuoteForContext({
+      plan: "full_report",
+      pricingSessionId: "550e8400-e29b-41d4-a716-446655440111",
+      reportSessionId: "550e8400-e29b-41d4-a716-446655440222",
+    });
+
+    expect(quote.experimentGroup).toMatch(/^[AB]$/);
+    expect(createdPayload).toEqual(
+      expect.objectContaining({
+        experiment_group: quote.experimentGroup,
+      })
+    );
+  });
 });

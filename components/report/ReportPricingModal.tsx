@@ -66,8 +66,18 @@ function getCardPricing(
   card: ReportPurchasePlan,
   quote: ReportPriceQuoteSnapshot | null | undefined
 ) {
-  const priceCents = quote?.currentPriceCents ?? card.priceCents;
+  if (!quote) {
+    return {
+      available: false,
+      badge: null,
+      priceLabel: "Pricing unavailable",
+      strikePriceLabel: null,
+    };
+  }
+
+  const priceCents = quote.currentPriceCents;
   return {
+    available: true,
     badge: getReportPurchaseBadgeFromPrice({ plan: card, priceCents }),
     priceLabel: formatReportPurchasePrice(priceCents),
     strikePriceLabel: getReportPurchaseStrikePrice(card),
@@ -269,6 +279,11 @@ const ReportPricingModal: FC<Props> = ({
                 <p id="report-pricing-modal-copy" className="report-pricing-modal__copy">
                   {subtitle}
                 </p>
+                {!quotes ? (
+                  <p className="report-pricing-modal__copy" role="alert">
+                    Live pricing couldn&apos;t be loaded right now. Reload the page and try again.
+                  </p>
+                ) : null}
               </div>
 
               <div className="report-pricing-modal__plans" role="list" aria-label="Pricing options">
@@ -337,9 +352,11 @@ const ReportPricingModal: FC<Props> = ({
                         </span>
                         <div className="report-pricing-card__price-row">
                           <strong>{pricing.priceLabel}</strong>
-                          <span>
-                            /{card.priceSuffix === "one-time" ? "one off" : card.priceSuffix}
-                          </span>
+                          {pricing.available ? (
+                            <span>
+                              /{card.priceSuffix === "one-time" ? "one off" : card.priceSuffix}
+                            </span>
+                          ) : null}
                         </div>
                       </div>
 
@@ -351,9 +368,10 @@ const ReportPricingModal: FC<Props> = ({
                         ]
                           .filter(Boolean)
                           .join(" ")}
+                        disabled={!pricing.available}
                         onClick={() => onUnlock(card.plan)}
                       >
-                        {card.ctaLabel}
+                        {pricing.available ? card.ctaLabel : "Pricing unavailable"}
                       </button>
 
                       <ul className="report-pricing-card__features">

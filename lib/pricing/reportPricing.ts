@@ -289,6 +289,7 @@ interface BuiltQuotePayload {
     device_type: PricingDeviceType;
     discount_multiplier: number;
     discount_step: number;
+    experiment_group: PricingExperimentGroup;
     engagement_multiplier: number;
     engagement_score: number;
     expires_at: string;
@@ -1070,6 +1071,7 @@ function buildQuotePayload({
       device_type: deviceType,
       discount_multiplier: discountMultiplier,
       discount_step: discountStep,
+      experiment_group: experimentGroup,
       engagement_multiplier: engagementMultiplier,
       engagement_score: engagementScore,
       expires_at: new Date(now.getTime() + QUOTE_VALIDITY_MS).toISOString(),
