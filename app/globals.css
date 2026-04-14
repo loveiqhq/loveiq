@@ -2138,19 +2138,19 @@ h3,
 /* Archetype subtitle — the paragraph containing the archetype name */
 .report-prose p:has(.report-archetype-name) {
   font-family: var(--font-serif);
-  font-size: 31px;
+  font-size: 36px;
   font-weight: 500;
-  line-height: 32px;
+  line-height: 1.05;
   color: #fff;
-  margin-top: 40px;
+  margin-top: 48px;
 }
 
 .report-archetype-name {
   color: rgb(var(--report-accent-rgb));
   font-family: var(--font-serif);
-  font-size: 31px;
+  font-size: 36px;
   font-weight: 500;
-  line-height: 32px;
+  line-height: 1.05;
 }
 
 .report-prose em {
@@ -2173,13 +2173,13 @@ h3,
 }
 
 .report-prose h2 {
-  font-size: 31px;
-  line-height: 32px;
+  font-size: 36px;
+  line-height: 1.06;
 }
 
 .report-prose h3 {
-  font-size: 24px;
-  line-height: 28px;
+  font-size: 27px;
+  line-height: 1.18;
 }
 
 .report-prose ul,
@@ -4213,23 +4213,23 @@ h3,
   align-items: center;
   gap: 24px;
   width: 100%;
-  margin-bottom: 40px;
+  margin-bottom: 48px;
 }
 
 .report-section__header--welcome {
-  margin-bottom: 40px;
+  margin-bottom: 48px;
 }
 
 .report-section__title-stack {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 12px;
+  gap: 14px;
   min-width: 0;
 }
 
 .report-section__title-stack.is-split {
-  gap: 20px;
+  gap: 24px;
 }
 
 .report-section__eyebrow {
@@ -4238,22 +4238,22 @@ h3,
   font-family: var(--font-sans);
   font-size: 14px;
   font-weight: 600;
-  letter-spacing: 0.16em;
-  line-height: 1;
+  letter-spacing: 0.18em;
+  line-height: 1.08;
   text-transform: uppercase;
 }
 
 .report-section__title {
   margin: 0;
-  font-size: 49px;
-  line-height: 49px;
-  letter-spacing: -0.75px;
+  font-size: clamp(52px, 4.4vw, 58px);
+  line-height: 0.98;
+  letter-spacing: -0.045em;
   font-weight: 500;
 }
 
 .report-section--welcome .report-section__title {
-  font-size: 76px;
-  line-height: 64px;
+  font-size: clamp(68px, 5.8vw, 80px);
+  line-height: 0.9;
 }
 
 .report-section__body {
@@ -4285,7 +4285,7 @@ h3,
 }
 
 .report-flow__stack--md {
-  gap: 40px;
+  gap: 48px;
 }
 
 .report-flow__stack--sm {
@@ -4300,10 +4300,152 @@ h3,
   margin: 0;
   color: #fff;
   font-family: var(--font-serif);
-  font-size: 31px;
+  font-size: 36px;
+  font-weight: 500;
+  line-height: 1.02;
+  letter-spacing: -0.04em;
+}
+
+.report-attachment-patterns {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  width: 100%;
+}
+
+.report-attachment-patterns__header {
+  max-width: 48rem;
+}
+
+.report-attachment-patterns__title {
+  margin: 0;
+  color: #fff;
+  font-family: var(--font-serif);
+  font-size: 38px;
   font-weight: 500;
   line-height: 1.04;
+  letter-spacing: -0.04em;
+}
+
+.report-attachment-patterns__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  width: 100%;
+}
+
+.report-attachment-patterns__card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-height: 100%;
+  padding: 26px 26px 24px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at top right, rgba(255, 255, 255, 0.08), transparent 44%),
+    linear-gradient(180deg, rgba(25, 19, 35, 0.94), rgba(11, 10, 17, 0.92));
+  box-shadow: 0 22px 56px rgba(2, 1, 7, 0.24);
+  overflow: hidden;
+}
+
+.report-attachment-patterns__card:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
+.report-attachment-patterns__card-accent {
+  width: 88px;
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(254, 104, 57, 0.95), rgba(244, 181, 94, 0.92));
+}
+
+.report-attachment-patterns__card[data-tone="secure"] .report-attachment-patterns__card-accent {
+  background: linear-gradient(90deg, rgba(138, 245, 215, 0.95), rgba(78, 222, 128, 0.92));
+}
+
+.report-attachment-patterns__card[data-tone="anxious"] .report-attachment-patterns__card-accent {
+  background: linear-gradient(90deg, rgba(254, 104, 57, 0.98), rgba(249, 115, 22, 0.92));
+}
+
+.report-attachment-patterns__card[data-tone="avoidant"] .report-attachment-patterns__card-accent {
+  background: linear-gradient(90deg, rgba(181, 137, 255, 0.96), rgba(99, 102, 241, 0.9));
+}
+
+.report-attachment-patterns__card[data-tone="mixed"] .report-attachment-patterns__card-accent {
+  background: linear-gradient(90deg, rgba(250, 204, 21, 0.95), rgba(251, 146, 60, 0.92));
+}
+
+.report-attachment-patterns__card[data-tone="adaptive"] .report-attachment-patterns__card-accent {
+  background: linear-gradient(90deg, rgba(125, 211, 252, 0.95), rgba(167, 139, 250, 0.92));
+}
+
+.report-attachment-patterns__card-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.report-attachment-patterns__card-title {
+  margin: 0;
+  color: #fff;
+  font-family: var(--font-serif);
+  font-size: 28px;
+  font-weight: 500;
+  line-height: 1.08;
   letter-spacing: -0.03em;
+}
+
+.report-attachment-patterns__card-body {
+  color: var(--report-copy);
+  font-family: var(--font-sans);
+  font-size: 18px;
+  font-weight: 300;
+  line-height: 1.68;
+}
+
+.report-attachment-patterns__card-body p {
+  margin: 0;
+}
+
+.report-attachment-patterns__card-body strong {
+  color: #fff;
+}
+
+.report-attachment-patterns__card-body em {
+  color: rgba(255, 255, 255, 0.74);
+}
+
+.report-attachment-patterns__examples {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.report-attachment-patterns__examples-label {
+  color: rgb(var(--report-accent-rgb));
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.report-attachment-patterns__examples-copy {
+  color: rgba(255, 255, 255, 0.72);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1.55;
+}
+
+.report-attachment-patterns__outro {
+  max-width: 58rem;
 }
 
 /* Old .report-feedback styles removed — replaced by .report-fb */
@@ -6088,15 +6230,15 @@ h3,
   .report-section__header {
     align-items: flex-start;
     gap: 1rem;
-    margin-bottom: 24px;
+    margin-bottom: 32px;
   }
 
   .report-section__title-stack {
-    gap: 10px;
+    gap: 12px;
   }
 
   .report-section__title-stack.is-split {
-    gap: 16px;
+    gap: 20px;
   }
 
   .report-section__eyebrow {
@@ -6105,13 +6247,13 @@ h3,
   }
 
   .report-section__title {
-    font-size: 32px;
-    line-height: 34px;
+    font-size: 38px;
+    line-height: 40px;
   }
 
   .report-section--welcome .report-section__title {
-    font-size: 48px;
-    line-height: 44px;
+    font-size: 52px;
+    line-height: 46px;
   }
 
   .report-section + .report-section {
@@ -6133,7 +6275,7 @@ h3,
 
   .report-flow__stack--lg,
   .report-flow__stack--md {
-    gap: 32px;
+    gap: 36px;
   }
 
   .report-flow__stack--sm {
@@ -6141,8 +6283,68 @@ h3,
   }
 
   .report-rich-heading p {
-    font-size: 28px;
+    font-size: 30px;
+    line-height: 1.06;
+  }
+
+  .report-prose p:has(.report-archetype-name),
+  .report-archetype-name,
+  .report-prose h2 {
+    font-size: 30px;
     line-height: 1.08;
+  }
+
+  .report-prose h3 {
+    font-size: 24px;
+    line-height: 1.2;
+  }
+
+  .report-attachment-patterns {
+    gap: 22px;
+  }
+
+  .report-attachment-patterns__title {
+    font-size: 30px;
+    line-height: 1.08;
+  }
+
+  .report-attachment-patterns__grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .report-attachment-patterns__card,
+  .report-attachment-patterns__card:last-child:nth-child(odd) {
+    grid-column: auto;
+  }
+
+  .report-attachment-patterns__card {
+    gap: 16px;
+    padding: 20px 18px 18px;
+    border-radius: 20px;
+  }
+
+  .report-attachment-patterns__card-accent {
+    width: 72px;
+  }
+
+  .report-attachment-patterns__card-title {
+    font-size: 24px;
+    line-height: 1.12;
+  }
+
+  .report-attachment-patterns__card-body {
+    font-size: 16px;
+    line-height: 1.6;
+  }
+
+  .report-attachment-patterns__examples {
+    gap: 6px;
+    padding-top: 12px;
+  }
+
+  .report-attachment-patterns__examples-copy {
+    font-size: 14px;
   }
 
   .report-stage-highlight {

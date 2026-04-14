@@ -16,6 +16,7 @@ import { useSectionFeedback, type FeedbackPayload } from "./hooks/useSectionFeed
 import { resolveReportSections } from "./reportTitles";
 import { getReportTheme, getReportThemeStyle } from "./reportTheme";
 import ArchetypeProbabilitySection from "./sections/ArchetypeProbabilitySection";
+import AttachmentPatternsSection from "./sections/AttachmentPatternsSection";
 import CoreArchetypeSection from "./sections/CoreArchetypeSection";
 import DimensionSection from "./sections/DimensionSection";
 import ImportanceOfSexualitySection from "./sections/ImportanceOfSexualitySection";
@@ -478,6 +479,33 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                       generalHtml={generalHtml}
                       importanceLabel={snapshot.importanceLabel}
                       importanceValue={snapshot.importanceValue}
+                    />
+                  </ReportSection>
+                );
+              }
+
+              if (section.sectionNumber === 8) {
+                const isBackendUnlocked = isSectionUnlockedForPlan({
+                  accessPlan,
+                  isPremium: section.isPremium,
+                  sectionId: section.id,
+                });
+
+                return (
+                  <ReportSection
+                    key={section.id}
+                    feedbackWidget={feedbackWidget}
+                    sectionId={section.id}
+                    title={title}
+                  >
+                    <AttachmentPatternsSection
+                      archetype={primaryArchetype}
+                      archetypeHtml={archetypeHtml}
+                      generalHtml={generalHtml}
+                      isPremium={section.isPremium}
+                      isUnlocked={isBackendUnlocked || (unlockedSections[section.id] ?? false)}
+                      onUnlock={() => unlockSection(section.id)}
+                      sectionTitle={title}
                     />
                   </ReportSection>
                 );

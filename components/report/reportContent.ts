@@ -37,6 +37,21 @@ export interface ReportPracticeTendencyGroup {
   title: string;
 }
 
+export interface ReportAttachmentPattern {
+  descriptionHtml: string;
+  examples: string[];
+  title: string;
+}
+
+const ATTACHMENT_COMMON_HEADING_PATTERN = /^Common Attachment Style Patterns Across Archetypes$/i;
+const ATTACHMENT_PATTERN_TITLES = new Set([
+  "secure attachment",
+  "anxious attachment",
+  "avoidant attachment",
+  "disorganized or mixed attachment",
+  "contextual / adaptive attachment",
+]);
+
 export function normalizeReportHtml(html: string | null | undefined) {
   if (!html) return html ?? "";
 
@@ -115,6 +130,125 @@ export function splitTrailingHeadingBlock(blocks: string[]) {
   return {
     bodyBlocks: blocks.slice(0, -1),
     headingBlock: lastBlock,
+  };
+}
+
+function normalizeAttachmentPatternTitle(title: string) {
+  return title.replace(/\s+/g, " ").trim().replace(/[.:]$/, "");
+}
+
+function splitAttachmentExamples(descriptionHtml: string) {
+  const exampleMatch = descriptionHtml.match(/<em>\s*\((?:e\.g\.\s*)?([\s\S]*?)\)\s*<\/em>/i);
+
+  if (!exampleMatch) {
+    return { descriptionHtml, examples: [] as string[] };
+  }
+
+  const descriptionWithoutExamples = normalizeReportHtml(
+    descriptionHtml.replace(exampleMatch[0], "").replace(/<p>\s*<\/p>/gi, "")
+  );
+
+  const examples = getReportBlockText(exampleMatch[1])
+    .split(/\s*,\s*/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+
+  return {
+    descriptionHtml: descriptionWithoutExamples,
+    examples,
+  };
+}
+
+function parseAttachmentPatternHeading(block: string) {
+  if (!/^\s*<p\b/i.test(block)) return null;
+
+  const strongMatch = block.match(/<strong>([\s\S]*?)<\/strong>/i);
+  if (!strongMatch) return null;
+
+  const title = normalizeAttachmentPatternTitle(getReportBlockText(strongMatch[1]));
+  if (!ATTACHMENT_PATTERN_TITLES.has(title.toLowerCase())) return null;
+
+  const afterStrong = block
+    .slice((strongMatch.index ?? 0) + strongMatch[0].length)
+    .replace(/^\s*(<br\s*\/?>\s*)+/i, "")
+    .replace(/\s*<\/p>\s*$/i, "")
+    .trim();
+
+  return {
+    inlineDescriptionHtml: getReportBlockText(afterStrong) ? `<p>${afterStrong}</p>` : "",
+    title,
+  };
+}
+
+export function extractAttachmentSectionContent(html: string | null | undefined) {
+  const blocks = extractReportHtmlBlocks(html ?? "");
+  const { bodyBlocks, headingBlock } = splitTrailingHeadingBlock(blocks);
+  const commonHeadingIndex = bodyBlocks.findIndex((block) =>
+    ATTACHMENT_COMMON_HEADING_PATTERN.test(getReportBlockText(stripReportImages(block)))
+  );
+
+  if (commonHeadingIndex === -1) {
+    return {
+      commonHeading: null as string | null,
+      headingBlock,
+      introHtml: joinReportHtmlBlocks(bodyBlocks),
+      outroHtml: "",
+      patterns: [] as ReportAttachmentPattern[],
+    };
+  }
+
+  const introBlocks = bodyBlocks.slice(0, commonHeadingIndex);
+  const remainingBlocks = bodyBlocks.slice(commonHeadingIndex + 1);
+  const patterns: ReportAttachmentPattern[] = [];
+  const outroBlocks: string[] = [];
+  let pendingTitle: string | null = null;
+  let encounteredPattern = false;
+
+  for (const block of remainingBlocks) {
+    const parsedHeading = parseAttachmentPatternHeading(block);
+
+    if (parsedHeading) {
+      if (pendingTitle) {
+        patterns.push({ title: pendingTitle, descriptionHtml: "", examples: [] });
+      }
+
+      pendingTitle = parsedHeading.title;
+      encounteredPattern = true;
+
+      if (parsedHeading.inlineDescriptionHtml) {
+        const { descriptionHtml, examples } = splitAttachmentExamples(
+          parsedHeading.inlineDescriptionHtml
+        );
+        patterns.push({ title: parsedHeading.title, descriptionHtml, examples });
+        pendingTitle = null;
+      }
+
+      continue;
+    }
+
+    if (pendingTitle) {
+      const { descriptionHtml, examples } = splitAttachmentExamples(block.trim());
+      patterns.push({ title: pendingTitle, descriptionHtml, examples });
+      pendingTitle = null;
+      encounteredPattern = true;
+      continue;
+    }
+
+    if (encounteredPattern) {
+      outroBlocks.push(block);
+    }
+  }
+
+  if (pendingTitle) {
+    patterns.push({ title: pendingTitle, descriptionHtml: "", examples: [] });
+  }
+
+  return {
+    commonHeading: "Common Attachment Style Patterns Across Archetypes",
+    headingBlock,
+    introHtml: joinReportHtmlBlocks(introBlocks),
+    outroHtml: joinReportHtmlBlocks(outroBlocks),
+    patterns,
   };
 }
 

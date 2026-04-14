@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  extractAttachmentSectionContent,
   ensureSexualStageHighlight,
   extractPracticeSectionIntroHtml,
   normalizeReportHtml,
   parsePracticeTendencyGroups,
 } from "@/components/report/reportContent";
 import { archetypeContent } from "@/data/report-archetypes";
+import { reportSections } from "@/data/report-general";
 
 describe("reportContent normalization", () => {
   it("removes leaked Google Docs footnote links from prose", () => {
@@ -65,5 +67,35 @@ describe("reportContent normalization", () => {
       actualPleasure: 6,
     });
     expect(groups.some((group) => group.title === "Technology & Distance")).toBe(true);
+  });
+
+  it("extracts attachment intro prose, common patterns, and the archetype heading separately", () => {
+    const attachmentHtml =
+      reportSections.find(
+        (section) =>
+          section.id === "attachment_style_how_safety_closeness_and_distance_shape_desire"
+      )?.generalContent ?? "";
+
+    const content = extractAttachmentSectionContent(attachmentHtml);
+
+    expect(content.introHtml).toContain("Attachment style describes how a person relates");
+    expect(content.commonHeading).toBe("Common Attachment Style Patterns Across Archetypes");
+    expect(content.patterns).toHaveLength(5);
+    expect(content.patterns[0]).toMatchObject({
+      title: "Secure attachment",
+      examples: [
+        "Sensual Connector",
+        "Relational Nurturer",
+        "Loyal Ritualist",
+        "Spiritual Lover",
+        "Curious Apprentice",
+      ],
+    });
+    expect(content.patterns[1]).toMatchObject({
+      title: "Anxious attachment",
+      examples: ["Approval Seeker"],
+    });
+    expect(content.outroHtml).toContain("Attachment style is <strong>not static</strong>");
+    expect(content.headingBlock).toContain("Attachment Style of the {{CORE_ARCHETYPE}}");
   });
 });
