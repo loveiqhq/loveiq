@@ -16,6 +16,73 @@ let capturedPaymentElementProps: {
   };
 } | null = null;
 
+function createCheckoutMock(overrides: Record<string, unknown> = {}) {
+  return {
+    applyPromotionCode: vi.fn().mockResolvedValue({
+      session: {
+        discountAmounts: [
+          {
+            displayName: "Spring promo",
+            promotionCode: "LOVEIQ10",
+          },
+        ],
+        total: {
+          discount: {
+            amount: "€3.00",
+            minorUnitsAmount: 300,
+          },
+          subtotal: {
+            amount: "€29.99",
+            minorUnitsAmount: 2999,
+          },
+          total: {
+            amount: "€26.99",
+            minorUnitsAmount: 2699,
+          },
+        },
+      },
+      type: "success",
+    }),
+    confirm: vi.fn().mockResolvedValue({ type: "success" }),
+    discountAmounts: null,
+    removePromotionCode: vi.fn().mockResolvedValue({
+      session: {
+        discountAmounts: null,
+        total: {
+          discount: {
+            amount: "€0.00",
+            minorUnitsAmount: 0,
+          },
+          subtotal: {
+            amount: "€29.99",
+            minorUnitsAmount: 2999,
+          },
+          total: {
+            amount: "€29.99",
+            minorUnitsAmount: 2999,
+          },
+        },
+      },
+      type: "success",
+    }),
+    total: {
+      discount: {
+        amount: "€0.00",
+        minorUnitsAmount: 0,
+      },
+      subtotal: {
+        amount: "€29.99",
+        minorUnitsAmount: 2999,
+      },
+      total: {
+        amount: "€29.99",
+        minorUnitsAmount: 2999,
+      },
+    },
+    ...overrides,
+  };
+}
+
 vi.mock("@stripe/stripe-js", () => ({
   loadStripe: vi.fn(() => Promise.resolve({})),
 }));
@@ -53,9 +120,7 @@ describe("StripeCheckoutMount", () => {
   it("renders the express wallet element above the payment element", async () => {
     mockCheckoutState = {
       type: "success",
-      checkout: {
-        confirm: vi.fn().mockResolvedValue({ type: "success" }),
-      },
+      checkout: createCheckoutMock(),
     };
 
     const { default: StripeCheckoutMount } =
@@ -78,9 +143,9 @@ describe("StripeCheckoutMount", () => {
 
     mockCheckoutState = {
       type: "success",
-      checkout: {
+      checkout: createCheckoutMock({
         confirm,
-      },
+      }),
     };
 
     const { default: StripeCheckoutMount } =
@@ -112,9 +177,9 @@ describe("StripeCheckoutMount", () => {
 
     mockCheckoutState = {
       type: "success",
-      checkout: {
+      checkout: createCheckoutMock({
         confirm,
-      },
+      }),
     };
 
     const { default: StripeCheckoutMount } =
@@ -136,5 +201,53 @@ describe("StripeCheckoutMount", () => {
         expressCheckoutConfirmEvent: expect.anything(),
       })
     );
+  });
+
+  it("applies a promotion code through the Stripe checkout session", async () => {
+    const applyPromotionCode = vi.fn().mockResolvedValue({
+      session: {
+        discountAmounts: [
+          {
+            displayName: "Spring promo",
+            promotionCode: "LOVEIQ10",
+          },
+        ],
+        total: {
+          discount: {
+            amount: "€3.00",
+            minorUnitsAmount: 300,
+          },
+          subtotal: {
+            amount: "€29.99",
+            minorUnitsAmount: 2999,
+          },
+          total: {
+            amount: "€26.99",
+            minorUnitsAmount: 2699,
+          },
+        },
+      },
+      type: "success",
+    });
+
+    mockCheckoutState = {
+      type: "success",
+      checkout: createCheckoutMock({
+        applyPromotionCode,
+      }),
+    };
+
+    const { default: StripeCheckoutMount } =
+      await import("@/components/checkout/StripeCheckoutMount");
+
+    render(<StripeCheckoutMount clientSecret="cs_test_preview_123" />);
+
+    fireEvent.change(screen.getByPlaceholderText(/enter promo code/i), {
+      target: { value: "loveiq10" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /apply/i }));
+
+    await waitFor(() => expect(applyPromotionCode).toHaveBeenCalledWith("loveiq10"));
+    expect(await screen.findByText(/promo code LOVEIQ10 applied\./i)).toBeInTheDocument();
   });
 });

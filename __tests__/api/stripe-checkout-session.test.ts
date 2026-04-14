@@ -129,6 +129,7 @@ describe("POST /api/stripe/checkout-session", () => {
     });
     expect(createSession).toHaveBeenCalledWith(
       expect.objectContaining({
+        allow_promotion_codes: true,
         customer_email: "test@example.com",
         payment_method_options: {
           us_bank_account: {

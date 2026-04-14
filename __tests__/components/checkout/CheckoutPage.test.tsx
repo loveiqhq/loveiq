@@ -29,9 +29,7 @@ describe("CheckoutPage", () => {
     cleanup();
   });
 
-  it(
-    "renders the full report checkout preview and requests a placeholder session",
-    async () => {
+  it("renders the full report checkout preview and requests a placeholder session", async () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -50,15 +48,15 @@ describe("CheckoutPage", () => {
       "href",
       "/report"
     );
+    expect(screen.getByText("Secure checkout")).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /card/i })).not.toBeInTheDocument();
 
-    await waitFor(() =>
-      expect(
-        screen.getByText(/payments are not enabled in this environment yet/i)
-      ).toBeInTheDocument()
-    );
+    expect(
+      (await screen.findAllByText(/payments are not enabled in this environment yet/i)).length
+    ).toBeGreaterThan(0);
 
     expect(screen.getByText("Full report")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /complete payment/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /secure checkout unavailable/i })).toBeDisabled();
     expect(mockFetch).toHaveBeenCalledWith(
       "/api/stripe/checkout-session",
       expect.objectContaining({
@@ -74,9 +72,7 @@ describe("CheckoutPage", () => {
         method: "POST",
       })
     );
-    },
-    10_000
-  );
+  }, 10_000);
 
   it("uses the report token for back navigation and checkout preparation when present", async () => {
     const mockFetch = vi.fn().mockResolvedValue({
@@ -128,7 +124,7 @@ describe("CheckoutPage", () => {
       expect(screen.getByTestId("stripe-checkout-mount")).toHaveTextContent("cs_test_preview_123")
     );
 
-    expect(screen.getByText("Stripe Checkout Preview")).toBeInTheDocument();
+    expect(screen.getByText("Secure checkout")).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: /card/i })).not.toBeInTheDocument();
   });
 

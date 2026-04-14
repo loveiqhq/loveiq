@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState, type FormEvent, type FC } from "react";
+import { useEffect, useMemo, useState, type FormEvent, type FC, type KeyboardEvent } from "react";
 import {
   loadStripe,
+  type StripeCheckoutDiscountAmount,
+  type StripeCheckoutSession,
   type StripeExpressCheckoutElementConfirmEvent,
   type StripeExpressCheckoutElementReadyEvent,
 } from "@stripe/stripe-js";
@@ -20,6 +22,15 @@ const isPreviewMode = process.env.NEXT_PUBLIC_STRIPE_CHECKOUT_PREVIEW_MODE === "
 const previewModeMessage =
   "Preview mode is active. You can confirm Stripe test payments here, but purchases still do not unlock LoveIQ reports yet.";
 const compactCheckoutMediaQuery = "(max-width: 640px)";
+
+export interface StripeCheckoutSummary {
+  discountAmount: string;
+  discountLabel: string | null;
+  discountMinorUnitsAmount: number;
+  promotionCode: string | null;
+  subtotalAmount: string;
+  totalAmount: string;
+}
 
 const checkoutElementFonts = [
   {
@@ -240,14 +251,58 @@ function useCompactCheckoutLayout() {
   return isCompactLayout;
 }
 
-function StripeCheckoutForm() {
+function getAppliedPromotion(checkout: StripeCheckoutSession): StripeCheckoutDiscountAmount | null {
+  return (
+    checkout.discountAmounts?.find((entry) => typeof entry.promotionCode === "string") ??
+    checkout.discountAmounts?.[0] ??
+    null
+  );
+}
+
+function buildCheckoutSummary(checkout: StripeCheckoutSession): StripeCheckoutSummary {
+  const appliedPromotion = getAppliedPromotion(checkout);
+
+  return {
+    discountAmount: checkout.total.discount.amount,
+    discountLabel: appliedPromotion?.displayName ?? null,
+    discountMinorUnitsAmount: checkout.total.discount.minorUnitsAmount,
+    promotionCode: appliedPromotion?.promotionCode ?? null,
+    subtotalAmount: checkout.total.subtotal.amount,
+    totalAmount: checkout.total.total.amount,
+  };
+}
+
+function StripeCheckoutForm({
+  onSessionChange,
+}: {
+  onSessionChange?: (summary: StripeCheckoutSummary) => void;
+}) {
   const checkoutState = useCheckout();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isApplyingPromotionCode, setIsApplyingPromotionCode] = useState(false);
   const [expressCheckoutAvailability, setExpressCheckoutAvailability] = useState<
     "available" | "pending" | "unavailable"
   >("pending");
+  const [promotionCodeDraft, setPromotionCodeDraft] = useState("");
+  const [promotionCodeMessage, setPromotionCodeMessage] = useState<{
+    tone: "error" | "success";
+    value: string;
+  } | null>(null);
   const isCompactLayout = useCompactCheckoutLayout();
+  const checkout = checkoutState.type === "success" ? checkoutState.checkout : null;
+  const appliedPromotion = useMemo(
+    () => (checkout ? getAppliedPromotion(checkout) : null),
+    [checkout]
+  );
+
+  useEffect(() => {
+    if (!checkout) {
+      return;
+    }
+
+    onSessionChange?.(buildCheckoutSummary(checkout));
+  }, [checkout, onSessionChange]);
 
   if (checkoutState.type === "loading") {
     return (
@@ -281,7 +336,11 @@ function StripeCheckoutForm() {
     );
   }
 
-  const { checkout } = checkoutState;
+  if (!checkout) {
+    return null;
+  }
+
+  const activeCheckout = checkout;
 
   async function confirmCheckout(
     options?: { expressCheckoutConfirmEvent?: StripeExpressCheckoutElementConfirmEvent },
@@ -291,7 +350,7 @@ function StripeCheckoutForm() {
     setErrorMessage(null);
     setIsSubmitting(true);
 
-    const result = await checkout.confirm({
+    const result = await activeCheckout.confirm({
       redirect: "always",
       ...options,
     });
@@ -310,12 +369,79 @@ function StripeCheckoutForm() {
     setIsSubmitting(false);
   }
 
+  async function applyPromotionCode() {
+    const code = promotionCodeDraft.trim();
+
+    if (!code) {
+      setPromotionCodeMessage({
+        tone: "error",
+        value: "Enter a promo code before applying it.",
+      });
+      return;
+    }
+
+    setPromotionCodeMessage(null);
+    setIsApplyingPromotionCode(true);
+
+    const result = await activeCheckout.applyPromotionCode(code);
+
+    if (result.type === "error") {
+      setPromotionCodeMessage({
+        tone: "error",
+        value: result.error.message ?? "That promo code could not be applied.",
+      });
+      setIsApplyingPromotionCode(false);
+      return;
+    }
+
+    const appliedCode = getAppliedPromotion(result.session)?.promotionCode ?? code.toUpperCase();
+
+    setPromotionCodeMessage({
+      tone: "success",
+      value: `Promo code ${appliedCode} applied.`,
+    });
+    setPromotionCodeDraft(appliedCode);
+    setIsApplyingPromotionCode(false);
+  }
+
+  async function removePromotionCode() {
+    setPromotionCodeMessage(null);
+    setIsApplyingPromotionCode(true);
+
+    const result = await activeCheckout.removePromotionCode();
+
+    if (result.type === "error") {
+      setPromotionCodeMessage({
+        tone: "error",
+        value: result.error.message ?? "That promo code could not be removed.",
+      });
+      setIsApplyingPromotionCode(false);
+      return;
+    }
+
+    setPromotionCodeDraft("");
+    setPromotionCodeMessage({
+      tone: "success",
+      value: "Promo code removed.",
+    });
+    setIsApplyingPromotionCode(false);
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     await confirmCheckout(undefined, event);
   }
 
   async function handleExpressConfirm(event: StripeExpressCheckoutElementConfirmEvent) {
     await confirmCheckout({ expressCheckoutConfirmEvent: event });
+  }
+
+  function handlePromotionCodeKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key !== "Enter") {
+      return;
+    }
+
+    event.preventDefault();
+    void applyPromotionCode();
   }
 
   return (
@@ -399,6 +525,73 @@ function StripeCheckoutForm() {
             }}
           />
         </div>
+        <div className="checkout-payment-panel__promo-shell">
+          <div className="checkout-payment-panel__promo-copy">
+            <span className="checkout-payment-panel__promo-label">Promo code</span>
+            <span className="checkout-payment-panel__promo-meta">
+              Enter a valid Stripe promotion code to apply any extra discount before payment.
+            </span>
+          </div>
+          <div className="checkout-payment-panel__promo-actions">
+            <label className="checkout-payment-panel__promo-field">
+              <span className="sr-only">Promo code</span>
+              <input
+                autoCapitalize="characters"
+                autoCorrect="off"
+                className="checkout-payment-panel__promo-input"
+                inputMode="text"
+                name="promotion_code"
+                onChange={(event) => {
+                  setPromotionCodeDraft(event.target.value);
+                }}
+                onKeyDown={handlePromotionCodeKeyDown}
+                placeholder="Enter promo code"
+                spellCheck={false}
+                type="text"
+                value={promotionCodeDraft}
+              />
+            </label>
+            <button
+              type="button"
+              className="checkout-payment-panel__promo-button"
+              disabled={isApplyingPromotionCode}
+              onClick={() => {
+                void applyPromotionCode();
+              }}
+            >
+              {isApplyingPromotionCode ? "Applying..." : "Apply"}
+            </button>
+          </div>
+          {appliedPromotion?.promotionCode ? (
+            <div className="checkout-payment-panel__promo-applied">
+              <span>
+                Applied <strong>{appliedPromotion.promotionCode}</strong>
+                {appliedPromotion.displayName ? ` - ${appliedPromotion.displayName}` : ""}
+              </span>
+              <button
+                type="button"
+                className="checkout-payment-panel__promo-remove"
+                disabled={isApplyingPromotionCode}
+                onClick={() => {
+                  void removePromotionCode();
+                }}
+              >
+                Remove
+              </button>
+            </div>
+          ) : null}
+          {promotionCodeMessage ? (
+            <div
+              className={[
+                "checkout-payment-panel__promo-message",
+                `checkout-payment-panel__promo-message--${promotionCodeMessage.tone}`,
+              ].join(" ")}
+              role={promotionCodeMessage.tone === "error" ? "alert" : "status"}
+            >
+              {promotionCodeMessage.value}
+            </div>
+          ) : null}
+        </div>
         {errorMessage ? (
           <div className="checkout-payment-panel__inline-error" role="alert">
             {errorMessage}
@@ -430,9 +623,10 @@ function StripeCheckoutForm() {
 
 interface Props {
   clientSecret: string;
+  onSessionChange?: (summary: StripeCheckoutSummary) => void;
 }
 
-const StripeCheckoutMount: FC<Props> = ({ clientSecret }) => {
+const StripeCheckoutMount: FC<Props> = ({ clientSecret, onSessionChange }) => {
   if (!stripePromise) {
     return (
       <div className="checkout-payment-stack">
@@ -462,7 +656,7 @@ const StripeCheckoutMount: FC<Props> = ({ clientSecret }) => {
         },
       }}
     >
-      <StripeCheckoutForm />
+      <StripeCheckoutForm onSessionChange={onSessionChange} />
     </CheckoutElementsProvider>
   );
 };
