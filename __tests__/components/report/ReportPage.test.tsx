@@ -37,6 +37,7 @@ describe("ReportPage", () => {
   function buildSuccessResponse() {
     return {
       data: {
+        accessPlan: null,
         userName: "Eman",
         primaryArchetype: "Emotional Voyeur",
         percentages: { "Emotional Voyeur": 63, "Explorer of Edges": 37 },
@@ -279,4 +280,17 @@ describe("ReportPage", () => {
     },
     REPORT_MODAL_TEST_TIMEOUT_MS
   );
+
+  it("does not open the pricing modal when backend access is already paid", () => {
+    const paid = buildSuccessResponse();
+    paid.data.accessPlan = "full_report";
+    mockUseReportData.mockReturnValue(paid);
+
+    render(<ReportPage />);
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: /unlock your full report/i })
+    ).not.toBeInTheDocument();
+  });
 });

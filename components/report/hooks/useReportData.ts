@@ -5,6 +5,7 @@ import { getCsrfToken } from "@/lib/csrf-client";
 import { finalizeReportSession } from "@/components/survey/hooks/surveySession";
 
 export interface ReportData {
+  accessPlan: "essentials" | "full_report" | "all_reports" | null;
   userName: string | null;
   primaryArchetype: string;
   percentages: Record<string, number>;

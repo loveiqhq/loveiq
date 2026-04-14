@@ -30,6 +30,10 @@ vi.mock("../../lib/circuit-breaker", () => ({
   CircuitOpenError: class CircuitOpenError extends Error {},
 }));
 
+vi.mock("../../lib/report/personalReport", () => ({
+  ensurePersonalReportForSubmission: vi.fn().mockResolvedValue({ id: 10 }),
+}));
+
 // Set env vars before importing the handler
 process.env.SUPABASE_URL = "https://test.supabase.co";
 process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-key";

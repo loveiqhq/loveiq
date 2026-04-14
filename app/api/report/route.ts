@@ -1,9 +1,15 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { scheduleAfterResponse } from "@/lib/after-response";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { getBreaker, CircuitOpenError } from "@/lib/circuit-breaker";
 import { verifyCsrfToken } from "@/lib/csrf";
+import {
+  ensurePersonalReportForSubmission,
+  getReportAccessPlanForSubmission,
+  recordReportSessionView,
+} from "@/lib/report/personalReport";
 import logger from "@/lib/logger";
 
 const sessionIdSchema = z.object({
@@ -33,6 +39,7 @@ interface SubmissionRow {
   id: number;
   created_date_time: string;
   app_user: SubmissionUser | SubmissionUser[] | null;
+  user_id: number | null;
 }
 
 interface SnapshotAnswers {
@@ -128,10 +135,10 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: "Report not found." }, { status: 404 });
       }
 
-      submissionQuery = `${supabaseUrl}/rest/v1/survey_submission?id=eq.${tokenRows[0].survey_submission_id}&select=id,created_date_time,app_user!fk_survey_submission_user(first_name)&limit=1`;
+      submissionQuery = `${supabaseUrl}/rest/v1/survey_submission?id=eq.${tokenRows[0].survey_submission_id}&select=id,user_id,created_date_time,app_user!fk_survey_submission_user(first_name)&limit=1`;
     } else {
       const sid = (sessionParsed as { success: true; data: { sessionId: string } }).data.sessionId;
-      submissionQuery = `${supabaseUrl}/rest/v1/survey_submission?session_id=eq.${encodeURIComponent(sid)}&select=id,created_date_time,app_user!fk_survey_submission_user(first_name)&limit=1`;
+      submissionQuery = `${supabaseUrl}/rest/v1/survey_submission?session_id=eq.${encodeURIComponent(sid)}&select=id,user_id,created_date_time,app_user!fk_survey_submission_user(first_name)&limit=1`;
     }
 
     const submissionRes = await getBreaker("supabase").fire(() =>
@@ -244,8 +251,32 @@ export async function GET(request: Request) {
       );
     }
 
+    let accessPlan: "essentials" | "full_report" | "all_reports" | null = null;
+
+    try {
+      await ensurePersonalReportForSubmission({
+        reportToken: tokenParsed?.success ? tokenParsed.data.token : null,
+        submissionId: submission.id,
+      });
+
+      const access = await getReportAccessPlanForSubmission(submission.id);
+      accessPlan = access.accessPlan;
+
+      if (access.personalReportId) {
+        scheduleAfterResponse("report-session-capture", async () => {
+          await recordReportSessionView({
+            personalReportId: access.personalReportId!,
+            userId: submission.user_id,
+          });
+        });
+      }
+    } catch (err) {
+      logger.warn({ err, submissionId: submission.id }, "Unable to sync report access state");
+    }
+
     // 7. Build response — prefer v5 fields, fall back to v4
     return NextResponse.json({
+      accessPlan,
       userName: getSubmissionUserName(submission),
       primaryArchetype: scoring.v5_primary_archetype || scoring.primary_archetype,
       percentages: scoring.v5_percentages || scoring.percentages || {},

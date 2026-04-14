@@ -22,6 +22,7 @@ import ImportanceOfSexualitySection from "./sections/ImportanceOfSexualitySectio
 import PracticeTendenciesSection from "./sections/PracticeTendenciesSection";
 import WelcomeSection from "./sections/WelcomeSection";
 import { normalizeReportHtml } from "./reportContent";
+import { isSectionUnlockedForPlan, type ReportAccessPlan } from "@/lib/report/access";
 
 interface SnapshotContent {
   importanceLabel: string;
@@ -244,6 +245,7 @@ interface ReportPageProps {
 }
 
 interface ReportExperienceProps {
+  accessPlan: ReportAccessPlan;
   devParam: string | null;
   feedbacks: Record<string, "up" | "down" | null>;
   matchScore: number;
@@ -268,6 +270,7 @@ interface ReportExperienceProps {
 }
 
 const ReportExperience: FC<ReportExperienceProps> = ({
+  accessPlan,
   devParam,
   feedbacks,
   matchScore,
@@ -285,7 +288,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
 }) => {
   const mainContentRef = useRef<HTMLElement | null>(null);
   const [activeSectionId, setActiveSectionId] = useState(resolvedSections[0]?.id ?? "welcome");
-  const [isPricingModalOpen, setIsPricingModalOpen] = useState(true);
+  const [isPricingModalOpen, setIsPricingModalOpen] = useState(accessPlan === null);
   const [unlockedSections, setUnlockedSections] = useState<Record<string, boolean>>({});
 
   const unlockSection = (sectionId: string) => {
@@ -481,6 +484,12 @@ const ReportExperience: FC<ReportExperienceProps> = ({
               }
 
               if (section.sectionNumber === 27) {
+                const isBackendUnlocked = isSectionUnlockedForPlan({
+                  accessPlan,
+                  isPremium: section.isPremium,
+                  sectionId: section.id,
+                });
+
                 return (
                   <ReportSection
                     key={section.id}
@@ -493,13 +502,19 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                       archetypeHtml={archetypeHtml}
                       generalHtml={generalHtml}
                       isPremium={section.isPremium}
-                      isUnlocked={unlockedSections[section.id] ?? false}
+                      isUnlocked={isBackendUnlocked || (unlockedSections[section.id] ?? false)}
                       onUnlock={() => unlockSection(section.id)}
                       sectionTitle={title}
                     />
                   </ReportSection>
                 );
               }
+
+              const isBackendUnlocked = isSectionUnlockedForPlan({
+                accessPlan,
+                isPremium: section.isPremium,
+                sectionId: section.id,
+              });
 
               return (
                 <ReportSection
@@ -513,7 +528,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     archetypeHtml={archetypeHtml}
                     generalHtml={generalHtml}
                     isPremium={section.isPremium}
-                    isUnlocked={unlockedSections[section.id] ?? false}
+                    isUnlocked={isBackendUnlocked || (unlockedSections[section.id] ?? false)}
                     onUnlock={() => unlockSection(section.id)}
                     sectionId={section.id}
                     sectionTitle={title}
@@ -627,6 +642,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     <ReportExperience
       key={`${token ?? "browser"}:${sessionId ?? "anon"}`}
       devParam={devParam}
+      accessPlan={data.accessPlan}
       feedbacks={feedbacks}
       matchScore={matchScore}
       onBeginCheckout={beginCheckout}

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { processStripeWebhookEvent } from "@/lib/checkout/fulfillment";
 import { getStripeServerClient, isStripeCheckoutEnabled } from "@/lib/checkout/stripeCheckout";
 import logger from "@/lib/logger";
 
@@ -21,18 +22,19 @@ export async function POST(request: Request) {
     const payload = await request.text();
     const event = stripe.webhooks.constructEvent(payload, signature, webhookSecret);
 
-    if (
-      event.type === "checkout.session.completed" ||
-      event.type === "checkout.session.async_payment_succeeded"
-    ) {
-      logger.info({ eventId: event.id, type: event.type }, "Stripe checkout event received");
-    } else {
-      logger.info({ eventId: event.id, type: event.type }, "Stripe webhook ignored");
-    }
+    await processStripeWebhookEvent({ event, stripe });
+    logger.info({ eventId: event.id, type: event.type }, "Stripe webhook processed");
 
     return NextResponse.json({ received: true });
   } catch (error) {
-    logger.error({ error }, "Stripe webhook signature verification failed");
-    return NextResponse.json({ error: "Invalid request." }, { status: 400 });
+    const message = error instanceof Error ? error.message : "";
+
+    if (message.includes("Unable to extract timestamp and signatures from header")) {
+      logger.error({ error }, "Stripe webhook signature verification failed");
+      return NextResponse.json({ error: "Invalid request." }, { status: 400 });
+    }
+
+    logger.error({ error }, "Stripe webhook processing failed");
+    return NextResponse.json({ error: "Webhook processing failed." }, { status: 500 });
   }
 }

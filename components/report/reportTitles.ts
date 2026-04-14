@@ -1,4 +1,5 @@
 import type { ReportSection } from "@/data/report-general";
+import { isSectionIncludedInEssentials } from "@/lib/report/access";
 
 export type AccessTier = "free" | "essentials" | "full_report";
 export type NavType = "link" | "subheading";
@@ -51,14 +52,6 @@ const NAV_TITLE_OVERRIDES: Record<string, string> = {
   typical_growth_potentials_for_the_core_archetype: "Growth Potentials",
 };
 
-/** Sections that show "Essentials" badge instead of "Full Report" */
-const ESSENTIALS_SECTIONS = new Set([
-  "probability_of_other_archetypes",
-  "core_motivation",
-  "sexual_stage",
-  "confidence_level_how_secure_a_person_feels_in_their_sexual_self",
-]);
-
 /** Sections rendered as category subheadings in sidebar nav */
 const SUBHEADING_SECTIONS = new Set([
   "core_archetype",
@@ -67,7 +60,7 @@ const SUBHEADING_SECTIONS = new Set([
 ]);
 
 function resolveAccessTier(section: ReportSection): AccessTier {
-  if (ESSENTIALS_SECTIONS.has(section.id)) return "essentials";
+  if (isSectionIncludedInEssentials(section.id)) return "essentials";
   if (section.isPremium) return "full_report";
   return "free";
 }

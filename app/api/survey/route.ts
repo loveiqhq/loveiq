@@ -6,6 +6,7 @@ import { scheduleAfterResponse } from "@/lib/after-response";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { verifyCsrfToken } from "@/lib/csrf";
 import logger from "@/lib/logger";
+import { ensurePersonalReportForSubmission } from "@/lib/report/personalReport";
 import type { SurveyAnswers } from "@/lib/survey/types";
 import {
   computeSurveyScoring,
@@ -214,6 +215,13 @@ export async function POST(request: Request) {
         firstName: normalizedFirstName,
         questionCount,
         durationMs,
+      });
+    });
+
+    scheduleAfterResponse("personal-report-bootstrap", async () => {
+      await ensurePersonalReportForSubmission({
+        reportToken: reportToken ?? null,
+        submissionId,
       });
     });
 

@@ -33,6 +33,7 @@ describe("useReportData", () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
+        accessPlan: null,
         userName: "Eman",
         primaryArchetype: "Emotional Voyeur",
         percentages: { "Emotional Voyeur": 63 },

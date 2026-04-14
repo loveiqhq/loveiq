@@ -10,6 +10,7 @@ const {
   mockFetchWithTimeout,
   mockComputeSurveyScoring,
   mockEnsureSubmissionScored,
+  mockEnsurePersonalReportForSubmission,
   mockSubmitSurveyOnce,
 } = vi.hoisted(() => ({
   mockAfter: vi.fn(),
@@ -25,6 +26,7 @@ const {
   mockFetchWithTimeout: vi.fn(),
   mockComputeSurveyScoring: vi.fn(),
   mockEnsureSubmissionScored: vi.fn(),
+  mockEnsurePersonalReportForSubmission: vi.fn(),
   mockSubmitSurveyOnce: vi.fn(),
 }));
 
@@ -58,6 +60,11 @@ vi.mock("../../lib/survey/server", () => ({
   computeSurveyScoring: (...args: unknown[]) => mockComputeSurveyScoring(...args),
   ensureSubmissionScored: (...args: unknown[]) => mockEnsureSubmissionScored(...args),
   submitSurveyOnce: (...args: unknown[]) => mockSubmitSurveyOnce(...args),
+}));
+
+vi.mock("../../lib/report/personalReport", () => ({
+  ensurePersonalReportForSubmission: (...args: unknown[]) =>
+    mockEnsurePersonalReportForSubmission(...args),
 }));
 
 import { POST } from "../../app/api/survey/route";
@@ -98,6 +105,7 @@ describe("POST /api/survey notifications", () => {
       primaryArchetype: "Spark Seeker",
       v5PrimaryArchetype: null,
     });
+    mockEnsurePersonalReportForSubmission.mockResolvedValue({ id: 10 });
     mockAfter.mockImplementation(async (fn: () => Promise<void>) => {
       await fn();
     });
@@ -114,7 +122,11 @@ describe("POST /api/survey notifications", () => {
     const res = await POST(makeRequest());
     expect(res.status).toBe(200);
 
-    expect(mockAfter).toHaveBeenCalledTimes(1);
+    expect(mockAfter).toHaveBeenCalledTimes(2);
+    expect(mockEnsurePersonalReportForSubmission).toHaveBeenCalledWith({
+      reportToken: null,
+      submissionId: 123,
+    });
     expect(mockFetchWithTimeout).toHaveBeenCalledWith(
       "https://hooks.slack.test/services/survey",
       expect.objectContaining({
@@ -137,7 +149,11 @@ describe("POST /api/survey notifications", () => {
     const res = await POST(makeRequest());
     expect(res.status).toBe(200);
 
-    expect(mockAfter).toHaveBeenCalledTimes(1);
+    expect(mockAfter).toHaveBeenCalledTimes(2);
+    expect(mockEnsurePersonalReportForSubmission).toHaveBeenCalledWith({
+      reportToken: null,
+      submissionId: 456,
+    });
     expect(mockFetchWithTimeout).not.toHaveBeenCalled();
     expect(mockLogger.info).toHaveBeenCalledWith(
       {

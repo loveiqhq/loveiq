@@ -26,10 +26,20 @@ vi.mock("../../lib/circuit-breaker", () => ({
   CircuitOpenError: class CircuitOpenError extends Error {},
 }));
 
+vi.mock("../../lib/report/personalReport", () => ({
+  ensurePersonalReportForSubmission: vi.fn().mockResolvedValue({ id: 99 }),
+  getReportAccessPlanForSubmission: vi.fn().mockResolvedValue({
+    accessPlan: null,
+    personalReportId: 99,
+  }),
+  recordReportSessionView: vi.fn().mockResolvedValue(undefined),
+}));
+
 process.env.SUPABASE_URL = "https://test.supabase.co";
 process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-key";
 
 import { GET } from "../../app/api/report/route";
+import { getReportAccessPlanForSubmission } from "../../lib/report/personalReport";
 
 function makeRequest(sessionId = "550e8400-e29b-41d4-a716-446655440000") {
   return new Request(`http://localhost:3000/api/report?sessionId=${sessionId}`);
@@ -120,6 +130,7 @@ describe("GET /api/report", () => {
         json: async () => [
           {
             id: 55,
+            user_id: 77,
             created_date_time: "2026-04-07T22:23:16.851299+00:00",
             app_user: { first_name: "Eman" },
           },
@@ -146,6 +157,7 @@ describe("GET /api/report", () => {
         json: async () => [
           {
             id: 55,
+            user_id: 77,
             created_date_time: "2026-04-07T22:23:16.851299+00:00",
             app_user: { first_name: "Eman" },
           },
@@ -183,6 +195,7 @@ describe("GET /api/report", () => {
     const json = await res.json();
     expect(json).toEqual({
       userName: "Eman",
+      accessPlan: null,
       primaryArchetype: "Emotional Voyeur",
       percentages: { "Emotional Voyeur": 63 },
       reportDate: "2026-04-07T22:23:16.851299+00:00",
@@ -211,6 +224,7 @@ describe("GET /api/report", () => {
         json: async () => [
           {
             id: 55,
+            user_id: 77,
             created_date_time: "2026-04-07T22:23:16.851299+00:00",
             app_user: { first_name: "Eman" },
           },
@@ -241,5 +255,49 @@ describe("GET /api/report", () => {
       currentSexualSatisfaction: null,
       importanceOfSex: null,
     });
+  });
+
+  it("returns the purchased backend access plan when the report has been paid", async () => {
+    allowCsrf();
+    allowRateLimit();
+    vi.mocked(getReportAccessPlanForSubmission).mockResolvedValueOnce({
+      accessPlan: "full_report",
+      personalReportId: 99,
+    });
+
+    mockFetchWithTimeout
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          {
+            id: 55,
+            user_id: 77,
+            created_date_time: "2026-04-07T22:23:16.851299+00:00",
+            app_user: { first_name: "Eman" },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          {
+            primary_archetype: "Spark Seeker",
+            v5_primary_archetype: "Emotional Voyeur",
+            percentages: { "Spark Seeker": 41 },
+            v5_percentages: { "Emotional Voyeur": 63 },
+            diagnostics: null,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [],
+      });
+
+    const res = await GET(makeRequest("02d88f31-eceb-4402-940d-c8cd98d01848"));
+    expect(res.status).toBe(200);
+
+    const json = await res.json();
+    expect(json.accessPlan).toBe("full_report");
   });
 });
