@@ -16,6 +16,10 @@ import {
   type ReportPurchasePlanId,
 } from "@/lib/checkout/reportPurchase";
 import {
+  cacheReportCheckoutQuote,
+  getCachedReportCheckoutQuote,
+} from "@/lib/checkout/reportCheckoutQuoteCache";
+import {
   STRIPE_CHECKOUT_DISABLED_MESSAGE,
   type StripeCheckoutSessionResponse,
 } from "@/lib/checkout/stripeCheckout";
@@ -234,10 +238,17 @@ const CheckoutPage: FC<Props> = ({ planId, token = null }) => {
     sessionId: token ? null : reportSessionId,
     token,
   });
+  const cachedQuote = getCachedReportCheckoutQuote({
+    plan: planId,
+    sessionId: token ? null : reportSessionId,
+    token,
+  });
   const [sessionState, setSessionState] = useState<CheckoutSessionState>({ status: "idle" });
   const [quoteState, setQuoteState] = useState<QuoteState>({ status: "idle" });
   const backHref = getReportReturnHref(token);
   const hasCheckoutContext = Boolean(token || reportSessionId);
+  const hasCachedQuote = Boolean(cachedQuote);
+  const activeQuote = quoteState.status === "ready" ? quoteState.quote : cachedQuote;
 
   useEffect(() => {
     if (!hasCheckoutContext) {
@@ -247,7 +258,9 @@ const CheckoutPage: FC<Props> = ({ planId, token = null }) => {
     let cancelled = false;
 
     async function fetchQuote() {
-      setQuoteState({ status: "loading" });
+      setQuoteState((current) =>
+        hasCachedQuote || current.status === "ready" ? current : { status: "loading" }
+      );
 
       try {
         const params = new URLSearchParams({ plan: planId });
@@ -275,23 +288,37 @@ const CheckoutPage: FC<Props> = ({ planId, token = null }) => {
         }
 
         if (!response.ok || !json?.quote) {
-          setQuoteState({
-            message: json?.error ?? "We couldn't prepare your quoted price right now.",
-            status: "error",
-          });
+          setQuoteState((current) =>
+            hasCachedQuote || current.status === "ready"
+              ? current
+              : {
+                  message: json?.error ?? "We couldn't prepare your quoted price right now.",
+                  status: "error",
+                }
+          );
           return;
         }
 
+        cacheReportCheckoutQuote({
+          plan: planId,
+          quote: json.quote,
+          sessionId: token ? null : reportSessionId,
+          token,
+        });
         setQuoteState({
           quote: json.quote,
           status: "ready",
         });
       } catch {
         if (!cancelled) {
-          setQuoteState({
-            message: "We couldn't prepare your quoted price right now.",
-            status: "error",
-          });
+          setQuoteState((current) =>
+            hasCachedQuote || current.status === "ready"
+              ? current
+              : {
+                  message: "We couldn't prepare your quoted price right now.",
+                  status: "error",
+                }
+          );
         }
       }
     }
@@ -301,7 +328,7 @@ const CheckoutPage: FC<Props> = ({ planId, token = null }) => {
     return () => {
       cancelled = true;
     };
-  }, [hasCheckoutContext, planId, pricingSessionId, reportSessionId, token]);
+  }, [hasCachedQuote, hasCheckoutContext, planId, pricingSessionId, reportSessionId, token]);
 
   async function handleContinueToStripe() {
     if (!hasCheckoutContext) {
@@ -313,7 +340,7 @@ const CheckoutPage: FC<Props> = ({ planId, token = null }) => {
       return;
     }
 
-    if (quoteState.status !== "ready") {
+    if (!activeQuote) {
       setSessionState({
         message:
           quoteState.status === "error"
@@ -336,7 +363,7 @@ const CheckoutPage: FC<Props> = ({ planId, token = null }) => {
         body: JSON.stringify({
           plan: planId,
           pricingSessionId,
-          quoteId: quoteState.quote.id,
+          quoteId: activeQuote.id,
           reportSessionId: token ? null : reportSessionId,
           reportToken: token,
         }),
@@ -411,10 +438,7 @@ const CheckoutPage: FC<Props> = ({ planId, token = null }) => {
             </div>
             {getReportPurchaseBadgeFromPrice({
               plan,
-              priceCents:
-                quoteState.status === "ready"
-                  ? quoteState.quote.currentPriceCents
-                  : plan.priceCents,
+              priceCents: activeQuote?.currentPriceCents ?? plan.priceCents,
             }) ? (
               <span
                 className={[
@@ -426,10 +450,7 @@ const CheckoutPage: FC<Props> = ({ planId, token = null }) => {
               >
                 {getReportPurchaseBadgeFromPrice({
                   plan,
-                  priceCents:
-                    quoteState.status === "ready"
-                      ? quoteState.quote.currentPriceCents
-                      : plan.priceCents,
+                  priceCents: activeQuote?.currentPriceCents ?? plan.priceCents,
                 })}
               </span>
             ) : null}
@@ -447,8 +468,8 @@ const CheckoutPage: FC<Props> = ({ planId, token = null }) => {
             )}
             <div className="checkout-page__summary-amount">
               <strong>
-                {quoteState.status === "ready"
-                  ? formatReportPurchasePrice(quoteState.quote.currentPriceCents)
+                {activeQuote
+                  ? formatReportPurchasePrice(activeQuote.currentPriceCents)
                   : "Preparing quote..."}
               </strong>
               <span>{plan.priceSuffix}</span>
@@ -471,12 +492,12 @@ const CheckoutPage: FC<Props> = ({ planId, token = null }) => {
           <CheckoutFallbackSurface backHref={backHref} sessionState={sessionState} />
         ) : (
           <CheckoutReviewSurface
-            canContinue={quoteState.status === "ready"}
-            quote={quoteState.status === "ready" ? quoteState.quote : null}
+            canContinue={Boolean(activeQuote)}
+            quote={activeQuote}
             errorMessage={
               sessionState.status === "error"
                 ? sessionState.message
-                : quoteState.status === "error"
+                : !activeQuote && quoteState.status === "error"
                   ? quoteState.message
                   : null
             }

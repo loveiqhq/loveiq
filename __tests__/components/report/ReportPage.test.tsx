@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 
 const mockRouterPush = vi.fn();
+const mockCacheReportCheckoutQuote = vi.fn();
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: mockRouterPush }),
@@ -26,6 +27,10 @@ vi.mock("@/components/report/hooks/useSectionFeedback", () => ({
     submitted: {},
     submitFeedback: vi.fn(),
   }),
+}));
+
+vi.mock("@/lib/checkout/reportCheckoutQuoteCache", () => ({
+  cacheReportCheckoutQuote: (...args: unknown[]) => mockCacheReportCheckoutQuote(...args),
 }));
 
 import ReportPage from "@/components/report/ReportPage";
@@ -210,6 +215,7 @@ describe("ReportPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRouterPush.mockReset();
+    mockCacheReportCheckoutQuote.mockReset();
     mockGetReportSessionId.mockReturnValue("02d88f31-eceb-4402-940d-c8cd98d01848");
   });
 
@@ -381,6 +387,12 @@ describe("ReportPage", () => {
 
       await user.click(screen.getByRole("button", { name: /^unlock full report$/i }));
 
+      expect(mockCacheReportCheckoutQuote).toHaveBeenCalledWith({
+        plan: "full_report",
+        quote: buildSuccessResponse().data.pricingQuotes.full_report,
+        sessionId: "02d88f31-eceb-4402-940d-c8cd98d01848",
+        token: undefined,
+      });
       await waitFor(() =>
         expect(mockRouterPush).toHaveBeenCalledWith("/checkout?plan=full_report")
       );

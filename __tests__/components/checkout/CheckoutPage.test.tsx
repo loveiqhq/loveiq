@@ -5,6 +5,8 @@ import CheckoutPage from "@/components/checkout/CheckoutPage";
 
 const mockGetReportSessionId = vi.fn();
 const mockGetReportPricingSessionId = vi.fn();
+const mockCacheReportCheckoutQuote = vi.fn();
+const mockGetCachedReportCheckoutQuote = vi.fn();
 const READY_QUOTE = {
   id: 42,
   plan: "full_report",
@@ -49,6 +51,11 @@ vi.mock("@/components/survey/hooks/surveySession", () => ({
   getReportSessionId: () => mockGetReportSessionId(),
 }));
 
+vi.mock("@/lib/checkout/reportCheckoutQuoteCache", () => ({
+  cacheReportCheckoutQuote: (...args: unknown[]) => mockCacheReportCheckoutQuote(...args),
+  getCachedReportCheckoutQuote: (...args: unknown[]) => mockGetCachedReportCheckoutQuote(...args),
+}));
+
 describe("CheckoutPage", () => {
   let originalFetch: typeof globalThis.fetch;
   const originalLocation = window.location;
@@ -59,6 +66,9 @@ describe("CheckoutPage", () => {
     document.cookie = "__csrf=test-csrf-token; path=/";
     mockGetReportSessionId.mockReset();
     mockGetReportPricingSessionId.mockReset();
+    mockCacheReportCheckoutQuote.mockReset();
+    mockGetCachedReportCheckoutQuote.mockReset();
+    mockGetCachedReportCheckoutQuote.mockReturnValue(null);
     mockedAssign = vi.fn();
     delete (window as Window & { location?: Location }).location;
     window.location = { ...originalLocation, assign: mockedAssign } as Location;
@@ -172,6 +182,49 @@ describe("CheckoutPage", () => {
             reportSessionId: null,
             reportToken: "rpt_ABCDEFGHIJKLMNOPQRST",
           }),
+        })
+      )
+    );
+  });
+
+  it("renders a cached quote immediately and can continue before the refresh completes", async () => {
+    const mockFetch = vi.fn(async (input: string | URL | Request) => {
+      const url =
+        typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      if (url.startsWith("/api/price?")) {
+        return new Promise<Response>(() => {});
+      }
+
+      return createJsonResponse({
+        enabled: true,
+        url: "https://checkout.stripe.com/c/pay/cs_test_cached",
+      });
+    });
+    globalThis.fetch = mockFetch;
+    mockGetReportSessionId.mockReturnValue("02d88f31-eceb-4402-940d-c8cd98d01848");
+    mockGetReportPricingSessionId.mockReturnValue("pricing-session-123");
+    mockGetCachedReportCheckoutQuote.mockReturnValue(READY_QUOTE);
+
+    render(<CheckoutPage planId="full_report" />);
+
+    expect(screen.getAllByText("€27.49")).toHaveLength(2);
+    expect(screen.queryByText(/preparing quote/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /continue to secure checkout/i })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole("button", { name: /continue to secure checkout/i }));
+
+    await waitFor(() =>
+      expect(mockFetch).toHaveBeenCalledWith(
+        "/api/stripe/checkout-session",
+        expect.objectContaining({
+          body: JSON.stringify({
+            plan: "full_report",
+            pricingSessionId: "pricing-session-123",
+            quoteId: 42,
+            reportSessionId: "02d88f31-eceb-4402-940d-c8cd98d01848",
+            reportToken: null,
+          }),
+          method: "POST",
         })
       )
     );

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useSyncExternalStore, type FC } from "reac
 import { useRouter, useSearchParams } from "next/navigation";
 import { archetypeContent } from "@/data/report-archetypes";
 import { reportSections } from "@/data/report-general";
+import { cacheReportCheckoutQuote } from "@/lib/checkout/reportCheckoutQuoteCache";
 import { buildReportCheckoutHref, type ReportPurchasePlanId } from "@/lib/checkout/reportPurchase";
 import type { ReportPriceQuoteSnapshot } from "@/lib/pricing/reportPricing";
 import ReportFooter from "./ReportFooter";
@@ -598,6 +599,15 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   const { data, status, error } = useReportData({ token, sessionId: token ? null : sessionId });
   const { feedbacks, submitted, submitFeedback } = useSectionFeedback(sessionId);
   const beginCheckout = (plan: ReportPurchasePlanId) => {
+    const quote = data?.pricingQuotes?.[plan];
+    if (quote) {
+      cacheReportCheckoutQuote({
+        plan,
+        quote,
+        sessionId: token ? null : sessionId,
+        token,
+      });
+    }
     router.push(buildReportCheckoutHref({ plan, token }));
   };
 
