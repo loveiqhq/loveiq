@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState, type FC } from "react";
+import { useRouter } from "next/navigation";
 import {
   buildReportCheckoutHref,
   getReportPurchasePlan,
@@ -9,9 +10,11 @@ import {
   type ReportPurchasePlanId,
 } from "@/lib/checkout/reportPurchase";
 import type { StripeCheckoutSessionStatusResponse } from "@/lib/checkout/stripeCheckout";
+import type { ReportAccessPlan } from "@/lib/report/access";
 
 type ReturnState =
   | {
+      message: string;
       status: "loading";
     }
   | {
@@ -19,6 +22,7 @@ type ReturnState =
       status: "disabled" | "error" | "missing";
     }
   | {
+      accessPlan: ReportAccessPlan;
       paymentStatus: string | null;
       sessionStatus: string | null;
       status: "ready";
@@ -31,10 +35,14 @@ interface Props {
 }
 
 const CheckoutReturnPage: FC<Props> = ({ planId, sessionId = null, token = null }) => {
+  const router = useRouter();
   const plan = getReportPurchasePlan(planId);
   const [state, setState] = useState<ReturnState>(
     sessionId
-      ? { status: "loading" }
+      ? {
+          message: "Verifying your checkout session…",
+          status: "loading",
+        }
       : {
           message: "Missing checkout session ID. Return to your report and try again.",
           status: "missing",
@@ -45,8 +53,12 @@ const CheckoutReturnPage: FC<Props> = ({ planId, sessionId = null, token = null 
   useEffect(() => {
     if (!sessionId) return;
     const resolvedSessionId = sessionId;
+    const MAX_UNLOCK_CHECK_ATTEMPTS = 8;
+    const UNLOCK_CHECK_DELAY_MS = 1_500;
 
     let cancelled = false;
+    let attempts = 0;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
     async function fetchStatus() {
       try {
@@ -82,9 +94,27 @@ const CheckoutReturnPage: FC<Props> = ({ planId, sessionId = null, token = null 
           return;
         }
 
+        const paymentStatus = json.paymentStatus;
+        const sessionStatus = json.sessionStatus;
+        const accessPlan = json.accessPlan ?? null;
+        const isPaidAndComplete = paymentStatus === "paid" && sessionStatus === "complete";
+
+        if (isPaidAndComplete && accessPlan === null && attempts < MAX_UNLOCK_CHECK_ATTEMPTS) {
+          attempts += 1;
+          setState({
+            message: "Payment received. Unlocking your report…",
+            status: "loading",
+          });
+          timeoutId = setTimeout(() => {
+            void fetchStatus();
+          }, UNLOCK_CHECK_DELAY_MS);
+          return;
+        }
+
         setState({
-          paymentStatus: json.paymentStatus,
-          sessionStatus: json.sessionStatus,
+          accessPlan,
+          paymentStatus,
+          sessionStatus,
           status: "ready",
         });
       } catch {
@@ -101,8 +131,33 @@ const CheckoutReturnPage: FC<Props> = ({ planId, sessionId = null, token = null 
 
     return () => {
       cancelled = true;
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+      }
     };
   }, [sessionId]);
+
+  const isPaidAndComplete =
+    state.status === "ready" &&
+    state.paymentStatus === "paid" &&
+    state.sessionStatus === "complete";
+  const canReturnToUnlockedReport =
+    state.status === "ready" && isPaidAndComplete && state.accessPlan !== null;
+  const isRedirecting = canReturnToUnlockedReport;
+
+  useEffect(() => {
+    if (!canReturnToUnlockedReport) {
+      return;
+    }
+
+    const redirectId = setTimeout(() => {
+      router.replace(backHref);
+    }, 1_200);
+
+    return () => {
+      clearTimeout(redirectId);
+    };
+  }, [backHref, canReturnToUnlockedReport, router]);
 
   return (
     <main className="checkout-page checkout-page--return">
@@ -119,7 +174,24 @@ const CheckoutReturnPage: FC<Props> = ({ planId, sessionId = null, token = null 
           <h1 className="checkout-return__title">Checkout status</h1>
 
           {state.status === "loading" ? (
-            <p className="checkout-return__copy">Verifying your checkout session…</p>
+            <p className="checkout-return__copy">{state.message}</p>
+          ) : isRedirecting ? (
+            <p className="checkout-return__copy">
+              Payment complete. Your report is unlocked. Redirecting you now…
+            </p>
+          ) : state.status === "ready" && isPaidAndComplete ? (
+            <>
+              <p className="checkout-return__copy">
+                Session status: <strong>{state.sessionStatus ?? "unknown"}</strong>
+              </p>
+              <p className="checkout-return__copy">
+                Payment status: <strong>{state.paymentStatus ?? "unknown"}</strong>
+              </p>
+              <p className="checkout-return__copy">
+                Your purchase is confirmed. Use the button below if the report does not open
+                automatically.
+              </p>
+            </>
           ) : state.status === "ready" ? (
             <>
               <p className="checkout-return__copy">
@@ -135,14 +207,16 @@ const CheckoutReturnPage: FC<Props> = ({ planId, sessionId = null, token = null 
 
           <div className="checkout-return__actions">
             <Link href={backHref} className="checkout-submit checkout-submit--secondary">
-              Return to report
+              {canReturnToUnlockedReport ? "Go to unlocked report" : "Return to report"}
             </Link>
-            <Link
-              href={buildReportCheckoutHref({ plan: planId, token })}
-              className="checkout-return__link"
-            >
-              Start checkout again
-            </Link>
+            {!isPaidAndComplete ? (
+              <Link
+                href={buildReportCheckoutHref({ plan: planId, token })}
+                className="checkout-return__link"
+              >
+                Start checkout again
+              </Link>
+            ) : null}
           </div>
         </div>
       </div>

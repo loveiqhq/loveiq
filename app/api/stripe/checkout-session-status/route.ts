@@ -6,6 +6,10 @@ import {
   isStripeCheckoutEnabled,
   type StripeCheckoutSessionStatusResponse,
 } from "@/lib/checkout/stripeCheckout";
+import {
+  getReportAccessPlanForSubmission,
+  resolveSubmissionAccessContext,
+} from "@/lib/report/personalReport";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
 import logger from "@/lib/logger";
 
@@ -62,8 +66,36 @@ export async function GET(request: Request) {
     }
 
     const session = await stripe.checkout.sessions.retrieve(parsed.data.session_id);
+    const reportSessionId =
+      typeof session.metadata?.reportSessionId === "string" && session.metadata.reportSessionId
+        ? session.metadata.reportSessionId
+        : null;
+    const reportToken =
+      typeof session.metadata?.reportToken === "string" && session.metadata.reportToken
+        ? session.metadata.reportToken
+        : null;
+    let accessPlan = null;
+
+    try {
+      const context = await resolveSubmissionAccessContext({
+        reportSessionId,
+        reportToken,
+      });
+
+      if (context?.submissionId) {
+        const access = await getReportAccessPlanForSubmission(context.submissionId);
+        accessPlan = access.accessPlan;
+      }
+    } catch (error) {
+      logger.warn(
+        { error, sessionId: session.id },
+        "Report access lookup failed during checkout status"
+      );
+    }
+
     const successResponse: StripeCheckoutSessionStatusResponse = {
       enabled: true,
+      accessPlan,
       paymentStatus: session.payment_status ?? null,
       sessionStatus: session.status ?? null,
     };

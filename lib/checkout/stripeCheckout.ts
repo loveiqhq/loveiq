@@ -1,5 +1,6 @@
 import Stripe from "stripe";
 import type { ReportPurchasePlanId } from "./reportPurchase";
+import type { ReportAccessPlan } from "@/lib/report/access";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 
 export const STRIPE_CHECKOUT_DISABLED_MESSAGE =
@@ -26,6 +27,7 @@ export type StripeCheckoutSessionStatusResponse =
     }
   | {
       enabled: true;
+      accessPlan: ReportAccessPlan;
       paymentStatus: string | null;
       sessionStatus: string | null;
     };
