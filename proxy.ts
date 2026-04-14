@@ -40,7 +40,12 @@ export async function proxy(request: NextRequest) {
       const session = request.cookies.get("staging_session")?.value;
       const expected = await sha256(STAGING_PASSWORD);
       if (session !== expected) {
-        return NextResponse.redirect(new URL("/login", request.url));
+        const loginUrl = new URL("/login", request.url);
+        const nextPath = `${request.nextUrl.pathname}${request.nextUrl.search}`;
+        if (nextPath.startsWith("/") && !nextPath.startsWith("//")) {
+          loginUrl.searchParams.set("next", nextPath);
+        }
+        return NextResponse.redirect(loginUrl);
       }
     }
   }

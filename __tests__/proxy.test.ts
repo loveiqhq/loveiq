@@ -7,6 +7,9 @@ vi.stubGlobal("crypto", {
     for (let i = 0; i < arr.length; i++) arr[i] = i % 256;
     return arr;
   },
+  subtle: {
+    digest: async () => new Uint8Array(Array.from({ length: 32 }, (_, index) => index)).buffer,
+  },
 });
 
 // Mock pino logger (path relative to THIS test file)
@@ -19,8 +22,11 @@ vi.mock("../lib/logger", () => ({
 }));
 
 // Mock next/server
-const mockResponseHeaders = new Map<string, string>();
-const mockCookiesSet = vi.fn();
+const { mockCookiesSet, mockRedirect, mockResponseHeaders } = vi.hoisted(() => ({
+  mockResponseHeaders: new Map<string, string>(),
+  mockCookiesSet: vi.fn(),
+  mockRedirect: vi.fn((url: URL) => ({ redirectedTo: url.toString() })),
+}));
 
 vi.mock("next/server", () => {
   return {
@@ -34,6 +40,7 @@ vi.mock("next/server", () => {
           set: mockCookiesSet,
         },
       })),
+      redirect: mockRedirect,
     },
   };
 });
@@ -50,16 +57,19 @@ function makeNextRequest(url = "http://localhost:3000/", cookieValue?: string) {
   return {
     method: "GET",
     headers,
+    url,
     cookies: {
       get: (name: string) => {
         // In test (NODE_ENV=test !== "production"), cookie name is "__csrf"
         if (name === "__csrf" && cookieValue) return { value: cookieValue };
         if (name === "__Host-csrf" && cookieValue) return { value: cookieValue };
+        if (name === "staging_session" && cookieValue) return { value: cookieValue };
         return undefined;
       },
     },
     nextUrl: {
       pathname: new URL(url).pathname,
+      search: new URL(url).search,
     },
   } as never;
 }
@@ -68,6 +78,7 @@ describe("proxy middleware", () => {
   beforeEach(() => {
     mockResponseHeaders.clear();
     mockCookiesSet.mockClear();
+    mockRedirect.mockClear();
     (logger.info as ReturnType<typeof vi.fn>).mockClear();
     delete process.env.STAGING_PASSWORD;
   });
@@ -202,6 +213,22 @@ describe("proxy middleware", () => {
       expect.objectContaining({
         type: "api_request",
         path: "/api/stripe/webhook",
+      })
+    );
+  });
+
+  it("redirects staging-gated requests to login with the original path preserved", async () => {
+    process.env.STAGING_PASSWORD = "test-staging-pw";
+
+    await proxy(
+      makeNextRequest(
+        "http://localhost:3000/checkout/return?plan=full_report&session_id=cs_test_123"
+      )
+    );
+
+    expect(mockRedirect).toHaveBeenCalledWith(
+      expect.objectContaining({
+        href: "http://localhost:3000/login?next=%2Fcheckout%2Freturn%3Fplan%3Dfull_report%26session_id%3Dcs_test_123",
       })
     );
   });

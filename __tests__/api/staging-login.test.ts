@@ -87,6 +87,7 @@ describe("POST /api/staging-login", () => {
 
     const setCookie = res.headers.get("set-cookie");
     expect(setCookie).toContain("staging_session=");
+    expect(setCookie?.toLowerCase()).toContain("samesite=lax");
   });
 
   it("returns 400 when body is malformed JSON", async () => {

@@ -4,8 +4,10 @@ import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 const mockRouterPush = vi.fn();
+const mockUseSearchParams = vi.fn(() => new URLSearchParams());
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: mockRouterPush }),
+  useSearchParams: () => mockUseSearchParams(),
 }));
 
 vi.mock("@/lib/csrf-client", () => ({
@@ -20,6 +22,8 @@ beforeEach(() => {
   mockFetch = vi.fn();
   globalThis.fetch = mockFetch;
   mockRouterPush.mockClear();
+  mockUseSearchParams.mockReset();
+  mockUseSearchParams.mockReturnValue(new URLSearchParams());
 });
 
 afterEach(cleanup);
@@ -48,6 +52,26 @@ describe("StagingLoginForm", () => {
 
     await waitFor(() => {
       expect(mockRouterPush).toHaveBeenCalledWith("/");
+    });
+  });
+
+  it("navigates back to the requested path after successful login", async () => {
+    const user = userEvent.setup();
+    mockFetch.mockResolvedValueOnce({ ok: true });
+    mockUseSearchParams.mockReturnValue(
+      new URLSearchParams(
+        "next=%2Fcheckout%2Freturn%3Fplan%3Dfull_report%26session_id%3Dcs_test_123"
+      )
+    );
+
+    render(<StagingLoginForm />);
+    await user.type(screen.getByPlaceholderText(/enter staging password/i), "correct");
+    await user.click(screen.getByRole("button", { name: /enter staging site/i }));
+
+    await waitFor(() => {
+      expect(mockRouterPush).toHaveBeenCalledWith(
+        "/checkout/return?plan=full_report&session_id=cs_test_123"
+      );
     });
   });
 

@@ -268,17 +268,21 @@ describe("ReportPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("surfaces pricing as unavailable when backend quotes are missing", () => {
-    const response = buildSuccessResponse();
-    response.data.pricingQuotes = null;
-    mockUseReportData.mockReturnValue(response);
+  it(
+    "surfaces pricing as unavailable when backend quotes are missing",
+    () => {
+      const response = buildSuccessResponse();
+      response.data.pricingQuotes = null;
+      mockUseReportData.mockReturnValue(response);
 
-    render(<ReportPage />);
+      render(<ReportPage />);
 
-    expect(screen.getByText(/live pricing couldn't be loaded right now/i)).toBeInTheDocument();
-    expect(screen.queryByText("€59.00")).not.toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: /pricing unavailable/i })).toHaveLength(3);
-  });
+      expect(screen.getByText(/live pricing couldn't be loaded right now/i)).toBeInTheDocument();
+      expect(screen.queryByText("€59.00")).not.toBeInTheDocument();
+      expect(screen.getAllByRole("button", { name: /pricing unavailable/i })).toHaveLength(3);
+    },
+    REPORT_MODAL_TEST_TIMEOUT_MS
+  );
 
   it(
     "shows the pricing modal on report open and keeps premium section gates after closing it",
