@@ -19,6 +19,22 @@ export type StripeCheckoutSessionResponse =
       url: string;
     };
 
+export interface StripeCheckoutPurchaseAnalytics {
+  value: number;
+  currency: string;
+  transaction_id: string;
+  pricing_cluster_id?: string;
+  base_price_bucket?: string;
+  experiment_group?: string;
+  discount_step?: number;
+  country_tier?: string;
+  device_type?: string;
+  traffic_source?: string;
+  engagement_score?: number;
+  behavioral_bucket?: string;
+  initial_price?: number;
+}
+
 export type StripeCheckoutSessionStatusResponse =
   | {
       enabled: false;
@@ -29,6 +45,7 @@ export type StripeCheckoutSessionStatusResponse =
       enabled: true;
       accessPlan: ReportAccessPlan;
       paymentStatus: string | null;
+      purchaseAnalytics: StripeCheckoutPurchaseAnalytics | null;
       sessionStatus: string | null;
     };
 

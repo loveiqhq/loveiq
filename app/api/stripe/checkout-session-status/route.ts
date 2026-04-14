@@ -1,9 +1,11 @@
+import Stripe from "stripe";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import {
   STRIPE_CHECKOUT_DISABLED_MESSAGE,
   getStripeServerClient,
   isStripeCheckoutEnabled,
+  type StripeCheckoutPurchaseAnalytics,
   type StripeCheckoutSessionStatusResponse,
 } from "@/lib/checkout/stripeCheckout";
 import {
@@ -24,6 +26,89 @@ const RATE_LIMIT_CONFIG = {
   limit: 30,
   windowMs: 60_000,
 };
+
+function getMetadataString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function getMetadataNumber(value: unknown) {
+  if (typeof value !== "string" || !value.trim()) {
+    return null;
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function getPurchaseAnalytics(session: Stripe.Checkout.Session) {
+  const amountTotal = typeof session.amount_total === "number" ? session.amount_total / 100 : null;
+  const currency =
+    typeof session.currency === "string" && session.currency.trim()
+      ? session.currency.toUpperCase()
+      : null;
+
+  if (amountTotal === null || currency === null) {
+    return null;
+  }
+
+  const purchaseAnalytics: StripeCheckoutPurchaseAnalytics = {
+    value: amountTotal,
+    currency,
+    transaction_id: session.id,
+  };
+
+  const pricingClusterId = getMetadataString(session.metadata?.pricingClusterId);
+  if (pricingClusterId) {
+    purchaseAnalytics.pricing_cluster_id = pricingClusterId;
+  }
+
+  const basePriceBucket = getMetadataString(session.metadata?.basePriceBucket);
+  if (basePriceBucket) {
+    purchaseAnalytics.base_price_bucket = basePriceBucket;
+  }
+
+  const experimentGroup = getMetadataString(session.metadata?.experimentGroup);
+  if (experimentGroup) {
+    purchaseAnalytics.experiment_group = experimentGroup;
+  }
+
+  const discountStep = getMetadataNumber(session.metadata?.discountStep);
+  if (discountStep !== null) {
+    purchaseAnalytics.discount_step = discountStep;
+  }
+
+  const countryTier = getMetadataString(session.metadata?.countryTier);
+  if (countryTier) {
+    purchaseAnalytics.country_tier = countryTier;
+  }
+
+  const deviceType = getMetadataString(session.metadata?.deviceType);
+  if (deviceType) {
+    purchaseAnalytics.device_type = deviceType;
+  }
+
+  const trafficSource = getMetadataString(session.metadata?.trafficSource);
+  if (trafficSource) {
+    purchaseAnalytics.traffic_source = trafficSource;
+  }
+
+  const engagementScore = getMetadataNumber(session.metadata?.engagementScore);
+  if (engagementScore !== null) {
+    purchaseAnalytics.engagement_score = engagementScore;
+  }
+
+  const behavioralBucket = getMetadataString(session.metadata?.behavioralBucket);
+  if (behavioralBucket) {
+    purchaseAnalytics.behavioral_bucket = behavioralBucket;
+  }
+
+  const initialPrice = getMetadataNumber(session.metadata?.initialPrice);
+  if (initialPrice !== null) {
+    purchaseAnalytics.initial_price = initialPrice;
+  }
+
+  return purchaseAnalytics;
+}
 
 export async function GET(request: Request) {
   const ip = getClientIp(request);
@@ -97,6 +182,7 @@ export async function GET(request: Request) {
       enabled: true,
       accessPlan,
       paymentStatus: session.payment_status ?? null,
+      purchaseAnalytics: getPurchaseAnalytics(session),
       sessionStatus: session.status ?? null,
     };
 

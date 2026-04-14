@@ -4,9 +4,14 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import CheckoutReturnPage from "@/components/checkout/CheckoutReturnPage";
 
 const mockRouterReplace = vi.fn();
+const mockTrackReportPurchase = vi.fn();
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: mockRouterReplace }),
+}));
+
+vi.mock("@/lib/analytics", () => ({
+  trackReportPurchase: (...args: unknown[]) => mockTrackReportPurchase(...args),
 }));
 
 describe("CheckoutReturnPage", () => {
@@ -15,6 +20,7 @@ describe("CheckoutReturnPage", () => {
   beforeEach(() => {
     originalFetch = globalThis.fetch;
     mockRouterReplace.mockReset();
+    mockTrackReportPurchase.mockReset();
   });
 
   afterEach(() => {
@@ -29,6 +35,21 @@ describe("CheckoutReturnPage", () => {
         accessPlan: "full_report",
         enabled: true,
         paymentStatus: "paid",
+        purchaseAnalytics: {
+          value: 27.49,
+          currency: "EUR",
+          transaction_id: "cs_test_123",
+          pricing_cluster_id: "cluster",
+          base_price_bucket: "full_center",
+          experiment_group: "B",
+          discount_step: 1,
+          country_tier: "tier_2",
+          device_type: "Desktop",
+          traffic_source: "google",
+          engagement_score: 40,
+          behavioral_bucket: "serious",
+          initial_price: 29.99,
+        },
         sessionStatus: "complete",
       }),
     } as Response);
@@ -48,6 +69,21 @@ describe("CheckoutReturnPage", () => {
         screen.getByText(/payment complete\. your report is unlocked\. redirecting you now/i)
       ).toBeInTheDocument()
     );
+    expect(mockTrackReportPurchase).toHaveBeenCalledWith({
+      value: 27.49,
+      currency: "EUR",
+      transaction_id: "cs_test_123",
+      pricing_cluster_id: "cluster",
+      base_price_bucket: "full_center",
+      experiment_group: "B",
+      discount_step: 1,
+      country_tier: "tier_2",
+      device_type: "Desktop",
+      traffic_source: "google",
+      engagement_score: 40,
+      behavioral_bucket: "serious",
+      initial_price: 29.99,
+    });
 
     expect(screen.getByRole("link", { name: /go to unlocked report/i })).toHaveAttribute(
       "href",
@@ -68,6 +104,11 @@ describe("CheckoutReturnPage", () => {
           accessPlan: null,
           enabled: true,
           paymentStatus: "paid",
+          purchaseAnalytics: {
+            value: 114.99,
+            currency: "EUR",
+            transaction_id: "cs_test_456",
+          },
           sessionStatus: "complete",
         }),
       } as Response)
@@ -77,6 +118,11 @@ describe("CheckoutReturnPage", () => {
           accessPlan: "all_reports",
           enabled: true,
           paymentStatus: "paid",
+          purchaseAnalytics: {
+            value: 114.99,
+            currency: "EUR",
+            transaction_id: "cs_test_456",
+          },
           sessionStatus: "complete",
         }),
       } as Response);
@@ -90,6 +136,7 @@ describe("CheckoutReturnPage", () => {
     );
 
     await waitFor(() => expect(screen.getByText(/unlocking your report/i)).toBeInTheDocument());
+    expect(mockTrackReportPurchase).not.toHaveBeenCalled();
 
     await new Promise((resolve) => setTimeout(resolve, 1_600));
 
@@ -98,6 +145,12 @@ describe("CheckoutReturnPage", () => {
         screen.getByText(/payment complete\. your report is unlocked\. redirecting you now/i)
       ).toBeInTheDocument()
     );
+    expect(mockTrackReportPurchase).toHaveBeenCalledTimes(1);
+    expect(mockTrackReportPurchase).toHaveBeenCalledWith({
+      value: 114.99,
+      currency: "EUR",
+      transaction_id: "cs_test_456",
+    });
 
     await new Promise((resolve) => setTimeout(resolve, 1_300));
 

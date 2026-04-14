@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, type FC } from "react";
+import { useEffect, useRef, useState, type FC } from "react";
 import { useRouter } from "next/navigation";
 import {
   buildReportCheckoutHref,
@@ -9,8 +9,12 @@ import {
   getReportReturnHref,
   type ReportPurchasePlanId,
 } from "@/lib/checkout/reportPurchase";
-import type { StripeCheckoutSessionStatusResponse } from "@/lib/checkout/stripeCheckout";
+import type {
+  StripeCheckoutPurchaseAnalytics,
+  StripeCheckoutSessionStatusResponse,
+} from "@/lib/checkout/stripeCheckout";
 import type { ReportAccessPlan } from "@/lib/report/access";
+import { trackReportPurchase } from "@/lib/analytics";
 
 type ReturnState =
   | {
@@ -24,6 +28,7 @@ type ReturnState =
   | {
       accessPlan: ReportAccessPlan;
       paymentStatus: string | null;
+      purchaseAnalytics: StripeCheckoutPurchaseAnalytics | null;
       sessionStatus: string | null;
       status: "ready";
     };
@@ -37,6 +42,7 @@ interface Props {
 const CheckoutReturnPage: FC<Props> = ({ planId, sessionId = null, token = null }) => {
   const router = useRouter();
   const plan = getReportPurchasePlan(planId);
+  const trackedTransactionIdRef = useRef<string | null>(null);
   const [state, setState] = useState<ReturnState>(
     sessionId
       ? {
@@ -114,6 +120,7 @@ const CheckoutReturnPage: FC<Props> = ({ planId, sessionId = null, token = null 
         setState({
           accessPlan,
           paymentStatus,
+          purchaseAnalytics: json.purchaseAnalytics ?? null,
           sessionStatus,
           status: "ready",
         });
@@ -144,6 +151,24 @@ const CheckoutReturnPage: FC<Props> = ({ planId, sessionId = null, token = null 
   const canReturnToUnlockedReport =
     state.status === "ready" && isPaidAndComplete && state.accessPlan !== null;
   const isRedirecting = canReturnToUnlockedReport;
+
+  useEffect(() => {
+    if (
+      state.status !== "ready" ||
+      !isPaidAndComplete ||
+      state.accessPlan === null ||
+      state.purchaseAnalytics === null
+    ) {
+      return;
+    }
+
+    if (trackedTransactionIdRef.current === state.purchaseAnalytics.transaction_id) {
+      return;
+    }
+
+    trackedTransactionIdRef.current = state.purchaseAnalytics.transaction_id;
+    trackReportPurchase(state.purchaseAnalytics);
+  }, [isPaidAndComplete, state]);
 
   useEffect(() => {
     if (!canReturnToUnlockedReport) {

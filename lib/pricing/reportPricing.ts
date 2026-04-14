@@ -122,6 +122,9 @@ const COUNTRY_NAME_TO_CODE: Record<string, string> = {
   VIETNAM: "VN",
 };
 
+const PRICING_SESSION_ID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 export type PricingExperimentGroup = "A" | "B";
 export type PricingDeviceType = "iOS" | "Android" | "Desktop";
 export type PricingTrafficSource =
@@ -261,8 +264,8 @@ interface SessionLockedQuote {
   lockedAt: string;
 }
 
-interface SessionLockMap {
-  [pricingSessionId: string]: SessionLockedQuote;
+interface StoredSessionLock extends SessionLockedQuote {
+  pricingSessionId: string;
 }
 
 interface SnapshotOverride {
@@ -405,16 +408,47 @@ function normalizeSessionLock(value: unknown): SessionLockedQuote | null {
   };
 }
 
-function getSessionLocks(metadata: Record<string, unknown> | null | undefined): SessionLockMap {
-  if (!metadata || !isRecord(metadata.sessionLocks)) {
-    return {};
+function isPricingSessionId(value: string) {
+  return PRICING_SESSION_ID_REGEX.test(value);
+}
+
+function getSessionLocks(
+  metadata: Record<string, unknown> | null | undefined
+): StoredSessionLock[] {
+  if (!metadata) {
+    return [];
   }
 
-  const locks: SessionLockMap = {};
-  for (const [pricingSessionId, value] of Object.entries(metadata.sessionLocks)) {
+  const rawSessionLocks = metadata.sessionLocks;
+  if (Array.isArray(rawSessionLocks)) {
+    return rawSessionLocks.flatMap((entry) => {
+      if (!isRecord(entry)) {
+        return [];
+      }
+
+      const pricingSessionId =
+        typeof entry.pricingSessionId === "string" && isPricingSessionId(entry.pricingSessionId)
+          ? entry.pricingSessionId
+          : null;
+      const normalized = normalizeSessionLock(entry);
+
+      return pricingSessionId && normalized ? [{ pricingSessionId, ...normalized }] : [];
+    });
+  }
+
+  if (!isRecord(rawSessionLocks)) {
+    return [];
+  }
+
+  const locks: StoredSessionLock[] = [];
+  for (const [pricingSessionId, value] of Object.entries(rawSessionLocks)) {
+    if (!isPricingSessionId(pricingSessionId)) {
+      continue;
+    }
+
     const normalized = normalizeSessionLock(value);
     if (normalized) {
-      locks[pricingSessionId] = normalized;
+      locks.push({ pricingSessionId, ...normalized });
     }
   }
 
@@ -432,7 +466,9 @@ function getSessionLockedQuote({
     return null;
   }
 
-  return getSessionLocks(metadata)[pricingSessionId] ?? null;
+  return (
+    getSessionLocks(metadata).find((entry) => entry.pricingSessionId === pricingSessionId) ?? null
+  );
 }
 
 function mergeSessionLockedQuote({
@@ -450,16 +486,14 @@ function mergeSessionLockedQuote({
     return metadata;
   }
 
-  const sessionLocks = {
-    ...getSessionLocks(existingMetadata),
-    [pricingSessionId]: sessionLockedQuote,
-  };
-
-  const prunedLocks = Object.fromEntries(
-    Object.entries(sessionLocks)
-      .sort(([, left], [, right]) => right.lockedAt.localeCompare(left.lockedAt))
-      .slice(0, 12)
-  );
+  const prunedLocks = [
+    { pricingSessionId, ...sessionLockedQuote },
+    ...getSessionLocks(existingMetadata).filter(
+      (entry) => entry.pricingSessionId !== pricingSessionId
+    ),
+  ]
+    .sort((left, right) => right.lockedAt.localeCompare(left.lockedAt))
+    .slice(0, 12);
 
   metadata.sessionLocks = prunedLocks;
   return metadata;
@@ -490,6 +524,7 @@ export function getPricingExperimentGroup(personalReportId: number): PricingExpe
 }
 
 function getBaseBucket(plan: ReportPurchasePlanId, personalReportId: number) {
+  // eslint-disable-next-line security/detect-object-injection -- plan is a closed union of internal purchase-plan ids.
   const buckets = PLAN_BASE_BUCKETS[plan];
   return buckets[hashString(`bucket:${personalReportId}:${plan}`) % buckets.length];
 }
@@ -504,12 +539,14 @@ function normalizeCountryCode(value: string | null | undefined) {
     return collapsed;
   }
 
+  // eslint-disable-next-line security/detect-object-injection -- normalized country labels resolve against a static internal dictionary.
   return COUNTRY_NAME_TO_CODE[collapsed] ?? null;
 }
 
 function getCountryPricing(code: string | null) {
   const resolvedCode = normalizeCountryCode(code);
   return (
+    // eslint-disable-next-line security/detect-object-injection -- normalized ISO country codes only index a static pricing tier table.
     (resolvedCode ? COUNTRY_CODE_TO_TIER[resolvedCode] : null) ?? {
       multiplier: 0.9,
       tier: "default" as const,

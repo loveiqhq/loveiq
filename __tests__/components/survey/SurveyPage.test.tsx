@@ -14,12 +14,12 @@ vi.mock("next/image", () => ({
     src,
     alt,
     unoptimized: _unoptimized,
-    ...props
+    ..._props
   }: {
     src: string;
     alt: string;
     unoptimized?: boolean;
-  }) => <img src={src} alt={alt} {...props} />,
+  }) => <span aria-label={alt} data-next-image={src} />,
 }));
 
 vi.mock("next/link", () => ({
