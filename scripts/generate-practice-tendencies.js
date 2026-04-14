@@ -4,7 +4,10 @@ const mammoth = require("mammoth");
 
 const ROOT = path.join(__dirname, "..");
 const DATA_DIR = path.join(ROOT, "data");
-const SCORES_DOC_PATH = path.join(ROOT, "27 - Typical Sexual Fantasy & Practice Tendencies (1).docx");
+const SCORES_DOC_PATH = path.join(
+  ROOT,
+  "27 - Typical Sexual Fantasy & Practice Tendencies (1).docx"
+);
 const EXPLANATIONS_DOC_PATH = path.join(
   ROOT,
   "[NOT IN USE - EXPLANATIONS INCLUDED] 27 - Typical Sexual Fantasy & Practice Tendencies.docx"
@@ -47,7 +50,8 @@ function splitBySectionHeading(html) {
 
   return matches.map((match, index) => {
     const start = match.index ?? 0;
-    const end = index + 1 < matches.length ? (matches[index + 1].index ?? cleaned.length) : cleaned.length;
+    const end =
+      index + 1 < matches.length ? (matches[index + 1].index ?? cleaned.length) : cleaned.length;
     return cleaned.slice(start, end);
   });
 }
@@ -190,10 +194,15 @@ async function main() {
   const explanationResult = await mammoth.convertToHtml({ path: EXPLANATIONS_DOC_PATH });
 
   const scoreSections = splitBySectionHeading(scoreResult.value).map(parseScoreSection);
-  const explanationSections = splitBySectionHeading(explanationResult.value).map(parseExplanationSection);
+  const explanationSections = splitBySectionHeading(explanationResult.value).map(
+    parseExplanationSection
+  );
 
   const explanationsByArchetype = Object.fromEntries(
-    explanationSections.map((section) => [section.archetype, buildExplanationLookup(section.groups)])
+    explanationSections.map((section) => [
+      section.archetype,
+      buildExplanationLookup(section.groups),
+    ])
   );
 
   const output = Object.fromEntries(

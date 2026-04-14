@@ -118,6 +118,16 @@ const ReportNavigation: FC<Props> = ({
           </div>
           <h1 className="report-mobile-intro__title">{primaryArchetype}</h1>
           <p className="report-mobile-intro__date">{reportDate}</p>
+          <div className="report-mobile-intro__actions">
+            <button className="report-sidebar__btn" type="button">
+              <ShareReportIcon />
+              <span>Share Report</span>
+            </button>
+            <button className="report-sidebar__btn" type="button">
+              <ReferFriendIcon />
+              <span>Refer a Friend</span>
+            </button>
+          </div>
           <button
             ref={browseButtonRef}
             type="button"

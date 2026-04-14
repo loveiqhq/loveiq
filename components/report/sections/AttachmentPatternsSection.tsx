@@ -30,6 +30,23 @@ function getAttachmentTone(pattern: ReportAttachmentPattern) {
   return ATTACHMENT_TONE_BY_TITLE[pattern.title.toLowerCase()] ?? "default";
 }
 
+const ARCHETYPE_CHIP_COLORS: Record<string, { bg: string; border: string }> = {
+  "Sensual Connector": { bg: "rgba(229,115,115,0.2)", border: "#e57373" },
+  "Relational Nurturer": { bg: "rgba(127,174,158,0.2)", border: "#7fae9e" },
+  "Loyal Ritualist": { bg: "rgba(42,255,143,0.2)", border: "#2aff8f" },
+  "Spiritual Lover": { bg: "rgba(139,123,190,0.2)", border: "#8b7bbe" },
+  "Curious Apprentice": { bg: "rgba(111,174,217,0.2)", border: "#6faed9" },
+  "Approval Seeker": { bg: "rgba(231,179,194,0.2)", border: "#e7b3c2" },
+  "Spark Seeker": { bg: "rgba(255,106,61,0.2)", border: "#ff6a3d" },
+  "Minimalist Companion": { bg: "rgba(181,178,173,0.2)", border: "#b5b2ad" },
+  "Emotional Voyeur": { bg: "rgba(46,246,227,0.2)", border: "#2ef6e3" },
+  "Analytical Sexualist": { bg: "rgba(106,0,255,0.2)", border: "#6a00ff" },
+  "Quiet Withdrawer": { bg: "rgba(201,247,245,0.2)", border: "#c9f7f5" },
+  "Explorer of Edges": { bg: "rgba(255,46,99,0.2)", border: "#ff2e63" },
+  "Power Orchestrator": { bg: "rgba(255,159,28,0.2)", border: "#ff9f1c" },
+  "Exhibitionist Performer": { bg: "rgba(230,182,92,0.2)", border: "#e6b65c" },
+};
+
 const AttachmentPatternsSection: FC<Props> = ({
   archetype,
   archetypeHtml,
@@ -79,7 +96,6 @@ const AttachmentPatternsSection: FC<Props> = ({
                   className="report-attachment-patterns__card"
                   data-tone={getAttachmentTone(pattern)}
                 >
-                  <div className="report-attachment-patterns__card-accent" aria-hidden="true" />
                   <div className="report-attachment-patterns__card-copy">
                     <h4 className="report-attachment-patterns__card-title">{pattern.title}</h4>
                     {pattern.descriptionHtml ? (
@@ -91,14 +107,32 @@ const AttachmentPatternsSection: FC<Props> = ({
                   </div>
 
                   {pattern.examples.length > 0 ? (
-                    <p className="report-attachment-patterns__examples">
+                    <div className="report-attachment-patterns__examples">
                       <span className="report-attachment-patterns__examples-label">
-                        Often seen in
+                        Associated Archetypes
                       </span>
-                      <span className="report-attachment-patterns__examples-copy">
-                        {pattern.examples.join(", ")}
-                      </span>
-                    </p>
+                      <div className="report-attachment-patterns__chips">
+                        {pattern.examples.map((example) => {
+                          const chipColors = ARCHETYPE_CHIP_COLORS[example];
+                          return (
+                            <span
+                              key={example}
+                              className="report-attachment-patterns__chip"
+                              style={
+                                chipColors
+                                  ? {
+                                      background: chipColors.bg,
+                                      borderColor: chipColors.border,
+                                    }
+                                  : undefined
+                              }
+                            >
+                              {example}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
                   ) : null}
                 </article>
               ))}

@@ -58,10 +58,7 @@ function couponNameForPercent(percent) {
 
 function isStripeNotFound(error) {
   return (
-    error &&
-    typeof error === "object" &&
-    "statusCode" in error &&
-    Number(error.statusCode) === 404
+    error && typeof error === "object" && "statusCode" in error && Number(error.statusCode) === 404
   );
 }
 

@@ -2862,9 +2862,9 @@ h3,
   width: 0.96rem;
   height: 0.96rem;
   margin-top: 0.22rem;
-  border: 1px solid rgba(254, 104, 57, 0.65);
+  border: 1px solid #00c950;
   border-radius: 9999px;
-  color: #fe6839;
+  color: #00c950;
 }
 
 .report-pricing-card__feature-icon svg {
@@ -3751,6 +3751,17 @@ h3,
   font-size: 0.95rem;
 }
 
+.report-mobile-intro__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+  padding: 16px 0;
+}
+
+.report-mobile-intro__actions .report-sidebar__btn {
+  width: 100%;
+}
+
 .report-mobile-intro__browse-btn {
   display: inline-flex;
   align-items: center;
@@ -4013,7 +4024,7 @@ h3,
 .report-sidebar__actions {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 30px;
   padding: 16px 0;
   flex-shrink: 0;
 }
@@ -4229,7 +4240,17 @@ h3,
 }
 
 .report-section__title-stack.is-split {
-  gap: 24px;
+  gap: 8px;
+}
+
+.report-section__subtitle {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.7);
+  font-family: var(--font-serif);
+  font-size: clamp(22px, 1.9vw, 26px);
+  font-weight: 400;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
 }
 
 .report-section__eyebrow {
@@ -4328,9 +4349,9 @@ h3,
 }
 
 .report-attachment-patterns__grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
   width: 100%;
 }
 
@@ -4338,63 +4359,33 @@ h3,
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  min-height: 100%;
-  padding: 26px 26px 24px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 24px;
-  background:
-    radial-gradient(circle at top right, rgba(255, 255, 255, 0.08), transparent 44%),
-    linear-gradient(180deg, rgba(25, 19, 35, 0.94), rgba(11, 10, 17, 0.92));
-  box-shadow: 0 22px 56px rgba(2, 1, 7, 0.24);
+  gap: 31px;
+  width: 100%;
+  padding: 33px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 32px;
+  background: #181121;
+  backdrop-filter: blur(2px);
+  box-shadow:
+    0px 20px 25px -5px rgba(0, 0, 0, 0.1),
+    0px 8px 10px -6px rgba(0, 0, 0, 0.1);
   overflow: hidden;
-}
-
-.report-attachment-patterns__card:last-child:nth-child(odd) {
-  grid-column: 1 / -1;
-}
-
-.report-attachment-patterns__card-accent {
-  width: 88px;
-  height: 3px;
-  border-radius: 999px;
-  background: linear-gradient(90deg, rgba(254, 104, 57, 0.95), rgba(244, 181, 94, 0.92));
-}
-
-.report-attachment-patterns__card[data-tone="secure"] .report-attachment-patterns__card-accent {
-  background: linear-gradient(90deg, rgba(138, 245, 215, 0.95), rgba(78, 222, 128, 0.92));
-}
-
-.report-attachment-patterns__card[data-tone="anxious"] .report-attachment-patterns__card-accent {
-  background: linear-gradient(90deg, rgba(254, 104, 57, 0.98), rgba(249, 115, 22, 0.92));
-}
-
-.report-attachment-patterns__card[data-tone="avoidant"] .report-attachment-patterns__card-accent {
-  background: linear-gradient(90deg, rgba(181, 137, 255, 0.96), rgba(99, 102, 241, 0.9));
-}
-
-.report-attachment-patterns__card[data-tone="mixed"] .report-attachment-patterns__card-accent {
-  background: linear-gradient(90deg, rgba(250, 204, 21, 0.95), rgba(251, 146, 60, 0.92));
-}
-
-.report-attachment-patterns__card[data-tone="adaptive"] .report-attachment-patterns__card-accent {
-  background: linear-gradient(90deg, rgba(125, 211, 252, 0.95), rgba(167, 139, 250, 0.92));
 }
 
 .report-attachment-patterns__card-copy {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 24px;
 }
 
 .report-attachment-patterns__card-title {
   margin: 0;
   color: #fff;
   font-family: var(--font-serif);
-  font-size: 28px;
-  font-weight: 500;
-  line-height: 1.08;
-  letter-spacing: -0.03em;
+  font-size: 30px;
+  font-weight: 400;
+  line-height: 1.2;
+  letter-spacing: -0.025em;
 }
 
 .report-attachment-patterns__card-body {
@@ -4402,7 +4393,7 @@ h3,
   font-family: var(--font-sans);
   font-size: 18px;
   font-weight: 300;
-  line-height: 1.68;
+  line-height: 1.625;
 }
 
 .report-attachment-patterns__card-body p {
@@ -4420,28 +4411,41 @@ h3,
 .report-attachment-patterns__examples {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
   margin: 0;
-  padding-top: 14px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 25px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .report-attachment-patterns__examples-label {
-  color: rgb(var(--report-accent-rgb));
+  color: #6b7280;
   font-family: var(--font-sans);
   font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.16em;
-  line-height: 1.1;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  line-height: 1.33;
   text-transform: uppercase;
 }
 
-.report-attachment-patterns__examples-copy {
-  color: rgba(255, 255, 255, 0.72);
+.report-attachment-patterns__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.report-attachment-patterns__chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 6.5px 17px 7.5px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #d1d5db;
   font-family: var(--font-sans);
-  font-size: 15px;
-  font-weight: 400;
-  line-height: 1.55;
+  font-size: 14px;
+  font-weight: 300;
+  line-height: 1.43;
+  white-space: nowrap;
 }
 
 .report-attachment-patterns__outro {
@@ -6238,7 +6242,12 @@ h3,
   }
 
   .report-section__title-stack.is-split {
-    gap: 20px;
+    gap: 6px;
+  }
+
+  .report-section__subtitle {
+    font-size: 18px;
+    line-height: 1.35;
   }
 
   .report-section__eyebrow {
@@ -6300,7 +6309,7 @@ h3,
   }
 
   .report-attachment-patterns {
-    gap: 22px;
+    gap: 16px;
   }
 
   .report-attachment-patterns__title {
@@ -6309,28 +6318,18 @@ h3,
   }
 
   .report-attachment-patterns__grid {
-    grid-template-columns: 1fr;
     gap: 16px;
-  }
-
-  .report-attachment-patterns__card,
-  .report-attachment-patterns__card:last-child:nth-child(odd) {
-    grid-column: auto;
   }
 
   .report-attachment-patterns__card {
-    gap: 16px;
-    padding: 20px 18px 18px;
-    border-radius: 20px;
-  }
-
-  .report-attachment-patterns__card-accent {
-    width: 72px;
+    gap: 24px;
+    padding: 22px 20px 20px;
+    border-radius: 24px;
   }
 
   .report-attachment-patterns__card-title {
     font-size: 24px;
-    line-height: 1.12;
+    line-height: 1.2;
   }
 
   .report-attachment-patterns__card-body {
@@ -6339,12 +6338,8 @@ h3,
   }
 
   .report-attachment-patterns__examples {
-    gap: 6px;
-    padding-top: 12px;
-  }
-
-  .report-attachment-patterns__examples-copy {
-    font-size: 14px;
+    gap: 10px;
+    padding-top: 18px;
   }
 
   .report-stage-highlight {

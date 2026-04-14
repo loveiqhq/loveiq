@@ -108,8 +108,14 @@ const ReportSection: FC<Props> = ({ children, feedbackWidget, sectionId, title }
     >
       <header className="report-section__header">
         <div className={`report-section__title-stack ${hasSplitTitle ? "is-split" : ""}`}>
-          {hasSplitTitle ? <p className="report-section__eyebrow">{eyebrow}</p> : null}
-          <h2 className="report-section__title">{resolvedTitle}</h2>
+          {hasSplitTitle ? (
+            <>
+              <h2 className="report-section__title">{eyebrow}</h2>
+              <p className="report-section__subtitle">{resolvedTitle}</p>
+            </>
+          ) : (
+            <h2 className="report-section__title">{resolvedTitle}</h2>
+          )}
         </div>
         {feedbackWidget}
       </header>

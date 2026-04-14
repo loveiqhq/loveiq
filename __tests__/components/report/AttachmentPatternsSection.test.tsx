@@ -30,7 +30,8 @@ describe("AttachmentPatternsSection", () => {
       screen.getByRole("heading", { name: "Common Attachment Style Patterns Across Archetypes" })
     ).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Secure attachment" })).toBeInTheDocument();
-    expect(screen.getByText(/Sensual Connector, Relational Nurturer/i)).toBeInTheDocument();
+    expect(screen.getByText(/Sensual Connector/i)).toBeInTheDocument();
+    expect(screen.getByText(/Relational Nurturer/i)).toBeInTheDocument();
     expect(container.querySelector(".report-themed-block__blurred")).toBeInTheDocument();
     expect(container.querySelector(".report-rich-heading")).toHaveTextContent(
       "Attachment Style of the Spark Seeker"
