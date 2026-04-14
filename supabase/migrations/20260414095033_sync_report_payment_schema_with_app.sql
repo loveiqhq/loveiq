@@ -7,15 +7,30 @@ ALTER TABLE IF EXISTS report_access_token
   ADD COLUMN IF NOT EXISTS token text,
   ADD COLUMN IF NOT EXISTS survey_submission_id bigint;
 
-UPDATE report_access_token rat
-SET survey_submission_id = pr.survey_submission_id
-FROM report_access_email rae
-JOIN personal_report pr ON pr.id = rae.personal_report_id
-WHERE rat.report_access_email_id = rae.id
-  AND rat.survey_submission_id IS NULL;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'report_access_token'
+      AND column_name = 'report_access_email_id'
+  ) THEN
+    EXECUTE $sql$
+      UPDATE report_access_token rat
+      SET survey_submission_id = pr.survey_submission_id
+      FROM report_access_email rae
+      JOIN personal_report pr ON pr.id = rae.personal_report_id
+      WHERE rat.report_access_email_id = rae.id
+        AND rat.survey_submission_id IS NULL
+    $sql$;
 
-ALTER TABLE IF EXISTS report_access_token
-  ALTER COLUMN report_access_email_id DROP NOT NULL;
+    EXECUTE $sql$
+      ALTER TABLE report_access_token
+        ALTER COLUMN report_access_email_id DROP NOT NULL
+    $sql$;
+  END IF;
+END $$;
 
 DO $$
 BEGIN
