@@ -12,6 +12,46 @@ vi.mock("../../lib/logger", () => ({
 vi.mock("../../lib/checkout/stripeCheckout", () => ({
   STRIPE_CHECKOUT_DISABLED_MESSAGE:
     "Checkout preview only. Payments are not enabled in this environment yet.",
+  STRIPE_CHECKOUT_SESSION_EXPAND: [
+    "discounts.coupon",
+    "discounts.promotion_code",
+    "discounts.promotion_code.promotion.coupon",
+  ],
+  getStripeCheckoutPromotionSummary: (session: {
+    discounts?: Array<{
+      coupon?: {
+        id?: string | null;
+        amount_off?: number | null;
+        name?: string | null;
+        percent_off?: number | null;
+      } | null;
+      promotion_code?: {
+        code?: string | null;
+      } | null;
+    }> | null;
+    total_details?: { amount_discount?: number | null } | null;
+  }) => {
+    const primaryDiscount =
+      session.discounts?.find((discount) => discount.promotion_code?.code) ??
+      session.discounts?.[0] ??
+      null;
+
+    if (!primaryDiscount) {
+      return null;
+    }
+
+    return {
+      couponAmountOff: primaryDiscount.coupon?.amount_off ?? null,
+      couponId: primaryDiscount.coupon?.id ?? null,
+      couponName: primaryDiscount.coupon?.name ?? null,
+      couponPercentOff: primaryDiscount.coupon?.percent_off ?? null,
+      discountAmount:
+        typeof session.total_details?.amount_discount === "number"
+          ? session.total_details.amount_discount / 100
+          : null,
+      promotionCode: primaryDiscount.promotion_code?.code ?? null,
+    };
+  },
   getStripeServerClient: vi.fn(),
   isStripeCheckoutEnabled: vi.fn().mockReturnValue(false),
 }));
@@ -63,6 +103,27 @@ describe("GET /api/stripe/checkout-session-status", () => {
         sessions: {
           retrieve: vi.fn().mockResolvedValue({
             id: "cs_test_123",
+            discounts: [
+              {
+                coupon: {
+                  id: "coupon_loveiq_20",
+                  amount_off: null,
+                  name: "LOVEIQ 20% Off",
+                  percent_off: 20,
+                },
+                promotion_code: {
+                  code: "LOVEIQ20",
+                  promotion: {
+                    coupon: {
+                      id: "coupon_loveiq_20",
+                      amount_off: null,
+                      name: "LOVEIQ 20% Off",
+                      percent_off: 20,
+                    },
+                  },
+                },
+              },
+            ],
             metadata: {
               basePriceBucket: "full_center",
               behavioralBucket: "serious",
@@ -81,6 +142,9 @@ describe("GET /api/stripe/checkout-session-status", () => {
             currency: "eur",
             payment_status: "paid",
             status: "complete",
+            total_details: {
+              amount_discount: 550,
+            },
           }),
         },
       },
@@ -109,6 +173,11 @@ describe("GET /api/stripe/checkout-session-status", () => {
         engagement_score: 40,
         behavioral_bucket: "serious",
         initial_price: 29.99,
+        promotion_code: "LOVEIQ20",
+        coupon_id: "coupon_loveiq_20",
+        coupon_name: "LOVEIQ 20% Off",
+        coupon_percent_off: 20,
+        discount_amount: 5.5,
       },
       sessionStatus: "complete",
     });

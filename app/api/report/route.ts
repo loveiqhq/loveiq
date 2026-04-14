@@ -44,6 +44,7 @@ interface SubmissionRow {
   id: number;
   created_date_time: string;
   app_user: SubmissionUser | SubmissionUser[] | null;
+  utm_tracker: string | null;
   user_id: number | null;
 }
 
@@ -83,6 +84,7 @@ export async function GET(request: Request) {
 
   // 3. Rate limiting
   const ip = getClientIp(request);
+  const userAgent = request.headers.get("user-agent");
   const rateLimit = await checkRateLimit(ip, RATE_LIMIT_CONFIG);
   if (!rateLimit.allowed) {
     return NextResponse.json(
@@ -148,10 +150,10 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: "Report not found." }, { status: 404 });
       }
 
-      submissionQuery = `${supabaseUrl}/rest/v1/survey_submission?id=eq.${tokenRows[0].survey_submission_id}&select=id,user_id,created_date_time,app_user!fk_survey_submission_user(first_name)&limit=1`;
+      submissionQuery = `${supabaseUrl}/rest/v1/survey_submission?id=eq.${tokenRows[0].survey_submission_id}&select=id,user_id,utm_tracker,created_date_time,app_user!fk_survey_submission_user(first_name)&limit=1`;
     } else {
       const sid = (sessionParsed as { success: true; data: { sessionId: string } }).data.sessionId;
-      submissionQuery = `${supabaseUrl}/rest/v1/survey_submission?session_id=eq.${encodeURIComponent(sid)}&select=id,user_id,created_date_time,app_user!fk_survey_submission_user(first_name)&limit=1`;
+      submissionQuery = `${supabaseUrl}/rest/v1/survey_submission?session_id=eq.${encodeURIComponent(sid)}&select=id,user_id,utm_tracker,created_date_time,app_user!fk_survey_submission_user(first_name)&limit=1`;
     }
 
     const submissionRes = await getBreaker("supabase").fire(() =>
@@ -278,14 +280,20 @@ export async function GET(request: Request) {
 
       if (access.personalReportId && !accessPlan) {
         await recordReportSessionView({
+          ipAddress: ip,
           personalReportId: access.personalReportId,
+          userAgent,
           userId: submission.user_id,
+          utmTracker: submission.utm_tracker,
         });
       } else if (access.personalReportId) {
         scheduleAfterResponse("report-session-capture", async () => {
           await recordReportSessionView({
+            ipAddress: ip,
             personalReportId: access.personalReportId!,
+            userAgent,
             userId: submission.user_id,
+            utmTracker: submission.utm_tracker,
           });
         });
       }
@@ -304,7 +312,7 @@ export async function GET(request: Request) {
           reportSessionId: sessionParsed?.success ? sessionParsed.data.sessionId : null,
           reportToken: tokenParsed?.success ? tokenParsed.data.token : null,
           submissionId: submission.id,
-          userAgent: request.headers.get("user-agent"),
+          userAgent,
         });
       } catch (err) {
         logger.warn({ err, submissionId: submission.id }, "Unable to resolve report pricing");

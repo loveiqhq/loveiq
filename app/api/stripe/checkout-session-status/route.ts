@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import {
   STRIPE_CHECKOUT_DISABLED_MESSAGE,
+  STRIPE_CHECKOUT_SESSION_EXPAND,
+  getStripeCheckoutPromotionSummary,
   getStripeServerClient,
   isStripeCheckoutEnabled,
   type StripeCheckoutPurchaseAnalytics,
@@ -107,6 +109,26 @@ function getPurchaseAnalytics(session: Stripe.Checkout.Session) {
     purchaseAnalytics.initial_price = initialPrice;
   }
 
+  const promotion = getStripeCheckoutPromotionSummary(session);
+  if (promotion?.promotionCode) {
+    purchaseAnalytics.promotion_code = promotion.promotionCode;
+  }
+  if (promotion?.couponId) {
+    purchaseAnalytics.coupon_id = promotion.couponId;
+  }
+  if (promotion?.couponName) {
+    purchaseAnalytics.coupon_name = promotion.couponName;
+  }
+  if (promotion?.couponPercentOff !== null && promotion?.couponPercentOff !== undefined) {
+    purchaseAnalytics.coupon_percent_off = promotion.couponPercentOff;
+  }
+  if (promotion?.couponAmountOff !== null && promotion?.couponAmountOff !== undefined) {
+    purchaseAnalytics.coupon_amount_off = promotion.couponAmountOff / 100;
+  }
+  if (promotion?.discountAmount !== null && promotion?.discountAmount !== undefined) {
+    purchaseAnalytics.discount_amount = promotion.discountAmount;
+  }
+
   return purchaseAnalytics;
 }
 
@@ -150,7 +172,9 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Service unavailable." }, { status: 503 });
     }
 
-    const session = await stripe.checkout.sessions.retrieve(parsed.data.session_id);
+    const session = await stripe.checkout.sessions.retrieve(parsed.data.session_id, {
+      expand: STRIPE_CHECKOUT_SESSION_EXPAND,
+    });
     const reportSessionId =
       typeof session.metadata?.reportSessionId === "string" && session.metadata.reportSessionId
         ? session.metadata.reportSessionId

@@ -39,6 +39,10 @@ interface Props {
   token?: string | null;
 }
 
+function isSuccessfulPaymentStatus(value: string | null) {
+  return value === "paid" || value === "no_payment_required";
+}
+
 const CheckoutReturnPage: FC<Props> = ({ planId, sessionId = null, token = null }) => {
   const router = useRouter();
   const plan = getReportPurchasePlan(planId);
@@ -103,7 +107,8 @@ const CheckoutReturnPage: FC<Props> = ({ planId, sessionId = null, token = null 
         const paymentStatus = json.paymentStatus;
         const sessionStatus = json.sessionStatus;
         const accessPlan = json.accessPlan ?? null;
-        const isPaidAndComplete = paymentStatus === "paid" && sessionStatus === "complete";
+        const isPaidAndComplete =
+          isSuccessfulPaymentStatus(paymentStatus) && sessionStatus === "complete";
 
         if (isPaidAndComplete && accessPlan === null && attempts < MAX_UNLOCK_CHECK_ATTEMPTS) {
           attempts += 1;
@@ -146,7 +151,7 @@ const CheckoutReturnPage: FC<Props> = ({ planId, sessionId = null, token = null 
 
   const isPaidAndComplete =
     state.status === "ready" &&
-    state.paymentStatus === "paid" &&
+    isSuccessfulPaymentStatus(state.paymentStatus) &&
     state.sessionStatus === "complete";
   const canReturnToUnlockedReport =
     state.status === "ready" && isPaidAndComplete && state.accessPlan !== null;

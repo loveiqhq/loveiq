@@ -280,16 +280,25 @@ export async function getReportAccessPlanForSubmission(submissionId: number): Pr
 }
 
 export async function recordReportSessionView({
+  ipAddress,
   personalReportId,
+  userAgent,
   userId,
+  utmTracker,
 }: {
+  ipAddress?: string | null;
   personalReportId: number;
+  userAgent?: string | null;
   userId?: number | null;
+  utmTracker?: string | null;
 }) {
   const response = await supabaseServiceFetch("/rest/v1/report_session", {
     body: JSON.stringify({
+      ...(ipAddress ? { ip_address: ipAddress } : {}),
       personal_report_id: personalReportId,
+      ...(userAgent ? { user_agent: userAgent } : {}),
       ...(typeof userId === "number" ? { user_id: userId } : {}),
+      ...(utmTracker ? { utm_tracker: utmTracker } : {}),
     }),
     headers: {
       Prefer: "return=minimal",

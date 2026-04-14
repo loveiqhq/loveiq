@@ -45,6 +45,7 @@ function makeRequest(body: unknown) {
     headers: {
       "Content-Type": "application/json",
       "x-csrf-token": "valid-token",
+      "user-agent": "Mozilla/5.0 (Vitest)",
     },
     body: JSON.stringify(body),
   });
@@ -177,6 +178,10 @@ describe("POST /api/stripe/checkout-session", () => {
             }),
           }),
         ],
+        metadata: expect.objectContaining({
+          requestIp: "127.0.0.1",
+          requestUserAgent: "Mozilla/5.0 (Vitest)",
+        }),
         success_url:
           "http://localhost/checkout/return?plan=full_report&session_id={CHECKOUT_SESSION_ID}",
       })

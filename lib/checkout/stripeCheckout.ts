@@ -33,6 +33,12 @@ export interface StripeCheckoutPurchaseAnalytics {
   engagement_score?: number;
   behavioral_bucket?: string;
   initial_price?: number;
+  promotion_code?: string;
+  coupon_id?: string;
+  coupon_name?: string;
+  coupon_percent_off?: number;
+  coupon_amount_off?: number;
+  discount_amount?: number;
 }
 
 export type StripeCheckoutSessionStatusResponse =
@@ -50,6 +56,86 @@ export type StripeCheckoutSessionStatusResponse =
     };
 
 let stripeClient: Stripe | null = null;
+
+type CheckoutSessionDiscount = NonNullable<Stripe.Checkout.Session["discounts"]>[number];
+
+export interface StripeCheckoutPromotionSummary {
+  couponAmountOff: number | null;
+  couponId: string | null;
+  couponName: string | null;
+  couponPercentOff: number | null;
+  discountAmount: number | null;
+  promotionCode: string | null;
+}
+
+export const STRIPE_CHECKOUT_SESSION_EXPAND = [
+  "discounts.coupon",
+  "discounts.promotion_code",
+  "discounts.promotion_code.promotion.coupon",
+] satisfies NonNullable<Stripe.Checkout.SessionRetrieveParams["expand"]>;
+
+function getExpandedCoupon(
+  discount: CheckoutSessionDiscount | null | undefined
+): Stripe.Coupon | null {
+  if (!discount) {
+    return null;
+  }
+
+  if (discount.coupon && typeof discount.coupon !== "string") {
+    return discount.coupon;
+  }
+
+  const promotionCode = discount.promotion_code;
+  if (!promotionCode || typeof promotionCode === "string") {
+    return null;
+  }
+
+  const coupon = promotionCode.promotion.coupon;
+  return coupon && typeof coupon !== "string" ? coupon : null;
+}
+
+function getPromotionCodeValue(discount: CheckoutSessionDiscount | null | undefined) {
+  const promotionCode = discount?.promotion_code;
+  if (!promotionCode) {
+    return null;
+  }
+
+  return typeof promotionCode === "string" ? null : promotionCode.code;
+}
+
+function toMajorCurrencyAmount(minorUnits: number | null | undefined) {
+  if (typeof minorUnits !== "number" || !Number.isFinite(minorUnits)) {
+    return null;
+  }
+
+  return minorUnits / 100;
+}
+
+export function getStripeCheckoutPromotionSummary(
+  session: Stripe.Checkout.Session
+): StripeCheckoutPromotionSummary | null {
+  const primaryDiscount =
+    session.discounts?.find((discount) => discount.promotion_code != null) ??
+    session.discounts?.[0] ??
+    null;
+
+  const coupon = getExpandedCoupon(primaryDiscount);
+  const promotionCode = getPromotionCodeValue(primaryDiscount);
+  const discountAmount = toMajorCurrencyAmount(session.total_details?.amount_discount ?? null);
+
+  if (!coupon && !promotionCode && discountAmount === null) {
+    return null;
+  }
+
+  return {
+    couponAmountOff: coupon?.amount_off ?? null,
+    couponId: coupon?.id ?? null,
+    couponName: coupon?.name ?? null,
+    couponPercentOff: coupon?.percent_off ?? null,
+    discountAmount,
+    promotionCode,
+  };
+}
 
 function normalizeCustomerEmail(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim().toLowerCase() : null;

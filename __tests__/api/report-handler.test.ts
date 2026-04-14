@@ -43,7 +43,10 @@ process.env.SUPABASE_URL = "https://test.supabase.co";
 process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-key";
 
 import { GET } from "../../app/api/report/route";
-import { getReportAccessPlanForSubmission } from "../../lib/report/personalReport";
+import {
+  getReportAccessPlanForSubmission,
+  recordReportSessionView,
+} from "../../lib/report/personalReport";
 import { getReportPriceQuotesForContext } from "../../lib/pricing/reportPricing";
 
 function makeRequest(sessionId = "550e8400-e29b-41d4-a716-446655440000") {
@@ -68,7 +71,12 @@ describe("GET /api/report", () => {
     process.env.SUPABASE_URL = "https://test.supabase.co";
     process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-key";
     mockGetClientIp.mockReturnValue("1.2.3.4");
+    vi.mocked(getReportAccessPlanForSubmission).mockResolvedValue({
+      accessPlan: null,
+      personalReportId: 99,
+    });
     vi.mocked(getReportPriceQuotesForContext).mockResolvedValue(null);
+    vi.mocked(recordReportSessionView).mockResolvedValue(undefined);
     mockFetchWithTimeout.mockResolvedValue({
       ok: true,
       json: async () => [],
@@ -137,6 +145,7 @@ describe("GET /api/report", () => {
           {
             id: 55,
             user_id: 77,
+            utm_tracker: "utm_source=google",
             created_date_time: "2026-04-07T22:23:16.851299+00:00",
             app_user: { first_name: "Eman" },
           },
@@ -216,10 +225,19 @@ describe("GET /api/report", () => {
     const submissionLookupUrl = mockFetchWithTimeout.mock.calls[0][0] as string;
     const snapshotAnswerLookupUrl = mockFetchWithTimeout.mock.calls[2][0] as string;
     expect(submissionLookupUrl).toContain("created_date_time");
+    expect(submissionLookupUrl).toContain("utm_tracker");
     expect(submissionLookupUrl).toContain("app_user!fk_survey_submission_user(first_name)");
     expect(submissionLookupUrl).not.toContain("select=id,first_name,created_at");
     expect(snapshotAnswerLookupUrl).toContain("survey_question!inner(frontend_qid)");
     expect(snapshotAnswerLookupUrl).toContain("survey_question.frontend_qid=in.(01002,16013)");
+    expect(recordReportSessionView).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ipAddress: "1.2.3.4",
+        personalReportId: 99,
+        userAgent: null,
+        userId: 77,
+      })
+    );
   });
 
   it("returns a null satisfaction snapshot answer when question 01002 is missing", async () => {

@@ -41,6 +41,19 @@ const RATE_LIMIT_CONFIG = {
   windowMs: 60_000,
 };
 
+function toStripeMetadataValue(value: string | null) {
+  if (!value) {
+    return "";
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  return trimmed.slice(0, 500);
+}
+
 function buildSuccessUrl({
   origin,
   plan,
@@ -83,6 +96,7 @@ export async function POST(request: Request) {
   }
 
   const ip = getClientIp(request);
+  const userAgent = request.headers.get("user-agent");
   const rateLimit = await checkRateLimit(ip, RATE_LIMIT_CONFIG);
   if (!rateLimit.allowed) {
     return NextResponse.json(
@@ -162,6 +176,8 @@ export async function POST(request: Request) {
         plan: parsed.data.plan,
         pricingClusterId: quote.pricingClusterId,
         pricingQuoteId: String(quote.id),
+        requestIp: toStripeMetadataValue(ip),
+        requestUserAgent: toStripeMetadataValue(userAgent),
         reportSessionId: parsed.data.reportSessionId ?? "",
         reportToken: parsed.data.reportToken ?? "",
         trafficSource: quote.trafficSource,

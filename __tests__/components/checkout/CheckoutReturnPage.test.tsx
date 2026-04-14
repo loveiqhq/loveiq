@@ -49,6 +49,11 @@ describe("CheckoutReturnPage", () => {
           engagement_score: 40,
           behavioral_bucket: "serious",
           initial_price: 29.99,
+          promotion_code: "LOVEIQ20",
+          coupon_id: "coupon_loveiq_20",
+          coupon_name: "LOVEIQ 20% Off",
+          coupon_percent_off: 20,
+          discount_amount: 5.5,
         },
         sessionStatus: "complete",
       }),
@@ -83,6 +88,11 @@ describe("CheckoutReturnPage", () => {
       engagement_score: 40,
       behavioral_bucket: "serious",
       initial_price: 29.99,
+      promotion_code: "LOVEIQ20",
+      coupon_id: "coupon_loveiq_20",
+      coupon_name: "LOVEIQ 20% Off",
+      coupon_percent_off: 20,
+      discount_amount: 5.5,
     });
 
     expect(screen.getByRole("link", { name: /go to unlocked report/i })).toHaveAttribute(
@@ -94,6 +104,48 @@ describe("CheckoutReturnPage", () => {
 
     expect(mockRouterReplace).toHaveBeenCalledWith("/report/rpt_ABCDEFGHIJKLMNOPQRST");
   }, 10000);
+
+  it("treats no_payment_required as a successful unlock for fully discounted checkouts", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        accessPlan: "full_report",
+        enabled: true,
+        paymentStatus: "no_payment_required",
+        purchaseAnalytics: {
+          value: 0,
+          currency: "EUR",
+          transaction_id: "cs_test_free_123",
+          promotion_code: "LOVEIQ100",
+          coupon_percent_off: 100,
+          discount_amount: 24.49,
+        },
+        sessionStatus: "complete",
+      }),
+    } as Response);
+
+    render(
+      <CheckoutReturnPage
+        planId="full_report"
+        sessionId="cs_test_free_123"
+        token="rpt_ABCDEFGHIJKLMNOPQRST"
+      />
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(/payment complete\. your report is unlocked\. redirecting you now/i)
+      ).toBeInTheDocument()
+    );
+    expect(mockTrackReportPurchase).toHaveBeenCalledWith({
+      value: 0,
+      currency: "EUR",
+      transaction_id: "cs_test_free_123",
+      promotion_code: "LOVEIQ100",
+      coupon_percent_off: 100,
+      discount_amount: 24.49,
+    });
+  });
 
   it("keeps polling while payment is complete but backend access is still syncing", async () => {
     globalThis.fetch = vi

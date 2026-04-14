@@ -8,6 +8,10 @@ import {
   type ReportPurchasePlanId,
 } from "./reportPurchase";
 import {
+  STRIPE_CHECKOUT_SESSION_EXPAND,
+  getStripeCheckoutPromotionSummary,
+} from "./stripeCheckout";
+import {
   ensurePersonalReportForSubmission,
   resolveSubmissionAccessContext,
 } from "@/lib/report/personalReport";
@@ -69,6 +73,10 @@ function toIsoDate(epochSeconds: number | null | undefined) {
   }
 
   return new Date(epochSeconds * 1000).toISOString();
+}
+
+function getMetadataString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 function getChargeDetails(charge: Stripe.Charge | null) {
@@ -166,6 +174,24 @@ async function upsertWebhookEventRecord({
   return createdRows[0]?.id ?? null;
 }
 
+async function fetchWebhookEventRecord(stripeEventId: string) {
+  const response = await supabaseServiceFetch(
+    `/rest/v1/payment_webhook_event?stripe_event_id=eq.${encodeURIComponent(stripeEventId)}&select=id,payment_id,processed&limit=1`
+  );
+
+  if (!response.ok) {
+    throw new Error("payment_webhook_event_lookup_failed");
+  }
+
+  const rows = (await response.json()) as Array<{
+    id: number;
+    payment_id: number | null;
+    processed: boolean | null;
+  }>;
+
+  return rows[0] ?? null;
+}
+
 async function fetchExistingPayment({
   stripeChargeId,
   stripePaymentIntentId,
@@ -215,6 +241,7 @@ async function upsertPaymentRecord({
   description,
   failureCode,
   failureMessage,
+  ipAddress,
   metadata,
   paymentDateTime,
   paymentId,
@@ -227,6 +254,7 @@ async function upsertPaymentRecord({
   stripeChargeId,
   stripeCustomerId,
   stripePaymentIntentId,
+  userAgent,
   userId,
 }: {
   amount: number | null;
@@ -238,6 +266,7 @@ async function upsertPaymentRecord({
   description: string;
   failureCode: string | null;
   failureMessage: string | null;
+  ipAddress: string | null;
   metadata: Record<string, unknown>;
   paymentDateTime: string;
   paymentId: number | null;
@@ -250,8 +279,10 @@ async function upsertPaymentRecord({
   stripeChargeId: string | null;
   stripeCustomerId: string | null;
   stripePaymentIntentId: string | null;
+  userAgent: string | null;
   userId: number;
 }) {
+  const now = new Date().toISOString();
   const payload = {
     amount,
     card_brand: cardBrand,
@@ -262,6 +293,7 @@ async function upsertPaymentRecord({
     description,
     failure_code: failureCode,
     failure_message: failureMessage,
+    ip_address: ipAddress,
     metadata,
     payment_date_time: paymentDateTime,
     payment_method_type: paymentMethodType,
@@ -273,6 +305,8 @@ async function upsertPaymentRecord({
     stripe_customer_id: stripeCustomerId,
     stripe_payment_intent_id: stripePaymentIntentId,
     stripe_payment_method_id: paymentMethodId,
+    updated_date_time: now,
+    user_agent: userAgent,
     user_id: userId,
   };
 
@@ -292,7 +326,10 @@ async function upsertPaymentRecord({
   }
 
   const response = await supabaseServiceFetch("/rest/v1/payment", {
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      ...payload,
+      created_date_time: now,
+    }),
     headers: { Prefer: "return=representation" },
     method: "POST",
   });
@@ -361,6 +398,7 @@ async function updatePersonalReportPayment({
   personalReportId: number;
   status: PaymentStatus;
 }) {
+  const now = new Date().toISOString();
   const response = await supabaseServiceFetch(
     `/rest/v1/personal_report?id=eq.${personalReportId}`,
     {
@@ -368,6 +406,7 @@ async function updatePersonalReportPayment({
         payment_id: paymentId,
         payment_status: status,
         price: amount,
+        updated_date_time: now,
       }),
       headers: { Prefer: "return=minimal" },
       method: "PATCH",
@@ -417,15 +456,21 @@ async function syncCheckoutSessionPayment({
     throw new Error("stripe_checkout_missing_personal_report");
   }
 
+  const settledSession = await stripe.checkout.sessions.retrieve(session.id, {
+    expand: STRIPE_CHECKOUT_SESSION_EXPAND,
+  });
+
   const paymentIntentId =
-    typeof session.payment_intent === "string"
-      ? session.payment_intent
-      : (session.payment_intent?.id ?? null);
+    typeof settledSession.payment_intent === "string"
+      ? settledSession.payment_intent
+      : (settledSession.payment_intent?.id ?? null);
 
   let charge: Stripe.Charge | null = null;
   let paymentMethodId: string | null = null;
   let stripeCustomerId: string | null =
-    typeof session.customer === "string" ? session.customer : (session.customer?.id ?? null);
+    typeof settledSession.customer === "string"
+      ? settledSession.customer
+      : (settledSession.customer?.id ?? null);
   let paymentDateTime = new Date().toISOString();
 
   if (paymentIntentId) {
@@ -451,36 +496,50 @@ async function syncCheckoutSessionPayment({
     paymentDateTime = toIsoDate(paymentIntent.created);
   }
 
-  const amount = toAmount(session.amount_total);
-  const pricingQuoteIdRaw = session.metadata?.pricingQuoteId;
+  const amount = toAmount(settledSession.amount_total);
+  const pricingQuoteIdRaw = settledSession.metadata?.pricingQuoteId;
   const pricingQuoteId =
     typeof pricingQuoteIdRaw === "string" && /^\d+$/.test(pricingQuoteIdRaw)
       ? Number(pricingQuoteIdRaw)
       : null;
   const chargeDetails = getChargeDetails(charge);
+  const promotionSummary = getStripeCheckoutPromotionSummary(settledSession);
+  const requestIp = getMetadataString(settledSession.metadata?.requestIp);
+  const requestUserAgent = getMetadataString(settledSession.metadata?.requestUserAgent);
   const existingPayment = await fetchExistingPayment({
     stripeChargeId: charge?.id ?? null,
     stripePaymentIntentId: paymentIntentId,
   });
 
   const metadata = {
-    checkoutSessionId: session.id,
+    checkoutSessionId: settledSession.id,
     plan,
     pricingQuoteId,
-    pricingClusterId: session.metadata?.pricingClusterId ?? null,
-    experimentGroup: session.metadata?.experimentGroup ?? null,
-    basePriceBucket: session.metadata?.basePriceBucket ?? null,
-    discountStep: session.metadata?.discountStep ?? null,
-    currentPrice: session.metadata?.currentPrice ?? null,
-    initialPrice: session.metadata?.initialPrice ?? null,
-    countryTier: session.metadata?.countryTier ?? null,
-    deviceType: session.metadata?.deviceType ?? null,
-    trafficSource: session.metadata?.trafficSource ?? null,
-    engagementScore: session.metadata?.engagementScore ?? null,
-    behavioralBucket: session.metadata?.behavioralBucket ?? null,
-    reportSessionId: session.metadata?.reportSessionId ?? null,
-    reportToken: session.metadata?.reportToken ?? null,
-    stripePaymentStatus: session.payment_status ?? null,
+    pricingClusterId: settledSession.metadata?.pricingClusterId ?? null,
+    experimentGroup: settledSession.metadata?.experimentGroup ?? null,
+    basePriceBucket: settledSession.metadata?.basePriceBucket ?? null,
+    discountStep: settledSession.metadata?.discountStep ?? null,
+    currentPrice: settledSession.metadata?.currentPrice ?? null,
+    initialPrice: settledSession.metadata?.initialPrice ?? null,
+    countryTier: settledSession.metadata?.countryTier ?? null,
+    deviceType: settledSession.metadata?.deviceType ?? null,
+    trafficSource: settledSession.metadata?.trafficSource ?? null,
+    engagementScore: settledSession.metadata?.engagementScore ?? null,
+    behavioralBucket: settledSession.metadata?.behavioralBucket ?? null,
+    reportSessionId: settledSession.metadata?.reportSessionId ?? null,
+    reportToken: settledSession.metadata?.reportToken ?? null,
+    requestIp,
+    requestUserAgent,
+    stripePaymentStatus: settledSession.payment_status ?? null,
+    promotionCode: promotionSummary?.promotionCode ?? null,
+    couponId: promotionSummary?.couponId ?? null,
+    couponName: promotionSummary?.couponName ?? null,
+    couponPercentOff: promotionSummary?.couponPercentOff ?? null,
+    couponAmountOff:
+      promotionSummary?.couponAmountOff !== null && promotionSummary?.couponAmountOff !== undefined
+        ? promotionSummary.couponAmountOff / 100
+        : null,
+    discountAmount: promotionSummary?.discountAmount ?? null,
   };
 
   const paymentId = await upsertPaymentRecord({
@@ -489,10 +548,11 @@ async function syncCheckoutSessionPayment({
     cardExpMonth: chargeDetails.cardExpMonth,
     cardExpYear: chargeDetails.cardExpYear,
     cardLast4: chargeDetails.cardLast4,
-    currency: session.currency ?? null,
+    currency: settledSession.currency ?? null,
     description: `LoveIQ ${getReportPurchasePlan(plan).title}`,
     failureCode: chargeDetails.failureCode,
     failureMessage: chargeDetails.failureMessage,
+    ipAddress: requestIp,
     metadata,
     paymentDateTime,
     paymentId: existingPayment?.id ?? null,
@@ -505,6 +565,7 @@ async function syncCheckoutSessionPayment({
     stripeChargeId: charge?.id ?? null,
     stripeCustomerId,
     stripePaymentIntentId: paymentIntentId,
+    userAgent: requestUserAgent,
     userId: context.userId,
   });
 
@@ -561,6 +622,7 @@ async function syncRefundEvent({ charge, event }: { charge: Stripe.Charge; event
         refund_amount: toAmount(charge.amount_refunded),
         refunded_at: new Date().toISOString(),
         status: "refunded",
+        updated_date_time: new Date().toISOString(),
       }),
       headers: { Prefer: "return=minimal" },
       method: "PATCH",
@@ -598,6 +660,11 @@ export async function processStripeWebhookEvent({
   stripe: Stripe;
 }) {
   try {
+    const existingWebhookEvent = await fetchWebhookEventRecord(event.id);
+    if (existingWebhookEvent?.processed) {
+      return;
+    }
+
     switch (event.type) {
       case "checkout.session.completed":
       case "checkout.session.async_payment_succeeded":
