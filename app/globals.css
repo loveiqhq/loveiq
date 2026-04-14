@@ -4013,7 +4013,7 @@ h3,
 .report-sidebar__actions {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
   padding: 16px 0;
   flex-shrink: 0;
 }
