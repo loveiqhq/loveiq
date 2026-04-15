@@ -2238,6 +2238,7 @@ h3,
 .report-prose h3 {
   font-size: 27px;
   line-height: 1.18;
+  margin-bottom: 28px;
 }
 
 .report-prose ul,
