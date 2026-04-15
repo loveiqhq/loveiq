@@ -440,13 +440,13 @@ const ReportPricingModal: FC<Props> = ({
                     <strong>Richard, 34</strong>
                     <em>Manager / Spark seeker</em>
                   </div>
-                  <div className="report-pricing-modal__stars" aria-label="5 out of 5 stars">
-                    {Array.from({ length: 5 }).map((_, index) => (
-                      <svg key={index} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-                        <path d="m8 1.5 1.72 3.48 3.84.56-2.78 2.71.66 3.83L8 10.27l-3.44 1.81.66-3.83L2.44 5.54l3.84-.56L8 1.5Z" />
-                      </svg>
-                    ))}
-                  </div>
+                </div>
+                <div className="report-pricing-modal__stars" aria-label="5 out of 5 stars">
+                  {Array.from({ length: 5 }).map((_, index) => (
+                    <svg key={index} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                      <path d="m8 1.5 1.72 3.48 3.84.56-2.78 2.71.66 3.83L8 10.27l-3.44 1.81.66-3.83L2.44 5.54l3.84-.56L8 1.5Z" />
+                    </svg>
+                  ))}
                 </div>
                 <blockquote className="report-pricing-modal__quote">
                   &ldquo;The results were <em>more insightful than I expected</em>. It connected
