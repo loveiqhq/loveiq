@@ -2313,6 +2313,7 @@ h3,
 
   .report-content {
     padding-inline: 0;
+    zoom: 0.67;
   }
 }
 
