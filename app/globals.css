@@ -887,6 +887,11 @@ h3,
   min-height: 100vh;
   min-height: 100svh; /* svh: excludes browser chrome — prevents iOS Safari jump */
   overflow-x: clip;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
   background:
     radial-gradient(circle at 10% 20%, rgb(var(--report-accent-rgb) / 0.12), transparent 0 32%),
     radial-gradient(circle at 92% 12%, rgb(var(--report-accent-rgb) / 0.22), transparent 0 28%),
@@ -7512,5 +7517,11 @@ h3,
 
   .checkout-powered__mark {
     font-size: 22px;
+  }
+}
+
+@media print {
+  .report-page {
+    display: none !important;
   }
 }
