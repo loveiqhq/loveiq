@@ -7,7 +7,7 @@ import { reportSections } from "@/data/report-general";
 import { cacheReportCheckoutQuote } from "@/lib/checkout/reportCheckoutQuoteCache";
 import { buildReportCheckoutHref, type ReportPurchasePlanId } from "@/lib/checkout/reportPurchase";
 import type { ReportPriceQuoteSnapshot } from "@/lib/pricing/reportPricing";
-import ReportFooter from "./ReportFooter";
+import FooterSection from "@/components/landing/FooterSection";
 import ReportNavigation from "./ReportNavigation";
 import ReportPricingModal from "./ReportPricingModal";
 import ReportSection from "./ReportSection";
@@ -586,7 +586,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
               );
             })}
 
-            <ReportFooter />
+            <FooterSection />
           </div>
         </div>
       </div>
