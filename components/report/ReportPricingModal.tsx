@@ -8,6 +8,7 @@ import {
   type MutableRefObject,
   type TouchEvent as ReactTouchEvent,
 } from "react";
+import Image from "next/image";
 import {
   REPORT_PURCHASE_PLANS,
   formatReportPurchasePrice,
@@ -426,30 +427,32 @@ const ReportPricingModal: FC<Props> = ({
               </div>
 
               <figure className="report-pricing-modal__testimonial">
-                <div className="report-pricing-modal__stars" aria-label="5 out of 5 stars">
-                  {Array.from({ length: 5 }).map((_, index) => (
-                    <svg key={index} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-                      <path d="m8 1.5 1.72 3.48 3.84.56-2.78 2.71.66 3.83L8 10.27l-3.44 1.81.66-3.83L2.44 5.54l3.84-.56L8 1.5Z" />
-                    </svg>
-                  ))}
+                <div className="report-pricing-modal__person">
+                  <div className="report-pricing-modal__avatar">
+                    <Image
+                      src="/images/testimonial-richard.png"
+                      alt="Richard"
+                      width={82}
+                      height={82}
+                    />
+                  </div>
+                  <div className="report-pricing-modal__author-copy">
+                    <strong>Richard, 34</strong>
+                    <em>Manager / Spark seeker</em>
+                  </div>
+                  <div className="report-pricing-modal__stars" aria-label="5 out of 5 stars">
+                    {Array.from({ length: 5 }).map((_, index) => (
+                      <svg key={index} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                        <path d="m8 1.5 1.72 3.48 3.84.56-2.78 2.71.66 3.83L8 10.27l-3.44 1.81.66-3.83L2.44 5.54l3.84-.56L8 1.5Z" />
+                      </svg>
+                    ))}
+                  </div>
                 </div>
                 <blockquote className="report-pricing-modal__quote">
-                  &ldquo;Unlocking my report was{" "}
-                  <em>one of the best investments made for my sexuality.</em> It is shockingly
-                  precise&rdquo;
+                  &ldquo;The results were <em>more insightful than I expected</em>. It connected
+                  dots between emotional triggers and communication styles I hadn&rsquo;t noticed
+                  before. Solid UX, too.&rdquo;
                 </blockquote>
-                <figcaption className="report-pricing-modal__author">
-                  <span className="report-pricing-modal__avatar" aria-hidden="true">
-                    TV
-                  </span>
-                  <span className="report-pricing-modal__author-copy">
-                    <span className="report-pricing-modal__author-line">
-                      <strong>Dr. Tobias V.</strong>
-                      <span className="report-pricing-modal__author-age">40</span>
-                    </span>
-                    <em>Berlin, Germany</em>
-                  </span>
-                </figcaption>
               </figure>
             </div>
           </div>

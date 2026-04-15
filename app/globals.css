@@ -2952,88 +2952,76 @@ h3,
   margin: 1.85rem auto 0;
   padding: 1.65rem 1.75rem;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
-  background: rgba(12, 6, 20, 0.88);
+  border-radius: 24px;
+  background: rgba(21, 10, 34, 0.92);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
   box-shadow:
-    0 20px 25px -5px rgba(0, 0, 0, 0.1),
-    0 8px 10px -6px rgba(0, 0, 0, 0.1);
+    0 10px 15px -3px rgba(0, 0, 0, 0.3),
+    0 4px 6px -4px rgba(0, 0, 0, 0.3);
+}
+
+.report-pricing-modal__person {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+
+.report-pricing-modal__avatar {
+  flex-shrink: 0;
+  width: 4rem;
+  height: 4rem;
+  overflow: hidden;
+  border-radius: 9999px;
+}
+
+.report-pricing-modal__avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .report-pricing-modal__stars {
   display: flex;
-  gap: 0.2rem;
+  gap: 0.25rem;
   color: #fe6839;
 }
 
 .report-pricing-modal__stars svg {
-  width: 0.82rem;
-  height: 0.82rem;
+  width: 1.1rem;
+  height: 1.1rem;
 }
 
 .report-pricing-modal__quote {
   margin: 0;
-  color: #9ca3af;
+  color: #d1d5db;
   font-family: var(--font-serif);
-  font-size: clamp(1rem, 1.2vw, 1.14rem);
-  line-height: 1.46;
+  font-size: clamp(1rem, 1.2vw, 1.18rem);
+  font-style: italic;
+  line-height: 1.55;
 }
 
 .report-pricing-modal__quote em {
   color: #fff;
   font-style: italic;
-  font-weight: 500;
-}
-
-.report-pricing-modal__author {
-  display: flex;
-  gap: 0.72rem;
-  align-items: center;
-  margin-top: 0.1rem;
-}
-
-.report-pricing-modal__avatar {
-  display: grid;
-  place-items: center;
-  width: 2.4rem;
-  height: 2.4rem;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 9999px;
-  background: linear-gradient(135deg, rgba(254, 104, 57, 0.35), rgba(192, 132, 252, 0.3));
-  color: #fff;
-  box-shadow:
-    0 10px 15px -3px rgba(0, 0, 0, 0.1),
-    0 4px 6px -4px rgba(0, 0, 0, 0.1);
-  font-size: 0.72rem;
   font-weight: 700;
-  letter-spacing: 0.04em;
 }
 
 .report-pricing-modal__author-copy {
   display: grid;
-  gap: 0.15rem;
+  gap: 0.1rem;
 }
 
-.report-pricing-modal__author-line {
-  display: flex;
-  gap: 0.34rem;
-  align-items: baseline;
-}
-
-.report-pricing-modal__author strong {
+.report-pricing-modal__author-copy strong {
   color: #fff;
-  font-size: 0.86rem;
-  font-weight: 500;
+  font-size: 1.05rem;
+  font-weight: 700;
 }
 
-.report-pricing-modal__author-age {
-  color: rgba(255, 255, 255, 0.38);
-  font-size: 0.76rem;
-  font-weight: 300;
-}
-
-.report-pricing-modal__author em {
-  color: rgba(255, 255, 255, 0.42);
-  font-size: 0.7rem;
+.report-pricing-modal__author-copy em {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.82rem;
   font-style: normal;
   line-height: 1.3;
 }
@@ -3224,11 +3212,17 @@ h3,
     width: min(100%, 38.5rem);
     margin-top: 1.55rem;
     padding: 1.35rem 1.45rem;
+    gap: 0.7rem;
+  }
+
+  .report-pricing-modal__avatar {
+    width: 3.4rem;
+    height: 3.4rem;
   }
 
   .report-pricing-modal__stars svg {
-    width: 0.72rem;
-    height: 0.72rem;
+    width: 0.92rem;
+    height: 0.92rem;
   }
 
   .report-pricing-modal__quote {
@@ -3236,22 +3230,12 @@ h3,
     line-height: 1.38;
   }
 
-  .report-pricing-modal__avatar {
-    width: 2.12rem;
-    height: 2.12rem;
-    font-size: 0.62rem;
+  .report-pricing-modal__author-copy strong {
+    font-size: 0.92rem;
   }
 
-  .report-pricing-modal__author strong {
-    font-size: 0.78rem;
-  }
-
-  .report-pricing-modal__author-age {
-    font-size: 0.68rem;
-  }
-
-  .report-pricing-modal__author em {
-    font-size: 0.64rem;
+  .report-pricing-modal__author-copy em {
+    font-size: 0.74rem;
   }
 }
 
@@ -3460,13 +3444,22 @@ h3,
     padding: 0.86rem 1rem;
   }
 
+  .report-pricing-modal__person {
+    gap: 0.35rem 0.5rem;
+  }
+
+  .report-pricing-modal__avatar {
+    width: 2.6rem;
+    height: 2.6rem;
+  }
+
   .report-pricing-modal__stars {
     gap: 0.12rem;
   }
 
   .report-pricing-modal__stars svg {
-    width: 0.58rem;
-    height: 0.58rem;
+    width: 0.72rem;
+    height: 0.72rem;
   }
 
   .report-pricing-modal__quote {
@@ -3474,35 +3467,16 @@ h3,
     line-height: 1.16;
   }
 
-  .report-pricing-modal__author {
-    gap: 0.42rem;
-    margin-top: 0;
-  }
-
-  .report-pricing-modal__avatar {
-    width: 1.6rem;
-    height: 1.6rem;
-    font-size: 0.48rem;
-  }
-
   .report-pricing-modal__author-copy {
     gap: 0.04rem;
   }
 
-  .report-pricing-modal__author-line {
-    gap: 0.2rem;
+  .report-pricing-modal__author-copy strong {
+    font-size: 0.74rem;
   }
 
-  .report-pricing-modal__author strong {
-    font-size: 0.62rem;
-  }
-
-  .report-pricing-modal__author-age {
-    font-size: 0.54rem;
-  }
-
-  .report-pricing-modal__author em {
-    font-size: 0.52rem;
+  .report-pricing-modal__author-copy em {
+    font-size: 0.6rem;
     line-height: 1.04;
   }
 }
@@ -6202,6 +6176,21 @@ h3,
     width: 100%;
     margin-top: 1.4rem;
     padding: 1.2rem 1rem;
+    gap: 0.7rem;
+  }
+
+  .report-pricing-modal__person {
+    gap: 0.4rem 0.65rem;
+  }
+
+  .report-pricing-modal__avatar {
+    width: 3.2rem;
+    height: 3.2rem;
+  }
+
+  .report-pricing-modal__stars svg {
+    width: 0.95rem;
+    height: 0.95rem;
   }
 
   .report-pricing-modal__quote {
@@ -6209,10 +6198,12 @@ h3,
     line-height: 1.44;
   }
 
-  .report-pricing-modal__avatar {
-    width: 2.08rem;
-    height: 2.08rem;
-    font-size: 0.62rem;
+  .report-pricing-modal__author-copy strong {
+    font-size: 0.92rem;
+  }
+
+  .report-pricing-modal__author-copy em {
+    font-size: 0.74rem;
   }
 
   .report-themed-block__preview--practice .report-premium-overlay {
