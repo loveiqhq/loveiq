@@ -182,12 +182,7 @@ const PracticeRow: FC<{
   return (
     <div className="report-practice-table__row" role="row">
       <div className="report-practice-table__practice" role="cell">
-        <div
-          className="report-practice-table__practice-stack"
-          data-practice-popover-root
-          onMouseEnter={interactive && row.description ? handleDesktopHoverOpen : undefined}
-          onMouseLeave={interactive && row.description ? () => onClose(rowId) : undefined}
-        >
+        <div className="report-practice-table__practice-stack" data-practice-popover-root>
           <span className="report-practice-table__practice-label">{row.practice}</span>
 
           {interactive && row.description ? (
@@ -201,6 +196,8 @@ const PracticeRow: FC<{
               onBlur={() => onClose(rowId)}
               onClick={(event) => handleOpenFromAnchor(event.currentTarget)}
               onFocus={(event) => handleOpenFromAnchor(event.currentTarget)}
+              onMouseEnter={handleDesktopHoverOpen}
+              onMouseLeave={() => onClose(rowId)}
             >
               <InfoGlyph className="report-practice-table__info-glyph" />
             </button>
@@ -534,22 +531,31 @@ const PracticeTendenciesSection: FC<Props> = ({
     <div className="report-flow__stack report-flow__stack--md report-practice-layout">
       <PracticeIntro archetype={archetype} generalHtml={generalHtml} />
 
-      <div className="report-themed-block">
-        {isPremium && !unlocked ? (
-          <div className="report-themed-block__preview report-themed-block__preview--practice">
-            <div className="report-practice-panel report-themed-block__blurred" aria-hidden="true">
-              <PracticePanel archetype={archetype} content={content} interactive={false} />
+      {isPremium && !unlocked ? (
+        <>
+          <h2 className="report-practice-panel__title">
+            <span>Typical Sexual Fantasy &amp; Practice Tendencies of the </span>
+            <span className="report-practice-panel__title-accent">{archetype}</span>
+          </h2>
+          <div className="report-themed-block">
+            <div className="report-themed-block__preview report-themed-block__preview--practice">
+              <div
+                className="report-practice-panel report-themed-block__blurred"
+                aria-hidden="true"
+              >
+                <PracticePanel archetype={archetype} content={content} interactive={false} />
+              </div>
+              <PremiumOverlay
+                archetype={archetype}
+                sectionTitle={sectionTitle}
+                onUnlock={handleUnlock}
+              />
             </div>
-            <PremiumOverlay
-              archetype={archetype}
-              sectionTitle={sectionTitle}
-              onUnlock={handleUnlock}
-            />
           </div>
-        ) : (
-          <PracticePanel archetype={archetype} content={content} interactive={true} />
-        )}
-      </div>
+        </>
+      ) : (
+        <PracticePanel archetype={archetype} content={content} interactive={true} />
+      )}
     </div>
   );
 };
