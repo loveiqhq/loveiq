@@ -5,6 +5,8 @@ import { getReportTheme, getReportThemeIconStyle } from "../reportTheme";
 
 interface Props {
   generalHtml: string;
+  isUnlocked: boolean;
+  onUnlock: () => void;
   percentages: Record<string, number>;
   primaryArchetype: string;
   ranking: string[];
@@ -39,6 +41,8 @@ const ChevronIcon: FC<{ up?: boolean }> = ({ up }) => (
 
 const ArchetypeProbabilitySection: FC<Props> = ({
   generalHtml,
+  isUnlocked,
+  onUnlock,
   percentages,
   primaryArchetype,
   ranking,
@@ -109,12 +113,12 @@ const ArchetypeProbabilitySection: FC<Props> = ({
         </div>
 
         {/* Secondary archetypes */}
-        <div className="report-prob__list">
+        <div className={`report-prob__list${isUnlocked ? "" : " report-prob__list--locked"}`}>
           {secondaryItems.map((name, i) => {
             const score = Math.round(percentages[name] ?? 0);
             const theme = getReportTheme(name);
             const ArchIcon = theme.Icon;
-            const isHovered = hoveredName === name;
+            const isHovered = isUnlocked && hoveredName === name;
             const isLast = i === secondaryItems.length - 1;
             // 3rd item (i===1) fades more in collapsed view
             const isFading = !expanded && i === 1;
@@ -142,13 +146,22 @@ const ArchetypeProbabilitySection: FC<Props> = ({
               >
                 <div className="report-prob__row-score">
                   <div className="report-prob__row-value">
-                    <span>{score}</span>
-                    <small>%</small>
+                    {isUnlocked ? (
+                      <>
+                        <span>{score}</span>
+                        <small>%</small>
+                      </>
+                    ) : (
+                      <>
+                        <span>—</span>
+                        <small>%</small>
+                      </>
+                    )}
                   </div>
                   <div className="report-prob__row-bar">
                     <div
                       style={{
-                        width: `${Math.min(score, 100)}%`,
+                        width: isUnlocked ? `${Math.min(score, 100)}%` : "0%",
                         background: isHovered ? theme.accent : undefined,
                       }}
                     />
@@ -161,12 +174,14 @@ const ArchetypeProbabilitySection: FC<Props> = ({
                   </div>
                   <div>
                     <h4 className="report-prob__row-name">{name}</h4>
-                    <p
-                      className="report-prob__row-motto"
-                      style={isHovered ? { color: theme.accent } : undefined}
-                    >
-                      {theme.motto}
-                    </p>
+                    {isUnlocked && (
+                      <p
+                        className="report-prob__row-motto"
+                        style={isHovered ? { color: theme.accent } : undefined}
+                      >
+                        {theme.motto}
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -178,26 +193,38 @@ const ArchetypeProbabilitySection: FC<Props> = ({
                       : undefined
                   }
                   type="button"
+                  onClick={isUnlocked ? undefined : onUnlock}
                 >
                   <LockIcon />
-                  <span>Unlock Full Report</span>
+                  <span>{isUnlocked ? "Unlock Full Report" : "Unlock Essentials"}</span>
                 </button>
 
                 {!isLast && !isHovered && <div className="report-prob__row-border" />}
               </div>
             );
           })}
+
+          {!isUnlocked && (
+            <div className="report-prob__list-overlay">
+              <button className="report-prob__unlock-cta" type="button" onClick={onUnlock}>
+                <LockIcon />
+                <span>Unlock Essentials to see all archetypes</span>
+              </button>
+            </div>
+          )}
         </div>
 
-        {/* Toggle */}
-        <button
-          className="report-prob__toggle"
-          type="button"
-          onClick={() => setExpanded((v) => !v)}
-        >
-          <span>{expanded ? "Hide archetype percentages" : "Show more archetypes"}</span>
-          <ChevronIcon up={expanded} />
-        </button>
+        {/* Toggle — only when unlocked */}
+        {isUnlocked && (
+          <button
+            className="report-prob__toggle"
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+          >
+            <span>{expanded ? "Hide archetype percentages" : "Show more archetypes"}</span>
+            <ChevronIcon up={expanded} />
+          </button>
+        )}
       </div>
     </div>
   );

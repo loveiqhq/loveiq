@@ -458,6 +458,12 @@ const ReportExperience: FC<ReportExperienceProps> = ({
               }
 
               if (section.sectionNumber === 4) {
+                const isBackendUnlocked = isSectionUnlockedForPlan({
+                  accessPlan,
+                  isPremium: section.isPremium,
+                  sectionId: section.id,
+                });
+
                 return (
                   <ReportSection
                     key={section.id}
@@ -468,6 +474,8 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                   >
                     <ArchetypeProbabilitySection
                       generalHtml={generalHtml}
+                      isUnlocked={isBackendUnlocked || (unlockedSections[section.id] ?? false)}
+                      onUnlock={() => unlockSection(section.id)}
                       percentages={percentages}
                       primaryArchetype={primaryArchetype}
                       ranking={ranking}

@@ -5,7 +5,6 @@ export const ESSENTIALS_SECTION_IDS = [
   "probability_of_other_archetypes",
   "core_motivation",
   "sexual_stage",
-  "confidence_level_how_secure_a_person_feels_in_their_sexual_self",
 ] as const;
 
 const ESSENTIALS_SECTION_SET = new Set<string>(ESSENTIALS_SECTION_IDS);
