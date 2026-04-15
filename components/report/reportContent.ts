@@ -1,4 +1,4 @@
-const REPORT_BLOCK_PATTERN = /<(table|div|ul|ol|p)\b[\s\S]*?<\/\1>/gi;
+const REPORT_BLOCK_PATTERN = /<(table|div|ul|ol|p|h[1-6])\b[\s\S]*?<\/\1>/gi;
 const REPORT_FOOTNOTE_ANCHOR_PATTERN =
   /<a\b[^>]*href="https:\/\/docs\.google\.com\/document\/[^"]*"[^>]*>\s*(?:\d+|[*†‡]+)\s*<\/a>/gi;
 const REPORT_FOOTNOTE_SUP_PATTERN =
