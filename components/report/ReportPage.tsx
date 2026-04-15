@@ -441,6 +441,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                   <ReportSection
                     key={section.id}
                     feedbackWidget={feedbackWidget}
+                    primaryArchetype={primaryArchetype}
                     sectionId={section.id}
                     title={title}
                   >
@@ -458,6 +459,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                   <ReportSection
                     key={section.id}
                     feedbackWidget={feedbackWidget}
+                    primaryArchetype={primaryArchetype}
                     sectionId={section.id}
                     title={title}
                   >
@@ -476,6 +478,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                   <ReportSection
                     key={section.id}
                     feedbackWidget={feedbackWidget}
+                    primaryArchetype={primaryArchetype}
                     sectionId={section.id}
                     title={title}
                   >
@@ -499,6 +502,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                   <ReportSection
                     key={section.id}
                     feedbackWidget={feedbackWidget}
+                    primaryArchetype={primaryArchetype}
                     sectionId={section.id}
                     title={title}
                   >
@@ -526,6 +530,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                   <ReportSection
                     key={section.id}
                     feedbackWidget={feedbackWidget}
+                    primaryArchetype={primaryArchetype}
                     sectionId={section.id}
                     title={title}
                   >
@@ -552,6 +557,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                 <ReportSection
                   key={section.id}
                   feedbackWidget={feedbackWidget}
+                  primaryArchetype={primaryArchetype}
                   sectionId={section.id}
                   title={title}
                 >

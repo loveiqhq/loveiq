@@ -2153,6 +2153,14 @@ h3,
   line-height: 1.05;
 }
 
+.report-section__title .report-archetype-name,
+.report-section__subtitle .report-archetype-name {
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+}
+
 .report-prose em {
   color: rgba(255, 255, 255, 0.62);
 }

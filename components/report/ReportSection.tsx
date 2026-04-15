@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type FC, type ReactNode } from "react";
 interface Props {
   children: ReactNode;
   feedbackWidget?: ReactNode;
+  primaryArchetype?: string;
   sectionId: string;
   title: string;
 }
@@ -30,7 +31,25 @@ function shouldRevealSection(element: HTMLElement, sectionId: string) {
   );
 }
 
-const ReportSection: FC<Props> = ({ children, feedbackWidget, sectionId, title }) => {
+function renderTitleWithArchetype(text: string, archetype?: string) {
+  if (!archetype || !text.includes(archetype)) return text;
+  const idx = text.indexOf(archetype);
+  return (
+    <>
+      {text.slice(0, idx)}
+      <span className="report-archetype-name">{archetype}</span>
+      {text.slice(idx + archetype.length)}
+    </>
+  );
+}
+
+const ReportSection: FC<Props> = ({
+  children,
+  feedbackWidget,
+  primaryArchetype,
+  sectionId,
+  title,
+}) => {
   const ref = useRef<HTMLElement>(null);
   const [isVisible, setIsVisible] = useState(false);
   const [eyebrow, ...titleSegments] = title.split(/:\s+/);
@@ -110,11 +129,17 @@ const ReportSection: FC<Props> = ({ children, feedbackWidget, sectionId, title }
         <div className={`report-section__title-stack ${hasSplitTitle ? "is-split" : ""}`}>
           {hasSplitTitle ? (
             <>
-              <h2 className="report-section__title">{eyebrow}</h2>
-              <p className="report-section__subtitle">{resolvedTitle}</p>
+              <h2 className="report-section__title">
+                {renderTitleWithArchetype(eyebrow, primaryArchetype)}
+              </h2>
+              <p className="report-section__subtitle">
+                {renderTitleWithArchetype(resolvedTitle, primaryArchetype)}
+              </p>
             </>
           ) : (
-            <h2 className="report-section__title">{resolvedTitle}</h2>
+            <h2 className="report-section__title">
+              {renderTitleWithArchetype(resolvedTitle, primaryArchetype)}
+            </h2>
           )}
         </div>
         {feedbackWidget}
