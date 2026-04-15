@@ -5608,6 +5608,13 @@ h3,
   text-align: center;
 }
 
+/* Shared footer inside report — match report palette, seamless transition */
+.report-content > footer {
+  margin-top: 80px;
+  background: transparent;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
 .report-footer__brand {
   display: flex;
   align-items: center;
