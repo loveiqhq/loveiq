@@ -1188,32 +1188,43 @@ const SurveyPage: FC = () => {
   // Wait for hydration before rendering to avoid flash
   if (!hydrated) return null;
 
+  let content: ReactNode;
+
   // Intro screen
   if (step === 0) {
-    return <IntroScreen onContinue={handleIntroContinue} transitioning={transitioning} />;
-  }
-
-  // Wizard slides
-  const slideIndex = step - 1;
-  if (slideIndex < TOTAL_STEPS) {
-    return (
+    content = <IntroScreen onContinue={handleIntroContinue} transitioning={transitioning} />;
+  } else if (step - 1 < TOTAL_STEPS) {
+    // Wizard slides
+    content = (
       <SlideScreen
-        slideIndex={slideIndex}
+        slideIndex={step - 1}
         onContinue={handleSlideContinue}
         onBack={handleSlideBack}
         onSkip={handleSkip}
       />
     );
+  } else if (step === TOTAL_STEPS + 1) {
+    // Consent screen
+    content = <ConsentScreen onAgree={handleAgree} onReturn={handleReturn} />;
+  } else {
+    // Survey engine
+    content = (
+      <SurveyEngine
+        onExit={() => handleReturn()}
+        onComplete={(token) => handleReturn(true, token)}
+      />
+    );
   }
 
-  // Consent screen
-  if (step === TOTAL_STEPS + 1) {
-    return <ConsentScreen onAgree={handleAgree} onReturn={handleReturn} />;
-  }
-
-  // Survey engine
   return (
-    <SurveyEngine onExit={() => handleReturn()} onComplete={(token) => handleReturn(true, token)} />
+    <div
+      className="survey-protected"
+      onCopy={(e) => e.preventDefault()}
+      onContextMenu={(e) => e.preventDefault()}
+      onDragStart={(e) => e.preventDefault()}
+    >
+      {content}
+    </div>
   );
 };
 
