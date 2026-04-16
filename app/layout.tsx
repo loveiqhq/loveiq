@@ -322,8 +322,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareApplicationSchema) }}
         />
-        {/* Keep this as a raw head script so vendor verification can detect it reliably. */}
-        <script src="https://t.contentsquare.net/uxa/f1a8d593041c0.js" async />
+        {/* Contentsquare UXA tag — keep raw + synchronous (no async) so the
+            vendor verifier finds CS_CONF/_uxa globals immediately. */}
+        <script src="https://t.contentsquare.net/uxa/f1a8d593041c0.js" />
       </head>
       <body className="bg-white dark:bg-[#050208]">
         <a
