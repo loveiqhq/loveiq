@@ -472,7 +472,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     <ArchetypeProbabilitySection
                       generalHtml={generalHtml}
                       isUnlocked={isBackendUnlocked || (unlockedSections[section.id] ?? false)}
-                      onUnlock={() => unlockSection(section.id)}
+                      onUnlock={() => setIsPricingModalOpen(true)}
                       percentages={percentages}
                       primaryArchetype={primaryArchetype}
                       ranking={ranking}

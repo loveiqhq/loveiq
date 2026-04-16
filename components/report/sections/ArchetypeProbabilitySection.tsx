@@ -113,7 +113,7 @@ const ArchetypeProbabilitySection: FC<Props> = ({
         </div>
 
         {/* Secondary archetypes */}
-        <div className={`report-prob__list${isUnlocked ? "" : " report-prob__list--locked"}`}>
+        <div className="report-prob__list">
           {secondaryItems.map((name, i) => {
             const score = Math.round(percentages[name] ?? 0);
             const theme = getReportTheme(name);
@@ -126,11 +126,17 @@ const ArchetypeProbabilitySection: FC<Props> = ({
               ...getReportThemeIconStyle(theme, "row"),
               ...(isHovered ? { background: theme.accent } : {}),
             };
+            const clickable = !isUnlocked;
 
             return (
               <div
                 key={name}
-                className={["report-prob__row", isHovered && "is-active", isFading && "is-fading"]
+                className={[
+                  "report-prob__row",
+                  isHovered && "is-active",
+                  isFading && "is-fading",
+                  clickable && "report-prob__row--clickable",
+                ]
                   .filter(Boolean)
                   .join(" ")}
                 style={
@@ -143,6 +149,19 @@ const ArchetypeProbabilitySection: FC<Props> = ({
                 }
                 onMouseEnter={() => setHoveredName(name)}
                 onMouseLeave={() => setHoveredName(null)}
+                onClick={clickable ? onUnlock : undefined}
+                onKeyDown={
+                  clickable
+                    ? (event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          onUnlock();
+                        }
+                      }
+                    : undefined
+                }
+                role={clickable ? "button" : undefined}
+                tabIndex={clickable ? 0 : undefined}
               >
                 <div className="report-prob__row-score">
                   <div className="report-prob__row-value">
@@ -174,14 +193,12 @@ const ArchetypeProbabilitySection: FC<Props> = ({
                   </div>
                   <div>
                     <h4 className="report-prob__row-name">{name}</h4>
-                    {isUnlocked && (
-                      <p
-                        className="report-prob__row-motto"
-                        style={isHovered ? { color: theme.accent } : undefined}
-                      >
-                        {theme.motto}
-                      </p>
-                    )}
+                    <p
+                      className="report-prob__row-motto"
+                      style={isHovered ? { color: theme.accent } : undefined}
+                    >
+                      {theme.motto}
+                    </p>
                   </div>
                 </div>
 
@@ -203,15 +220,6 @@ const ArchetypeProbabilitySection: FC<Props> = ({
               </div>
             );
           })}
-
-          {!isUnlocked && (
-            <div className="report-prob__list-overlay">
-              <button className="report-prob__unlock-cta" type="button" onClick={onUnlock}>
-                <LockIcon />
-                <span>Unlock Essentials to see all archetypes</span>
-              </button>
-            </div>
-          )}
         </div>
 
         {/* Toggle — only when unlocked */}
