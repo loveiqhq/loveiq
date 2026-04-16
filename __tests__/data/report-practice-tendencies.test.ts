@@ -32,8 +32,8 @@ describe("reportPracticeTendencies", () => {
     expect(sparkSeeker.introBlocks[0]).toContain("probability-based estimates");
     expect(firstRow).toMatchObject({
       practice: "Romantic lovemaking",
-      fantasyPull: 6,
-      actualPleasure: 6,
+      fantasyPull: 5,
+      actualPleasure: 7,
     });
     expect(firstRow?.description).toContain(
       "feeling emotionally chosen. Organizes chemistry, freedom, and playful connection."

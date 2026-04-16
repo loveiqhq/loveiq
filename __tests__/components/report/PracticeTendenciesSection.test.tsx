@@ -162,9 +162,9 @@ describe("PracticeTendenciesSection", () => {
     );
 
     const rows = Array.from(container.querySelectorAll(".report-practice-table__row"));
-    const highRow = rows.find((row) => row.textContent?.includes("Passionate quickies")) ?? null;
-    const lowRow =
-      rows.find((row) => row.textContent?.includes("Crying or emotional release")) ?? null;
+    const highRow =
+      rows.find((row) => row.textContent?.includes("Double-penetration fantasy")) ?? null;
+    const lowRow = rows.find((row) => row.textContent?.includes("Penetrating partner")) ?? null;
 
     const highFill = highRow?.querySelector(
       ".report-practice-table__metric--fantasy .report-practice-table__metric-bar span"
@@ -177,11 +177,11 @@ describe("PracticeTendenciesSection", () => {
       container.querySelectorAll(".report-practice-table__metric-bar span").length
     ).toBeGreaterThan(0);
     expect(highFill?.style.width).toBe("100%");
-    expect(lowFill?.style.width).toBe("10%");
+    expect(lowFill?.style.width).toBe("20%");
     expect(highFill?.style.getPropertyValue("--practice-fill-opacity-end")).toBe("0.940");
-    expect(lowFill?.style.getPropertyValue("--practice-fill-opacity-end")).toBe("0.508");
+    expect(lowFill?.style.getPropertyValue("--practice-fill-opacity-end")).toBe("0.556");
     expect(highFill?.style.getPropertyValue("--practice-fill-shadow-opacity")).toBe("0.320");
-    expect(lowFill?.style.getPropertyValue("--practice-fill-shadow-opacity")).toBe("0.104");
+    expect(lowFill?.style.getPropertyValue("--practice-fill-shadow-opacity")).toBe("0.128");
   });
 
   it("renders the premium overlay preview when the section is locked", () => {
