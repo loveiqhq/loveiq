@@ -1822,13 +1822,7 @@ h3,
 
 .report-prob__row--clickable {
   cursor: pointer;
-  transition:
-    background 200ms ease,
-    opacity 200ms ease;
-}
-
-.report-prob__row--clickable:hover {
-  background: rgba(255, 255, 255, 0.03);
+  transition: opacity 200ms ease;
 }
 
 .report-prob__list-overlay {

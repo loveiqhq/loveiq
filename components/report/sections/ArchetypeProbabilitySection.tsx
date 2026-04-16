@@ -222,17 +222,20 @@ const ArchetypeProbabilitySection: FC<Props> = ({
           })}
         </div>
 
-        {/* Toggle — only when unlocked */}
-        {isUnlocked && (
-          <button
-            className="report-prob__toggle"
-            type="button"
-            onClick={() => setExpanded((v) => !v)}
-          >
-            <span>{expanded ? "Hide archetype percentages" : "Show more archetypes"}</span>
-            <ChevronIcon up={expanded} />
-          </button>
-        )}
+        <button
+          className="report-prob__toggle"
+          type="button"
+          onClick={isUnlocked ? () => setExpanded((v) => !v) : onUnlock}
+        >
+          <span>
+            {isUnlocked
+              ? expanded
+                ? "Hide archetype percentages"
+                : "Show more archetypes"
+              : "See other archetype percentages"}
+          </span>
+          <ChevronIcon up={isUnlocked && expanded} />
+        </button>
       </div>
     </div>
   );
