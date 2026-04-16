@@ -39,4 +39,19 @@ describe("report access helpers", () => {
       getUnlockedPremiumSectionIdsForPlan("full_report")
     );
   });
+
+  it("full_report unlocks both essentials and non-essentials sections", () => {
+    for (const sectionId of ESSENTIALS_SECTION_IDS) {
+      expect(
+        isSectionUnlockedForPlan({ accessPlan: "full_report", isPremium: true, sectionId })
+      ).toBe(true);
+    }
+    expect(
+      isSectionUnlockedForPlan({
+        accessPlan: "full_report",
+        isPremium: true,
+        sectionId: "typical_growth_potentials_for_the_core_archetype",
+      })
+    ).toBe(true);
+  });
 });

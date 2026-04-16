@@ -118,10 +118,10 @@ const ArchetypeProbabilitySection: FC<Props> = ({
             const score = Math.round(percentages[name] ?? 0);
             const theme = getReportTheme(name);
             const ArchIcon = theme.Icon;
-            const isHovered = isUnlocked && hoveredName === name;
+            const isHovered = hoveredName === name;
             const isLast = i === secondaryItems.length - 1;
-            // 3rd item (i===1) fades more in collapsed view
-            const isFading = !expanded && i === 1;
+            // 3rd item (i===1) fades more in collapsed view, unless hovered
+            const isFading = !expanded && i === 1 && !isHovered;
             const rowIconStyle = {
               ...getReportThemeIconStyle(theme, "row"),
               ...(isHovered ? { background: theme.accent } : {}),
