@@ -2317,56 +2317,6 @@ h3,
     padding-inline: 0;
     max-width: none;
   }
-
-  .report-sidebar {
-    width: 430px;
-    height: 149vh;
-    font-size: 149%;
-  }
-
-  .report-sidebar__inner {
-    padding: 48px 32px 48px 30px;
-    gap: 60px;
-  }
-
-  .report-sidebar__logo {
-    width: 60px;
-    height: 60px;
-  }
-
-  .report-sidebar__btn {
-    height: 69px;
-    padding: 20px 25px;
-    border-radius: 18px;
-    font-size: 21px;
-  }
-
-  .report-sidebar__btn svg {
-    width: 24px;
-    height: 24px;
-  }
-
-  .report-sidebar__chapters-label {
-    font-size: 18px;
-  }
-
-  .report-sidebar__item-label {
-    font-size: 21px;
-    line-height: 30px;
-  }
-
-  .report-sidebar__item.is-subheading .report-sidebar__item-label > span {
-    font-size: 19px;
-  }
-
-  .report-sidebar__item::before {
-    width: 9px;
-    height: 9px;
-  }
-
-  .report-sidebar__nav-list {
-    gap: 27px;
-  }
 }
 
 @media (max-width: 767px) {
@@ -4280,6 +4230,59 @@ h3,
   gap: 6px;
   flex-shrink: 0;
   padding-left: 8px;
+}
+
+/* Desktop sidebar size compensation for 0.67 shell zoom */
+@media (min-width: 1280px) {
+  .report-sidebar {
+    width: 430px;
+    height: 149vh;
+    font-size: 149%;
+  }
+
+  .report-sidebar__inner {
+    padding: 48px 32px 48px 30px;
+    gap: 60px;
+  }
+
+  .report-sidebar__logo {
+    width: 60px;
+    height: 60px;
+  }
+
+  .report-sidebar__btn {
+    height: 69px;
+    padding: 20px 25px;
+    border-radius: 18px;
+    font-size: 21px;
+  }
+
+  .report-sidebar__btn svg {
+    width: 24px;
+    height: 24px;
+  }
+
+  .report-sidebar__chapters-label {
+    font-size: 18px;
+  }
+
+  .report-sidebar__item-label {
+    font-size: 21px;
+    line-height: 30px;
+  }
+
+  .report-sidebar__item.is-subheading .report-sidebar__item-label > span {
+    font-size: 19px;
+  }
+
+  .report-sidebar__item::before {
+    width: 9px;
+    height: 9px;
+  }
+
+  .report-sidebar__nav-list {
+    gap: 27px;
+  }
 }
 
 .report-section {
