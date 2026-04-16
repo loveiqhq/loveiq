@@ -2307,16 +2307,19 @@ h3,
 @media (min-width: 1280px) {
   .report-shell {
     grid-template-columns: 17rem minmax(0, 1fr);
-    gap: 0;
+    gap: clamp(2rem, 4vw, 4rem);
     width: min(1520px, calc(100% - 3rem));
     margin: 0 auto;
+    zoom: 0.67;
   }
 
   .report-content {
     padding-inline: 0;
-    padding-left: clamp(2rem, 4vw, 4rem);
-    zoom: 0.67;
     max-width: none;
+  }
+
+  .report-sidebar {
+    zoom: calc(1 / 0.67);
   }
 }
 
