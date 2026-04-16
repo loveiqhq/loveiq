@@ -4502,6 +4502,7 @@ h3,
 
 .report-card__status {
   max-width: 13ch;
+  min-height: 3.45rem;
   margin: 0 auto 1rem;
   color: #fff;
   font-family: var(--font-serif);
@@ -4528,8 +4529,9 @@ h3,
 }
 
 .report-stage-card__body {
-  /* Matches gauge wrap height (SVG is 208×114px) so stage card aligns with metric cards */
-  min-height: 114px;
+  /* Matches metric card status (3.45rem) + status-mb (1rem) + gauge-wrap (~118px)
+     so stage card description aligns with metric card description. */
+  min-height: 190px;
   align-content: center;
   gap: 2rem;
   padding: 1.5rem 0 2rem;

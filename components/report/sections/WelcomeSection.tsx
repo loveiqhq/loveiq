@@ -304,10 +304,10 @@ const StageCard: FC<{
     <p className="report-card__eyebrow">Likely Current Sexual Stage</p>
     <div className="report-stage-card__body">
       <p className="report-stage-card__title">{stage ?? "Still calibrating"}</p>
-      <p className="report-card__description">
-        {description || "We need more report data to describe this stage cleanly."}
-      </p>
     </div>
+    <p className="report-card__description">
+      {description || "We need more report data to describe this stage cleanly."}
+    </p>
   </article>
 );
 
