@@ -2310,12 +2310,62 @@ h3,
     gap: clamp(2rem, 4vw, 4rem);
     width: min(1520px, calc(100% - 3rem));
     margin: 0 auto;
+    zoom: 0.67;
   }
 
   .report-content {
     padding-inline: 0;
-    transform: scale(0.67);
-    transform-origin: top left;
+    max-width: none;
+  }
+
+  .report-sidebar {
+    width: 430px;
+    height: 100vh;
+    font-size: 149%;
+  }
+
+  .report-sidebar__inner {
+    padding: 48px 32px 48px 30px;
+    gap: 60px;
+  }
+
+  .report-sidebar__logo {
+    width: 60px;
+    height: 60px;
+  }
+
+  .report-sidebar__btn {
+    height: 69px;
+    padding: 20px 25px;
+    border-radius: 18px;
+    font-size: 21px;
+  }
+
+  .report-sidebar__btn svg {
+    width: 24px;
+    height: 24px;
+  }
+
+  .report-sidebar__chapters-label {
+    font-size: 18px;
+  }
+
+  .report-sidebar__item-label {
+    font-size: 21px;
+    line-height: 30px;
+  }
+
+  .report-sidebar__item.is-subheading .report-sidebar__item-label > span {
+    font-size: 19px;
+  }
+
+  .report-sidebar__item::before {
+    width: 9px;
+    height: 9px;
+  }
+
+  .report-sidebar__nav-list {
+    gap: 27px;
   }
 }
 
