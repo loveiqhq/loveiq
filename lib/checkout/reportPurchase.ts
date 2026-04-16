@@ -12,7 +12,6 @@ export interface ReportPurchaseFeature {
 
 export interface ReportPurchasePlan {
   badge?: string;
-  badgeTone?: "discount" | "accent";
   ctaLabel: string;
   description: string;
   featuredLabel?: string;
@@ -61,7 +60,6 @@ export const REPORT_PURCHASE_PLANS: ReportPurchasePlan[] = [
   },
   {
     badge: "50% OFF",
-    badgeTone: "discount",
     ctaLabel: "Unlock full report",
     description: "Perfect for individuals who want to dive deep",
     featuredLabel: "Most popular",
@@ -74,13 +72,13 @@ export const REPORT_PURCHASE_PLANS: ReportPurchasePlan[] = [
         label: "Get full access to the report",
       },
       {
-        label: "All sections unlocked",
+        label: "Share report with anyone",
       },
       {
         label: "18 analysed dimensions",
       },
       {
-        label: "Share report with up to 2 emails",
+        label: "1 free month of \u201cThe LoveIQ Journal\u201d",
       },
     ],
     plan: "full_report",
@@ -92,7 +90,6 @@ export const REPORT_PURCHASE_PLANS: ReportPurchasePlan[] = [
   },
   {
     badge: "32% OFF",
-    badgeTone: "accent",
     ctaLabel: "Unlock all reports",
     description: "Built for those wanting to explore all archetypes",
     features: [
@@ -103,7 +100,7 @@ export const REPORT_PURCHASE_PLANS: ReportPurchasePlan[] = [
         label: "All benefits as full report",
       },
       {
-        label: "Perfect for comparison across patterns",
+        label: "6 free months of \u201cThe LoveIQ Journal\u201d",
       },
     ],
     plan: "all_reports",

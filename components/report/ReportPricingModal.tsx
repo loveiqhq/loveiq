@@ -309,18 +309,7 @@ const ReportPricingModal: FC<Props> = ({
                       {pricing.badge || card.featuredLabel ? (
                         <div className="report-pricing-card__badges">
                           {pricing.badge ? (
-                            <span
-                              className={[
-                                "report-pricing-card__badge",
-                                card.badgeTone
-                                  ? `report-pricing-card__badge--${card.badgeTone}`
-                                  : "",
-                              ]
-                                .filter(Boolean)
-                                .join(" ")}
-                            >
-                              {pricing.badge}
-                            </span>
+                            <span className="report-pricing-card__badge">{pricing.badge}</span>
                           ) : null}
                           {card.featuredLabel ? (
                             <span className="report-pricing-card__badge report-pricing-card__badge--featured">
@@ -348,14 +337,14 @@ const ReportPricingModal: FC<Props> = ({
                           aria-hidden={pricing.strikePriceLabel ? undefined : "true"}
                         >
                           {pricing.strikePriceLabel
-                            ? `${pricing.strikePriceLabel} ${card.priceSuffix === "one-time" ? "one off" : card.priceSuffix}`
+                            ? `${pricing.strikePriceLabel} ${card.priceSuffix === "one-time" ? "one time off" : card.priceSuffix}`
                             : "\u00a0"}
                         </span>
                         <div className="report-pricing-card__price-row">
                           <strong>{pricing.priceLabel}</strong>
                           {pricing.available ? (
                             <span>
-                              /{card.priceSuffix === "one-time" ? "one off" : card.priceSuffix}
+                              /{card.priceSuffix === "one-time" ? "one time off" : card.priceSuffix}
                             </span>
                           ) : null}
                         </div>

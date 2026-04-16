@@ -440,14 +440,7 @@ const CheckoutPage: FC<Props> = ({ planId, token = null }) => {
               plan,
               priceCents: activeQuote?.currentPriceCents ?? plan.priceCents,
             }) ? (
-              <span
-                className={[
-                  "checkout-page__badge",
-                  plan.badgeTone ? `checkout-page__badge--${plan.badgeTone}` : "",
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
-              >
+              <span className="checkout-page__badge">
                 {getReportPurchaseBadgeFromPrice({
                   plan,
                   priceCents: activeQuote?.currentPriceCents ?? plan.priceCents,

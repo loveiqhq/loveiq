@@ -2742,22 +2742,16 @@ h3,
   align-items: center;
   min-height: 1.62rem;
   padding: 0.28rem 0.78rem;
-  border: 1px solid rgba(254, 104, 57, 0.3);
+  border: 1px solid rgba(0, 201, 80, 0.3);
   border-radius: 9999px;
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
-  background: rgba(254, 104, 57, 0.2);
-  color: #fe6839;
+  background: rgba(0, 201, 80, 0.2);
+  color: #00c950;
   font-size: 0.68rem;
   font-weight: 600;
   letter-spacing: 0.025em;
   line-height: 1.1;
-}
-
-.report-pricing-card__badge--accent {
-  border-color: rgba(254, 104, 57, 0.3);
-  background: rgba(254, 104, 57, 0.2);
-  color: #fe6839;
 }
 
 .report-pricing-card__badge--featured {
@@ -6594,19 +6588,13 @@ h3,
   justify-content: center;
   min-height: 26px;
   padding: 4px 16px;
-  border: 1px solid rgba(254, 104, 57, 0.3);
+  border: 1px solid rgba(0, 201, 80, 0.3);
   border-radius: 999px;
-  color: #fe6839;
-  background: rgba(254, 104, 57, 0.2);
+  color: #00c950;
+  background: rgba(0, 201, 80, 0.2);
   font-size: 13px;
   font-weight: 500;
   line-height: 1.33;
-}
-
-.checkout-page__badge--accent {
-  border-color: rgba(168, 85, 247, 0.3);
-  color: #c4b5fd;
-  background: rgba(168, 85, 247, 0.18);
 }
 
 .checkout-page__summary-price {
