@@ -2320,7 +2320,9 @@ h3,
 
   .report-sidebar {
     zoom: calc(1 / 0.67);
-    margin-right: 2rem;
+    width: 193px;
+    height: 67dvh;
+    margin-right: 3rem;
   }
 }
 
