@@ -432,7 +432,6 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     generalHtml={generalHtml}
                     sectionId={section.id}
                     snapshot={snapshot}
-                    userName={placeholderValues.userName}
                   />
                 );
               }

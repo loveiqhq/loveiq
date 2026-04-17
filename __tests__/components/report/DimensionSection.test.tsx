@@ -179,9 +179,9 @@ describe("DimensionSection", () => {
 
     const scoped = within(container);
 
-    await user.click(scoped.getByRole("button", { name: /unlock full report/i }));
+    await user.click(scoped.getByRole("button", { name: /unlock report/i }));
 
-    expect(scoped.queryByRole("button", { name: /unlock full report/i })).not.toBeInTheDocument();
+    expect(scoped.queryByRole("button", { name: /unlock report/i })).not.toBeInTheDocument();
     expect(scoped.getByText(/The Deep Psychology of BDSM and Kink/i)).toBeInTheDocument();
   });
 
@@ -201,7 +201,7 @@ describe("DimensionSection", () => {
 
     const scoped = within(container);
 
-    await user.click(scoped.getByRole("button", { name: /unlock full report/i }));
+    await user.click(scoped.getByRole("button", { name: /unlock report/i }));
 
     expect(
       scoped.getByText(/Recommendations for this archetype are being finalized/i)

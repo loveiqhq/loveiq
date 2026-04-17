@@ -21,7 +21,6 @@ interface Props {
   generalHtml: string;
   sectionId: string;
   snapshot: SnapshotContent;
-  userName: string;
 }
 
 const COUNT_UP_DURATION_MS = 1800;
@@ -76,13 +75,7 @@ function describeScalarValue(label: string, value: number | null) {
   return descriptions[value] ?? descriptions[4]!;
 }
 
-const WelcomeSection: FC<Props> = ({
-  feedbackWidget,
-  generalHtml,
-  sectionId,
-  snapshot,
-  userName,
-}) => {
+const WelcomeSection: FC<Props> = ({ feedbackWidget, generalHtml, sectionId, snapshot }) => {
   const sectionRef = useRef<HTMLElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
   const [isVisible, setIsVisible] = useState(false);
@@ -175,7 +168,6 @@ const WelcomeSection: FC<Props> = ({
   const cleanHtml = generalHtml
     .replace(/<table>[\s\S]*?<\/table>/g, "")
     .replace(/<p>Your snapshot<\/p>/g, "")
-    .replace(/<p><strong>[^<]*?,\s*<\/strong>/, "<p>")
     .trim();
 
   return (
@@ -195,8 +187,6 @@ const WelcomeSection: FC<Props> = ({
       <div className="report-section__header report-section__header--welcome">
         <h2 className="report-section__title">Welcome</h2>
       </div>
-
-      <p className="report-welcome-name">{userName}</p>
 
       <div
         className="report-prose report-prose--lead"

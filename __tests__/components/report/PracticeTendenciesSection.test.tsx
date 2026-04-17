@@ -203,6 +203,6 @@ describe("PracticeTendenciesSection", () => {
         ".report-themed-block__preview--practice .report-practice-panel__intro"
       )
     ).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /unlock full report/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /unlock report/i })).toBeInTheDocument();
   }, 15000);
 });

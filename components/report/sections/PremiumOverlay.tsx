@@ -22,11 +22,12 @@ const PremiumOverlay: FC<Props> = ({ archetype, sectionTitle, onUnlock }) => (
 
       <h3 className="report-premium-overlay__title">Premium Content</h3>
       <p className="report-premium-overlay__copy">
-        To read this section unlock the full report of the <strong>{archetype}</strong>
+        To read this section unlock <strong>Essentials</strong> or the <strong>Full Report</strong>{" "}
+        of the <strong>{archetype}</strong>
       </p>
 
       <button type="button" className="report-premium-overlay__cta" onClick={onUnlock}>
-        Unlock full report
+        Unlock report
       </button>
     </div>
   </div>

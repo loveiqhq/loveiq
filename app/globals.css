@@ -1580,10 +1580,8 @@ h3,
   position: absolute;
   left: 0;
   right: 0;
-  /* Arc SVG viewBox 0 0 208 114; arc endpoints at y=100 (87.7% from top).
-     top: 74% places the number's centre at ~y=84 — inside the arc opening. */
-  top: 74%;
-  transform: translateY(-50%);
+  /* Figma: number sits ~13px above gauge bottom (pulled up to hug arc). */
+  bottom: 13px;
   margin-top: 0;
 }
 
@@ -3707,21 +3705,16 @@ h3,
 }
 
 .report-nav-chip.is-free {
-  border-color: rgba(42, 255, 143, 0.15);
-  background: rgba(42, 255, 143, 0.06);
-  color: rgba(42, 255, 143, 0.7);
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  color: #d1d5db;
 }
 
-.report-nav-chip.is-essentials {
-  border-color: rgba(250, 204, 21, 0.15);
-  background: rgba(250, 204, 21, 0.06);
-  color: rgba(250, 204, 21, 0.7);
-}
-
+.report-nav-chip.is-essentials,
 .report-nav-chip.is-full {
-  border-color: rgba(254, 104, 57, 0.15);
-  background: rgba(254, 104, 57, 0.06);
-  color: rgba(254, 104, 57, 0.7);
+  border-color: rgba(168, 85, 247, 0.2);
+  background: rgba(168, 85, 247, 0.1);
+  color: #c084fc;
 }
 
 .report-nav-lock {
@@ -4157,9 +4150,9 @@ h3,
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 0 0 0 16px;
+  padding: 10px 12px 12px 28px;
   border: 0;
-  border-radius: 0;
+  border-radius: 12px;
   background: transparent;
   color: inherit;
   text-decoration: none;
@@ -4172,7 +4165,7 @@ h3,
 .report-sidebar__item::before {
   content: "";
   position: absolute;
-  left: 0;
+  left: 12px;
   top: 50%;
   transform: translateY(-50%);
   width: 6px;
@@ -4182,6 +4175,10 @@ h3,
   transition:
     background 180ms ease,
     box-shadow 180ms ease;
+}
+
+.report-sidebar__item.is-active {
+  background: rgba(192, 132, 252, 0.1);
 }
 
 .report-sidebar__item.is-active::before {
@@ -4214,7 +4211,7 @@ h3,
 .report-sidebar__item.is-active .report-sidebar__item-label,
 .report-sidebar__item.is-active .report-sidebar__item-label > span {
   color: #fff;
-  font-weight: 500;
+  font-weight: 700;
 }
 
 /* Item meta (badge + lock) */
@@ -4315,8 +4312,7 @@ h3,
   margin-top: 40px;
 }
 
-.report-welcome-name {
-  margin: 0 0 24px;
+.report-prose--lead > p:first-child > strong:first-child {
   color: #d1d5db;
   font-family: var(--font-sans);
   font-size: 20px;
@@ -4540,9 +4536,9 @@ h3,
 
 .report-card__metric-value span {
   font-family: var(--font-sans);
-  font-size: 39px;
+  font-size: 32px;
   font-weight: 400;
-  line-height: 39px;
+  line-height: 40px;
 }
 
 .report-card__description {
