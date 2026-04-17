@@ -4272,9 +4272,9 @@ h3,
   margin: 0;
   color: rgba(255, 255, 255, 0.7);
   font-family: var(--font-serif);
-  font-size: clamp(22px, 1.9vw, 26px);
+  font-size: 32px;
   font-weight: 400;
-  line-height: 1.3;
+  line-height: 40px;
   letter-spacing: -0.02em;
 }
 
@@ -4291,10 +4291,12 @@ h3,
 
 .report-section__title {
   margin: 0;
-  font-size: clamp(52px, 4.4vw, 58px);
-  line-height: 0.98;
-  letter-spacing: -0.045em;
+  font-family: var(--font-serif);
+  font-size: 32px;
+  line-height: 40px;
+  letter-spacing: -0.02em;
   font-weight: 500;
+  color: #fff;
 }
 
 .report-section--welcome .report-section__title {
@@ -5673,8 +5675,8 @@ h3,
 
 .report-prose {
   color: var(--report-copy);
-  font-size: clamp(1.05rem, 1vw + 0.9rem, 1.25rem);
-  line-height: 1.6;
+  font-size: 16px;
+  line-height: 24px;
   width: 100%;
 }
 
@@ -5708,7 +5710,6 @@ h3,
 
 .report-prose strong {
   color: #fff;
-  font-size: clamp(1.2rem, 1.2vw + 1rem, 1.45rem);
 }
 
 .report-prose em {
@@ -6332,8 +6333,8 @@ h3,
   }
 
   .report-section__subtitle {
-    font-size: 18px;
-    line-height: 1.35;
+    font-size: 28px;
+    line-height: 32px;
   }
 
   .report-section__eyebrow {
@@ -6342,8 +6343,8 @@ h3,
   }
 
   .report-section__title {
-    font-size: 38px;
-    line-height: 40px;
+    font-size: 28px;
+    line-height: 32px;
   }
 
   .report-section--welcome .report-section__title {
@@ -6360,12 +6361,8 @@ h3,
   }
 
   .report-prose {
-    font-size: 17px;
-    line-height: 28px;
-  }
-
-  .report-prose strong {
-    font-size: 20px;
+    font-size: 14px;
+    line-height: 22px;
   }
 
   .report-prose--lead {
