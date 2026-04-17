@@ -295,6 +295,12 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   const [activeSectionId, setActiveSectionId] = useState(resolvedSections[0]?.id ?? "welcome");
   const [isPricingModalOpen, setIsPricingModalOpen] = useState(accessPlan === null);
   const [unlockedSections, setUnlockedSections] = useState<Record<string, boolean>>({});
+  const clickLockUntilRef = useRef(0);
+
+  const handleSectionClick = (sectionId: string) => {
+    clickLockUntilRef.current = Date.now() + 800;
+    setActiveSectionId(sectionId);
+  };
 
   const unlockSection = (sectionId: string) => {
     setUnlockedSections((current) => {
@@ -323,6 +329,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
     let rafId: number | null = null;
 
     function updateActive() {
+      if (Date.now() < clickLockUntilRef.current) return;
       const threshold = window.scrollY + ACTIVATION_LINE;
       let activeId = sectionTops[0]?.id ?? resolvedSections[0]?.id ?? "welcome";
       for (const section of sectionTops) {
@@ -399,7 +406,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
         <div className="report-shell">
           <ReportNavigation
             activeSectionId={activeSectionId}
-            onSectionClick={setActiveSectionId}
+            onSectionClick={handleSectionClick}
             primaryArchetype={primaryArchetype}
             reportDate={reportDate}
             sections={resolvedSections}

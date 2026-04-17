@@ -206,7 +206,7 @@ const ArchetypeProbabilitySection: FC<Props> = ({
                   className={`report-prob__row-cta ${isHovered ? "is-active" : ""}`}
                   style={
                     isHovered
-                      ? { background: theme.accent, borderColor: "transparent", color: "#fff" }
+                      ? { background: theme.accent, borderColor: "transparent", color: "#130b17" }
                       : undefined
                   }
                   type="button"
