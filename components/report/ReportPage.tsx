@@ -425,20 +425,14 @@ const ReportExperience: FC<ReportExperienceProps> = ({
               ) : null;
 
               if (section.sectionNumber === 1) {
-                const isStageLocked = !isSectionUnlockedForPlan({
-                  accessPlan,
-                  isPremium: true,
-                  sectionId: "sexual_stage",
-                });
-
                 return (
                   <WelcomeSection
                     key={section.id}
                     feedbackWidget={feedbackWidget}
                     generalHtml={generalHtml}
-                    isLocked={isStageLocked}
                     sectionId={section.id}
                     snapshot={snapshot}
+                    userName={placeholderValues.userName}
                   />
                 );
               }
@@ -567,6 +561,13 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                 isPremium: section.isPremium,
                 sectionId: section.id,
               });
+              const isStageValueLocked =
+                section.id === "sexual_stage" &&
+                !isSectionUnlockedForPlan({
+                  accessPlan,
+                  isPremium: true,
+                  sectionId: "sexual_stage",
+                });
 
               return (
                 <ReportSection
@@ -581,6 +582,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     archetypeHtml={archetypeHtml}
                     generalHtml={generalHtml}
                     isPremium={section.isPremium}
+                    isStageValueLocked={isStageValueLocked}
                     isUnlocked={isBackendUnlocked || (unlockedSections[section.id] ?? false)}
                     onUnlock={() => unlockSection(section.id)}
                     sectionId={section.id}

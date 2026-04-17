@@ -67,17 +67,33 @@ function stripReportImages(html: string) {
   return html.replace(REPORT_IMAGE_TAG_PATTERN, "");
 }
 
-export function ensureSexualStageHighlight(html: string | null | undefined) {
+export function ensureSexualStageHighlight(
+  html: string | null | undefined,
+  options?: { isLocked?: boolean }
+) {
   const normalizedHtml = normalizeReportHtml(html);
 
-  if (!normalizedHtml || normalizedHtml.includes('class="report-stage-highlight"')) {
-    return normalizedHtml;
+  if (!normalizedHtml) return normalizedHtml;
+
+  const valueClass = `report-stage-highlight__value${options?.isLocked ? " report-stage-highlight__value--locked" : ""}`;
+  const metaClass = `report-stage-highlight__meta${options?.isLocked ? " report-stage-highlight__meta--locked" : ""}`;
+
+  if (normalizedHtml.includes('class="report-stage-highlight"')) {
+    return normalizedHtml
+      .replace(
+        /class="report-stage-highlight__value(?:\s+report-stage-highlight__value--locked)?"/g,
+        `class="${valueClass}"`
+      )
+      .replace(
+        /class="report-stage-highlight__meta(?:\s+report-stage-highlight__meta--locked)?"/g,
+        `class="${metaClass}"`
+      );
   }
 
   return normalizedHtml.replace(
     SEXUAL_STAGE_SUMMARY_PATTERN,
     (_match, value, description) =>
-      `<div class="report-stage-highlight"><p class="report-stage-highlight__label">Your likely current sexual stage:</p><p class="report-stage-highlight__value">${value.trim()}</p><p class="report-stage-highlight__meta">(${description.trim()})</p></div>`
+      `<div class="report-stage-highlight"><p class="report-stage-highlight__label">Your likely current sexual stage:</p><p class="${valueClass}">${value.trim()}</p><p class="${metaClass}">(${description.trim()})</p></div>`
   );
 }
 

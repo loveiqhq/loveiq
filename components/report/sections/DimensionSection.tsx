@@ -16,6 +16,7 @@ interface Props {
   archetypeHtml: string | null;
   generalHtml: string;
   isPremium: boolean;
+  isStageValueLocked?: boolean;
   isUnlocked?: boolean;
   onUnlock?: () => void;
   sectionId: string;
@@ -30,6 +31,7 @@ const DimensionSection: FC<Props> = ({
   archetypeHtml,
   generalHtml,
   isPremium,
+  isStageValueLocked = false,
   isUnlocked = false,
   onUnlock,
   sectionId,
@@ -38,7 +40,9 @@ const DimensionSection: FC<Props> = ({
   const [locallyUnlocked, setLocallyUnlocked] = useState(false);
   const unlocked = isUnlocked || locallyUnlocked;
   const normalizedGeneralHtml =
-    sectionId === "sexual_stage" ? ensureSexualStageHighlight(generalHtml) : generalHtml;
+    sectionId === "sexual_stage"
+      ? ensureSexualStageHighlight(generalHtml, { isLocked: isStageValueLocked })
+      : generalHtml;
   const rawBlocks = extractReportHtmlBlocks(normalizedGeneralHtml);
   const { bodyBlocks, headingBlock } = splitTrailingHeadingBlock(rawBlocks);
 

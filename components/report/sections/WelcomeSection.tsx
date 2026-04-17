@@ -19,9 +19,9 @@ interface SnapshotContent {
 interface Props {
   feedbackWidget: ReactNode;
   generalHtml: string;
-  isLocked: boolean;
   sectionId: string;
   snapshot: SnapshotContent;
+  userName: string;
 }
 
 const COUNT_UP_DURATION_MS = 1800;
@@ -79,9 +79,9 @@ function describeScalarValue(label: string, value: number | null) {
 const WelcomeSection: FC<Props> = ({
   feedbackWidget,
   generalHtml,
-  isLocked,
   sectionId,
   snapshot,
+  userName,
 }) => {
   const sectionRef = useRef<HTMLElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
@@ -175,6 +175,7 @@ const WelcomeSection: FC<Props> = ({
   const cleanHtml = generalHtml
     .replace(/<table>[\s\S]*?<\/table>/g, "")
     .replace(/<p>Your snapshot<\/p>/g, "")
+    .replace(/<p><strong>[^<]*?,\s*<\/strong>/, "<p>")
     .trim();
 
   return (
@@ -194,6 +195,8 @@ const WelcomeSection: FC<Props> = ({
       <div className="report-section__header report-section__header--welcome">
         <h2 className="report-section__title">Welcome</h2>
       </div>
+
+      <p className="report-welcome-name">{userName}</p>
 
       <div
         className="report-prose report-prose--lead"
@@ -221,7 +224,6 @@ const WelcomeSection: FC<Props> = ({
           value={snapshot.importanceValue}
         />
         <StageCard
-          isLocked={isLocked}
           stage={snapshot.stage}
           description={
             snapshot.stage
@@ -307,18 +309,12 @@ const MetricCard: FC<{
 
 const StageCard: FC<{
   description: string;
-  isLocked: boolean;
   stage: string | null;
-}> = ({ description, isLocked, stage }) => (
+}> = ({ description, stage }) => (
   <article className="report-card report-card--metric">
     <p className="report-card__eyebrow">Likely Current Sexual Stage</p>
     <div className="report-stage-card__body">
-      <p
-        className={`report-stage-card__title${isLocked ? " report-stage-card__title--locked" : ""}`}
-        aria-hidden={isLocked || undefined}
-      >
-        {stage ?? "Still calibrating"}
-      </p>
+      <p className="report-stage-card__title">{stage ?? "Still calibrating"}</p>
     </div>
     <p className="report-card__description">
       {description || "We need more report data to describe this stage cleanly."}

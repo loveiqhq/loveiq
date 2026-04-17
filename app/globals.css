@@ -4315,6 +4315,15 @@ h3,
   margin-top: 40px;
 }
 
+.report-welcome-name {
+  margin: 0 0 24px;
+  color: #d1d5db;
+  font-family: var(--font-sans);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 24px;
+}
+
 .report-flow {
   display: flex;
   flex-direction: column;
@@ -4561,7 +4570,8 @@ h3,
   letter-spacing: -0.025em;
 }
 
-.report-stage-card__title--locked {
+.report-stage-highlight__value--locked,
+.report-stage-highlight__meta--locked {
   filter: blur(8.25px);
   user-select: none;
   pointer-events: none;
