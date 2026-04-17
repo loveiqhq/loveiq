@@ -2181,11 +2181,17 @@ h3,
 /* Archetype subtitle — the paragraph containing the archetype name */
 .report-prose p:has(.report-archetype-name) {
   font-family: var(--font-serif);
-  font-size: 36px;
+  font-size: 32px;
   font-weight: 500;
-  line-height: 1.05;
+  line-height: 40px;
   color: #fff;
   margin-top: 48px;
+}
+
+.report-prose p:has(.report-archetype-name) .report-archetype-name {
+  font-size: inherit;
+  line-height: inherit;
+  font-weight: inherit;
 }
 
 .report-archetype-name {
@@ -2224,13 +2230,13 @@ h3,
 }
 
 .report-prose h2 {
-  font-size: 36px;
-  line-height: 1.06;
+  font-size: 32px;
+  line-height: 40px;
 }
 
 .report-prose h3 {
-  font-size: 27px;
-  line-height: 1.18;
+  font-size: 22px;
+  line-height: 30px;
   margin-bottom: 28px;
 }
 
@@ -2272,14 +2278,17 @@ h3,
 
 .report-prose th {
   color: #fff;
-  font-size: 0.82rem;
+  font-size: 20px;
   font-weight: 700;
+  line-height: 32px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 .report-prose td {
   color: rgba(255, 255, 255, 0.72);
+  font-size: 20px;
+  line-height: 32px;
 }
 
 @media (min-width: 768px) {
@@ -4289,12 +4298,19 @@ h3,
 }
 
 .report-section--welcome .report-section__title {
-  font-size: clamp(68px, 5.8vw, 80px);
-  line-height: 0.9;
+  font-size: 40px;
+  line-height: 48px;
 }
 
 .report-section__body {
   width: 100%;
+}
+
+.report-section__feedback-row {
+  display: flex;
+  justify-content: flex-end;
+  width: 100%;
+  margin-top: 40px;
 }
 
 .report-flow {
@@ -4337,9 +4353,9 @@ h3,
   margin: 0;
   color: #fff;
   font-family: var(--font-serif);
-  font-size: 36px;
+  font-size: 32px;
   font-weight: 500;
-  line-height: 1.02;
+  line-height: 40px;
   letter-spacing: -0.04em;
 }
 
@@ -4358,9 +4374,9 @@ h3,
   margin: 0;
   color: #fff;
   font-family: var(--font-serif);
-  font-size: 38px;
+  font-size: 32px;
   font-weight: 500;
-  line-height: 1.04;
+  line-height: 40px;
   letter-spacing: -0.04em;
 }
 
@@ -4398,9 +4414,9 @@ h3,
   margin: 0;
   color: #fff;
   font-family: var(--font-serif);
-  font-size: 30px;
+  font-size: 24px;
   font-weight: 400;
-  line-height: 1.2;
+  line-height: 32px;
   letter-spacing: -0.025em;
 }
 
@@ -4541,6 +4557,12 @@ h3,
   font-size: 32px;
   line-height: 38.4px;
   letter-spacing: -0.025em;
+}
+
+.report-stage-card__title--locked {
+  filter: blur(8.25px);
+  user-select: none;
+  pointer-events: none;
 }
 
 .report-gauge {
@@ -5340,14 +5362,10 @@ h3,
 }
 
 .report-practice-table__popover {
-  padding: 0.9rem 1rem;
-  border: 1px solid rgba(168, 85, 247, 0.25);
-  border-radius: 18px;
-  background: linear-gradient(180deg, rgba(28, 17, 40, 0.98), rgba(15, 10, 22, 0.98));
-  box-shadow:
-    0 28px 60px -24px rgba(0, 0, 0, 0.75),
-    0 0 0 1px rgba(255, 255, 255, 0.04) inset;
-  backdrop-filter: blur(18px);
+  padding: 13px 17px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  background: #130b17;
 }
 
 .report-practice-table__popover--floating {
@@ -5367,21 +5385,22 @@ h3,
 }
 
 .report-practice-table__popover-title {
-  margin: 0 0 0.35rem;
-  color: #fff;
-  font-family: var(--font-serif);
-  font-size: 1.05rem;
-  line-height: 1.3;
-  letter-spacing: -0.02em;
+  margin: 0 0 2px;
+  color: #e5e7eb;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+  letter-spacing: 0;
 }
 
 .report-practice-table__popover-copy {
   margin: 0;
-  color: #d1d5db;
+  color: #6b7280;
   font-family: var(--font-sans);
-  font-size: 0.94rem;
-  font-weight: 400;
-  line-height: 1.6;
+  font-size: 12px;
+  font-weight: 300;
+  line-height: 16px;
 }
 
 .report-practice-table__metric {
@@ -5660,9 +5679,31 @@ h3,
 }
 
 .report-prose--lead {
-  font-size: clamp(1.05rem, 1vw + 0.9rem, 1.25rem);
-  line-height: 1.6;
+  font-size: 16px;
+  line-height: 24px;
   max-width: 760px;
+}
+
+.report-prose--lead p {
+  font-size: 16px;
+  line-height: 24px;
+}
+
+.report-prose--lead p strong {
+  font-size: 16px;
+  line-height: 24px;
+}
+
+.report-prose--lead p:has(.report-archetype-name),
+.report-prose--lead p:has(.report-archetype-name) strong {
+  font-size: 20px;
+  line-height: 28px;
+}
+
+.report-prose--lead p:has(.report-archetype-name) .report-archetype-name {
+  font-size: inherit;
+  line-height: inherit;
+  font-weight: inherit;
 }
 
 .report-prose strong {
@@ -6306,12 +6347,16 @@ h3,
   }
 
   .report-section--welcome .report-section__title {
-    font-size: 52px;
-    line-height: 46px;
+    font-size: 32px;
+    line-height: 40px;
   }
 
   .report-section + .report-section {
     margin-top: 48px;
+  }
+
+  .report-section__feedback-row {
+    margin-top: 32px;
   }
 
   .report-prose {
@@ -6325,6 +6370,24 @@ h3,
 
   .report-prose--lead {
     max-width: none;
+  }
+
+  .report-prose--lead p,
+  .report-prose--lead p strong {
+    font-size: 14px;
+    line-height: 22px;
+  }
+
+  .report-prose--lead p:has(.report-archetype-name),
+  .report-prose--lead p:has(.report-archetype-name) strong {
+    font-size: 18px;
+    line-height: 26px;
+  }
+
+  .report-prose th,
+  .report-prose td {
+    font-size: 20px;
+    line-height: 32px;
   }
 
   .report-flow--gap-xl {
@@ -6341,20 +6404,19 @@ h3,
   }
 
   .report-rich-heading p {
-    font-size: 30px;
-    line-height: 1.06;
+    font-size: 28px;
+    line-height: 32px;
   }
 
   .report-prose p:has(.report-archetype-name),
-  .report-archetype-name,
   .report-prose h2 {
-    font-size: 30px;
-    line-height: 1.08;
+    font-size: 28px;
+    line-height: 32px;
   }
 
   .report-prose h3 {
-    font-size: 24px;
-    line-height: 1.2;
+    font-size: 18px;
+    line-height: 26px;
   }
 
   .report-attachment-patterns {
@@ -6362,8 +6424,8 @@ h3,
   }
 
   .report-attachment-patterns__title {
-    font-size: 30px;
-    line-height: 1.08;
+    font-size: 28px;
+    line-height: 32px;
   }
 
   .report-attachment-patterns__grid {
@@ -6378,7 +6440,7 @@ h3,
 
   .report-attachment-patterns__card-title {
     font-size: 24px;
-    line-height: 1.2;
+    line-height: 32px;
   }
 
   .report-attachment-patterns__card-body {
@@ -6487,6 +6549,20 @@ h3,
   .report-hero-card__traits {
     grid-template-columns: 1fr;
     gap: 24px;
+  }
+
+  .report-hero-card__motivation-value {
+    font-family: var(--font-serif);
+    font-size: 24px;
+    line-height: 32px;
+    font-weight: 600;
+  }
+
+  .report-trait__value {
+    font-family: var(--font-serif);
+    font-size: 20px;
+    line-height: 24px;
+    font-weight: 600;
   }
 
   .report-hero-card__content {

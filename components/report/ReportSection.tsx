@@ -142,9 +142,9 @@ const ReportSection: FC<Props> = ({
             </h2>
           )}
         </div>
-        {feedbackWidget}
       </header>
       <div className="report-section__body">{children}</div>
+      {feedbackWidget ? <div className="report-section__feedback-row">{feedbackWidget}</div> : null}
     </section>
   );
 };

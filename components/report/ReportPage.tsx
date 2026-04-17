@@ -425,11 +425,18 @@ const ReportExperience: FC<ReportExperienceProps> = ({
               ) : null;
 
               if (section.sectionNumber === 1) {
+                const isStageLocked = !isSectionUnlockedForPlan({
+                  accessPlan,
+                  isPremium: true,
+                  sectionId: "sexual_stage",
+                });
+
                 return (
                   <WelcomeSection
                     key={section.id}
                     feedbackWidget={feedbackWidget}
                     generalHtml={generalHtml}
+                    isLocked={isStageLocked}
                     sectionId={section.id}
                     snapshot={snapshot}
                   />

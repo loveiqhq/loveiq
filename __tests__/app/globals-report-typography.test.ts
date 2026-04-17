@@ -5,13 +5,13 @@ import { describe, expect, it } from "vitest";
 const globalsCss = readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8");
 
 describe("report inline heading typography", () => {
-  it("sets the shared desktop archetype inline heading size to 36px", () => {
-    expect(globalsCss).toMatch(/\.report-rich-heading p\s*\{[\s\S]*?font-size:\s*36px;/);
+  it("sets the shared desktop archetype inline heading size to 32px", () => {
+    expect(globalsCss).toMatch(/\.report-rich-heading p\s*\{[\s\S]*?font-size:\s*32px;/);
   });
 
-  it("sets the shared mobile archetype inline heading size to 30px", () => {
+  it("sets the shared mobile archetype inline heading size to 28px", () => {
     expect(globalsCss).toMatch(
-      /@media \(max-width:\s*767px\)\s*\{[\s\S]*?\.report-rich-heading p\s*\{[\s\S]*?font-size:\s*30px;/
+      /@media \(max-width:\s*767px\)\s*\{[\s\S]*?\.report-rich-heading p\s*\{[\s\S]*?font-size:\s*28px;/
     );
   });
 

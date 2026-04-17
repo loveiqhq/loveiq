@@ -19,6 +19,7 @@ interface SnapshotContent {
 interface Props {
   feedbackWidget: ReactNode;
   generalHtml: string;
+  isLocked: boolean;
   sectionId: string;
   snapshot: SnapshotContent;
 }
@@ -75,7 +76,13 @@ function describeScalarValue(label: string, value: number | null) {
   return descriptions[value] ?? descriptions[4]!;
 }
 
-const WelcomeSection: FC<Props> = ({ feedbackWidget, generalHtml, sectionId, snapshot }) => {
+const WelcomeSection: FC<Props> = ({
+  feedbackWidget,
+  generalHtml,
+  isLocked,
+  sectionId,
+  snapshot,
+}) => {
   const sectionRef = useRef<HTMLElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
   const [isVisible, setIsVisible] = useState(false);
@@ -186,7 +193,6 @@ const WelcomeSection: FC<Props> = ({ feedbackWidget, generalHtml, sectionId, sna
 
       <div className="report-section__header report-section__header--welcome">
         <h2 className="report-section__title">Welcome</h2>
-        {feedbackWidget}
       </div>
 
       <div
@@ -215,6 +221,7 @@ const WelcomeSection: FC<Props> = ({ feedbackWidget, generalHtml, sectionId, sna
           value={snapshot.importanceValue}
         />
         <StageCard
+          isLocked={isLocked}
           stage={snapshot.stage}
           description={
             snapshot.stage
@@ -223,6 +230,8 @@ const WelcomeSection: FC<Props> = ({ feedbackWidget, generalHtml, sectionId, sna
           }
         />
       </div>
+
+      {feedbackWidget ? <div className="report-section__feedback-row">{feedbackWidget}</div> : null}
     </section>
   );
 };
@@ -298,12 +307,18 @@ const MetricCard: FC<{
 
 const StageCard: FC<{
   description: string;
+  isLocked: boolean;
   stage: string | null;
-}> = ({ description, stage }) => (
+}> = ({ description, isLocked, stage }) => (
   <article className="report-card report-card--metric">
     <p className="report-card__eyebrow">Likely Current Sexual Stage</p>
     <div className="report-stage-card__body">
-      <p className="report-stage-card__title">{stage ?? "Still calibrating"}</p>
+      <p
+        className={`report-stage-card__title${isLocked ? " report-stage-card__title--locked" : ""}`}
+        aria-hidden={isLocked || undefined}
+      >
+        {stage ?? "Still calibrating"}
+      </p>
     </div>
     <p className="report-card__description">
       {description || "We need more report data to describe this stage cleanly."}
