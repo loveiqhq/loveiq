@@ -4565,15 +4565,10 @@ h3,
 }
 
 .report-card--stage .report-stage-card__body {
-  min-height: 0;
-  align-content: normal;
+  min-height: 170px;
+  align-content: center;
   padding: 0;
   gap: 0;
-}
-
-.report-card--stage .report-card__description {
-  margin-top: auto;
-  margin-bottom: auto;
 }
 
 .report-stage-card__title {
