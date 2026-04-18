@@ -2483,10 +2483,16 @@ h3,
 
   .report-welcome-grid > .report-card,
   .report-prob__list .report-prob__row,
-  .report-attachment-patterns__grid > .report-attachment-patterns__card,
-  .report-importance__tooltip {
+  .report-attachment-patterns__grid > .report-attachment-patterns__card {
     opacity: 1 !important;
     transform: none !important;
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+  }
+
+  .report-importance__tooltip {
+    opacity: 1 !important;
+    transform: translate(-50%, -100%) translateY(-8px) !important;
     animation-duration: 0.01ms !important;
     animation-delay: 0ms !important;
   }
