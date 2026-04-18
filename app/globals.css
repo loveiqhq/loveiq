@@ -4565,7 +4565,9 @@ h3,
 }
 
 .report-card--stage .report-stage-card__body {
-  min-height: 170px;
+  /* 170px (gauge-wrap on cards 1/2) + 71px (status row: 3.45rem min-h + 1rem mb)
+     = 241px so the description y-line matches the description in cards 1/2. */
+  min-height: 241px;
   align-content: center;
   padding: 0;
   gap: 0;
