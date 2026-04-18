@@ -193,7 +193,7 @@ const WelcomeSection: FC<Props> = ({ feedbackWidget, generalHtml, sectionId, sna
         dangerouslySetInnerHTML={{ __html: cleanHtml }}
       />
 
-      <div ref={gridRef} className="report-welcome-grid">
+      <div ref={gridRef} className={`report-welcome-grid${animateReady ? " is-revealed" : ""}`}>
         <MetricCard
           animate={animateReady}
           description={describeScalarValue(
@@ -202,6 +202,7 @@ const WelcomeSection: FC<Props> = ({ feedbackWidget, generalHtml, sectionId, sna
           )}
           label="Current Sexual Satisfaction"
           pct={snapshot.satisfactionPct}
+          staggerIndex={0}
           status={snapshot.satisfactionStatusLabel}
           value={snapshot.satisfactionValue}
         />
@@ -210,10 +211,12 @@ const WelcomeSection: FC<Props> = ({ feedbackWidget, generalHtml, sectionId, sna
           description={describeScalarValue("Importance of Sex", snapshot.importanceValue)}
           label="Importance of Sex"
           pct={snapshot.importancePct}
+          staggerIndex={1}
           status={snapshot.importanceStatusLabel}
           value={snapshot.importanceValue}
         />
         <StageCard
+          staggerIndex={2}
           stage={snapshot.stage}
           description={
             snapshot.stage
@@ -271,11 +274,13 @@ const MetricCard: FC<{
   description: string;
   label: string;
   pct: number | null;
+  staggerIndex: number;
   status?: string;
   value: number | null;
-}> = ({ animate, description, label, pct, status, value }) => (
+}> = ({ animate, description, label, pct, staggerIndex, status, value }) => (
   <article
     className={`report-card report-card--metric${status ? " report-card--metric-has-status" : ""}`}
+    style={{ ["--stagger-i" as string]: staggerIndex }}
   >
     <p className="report-card__eyebrow">{label}</p>
     {status ? <p className="report-card__status">{status}</p> : null}
@@ -299,9 +304,13 @@ const MetricCard: FC<{
 
 const StageCard: FC<{
   description: string;
+  staggerIndex: number;
   stage: string | null;
-}> = ({ description, stage }) => (
-  <article className="report-card report-card--metric report-card--stage">
+}> = ({ description, staggerIndex, stage }) => (
+  <article
+    className="report-card report-card--metric report-card--stage"
+    style={{ ["--stagger-i" as string]: staggerIndex }}
+  >
     <p className="report-card__eyebrow">Likely Current Sexual Stage</p>
     <div className="report-stage-card__body">
       <p className="report-stage-card__title">{stage ?? "Still calibrating"}</p>

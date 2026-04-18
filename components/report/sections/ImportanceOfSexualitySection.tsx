@@ -1,6 +1,6 @@
 "use client";
 
-import type { FC } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type FC } from "react";
 
 interface Props {
   generalHtml: string;
@@ -76,6 +76,25 @@ const ImportanceOfSexualitySection: FC<Props> = ({
   const userBar = bars.find((b) => b.isUser);
   if (userBar) userBar.height = userHeight;
 
+  const chartRef = useRef<HTMLDivElement>(null);
+  const [isAnimated, setIsAnimated] = useState(() => typeof IntersectionObserver === "undefined");
+
+  useEffect(() => {
+    const el = chartRef.current;
+    if (!el || isAnimated) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsAnimated(true);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.2 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [isAnimated]);
+
   return (
     <div className="report-flow report-flow--gap-xl">
       <article className="report-importance">
@@ -99,7 +118,10 @@ const ImportanceOfSexualitySection: FC<Props> = ({
         </div>
 
         {/* Bar chart */}
-        <div className="report-importance__chart">
+        <div
+          ref={chartRef}
+          className={`report-importance__chart${isAnimated ? " is-animated" : ""}`}
+        >
           <div className="report-importance__yaxis">
             <span>High</span>
             <span>Medium</span>
@@ -114,10 +136,18 @@ const ImportanceOfSexualitySection: FC<Props> = ({
             </div>
 
             {bars.map((bar, i) => (
-              <div key={i} className="report-importance__bar">
+              <div
+                key={i}
+                className="report-importance__bar"
+                style={
+                  {
+                    ["--stagger-i"]: i,
+                    ["--bar-fill-h"]: `${bar.height}%`,
+                  } as CSSProperties
+                }
+              >
                 <div
                   className={`report-importance__bar-fill ${bar.isUser ? "report-importance__bar-fill--user" : "report-importance__bar-fill--ref"}`}
-                  style={{ height: `${bar.height}%` }}
                 >
                   {bar.isUser && <div className="report-importance__tooltip">You</div>}
                 </div>

@@ -176,8 +176,8 @@ describe("PracticeTendenciesSection", () => {
     expect(
       container.querySelectorAll(".report-practice-table__metric-bar span").length
     ).toBeGreaterThan(0);
-    expect(highFill?.style.width).toBe("100%");
-    expect(lowFill?.style.width).toBe("20%");
+    expect(highFill?.style.getPropertyValue("--practice-fill-w")).toBe("100%");
+    expect(lowFill?.style.getPropertyValue("--practice-fill-w")).toBe("20%");
     expect(highFill?.style.getPropertyValue("--practice-fill-opacity-end")).toBe("0.940");
     expect(lowFill?.style.getPropertyValue("--practice-fill-opacity-end")).toBe("0.556");
     expect(highFill?.style.getPropertyValue("--practice-fill-shadow-opacity")).toBe("0.320");

@@ -1863,7 +1863,11 @@ h3,
   align-items: center;
   padding: 24px 0;
   opacity: 0.7;
-  transition: opacity 200ms ease;
+  transition:
+    opacity 200ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    background 150ms ease;
 }
 
 .report-prob__row.is-active {
@@ -1871,6 +1875,28 @@ h3,
 }
 
 .report-prob__row.is-fading {
+  opacity: 0.45;
+}
+
+.report-prob__list .report-prob__row {
+  opacity: 0;
+  transform: translateY(12px);
+}
+
+.report-prob__list.is-revealed .report-prob__row {
+  opacity: 0.7;
+  transform: none;
+  transition:
+    opacity 520ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 520ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition-delay: calc(var(--stagger-i, 0) * 70ms);
+}
+
+.report-prob__list.is-revealed .report-prob__row.is-active {
+  opacity: 1;
+}
+
+.report-prob__list.is-revealed .report-prob__row.is-fading {
   opacity: 0.45;
 }
 
@@ -1923,9 +1949,18 @@ h3,
 }
 
 .report-prob__row-bar > div {
+  width: 0%;
   height: 100%;
   border-radius: 9999px;
   background: #9ca3af;
+  transition:
+    width 900ms cubic-bezier(0.22, 1, 0.36, 1),
+    background 200ms ease;
+}
+
+.report-prob__list.is-revealed .report-prob__row-bar > div {
+  width: var(--prob-row-fill, 0%);
+  transition-delay: calc((var(--stagger-i, 0) * 70ms) + 200ms);
 }
 
 /* Row profile */
@@ -2076,6 +2111,7 @@ h3,
   box-shadow:
     0 0 40px rgba(254, 104, 57, 0.12),
     0 0 80px rgba(167, 139, 250, 0.08);
+  animation: report-overlay-pop 260ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 
 .report-premium-overlay__icon {
@@ -2443,6 +2479,27 @@ h3,
   .report-section {
     opacity: 1;
     transform: none;
+  }
+
+  .report-welcome-grid > .report-card,
+  .report-prob__list .report-prob__row,
+  .report-attachment-patterns__grid > .report-attachment-patterns__card,
+  .report-importance__tooltip {
+    opacity: 1 !important;
+    transform: none !important;
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+  }
+
+  .report-prob__row-bar > div,
+  .report-practice-table__metric-bar span,
+  .report-importance__bar-fill,
+  .report-premium-overlay__card,
+  .report-practice-table__popover {
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
   }
 }
 
@@ -4398,6 +4455,16 @@ h3,
   width: 100%;
 }
 
+.report-attachment-patterns__grid > .report-attachment-patterns__card {
+  opacity: 0;
+  transform: translateY(16px);
+}
+
+.report-attachment-patterns__grid.is-revealed > .report-attachment-patterns__card {
+  animation: report-card-rise 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: calc(var(--stagger-i, 0) * 90ms);
+}
+
 .report-attachment-patterns__card {
   position: relative;
   display: flex;
@@ -4497,10 +4564,53 @@ h3,
 
 /* Old .report-feedback styles removed — replaced by .report-fb */
 
+@keyframes report-card-rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes report-overlay-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes report-popover-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .report-welcome-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1.5rem;
   margin-top: 3rem;
+}
+
+.report-welcome-grid > .report-card {
+  opacity: 0;
+  transform: translateY(16px);
+}
+
+.report-welcome-grid.is-revealed > .report-card {
+  animation: report-card-rise 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: calc(var(--stagger-i, 0) * 80ms);
 }
 
 .report-card--metric {
@@ -5387,6 +5497,7 @@ h3,
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 16px;
   background: #130b17;
+  animation: report-popover-in 160ms ease-out both;
 }
 
 .report-practice-table__popover--floating {
@@ -5464,6 +5575,7 @@ h3,
 
 .report-practice-table__metric-bar span {
   display: block;
+  width: 0%;
   height: 100%;
   border-radius: inherit;
   background: linear-gradient(
@@ -5474,9 +5586,13 @@ h3,
   );
   box-shadow: 0 0 0.7rem rgba(var(--practice-fill-rgb), var(--practice-fill-shadow-opacity, 0.14));
   transition:
-    width 220ms ease,
+    width 900ms cubic-bezier(0.22, 1, 0.36, 1),
     background 220ms ease,
     box-shadow 220ms ease;
+}
+
+.report-practice-panel.is-animated .report-practice-table__metric-bar span {
+  width: var(--practice-fill-w, 0%);
 }
 
 .report-practice-table__metric--fantasy .report-practice-table__metric-bar span {
@@ -5898,8 +6014,15 @@ h3,
 .report-importance__bar-fill {
   position: relative;
   width: 100%;
+  height: 0%;
   border-radius: 8px 8px 0 0;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
+  transition: height 900ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition-delay: calc(var(--stagger-i, 0) * 90ms);
+}
+
+.report-importance__chart.is-animated .report-importance__bar-fill {
+  height: var(--bar-fill-h, 0%);
 }
 
 .report-importance__bar-fill--ref {
@@ -5950,6 +6073,12 @@ h3,
     0 2px 2px rgba(0, 0, 0, 0.06),
     0 4px 3px rgba(0, 0, 0, 0.07);
   z-index: 2;
+  opacity: 0;
+}
+
+.report-importance__chart.is-animated .report-importance__tooltip {
+  animation: report-card-rise 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: calc(var(--stagger-i, 0) * 90ms + 600ms);
 }
 
 .report-importance__tooltip::after {

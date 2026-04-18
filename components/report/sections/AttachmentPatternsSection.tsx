@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FC } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type FC } from "react";
 import PremiumOverlay from "./PremiumOverlay";
 import {
   extractAttachmentSectionContent,
@@ -58,6 +58,25 @@ const AttachmentPatternsSection: FC<Props> = ({
 }) => {
   const [locallyUnlocked, setLocallyUnlocked] = useState(false);
   const unlocked = isUnlocked || locallyUnlocked;
+  const gridRef = useRef<HTMLDivElement>(null);
+  const [isRevealed, setIsRevealed] = useState(() => typeof IntersectionObserver === "undefined");
+
+  useEffect(() => {
+    const el = gridRef.current;
+    if (!el || isRevealed) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsRevealed(true);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.15 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [isRevealed]);
+
   const { introHtml, commonHeading, patterns, outroHtml, headingBlock } =
     extractAttachmentSectionContent(generalHtml);
   const archetypeContentStackClassName = headingBlock
@@ -89,12 +108,16 @@ const AttachmentPatternsSection: FC<Props> = ({
           ) : null}
 
           {patterns.length > 0 ? (
-            <div className="report-attachment-patterns__grid">
-              {patterns.map((pattern) => (
+            <div
+              ref={gridRef}
+              className={`report-attachment-patterns__grid${isRevealed ? " is-revealed" : ""}`}
+            >
+              {patterns.map((pattern, i) => (
                 <article
                   key={pattern.title}
                   className="report-attachment-patterns__card"
                   data-tone={getAttachmentTone(pattern)}
+                  style={{ ["--stagger-i" as string]: i } as CSSProperties}
                 >
                   <div className="report-attachment-patterns__card-copy">
                     <h4 className="report-attachment-patterns__card-title">{pattern.title}</h4>

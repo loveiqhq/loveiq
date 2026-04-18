@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FC } from "react";
+import { useEffect, useRef, useState, type FC } from "react";
 import { getReportTheme, getReportThemeIconStyle } from "../reportTheme";
 
 interface Props {
@@ -49,6 +49,24 @@ const ArchetypeProbabilitySection: FC<Props> = ({
 }) => {
   const [expanded, setExpanded] = useState(false);
   const [hoveredName, setHoveredName] = useState<string | null>(null);
+  const [isRevealed, setIsRevealed] = useState(() => typeof IntersectionObserver === "undefined");
+  const listRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el || isRevealed) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsRevealed(true);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.15 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [isRevealed]);
 
   const primaryTheme = getReportTheme(primaryArchetype);
   const primaryScore = Math.round(percentages[primaryArchetype] ?? 0);
@@ -113,7 +131,7 @@ const ArchetypeProbabilitySection: FC<Props> = ({
         </div>
 
         {/* Secondary archetypes */}
-        <div className="report-prob__list">
+        <div ref={listRef} className={`report-prob__list${isRevealed ? " is-revealed" : ""}`}>
           {secondaryItems.map((name, i) => {
             const score = Math.round(percentages[name] ?? 0);
             const theme = getReportTheme(name);
@@ -139,14 +157,16 @@ const ArchetypeProbabilitySection: FC<Props> = ({
                 ]
                   .filter(Boolean)
                   .join(" ")}
-                style={
-                  isHovered
+                style={{
+                  ["--stagger-i" as string]: i,
+                  ["--prob-row-fill" as string]: isUnlocked ? `${Math.min(score, 100)}%` : "0%",
+                  ...(isHovered
                     ? {
                         ["--prob-row-accent" as string]: theme.accent,
                         ["--prob-row-accent-rgb" as string]: theme.accentRgb,
                       }
-                    : undefined
-                }
+                    : {}),
+                }}
                 onMouseEnter={() => setHoveredName(name)}
                 onMouseLeave={() => setHoveredName(null)}
                 onClick={clickable ? onUnlock : undefined}
@@ -178,12 +198,7 @@ const ArchetypeProbabilitySection: FC<Props> = ({
                     )}
                   </div>
                   <div className="report-prob__row-bar">
-                    <div
-                      style={{
-                        width: isUnlocked ? `${Math.min(score, 100)}%` : "0%",
-                        background: isHovered ? theme.accent : undefined,
-                      }}
-                    />
+                    <div style={isHovered ? { background: theme.accent } : undefined} />
                   </div>
                 </div>
 

@@ -73,7 +73,7 @@ function buildPracticeMetricFillStyle(percent: number): CSSProperties {
   const shadowOpacity = 0.08 + strength * 0.24;
 
   return {
-    width: `${percent}%`,
+    "--practice-fill-w": `${percent}%`,
     "--practice-fill-opacity-start": startOpacity.toFixed(3),
     "--practice-fill-opacity-mid": midOpacity.toFixed(3),
     "--practice-fill-opacity-end": endOpacity.toFixed(3),
@@ -317,6 +317,23 @@ const PracticePanel: FC<{
   const [desktopPopover, setDesktopPopover] = useState<DesktopPopoverState | null>(null);
   const [desktopPopoverPosition, setDesktopPopoverPosition] = useState<CSSProperties | null>(null);
   const [useDesktopPopover, setUseDesktopPopover] = useState(resolveDesktopPopoverMode);
+  const [isAnimated, setIsAnimated] = useState(() => typeof IntersectionObserver === "undefined");
+
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el || isAnimated) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsAnimated(true);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.15 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [isAnimated]);
 
   useEffect(() => {
     if (!interactive || typeof window === "undefined") {
@@ -473,7 +490,7 @@ const PracticePanel: FC<{
       : null;
 
   return (
-    <div ref={rootRef} className="report-practice-panel">
+    <div ref={rootRef} className={`report-practice-panel${isAnimated ? " is-animated" : ""}`}>
       <h2 className="report-practice-panel__title">
         <span>Typical Sexual Fantasy &amp; Practice Tendencies of the </span>
         <span className="report-practice-panel__title-accent">{archetype}</span>
