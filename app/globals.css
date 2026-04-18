@@ -1150,15 +1150,11 @@ h3,
   padding: 2rem 0;
   scroll-margin-top: 6rem;
   opacity: 0;
-  transform: translateY(28px);
-  transition:
-    opacity 680ms cubic-bezier(0.16, 1, 0.3, 1),
-    transform 680ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition: opacity 280ms ease-out;
 }
 
 .report-section.is-visible {
   opacity: 1;
-  transform: translateY(0);
 }
 
 .report-section + .report-section {
@@ -4209,6 +4205,13 @@ h3,
   line-height: 20px;
 }
 
+.report-sidebar__item-label > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .report-sidebar__item.is-active .report-sidebar__item-label,
 .report-sidebar__item.is-active .report-sidebar__item-label > span {
   color: #fff;
@@ -4559,6 +4562,18 @@ h3,
   align-content: start;
   gap: 2rem;
   padding: 0 0 2rem;
+}
+
+.report-card--stage .report-stage-card__body {
+  min-height: 0;
+  align-content: normal;
+  padding: 0;
+  gap: 0;
+}
+
+.report-card--stage .report-card__description {
+  margin-top: auto;
+  margin-bottom: auto;
 }
 
 .report-stage-card__title {
@@ -6472,8 +6487,7 @@ h3,
     line-height: 1.55;
   }
 
-  .report-welcome-grid,
-  .report-hero-card__traits {
+  .report-welcome-grid {
     grid-template-columns: 1fr;
   }
 
@@ -6551,8 +6565,8 @@ h3,
   }
 
   .report-hero-card__traits {
-    grid-template-columns: 1fr;
-    gap: 24px;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px 16px;
   }
 
   .report-hero-card__motivation-value {

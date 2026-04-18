@@ -26,8 +26,8 @@ interface Props {
 const COUNT_UP_DURATION_MS = 1800;
 const INITIAL_METRIC_REVEAL_DELAY_MS = 840;
 const METRIC_REVEAL_DELAY_MS = 120;
-const METRIC_REVEAL_THRESHOLD = 0.65;
-const METRIC_REVEAL_ROOT_MARGIN = "0px 0px -12% 0px";
+const METRIC_REVEAL_THRESHOLD = 0.15;
+const METRIC_REVEAL_ROOT_MARGIN = "0px 0px 0px 0px";
 
 const stageDescriptions: Record<string, string> = {
   "Recharging / Pausing":
@@ -301,7 +301,7 @@ const StageCard: FC<{
   description: string;
   stage: string | null;
 }> = ({ description, stage }) => (
-  <article className="report-card report-card--metric">
+  <article className="report-card report-card--metric report-card--stage">
     <p className="report-card__eyebrow">Likely Current Sexual Stage</p>
     <div className="report-stage-card__body">
       <p className="report-stage-card__title">{stage ?? "Still calibrating"}</p>
