@@ -28,8 +28,13 @@ import type {
 let cachedConfig: ScoringConfig | null = null;
 
 function toBoolLocal(v: string | undefined, def: boolean): boolean {
-  if (v == null) return def;
-  return ["true", "1", "yes", "y", "t"].includes(v.trim().toLowerCase());
+  if (v == null || v === "") return def;
+  const s = String(v).trim().toLowerCase();
+  if (["true", "yes", "y", "t"].includes(s)) return true;
+  if (["false", "no", "n", "f"].includes(s)) return false;
+  const n = Number(s);
+  if (Number.isFinite(n)) return n !== 0;
+  return def;
 }
 
 function toFloatLocal(v: string | undefined, def: number): number {

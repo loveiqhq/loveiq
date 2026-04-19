@@ -113,8 +113,11 @@ describe("V5 anchor-based percentage mapping", () => {
       "03009": 7, // DIM_PURSUIT → 1.0 (close to 0.79)
       "03012": 5, // DIM_EDGE_NEED → 0.67 (close to 0.60)
     });
-    // Spark Seeker should have a notably above-50% raw percentage
-    expect(result.v5!.rawPct["Spark Seeker"]).toBeGreaterThan(55);
+    // Spark Seeker should score above the baseline (rawMean, 50%) for a matching profile.
+    // V8 per-archetype intercept scale (Spark Seeker 1.2877 vs V7's constant 0.5)
+    // compresses partial-profile scores closer to baseline, so we assert direction
+    // rather than a tight upper bound.
+    expect(result.v5!.rawPct["Spark Seeker"]).toBeGreaterThan(50);
   });
 });
 

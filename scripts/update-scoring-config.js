@@ -27,7 +27,13 @@ function toFloat(v, def = 0) {
 }
 
 function toBool(v) {
-  return ["true", "1", "yes", "y", "t"].includes(String(v).trim().toLowerCase());
+  if (v == null || v === "") return false;
+  const s = String(v).trim().toLowerCase();
+  if (["true", "yes", "y", "t"].includes(s)) return true;
+  if (["false", "no", "n", "f"].includes(s)) return false;
+  const n = Number(s);
+  if (Number.isFinite(n)) return n !== 0;
+  return false;
 }
 
 function normalizeLabel(label) {
@@ -103,7 +109,7 @@ function main() {
       answerCode: (r.answer_code || "").trim(),
       answerLabel: (r.answer_label || "").trim(),
       archetypeName: r.archetype_name.trim(),
-      scoreAdd: toFloat(r.score_add_proposed, toFloat(r.score_add, 0.0)),
+      scoreAdd: toFloat(r.score_add, 0.0),
     }));
 
   // 7. Gates
@@ -154,7 +160,7 @@ function main() {
     }));
 
   // 11. V5 Independent Params
-  const v5IndependentParamsRows = readCsv("v5_independent_params.csv");
+  const v5IndependentParamsRows = readCsv("independent_params.csv");
   const v5IndependentParams = {};
   for (const row of v5IndependentParamsRows) {
     const key = (row.key || "").trim();
@@ -163,7 +169,7 @@ function main() {
   }
 
   // 12. V5 Prototype Helpers
-  const v5HelperRows = readCsv("v5_prototype_helpers.csv");
+  const v5HelperRows = readCsv("prototype_helpers.csv");
   const v5PrototypeHelpers = v5HelperRows
     .filter((r) => r.archetype_name && r.dimension_id)
     .map((r) => ({
@@ -176,7 +182,7 @@ function main() {
     }));
 
   // 13. V5 Archetype Calibration
-  const v5CalibRows = readCsv("v5_archetype_calibration.csv");
+  const v5CalibRows = readCsv("archetype_calibration.csv");
   const v5ArchetypeCalibration = v5CalibRows
     .filter((r) => r.archetype_name)
     .map((r) => ({
@@ -192,7 +198,7 @@ function main() {
     }));
 
   // 14. V6 Question Logic
-  const v6QuestionLogicRows = readCsv("v6_question_logic.csv");
+  const v6QuestionLogicRows = readCsv("question_logic.csv");
   const multiselectScoringQuestions = v6QuestionLogicRows
     .filter(
       (r) =>

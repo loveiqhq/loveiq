@@ -48,10 +48,12 @@ describe("getScoringConfig", () => {
   });
 
   it("loads V5 categorical intercept calibration", () => {
+    // V8 uses per-archetype v5_categorical_intercept_scale (V7 was a constant 0.5);
+    // v5_categorical_intercept_subtract = expected_lift × scale per row.
     expect(config.v5CategoricalInterceptEnabled).toBe(true);
     expect(config.v5Calibration.size).toBe(14);
-    expect(config.v5CategoricalInterceptByArchetype["Sensual Connector"]).toBeCloseTo(1.132, 6);
-    expect(config.v5CategoricalInterceptByArchetype["Spark Seeker"]).toBeCloseTo(1.121, 6);
+    expect(config.v5CategoricalInterceptByArchetype["Sensual Connector"]).toBeCloseTo(2.5863936, 6);
+    expect(config.v5CategoricalInterceptByArchetype["Spark Seeker"]).toBeCloseTo(2.8870234, 6);
   });
 
   it("has multiselectScoringQuestions with 3 questions", () => {
