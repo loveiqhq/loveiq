@@ -38,4 +38,16 @@ describe("report inline heading typography", () => {
       /@media \(max-width:\s*767px\)\s*\{[\s\S]*?\.report-hero-card__header\s*\{[\s\S]*?grid-template-areas:\s*"copy"\s*"motto"\s*"match";/
     );
   });
+
+  it("inherits parent typography for archetype name inside rich heading paragraphs", () => {
+    // Ensures the 36px base .report-archetype-name is overridden to match the
+    // 32px (desktop) / 28px (mobile) .report-rich-heading p size.
+    expect(globalsCss).toMatch(
+      /\.report-rich-heading p \.report-archetype-name\s*\{[\s\S]*?font-size:\s*inherit;/
+    );
+  });
+
+  it("renders split section subtitles in full white matching the main title", () => {
+    expect(globalsCss).toMatch(/\.report-section__subtitle\s*\{[\s\S]*?color:\s*#fff;/);
+  });
 });

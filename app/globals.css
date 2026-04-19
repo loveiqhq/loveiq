@@ -2233,7 +2233,8 @@ h3,
 }
 
 .report-section__title .report-archetype-name,
-.report-section__subtitle .report-archetype-name {
+.report-section__subtitle .report-archetype-name,
+.report-rich-heading p .report-archetype-name {
   font-size: inherit;
   font-weight: inherit;
   line-height: inherit;
@@ -4334,7 +4335,7 @@ h3,
 
 .report-section__subtitle {
   margin: 0;
-  color: rgba(255, 255, 255, 0.7);
+  color: #fff;
   font-family: var(--font-serif);
   font-size: 32px;
   font-weight: 400;
@@ -4692,9 +4693,11 @@ h3,
 }
 
 .report-card--stage .report-stage-card__body {
-  /* 170px (gauge-wrap on cards 1/2) + 71px (status row: 3.45rem min-h + 1rem mb)
-     = 241px so the description y-line matches the description in cards 1/2. */
-  min-height: 241px;
+  /* gauge-wrap = 114px (SVG viewBox 0 0 208 114 at 208px width) + 4px margin = 118px
+     status row = 3.45rem min-h (55.2px) + 1rem mb (16px) = 71.2px
+     total = 189.2px ≈ 190px — matches content height above description in cards 1/2.
+     align-content:center keeps the title centred regardless of 1- or 2-line wrap. */
+  min-height: 190px;
   align-content: center;
   padding: 0;
   gap: 0;
