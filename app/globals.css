@@ -6247,13 +6247,17 @@ h3,
 @media (min-width: 1280px) {
   .report-shell {
     grid-template-columns: 288px minmax(0, 1024px);
-    gap: 0;
-    width: min(1440px, 100%);
-    padding: 0 4rem 4rem 0;
+    /* fluid gap: 0 at 1280px → 3rem at 1920px+ */
+    gap: clamp(0px, 2.5vw, 3rem);
+    /* calc(100% - 2rem) guarantees ≥1rem outer breathing room via margin:0 auto
+       even before the 1440px cap fires; at 1536px+ the cap takes over */
+    width: min(1440px, calc(100% - 2rem));
+    padding: 2rem 0 4rem;
   }
 
   .report-content {
-    padding-inline: 4rem;
+    /* fluid: 1.5rem at 1280px → 4rem at 1920px+ */
+    padding-inline: clamp(1.5rem, 3.5vw, 4rem);
     padding-top: 2rem;
   }
 }
