@@ -41,6 +41,24 @@ describe("reportContent normalization", () => {
     );
   });
 
+  it("merges all split heading paragraphs even when a later heading already contains a br", () => {
+    const normalized = normalizeReportHtml(
+      [
+        "<p><strong>Monogamy<br /></strong>One exclusive partner.</p>",
+        "<p><strong>Silent (Assumed) Monogamy</strong></p><p>Monogamy is expected but never explicitly discussed.</p>",
+        "<p><strong>Serial Monogamy</strong></p><p>One exclusive relationship at a time.</p>",
+      ].join("")
+    );
+
+    expect(normalized).toContain(
+      "<p><strong>Silent (Assumed) Monogamy<br /></strong>Monogamy is expected"
+    );
+    expect(normalized).toContain(
+      "<p><strong>Serial Monogamy<br /></strong>One exclusive relationship"
+    );
+    expect(normalized).toContain("<p><strong>Monogamy<br /></strong>One exclusive partner.");
+  });
+
   it("converts the sexual stage summary into the themed highlight block", () => {
     const normalized = ensureSexualStageHighlight(
       "<p><strong>Your likely current sexual stage: </strong>Grounded / Integrated</p><p>(A snapshot of how your sexuality is organized right now, not a permanent identity.)</p>"
