@@ -21,7 +21,7 @@ const FormField: FC<FormFieldProps> = ({ id, label, type = "text", value, onChan
       id={id}
       name={id}
       type={type}
-      className="h-[49px] w-full border-b border-white/10 bg-transparent text-sm text-white transition focus:border-white/30 focus:outline-none focus:ring-0 disabled:opacity-60"
+      className="autofill-dark h-[49px] w-full border-b border-white/10 bg-transparent text-sm text-white transition focus:border-white/30 focus:outline-none focus:ring-0 disabled:opacity-60"
       value={value}
       onChange={onChange}
       required

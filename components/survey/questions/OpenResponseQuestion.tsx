@@ -79,11 +79,12 @@ const OpenResponseQuestion: FC<OpenResponseQuestionProps> = ({
           autoComplete={question.inputType === "email" ? "email" : "off"}
           spellCheck={question.inputType === "email" ? false : undefined}
           maxLength={MAX_LENGTH}
-          className={`w-full border-b-2 bg-transparent pb-3 pt-2 font-sans text-[22px] text-white placeholder:text-white/30 focus:outline-none sm:text-[24px] ${
+          className={`autofill-dark w-full border-b-2 bg-transparent pb-3 pt-2 font-sans text-[22px] text-white placeholder:text-white/30 focus:outline-none sm:text-[24px] ${
             error
               ? "border-[#ef4444]"
               : "border-[rgba(254,104,57,0.2)] focus:border-[rgba(254,104,57,0.4)]"
           }`}
+          style={{ ["--autofill-bg" as string]: "#0a0510" }}
         />
 
         {/* Below input: error message left, char count right */}
