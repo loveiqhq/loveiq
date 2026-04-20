@@ -6249,9 +6249,10 @@ h3,
     grid-template-columns: 288px minmax(0, 1024px);
     /* fluid gap: 0 at 1280px → 3rem at 1920px+ */
     gap: clamp(0px, 2.5vw, 3rem);
-    /* calc(100% - 2rem) guarantees ≥1rem outer breathing room via margin:0 auto
-       even before the 1440px cap fires; at 1536px+ the cap takes over */
-    width: min(1440px, calc(100% - 2rem));
+    /* calc(100% - 6rem) gives ≥3rem of outer gutter at laptop widths
+       (1280–1535px) so the report doesn't feel edge-to-edge before the
+       1440px cap kicks in at ~1536px. */
+    width: min(1440px, calc(100% - 6rem));
     padding: 2rem 0 4rem;
   }
 
