@@ -3,26 +3,30 @@ import type { FC } from "react";
 const FriendPlusPaths: FC = () => (
   <>
     <path
-      d="M10.6673 14V12.6667C10.6673 11.9594 10.3864 11.2811 9.88627 10.781C9.38617 10.281 8.70789 10 8.00065 10H4.00065C3.29341 10 2.61513 10.281 2.11503 10.781C1.61494 11.2811 1.33398 11.9594 1.33398 12.6667V14"
+      d="M16 21V19C16 16.7923 14.2077 15 12 15H6C3.79234 15 2 16.7923 2 19V21"
       stroke="currentColor"
+      strokeWidth="1.5"
       strokeLinecap="round"
       strokeLinejoin="round"
     />
     <path
-      d="M6.00065 7.33333C7.47341 7.33333 8.66732 6.13943 8.66732 4.66667C8.66732 3.19391 7.47341 2 6.00065 2C4.52789 2 3.33398 3.19391 3.33398 4.66667C3.33398 6.13943 4.52789 7.33333 6.00065 7.33333Z"
+      d="M5 7C5 8.42906 5.7624 9.74957 7 10.4641C8.2376 11.1786 9.7624 11.1786 11 10.4641C12.2376 9.74957 13 8.42906 13 7C13 4.79234 11.2077 3 9 3C6.79234 3 5 4.79234 5 7H5"
       stroke="currentColor"
+      strokeWidth="1.5"
       strokeLinecap="round"
       strokeLinejoin="round"
     />
     <path
-      d="M12.666 5.33331V9.33331"
+      d="M19 8V14"
       stroke="currentColor"
+      strokeWidth="1.5"
       strokeLinecap="round"
       strokeLinejoin="round"
     />
     <path
-      d="M14.666 7.33331H10.666"
+      d="M22 11H16"
       stroke="currentColor"
+      strokeWidth="1.5"
       strokeLinecap="round"
       strokeLinejoin="round"
     />
@@ -65,13 +69,13 @@ export const ShareReportIcon: FC = () => (
 );
 
 export const ReferFriendIcon: FC = () => (
-  <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
     <FriendPlusPaths />
   </svg>
 );
 
 export const InviteFriendIcon: FC = () => (
-  <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
     <FriendPlusPaths />
   </svg>
 );

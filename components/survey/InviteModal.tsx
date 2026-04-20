@@ -78,10 +78,43 @@ const PeopleIcon: FC<{ className?: string }> = ({ className }) => (
     strokeLinejoin="round"
     aria-hidden="true"
   >
-    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-    <circle cx="9" cy="7" r="4" />
-    <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    <path d="M16 21V19C16 16.7923 14.2077 15 12 15H6C3.79234 15 2 16.7923 2 19V21" />
+    <path d="M5 7C5 8.42906 5.7624 9.74957 7 10.4641C8.2376 11.1786 9.7624 11.1786 11 10.4641C12.2376 9.74957 13 8.42906 13 7C13 4.79234 11.2077 3 9 3C6.79234 3 5 4.79234 5 7H5" />
+    <path d="M19 8V14" />
+    <path d="M22 11H16" />
+  </svg>
+);
+
+const ReferFriendIcon: FC<{ className?: string }> = ({ className }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path
+      d="M16 21V19C16 16.7923 14.2077 15 12 15H6C3.79234 15 2 16.7923 2 19V21"
+      stroke="#A855F7"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M5 7C5 8.42906 5.7624 9.74957 7 10.4641C8.2376 11.1786 9.7624 11.1786 11 10.4641C12.2376 9.74957 13 8.42906 13 7C13 4.79234 11.2077 3 9 3C6.79234 3 5 4.79234 5 7H5"
+      stroke="#A855F7"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M19 8V14"
+      stroke="#A855F7"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M22 11H16"
+      stroke="#A855F7"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
   </svg>
 );
 
@@ -744,7 +777,7 @@ const InviteModal: FC<InviteModalProps> = ({ open, onClose, referrerEmail, refer
                 <div className="flex items-center justify-between pr-10">
                   <div className="flex items-center gap-4">
                     <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-[rgba(168,85,247,0.2)] bg-[rgba(168,85,247,0.1)]">
-                      <PeopleIcon className="h-6 w-6 text-[#a855f7]" />
+                      <ReferFriendIcon className="h-6 w-6 text-[#a855f7]" />
                     </div>
                     <h2 className="font-serif text-[24px] font-normal tracking-[-0.6px] text-white">
                       Refer a friend
@@ -793,8 +826,8 @@ const InviteModal: FC<InviteModalProps> = ({ open, onClose, referrerEmail, refer
                     >
                       Friend&rsquo;s Email
                     </label>
-                    <div className="relative pt-1">
-                      <EnvelopeIcon className="absolute left-[25px] top-1/2 h-5 w-5 -translate-y-1/2 text-[#6b7280]" />
+                    <div className="relative">
+                      <EnvelopeIcon className="pointer-events-none absolute left-[20px] top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-[#7a738d]" />
                       <input
                         ref={inputRef}
                         id="invite-recipient-email"
@@ -807,10 +840,10 @@ const InviteModal: FC<InviteModalProps> = ({ open, onClose, referrerEmail, refer
                           if (state === "error") setState("idle");
                         }}
                         disabled={state === "sending"}
-                        className={`w-full rounded-2xl border bg-[#130b1c] py-[19px] pl-[52px] pr-4 font-sans text-[16px] text-white placeholder-[#6b7280] shadow-[inset_0_2px_4px_1px_rgba(0,0,0,0.05)] outline-none transition disabled:opacity-50 ${
+                        className={`h-[44px] w-full rounded-[15px] border bg-[#140c1d] pl-[50px] pr-4 font-sans text-[15px] leading-none text-white placeholder:text-[#7a738d] outline-none transition disabled:opacity-50 ${
                           hasError
                             ? "border-[#ff6467] focus:border-[#ff6467]"
-                            : "border-white/10 focus:border-[#fe6839]/60"
+                            : "border-white/[0.09] focus:border-[#fe6839]/60"
                         }`}
                       />
                     </div>
