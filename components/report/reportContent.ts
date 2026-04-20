@@ -5,6 +5,8 @@ const REPORT_FOOTNOTE_SUP_PATTERN =
   /<sup>\s*(?:<a\b[^>]*>\s*(?:\d+|[*†‡]+)\s*<\/a>|(?:\d+|[*†‡]+))\s*<\/sup>/gi;
 const REPORT_TRAILING_REFERENCE_PATTERN =
   /([?!.,:;"'")\]])\s*(?:<sup>\s*)?(?:\d+|[*†‡]+)(?:\s*<\/sup>)?(?=\s*<\/(?:p|li|h[1-6])>)/gi;
+const REPORT_SPLIT_STRONG_PARAGRAPH_PATTERN =
+  /<p>\s*<strong>(?![\s\S]*?<br\s*\/?>)([\s\S]*?)<\/strong>\s*<\/p>\s*<p>([\s\S]*?)<\/p>/gi;
 const SEXUAL_STAGE_SUMMARY_PATTERN =
   /<p><strong>\s*Your likely current sexual stage:\s*<\/strong>\s*([\s\S]*?)<\/p>\s*<p>\(([\s\S]*?)\)<\/p>/i;
 
@@ -59,6 +61,10 @@ export function normalizeReportHtml(html: string | null | undefined) {
     .replace(REPORT_FOOTNOTE_ANCHOR_PATTERN, "")
     .replace(REPORT_FOOTNOTE_SUP_PATTERN, "")
     .replace(REPORT_TRAILING_REFERENCE_PATTERN, "$1")
+    .replace(
+      REPORT_SPLIT_STRONG_PARAGRAPH_PATTERN,
+      (_match, heading, body) => `<p><strong>${heading.trim()}<br /></strong>${body.trim()}</p>`
+    )
     .replace(/\s{2,}/g, " ")
     .trim();
 }

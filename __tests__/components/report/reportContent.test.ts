@@ -31,6 +31,16 @@ describe("reportContent normalization", () => {
     expect(normalized).not.toContain("docs.google.com/document");
   });
 
+  it("merges split strong-only heading paragraphs with their following body paragraph", () => {
+    const normalized = normalizeReportHtml(
+      "<p><strong>Silent (Assumed) Monogamy</strong></p><p>Monogamy is expected but never explicitly discussed.</p>"
+    );
+
+    expect(normalized).toBe(
+      "<p><strong>Silent (Assumed) Monogamy<br /></strong>Monogamy is expected but never explicitly discussed.</p>"
+    );
+  });
+
   it("converts the sexual stage summary into the themed highlight block", () => {
     const normalized = ensureSexualStageHighlight(
       "<p><strong>Your likely current sexual stage: </strong>Grounded / Integrated</p><p>(A snapshot of how your sexuality is organized right now, not a permanent identity.)</p>"
