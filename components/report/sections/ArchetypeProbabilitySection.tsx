@@ -13,7 +13,6 @@ interface Props {
 }
 
 const INITIAL_COUNT = 3;
-const EXPANDED_COUNT = 6;
 
 const LockIcon: FC = () => (
   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
@@ -41,8 +40,6 @@ const ChevronIcon: FC<{ up?: boolean }> = ({ up }) => (
 
 const ArchetypeProbabilitySection: FC<Props> = ({
   generalHtml,
-  isUnlocked,
-  onUnlock,
   percentages,
   primaryArchetype,
   ranking,
@@ -72,8 +69,12 @@ const ArchetypeProbabilitySection: FC<Props> = ({
   const primaryScore = Math.round(percentages[primaryArchetype] ?? 0);
   const PrimaryIcon = primaryTheme.Icon;
 
-  const visibleCount = expanded ? EXPANDED_COUNT : INITIAL_COUNT;
-  const secondaryItems = ranking.filter((n) => n !== primaryArchetype).slice(0, visibleCount - 1);
+  const INITIAL_SECONDARY = INITIAL_COUNT - 1;
+  const EXTRA_ON_EXPAND = 3;
+  const secondaryAll = ranking.filter((n) => n !== primaryArchetype);
+  const secondaryItems = expanded
+    ? secondaryAll.slice(0, INITIAL_SECONDARY + EXTRA_ON_EXPAND)
+    : secondaryAll.slice(0, INITIAL_SECONDARY);
 
   return (
     <div className="report-flow report-flow--gap-xl">
@@ -138,28 +139,18 @@ const ArchetypeProbabilitySection: FC<Props> = ({
             const ArchIcon = theme.Icon;
             const isHovered = hoveredName === name;
             const isLast = i === secondaryItems.length - 1;
-            // 3rd item (i===1) fades more in collapsed view, unless hovered
-            const isFading = !expanded && i === 1 && !isHovered;
             const rowIconStyle = {
               ...getReportThemeIconStyle(theme, "row"),
               ...(isHovered ? { background: theme.accent } : {}),
             };
-            const clickable = !isUnlocked;
 
             return (
               <div
                 key={name}
-                className={[
-                  "report-prob__row",
-                  isHovered && "is-active",
-                  isFading && "is-fading",
-                  clickable && "report-prob__row--clickable",
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
+                className={["report-prob__row", isHovered && "is-active"].filter(Boolean).join(" ")}
                 style={{
                   ["--stagger-i" as string]: i,
-                  ["--prob-row-fill" as string]: isUnlocked ? `${Math.min(score, 100)}%` : "0%",
+                  ["--prob-row-fill" as string]: `${Math.min(score, 100)}%`,
                   ...(isHovered
                     ? {
                         ["--prob-row-accent" as string]: theme.accent,
@@ -169,33 +160,11 @@ const ArchetypeProbabilitySection: FC<Props> = ({
                 }}
                 onMouseEnter={() => setHoveredName(name)}
                 onMouseLeave={() => setHoveredName(null)}
-                onClick={clickable ? onUnlock : undefined}
-                onKeyDown={
-                  clickable
-                    ? (event) => {
-                        if (event.key === "Enter" || event.key === " ") {
-                          event.preventDefault();
-                          onUnlock();
-                        }
-                      }
-                    : undefined
-                }
-                role={clickable ? "button" : undefined}
-                tabIndex={clickable ? 0 : undefined}
               >
                 <div className="report-prob__row-score">
                   <div className="report-prob__row-value">
-                    {isUnlocked ? (
-                      <>
-                        <span>{score}</span>
-                        <small>%</small>
-                      </>
-                    ) : (
-                      <>
-                        <span>—</span>
-                        <small>%</small>
-                      </>
-                    )}
+                    <span>{score}</span>
+                    <small>%</small>
                   </div>
                   <div className="report-prob__row-bar">
                     <div style={isHovered ? { background: theme.accent } : undefined} />
@@ -217,20 +186,6 @@ const ArchetypeProbabilitySection: FC<Props> = ({
                   </div>
                 </div>
 
-                <button
-                  className={`report-prob__row-cta ${isHovered ? "is-active" : ""}`}
-                  style={
-                    isHovered
-                      ? { background: theme.accent, borderColor: "transparent", color: "#130b17" }
-                      : undefined
-                  }
-                  type="button"
-                  onClick={isUnlocked ? undefined : onUnlock}
-                >
-                  <LockIcon />
-                  <span>{isUnlocked ? "Unlock Full Report" : "Unlock Essentials"}</span>
-                </button>
-
                 {!isLast && !isHovered && <div className="report-prob__row-border" />}
               </div>
             );
@@ -240,16 +195,10 @@ const ArchetypeProbabilitySection: FC<Props> = ({
         <button
           className="report-prob__toggle"
           type="button"
-          onClick={isUnlocked ? () => setExpanded((v) => !v) : onUnlock}
+          onClick={() => setExpanded((v) => !v)}
         >
-          <span>
-            {isUnlocked
-              ? expanded
-                ? "Hide archetype percentages"
-                : "Show more archetypes"
-              : "See other archetype percentages"}
-          </span>
-          <ChevronIcon up={isUnlocked && expanded} />
+          <span>{expanded ? "Hide archetype percentages" : "Show more archetypes"}</span>
+          <ChevronIcon up={expanded} />
         </button>
       </div>
     </div>

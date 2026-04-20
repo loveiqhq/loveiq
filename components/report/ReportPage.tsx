@@ -307,13 +307,16 @@ const ReportExperience: FC<ReportExperienceProps> = ({
     setActiveSectionId(sectionId);
   };
 
-  const unlockSection = (sectionId: string) => {
+  // TEMP (beta): any unlock CTA unlocks every section so testers don't
+  // have to click each one. Revert once paywall gating is re-enabled —
+  // original body set only the clicked sectionId to true.
+  const unlockSection = (_sectionId: string) => {
     setUnlockedSections((current) => {
-      if (current[sectionId]) return current;
-      return {
-        ...current,
-        [sectionId]: true,
-      };
+      const allAlreadyUnlocked = resolvedSections.every((s) => current[s.id]);
+      if (allAlreadyUnlocked) return current;
+      const next: Record<string, boolean> = { ...current };
+      for (const s of resolvedSections) next[s.id] = true;
+      return next;
     });
   };
 

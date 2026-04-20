@@ -315,7 +315,10 @@ describe("ReportPage", () => {
   );
 
   it(
-    "reveals a clicked premium section locally instead of routing to checkout",
+    // TEMP (beta): one unlock click reveals every section — see
+    // unlockSection in ReportPage.tsx. Restore single-section expectation
+    // when the paywall is re-enabled.
+    "reveals all premium sections from a single click (temp beta unlock)",
     async () => {
       const user = userEvent.setup();
       mockUseReportData.mockReturnValue(buildSuccessResponse());
@@ -328,24 +331,16 @@ describe("ReportPage", () => {
       const firstSectionUnlockButton = container.querySelector(
         ".report-section .report-premium-overlay__cta"
       ) as HTMLButtonElement | null;
-      const lockedSection = firstSectionUnlockButton?.closest(
-        "[data-report-section='true']"
-      ) as HTMLElement | null;
       const lockedSectionCount = container.querySelectorAll(".report-premium-overlay__cta").length;
 
       expect(firstSectionUnlockButton).toBeTruthy();
-      expect(lockedSection).toBeTruthy();
       expect(lockedSectionCount).toBeGreaterThan(1);
 
       await user.click(firstSectionUnlockButton!);
 
       await waitFor(() => {
-        expect(lockedSection?.querySelector(".report-premium-overlay")).not.toBeInTheDocument();
+        expect(container.querySelectorAll(".report-premium-overlay__cta")).toHaveLength(0);
       });
-
-      expect(container.querySelectorAll(".report-premium-overlay__cta")).toHaveLength(
-        lockedSectionCount - 1
-      );
       expect(mockRouterPush).not.toHaveBeenCalled();
     },
     REPORT_MODAL_TEST_TIMEOUT_MS
