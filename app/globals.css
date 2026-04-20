@@ -107,24 +107,41 @@ h3,
 
 /*
  * Neutralize browser autofill background for dark-themed inputs.
- * Chromium/WebKit paint their own yellow/white fill on :-webkit-autofill
- * and ignore `background-color` — the canonical workaround is an inset
- * box-shadow that overpaints it. Firefox honors `:autofill` directly.
- * Long transition delays the style revert when the field is restored.
+ * Chromium paints its own fill on :-webkit-autofill (after click) AND
+ * :-internal-autofill-previewed (while the suggestion row is hovered),
+ * ignoring `background-color`. Canonical workaround is an inset
+ * box-shadow overpaint. `!important` beats Tailwind's bg-transparent
+ * and UA defaults. Long transition delays the style revert when the
+ * field is restored on back-nav. Firefox honors standard `:autofill`.
  */
 .autofill-dark:-webkit-autofill,
 .autofill-dark:-webkit-autofill:hover,
 .autofill-dark:-webkit-autofill:focus,
 .autofill-dark:-webkit-autofill:active {
-  -webkit-box-shadow: 0 0 0 1000px var(--autofill-bg, var(--color-bg)) inset;
-  box-shadow: 0 0 0 1000px var(--autofill-bg, var(--color-bg)) inset;
-  -webkit-text-fill-color: #ffffff;
-  caret-color: #ffffff;
-  transition: background-color 9999s ease-in-out 0s;
+  -webkit-box-shadow: 0 0 0 1000px var(--autofill-bg, var(--color-bg)) inset !important;
+  box-shadow: 0 0 0 1000px var(--autofill-bg, var(--color-bg)) inset !important;
+  -webkit-text-fill-color: #ffffff !important;
+  caret-color: #ffffff !important;
+  background-clip: content-box !important;
+  background-image: none !important;
+  transition:
+    background-color 9999s ease-in-out 0s,
+    color 9999s ease-in-out 0s !important;
+}
+
+.autofill-dark:-internal-autofill-selected,
+.autofill-dark:-internal-autofill-previewed {
+  -webkit-box-shadow: 0 0 0 1000px var(--autofill-bg, var(--color-bg)) inset !important;
+  box-shadow: 0 0 0 1000px var(--autofill-bg, var(--color-bg)) inset !important;
+  -webkit-text-fill-color: #ffffff !important;
+  background-color: var(--autofill-bg, var(--color-bg)) !important;
+  background-image: none !important;
+  color: #ffffff !important;
 }
 
 .autofill-dark:autofill {
   background-color: var(--autofill-bg, var(--color-bg)) !important;
+  background-image: none !important;
   color: #ffffff !important;
 }
 
