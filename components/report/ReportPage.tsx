@@ -293,7 +293,10 @@ const ReportExperience: FC<ReportExperienceProps> = ({
 }) => {
   const mainContentRef = useRef<HTMLElement | null>(null);
   const [activeSectionId, setActiveSectionId] = useState(resolvedSections[0]?.id ?? "welcome");
-  const [isPricingModalOpen, setIsPricingModalOpen] = useState(accessPlan === null);
+  const paywallDisabled = process.env.NEXT_PUBLIC_DISABLE_PAYWALL === "1";
+  const [isPricingModalOpen, setIsPricingModalOpen] = useState(
+    paywallDisabled ? false : accessPlan === null
+  );
   const [unlockedSections, setUnlockedSections] = useState<Record<string, boolean>>({});
   const clickLockUntilRef = useRef(0);
 
@@ -479,7 +482,9 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     <ArchetypeProbabilitySection
                       generalHtml={generalHtml}
                       isUnlocked={isBackendUnlocked || (unlockedSections[section.id] ?? false)}
-                      onUnlock={() => setIsPricingModalOpen(true)}
+                      onUnlock={() => {
+                        if (!paywallDisabled) setIsPricingModalOpen(true);
+                      }}
                       percentages={percentages}
                       primaryArchetype={primaryArchetype}
                       ranking={ranking}
