@@ -30,7 +30,6 @@ describe("ReportNavigation", () => {
     expect(screen.getAllByText(/spark seeker/i)[0]).toBeInTheDocument();
     expect(screen.getByAltText(/loveiq/i)).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: /share report/i })[0]).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: /refer a friend/i })[0]).toBeInTheDocument();
     expect(screen.getAllByText(/full report/i).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("navigation")[0]).toBeInTheDocument();
     expect(screen.getAllByText(/challenges to enjoy sex/i)[0]).toBeInTheDocument();

@@ -8,7 +8,6 @@ import { cacheReportCheckoutQuote } from "@/lib/checkout/reportCheckoutQuoteCach
 import { buildReportCheckoutHref, type ReportPurchasePlanId } from "@/lib/checkout/reportPurchase";
 import type { ReportPriceQuoteSnapshot } from "@/lib/pricing/reportPricing";
 import FooterSection from "@/components/landing/FooterSection";
-import InviteModal from "@/components/survey/InviteModal";
 import ReportNavigation from "./ReportNavigation";
 import ReportPricingModal from "./ReportPricingModal";
 import ReportSection from "./ReportSection";
@@ -272,7 +271,6 @@ interface ReportExperienceProps {
   submitFeedback: (sectionId: string, payload: FeedbackPayload) => void;
   submitted: Record<string, boolean>;
   theme: ReturnType<typeof getReportTheme>;
-  userEmail: string | null;
   userName: string | null;
 }
 
@@ -293,7 +291,6 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   submitFeedback,
   submitted,
   theme,
-  userEmail,
   userName,
 }) => {
   const mainContentRef = useRef<HTMLElement | null>(null);
@@ -302,7 +299,6 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   const [isPricingModalOpen, setIsPricingModalOpen] = useState(
     paywallDisabled ? false : accessPlan === null
   );
-  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [unlockedSections, setUnlockedSections] = useState<Record<string, boolean>>({});
   const clickLockUntilRef = useRef(0);
 
@@ -415,7 +411,6 @@ const ReportExperience: FC<ReportExperienceProps> = ({
         <div className="report-shell">
           <ReportNavigation
             activeSectionId={activeSectionId}
-            onReferFriendClick={() => setIsInviteModalOpen(true)}
             onSectionClick={handleSectionClick}
             primaryArchetype={primaryArchetype}
             reportDate={reportDate}
@@ -447,7 +442,6 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     key={section.id}
                     feedbackWidget={feedbackWidget}
                     generalHtml={generalHtml}
-                    onReferFriendClick={() => setIsInviteModalOpen(true)}
                     sectionId={section.id}
                     snapshot={snapshot}
                   />
@@ -623,12 +617,6 @@ const ReportExperience: FC<ReportExperienceProps> = ({
         quotes={pricingQuotes}
         returnFocusRef={mainContentRef}
       />
-      <InviteModal
-        open={isInviteModalOpen}
-        onClose={() => setIsInviteModalOpen(false)}
-        referrerEmail={userEmail ?? ""}
-        referrerName={userName ?? ""}
-      />
     </main>
   );
 };
@@ -747,7 +735,6 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       submitFeedback={submitFeedback}
       submitted={submitted}
       theme={theme}
-      userEmail={data.userEmail}
       userName={data.userName}
     />
   );

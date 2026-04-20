@@ -265,8 +265,8 @@ const slides: Slide[] = [
     heading: "A note before you explore your report.",
     body: (
       <>
-        <strong>Congratulations on completing your survey.</strong> Your openness and persistence
-        made the upcoming report possible. Your report is{" "}
+        <strong>Congratulations on completing your test.</strong> Your openness and persistence made
+        the upcoming report possible. Your report is{" "}
         <strong>based on +60 responses you shared</strong> and draws on insights from over +100
         scientific papers and books.{" "}
         <strong>The results are designed to help you better understand yourself and grow.</strong>

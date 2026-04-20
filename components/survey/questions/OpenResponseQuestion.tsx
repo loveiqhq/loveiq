@@ -28,15 +28,21 @@ const AlertCircleIcon: FC = () => (
 );
 
 const MAX_LENGTH = 500;
+// Qs that render without a character limit or counter (email + name).
+const UNLIMITED_QIDS = new Set(["00000", "00001"]);
 
-function getValidationError(value: string, inputType?: string): string | null {
+function getValidationError(
+  value: string,
+  inputType: string | undefined,
+  limited: boolean
+): string | null {
   if (!value) return null;
   if (inputType === "email") {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(value))
       return "Hmm, that doesn\u2019t look like a valid email. Make sure it follows the format: name@example.com";
   }
-  if (value.length > MAX_LENGTH) return `Maximum ${MAX_LENGTH} characters allowed`;
+  if (limited && value.length > MAX_LENGTH) return `Maximum ${MAX_LENGTH} characters allowed`;
   return null;
 }
 
@@ -49,7 +55,8 @@ const OpenResponseQuestion: FC<OpenResponseQuestionProps> = ({
   const [touched, setTouched] = useState(false);
   const currentValue = value ?? "";
   const showError = touched || forceValidation;
-  const error = showError ? getValidationError(currentValue, question.inputType) : null;
+  const limited = !UNLIMITED_QIDS.has(question.qId);
+  const error = showError ? getValidationError(currentValue, question.inputType, limited) : null;
 
   // Subtitle text from formatGuidance or fallback
   const subtitle =
@@ -78,7 +85,7 @@ const OpenResponseQuestion: FC<OpenResponseQuestionProps> = ({
           placeholder={question.placeholder || "Type your answer…"}
           autoComplete={question.inputType === "email" ? "email" : "off"}
           spellCheck={question.inputType === "email" ? false : undefined}
-          maxLength={MAX_LENGTH}
+          maxLength={limited ? MAX_LENGTH : undefined}
           className={`autofill-dark w-full border-b-2 bg-transparent pb-3 pt-2 font-sans text-[22px] text-white placeholder:text-white/30 focus:outline-none sm:text-[24px] ${
             error
               ? "border-[#ef4444]"
@@ -105,10 +112,12 @@ const OpenResponseQuestion: FC<OpenResponseQuestionProps> = ({
             )}
           </div>
 
-          {/* Character counter */}
-          <span className="font-sans text-[12px] font-medium text-white/30">
-            {currentValue.length} / {MAX_LENGTH}
-          </span>
+          {/* Character counter (hidden for unlimited Qs) */}
+          {limited && (
+            <span className="font-sans text-[12px] font-medium text-white/30">
+              {currentValue.length} / {MAX_LENGTH}
+            </span>
+          )}
         </div>
       </div>
     </div>

@@ -383,52 +383,6 @@ describe("ReportPage", () => {
   );
 
   it(
-    "opens the invite modal from the real report navigation action",
-    async () => {
-      const user = userEvent.setup();
-      mockUseReportData.mockReturnValue(buildSuccessResponse());
-
-      render(<ReportPage />);
-
-      await user.click(screen.getByRole("button", { name: /close pricing modal/i }));
-      await waitFor(() =>
-        expect(
-          screen.queryByRole("heading", { name: /unlock your full report/i })
-        ).not.toBeInTheDocument()
-      );
-
-      await user.click(screen.getAllByRole("button", { name: /refer a friend/i })[0]);
-
-      expect(screen.getByRole("dialog", { name: /refer a friend/i })).toBeInTheDocument();
-      expect(screen.getByDisplayValue("Eman")).toBeInTheDocument();
-    },
-    REPORT_MODAL_TEST_TIMEOUT_MS
-  );
-
-  it(
-    "opens the invite modal from the welcome-section invite action",
-    async () => {
-      const user = userEvent.setup();
-      mockUseReportData.mockReturnValue(buildSuccessResponse());
-
-      render(<ReportPage />);
-
-      await user.click(screen.getByRole("button", { name: /close pricing modal/i }));
-      await waitFor(() =>
-        expect(
-          screen.queryByRole("heading", { name: /unlock your full report/i })
-        ).not.toBeInTheDocument()
-      );
-
-      await user.click(screen.getByRole("button", { name: /invite a friend/i }));
-
-      expect(screen.getByRole("dialog", { name: /refer a friend/i })).toBeInTheDocument();
-      expect(screen.getByDisplayValue("Eman")).toBeInTheDocument();
-    },
-    REPORT_MODAL_TEST_TIMEOUT_MS
-  );
-
-  it(
     "routes to checkout when a pricing modal CTA is clicked",
     async () => {
       const user = userEvent.setup();

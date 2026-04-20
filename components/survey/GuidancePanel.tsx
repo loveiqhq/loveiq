@@ -167,7 +167,7 @@ const GuidancePanel: FC<GuidancePanelProps> = ({ question }) => {
                         className="rounded-[14px] border border-white/[0.05] bg-white/[0.03] px-4 py-3.5"
                       >
                         <p className="font-sans text-[13px] font-medium leading-[18px] text-white/90">
-                          {item.option}
+                          {item.option.replace(/^\s*\d+\s*=\s*/, "")}
                         </p>
                         <p className="mt-1 font-sans text-[13px] font-light leading-[21px] text-white/50">
                           {item.explanation}

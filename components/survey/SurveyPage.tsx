@@ -325,15 +325,20 @@ const slides: Slide[] = [
       <>
         {/* Mobile — natural wrap */}
         <span className="md:hidden">
-          LoveIQ follows a strict input–output principle: the accuracy of your report depends on the
-          accuracy of your answers. Rushed or filtered responses lower signal quality; honest,
-          precise responses produce clear, high-resolution insights.
+          LoveIQ follows a strict input–output principle:{" "}
+          <strong>the accuracy of your report depends on the accuracy of your answers.</strong>{" "}
+          Rushed or filtered responses lower signal quality; honest, precise responses produce
+          clear, high-resolution insights.
         </span>
         {/* Desktop line breaks */}
         <span className="hidden md:inline">
-          LoveIQ follows a strict input–output principle: the accuracy of your
-          <br />
-          report depends on the accuracy of your answers. Rushed or filtered
+          LoveIQ follows a strict input–output principle:{" "}
+          <strong>
+            the accuracy of your
+            <br />
+            report depends on the accuracy of your answers.
+          </strong>{" "}
+          Rushed or filtered
           <br />
           responses lower signal quality; honest, precise responses produce
           <br />
@@ -349,22 +354,34 @@ const slides: Slide[] = [
       <>
         {/* Mobile — natural wrap */}
         <span className="md:hidden">
-          This is a strictly judgment-free space. There are no good, bad, impressive, or
-          embarrassing answers and no one is rating you. Don&rsquo;t answer how you should feel, how
-          you wish to be seen, or what sounds mature or attractive. Answer what is actually true for
-          you. The more real you are, the more precise and powerful your results will be.
+          This is a strictly judgment-free space.{" "}
+          <strong>
+            There are no good, bad, impressive, or embarrassing answers and no one is rating you.
+          </strong>{" "}
+          Don&rsquo;t answer how you should feel, how you wish to be seen, or what sounds mature or
+          attractive. Answer what is actually true for you.{" "}
+          <strong>
+            The more real you are, the more precise and powerful your results will be.
+          </strong>
         </span>
         {/* Desktop line breaks */}
         <span className="hidden md:inline">
-          This is a strictly judgment-free space. There are no good, bad, impressive,
-          <br />
-          or embarrassing answers and no one is rating you. Don&rsquo;t answer how you
+          This is a strictly judgment-free space.{" "}
+          <strong>
+            There are no good, bad, impressive,
+            <br />
+            or embarrassing answers and no one is rating you.
+          </strong>{" "}
+          Don&rsquo;t answer how you
           <br />
           should feel, how you wish to be seen, or what sounds mature or
           <br />
-          attractive. Answer what is actually true for you. The more real you are, the
-          <br />
-          more precise and powerful your results will be.
+          attractive. Answer what is actually true for you.{" "}
+          <strong>
+            The more real you are, the
+            <br />
+            more precise and powerful your results will be.
+          </strong>
         </span>
       </>
     ),
@@ -741,7 +758,7 @@ const SlideScreen: FC<{
             </h2>
 
             <p
-              className="survey-animate mt-6 max-w-[798px] lg:max-w-[880px] font-sans not-italic text-[18px] font-light leading-[29.25px] text-white/80"
+              className="survey-animate mt-6 max-w-[798px] lg:max-w-[880px] font-sans not-italic text-[18px] font-light leading-[29.25px] text-white/80 [&_strong]:font-bold [&_strong]:text-white"
               style={{
                 opacity: 0,
                 animation: "survey-fade-up 700ms cubic-bezier(0.16,1,0.3,1) 300ms both",

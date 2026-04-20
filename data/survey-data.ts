@@ -1972,37 +1972,35 @@ export const surveyQuestions: SurveyQuestion[] = [
       {
         option: "1 = Not at all true",
         explanation:
-          "structure, protocols, or explicit rules usually feel unnecessary or restrictive for you",
+          "my attention is usually much more on my own experience than on my partner\u2019s",
       },
       {
         option: "2 = Mostly not true",
         explanation:
-          "some clarity may help occasionally, but formal structure is usually not part of what makes sex work for you",
+          "my attention tends to stay more on my own experience than on my partner\u2019s",
       },
       {
         option: "3 = Slightly not true",
-        explanation:
-          "you can appreciate a little structure in some contexts, though you generally do not rely on it much",
+        explanation: "my attention is somewhat more on my own experience than on my partner\u2019s",
       },
       {
         option: "4 = Mixed / depends",
-        explanation:
-          "some degree of structure can help, depending on context, mood, or partner dynamic",
+        explanation: "my attention feels fairly balanced, or it depends on the context or partner",
       },
       {
         option: "5 = Slightly true",
         explanation:
-          "clear roles, agreements, or structure often improve the experience, even if you do not always need them",
+          "my attention tends to go somewhat more toward my partner\u2019s experience than toward my own",
       },
       {
         option: "6 = Mostly true",
         explanation:
-          "clear rules, roles, or agreed structure usually make sex feel easier, safer, or more erotically alive for you",
+          "my attention usually goes more toward my partner\u2019s experience than toward my own",
       },
       {
         option: "7 = Very true",
         explanation:
-          "clear rules, roles, or agreed structure often make sex feel more open, safe, or erotically alive for you",
+          "my attention strongly and naturally goes more toward my partner\u2019s experience than toward my own",
       },
     ],
     hoverStates: {

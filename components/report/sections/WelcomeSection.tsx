@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState, type FC, type ReactNode } from "react";
-import { InviteFriendIcon } from "../ReportActionIcons";
 import ArcGauge from "./ArcGauge";
 
 interface SnapshotContent {
@@ -19,7 +18,6 @@ interface SnapshotContent {
 interface Props {
   feedbackWidget: ReactNode;
   generalHtml: string;
-  onReferFriendClick?: () => void;
   sectionId: string;
   snapshot: SnapshotContent;
 }
@@ -76,13 +74,7 @@ function describeScalarValue(label: string, value: number | null) {
   return descriptions[value] ?? descriptions[4]!;
 }
 
-const WelcomeSection: FC<Props> = ({
-  feedbackWidget,
-  generalHtml,
-  onReferFriendClick,
-  sectionId,
-  snapshot,
-}) => {
+const WelcomeSection: FC<Props> = ({ feedbackWidget, generalHtml, sectionId, snapshot }) => {
   const sectionRef = useRef<HTMLElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
   const [isVisible, setIsVisible] = useState(false);
@@ -184,13 +176,6 @@ const WelcomeSection: FC<Props> = ({
       data-report-section="true"
       className={`report-section report-section--welcome ${isVisible ? "is-visible" : ""}`}
     >
-      <div className="report-section__actions-row">
-        <button type="button" className="report-button" onClick={onReferFriendClick}>
-          <InviteFriendIcon />
-          <span>Invite a Friend</span>
-        </button>
-      </div>
-
       <div className="report-section__header report-section__header--welcome">
         <h2 className="report-section__title">Welcome</h2>
       </div>
