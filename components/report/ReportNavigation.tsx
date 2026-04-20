@@ -56,6 +56,34 @@ const ReportNavigation: FC<Props> = ({
     return () => nav.removeEventListener("wheel", onWheel);
   }, []);
 
+  // Keep the active chapter link in view inside the sidebar as the page
+  // scrolls. We adjust only nav.scrollTop — never the window — so the main
+  // page scroll position is untouched. No-op when the link is already in
+  // the sidebar's visible range.
+  useEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+    const activeLink = nav.querySelector<HTMLElement>(`a[href="#${activeSectionId}"]`);
+    if (!activeLink) return;
+
+    const navRect = nav.getBoundingClientRect();
+    const linkRect = activeLink.getBoundingClientRect();
+    const margin = 24;
+    let delta = 0;
+    if (linkRect.top < navRect.top + margin) {
+      delta = linkRect.top - navRect.top - margin;
+    } else if (linkRect.bottom > navRect.bottom - margin) {
+      delta = linkRect.bottom - navRect.bottom + margin;
+    }
+    if (delta !== 0) {
+      if (typeof nav.scrollBy === "function") {
+        nav.scrollBy({ top: delta, behavior: "smooth" });
+      } else {
+        nav.scrollTop += delta;
+      }
+    }
+  }, [activeSectionId]);
+
   // Show sticky bar once the intro block leaves the viewport
   useEffect(() => {
     const intro = introRef.current;
