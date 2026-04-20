@@ -40,6 +40,7 @@ const ChevronIcon: FC<{ up?: boolean }> = ({ up }) => (
 
 const ArchetypeProbabilitySection: FC<Props> = ({
   generalHtml,
+  onUnlock,
   percentages,
   primaryArchetype,
   ranking,
@@ -185,6 +186,20 @@ const ArchetypeProbabilitySection: FC<Props> = ({
                     </p>
                   </div>
                 </div>
+
+                <button
+                  className={`report-prob__row-cta ${isHovered ? "is-active" : ""}`}
+                  style={
+                    isHovered
+                      ? { background: theme.accent, borderColor: "transparent", color: "#130b17" }
+                      : undefined
+                  }
+                  type="button"
+                  onClick={onUnlock}
+                >
+                  <LockIcon />
+                  <span>Unlock Full Report</span>
+                </button>
 
                 {!isLast && !isHovered && <div className="report-prob__row-border" />}
               </div>
