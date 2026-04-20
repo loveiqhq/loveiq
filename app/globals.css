@@ -124,6 +124,11 @@ h3,
   caret-color: #ffffff !important;
   background-clip: content-box !important;
   background-image: none !important;
+  font: inherit !important;
+  font-size: inherit !important;
+  font-family: inherit !important;
+  font-weight: inherit !important;
+  letter-spacing: inherit !important;
   transition:
     background-color 9999s ease-in-out 0s,
     color 9999s ease-in-out 0s !important;
@@ -137,6 +142,11 @@ h3,
   background-color: var(--autofill-bg, var(--color-bg)) !important;
   background-image: none !important;
   color: #ffffff !important;
+  font: inherit !important;
+  font-size: inherit !important;
+  font-family: inherit !important;
+  font-weight: inherit !important;
+  letter-spacing: inherit !important;
 }
 
 .autofill-dark:autofill {
