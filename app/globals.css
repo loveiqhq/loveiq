@@ -114,18 +114,22 @@ h3,
  * and UA defaults. Long transition delays the style revert when the
  * field is restored on back-nav. Firefox honors standard `:autofill`.
  */
-.autofill-dark:-webkit-autofill,
-.autofill-dark:-webkit-autofill:hover,
-.autofill-dark:-webkit-autofill:focus,
-.autofill-dark:-webkit-autofill:active {
+input.autofill-dark:-webkit-autofill,
+input.autofill-dark:-webkit-autofill:hover,
+input.autofill-dark:-webkit-autofill:focus,
+input.autofill-dark:-webkit-autofill:active,
+input.autofill-dark:-internal-autofill-selected,
+input.autofill-dark:-internal-autofill-previewed {
   -webkit-box-shadow: 0 0 0 1000px var(--autofill-bg, var(--color-bg)) inset !important;
   box-shadow: 0 0 0 1000px var(--autofill-bg, var(--color-bg)) inset !important;
   -webkit-text-fill-color: #ffffff !important;
   caret-color: #ffffff !important;
-  background-clip: content-box !important;
+  background-color: var(--autofill-bg, var(--color-bg)) !important;
   background-image: none !important;
-  font: inherit !important;
-  font-size: inherit !important;
+  background-clip: content-box !important;
+  color: #ffffff !important;
+  font-size: var(--autofill-font-size, 22px) !important;
+  line-height: var(--autofill-line-height, 1.2) !important;
   font-family: inherit !important;
   font-weight: inherit !important;
   letter-spacing: inherit !important;
@@ -134,19 +138,15 @@ h3,
     color 9999s ease-in-out 0s !important;
 }
 
-.autofill-dark:-internal-autofill-selected,
-.autofill-dark:-internal-autofill-previewed {
-  -webkit-box-shadow: 0 0 0 1000px var(--autofill-bg, var(--color-bg)) inset !important;
-  box-shadow: 0 0 0 1000px var(--autofill-bg, var(--color-bg)) inset !important;
-  -webkit-text-fill-color: #ffffff !important;
-  background-color: var(--autofill-bg, var(--color-bg)) !important;
-  background-image: none !important;
-  color: #ffffff !important;
-  font: inherit !important;
-  font-size: inherit !important;
-  font-family: inherit !important;
-  font-weight: inherit !important;
-  letter-spacing: inherit !important;
+@media (min-width: 640px) {
+  input.autofill-dark:-webkit-autofill,
+  input.autofill-dark:-webkit-autofill:hover,
+  input.autofill-dark:-webkit-autofill:focus,
+  input.autofill-dark:-webkit-autofill:active,
+  input.autofill-dark:-internal-autofill-selected,
+  input.autofill-dark:-internal-autofill-previewed {
+    font-size: var(--autofill-font-size-sm, var(--autofill-font-size, 24px)) !important;
+  }
 }
 
 .autofill-dark:autofill {

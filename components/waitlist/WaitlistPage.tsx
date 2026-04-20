@@ -221,6 +221,10 @@ export default function WaitlistPage() {
                   name="email"
                   aria-label="Email address"
                   className="autofill-dark h-12 min-w-0 w-full border-none bg-transparent pr-3 text-base text-white placeholder-white/60 focus:outline-none focus:ring-0 sm:pr-12"
+                  style={{
+                    ["--autofill-font-size" as string]: "16px",
+                    ["--autofill-font-size-sm" as string]: "16px",
+                  }}
                   placeholder="name@email.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}

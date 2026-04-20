@@ -84,7 +84,11 @@ const OpenResponseQuestion: FC<OpenResponseQuestionProps> = ({
               ? "border-[#ef4444]"
               : "border-[rgba(254,104,57,0.2)] focus:border-[rgba(254,104,57,0.4)]"
           }`}
-          style={{ ["--autofill-bg" as string]: "#0a0510" }}
+          style={{
+            ["--autofill-bg" as string]: "#0a0510",
+            ["--autofill-font-size" as string]: "22px",
+            ["--autofill-font-size-sm" as string]: "24px",
+          }}
         />
 
         {/* Below input: error message left, char count right */}
