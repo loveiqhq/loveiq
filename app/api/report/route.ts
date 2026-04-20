@@ -38,6 +38,7 @@ type SnapshotQuestionQid = (typeof SNAPSHOT_QUESTION_QIDS)[number];
 
 interface SubmissionUser {
   first_name: string | null;
+  email: string | null;
 }
 
 interface SubmissionRow {
@@ -61,6 +62,14 @@ function getSubmissionUserName(submission: SubmissionRow): string | null {
   }
 
   return submission.app_user?.first_name ?? null;
+}
+
+function getSubmissionUserEmail(submission: SubmissionRow): string | null {
+  if (Array.isArray(submission.app_user)) {
+    return submission.app_user[0]?.email ?? null;
+  }
+
+  return submission.app_user?.email ?? null;
 }
 
 function normalizeScaleAnswer(value: unknown): number | null {
@@ -150,10 +159,10 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: "Report not found." }, { status: 404 });
       }
 
-      submissionQuery = `${supabaseUrl}/rest/v1/survey_submission?id=eq.${tokenRows[0].survey_submission_id}&select=id,user_id,utm_tracker,created_date_time,app_user!fk_survey_submission_user(first_name)&limit=1`;
+      submissionQuery = `${supabaseUrl}/rest/v1/survey_submission?id=eq.${tokenRows[0].survey_submission_id}&select=id,user_id,utm_tracker,created_date_time,app_user!fk_survey_submission_user(first_name,email)&limit=1`;
     } else {
       const sid = (sessionParsed as { success: true; data: { sessionId: string } }).data.sessionId;
-      submissionQuery = `${supabaseUrl}/rest/v1/survey_submission?session_id=eq.${encodeURIComponent(sid)}&select=id,user_id,utm_tracker,created_date_time,app_user!fk_survey_submission_user(first_name)&limit=1`;
+      submissionQuery = `${supabaseUrl}/rest/v1/survey_submission?session_id=eq.${encodeURIComponent(sid)}&select=id,user_id,utm_tracker,created_date_time,app_user!fk_survey_submission_user(first_name,email)&limit=1`;
     }
 
     const submissionRes = await getBreaker("supabase").fire(() =>
@@ -323,6 +332,7 @@ export async function GET(request: Request) {
     return NextResponse.json({
       accessPlan,
       userName: getSubmissionUserName(submission),
+      userEmail: getSubmissionUserEmail(submission),
       primaryArchetype: scoring.v5_primary_archetype || scoring.primary_archetype,
       percentages: scoring.v5_percentages || scoring.percentages || {},
       reportDate: submission.created_date_time,

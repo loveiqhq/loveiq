@@ -204,14 +204,14 @@ const ReportReady: FC<ReportReadyProps> = ({ name, email, onContinue }) => {
             <ArrowRightIcon />
           </button>
 
-          {/* Secondary — opens invite modal */}
+          {/* Secondary — opens refer-a-friend modal */}
           <button
             type="button"
             onClick={() => setShowInvite(true)}
-            className="flex w-full items-center justify-center gap-2 rounded-full border border-white/5 bg-[#171021] px-6 py-[17px] font-sans text-[16px] text-[#d1d5db] transition-all duration-300 hover:border-white/15 hover:bg-white/5 focus-visible-ring"
+            className="flex h-16 w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-[17px] font-sans text-[14px] font-medium text-[#d1d5db] shadow-[0_10px_15px_-3px_rgba(0,0,0,0.2),0_4px_6px_-4px_rgba(0,0,0,0.2)] transition-all duration-300 hover:bg-white/10 focus-visible-ring"
           >
             <PeopleIcon />
-            Invite someone to take the survey
+            Refer a Friend
           </button>
         </div>
       </div>

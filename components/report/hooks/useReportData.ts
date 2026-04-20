@@ -12,6 +12,7 @@ import type { ReportPurchasePlanId } from "@/lib/checkout/reportPurchase";
 export interface ReportData {
   accessPlan: "essentials" | "full_report" | "all_reports" | null;
   userName: string | null;
+  userEmail: string | null;
   primaryArchetype: string;
   percentages: Record<string, number>;
   reportDate: string;

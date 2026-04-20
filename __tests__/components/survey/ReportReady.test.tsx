@@ -11,25 +11,11 @@ vi.mock("next/link", () => ({
   ),
 }));
 
-vi.mock("@/components/survey/InviteModal", () => ({
-  default: ({
-    open,
-    onClose,
-    referrerEmail,
-    referrerName,
-  }: {
-    open: boolean;
-    onClose: () => void;
-    referrerEmail: string;
-    referrerName: string;
-  }) =>
-    open ? (
-      <div data-testid="invite-modal">
-        <span>{referrerEmail}</span>
-        <span>{referrerName}</span>
-        <button onClick={onClose}>Close Invite</button>
-      </div>
-    ) : null,
+vi.mock("next/navigation", () => ({ usePathname: () => "/survey" }));
+vi.mock("@/lib/csrf-client", () => ({ getCsrfToken: () => "test-token" }));
+vi.mock("@/lib/analytics", () => ({
+  trackSurveyInvite: vi.fn(),
+  trackShare: vi.fn(),
 }));
 
 describe("ReportReady", () => {
@@ -110,17 +96,37 @@ describe("ReportReady", () => {
     expect(onContinue).toHaveBeenCalledTimes(1);
   });
 
-  it("opens the invite modal from the secondary action", () => {
+  it("opens the invite modal from the secondary action and pre-fills sender name", () => {
     render(<ReportReady name="Alice" email="alice@example.com" onContinue={vi.fn()} />);
     act(() => {
       vi.runOnlyPendingTimers();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /invite someone to take the survey/i }));
+    fireEvent.click(screen.getByRole("button", { name: /refer a friend/i }));
 
-    const modal = screen.getByTestId("invite-modal");
-    expect(modal).toBeInTheDocument();
-    expect(within(modal).getByText("alice@example.com")).toBeInTheDocument();
-    expect(within(modal).getByText("Alice")).toBeInTheDocument();
+    // Flush the InviteModal's RAF (isVisible → true)
+    act(() => {
+      vi.runOnlyPendingTimers();
+    });
+
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toBeInTheDocument();
+    expect(within(dialog).getByDisplayValue("Alice")).toBeInTheDocument();
+  });
+
+  it("shows validation when submitting an invalid invite email from the real modal", () => {
+    render(<ReportReady name="Alice" email="alice@example.com" onContinue={vi.fn()} />);
+    act(() => {
+      vi.runOnlyPendingTimers();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /refer a friend/i }));
+    act(() => {
+      vi.runOnlyPendingTimers();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /send invite/i }));
+
+    expect(screen.getByText(/please enter a valid email address/i)).toBeInTheDocument();
   });
 });

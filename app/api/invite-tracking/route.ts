@@ -13,6 +13,7 @@ const schema = z.object({
     "whatsapp",
     "twitter",
     "facebook",
+    "instagram",
     "sms",
     "telegram",
     "email_client",

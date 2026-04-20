@@ -57,21 +57,14 @@ export async function POST(request: Request) {
   const { recipientEmail, referrerEmail, referrerName } = parsed.data;
   const normalizedRecipient = recipientEmail.toLowerCase().trim();
 
-  // 4. Build UTM-tagged survey URL
+  // 4. Build UTM-tagged CTA URL (A/B variant assigned randomly)
+  const variant: "a" | "b" = Math.random() < 0.5 ? "a" : "b";
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://loveiq.org";
-  const refId = referrerEmail
-    ? Buffer.from(referrerEmail.toLowerCase().trim()).toString("base64")
-    : "";
-  const utmParams = new URLSearchParams({
-    utm_source: "referral",
-    utm_medium: "email",
-    utm_campaign: "survey_invite",
-    ...(refId ? { utm_content: refId } : {}),
-  });
-  const surveyUrl = `${siteUrl}/survey?${utmParams.toString()}`;
+  // eslint-disable-next-line no-secrets/no-secrets
+  const ctaUrl = `${siteUrl}?utm_source=loveiq_email&utm_medium=email&utm_campaign=refer_a_friend&utm_content=version_${variant}&utm_term=report_purchaser`;
 
   // 5. Build email
-  const tpl = inviteEmail({ referrerName, surveyUrl, siteUrl });
+  const tpl = inviteEmail({ referrerName, ctaUrl, siteUrl, variant });
 
   // 6. Send email via Resend + track in DB (after response)
   const resendKey = process.env.RESEND_API_KEY;

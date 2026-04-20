@@ -19,6 +19,7 @@ interface SnapshotContent {
 interface Props {
   feedbackWidget: ReactNode;
   generalHtml: string;
+  onReferFriendClick?: () => void;
   sectionId: string;
   snapshot: SnapshotContent;
 }
@@ -75,7 +76,13 @@ function describeScalarValue(label: string, value: number | null) {
   return descriptions[value] ?? descriptions[4]!;
 }
 
-const WelcomeSection: FC<Props> = ({ feedbackWidget, generalHtml, sectionId, snapshot }) => {
+const WelcomeSection: FC<Props> = ({
+  feedbackWidget,
+  generalHtml,
+  onReferFriendClick,
+  sectionId,
+  snapshot,
+}) => {
   const sectionRef = useRef<HTMLElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
   const [isVisible, setIsVisible] = useState(false);
@@ -178,10 +185,10 @@ const WelcomeSection: FC<Props> = ({ feedbackWidget, generalHtml, sectionId, sna
       className={`report-section report-section--welcome ${isVisible ? "is-visible" : ""}`}
     >
       <div className="report-section__actions-row">
-        <a href="/survey" className="report-button">
+        <button type="button" className="report-button" onClick={onReferFriendClick}>
           <InviteFriendIcon />
           <span>Invite a Friend</span>
-        </a>
+        </button>
       </div>
 
       <div className="report-section__header report-section__header--welcome">

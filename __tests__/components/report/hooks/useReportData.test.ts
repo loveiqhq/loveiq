@@ -36,6 +36,7 @@ describe("useReportData", () => {
       json: async () => ({
         accessPlan: null,
         userName: "Eman",
+        userEmail: "eman@example.com",
         primaryArchetype: "Emotional Voyeur",
         percentages: { "Emotional Voyeur": 63 },
         reportDate: "2026-04-07T22:23:16.851299+00:00",
@@ -58,6 +59,7 @@ describe("useReportData", () => {
     });
 
     expect(result.current.data?.primaryArchetype).toBe("Emotional Voyeur");
+    expect(result.current.data?.userEmail).toBe("eman@example.com");
     expect(result.current.data?.snapshotAnswers).toEqual({
       currentSexualSatisfaction: 3,
       importanceOfSex: 5,

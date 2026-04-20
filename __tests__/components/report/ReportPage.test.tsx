@@ -44,6 +44,7 @@ describe("ReportPage", () => {
       data: {
         accessPlan: null,
         userName: "Eman",
+        userEmail: "eman@example.com",
         primaryArchetype: "Emotional Voyeur",
         percentages: { "Emotional Voyeur": 63, "Explorer of Edges": 37 },
         reportDate: "2026-04-07T22:23:16.851299+00:00",
@@ -377,6 +378,52 @@ describe("ReportPage", () => {
       expect(document.body.style.width).toBe("");
       expect(document.body.style.overflow).toBe("");
       expect(mockScrollTo).toHaveBeenCalledWith(0, 240);
+    },
+    REPORT_MODAL_TEST_TIMEOUT_MS
+  );
+
+  it(
+    "opens the invite modal from the real report navigation action",
+    async () => {
+      const user = userEvent.setup();
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
+
+      render(<ReportPage />);
+
+      await user.click(screen.getByRole("button", { name: /close pricing modal/i }));
+      await waitFor(() =>
+        expect(
+          screen.queryByRole("heading", { name: /unlock your full report/i })
+        ).not.toBeInTheDocument()
+      );
+
+      await user.click(screen.getAllByRole("button", { name: /refer a friend/i })[0]);
+
+      expect(screen.getByRole("dialog", { name: /refer a friend/i })).toBeInTheDocument();
+      expect(screen.getByDisplayValue("Eman")).toBeInTheDocument();
+    },
+    REPORT_MODAL_TEST_TIMEOUT_MS
+  );
+
+  it(
+    "opens the invite modal from the welcome-section invite action",
+    async () => {
+      const user = userEvent.setup();
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
+
+      render(<ReportPage />);
+
+      await user.click(screen.getByRole("button", { name: /close pricing modal/i }));
+      await waitFor(() =>
+        expect(
+          screen.queryByRole("heading", { name: /unlock your full report/i })
+        ).not.toBeInTheDocument()
+      );
+
+      await user.click(screen.getByRole("button", { name: /invite a friend/i }));
+
+      expect(screen.getByRole("dialog", { name: /refer a friend/i })).toBeInTheDocument();
+      expect(screen.getByDisplayValue("Eman")).toBeInTheDocument();
     },
     REPORT_MODAL_TEST_TIMEOUT_MS
   );

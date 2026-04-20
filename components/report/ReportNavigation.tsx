@@ -7,6 +7,7 @@ import type { AccessTier, DisplayReportSection } from "./reportTitles";
 
 interface Props {
   activeSectionId: string;
+  onReferFriendClick?: () => void;
   onSectionClick?: (sectionId: string) => void;
   primaryArchetype: string;
   reportDate: string;
@@ -15,6 +16,7 @@ interface Props {
 
 const ReportNavigation: FC<Props> = ({
   activeSectionId,
+  onReferFriendClick,
   onSectionClick,
   primaryArchetype,
   reportDate,
@@ -123,7 +125,7 @@ const ReportNavigation: FC<Props> = ({
               <ShareReportIcon />
               <span>Share Report</span>
             </button>
-            <button className="report-sidebar__btn" type="button">
+            <button className="report-sidebar__btn" type="button" onClick={onReferFriendClick}>
               <ReferFriendIcon />
               <span>Refer a Friend</span>
             </button>
@@ -256,7 +258,7 @@ const ReportNavigation: FC<Props> = ({
               <ShareReportIcon />
               <span>Share Report</span>
             </button>
-            <button className="report-sidebar__btn" type="button">
+            <button className="report-sidebar__btn" type="button" onClick={onReferFriendClick}>
               <ReferFriendIcon />
               <span>Refer a Friend</span>
             </button>

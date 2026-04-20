@@ -174,7 +174,7 @@ describe("GET /api/report", () => {
             id: 55,
             user_id: 77,
             created_date_time: "2026-04-07T22:23:16.851299+00:00",
-            app_user: { first_name: "Eman" },
+            app_user: { first_name: "Eman", email: "eman@example.com" },
           },
         ],
       })
@@ -210,6 +210,7 @@ describe("GET /api/report", () => {
     const json = await res.json();
     expect(json).toEqual({
       userName: "Eman",
+      userEmail: "eman@example.com",
       accessPlan: null,
       primaryArchetype: "Emotional Voyeur",
       percentages: { "Emotional Voyeur": 63 },
@@ -226,7 +227,7 @@ describe("GET /api/report", () => {
     const snapshotAnswerLookupUrl = mockFetchWithTimeout.mock.calls[2][0] as string;
     expect(submissionLookupUrl).toContain("created_date_time");
     expect(submissionLookupUrl).toContain("utm_tracker");
-    expect(submissionLookupUrl).toContain("app_user!fk_survey_submission_user(first_name)");
+    expect(submissionLookupUrl).toContain("app_user!fk_survey_submission_user(first_name,email)");
     expect(submissionLookupUrl).not.toContain("select=id,first_name,created_at");
     expect(snapshotAnswerLookupUrl).toContain("survey_question!inner(frontend_qid)");
     expect(snapshotAnswerLookupUrl).toContain("survey_question.frontend_qid=in.(01002,16013)");

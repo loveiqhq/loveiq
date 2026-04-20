@@ -7,11 +7,21 @@ import { trackSurveyInvite } from "@/lib/analytics";
 const EASING = "cubic-bezier(0.16, 1, 0.3, 1)";
 const SHARE_TEXT =
   "I took the LoveIQ assessment \u2014 it gave me real clarity on my relationship patterns. Try it yourself!";
+type ShareMethod =
+  | "copy_link"
+  | "email"
+  | "email_client"
+  | "facebook"
+  | "instagram"
+  | "sms"
+  | "telegram"
+  | "twitter"
+  | "whatsapp";
 
 /* ------------------------------------------------------------------ */
 /*  Share URL builder                                                  */
 /* ------------------------------------------------------------------ */
-function buildShareUrl(referrerEmail: string, medium: string): string {
+function buildShareUrl(referrerEmail: string, medium: ShareMethod): string {
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://loveiq.org";
   const refId = referrerEmail ? btoa(referrerEmail.toLowerCase().trim()) : "";
   const params = new URLSearchParams({
@@ -26,7 +36,7 @@ function buildShareUrl(referrerEmail: string, medium: string): string {
 /* ------------------------------------------------------------------ */
 /*  Tracking helper (fire-and-forget)                                  */
 /* ------------------------------------------------------------------ */
-function trackShare(method: string, referrerEmail: string) {
+function trackShare(method: ShareMethod, referrerEmail: string) {
   trackSurveyInvite(method);
   fetch("/api/invite-tracking", {
     method: "POST",
@@ -148,9 +158,15 @@ const XIcon: FC<{ className?: string }> = ({ className }) => (
   </svg>
 );
 
-const FacebookIcon: FC<{ className?: string }> = ({ className }) => (
+const MessengerIcon: FC<{ className?: string }> = ({ className }) => (
   <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-    <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+    <path d="M12 0C5.373 0 0 4.974 0 11.111c0 3.498 1.744 6.614 4.469 8.654V24l4.088-2.242c1.092.3 2.246.464 3.443.464 6.627 0 12-4.974 12-11.111S18.627 0 12 0zm1.191 14.963-3.055-3.26-5.963 3.26L10.732 8l3.131 3.26L19.752 8z" />
+  </svg>
+);
+
+const InstagramIcon: FC<{ className?: string }> = ({ className }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838a6.162 6.162 0 1 0 0 12.324 6.162 6.162 0 0 0 0-12.324zM12 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm6.406-11.845a1.44 1.44 0 1 0 0 2.881 1.44 1.44 0 0 0 0-2.881z" />
   </svg>
 );
 
@@ -183,10 +199,10 @@ const TelegramIcon: FC<{ className?: string }> = ({ className }) => (
   </svg>
 );
 
-const MailClientIcon: FC<{ className?: string }> = ({ className }) => (
+const CopyIcon: FC<{ className?: string }> = ({ className }) => (
   <svg
     className={className}
-    viewBox="0 0 18 18"
+    viewBox="0 0 16 16"
     fill="none"
     stroke="currentColor"
     strokeWidth="1.5"
@@ -194,8 +210,8 @@ const MailClientIcon: FC<{ className?: string }> = ({ className }) => (
     strokeLinejoin="round"
     aria-hidden="true"
   >
-    <rect x="1.5" y="3.75" width="15" height="10.5" rx="1.5" />
-    <path d="m1.5 5.25 7.5 4.5 7.5-4.5" />
+    <rect x="5" y="5" width="9" height="9" rx="1.5" />
+    <path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2H3.5A1.5 1.5 0 0 0 2 3.5V9.5A1.5 1.5 0 0 0 3.5 11H5" />
   </svg>
 );
 
@@ -255,18 +271,6 @@ const MoreDropdown: FC<MoreDropdownProps> = ({ isOpen, onClose, referrerEmail })
         );
       },
     },
-    {
-      label: "Email",
-      icon: <MailClientIcon className="h-[18px] w-[18px]" />,
-      method: "email_client" as const,
-      action: () => {
-        const url = buildShareUrl(referrerEmail, "email_client");
-        window.open(
-          `mailto:?subject=${encodeURIComponent("Check out LoveIQ")}&body=${encodeURIComponent(SHARE_TEXT + "\n\n" + url)}`,
-          "_self"
-        );
-      },
-    },
   ];
 
   return (
@@ -303,23 +307,28 @@ const MoreDropdown: FC<MoreDropdownProps> = ({ isOpen, onClose, referrerEmail })
 /* ------------------------------------------------------------------ */
 interface SocialButtonsProps {
   referrerEmail: string;
+  onCopied: () => void;
 }
 
-const SocialButtons: FC<SocialButtonsProps> = ({ referrerEmail }) => {
-  const [copied, setCopied] = useState(false);
+const SocialButtons: FC<SocialButtonsProps> = ({ referrerEmail, onCopied }) => {
+  const [copiedBtn, setCopiedBtn] = useState<"copy" | "instagram" | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
 
-  const handleCopy = useCallback(async () => {
-    const url = buildShareUrl(referrerEmail, "copy_link");
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopied(true);
-      trackShare("copy_link", referrerEmail);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      /* clipboard API unavailable — silently fail */
-    }
-  }, [referrerEmail]);
+  const copyUrl = useCallback(
+    async (method: "copy_link" | "instagram") => {
+      const url = buildShareUrl(referrerEmail, method);
+      try {
+        await navigator.clipboard.writeText(url);
+        setCopiedBtn(method === "copy_link" ? "copy" : "instagram");
+        trackShare(method, referrerEmail);
+        onCopied();
+        setTimeout(() => setCopiedBtn(null), 2000);
+      } catch {
+        /* clipboard API unavailable */
+      }
+    },
+    [referrerEmail, onCopied]
+  );
 
   const handleWhatsApp = useCallback(() => {
     const url = buildShareUrl(referrerEmail, "whatsapp");
@@ -331,7 +340,7 @@ const SocialButtons: FC<SocialButtonsProps> = ({ referrerEmail }) => {
     );
   }, [referrerEmail]);
 
-  const handleTwitter = useCallback(() => {
+  const handleX = useCallback(() => {
     const url = buildShareUrl(referrerEmail, "twitter");
     trackShare("twitter", referrerEmail);
     window.open(
@@ -341,88 +350,157 @@ const SocialButtons: FC<SocialButtonsProps> = ({ referrerEmail }) => {
     );
   }, [referrerEmail]);
 
-  const handleFacebook = useCallback(() => {
+  // Instagram doesn't support standard web share URLs; copy link as fallback.
+  const handleInstagram = useCallback(() => copyUrl("instagram"), [copyUrl]);
+
+  const handleMessenger = useCallback(() => {
     const url = buildShareUrl(referrerEmail, "facebook");
     trackShare("facebook", referrerEmail);
     window.open(
-      `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`,
+      `https://m.me/share?link=${encodeURIComponent(url)}`,
       "_blank",
       "noopener,noreferrer"
     );
   }, [referrerEmail]);
 
   const btnBase =
-    "relative flex h-12 w-12 sm:h-14 sm:w-14 shrink-0 items-center justify-center rounded-full transition-transform duration-200 hover:scale-105 active:scale-95";
+    "relative flex h-14 w-14 shrink-0 items-center justify-center rounded-full border border-white/10 bg-[rgba(168,85,247,0.5)] shadow-[0_1px_2px_rgba(0,0,0,0.05)] transition-transform duration-200 hover:scale-105 active:scale-95";
 
   return (
-    <div className="flex items-center justify-center gap-3 sm:gap-5">
+    <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-6">
       {/* Copy Link */}
-      <div className="relative">
+      <div className="flex flex-col items-center gap-4">
         <button
           type="button"
-          onClick={handleCopy}
-          className={`${btnBase} border border-white/10 bg-[#130b1c] shadow-[0_1px_2px_rgba(0,0,0,0.05)]`}
+          onClick={() => copyUrl("copy_link")}
+          className={btnBase}
           aria-label="Copy link"
         >
-          <LinkIcon className="h-5 w-5 sm:h-6 sm:w-6 text-[#d1d5db]" />
+          <LinkIcon className="h-6 w-6 text-white" />
         </button>
-        {copied && (
-          <span
-            className="absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-white/10 px-2.5 py-1 font-sans text-[12px] text-white backdrop-blur-sm"
-            style={{ animation: `survey-fade-up 200ms ${EASING} both` }}
-          >
-            Copied!
-          </span>
-        )}
+        <span className="font-sans text-[13px] font-medium text-white">
+          {copiedBtn === "copy" ? "Copied ✓" : "Copy Link"}
+        </span>
+      </div>
+
+      {/* Instagram — copies link (no standard web share URL) */}
+      <div className="flex flex-col items-center gap-4">
+        <button
+          type="button"
+          onClick={handleInstagram}
+          className={btnBase}
+          aria-label="Share via Instagram (copies link)"
+        >
+          <InstagramIcon className="h-6 w-6 text-white" />
+        </button>
+        <span className="font-sans text-[13px] font-medium text-white">
+          {copiedBtn === "instagram" ? "Copied ✓" : "Instagram"}
+        </span>
       </div>
 
       {/* WhatsApp */}
-      <button
-        type="button"
-        onClick={handleWhatsApp}
-        className={`${btnBase} bg-[#25d366] shadow-[0_0_15px_rgba(37,211,102,0.3)]`}
-        aria-label="Share on WhatsApp"
-      >
-        <WhatsAppIcon className="h-6 w-6 sm:h-7 sm:w-7 text-white" />
-      </button>
-
-      {/* Twitter / X */}
-      <button
-        type="button"
-        onClick={handleTwitter}
-        className={`${btnBase} bg-black border border-white/10 shadow-[0_1px_2px_rgba(0,0,0,0.05)]`}
-        aria-label="Share on X"
-      >
-        <XIcon className="h-[14px] w-[14px] sm:h-4 sm:w-4 text-white" />
-      </button>
-
-      {/* Facebook */}
-      <button
-        type="button"
-        onClick={handleFacebook}
-        className={`${btnBase} bg-[#1877f2] shadow-[0_0_15px_rgba(24,119,242,0.3)]`}
-        aria-label="Share on Facebook"
-      >
-        <FacebookIcon className="h-6 w-6 sm:h-7 sm:w-7 text-white" />
-      </button>
-
-      {/* More */}
-      <div className="relative">
+      <div className="flex flex-col items-center gap-4">
         <button
           type="button"
-          onClick={() => setMoreOpen((v) => !v)}
-          className={`${btnBase} border border-white/10 bg-[#130b1c] shadow-[0_1px_2px_rgba(0,0,0,0.05)]`}
-          aria-label="More sharing options"
-          aria-expanded={moreOpen}
+          onClick={handleWhatsApp}
+          className={btnBase}
+          aria-label="Share on WhatsApp"
         >
-          <EllipsisIcon className="h-5 w-5 sm:h-6 sm:w-6 text-[#d1d5db]" />
+          <WhatsAppIcon className="h-6 w-6 text-white" />
         </button>
-        <MoreDropdown
-          isOpen={moreOpen}
-          onClose={() => setMoreOpen(false)}
-          referrerEmail={referrerEmail}
-        />
+        <span className="font-sans text-[13px] font-medium text-white">WhatsApp</span>
       </div>
+
+      {/* X */}
+      <div className="flex flex-col items-center gap-4">
+        <button type="button" onClick={handleX} className={btnBase} aria-label="Share on X">
+          <XIcon className="h-5 w-5 text-white" />
+        </button>
+        <span className="font-sans text-[13px] font-medium text-white">X</span>
+      </div>
+
+      {/* Messenger */}
+      <div className="flex flex-col items-center gap-4">
+        <button
+          type="button"
+          onClick={handleMessenger}
+          className={btnBase}
+          aria-label="Share on Messenger"
+        >
+          <MessengerIcon className="h-6 w-6 text-white" />
+        </button>
+        <span className="font-sans text-[13px] font-medium text-white">Messenger</span>
+      </div>
+
+      {/* More */}
+      <div className="flex flex-col items-center gap-4">
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setMoreOpen((v) => !v)}
+            className={btnBase}
+            aria-label="More sharing options"
+            aria-expanded={moreOpen}
+          >
+            <EllipsisIcon className="h-6 w-6 text-white" />
+          </button>
+          <MoreDropdown
+            isOpen={moreOpen}
+            onClose={() => setMoreOpen(false)}
+            referrerEmail={referrerEmail}
+          />
+        </div>
+        <span className="font-sans text-[13px] font-medium text-white">More Options</span>
+      </div>
+    </div>
+  );
+};
+
+/* ------------------------------------------------------------------ */
+/*  ReferralLinkCard                                                   */
+/* ------------------------------------------------------------------ */
+interface ReferralLinkCardProps {
+  referrerEmail: string;
+}
+
+const ReferralLinkCard: FC<ReferralLinkCardProps> = ({ referrerEmail }) => {
+  const [copied, setCopied] = useState(false);
+  const url = buildShareUrl(referrerEmail, "copy_link");
+
+  const handleCopyAgain = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* clipboard API unavailable */
+    }
+  }, [url]);
+
+  return (
+    <div
+      className="w-full rounded-2xl border border-white/10 bg-white/[0.04] px-5 py-5"
+      style={{ animation: `survey-fade-up 250ms ${EASING} both` }}
+    >
+      <div className="flex items-center gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[rgba(168,85,247,0.2)]">
+          <LinkIcon className="h-5 w-5 text-[#a855f7]" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="font-sans text-[13px] font-medium uppercase tracking-[0.65px] text-white/50">
+            Your Referral Link
+          </p>
+          <p className="truncate font-sans text-[13px] text-white/90">{url}</p>
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={handleCopyAgain}
+        className="mt-3 flex w-full items-center justify-center gap-2 rounded-[10px] border border-white/10 bg-white/5 py-2.5 font-sans text-[13px] text-white/70 transition hover:bg-white/10"
+      >
+        <CopyIcon className="h-4 w-4" />
+        {copied ? "Copied!" : "Copy Again"}
+      </button>
     </div>
   );
 };
@@ -441,25 +519,30 @@ interface InviteModalProps {
 
 const InviteModal: FC<InviteModalProps> = ({ open, onClose, referrerEmail, referrerName }) => {
   const [email, setEmail] = useState("");
+  const [senderName, setSenderName] = useState(referrerName);
   const [state, setState] = useState<ModalState>("idle");
   const [errorMsg, setErrorMsg] = useState("");
   const [isVisible, setIsVisible] = useState(false);
+  const [showReferralCard, setShowReferralCard] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Reset modal state on open/close — intentional cascading render
-  // to trigger entering CSS transition on open.
+  const isEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+
+  // Reset on open/close
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (open) {
       setState("idle");
       setEmail("");
+      setSenderName(referrerName);
       setErrorMsg("");
+      setShowReferralCard(false);
       requestAnimationFrame(() => setIsVisible(true));
       setTimeout(() => inputRef.current?.focus(), 300);
     } else {
       setIsVisible(false);
     }
-  }, [open]);
+  }, [open, referrerName]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   // Escape key to close
@@ -477,7 +560,7 @@ const InviteModal: FC<InviteModalProps> = ({ open, onClose, referrerEmail, refer
       e.preventDefault();
       const trimmed = email.trim().toLowerCase();
       if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
-        setErrorMsg("Please enter a valid email address.");
+        setErrorMsg("Please enter a valid email address");
         return;
       }
 
@@ -495,7 +578,7 @@ const InviteModal: FC<InviteModalProps> = ({ open, onClose, referrerEmail, refer
           body: JSON.stringify({
             recipientEmail: trimmed,
             referrerEmail: referrerEmail.trim().toLowerCase() || undefined,
-            referrerName: referrerName.trim() || undefined,
+            referrerName: senderName.trim() || undefined,
           }),
         });
 
@@ -512,12 +595,21 @@ const InviteModal: FC<InviteModalProps> = ({ open, onClose, referrerEmail, refer
         setState("error");
       }
     },
-    [email, referrerEmail, referrerName]
+    [email, referrerEmail, senderName]
   );
+
+  const handleSendAnother = useCallback(() => {
+    setState("idle");
+    setEmail("");
+    setErrorMsg("");
+    setShowReferralCard(false);
+    setTimeout(() => inputRef.current?.focus(), 100);
+  }, []);
 
   if (!open) return null;
 
   const isSuccess = state === "success";
+  const hasError = !!errorMsg;
 
   return (
     <>
@@ -527,19 +619,21 @@ const InviteModal: FC<InviteModalProps> = ({ open, onClose, referrerEmail, refer
         style={{
           opacity: isVisible ? 1 : 0,
           transition: `opacity 300ms ${EASING}`,
+          pointerEvents: isVisible ? undefined : "none",
         }}
         aria-hidden="true"
         onClick={state !== "sending" ? onClose : undefined}
       />
 
-      {/* Dialog container — bottom-sheet on mobile, centered on desktop */}
+      {/* Dialog container */}
       <div className="fixed inset-0 z-50 flex items-end justify-center px-4 sm:items-center sm:px-5 pointer-events-none">
         <div
           role="dialog"
           aria-modal="true"
-          aria-label={isSuccess ? "Invite sent" : "Invite a friend"}
+          aria-label={isSuccess ? "Referral sent" : "Refer a friend"}
+          data-testid="invite-modal"
           className={`pointer-events-auto w-full overflow-hidden rounded-t-3xl border border-white/10 sm:rounded-3xl ${
-            isSuccess ? "sm:max-w-[460px]" : "sm:max-w-[448px]"
+            isSuccess ? "sm:max-w-[744px]" : "sm:max-w-[789px]"
           }`}
           style={{
             background: "#130b1c",
@@ -568,84 +662,169 @@ const InviteModal: FC<InviteModalProps> = ({ open, onClose, referrerEmail, refer
 
             {isSuccess ? (
               /* ---- Success State ---- */
-              <div className="flex flex-col items-center px-6 py-10 sm:px-[33px] sm:py-[49px]">
-                {/* Icon */}
+              <div className="flex flex-col items-center px-8 py-12 sm:px-[33px] sm:py-[49px] gap-8">
+                {/* Purple check icon */}
                 <div
-                  className="flex h-[76px] w-[76px] items-center justify-center rounded-full border border-[rgba(254,104,57,0.2)] bg-[rgba(254,104,57,0.1)]"
+                  className="flex h-[76px] w-[76px] items-center justify-center rounded-full border border-[rgba(168,85,247,0.2)] bg-[rgba(168,85,247,0.1)]"
                   style={{ animation: `survey-scale-in 500ms ${EASING} both` }}
                 >
-                  <CheckIcon className="h-8 w-8 text-[#fe6839]" />
+                  <CheckIcon className="h-8 w-8 text-[#a855f7]" />
                 </div>
 
                 {/* Heading */}
                 <h2
-                  className="mt-6 font-serif text-[24px] sm:text-[30px] font-medium tracking-[-0.75px] text-white"
+                  className="font-serif text-[36px] sm:text-[49px] font-medium tracking-[-1.2px] text-white text-center"
                   style={{ animation: `survey-fade-up 400ms ${EASING} 200ms both` }}
                 >
-                  Invite sent!
+                  Referral Sent!
                 </h2>
 
                 {/* Body */}
-                <div
-                  className="mt-4 text-center"
+                <p
+                  className="text-center font-sans text-[16px] sm:text-[20px] font-light leading-[1.55] text-white/70 max-w-[526px]"
                   style={{ animation: `survey-fade-up 400ms ${EASING} 350ms both` }}
                 >
-                  <p className="font-sans text-[15px] sm:text-[18px] text-[#8e859b]">
-                    We&rsquo;ve sent a beautifully designed email to
+                  Your friend will receive a personalized email invitation with your unique referral
+                  link at: <span className="font-normal text-white">{email.trim()}</span>.
+                </p>
+
+                {/* What happens next card */}
+                <div
+                  className="w-full max-w-[512px] rounded-2xl border border-white/10 bg-white/[0.04] px-6 py-5"
+                  style={{ animation: `survey-fade-up 400ms ${EASING} 450ms both` }}
+                >
+                  <p className="font-sans text-[13px] font-semibold uppercase tracking-[1.3px] text-[#a855f7] mb-3">
+                    What happens next?
                   </p>
-                  <p className="mt-1 truncate font-sans text-[15px] sm:text-[18px] font-medium text-[#a773f5]">
-                    {email.trim()}
-                  </p>
+                  <div className="flex flex-col gap-3">
+                    {[
+                      "Your friend receives the invitation email",
+                      "They click your unique referral link",
+                      "They start their own journey of self-discovery through their assessment",
+                    ].map((step, i) => (
+                      <div key={i} className="flex items-center gap-3">
+                        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[rgba(168,85,247,0.2)]">
+                          <span className="font-sans text-[13px] font-bold text-[#a855f7]">
+                            {i + 1}
+                          </span>
+                        </div>
+                        <p className="font-sans text-[13px] font-light text-white/70">{step}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div
+                  className="flex w-full flex-col gap-4"
+                  style={{ animation: `survey-fade-up 400ms ${EASING} 550ms both` }}
+                >
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="flex w-full items-center justify-center gap-2 rounded-full bg-[#fe6839] py-4 font-sans text-[16px] font-medium text-white transition hover:-translate-y-0.5"
+                  >
+                    Back to Report
+                    <ArrowIcon className="h-5 w-5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSendAnother}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-white/10 py-4 font-sans text-[16px] font-medium text-white/70 shadow-[0_10px_15px_0_rgba(0,0,0,0.2),0_4px_6px_0_rgba(0,0,0,0.2)] transition hover:bg-white/15"
+                  >
+                    Send Another Invitation
+                    <PeopleIcon className="h-5 w-5" />
+                  </button>
                 </div>
               </div>
             ) : (
               /* ---- Form State ---- */
-              <div className="px-6 pb-6 pt-6 sm:px-6">
+              <div className="flex flex-col gap-10 px-6 pb-8 pt-6 sm:px-[22px]">
                 {/* Header */}
-                <div className="flex items-center gap-4 pr-10">
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-[rgba(254,104,57,0.2)] bg-[rgba(254,104,57,0.1)]">
-                    <PeopleIcon className="h-6 w-6 text-[#fe6839]" />
+                <div className="flex items-center justify-between pr-10">
+                  <div className="flex items-center gap-4">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-[rgba(168,85,247,0.2)] bg-[rgba(168,85,247,0.1)]">
+                      <PeopleIcon className="h-6 w-6 text-[#a855f7]" />
+                    </div>
+                    <h2 className="font-serif text-[24px] font-normal tracking-[-0.6px] text-white">
+                      Refer a friend
+                    </h2>
                   </div>
-                  <h2 className="font-serif text-[20px] sm:text-[24px] font-normal tracking-[-0.6px] text-white">
-                    Invite a friend
-                  </h2>
                 </div>
 
                 {/* Description */}
-                <p className="mt-4 font-sans text-[16px] font-light leading-[26px] text-[#9ca3af]">
-                  Share LoveIQ with someone you care about. We&rsquo;ll send them a beautifully
-                  designed email with a link to try the assessment.
-                </p>
+                <div className="flex flex-col gap-2">
+                  <p className="font-sans text-[16px] font-light leading-[26px] text-[#9ca3af]">
+                    You&rsquo;ve just uncovered your LoveIQ. Now invite someone else to discover
+                    theirs.
+                  </p>
+                  <p className="font-sans text-[16px] font-light leading-[26px] text-[#9ca3af]">
+                    Share LoveIQ with someone you care about. We&rsquo;ll send them a beautifully
+                    designed email with a link to try the assessment.
+                  </p>
+                </div>
 
                 {/* Form */}
-                <form onSubmit={handleSubmit} className="mt-6">
-                  {/* Email input */}
-                  <div className="relative">
-                    <EnvelopeIcon className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#6b7280]" />
+                <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+                  {/* Name used in mail */}
+                  <div className="flex flex-col gap-2">
+                    <label
+                      htmlFor="invite-sender-name"
+                      className="px-2 font-sans text-[16px] text-white"
+                    >
+                      Name used in mail
+                    </label>
                     <input
-                      ref={inputRef}
-                      type="email"
-                      placeholder="Enter their email address"
-                      value={email}
-                      onChange={(e) => {
-                        setEmail(e.target.value);
-                        if (errorMsg) setErrorMsg("");
-                      }}
+                      id="invite-sender-name"
+                      type="text"
+                      placeholder="Your name"
+                      value={senderName}
+                      onChange={(e) => setSenderName(e.target.value)}
                       disabled={state === "sending"}
-                      className="w-full rounded-2xl border border-white/10 bg-[#130b1c] py-[18px] pl-[49px] pr-4 font-sans text-[16px] text-white placeholder-[#6b7280] shadow-[inset_0_2px_4px_1px_rgba(0,0,0,0.05)] outline-none transition focus:border-[#fe6839]/40 focus:ring-1 focus:ring-[#fe6839]/20 disabled:opacity-50"
+                      className="w-full rounded-2xl border border-white/10 bg-[#130b1c] py-[19px] px-[25px] font-sans text-[16px] text-white placeholder-[#6b7280] shadow-[inset_0_2px_4px_1px_rgba(0,0,0,0.05)] outline-none transition focus:border-white/30 disabled:opacity-50"
                     />
                   </div>
 
-                  {/* Error message */}
-                  {errorMsg && (
-                    <p className="mt-2.5 font-sans text-[13px] text-[#f87171]">{errorMsg}</p>
-                  )}
+                  {/* Friend's Email */}
+                  <div className="flex flex-col gap-2">
+                    <label
+                      htmlFor="invite-recipient-email"
+                      className="px-2 font-sans text-[16px] text-white"
+                    >
+                      Friend&rsquo;s Email
+                    </label>
+                    <div className="relative pt-1">
+                      <EnvelopeIcon className="absolute left-[25px] top-1/2 h-5 w-5 -translate-y-1/2 text-[#6b7280]" />
+                      <input
+                        ref={inputRef}
+                        id="invite-recipient-email"
+                        type="email"
+                        placeholder="mb@loveiq.org"
+                        value={email}
+                        onChange={(e) => {
+                          setEmail(e.target.value);
+                          if (errorMsg) setErrorMsg("");
+                          if (state === "error") setState("idle");
+                        }}
+                        disabled={state === "sending"}
+                        className={`w-full rounded-2xl border bg-[#130b1c] py-[19px] pl-[52px] pr-4 font-sans text-[16px] text-white placeholder-[#6b7280] shadow-[inset_0_2px_4px_1px_rgba(0,0,0,0.05)] outline-none transition disabled:opacity-50 ${
+                          hasError
+                            ? "border-[#ff6467] focus:border-[#ff6467]"
+                            : "border-white/10 focus:border-[#fe6839]/60"
+                        }`}
+                      />
+                    </div>
+                    {hasError && <p className="font-sans text-[16px] text-[#ff6467]">{errorMsg}</p>}
+                  </div>
 
                   {/* Submit button */}
                   <button
                     type="submit"
                     disabled={state === "sending"}
-                    className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-[#fe6839] px-6 py-4 font-sans text-[16px] font-semibold text-white shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-4px_rgba(0,0,0,0.1)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_14px_20px_-3px_rgba(254,104,57,0.25)] disabled:translate-y-0 disabled:opacity-60 disabled:shadow-none"
+                    className="flex w-full items-center justify-center gap-2 rounded-full py-4 font-sans text-[16px] font-semibold text-white shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-4px_rgba(0,0,0,0.1)] transition-all duration-300 disabled:opacity-70"
+                    style={{
+                      backgroundColor: isEmailValid && state !== "sending" ? "#fe6839" : "#6f6f6f",
+                    }}
                   >
                     {state === "sending" ? (
                       "Sending..."
@@ -658,21 +837,17 @@ const InviteModal: FC<InviteModalProps> = ({ open, onClose, referrerEmail, refer
                   </button>
                 </form>
 
-                {/* Divider */}
-                <div className="mt-6 border-t border-white/5 pt-[25px]">
-                  <SocialButtons referrerEmail={referrerEmail} />
-                </div>
+                {/* Social buttons */}
+                <div className="flex flex-col gap-6">
+                  <div className="border-t border-white/5 pt-6">
+                    <SocialButtons
+                      referrerEmail={referrerEmail}
+                      onCopied={() => setShowReferralCard(true)}
+                    />
+                  </div>
 
-                {/* Cancel link */}
-                <div className="mt-6 flex justify-center">
-                  <button
-                    type="button"
-                    onClick={onClose}
-                    disabled={state === "sending"}
-                    className="font-sans text-[16px] font-light text-[#6b7280] transition hover:text-white/50 disabled:opacity-30"
-                  >
-                    Cancel
-                  </button>
+                  {/* Referral link card — shown after copy action */}
+                  {showReferralCard && <ReferralLinkCard referrerEmail={referrerEmail} />}
                 </div>
               </div>
             )}
