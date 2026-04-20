@@ -6249,10 +6249,10 @@ h3,
     grid-template-columns: 288px minmax(0, 1024px);
     /* fluid gap: 0 at 1280px → 3rem at 1920px+ */
     gap: clamp(0px, 2.5vw, 3rem);
-    /* calc(100% - 6rem) gives ≥3rem of outer gutter at laptop widths
-       (1280–1535px) so the report doesn't feel edge-to-edge before the
-       1440px cap kicks in at ~1536px. */
-    width: min(1440px, calc(100% - 6rem));
+    /* calc(100% - 10rem) gives ≥5rem (80px) of outer gutter at laptop
+       widths (1280–1599px). The 1440px cap only fires at ≥1600px so
+       big-monitor layout is unchanged. Mobile/tablet rules untouched. */
+    width: min(1440px, calc(100% - 10rem));
     padding: 2rem 0 4rem;
   }
 
