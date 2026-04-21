@@ -188,4 +188,68 @@ describe("POST /api/stripe/checkout-session", () => {
     );
     expect(markReportPriceQuoteCheckoutStarted).toHaveBeenCalledWith({ quoteId: 22 });
   });
+
+  it("rejects archetype when plan is not full_report", async () => {
+    const res = await POST(
+      makeRequest({
+        archetype: "Spark Seeker",
+        plan: "essentials",
+        reportSessionId: "02d88f31-eceb-4402-940d-c8cd98d01848",
+      })
+    );
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toEqual({ error: "Invalid input." });
+  });
+
+  it("rejects unknown archetype names", async () => {
+    const res = await POST(
+      makeRequest({
+        archetype: "Not A Real Archetype",
+        plan: "full_report",
+        reportSessionId: "02d88f31-eceb-4402-940d-c8cd98d01848",
+      })
+    );
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toEqual({ error: "Invalid input." });
+  });
+
+  it("forwards archetype metadata and success URL slug when full_report + valid archetype", async () => {
+    const createSession = vi.fn().mockResolvedValue({
+      id: "cs_test_archetype_456",
+      url: "https://checkout.stripe.com/c/pay/cs_test_archetype_456",
+    });
+
+    vi.mocked(isStripeCheckoutEnabled).mockReturnValue(true);
+    vi.mocked(getStripeCheckoutCustomerEmail).mockResolvedValue("test@example.com");
+    vi.mocked(getStripeServerClient).mockReturnValue({
+      checkout: {
+        sessions: {
+          create: createSession,
+        },
+      },
+    } as never);
+
+    const res = await POST(
+      makeRequest({
+        archetype: "Spark Seeker",
+        plan: "full_report",
+        reportSessionId: "02d88f31-eceb-4402-940d-c8cd98d01848",
+      })
+    );
+
+    expect(res.status).toBe(200);
+    expect(createSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          archetype: "Spark Seeker",
+          plan: "full_report",
+        }),
+        success_url:
+          "http://localhost/checkout/return?plan=full_report&session_id={CHECKOUT_SESSION_ID}&archetype=spark-seeker",
+        cancel_url: "http://localhost/checkout?plan=full_report&archetype=spark-seeker",
+      })
+    );
+  });
 });

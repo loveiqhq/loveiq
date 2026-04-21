@@ -6,6 +6,7 @@ import {
   isReportPurchasePlan,
   type ReportAccessPlan,
 } from "@/lib/report/access";
+import { KNOWN_ARCHETYPES, isArchetypeName } from "@/lib/report/archetypeSlug";
 
 const SUPABASE_TIMEOUT_MS = 8_000;
 
@@ -27,6 +28,7 @@ interface PersonalReportRow {
   payment_id: number | null;
   payment_status: string | null;
   url?: string | null;
+  unlocked_archetypes?: string[] | null;
 }
 
 function getSupabaseServiceConfig() {
@@ -178,7 +180,7 @@ export async function resolveSubmissionAccessContext({
 
 async function fetchPersonalReportForSubmission(submissionId: number) {
   const response = await supabaseServiceFetch(
-    `/rest/v1/personal_report?survey_submission_id=eq.${submissionId}&select=id,payment_id,payment_status,url&limit=1`
+    `/rest/v1/personal_report?survey_submission_id=eq.${submissionId}&select=id,payment_id,payment_status,url,unlocked_archetypes&limit=1`
   );
 
   if (!response.ok) {
@@ -242,6 +244,7 @@ export async function ensurePersonalReportForSubmission({
 export async function getReportAccessPlanForSubmission(submissionId: number): Promise<{
   accessPlan: ReportAccessPlan;
   personalReportId: number | null;
+  unlockedArchetypeColumn: string[];
 }> {
   const personalReport = await fetchPersonalReportForSubmission(submissionId);
 
@@ -249,6 +252,7 @@ export async function getReportAccessPlanForSubmission(submissionId: number): Pr
     return {
       accessPlan: null,
       personalReportId: null,
+      unlockedArchetypeColumn: [],
     };
   }
 
@@ -273,10 +277,119 @@ export async function getReportAccessPlanForSubmission(submissionId: number): Pr
     })
   );
 
+  const columnValues = Array.isArray(personalReport.unlocked_archetypes)
+    ? personalReport.unlocked_archetypes.filter(isArchetypeName)
+    : [];
+
   return {
     accessPlan: strongestPlan,
     personalReportId: personalReport.id,
+    unlockedArchetypeColumn: columnValues,
   };
+}
+
+export function resolveUnlockedArchetypes({
+  accessPlan,
+  columnValues,
+  primaryArchetype,
+}: {
+  accessPlan: ReportAccessPlan;
+  columnValues: string[] | undefined | null;
+  primaryArchetype: string;
+}): string[] {
+  if (accessPlan === "all_reports") {
+    return [...KNOWN_ARCHETYPES];
+  }
+
+  const source = Array.isArray(columnValues) ? columnValues : [];
+  const set = new Set<string>(source.filter(isArchetypeName));
+
+  if (isArchetypeName(primaryArchetype)) {
+    set.add(primaryArchetype);
+  }
+
+  if (accessPlan === "full_report" && isArchetypeName(primaryArchetype)) {
+    set.add(primaryArchetype);
+  }
+
+  return Array.from(set);
+}
+
+async function fetchPersonalReportById(personalReportId: number) {
+  const response = await supabaseServiceFetch(
+    `/rest/v1/personal_report?id=eq.${personalReportId}&select=id,payment_id,payment_status,url,unlocked_archetypes&limit=1`
+  );
+
+  if (!response.ok) {
+    throw new Error("personal_report_lookup_failed");
+  }
+
+  const rows = (await response.json()) as PersonalReportRow[];
+  return rows[0] ?? null;
+}
+
+export async function addUnlockedArchetypeForPersonalReport({
+  archetype,
+  personalReportId,
+}: {
+  archetype: string;
+  personalReportId: number;
+}): Promise<string[]> {
+  if (!isArchetypeName(archetype)) {
+    throw new Error("invalid_archetype");
+  }
+
+  const personalReport = await fetchPersonalReportById(personalReportId);
+  if (!personalReport) {
+    throw new Error("personal_report_not_found");
+  }
+
+  const existing = Array.isArray(personalReport.unlocked_archetypes)
+    ? personalReport.unlocked_archetypes.filter(isArchetypeName)
+    : [];
+
+  if (existing.includes(archetype)) {
+    return existing;
+  }
+
+  const next = Array.from(new Set([...existing, archetype]));
+
+  const updateResponse = await supabaseServiceFetch(
+    `/rest/v1/personal_report?id=eq.${personalReport.id}`,
+    {
+      body: JSON.stringify({ unlocked_archetypes: next }),
+      headers: { Prefer: "return=minimal" },
+      method: "PATCH",
+    }
+  );
+
+  if (!updateResponse.ok) {
+    logger.error(
+      { personalReportId, status: updateResponse.status },
+      "Unable to persist unlocked archetype"
+    );
+    throw new Error("unlocked_archetypes_update_failed");
+  }
+
+  return next;
+}
+
+export async function addUnlockedArchetypeForSubmission({
+  archetype,
+  submissionId,
+}: {
+  archetype: string;
+  submissionId: number;
+}): Promise<string[]> {
+  const personalReport = await fetchPersonalReportForSubmission(submissionId);
+  if (!personalReport) {
+    throw new Error("personal_report_not_found");
+  }
+
+  return addUnlockedArchetypeForPersonalReport({
+    archetype,
+    personalReportId: personalReport.id,
+  });
 }
 
 export async function recordReportSessionView({

@@ -31,8 +31,10 @@ vi.mock("../../lib/report/personalReport", () => ({
   getReportAccessPlanForSubmission: vi.fn().mockResolvedValue({
     accessPlan: null,
     personalReportId: 99,
+    unlockedArchetypeColumn: [],
   }),
   recordReportSessionView: vi.fn().mockResolvedValue(undefined),
+  resolveUnlockedArchetypes: vi.fn(() => []),
 }));
 
 vi.mock("../../lib/pricing/reportPricing", () => ({
@@ -221,6 +223,7 @@ describe("GET /api/report", () => {
         importanceOfSex: 5,
       },
       pricingQuotes: null,
+      unlockedArchetypes: [],
     });
 
     const submissionLookupUrl = mockFetchWithTimeout.mock.calls[0][0] as string;

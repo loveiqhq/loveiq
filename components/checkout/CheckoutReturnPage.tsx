@@ -15,6 +15,7 @@ import type {
 } from "@/lib/checkout/stripeCheckout";
 import type { ReportAccessPlan } from "@/lib/report/access";
 import { trackReportPurchase } from "@/lib/analytics";
+import { toArchetypeSlug } from "@/lib/report/archetypeSlug";
 
 type ReturnState =
   | {
@@ -34,6 +35,7 @@ type ReturnState =
     };
 
 interface Props {
+  archetype?: string | null;
   planId: ReportPurchasePlanId;
   sessionId?: string | null;
   token?: string | null;
@@ -43,7 +45,12 @@ function isSuccessfulPaymentStatus(value: string | null) {
   return value === "paid" || value === "no_payment_required";
 }
 
-const CheckoutReturnPage: FC<Props> = ({ planId, sessionId = null, token = null }) => {
+const CheckoutReturnPage: FC<Props> = ({
+  archetype = null,
+  planId,
+  sessionId = null,
+  token = null,
+}) => {
   const router = useRouter();
   const plan = getReportPurchasePlan(planId);
   const trackedTransactionIdRef = useRef<string | null>(null);
@@ -58,7 +65,12 @@ const CheckoutReturnPage: FC<Props> = ({ planId, sessionId = null, token = null 
           status: "missing",
         }
   );
-  const backHref = getReportReturnHref(token);
+  const archetypeSlug = archetype ? toArchetypeSlug(archetype) : null;
+  const baseReportHref = getReportReturnHref(token);
+  const reportHrefWithArchetype = archetypeSlug
+    ? `${baseReportHref}?archetype=${encodeURIComponent(archetypeSlug)}`
+    : baseReportHref;
+  const backHref = reportHrefWithArchetype;
 
   useEffect(() => {
     if (!sessionId) return;
@@ -241,7 +253,7 @@ const CheckoutReturnPage: FC<Props> = ({ planId, sessionId = null, token = null 
             </Link>
             {!isPaidAndComplete ? (
               <Link
-                href={buildReportCheckoutHref({ plan: planId, token })}
+                href={buildReportCheckoutHref({ archetype: archetypeSlug, plan: planId, token })}
                 className="checkout-return__link"
               >
                 Start checkout again

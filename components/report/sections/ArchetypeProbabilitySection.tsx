@@ -5,11 +5,11 @@ import { getReportTheme, getReportThemeIconStyle } from "../reportTheme";
 
 interface Props {
   generalHtml: string;
-  isUnlocked: boolean;
-  onUnlock: () => void;
+  onUnlock: (archetypeName: string) => void;
   percentages: Record<string, number>;
   primaryArchetype: string;
   ranking: string[];
+  unlockedArchetypes: Set<string>;
 }
 
 const INITIAL_COUNT = 3;
@@ -18,6 +18,13 @@ const LockIcon: FC = () => (
   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
     <rect x="3" y="7" width="10" height="6.5" rx="1.5" />
     <path d="M5 7V5.5a3 3 0 0 1 6 0V7" />
+  </svg>
+);
+
+const ArrowIcon: FC = () => (
+  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
+    <path d="M3 8h10" strokeLinecap="round" />
+    <path d="m9 4 4 4-4 4" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 );
 
@@ -44,6 +51,7 @@ const ArchetypeProbabilitySection: FC<Props> = ({
   percentages,
   primaryArchetype,
   ranking,
+  unlockedArchetypes,
 }) => {
   const [expanded, setExpanded] = useState(false);
   const [hoveredName, setHoveredName] = useState<string | null>(null);
@@ -69,6 +77,7 @@ const ArchetypeProbabilitySection: FC<Props> = ({
   const primaryTheme = getReportTheme(primaryArchetype);
   const primaryScore = Math.round(percentages[primaryArchetype] ?? 0);
   const PrimaryIcon = primaryTheme.Icon;
+  const isPrimaryUnlocked = unlockedArchetypes.has(primaryArchetype);
 
   const INITIAL_SECONDARY = INITIAL_COUNT - 1;
   const EXTRA_ON_EXPAND = 3;
@@ -126,9 +135,13 @@ const ArchetypeProbabilitySection: FC<Props> = ({
             <PrimaryIcon className="report-prob__hero-icon-svg" />
           </div>
 
-          <button className="report-prob__hero-cta" type="button">
-            <LockIcon />
-            <span>Unlock Full Report</span>
+          <button
+            className="report-prob__hero-cta"
+            type="button"
+            onClick={() => onUnlock(primaryArchetype)}
+          >
+            {isPrimaryUnlocked ? <ArrowIcon /> : <LockIcon />}
+            <span>{isPrimaryUnlocked ? "View Full Report" : "Unlock Full Report"}</span>
           </button>
         </div>
 
@@ -140,6 +153,7 @@ const ArchetypeProbabilitySection: FC<Props> = ({
             const ArchIcon = theme.Icon;
             const isHovered = hoveredName === name;
             const isLast = i === secondaryItems.length - 1;
+            const isRowUnlocked = unlockedArchetypes.has(name);
             const rowIconStyle = {
               ...getReportThemeIconStyle(theme, "row"),
               ...(isHovered ? { background: theme.accent } : {}),
@@ -195,10 +209,10 @@ const ArchetypeProbabilitySection: FC<Props> = ({
                       : undefined
                   }
                   type="button"
-                  onClick={onUnlock}
+                  onClick={() => onUnlock(name)}
                 >
-                  <LockIcon />
-                  <span>Unlock Full Report</span>
+                  {isRowUnlocked ? <ArrowIcon /> : <LockIcon />}
+                  <span>{isRowUnlocked ? "View Full Report" : "Unlock Full Report"}</span>
                 </button>
 
                 {!isLast && !isHovered && <div className="report-prob__row-border" />}

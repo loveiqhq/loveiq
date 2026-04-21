@@ -22,6 +22,7 @@ export interface ReportData {
     importanceOfSex: number | null;
   };
   pricingQuotes: Record<ReportPurchasePlanId, ReportPriceQuoteSnapshot> | null;
+  unlockedArchetypes: string[];
 }
 
 export interface ReportRequestError {

@@ -16,6 +16,7 @@ vi.mock("../../lib/logger", () => ({
 }));
 
 vi.mock("../../lib/report/personalReport", () => ({
+  addUnlockedArchetypeForPersonalReport: vi.fn(),
   ensurePersonalReportForSubmission: vi.fn(),
   resolveSubmissionAccessContext: vi.fn(),
 }));
@@ -26,6 +27,7 @@ vi.mock("../../lib/pricing/reportPricing", () => ({
 
 import { processStripeWebhookEvent } from "../../lib/checkout/fulfillment";
 import {
+  addUnlockedArchetypeForPersonalReport,
   ensurePersonalReportForSubmission,
   resolveSubmissionAccessContext,
 } from "../../lib/report/personalReport";
@@ -55,6 +57,7 @@ describe("checkout fulfillment", () => {
       id: 5,
     });
     vi.mocked(markReportPriceQuotePurchased).mockResolvedValue(undefined);
+    vi.mocked(addUnlockedArchetypeForPersonalReport).mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -241,6 +244,210 @@ describe("checkout fulfillment", () => {
       })
     );
     expect(markReportPriceQuotePurchased).toHaveBeenCalledWith({ paymentId: 41, quoteId: 8 });
+    expect(addUnlockedArchetypeForPersonalReport).not.toHaveBeenCalled();
+  });
+
+  it("appends unlocked archetype when full_report checkout includes metadata.archetype", async () => {
+    mockFetchWithTimeout.mockImplementation(
+      async (url: string, options?: { body?: string; method?: string }) => {
+        if (
+          url.includes(
+            "/rest/v1/payment_webhook_event?stripe_event_id=eq.evt_test_checkout_archetype&select=id,payment_id,processed&limit=1"
+          )
+        ) {
+          return createJsonResponse([]);
+        }
+
+        if (
+          url.includes(
+            "/rest/v1/payment_webhook_event?stripe_event_id=eq.evt_test_checkout_archetype&select=id&limit=1"
+          )
+        ) {
+          return createJsonResponse([]);
+        }
+
+        if (
+          url.includes("/rest/v1/payment?stripe_charge_id=eq.") ||
+          url.includes("/rest/v1/payment?stripe_payment_intent_id=eq.")
+        ) {
+          return createJsonResponse([]);
+        }
+
+        if (options?.method === "POST" && url.endsWith("/rest/v1/payment")) {
+          return createJsonResponse([{ id: 77 }]);
+        }
+
+        if (url.includes("/rest/v1/payment_item?payment_id=eq.77")) {
+          return createJsonResponse([]);
+        }
+
+        if (options?.method === "POST" && url.endsWith("/rest/v1/payment_item")) {
+          return createJsonResponse([{ id: 7 }]);
+        }
+
+        if (options?.method === "PATCH" && url.includes("/rest/v1/personal_report?id=eq.5")) {
+          return createJsonResponse([]);
+        }
+
+        if (options?.method === "POST" && url.endsWith("/rest/v1/payment_webhook_event")) {
+          return createJsonResponse([{ id: 78 }]);
+        }
+
+        throw new Error(`Unexpected fetch call: ${options?.method ?? "GET"} ${url}`);
+      }
+    );
+
+    const stripe = {
+      charges: { retrieve: vi.fn() },
+      checkout: {
+        sessions: {
+          retrieve: vi.fn().mockResolvedValue({
+            id: "cs_test_archetype_123",
+            amount_total: 2999,
+            currency: "eur",
+            customer: null,
+            metadata: {
+              archetype: "Spark Seeker",
+              plan: "full_report",
+              pricingQuoteId: "9",
+              pricingClusterId:
+                "A-full_report-full_mid_1-tier_2-desktop-direct-consistent-engaged-d0",
+              experimentGroup: "A",
+              basePriceBucket: "full_mid_1",
+              discountStep: "0",
+              currentPrice: "29.99",
+              initialPrice: "29.99",
+              countryTier: "tier_2",
+              deviceType: "Desktop",
+              trafficSource: "direct",
+              engagementScore: "50",
+              behavioralBucket: "consistent",
+              reportSessionId: "",
+              reportToken: "rpt_ABCDEFGHIJKLMNOPQRST",
+              requestIp: "127.0.0.1",
+              requestUserAgent: "Mozilla/5.0 (Vitest)",
+            },
+            payment_intent: null,
+            payment_status: "paid",
+            total_details: { amount_discount: 0 },
+          }),
+        },
+      },
+      paymentIntents: { retrieve: vi.fn() },
+    };
+
+    await processStripeWebhookEvent({
+      event: {
+        id: "evt_test_checkout_archetype",
+        type: "checkout.session.completed",
+        data: {
+          object: {
+            id: "cs_test_archetype_123",
+            metadata: {
+              archetype: "Spark Seeker",
+              plan: "full_report",
+              reportToken: "rpt_ABCDEFGHIJKLMNOPQRST",
+            },
+          },
+        },
+      } as never,
+      stripe: stripe as never,
+    });
+
+    expect(addUnlockedArchetypeForPersonalReport).toHaveBeenCalledWith({
+      archetype: "Spark Seeker",
+      personalReportId: 5,
+    });
+  });
+
+  it("does not append unlocked archetype when metadata.archetype is unknown", async () => {
+    mockFetchWithTimeout.mockImplementation(
+      async (url: string, options?: { body?: string; method?: string }) => {
+        if (url.includes("/rest/v1/payment_webhook_event?stripe_event_id=eq.")) {
+          return createJsonResponse([]);
+        }
+        if (
+          url.includes("/rest/v1/payment?stripe_charge_id=eq.") ||
+          url.includes("/rest/v1/payment?stripe_payment_intent_id=eq.")
+        ) {
+          return createJsonResponse([]);
+        }
+        if (options?.method === "POST" && url.endsWith("/rest/v1/payment")) {
+          return createJsonResponse([{ id: 88 }]);
+        }
+        if (url.includes("/rest/v1/payment_item?payment_id=eq.88")) {
+          return createJsonResponse([]);
+        }
+        if (options?.method === "POST" && url.endsWith("/rest/v1/payment_item")) {
+          return createJsonResponse([{ id: 8 }]);
+        }
+        if (options?.method === "PATCH" && url.includes("/rest/v1/personal_report?id=eq.5")) {
+          return createJsonResponse([]);
+        }
+        if (options?.method === "POST" && url.endsWith("/rest/v1/payment_webhook_event")) {
+          return createJsonResponse([{ id: 89 }]);
+        }
+        throw new Error(`Unexpected fetch call: ${options?.method ?? "GET"} ${url}`);
+      }
+    );
+
+    const stripe = {
+      charges: { retrieve: vi.fn() },
+      checkout: {
+        sessions: {
+          retrieve: vi.fn().mockResolvedValue({
+            id: "cs_test_unknown_arch_456",
+            amount_total: 2999,
+            currency: "eur",
+            customer: null,
+            metadata: {
+              archetype: "Not A Real Archetype",
+              plan: "full_report",
+              pricingQuoteId: "10",
+              pricingClusterId: "x",
+              experimentGroup: "A",
+              basePriceBucket: "full_mid_1",
+              discountStep: "0",
+              currentPrice: "29.99",
+              initialPrice: "29.99",
+              countryTier: "tier_2",
+              deviceType: "Desktop",
+              trafficSource: "direct",
+              engagementScore: "50",
+              behavioralBucket: "consistent",
+              reportSessionId: "",
+              reportToken: "rpt_ABCDEFGHIJKLMNOPQRST",
+              requestIp: "127.0.0.1",
+              requestUserAgent: "Mozilla/5.0 (Vitest)",
+            },
+            payment_intent: null,
+            payment_status: "paid",
+            total_details: { amount_discount: 0 },
+          }),
+        },
+      },
+      paymentIntents: { retrieve: vi.fn() },
+    };
+
+    await processStripeWebhookEvent({
+      event: {
+        id: "evt_test_checkout_unknown_arch",
+        type: "checkout.session.completed",
+        data: {
+          object: {
+            id: "cs_test_unknown_arch_456",
+            metadata: {
+              archetype: "Not A Real Archetype",
+              plan: "full_report",
+              reportToken: "rpt_ABCDEFGHIJKLMNOPQRST",
+            },
+          },
+        },
+      } as never,
+      stripe: stripe as never,
+    });
+
+    expect(addUnlockedArchetypeForPersonalReport).not.toHaveBeenCalled();
   });
 
   it("returns early when the webhook event was already processed", async () => {

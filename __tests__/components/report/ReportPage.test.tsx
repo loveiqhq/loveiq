@@ -7,6 +7,7 @@ const mockRouterPush = vi.fn();
 const mockCacheReportCheckoutQuote = vi.fn();
 
 vi.mock("next/navigation", () => ({
+  usePathname: () => "/report",
   useRouter: () => ({ push: mockRouterPush }),
   useSearchParams: () => new URLSearchParams(),
 }));

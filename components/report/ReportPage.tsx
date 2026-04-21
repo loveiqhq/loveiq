@@ -1,7 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore, type FC } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type FC,
+} from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { archetypeContent } from "@/data/report-archetypes";
 import { reportSections } from "@/data/report-general";
 import { cacheReportCheckoutQuote } from "@/lib/checkout/reportCheckoutQuoteCache";
@@ -12,6 +20,7 @@ import ReportNavigation from "./ReportNavigation";
 import ReportPricingModal from "./ReportPricingModal";
 import ReportSection from "./ReportSection";
 import SectionFeedback from "./SectionFeedback";
+import ViewingBanner from "./ViewingBanner";
 import { getReportSessionId } from "@/components/survey/hooks/surveySession";
 import { useReportData, type ReportRequestError } from "./hooks/useReportData";
 import { useSectionFeedback, type FeedbackPayload } from "./hooks/useSectionFeedback";
@@ -26,6 +35,8 @@ import PracticeTendenciesSection from "./sections/PracticeTendenciesSection";
 import WelcomeSection from "./sections/WelcomeSection";
 import { normalizeReportHtml } from "./reportContent";
 import { isSectionUnlockedForPlan, type ReportAccessPlan } from "@/lib/report/access";
+import { fromArchetypeSlug, isArchetypeName, toArchetypeSlug } from "@/lib/report/archetypeSlug";
+import { getCsrfToken } from "@/lib/csrf-client";
 
 interface SnapshotContent {
   importanceLabel: string;
@@ -251,9 +262,13 @@ interface ReportExperienceProps {
   accessPlan: ReportAccessPlan;
   devParam: string | null;
   feedbacks: Record<string, "up" | "down" | null>;
+  isPricingModalOpen: boolean;
   matchScore: number;
-  onBeginCheckout: (plan: ReportPurchasePlanId) => void;
+  onBeginCheckout: (plan: ReportPurchasePlanId, archetype?: string | null) => void;
+  onClosePricingModal: () => void;
+  onUnlockArchetype: (archetypeName: string) => void;
   percentages: Record<string, number>;
+  pricingTargetArchetype: string | null;
   placeholderValues: {
     archetype: string;
     matchScore: number;
@@ -267,38 +282,44 @@ interface ReportExperienceProps {
   ranking: string[];
   reportDate: string;
   resolvedSections: ReturnType<typeof resolveReportSections>;
+  returnToPrimaryHref: string;
   snapshot: SnapshotContent;
   submitFeedback: (sectionId: string, payload: FeedbackPayload) => void;
   submitted: Record<string, boolean>;
   theme: ReturnType<typeof getReportTheme>;
+  unlockedArchetypes: Set<string>;
   userName: string | null;
+  viewArchetype: string;
 }
 
 const ReportExperience: FC<ReportExperienceProps> = ({
   accessPlan,
   devParam,
   feedbacks,
+  isPricingModalOpen,
   matchScore,
   onBeginCheckout,
+  onClosePricingModal,
+  onUnlockArchetype,
   percentages,
   placeholderValues,
   primaryArchetype,
   pricingQuotes,
+  pricingTargetArchetype,
   ranking,
   reportDate,
   resolvedSections,
+  returnToPrimaryHref,
   snapshot,
   submitFeedback,
   submitted,
   theme,
+  unlockedArchetypes,
   userName,
+  viewArchetype,
 }) => {
   const mainContentRef = useRef<HTMLElement | null>(null);
   const [activeSectionId, setActiveSectionId] = useState(resolvedSections[0]?.id ?? "welcome");
-  const paywallDisabled = process.env.NEXT_PUBLIC_DISABLE_PAYWALL === "1";
-  const [isPricingModalOpen, setIsPricingModalOpen] = useState(
-    paywallDisabled ? false : accessPlan === null
-  );
   const [unlockedSections, setUnlockedSections] = useState<Record<string, boolean>>({});
   const clickLockUntilRef = useRef(0);
 
@@ -401,6 +422,9 @@ const ReportExperience: FC<ReportExperienceProps> = ({
           DEV — report loaded via ?dev_session URL param ({devParam.slice(0, 8)}...)
         </div>
       )}
+      {viewArchetype !== primaryArchetype && (
+        <ViewingBanner archetypeName={viewArchetype} returnHref={returnToPrimaryHref} />
+      )}
       <div
         className={[
           "report-page__shell-wrap",
@@ -415,7 +439,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
           <ReportNavigation
             activeSectionId={activeSectionId}
             onSectionClick={handleSectionClick}
-            primaryArchetype={primaryArchetype}
+            primaryArchetype={viewArchetype}
             reportDate={reportDate}
             sections={resolvedSections}
           />
@@ -426,7 +450,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
               const generalHtml = replacePlaceholders(section.generalContent, placeholderValues);
               const archetypeHtml = normalizeReportHtml(
                 section.archetypeBlockId
-                  ? (archetypeContent[section.archetypeBlockId]?.[primaryArchetype] ?? null)
+                  ? (archetypeContent[section.archetypeBlockId]?.[viewArchetype] ?? null)
                   : null
               );
 
@@ -456,7 +480,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                   <ReportSection
                     key={section.id}
                     feedbackWidget={feedbackWidget}
-                    primaryArchetype={primaryArchetype}
+                    primaryArchetype={viewArchetype}
                     sectionId={section.id}
                     title={title}
                   >
@@ -470,12 +494,6 @@ const ReportExperience: FC<ReportExperienceProps> = ({
               }
 
               if (section.sectionNumber === 4) {
-                const isBackendUnlocked = isSectionUnlockedForPlan({
-                  accessPlan,
-                  isPremium: section.isPremium,
-                  sectionId: section.id,
-                });
-
                 return (
                   <ReportSection
                     key={section.id}
@@ -486,13 +504,11 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                   >
                     <ArchetypeProbabilitySection
                       generalHtml={generalHtml}
-                      isUnlocked={isBackendUnlocked || (unlockedSections[section.id] ?? false)}
-                      onUnlock={() => {
-                        if (!paywallDisabled) setIsPricingModalOpen(true);
-                      }}
+                      onUnlock={onUnlockArchetype}
                       percentages={percentages}
                       primaryArchetype={primaryArchetype}
                       ranking={ranking}
+                      unlockedArchetypes={unlockedArchetypes}
                     />
                   </ReportSection>
                 );
@@ -503,7 +519,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                   <ReportSection
                     key={section.id}
                     feedbackWidget={feedbackWidget}
-                    primaryArchetype={primaryArchetype}
+                    primaryArchetype={viewArchetype}
                     sectionId={section.id}
                     title={title}
                   >
@@ -527,12 +543,12 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                   <ReportSection
                     key={section.id}
                     feedbackWidget={feedbackWidget}
-                    primaryArchetype={primaryArchetype}
+                    primaryArchetype={viewArchetype}
                     sectionId={section.id}
                     title={title}
                   >
                     <AttachmentPatternsSection
-                      archetype={primaryArchetype}
+                      archetype={viewArchetype}
                       archetypeHtml={archetypeHtml}
                       generalHtml={generalHtml}
                       isPremium={section.isPremium}
@@ -550,18 +566,18 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                   isPremium: section.isPremium,
                   sectionId: section.id,
                 });
-                const practiceSectionTitle = `Typical Sexual Fantasy & Practice Tendencies of the ${primaryArchetype}`;
+                const practiceSectionTitle = `Typical Sexual Fantasy & Practice Tendencies of the ${viewArchetype}`;
 
                 return (
                   <ReportSection
                     key={section.id}
                     feedbackWidget={feedbackWidget}
-                    primaryArchetype={primaryArchetype}
+                    primaryArchetype={viewArchetype}
                     sectionId={section.id}
                     title={practiceSectionTitle}
                   >
                     <PracticeTendenciesSection
-                      archetype={primaryArchetype}
+                      archetype={viewArchetype}
                       archetypeHtml={archetypeHtml}
                       generalHtml={generalHtml}
                       isPremium={section.isPremium}
@@ -590,12 +606,12 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                 <ReportSection
                   key={section.id}
                   feedbackWidget={feedbackWidget}
-                  primaryArchetype={primaryArchetype}
+                  primaryArchetype={viewArchetype}
                   sectionId={section.id}
                   title={title}
                 >
                   <DimensionSection
-                    archetype={primaryArchetype}
+                    archetype={viewArchetype}
                     archetypeHtml={archetypeHtml}
                     generalHtml={generalHtml}
                     isPremium={section.isPremium}
@@ -616,10 +632,11 @@ const ReportExperience: FC<ReportExperienceProps> = ({
       <ReportPricingModal
         archetype={primaryArchetype}
         open={isPricingModalOpen}
-        onClose={() => setIsPricingModalOpen(false)}
+        onClose={onClosePricingModal}
         onUnlock={onBeginCheckout}
         quotes={pricingQuotes}
         returnFocusRef={mainContentRef}
+        targetArchetype={pricingTargetArchetype}
       />
     </main>
   );
@@ -627,6 +644,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
 
 const ReportPage: FC<ReportPageProps> = ({ token }) => {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const storedSessionId = useSyncExternalStore(subscribeNoop, getReportSessionId, () => null);
   // NODE_ENV is statically replaced at build time by Next.js/webpack — safe in client components
@@ -638,7 +656,118 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
 
   const { data, status, error } = useReportData({ token, sessionId: token ? null : sessionId });
   const { feedbacks, submitted, submitFeedback } = useSectionFeedback(sessionId);
-  const beginCheckout = (plan: ReportPurchasePlanId) => {
+  const [locallyUnlocked, setLocallyUnlocked] = useState<string[]>([]);
+  const [isPricingModalOpen, setIsPricingModalOpen] = useState(false);
+  const [pricingTargetArchetype, setPricingTargetArchetype] = useState<string | null>(null);
+  const autoOpenedPricingRef = useRef(false);
+
+  const accessPlan = data?.accessPlan ?? null;
+  useEffect(() => {
+    if (autoOpenedPricingRef.current) return;
+    if (!data) return;
+    const paywallDisabled = process.env.NEXT_PUBLIC_DISABLE_PAYWALL === "1";
+    if (paywallDisabled) return;
+    if (accessPlan !== null) return;
+    autoOpenedPricingRef.current = true;
+    // One-shot auto-open when the unpaid report first loads; guarded by
+    // autoOpenedPricingRef so it never cascades.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setIsPricingModalOpen(true);
+  }, [accessPlan, data]);
+
+  const apiUnlocked = data?.unlockedArchetypes;
+  const primaryArchetypeFromData = data?.primaryArchetype;
+  const unlockedArchetypes = useMemo(() => {
+    const set = new Set<string>();
+    if (apiUnlocked) {
+      for (const name of apiUnlocked) set.add(name);
+    }
+    for (const name of locallyUnlocked) set.add(name);
+    if (primaryArchetypeFromData) set.add(primaryArchetypeFromData);
+    return set;
+  }, [apiUnlocked, locallyUnlocked, primaryArchetypeFromData]);
+
+  const archetypeSlugParam = searchParams.get("archetype");
+  const requestedArchetype = fromArchetypeSlug(archetypeSlugParam);
+  const viewArchetype =
+    requestedArchetype && unlockedArchetypes.has(requestedArchetype)
+      ? requestedArchetype
+      : (primaryArchetypeFromData ?? "");
+
+  const returnToPrimaryHref = useMemo(() => {
+    if (devParam) {
+      const params = new URLSearchParams({ dev_session: devParam });
+      return `${pathname}?${params.toString()}`;
+    }
+    return pathname;
+  }, [devParam, pathname]);
+
+  const handleUnlockArchetype = useCallback(
+    (name: string) => {
+      if (!isArchetypeName(name)) return;
+
+      const navigateTo = (archetypeName: string) => {
+        if (archetypeName === primaryArchetypeFromData) {
+          router.push(returnToPrimaryHref);
+          return;
+        }
+        const slug = toArchetypeSlug(archetypeName);
+        if (!slug) return;
+        const params = new URLSearchParams();
+        params.set("archetype", slug);
+        if (devParam) params.set("dev_session", devParam);
+        router.push(`${pathname}?${params.toString()}`);
+      };
+
+      if (unlockedArchetypes.has(name)) {
+        navigateTo(name);
+        return;
+      }
+
+      const paywallDisabled = process.env.NEXT_PUBLIC_DISABLE_PAYWALL === "1";
+      if (!paywallDisabled) {
+        setPricingTargetArchetype(name === primaryArchetypeFromData ? null : name);
+        setIsPricingModalOpen(true);
+        return;
+      }
+
+      void (async () => {
+        try {
+          const csrfToken = getCsrfToken();
+          const body: Record<string, string> = { archetype: name };
+          if (token) body.token = token;
+          else if (sessionId) body.sessionId = sessionId;
+          const res = await fetch("/api/report/unlock-archetype", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-csrf-token": csrfToken,
+            },
+            body: JSON.stringify(body),
+          });
+          if (!res.ok) return;
+          const json = (await res.json()) as { unlockedArchetypes?: string[] };
+          const returned = Array.isArray(json.unlockedArchetypes) ? json.unlockedArchetypes : [];
+          setLocallyUnlocked((prev) => Array.from(new Set([...prev, ...returned, name])));
+          navigateTo(name);
+        } catch {
+          // swallow — user can retry
+        }
+      })();
+    },
+    [
+      devParam,
+      pathname,
+      primaryArchetypeFromData,
+      returnToPrimaryHref,
+      router,
+      sessionId,
+      token,
+      unlockedArchetypes,
+    ]
+  );
+
+  const beginCheckout = (plan: ReportPurchasePlanId, archetype?: string | null) => {
     const quote = data?.pricingQuotes?.[plan];
     if (quote) {
       cacheReportCheckoutQuote({
@@ -648,8 +777,14 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
         token,
       });
     }
-    router.push(buildReportCheckoutHref({ plan, token }));
+    const archetypeForCheckout = plan === "full_report" ? (archetype ?? null) : null;
+    router.push(buildReportCheckoutHref({ archetype: archetypeForCheckout, plan, token }));
   };
+
+  const closePricingModal = useCallback(() => {
+    setIsPricingModalOpen(false);
+    setPricingTargetArchetype(null);
+  }, []);
 
   if (status === "loading") {
     return (
@@ -698,11 +833,12 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   }
 
   const { diagnostics, percentages, primaryArchetype, snapshotAnswers } = data;
-  const theme = getReportTheme(primaryArchetype);
+  const effectiveViewArchetype = viewArchetype || primaryArchetype;
+  const theme = getReportTheme(effectiveViewArchetype);
   const ranking = Object.entries(percentages)
     .sort(([, left], [, right]) => right - left)
     .map(([name]) => name);
-  const matchScore = percentages[primaryArchetype] ?? 0;
+  const matchScore = percentages[effectiveViewArchetype] ?? percentages[primaryArchetype] ?? 0;
   const reportDate = new Date(data.reportDate).toLocaleDateString("en-US", {
     year: "numeric",
     month: "long",
@@ -711,14 +847,14 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   const snapshot = getSnapshotContent(diagnostics, snapshotAnswers ?? null);
 
   const placeholderValues = {
-    archetype: primaryArchetype,
+    archetype: effectiveViewArchetype,
     matchScore,
     motto: theme.motto,
     reportDate,
     snapshot,
     userName: data.userName ?? "Friend",
   };
-  const resolvedSections = resolveReportSections(reportSections, primaryArchetype);
+  const resolvedSections = resolveReportSections(reportSections, effectiveViewArchetype);
 
   return (
     <ReportExperience
@@ -726,20 +862,27 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       devParam={devParam}
       accessPlan={data.accessPlan}
       feedbacks={feedbacks}
+      isPricingModalOpen={isPricingModalOpen}
       matchScore={matchScore}
       onBeginCheckout={beginCheckout}
+      onClosePricingModal={closePricingModal}
+      onUnlockArchetype={handleUnlockArchetype}
       percentages={percentages}
       placeholderValues={placeholderValues}
       primaryArchetype={primaryArchetype}
       pricingQuotes={data.pricingQuotes}
+      pricingTargetArchetype={pricingTargetArchetype}
       ranking={ranking}
       reportDate={reportDate}
       resolvedSections={resolvedSections}
+      returnToPrimaryHref={returnToPrimaryHref}
       snapshot={snapshot}
       submitFeedback={submitFeedback}
       submitted={submitted}
       theme={theme}
+      unlockedArchetypes={unlockedArchetypes}
       userName={data.userName}
+      viewArchetype={effectiveViewArchetype}
     />
   );
 };

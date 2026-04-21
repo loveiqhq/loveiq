@@ -5,6 +5,7 @@ import {
   isReportAccessToken,
   isReportPurchasePlanId,
 } from "@/lib/checkout/reportPurchase";
+import { fromArchetypeSlug } from "@/lib/report/archetypeSlug";
 
 export const metadata: Metadata = {
   title: "Checkout Status | LoveIQ",
@@ -14,6 +15,7 @@ export const metadata: Metadata = {
 
 interface Props {
   searchParams: Promise<{
+    archetype?: string;
     plan?: string;
     session_id?: string;
     token?: string;
@@ -26,6 +28,14 @@ export default async function Page({ searchParams }: Props) {
     ? params.plan
     : DEFAULT_REPORT_PURCHASE_PLAN_ID;
   const token = isReportAccessToken(params.token) ? params.token : null;
+  const archetype = planId === "full_report" ? fromArchetypeSlug(params.archetype) : null;
 
-  return <CheckoutReturnPage planId={planId} sessionId={params.session_id ?? null} token={token} />;
+  return (
+    <CheckoutReturnPage
+      archetype={archetype}
+      planId={planId}
+      sessionId={params.session_id ?? null}
+      token={token}
+    />
+  );
 }

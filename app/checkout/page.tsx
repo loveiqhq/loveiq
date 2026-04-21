@@ -6,6 +6,7 @@ import {
   isReportAccessToken,
   isReportPurchasePlanId,
 } from "@/lib/checkout/reportPurchase";
+import { fromArchetypeSlug } from "@/lib/report/archetypeSlug";
 
 export const metadata: Metadata = {
   title: "Complete Your Order | LoveIQ",
@@ -15,18 +16,22 @@ export const metadata: Metadata = {
 
 interface Props {
   searchParams: Promise<{
+    archetype?: string;
     plan?: string;
     token?: string;
   }>;
 }
 
 export default async function Page({ searchParams }: Props) {
-  const { plan: rawPlan, token: rawToken } = await searchParams;
+  const { archetype: rawArchetype, plan: rawPlan, token: rawToken } = await searchParams;
   const token = isReportAccessToken(rawToken) ? rawToken : null;
 
   if (!isReportPurchasePlanId(rawPlan)) {
     redirect(getReportReturnHref(token));
   }
 
-  return <CheckoutPage planId={rawPlan} token={token} />;
+  const archetypeName = fromArchetypeSlug(rawArchetype);
+  const archetype = rawPlan === "full_report" ? archetypeName : null;
+
+  return <CheckoutPage planId={rawPlan} token={token} archetype={archetype} />;
 }

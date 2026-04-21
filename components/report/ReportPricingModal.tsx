@@ -23,9 +23,10 @@ interface Props {
   archetype: string;
   open: boolean;
   onClose: () => void;
-  onUnlock: (plan: ReportPurchasePlanId) => void;
+  onUnlock: (plan: ReportPurchasePlanId, archetype?: string | null) => void;
   quotes: Record<ReportPurchasePlanId, ReportPriceQuoteSnapshot> | null;
   returnFocusRef?: MutableRefObject<HTMLElement | null>;
+  targetArchetype?: string | null;
 }
 
 const FOCUSABLE_SELECTOR =
@@ -92,6 +93,7 @@ const ReportPricingModal: FC<Props> = ({
   onUnlock,
   quotes,
   returnFocusRef,
+  targetArchetype = null,
 }) => {
   const dialogRef = useRef<HTMLDivElement>(null);
   const scrollRegionRef = useRef<HTMLDivElement>(null);
@@ -101,7 +103,12 @@ const ReportPricingModal: FC<Props> = ({
   const touchStartYRef = useRef<number | null>(null);
   const [focusMode, setFocusMode] = useState<"keyboard" | "pointer">("pointer");
 
-  const subtitle = `Unlock your complete ${archetype} report \u2014 comprehensive coverage of your probabilities, sexual stage, attachment style, desire drivers, and growth paths.`;
+  const subtitle = targetArchetype
+    ? `Unlock the complete ${targetArchetype} report \u2014 full attachment, desire drivers, practices, and growth paths for this archetype.`
+    : `Unlock your complete ${archetype} report \u2014 comprehensive coverage of your probabilities, sexual stage, attachment style, desire drivers, and growth paths.`;
+  const planCards = targetArchetype
+    ? REPORT_PURCHASE_PLANS.filter((card) => card.plan === "full_report")
+    : REPORT_PURCHASE_PLANS;
 
   useEffect(() => {
     if (open) {
@@ -275,7 +282,9 @@ const ReportPricingModal: FC<Props> = ({
                   Don&apos;t miss out on truly understanding your sexuality
                 </span>
                 <h2 id="report-pricing-modal-title" className="report-pricing-modal__title">
-                  Unlock your full report
+                  {targetArchetype
+                    ? `Unlock the ${targetArchetype} report`
+                    : "Unlock your full report"}
                 </h2>
                 <p id="report-pricing-modal-copy" className="report-pricing-modal__copy">
                   {subtitle}
@@ -288,8 +297,12 @@ const ReportPricingModal: FC<Props> = ({
               </div>
 
               <div className="report-pricing-modal__plans" role="list" aria-label="Pricing options">
-                {REPORT_PURCHASE_PLANS.map((card) => {
+                {planCards.map((card) => {
                   const pricing = getCardPricing(card, quotes?.[card.plan]);
+                  const cardTitle =
+                    targetArchetype && card.plan === "full_report"
+                      ? `${targetArchetype} report`
+                      : card.title;
 
                   return (
                     <article
@@ -320,7 +333,7 @@ const ReportPricingModal: FC<Props> = ({
                       ) : null}
 
                       <div className="report-pricing-card__heading">
-                        <h3 className="report-pricing-card__title">{card.title}</h3>
+                        <h3 className="report-pricing-card__title">{cardTitle}</h3>
                         <p className="report-pricing-card__description">{card.description}</p>
                       </div>
 
@@ -359,7 +372,7 @@ const ReportPricingModal: FC<Props> = ({
                           .filter(Boolean)
                           .join(" ")}
                         disabled={!pricing.available}
-                        onClick={() => onUnlock(card.plan)}
+                        onClick={() => onUnlock(card.plan, targetArchetype ?? null)}
                       >
                         {pricing.available ? card.ctaLabel : "Pricing unavailable"}
                       </button>

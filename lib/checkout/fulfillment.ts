@@ -12,9 +12,11 @@ import {
   getStripeCheckoutPromotionSummary,
 } from "./stripeCheckout";
 import {
+  addUnlockedArchetypeForPersonalReport,
   ensurePersonalReportForSubmission,
   resolveSubmissionAccessContext,
 } from "@/lib/report/personalReport";
+import { isArchetypeName } from "@/lib/report/archetypeSlug";
 import { markReportPriceQuotePurchased } from "@/lib/pricing/reportPricing";
 
 const SUPABASE_TIMEOUT_MS = 8_000;
@@ -511,7 +513,14 @@ async function syncCheckoutSessionPayment({
     stripePaymentIntentId: paymentIntentId,
   });
 
+  const rawArchetypeMetadata = settledSession.metadata?.archetype ?? null;
+  const unlockedArchetype =
+    typeof rawArchetypeMetadata === "string" && isArchetypeName(rawArchetypeMetadata)
+      ? rawArchetypeMetadata
+      : null;
+
   const metadata = {
+    archetype: unlockedArchetype,
     checkoutSessionId: settledSession.id,
     plan,
     pricingQuoteId,
@@ -586,6 +595,20 @@ async function syncCheckoutSessionPayment({
     personalReportId: personalReport.id,
     status: eventStatus,
   });
+
+  if (eventStatus === "succeeded" && plan === "full_report" && unlockedArchetype) {
+    try {
+      await addUnlockedArchetypeForPersonalReport({
+        archetype: unlockedArchetype,
+        personalReportId: personalReport.id,
+      });
+    } catch (err) {
+      logger.warn(
+        { archetype: unlockedArchetype, err, personalReportId: personalReport.id },
+        "Unable to persist unlocked archetype after checkout"
+      );
+    }
+  }
 
   await upsertWebhookEventRecord({
     event,

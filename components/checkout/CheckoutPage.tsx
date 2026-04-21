@@ -227,11 +227,12 @@ function CheckoutReviewSurface({
 }
 
 interface Props {
+  archetype?: string | null;
   planId: ReportPurchasePlanId;
   token?: string | null;
 }
 
-const CheckoutPage: FC<Props> = ({ planId, token = null }) => {
+const CheckoutPage: FC<Props> = ({ archetype = null, planId, token = null }) => {
   const plan = getReportPurchasePlan(planId);
   const reportSessionId = useSyncExternalStore(subscribeNoop, getReportSessionId, () => null);
   const pricingSessionId = getReportPricingSessionId({
@@ -361,6 +362,7 @@ const CheckoutPage: FC<Props> = ({ planId, token = null }) => {
           "x-csrf-token": getCsrfToken(),
         },
         body: JSON.stringify({
+          archetype: archetype ?? undefined,
           plan: planId,
           pricingSessionId,
           quoteId: activeQuote.id,

@@ -9,6 +9,7 @@ import {
   ensurePersonalReportForSubmission,
   getReportAccessPlanForSubmission,
   recordReportSessionView,
+  resolveUnlockedArchetypes,
 } from "@/lib/report/personalReport";
 import { getReportPriceQuotesForContext } from "@/lib/pricing/reportPricing";
 import logger from "@/lib/logger";
@@ -277,6 +278,7 @@ export async function GET(request: Request) {
 
     let accessPlan: "essentials" | "full_report" | "all_reports" | null = null;
     let pricingQuotes: ReportPricingQuotesResponse = null;
+    let unlockedArchetypeColumn: string[] = [];
 
     try {
       await ensurePersonalReportForSubmission({
@@ -286,6 +288,7 @@ export async function GET(request: Request) {
 
       const access = await getReportAccessPlanForSubmission(submission.id);
       accessPlan = access.accessPlan;
+      unlockedArchetypeColumn = access.unlockedArchetypeColumn ?? [];
 
       if (access.personalReportId && !accessPlan) {
         await recordReportSessionView({
@@ -329,16 +332,24 @@ export async function GET(request: Request) {
     }
 
     // 7. Build response — prefer v5 fields, fall back to v4
+    const primaryArchetype = scoring.v5_primary_archetype || scoring.primary_archetype;
+    const unlockedArchetypes = resolveUnlockedArchetypes({
+      accessPlan,
+      columnValues: unlockedArchetypeColumn,
+      primaryArchetype,
+    });
+
     return NextResponse.json({
       accessPlan,
       userName: getSubmissionUserName(submission),
       userEmail: getSubmissionUserEmail(submission),
-      primaryArchetype: scoring.v5_primary_archetype || scoring.primary_archetype,
+      primaryArchetype,
       percentages: scoring.v5_percentages || scoring.percentages || {},
       reportDate: submission.created_date_time,
       diagnostics: scoring.diagnostics ?? null,
       snapshotAnswers,
       pricingQuotes,
+      unlockedArchetypes,
     });
   } catch (err) {
     if (err instanceof CircuitOpenError) {

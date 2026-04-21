@@ -135,9 +135,11 @@ export function getReportReturnHref(token?: string | null) {
 }
 
 export function buildReportCheckoutHref({
+  archetype,
   plan,
   token,
 }: {
+  archetype?: string | null;
   plan: ReportPurchasePlanId;
   token?: string | null;
 }) {
@@ -145,6 +147,10 @@ export function buildReportCheckoutHref({
 
   if (token) {
     params.set("token", token);
+  }
+
+  if (archetype) {
+    params.set("archetype", archetype);
   }
 
   return `/checkout?${params.toString()}`;

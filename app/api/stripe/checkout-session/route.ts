@@ -5,6 +5,7 @@ import {
   REPORT_PURCHASE_PLAN_IDS,
   type ReportPurchasePlanId,
 } from "@/lib/checkout/reportPurchase";
+import { KNOWN_ARCHETYPES, toArchetypeSlug } from "@/lib/report/archetypeSlug";
 import {
   STRIPE_CHECKOUT_DISABLED_MESSAGE,
   getStripeCheckoutCustomerEmail,
@@ -25,6 +26,7 @@ export const runtime = "nodejs";
 
 const createCheckoutSessionSchema = z
   .object({
+    archetype: z.enum(KNOWN_ARCHETYPES as unknown as [string, ...string[]]).optional(),
     plan: z.enum(REPORT_PURCHASE_PLAN_IDS),
     pricingSessionId: z.string().uuid().nullable().optional(),
     quoteId: z.number().int().positive().nullable().optional(),
@@ -33,6 +35,9 @@ const createCheckoutSessionSchema = z
   })
   .refine((value) => !!(value.reportSessionId || value.reportToken), {
     message: "Report context required.",
+  })
+  .refine((value) => !value.archetype || value.plan === "full_report", {
+    message: "Per-archetype unlocks are only available on the full_report plan.",
   });
 
 const RATE_LIMIT_CONFIG = {
@@ -55,10 +60,12 @@ function toStripeMetadataValue(value: string | null) {
 }
 
 function buildSuccessUrl({
+  archetypeSlug,
   origin,
   plan,
   reportToken,
 }: {
+  archetypeSlug?: string | null;
   origin: string;
   plan: ReportPurchasePlanId;
   reportToken?: string | null;
@@ -69,14 +76,20 @@ function buildSuccessUrl({
     params.push(`token=${encodeURIComponent(reportToken)}`);
   }
 
+  if (archetypeSlug) {
+    params.push(`archetype=${encodeURIComponent(archetypeSlug)}`);
+  }
+
   return `${origin}/checkout/return?${params.join("&")}`;
 }
 
 function buildCancelUrl({
+  archetypeSlug,
   origin,
   plan,
   reportToken,
 }: {
+  archetypeSlug?: string | null;
   origin: string;
   plan: ReportPurchasePlanId;
   reportToken?: string | null;
@@ -85,6 +98,10 @@ function buildCancelUrl({
 
   if (reportToken) {
     params.push(`token=${encodeURIComponent(reportToken)}`);
+  }
+
+  if (archetypeSlug) {
+    params.push(`archetype=${encodeURIComponent(archetypeSlug)}`);
   }
 
   return `${origin}/checkout?${params.join("&")}`;
@@ -146,6 +163,9 @@ export async function POST(request: Request) {
     }
 
     const plan = getReportPurchasePlan(parsed.data.plan);
+    const archetypeName = parsed.data.archetype ?? null;
+    const archetypeSlug = archetypeName ? toArchetypeSlug(archetypeName) : null;
+    const planTitle = archetypeName ? `${archetypeName} report` : plan.title;
     const session = await stripe.checkout.sessions.create({
       allow_promotion_codes: true,
       billing_address_collection: "auto",
@@ -156,7 +176,7 @@ export async function POST(request: Request) {
             currency: quote.currency.toLowerCase(),
             product_data: {
               description: plan.description,
-              name: `LoveIQ ${plan.title}`,
+              name: `LoveIQ ${planTitle}`,
             },
             unit_amount: quote.currentPriceCents,
           },
@@ -164,6 +184,7 @@ export async function POST(request: Request) {
         },
       ],
       metadata: {
+        archetype: archetypeName ?? "",
         basePriceBucket: quote.basePriceBucket,
         behavioralBucket: quote.behavioralBucket,
         countryTier: quote.countryTier,
@@ -184,11 +205,13 @@ export async function POST(request: Request) {
       },
       mode: "payment",
       success_url: buildSuccessUrl({
+        archetypeSlug,
         origin: siteUrl,
         plan: parsed.data.plan,
         reportToken: parsed.data.reportToken ?? null,
       }),
       cancel_url: buildCancelUrl({
+        archetypeSlug,
         origin: siteUrl,
         plan: parsed.data.plan,
         reportToken: parsed.data.reportToken ?? null,
