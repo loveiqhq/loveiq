@@ -132,7 +132,7 @@ export function hasMeaningfulReportHtml(html: string | null | undefined) {
 }
 
 export function isStandaloneHeadingBlock(block: string) {
-  if (!/^\s*<p\b/i.test(block)) return false;
+  if (!/^\s*<(p|h[1-6])\b/i.test(block)) return false;
 
   const text = getReportBlockText(block);
   if (!text) return false;
