@@ -2334,6 +2334,11 @@ input.autofill-dark:-internal-autofill-previewed {
   margin-bottom: 0.55rem;
 }
 
+.report-prose blockquote {
+  margin: 0.25rem 0 0.25rem 1.5rem;
+  font-style: italic;
+}
+
 .report-prose a {
   color: rgb(var(--report-accent-rgb));
   text-underline-offset: 0.16em;

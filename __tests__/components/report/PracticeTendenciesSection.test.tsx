@@ -13,7 +13,7 @@ afterEach(() => {
 });
 
 describe("PracticeTendenciesSection", () => {
-  it("renders the shared practice intro from the report section before the archetype heading", () => {
+  it("renders the shared practice intro from the report section", () => {
     const { container } = render(
       <PracticeTendenciesSection
         archetype="Spark Seeker"
@@ -25,11 +25,8 @@ describe("PracticeTendenciesSection", () => {
     );
 
     const intro = container.querySelector(".report-practice-panel__intro");
-    const heading = container.querySelector(".report-practice-panel__title");
 
     expect(intro?.textContent).toContain("These scores do not define you as an individual");
-    expect(heading).toBeInTheDocument();
-    expect(screen.getByText("Spark Seeker")).toBeInTheDocument();
     expect(
       screen.getByText(/probability-based estimates derived from aggregated research/i)
     ).toBeInTheDocument();
@@ -39,7 +36,6 @@ describe("PracticeTendenciesSection", () => {
     expect(container.querySelector(".report-practice-table")).toBeInTheDocument();
     expect(container.querySelector(".report-practice-panel__glow")).not.toBeInTheDocument();
     expect(screen.getAllByText("60%").length).toBeGreaterThan(0);
-    expect(intro?.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("opens and closes explanation popovers from the row info affordance", async () => {

@@ -491,11 +491,6 @@ const PracticePanel: FC<{
 
   return (
     <div ref={rootRef} className={`report-practice-panel${isAnimated ? " is-animated" : ""}`}>
-      <h2 className="report-practice-panel__title">
-        <span>Typical Sexual Fantasy &amp; Practice Tendencies of the </span>
-        <span className="report-practice-panel__title-accent">{archetype}</span>
-      </h2>
-
       <div className="report-practice-panel__groups">
         {content.groups.map((group) => (
           <PracticeGroupTable
@@ -550,10 +545,6 @@ const PracticeTendenciesSection: FC<Props> = ({
 
       {isPremium && !unlocked ? (
         <>
-          <h2 className="report-practice-panel__title">
-            <span>Typical Sexual Fantasy &amp; Practice Tendencies of the </span>
-            <span className="report-practice-panel__title-accent">{archetype}</span>
-          </h2>
           <div className="report-themed-block">
             <div className="report-themed-block__preview report-themed-block__preview--practice">
               <div
