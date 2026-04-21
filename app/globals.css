@@ -4447,6 +4447,11 @@ input.autofill-dark:-internal-autofill-previewed {
   line-height: 24px;
 }
 
+.report-section--welcome .report-prose--lead > p:first-child > strong:first-child {
+  color: #d1d5db;
+  font-size: 20px;
+}
+
 .report-flow {
   display: flex;
   flex-direction: column;
