@@ -329,7 +329,7 @@ const PracticePanel: FC<{
           observer.disconnect();
         }
       },
-      { threshold: 0.15 }
+      { threshold: 0 }
     );
     observer.observe(el);
     return () => observer.disconnect();

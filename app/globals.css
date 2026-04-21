@@ -2321,8 +2321,8 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-prose h3 {
   font-size: 22px;
   line-height: 30px;
-  margin-top: 28px;
-  margin-bottom: 10px;
+  margin-top: 32px;
+  margin-bottom: 20px;
 }
 
 .report-prose ul,
@@ -4440,9 +4440,9 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 .report-prose--lead > p:first-child > strong:first-child {
-  color: #d1d5db;
+  color: #fff;
   font-family: var(--font-sans);
-  font-size: 20px;
+  font-size: 16px;
   font-weight: 700;
   line-height: 24px;
 }
