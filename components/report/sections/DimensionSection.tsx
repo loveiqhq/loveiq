@@ -49,10 +49,7 @@ const DimensionSection: FC<Props> = ({
   let introBlocks = bodyBlocks;
   let panelBlocks: string[] = [];
 
-  if (sectionId === "the_loveiq_concept") {
-    introBlocks = bodyBlocks.slice(0, 1);
-    panelBlocks = bodyBlocks.slice(1);
-  } else if (sectionId === "sexual_stage") {
+  if (sectionId === "sexual_stage") {
     const stagePanelIndex = bodyBlocks.findIndex((block) =>
       block.includes('class="report-stage-highlight"')
     );

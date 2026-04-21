@@ -6,7 +6,7 @@ import DimensionSection from "@/components/report/sections/DimensionSection";
 import { archetypeContent } from "@/data/report-archetypes";
 
 describe("DimensionSection", () => {
-  it("splits the LoveIQ concept intro into a lead paragraph and left-aligned body flow", () => {
+  it("renders the LoveIQ concept content in a single lead prose block", () => {
     const { container } = render(
       <DimensionSection
         archetype="Spark Seeker"
@@ -23,9 +23,9 @@ describe("DimensionSection", () => {
 
     expect(lead).toBeInTheDocument();
     expect(lead).toHaveTextContent("Lead paragraph.");
-    expect(proseBlocks).toHaveLength(2);
-    expect(proseBlocks[1]).toHaveTextContent("Panel paragraph one.");
-    expect(proseBlocks[1]).toHaveTextContent("Panel paragraph two.");
+    expect(lead).toHaveTextContent("Panel paragraph one.");
+    expect(lead).toHaveTextContent("Panel paragraph two.");
+    expect(proseBlocks).toHaveLength(1);
   });
 
   it("extracts the trailing archetype heading into its own left-aligned stack", () => {
