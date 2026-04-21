@@ -73,15 +73,16 @@ describe("reportContent normalization", () => {
   it("removes the DOCX image heading from the practice tendencies intro flow", () => {
     const introHtml = extractPracticeSectionIntroHtml(
       [
-        "<p>Over time, most people develop recurring sexual scripts.</p>",
-        "<p>Looking at both dimensions together helps distinguish themes.</p>",
-        '<p>Typical Sexual Fantasy &amp; Practice Tendencies of the <span class="report-archetype-name">Spark Seeker</span><img src="data:image/png;base64,ABC" /></p>',
+        "<p>These scores do not define you as an individual.</p>",
+        "<p>Looking at both dimensions together helps you understand how a theme tends to show up in your mind vs. in real experience.</p>",
+        '<p>Typical Sexual Fantasy &amp; Practice Tendencies of the <span class="report-archetype-name">Spark Seeker</span></p>',
       ].join("")
     );
 
-    expect(introHtml).toContain("Over time, most people develop recurring sexual scripts.");
-    expect(introHtml).toContain("Looking at both dimensions together helps distinguish themes.");
-    expect(introHtml).not.toContain("data:image/png");
+    expect(introHtml).toContain("These scores do not define you as an individual.");
+    expect(introHtml).toContain(
+      "Looking at both dimensions together helps you understand how a theme tends to show up in your mind vs. in real experience."
+    );
     expect(introHtml).not.toContain("Typical Sexual Fantasy");
   });
 

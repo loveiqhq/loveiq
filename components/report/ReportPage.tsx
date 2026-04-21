@@ -550,6 +550,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                   isPremium: section.isPremium,
                   sectionId: section.id,
                 });
+                const practiceSectionTitle = `Typical Sexual Fantasy & Practice Tendencies of the ${primaryArchetype}`;
 
                 return (
                   <ReportSection
@@ -557,7 +558,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     feedbackWidget={feedbackWidget}
                     primaryArchetype={primaryArchetype}
                     sectionId={section.id}
-                    title={title}
+                    title={practiceSectionTitle}
                   >
                     <PracticeTendenciesSection
                       archetype={primaryArchetype}
@@ -566,7 +567,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                       isPremium={section.isPremium}
                       isUnlocked={isBackendUnlocked || (unlockedSections[section.id] ?? false)}
                       onUnlock={() => unlockSection(section.id)}
-                      sectionTitle={title}
+                      sectionTitle={practiceSectionTitle}
                     />
                   </ReportSection>
                 );

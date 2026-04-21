@@ -27,12 +27,12 @@ describe("PracticeTendenciesSection", () => {
     const intro = container.querySelector(".report-practice-panel__intro");
     const heading = container.querySelector(".report-practice-panel__title");
 
-    expect(intro?.textContent).toContain("Over time, most people develop recurring sexual scripts");
+    expect(intro?.textContent).toContain("These scores do not define you as an individual");
     expect(heading).toBeInTheDocument();
     expect(screen.getByText("Spark Seeker")).toBeInTheDocument();
     expect(
-      screen.queryByText(/probability-based estimates derived from aggregated research/i)
-    ).not.toBeInTheDocument();
+      screen.getByText(/probability-based estimates derived from aggregated research/i)
+    ).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Core Relational & Embodied" })).toBeInTheDocument();
     expect(screen.getByText("Romantic lovemaking")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Technology & Distance" })).toBeInTheDocument();
