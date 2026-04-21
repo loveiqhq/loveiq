@@ -1652,6 +1652,9 @@ input.autofill-dark:-internal-autofill-previewed {
   background: #130b17;
   box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
   backdrop-filter: blur(6px);
+  /* Shrink whole card 15% — interior uses fixed-px sizing, zoom is the
+     least-invasive way to scale all children + hit-targets together. */
+  zoom: 0.85;
 }
 
 .report-prob__orb {
