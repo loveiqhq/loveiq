@@ -3849,7 +3849,7 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 .report-mobile-nav__link.is-subheading {
-  padding: 16px 0 4px;
+  padding: 16px 12px 4px 28px;
 }
 
 .report-mobile-nav__link.is-subheading::before {
