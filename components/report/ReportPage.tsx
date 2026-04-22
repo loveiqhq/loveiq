@@ -594,13 +594,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                 isPremium: section.isPremium,
                 sectionId: section.id,
               });
-              const isStageValueLocked =
-                section.id === "sexual_stage" &&
-                !isSectionUnlockedForPlan({
-                  accessPlan,
-                  isPremium: true,
-                  sectionId: "sexual_stage",
-                });
+              const isStageValueLocked = false;
 
               return (
                 <ReportSection

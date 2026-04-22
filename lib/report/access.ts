@@ -3,8 +3,11 @@ import type { ReportPurchasePlanId } from "@/lib/checkout/reportPurchase";
 
 export const ESSENTIALS_SECTION_IDS = [
   "probability_of_other_archetypes",
-  "core_motivation",
-  "sexual_stage",
+  "attachment_style_how_safety_closeness_and_distance_shape_desire",
+  "core_insecurities_the_hidden_fears_that_shape_desire_protection_and_erotic_expression",
+  "confidence_level_how_secure_a_person_feels_in_their_sexual_self",
+  // eslint-disable-next-line no-secrets/no-secrets -- section id, not a secret
+  "typical_beliefs_how_early_learning_shapes_sexual_meaning",
 ] as const;
 
 const ESSENTIALS_SECTION_SET = new Set<string>(ESSENTIALS_SECTION_IDS);

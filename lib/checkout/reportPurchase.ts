@@ -32,21 +32,21 @@ export const REPORT_PURCHASE_PLANS: ReportPurchasePlan[] = [
     description: "Built for those with limited time",
     features: [
       {
-        label: "Includes the following chapter:",
+        label: "Includes the following chapters:",
       },
       {
         icon: "none",
-        label: "Basic Archetype Info",
+        label: "Other Archetype Probabilities",
         tone: "muted",
       },
       {
         icon: "none",
-        label: "Core Desire Drivers",
+        label: "Attachment Style",
         tone: "muted",
       },
       {
         icon: "none",
-        label: "Initial Growth Paths",
+        label: "Core Insecurities, Confidence & Beliefs",
         tone: "muted",
       },
       {

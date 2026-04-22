@@ -302,15 +302,13 @@ describe("ReportPage", () => {
       await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
       expect(container.querySelectorAll(".report-premium-overlay__cta").length).toBeGreaterThan(0);
 
-      const loveLanguageSection = container.querySelector(
-        "#love_language_how_affection_meaning_and_erotic_safety_are_communicated"
+      const growthSection = container.querySelector(
+        "#typical_growth_potentials_for_the_core_archetype"
       );
 
-      expect(loveLanguageSection).toBeInTheDocument();
-      expect(
-        loveLanguageSection?.querySelector(".report-themed-block__blurred")
-      ).not.toBeInTheDocument();
-      expect(loveLanguageSection?.querySelector(".report-premium-overlay")).not.toBeInTheDocument();
+      expect(growthSection).toBeInTheDocument();
+      expect(growthSection?.querySelector(".report-themed-block__blurred")).not.toBeInTheDocument();
+      expect(growthSection?.querySelector(".report-premium-overlay")).not.toBeInTheDocument();
     },
     REPORT_MODAL_TEST_TIMEOUT_MS
   );

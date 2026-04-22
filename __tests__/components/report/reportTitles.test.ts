@@ -46,7 +46,7 @@ describe("reportTitles", () => {
     expect(section.navTitle).toBe("Fantasies by Context");
   });
 
-  it("treats Love Language as a free section in the resolved access tiers", () => {
+  it("treats Love Language as a full_report section in the resolved access tiers", () => {
     const [section] = resolveReportSections(
       reportSections.filter(
         (entry) =>
@@ -55,6 +55,6 @@ describe("reportTitles", () => {
       "Spark Seeker"
     );
 
-    expect(section.accessTier).toBe("free");
+    expect(section.accessTier).toBe("full_report");
   });
 });

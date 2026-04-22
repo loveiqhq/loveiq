@@ -105,7 +105,7 @@ const ReportPricingModal: FC<Props> = ({
 
   const subtitle = targetArchetype
     ? `Unlock the complete ${targetArchetype} report \u2014 full attachment, desire drivers, practices, and growth paths for this archetype.`
-    : `Unlock your complete ${archetype} report \u2014 comprehensive coverage of your probabilities, sexual stage, attachment style, desire drivers, and growth paths.`;
+    : `Unlock your complete ${archetype} report \u2014 attachment style, core insecurities, confidence, love language, arousal, desire drivers, fantasies, and more.`;
   const planCards = targetArchetype
     ? REPORT_PURCHASE_PLANS.filter((card) => card.plan === "full_report")
     : REPORT_PURCHASE_PLANS;
