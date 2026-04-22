@@ -2517,7 +2517,7 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .report-section,
+  /* Buttons, navs, modals — snap to final state (motion not aesthetically meaningful here). */
   .report-gauge__value,
   .report-button,
   .report-page__shell-wrap,
@@ -2536,20 +2536,26 @@ input.autofill-dark:-internal-autofill-previewed {
     animation-duration: 0.01ms !important;
   }
 
+  /* Section wrapper — keep the 280ms opacity fade (opacity-only, vestibular-safe). */
   .report-section {
-    opacity: 1;
-    transform: none;
+    transform: none !important;
   }
 
+  /* Cards and rows — soft opacity-only fade, no translate. */
   .report-welcome-grid > .report-card,
   .report-prob__list .report-prob__row,
   .report-attachment-patterns__grid > .report-attachment-patterns__card {
-    opacity: 1 !important;
     transform: none !important;
-    animation-duration: 0.01ms !important;
+  }
+
+  .report-welcome-grid.is-revealed > .report-card,
+  .report-prob__list.is-revealed .report-prob__row,
+  .report-attachment-patterns__grid.is-revealed > .report-attachment-patterns__card {
+    animation: report-card-fade-in 120ms ease-out both !important;
     animation-delay: 0ms !important;
   }
 
+  /* Motion-by-definition: bar height/width sweeps + tooltip translate — snap. */
   .report-importance__tooltip {
     opacity: 1 !important;
     transform: translate(-50%, -100%) translateY(-8px) !important;
@@ -4643,6 +4649,15 @@ input.autofill-dark:-internal-autofill-previewed {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes report-card-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
   }
 }
 
