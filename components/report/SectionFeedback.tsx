@@ -46,6 +46,12 @@ const SectionFeedback: FC<Props> = ({ onFeedback, sectionTitle, value, isSent })
   const [comment, setComment] = useState("");
   const [selectedIssue, setSelectedIssue] = useState<string | null>(null);
   const [issueDropdownOpen, setIssueDropdownOpen] = useState(false);
+  // Tracks which thumb was most recently sent so the selected color survives
+  // the React batch between onFeedback (deferred via startTransition in parent)
+  // and setStep("sent"). Without this the thumb flashes gray for one frame.
+  const [sentDirection, setSentDirection] = useState<"up" | "down" | null>(
+    value === "up" || value === "down" ? value : null
+  );
 
   // Auto-dismiss toast after 3 seconds
   useEffect(() => {
@@ -64,7 +70,9 @@ const SectionFeedback: FC<Props> = ({ onFeedback, sectionTitle, value, isSent })
         <button
           type="button"
           aria-label={`This resonates: ${sectionTitle}`}
-          className={`report-fb__thumb ${value === "up" || step === "positive" ? "is-selected" : ""}`}
+          className={`report-fb__thumb ${
+            value === "up" || sentDirection === "up" || step === "positive" ? "is-selected" : ""
+          }`}
           onClick={() => setStep(step === "positive" ? "idle" : "positive")}
         >
           <ThumbUpIcon />
@@ -73,7 +81,10 @@ const SectionFeedback: FC<Props> = ({ onFeedback, sectionTitle, value, isSent })
           type="button"
           aria-label={`This does not resonate: ${sectionTitle}`}
           className={`report-fb__thumb ${
-            value === "down" || step === "negative-pick" || step === "negative-comment"
+            value === "down" ||
+            sentDirection === "down" ||
+            step === "negative-pick" ||
+            step === "negative-comment"
               ? "is-selected"
               : ""
           }`}
@@ -123,6 +134,7 @@ const SectionFeedback: FC<Props> = ({ onFeedback, sectionTitle, value, isSent })
               className="report-fb__send"
               onClick={() => {
                 onFeedback({ feedback: "up", comment: comment || undefined });
+                setSentDirection("up");
                 setStep("sent");
               }}
             >
@@ -211,6 +223,7 @@ const SectionFeedback: FC<Props> = ({ onFeedback, sectionTitle, value, isSent })
                   issue: selectedIssue ?? undefined,
                   comment: comment || undefined,
                 });
+                setSentDirection("down");
                 setStep("sent");
               }}
             >
