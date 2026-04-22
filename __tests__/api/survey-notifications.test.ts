@@ -122,7 +122,7 @@ describe("POST /api/survey notifications", () => {
     const res = await POST(makeRequest());
     expect(res.status).toBe(200);
 
-    expect(mockAfter).toHaveBeenCalledTimes(2);
+    expect(mockAfter).toHaveBeenCalledTimes(3);
     expect(mockEnsurePersonalReportForSubmission).toHaveBeenCalledWith({
       reportToken: null,
       submissionId: 123,
@@ -149,7 +149,7 @@ describe("POST /api/survey notifications", () => {
     const res = await POST(makeRequest());
     expect(res.status).toBe(200);
 
-    expect(mockAfter).toHaveBeenCalledTimes(2);
+    expect(mockAfter).toHaveBeenCalledTimes(3);
     expect(mockEnsurePersonalReportForSubmission).toHaveBeenCalledWith({
       reportToken: null,
       submissionId: 456,

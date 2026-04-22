@@ -1,12 +1,121 @@
 import Stripe from "stripe";
+import { Resend } from "resend";
 import { getBreaker } from "@/lib/circuit-breaker";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import logger from "@/lib/logger";
+import { reportAllEmail } from "@/lib/emails/report-all";
+import { reportFullEmail } from "@/lib/emails/report-full";
 import {
   getReportPurchasePlan,
   isReportPurchasePlanId,
   type ReportPurchasePlanId,
 } from "./reportPurchase";
+
+let _resend: Resend | null = null;
+function getResend(): Resend | null {
+  const key = process.env.RESEND_API_KEY;
+  if (!key) return null;
+  if (!_resend) _resend = new Resend(key);
+  return _resend;
+}
+
+async function lookupRecipientForSubmission(submissionId: number): Promise<{
+  email: string | null;
+  firstName: string | null;
+}> {
+  try {
+    const response = await supabaseServiceFetch(
+      `/rest/v1/survey_submission?id=eq.${submissionId}&select=app_user!fk_survey_submission_user(email,first_name)&limit=1`
+    );
+    if (!response.ok) return { email: null, firstName: null };
+
+    const rows = (await response.json()) as Array<{
+      app_user?: { email?: string | null; first_name?: string | null } | null;
+    }>;
+    const user = rows[0]?.app_user;
+    return {
+      email: user?.email?.toLowerCase().trim() || null,
+      firstName: user?.first_name?.trim() || null,
+    };
+  } catch (err) {
+    logger.warn({ err, submissionId }, "lookupRecipientForSubmission failed");
+    return { email: null, firstName: null };
+  }
+}
+
+async function lookupReportTokenForSubmission(submissionId: number): Promise<string | null> {
+  try {
+    const response = await supabaseServiceFetch(
+      `/rest/v1/report_access_token?survey_submission_id=eq.${submissionId}&select=token&order=created_at.desc&limit=1`
+    );
+    if (!response.ok) return null;
+    const rows = (await response.json()) as Array<{ token?: string | null }>;
+    return rows[0]?.token ?? null;
+  } catch (err) {
+    logger.warn({ err, submissionId }, "lookupReportTokenForSubmission failed");
+    return null;
+  }
+}
+
+async function sendPurchaseEmail({
+  plan,
+  reportTokenOverride,
+  submissionId,
+}: {
+  plan: ReportPurchasePlanId;
+  reportTokenOverride: string | null;
+  submissionId: number;
+}): Promise<void> {
+  if (plan !== "full_report" && plan !== "all_reports") {
+    return;
+  }
+
+  const resend = getResend();
+  if (!resend) {
+    logger.warn({ plan, submissionId }, "RESEND_API_KEY missing — skipping purchase email");
+    return;
+  }
+
+  const recipient = await lookupRecipientForSubmission(submissionId);
+  if (!recipient.email) {
+    logger.warn({ plan, submissionId }, "No recipient email for purchase — skipping");
+    return;
+  }
+
+  const reportToken = reportTokenOverride || (await lookupReportTokenForSubmission(submissionId));
+  const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://loveiq.org").replace(/\/$/, "");
+  const reportUrl = reportToken
+    ? `${siteUrl}/report/${encodeURIComponent(reportToken)}`
+    : `${siteUrl}/report`;
+
+  const tpl =
+    plan === "all_reports"
+      ? reportAllEmail({ firstName: recipient.firstName, reportUrl, siteUrl })
+      : reportFullEmail({ firstName: recipient.firstName, reportUrl, siteUrl });
+
+  try {
+    const { error } = await Promise.race([
+      resend.emails.send({
+        from: process.env.RESEND_FROM || "LoveIQ <hello@send.loveiq.org>",
+        to: recipient.email,
+        replyTo: process.env.RESEND_REPLY_TO || "hello@loveiq.org",
+        subject: tpl.subject,
+        html: tpl.html,
+        text: tpl.text,
+      }),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("Resend timeout")), 8_000)
+      ),
+    ]);
+    if (error) {
+      logger.error({ error, plan, submissionId }, "Purchase email send failed");
+    } else {
+      logger.info({ plan, submissionId }, "Purchase email sent");
+    }
+  } catch (err) {
+    logger.error({ err, plan, submissionId }, "Purchase email error");
+  }
+}
 import {
   STRIPE_CHECKOUT_SESSION_EXPAND,
   getStripeCheckoutPromotionSummary,
@@ -608,6 +717,17 @@ async function syncCheckoutSessionPayment({
         "Unable to persist unlocked archetype after checkout"
       );
     }
+  }
+
+  if (eventStatus === "succeeded") {
+    await sendPurchaseEmail({
+      plan,
+      reportTokenOverride:
+        typeof settledSession.metadata?.reportToken === "string"
+          ? settledSession.metadata.reportToken
+          : null,
+      submissionId: context.submissionId,
+    });
   }
 
   await upsertWebhookEventRecord({

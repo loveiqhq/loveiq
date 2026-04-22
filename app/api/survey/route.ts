@@ -1,11 +1,13 @@
 import { randomBytes } from "crypto";
 import { NextResponse } from "next/server";
+import { Resend } from "resend";
 import { z } from "zod";
 import { checkRateLimit, checkCooldown, getClientIp } from "@/lib/ratelimit";
 import { scheduleAfterResponse } from "@/lib/after-response";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { verifyCsrfToken } from "@/lib/csrf";
 import logger from "@/lib/logger";
+import { surveyCompleteEmail } from "@/lib/emails/survey-complete";
 import { ensurePersonalReportForSubmission } from "@/lib/report/personalReport";
 import type { SurveyAnswers } from "@/lib/survey/types";
 import {
@@ -13,6 +15,14 @@ import {
   ensureSubmissionScored,
   submitSurveyOnce,
 } from "@/lib/survey/server";
+
+let _resend: Resend | null = null;
+function getResend(): Resend | null {
+  const key = process.env.RESEND_API_KEY;
+  if (!key) return null;
+  if (!_resend) _resend = new Resend(key);
+  return _resend;
+}
 
 // eslint-disable-next-line no-secrets/no-secrets
 const BASE62 = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -223,6 +233,50 @@ export async function POST(request: Request) {
         reportToken: reportToken ?? null,
         submissionId,
       });
+    });
+
+    scheduleAfterResponse("survey-complete-email", async () => {
+      if (isExisting) return;
+
+      const resend = getResend();
+      if (!resend) {
+        logger.warn({ submissionId }, "RESEND_API_KEY missing — skipping survey completion email");
+        return;
+      }
+
+      const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://loveiq.org").replace(/\/$/, "");
+      const reportUrl = reportToken
+        ? `${siteUrl}/report/${encodeURIComponent(reportToken)}`
+        : `${siteUrl}/report`;
+
+      const tpl = surveyCompleteEmail({
+        firstName: normalizedFirstName,
+        reportUrl,
+        siteUrl,
+      });
+
+      try {
+        const { error } = await Promise.race([
+          resend.emails.send({
+            from: process.env.RESEND_FROM || "LoveIQ <hello@send.loveiq.org>",
+            to: normalizedEmail,
+            replyTo: process.env.RESEND_REPLY_TO || "hello@loveiq.org",
+            subject: tpl.subject,
+            html: tpl.html,
+            text: tpl.text,
+          }),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("Resend timeout")), 8_000)
+          ),
+        ]);
+        if (error) {
+          logger.error({ error, submissionId }, "Survey complete email send failed");
+        } else {
+          logger.info({ submissionId }, "Survey complete email sent");
+        }
+      } catch (err) {
+        logger.error({ err, submissionId }, "Survey complete email error");
+      }
     });
 
     return NextResponse.json({
