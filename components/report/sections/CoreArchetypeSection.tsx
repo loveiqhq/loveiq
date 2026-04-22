@@ -80,7 +80,7 @@ const CoreArchetypeSection: FC<Props> = ({ archetypeHtml, matchScore, theme }) =
 
         frameId = requestAnimationFrame(step);
       },
-      { threshold: 0.3 }
+      { threshold: 0 }
     );
 
     observer.observe(card);

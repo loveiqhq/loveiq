@@ -89,7 +89,7 @@ const ImportanceOfSexualitySection: FC<Props> = ({
           observer.disconnect();
         }
       },
-      { threshold: 0.2 }
+      { threshold: 0 }
     );
     observer.observe(el);
     return () => observer.disconnect();

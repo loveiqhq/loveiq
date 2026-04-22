@@ -92,7 +92,7 @@ const WelcomeSection: FC<Props> = ({ feedbackWidget, generalHtml, sectionId, sna
           observer.disconnect();
         }
       },
-      { threshold: 0.08 }
+      { threshold: 0 }
     );
 
     observer.observe(element);
@@ -145,12 +145,12 @@ const WelcomeSection: FC<Props> = ({ feedbackWidget, generalHtml, sectionId, sna
 
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (!entry.isIntersecting || entry.intersectionRatio < effectiveThreshold) return;
+        if (!entry.isIntersecting) return;
         reveal(METRIC_REVEAL_DELAY_MS);
         observer.disconnect();
       },
       {
-        threshold: [0, effectiveThreshold, 1],
+        threshold: 0,
         rootMargin: METRIC_REVEAL_ROOT_MARGIN,
       }
     );
