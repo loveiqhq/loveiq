@@ -7,6 +7,9 @@ import { trackSurveyInvite } from "@/lib/analytics";
 const EASING = "cubic-bezier(0.16, 1, 0.3, 1)";
 const SHARE_TEXT =
   "I took the LoveIQ assessment \u2014 it gave me real clarity on my relationship patterns. Try it yourself!";
+
+const buildWhatsAppMessage = (url: string): string =>
+  `Hey \u{1F60A} ,\n\nI recently did this pretty fascinating test on loveiq.org. It analyzes your sexuality and relationship patterns in a very thoughtful, science-based way.   It actually gave me a surprisingly deep perspective on how I experience desire, connection, and intimacy. Way beyond the usual \u201Cpersonality test\u201D stuff. \nThought of you while doing it, as I think you\u2019d find it genuinely interesting (and maybe even a bit eye-opening). No pressure at all of course. \nIf you try it, I\u2019d love to hear what you think \u{1F90D}\n\n${url}`;
 type ShareMethod =
   | "copy_link"
   | "email"
@@ -367,7 +370,7 @@ const SocialButtons: FC<SocialButtonsProps> = ({ referrerEmail, onCopied }) => {
     const url = buildShareUrl(referrerEmail, "whatsapp");
     trackShare("whatsapp", referrerEmail);
     window.open(
-      `https://wa.me/?text=${encodeURIComponent(SHARE_TEXT + " " + url)}`,
+      `https://wa.me/?text=${encodeURIComponent(buildWhatsAppMessage(url))}`,
       "_blank",
       "noopener,noreferrer"
     );
