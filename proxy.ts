@@ -34,7 +34,10 @@ export async function proxy(request: NextRequest) {
       path.startsWith("/admin") ||
       path.startsWith("/_next/") ||
       path.startsWith("/images/") ||
-      path === "/favicon.ico";
+      path.startsWith("/emails/") ||
+      path === "/favicon.ico" ||
+      path === "/favicon.svg" ||
+      path === "/apple-touch-icon.png";
 
     if (!isPublic) {
       const session = request.cookies.get("staging_session")?.value;
