@@ -4416,8 +4416,8 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-section__title {
   margin: 0;
   font-family: var(--font-serif);
-  font-size: 32px;
-  line-height: 40px;
+  font-size: 40px;
+  line-height: 48px;
   letter-spacing: -0.02em;
   font-weight: 500;
   color: #fff;
