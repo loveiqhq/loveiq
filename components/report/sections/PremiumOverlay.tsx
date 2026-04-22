@@ -12,9 +12,18 @@ const PremiumOverlay: FC<Props> = ({ archetype, sectionTitle, onUnlock }) => (
   <div className="report-premium-overlay">
     <div className="report-premium-overlay__card">
       <div className="report-premium-overlay__icon" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.8">
-          <rect x="4" y="11" width="16" height="9" rx="2" />
-          <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="#fff"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M4 9.8V4a2 2 0 0 1 2-2h8a2 2 0 0 1 1.414.586l3.588 3.588A2 2 0 0 1 20 8v12a2 2 0 0 1-2 2h-3" />
+          <path d="M14 2v5a1 1 0 0 0 1 1h5" />
+          <path d="M9 17v-2a2 2 0 0 0-4 0v2" />
+          <rect x="3" y="17" width="8" height="5" rx="1" />
         </svg>
       </div>
 
