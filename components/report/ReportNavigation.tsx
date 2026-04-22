@@ -11,6 +11,11 @@ interface Props {
   sections: DisplayReportSection[];
 }
 
+// Mirror of landing NavSection scroll-hide: hide topbar on scroll down, show on scroll up.
+// Scoped to viewports below xl (1280) — desktop uses the sidebar instead.
+const TOPBAR_SCROLL_THRESHOLD = 15;
+const TOPBAR_HIDE_BREAKPOINT = 1280;
+
 const ReportNavigation: FC<Props> = ({ activeSectionId, onSectionClick, sections }) => {
   const navRef = useRef<HTMLElement>(null);
   const browseButtonRef = useRef<HTMLButtonElement>(null);
@@ -18,6 +23,61 @@ const ReportNavigation: FC<Props> = ({ activeSectionId, onSectionClick, sections
   const drawerRef = useRef<HTMLDivElement>(null);
 
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [topbarHidden, setTopbarHidden] = useState(false);
+
+  useEffect(() => {
+    const lastScrollY = { current: window.scrollY };
+    const lastDirection: { current: "up" | "down" | null } = { current: null };
+    let ticking = false;
+
+    const update = () => {
+      const scrollY = window.scrollY || document.documentElement.scrollTop;
+      const belowXl = window.innerWidth < TOPBAR_HIDE_BREAKPOINT;
+
+      if (!belowXl) {
+        setTopbarHidden(false);
+        lastScrollY.current = scrollY;
+        ticking = false;
+        return;
+      }
+
+      if (scrollY <= 0) {
+        setTopbarHidden(false);
+        lastScrollY.current = scrollY;
+        ticking = false;
+        return;
+      }
+
+      const diff = scrollY - lastScrollY.current;
+      if (Math.abs(diff) >= TOPBAR_SCROLL_THRESHOLD) {
+        const direction = diff > 0 ? "down" : "up";
+        if (direction !== lastDirection.current) {
+          lastDirection.current = direction;
+          setTopbarHidden(direction === "down");
+        }
+        lastScrollY.current = scrollY;
+      }
+      ticking = false;
+    };
+
+    const onScroll = () => {
+      if (!ticking) {
+        requestAnimationFrame(update);
+        ticking = true;
+      }
+    };
+
+    const onResize = () => {
+      if (window.innerWidth >= TOPBAR_HIDE_BREAKPOINT) setTopbarHidden(false);
+    };
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onResize, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onResize);
+    };
+  }, []);
 
   // Capture wheel events on the desktop nav so the page doesn't scroll instead
   useEffect(() => {
@@ -101,7 +161,9 @@ const ReportNavigation: FC<Props> = ({ activeSectionId, onSectionClick, sections
       {/* ── Mobile nav (below xl) ── */}
       <div className="xl:hidden">
         {/* Fixed top bar — logo + wordmark + menu */}
-        <header className="report-mobile-topbar">
+        <header
+          className={`report-mobile-topbar${topbarHidden ? " report-mobile-topbar--hidden" : ""}`}
+        >
           <div className="report-mobile-topbar__brand">
             <Image
               src="/favicon.svg"
@@ -112,7 +174,7 @@ const ReportNavigation: FC<Props> = ({ activeSectionId, onSectionClick, sections
               width={32}
               unoptimized
             />
-            <span className="report-mobile-topbar__wordmark">LoveIQ</span>
+            <span className="report-mobile-topbar__wordmark">LoveIQ Report</span>
           </div>
           <button
             ref={browseButtonRef}

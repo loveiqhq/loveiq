@@ -1294,14 +1294,21 @@ input.autofill-dark:-internal-autofill-previewed {
   transition: color 180ms ease;
 }
 
-.report-fb__thumb:first-child:hover,
 .report-fb__thumb:first-child.is-selected {
   color: #2aff8f;
 }
 
-.report-fb__thumb:last-child:hover,
 .report-fb__thumb:last-child.is-selected {
   color: #ff4d4d;
+}
+
+@media (hover: hover) {
+  .report-fb__thumb:first-child:hover {
+    color: #2aff8f;
+  }
+  .report-fb__thumb:last-child:hover {
+    color: #ff4d4d;
+  }
 }
 
 .report-fb__thumb svg {
@@ -2455,10 +2462,11 @@ input.autofill-dark:-internal-autofill-previewed {
   }
 }
 
-/* Below xl the fixed mobile topbar (~64px) overlays content — pad so first section isn't clipped */
+/* Below xl the floating pill topbar (~56px including 8px top offset) overlays content —
+   pad generously so the first section gets breathing room below the pill */
 @media (max-width: 1279px) {
   .report-shell {
-    padding-top: calc(64px + env(safe-area-inset-top, 0px) + 1rem);
+    padding-top: calc(env(safe-area-inset-top, 0px) + 88px);
   }
 }
 
@@ -3928,29 +3936,36 @@ input.autofill-dark:-internal-autofill-previewed {
   height: 12px;
 }
 
-/* ── Mobile fixed top bar (logo + wordmark + menu) ── */
+/* ── Mobile floating glass pill (logo + wordmark + menu) ── */
 
 .report-mobile-topbar {
   position: fixed;
-  top: 0;
-  right: 0;
-  left: 0;
+  inset-inline: 8px;
+  top: calc(env(safe-area-inset-top, 0px) + 8px);
   z-index: 40;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px;
-  padding-top: max(16px, env(safe-area-inset-top));
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(15, 10, 22, 0.9);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  gap: 12px;
+  padding: 8px 8px 8px 14px;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, #1b0f2a 0%, #120a20 50%, #1b0f2a 100%);
+  box-shadow:
+    0 25px 80px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: transform 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.report-mobile-topbar--hidden {
+  transform: translate3d(0, calc(-100% - 16px), 0);
 }
 
 .report-mobile-topbar__brand {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
 }
 
@@ -3959,36 +3974,45 @@ input.autofill-dark:-internal-autofill-previewed {
   height: 32px;
   border-radius: 9999px;
   flex-shrink: 0;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.28);
 }
 
 .report-mobile-topbar__wordmark {
   color: #fff;
   font-family: var(--font-serif);
-  font-size: 20px;
-  line-height: 28px;
+  font-size: 18px;
+  line-height: 24px;
+  letter-spacing: -0.3px;
   white-space: nowrap;
 }
 
 .report-mobile-topbar__menu-btn {
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
-  padding: 4px;
-  border: 0;
-  background: transparent;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.05);
   color: #fff;
   cursor: pointer;
-  transition: color 180ms ease;
+  flex-shrink: 0;
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    transform 180ms ease;
 }
 
 .report-mobile-topbar__menu-btn:hover {
-  color: rgba(255, 255, 255, 0.75);
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.18);
+  transform: translateY(-1px);
 }
 
 .report-mobile-topbar__menu-btn svg {
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
 }
 
 /* ── Chapter drawer ── */

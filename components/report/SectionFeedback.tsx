@@ -64,7 +64,7 @@ const SectionFeedback: FC<Props> = ({ onFeedback, sectionTitle, value, isSent })
         <button
           type="button"
           aria-label={`This resonates: ${sectionTitle}`}
-          className={`report-fb__thumb ${value === "up" ? "is-selected" : ""}`}
+          className={`report-fb__thumb ${value === "up" || step === "positive" ? "is-selected" : ""}`}
           onClick={() => setStep(step === "positive" ? "idle" : "positive")}
         >
           <ThumbUpIcon />
@@ -72,7 +72,11 @@ const SectionFeedback: FC<Props> = ({ onFeedback, sectionTitle, value, isSent })
         <button
           type="button"
           aria-label={`This does not resonate: ${sectionTitle}`}
-          className={`report-fb__thumb ${value === "down" ? "is-selected" : ""}`}
+          className={`report-fb__thumb ${
+            value === "down" || step === "negative-pick" || step === "negative-comment"
+              ? "is-selected"
+              : ""
+          }`}
           onClick={() =>
             setStep(
               step === "negative-pick" || step === "negative-comment" ? "idle" : "negative-pick"
