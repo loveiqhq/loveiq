@@ -2221,6 +2221,53 @@ input.autofill-dark:-internal-autofill-previewed {
   font-weight: 600;
 }
 
+.report-premium-overlay__badges-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin: 0 auto 26px;
+}
+
+.report-premium-overlay__badges-label {
+  color: #d1d5db;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 300;
+  line-height: 19.21px;
+}
+
+.report-premium-overlay__badges-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.report-premium-overlay__badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 7px;
+  border-radius: 4px;
+  border: 1px solid rgba(168, 85, 247, 0.2);
+  font-family: var(--font-sans);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 13.5px;
+  letter-spacing: 0.45px;
+  text-transform: uppercase;
+}
+
+.report-premium-overlay__badge--essentials {
+  background: rgba(168, 85, 247, 0.1);
+  color: #c084fc;
+}
+
+.report-premium-overlay__badge--full {
+  background: rgba(85, 101, 247, 0.1);
+  color: #8486fc;
+}
+
 .report-premium-overlay__cta {
   display: inline-flex;
   align-items: center;
