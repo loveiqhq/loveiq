@@ -204,7 +204,17 @@ const ReportNavigation: FC<Props> = ({
               className="report-chapter-panel"
             >
               <div className="report-chapter-panel__header">
-                <span className="report-chapter-panel__heading">Chapters</span>
+                <div className="report-chapter-panel__brand">
+                  <Image
+                    alt=""
+                    aria-hidden="true"
+                    className="report-chapter-panel__logo"
+                    height={40}
+                    src="/images/LoveiqLogo.svg"
+                    width={40}
+                  />
+                  <span className="report-chapter-panel__brand-text">LoveIQ Report</span>
+                </div>
                 <button
                   ref={closeButtonRef}
                   type="button"
@@ -223,35 +233,45 @@ const ReportNavigation: FC<Props> = ({
                   </svg>
                 </button>
               </div>
+
+              <div className="report-chapter-panel__actions">
+                <button className="report-sidebar__btn" type="button">
+                  <ShareReportIcon />
+                  <span>Share Report</span>
+                </button>
+              </div>
+
+              <p className="report-chapter-panel__label">Chapters</p>
+
               <nav aria-label="Report sections" className="report-chapter-panel__nav">
-                {sections.map((section) => (
-                  <a
-                    key={section.id}
-                    href={`#${section.id}`}
-                    aria-current={activeSectionId === section.id ? "location" : undefined}
-                    title={section.displayTitle}
-                    className={[
-                      "report-mobile-nav__link",
-                      activeSectionId === section.id && "is-active",
-                    ]
-                      .filter(Boolean)
-                      .join(" ")}
-                    onClick={() => {
-                      onSectionClick?.(section.id);
-                      setDrawerOpen(false);
-                    }}
-                  >
-                    <span className="report-mobile-nav__copy">
-                      <span className="report-mobile-nav__number">
-                        {String(section.sectionNumber).padStart(2, "0")}
-                      </span>
+                {sections.map((section) => {
+                  const isActive = activeSectionId === section.id;
+                  const isSubheading = section.navType === "subheading";
+                  return (
+                    <a
+                      key={section.id}
+                      href={`#${section.id}`}
+                      aria-current={isActive ? "location" : undefined}
+                      title={section.displayTitle}
+                      className={[
+                        "report-mobile-nav__link",
+                        isActive && "is-active",
+                        isSubheading && "is-subheading",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                      onClick={() => {
+                        onSectionClick?.(section.id);
+                        setDrawerOpen(false);
+                      }}
+                    >
                       <span className="report-mobile-nav__label">{section.navTitle}</span>
-                    </span>
-                    <span className="report-mobile-nav__meta">
-                      <NavBadge tier={section.accessTier} />
-                    </span>
-                  </a>
-                ))}
+                      <span className="report-mobile-nav__meta">
+                        <NavBadge tier={section.accessTier} />
+                      </span>
+                    </a>
+                  );
+                })}
               </nav>
             </div>
           </div>
