@@ -439,8 +439,6 @@ const ReportExperience: FC<ReportExperienceProps> = ({
           <ReportNavigation
             activeSectionId={activeSectionId}
             onSectionClick={handleSectionClick}
-            primaryArchetype={viewArchetype}
-            reportDate={reportDate}
             sections={resolvedSections}
           />
 

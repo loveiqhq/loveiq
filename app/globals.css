@@ -2444,7 +2444,6 @@ input.autofill-dark:-internal-autofill-previewed {
 @media (min-width: 768px) {
   .report-shell {
     width: min(1520px, calc(100% - 2rem));
-    padding-top: 1.35rem;
   }
 
   .report-content {
@@ -2456,12 +2455,20 @@ input.autofill-dark:-internal-autofill-previewed {
   }
 }
 
+/* Below xl the fixed mobile topbar (~64px) overlays content — pad so first section isn't clipped */
+@media (max-width: 1279px) {
+  .report-shell {
+    padding-top: calc(64px + env(safe-area-inset-top, 0px) + 1rem);
+  }
+}
+
 @media (min-width: 1280px) {
   .report-shell {
     grid-template-columns: 17rem minmax(0, 1fr);
     gap: clamp(2rem, 4vw, 4rem);
     width: min(1520px, calc(100% - 3rem));
     margin: 0 auto;
+    padding-top: 1.35rem;
   }
 
   .report-content {
@@ -2585,7 +2592,7 @@ input.autofill-dark:-internal-autofill-previewed {
   .report-sidebar__btn,
   .report-mobile-nav__link,
   .report-fb__thumb,
-  .report-mobile-sticky,
+  .report-mobile-topbar,
   .report-chapter-panel,
   .report-chapter-backdrop,
   .report-pricing-modal__backdrop,
@@ -3921,158 +3928,67 @@ input.autofill-dark:-internal-autofill-previewed {
   height: 12px;
 }
 
-/* ── Mobile intro block ── */
+/* ── Mobile fixed top bar (logo + wordmark + menu) ── */
 
-.report-mobile-intro {
-  display: grid;
-  gap: 0.35rem;
-  padding-bottom: 1.5rem;
-}
-
-.report-mobile-intro__meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.report-mobile-intro__progress {
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  color: rgba(255, 255, 255, 0.38);
-  font-variant-numeric: tabular-nums;
-}
-
-.report-mobile-intro__title {
-  margin: 0;
-  font-family: var(--font-serif);
-  font-size: clamp(2.4rem, 8vw, 3.5rem);
-  line-height: 0.92;
-  letter-spacing: -0.05em;
-  color: #fff;
-}
-
-.report-mobile-intro__date {
-  margin: 0;
-  color: var(--report-muted);
-  font-size: 0.95rem;
-}
-
-.report-mobile-intro__actions {
-  display: flex;
-  flex-direction: column;
-  gap: 30px;
-  padding: 16px 0;
-}
-
-.report-mobile-intro__actions .report-sidebar__btn {
-  width: 100%;
-}
-
-.report-mobile-intro__browse-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: fit-content;
-  height: 44px;
-  margin-top: 0.5rem;
-  padding: 0 1.25rem;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--report-copy);
-  font-size: 0.875rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition:
-    background-color 180ms ease,
-    border-color 180ms ease;
-}
-
-.report-mobile-intro__browse-btn:hover {
-  background: rgba(255, 255, 255, 0.09);
-  border-color: rgba(255, 255, 255, 0.2);
-}
-
-/* ── Mobile sticky bar ── */
-
-.report-mobile-sticky {
+.report-mobile-topbar {
   position: fixed;
-  /* Push bar below the status-bar/notch on notched phones (viewport-fit: cover) */
-  top: env(safe-area-inset-top, 0px);
+  top: 0;
   right: 0;
   left: 0;
-  z-index: 50;
+  z-index: 40;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.75rem;
-  height: 52px;
-  padding: 0 1rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(22, 12, 34, 0.88);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(-100%);
-  transition:
-    opacity 220ms ease,
-    transform 220ms ease;
+  padding: 16px;
+  padding-top: max(16px, env(safe-area-inset-top));
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(15, 10, 22, 0.9);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
 
-.report-mobile-sticky.is-visible {
-  opacity: 1;
-  pointer-events: auto;
-  transform: translateY(0);
-}
-
-.report-mobile-sticky__section {
+.report-mobile-topbar__brand {
   display: flex;
-  flex: 1;
-  align-items: baseline;
-  gap: 0.5rem;
+  align-items: center;
+  gap: 8px;
   min-width: 0;
 }
 
-.report-mobile-sticky__number {
+.report-mobile-topbar__logo {
+  width: 32px;
+  height: 32px;
+  border-radius: 9999px;
   flex-shrink: 0;
-  font-size: 0.68rem;
-  font-weight: 600;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.32);
-  font-variant-numeric: tabular-nums;
 }
 
-.report-mobile-sticky__label {
-  overflow: hidden;
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--report-copy);
-  text-overflow: ellipsis;
+.report-mobile-topbar__wordmark {
+  color: #fff;
+  font-family: var(--font-serif);
+  font-size: 20px;
+  line-height: 28px;
   white-space: nowrap;
 }
 
-.report-mobile-sticky__chapters-btn {
-  display: inline-flex;
-  flex-shrink: 0;
-  align-items: center;
-  gap: 0.35rem;
-  height: 36px;
-  padding: 0 0.875rem;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--report-copy);
-  font-size: 0.8125rem;
-  font-weight: 500;
+.report-mobile-topbar__menu-btn {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 4px;
+  border: 0;
+  background: transparent;
+  color: #fff;
   cursor: pointer;
-  transition: background-color 180ms ease;
+  transition: color 180ms ease;
 }
 
-.report-mobile-sticky__chapters-btn:hover {
-  background: rgba(255, 255, 255, 0.09);
+.report-mobile-topbar__menu-btn:hover {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.report-mobile-topbar__menu-btn svg {
+  width: 24px;
+  height: 24px;
 }
 
 /* ── Chapter drawer ── */

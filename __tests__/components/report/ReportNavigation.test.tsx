@@ -18,16 +18,8 @@ describe("ReportNavigation", () => {
       "Spark Seeker"
     );
 
-    render(
-      <ReportNavigation
-        activeSectionId="core_motivation"
-        primaryArchetype="Spark Seeker"
-        reportDate="April 7, 2026"
-        sections={sections}
-      />
-    );
+    render(<ReportNavigation activeSectionId="core_motivation" sections={sections} />);
 
-    expect(screen.getAllByText(/spark seeker/i)[0]).toBeInTheDocument();
     expect(screen.getByAltText(/loveiq/i)).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: /share report/i })[0]).toBeInTheDocument();
     expect(screen.getAllByText(/full report/i).length).toBeGreaterThan(0);

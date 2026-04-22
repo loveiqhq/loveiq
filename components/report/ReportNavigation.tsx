@@ -1,40 +1,23 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useMemo, useRef, useState, type FC } from "react";
+import { useEffect, useRef, useState, type FC } from "react";
 import { ShareReportIcon } from "./ReportActionIcons";
 import type { AccessTier, DisplayReportSection } from "./reportTitles";
 
 interface Props {
   activeSectionId: string;
   onSectionClick?: (sectionId: string) => void;
-  primaryArchetype: string;
-  reportDate: string;
   sections: DisplayReportSection[];
 }
 
-const ReportNavigation: FC<Props> = ({
-  activeSectionId,
-  onSectionClick,
-  primaryArchetype,
-  reportDate,
-  sections,
-}) => {
+const ReportNavigation: FC<Props> = ({ activeSectionId, onSectionClick, sections }) => {
   const navRef = useRef<HTMLElement>(null);
-  const introRef = useRef<HTMLDivElement>(null);
   const browseButtonRef = useRef<HTMLButtonElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const drawerRef = useRef<HTMLDivElement>(null);
 
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [stickyVisible, setStickyVisible] = useState(false);
-
-  // Derived section progress values
-  const linkSections = useMemo(() => sections.filter((s) => s.navType === "link"), [sections]);
-  const activeSection = sections.find((s) => s.id === activeSectionId);
-  const activeProgress = activeSection?.sectionNumber ?? 1;
-  const totalLinks = linkSections.length;
-  const progressLabel = `${String(activeProgress).padStart(2, "0")} / ${String(totalLinks).padStart(2, "0")}`;
 
   // Capture wheel events on the desktop nav so the page doesn't scroll instead
   useEffect(() => {
@@ -84,20 +67,6 @@ const ReportNavigation: FC<Props> = ({
     }
   }, [activeSectionId]);
 
-  // Show sticky bar once the intro block leaves the viewport
-  useEffect(() => {
-    const intro = introRef.current;
-    if (!intro || typeof IntersectionObserver === "undefined") return;
-
-    const observer = new IntersectionObserver(
-      ([entry]) => setStickyVisible(!entry.isIntersecting),
-      { threshold: 0 }
-    );
-
-    observer.observe(intro);
-    return () => observer.disconnect();
-  }, []);
-
   // Lock body scroll while the drawer is open
   useEffect(() => {
     if (!drawerOpen) return;
@@ -131,63 +100,43 @@ const ReportNavigation: FC<Props> = ({
     <>
       {/* ── Mobile nav (below xl) ── */}
       <div className="xl:hidden">
-        {/* LAYER 1 — Compact intro block */}
-        <div ref={introRef} className="report-mobile-intro">
-          <div className="report-mobile-intro__meta">
-            <p className="report-overline">LoveIQ report</p>
-            {totalLinks > 0 && (
-              <span
-                className="report-mobile-intro__progress"
-                aria-label={`Section ${activeProgress} of ${totalLinks}`}
-              >
-                {progressLabel}
-              </span>
-            )}
-          </div>
-          <h1 className="report-mobile-intro__title">{primaryArchetype}</h1>
-          <p className="report-mobile-intro__date">{reportDate}</p>
-          <div className="report-mobile-intro__actions">
-            <button className="report-sidebar__btn" type="button">
-              <ShareReportIcon />
-              <span>Share Report</span>
-            </button>
+        {/* Fixed top bar — logo + wordmark + menu */}
+        <header className="report-mobile-topbar">
+          <div className="report-mobile-topbar__brand">
+            <Image
+              src="/favicon.svg"
+              alt=""
+              aria-hidden="true"
+              className="report-mobile-topbar__logo"
+              height={32}
+              width={32}
+              unoptimized
+            />
+            <span className="report-mobile-topbar__wordmark">LoveIQ</span>
           </div>
           <button
             ref={browseButtonRef}
             type="button"
-            className="report-mobile-intro__browse-btn"
+            className="report-mobile-topbar__menu-btn"
+            aria-label="Open chapters menu"
             aria-expanded={drawerOpen}
             aria-controls="report-chapter-drawer"
             onClick={() => setDrawerOpen(true)}
           >
-            Browse chapters
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              aria-hidden="true"
+            >
+              <path d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
           </button>
-        </div>
+        </header>
 
-        {/* LAYER 2 — Slim sticky bar (appears once intro scrolls away) */}
-        <div
-          className={`report-mobile-sticky${stickyVisible ? " is-visible" : ""}`}
-          aria-hidden={!stickyVisible}
-        >
-          <div className="report-mobile-sticky__section">
-            <span className="report-mobile-sticky__number">
-              {String(activeProgress).padStart(2, "0")}
-            </span>
-            <span className="report-mobile-sticky__label">{activeSection?.navTitle ?? ""}</span>
-          </div>
-          <button
-            type="button"
-            className="report-mobile-sticky__chapters-btn"
-            tabIndex={stickyVisible ? 0 : -1}
-            aria-expanded={drawerOpen}
-            aria-controls="report-chapter-drawer"
-            onClick={() => setDrawerOpen(true)}
-          >
-            ≡ Chapters
-          </button>
-        </div>
-
-        {/* LAYER 3 — Chapter drawer */}
+        {/* Chapter drawer */}
         {drawerOpen && (
           <div className="report-chapter-drawer-root">
             <div
