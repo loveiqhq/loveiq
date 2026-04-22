@@ -668,7 +668,7 @@ const InviteModal: FC<InviteModalProps> = ({ open, onClose, referrerEmail, refer
           aria-modal="true"
           aria-label={isSuccess ? "Referral sent" : "Refer a friend"}
           data-testid="invite-modal"
-          className={`pointer-events-auto w-full overflow-hidden rounded-t-3xl border border-white/10 sm:rounded-3xl ${
+          className={`pointer-events-auto relative flex w-full max-h-[100dvh] sm:max-h-[90vh] flex-col overflow-hidden rounded-t-3xl border border-white/10 sm:rounded-3xl ${
             isSuccess ? "sm:max-w-[744px]" : "sm:max-w-[789px]"
           }`}
           style={{
@@ -681,21 +681,21 @@ const InviteModal: FC<InviteModalProps> = ({ open, onClose, referrerEmail, refer
             transition: `all 400ms ${EASING}`,
           }}
         >
+          {/* Close button — anchored to dialog, stays visible while content scrolls */}
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={state === "sending"}
+            className="absolute right-5 top-5 z-20 flex items-center justify-center rounded-full bg-white/5 p-2 text-white/40 transition hover:bg-white/10 hover:text-white/60 disabled:opacity-30"
+            aria-label="Close"
+          >
+            <CloseIcon className="h-5 w-5" />
+          </button>
+
           <div
-            className="relative"
+            className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain"
             style={{ paddingBottom: "max(0px, env(safe-area-inset-bottom, 0px))" }}
           >
-            {/* Close button */}
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={state === "sending"}
-              className="absolute right-5 top-5 z-10 flex items-center justify-center rounded-full bg-white/5 p-2 text-white/40 transition hover:bg-white/10 hover:text-white/60 disabled:opacity-30"
-              aria-label="Close"
-            >
-              <CloseIcon className="h-5 w-5" />
-            </button>
-
             {isSuccess ? (
               /* ---- Success State ---- */
               <div className="flex flex-col items-center px-8 py-12 sm:px-[33px] sm:py-[49px] gap-8">
