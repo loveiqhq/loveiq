@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type CSSProperties, type FC } from "react";
+import { useEffect, useState, type CSSProperties, type FC } from "react";
 
 interface Props {
   generalHtml: string;
@@ -76,24 +76,12 @@ const ImportanceOfSexualitySection: FC<Props> = ({
   const userBar = bars.find((b) => b.isUser);
   if (userBar) userBar.height = userHeight;
 
-  const chartRef = useRef<HTMLDivElement>(null);
-  const [isAnimated, setIsAnimated] = useState(() => typeof IntersectionObserver === "undefined");
+  const [isAnimated, setIsAnimated] = useState(false);
 
   useEffect(() => {
-    const el = chartRef.current;
-    if (!el || isAnimated) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setIsAnimated(true);
-          observer.disconnect();
-        }
-      },
-      { threshold: 0 }
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [isAnimated]);
+    const rafId = requestAnimationFrame(() => setIsAnimated(true));
+    return () => cancelAnimationFrame(rafId);
+  }, []);
 
   return (
     <div className="report-flow report-flow--gap-xl">
@@ -118,10 +106,7 @@ const ImportanceOfSexualitySection: FC<Props> = ({
         </div>
 
         {/* Bar chart */}
-        <div
-          ref={chartRef}
-          className={`report-importance__chart${isAnimated ? " is-animated" : ""}`}
-        >
+        <div className={`report-importance__chart${isAnimated ? " is-animated" : ""}`}>
           <div className="report-importance__yaxis">
             <span>High</span>
             <span>Medium</span>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type FC } from "react";
+import { useEffect, useState, type FC } from "react";
 import { getReportTheme, getReportThemeIconStyle } from "../reportTheme";
 
 interface Props {
@@ -55,24 +55,12 @@ const ArchetypeProbabilitySection: FC<Props> = ({
 }) => {
   const [expanded, setExpanded] = useState(false);
   const [hoveredName, setHoveredName] = useState<string | null>(null);
-  const [isRevealed, setIsRevealed] = useState(() => typeof IntersectionObserver === "undefined");
-  const listRef = useRef<HTMLDivElement>(null);
+  const [isRevealed, setIsRevealed] = useState(false);
 
   useEffect(() => {
-    const el = listRef.current;
-    if (!el || isRevealed) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setIsRevealed(true);
-          observer.disconnect();
-        }
-      },
-      { threshold: 0 }
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [isRevealed]);
+    const rafId = requestAnimationFrame(() => setIsRevealed(true));
+    return () => cancelAnimationFrame(rafId);
+  }, []);
 
   const primaryTheme = getReportTheme(primaryArchetype);
   const primaryScore = Math.round(percentages[primaryArchetype] ?? 0);
@@ -146,7 +134,7 @@ const ArchetypeProbabilitySection: FC<Props> = ({
         </div>
 
         {/* Secondary archetypes */}
-        <div ref={listRef} className={`report-prob__list${isRevealed ? " is-revealed" : ""}`}>
+        <div className={`report-prob__list${isRevealed ? " is-revealed" : ""}`}>
           {secondaryItems.map((name, i) => {
             const score = Math.round(percentages[name] ?? 0);
             const theme = getReportTheme(name);

@@ -27,72 +27,64 @@ function splitMottoForWrap(motto: string) {
 const CoreArchetypeSection: FC<Props> = ({ archetypeHtml, matchScore, theme }) => {
   const matchPct = Math.round(matchScore);
   const mottoSegments = splitMottoForWrap(theme.motto);
-  const cardRef = useRef<HTMLElement>(null);
   const fillRef = useRef<HTMLDivElement>(null);
   const hasAnimated = useRef(false);
   const [displayPct, setDisplayPct] = useState(0);
 
   useEffect(() => {
-    const card = cardRef.current;
-    if (!card) return;
+    if (hasAnimated.current) return;
+    hasAnimated.current = true;
     let frameId = 0;
 
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (!entry.isIntersecting || hasAnimated.current) return;
-        observer.disconnect();
-        hasAnimated.current = true;
+    const prefersReducedMotion =
+      typeof window !== "undefined" &&
+      "matchMedia" in window &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-        const prefersReducedMotion =
-          typeof window !== "undefined" &&
-          "matchMedia" in window &&
-          window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (prefersReducedMotion) {
+      frameId = requestAnimationFrame(() => {
+        setDisplayPct(matchPct);
+        if (fillRef.current) fillRef.current.style.width = `${matchPct}%`;
+      });
+      return () => {
+        if (frameId) cancelAnimationFrame(frameId);
+      };
+    }
 
-        if (prefersReducedMotion) {
-          setDisplayPct(matchPct);
-          if (fillRef.current) fillRef.current.style.width = `${matchPct}%`;
-          return;
-        }
+    // Bar: single CSS transition — compositor-driven, no JS per frame
+    if (fillRef.current) {
+      fillRef.current.style.transition = `width ${ANIMATION_DURATION_MS}ms cubic-bezier(0.645, 0.045, 0.355, 1)`;
+      // rAF ensures width:0% is painted before setting target, triggering the transition
+      frameId = requestAnimationFrame(() => {
+        if (fillRef.current) fillRef.current.style.width = `${matchPct}%`;
+      });
+    }
 
-        // Bar: single CSS transition — compositor-driven, no JS per frame
-        if (fillRef.current) {
-          fillRef.current.style.transition = `width ${ANIMATION_DURATION_MS}ms cubic-bezier(0.645, 0.045, 0.355, 1)`;
-          // rAF ensures width:0% is painted before setting target, triggering the transition
-          frameId = requestAnimationFrame(() => {
-            if (fillRef.current) fillRef.current.style.width = `${matchPct}%`;
-          });
-        }
+    // Text count-up: independent RAF loop, does not touch the bar
+    const start = performance.now();
 
-        // Text count-up: independent RAF loop, does not touch the bar
-        const start = performance.now();
-
-        const step = (now: number) => {
-          const progress = Math.min((now - start) / ANIMATION_DURATION_MS, 1);
-          const eased =
-            progress < 0.5
-              ? 4 * progress * progress * progress
-              : 1 - Math.pow(-2 * progress + 2, 3) / 2;
-          setDisplayPct(Math.round(eased * matchPct));
-          if (progress < 1) {
-            frameId = requestAnimationFrame(step);
-          }
-        };
-
+    const step = (now: number) => {
+      const progress = Math.min((now - start) / ANIMATION_DURATION_MS, 1);
+      const eased =
+        progress < 0.5
+          ? 4 * progress * progress * progress
+          : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+      setDisplayPct(Math.round(eased * matchPct));
+      if (progress < 1) {
         frameId = requestAnimationFrame(step);
-      },
-      { threshold: 0 }
-    );
+      }
+    };
 
-    observer.observe(card);
+    frameId = requestAnimationFrame(step);
+
     return () => {
-      observer.disconnect();
       if (frameId) cancelAnimationFrame(frameId);
     };
   }, [matchPct]);
 
   return (
     <div className="report-flow report-flow--gap-xl">
-      <article ref={cardRef} className="report-hero-card">
+      <article className="report-hero-card">
         {/* Glow orbs */}
         <span className="report-hero-card__orb report-hero-card__orb--tr" aria-hidden="true" />
         <span className="report-hero-card__orb report-hero-card__orb--bl" aria-hidden="true" />

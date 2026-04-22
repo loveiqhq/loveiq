@@ -24,9 +24,6 @@ interface Props {
 
 const COUNT_UP_DURATION_MS = 1800;
 const INITIAL_METRIC_REVEAL_DELAY_MS = 840;
-const METRIC_REVEAL_DELAY_MS = 120;
-const METRIC_REVEAL_THRESHOLD = 0.15;
-const METRIC_REVEAL_ROOT_MARGIN = "0px 0px 0px 0px";
 
 const stageDescriptions: Record<string, string> = {
   "Recharging / Pausing":
@@ -76,7 +73,6 @@ function describeScalarValue(label: string, value: number | null) {
 
 const WelcomeSection: FC<Props> = ({ feedbackWidget, generalHtml, sectionId, snapshot }) => {
   const sectionRef = useRef<HTMLElement>(null);
-  const gridRef = useRef<HTMLDivElement>(null);
   const [isVisible, setIsVisible] = useState(false);
   const [animateReady, setAnimateReady] = useState(false);
 
@@ -100,69 +96,18 @@ const WelcomeSection: FC<Props> = ({ feedbackWidget, generalHtml, sectionId, sna
   }, []);
 
   useEffect(() => {
-    if (!isVisible || animateReady) return;
-    const grid = gridRef.current;
-    if (!grid) return;
-
     const prefersReducedMotion =
       typeof window !== "undefined" &&
       "matchMedia" in window &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-    let timeoutId = 0;
-
-    const reveal = (delay: number) => {
-      timeoutId = window.setTimeout(
-        () => {
-          setAnimateReady(true);
-        },
-        prefersReducedMotion ? 0 : delay
-      );
-    };
-
-    // On mobile, cards stack vertically making the grid taller than the viewport.
-    // IntersectionObserver caps intersectionRatio at viewportHeight/elementHeight,
-    // so a fixed 0.65 threshold is unreachable. Compute the highest achievable
-    // ratio and use 90% of it so the animation triggers when meaningfully in view.
-    const gridRect = grid.getBoundingClientRect();
-    const maxAchievableRatio =
-      gridRect.height > 0 ? Math.min(1, window.innerHeight / gridRect.height) : 1;
-    const effectiveThreshold = Math.min(METRIC_REVEAL_THRESHOLD, maxAchievableRatio * 0.9);
-
-    const isAboveTheFoldOnLoad =
-      typeof window !== "undefined" &&
-      window.scrollY <= 16 &&
-      isElementVisibleEnough(grid, effectiveThreshold);
-
-    if (isAboveTheFoldOnLoad) {
-      reveal(INITIAL_METRIC_REVEAL_DELAY_MS);
-      return () => {
-        if (timeoutId) {
-          window.clearTimeout(timeoutId);
-        }
-      };
-    }
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (!entry.isIntersecting) return;
-        reveal(METRIC_REVEAL_DELAY_MS);
-        observer.disconnect();
-      },
-      {
-        threshold: 0,
-        rootMargin: METRIC_REVEAL_ROOT_MARGIN,
-      }
+    const timeoutId = window.setTimeout(
+      () => setAnimateReady(true),
+      prefersReducedMotion ? 0 : INITIAL_METRIC_REVEAL_DELAY_MS
     );
 
-    observer.observe(grid);
-    return () => {
-      observer.disconnect();
-      if (timeoutId) {
-        window.clearTimeout(timeoutId);
-      }
-    };
-  }, [animateReady, isVisible]);
+    return () => window.clearTimeout(timeoutId);
+  }, []);
 
   const cleanHtml = generalHtml
     .replace(/<table>[\s\S]*?<\/table>/g, "")
@@ -185,7 +130,7 @@ const WelcomeSection: FC<Props> = ({ feedbackWidget, generalHtml, sectionId, sna
         dangerouslySetInnerHTML={{ __html: cleanHtml }}
       />
 
-      <div ref={gridRef} className={`report-welcome-grid${animateReady ? " is-revealed" : ""}`}>
+      <div className={`report-welcome-grid${animateReady ? " is-revealed" : ""}`}>
         <MetricCard
           animate={animateReady}
           description={describeScalarValue(
@@ -314,14 +259,3 @@ const StageCard: FC<{
 );
 
 export default WelcomeSection;
-
-function isElementVisibleEnough(element: Element, threshold: number) {
-  const rect = element.getBoundingClientRect();
-  const viewportHeight =
-    typeof window !== "undefined" ? window.innerHeight || document.documentElement.clientHeight : 0;
-
-  if (rect.height <= 0 || viewportHeight <= 0) return false;
-
-  const visibleHeight = Math.min(rect.bottom, viewportHeight) - Math.max(rect.top, 0);
-  return visibleHeight / rect.height >= threshold;
-}

@@ -4,11 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import WelcomeSection from "@/components/report/sections/WelcomeSection";
 
 let frameTime = 0;
-const SECTION_SELECTOR = 'section[data-report-section="true"]';
-const GRID_SELECTOR = ".report-welcome-grid";
 const GAUGE_SELECTOR = ".report-gauge__value";
 const INITIAL_METRIC_REVEAL_DELAY_MS = 840;
-const LATE_METRIC_REVEAL_DELAY_MS = 120;
 
 class MockIntersectionObserver implements IntersectionObserver {
   static instances: MockIntersectionObserver[] = [];
@@ -102,7 +99,7 @@ describe("WelcomeSection", () => {
     cleanup();
   });
 
-  it("delays the above-the-fold metric animation until after the welcome section settles", async () => {
+  it("renders static labels and initial 0% metric values on mount", () => {
     render(
       <WelcomeSection
         feedbackWidget={null}
@@ -124,43 +121,10 @@ describe("WelcomeSection", () => {
 
     expect(screen.getByText("Mostly satisfied")).toBeInTheDocument();
     expect(screen.getByText("Slightly important")).toBeInTheDocument();
-
     expect(getMetricTexts()).toEqual(["0%", "0%"]);
-    expect(MockIntersectionObserver.instances).toHaveLength(1);
-
-    const section = document.querySelector(SECTION_SELECTOR) as HTMLElement | null;
-    const grid = document.querySelector(GRID_SELECTOR) as HTMLDivElement | null;
-    expect(section).not.toBeNull();
-    expect(grid).not.toBeNull();
-    mockElementRect(grid!, { top: 160, bottom: 520, height: 360 });
-
-    const firstGaugeValue = document.querySelector(GAUGE_SELECTOR) as SVGPathElement | null;
-    expect(firstGaugeValue).not.toBeNull();
-    const initialOffset = Number(firstGaugeValue!.style.strokeDashoffset);
-
-    act(() => {
-      triggerIntersection(section!, 1);
-    });
-
-    await act(async () => {
-      vi.advanceTimersByTime(INITIAL_METRIC_REVEAL_DELAY_MS - 1);
-    });
-
-    expect(getMetricTexts()).toEqual(["0%", "0%"]);
-
-    await act(async () => {
-      vi.advanceTimersByTime(1);
-    });
-
-    await act(async () => {
-      await vi.runAllTimersAsync();
-    });
-
-    expect(getMetricTexts()).toEqual(["86%", "71%"]);
-    expect(Number(firstGaugeValue!.style.strokeDashoffset)).toBeLessThan(initialOffset);
   });
 
-  it("animates after later intersection when the welcome metrics are not initially visible", async () => {
+  it("animates metrics to their final values after the mount delay regardless of scroll", async () => {
     render(
       <WelcomeSection
         feedbackWidget={null}
@@ -180,81 +144,31 @@ describe("WelcomeSection", () => {
       />
     );
 
-    const section = document.querySelector(SECTION_SELECTOR) as HTMLElement | null;
-    const grid = document.querySelector(GRID_SELECTOR) as HTMLDivElement | null;
-    expect(section).not.toBeNull();
-    expect(grid).not.toBeNull();
+    const firstGaugeValue = document.querySelector(GAUGE_SELECTOR) as SVGPathElement | null;
+    expect(firstGaugeValue).not.toBeNull();
+    const initialOffset = Number(firstGaugeValue!.style.strokeDashoffset);
 
-    mockElementRect(grid!, { top: 920, bottom: 1280, height: 360 });
-
-    act(() => {
-      triggerIntersection(section!, 1);
-    });
-
-    expect(getMetricTexts()).toEqual(["0%", "0%"]);
-    expect(MockIntersectionObserver.instances).toHaveLength(2);
-
-    mockElementRect(grid!, { top: 220, bottom: 580, height: 360 });
-
-    act(() => {
-      triggerIntersection(grid!, 1);
-    });
-
+    // Before the reveal delay elapses, metrics still read 0%.
     await act(async () => {
-      vi.advanceTimersByTime(LATE_METRIC_REVEAL_DELAY_MS);
+      vi.advanceTimersByTime(INITIAL_METRIC_REVEAL_DELAY_MS - 1);
     });
+    expect(getMetricTexts()).toEqual(["0%", "0%"]);
 
+    // After the reveal delay and all follow-up rAFs, metrics reach their targets.
+    await act(async () => {
+      vi.advanceTimersByTime(1);
+    });
     await act(async () => {
       await vi.runAllTimersAsync();
     });
 
     expect(getMetricTexts()).toEqual(["86%", "71%"]);
+    expect(Number(firstGaugeValue!.style.strokeDashoffset)).toBeLessThan(initialOffset);
   });
 });
-
-function triggerIntersection(element: Element, intersectionRatio: number) {
-  const rect = new DOMRect(0, 0, 208, 114);
-
-  for (const observer of MockIntersectionObserver.instances) {
-    if (!observer.elements.has(element)) continue;
-
-    observer.callback(
-      [
-        {
-          boundingClientRect: rect,
-          intersectionRatio,
-          intersectionRect: rect,
-          isIntersecting: intersectionRatio > 0,
-          rootBounds: null,
-          target: element,
-          time: frameTime,
-        } as IntersectionObserverEntry,
-      ],
-      observer as unknown as IntersectionObserver
-    );
-  }
-}
 
 function getMetricTexts() {
   return Array.from(document.querySelectorAll(".report-card__metric-value span")).map(
     (element) => element.textContent
   );
-}
-
-function mockElementRect(
-  element: Element,
-  { top, bottom, height }: { top: number; bottom: number; height: number }
-) {
-  const width = 320;
-  vi.spyOn(element, "getBoundingClientRect").mockReturnValue({
-    x: 0,
-    y: top,
-    top,
-    bottom,
-    left: 0,
-    right: width,
-    width,
-    height,
-    toJSON: () => ({}),
-  } as DOMRect);
 }
