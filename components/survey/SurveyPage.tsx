@@ -686,13 +686,21 @@ const SlideScreen: FC<{
     <main className="relative flex min-h-dvh flex-col overflow-hidden bg-[#140a1a]">
       {/* Orange corner blob */}
       <div className="pointer-events-none absolute bottom-0 left-0 -translate-x-1/2 translate-y-1/2">
-        <div className="rounded-full bg-[#FE6839] w-[718px] h-[1895px] blur-[500px] sm:w-[1296px] sm:h-[1296px] animate-pulse-glow" />
+        <div
+          className="rounded-full bg-[#FE6839] w-[718px] h-[1895px] blur-[500px] sm:w-[1296px] sm:h-[1296px] animate-pulse-glow-opacity"
+          style={{ willChange: "opacity", transform: "translateZ(0)" }}
+        />
       </div>
       {/* Purple corner blob */}
       <div className="pointer-events-none absolute right-0 top-0 translate-x-1/2 -translate-y-1/2">
         <div
-          className="rounded-full bg-[#A78BFA] w-[653px] h-[1724px] blur-[400px] sm:w-[920px] sm:h-[920px] animate-pulse-glow"
-          style={{ animationDelay: "2s", animationFillMode: "backwards" }}
+          className="rounded-full bg-[#A78BFA] w-[653px] h-[1724px] blur-[400px] sm:w-[920px] sm:h-[920px] animate-pulse-glow-opacity"
+          style={{
+            animationDelay: "2s",
+            animationFillMode: "backwards",
+            willChange: "opacity",
+            transform: "translateZ(0)",
+          }}
         />
       </div>
       <div

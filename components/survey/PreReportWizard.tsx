@@ -417,13 +417,21 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete }) => {
     >
       {/* Orange corner blob */}
       <div className="pointer-events-none absolute bottom-0 left-0 -translate-x-1/2 translate-y-1/2">
-        <div className="h-[1895px] w-[718px] animate-pulse-glow rounded-full bg-[#FE6839] blur-[500px] sm:h-[1296px] sm:w-[1296px]" />
+        <div
+          className="h-[1895px] w-[718px] animate-pulse-glow-opacity rounded-full bg-[#FE6839] blur-[500px] sm:h-[1296px] sm:w-[1296px]"
+          style={{ willChange: "opacity", transform: "translateZ(0)" }}
+        />
       </div>
       {/* Purple corner blob */}
       <div className="pointer-events-none absolute right-0 top-0 translate-x-1/2 -translate-y-1/2">
         <div
-          className="h-[1724px] w-[653px] animate-pulse-glow rounded-full bg-[#A78BFA] blur-[400px] sm:h-[920px] sm:w-[920px]"
-          style={{ animationDelay: "2s", animationFillMode: "backwards" }}
+          className="h-[1724px] w-[653px] animate-pulse-glow-opacity rounded-full bg-[#A78BFA] blur-[400px] sm:h-[920px] sm:w-[920px]"
+          style={{
+            animationDelay: "2s",
+            animationFillMode: "backwards",
+            willChange: "opacity",
+            transform: "translateZ(0)",
+          }}
         />
       </div>
 

@@ -247,6 +247,19 @@ input.autofill-dark:-internal-autofill-previewed {
 .animate-pulse-glow {
   animation: pulse-glow 4s ease-in-out infinite;
 }
+
+@keyframes pulse-glow-opacity {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+.animate-pulse-glow-opacity {
+  animation: pulse-glow-opacity 4s ease-in-out infinite;
+}
 .animate-gradient-move {
   background-size: 200% 200%;
   animation: gradient-move 8s ease infinite;
