@@ -15,6 +15,7 @@ import { reportSections } from "@/data/report-general";
 import { cacheReportCheckoutQuote } from "@/lib/checkout/reportCheckoutQuoteCache";
 import { buildReportCheckoutHref, type ReportPurchasePlanId } from "@/lib/checkout/reportPurchase";
 import type { ReportPriceQuoteSnapshot } from "@/lib/pricing/reportPricing";
+import InviteModal from "@/components/survey/InviteModal";
 import FooterSection from "@/components/landing/FooterSection";
 import ReportNavigation from "./ReportNavigation";
 import ReportPricingModal from "./ReportPricingModal";
@@ -39,6 +40,7 @@ import DimensionSection from "./sections/DimensionSection";
 import ImportanceOfSexualitySection from "./sections/ImportanceOfSexualitySection";
 import PracticeTendenciesSection from "./sections/PracticeTendenciesSection";
 import WelcomeSection from "./sections/WelcomeSection";
+import { ReferFriendIcon } from "./ReportActionIcons";
 import { normalizeReportHtml } from "./reportContent";
 import { isSectionUnlockedForPlan, type ReportAccessPlan } from "@/lib/report/access";
 import { fromArchetypeSlug, isArchetypeName, toArchetypeSlug } from "@/lib/report/archetypeSlug";
@@ -301,6 +303,7 @@ interface ReportExperienceProps {
   submitted: Record<string, boolean>;
   theme: ReturnType<typeof getReportTheme>;
   unlockedArchetypes: Set<string>;
+  userEmail: string | null;
   userName: string | null;
   viewArchetype: string;
   viewMode: "owner" | "shared";
@@ -336,12 +339,14 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   submitted,
   theme,
   unlockedArchetypes,
+  userEmail,
   userName,
   viewArchetype,
   viewMode,
 }) => {
   const mainContentRef = useRef<HTMLElement | null>(null);
   const [activeSectionId, setActiveSectionId] = useState(resolvedSections[0]?.id ?? "welcome");
+  const [showInvite, setShowInvite] = useState(false);
   const [unlockedSections, setUnlockedSections] = useState<Record<string, boolean>>({});
   const clickLockUntilRef = useRef(0);
 
@@ -461,12 +466,23 @@ const ReportExperience: FC<ReportExperienceProps> = ({
         <div className="report-shell">
           <ReportNavigation
             activeSectionId={activeSectionId}
+            onReferFriend={() => setShowInvite(true)}
             onSectionClick={handleSectionClick}
             onShareClick={viewMode === "owner" && ownerToken ? onOpenShareModal : undefined}
             sections={resolvedSections}
           />
 
           <div className="report-content">
+            <div className="hidden xl:flex justify-end pb-2">
+              <button
+                type="button"
+                onClick={() => setShowInvite(true)}
+                className="flex items-center gap-2 rounded-xl bg-[#fe6839] px-[17px] py-[13px] text-sm font-medium text-white shadow-[0px_10px_15px_-3px_rgba(0,0,0,0.2),0px_4px_6px_-4px_rgba(0,0,0,0.2)] transition hover:bg-[#e85a2a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#fe6839]/60 [&_svg]:h-4 [&_svg]:w-4"
+              >
+                <ReferFriendIcon />
+                Refer a Friend
+              </button>
+            </div>
             {resolvedSections.map((section) => {
               const title = section.displayTitle;
               const generalHtml = replacePlaceholders(section.generalContent, placeholderValues);
@@ -665,6 +681,12 @@ const ReportExperience: FC<ReportExperienceProps> = ({
           returnFocusRef={mainContentRef}
         />
       ) : null}
+      <InviteModal
+        open={showInvite}
+        onClose={() => setShowInvite(false)}
+        referrerEmail={userEmail ?? ""}
+        referrerName={userName ?? ""}
+      />
     </main>
   );
 };
@@ -986,6 +1008,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       submitted={submitted}
       theme={theme}
       unlockedArchetypes={unlockedArchetypes}
+      userEmail={data.userEmail}
       userName={data.userName}
       viewArchetype={effectiveViewArchetype}
       viewMode={viewMode}

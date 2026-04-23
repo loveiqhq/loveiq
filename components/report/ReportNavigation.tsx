@@ -2,11 +2,12 @@
 
 import Image from "next/image";
 import { useEffect, useRef, useState, type FC } from "react";
-import { ShareReportIcon } from "./ReportActionIcons";
+import { ReferFriendIcon, ShareReportIcon } from "./ReportActionIcons";
 import type { AccessTier, DisplayReportSection } from "./reportTitles";
 
 interface Props {
   activeSectionId: string;
+  onReferFriend?: () => void;
   onSectionClick?: (sectionId: string) => void;
   onShareClick?: () => void;
   sections: DisplayReportSection[];
@@ -19,6 +20,7 @@ const TOPBAR_HIDE_BREAKPOINT = 1280;
 
 const ReportNavigation: FC<Props> = ({
   activeSectionId,
+  onReferFriend,
   onSectionClick,
   onShareClick,
   sections,
@@ -264,6 +266,19 @@ const ReportNavigation: FC<Props> = ({
                   <ShareReportIcon />
                   <span>Share Report</span>
                 </button>
+                {onReferFriend && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDrawerOpen(false);
+                      onReferFriend();
+                    }}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#fe6839] px-[17px] py-[13px] text-sm font-medium text-white shadow-[0px_10px_15px_-3px_rgba(0,0,0,0.2),0px_4px_6px_-4px_rgba(0,0,0,0.2)] transition hover:bg-[#e85a2a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#fe6839]/60 [&_svg]:h-4 [&_svg]:w-4"
+                  >
+                    <ReferFriendIcon />
+                    <span>Refer a Friend</span>
+                  </button>
+                )}
               </div>
 
               <p className="report-chapter-panel__label">Chapters</p>
