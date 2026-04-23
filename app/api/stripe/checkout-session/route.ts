@@ -204,6 +204,8 @@ export async function POST(request: Request) {
         trafficSource: quote.trafficSource,
       },
       mode: "payment",
+      invoice_creation: { enabled: true },
+      payment_intent_data: { receipt_email: customerEmail },
       success_url: buildSuccessUrl({
         archetypeSlug,
         origin: siteUrl,

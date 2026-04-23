@@ -94,7 +94,7 @@ export function reportAllEmail({ firstName, reportUrl, siteUrl }: ReportAllEmail
         Curious minds tend to get the most out of this.
       </p>
       <p style="margin:0 0 24px 0; font-family:${EMAIL_FONT}; font-size:17px; line-height:1.55; color:#000000;">
-        P.S. Each report is yours to <strong style="font-weight:700;">share with people you trust.</strong> Your <strong style="font-weight:700;">six complimentary months of the LoveIQ Journal</strong> on Substack are also included.
+        P.S. Each report is yours to <strong style="font-weight:700;">share with people you trust.</strong>
       </p>
     </td>
   </tr>
@@ -132,7 +132,7 @@ export function reportAllEmail({ firstName, reportUrl, siteUrl }: ReportAllEmail
     "",
     "Curious minds tend to get the most out of this.",
     "",
-    "P.S. Each report is yours to share with people you trust. Your six complimentary months of the LoveIQ Journal on Substack are also included.",
+    "P.S. Each report is yours to share with people you trust.",
     "",
     "If anything gets in the way — missing link, expired access, or trouble opening your report — reach out to us at hello@loveiq.org.",
     "",

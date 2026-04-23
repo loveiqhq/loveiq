@@ -1,22 +1,26 @@
 import { EMAIL_FONT, escapeHtml, renderCtaButton, wrapEmailShell } from "@/lib/emails/shared";
 
-export interface ReportFullEmailParams {
+export interface ReportEssentialsEmailParams {
   firstName?: string | null;
   reportUrl: string;
   siteUrl: string;
 }
 
-export function reportFullEmail({ firstName, reportUrl, siteUrl }: ReportFullEmailParams) {
+export function reportEssentialsEmail({
+  firstName,
+  reportUrl,
+  siteUrl,
+}: ReportEssentialsEmailParams) {
   const safeFirstName = firstName?.trim() ? escapeHtml(firstName.trim()) : "there";
   const displayName = firstName?.trim() || "there";
   const subject = `Your full report is ready, ${displayName}`;
-  const previewText = "Thank you for trusting us. Your Full Report is inside.";
+  const previewText = "Thank you for trusting us. Your Essentials report is ready.";
 
   const bodyHtml = `
   <tr>
     <td style="padding:24px 32px 8px;">
       <h1 style="margin:0; font-family:${EMAIL_FONT}; font-size:26px; font-weight:600; line-height:1.35; color:#000000; letter-spacing:-0.3px;">
-        You went deeper. Here&rsquo;s what you unlocked.
+        Here&rsquo;s what you just unlocked.
       </h1>
     </td>
   </tr>
@@ -29,19 +33,19 @@ export function reportFullEmail({ firstName, reportUrl, siteUrl }: ReportFullEma
         Thank you for trusting us with something this personal. That means a lot to us.
       </p>
       <p style="margin:0 0 16px 0; font-family:${EMAIL_FONT}; font-size:17px; line-height:1.55; color:#000000;">
-        <strong style="font-weight:700;">Your Full Report is inside.</strong>
+        <strong style="font-weight:700;">Your Essentials report is ready.</strong>
       </p>
       <p style="margin:0 0 16px 0; font-family:${EMAIL_FONT}; font-size:17px; line-height:1.55; color:#000000;">
-        It reflects the patterns in your responses across <strong style="font-weight:700;">18 analysed dimensions</strong> &mdash; your archetype probabilities, core motivation, relational stage, desire drivers, attachment style, and more. Most people are surprised by at least one of them.
+        Inside, you&rsquo;ll find three dimensions that together give you a grounded read on how you experience desire and connection &mdash; your archetype probabilities, core motivation, and relational stage. Most people have felt these patterns for years. Now you&rsquo;ll have language for them.
       </p>
       <p style="margin:0 0 24px 0; font-family:${EMAIL_FONT}; font-size:17px; line-height:1.55; color:#000000;">
-        You can <strong style="font-weight:700;">share this report</strong> with up to two people you trust. Some of the most interesting conversations start here.
+        You can also <strong style="font-weight:700;">share the report</strong> with one person you trust &mdash; sometimes the most valuable insight is a conversation it starts.
       </p>
     </td>
   </tr>
   <tr>
     <td align="center" style="padding:8px 32px 24px;">
-      ${renderCtaButton({ href: reportUrl, label: "View your Full Report" })}
+      ${renderCtaButton({ href: reportUrl, label: "View your Essentials Report" })}
     </td>
   </tr>
   <tr>
@@ -51,7 +55,7 @@ export function reportFullEmail({ firstName, reportUrl, siteUrl }: ReportFullEma
       </p>
       <ul style="margin:0 0 16px 0; padding-left:22px; font-family:${EMAIL_FONT}; font-size:17px; line-height:1.55; color:#000000;">
         <li style="margin:0 0 6px 0;">Built on psychology + real response patterns</li>
-        <li style="margin:0 0 6px 0;">18 dimensions of insight you can actually use</li>
+        <li style="margin:0 0 6px 0;">Practical insights you can actually use</li>
         <li style="margin:0 0 6px 0;">Private by design &mdash; your data stays yours</li>
       </ul>
       <p style="margin:16px 0 24px 0; font-family:${EMAIL_FONT}; font-size:17px; line-height:1.55; color:#000000;">
@@ -83,17 +87,17 @@ export function reportFullEmail({ firstName, reportUrl, siteUrl }: ReportFullEma
     "",
     "Thank you for trusting us with something this personal. That means a lot to us.",
     "",
-    "Your Full Report is inside.",
+    "Your Essentials report is ready.",
     "",
-    "It reflects the patterns in your responses across 18 analysed dimensions — your archetype probabilities, core motivation, relational stage, desire drivers, attachment style, and more. Most people are surprised by at least one of them.",
+    "Inside, you'll find three dimensions that together give you a grounded read on how you experience desire and connection — your archetype probabilities, core motivation, and relational stage. Most people have felt these patterns for years. Now you'll have language for them.",
     "",
-    "You can share this report with up to two people you trust. Some of the most interesting conversations start here.",
+    "You can also share the report with one person you trust — sometimes the most valuable insight is a conversation it starts.",
     "",
-    `View your Full Report: ${reportUrl}`,
+    `View your Essentials Report: ${reportUrl}`,
     "",
     "Why it's worth a look:",
     "- Built on psychology + real response patterns",
-    "- 18 dimensions of insight you can actually use",
+    "- Practical insights you can actually use",
     "- Private by design — your data stays yours",
     "",
     "Curious minds tend to get the most out of this.",

@@ -4,6 +4,7 @@ import { getBreaker } from "@/lib/circuit-breaker";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import logger from "@/lib/logger";
 import { reportAllEmail } from "@/lib/emails/report-all";
+import { reportEssentialsEmail } from "@/lib/emails/report-essentials";
 import { reportFullEmail } from "@/lib/emails/report-full";
 import {
   getReportPurchasePlan,
@@ -66,7 +67,7 @@ async function sendPurchaseEmail({
   reportTokenOverride: string | null;
   submissionId: number;
 }): Promise<void> {
-  if (plan !== "full_report" && plan !== "all_reports") {
+  if (plan !== "essentials" && plan !== "full_report" && plan !== "all_reports") {
     return;
   }
 
@@ -91,7 +92,9 @@ async function sendPurchaseEmail({
   const tpl =
     plan === "all_reports"
       ? reportAllEmail({ firstName: recipient.firstName, reportUrl, siteUrl })
-      : reportFullEmail({ firstName: recipient.firstName, reportUrl, siteUrl });
+      : plan === "essentials"
+        ? reportEssentialsEmail({ firstName: recipient.firstName, reportUrl, siteUrl })
+        : reportFullEmail({ firstName: recipient.firstName, reportUrl, siteUrl });
 
   try {
     const { error } = await Promise.race([
