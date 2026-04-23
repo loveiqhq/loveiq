@@ -8,6 +8,7 @@ import type { AccessTier, DisplayReportSection } from "./reportTitles";
 interface Props {
   activeSectionId: string;
   onSectionClick?: (sectionId: string) => void;
+  onShareClick?: () => void;
   sections: DisplayReportSection[];
 }
 
@@ -16,7 +17,12 @@ interface Props {
 const TOPBAR_SCROLL_THRESHOLD = 15;
 const TOPBAR_HIDE_BREAKPOINT = 1280;
 
-const ReportNavigation: FC<Props> = ({ activeSectionId, onSectionClick, sections }) => {
+const ReportNavigation: FC<Props> = ({
+  activeSectionId,
+  onSectionClick,
+  onShareClick,
+  sections,
+}) => {
   const navRef = useRef<HTMLElement>(null);
   const browseButtonRef = useRef<HTMLButtonElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
@@ -246,7 +252,15 @@ const ReportNavigation: FC<Props> = ({ activeSectionId, onSectionClick, sections
               </div>
 
               <div className="report-chapter-panel__actions">
-                <button className="report-sidebar__btn" type="button">
+                <button
+                  className="report-sidebar__btn"
+                  type="button"
+                  onClick={() => {
+                    setDrawerOpen(false);
+                    onShareClick?.();
+                  }}
+                  disabled={!onShareClick}
+                >
                   <ShareReportIcon />
                   <span>Share Report</span>
                 </button>
@@ -307,7 +321,12 @@ const ReportNavigation: FC<Props> = ({ activeSectionId, onSectionClick, sections
 
           {/* Action buttons */}
           <div className="report-sidebar__actions">
-            <button className="report-sidebar__btn" type="button">
+            <button
+              className="report-sidebar__btn"
+              type="button"
+              onClick={() => onShareClick?.()}
+              disabled={!onShareClick}
+            >
               <ShareReportIcon />
               <span>Share Report</span>
             </button>

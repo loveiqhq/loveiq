@@ -20,6 +20,9 @@ import ReportNavigation from "./ReportNavigation";
 import ReportPricingModal from "./ReportPricingModal";
 import ReportSection from "./ReportSection";
 import SectionFeedback from "./SectionFeedback";
+import ShareReportModal from "./ShareReportModal";
+import ShareVerifyGate from "./ShareVerifyGate";
+import SharedViewerBanner from "./SharedViewerBanner";
 import ViewingBanner from "./ViewingBanner";
 import { getReportSessionId } from "@/components/survey/hooks/surveySession";
 import { useReportData, type ReportRequestError } from "./hooks/useReportData";
@@ -263,10 +266,16 @@ interface ReportExperienceProps {
   devParam: string | null;
   feedbacks: Record<string, "up" | "down" | null>;
   isPricingModalOpen: boolean;
+  isShareModalOpen: boolean;
   matchScore: number;
   onBeginCheckout: (plan: ReportPurchasePlanId, archetype?: string | null) => void;
   onClosePricingModal: () => void;
+  onCloseShareModal: () => void;
+  onOpenShareModal: () => void;
+  onOpenPricingModal: () => void;
   onUnlockArchetype: (archetypeName: string) => void;
+  ownerFirstName: string | null;
+  ownerToken: string | null;
   percentages: Record<string, number>;
   pricingTargetArchetype: string | null;
   placeholderValues: {
@@ -290,6 +299,7 @@ interface ReportExperienceProps {
   unlockedArchetypes: Set<string>;
   userName: string | null;
   viewArchetype: string;
+  viewMode: "owner" | "shared";
 }
 
 const ReportExperience: FC<ReportExperienceProps> = ({
@@ -297,10 +307,16 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   devParam,
   feedbacks,
   isPricingModalOpen,
+  isShareModalOpen,
   matchScore,
   onBeginCheckout,
   onClosePricingModal,
+  onCloseShareModal,
+  onOpenShareModal,
+  onOpenPricingModal,
   onUnlockArchetype,
+  ownerFirstName,
+  ownerToken,
   percentages,
   placeholderValues,
   primaryArchetype,
@@ -317,6 +333,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   unlockedArchetypes,
   userName,
   viewArchetype,
+  viewMode,
 }) => {
   const mainContentRef = useRef<HTMLElement | null>(null);
   const [activeSectionId, setActiveSectionId] = useState(resolvedSections[0]?.id ?? "welcome");
@@ -422,23 +439,25 @@ const ReportExperience: FC<ReportExperienceProps> = ({
           DEV — report loaded via ?dev_session URL param ({devParam.slice(0, 8)}...)
         </div>
       )}
+      {viewMode === "shared" && <SharedViewerBanner ownerFirstName={ownerFirstName} />}
       {viewArchetype !== primaryArchetype && (
         <ViewingBanner archetypeName={viewArchetype} returnHref={returnToPrimaryHref} />
       )}
       <div
         className={[
           "report-page__shell-wrap",
-          isPricingModalOpen ? "report-page__shell-wrap--obscured" : "",
+          isPricingModalOpen || isShareModalOpen ? "report-page__shell-wrap--obscured" : "",
         ]
           .filter(Boolean)
           .join(" ")}
-        aria-hidden={isPricingModalOpen}
-        inert={isPricingModalOpen}
+        aria-hidden={isPricingModalOpen || isShareModalOpen}
+        inert={isPricingModalOpen || isShareModalOpen}
       >
         <div className="report-shell">
           <ReportNavigation
             activeSectionId={activeSectionId}
             onSectionClick={handleSectionClick}
+            onShareClick={viewMode === "owner" && ownerToken ? onOpenShareModal : undefined}
             sections={resolvedSections}
           />
 
@@ -630,6 +649,16 @@ const ReportExperience: FC<ReportExperienceProps> = ({
         returnFocusRef={mainContentRef}
         targetArchetype={pricingTargetArchetype}
       />
+      {viewMode === "owner" && ownerToken ? (
+        <ShareReportModal
+          open={isShareModalOpen}
+          onClose={onCloseShareModal}
+          ownerToken={ownerToken}
+          initialPlan={accessPlan}
+          onUpgrade={onOpenPricingModal}
+          returnFocusRef={mainContentRef}
+        />
+      ) : null}
     </main>
   );
 };
@@ -646,12 +675,22 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   /* eslint-enable no-restricted-syntax */
   const sessionId = devParam ?? storedSessionId;
 
-  const { data, status, error } = useReportData({ token, sessionId: token ? null : sessionId });
+  const { data, status, error, challenge, retry } = useReportData({
+    token,
+    sessionId: token ? null : sessionId,
+  });
   const { feedbacks, submitted, submitFeedback } = useSectionFeedback(sessionId);
   const [locallyUnlocked, setLocallyUnlocked] = useState<string[]>([]);
   const [isPricingModalOpen, setIsPricingModalOpen] = useState(false);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [pricingTargetArchetype, setPricingTargetArchetype] = useState<string | null>(null);
   const autoOpenedPricingRef = useRef(false);
+
+  const viewMode: "owner" | "shared" = data?.viewMode === "shared" ? "shared" : "owner";
+  const ownerFirstName = data?.ownerFirstName ?? null;
+  // Prefer URL token; fall back to server-resolved owner token so session-based
+  // (/report?sessionId=... or dev_session) views can also open the share modal.
+  const ownerToken = viewMode === "owner" ? (token ?? data?.ownerToken ?? null) : null;
 
   const accessPlan = data?.accessPlan ?? null;
   useEffect(() => {
@@ -659,13 +698,14 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     if (!data) return;
     const paywallDisabled = process.env.NEXT_PUBLIC_DISABLE_PAYWALL === "1";
     if (paywallDisabled) return;
+    if (viewMode === "shared") return;
     if (accessPlan !== null) return;
     autoOpenedPricingRef.current = true;
     // One-shot auto-open when the unpaid report first loads; guarded by
     // autoOpenedPricingRef so it never cascades.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsPricingModalOpen(true);
-  }, [accessPlan, data]);
+  }, [accessPlan, data, viewMode]);
 
   const apiUnlocked = data?.unlockedArchetypes;
   const primaryArchetypeFromData = data?.primaryArchetype;
@@ -778,6 +818,13 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     setPricingTargetArchetype(null);
   }, []);
 
+  const openShareModal = useCallback(() => setIsShareModalOpen(true), []);
+  const closeShareModal = useCallback(() => setIsShareModalOpen(false), []);
+  const openPricingModal = useCallback(() => {
+    setPricingTargetArchetype(null);
+    setIsPricingModalOpen(true);
+  }, []);
+
   if (status === "loading") {
     return (
       <main className="report-status-screen">
@@ -786,6 +833,17 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
           <p className="report-status-card__label">Loading your report...</p>
         </div>
       </main>
+    );
+  }
+
+  if (status === "needs_verification" && token) {
+    return (
+      <ShareVerifyGate
+        shareToken={token}
+        ownerFirstName={challenge?.ownerFirstName ?? null}
+        recipientEmailHint={challenge?.recipientEmailHint ?? null}
+        onVerified={() => retry()}
+      />
     );
   }
 
@@ -855,10 +913,16 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       accessPlan={data.accessPlan}
       feedbacks={feedbacks}
       isPricingModalOpen={isPricingModalOpen}
+      isShareModalOpen={isShareModalOpen}
       matchScore={matchScore}
       onBeginCheckout={beginCheckout}
       onClosePricingModal={closePricingModal}
+      onCloseShareModal={closeShareModal}
+      onOpenShareModal={openShareModal}
+      onOpenPricingModal={openPricingModal}
       onUnlockArchetype={handleUnlockArchetype}
+      ownerFirstName={ownerFirstName}
+      ownerToken={ownerToken}
       percentages={percentages}
       placeholderValues={placeholderValues}
       primaryArchetype={primaryArchetype}
@@ -875,6 +939,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       unlockedArchetypes={unlockedArchetypes}
       userName={data.userName}
       viewArchetype={effectiveViewArchetype}
+      viewMode={viewMode}
     />
   );
 };

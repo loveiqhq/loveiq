@@ -20,11 +20,13 @@ describe("useReportData", () => {
   it("returns a missing status when no report session id exists", () => {
     const { result } = renderHook(() => useReportData({ sessionId: null }));
 
-    expect(result.current).toEqual({
+    expect(result.current).toMatchObject({
       data: null,
       status: "missing",
       error: null,
+      challenge: null,
     });
+    expect(typeof result.current.retry).toBe("function");
   });
 
   it("returns report data on a successful fetch", async () => {

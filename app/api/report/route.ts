@@ -15,6 +15,12 @@ import { getReportPriceQuotesForContext } from "@/lib/pricing/reportPricing";
 import logger from "@/lib/logger";
 import type { ReportPriceQuoteSnapshot } from "@/lib/pricing/reportPricing";
 import type { ReportPurchasePlanId } from "@/lib/checkout/reportPurchase";
+import {
+  REPORT_SHARE_TOKEN_REGEX,
+  markShareViewed,
+  resolveShareFromToken,
+} from "@/lib/report/shareAccess";
+import { maskEmail, verifyCookieForShare } from "@/lib/report/shareVerify";
 
 const sessionIdSchema = z.object({
   pricingSessionId: z.string().uuid().optional(),
@@ -23,7 +29,7 @@ const sessionIdSchema = z.object({
 
 const tokenSchema = z.object({
   pricingSessionId: z.string().uuid().optional(),
-  token: z.string().regex(/^rpt_[a-zA-Z0-9]{20}$/),
+  token: z.string().regex(/^(rpt_[a-zA-Z0-9]{20}|rpts_[A-Za-z0-9]{20})$/),
 });
 
 const RATE_LIMIT_CONFIG = {
@@ -141,26 +147,62 @@ export async function GET(request: Request) {
     // 5. Look up survey_submission — by token or session_id
     let submissionQuery: string;
 
-    if (tokenParsed?.success) {
-      // Token-based: look up report_access_token → get submission_id → get submission
-      const tokenRes = await getBreaker("supabase").fire(() =>
-        fetchWithTimeout(
-          `${supabaseUrl}/rest/v1/report_access_token?token=eq.${encodeURIComponent(tokenParsed.data.token)}&select=survey_submission_id&limit=1`,
-          { headers, cache: "no-store", timeoutMs: SUPABASE_TIMEOUT_MS }
-        )
-      );
+    let isShareAccess = false;
+    let shareId: number | null = null;
 
-      if (!tokenRes.ok) {
-        logger.error({ status: tokenRes.status }, "Token lookup failed");
-        return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
+    if (tokenParsed?.success) {
+      const token = tokenParsed.data.token;
+      let submissionId: number | null = null;
+
+      if (REPORT_SHARE_TOKEN_REGEX.test(token)) {
+        // Shared viewer — resolve via report_share, reject if revoked.
+        const shareContext = await resolveShareFromToken(token);
+        if (!shareContext) {
+          return NextResponse.json({ error: "Report not found." }, { status: 404 });
+        }
+        // Email-verification gate: recipient must have proven their identity
+        // (POST /api/report/share/verify) and received the HMAC cookie.
+        if (
+          !verifyCookieForShare(request, shareContext.share.id, shareContext.share.recipient_email)
+        ) {
+          return NextResponse.json(
+            {
+              needsVerification: true,
+              recipientEmailHint: maskEmail(shareContext.share.recipient_email),
+              ownerFirstName: shareContext.ownerFirstName,
+            },
+            { status: 401 }
+          );
+        }
+        isShareAccess = true;
+        shareId = shareContext.share.id;
+        submissionId = shareContext.submissionId;
+      } else {
+        // Owner — look up report_access_token → submission_id.
+        const tokenRes = await getBreaker("supabase").fire(() =>
+          fetchWithTimeout(
+            `${supabaseUrl}/rest/v1/report_access_token?token=eq.${encodeURIComponent(token)}&select=survey_submission_id&limit=1`,
+            { headers, cache: "no-store", timeoutMs: SUPABASE_TIMEOUT_MS }
+          )
+        );
+
+        if (!tokenRes.ok) {
+          logger.error({ status: tokenRes.status }, "Token lookup failed");
+          return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
+        }
+
+        const tokenRows = (await tokenRes.json()) as Array<{ survey_submission_id: number }>;
+        if (!Array.isArray(tokenRows) || tokenRows.length === 0) {
+          return NextResponse.json({ error: "Report not found." }, { status: 404 });
+        }
+        submissionId = tokenRows[0].survey_submission_id;
       }
 
-      const tokenRows = (await tokenRes.json()) as Array<{ survey_submission_id: number }>;
-      if (!Array.isArray(tokenRows) || tokenRows.length === 0) {
+      if (!submissionId) {
         return NextResponse.json({ error: "Report not found." }, { status: 404 });
       }
 
-      submissionQuery = `${supabaseUrl}/rest/v1/survey_submission?id=eq.${tokenRows[0].survey_submission_id}&select=id,user_id,utm_tracker,created_date_time,app_user!fk_survey_submission_user(first_name,email)&limit=1`;
+      submissionQuery = `${supabaseUrl}/rest/v1/survey_submission?id=eq.${submissionId}&select=id,user_id,utm_tracker,created_date_time,app_user!fk_survey_submission_user(first_name,email)&limit=1`;
     } else {
       const sid = (sessionParsed as { success: true; data: { sessionId: string } }).data.sessionId;
       submissionQuery = `${supabaseUrl}/rest/v1/survey_submission?session_id=eq.${encodeURIComponent(sid)}&select=id,user_id,utm_tracker,created_date_time,app_user!fk_survey_submission_user(first_name,email)&limit=1`;
@@ -313,7 +355,7 @@ export async function GET(request: Request) {
       logger.warn({ err, submissionId: submission.id }, "Unable to sync report access state");
     }
 
-    if (!accessPlan) {
+    if (!accessPlan && !isShareAccess) {
       try {
         pricingQuotes = await getReportPriceQuotesForContext({
           pricingSessionId: tokenParsed?.success
@@ -339,10 +381,44 @@ export async function GET(request: Request) {
       primaryArchetype,
     });
 
+    if (isShareAccess && shareId !== null) {
+      const viewedShareId = shareId;
+      scheduleAfterResponse("report-share-view", () => markShareViewed(viewedShareId));
+    }
+
+    // Owner token lookup — needed so the share modal can authenticate POST
+    // /api/report/share. Session-based views (`/report?dev_session=...` or
+    // sessionId cookie flow) otherwise have no `rpt_` handle. Skip for shared
+    // viewers; they must not see the owner's token.
+    let ownerToken: string | null = null;
+    if (!isShareAccess) {
+      if (tokenParsed?.success) {
+        ownerToken = tokenParsed.data.token;
+      } else {
+        try {
+          const ownerTokenRes = await getBreaker("supabase").fire(() =>
+            fetchWithTimeout(
+              `${supabaseUrl}/rest/v1/report_access_token?survey_submission_id=eq.${submission.id}&select=token&order=created_at.desc&limit=1`,
+              { headers, cache: "no-store", timeoutMs: SUPABASE_TIMEOUT_MS }
+            )
+          );
+          if (ownerTokenRes.ok) {
+            const rows = (await ownerTokenRes.json()) as Array<{ token: string | null }>;
+            ownerToken = rows[0]?.token ?? null;
+          }
+        } catch (err) {
+          logger.warn({ err, submissionId: submission.id }, "owner-token lookup failed");
+        }
+      }
+    }
+
     return NextResponse.json({
       accessPlan,
       userName: getSubmissionUserName(submission),
-      userEmail: getSubmissionUserEmail(submission),
+      userEmail: isShareAccess ? null : getSubmissionUserEmail(submission),
+      ownerFirstName: isShareAccess ? getSubmissionUserName(submission) : null,
+      ownerToken,
+      viewMode: isShareAccess ? ("shared" as const) : ("owner" as const),
       primaryArchetype,
       percentages: scoring.v5_percentages || scoring.percentages || {},
       reportDate: submission.created_date_time,

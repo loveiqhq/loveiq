@@ -210,9 +210,11 @@ describe("GET /api/report", () => {
     expect(res.status).toBe(200);
 
     const json = await res.json();
-    expect(json).toEqual({
+    expect(json).toMatchObject({
       userName: "Eman",
       userEmail: "eman@example.com",
+      ownerFirstName: null,
+      viewMode: "owner",
       accessPlan: null,
       primaryArchetype: "Emotional Voyeur",
       percentages: { "Emotional Voyeur": 63 },
@@ -225,6 +227,7 @@ describe("GET /api/report", () => {
       pricingQuotes: null,
       unlockedArchetypes: [],
     });
+    expect("ownerToken" in json).toBe(true);
 
     const submissionLookupUrl = mockFetchWithTimeout.mock.calls[0][0] as string;
     const snapshotAnswerLookupUrl = mockFetchWithTimeout.mock.calls[2][0] as string;

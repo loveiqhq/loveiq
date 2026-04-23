@@ -49,9 +49,6 @@ export const REPORT_PURCHASE_PLANS: ReportPurchasePlan[] = [
         label: "Core Insecurities, Confidence & Beliefs",
         tone: "muted",
       },
-      {
-        label: "Share report with 1 extra email",
-      },
     ],
     plan: "essentials",
     priceCents: 1499,
@@ -72,7 +69,7 @@ export const REPORT_PURCHASE_PLANS: ReportPurchasePlan[] = [
         label: "Get full access to the report",
       },
       {
-        label: "Share report with anyone",
+        label: "Share report with up to 2 people",
       },
       {
         label: "18 analysed dimensions",

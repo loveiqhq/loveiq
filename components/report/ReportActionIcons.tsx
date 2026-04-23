@@ -34,37 +34,21 @@ const FriendPlusPaths: FC = () => (
 );
 
 export const ShareReportIcon: FC = () => (
-  <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-    <path
-      d="M7.33398 9.33331H14.0007"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <path
-      d="M10.666 2.66669H11.9993C12.353 2.66669 12.6921 2.80716 12.9422 3.05721C13.1922 3.30726 13.3327 3.6464 13.3327 4.00002V4.89602"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <path
-      d="M11.334 12L14.0007 9.33335L11.334 6.66669"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <path
-      d="M5.33268 2.66669H3.99935C3.64573 2.66669 3.30659 2.80716 3.05654 3.05721C2.80649 3.30726 2.66602 3.6464 2.66602 4.00002V13.3334C2.66602 13.687 2.80649 14.0261 3.05654 14.2762C3.30659 14.5262 3.64573 14.6667 3.99935 14.6667H11.9993C12.248 14.6667 12.4916 14.5973 12.7028 14.4662C12.9141 14.3351 13.0844 14.1475 13.1947 13.9247"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <path
-      d="M10.0007 1.33331H6.00065C5.63246 1.33331 5.33398 1.63179 5.33398 1.99998V3.33331C5.33398 3.7015 5.63246 3.99998 6.00065 3.99998H10.0007C10.3688 3.99998 10.6673 3.7015 10.6673 3.33331V1.99998C10.6673 1.63179 10.3688 1.33331 10.0007 1.33331Z"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
+  <svg
+    viewBox="0 0 32 32"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    stroke="currentColor"
+    strokeWidth="2.66667"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <path d="M24 10.6666C26.2091 10.6666 28 8.87577 28 6.66663C28 4.45749 26.2091 2.66663 24 2.66663C21.7909 2.66663 20 4.45749 20 6.66663C20 8.87577 21.7909 10.6666 24 10.6666Z" />
+    <path d="M8 20C10.2091 20 12 18.2091 12 16C12 13.7909 10.2091 12 8 12C5.79086 12 4 13.7909 4 16C4 18.2091 5.79086 20 8 20Z" />
+    <path d="M24 29.3334C26.2091 29.3334 28 27.5425 28 25.3334C28 23.1242 26.2091 21.3334 24 21.3334C21.7909 21.3334 20 23.1242 20 25.3334C20 27.5425 21.7909 29.3334 24 29.3334Z" />
+    <path d="M11.4534 18.0133L20.56 23.32" />
+    <path d="M20.5467 8.68005L11.4534 13.9867" />
   </svg>
 );
 
