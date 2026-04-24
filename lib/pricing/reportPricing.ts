@@ -1111,9 +1111,13 @@ function buildQuotePayload({
       : now.toISOString();
 
   // Initial price rules (Pricing.xlsx + MVP doc):
-  //   Group A  → initial = starting (no contextual adjustments)
-  //   Group B  → initial = normalize(min(msrp, starting × mults))
-  // In both cases, initial never exceeds MSRP so the email strike stays sane.
+  //   Group A  → initial = starting (no contextual adjustments).
+  //   Group B  → initial = min(msrp, starting × country × device × traffic ×
+  //              behavioral × engagement). The MVP doc's "Full Dynamic Pricing
+  //              Engine" lives in Group B — uplift flows through to what the
+  //              user is charged, not just analytics.
+  // Normalize to .49/.99 endings, then re-clamp to MSRP so All Reports' flat
+  // .00 MSRP (e.g. €259.00 / €159.00) doesn't drift above the retail anchor.
   const groupBInitialRaw =
     bucket.startingCents *
     countryPricing.multiplier *
@@ -1121,8 +1125,11 @@ function buildQuotePayload({
     trafficMultiplier *
     behavioralPricing.multiplier *
     engagementMultiplier;
-  const computedInitialCents = normalizePriceEnding(
-    Math.min(bucket.msrpCents, experimentGroup === "A" ? bucket.startingCents : groupBInitialRaw)
+  const computedInitialCents = Math.min(
+    bucket.msrpCents,
+    normalizePriceEnding(
+      Math.min(bucket.msrpCents, experimentGroup === "A" ? bucket.startingCents : groupBInitialRaw)
+    )
   );
   const initialPriceCents =
     !regenerateInitialPrice && existingQuote?.initial_price != null
@@ -1134,10 +1141,11 @@ function buildQuotePayload({
     now,
     plan,
   });
-  // Ladder is applied to starting-sale (per xlsx). For Group A this matches
-  // initial; for Group B it intentionally ignores the contextual uplift so
-  // the promised discount depth lines up with what the email advertises.
-  const discountedCents = normalizePriceEnding(bucket.startingCents * discount.multiplier);
+  // Ladder is applied to initial_price so Group B's contextual uplift flows
+  // through to the charged amount. For Group A this equals starting × ladder
+  // which matches the xlsx advertised depth; for Group B the depth is
+  // relative to the uplifted initial, exactly as the MVP doc specifies.
+  const discountedCents = normalizePriceEnding(initialPriceCents * discount.multiplier);
   const previousCurrentPriceCents =
     !regenerateInitialPrice && existingQuote?.current_price != null
       ? fromEuroAmount(existingQuote.current_price)

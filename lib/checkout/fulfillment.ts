@@ -642,6 +642,8 @@ async function syncCheckoutSessionPayment({
     discountStep: settledSession.metadata?.discountStep ?? null,
     currentPrice: settledSession.metadata?.currentPrice ?? null,
     initialPrice: settledSession.metadata?.initialPrice ?? null,
+    msrp: settledSession.metadata?.msrp ?? null,
+    startingPrice: settledSession.metadata?.startingPrice ?? null,
     countryTier: settledSession.metadata?.countryTier ?? null,
     deviceType: settledSession.metadata?.deviceType ?? null,
     trafficSource: settledSession.metadata?.trafficSource ?? null,
