@@ -5621,6 +5621,101 @@ input.autofill-dark:-internal-autofill-previewed {
   border-bottom: 0;
 }
 
+/* ── Locked (premium) group layout ────────────────────────── */
+
+/* Static bar fill — no IntersectionObserver in locked state */
+.report-practice-group--locked .report-practice-table__metric-bar span {
+  width: var(--practice-fill-w);
+  transition: none;
+}
+
+/* Blur metric cells inside locked rows */
+.report-practice-table__row--locked .report-practice-table__metric {
+  filter: blur(4.55px);
+  opacity: 0.5;
+  user-select: none;
+  pointer-events: none;
+}
+
+/* Container — containing block for the absolute cover */
+.report-practice-table__locked-section {
+  position: relative;
+}
+
+/* Remove bottom border from the last locked row (cover div follows it) */
+.report-practice-table__locked-section .report-practice-table__row:nth-last-child(2) {
+  border-bottom: 0;
+}
+
+/* Cover — absolutely positioned grid that mirrors the table columns exactly */
+.report-practice-table__locked-cover {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: minmax(300px, 1.65fr) minmax(184px, 1fr) minmax(184px, 1fr);
+  pointer-events: none;
+}
+
+/* Column 1 placeholder — transparent, passes pointer events to name cells below */
+.report-practice-table__locked-cover__name-spacer {
+  /* intentionally empty */
+}
+
+/* Columns 2–3 — containing block for PremiumOverlay */
+.report-practice-table__locked-cover__metrics {
+  grid-column: 2 / 4;
+  position: relative;
+  pointer-events: all;
+}
+
+/* Tighten overlay padding and reduce glow spread to stay within clipped container */
+.report-practice-table__locked-cover__metrics .report-premium-overlay {
+  padding: 1.5rem 1rem;
+}
+
+.report-practice-table__locked-cover__metrics .report-premium-overlay__card {
+  padding: 28px 24px;
+  box-shadow:
+    0 0 18px rgba(254, 104, 57, 0.1),
+    0 0 32px rgba(167, 139, 250, 0.06);
+}
+
+/* Compact card — scales to locked-rows height for the 3 shorter groups */
+.report-practice-table__locked-cover__metrics--compact .report-premium-overlay {
+  padding: 8px;
+  align-items: stretch;
+}
+.report-practice-table__locked-cover__metrics--compact .report-premium-overlay__card {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  overflow: hidden;
+}
+.report-practice-table__locked-cover__metrics--compact .report-premium-overlay__icon {
+  margin: 0;
+  width: 32px;
+  height: 32px;
+}
+.report-practice-table__locked-cover__metrics--compact .report-premium-overlay__icon svg {
+  width: 18px;
+  height: 18px;
+}
+.report-practice-table__locked-cover__metrics--compact .report-premium-overlay__title {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1.2;
+}
+.report-practice-table__locked-cover__metrics--compact .report-premium-overlay__badges-group {
+  margin: 0;
+}
+.report-practice-table__locked-cover__metrics--compact .report-premium-overlay__copy {
+  margin: 0;
+  font-size: 13px;
+}
+
 .report-practice-table__practice {
   min-width: 0;
   padding-right: 1rem;
@@ -5926,6 +6021,55 @@ input.autofill-dark:-internal-autofill-previewed {
 
   .report-practice-table__metric-value {
     font-size: 0.92rem;
+  }
+
+  .report-practice-table__locked-cover {
+    grid-template-columns: minmax(0, 1.45fr) minmax(0, 0.9fr) minmax(0, 0.9fr);
+    column-gap: 0.45rem;
+  }
+}
+
+@media (max-width: 720px) {
+  .report-practice-table__locked-cover {
+    grid-template-columns: minmax(0, 1.6fr) minmax(0, 0.95fr) minmax(0, 0.95fr);
+    column-gap: 0.55rem;
+  }
+
+  .report-practice-table__locked-cover__metrics .report-premium-overlay__card {
+    padding: 20px 16px;
+  }
+
+  /* All locked groups on mobile: blur rows/header only, not the cover card */
+  .report-practice-group--locked .report-practice-table__header,
+  .report-practice-group--locked .report-practice-table__row {
+    filter: blur(4.55px);
+    opacity: 0.5;
+    user-select: none;
+    pointer-events: none;
+  }
+
+  /* Card covers the entire table (header + all rows) */
+  .report-practice-group--locked .report-practice-group__table-shell {
+    position: relative;
+    min-height: 460px;
+  }
+  .report-practice-group--locked .report-practice-table__locked-section {
+    position: static;
+  }
+  .report-practice-group--locked .report-practice-table__locked-cover {
+    grid-template-columns: 1fr;
+    column-gap: 0;
+  }
+  .report-practice-group--locked .report-practice-table__locked-cover__name-spacer {
+    display: none;
+  }
+  .report-practice-group--locked .report-practice-table__locked-cover__metrics {
+    grid-column: 1 / -1;
+  }
+  /* Restore standard overlay centering for compact groups on mobile */
+  .report-practice-table__locked-cover__metrics--compact .report-premium-overlay {
+    padding: 2rem 1rem;
+    align-items: center;
   }
 }
 

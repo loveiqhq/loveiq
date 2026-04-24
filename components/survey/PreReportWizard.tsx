@@ -42,12 +42,15 @@ const ArrowLeft: FC<{ className?: string }> = ({ className = "h-5 w-5" }) => (
 /*  Icon components with purple glow                                   */
 /* ------------------------------------------------------------------ */
 const IconGlow: FC<{ children: ReactNode }> = ({ children }) => (
-  <div className="relative h-[40px] w-[40px]">
+  <div
+    className="relative flex-shrink-0"
+    style={{ width: "80px", height: "80px", aspectRatio: "1/1" }}
+  >
     <div
-      className="absolute rounded-full"
+      className="pointer-events-none absolute rounded-full"
       style={{
-        width: "88px",
-        height: "88px",
+        width: "176px",
+        height: "176px",
         top: "50%",
         left: "50%",
         transform: "translate(-50%, -50%)",
@@ -59,192 +62,223 @@ const IconGlow: FC<{ children: ReactNode }> = ({ children }) => (
   </div>
 );
 
-/* Sparkle icon — slides 1 & 4 */
-const SparkleIcon: FC = () => (
+/* Slide 1 — report / document icon */
+const Slide1Icon: FC = () => (
   <IconGlow>
-    <div className="relative h-[40px] w-[40px] opacity-90">
-      <svg
-        aria-hidden
-        className="absolute left-[5px] top-[5px]"
-        width="31"
-        height="31"
-        viewBox="0 0 31 31"
-        fill="none"
-      >
-        <path
-          d="M13.7775 2.15656C13.8382 1.83158 14.0106 1.53806 14.2649 1.32684C14.5193 1.11562 14.8395 1 15.1701 1C15.5007 1 15.8208 1.11562 16.0752 1.32684C16.3295 1.53806 16.5019 1.83158 16.5626 2.15656L18.0516 10.0304C18.1573 10.5902 18.4293 11.1051 18.8322 11.5079C19.235 11.9108 19.7499 12.1828 20.3097 12.2886L28.1836 13.7775C28.5085 13.8382 28.8021 14.0106 29.0133 14.2649C29.2245 14.5193 29.3401 14.8395 29.3401 15.1701C29.3401 15.5007 29.2245 15.8208 29.0133 16.0752C28.8021 16.3295 28.5085 16.5019 28.1836 16.5626L20.3097 18.0516C19.7499 18.1573 19.235 18.4293 18.8322 18.8322C18.4293 19.235 18.1573 19.7499 18.0516 20.3097L16.5626 28.1836C16.5019 28.5085 16.3295 28.8021 16.0752 29.0133C15.8208 29.2245 15.5007 29.3401 15.1701 29.3401C14.8395 29.3401 14.5193 29.2245 14.2649 29.0133C14.0106 28.8021 13.8382 28.5085 13.7775 28.1836L12.2886 20.3097C12.1828 19.7499 11.9108 19.235 11.5079 18.8322C11.1051 18.4293 10.5902 18.1573 10.0304 18.0516L2.15656 16.5626C1.83158 16.5019 1.53806 16.3295 1.32684 16.0752C1.11562 15.8208 1 15.5007 1 15.1701C1 14.8395 1.11562 14.5193 1.32684 14.2649C1.53806 14.0106 1.83158 13.8382 2.15656 13.7775L10.0304 12.2886C10.5902 12.1828 11.1051 11.9108 11.5079 11.5079C11.9108 11.1051 12.1828 10.5902 12.2886 10.0304L13.7775 2.15656Z"
-          stroke="#F7F5F7"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-      <svg
-        aria-hidden
-        className="absolute right-[2px] top-[0px]"
-        width="8"
-        height="8"
-        viewBox="0 0 8 8"
-        fill="none"
-      >
-        <path
-          d="M4 1v6M1 4h6"
-          stroke="#F7F5F7"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-      <svg
-        aria-hidden
-        className="absolute bottom-[2px] left-[2px]"
-        width="8"
-        height="8"
-        viewBox="0 0 8 8"
-        fill="none"
-      >
-        <path
-          d="M3.83333 6.66667C5.39814 6.66667 6.66667 5.39814 6.66667 3.83333C6.66667 2.26853 5.39814 1 3.83333 1C2.26853 1 1 2.26853 1 3.83333C1 5.39814 2.26853 6.66667 3.83333 6.66667Z"
-          stroke="#F7F5F7"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    </div>
+    <svg
+      aria-hidden
+      className="relative opacity-90"
+      width="80"
+      height="80"
+      viewBox="0 0 80 80"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d="M6.6665 20H19.9998"
+        stroke="white"
+        strokeWidth="4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M6.6665 33.3335H19.9998"
+        stroke="white"
+        strokeWidth="4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M6.6665 46.6665H19.9998"
+        stroke="white"
+        strokeWidth="4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M6.6665 60H19.9998"
+        stroke="white"
+        strokeWidth="4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M60.0002 6.6665H20.0002C16.3183 6.6665 13.3335 9.65127 13.3335 13.3332V66.6665C13.3335 70.3484 16.3183 73.3332 20.0002 73.3332H60.0002C63.6821 73.3332 66.6668 70.3484 66.6668 66.6665V13.3332C66.6668 9.65127 63.6821 6.6665 60.0002 6.6665Z"
+        stroke="white"
+        strokeWidth="4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M31.6665 26.6665H48.3332"
+        stroke="white"
+        strokeWidth="4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M31.6665 40H53.3332"
+        stroke="white"
+        strokeWidth="4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M31.6665 53.3335H46.6665"
+        stroke="white"
+        strokeWidth="4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   </IconGlow>
 );
 
-/* Scale / balance icon — slide 2 */
-const ScaleIcon: FC = () => (
+/* Slide 2 — user profile in frame */
+const Slide2Icon: FC = () => (
   <IconGlow>
-    <div className="relative h-[40px] w-[40px] opacity-90">
-      <svg
-        aria-hidden
-        className="absolute left-[1px] top-[7px]"
-        width="12"
-        height="19"
-        viewBox="0 0 12 19"
-        fill="none"
-      >
-        <path
-          d="M5.875 2.625L10.75 15.625C9.34359 16.6798 7.63301 17.25 5.875 17.25C4.11699 17.25 2.40641 16.6798 1 15.625L5.875 2.625ZM5.875 2.625V1"
-          stroke="#F7F5F7"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-      <svg
-        aria-hidden
-        className="absolute left-[4px] top-[6px]"
-        width="32"
-        height="6"
-        viewBox="0 0 32 6"
-        fill="none"
-      >
-        <path
-          d="M1 4.25H2.625C7.15939 4.25 11.6241 3.13383 15.625 1C19.6259 3.13383 24.0906 4.25 28.625 4.25H30.25"
-          stroke="#F7F5F7"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-      <svg
-        aria-hidden
-        className="absolute left-[19px] top-[4px]"
-        width="2"
-        height="32"
-        viewBox="0 0 2 32"
-        fill="none"
-      >
-        <path
-          d="M1 1V30.25"
-          stroke="#F7F5F7"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-      <svg
-        aria-hidden
-        className="absolute right-[1px] top-[7px]"
-        width="12"
-        height="19"
-        viewBox="0 0 12 19"
-        fill="none"
-      >
-        <path
-          d="M5.875 2.625L10.75 15.625C9.34359 16.6798 7.63301 17.25 5.875 17.25C4.11699 17.25 2.40641 16.6798 1 15.625L5.875 2.625ZM5.875 2.625V1"
-          stroke="#F7F5F7"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-      <svg
-        aria-hidden
-        className="absolute bottom-[1px] left-[11px]"
-        width="19"
-        height="2"
-        viewBox="0 0 19 2"
-        fill="none"
-      >
-        <path
-          d="M1 1H17.25"
-          stroke="#F7F5F7"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    </div>
+    <svg
+      aria-hidden
+      className="relative opacity-90"
+      width="80"
+      height="80"
+      viewBox="0 0 80 80"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d="M60 70C60 64.6957 57.8929 59.6086 54.1421 55.8579C50.3914 52.1071 45.3043 50 40 50C34.6957 50 29.6086 52.1071 25.8579 55.8579C22.1071 59.6086 20 64.6957 20 70"
+        stroke="white"
+        strokeWidth="4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M39.9998 50.0002C47.3636 50.0002 53.3332 44.0306 53.3332 36.6668C53.3332 29.303 47.3636 23.3335 39.9998 23.3335C32.636 23.3335 26.6665 29.303 26.6665 36.6668C26.6665 44.0306 32.636 50.0002 39.9998 50.0002Z"
+        stroke="white"
+        strokeWidth="4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M63.3333 10H16.6667C12.9848 10 10 12.9848 10 16.6667V63.3333C10 67.0152 12.9848 70 16.6667 70H63.3333C67.0152 70 70 67.0152 70 63.3333V16.6667C70 12.9848 67.0152 10 63.3333 10Z"
+        stroke="white"
+        strokeWidth="4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   </IconGlow>
 );
 
-/* User with key icon — slides 3 & 5 */
-const UserKeyIcon: FC = () => (
+/* Slide 3 — thumbs up */
+const Slide3Icon: FC = () => (
   <IconGlow>
-    <div className="relative flex h-[40px] w-[40px] items-center justify-center opacity-90">
-      <svg aria-hidden width="32" height="32" viewBox="0 0 32 32" fill="none">
-        <path
-          d="M25.3335 14.668V22.668"
-          stroke="#F7F5F7"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <path
-          d="M25.3335 17.332H28.0002"
-          stroke="#F7F5F7"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <path
-          d="M2.6665 27.9995C2.66636 26.0088 3.22328 24.0578 4.27425 22.3672C5.32522 20.6766 6.82832 19.3138 8.61351 18.433C10.3987 17.5522 12.3947 17.1885 14.3759 17.3831C16.357 17.5777 18.2441 18.3228 19.8238 19.5341"
-          stroke="#F7F5F7"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <path
-          d="M13.3332 17.3333C17.0151 17.3333 19.9998 14.3486 19.9998 10.6667C19.9998 6.98477 17.0151 4 13.3332 4C9.65127 4 6.6665 6.98477 6.6665 10.6667C6.6665 14.3486 9.65127 17.3333 13.3332 17.3333Z"
-          stroke="#F7F5F7"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <path
-          d="M25.3332 28.0013C26.8059 28.0013 27.9998 26.8074 27.9998 25.3346C27.9998 23.8619 26.8059 22.668 25.3332 22.668C23.8604 22.668 22.6665 23.8619 22.6665 25.3346C22.6665 26.8074 23.8604 28.0013 25.3332 28.0013Z"
-          stroke="#F7F5F7"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    </div>
+    <svg
+      aria-hidden
+      className="relative opacity-90"
+      width="80"
+      height="80"
+      viewBox="0 0 80 80"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d="M49.9998 19.5998L46.6665 33.3332H66.0998C67.1348 33.3332 68.1556 33.5741 69.0813 34.037C70.007 34.4998 70.8122 35.1719 71.4332 35.9998C72.0542 36.8278 72.4738 37.789 72.659 38.8073C72.8441 39.8255 72.7896 40.8729 72.4998 41.8665L64.7332 68.5332C64.3293 69.9179 63.4871 71.1344 62.3332 71.9998C61.1792 72.8653 59.7756 73.3332 58.3332 73.3332H13.3332C11.5651 73.3332 9.86937 72.6308 8.61913 71.3805C7.36888 70.1303 6.6665 68.4346 6.6665 66.6665V39.9998C6.6665 38.2317 7.36888 36.536 8.61913 35.2858C9.86937 34.0356 11.5651 33.3332 13.3332 33.3332H22.5332C23.7735 33.3325 24.989 32.9859 26.043 32.3322C27.0971 31.6786 27.9479 30.7439 28.4998 29.6332L39.9998 6.6665C41.5718 6.68597 43.119 7.0604 44.5259 7.76182C45.9327 8.46325 47.1629 9.47353 48.1245 10.7172C49.0861 11.9608 49.7542 13.4057 50.079 14.9438C50.4037 16.482 50.3766 18.0736 49.9998 19.5998Z"
+        stroke="white"
+        strokeWidth="4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M23.3335 33.3335V73.3335"
+        stroke="white"
+        strokeWidth="4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  </IconGlow>
+);
+
+/* Slide 4 — heart with plus */
+const Slide4Icon: FC = () => (
+  <IconGlow>
+    <svg
+      aria-hidden
+      className="relative opacity-90"
+      width="80"
+      height="80"
+      viewBox="0 0 80 80"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d="M48.2634 64.5798L45.0268 67.7098C44.4056 68.4232 43.6398 68.9962 42.7802 69.3908C41.9206 69.7854 40.9869 69.9926 40.041 69.9986C39.0952 70.0046 38.1589 69.8093 37.2944 69.4256C36.4298 69.0419 35.6568 68.4786 35.0268 67.7731L16.6667 49.9998C11.6667 44.9998 6.66675 39.3331 6.66675 31.6665C6.66682 27.9571 7.79206 24.3351 9.89386 21.2787C11.9957 18.2223 14.9751 15.8753 18.4388 14.5478C21.9024 13.2203 25.6873 12.9746 29.2935 13.8433C32.8996 14.712 36.1575 16.6541 38.6367 19.4131C38.8114 19.5999 39.0225 19.7487 39.257 19.8505C39.4915 19.9522 39.7444 20.0048 40.0001 20.0048C40.2557 20.0048 40.5086 19.9522 40.7432 19.8505C40.9777 19.7487 41.1888 19.5999 41.3634 19.4131C43.8349 16.6361 47.0935 14.6777 50.7055 13.7985C54.3176 12.9193 58.1117 13.161 61.583 14.4914C65.0543 15.8219 68.038 18.178 70.1371 21.2461C72.2362 24.3143 73.3511 27.949 73.3334 31.6665C73.3324 33.3487 73.0865 35.0218 72.6034 36.6331"
+        stroke="white"
+        strokeWidth="4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M50 50H70"
+        stroke="white"
+        strokeWidth="4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M60 40V60"
+        stroke="white"
+        strokeWidth="4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  </IconGlow>
+);
+
+/* Slide 5 — user with plus */
+const Slide5Icon: FC = () => (
+  <IconGlow>
+    <svg
+      aria-hidden
+      className="relative opacity-90"
+      width="80"
+      height="80"
+      viewBox="0 0 80 80"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d="M6.66669 70.0002C6.66641 64.8679 8.14714 59.8446 10.9312 55.5331C13.7152 51.2216 17.6843 47.8051 22.362 45.6936C27.0398 43.582 32.2275 42.8652 37.3026 43.6291C42.3776 44.393 47.1245 46.6052 50.9734 50.0002"
+        stroke="white"
+        strokeWidth="4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M33.3334 43.3333C42.5381 43.3333 50 35.8714 50 26.6667C50 17.4619 42.5381 10 33.3334 10C24.1286 10 16.6667 17.4619 16.6667 26.6667C16.6667 35.8714 24.1286 43.3333 33.3334 43.3333Z"
+        stroke="white"
+        strokeWidth="4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M63.3333 53.3335V73.3335"
+        stroke="white"
+        strokeWidth="4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M73.3333 63.3335H53.3333"
+        stroke="white"
+        strokeWidth="4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   </IconGlow>
 );
 
@@ -261,7 +295,7 @@ interface Slide {
 
 const slides: Slide[] = [
   {
-    icon: SparkleIcon,
+    icon: Slide1Icon,
     heading: "A note before you explore your report.",
     body: (
       <>
@@ -274,7 +308,7 @@ const slides: Slide[] = [
     ),
   },
   {
-    icon: ScaleIcon,
+    icon: Slide2Icon,
     heading: "Take only what resonates.",
     body: (
       <>
@@ -285,7 +319,7 @@ const slides: Slide[] = [
     ),
   },
   {
-    icon: UserKeyIcon,
+    icon: Slide3Icon,
     heading: "Rate each report section.",
     body: (
       <>
@@ -297,7 +331,7 @@ const slides: Slide[] = [
     ),
   },
   {
-    icon: SparkleIcon,
+    icon: Slide4Icon,
     heading: "Share your report with your partner.",
     body: (
       <>
@@ -308,7 +342,7 @@ const slides: Slide[] = [
     ),
   },
   {
-    icon: UserKeyIcon,
+    icon: Slide5Icon,
     heading: "Invite your friends to grow.",
     body: (
       <>

@@ -51,12 +51,15 @@ const ArrowLeft: FC<{ className?: string }> = ({ className = "h-5 w-5" }) => (
 /*  Slide icons with purple glow                                       */
 /* ------------------------------------------------------------------ */
 const IconGlow: FC<{ children: ReactNode }> = ({ children }) => (
-  <div className="relative h-[40px] w-[40px]">
+  <div
+    className="relative flex-shrink-0"
+    style={{ width: "80px", height: "80px", aspectRatio: "1/1" }}
+  >
     <div
-      className="absolute rounded-full"
+      className="pointer-events-none absolute rounded-full"
       style={{
-        width: "88px",
-        height: "88px",
+        width: "176px",
+        height: "176px",
         top: "50%",
         left: "50%",
         transform: "translate(-50%, -50%)",
@@ -68,31 +71,31 @@ const IconGlow: FC<{ children: ReactNode }> = ({ children }) => (
   </div>
 );
 
-/* Slide 1 — Sparkle */
+/* Slide 1 — Sparkle: main 62×62 star centered in 80×80 + two accent marks */
 const SparkleIcon: FC = () => (
   <IconGlow>
-    <div className="relative h-[40px] w-[40px] opacity-90">
+    <div className="relative h-[80px] w-[80px] opacity-90">
       <svg
         aria-hidden
-        className="absolute left-[5px] top-[5px]"
-        width="31"
-        height="31"
+        className="absolute left-[10px] top-[10px]"
+        width="62"
+        height="62"
         viewBox="0 0 31 31"
         fill="none"
       >
         <path
           d="M13.7775 2.15656C13.8382 1.83158 14.0106 1.53806 14.2649 1.32684C14.5193 1.11562 14.8395 1 15.1701 1C15.5007 1 15.8208 1.11562 16.0752 1.32684C16.3295 1.53806 16.5019 1.83158 16.5626 2.15656L18.0516 10.0304C18.1573 10.5902 18.4293 11.1051 18.8322 11.5079C19.235 11.9108 19.7499 12.1828 20.3097 12.2886L28.1836 13.7775C28.5085 13.8382 28.8021 14.0106 29.0133 14.2649C29.2245 14.5193 29.3401 14.8395 29.3401 15.1701C29.3401 15.5007 29.2245 15.8208 29.0133 16.0752C28.8021 16.3295 28.5085 16.5019 28.1836 16.5626L20.3097 18.0516C19.7499 18.1573 19.235 18.4293 18.8322 18.8322C18.4293 19.235 18.1573 19.7499 18.0516 20.3097L16.5626 28.1836C16.5019 28.5085 16.3295 28.8021 16.0752 29.0133C15.8208 29.2245 15.5007 29.3401 15.1701 29.3401C14.8395 29.3401 14.5193 29.2245 14.2649 29.0133C14.0106 28.8021 13.8382 28.5085 13.7775 28.1836L12.2886 20.3097C12.1828 19.7499 11.9108 19.235 11.5079 18.8322C11.1051 18.4293 10.5902 18.1573 10.0304 18.0516L2.15656 16.5626C1.83158 16.5019 1.53806 16.3295 1.32684 16.0752C1.11562 15.8208 1 15.5007 1 15.1701C1 14.8395 1.11562 14.5193 1.32684 14.2649C1.53806 14.0106 1.83158 13.8382 2.15656 13.7775L10.0304 12.2886C10.5902 12.1828 11.1051 11.9108 11.5079 11.5079C11.9108 11.1051 12.1828 10.5902 12.2886 10.0304L13.7775 2.15656Z"
           stroke="#F7F5F7"
-          strokeWidth="2"
+          strokeWidth="1.8"
           strokeLinecap="round"
           strokeLinejoin="round"
         />
       </svg>
       <svg
         aria-hidden
-        className="absolute right-[2px] top-[0px]"
-        width="8"
-        height="8"
+        className="absolute right-[4px] top-[0px]"
+        width="16"
+        height="16"
         viewBox="0 0 8 8"
         fill="none"
       >
@@ -106,9 +109,9 @@ const SparkleIcon: FC = () => (
       </svg>
       <svg
         aria-hidden
-        className="absolute bottom-[2px] left-[2px]"
-        width="8"
-        height="8"
+        className="absolute bottom-[4px] left-[4px]"
+        width="16"
+        height="16"
         viewBox="0 0 8 8"
         fill="none"
       >
@@ -124,104 +127,62 @@ const SparkleIcon: FC = () => (
   </IconGlow>
 );
 
-/* Slide 2 — Scale / balance */
+/* Slide 2 — Scale / balance: single clean 80×80 SVG */
 const ScaleIcon: FC = () => (
   <IconGlow>
-    <div className="relative h-[40px] w-[40px] opacity-90">
-      {/* Left pan */}
-      <svg
-        aria-hidden
-        className="absolute left-[1px] top-[7px]"
-        width="12"
-        height="19"
-        viewBox="0 0 12 19"
-        fill="none"
-      >
-        <path
-          d="M5.875 2.625L10.75 15.625C9.34359 16.6798 7.63301 17.25 5.875 17.25C4.11699 17.25 2.40641 16.6798 1 15.625L5.875 2.625ZM5.875 2.625V1"
-          stroke="#F7F5F7"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-      {/* Beam */}
-      <svg
-        aria-hidden
-        className="absolute left-[4px] top-[6px]"
-        width="32"
-        height="6"
-        viewBox="0 0 32 6"
-        fill="none"
-      >
-        <path
-          d="M1 4.25H2.625C7.15939 4.25 11.6241 3.13383 15.625 1C19.6259 3.13383 24.0906 4.25 28.625 4.25H30.25"
-          stroke="#F7F5F7"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-      {/* Vertical pole */}
-      <svg
-        aria-hidden
-        className="absolute left-[19px] top-[4px]"
-        width="2"
-        height="32"
-        viewBox="0 0 2 32"
-        fill="none"
-      >
-        <path
-          d="M1 1V30.25"
-          stroke="#F7F5F7"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-      {/* Right pan */}
-      <svg
-        aria-hidden
-        className="absolute right-[1px] top-[7px]"
-        width="12"
-        height="19"
-        viewBox="0 0 12 19"
-        fill="none"
-      >
-        <path
-          d="M5.875 2.625L10.75 15.625C9.34359 16.6798 7.63301 17.25 5.875 17.25C4.11699 17.25 2.40641 16.6798 1 15.625L5.875 2.625ZM5.875 2.625V1"
-          stroke="#F7F5F7"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-      {/* Base */}
-      <svg
-        aria-hidden
-        className="absolute bottom-[1px] left-[11px]"
-        width="19"
-        height="2"
-        viewBox="0 0 19 2"
-        fill="none"
-      >
-        <path
-          d="M1 1H17.25"
-          stroke="#F7F5F7"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    </div>
+    <svg
+      aria-hidden
+      className="relative opacity-90"
+      width="80"
+      height="80"
+      viewBox="0 0 80 80"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d="M40 10 V68"
+        stroke="white"
+        strokeWidth="4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M24 68 H56"
+        stroke="white"
+        strokeWidth="4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M10 28 H70"
+        stroke="white"
+        strokeWidth="4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M13 28 L7 44 Q13 52 19 44 L13 28"
+        stroke="white"
+        strokeWidth="4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M67 28 L61 44 Q67 52 73 44 L67 28"
+        stroke="white"
+        strokeWidth="4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   </IconGlow>
 );
 
-/* Slide 3 — User with privacy indicator */
+/* Slide 3 — User with privacy indicator: existing paths scaled to 80×80 */
 const PrivacyIcon: FC = () => (
   <IconGlow>
-    <div className="relative h-[40px] w-[40px] opacity-90 flex items-center justify-center">
-      <svg aria-hidden width="32" height="32" viewBox="0 0 32 32" fill="none">
+    <div className="relative flex h-[80px] w-[80px] items-center justify-center opacity-90">
+      <svg aria-hidden width="80" height="80" viewBox="0 0 32 32" fill="none">
         <path
           d="M25.3335 14.668V22.668"
           stroke="#F7F5F7"
@@ -262,11 +223,11 @@ const PrivacyIcon: FC = () => (
   </IconGlow>
 );
 
-/* Slide 4 — Clipboard with question mark */
+/* Slide 4 — Clipboard with question mark: existing paths scaled to 80×80 */
 const ClipboardIcon: FC = () => (
   <IconGlow>
-    <div className="relative h-[40px] w-[40px] opacity-90 flex items-center justify-center">
-      <svg aria-hidden width="34" height="34" viewBox="0 0 34 34" fill="none">
+    <div className="relative flex h-[80px] w-[80px] items-center justify-center opacity-90">
+      <svg aria-hidden width="80" height="80" viewBox="0 0 34 34" fill="none">
         <path
           d="M21.2499 2.83203H12.7499C11.9675 2.83203 11.3333 3.46629 11.3333 4.2487V7.08203C11.3333 7.86444 11.9675 8.4987 12.7499 8.4987H21.2499C22.0323 8.4987 22.6666 7.86444 22.6666 7.08203V4.2487C22.6666 3.46629 22.0323 2.83203 21.2499 2.83203Z"
           stroke="#F7F5F7"

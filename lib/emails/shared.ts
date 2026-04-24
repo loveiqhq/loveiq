@@ -1,5 +1,6 @@
 export const EMAIL_FONT =
   "'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif";
+const SHOW_EMAIL_SOCIAL_ICONS = false;
 
 export function escapeHtml(input: string): string {
   return input
@@ -31,10 +32,8 @@ export function renderBrandHeader(siteUrl: string): string {
 
 export function renderBrandFooter(siteUrl: string): string {
   const site = siteUrl.replace(/\/$/, "");
-  return `
-  <tr>
-    <td style="padding:24px 32px 32px; background-color:#f7f7f8; border-top:1px solid #eeeef1;">
-      <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
+  const socialIconsRow = SHOW_EMAIL_SOCIAL_ICONS
+    ? `
         <tr>
           <td align="center" style="padding-bottom:12px;">
             <a href="https://www.instagram.com/loveiq.org" target="_blank" style="display:inline-block; padding:0 8px; text-decoration:none;">
@@ -47,7 +46,13 @@ export function renderBrandFooter(siteUrl: string): string {
               <img src="${site}/emails/icon-web.png" alt="loveiq.org" width="26" height="26" style="display:inline-block; border:0;" />
             </a>
           </td>
-        </tr>
+        </tr>`
+    : "";
+  return `
+  <tr>
+    <td style="padding:24px 32px 32px; background-color:#f7f7f8; border-top:1px solid #eeeef1;">
+      <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
+        ${socialIconsRow}
         <tr>
           <td align="center" style="font-family:${EMAIL_FONT}; font-size:13px; color:#111111; padding-bottom:4px;">
             <span style="font-weight:400;">Copyright © 2026</span>

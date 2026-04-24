@@ -41,6 +41,11 @@ type DesktopPopoverState = {
 const DESKTOP_POPOVER_MEDIA_QUERY = "(min-width: 1025px)";
 const DESKTOP_POPOVER_EDGE_PADDING = 24;
 const DESKTOP_POPOVER_GAP = 18;
+const COMPACT_LOCKED_GROUP_TITLES = new Set([
+  "Penetration & Body Opening",
+  "Technology & Distance",
+  "Ritual, Tantra & Conscious Sex",
+]);
 
 function resolveDesktopPopoverMode() {
   if (typeof window === "undefined") {
@@ -223,6 +228,134 @@ const PracticeRow: FC<{
         </div>
       ) : null}
     </div>
+  );
+};
+
+const PracticeGroupLocked: FC<{
+  archetype: string;
+  group: ReportPracticeTendencyGroup;
+  onUnlock: () => void;
+  sectionTitle: string;
+}> = ({ archetype, group, onUnlock, sectionTitle }) => {
+  const freeRow = group.rows[0] ?? null;
+  const lockedRows = group.rows.slice(1);
+  const useCompactLockedCard = COMPACT_LOCKED_GROUP_TITLES.has(group.title);
+
+  return (
+    <section
+      className="report-practice-group report-practice-group--locked"
+      aria-labelledby={`practice-group-locked-${slugifyPracticeKey(group.title)}`}
+    >
+      <h3
+        id={`practice-group-locked-${slugifyPracticeKey(group.title)}`}
+        className="report-practice-group__title"
+      >
+        {group.title}
+      </h3>
+
+      <div className="report-practice-group__table-shell">
+        <div
+          className="report-practice-table"
+          role="table"
+          aria-label={`${group.title} tendencies`}
+        >
+          <div className="report-practice-table__header" role="row">
+            <div
+              className="report-practice-table__header-cell report-practice-table__header-cell--name"
+              role="columnheader"
+            >
+              Fantasy &amp; Practice
+            </div>
+            <div className="report-practice-table__header-cell" role="columnheader">
+              <span>Fantasy Pull</span>
+              <InfoGlyph className="report-practice-table__header-glyph" />
+            </div>
+            <div className="report-practice-table__header-cell" role="columnheader">
+              <span>Actual Pleasure</span>
+              <InfoGlyph className="report-practice-table__header-glyph" />
+            </div>
+          </div>
+
+          <div className="report-practice-table__body" role="rowgroup">
+            {freeRow && (
+              <div className="report-practice-table__row" role="row">
+                <div className="report-practice-table__practice" role="cell">
+                  <div className="report-practice-table__practice-stack">
+                    <span className="report-practice-table__practice-label">
+                      {freeRow.practice}
+                    </span>
+                    <InfoGlyph className="report-practice-table__info-glyph report-practice-table__info-glyph--muted" />
+                  </div>
+                </div>
+                <PracticeMetricCell
+                  label="Fantasy Pull"
+                  tone="fantasy"
+                  value={freeRow.fantasyPull}
+                />
+                <PracticeMetricCell
+                  label="Actual Pleasure"
+                  tone="pleasure"
+                  value={freeRow.actualPleasure}
+                />
+              </div>
+            )}
+
+            {lockedRows.length > 0 && (
+              <div
+                className={`report-practice-table__locked-section${useCompactLockedCard ? " report-practice-table__locked-section--compact" : ""}`}
+                role="presentation"
+              >
+                {lockedRows.map((row) => (
+                  <div
+                    key={row.practice}
+                    className="report-practice-table__row report-practice-table__row--locked"
+                    role="row"
+                  >
+                    <div className="report-practice-table__practice" role="cell">
+                      <div className="report-practice-table__practice-stack">
+                        <span className="report-practice-table__practice-label">
+                          {row.practice}
+                        </span>
+                        <InfoGlyph className="report-practice-table__info-glyph report-practice-table__info-glyph--muted" />
+                      </div>
+                    </div>
+                    <PracticeMetricCell
+                      label="Fantasy Pull"
+                      tone="fantasy"
+                      value={row.fantasyPull}
+                    />
+                    <PracticeMetricCell
+                      label="Actual Pleasure"
+                      tone="pleasure"
+                      value={row.actualPleasure}
+                    />
+                  </div>
+                ))}
+
+                {/* Cover: replicates the table column grid so the card sits over
+                    exactly columns 2–3, leaving column 1 (names) fully visible */}
+                <div className="report-practice-table__locked-cover">
+                  <div className="report-practice-table__locked-cover__name-spacer" />
+                  <div
+                    className={`report-practice-table__locked-cover__metrics${
+                      useCompactLockedCard
+                        ? " report-practice-table__locked-cover__metrics--compact"
+                        : ""
+                    }`}
+                  >
+                    <PremiumOverlay
+                      archetype={archetype}
+                      sectionTitle={sectionTitle}
+                      onUnlock={onUnlock}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </section>
   );
 };
 
@@ -544,23 +677,17 @@ const PracticeTendenciesSection: FC<Props> = ({
       <PracticeIntro archetype={archetype} generalHtml={generalHtml} />
 
       {isPremium && !unlocked ? (
-        <>
-          <div className="report-themed-block">
-            <div className="report-themed-block__preview report-themed-block__preview--practice">
-              <div
-                className="report-practice-panel report-themed-block__blurred"
-                aria-hidden="true"
-              >
-                <PracticePanel archetype={archetype} content={content} interactive={false} />
-              </div>
-              <PremiumOverlay
-                archetype={archetype}
-                sectionTitle={sectionTitle}
-                onUnlock={handleUnlock}
-              />
-            </div>
-          </div>
-        </>
+        <div className="report-practice-panel">
+          {content.groups.map((group) => (
+            <PracticeGroupLocked
+              key={group.title}
+              archetype={archetype}
+              group={group}
+              sectionTitle={sectionTitle}
+              onUnlock={handleUnlock}
+            />
+          ))}
+        </div>
       ) : (
         <PracticePanel archetype={archetype} content={content} interactive={true} />
       )}

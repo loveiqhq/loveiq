@@ -192,13 +192,52 @@ describe("PracticeTendenciesSection", () => {
     );
 
     expect(container.querySelector(".report-practice-panel__intro")).toBeInTheDocument();
-    expect(container.querySelector(".report-themed-block__blurred")).toBeInTheDocument();
-    expect(container.querySelector(".report-themed-block__preview--practice")).toBeInTheDocument();
+    // One locked group per practice group
+    const lockedGroups = container.querySelectorAll(".report-practice-group--locked");
+    expect(lockedGroups.length).toBeGreaterThanOrEqual(1);
+    // Locked section container present
+    expect(container.querySelector(".report-practice-table__locked-section")).toBeInTheDocument();
+    // Locked rows rendered (metric cells blurred via CSS class)
     expect(
-      container.querySelector(
-        ".report-themed-block__preview--practice .report-practice-panel__intro"
-      )
-    ).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /unlock report/i })).toBeInTheDocument();
+      container.querySelectorAll(".report-practice-table__row--locked").length
+    ).toBeGreaterThan(0);
+    // Grid cover over metrics columns present
+    expect(container.querySelector(".report-practice-table__locked-cover")).toBeInTheDocument();
+    // One unlock button per practice group
+    const unlockButtons = screen.getAllByRole("button", { name: /unlock report/i });
+    expect(unlockButtons.length).toBeGreaterThanOrEqual(1);
   }, 15000);
+
+  it("uses the compact locked modifier only for the shorter locked groups", () => {
+    const { container } = render(
+      <PracticeTendenciesSection
+        archetype="Spark Seeker"
+        archetypeHtml={null}
+        generalHtml={practiceGeneralHtml}
+        isPremium={true}
+        sectionTitle="Typical Sexual Fantasy & Practice Tendencies"
+      />
+    );
+
+    const lockedGroups = Array.from(
+      container.querySelectorAll<HTMLElement>(".report-practice-group--locked")
+    );
+    const compactGroups = lockedGroups.filter((group) =>
+      group.querySelector(".report-practice-table__locked-cover__metrics--compact")
+    );
+
+    expect(compactGroups).toHaveLength(3);
+    expect(
+      compactGroups.some((group) => group.textContent?.includes("Penetration & Body Opening"))
+    ).toBe(true);
+    expect(
+      compactGroups.some((group) => group.textContent?.includes("Technology & Distance"))
+    ).toBe(true);
+    expect(
+      compactGroups.some((group) => group.textContent?.includes("Ritual, Tantra & Conscious Sex"))
+    ).toBe(true);
+    expect(compactGroups.some((group) => group.textContent?.includes("Sensation & Touch"))).toBe(
+      false
+    );
+  });
 });
