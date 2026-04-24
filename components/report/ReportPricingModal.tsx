@@ -72,7 +72,7 @@ function PricingMethodMark({
 }
 
 function getCardPricing(
-  card: ReportPurchasePlan,
+  _card: ReportPurchasePlan,
   quote: ReportPriceQuoteSnapshot | null | undefined
 ) {
   if (!quote) {
@@ -84,17 +84,17 @@ function getCardPricing(
     };
   }
 
-  const priceCents = quote.currentPriceCents;
-  // Only show the strike line when the plan is genuinely discounted — else
-  // e.g. Essentials (strike 1499 === current 1499 at 0-discount) would render
-  // a line-through over the same number as the active price.
-  const strikeEligible =
-    typeof card.strikePriceCents === "number" && card.strikePriceCents > priceCents;
+  const currentCents = quote.currentPriceCents;
+  const strikeCents = quote.msrpCents;
+  // Hide strike when the MSRP and current price are equal (e.g. legacy
+  // pre-migration rows where `msrpCents` backfilled to the same value) so the
+  // modal doesn't render a pointless line-through over an identical number.
+  const strikeEligible = typeof strikeCents === "number" && strikeCents > currentCents;
   return {
     available: true,
-    badge: getReportPurchaseBadgeFromPrice({ plan: card, priceCents }),
-    priceLabel: formatReportPurchasePrice(priceCents),
-    strikePriceLabel: strikeEligible ? getReportPurchaseStrikePrice(card) : null,
+    badge: getReportPurchaseBadgeFromPrice({ strikeCents, currentCents }),
+    priceLabel: formatReportPurchasePrice(currentCents),
+    strikePriceLabel: strikeEligible ? getReportPurchaseStrikePrice(strikeCents) : null,
   };
 }
 
@@ -126,14 +126,19 @@ const ReportPricingModal: FC<Props> = ({
     ? REPORT_PURCHASE_PLANS.filter((card) => card.plan === "full_report")
     : REPORT_PURCHASE_PLANS;
 
-  // "Extra 50% OFF" inline pill on Full card fires once the ladder hits 50% or
-  // deeper. Matches the "Extra 50% OFF" badge from Figma 5495:302.
+  // "Extra N% OFF" pill on Full card — communicates the ladder depth relative
+  // to the starting-sale price (NOT MSRP), so it reads as bonus savings on top
+  // of the baseline Full Report discount. Fires from step 2 (72h) onward.
   const fullQuote = quotes?.full_report ?? null;
+  const extraDiscountPct =
+    fullQuote && fullQuote.startingPriceCents > 0
+      ? Math.max(
+          0,
+          Math.round((1 - fullQuote.currentPriceCents / fullQuote.startingPriceCents) * 100)
+        )
+      : 0;
   const showExtraDiscountPill =
-    isOffer && !!fullQuote && fullQuote.discountMultiplier <= 0.5 && fullQuote.discountStep >= 2;
-  const extraDiscountPct = fullQuote
-    ? Math.max(0, Math.round((1 - fullQuote.discountMultiplier) * 100))
-    : 0;
+    isOffer && !!fullQuote && fullQuote.discountStep >= 2 && extraDiscountPct > 0;
 
   useEffect(() => {
     if (open) {

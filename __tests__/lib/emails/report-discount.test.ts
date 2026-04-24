@@ -9,13 +9,15 @@ function makeQuote(overrides: Partial<ReportPriceQuoteSnapshot>): ReportPriceQuo
     plan: "full_report",
     currency: "EUR",
     experimentGroup: "A",
-    basePriceBucket: "full_center",
-    basePriceCents: 2999,
+    basePriceBucket: "B",
+    basePriceCents: 5999,
+    msrpCents: 5999,
+    startingPriceCents: 2999,
     currentPriceCents: 2999,
     initialPriceCents: 2999,
     discountMultiplier: 1,
     discountStep: 0,
-    pricingClusterId: "A-full_report-test",
+    pricingClusterId: "A-full_report-B",
     countryTier: "tier_2",
     countryMultiplier: 1,
     deviceType: "Desktop",
@@ -38,29 +40,41 @@ function makeQuote(overrides: Partial<ReportPriceQuoteSnapshot>): ReportPriceQuo
   };
 }
 
+/**
+ * Bucket B at step 3 (7d). Under Pricing.xlsx:
+ *   Essentials: MSRP 19.99 → starting 14.99 → step-3 (-50%) ⇒ 7.49
+ *   Full:       MSRP 59.99 → starting 29.99 → step-3 (-50%) ⇒ 14.99
+ *   All:        MSRP 259.00 → starting 129.49 → step-3 (-30% cap) ⇒ 90.99
+ */
 function makeQuotes(): Partial<Record<ReportPurchasePlanId, ReportPriceQuoteSnapshot>> {
   return {
-    // All three rowed at discount_step 2 (-50%). For Essentials strike 1499,
-    // current 749 → 50% off, 7.49 saved. For Full strike 5900, current 1499
-    // → 74% off (realistic ladder + anchor combo). For All strike 19000,
-    // current 6499 → 66% off.
     essentials: makeQuote({
       plan: "essentials",
+      basePriceBucket: "B",
+      basePriceCents: 1999,
+      msrpCents: 1999,
+      startingPriceCents: 1499,
+      initialPriceCents: 1499,
       currentPriceCents: 749,
       discountMultiplier: 0.5,
-      discountStep: 2,
+      discountStep: 3,
     }),
     full_report: makeQuote({
       plan: "full_report",
       currentPriceCents: 1499,
       discountMultiplier: 0.5,
-      discountStep: 2,
+      discountStep: 3,
     }),
     all_reports: makeQuote({
       plan: "all_reports",
-      currentPriceCents: 6499,
-      discountMultiplier: 0.5,
-      discountStep: 2,
+      basePriceBucket: "B",
+      basePriceCents: 25900,
+      msrpCents: 25900,
+      startingPriceCents: 12949,
+      initialPriceCents: 12949,
+      currentPriceCents: 9099,
+      discountMultiplier: 0.7,
+      discountStep: 3,
     }),
   };
 }
@@ -129,21 +143,24 @@ describe("reportDiscountEmail", () => {
     expect(result.html).toContain("Secure discount on report");
   });
 
-  it("computes saved amount and percent off from strike vs current quote", () => {
+  it("uses quote.msrpCents as the strike and computes percent off correctly", () => {
     const result = reportDiscountEmail({
       ...baseParams,
       firstName: "Ada",
       quotes: makeQuotes(),
     });
-    // Full report: strike 59.00 → current 14.99 → saved 44.01 → 75% off.
-    expect(result.html).toContain("€44.01 saved");
+    // Essentials: strike 19.99 → current 7.49 → saved 12.50 → 63% off.
+    expect(result.html).toContain("€19.99");
+    expect(result.html).toContain("€12.50 saved");
+    expect(result.html).toContain("-63%");
+    // Full report: strike 59.99 → current 14.99 → saved 45.00 → 75% off.
+    expect(result.html).toContain("€59.99");
+    expect(result.html).toContain("€45.00 saved");
     expect(result.html).toContain("-75%");
-    // All reports: strike 190.00 → current 64.99 → saved 125.01 → 66% off.
-    expect(result.html).toContain("€125.01 saved");
-    expect(result.html).toContain("-66%");
-    // Essentials: strike 14.99 → current 7.49 → saved 7.50 → 50% off.
-    expect(result.html).toContain("€7.50 saved");
-    expect(result.html).toContain("-50%");
+    // All reports: strike 259.00 → current 90.99 → saved 168.01 → 65% off.
+    expect(result.html).toContain("€259.00");
+    expect(result.html).toContain("€168.01 saved");
+    expect(result.html).toContain("-65%");
   });
 
   it("falls back to catalogue prices + no savings when quote missing", () => {
@@ -152,9 +169,9 @@ describe("reportDiscountEmail", () => {
       firstName: "Ada",
       quotes: null,
     });
-    // Essentials strike = current = €14.99 → no savings rendered.
-    expect(result.html).toContain("€14.99");
-    expect(result.html).not.toContain("€7.50 saved");
+    // Essentials catalogue fallback (bucket B MSRP) is now €19.99.
+    expect(result.html).toContain("€19.99");
+    expect(result.html).not.toContain("saved");
   });
 
   it("renders Why-it's-worth-a-look bullets", () => {

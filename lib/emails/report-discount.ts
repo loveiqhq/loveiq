@@ -39,7 +39,10 @@ function computePlanPricing(
   plan: ReportPurchasePlan,
   quote: ReportPriceQuoteSnapshot | undefined
 ): PlanPricing {
-  const strikeCents = plan.strikePriceCents ?? plan.priceCents;
+  // Strike = MSRP from the live quote (xlsx column C/E/G per bucket).
+  // Fallback to catalogue `priceCents` for the rare case we render this email
+  // without a resolvable quote — keeps the body well-formed rather than empty.
+  const strikeCents = quote?.msrpCents ?? plan.priceCents;
   const currentCents = quote?.currentPriceCents ?? plan.priceCents;
 
   if (

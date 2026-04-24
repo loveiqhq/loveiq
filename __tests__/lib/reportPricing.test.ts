@@ -18,6 +18,7 @@ vi.mock("../../lib/report/personalReport", () => ({
 
 import {
   getDiscountAdjustment,
+  getPricingBucketsForPlan,
   getReportPriceQuoteForContext,
 } from "../../lib/pricing/reportPricing";
 import {
@@ -55,31 +56,84 @@ describe("reportPricing", () => {
     process.env.SUPABASE_SERVICE_ROLE_KEY = originalSupabaseServiceRoleKey;
   });
 
-  describe("getDiscountAdjustment", () => {
+  describe("getDiscountAdjustment per plan (Pricing.xlsx)", () => {
     const initialPriceTimestamp = "2026-04-14T10:00:00.000Z";
 
     it.each([
       { now: "2026-04-14T10:00:00.000Z", step: 0, multiplier: 1 },
-      { now: "2026-04-15T10:00:00.000Z", step: 1, multiplier: 0.75 },
-      { now: "2026-04-17T10:00:00.000Z", step: 2, multiplier: 0.5 },
-      { now: "2026-04-21T10:00:00.000Z", step: 3, multiplier: 0.35 },
-      { now: "2026-04-28T10:00:00.000Z", step: 4, multiplier: 0.25 },
-    ])("uses the expected ladder step at $now", ({ now, step, multiplier }) => {
+      { now: "2026-04-15T10:00:00.000Z", step: 1, multiplier: 0.9 },
+      { now: "2026-04-17T10:00:00.000Z", step: 2, multiplier: 0.7 },
+      { now: "2026-04-21T10:00:00.000Z", step: 3, multiplier: 0.5 },
+      { now: "2026-04-28T10:00:00.000Z", step: 4, multiplier: 0.3 },
+    ])("full_report ladder at $now → step $step ×$multiplier", ({ now, step, multiplier }) => {
       expect(
-        getDiscountAdjustment({
-          initialPriceTimestamp,
-          now: new Date(now),
-        })
-      ).toEqual(
-        expect.objectContaining({
-          step,
-          multiplier,
-        })
-      );
+        getDiscountAdjustment({ initialPriceTimestamp, now: new Date(now), plan: "full_report" })
+      ).toEqual(expect.objectContaining({ step, multiplier }));
+    });
+
+    it.each([
+      { now: "2026-04-14T10:00:00.000Z", step: 0, multiplier: 1 },
+      { now: "2026-04-15T10:00:00.000Z", step: 1, multiplier: 0.9 },
+      { now: "2026-04-17T10:00:00.000Z", step: 2, multiplier: 0.7 },
+      { now: "2026-04-21T10:00:00.000Z", step: 3, multiplier: 0.5 },
+      { now: "2026-04-28T10:00:00.000Z", step: 4, multiplier: 0.3 },
+    ])("essentials ladder at $now → step $step ×$multiplier", ({ now, step, multiplier }) => {
+      expect(
+        getDiscountAdjustment({ initialPriceTimestamp, now: new Date(now), plan: "essentials" })
+      ).toEqual(expect.objectContaining({ step, multiplier }));
+    });
+
+    it.each([
+      { now: "2026-04-14T10:00:00.000Z", step: 0, multiplier: 1 },
+      { now: "2026-04-15T10:00:00.000Z", step: 1, multiplier: 0.9 },
+      { now: "2026-04-17T10:00:00.000Z", step: 2, multiplier: 0.7 },
+      // All Reports caps at -30% past 72h per Pricing.xlsx column H.
+      { now: "2026-04-21T10:00:00.000Z", step: 3, multiplier: 0.7 },
+      { now: "2026-04-28T10:00:00.000Z", step: 4, multiplier: 0.7 },
+    ])("all_reports ladder at $now → step $step ×$multiplier", ({ now, step, multiplier }) => {
+      expect(
+        getDiscountAdjustment({ initialPriceTimestamp, now: new Date(now), plan: "all_reports" })
+      ).toEqual(expect.objectContaining({ step, multiplier }));
     });
   });
 
-  it("recalculates the token quote on a later revisit and persists the new backend discount", async () => {
+  describe("bucket catalogue (Pricing.xlsx)", () => {
+    it("essentials buckets match xlsx MSRP / starting-sale pairs", () => {
+      expect(getPricingBucketsForPlan("essentials")).toEqual([
+        { code: "A", weight: 34, msrpCents: 2999, startingCents: 2249 },
+        { code: "B", weight: 33, msrpCents: 1999, startingCents: 1499 },
+        { code: "C", weight: 33, msrpCents: 999, startingCents: 749 },
+      ]);
+    });
+
+    it("full_report buckets match xlsx MSRP / starting-sale pairs", () => {
+      expect(getPricingBucketsForPlan("full_report")).toEqual([
+        { code: "A", weight: 34, msrpCents: 6999, startingCents: 3499 },
+        { code: "B", weight: 33, msrpCents: 5999, startingCents: 2999 },
+        { code: "C", weight: 33, msrpCents: 4999, startingCents: 2499 },
+      ]);
+    });
+
+    it("all_reports buckets match xlsx MSRP / starting-sale pairs", () => {
+      expect(getPricingBucketsForPlan("all_reports")).toEqual([
+        { code: "A", weight: 34, msrpCents: 35900, startingCents: 17949 },
+        { code: "B", weight: 33, msrpCents: 25900, startingCents: 12949 },
+        { code: "C", weight: 33, msrpCents: 15900, startingCents: 7949 },
+      ]);
+    });
+
+    it("weights sum to 100 per plan", () => {
+      for (const plan of ["essentials", "full_report", "all_reports"] as const) {
+        const total = getPricingBucketsForPlan(plan).reduce((s, b) => s + b.weight, 0);
+        expect(total).toBe(100);
+      }
+    });
+  });
+
+  it("applies the new ladder to the starting-sale price when revisiting a legacy quote", async () => {
+    // Legacy row — pre-2026-04 migration, so msrp/starting_price are null.
+    // Engine falls back to `base_price` as both the msrp and starting
+    // anchor, then applies the new full_report ladder at step 1 (24h = 0.9).
     const initialPriceTimestamp = "2026-04-14T10:00:00.000Z";
     const existingQuote = {
       id: 77,
@@ -91,6 +145,8 @@ describe("reportPricing", () => {
       experiment_group: "B",
       base_price_bucket: "full_center",
       base_price: 29.99,
+      msrp: null,
+      starting_price: null,
       current_price: 29.99,
       initial_price: 29.99,
       discount_step: 0,
@@ -182,19 +238,22 @@ describe("reportPricing", () => {
       reportToken: "rpt_ABCDEFGHIJKLMNOPQRST",
     });
 
+    // Starting anchor = €29.99 (base_price fallback) × 0.9 = €26.99.
     expect(quote).toEqual(
       expect.objectContaining({
-        currentPriceCents: 2249,
-        discountMultiplier: 0.75,
+        currentPriceCents: 2699,
+        discountMultiplier: 0.9,
         discountStep: 1,
         initialPriceCents: 2999,
         initialPriceTimestamp,
+        msrpCents: 2999,
+        startingPriceCents: 2999,
       })
     );
     expect(patchedPayload).toEqual(
       expect.objectContaining({
-        current_price: 22.49,
-        discount_multiplier: 0.75,
+        current_price: 26.99,
+        discount_multiplier: 0.9,
         discount_step: 1,
       })
     );
@@ -204,8 +263,8 @@ describe("reportPricing", () => {
         sessionLocks: [
           expect.objectContaining({
             pricingSessionId: "550e8400-e29b-41d4-a716-446655440001",
-            currentPriceCents: 2249,
-            discountMultiplier: 0.75,
+            currentPriceCents: 2699,
+            discountMultiplier: 0.9,
             discountStep: 1,
           }),
         ],
@@ -223,13 +282,15 @@ describe("reportPricing", () => {
       plan: "full_report",
       currency: "EUR",
       experiment_group: "B",
-      base_price_bucket: "full_center",
-      base_price: 29.99,
-      current_price: 22.49,
+      base_price_bucket: "B",
+      base_price: 59.99,
+      msrp: 59.99,
+      starting_price: 29.99,
+      current_price: 26.99,
       initial_price: 29.99,
       discount_step: 1,
-      discount_multiplier: 0.75,
-      pricing_cluster_id: "B-full_report-full_center-tier_2-desktop-google-serious-engaged-d1",
+      discount_multiplier: 0.9,
+      pricing_cluster_id: "B-full_report-B-tier_2-desktop-google-serious-engaged-d1",
       country_tier: "tier_2",
       country_multiplier: 1,
       device_type: "Desktop",
@@ -261,42 +322,40 @@ describe("reportPricing", () => {
       view_count: 2,
     };
 
-    mockFetchWithTimeout.mockImplementation(
-      async (url: string, _options?: { body?: string; method?: string }) => {
-        if (url.includes("/rest/v1/survey_submission?id=eq.42")) {
-          return createJsonResponse([
-            {
-              id: 42,
-              user_id: 7,
-              utm_tracker: "utm_source=google",
-              duration_ms: 600000,
-              app_user: {
-                id: 7,
-                email: "user@example.com",
-                utm_tracker: null,
-                user_profile: {
-                  location_primary: "Germany",
-                },
+    mockFetchWithTimeout.mockImplementation(async (url: string) => {
+      if (url.includes("/rest/v1/survey_submission?id=eq.42")) {
+        return createJsonResponse([
+          {
+            id: 42,
+            user_id: 7,
+            utm_tracker: "utm_source=google",
+            duration_ms: 600000,
+            app_user: {
+              id: 7,
+              email: "user@example.com",
+              utm_tracker: null,
+              user_profile: {
+                location_primary: "Germany",
               },
             },
-          ]);
-        }
-
-        if (url.includes("/rest/v1/survey_submission_answer?survey_submission_id=eq.42")) {
-          return createJsonResponse([]);
-        }
-
-        if (url.includes("/rest/v1/report_session?personal_report_id=eq.9")) {
-          return createJsonResponse([{ id: 1 }]);
-        }
-
-        if (url.includes("/rest/v1/report_price_quote?id=eq.77&select=*&limit=1")) {
-          return createJsonResponse([storedQuote]);
-        }
-
-        throw new Error(`Unexpected fetch call: ${url}`);
+          },
+        ]);
       }
-    );
+
+      if (url.includes("/rest/v1/survey_submission_answer?survey_submission_id=eq.42")) {
+        return createJsonResponse([]);
+      }
+
+      if (url.includes("/rest/v1/report_session?personal_report_id=eq.9")) {
+        return createJsonResponse([{ id: 1 }]);
+      }
+
+      if (url.includes("/rest/v1/report_price_quote?id=eq.77&select=*&limit=1")) {
+        return createJsonResponse([storedQuote]);
+      }
+
+      throw new Error(`Unexpected fetch call: ${url}`);
+    });
 
     const quote = await getReportPriceQuoteForContext({
       plan: "full_report",
@@ -305,16 +364,20 @@ describe("reportPricing", () => {
       reportToken: "rpt_ABCDEFGHIJKLMNOPQRST",
     });
 
+    // Session lock pins the original 29.99 price — ladder progress is ignored
+    // within the same pricingSessionId.
     expect(quote).toEqual(
       expect.objectContaining({
         currentPriceCents: 2999,
         discountMultiplier: 1,
         discountStep: 0,
+        msrpCents: 5999,
+        startingPriceCents: 2999,
       })
     );
   });
 
-  it("persists experiment_group when creating a new quote", async () => {
+  it("persists new msrp + starting_price columns when creating a fresh quote", async () => {
     let createdPayload: Record<string, unknown> | null = null;
 
     mockFetchWithTimeout.mockImplementation(
@@ -330,33 +393,18 @@ describe("reportPricing", () => {
                 id: 7,
                 email: "user@example.com",
                 utm_tracker: null,
-                user_profile: {
-                  location_primary: "Germany",
-                },
+                user_profile: { location_primary: "Germany" },
               },
             },
           ]);
         }
 
         if (url.includes("/rest/v1/survey_submission_answer?survey_submission_id=eq.42")) {
-          return createJsonResponse([
-            {
-              answer_option: { option_text: "Germany" },
-              answer_text: null,
-              normalized_value: null,
-              survey_question: { frontend_qid: "15001" },
-            },
-            {
-              answer_option: { option_text: "I want to seriously invest in my sex life" },
-              answer_text: null,
-              normalized_value: null,
-              survey_question: { frontend_qid: "16012" },
-            },
-          ]);
+          return createJsonResponse([]);
         }
 
         if (url.includes("/rest/v1/report_session?personal_report_id=eq.9")) {
-          return createJsonResponse([{ id: 1 }, { id: 2 }]);
+          return createJsonResponse([]);
         }
 
         if (
@@ -373,35 +421,9 @@ describe("reportPricing", () => {
               personal_report_id: 9,
               survey_submission_id: 42,
               user_id: 7,
-              plan: "full_report",
-              currency: "EUR",
-              experiment_group: createdPayload.experiment_group,
-              base_price_bucket: createdPayload.base_price_bucket,
-              base_price: createdPayload.base_price,
-              current_price: createdPayload.current_price,
-              initial_price: createdPayload.initial_price,
-              discount_step: createdPayload.discount_step,
-              discount_multiplier: createdPayload.discount_multiplier,
-              pricing_cluster_id: createdPayload.pricing_cluster_id,
-              country_tier: createdPayload.country_tier,
-              country_multiplier: createdPayload.country_multiplier,
-              device_type: createdPayload.device_type,
-              device_multiplier: createdPayload.device_multiplier,
-              traffic_source: createdPayload.traffic_source,
-              traffic_multiplier: createdPayload.traffic_multiplier,
-              behavioral_bucket: createdPayload.behavioral_bucket,
-              behavioral_multiplier: createdPayload.behavioral_multiplier,
-              engagement_score: createdPayload.engagement_score,
-              engagement_multiplier: createdPayload.engagement_multiplier,
-              report_preview_views: createdPayload.report_preview_views,
-              fantasy_signal_count: createdPayload.fantasy_signal_count,
-              survey_duration_ms: createdPayload.survey_duration_ms,
-              initial_price_timestamp: createdPayload.initial_price_timestamp,
-              expires_at: createdPayload.expires_at,
+              ...createdPayload,
               checkout_started_at: null,
               purchased_at: null,
-              metadata: createdPayload.metadata,
-              view_count: createdPayload.view_count,
             },
           ]);
         }
@@ -417,9 +439,17 @@ describe("reportPricing", () => {
     });
 
     expect(quote.experimentGroup).toMatch(/^[AB]$/);
+    expect(quote.basePriceBucket).toMatch(/^[ABC]$/);
+    expect(quote.msrpCents).toBeGreaterThan(0);
+    expect(quote.startingPriceCents).toBeGreaterThan(0);
+    // MSRP is always ≥ starting (xlsx: ratio is 0.5 or 0.75 depending on plan).
+    expect(quote.msrpCents).toBeGreaterThan(quote.startingPriceCents);
     expect(createdPayload).toEqual(
       expect.objectContaining({
         experiment_group: quote.experimentGroup,
+        base_price_bucket: quote.basePriceBucket,
+        msrp: quote.msrpCents / 100,
+        starting_price: quote.startingPriceCents / 100,
       })
     );
   });

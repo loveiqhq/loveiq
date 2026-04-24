@@ -17,9 +17,13 @@ export interface ReportPurchasePlan {
   featuredLabel?: string;
   features: ReportPurchaseFeature[];
   plan: ReportPurchasePlanId;
+  /**
+   * Bucket-B MSRP — only used as a display fallback when a live quote isn't
+   * available (e.g. the marketing site before the paywall). The real
+   * per-user strike + current price come from `ReportPriceQuoteSnapshot`.
+   */
   priceCents: number;
   priceSuffix: string;
-  strikePriceCents?: number;
   title: string;
   tone?: "highlight";
 }
@@ -54,13 +58,11 @@ export const REPORT_PURCHASE_PLANS: ReportPurchasePlan[] = [
       },
     ],
     plan: "essentials",
-    priceCents: 1499,
+    priceCents: 1999,
     priceSuffix: "one-time",
-    strikePriceCents: 1499,
     title: "Essentials only",
   },
   {
-    badge: "50% OFF",
     ctaLabel: "Unlock full report",
     description: "Perfect for individuals who want to dive deep",
     featuredLabel: "Most popular",
@@ -82,12 +84,10 @@ export const REPORT_PURCHASE_PLANS: ReportPurchasePlan[] = [
     plan: "full_report",
     priceCents: 2999,
     priceSuffix: "one-time",
-    strikePriceCents: 5900,
     title: "Full report",
     tone: "highlight",
   },
   {
-    badge: "32% OFF",
     ctaLabel: "Unlock all reports",
     description: "Built for those wanting to explore all archetypes",
     features: [
@@ -101,9 +101,8 @@ export const REPORT_PURCHASE_PLANS: ReportPurchasePlan[] = [
       },
     ],
     plan: "all_reports",
-    priceCents: 12999,
+    priceCents: 25900,
     priceSuffix: "one-time",
-    strikePriceCents: 19000,
     title: "All reports",
   },
 ];
@@ -160,29 +159,31 @@ export function formatReportPurchasePrice(cents: number, currency = "EUR") {
   }).format(cents / 100);
 }
 
-export function getReportPurchaseStrikePrice(plan: ReportPurchasePlan) {
-  return typeof plan.strikePriceCents === "number"
-    ? formatReportPurchasePrice(plan.strikePriceCents)
+/**
+ * Format the MSRP strike for display. Accepts the cents value directly so
+ * callers can pull it from a live quote (`snapshot.msrpCents`) or from a
+ * static catalogue fallback when no quote is present.
+ */
+export function getReportPurchaseStrikePrice(strikeCents: number | null | undefined) {
+  return typeof strikeCents === "number" && strikeCents > 0
+    ? formatReportPurchasePrice(strikeCents)
     : null;
 }
 
+/**
+ * Derive the green "N% OFF" badge from the live strike/current pair. Returns
+ * null when the discount is zero or negative so the UI can skip the pill.
+ */
 export function getReportPurchaseBadgeFromPrice({
-  plan,
-  priceCents,
+  strikeCents,
+  currentCents,
 }: {
-  plan: ReportPurchasePlan;
-  priceCents: number;
+  strikeCents: number | null | undefined;
+  currentCents: number;
 }) {
-  if (
-    typeof plan.strikePriceCents !== "number" ||
-    plan.strikePriceCents <= 0 ||
-    priceCents >= plan.strikePriceCents
-  ) {
-    return plan.badge;
+  if (!strikeCents || strikeCents <= 0 || currentCents >= strikeCents) {
+    return null;
   }
-
-  const percentOff = Math.round(
-    ((plan.strikePriceCents - priceCents) / plan.strikePriceCents) * 100
-  );
-  return percentOff > 0 ? `${percentOff}% OFF` : plan.badge;
+  const percentOff = Math.round(((strikeCents - currentCents) / strikeCents) * 100);
+  return percentOff > 0 ? `${percentOff}% OFF` : null;
 }

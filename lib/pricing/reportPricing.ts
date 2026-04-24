@@ -3,7 +3,6 @@ import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import {
   DEFAULT_REPORT_PURCHASE_PLAN_ID,
   REPORT_PURCHASE_PLAN_IDS,
-  getReportPurchasePlan,
   type ReportPurchasePlanId,
 } from "@/lib/checkout/reportPurchase";
 import {
@@ -14,13 +13,37 @@ import { parseUtmSource } from "@/lib/survey/utils";
 
 const SUPABASE_TIMEOUT_MS = 8_000;
 const QUOTE_VALIDITY_MS = 21 * 24 * 60 * 60 * 1_000;
-const DISCOUNT_LADDER = [
+
+/**
+ * Per-plan discount ladder — values come from Pricing.xlsx (rows 8-11).
+ * Essentials + Full Report share the same ladder that deepens to -70% at 14d.
+ * All Reports caps at -30% past 72h so the premium tier never free-falls.
+ * Multipliers are applied to the quote's `starting_price` (NOT to MSRP).
+ */
+const ONE_HOUR_MS = 60 * 60 * 1_000;
+const PLAN_LADDER_ESSENTIALS_FULL = [
   { delayMs: 0, multiplier: 1, step: 0 },
-  { delayMs: 24 * 60 * 60 * 1_000, multiplier: 0.75, step: 1 },
-  { delayMs: 72 * 60 * 60 * 1_000, multiplier: 0.5, step: 2 },
-  { delayMs: 7 * 24 * 60 * 60 * 1_000, multiplier: 0.35, step: 3 },
-  { delayMs: 14 * 24 * 60 * 60 * 1_000, multiplier: 0.25, step: 4 },
+  { delayMs: 24 * ONE_HOUR_MS, multiplier: 0.9, step: 1 }, // -10%
+  { delayMs: 72 * ONE_HOUR_MS, multiplier: 0.7, step: 2 }, // -30%
+  { delayMs: 7 * 24 * ONE_HOUR_MS, multiplier: 0.5, step: 3 }, // -50%
+  { delayMs: 14 * 24 * ONE_HOUR_MS, multiplier: 0.3, step: 4 }, // -70%
 ] as const;
+const PLAN_LADDER_ALL = [
+  { delayMs: 0, multiplier: 1, step: 0 },
+  { delayMs: 24 * ONE_HOUR_MS, multiplier: 0.9, step: 1 }, // -10%
+  { delayMs: 72 * ONE_HOUR_MS, multiplier: 0.7, step: 2 }, // -30%
+  { delayMs: 7 * 24 * ONE_HOUR_MS, multiplier: 0.7, step: 3 }, // cap at -30%
+  { delayMs: 14 * 24 * ONE_HOUR_MS, multiplier: 0.7, step: 4 }, // cap at -30%
+] as const;
+const PLAN_LADDERS = {
+  essentials: PLAN_LADDER_ESSENTIALS_FULL,
+  full_report: PLAN_LADDER_ESSENTIALS_FULL,
+  all_reports: PLAN_LADDER_ALL,
+} as const satisfies Record<
+  ReportPurchasePlanId,
+  ReadonlyArray<{ delayMs: number; multiplier: number; step: number }>
+>;
+
 const PRICING_SIGNAL_QIDS = ["15001", "16012", "03005", "03010", "03012"] as const;
 const PRICING_SIGNAL_SELECT = [
   "answer_text",
@@ -29,27 +52,34 @@ const PRICING_SIGNAL_SELECT = [
   "answer_option!fk_ssa_answer_option(option_text)",
 ].join(",");
 
-const PLAN_BASE_BUCKETS: Record<ReportPurchasePlanId, Array<{ cents: number; key: string }>> = {
+/**
+ * Pricing.xlsx buckets — each plan has 3 buckets (A / B / C) with a weighted
+ * distribution. MSRP is the struck-out anchor shown in the discount email and
+ * modal; `startingCents` is the initial sale price before any ladder discount.
+ * The ladder multipliers in `PLAN_LADDERS` are applied to `startingCents`.
+ */
+export type PricingBucketCode = "A" | "B" | "C";
+interface PricingBucket {
+  code: PricingBucketCode;
+  weight: number; // out of 100
+  msrpCents: number;
+  startingCents: number;
+}
+const PLAN_BUCKETS: Record<ReportPurchasePlanId, readonly PricingBucket[]> = {
   essentials: [
-    { cents: 1249, key: "essentials_low_2" },
-    { cents: 1399, key: "essentials_low_1" },
-    { cents: 1499, key: "essentials_center" },
-    { cents: 1599, key: "essentials_high_1" },
-    { cents: 1749, key: "essentials_high_2" },
+    { code: "A", weight: 34, msrpCents: 2999, startingCents: 2249 },
+    { code: "B", weight: 33, msrpCents: 1999, startingCents: 1499 },
+    { code: "C", weight: 33, msrpCents: 999, startingCents: 749 },
   ],
   full_report: [
-    { cents: 2449, key: "full_low_2" },
-    { cents: 2749, key: "full_low_1" },
-    { cents: 2999, key: "full_center" },
-    { cents: 3249, key: "full_high_1" },
-    { cents: 3499, key: "full_high_2" },
+    { code: "A", weight: 34, msrpCents: 6999, startingCents: 3499 },
+    { code: "B", weight: 33, msrpCents: 5999, startingCents: 2999 },
+    { code: "C", weight: 33, msrpCents: 4999, startingCents: 2499 },
   ],
   all_reports: [
-    { cents: 9999, key: "all_low_2" },
-    { cents: 11499, key: "all_low_1" },
-    { cents: 12999, key: "all_center" },
-    { cents: 14499, key: "all_high_1" },
-    { cents: 15999, key: "all_high_2" },
+    { code: "A", weight: 34, msrpCents: 35900, startingCents: 17949 },
+    { code: "B", weight: 33, msrpCents: 25900, startingCents: 12949 },
+    { code: "C", weight: 33, msrpCents: 15900, startingCents: 7949 },
   ],
 };
 
@@ -143,6 +173,18 @@ export interface ReportPriceQuoteSnapshot {
   experimentGroup: PricingExperimentGroup;
   basePriceBucket: string;
   basePriceCents: number;
+  /**
+   * MSRP / retail anchor for the bucket — this is the strike-out "old price"
+   * shown in the discount email and pricing modal. Persisted on the quote row
+   * so the strike is stable even if the pricing table changes later.
+   */
+  msrpCents: number;
+  /**
+   * Pre-ladder sale price (MSRP × bucket-specific discount: 0.75 for
+   * Essentials, 0.5 for Full/All). The time-based discount ladder scales
+   * relative to this value, not to MSRP.
+   */
+  startingPriceCents: number;
   currentPriceCents: number;
   initialPriceCents: number;
   discountMultiplier: number;
@@ -231,6 +273,10 @@ interface ReportPriceQuoteRow {
   experiment_group: PricingExperimentGroup;
   base_price_bucket: string;
   base_price: number;
+  /** MSRP anchor in EUR (numeric). Nullable for rows written before the 2026-04 pricing migration. */
+  msrp?: number | null;
+  /** Starting-sale price in EUR (numeric). Nullable for legacy rows. */
+  starting_price?: number | null;
   current_price: number;
   initial_price: number;
   discount_step: number;
@@ -278,6 +324,8 @@ interface BuiltQuotePayload {
   payload: {
     base_price: number;
     base_price_bucket: string;
+    msrp: number;
+    starting_price: number;
     behavioral_bucket: PricingBehavioralBucket;
     behavioral_multiplier: number;
     checkout_started_at: string | null;
@@ -524,10 +572,34 @@ export function getPricingExperimentGroup(personalReportId: number): PricingExpe
   return hashString(`experiment:${personalReportId}`) % 2 === 0 ? "A" : "B";
 }
 
-function getBaseBucket(plan: ReportPurchasePlanId, personalReportId: number) {
+/**
+ * Deterministic bucket selection using the hash-of-personalReportId seeded
+ * against the weighted distribution (A=34%, B=33%, C=33%). Same user always
+ * lands in the same bucket for the same plan.
+ */
+function pickBucket(plan: ReportPurchasePlanId, personalReportId: number): PricingBucket {
   // eslint-disable-next-line security/detect-object-injection -- plan is a closed union of internal purchase-plan ids.
-  const buckets = PLAN_BASE_BUCKETS[plan];
-  return buckets[hashString(`bucket:${personalReportId}:${plan}`) % buckets.length];
+  const buckets = PLAN_BUCKETS[plan];
+  const draw = hashString(`bucket:${personalReportId}:${plan}`) % 100;
+  let running = 0;
+  for (const bucket of buckets) {
+    running += bucket.weight;
+    if (draw < running) {
+      return bucket;
+    }
+  }
+  // Weights sum to 100; the loop always returns, but fall through defensively.
+  return buckets[buckets.length - 1];
+}
+
+function bucketFromCode(
+  plan: ReportPurchasePlanId,
+  code: string | null | undefined
+): PricingBucket | null {
+  if (!code) return null;
+  // eslint-disable-next-line security/detect-object-injection -- plan is a closed union.
+  const buckets = PLAN_BUCKETS[plan];
+  return buckets.find((bucket) => bucket.code === code) ?? null;
 }
 
 function normalizeCountryCode(value: string | null | undefined) {
@@ -699,16 +771,20 @@ function getEngagementMultiplier(engagementScore: number) {
 export function getDiscountAdjustment({
   initialPriceTimestamp,
   now = new Date(),
+  plan = "full_report",
 }: {
   initialPriceTimestamp: string;
   now?: Date;
+  plan?: ReportPurchasePlanId;
 }) {
   const initialTimestampMs = new Date(initialPriceTimestamp).getTime();
   const ageMs = Math.max(0, now.getTime() - initialTimestampMs);
 
-  let resolved: (typeof DISCOUNT_LADDER)[number] = DISCOUNT_LADDER[0];
+  // eslint-disable-next-line security/detect-object-injection -- plan is a closed union.
+  const ladder = PLAN_LADDERS[plan];
+  let resolved: (typeof ladder)[number] = ladder[0];
 
-  for (const candidate of DISCOUNT_LADDER) {
+  for (const candidate of ladder) {
     if (ageMs >= candidate.delayMs) {
       resolved = candidate;
     }
@@ -777,6 +853,19 @@ function toSnapshot(
   row: ReportPriceQuoteRow,
   override?: SnapshotOverride | null
 ): ReportPriceQuoteSnapshot {
+  // Backfill msrp + starting_price for legacy rows that predate the 2026-04
+  // pricing migration. Fall back to the bucket catalogue if the row matches a
+  // known bucket code, else to the stored initial_price so the snapshot is
+  // always numerically self-consistent.
+  const catalogueBucket = bucketFromCode(row.plan, row.base_price_bucket);
+  const initialCents = fromEuroAmount(row.initial_price);
+  const msrpCents =
+    row.msrp != null ? fromEuroAmount(row.msrp) : (catalogueBucket?.msrpCents ?? initialCents);
+  const startingCents =
+    row.starting_price != null
+      ? fromEuroAmount(row.starting_price)
+      : (catalogueBucket?.startingCents ?? initialCents);
+
   return {
     id: row.id,
     plan: row.plan,
@@ -784,8 +873,10 @@ function toSnapshot(
     experimentGroup: row.experiment_group,
     basePriceBucket: row.base_price_bucket,
     basePriceCents: fromEuroAmount(row.base_price),
+    msrpCents,
+    startingPriceCents: startingCents,
     currentPriceCents: override?.currentPriceCents ?? fromEuroAmount(row.current_price),
-    initialPriceCents: fromEuroAmount(row.initial_price),
+    initialPriceCents: initialCents,
     discountMultiplier: override?.discountMultiplier ?? row.discount_multiplier,
     discountStep: override?.discountStep ?? row.discount_step,
     pricingClusterId: row.pricing_cluster_id,
@@ -967,12 +1058,29 @@ function buildQuotePayload({
 }): BuiltQuotePayload {
   const experimentGroup =
     existingQuote?.experiment_group ?? getPricingExperimentGroup(context.personalReportId);
-  const baseBucket = existingQuote
+
+  // Resolve the bucket — either read the stored code (with MSRP/starting
+  // sourced from the row when present) or pick fresh for a brand-new quote.
+  const existingBucketFromCode = existingQuote
+    ? bucketFromCode(plan, existingQuote.base_price_bucket)
+    : null;
+  const bucket = existingQuote
     ? {
-        cents: fromEuroAmount(existingQuote.base_price),
-        key: existingQuote.base_price_bucket,
+        code:
+          (existingBucketFromCode?.code as PricingBucketCode | undefined) ??
+          ((existingQuote.base_price_bucket as PricingBucketCode) || "B"),
+        weight: existingBucketFromCode?.weight ?? 0,
+        msrpCents:
+          existingQuote.msrp != null
+            ? fromEuroAmount(existingQuote.msrp)
+            : (existingBucketFromCode?.msrpCents ?? fromEuroAmount(existingQuote.base_price)),
+        startingCents:
+          existingQuote.starting_price != null
+            ? fromEuroAmount(existingQuote.starting_price)
+            : (existingBucketFromCode?.startingCents ?? fromEuroAmount(existingQuote.base_price)),
       }
-    : getBaseBucket(plan, context.personalReportId);
+    : pickBucket(plan, context.personalReportId);
+
   const countryPricing = getCountryPricing(context.countryCode);
   const deviceType = existingQuote?.device_type ?? getDeviceTypeFromUserAgent(context.userAgent);
   const deviceMultiplier = existingQuote?.device_multiplier ?? getDeviceMultiplier(deviceType);
@@ -1001,24 +1109,35 @@ function buildQuotePayload({
     !regenerateInitialPrice && existingQuote?.initial_price_timestamp
       ? existingQuote.initial_price_timestamp
       : now.toISOString();
+
+  // Initial price rules (Pricing.xlsx + MVP doc):
+  //   Group A  → initial = starting (no contextual adjustments)
+  //   Group B  → initial = normalize(min(msrp, starting × mults))
+  // In both cases, initial never exceeds MSRP so the email strike stays sane.
+  const groupBInitialRaw =
+    bucket.startingCents *
+    countryPricing.multiplier *
+    deviceMultiplier *
+    trafficMultiplier *
+    behavioralPricing.multiplier *
+    engagementMultiplier;
+  const computedInitialCents = normalizePriceEnding(
+    Math.min(bucket.msrpCents, experimentGroup === "A" ? bucket.startingCents : groupBInitialRaw)
+  );
   const initialPriceCents =
     !regenerateInitialPrice && existingQuote?.initial_price != null
       ? fromEuroAmount(existingQuote.initial_price)
-      : normalizePriceEnding(
-          baseBucket.cents *
-            (experimentGroup === "A"
-              ? 1
-              : countryPricing.multiplier *
-                deviceMultiplier *
-                trafficMultiplier *
-                behavioralPricing.multiplier *
-                engagementMultiplier)
-        );
+      : computedInitialCents;
+
   const discount = getDiscountAdjustment({
     initialPriceTimestamp,
     now,
+    plan,
   });
-  const discountedCents = normalizePriceEnding(initialPriceCents * discount.multiplier);
+  // Ladder is applied to starting-sale (per xlsx). For Group A this matches
+  // initial; for Group B it intentionally ignores the contextual uplift so
+  // the promised discount depth lines up with what the email advertises.
+  const discountedCents = normalizePriceEnding(bucket.startingCents * discount.multiplier);
   const previousCurrentPriceCents =
     !regenerateInitialPrice && existingQuote?.current_price != null
       ? fromEuroAmount(existingQuote.current_price)
@@ -1045,7 +1164,7 @@ function buildQuotePayload({
           lockedAt: now.toISOString(),
         });
   const pricingClusterId = buildPricingClusterId({
-    baseBucket: baseBucket.key,
+    baseBucket: bucket.code,
     behavioralBucket: behavioralPricing.bucket,
     countryTier: countryPricing.tier,
     deviceType,
@@ -1058,8 +1177,13 @@ function buildQuotePayload({
 
   return {
     payload: {
-      base_price: toEuroAmount(baseBucket.cents),
-      base_price_bucket: baseBucket.key,
+      // `base_price` retained as the MSRP anchor for analytics continuity —
+      // legacy dashboards key off the column name. New `msrp` + `starting_price`
+      // columns are the canonical source going forward.
+      base_price: toEuroAmount(bucket.msrpCents),
+      base_price_bucket: bucket.code,
+      msrp: toEuroAmount(bucket.msrpCents),
+      starting_price: toEuroAmount(bucket.startingCents),
       behavioral_bucket: behavioralPricing.bucket,
       behavioral_multiplier: behavioralPricing.multiplier,
       checkout_started_at: existingQuote?.checkout_started_at ?? null,
@@ -1392,7 +1516,22 @@ export async function markReportPriceQuotePurchased({
   }
 }
 
+/**
+ * Display helper used by legacy admin screens. Returns the bucket-B MSRP as
+ * the default "retail" price — the per-user strike is stored on the quote now
+ * and should be read from `ReportPriceQuoteSnapshot.msrpCents` instead.
+ */
 export function getReportPriceStrikeDisplay(plan: ReportPurchasePlanId) {
-  const strikePriceCents = getReportPurchasePlan(plan).strikePriceCents;
-  return strikePriceCents ? formatReportPrice(strikePriceCents) : null;
+  // eslint-disable-next-line security/detect-object-injection -- plan is a closed union of internal purchase-plan ids.
+  const bucketList = PLAN_BUCKETS[plan];
+  const defaultBucket = bucketList.find((entry) => entry.code === "B") ?? bucketList[0];
+  return defaultBucket ? formatReportPrice(defaultBucket.msrpCents) : null;
+}
+
+/**
+ * Exported so tests + admin tools can read the bucket catalogue.
+ */
+export function getPricingBucketsForPlan(plan: ReportPurchasePlanId) {
+  // eslint-disable-next-line security/detect-object-injection -- plan is a closed union.
+  return PLAN_BUCKETS[plan];
 }

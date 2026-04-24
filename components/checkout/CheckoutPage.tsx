@@ -438,29 +438,29 @@ const CheckoutPage: FC<Props> = ({ archetype = null, planId, token = null }) => 
               <h2 className="checkout-page__summary-title">{plan.title}</h2>
               <p className="checkout-page__summary-copy">{plan.description}</p>
             </div>
-            {getReportPurchaseBadgeFromPrice({
-              plan,
-              priceCents: activeQuote?.currentPriceCents ?? plan.priceCents,
-            }) ? (
-              <span className="checkout-page__badge">
-                {getReportPurchaseBadgeFromPrice({
-                  plan,
-                  priceCents: activeQuote?.currentPriceCents ?? plan.priceCents,
-                })}
-              </span>
-            ) : null}
+            {(() => {
+              const strikeCents = activeQuote?.msrpCents ?? null;
+              const currentCents = activeQuote?.currentPriceCents ?? plan.priceCents;
+              const badge = getReportPurchaseBadgeFromPrice({ strikeCents, currentCents });
+              return badge ? <span className="checkout-page__badge">{badge}</span> : null;
+            })()}
           </div>
 
           <div className="checkout-page__summary-price">
-            {getReportPurchaseStrikePrice(plan) ? (
-              <span className="checkout-page__summary-strike">
-                {getReportPurchaseStrikePrice(plan)}
-              </span>
-            ) : (
-              <span className="checkout-page__summary-strike checkout-page__summary-strike--placeholder">
-                &nbsp;
-              </span>
-            )}
+            {(() => {
+              const strikeCents = activeQuote?.msrpCents ?? null;
+              const currentCents = activeQuote?.currentPriceCents ?? plan.priceCents;
+              const showStrike = typeof strikeCents === "number" && strikeCents > currentCents;
+              return showStrike ? (
+                <span className="checkout-page__summary-strike">
+                  {getReportPurchaseStrikePrice(strikeCents)}
+                </span>
+              ) : (
+                <span className="checkout-page__summary-strike checkout-page__summary-strike--placeholder">
+                  &nbsp;
+                </span>
+              );
+            })()}
             <div className="checkout-page__summary-amount">
               <strong>
                 {activeQuote
