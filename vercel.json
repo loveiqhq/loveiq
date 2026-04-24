@@ -4,6 +4,10 @@
     {
       "path": "/api/cron/survey-paused",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/report-discount-email",
+      "schedule": "0 9 * * *"
     }
   ]
 }

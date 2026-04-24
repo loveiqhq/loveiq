@@ -9,6 +9,7 @@ import {
   copySurveySessionToReportSession,
   getReportSessionId,
   getSessionId,
+  setReportPricingSessionId,
   setReportSessionId,
 } from "@/components/survey/hooks/surveySession";
 
@@ -104,5 +105,43 @@ describe("surveySession", () => {
       "pricing-session"
     );
     expect(randomUuid).toHaveBeenCalledTimes(2);
+  });
+
+  it("setReportPricingSessionId overwrites the stored id for a token context", () => {
+    sessionStorage.setItem(
+      `${REPORT_PRICING_SESSION_PREFIX}:token:rpt_ABCDEFGHIJKLMNOPQRST`,
+      "old-id"
+    );
+
+    setReportPricingSessionId({
+      token: "rpt_ABCDEFGHIJKLMNOPQRST",
+      pricingSessionId: "url-supplied-id",
+    });
+
+    expect(
+      sessionStorage.getItem(`${REPORT_PRICING_SESSION_PREFIX}:token:rpt_ABCDEFGHIJKLMNOPQRST`)
+    ).toBe("url-supplied-id");
+    expect(getReportPricingSessionId({ token: "rpt_ABCDEFGHIJKLMNOPQRST" })).toBe(
+      "url-supplied-id"
+    );
+  });
+
+  it("setReportPricingSessionId stores against the session-id context when no token present", () => {
+    setReportPricingSessionId({
+      sessionId: "02d88f31-eceb-4402-940d-c8cd98d01848",
+      pricingSessionId: "from-email",
+    });
+
+    expect(
+      sessionStorage.getItem(
+        `${REPORT_PRICING_SESSION_PREFIX}:session:02d88f31-eceb-4402-940d-c8cd98d01848`
+      )
+    ).toBe("from-email");
+  });
+
+  it("setReportPricingSessionId silently no-ops when neither token nor session id is supplied", () => {
+    setReportPricingSessionId({ pricingSessionId: "orphan" });
+    // No storage key can be formed; nothing should be written.
+    expect(sessionStorage.length).toBe(0);
   });
 });

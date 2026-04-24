@@ -131,3 +131,31 @@ export function getReportPricingSessionId({
     return null;
   }
 }
+
+/**
+ * Persist a pricing-session id threaded from an external URL (e.g. the
+ * discount email CTA ?pricingSessionId=...). Downstream surfaces — the report
+ * page, the checkout page, the Stripe session endpoint — all read via
+ * `getReportPricingSessionId`, so writing into the same storage key makes the
+ * offer's locked quote transparently win through the whole flow.
+ */
+export function setReportPricingSessionId({
+  pricingSessionId,
+  sessionId,
+  token,
+}: {
+  pricingSessionId: string;
+  sessionId?: string | null;
+  token?: string | null;
+}): void {
+  if (!canUseStorage()) return;
+
+  const storageKey = getReportPricingSessionStorageKey({ sessionId, token });
+  if (!storageKey) return;
+
+  try {
+    sessionStorage.setItem(storageKey, pricingSessionId);
+  } catch {
+    /* storage unavailable */
+  }
+}

@@ -27,6 +27,13 @@ interface Props {
   quotes: Record<ReportPurchasePlanId, ReportPriceQuoteSnapshot> | null;
   returnFocusRef?: MutableRefObject<HTMLElement | null>;
   targetArchetype?: string | null;
+  /**
+   * "default" (current behaviour) vs "offer" — triggered from the discount email
+   * deep-link (?offer=1). Swaps the headline, recolours the first clause to
+   * orange, and surfaces the "Extra N% OFF" inline pill on the Full card when
+   * the ladder has progressed past 50%.
+   */
+  variant?: "default" | "offer";
 }
 
 const FOCUSABLE_SELECTOR =
@@ -78,11 +85,16 @@ function getCardPricing(
   }
 
   const priceCents = quote.currentPriceCents;
+  // Only show the strike line when the plan is genuinely discounted — else
+  // e.g. Essentials (strike 1499 === current 1499 at 0-discount) would render
+  // a line-through over the same number as the active price.
+  const strikeEligible =
+    typeof card.strikePriceCents === "number" && card.strikePriceCents > priceCents;
   return {
     available: true,
     badge: getReportPurchaseBadgeFromPrice({ plan: card, priceCents }),
     priceLabel: formatReportPurchasePrice(priceCents),
-    strikePriceLabel: getReportPurchaseStrikePrice(card),
+    strikePriceLabel: strikeEligible ? getReportPurchaseStrikePrice(card) : null,
   };
 }
 
@@ -94,6 +106,7 @@ const ReportPricingModal: FC<Props> = ({
   quotes,
   returnFocusRef,
   targetArchetype = null,
+  variant = "default",
 }) => {
   const dialogRef = useRef<HTMLDivElement>(null);
   const scrollRegionRef = useRef<HTMLDivElement>(null);
@@ -103,12 +116,24 @@ const ReportPricingModal: FC<Props> = ({
   const touchStartYRef = useRef<number | null>(null);
   const [focusMode, setFocusMode] = useState<"keyboard" | "pointer">("pointer");
 
+  const isOffer = variant === "offer";
   const subtitle = targetArchetype
     ? `Unlock the complete ${targetArchetype} report \u2014 full attachment, desire drivers, practices, and growth paths for this archetype.`
-    : `Unlock your complete ${archetype} report \u2014 attachment style, core insecurities, confidence, love language, arousal, desire drivers, fantasies, and more.`;
+    : isOffer
+      ? "Unlock your complete archetype report \u2014 comprehensive coverage of your archetype probabilities, sexual stage, attachment style, desire drivers, and growth paths."
+      : `Unlock your complete ${archetype} report \u2014 attachment style, core insecurities, confidence, love language, arousal, desire drivers, fantasies, and more.`;
   const planCards = targetArchetype
     ? REPORT_PURCHASE_PLANS.filter((card) => card.plan === "full_report")
     : REPORT_PURCHASE_PLANS;
+
+  // "Extra 50% OFF" inline pill on Full card fires once the ladder hits 50% or
+  // deeper. Matches the "Extra 50% OFF" badge from Figma 5495:302.
+  const fullQuote = quotes?.full_report ?? null;
+  const showExtraDiscountPill =
+    isOffer && !!fullQuote && fullQuote.discountMultiplier <= 0.5 && fullQuote.discountStep >= 2;
+  const extraDiscountPct = fullQuote
+    ? Math.max(0, Math.round((1 - fullQuote.discountMultiplier) * 100))
+    : 0;
 
   useEffect(() => {
     if (open) {
@@ -241,6 +266,7 @@ const ReportPricingModal: FC<Props> = ({
       className={`report-pricing-modal ${open ? "is-visible" : "is-hidden"}`}
       data-state={open ? "open" : "closed"}
       data-focus-mode={focusMode}
+      data-variant={variant}
       aria-hidden={!open}
     >
       <div className="report-pricing-modal__backdrop" aria-hidden="true" onClick={onClose} />
@@ -282,9 +308,18 @@ const ReportPricingModal: FC<Props> = ({
                   Don&apos;t miss out on truly understanding your sexuality
                 </span>
                 <h2 id="report-pricing-modal-title" className="report-pricing-modal__title">
-                  {targetArchetype
-                    ? `Unlock the ${targetArchetype} report`
-                    : "Unlock your full report"}
+                  {targetArchetype ? (
+                    `Unlock the ${targetArchetype} report`
+                  ) : isOffer ? (
+                    <>
+                      <span className="report-pricing-modal__title-accent">
+                        Secure your extra discount now,
+                      </span>{" "}
+                      to unlock your full report
+                    </>
+                  ) : (
+                    "Unlock your full report"
+                  )}
                 </h2>
                 <p id="report-pricing-modal-copy" className="report-pricing-modal__copy">
                   {subtitle}
@@ -358,6 +393,14 @@ const ReportPricingModal: FC<Props> = ({
                           {pricing.available ? (
                             <span>
                               /{card.priceSuffix === "one-time" ? "one time off" : card.priceSuffix}
+                            </span>
+                          ) : null}
+                          {card.plan === "full_report" && showExtraDiscountPill ? (
+                            <span
+                              className="report-pricing-card__extra-pill"
+                              aria-label={`Extra ${extraDiscountPct} percent off`}
+                            >
+                              Extra {extraDiscountPct}% OFF
                             </span>
                           ) : null}
                         </div>
@@ -451,9 +494,19 @@ const ReportPricingModal: FC<Props> = ({
                   ))}
                 </div>
                 <blockquote className="report-pricing-modal__quote">
-                  &ldquo;The results were <em>more insightful than I expected</em>. It connected
-                  dots between emotional triggers and communication styles I hadn&rsquo;t noticed
-                  before. Solid UX, too.&rdquo;
+                  {isOffer ? (
+                    <>
+                      &ldquo;Unlocking my report was{" "}
+                      <em>one of the best investments made for my sexuality.</em> It is shockingly
+                      precise&rdquo;
+                    </>
+                  ) : (
+                    <>
+                      &ldquo;The results were <em>more insightful than I expected</em>. It connected
+                      dots between emotional triggers and communication styles I hadn&rsquo;t
+                      noticed before. Solid UX, too.&rdquo;
+                    </>
+                  )}
                 </blockquote>
               </figure>
             </div>

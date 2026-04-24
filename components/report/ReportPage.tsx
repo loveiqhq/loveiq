@@ -24,7 +24,10 @@ import ShareReportModal from "./ShareReportModal";
 import ShareVerifyGate from "./ShareVerifyGate";
 import SharedViewerBanner from "./SharedViewerBanner";
 import ViewingBanner from "./ViewingBanner";
-import { getReportSessionId } from "@/components/survey/hooks/surveySession";
+import {
+  getReportSessionId,
+  setReportPricingSessionId,
+} from "@/components/survey/hooks/surveySession";
 import { useReportData, type ReportRequestError } from "./hooks/useReportData";
 import { useSectionFeedback, type FeedbackPayload } from "./hooks/useSectionFeedback";
 import { resolveReportSections } from "./reportTitles";
@@ -278,6 +281,7 @@ interface ReportExperienceProps {
   ownerToken: string | null;
   percentages: Record<string, number>;
   pricingTargetArchetype: string | null;
+  pricingVariant: "default" | "offer";
   placeholderValues: {
     archetype: string;
     matchScore: number;
@@ -322,6 +326,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   primaryArchetype,
   pricingQuotes,
   pricingTargetArchetype,
+  pricingVariant,
   ranking,
   reportDate,
   resolvedSections,
@@ -648,6 +653,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
         quotes={pricingQuotes}
         returnFocusRef={mainContentRef}
         targetArchetype={pricingTargetArchetype}
+        variant={pricingVariant}
       />
       {viewMode === "owner" && ownerToken ? (
         <ShareReportModal
@@ -675,16 +681,39 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   /* eslint-enable no-restricted-syntax */
   const sessionId = devParam ?? storedSessionId;
 
+  // Honour the discount-email CTA deep-link: /report/[token]?offer=1&pricingSessionId=<uuid>
+  const isOfferLink = searchParams.get("offer") === "1";
+  const pricingSessionIdFromUrl = searchParams.get("pricingSessionId");
+
+  // Persist the URL-provided pricingSessionId into sessionStorage so every
+  // downstream surface (report data, /api/price, checkout, Stripe session)
+  // sees the same locked quote the email was built against. Runs once per
+  // navigation; harmless if the URL param is absent.
+  useEffect(() => {
+    if (!pricingSessionIdFromUrl) return;
+    if (!token && !sessionId) return;
+    setReportPricingSessionId({
+      pricingSessionId: pricingSessionIdFromUrl,
+      sessionId: token ? null : sessionId,
+      token,
+    });
+  }, [pricingSessionIdFromUrl, sessionId, token]);
+
   const { data, status, error, challenge, retry } = useReportData({
     token,
     sessionId: token ? null : sessionId,
+    pricingSessionIdOverride: pricingSessionIdFromUrl,
   });
   const { feedbacks, submitted, submitFeedback } = useSectionFeedback(sessionId);
   const [locallyUnlocked, setLocallyUnlocked] = useState<string[]>([]);
   const [isPricingModalOpen, setIsPricingModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [pricingTargetArchetype, setPricingTargetArchetype] = useState<string | null>(null);
+  const [pricingVariant, setPricingVariant] = useState<"default" | "offer">(
+    isOfferLink ? "offer" : "default"
+  );
   const autoOpenedPricingRef = useRef(false);
+  const autoOpenedOfferRef = useRef(false);
 
   const viewMode: "owner" | "shared" = data?.viewMode === "shared" ? "shared" : "owner";
   const ownerFirstName = data?.ownerFirstName ?? null;
@@ -706,6 +735,22 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsPricingModalOpen(true);
   }, [accessPlan, data, viewMode]);
+
+  useEffect(() => {
+    if (!isOfferLink) return;
+    if (autoOpenedOfferRef.current) return;
+    if (!data) return;
+    if (viewMode === "shared") return;
+    autoOpenedOfferRef.current = true;
+    // Discount email deep-link — open the pricing modal in offer variant
+    // once quotes have resolved. Fires regardless of accessPlan so users who
+    // already bought one plan can still see offers for the tier above.
+    // One-shot: guarded by autoOpenedOfferRef to avoid re-open cascades.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPricingTargetArchetype(null);
+    setPricingVariant("offer");
+    setIsPricingModalOpen(true);
+  }, [data, isOfferLink, viewMode]);
 
   const apiUnlocked = data?.unlockedArchetypes;
   const primaryArchetypeFromData = data?.primaryArchetype;
@@ -759,6 +804,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       const paywallDisabled = process.env.NEXT_PUBLIC_DISABLE_PAYWALL === "1";
       if (!paywallDisabled) {
         setPricingTargetArchetype(name === primaryArchetypeFromData ? null : name);
+        setPricingVariant("default");
         setIsPricingModalOpen(true);
         return;
       }
@@ -816,12 +862,14 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   const closePricingModal = useCallback(() => {
     setIsPricingModalOpen(false);
     setPricingTargetArchetype(null);
+    setPricingVariant("default");
   }, []);
 
   const openShareModal = useCallback(() => setIsShareModalOpen(true), []);
   const closeShareModal = useCallback(() => setIsShareModalOpen(false), []);
   const openPricingModal = useCallback(() => {
     setPricingTargetArchetype(null);
+    setPricingVariant("default");
     setIsPricingModalOpen(true);
   }, []);
 
@@ -928,6 +976,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       primaryArchetype={primaryArchetype}
       pricingQuotes={data.pricingQuotes}
       pricingTargetArchetype={pricingTargetArchetype}
+      pricingVariant={pricingVariant}
       ranking={ranking}
       reportDate={reportDate}
       resolvedSections={resolvedSections}

@@ -32,27 +32,31 @@ export const REPORT_PURCHASE_PLANS: ReportPurchasePlan[] = [
     description: "Built for those with limited time",
     features: [
       {
-        label: "Includes the following chapters:",
+        label: "Includes the following chapter:",
       },
       {
         icon: "none",
-        label: "Other Archetype Probabilities",
+        label: "Basic Archetype Info",
         tone: "muted",
       },
       {
         icon: "none",
-        label: "Attachment Style",
+        label: "Core Desire Drivers",
         tone: "muted",
       },
       {
         icon: "none",
-        label: "Core Insecurities, Confidence & Beliefs",
+        label: "Initial Growth Paths",
         tone: "muted",
+      },
+      {
+        label: "Share report with 1 extra email",
       },
     ],
     plan: "essentials",
     priceCents: 1499,
     priceSuffix: "one-time",
+    strikePriceCents: 1499,
     title: "Essentials only",
   },
   {
@@ -69,13 +73,10 @@ export const REPORT_PURCHASE_PLANS: ReportPurchasePlan[] = [
         label: "Get full access to the report",
       },
       {
-        label: "Share report with up to 2 people",
-      },
-      {
         label: "18 analysed dimensions",
       },
       {
-        label: "1 free month of \u201cThe LoveIQ Journal\u201d",
+        label: "Share report with 2 extra emails",
       },
     ],
     plan: "full_report",
@@ -92,12 +93,11 @@ export const REPORT_PURCHASE_PLANS: ReportPurchasePlan[] = [
     features: [
       {
         label: "All 14 archetypes unlocked",
+        tone: "emphasis",
       },
       {
         label: "All benefits as full report",
-      },
-      {
-        label: "6 free months of \u201cThe LoveIQ Journal\u201d",
+        tone: "emphasis",
       },
     ],
     plan: "all_reports",

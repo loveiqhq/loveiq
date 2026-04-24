@@ -2872,6 +2872,11 @@ input.autofill-dark:-internal-autofill-previewed {
   text-wrap: balance;
 }
 
+.report-pricing-modal__title-accent {
+  color: #ff6a3d;
+  font-weight: 500;
+}
+
 .report-pricing-modal__copy {
   margin: 0 auto;
   max-width: 38.5rem;
@@ -2886,6 +2891,17 @@ input.autofill-dark:-internal-autofill-previewed {
   gap: 1rem;
   margin-top: 0;
   align-items: start;
+}
+
+@media (max-width: 959px) {
+  /*
+   * On a single-column stack the highlighted Full Report card is the visual
+   * anchor. Pull it above the Essentials/All cards so the user sees the
+   * recommended plan first without scrolling.
+   */
+  .report-pricing-modal__plans .report-pricing-card--highlight {
+    order: -1;
+  }
 }
 
 .report-pricing-card {
@@ -3034,6 +3050,24 @@ input.autofill-dark:-internal-autofill-previewed {
   font-size: 0.76rem;
   font-weight: 300;
   line-height: 1.2;
+}
+
+.report-pricing-card__price-row .report-pricing-card__extra-pill {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 0.6rem;
+  padding: 0.28rem 0.72rem;
+  border: 1px solid rgba(0, 201, 80, 0.3);
+  border-radius: 9999px;
+  background: rgba(0, 201, 80, 0.2);
+  color: #00c950;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.025em;
+  line-height: 1.1;
+  white-space: nowrap;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 
 .report-pricing-card__cta {
@@ -8005,20 +8039,22 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 .report-share-modal__viewport {
-  position: relative;
-  display: grid;
-  place-items: center;
-  min-height: 100vh;
-  min-height: 100svh;
+  position: absolute;
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
   padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
     max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
   overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
 }
 
 .report-share-modal__dialog {
   position: relative;
   width: min(100%, 760px);
-  margin: 0 auto;
+  margin: auto;
   padding: 2rem 2.25rem 2.25rem;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 16px;
@@ -8129,6 +8165,7 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-share-modal__hero-icon svg {
   width: 32px;
   height: 32px;
+  transform: translateX(-2px);
 }
 
 .report-share-modal__title {
@@ -8438,16 +8475,16 @@ input.autofill-dark:-internal-autofill-previewed {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.55rem;
-  padding: 1.05rem 1.25rem;
+  gap: 0.5rem;
+  padding: 0.75rem 1.15rem;
   border: 0;
   border-radius: 999px;
   background: #fe6839;
   color: #ffffff;
   font: inherit;
   font-weight: 500;
-  font-size: 1.25rem;
-  line-height: 1.55;
+  font-size: 1rem;
+  line-height: 1.45;
   cursor: pointer;
   transition:
     transform 120ms ease,
@@ -8461,8 +8498,8 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 .report-share-modal__primary svg {
-  width: 20px;
-  height: 20px;
+  width: 16px;
+  height: 16px;
 }
 
 .report-share-modal__primary:hover:not(:disabled) {
@@ -8699,8 +8736,8 @@ input.autofill-dark:-internal-autofill-previewed {
   }
 
   .report-share-modal__primary {
-    font-size: 1.05rem;
-    padding: 0.95rem 1rem;
+    font-size: 0.95rem;
+    padding: 0.7rem 1rem;
   }
 }
 

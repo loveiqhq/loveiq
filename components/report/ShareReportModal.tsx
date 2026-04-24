@@ -572,7 +572,7 @@ const ShareReportModal: FC<Props> = ({
       aria-hidden={!open}
     >
       <div className="report-share-modal__backdrop" aria-hidden="true" onClick={onClose} />
-      <div className="report-share-modal__viewport">
+      <div className="report-share-modal__viewport" data-lenis-prevent>
         <div
           ref={dialogRef}
           role={open ? "dialog" : undefined}

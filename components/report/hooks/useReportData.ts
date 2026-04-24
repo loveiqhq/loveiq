@@ -43,6 +43,13 @@ type Status = "idle" | "loading" | "error" | "success" | "missing" | "needs_veri
 interface ReportIdentifier {
   sessionId?: string | null;
   token?: string | null;
+  /**
+   * Optional override for the pricing session id — threaded from the offer
+   * email CTA (?pricingSessionId=...). When provided it takes precedence over
+   * the per-report session id read from local storage so the recipient lands
+   * on exactly the locked quote the email was built against.
+   */
+  pricingSessionIdOverride?: string | null;
 }
 
 async function parseErrorResponse(res: Response): Promise<ReportRequestError> {
@@ -61,7 +68,7 @@ async function parseErrorResponse(res: Response): Promise<ReportRequestError> {
 }
 
 export function useReportData(identifier: ReportIdentifier) {
-  const { sessionId, token } = identifier;
+  const { sessionId, token, pricingSessionIdOverride } = identifier;
   const hasIdentifier = !!(sessionId || token);
 
   const [state, setState] = useState<{
@@ -95,7 +102,8 @@ export function useReportData(identifier: ReportIdentifier) {
       try {
         const csrfToken = getCsrfToken();
         const params = new URLSearchParams(token ? { token } : { sessionId: sessionId ?? "" });
-        const pricingSessionId = getReportPricingSessionId({ sessionId, token });
+        const pricingSessionId =
+          pricingSessionIdOverride ?? getReportPricingSessionId({ sessionId, token });
         if (pricingSessionId) {
           params.set("pricingSessionId", pricingSessionId);
         }
@@ -171,7 +179,7 @@ export function useReportData(identifier: ReportIdentifier) {
     return () => {
       cancelled = true;
     };
-  }, [sessionId, token, hasIdentifier, state.refreshKey]);
+  }, [sessionId, token, hasIdentifier, pricingSessionIdOverride, state.refreshKey]);
 
   const retry = () => setState((prev) => ({ ...prev, refreshKey: prev.refreshKey + 1 }));
 
