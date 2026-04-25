@@ -361,7 +361,7 @@ const slides: Slide[] = [
             href="/trust-zone"
             target="_blank"
             rel="noopener noreferrer"
-            className="no-underline decoration-white/50 underline-offset-2 transition-all duration-300 hover:text-white hover:underline"
+            className="font-semibold text-[#fe6839] underline decoration-[#fe6839] decoration-2 underline-offset-4 transition-all duration-300 hover:text-[#ff8a6a] hover:decoration-[#ff8a6a]"
           >
             &gt; Trust Zone
           </a>
@@ -378,7 +378,7 @@ const slides: Slide[] = [
             href="/trust-zone"
             target="_blank"
             rel="noopener noreferrer"
-            className="no-underline decoration-white/50 underline-offset-2 transition-all duration-300 hover:text-white hover:underline"
+            className="font-semibold text-[#fe6839] underline decoration-[#fe6839] decoration-2 underline-offset-4 transition-all duration-300 hover:text-[#ff8a6a] hover:decoration-[#ff8a6a]"
           >
             &gt; Trust Zone
           </a>
@@ -394,7 +394,7 @@ const slides: Slide[] = [
       <>
         {/* Mobile — natural wrap */}
         <span className="md:hidden">
-          For ~15 min we will guide you towards the most meaningful exploration of your sexuality.
+          For ~15 min we will guide you towards a highly meaningful exploration of your sexuality.
           Questions appear one at a time. Answer options are clear and simple. Dynamic Guidance
           adapts the journey to your responses.
           <br />
@@ -403,7 +403,7 @@ const slides: Slide[] = [
         </span>
         {/* Desktop line breaks */}
         <span className="hidden md:inline">
-          For ~15 min we will guide you towards the most meaningful exploration of
+          For ~15 min we will guide you towards a highly meaningful exploration of
           <br />
           your sexuality. Questions appear one at a time. Answer options are clear
           <br />
@@ -727,7 +727,7 @@ const SlideScreen: FC<{
             </h2>
 
             <p
-              className="survey-animate mt-6 max-w-[798px] lg:max-w-[880px] font-sans not-italic text-[18px] font-light leading-[29.25px] text-white/80 [&_strong]:font-bold [&_strong]:text-white"
+              className="survey-animate mt-6 max-w-[798px] lg:max-w-[880px] font-sans not-italic text-[18px] font-light leading-[29.25px] text-white/80 [&_strong]:font-extrabold [&_strong]:text-white [&_strong]:[font-variation-settings:'wght'_800]"
               style={{
                 opacity: 0,
                 animation: "survey-fade-up 700ms cubic-bezier(0.16,1,0.3,1) 300ms both",
