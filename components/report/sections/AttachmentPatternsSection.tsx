@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type CSSProperties, type FC } from "react";
-import PremiumOverlay from "./PremiumOverlay";
+import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import {
   extractAttachmentSectionContent,
   normalizeReportHtml,
@@ -16,6 +16,7 @@ interface Props {
   isUnlocked?: boolean;
   onUnlock?: () => void;
   sectionTitle: string;
+  tier?: PremiumOverlayTier;
 }
 
 const ATTACHMENT_TONE_BY_TITLE: Record<string, string> = {
@@ -55,6 +56,7 @@ const AttachmentPatternsSection: FC<Props> = ({
   isUnlocked = false,
   onUnlock,
   sectionTitle,
+  tier = "essentials",
 }) => {
   const [locallyUnlocked, setLocallyUnlocked] = useState(false);
   const unlocked = isUnlocked || locallyUnlocked;
@@ -176,6 +178,7 @@ const AttachmentPatternsSection: FC<Props> = ({
                 <PremiumOverlay
                   archetype={archetype}
                   sectionTitle={sectionTitle}
+                  tier={tier}
                   onUnlock={handleUnlock}
                 />
               </div>

@@ -42,7 +42,11 @@ import PracticeTendenciesSection from "./sections/PracticeTendenciesSection";
 import WelcomeSection from "./sections/WelcomeSection";
 import { ReferFriendIcon } from "./ReportActionIcons";
 import { normalizeReportHtml } from "./reportContent";
-import { isSectionUnlockedForPlan, type ReportAccessPlan } from "@/lib/report/access";
+import {
+  isSectionIncludedInEssentials,
+  isSectionUnlockedForPlan,
+  type ReportAccessPlan,
+} from "@/lib/report/access";
 import { fromArchetypeSlug, isArchetypeName, toArchetypeSlug } from "@/lib/report/archetypeSlug";
 import { getCsrfToken } from "@/lib/csrf-client";
 
@@ -593,6 +597,9 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                       isUnlocked={isBackendUnlocked || (unlockedSections[section.id] ?? false)}
                       onUnlock={() => unlockSection(section.id)}
                       sectionTitle={title}
+                      tier={
+                        isSectionIncludedInEssentials(section.id) ? "essentials" : "full_report"
+                      }
                     />
                   </ReportSection>
                 );
@@ -622,6 +629,9 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                       isUnlocked={isBackendUnlocked || (unlockedSections[section.id] ?? false)}
                       onUnlock={() => unlockSection(section.id)}
                       sectionTitle={practiceSectionTitle}
+                      tier={
+                        isSectionIncludedInEssentials(section.id) ? "essentials" : "full_report"
+                      }
                     />
                   </ReportSection>
                 );
@@ -652,6 +662,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     onUnlock={() => unlockSection(section.id)}
                     sectionId={section.id}
                     sectionTitle={title}
+                    tier={isSectionIncludedInEssentials(section.id) ? "essentials" : "full_report"}
                   />
                 </ReportSection>
               );

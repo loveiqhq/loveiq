@@ -2,13 +2,16 @@
 
 import type { FC } from "react";
 
+export type PremiumOverlayTier = "essentials" | "full_report";
+
 interface Props {
   archetype: string;
   sectionTitle: string;
+  tier: PremiumOverlayTier;
   onUnlock?: () => void;
 }
 
-const PremiumOverlay: FC<Props> = ({ archetype, sectionTitle, onUnlock }) => (
+const PremiumOverlay: FC<Props> = ({ archetype, sectionTitle, tier, onUnlock }) => (
   <div className="report-premium-overlay">
     <div className="report-premium-overlay__card">
       <div className="report-premium-overlay__icon" aria-hidden="true">
@@ -32,9 +35,11 @@ const PremiumOverlay: FC<Props> = ({ archetype, sectionTitle, onUnlock }) => (
       <div className="report-premium-overlay__badges-group" aria-hidden="true">
         <span className="report-premium-overlay__badges-label">Included in:</span>
         <div className="report-premium-overlay__badges-row">
-          <span className="report-premium-overlay__badge report-premium-overlay__badge--essentials">
-            Essentials
-          </span>
+          {tier === "essentials" ? (
+            <span className="report-premium-overlay__badge report-premium-overlay__badge--essentials">
+              Essentials
+            </span>
+          ) : null}
           <span className="report-premium-overlay__badge report-premium-overlay__badge--full">
             Full Report
           </span>

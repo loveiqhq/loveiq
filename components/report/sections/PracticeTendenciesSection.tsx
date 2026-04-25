@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type FC } from "react";
 import { createPortal } from "react-dom";
-import PremiumOverlay from "./PremiumOverlay";
+import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import {
   reportPracticeTendencies,
   type ReportPracticeTendencyContent,
@@ -22,6 +22,7 @@ interface Props {
   isUnlocked?: boolean;
   onUnlock?: () => void;
   sectionTitle: string;
+  tier?: PremiumOverlayTier;
 }
 
 type MetricTone = "fantasy" | "pleasure";
@@ -236,7 +237,8 @@ const PracticeGroupLocked: FC<{
   group: ReportPracticeTendencyGroup;
   onUnlock: () => void;
   sectionTitle: string;
-}> = ({ archetype, group, onUnlock, sectionTitle }) => {
+  tier: PremiumOverlayTier;
+}> = ({ archetype, group, onUnlock, sectionTitle, tier }) => {
   const freeRow = group.rows[0] ?? null;
   const lockedRows = group.rows.slice(1);
   const useCompactLockedCard = COMPACT_LOCKED_GROUP_TITLES.has(group.title);
@@ -346,6 +348,7 @@ const PracticeGroupLocked: FC<{
                     <PremiumOverlay
                       archetype={archetype}
                       sectionTitle={sectionTitle}
+                      tier={tier}
                       onUnlock={onUnlock}
                     />
                   </div>
@@ -650,6 +653,7 @@ const PracticeTendenciesSection: FC<Props> = ({
   isUnlocked = false,
   onUnlock,
   sectionTitle,
+  tier = "full_report",
 }) => {
   const [locallyUnlocked, setLocallyUnlocked] = useState(false);
   const unlocked = isUnlocked || locallyUnlocked;
@@ -684,6 +688,7 @@ const PracticeTendenciesSection: FC<Props> = ({
               archetype={archetype}
               group={group}
               sectionTitle={sectionTitle}
+              tier={tier}
               onUnlock={handleUnlock}
             />
           ))}

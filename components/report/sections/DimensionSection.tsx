@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FC } from "react";
-import PremiumOverlay from "./PremiumOverlay";
+import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import {
   ensureSexualStageHighlight,
   extractReportHtmlBlocks,
@@ -21,6 +21,7 @@ interface Props {
   onUnlock?: () => void;
   sectionId: string;
   sectionTitle: string;
+  tier?: PremiumOverlayTier;
 }
 
 const RECOMMENDATIONS_PLACEHOLDER_HTML =
@@ -36,6 +37,7 @@ const DimensionSection: FC<Props> = ({
   onUnlock,
   sectionId,
   sectionTitle,
+  tier = "full_report",
 }) => {
   const [locallyUnlocked, setLocallyUnlocked] = useState(false);
   const unlocked = isUnlocked || locallyUnlocked;
@@ -114,6 +116,7 @@ const DimensionSection: FC<Props> = ({
                 <PremiumOverlay
                   archetype={archetype}
                   sectionTitle={sectionTitle}
+                  tier={tier}
                   onUnlock={handleUnlock}
                 />
               </div>

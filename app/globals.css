@@ -3948,11 +3948,16 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #d1d5db;
 }
 
-.report-nav-chip.is-essentials,
-.report-nav-chip.is-full {
+.report-nav-chip.is-essentials {
   border-color: rgba(168, 85, 247, 0.2);
   background: rgba(168, 85, 247, 0.1);
   color: #c084fc;
+}
+
+.report-nav-chip.is-full {
+  border-color: rgba(85, 101, 247, 0.2);
+  background: rgba(85, 101, 247, 0.1);
+  color: #8486fc;
 }
 
 .report-nav-lock {
