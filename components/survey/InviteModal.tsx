@@ -801,7 +801,7 @@ const InviteModal: FC<InviteModalProps> = ({ open, onClose, referrerEmail, refer
                 </div>
 
                 {/* Form */}
-                <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+                <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-6">
                   {/* Name used in mail */}
                   <div className="flex flex-col gap-2">
                     <label
@@ -817,7 +817,7 @@ const InviteModal: FC<InviteModalProps> = ({ open, onClose, referrerEmail, refer
                       value={senderName}
                       onChange={(e) => setSenderName(e.target.value)}
                       disabled={state === "sending"}
-                      className="w-full rounded-2xl border border-white/10 bg-[#130b1c] py-[19px] px-[25px] font-sans text-[16px] text-white placeholder-[#6b7280] shadow-[inset_0_2px_4px_1px_rgba(0,0,0,0.05)] outline-none transition focus:border-white/30 disabled:opacity-50"
+                      className="w-full rounded-2xl border border-white/10 bg-[#130b1c] py-[19px] px-[25px] font-sans text-[16px] text-white placeholder-[#6b7280] shadow-[inset_0_2px_4px_1px_rgba(0,0,0,0.05)] outline-none transition focus:border-[#a855f7]/60 disabled:opacity-50"
                     />
                   </div>
 
@@ -830,7 +830,9 @@ const InviteModal: FC<InviteModalProps> = ({ open, onClose, referrerEmail, refer
                       Friend&rsquo;s Email
                     </label>
                     <div className="relative">
-                      <EnvelopeIcon className="pointer-events-none absolute left-[20px] top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-[#7a738d]" />
+                      <EnvelopeIcon
+                        className={`pointer-events-none absolute left-[20px] top-1/2 h-[18px] w-[18px] -translate-y-1/2 transition ${hasError ? "text-[#ef4444]" : "text-[#7a738d]"}`}
+                      />
                       <input
                         ref={inputRef}
                         id="invite-recipient-email"
@@ -843,14 +845,14 @@ const InviteModal: FC<InviteModalProps> = ({ open, onClose, referrerEmail, refer
                           if (state === "error") setState("idle");
                         }}
                         disabled={state === "sending"}
-                        className={`h-[44px] w-full rounded-[15px] border bg-[#140c1d] pl-[50px] pr-4 font-sans text-[15px] leading-none text-white placeholder:text-[#7a738d] outline-none transition disabled:opacity-50 ${
+                        className={`w-full rounded-2xl border bg-[#130b1c] py-[19px] pl-[52px] pr-[25px] font-sans text-[16px] text-white placeholder:text-[#7a738d] shadow-[inset_0_2px_4px_1px_rgba(0,0,0,0.05)] outline-none transition disabled:opacity-50 ${
                           hasError
-                            ? "border-[#ff6467] focus:border-[#ff6467]"
-                            : "border-white/[0.09] focus:border-[#fe6839]/60"
+                            ? "border-[#ef4444] focus:border-[#ef4444]"
+                            : "border-white/[0.09] focus:border-[#a855f7]/60"
                         }`}
                       />
                     </div>
-                    {hasError && <p className="font-sans text-[16px] text-[#ff6467]">{errorMsg}</p>}
+                    {hasError && <p className="font-sans text-[16px] text-[#ef4444]">{errorMsg}</p>}
                   </div>
 
                   {/* Submit button */}
