@@ -35,14 +35,25 @@ interface PlanPricing {
   percentOff: number | null;
 }
 
+function formatEuroSuffix(cents: number): string {
+  const abs = Math.abs(cents);
+  const euros = Math.floor(abs / 100);
+  const fraction = String(abs % 100).padStart(2, "0");
+  return `${euros},${fraction}€`;
+}
+
 function computePlanPricing(
   plan: ReportPurchasePlan,
   quote: ReportPriceQuoteSnapshot | undefined
 ): PlanPricing {
-  // Strike = MSRP from the live quote (xlsx column C/E/G per bucket).
-  // Fallback to catalogue `priceCents` for the rare case we render this email
-  // without a resolvable quote — keeps the body well-formed rather than empty.
-  const strikeCents = quote?.msrpCents ?? plan.priceCents;
+  // Strike = MSRP. Floor at catalogue `priceCents` so a stale/incomplete quote
+  // (msrp missing or accidentally equal to the discounted current) never wipes
+  // out the strike + saved line.
+  const quoteMsrp = quote?.msrpCents;
+  const strikeCents = Math.max(
+    Number.isFinite(quoteMsrp) ? (quoteMsrp as number) : 0,
+    plan.priceCents
+  );
   const currentCents = quote?.currentPriceCents ?? plan.priceCents;
 
   if (
@@ -63,7 +74,7 @@ function computePlanPricing(
   return {
     oldLabel: formatReportPurchasePrice(strikeCents),
     newLabel: formatReportPurchasePrice(currentCents),
-    savedLabel: formatReportPurchasePrice(savedCents),
+    savedLabel: formatEuroSuffix(savedCents),
     percentOff,
   };
 }
@@ -79,8 +90,8 @@ function firstNameDisplay(firstName?: string | null): { safe: string; plain: str
 function renderPlanBlockHtml(plan: ReportPurchasePlan, pricing: PlanPricing): string {
   const savedSpan =
     pricing.savedLabel && pricing.percentOff
-      ? `<span style="color:#329000; font-weight:700;">${escapeHtml(pricing.savedLabel)} saved</span>
-         <span style="color:#329000; font-weight:700;"> | -${pricing.percentOff}%</span>`
+      ? `<span style="color:#329000; font-weight:700;">${pricing.percentOff}% saved</span>
+         <span style="color:#329000; font-weight:700;"> | -${escapeHtml(pricing.savedLabel)}</span>`
       : "";
 
   return `
@@ -102,7 +113,7 @@ function renderPlanBlockHtml(plan: ReportPurchasePlan, pricing: PlanPricing): st
 function renderPlanBlockText(plan: ReportPurchasePlan, pricing: PlanPricing): string {
   const savedLine =
     pricing.savedLabel && pricing.percentOff
-      ? `${pricing.savedLabel} saved | -${pricing.percentOff}%`
+      ? `${pricing.percentOff}% saved | -${pricing.savedLabel}`
       : null;
 
   return [

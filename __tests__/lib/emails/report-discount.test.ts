@@ -151,16 +151,16 @@ describe("reportDiscountEmail", () => {
     });
     // Essentials: strike 19.99 → current 7.49 → saved 12.50 → 63% off.
     expect(result.html).toContain("€19.99");
-    expect(result.html).toContain("€12.50 saved");
-    expect(result.html).toContain("-63%");
+    expect(result.html).toContain("63% saved");
+    expect(result.html).toContain("-12,50€");
     // Full report: strike 59.99 → current 14.99 → saved 45.00 → 75% off.
     expect(result.html).toContain("€59.99");
-    expect(result.html).toContain("€45.00 saved");
-    expect(result.html).toContain("-75%");
+    expect(result.html).toContain("75% saved");
+    expect(result.html).toContain("-45,00€");
     // All reports: strike 259.00 → current 90.99 → saved 168.01 → 65% off.
     expect(result.html).toContain("€259.00");
-    expect(result.html).toContain("€168.01 saved");
-    expect(result.html).toContain("-65%");
+    expect(result.html).toContain("65% saved");
+    expect(result.html).toContain("-168,01€");
   });
 
   it("falls back to catalogue prices + no savings when quote missing", () => {
