@@ -278,31 +278,37 @@ function escapeRegex(str) {
 async function main() {
   console.log("Converting report .docx files to TypeScript...\n");
 
-  // 1. Parse main template
-  console.log("Reading main template...");
-  const templateResult = await mammoth.convertToHtml({ path: TEMPLATE_PATH });
-  const templateHtml = templateResult.value;
-  const rawSections = splitOnH1(templateHtml);
+  // 1. Parse main template (optional — skipped if file absent, data/report-general.ts unchanged)
+  const templateExists = fs.existsSync(TEMPLATE_PATH);
+  let sections = [];
+  if (templateExists) {
+    console.log("Reading main template...");
+    const templateResult = await mammoth.convertToHtml({ path: TEMPLATE_PATH });
+    const templateHtml = templateResult.value;
+    const rawSections = splitOnH1(templateHtml);
 
-  const sections = [];
-  for (const raw of rawSections) {
-    const { num, title } = parseHeading(raw.heading);
-    const blockId = extractBlockId(raw.body);
-    const generalContent = stripBlockMarkers(raw.body);
-    const id = slugify(raw.heading);
+    for (const raw of rawSections) {
+      const { num, title } = parseHeading(raw.heading);
+      const blockId = extractBlockId(raw.body);
+      const generalContent = stripBlockMarkers(raw.body);
+      const id = slugify(raw.heading);
 
-    sections.push({
-      id,
-      sectionNumber: num,
-      title,
-      generalContent,
-      archetypeBlockId: blockId,
-      isPremium: blockId !== null && PREMIUM_SECTIONS.has(num),
-      hasResonatesFeedback: !NO_FEEDBACK_SECTIONS.has(num),
-    });
+      sections.push({
+        id,
+        sectionNumber: num,
+        title,
+        generalContent,
+        archetypeBlockId: blockId,
+        isPremium: blockId !== null && PREMIUM_SECTIONS.has(num),
+        hasResonatesFeedback: !NO_FEEDBACK_SECTIONS.has(num),
+      });
+    }
+    console.log(`  Found ${sections.length} sections`);
+  } else {
+    console.log(
+      "  General template not found — skipping data/report-general.ts (archetype files still processed)"
+    );
   }
-
-  console.log(`  Found ${sections.length} sections`);
 
   // 2. Parse archetype-specific files
   console.log("\nReading archetype-specific files...");
@@ -316,10 +322,7 @@ async function main() {
     }
 
     const result = await mammoth.convertToHtml({ path: filePath });
-    const byArchetype =
-      blockId === "core_archetype"
-        ? splitSequentialH1Blocks(result.value, ARCHETYPES)
-        : splitByArchetype(result.value);
+    const byArchetype = splitByArchetype(result.value);
     archetypeContent[blockId] = byArchetype;
 
     const count = Object.keys(byArchetype).length;
@@ -330,9 +333,10 @@ async function main() {
     }
   }
 
-  // 3. Write data/report-general.ts
-  console.log("\nWriting data/report-general.ts...");
-  const generalTs = `// Auto-generated from report .docx files — do not edit manually.
+  // 3. Write data/report-general.ts (only if template was present)
+  if (templateExists) {
+    console.log("\nWriting data/report-general.ts...");
+    const generalTs = `// Auto-generated from report .docx files — do not edit manually.
 // Run: node scripts/convert-report-content.js
 
 export interface ReportSection {
@@ -354,7 +358,8 @@ export interface ReportSection {
 
 export const reportSections: ReportSection[] = ${JSON.stringify(sections, null, 2)};
 `;
-  fs.writeFileSync(path.join(DATA_DIR, "report-general.ts"), generalTs, "utf-8");
+    fs.writeFileSync(path.join(DATA_DIR, "report-general.ts"), generalTs, "utf-8");
+  }
 
   // 4. Write data/report-archetypes.ts
   console.log("Writing data/report-archetypes.ts...");

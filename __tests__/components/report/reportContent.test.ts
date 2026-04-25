@@ -92,8 +92,8 @@ describe("reportContent normalization", () => {
     expect(groups[0]?.title).toBe("Core Relational & Embodied");
     expect(groups[0]?.rows[0]).toEqual({
       practice: "Romantic lovemaking",
-      fantasyPull: 6,
-      actualPleasure: 6,
+      fantasyPull: 5,
+      actualPleasure: 7,
     });
     expect(groups.some((group) => group.title === "Technology & Distance")).toBe(true);
   });
