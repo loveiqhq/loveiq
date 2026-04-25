@@ -389,7 +389,7 @@ const slides: Slide[] = [
   },
   {
     icon: "clipboard",
-    heading: "How the Survey Works",
+    heading: "How the Test Works",
     body: (
       <>
         {/* Mobile — natural wrap */}
