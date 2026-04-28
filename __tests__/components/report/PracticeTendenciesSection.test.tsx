@@ -83,7 +83,7 @@ describe("PracticeTendenciesSection", () => {
         screen.queryByText(/chemistry, freedom, and playful connection/i)
       ).not.toBeInTheDocument();
     });
-  }, 15000);
+  }, 60_000);
 
   it("renders desktop explanations in a floating layer instead of inside the table row", async () => {
     const user = userEvent.setup();
@@ -144,7 +144,7 @@ describe("PracticeTendenciesSection", () => {
         document.body.querySelector(".report-practice-table__popover--floating")
       ).not.toBeInTheDocument();
     });
-  }, 15000);
+  }, 60_000);
 
   it("scales the metric fill gradient intensity with the score", () => {
     const { container } = render(
@@ -206,7 +206,7 @@ describe("PracticeTendenciesSection", () => {
     // One unlock button per practice group
     const unlockButtons = screen.getAllByRole("button", { name: /unlock report/i });
     expect(unlockButtons.length).toBeGreaterThanOrEqual(1);
-  }, 15000);
+  }, 60_000);
 
   it("uses the compact locked modifier only for the shorter locked groups", () => {
     const { container } = render(

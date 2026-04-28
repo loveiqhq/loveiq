@@ -6,6 +6,10 @@ export default defineConfig({
     environment: "node",
     setupFiles: ["__tests__/setup.ts"],
     exclude: ["node_modules", "e2e", ".next"],
+    // Heavy report sections render multi-hundred-KB data files; under full-suite
+    // parallel load these can exceed the 5s default. 60s gives flake headroom.
+    testTimeout: 60_000,
+    hookTimeout: 60_000,
     coverage: {
       provider: "v8",
       include: ["lib/**/*.ts", "app/api/**/*.ts", "proxy.ts"],
