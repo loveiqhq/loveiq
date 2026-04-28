@@ -9104,3 +9104,1113 @@ input.autofill-dark:-internal-autofill-previewed {
   width: 14px;
   height: 14px;
 }
+
+/* ─────────────────────────────────────────────────────────────────
+   Sexual Stage Explorer (Section 6)
+   ───────────────────────────────────────────────────────────────── */
+
+.stage-explorer {
+  --stage-purple: 168, 85, 247;
+  --stage-purple-soft: 192, 132, 252;
+  --stage-bg: #160c22;
+  --stage-bg-2: #181121;
+  --stage-border: rgba(255, 255, 255, 0.08);
+  --stage-text: #d1d5db;
+  --stage-muted: #9ca3af;
+  --stage-reveal-duration: 700ms;
+  --stage-reveal-ease: cubic-bezier(0.16, 1, 0.3, 1);
+
+  display: block;
+  width: 100%;
+}
+
+/* Desktop layout (orbit + detail card stacked). The desktop variant
+   is hidden on small viewports; the mobile variant is hidden on
+   large viewports. Single source of data, two presentations. */
+.stage-explorer__desktop {
+  display: none;
+}
+
+.stage-explorer__mobile {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+@media (min-width: 1024px) {
+  .stage-explorer__desktop {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 64px;
+  }
+
+  .stage-explorer__mobile {
+    display: none;
+  }
+}
+
+/* ── Orbit ── */
+
+.stage-explorer__orbit-wrap {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  /* Anchor chip extends ~50px above orbit; bottom chip extends ~50px below.
+     Pad the wrap so neither gets clipped and the orbit stays centred in
+     its visual box. */
+  padding-block: 56px;
+  overflow: visible;
+}
+
+.stage-explorer__orbit {
+  position: relative;
+  width: var(--orbit-size, 520px);
+  height: var(--orbit-size, 520px);
+  flex-shrink: 0;
+}
+
+.stage-explorer__ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  pointer-events: none;
+  opacity: 0;
+  transform: scale(0.92);
+  transition:
+    opacity 700ms var(--stage-reveal-ease),
+    transform 700ms var(--stage-reveal-ease);
+}
+
+.stage-explorer__ring--outer {
+  border-color: rgba(var(--stage-purple), 0.1);
+  box-shadow: 0 0 80px 0 rgba(var(--stage-purple), 0.05);
+}
+
+.stage-explorer__ring--mid {
+  inset: 26px 24px 24px 24px;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.stage-explorer__ring--inner {
+  inset: 48px;
+  border-color: rgba(255, 255, 255, 0.05);
+}
+
+.stage-explorer.is-revealed .stage-explorer__ring {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.stage-explorer.is-revealed .stage-explorer__ring--mid {
+  transition-delay: 80ms;
+}
+
+.stage-explorer.is-revealed .stage-explorer__ring--inner {
+  transition-delay: 160ms;
+}
+
+.stage-explorer__center {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  text-align: center;
+  pointer-events: none;
+  width: min(332px, 80%);
+  opacity: 0;
+  transition: opacity 600ms var(--stage-reveal-ease) 280ms;
+}
+
+.stage-explorer.is-revealed .stage-explorer__center {
+  opacity: 1;
+}
+
+.stage-explorer__center-icon {
+  color: rgba(var(--stage-purple-soft), 0.7);
+}
+
+.stage-explorer__center-caption {
+  margin: 0;
+  width: 332px;
+  max-width: 100%;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 300;
+  line-height: 20px;
+  color: #d1d5db;
+}
+
+/* ── Orbit chip slots (ring stages only) ──
+   Each ring chip is wrapped in a slot. The slot owns the polar
+   positioning and reveals on scroll; inside it sit the chip button
+   and the popover-style tooltip rendered absolutely beside the chip
+   so hovering doesn't shift the surrounding layout. */
+
+.stage-explorer__chip-slot {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  opacity: 0;
+  transition: opacity 540ms var(--stage-reveal-ease) var(--chip-delay, 0ms);
+}
+
+.stage-explorer.is-revealed .stage-explorer__chip-slot {
+  opacity: 1;
+}
+
+/* Lift the slot above siblings while interacting so the tooltip is
+   never covered by neighbouring chips. */
+.stage-explorer__chip-slot:hover,
+.stage-explorer__chip-slot:focus-within {
+  z-index: 20;
+}
+
+/* ── Chip (button) ── */
+
+.stage-explorer__chip {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 16px;
+  margin: 0;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(24, 17, 33, 0.5);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 4px 30px 0 rgba(0, 0, 0, 0.1);
+  color: #ffffff;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  white-space: nowrap;
+  opacity: 0;
+  transition:
+    opacity 540ms var(--stage-reveal-ease) var(--chip-delay, 0ms),
+    border-color 220ms ease,
+    background 220ms ease,
+    box-shadow 220ms ease;
+  z-index: 2;
+}
+
+.stage-explorer.is-revealed .stage-explorer__chip {
+  opacity: 1;
+}
+
+/* Ring chips live inside slots — strip the absolute positioning + opacity
+   handling, those now belong to the slot. */
+.stage-explorer__chip-slot .stage-explorer__chip {
+  position: relative;
+  transform: none;
+  opacity: 1;
+  transition:
+    border-color 220ms ease,
+    background 220ms ease,
+    box-shadow 220ms ease;
+}
+
+.stage-explorer__chip:focus-visible {
+  outline: none;
+  border-color: rgba(var(--stage-purple), 0.6);
+  box-shadow:
+    0 4px 30px 0 rgba(0, 0, 0, 0.1),
+    0 0 0 3px rgba(var(--stage-purple), 0.25);
+}
+
+.stage-explorer__chip:hover,
+.stage-explorer__chip.is-selected {
+  border-color: rgba(var(--stage-purple), 0.4);
+  background: rgba(24, 17, 33, 0.7);
+  box-shadow: 0 0 24px rgba(var(--stage-purple), 0.18);
+}
+
+/* Anchor (user's current stage) — large card centred above the orbit */
+.stage-explorer__chip--anchor {
+  /* Top edge sits 9.5% (≈49px on a 520px orbit) above the circle perimeter,
+     centred horizontally. */
+  top: -9.5%;
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 280px;
+  padding: 16px;
+  border-color: rgba(var(--stage-purple), 0.35);
+  background: rgba(24, 17, 33, 0.9);
+  box-shadow: 0 0 24px -2px rgba(var(--stage-purple), 0.18);
+  z-index: 3;
+}
+
+.stage-explorer__chip--anchor:hover,
+.stage-explorer__chip--anchor.is-selected {
+  border-color: rgba(var(--stage-purple), 0.5);
+  background: rgba(24, 17, 33, 0.92);
+  box-shadow: 0 0 28px -2px rgba(var(--stage-purple), 0.28);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .stage-explorer.is-revealed .stage-explorer__chip--anchor.is-user-stage {
+    animation: stage-chip-pulse 3.4s ease-in-out infinite 1.4s;
+  }
+}
+
+@keyframes stage-chip-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 22px -2px rgba(var(--stage-purple), 0.18);
+  }
+  50% {
+    box-shadow: 0 0 30px -2px rgba(var(--stage-purple), 0.28);
+  }
+}
+
+/* Eyebrow inner pill on the anchor card */
+.stage-explorer__chip-eyebrow {
+  align-self: center;
+  padding: 3px 9px;
+  margin-bottom: 10px;
+  border-radius: 4px;
+  border: 1px solid rgba(var(--stage-purple), 0.3);
+  background: rgba(var(--stage-purple), 0.2);
+  font-family: var(--font-sans);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  line-height: 13.5px;
+  text-transform: uppercase;
+  color: #d8b4fe;
+  white-space: nowrap;
+}
+
+/* Row holding dot + title (used in both anchor and ring chips) */
+.stage-explorer__chip-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+/* Bullet dot beside the chip title */
+.stage-explorer__chip-dot {
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  background: rgba(var(--stage-purple), 0.2);
+  border: 1px solid #a855f7;
+  box-shadow: 0 0 10px 0 rgba(167, 139, 250, 0.8);
+}
+
+/* Solid filled dot for the anchor (its dot is purple-fill, no border) */
+.stage-explorer__chip--anchor .stage-explorer__chip-dot {
+  background: #c084fc;
+  border: none;
+  box-shadow: 0 0 15px 0 #c084fc;
+}
+
+.stage-explorer__chip-title {
+  font-family: var(--font-serif);
+  font-weight: 500;
+  font-size: 15px;
+  line-height: 22.5px;
+  letter-spacing: -0.025em;
+  color: #ffffff;
+}
+
+.stage-explorer__chip--anchor .stage-explorer__chip-title {
+  font-size: 20px;
+  line-height: 22.5px;
+  letter-spacing: -0.019em;
+}
+
+/* ── Stage tooltip (popover beside ring chips on hover/focus) ── */
+
+.stage-tooltip {
+  position: absolute;
+  width: 320px;
+  max-width: min(320px, 80vw);
+  padding: 24px;
+  border-radius: 16px;
+  border: 1px solid rgba(var(--stage-purple), 0.4);
+  background: #181121;
+  box-shadow:
+    0 0 24px 0 rgba(var(--stage-purple), 0.18),
+    0 24px 48px -16px rgba(0, 0, 0, 0.6);
+  color: #ffffff;
+  text-align: left;
+  white-space: normal;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 180ms ease,
+    visibility 0s linear 180ms,
+    transform 180ms ease;
+  z-index: 30;
+}
+
+.stage-tooltip.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+  visibility: visible;
+  transition:
+    opacity 180ms ease,
+    visibility 0s linear 0s,
+    transform 180ms ease;
+}
+
+/* Side variants — anchored to slot, gap of 12px between chip and tooltip. */
+.stage-explorer__chip-slot[data-tooltip-side="right"] .stage-tooltip {
+  left: calc(100% + 12px);
+  top: 50%;
+  transform: translateY(-50%) translateX(-6px);
+}
+
+.stage-explorer__chip-slot[data-tooltip-side="right"] .stage-tooltip.is-visible {
+  transform: translateY(-50%) translateX(0);
+}
+
+.stage-explorer__chip-slot[data-tooltip-side="left"] .stage-tooltip {
+  right: calc(100% + 12px);
+  top: 50%;
+  transform: translateY(-50%) translateX(6px);
+}
+
+.stage-explorer__chip-slot[data-tooltip-side="left"] .stage-tooltip.is-visible {
+  transform: translateY(-50%) translateX(0);
+}
+
+.stage-explorer__chip-slot[data-tooltip-side="above"] .stage-tooltip {
+  bottom: calc(100% + 12px);
+  left: 50%;
+  transform: translateX(-50%) translateY(6px);
+}
+
+.stage-explorer__chip-slot[data-tooltip-side="above"] .stage-tooltip.is-visible {
+  transform: translateX(-50%) translateY(0);
+}
+
+.stage-tooltip__eyebrow {
+  display: block;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 11px;
+  line-height: 14px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--tip-eyebrow-accent, #d8b4fe);
+  margin-bottom: 6px;
+}
+
+.stage-tooltip__title {
+  margin: 0 0 18px;
+  font-family: var(--font-serif);
+  font-weight: 400;
+  font-size: 24px;
+  line-height: 28px;
+  letter-spacing: -0.015em;
+  color: #ffffff;
+}
+
+.stage-tooltip__rows {
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.stage-tooltip__row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.stage-tooltip__row dt {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 11px;
+  line-height: 14px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--tip-eyebrow-accent, #d8b4fe);
+}
+
+.stage-tooltip__row dd {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-weight: 300;
+  font-size: 13px;
+  line-height: 18px;
+  color: #d1d5db;
+}
+
+.stage-tooltip__need {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(var(--stage-purple), 0.2);
+  background: rgba(var(--stage-purple), 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.stage-tooltip__need-label {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 12px;
+  line-height: 16px;
+  color: #ffffff;
+}
+
+.stage-tooltip__need-value {
+  font-family: var(--font-sans);
+  font-weight: 300;
+  font-size: 12px;
+  line-height: 18px;
+  color: #d1d5db;
+}
+
+/* ── Detail card (desktop) ── */
+
+.stage-detail {
+  position: relative;
+  width: 100%;
+  max-width: 641px;
+  padding: 41px;
+  border-radius: 24px;
+  border: 1px solid rgba(var(--stage-purple), 0.4);
+  background: #181121;
+  box-shadow: 0 0 20px 0 rgba(var(--stage-purple), 0.15);
+  overflow: hidden;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 16px;
+}
+
+/* Decorative purple blurred blobs (per Figma) */
+.stage-detail__blob {
+  position: absolute;
+  width: 128px;
+  height: 128px;
+  border-radius: 9999px;
+  background: rgba(var(--stage-purple), 0.2);
+  filter: blur(32px);
+  z-index: -1;
+  pointer-events: none;
+}
+
+.stage-detail__blob--tr {
+  top: -48px;
+  right: -1px;
+}
+
+.stage-detail__blob--bl {
+  bottom: -48px;
+  left: -1px;
+}
+
+@media (max-width: 1023px) {
+  .stage-detail {
+    padding: 28px;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .stage-detail {
+    animation: stage-detail-swap 280ms var(--stage-reveal-ease) both;
+  }
+}
+
+@keyframes stage-detail-swap {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.stage-detail__header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.stage-detail__eyebrow {
+  display: inline-block;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 14px;
+  line-height: 18px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #d8b4fe;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.stage-detail__title {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-weight: 400;
+  font-size: 48px;
+  line-height: 56px;
+  letter-spacing: -0.0188em; /* ≈ -0.9px tracking on 48px text */
+  color: #ffffff;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.stage-detail__divider {
+  display: block;
+  width: 367px;
+  max-width: 100%;
+  height: 1px;
+  margin-top: 16px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.12) 20%,
+    rgba(255, 255, 255, 0.18) 50%,
+    rgba(255, 255, 255, 0.12) 80%,
+    transparent 100%
+  );
+}
+
+.stage-detail__rows {
+  width: 100%;
+  padding-top: 20px;
+}
+
+@media (max-width: 1023px) {
+  .stage-detail__eyebrow {
+    font-size: 12px;
+    line-height: 16px;
+    letter-spacing: 0.16em;
+    white-space: normal;
+  }
+
+  .stage-detail__title {
+    font-size: 32px;
+    line-height: 36px;
+    white-space: normal;
+  }
+}
+
+.stage-detail__need {
+  margin-top: 8px;
+  padding: 17px;
+  border-radius: 12px;
+  border: 1px solid rgba(var(--stage-purple), 0.2);
+  background: rgba(var(--stage-purple), 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 3.5px;
+}
+
+.stage-detail__need-label {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 16px;
+  line-height: 16px;
+  color: #ffffff;
+}
+
+.stage-detail__need-value {
+  font-family: var(--font-sans);
+  font-weight: 300;
+  font-size: 14px;
+  line-height: 20px;
+  color: #d1d5db;
+}
+
+/* ── Stage rows (shared, desktop detail + mobile cards) ── */
+
+.stage-rows {
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.stage-rows__row {
+  display: flex;
+  flex-direction: column;
+  gap: 5.5px;
+  align-items: flex-start;
+}
+
+.stage-rows__row dt {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 16px;
+  line-height: 20px;
+  letter-spacing: 0.031em; /* ≈ 0.5px tracking */
+  text-transform: uppercase;
+  color: #d8b4fe;
+}
+
+.stage-rows__row dd {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-weight: 300;
+  font-size: 14px;
+  line-height: 20px;
+  color: #d1d5db;
+}
+
+@media (max-width: 1023px) {
+  .stage-rows {
+    gap: 18px;
+  }
+
+  .stage-rows__row dt {
+    font-size: 11px;
+    line-height: 16.5px;
+    letter-spacing: 0.05em;
+  }
+
+  .stage-rows__row dd {
+    font-size: 15px;
+    line-height: 22.5px;
+  }
+}
+
+/* Within a stage card, the row labels pick up the card's stage accent. */
+.stage-card .stage-rows__row dt {
+  color: var(--card-eyebrow-accent, #d8b4fe);
+}
+
+/* ── Mobile (Figma 6166:227): pill → heading → mini orbit → carousel → pager ── */
+
+.stage-explorer__mobile {
+  padding-top: 8px;
+}
+
+/* Pill header — stadium-shaped current-stage indicator */
+.stage-explorer__mobile-pill {
+  position: relative;
+  align-self: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 13px 25px;
+  border-radius: 9999px;
+  border: 1.5px solid rgba(var(--stage-purple), 0.4);
+  background: #181121;
+  box-shadow: 0 0 30px 0 rgba(var(--stage-purple), 0.15);
+  text-align: center;
+  width: min(325px, 92%);
+  isolation: isolate;
+  overflow: hidden;
+}
+
+/* Subtle horizontal gradient overlay matching Figma. */
+.stage-explorer__mobile-pill::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    rgba(var(--stage-purple), 0.1) 0%,
+    rgba(var(--stage-purple), 0) 100%
+  );
+  z-index: -1;
+  pointer-events: none;
+}
+
+.stage-explorer__mobile-pill-eyebrow {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 12px;
+  line-height: 14px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #d8b4fe;
+}
+
+.stage-explorer__mobile-pill-value {
+  font-family: var(--font-serif);
+  font-weight: 400;
+  font-size: 22px;
+  line-height: 26px;
+  letter-spacing: -0.022em;
+  color: #ffffff;
+}
+
+/* Section heading above the mini orbit. */
+.stage-explorer__mobile-heading {
+  margin: 24px 0 0;
+  align-self: center;
+  font-family: var(--font-serif);
+  font-weight: 400;
+  font-size: 18px;
+  line-height: 26px;
+  letter-spacing: -0.022em;
+  color: #ffffff;
+  text-align: center;
+}
+
+/* Mini orbit — 234px circle with 6 dots + center caption. */
+.stage-explorer__mobile-orbit {
+  position: relative;
+  align-self: center;
+  width: 235px;
+  height: 235px;
+  margin-top: 14px;
+}
+
+.stage-explorer__mobile-orbit .stage-explorer__ring {
+  /* Override desktop ring sizing so percentages scale to the 235px box. */
+  inset: 0;
+  border-width: 0.7px;
+}
+
+.stage-explorer__mobile-orbit .stage-explorer__ring--outer {
+  box-shadow: 0 0 54px 0 rgba(var(--stage-purple), 0.05);
+}
+
+.stage-explorer__mobile-orbit .stage-explorer__ring--mid {
+  inset: 12px 11px 11px 11px;
+}
+
+.stage-explorer__mobile-orbit .stage-explorer__ring--inner {
+  inset: 22px;
+}
+
+.stage-explorer__mobile-orbit-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 32px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.stage-explorer__mobile-orbit-center > svg {
+  color: rgba(var(--stage-purple-soft), 0.7);
+}
+
+.stage-explorer__mobile-orbit-center p {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-weight: 400;
+  font-size: 13px;
+  line-height: 18px;
+  letter-spacing: -0.018em;
+  color: #6b7280;
+  max-width: 162px;
+}
+
+/* Stage dots around the perimeter — small outlined buttons. Tapping one
+   smoothly scrolls the carousel; the indicator (below) follows the
+   scroll, riding the perimeter to the new dot's position. */
+.stage-explorer__mobile-orbit-dot {
+  position: absolute;
+  width: 11px;
+  height: 11px;
+  padding: 0;
+  border: 0.7px solid #a855f7;
+  background: rgba(var(--stage-purple), 0.2);
+  border-radius: 9999px;
+  box-shadow: 0 0 10px 0 #c084fc;
+  cursor: pointer;
+  transform: translate(-50%, -50%);
+  transform-origin: center;
+  transition:
+    transform 200ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 200ms ease;
+}
+
+.stage-explorer__mobile-orbit-dot:hover {
+  transform: translate(-50%, -50%) scale(1.25);
+}
+
+.stage-explorer__mobile-orbit-dot:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 10px 0 #c084fc,
+    0 0 0 3px rgba(var(--stage-purple), 0.45);
+}
+
+/* Smooth indicator that visualises the carousel's current position on
+   the orbit. Sits at the orbit centre and uses a transform pipeline of
+   (centre → rotate → push outward) so a single rotating angle moves it
+   along the perimeter. The angle is updated via the `--orbit-rot` custom
+   property on every scroll frame. */
+.stage-explorer__mobile-orbit-indicator {
+  --orbit-radius: calc(235px * 0.47);
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 19px;
+  height: 19px;
+  border-radius: 9999px;
+  background: #c084fc;
+  box-shadow: 0 0 14px 0 rgba(192, 132, 252, 0.85);
+  pointer-events: none;
+  transform: translate(-50%, -50%) rotate(calc(var(--orbit-rot, 0deg) - 90deg))
+    translateX(var(--orbit-radius));
+  z-index: 2;
+}
+
+/* Carousel — full-viewport-width snap scroller so the centring math
+   is independent of the report's padding. Card width and side padding
+   are derived from a single `--card-w` variable so each card lands
+   exactly in the viewport centre when it snaps. */
+.stage-explorer__carousel {
+  --card-w: min(320px, calc(100vw - 32px));
+  --carousel-side-pad: calc((100vw - var(--card-w)) / 2);
+
+  width: 100vw;
+  margin-top: 22px;
+  /* Break out of the report's horizontal padding to span the full viewport. */
+  margin-inline: calc(50% - 50vw);
+  overflow-x: auto;
+  overflow-y: visible;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  scroll-padding-inline: var(--carousel-side-pad);
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding: 8px 0 16px;
+}
+
+.stage-explorer__carousel::-webkit-scrollbar {
+  display: none;
+}
+
+.stage-explorer__carousel-track {
+  display: flex;
+  gap: 16px;
+  padding-inline: var(--carousel-side-pad);
+  width: max-content;
+}
+
+/* Cards (320px wide). Each stage's accent drives the dot, eyebrows, and
+   the soft corner blob; the active card adds a purple ring + glow. */
+.stage-card {
+  position: relative;
+  flex: 0 0 auto;
+  width: var(--card-w, 320px);
+  scroll-snap-align: center;
+  scroll-snap-stop: always;
+  padding: 24px;
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(24, 17, 33, 0.9);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  box-shadow:
+    0 10px 15px -3px rgba(0, 0, 0, 0.18),
+    0 4px 6px -4px rgba(0, 0, 0, 0.18);
+  isolation: isolate;
+  overflow: hidden;
+  transition:
+    border-color 240ms ease,
+    box-shadow 240ms ease,
+    transform 240ms ease;
+}
+
+.stage-card::before {
+  /* Soft accent blob in the top-right corner. */
+  content: "";
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  width: 110px;
+  height: 110px;
+  border-radius: 9999px;
+  filter: blur(28px);
+  background: rgba(var(--stage-purple), 0.06);
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+.stage-card.is-active {
+  border-color: rgba(var(--stage-purple), 0.3);
+  box-shadow: 0 0 18px -4px rgba(var(--stage-purple), 0.12);
+}
+
+.stage-card.is-user-stage {
+  background: rgba(24, 17, 33, 0.95);
+}
+
+.stage-card.is-active.is-user-stage {
+  border-color: rgba(var(--stage-purple), 0.35);
+  box-shadow: 0 0 22px -4px rgba(var(--stage-purple), 0.18);
+}
+
+.stage-card__header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.stage-card__dot {
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  border-radius: 9999px;
+  background: var(--card-accent, #c084fc);
+  box-shadow: 0 0 12px 0 rgba(192, 132, 252, 0.8);
+}
+
+.stage-card__title {
+  flex: 1 1 auto;
+  margin: 0;
+  font-family: var(--font-serif);
+  font-weight: 400;
+  font-size: 20px;
+  line-height: 26px;
+  letter-spacing: -0.025em;
+  color: #ffffff;
+}
+
+.stage-card__current {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 9px;
+  border-radius: 4px;
+  border: 1px solid rgba(var(--stage-purple), 0.3);
+  background: rgba(var(--stage-purple), 0.2);
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 9px;
+  line-height: 13.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #d8b4fe;
+}
+
+.stage-card__need {
+  margin-top: 16px;
+  padding: 15px;
+  border-radius: 12px;
+  border: 1px solid rgba(var(--stage-purple), 0.2);
+  background: rgba(var(--stage-purple), 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.stage-card__need-label {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 12px;
+  line-height: 16px;
+  color: #ffffff;
+}
+
+.stage-card__need-value {
+  font-family: var(--font-sans);
+  font-weight: 300;
+  font-size: 14px;
+  line-height: 20px;
+  color: #d1d5db;
+}
+
+/* Pager — 6 dots joined by horizontal lines (Figma "Mobile Cycle Indicator"). */
+.stage-explorer__pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.stage-explorer__pager-line {
+  display: block;
+  width: 16px;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 9999px;
+}
+
+.stage-explorer__pager-dot {
+  width: 6px;
+  height: 6px;
+  padding: 0;
+  border: none;
+  border-radius: 9999px;
+  background: #797979;
+  box-shadow: 0 0 8px 0 rgba(209, 213, 219, 0.6);
+  cursor: pointer;
+  transition:
+    width 220ms cubic-bezier(0.16, 1, 0.3, 1),
+    height 220ms cubic-bezier(0.16, 1, 0.3, 1),
+    background 220ms ease,
+    box-shadow 220ms ease;
+}
+
+.stage-explorer__pager-dot:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(var(--stage-purple), 0.35);
+}
+
+.stage-explorer__pager-dot.is-active {
+  width: 10px;
+  height: 10px;
+  background: #a855f7;
+  box-shadow: 0 0 12px 0 rgba(209, 213, 219, 0.7);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Disable motion (animations + transitions) but keep layout transforms —
+     the chips/slots/dots rely on `transform: translate(-50%, -50%)` for
+     positional centring on the orbit, so wiping `transform` here would
+     shift them half their own width to the right. */
+  .stage-explorer__ring,
+  .stage-explorer__chip,
+  .stage-explorer__chip-slot,
+  .stage-explorer__center,
+  .stage-explorer__mobile-orbit-dot,
+  .stage-explorer__pager-dot,
+  .stage-detail {
+    animation: none !important;
+    transition: none !important;
+    opacity: 1 !important;
+  }
+
+  .stage-explorer__ring {
+    /* Rings only had an entry-scale; safe to neutralise. */
+    transform: none !important;
+  }
+
+  .stage-explorer__chip.is-user-stage {
+    animation: none !important;
+  }
+
+  /* Tooltip: keep show/hide instant. No slide-in transform — only opacity. */
+  .stage-tooltip {
+    transition: none !important;
+  }
+}

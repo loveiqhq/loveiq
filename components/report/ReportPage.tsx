@@ -39,8 +39,8 @@ import CoreArchetypeSection from "./sections/CoreArchetypeSection";
 import DimensionSection from "./sections/DimensionSection";
 import ImportanceOfSexualitySection from "./sections/ImportanceOfSexualitySection";
 import PracticeTendenciesSection from "./sections/PracticeTendenciesSection";
+import SexualStageSection from "./sections/SexualStageSection";
 import WelcomeSection from "./sections/WelcomeSection";
-import { ReferFriendIcon } from "./ReportActionIcons";
 import { normalizeReportHtml } from "./reportContent";
 import {
   isSectionIncludedInEssentials,
@@ -477,16 +477,6 @@ const ReportExperience: FC<ReportExperienceProps> = ({
           />
 
           <div className="report-content">
-            <div className="hidden xl:flex justify-end pb-2">
-              <button
-                type="button"
-                onClick={() => setShowInvite(true)}
-                className="flex items-center gap-2 rounded-xl bg-[#fe6839] px-[17px] py-[13px] text-sm font-medium text-white shadow-[0px_10px_15px_-3px_rgba(0,0,0,0.2),0px_4px_6px_-4px_rgba(0,0,0,0.2)] transition hover:bg-[#e85a2a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#fe6839]/60 [&_svg]:h-4 [&_svg]:w-4"
-              >
-                <ReferFriendIcon />
-                Refer a Friend
-              </button>
-            </div>
             {resolvedSections.map((section) => {
               const title = section.displayTitle;
               const generalHtml = replacePlaceholders(section.generalContent, placeholderValues);
@@ -552,6 +542,20 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                       ranking={ranking}
                       unlockedArchetypes={unlockedArchetypes}
                     />
+                  </ReportSection>
+                );
+              }
+
+              if (section.sectionNumber === 6) {
+                return (
+                  <ReportSection
+                    key={section.id}
+                    feedbackWidget={feedbackWidget}
+                    primaryArchetype={viewArchetype}
+                    sectionId={section.id}
+                    title={title}
+                  >
+                    <SexualStageSection generalHtml={generalHtml} userStageLabel={snapshot.stage} />
                   </ReportSection>
                 );
               }

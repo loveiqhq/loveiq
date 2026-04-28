@@ -1971,17 +1971,15 @@ export const surveyQuestions: SurveyQuestion[] = [
     answerOptionsExplained: [
       {
         option: "1 = Not at all true",
-        explanation:
-          "my attention is usually much more on my own experience than on my partner\u2019s",
+        explanation: "my attention is usually much more on my own experience than on my partner’s",
       },
       {
         option: "2 = Mostly not true",
-        explanation:
-          "my attention tends to stay more on my own experience than on my partner\u2019s",
+        explanation: "my attention tends to stay more on my own experience than on my partner’s",
       },
       {
         option: "3 = Slightly not true",
-        explanation: "my attention is somewhat more on my own experience than on my partner\u2019s",
+        explanation: "my attention is somewhat more on my own experience than on my partner’s",
       },
       {
         option: "4 = Mixed / depends",
@@ -1990,17 +1988,17 @@ export const surveyQuestions: SurveyQuestion[] = [
       {
         option: "5 = Slightly true",
         explanation:
-          "my attention tends to go somewhat more toward my partner\u2019s experience than toward my own",
+          "my attention tends to go somewhat more toward my partner’s experience than toward my own",
       },
       {
         option: "6 = Mostly true",
         explanation:
-          "my attention usually goes more toward my partner\u2019s experience than toward my own",
+          "my attention usually goes more toward my partner’s experience than toward my own",
       },
       {
         option: "7 = Very true",
         explanation:
-          "my attention strongly and naturally goes more toward my partner\u2019s experience than toward my own",
+          "my attention strongly and naturally goes more toward my partner’s experience than toward my own",
       },
     ],
     hoverStates: {
@@ -2852,11 +2850,13 @@ export const surveyQuestions: SurveyQuestion[] = [
       "We use this to match recommendations to your real timing, not an ideal timeline.",
     answerOptionsExplained: [
       { option: "Within 7 days", explanation: "you would likely begin almost immediately" },
+      { option: "Within 30 days", explanation: "you would likely start soon, but not right away" },
+      { option: "1–3 months", explanation: "change feels relevant, but not yet immediate" },
       {
-        option: "Within 30 days",
-        explanation:
-          "you would likely start soon, but not right away. 1–3 months = change feels relevant, but not yet immediate. 3–6 months = this matters, though it is more of a medium-term step. 6–12 months = action feels more distant for now",
+        option: "3–6 months",
+        explanation: "this matters, though it is more of a medium-term step",
       },
+      { option: "6–12 months", explanation: "action feels more distant for now" },
       {
         option: "Later than 12 months",
         explanation: "this is not something you see yourself beginning soon",
@@ -3069,8 +3069,11 @@ export const surveyQuestions: SurveyQuestion[] = [
       },
       {
         option: "Partner-inclusive guidance",
-        explanation:
-          "support that includes your partner would be most helpful.\n1:1 professional support = individualized help from a trained professional would fit best",
+        explanation: "support that includes your partner would be most helpful",
+      },
+      {
+        option: "1:1 professional support",
+        explanation: "individualized help from a trained professional would fit best",
       },
       {
         option: "Not sure yet",

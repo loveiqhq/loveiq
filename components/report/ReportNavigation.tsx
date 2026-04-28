@@ -268,12 +268,12 @@ const ReportNavigation: FC<Props> = ({
                 </button>
                 {onReferFriend && (
                   <button
+                    className="report-sidebar__btn"
                     type="button"
                     onClick={() => {
                       setDrawerOpen(false);
                       onReferFriend();
                     }}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#fe6839] px-[17px] py-[13px] text-sm font-medium text-white shadow-[0px_10px_15px_-3px_rgba(0,0,0,0.2),0px_4px_6px_-4px_rgba(0,0,0,0.2)] transition hover:bg-[#e85a2a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#fe6839]/60 [&_svg]:h-4 [&_svg]:w-4"
                   >
                     <ReferFriendIcon />
                     <span>Refer a Friend</span>
@@ -345,6 +345,12 @@ const ReportNavigation: FC<Props> = ({
               <ShareReportIcon />
               <span>Share Report</span>
             </button>
+            {onReferFriend && (
+              <button className="report-sidebar__btn" type="button" onClick={() => onReferFriend()}>
+                <ReferFriendIcon />
+                <span>Refer a Friend</span>
+              </button>
+            )}
           </div>
 
           {/* Chapters nav */}

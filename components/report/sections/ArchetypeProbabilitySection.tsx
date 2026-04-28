@@ -68,11 +68,8 @@ const ArchetypeProbabilitySection: FC<Props> = ({
   const isPrimaryUnlocked = unlockedArchetypes.has(primaryArchetype);
 
   const INITIAL_SECONDARY = INITIAL_COUNT - 1;
-  const EXTRA_ON_EXPAND = 3;
   const secondaryAll = ranking.filter((n) => n !== primaryArchetype);
-  const secondaryItems = expanded
-    ? secondaryAll.slice(0, INITIAL_SECONDARY + EXTRA_ON_EXPAND)
-    : secondaryAll.slice(0, INITIAL_SECONDARY);
+  const secondaryItems = expanded ? secondaryAll : secondaryAll.slice(0, INITIAL_SECONDARY);
 
   return (
     <div className="report-flow report-flow--gap-xl">

@@ -123,8 +123,10 @@ function parseAnswerOptionsExplained(text) {
   }
 
   // Choice format: "Option title = explanation. Another option = explanation."
-  // Split on ". " followed by a capital letter (including single-letter words like "I")
-  const choiceEntries = trimmed.split(/(?<=\.)\s+(?=[A-Z])/);
+  // Split on ". " followed by a capital letter OR a digit so options that
+  // start with a number (e.g. "1–3 months", "1:1 professional support",
+  // "6–12 months") aren't merged into the previous option's explanation.
+  const choiceEntries = trimmed.split(/(?<=\.)\s+(?=[A-Z\d])/);
   if (choiceEntries.length > 1) {
     for (const entry of choiceEntries) {
       const match = entry.match(/^(.+?)\s*=\s*(.+)$/s);
