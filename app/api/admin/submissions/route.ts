@@ -63,6 +63,10 @@ export async function GET(request: Request) {
   const archetype = url.searchParams.get("archetype") || "";
   const dateFrom = url.searchParams.get("dateFrom") || "";
   const dateTo = url.searchParams.get("dateTo") || "";
+  const sortParam = url.searchParams.get("sort") || "priority";
+  const sort: "priority" | "date_desc" | "date_asc" =
+    sortParam === "date_desc" || sortParam === "date_asc" ? sortParam : "priority";
+  const dateAscending = sort === "date_asc";
 
   const offset = (page - 1) * limit;
   const includePartials = !status || status === "partial" || status === "pending_completion";
@@ -72,8 +76,8 @@ export async function GET(request: Request) {
     let partialRecords: Array<ReturnType<typeof buildPartialSubmissionRecord>> = [];
 
     if (includePartials && !archetype) {
-      let partialQuery =
-        "/rest/v1/survey_partial_save?select=id,session_id,answers,current_index,started_at,saved_at,utm_tracker&order=saved_at.desc";
+      const partialOrder = dateAscending ? "saved_at.asc" : "saved_at.desc";
+      let partialQuery = `/rest/v1/survey_partial_save?select=id,session_id,answers,current_index,started_at,saved_at,utm_tracker&order=${partialOrder}`;
       if (dateFrom) partialQuery += `&saved_at=gte.${encodeURIComponent(dateFrom)}`;
       if (dateTo) {
         partialQuery += `&saved_at=lte.${encodeURIComponent(dateTo + "T23:59:59.999Z")}`;
@@ -156,7 +160,8 @@ export async function GET(request: Request) {
         : "scoring_result(primary_archetype,v5_primary_archetype,percentages,v5_percentages)";
       const completedFetchSize = Math.max(limit, offset + limit + partialRecords.length);
 
-      let query = `/rest/v1/survey_submission?select=id,status,start_date_time,created_date_time,duration_ms,${userJoin},${scoringJoin}&order=created_date_time.desc`;
+      const completedOrder = dateAscending ? "created_date_time.asc" : "created_date_time.desc";
+      let query = `/rest/v1/survey_submission?select=id,status,start_date_time,created_date_time,duration_ms,${userJoin},${scoringJoin}&order=${completedOrder}`;
       if (status) query += `&status=eq.${encodeURIComponent(status)}`;
       if (dateFrom) query += `&start_date_time=gte.${encodeURIComponent(dateFrom)}`;
       if (dateTo) {
@@ -308,13 +313,25 @@ export async function GET(request: Request) {
       });
     }
 
-    const submissions = [...partialRecords, ...completedRows]
-      .sort(
+    const merged = [...partialRecords, ...completedRows];
+    if (sort === "date_desc") {
+      merged.sort(
+        (left, right) =>
+          new Date(right.completed_at).getTime() - new Date(left.completed_at).getTime()
+      );
+    } else if (sort === "date_asc") {
+      merged.sort(
+        (left, right) =>
+          new Date(left.completed_at).getTime() - new Date(right.completed_at).getTime()
+      );
+    } else {
+      merged.sort(
         (left, right) =>
           right.priority_score - left.priority_score ||
           new Date(right.completed_at).getTime() - new Date(left.completed_at).getTime()
-      )
-      .slice(offset, offset + limit);
+      );
+    }
+    const submissions = merged.slice(offset, offset + limit);
 
     return NextResponse.json(
       {

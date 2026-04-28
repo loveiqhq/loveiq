@@ -214,6 +214,61 @@ describe("GET /api/admin/submissions", () => {
     expect(json.submissions[0].priority_label).toBe("low");
   });
 
+  it("defaults sort to priority (created_date_time.desc, priority-first JS sort)", async () => {
+    mockSubmissionsOk();
+
+    const res = await GET(makeRequest());
+    expect(res.status).toBe(200);
+
+    const partialQuery = mockSupabaseFetch.mock.calls[0][0] as string;
+    const completedQuery = mockSupabaseFetch.mock.calls[1][0] as string;
+
+    expect(partialQuery).toContain("order=saved_at.desc");
+    expect(completedQuery).toContain("order=created_date_time.desc");
+  });
+
+  it("sort=date_desc orders by created_date_time descending", async () => {
+    mockSubmissionsOk();
+
+    const res = await GET(makeRequest("?sort=date_desc"));
+    expect(res.status).toBe(200);
+
+    const json = await res.json();
+    expect(json.submissions[0].id).toBe(2);
+    expect(json.submissions[1].id).toBe(1);
+
+    const partialQuery = mockSupabaseFetch.mock.calls[0][0] as string;
+    const completedQuery = mockSupabaseFetch.mock.calls[1][0] as string;
+    expect(partialQuery).toContain("order=saved_at.desc");
+    expect(completedQuery).toContain("order=created_date_time.desc");
+  });
+
+  it("sort=date_asc flips Supabase order and reverses results", async () => {
+    mockSubmissionsOk();
+
+    const res = await GET(makeRequest("?sort=date_asc"));
+    expect(res.status).toBe(200);
+
+    const json = await res.json();
+    expect(json.submissions[0].id).toBe(1);
+    expect(json.submissions[1].id).toBe(2);
+
+    const partialQuery = mockSupabaseFetch.mock.calls[0][0] as string;
+    const completedQuery = mockSupabaseFetch.mock.calls[1][0] as string;
+    expect(partialQuery).toContain("order=saved_at.asc");
+    expect(completedQuery).toContain("order=created_date_time.asc");
+  });
+
+  it("ignores unknown sort values and falls back to priority", async () => {
+    mockSubmissionsOk();
+
+    const res = await GET(makeRequest("?sort=bogus"));
+    expect(res.status).toBe(200);
+
+    const completedQuery = mockSupabaseFetch.mock.calls[1][0] as string;
+    expect(completedQuery).toContain("order=created_date_time.desc");
+  });
+
   it("reads embedded scoring objects and exposes both archetype columns", async () => {
     mockSubmissionsOk([
       {

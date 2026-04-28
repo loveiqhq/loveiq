@@ -27,12 +27,21 @@ interface Filters {
   dateTo: string;
 }
 
+export type SortOption = "priority" | "date_desc" | "date_asc";
+
 interface FilterBarProps {
   onFilterChange: (filters: Filters) => void;
   initialFilters?: Filters;
+  sort?: SortOption;
+  onSortChange?: (sort: SortOption) => void;
 }
 
-export default function FilterBar({ onFilterChange, initialFilters }: FilterBarProps) {
+export default function FilterBar({
+  onFilterChange,
+  initialFilters,
+  sort,
+  onSortChange,
+}: FilterBarProps) {
   const [status, setStatus] = useState(initialFilters?.status || "");
   const [email, setEmail] = useState(initialFilters?.email || "");
   const [archetype, setArchetype] = useState(initialFilters?.archetype || "");
@@ -115,6 +124,25 @@ export default function FilterBar({ onFilterChange, initialFilters }: FilterBarP
         className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-text-primary outline-none"
         aria-label="To date"
       />
+
+      {onSortChange && (
+        <select
+          value={sort ?? "priority"}
+          onChange={(e) => onSortChange(e.target.value as SortOption)}
+          className="rounded-lg border border-white/10 bg-[#1a1025] px-3 py-2 text-sm text-text-primary outline-none"
+          aria-label="Sort submissions"
+        >
+          <option value="priority" className="bg-[#1a1025] text-gray-200">
+            Sort: Priority
+          </option>
+          <option value="date_desc" className="bg-[#1a1025] text-gray-200">
+            Sort: Newest first
+          </option>
+          <option value="date_asc" className="bg-[#1a1025] text-gray-200">
+            Sort: Oldest first
+          </option>
+        </select>
+      )}
     </div>
   );
 }

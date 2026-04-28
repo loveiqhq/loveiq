@@ -42,6 +42,8 @@ interface SubmissionsData {
   limit: number;
 }
 
+type SortValue = "priority" | "date_desc" | "date_asc";
+
 export default function SubmissionBrowser() {
   const [page, setPage] = useState(1);
   const [filters, setFilters] = useState({
@@ -51,6 +53,7 @@ export default function SubmissionBrowser() {
     dateFrom: "",
     dateTo: "",
   });
+  const [sort, setSort] = useState<SortValue>("priority");
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [filterKey, setFilterKey] = useState(0);
 
@@ -61,8 +64,9 @@ export default function SubmissionBrowser() {
     if (filters.archetype) p.archetype = filters.archetype;
     if (filters.dateFrom) p.dateFrom = filters.dateFrom;
     if (filters.dateTo) p.dateTo = filters.dateTo;
+    if (sort !== "priority") p.sort = sort;
     return p;
-  }, [page, filters]);
+  }, [page, filters, sort]);
 
   const { data, loading, error, refetch } = useAdminFetch<SubmissionsData>(
     "/api/admin/submissions",
@@ -71,6 +75,12 @@ export default function SubmissionBrowser() {
 
   const handleFilterChange = useCallback((newFilters: typeof filters) => {
     setFilters(newFilters);
+    setPage(1);
+    setSelectedIds(new Set());
+  }, []);
+
+  const handleSortChange = useCallback((next: SortValue) => {
+    setSort(next);
     setPage(1);
     setSelectedIds(new Set());
   }, []);
@@ -156,7 +166,13 @@ export default function SubmissionBrowser() {
 
       <ExportPresetsBar filters={filters} onApplyPreset={handleApplyView} />
 
-      <FilterBar key={filterKey} onFilterChange={handleFilterChange} initialFilters={filters} />
+      <FilterBar
+        key={filterKey}
+        onFilterChange={handleFilterChange}
+        initialFilters={filters}
+        sort={sort}
+        onSortChange={handleSortChange}
+      />
 
       {!loading && !error && data && (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
