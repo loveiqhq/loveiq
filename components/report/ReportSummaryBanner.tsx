@@ -1,40 +1,68 @@
 "use client";
 
-import { type FC } from "react";
+import { useEffect, useState, type FC } from "react";
 
 interface Props {
   onSummaryClick?: () => void;
 }
 
-const ReportSummaryBanner: FC<Props> = ({ onSummaryClick }) => (
-  <div className="report-summary-banner">
-    <a href="#summary" className="report-summary-banner__btn" onClick={onSummaryClick}>
-      <svg
-        width="20"
-        height="20"
-        viewBox="0 0 20 20"
-        fill="none"
-        aria-hidden="true"
-        xmlns="http://www.w3.org/2000/svg"
-      >
-        <path
-          d="M11.667 2.5H5.833A1.667 1.667 0 0 0 4.167 4.167v11.666A1.667 1.667 0 0 0 5.833 17.5h8.334a1.667 1.667 0 0 0 1.666-1.667V7.5l-4.166-5Z"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <path
-          d="M11.667 2.5v5h5M13.333 10.833H6.667M13.333 13.333H6.667M8.333 8.333H6.667"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-      <span>Want it shorter?&nbsp;&nbsp;Read Report summary</span>
-    </a>
-  </div>
-);
+const SCROLL_THRESHOLD = 15;
+
+const ReportSummaryBanner: FC<Props> = ({ onSummaryClick }) => {
+  const [hidden, setHidden] = useState(false);
+
+  useEffect(() => {
+    const lastScrollY = { current: window.scrollY };
+    const lastDirection: { current: "up" | "down" | null } = { current: null };
+    let ticking = false;
+
+    const update = () => {
+      const scrollY = window.scrollY || document.documentElement.scrollTop;
+      if (scrollY <= 0) {
+        setHidden(false);
+        lastScrollY.current = scrollY;
+        ticking = false;
+        return;
+      }
+      const diff = scrollY - lastScrollY.current;
+      if (Math.abs(diff) >= SCROLL_THRESHOLD) {
+        const direction = diff > 0 ? "down" : "up";
+        if (direction !== lastDirection.current) {
+          lastDirection.current = direction;
+          setHidden(direction === "down");
+        }
+        lastScrollY.current = scrollY;
+      }
+      ticking = false;
+    };
+
+    const onScroll = () => {
+      if (!ticking) {
+        requestAnimationFrame(update);
+        ticking = true;
+      }
+    };
+
+    const onResize = () => {
+      if (window.scrollY <= 0) setHidden(false);
+    };
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onResize, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onResize);
+    };
+  }, []);
+
+  return (
+    <div className={`report-summary-banner${hidden ? " report-summary-banner--hidden" : ""}`}>
+      <a href="#summary" className="report-summary-banner__btn" onClick={onSummaryClick}>
+        <span className="report-summary-banner__label-primary">Want it shorter?</span>
+        <span className="report-summary-banner__label-secondary">Jump to the report summary</span>
+      </a>
+    </div>
+  );
+};
 
 export default ReportSummaryBanner;

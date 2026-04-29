@@ -1002,32 +1002,52 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 .report-summary-banner {
+  position: fixed;
+  /* sit just below the pill topbar: safe-area + 8px offset + ~56px topbar + 8px gap */
+  top: calc(env(safe-area-inset-top, 0px) + 72px);
+  left: 0;
+  right: 0;
   display: flex;
   justify-content: center;
-  padding-block: 1.5rem 0.25rem;
+  z-index: 39;
+  pointer-events: none;
+  will-change: transform;
+  transition: transform 420ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.report-summary-banner--hidden {
+  transform: translate3d(0, calc(-100% - 80px), 0);
 }
 
 .report-summary-banner__btn {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   padding: 13px 17px;
   background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(167, 139, 250, 0.57);
   border-radius: 12px;
-  color: #d1d5db;
   font-family: var(--font-sans);
   font-size: 0.875rem;
   font-weight: 500;
-  line-height: 1.4;
+  line-height: 1.43;
   cursor: pointer;
   white-space: nowrap;
   text-decoration: none;
+  pointer-events: auto;
   transition: background 0.15s ease;
 }
 
 .report-summary-banner__btn:hover {
   background: rgba(255, 255, 255, 0.09);
+}
+
+.report-summary-banner__label-primary {
+  color: #a78bfa;
+}
+
+.report-summary-banner__label-secondary {
+  color: #d1d5db;
 }
 
 .report-status-screen {
@@ -2496,11 +2516,16 @@ input.autofill-dark:-internal-autofill-previewed {
   }
 }
 
-/* Below xl the floating pill topbar (~56px including 8px top offset) overlays content —
-   pad generously so the first section gets breathing room below the pill */
+/* Below xl the floating pill topbar (~56px) + summary banner (~46px) overlay content.
+   Shell padding clears the topbar; content padding adds breathing room for the banner. */
 @media (max-width: 1279px) {
   .report-shell {
     padding-top: calc(env(safe-area-inset-top, 0px) + 160px);
+  }
+
+  .report-content {
+    /* banner fixed at ~72px–118px from top; push first content below it */
+    padding-top: 5rem;
   }
 }
 
@@ -4493,8 +4518,8 @@ input.autofill-dark:-internal-autofill-previewed {
 
 .report-section {
   padding: 0;
-  /* 4rem (64px) clears the 52px mobile sticky bar + 12px buffer */
-  scroll-margin-top: 4rem;
+  /* 8rem (128px) clears topbar (~64px) + summary banner (~46px) + buffer on mobile */
+  scroll-margin-top: 8rem;
 }
 
 .report-section + .report-section {
@@ -6618,6 +6643,17 @@ input.autofill-dark:-internal-autofill-previewed {
     /* fluid: 1.5rem at 1280px → 4rem at 1920px+ */
     padding-inline: clamp(1.5rem, 3.5vw, 4rem);
     padding-top: 2rem;
+  }
+
+  /* Desktop: banner fixed near viewport top, offset right of sidebar */
+  .report-summary-banner {
+    top: 1.5rem;
+    left: 288px; /* approximate sidebar width — centers button in content column */
+  }
+
+  /* Desktop: banner is ~24px+46px = ~70px from top; 5rem (80px) clears it with buffer */
+  .report-section {
+    scroll-margin-top: 5rem;
   }
 }
 

@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useRef, useState, type FC } from "react";
-import { ReferFriendIcon, ReportSummaryIcon, ShareReportIcon } from "./ReportActionIcons";
+import { ReferFriendIcon, ShareReportIcon } from "./ReportActionIcons";
 import type { AccessTier, DisplayReportSection } from "./reportTitles";
 
 interface Props {
@@ -283,20 +283,6 @@ const ReportNavigation: FC<Props> = ({
 
               <p className="report-chapter-panel__label">Chapters</p>
 
-              <div className="report-chapter-panel__summary-btn-wrap">
-                <a
-                  href="#summary"
-                  className="report-sidebar__btn"
-                  onClick={() => {
-                    onSectionClick?.("summary");
-                    setDrawerOpen(false);
-                  }}
-                >
-                  <ReportSummaryIcon />
-                  <span>Report summary</span>
-                </a>
-              </div>
-
               <nav aria-label="Report sections" className="report-chapter-panel__nav">
                 {sections.map((section) => {
                   const isActive = activeSectionId === section.id;
@@ -370,15 +356,6 @@ const ReportNavigation: FC<Props> = ({
           {/* Chapters nav */}
           <div className="report-sidebar__chapters">
             <p className="report-sidebar__chapters-label">Chapters</p>
-
-            <a
-              href="#summary"
-              className="report-sidebar__btn report-sidebar__summary-btn"
-              onClick={() => onSectionClick?.("summary")}
-            >
-              <ReportSummaryIcon />
-              <span>Report summary</span>
-            </a>
 
             <nav ref={navRef} aria-label="Report sections" className="report-sidebar__nav">
               <div className="report-sidebar__nav-list">
