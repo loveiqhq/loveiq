@@ -339,4 +339,14 @@ export const reportSections: ReportSection[] = [
     isPremium: false,
     hasResonatesFeedback: true,
   },
+  {
+    // Manually maintained — content sourced from scripts/convert-summary-docx.js
+    id: "summary",
+    sectionNumber: 35,
+    title: "Summary",
+    generalContent: "",
+    archetypeBlockId: null,
+    isPremium: false,
+    hasResonatesFeedback: true,
+  },
 ];

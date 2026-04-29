@@ -41,6 +41,8 @@ import ImportanceOfSexualitySection from "./sections/ImportanceOfSexualitySectio
 import PracticeTendenciesSection from "./sections/PracticeTendenciesSection";
 import SexualStageSection from "./sections/SexualStageSection";
 import WelcomeSection from "./sections/WelcomeSection";
+import ReportSummaryBanner from "./ReportSummaryBanner";
+import { summaryArchetypeContent } from "@/data/report-summary";
 import { normalizeReportHtml } from "./reportContent";
 import {
   isSectionIncludedInEssentials,
@@ -477,6 +479,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
           />
 
           <div className="report-content">
+            <ReportSummaryBanner />
             {resolvedSections.map((section) => {
               const title = section.displayTitle;
               const generalHtml = replacePlaceholders(section.generalContent, placeholderValues);
@@ -504,6 +507,31 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     sectionId={section.id}
                     snapshot={snapshot}
                   />
+                );
+              }
+
+              if (section.id === "summary") {
+                const summaryHtml = normalizeReportHtml(
+                  summaryArchetypeContent[viewArchetype] ?? null
+                );
+                return (
+                  <ReportSection
+                    key={section.id}
+                    feedbackWidget={feedbackWidget}
+                    primaryArchetype={viewArchetype}
+                    sectionId={section.id}
+                    title={title}
+                  >
+                    <DimensionSection
+                      archetype={viewArchetype}
+                      archetypeHtml={summaryHtml}
+                      generalHtml=""
+                      isPremium={false}
+                      isUnlocked={true}
+                      sectionId={section.id}
+                      sectionTitle={title}
+                    />
+                  </ReportSection>
                 );
               }
 

@@ -996,6 +996,35 @@ input.autofill-dark:-internal-autofill-previewed {
   padding-inline: clamp(0.6rem, 3vw, 2rem);
 }
 
+.report-summary-banner {
+  display: flex;
+  justify-content: center;
+  padding-top: 1.75rem;
+  padding-bottom: 0.25rem;
+}
+
+.report-summary-banner__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 13px 17px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  color: #d1d5db;
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.4;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease;
+}
+
+.report-summary-banner__btn:hover {
+  background: rgba(255, 255, 255, 0.09);
+}
+
 .report-status-screen {
   display: grid;
   min-height: 100vh;
