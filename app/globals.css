@@ -9352,15 +9352,130 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 /* Ring chips live inside slots — strip the absolute positioning + opacity
-   handling, those now belong to the slot. */
+   handling, those now belong to the slot. Chip is a flex column whose
+   detail panel uses max-height + opacity to collapse/expand smoothly.
+   Because the slot is `transform: translate(-50%, -50%)`, growing the chip's
+   height visually expands it equally up AND down from its orbital position. */
 .stage-explorer__chip-slot .stage-explorer__chip {
   position: relative;
   transform: none;
   opacity: 1;
+  width: max-content;
+  min-width: 200px;
+  max-width: 300px;
+  text-align: left;
   transition:
-    border-color 220ms ease,
-    background 220ms ease,
-    box-shadow 220ms ease;
+    width 450ms cubic-bezier(0.7, 0, 0.3, 1),
+    border-color 300ms ease,
+    background 300ms ease,
+    box-shadow 350ms ease;
+}
+
+.stage-explorer__chip-slot:hover .stage-explorer__chip,
+.stage-explorer__chip-slot:focus-within .stage-explorer__chip,
+.stage-explorer__chip-slot .stage-explorer__chip.is-expanded {
+  width: 280px;
+  background: rgba(24, 17, 33, 0.92);
+  border-color: rgba(var(--stage-purple), 0.5);
+  box-shadow:
+    0 0 28px -2px rgba(var(--stage-purple), 0.28),
+    0 24px 48px -16px rgba(0, 0, 0, 0.6);
+}
+
+/* Dim the four un-hovered ring chips so the expanded one reads first. The
+   anchor chip lives outside the slot, so it stays at full opacity. */
+.stage-explorer__orbit:has(.stage-explorer__chip-slot:hover) .stage-explorer__chip-slot:not(:hover),
+.stage-explorer__orbit:has(.stage-explorer__chip-slot:focus-within)
+  .stage-explorer__chip-slot:not(:focus-within) {
+  opacity: 0.4;
+  transition: opacity 420ms ease;
+}
+
+/* ── Chip detail panel (shown on hover/focus) ──
+   Pure max-height clip animation — no opacity fade, no transform on the
+   panel — so the rows/need block don't slide or fade in; they're simply
+   revealed as the box grows around them. Slow easeOutExpo makes the
+   expand feel luxurious; collapse mirrors the duration. */
+
+.stage-explorer__chip-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: 0;
+  margin-top: 0;
+  overflow: hidden;
+  transition:
+    max-height 450ms cubic-bezier(0.7, 0, 0.3, 1),
+    margin-top 450ms cubic-bezier(0.7, 0, 0.3, 1);
+}
+
+.stage-explorer__chip-slot:hover .stage-explorer__chip-detail,
+.stage-explorer__chip-slot:focus-within .stage-explorer__chip-detail,
+.stage-explorer__chip-slot .stage-explorer__chip.is-expanded .stage-explorer__chip-detail {
+  max-height: 360px;
+  margin-top: 14px;
+  transition:
+    max-height 500ms cubic-bezier(0.7, 0, 0.3, 1),
+    margin-top 500ms cubic-bezier(0.7, 0, 0.3, 1);
+}
+
+.stage-explorer__chip-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  white-space: normal;
+}
+
+.stage-explorer__chip-rows-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.stage-explorer__chip-rows-label {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 11px;
+  line-height: 14px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--chip-eyebrow-accent, #d8b4fe);
+}
+
+.stage-explorer__chip-rows-value {
+  font-family: var(--font-sans);
+  font-weight: 300;
+  font-size: 13px;
+  line-height: 18px;
+  color: #d1d5db;
+  white-space: normal;
+}
+
+.stage-explorer__chip-need {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(var(--stage-purple), 0.2);
+  background: rgba(var(--stage-purple), 0.1);
+  white-space: normal;
+}
+
+.stage-explorer__chip-need-label {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 12px;
+  line-height: 16px;
+  color: #ffffff;
+}
+
+.stage-explorer__chip-need-value {
+  font-family: var(--font-sans);
+  font-weight: 300;
+  font-size: 12px;
+  line-height: 18px;
+  color: #d1d5db;
 }
 
 .stage-explorer__chip:focus-visible {
@@ -9402,17 +9517,59 @@ input.autofill-dark:-internal-autofill-previewed {
 
 @media (prefers-reduced-motion: no-preference) {
   .stage-explorer.is-revealed .stage-explorer__chip--anchor.is-user-stage {
-    animation: stage-chip-pulse 3.4s ease-in-out infinite 1.4s;
+    /* Slow, calm "breathing" — gentle scale + glow pulse, not a bounce. */
+    animation: stage-chip-pulse 4.2s ease-in-out infinite 1.4s;
+  }
+
+  /* Subtle opacity pulse on the orbit rings — gives the whole circle a slow,
+     premium living-feel without ever drawing the eye. */
+  .stage-explorer.is-revealed .stage-explorer__ring--outer {
+    animation: stage-ring-pulse 6s ease-in-out infinite;
+  }
+  .stage-explorer.is-revealed .stage-explorer__ring--mid {
+    animation: stage-ring-pulse 6s ease-in-out infinite 1.2s;
+  }
+  .stage-explorer.is-revealed .stage-explorer__ring--inner {
+    animation: stage-ring-pulse 6s ease-in-out infinite 2.4s;
+  }
+
+  /* Very faint opacity breath on the centre caption so it doesn't sit dead. */
+  .stage-explorer.is-revealed .stage-explorer__center {
+    animation: stage-center-breathe 7s ease-in-out infinite 2s;
   }
 }
 
 @keyframes stage-chip-pulse {
   0%,
   100% {
+    transform: translateX(-50%) scale(1);
     box-shadow: 0 0 22px -2px rgba(var(--stage-purple), 0.18);
   }
   50% {
-    box-shadow: 0 0 30px -2px rgba(var(--stage-purple), 0.28);
+    transform: translateX(-50%) scale(1.015);
+    box-shadow:
+      0 0 36px -2px rgba(var(--stage-purple), 0.34),
+      0 0 70px -8px rgba(var(--stage-purple), 0.2);
+  }
+}
+
+@keyframes stage-ring-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes stage-center-breathe {
+  0%,
+  100% {
+    opacity: 0.85;
+  }
+  50% {
+    opacity: 1;
   }
 }
 
@@ -9473,155 +9630,6 @@ input.autofill-dark:-internal-autofill-previewed {
   font-size: 20px;
   line-height: 22.5px;
   letter-spacing: -0.019em;
-}
-
-/* ── Stage tooltip (popover beside ring chips on hover/focus) ── */
-
-.stage-tooltip {
-  position: absolute;
-  width: 320px;
-  max-width: min(320px, 80vw);
-  padding: 24px;
-  border-radius: 16px;
-  border: 1px solid rgba(var(--stage-purple), 0.4);
-  background: #181121;
-  box-shadow:
-    0 0 24px 0 rgba(var(--stage-purple), 0.18),
-    0 24px 48px -16px rgba(0, 0, 0, 0.6);
-  color: #ffffff;
-  text-align: left;
-  white-space: normal;
-  pointer-events: none;
-  opacity: 0;
-  visibility: hidden;
-  transition:
-    opacity 180ms ease,
-    visibility 0s linear 180ms,
-    transform 180ms ease;
-  z-index: 30;
-}
-
-.stage-tooltip.is-visible {
-  opacity: 1;
-  pointer-events: auto;
-  visibility: visible;
-  transition:
-    opacity 180ms ease,
-    visibility 0s linear 0s,
-    transform 180ms ease;
-}
-
-/* Side variants — anchored to slot, gap of 12px between chip and tooltip. */
-.stage-explorer__chip-slot[data-tooltip-side="right"] .stage-tooltip {
-  left: calc(100% + 12px);
-  top: 50%;
-  transform: translateY(-50%) translateX(-6px);
-}
-
-.stage-explorer__chip-slot[data-tooltip-side="right"] .stage-tooltip.is-visible {
-  transform: translateY(-50%) translateX(0);
-}
-
-.stage-explorer__chip-slot[data-tooltip-side="left"] .stage-tooltip {
-  right: calc(100% + 12px);
-  top: 50%;
-  transform: translateY(-50%) translateX(6px);
-}
-
-.stage-explorer__chip-slot[data-tooltip-side="left"] .stage-tooltip.is-visible {
-  transform: translateY(-50%) translateX(0);
-}
-
-.stage-explorer__chip-slot[data-tooltip-side="above"] .stage-tooltip {
-  bottom: calc(100% + 12px);
-  left: 50%;
-  transform: translateX(-50%) translateY(6px);
-}
-
-.stage-explorer__chip-slot[data-tooltip-side="above"] .stage-tooltip.is-visible {
-  transform: translateX(-50%) translateY(0);
-}
-
-.stage-tooltip__eyebrow {
-  display: block;
-  font-family: var(--font-sans);
-  font-weight: 500;
-  font-size: 11px;
-  line-height: 14px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--tip-eyebrow-accent, #d8b4fe);
-  margin-bottom: 6px;
-}
-
-.stage-tooltip__title {
-  margin: 0 0 18px;
-  font-family: var(--font-serif);
-  font-weight: 400;
-  font-size: 24px;
-  line-height: 28px;
-  letter-spacing: -0.015em;
-  color: #ffffff;
-}
-
-.stage-tooltip__rows {
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.stage-tooltip__row {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.stage-tooltip__row dt {
-  font-family: var(--font-sans);
-  font-weight: 500;
-  font-size: 11px;
-  line-height: 14px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--tip-eyebrow-accent, #d8b4fe);
-}
-
-.stage-tooltip__row dd {
-  margin: 0;
-  font-family: var(--font-sans);
-  font-weight: 300;
-  font-size: 13px;
-  line-height: 18px;
-  color: #d1d5db;
-}
-
-.stage-tooltip__need {
-  margin-top: 16px;
-  padding: 12px 14px;
-  border-radius: 10px;
-  border: 1px solid rgba(var(--stage-purple), 0.2);
-  background: rgba(var(--stage-purple), 0.1);
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.stage-tooltip__need-label {
-  font-family: var(--font-sans);
-  font-weight: 500;
-  font-size: 12px;
-  line-height: 16px;
-  color: #ffffff;
-}
-
-.stage-tooltip__need-value {
-  font-family: var(--font-sans);
-  font-weight: 300;
-  font-size: 12px;
-  line-height: 18px;
-  color: #d1d5db;
 }
 
 /* ── Detail card (desktop) ── */
@@ -10228,13 +10236,10 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  /* Disable motion (animations + transitions) but keep layout transforms —
-     the chips/slots/dots rely on `transform: translate(-50%, -50%)` for
-     positional centring on the orbit, so wiping `transform` here would
-     shift them half their own width to the right. */
+  /* Kill purely decorative entry/scale animations but preserve hover-driven
+     transitions on chips — they convey meaning (which chip is open) so the
+     motion stays, just shortened. */
   .stage-explorer__ring,
-  .stage-explorer__chip,
-  .stage-explorer__chip-slot,
   .stage-explorer__center,
   .stage-explorer__mobile-orbit-dot,
   .stage-explorer__pager-dot,
@@ -10244,6 +10249,16 @@ input.autofill-dark:-internal-autofill-previewed {
     opacity: 1 !important;
   }
 
+  .stage-explorer.is-revealed .stage-explorer__chip,
+  .stage-explorer.is-revealed .stage-explorer__chip-slot {
+    opacity: 1 !important;
+  }
+
+  .stage-explorer__chip,
+  .stage-explorer__chip-slot {
+    animation: none !important;
+  }
+
   .stage-explorer__ring {
     /* Rings only had an entry-scale; safe to neutralise. */
     transform: none !important;
@@ -10251,10 +10266,5 @@ input.autofill-dark:-internal-autofill-previewed {
 
   .stage-explorer__chip.is-user-stage {
     animation: none !important;
-  }
-
-  /* Tooltip: keep show/hide instant. No slide-in transform — only opacity. */
-  .stage-tooltip {
-    transition: none !important;
   }
 }

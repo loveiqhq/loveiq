@@ -72,7 +72,7 @@ describe("SexualStageExplorer", () => {
     );
   });
 
-  it("locks the desktop detail card to the user's stage and shows a tooltip on chip hover", async () => {
+  it("locks the desktop detail card to the user's stage and expands the chip on hover", async () => {
     const user = userEvent.setup();
     const { container } = render(<SexualStageExplorer userStageLabel="Awakening / Exploring" />);
 
@@ -83,18 +83,17 @@ describe("SexualStageExplorer", () => {
       "Awakening / Exploring"
     );
 
-    // Hovering a non-anchor chip surfaces a tooltip alongside it without
-    // mutating the locked detail card.
-    const evolvingTooltip = container.querySelector("#stage-tooltip-evolving");
-    expect(evolvingTooltip).toBeTruthy();
-    expect(evolvingTooltip).not.toHaveClass("is-visible");
-
+    // Hovering a non-anchor chip expands it in place (aria-expanded flips and
+    // its detail content becomes part of the chip) without mutating the
+    // locked detail card.
     const evolvingChip = container.querySelector<HTMLButtonElement>('[data-chip-id="evolving"]')!;
+    expect(evolvingChip).toHaveAttribute("aria-expanded", "false");
+
     await user.hover(evolvingChip);
 
-    expect(evolvingTooltip).toHaveClass("is-visible");
-    expect(evolvingTooltip).toHaveTextContent("Evolving / Transcending");
-    expect(evolvingTooltip).toHaveTextContent("Integration + grounding + devotion");
+    expect(evolvingChip).toHaveAttribute("aria-expanded", "true");
+    expect(evolvingChip).toHaveTextContent("Evolving / Transcending");
+    expect(evolvingChip).toHaveTextContent("Integration + grounding + devotion");
 
     // Detail card content stays anchored to the user's stage.
     expect(within(detail as HTMLElement).getByRole("heading")).toHaveTextContent(

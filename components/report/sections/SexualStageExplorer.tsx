@@ -99,8 +99,6 @@ interface Props {
   userStageLabel: string | null;
 }
 
-type TooltipSide = "right" | "left" | "above";
-
 function resolveUserStageId(userStageLabel: string | null): StageId | null {
   if (!userStageLabel) return null;
   const normalized = userStageLabel.toLowerCase().trim();
@@ -357,10 +355,10 @@ const SexualStageExplorer: FC<Props> = ({ userStageLabel }) => {
               </span>
             </button>
 
-            {/* Ring stages — small single-line pills around the perimeter,
-                each wrapped in a slot that holds the chip + a hover tooltip
-                so the popup is positioned relative to the chip without
-                affecting the rest of the report's layout. */}
+            {/* Ring stages — single-line pills around the perimeter that
+                expand vertically in place on hover/focus to reveal the
+                stage's detail rows + need block, while the four un-hovered
+                siblings dim to focus attention. */}
             {ringStages.map((stage, ringIdx) => {
               const positionIndex = ringIdx + 1; // 1..5 (anchor occupies 0)
               // Distribute the five ring chips evenly across the bottom 300°
@@ -373,11 +371,7 @@ const SexualStageExplorer: FC<Props> = ({ userStageLabel }) => {
               const y = 50 + ORBIT_RING_RADIUS_PCT * Math.sin(angleRad);
               const isSelected = selectedId === stage.id;
               const isHovered = hoveredId === stage.id;
-              // Always point the popover INWARD (toward the orbit centre)
-              // so right-side tooltips never overflow the viewport on
-              // narrower laptop screens.
-              const tooltipSide: TooltipSide =
-                positionIndex <= 2 ? "left" : positionIndex === 3 ? "above" : "right";
+              const isExpanded = isHovered || isSelected;
               const slotStyle = {
                 left: `${x}%`,
                 top: `${y}%`,
@@ -385,13 +379,11 @@ const SexualStageExplorer: FC<Props> = ({ userStageLabel }) => {
                 "--chip-eyebrow-accent": stage.eyebrowAccent,
                 "--chip-delay": `${positionIndex * 70}ms`,
               } as CSSProperties;
-              const tooltipId = `stage-tooltip-${stage.id}`;
 
               return (
                 <div
                   key={stage.id}
                   className="stage-explorer__chip-slot"
-                  data-tooltip-side={tooltipSide}
                   style={slotStyle}
                   onMouseEnter={() => setHoveredId(stage.id)}
                   onMouseLeave={() => setHoveredId(null)}
@@ -399,10 +391,12 @@ const SexualStageExplorer: FC<Props> = ({ userStageLabel }) => {
                   <button
                     type="button"
                     data-chip-id={stage.id}
-                    className={`stage-explorer__chip${isSelected ? " is-selected" : ""}`}
+                    className={`stage-explorer__chip${isSelected ? " is-selected" : ""}${
+                      isExpanded ? " is-expanded" : ""
+                    }`}
                     aria-pressed={isSelected}
+                    aria-expanded={isExpanded}
                     aria-label={stage.label}
-                    aria-describedby={isHovered ? tooltipId : undefined}
                     onClick={() => setSelectedId(stage.id)}
                     onFocus={() => setHoveredId(stage.id)}
                     onBlur={() => setHoveredId(null)}
@@ -412,8 +406,31 @@ const SexualStageExplorer: FC<Props> = ({ userStageLabel }) => {
                       <span className="stage-explorer__chip-dot" aria-hidden="true" />
                       <span className="stage-explorer__chip-title">{stage.label}</span>
                     </span>
+                    <span className="stage-explorer__chip-detail" aria-hidden={!isExpanded}>
+                      <span className="stage-explorer__chip-rows">
+                        <span className="stage-explorer__chip-rows-row">
+                          <span className="stage-explorer__chip-rows-label">How it Feels</span>
+                          <span className="stage-explorer__chip-rows-value">{stage.feels}</span>
+                        </span>
+                        <span className="stage-explorer__chip-rows-row">
+                          <span className="stage-explorer__chip-rows-label">
+                            What You&rsquo;re Focused On
+                          </span>
+                          <span className="stage-explorer__chip-rows-value">{stage.focus}</span>
+                        </span>
+                        <span className="stage-explorer__chip-rows-row">
+                          <span className="stage-explorer__chip-rows-label">Common Thought</span>
+                          <span className="stage-explorer__chip-rows-value">
+                            &ldquo;{stage.thought}&rdquo;
+                          </span>
+                        </span>
+                      </span>
+                      <span className="stage-explorer__chip-need">
+                        <span className="stage-explorer__chip-need-label">Main Need Right Now</span>
+                        <span className="stage-explorer__chip-need-value">{stage.need}</span>
+                      </span>
+                    </span>
                   </button>
-                  <StageTooltip id={tooltipId} stage={stage} visible={isHovered} />
                 </div>
               );
             })}
@@ -602,46 +619,6 @@ const StageRows: FC<{ stage: Stage }> = ({ stage }) => (
       <dd>&ldquo;{stage.thought}&rdquo;</dd>
     </div>
   </dl>
-);
-
-const StageTooltip: FC<{ id: string; stage: Stage; visible: boolean }> = ({
-  id,
-  stage,
-  visible,
-}) => (
-  <div
-    id={id}
-    className={`stage-tooltip${visible ? " is-visible" : ""}`}
-    role="tooltip"
-    aria-hidden={!visible}
-    style={
-      {
-        "--tip-accent": stage.accent,
-        "--tip-eyebrow-accent": stage.eyebrowAccent,
-      } as CSSProperties
-    }
-  >
-    <span className="stage-tooltip__eyebrow">EXPLORE THIS STAGE</span>
-    <h4 className="stage-tooltip__title">{stage.label}</h4>
-    <dl className="stage-tooltip__rows">
-      <div className="stage-tooltip__row">
-        <dt>How it Feels</dt>
-        <dd>{stage.feels}</dd>
-      </div>
-      <div className="stage-tooltip__row">
-        <dt>{"What You\u2019re Focused On"}</dt>
-        <dd>{stage.focus}</dd>
-      </div>
-      <div className="stage-tooltip__row">
-        <dt>Common Thought</dt>
-        <dd>&ldquo;{stage.thought}&rdquo;</dd>
-      </div>
-    </dl>
-    <div className="stage-tooltip__need">
-      <span className="stage-tooltip__need-label">Main Need Right Now</span>
-      <span className="stage-tooltip__need-value">{stage.need}</span>
-    </div>
-  </div>
 );
 
 const CycleIcon: FC = () => (
