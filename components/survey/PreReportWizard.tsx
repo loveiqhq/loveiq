@@ -332,12 +332,12 @@ const slides: Slide[] = [
   },
   {
     icon: Slide4Icon,
-    heading: "Share your report with your partner.",
+    heading: "Share your report with someone you care about.",
     body: (
       <>
         <strong>Sharing your report can open powerful conversations</strong> about desire, needs,
-        boundaries, and intimacy. When partners understand each other more deeply, connection,
-        trust, and attraction often grow.
+        boundaries, and intimacy. When partners or counterparts understand each other more deeply,
+        connection, trust, and attraction often grow.
       </>
     ),
   },

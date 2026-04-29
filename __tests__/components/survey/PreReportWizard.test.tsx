@@ -60,7 +60,7 @@ describe("PreReportWizard", () => {
       "A note before you explore your report.",
       "Take only what resonates.",
       "Rate each report section.",
-      "Share your report with your partner.",
+      "Share your report with someone you care about.",
       "Invite your friends to grow.",
     ];
 
