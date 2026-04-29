@@ -5,8 +5,8 @@ import { type FC } from "react";
 const ReportSummaryBanner: FC = () => (
   <div className="report-summary-banner">
     <button
-      className="report-summary-banner__btn"
       type="button"
+      className="report-summary-banner__btn"
       onClick={() => {
         document.getElementById("summary")?.scrollIntoView({ behavior: "smooth", block: "start" });
       }}
