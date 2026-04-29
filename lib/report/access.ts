@@ -2,6 +2,7 @@ import { reportSections } from "@/data/report-general";
 import type { ReportPurchasePlanId } from "@/lib/checkout/reportPurchase";
 
 export const ESSENTIALS_SECTION_IDS = [
+  "summary",
   "probability_of_other_archetypes",
   "attachment_style_how_safety_closeness_and_distance_shape_desire",
   "core_insecurities_the_hidden_fears_that_shape_desire_protection_and_erotic_expression",

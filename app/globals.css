@@ -1002,17 +1002,9 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 .report-summary-banner {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  /* Offset the sidebar column + gap so the button centers in the content column */
-  padding-left: calc(17rem + clamp(2rem, 4vw, 4rem));
-  padding-top: 1.75rem;
-  z-index: 10;
   display: flex;
   justify-content: center;
-  pointer-events: none;
+  padding-block: 1.5rem 0.25rem;
 }
 
 .report-summary-banner__btn {
@@ -1030,7 +1022,7 @@ input.autofill-dark:-internal-autofill-previewed {
   line-height: 1.4;
   cursor: pointer;
   white-space: nowrap;
-  pointer-events: auto;
+  text-decoration: none;
   transition: background 0.15s ease;
 }
 
@@ -2509,13 +2501,6 @@ input.autofill-dark:-internal-autofill-previewed {
 @media (max-width: 1279px) {
   .report-shell {
     padding-top: calc(env(safe-area-inset-top, 0px) + 160px);
-  }
-
-  /* Fixed banner: no sidebar on mobile, clear the topbar */
-  .report-summary-banner {
-    top: calc(env(safe-area-inset-top, 0px) + 4.5rem);
-    padding-left: 0;
-    padding-top: 0;
   }
 }
 
@@ -4227,6 +4212,15 @@ input.autofill-dark:-internal-autofill-previewed {
   width: 100%;
 }
 
+.report-chapter-panel__summary-btn-wrap {
+  padding: 0 20px 8px;
+  flex-shrink: 0;
+}
+
+.report-chapter-panel__summary-btn-wrap .report-sidebar__btn {
+  width: 100%;
+}
+
 .report-chapter-panel__label {
   margin: 0;
   padding: 24px 20px 16px;
@@ -4331,6 +4325,7 @@ input.autofill-dark:-internal-autofill-previewed {
   font-size: 14px;
   font-weight: 500;
   line-height: 20px;
+  text-decoration: none;
   cursor: pointer;
   transition:
     border-color 180ms ease,

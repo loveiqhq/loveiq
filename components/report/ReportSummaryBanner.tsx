@@ -2,15 +2,13 @@
 
 import { type FC } from "react";
 
-const ReportSummaryBanner: FC = () => (
+interface Props {
+  onSummaryClick?: () => void;
+}
+
+const ReportSummaryBanner: FC<Props> = ({ onSummaryClick }) => (
   <div className="report-summary-banner">
-    <button
-      type="button"
-      className="report-summary-banner__btn"
-      onClick={() => {
-        document.getElementById("summary")?.scrollIntoView({ behavior: "smooth", block: "start" });
-      }}
-    >
+    <a href="#summary" className="report-summary-banner__btn" onClick={onSummaryClick}>
       <svg
         width="20"
         height="20"
@@ -35,7 +33,7 @@ const ReportSummaryBanner: FC = () => (
         />
       </svg>
       <span>Want it shorter?&nbsp;&nbsp;Read Report summary</span>
-    </button>
+    </a>
   </div>
 );
 

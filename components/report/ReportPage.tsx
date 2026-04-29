@@ -482,7 +482,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
           />
 
           <div className="report-content">
-            <ReportSummaryBanner />
+            <ReportSummaryBanner onSummaryClick={() => handleSectionClick("summary")} />
             {resolvedSections.map((section) => {
               const title = section.displayTitle;
               const generalHtml = replacePlaceholders(section.generalContent, placeholderValues);
@@ -517,6 +517,11 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                 const summaryHtml = normalizeReportHtml(
                   summaryArchetypeContent[viewArchetype] ?? null
                 );
+                const isSummaryUnlocked = isSectionUnlockedForPlan({
+                  accessPlan,
+                  isPremium: section.isPremium,
+                  sectionId: section.id,
+                });
                 return (
                   <ReportSection
                     key={section.id}
@@ -529,10 +534,12 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                       archetype={viewArchetype}
                       archetypeHtml={summaryHtml}
                       generalHtml=""
-                      isPremium={false}
-                      isUnlocked={true}
+                      isPremium={section.isPremium}
+                      isUnlocked={isSummaryUnlocked || (unlockedSections[section.id] ?? false)}
+                      onUnlock={() => unlockSection(section.id)}
                       sectionId={section.id}
                       sectionTitle={title}
+                      tier="essentials"
                     />
                   </ReportSection>
                 );

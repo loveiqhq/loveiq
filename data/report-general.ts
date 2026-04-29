@@ -346,7 +346,7 @@ export const reportSections: ReportSection[] = [
     title: "Summary",
     generalContent: "",
     archetypeBlockId: null,
-    isPremium: false,
+    isPremium: true,
     hasResonatesFeedback: true,
   },
 ];
