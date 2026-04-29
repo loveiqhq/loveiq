@@ -354,14 +354,14 @@ const slides: Slide[] = [
       <>
         {/* Mobile — natural wrap */}
         <span className="md:hidden">
-          Everything can be fully anonymous and we encrypt with high security standards. If you
-          prefer to remain unidentifiable, you&rsquo;re welcome to use an alias email address. Learn
-          more in our{" "}
+          We encrypt with high security standards. If you prefer to remain unidentifiable,
+          you&rsquo;re welcome to use an alias email address and anonymize your identity and name.
+          Learn more in our{" "}
           <a
             href="/trust-zone"
             target="_blank"
             rel="noopener noreferrer"
-            className="font-semibold text-[#fe6839] underline decoration-[#fe6839] decoration-2 underline-offset-4 transition-all duration-300 hover:text-[#ff8a6a] hover:decoration-[#ff8a6a]"
+            className="font-semibold text-[#fe6839] underline decoration-[#fe6839] decoration-2 underline-offset-2 transition-all duration-300 hover:text-[#ff8a6a] hover:decoration-[#ff8a6a]"
           >
             &gt; Trust Zone
           </a>
@@ -369,16 +369,17 @@ const slides: Slide[] = [
         </span>
         {/* Desktop line breaks */}
         <span className="hidden md:inline">
-          Everything can be fully anonymous and we encrypt with high security
+          We encrypt with high security standards. If you prefer to remain unidentifiable,
+          you&rsquo;re
           <br />
-          standards. If you prefer to remain unidentifiable, you&rsquo;re welcome to use an
+          welcome to use an alias email address and anonymize your identity and name.
           <br />
-          alias email address. Learn more in our{" "}
+          Learn more in our{" "}
           <a
             href="/trust-zone"
             target="_blank"
             rel="noopener noreferrer"
-            className="font-semibold text-[#fe6839] underline decoration-[#fe6839] decoration-2 underline-offset-4 transition-all duration-300 hover:text-[#ff8a6a] hover:decoration-[#ff8a6a]"
+            className="font-semibold text-[#fe6839] underline decoration-[#fe6839] decoration-2 underline-offset-2 transition-all duration-300 hover:text-[#ff8a6a] hover:decoration-[#ff8a6a]"
           >
             &gt; Trust Zone
           </a>
