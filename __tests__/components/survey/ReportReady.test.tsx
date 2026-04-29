@@ -125,7 +125,9 @@ describe("ReportReady", () => {
       vi.runOnlyPendingTimers();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /send invite/i }));
+    // Expand the email form first — it is collapsed by default
+    fireEvent.click(screen.getByRole("button", { name: /send invite by email/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^send invite$/i }));
 
     expect(screen.getByText(/please enter a valid email address/i)).toBeInTheDocument();
   });

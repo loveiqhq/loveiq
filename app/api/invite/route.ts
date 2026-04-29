@@ -13,6 +13,7 @@ const schema = z.object({
   recipientEmail: z.string().email().max(320),
   referrerEmail: z.string().email().max(320).optional(),
   referrerName: z.string().max(100).optional(),
+  personalMessage: z.string().max(1500).optional(),
 });
 
 let _resend: Resend | null = null;
@@ -54,7 +55,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   }
 
-  const { recipientEmail, referrerEmail, referrerName } = parsed.data;
+  const { recipientEmail, referrerEmail, referrerName, personalMessage } = parsed.data;
   const normalizedRecipient = recipientEmail.toLowerCase().trim();
 
   // 4. Build UTM-tagged CTA URL (A/B variant assigned randomly)
@@ -64,7 +65,7 @@ export async function POST(request: Request) {
   const ctaUrl = `${siteUrl}?utm_source=loveiq_email&utm_medium=email&utm_campaign=refer_a_friend&utm_content=version_${variant}&utm_term=report_purchaser`;
 
   // 5. Build email
-  const tpl = inviteEmail({ referrerName, ctaUrl, siteUrl, variant });
+  const tpl = inviteEmail({ referrerName, ctaUrl, siteUrl, variant, personalMessage });
 
   // 6. Send email via Resend + track in DB (after response)
   const resendKey = process.env.RESEND_API_KEY;

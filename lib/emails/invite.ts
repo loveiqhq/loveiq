@@ -1,18 +1,26 @@
 import { EMAIL_FONT, escapeHtml, renderCtaButton, wrapEmailShell } from "@/lib/emails/shared";
+import { SHARE_MESSAGE_BODY } from "@/lib/share-message";
 
 export interface InviteEmailParams {
   ctaUrl: string;
   referrerName?: string | null;
   siteUrl: string;
   variant?: "a" | "b";
+  personalMessage?: string | null;
 }
 
-export function inviteEmail({ ctaUrl, referrerName, siteUrl }: InviteEmailParams) {
+export function inviteEmail({ ctaUrl, referrerName, siteUrl, personalMessage }: InviteEmailParams) {
   const firstName = referrerName?.trim() ? referrerName.trim().split(/\s+/)[0] : null;
   const safeFirstName = firstName ? escapeHtml(firstName) : "A friend";
 
+  const userMessage = personalMessage?.trim() || "";
+  const isCustom = userMessage.length > 0;
+  const bodyMessage = isCustom ? userMessage : SHARE_MESSAGE_BODY;
+  const safeBodyMessage = escapeHtml(bodyMessage).replace(/\n/g, "<br />");
+
   const subject = "Check out LoveIQ - It was super helpful";
-  const previewText = "It gave me real clarity on my intimate patterns, desires, and potentials.";
+  const previewText = bodyMessage.slice(0, 140);
+  const safeCtaUrl = escapeHtml(ctaUrl);
 
   const bodyHtml = `
   <tr>
@@ -23,15 +31,14 @@ export function inviteEmail({ ctaUrl, referrerName, siteUrl }: InviteEmailParams
     </td>
   </tr>
   <tr>
-    <td style="padding:16px 32px 0;">
-      <p style="margin:0 0 16px 0; font-family:${EMAIL_FONT}; font-size:17px; line-height:1.55; color:#000000;">
-        Hi :),
-      </p>
-      <p style="margin:0 0 16px 0; font-family:${EMAIL_FONT}; font-size:17px; line-height:1.55; color:#000000;">
-        I took the LoveIQ test and it <strong style="font-weight:700;">gave me real clarity on my intimate patterns, desires, and potentials</strong>. It is much better than I expected.
-      </p>
-      <p style="margin:0 0 24px 0; font-family:${EMAIL_FONT}; font-size:17px; line-height:1.55; color:#000000;">
-        You should try it. <a href="${escapeHtml(ctaUrl)}" target="_blank" style="color:#1a73e8; text-decoration:underline;">[Link]</a>
+    <td style="padding:16px 32px 8px;">
+      <p style="margin:0; font-family:${EMAIL_FONT}; font-size:17px; line-height:1.55; color:#000000; white-space:pre-wrap;">${safeBodyMessage}</p>
+    </td>
+  </tr>
+  <tr>
+    <td style="padding:8px 32px 16px;">
+      <p style="margin:0; font-family:${EMAIL_FONT}; font-size:17px; line-height:1.55; color:#000000; word-break:break-all;">
+        <a href="${safeCtaUrl}" target="_blank" style="color:#1a73e8; text-decoration:underline;">${safeCtaUrl}</a>
       </p>
     </td>
   </tr>
@@ -56,13 +63,9 @@ export function inviteEmail({ ctaUrl, referrerName, siteUrl }: InviteEmailParams
   const text = [
     "You should definitely try LoveIQ",
     "",
-    "Hi :),",
+    bodyMessage,
     "",
-    "I took the LoveIQ test and it gave me real clarity on my intimate patterns, desires, and potentials. It is much better than I expected.",
-    "",
-    `You should try it. ${ctaUrl}`,
-    "",
-    `Check out LoveIQ: ${ctaUrl}`,
+    ctaUrl,
     "",
     "With kindness,",
     `${firstName || "A friend"} sent via LoveIQ`,

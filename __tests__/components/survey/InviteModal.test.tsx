@@ -53,6 +53,23 @@ describe("InviteModal", () => {
     cleanup();
   });
 
+  it("hides the email form by default and reveals it when the Email tile is clicked", () => {
+    render(
+      <InviteModal open onClose={vi.fn()} referrerEmail="alice@example.com" referrerName="Alice" />
+    );
+
+    act(() => {
+      vi.runOnlyPendingTimers();
+    });
+
+    const wrapper = document.getElementById("invite-email-form");
+    expect(wrapper).toHaveAttribute("aria-hidden", "true");
+
+    fireEvent.click(screen.getByRole("button", { name: /send invite by email/i }));
+
+    expect(document.getElementById("invite-email-form")).toHaveAttribute("aria-hidden", "false");
+  });
+
   it("shows the success state after a successful invite submission", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
@@ -68,11 +85,13 @@ describe("InviteModal", () => {
       vi.runOnlyPendingTimers();
     });
 
+    fireEvent.click(screen.getByRole("button", { name: /send invite by email/i }));
+
     fireEvent.change(screen.getByLabelText(/friend.?s email/i), {
       target: { value: "friend@example.com" },
     });
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /send invite/i }));
+      fireEvent.click(screen.getByRole("button", { name: /^send invite$/i }));
       await Promise.resolve();
       await Promise.resolve();
     });

@@ -39,6 +39,8 @@ supabase/.temp/
 # Data source files
 *.csv
 *.docx
+*.xlsx
+*.xls
 !.source-artifacts/
 !.source-artifacts/**/*.docx
 !.source-artifacts/**/*.xlsm
