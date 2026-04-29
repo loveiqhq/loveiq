@@ -435,6 +435,9 @@ const ReportExperience: FC<ReportExperienceProps> = ({
       tabIndex={-1}
       className="report-page"
       style={getReportThemeStyle(theme)}
+      onCopy={(e) => e.preventDefault()}
+      onContextMenu={(e) => e.preventDefault()}
+      onDragStart={(e) => e.preventDefault()}
     >
       {devParam && (
         <div
