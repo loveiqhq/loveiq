@@ -2278,7 +2278,7 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 .report-premium-overlay__copy strong {
-  color: #fe6839;
+  color: var(--report-accent, #fe6839);
   font-weight: 600;
 }
 
