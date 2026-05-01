@@ -19,7 +19,7 @@ import {
 import type { ReportPriceQuoteSnapshot } from "@/lib/pricing/reportPricing";
 import PricingTestimonialsCarousel from "./PricingTestimonialsCarousel";
 import { getReportTheme, getReportThemeStyle } from "./reportTheme";
-import { doesAccessPlanCover, type ReportAccessPlan } from "@/lib/report/access";
+import { isPlanOwnedForArchetype, type ReportAccessPlan } from "@/lib/report/access";
 
 interface Props {
   accessPlan?: ReportAccessPlan;
@@ -27,6 +27,8 @@ interface Props {
   open: boolean;
   onClose: () => void;
   onUnlock: (plan: ReportPurchasePlanId, archetype?: string | null) => void;
+  /** Archetypes the user has individually unlocked at full_report tier. */
+  unlockedArchetypes?: ReadonlyArray<string>;
   quotes: Record<ReportPurchasePlanId, ReportPriceQuoteSnapshot> | null;
   returnFocusRef?: MutableRefObject<HTMLElement | null>;
   targetArchetype?: string | null;
@@ -121,8 +123,14 @@ const ReportPricingModal: FC<Props> = ({
   quotes,
   returnFocusRef,
   targetArchetype = null,
+  unlockedArchetypes,
   variant = "default",
 }) => {
+  // The modal is scoped to `targetArchetype` when set (non-primary tile clicked
+  // in "Probability of Other Archetypes"); otherwise it's about the primary.
+  const isPrimaryScope = targetArchetype === null;
+  const isUnlockedNonPrimary =
+    !isPrimaryScope && !!targetArchetype && !!unlockedArchetypes?.includes(targetArchetype);
   const dialogRef = useRef<HTMLDivElement>(null);
   const scrollRegionRef = useRef<HTMLDivElement>(null);
   const didOpenRef = useRef(false);
@@ -373,7 +381,12 @@ const ReportPricingModal: FC<Props> = ({
                     targetArchetype && card.plan === "full_report"
                       ? `${targetArchetype} report`
                       : card.title;
-                  const isOwned = doesAccessPlanCover(accessPlan, card.plan);
+                  const isOwned = isPlanOwnedForArchetype({
+                    accessPlan,
+                    isPrimary: isPrimaryScope,
+                    isUnlockedNonPrimary,
+                    targetPlan: card.plan,
+                  });
 
                   return (
                     <article

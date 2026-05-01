@@ -733,6 +733,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
         quotes={pricingQuotes}
         returnFocusRef={mainContentRef}
         targetArchetype={pricingTargetArchetype}
+        unlockedArchetypes={Array.from(unlockedArchetypes)}
         variant={pricingVariant}
       />
       {viewMode === "owner" && ownerToken ? (

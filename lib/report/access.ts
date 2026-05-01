@@ -59,6 +59,43 @@ export function doesAccessPlanCover(
   return getPlanPriority(accessPlan) >= getPlanPriority(targetPlan);
 }
 
+/**
+ * Per-archetype ownership for the pricing modal.
+ *
+ * The pricing modal can open scoped to a specific archetype (e.g. when a user
+ * clicks rank 2 in "Probability of Other Archetypes"). Ownership state has to
+ * be evaluated *for that archetype*, not for the user globally:
+ *
+ *   - `all_reports` covers every archetype, every tier.
+ *   - For the **primary** archetype, the user's `accessPlan` (highest tier
+ *     across all payments) is the source of truth — same logic as
+ *     `doesAccessPlanCover`.
+ *   - For a **non-primary** archetype, only `full_report` purchases are
+ *     tracked (`personal_report.unlocked_archetypes`). If the archetype is in
+ *     that list, both `essentials` and `full_report` cards are owned. If
+ *     not, neither is owned for that archetype — we never assume a primary
+ *     plan carries over.
+ */
+export function isPlanOwnedForArchetype({
+  accessPlan,
+  isPrimary,
+  isUnlockedNonPrimary,
+  targetPlan,
+}: {
+  accessPlan: ReportAccessPlan;
+  isPrimary: boolean;
+  isUnlockedNonPrimary: boolean;
+  targetPlan: ReportPurchasePlanId;
+}): boolean {
+  if (accessPlan === "all_reports") return true;
+  if (targetPlan === "all_reports") return false;
+  if (isPrimary) return doesAccessPlanCover(accessPlan, targetPlan);
+  if (targetPlan === "full_report" || targetPlan === "essentials") {
+    return isUnlockedNonPrimary;
+  }
+  return false;
+}
+
 export function isSectionIncludedInEssentials(sectionId: string) {
   return ESSENTIALS_SECTION_SET.has(sectionId);
 }
