@@ -46,6 +46,19 @@ function getPlanPriority(plan: ReportPurchasePlanId) {
   }
 }
 
+/**
+ * Whether the user's current `accessPlan` already covers `targetPlan`. Used by
+ * the pricing modal to show an "owned" pill instead of a buy button when the
+ * user is already entitled (e.g. full_report owns essentials).
+ */
+export function doesAccessPlanCover(
+  accessPlan: ReportAccessPlan,
+  targetPlan: ReportPurchasePlanId
+): boolean {
+  if (!accessPlan) return false;
+  return getPlanPriority(accessPlan) >= getPlanPriority(targetPlan);
+}
+
 export function isSectionIncludedInEssentials(sectionId: string) {
   return ESSENTIALS_SECTION_SET.has(sectionId);
 }

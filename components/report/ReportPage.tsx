@@ -725,6 +725,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
         </div>
       </div>
       <ReportPricingModal
+        accessPlan={accessPlan}
         archetype={primaryArchetype}
         open={isPricingModalOpen}
         onClose={onClosePricingModal}

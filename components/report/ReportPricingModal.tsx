@@ -19,8 +19,10 @@ import {
 import type { ReportPriceQuoteSnapshot } from "@/lib/pricing/reportPricing";
 import PricingTestimonialsCarousel from "./PricingTestimonialsCarousel";
 import { getReportTheme, getReportThemeStyle } from "./reportTheme";
+import { doesAccessPlanCover, type ReportAccessPlan } from "@/lib/report/access";
 
 interface Props {
+  accessPlan?: ReportAccessPlan;
   archetype: string;
   open: boolean;
   onClose: () => void;
@@ -111,6 +113,7 @@ function getCardPricing(
 }
 
 const ReportPricingModal: FC<Props> = ({
+  accessPlan = null,
   archetype,
   open,
   onClose,
@@ -370,6 +373,7 @@ const ReportPricingModal: FC<Props> = ({
                     targetArchetype && card.plan === "full_report"
                       ? `${targetArchetype} report`
                       : card.title;
+                  const isOwned = doesAccessPlanCover(accessPlan, card.plan);
 
                   return (
                     <article
@@ -383,6 +387,7 @@ const ReportPricingModal: FC<Props> = ({
                         card.badge || card.featuredLabel ? "report-pricing-card--with-badge" : "",
                         card.tone === "highlight" ? "report-pricing-card--highlight" : "",
                         card.plan === "essentials" ? "report-pricing-card--essentials" : "",
+                        isOwned ? "report-pricing-card--owned" : "",
                       ]
                         .filter(Boolean)
                         .join(" ")}
@@ -459,13 +464,21 @@ const ReportPricingModal: FC<Props> = ({
                         className={[
                           "report-pricing-card__cta",
                           card.tone === "highlight" ? "report-pricing-card__cta--primary" : "",
+                          isOwned ? "report-pricing-card__cta--owned" : "",
                         ]
                           .filter(Boolean)
                           .join(" ")}
-                        disabled={!pricing.available}
-                        onClick={() => onUnlock(card.plan, targetArchetype ?? null)}
+                        disabled={isOwned || !pricing.available}
+                        aria-disabled={isOwned || !pricing.available}
+                        onClick={
+                          isOwned ? undefined : () => onUnlock(card.plan, targetArchetype ?? null)
+                        }
                       >
-                        {pricing.available ? card.ctaLabel : "Pricing unavailable"}
+                        {isOwned
+                          ? "Your current plan"
+                          : pricing.available
+                            ? card.ctaLabel
+                            : "Pricing unavailable"}
                       </button>
 
                       <ul className="report-pricing-card__features">

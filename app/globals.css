@@ -3284,6 +3284,35 @@ input.autofill-dark:-internal-autofill-previewed {
   background: linear-gradient(180deg, #ff845e 0%, #ff6a3d 100%);
 }
 
+/* Owned tier — replaces the buy CTA with a quiet "Your current plan" pill.
+   Disabled, no hover lift, no orange. Keeps full width so the price block
+   still aligns with sibling cards on desktop and mobile. */
+.report-pricing-card__cta--owned,
+.report-pricing-card__cta--owned.report-pricing-card__cta--primary {
+  cursor: default;
+  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.78);
+  box-shadow: none;
+  text-shadow: none;
+}
+
+.report-pricing-card__cta--owned:hover,
+.report-pricing-card__cta--owned.report-pricing-card__cta--primary:hover {
+  background: rgba(255, 255, 255, 0.06);
+  transform: none;
+  filter: none;
+}
+
+.report-pricing-card--owned {
+  opacity: 0.86;
+}
+
+.report-pricing-card--owned .report-pricing-card__price strong,
+.report-pricing-card--owned .report-pricing-card__strike {
+  text-decoration-color: rgba(255, 255, 255, 0.3);
+}
+
 .report-pricing-card__features {
   display: grid;
   gap: 1rem;
