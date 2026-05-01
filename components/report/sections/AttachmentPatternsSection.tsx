@@ -152,7 +152,7 @@ const AttachmentPatternsSection: FC<Props> = ({
         </section>
       ) : null}
 
-      {normalizedArchetypeHtml ? (
+      {normalizedArchetypeHtml || (isPremium && !unlocked) ? (
         <div className={archetypeContentStackClassName}>
           {headingBlock ? (
             <div
@@ -171,12 +171,12 @@ const AttachmentPatternsSection: FC<Props> = ({
                   onUnlock={handleUnlock}
                 />
               </div>
-            ) : (
+            ) : normalizedArchetypeHtml ? (
               <div
                 className="report-prose"
                 dangerouslySetInnerHTML={{ __html: normalizedArchetypeHtml }}
               />
-            )}
+            ) : null}
           </div>
         </div>
       ) : null}

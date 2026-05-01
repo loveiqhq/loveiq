@@ -90,7 +90,7 @@ const DimensionSection: FC<Props> = ({
         <div className="report-prose" dangerouslySetInnerHTML={{ __html: panelHtml }} />
       ) : null}
 
-      {normalizedArchetypeHtml ? (
+      {normalizedArchetypeHtml || (isPremium && !unlocked) ? (
         <div className={archetypeContentStackClassName}>
           {headingBlock ? (
             <div
@@ -109,12 +109,12 @@ const DimensionSection: FC<Props> = ({
                   onUnlock={handleUnlock}
                 />
               </div>
-            ) : (
+            ) : normalizedArchetypeHtml ? (
               <div
                 className="report-prose"
                 dangerouslySetInnerHTML={{ __html: normalizedArchetypeHtml }}
               />
-            )}
+            ) : null}
           </div>
         </div>
       ) : null}
