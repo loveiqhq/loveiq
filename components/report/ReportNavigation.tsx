@@ -174,15 +174,23 @@ const ReportNavigation: FC<Props> = ({
         >
           <div className="report-mobile-topbar__brand">
             <Image
-              src="/favicon.svg"
+              src="/images/loveiq-mark.svg"
               alt=""
               aria-hidden="true"
               className="report-mobile-topbar__logo"
               height={32}
-              width={32}
+              width={36}
               unoptimized
             />
-            <span className="report-mobile-topbar__wordmark">LoveIQ Report</span>
+            <span className="report-mobile-topbar__wordmark" aria-label="LoveIQ Report">
+              <span aria-hidden="true" className="report-mobile-topbar__love">
+                Love
+              </span>
+              <span aria-hidden="true" className="report-mobile-topbar__iq">
+                IQ
+              </span>
+              <span aria-hidden="true">&nbsp;Report</span>
+            </span>
           </div>
           <button
             ref={browseButtonRef}
@@ -229,10 +237,18 @@ const ReportNavigation: FC<Props> = ({
                     aria-hidden="true"
                     className="report-chapter-panel__logo"
                     height={40}
-                    src="/images/LoveiqLogo.svg"
-                    width={40}
+                    src="/images/loveiq-mark.svg"
+                    width={45}
                   />
-                  <span className="report-chapter-panel__brand-text">LoveIQ Report</span>
+                  <span className="report-chapter-panel__brand-text" aria-label="LoveIQ Report">
+                    <span aria-hidden="true" className="report-chapter-panel__love">
+                      Love
+                    </span>
+                    <span aria-hidden="true" className="report-chapter-panel__iq">
+                      IQ
+                    </span>
+                    <span aria-hidden="true">&nbsp;Report</span>
+                  </span>
                 </div>
                 <button
                   ref={closeButtonRef}
@@ -324,14 +340,22 @@ const ReportNavigation: FC<Props> = ({
           {/* Logo */}
           <div className="report-sidebar__brand">
             <Image
-              alt="LoveIQ"
+              alt=""
               className="report-sidebar__logo"
               height={40}
               priority
-              src="/images/LoveiqLogo.svg"
-              width={40}
+              src="/images/loveiq-mark.svg"
+              width={45}
             />
-            <span className="report-sidebar__brand-text">LoveIQ Report</span>
+            <span className="report-sidebar__brand-text" aria-label="LoveIQ Report">
+              <span aria-hidden="true" className="report-sidebar__love">
+                Love
+              </span>
+              <span aria-hidden="true" className="report-sidebar__iq">
+                IQ
+              </span>
+              <span aria-hidden="true">&nbsp;Report</span>
+            </span>
           </div>
 
           {/* Action buttons */}

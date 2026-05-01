@@ -33,9 +33,10 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("NavSection", () => {
-  it("renders LoveIQ logo text", () => {
+  it("renders LoveIQ wordmark", () => {
     render(<NavSection />);
-    expect(screen.getByText("LoveIQ")).toBeInTheDocument();
+    // Wordmark uses aria-label since "Love" and "IQ" are styled as separate spans
+    expect(screen.getAllByLabelText("LoveIQ").length).toBeGreaterThan(0);
   });
 
   it("renders hamburger button in DOM", () => {

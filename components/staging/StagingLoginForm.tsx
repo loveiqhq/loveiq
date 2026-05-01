@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getCsrfToken } from "@/lib/csrf-client";
+import { LoveIQMark, LoveIQWordmark } from "@/components/branding/LoveIQBrand";
 
 function getSafeNextPath(value: string | null) {
   if (!value || !value.startsWith("/") || value.startsWith("//")) {
@@ -52,7 +53,8 @@ export default function StagingLoginForm() {
       <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-surface p-8 shadow-card">
         <div className="mb-8 text-center">
           <div className="mb-3 flex items-center justify-center gap-2">
-            <span className="font-serif text-2xl font-semibold text-text-primary">LoveIQ</span>
+            <LoveIQMark className="h-7 w-8 shrink-0" width={32} height={28} />
+            <LoveIQWordmark className="text-2xl" />
             <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
               Staging
             </span>

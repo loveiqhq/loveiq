@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useRef } from "react";
 import type { FC } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { trackStartSurvey } from "@/lib/analytics";
+import { LoveIQMark, LoveIQWordmark } from "@/components/branding/LoveIQBrand";
 
 const navLinks = [
   { label: "Home", href: "/" },
@@ -183,15 +183,8 @@ const GlossaryNavSection: FC = () => {
           <nav className="relative mx-auto flex w-full items-center justify-between gap-2 rounded-[999px] bg-gradient-to-r from-[#1b0f2a] via-[#120a20] to-[#1b0f2a] px-3 py-2 shadow-[0_25px_80px_rgba(0,0,0,0.55)] backdrop-blur sm:gap-5 sm:pl-6 sm:pr-2 sm:py-[6px] sm:max-w-[1200px]">
             <div className="flex flex-1 items-center gap-2">
               <Link href="/" className="flex items-center gap-2">
-                <Image
-                  src="/favicon.svg"
-                  alt=""
-                  width={28}
-                  height={28}
-                  unoptimized
-                  className="h-7 w-7 rounded-full shadow-[0_8px_18px_rgba(0,0,0,0.28)]"
-                />
-                <span className="font-serif text-xl font-semibold text-white">LoveIQ</span>
+                <LoveIQMark className="h-7 w-8 shrink-0" width={32} height={28} priority />
+                <LoveIQWordmark className="text-xl" />
               </Link>
             </div>
 

@@ -37,7 +37,7 @@ describe("StagingLoginForm", () => {
 
   it("renders LoveIQ branding and staging label", () => {
     render(<StagingLoginForm />);
-    expect(screen.getByText("LoveIQ")).toBeInTheDocument();
+    expect(screen.getByLabelText("LoveIQ")).toBeInTheDocument();
     expect(screen.getByText("Staging")).toBeInTheDocument();
     expect(screen.getByText(/developer access only/i)).toBeInTheDocument();
   });

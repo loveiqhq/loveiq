@@ -1,6 +1,5 @@
 export const EMAIL_FONT =
   "'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif";
-const SHOW_EMAIL_SOCIAL_ICONS = false;
 
 export function buildArchetypeReportUrl(reportUrl: string, archetypeSlug: string | null): string {
   if (!archetypeSlug) return reportUrl;
@@ -16,16 +15,18 @@ export { escapeHtml };
 
 export function renderBrandHeader(siteUrl: string): string {
   const logoUrl = `${siteUrl}/apple-touch-icon.png`;
+  // "IQ" gradient: clients without -webkit-text-fill-color (e.g. Outlook desktop)
+  // fall back to the solid `color` value.
   return `
   <tr>
     <td style="padding:24px 32px 8px;">
       <table role="presentation" cellpadding="0" cellspacing="0">
         <tr>
-          <td style="width:32px; height:32px; vertical-align:middle;">
-            <img src="${logoUrl}" alt="LoveIQ" width="32" height="32" style="display:block; border-radius:8px;" />
+          <td style="width:36px; height:32px; vertical-align:middle;">
+            <img src="${logoUrl}" alt="LoveIQ" width="36" height="32" style="display:block; border-radius:8px;" />
           </td>
-          <td style="padding-left:12px; font-family:Georgia,'Times New Roman',serif; font-size:18px; font-weight:600; color:#111111; letter-spacing:-0.2px; vertical-align:middle;">
-            LoveIQ
+          <td style="padding-left:12px; font-family:Georgia,'Times New Roman',serif; font-size:20px; font-weight:700; letter-spacing:-0.2px; vertical-align:middle; line-height:1;">
+            <span style="color:#111111;">Love</span><span style="color:#C167CF; background:linear-gradient(105deg,#D05976 20.51%,#C167CF 48.14%,#8887F6 79.16%); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;">IQ</span>
           </td>
         </tr>
       </table>
@@ -33,29 +34,11 @@ export function renderBrandHeader(siteUrl: string): string {
   </tr>`;
 }
 
-export function renderBrandFooter(siteUrl: string): string {
-  const site = siteUrl.replace(/\/$/, "");
-  const socialIconsRow = SHOW_EMAIL_SOCIAL_ICONS
-    ? `
-        <tr>
-          <td align="center" style="padding-bottom:12px;">
-            <a href="https://www.instagram.com/loveiq.org" target="_blank" style="display:inline-block; padding:0 8px; text-decoration:none;">
-              <img src="${site}/emails/icon-instagram.png" alt="Instagram" width="26" height="26" style="display:inline-block; border:0;" />
-            </a>
-            <a href="https://www.linkedin.com/company/loveiq" target="_blank" style="display:inline-block; padding:0 8px; text-decoration:none;">
-              <img src="${site}/emails/icon-linkedin.png" alt="LinkedIn" width="26" height="26" style="display:inline-block; border:0;" />
-            </a>
-            <a href="${site}" target="_blank" style="display:inline-block; padding:0 8px; text-decoration:none;">
-              <img src="${site}/emails/icon-web.png" alt="loveiq.org" width="26" height="26" style="display:inline-block; border:0;" />
-            </a>
-          </td>
-        </tr>`
-    : "";
+export function renderBrandFooter(): string {
   return `
   <tr>
     <td style="padding:24px 32px 32px; background-color:#f7f7f8; border-top:1px solid #eeeef1;">
       <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
-        ${socialIconsRow}
         <tr>
           <td align="center" style="font-family:${EMAIL_FONT}; font-size:13px; color:#111111; padding-bottom:4px;">
             <span style="font-weight:400;">Copyright © 2026</span>
@@ -127,7 +110,7 @@ ${preview}
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px; background-color:#ffffff; border-radius:8px; overflow:hidden;">
         ${renderBrandHeader(siteUrl)}
         ${bodyHtml}
-        ${renderBrandFooter(siteUrl)}
+        ${renderBrandFooter()}
       </table>
     </td>
   </tr>

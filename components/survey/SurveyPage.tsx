@@ -679,12 +679,12 @@ const SlideScreen: FC<{
         >
           <div className="flex items-center gap-4">
             <Image
-              src="/favicon.svg"
+              src="/images/loveiq-mark.svg"
               alt=""
-              width={50}
+              width={57}
               height={50}
               unoptimized
-              className="h-[42px] w-[42px] rounded-full sm:h-[50px] sm:w-[50px]"
+              className="h-[42px] w-[48px] shrink-0 sm:h-[50px] sm:w-[57px]"
             />
             <span className="text-[12px] font-bold uppercase tracking-[1.6px] text-white/90 sm:text-[16px]">
               Identify Your Sexual Archetype

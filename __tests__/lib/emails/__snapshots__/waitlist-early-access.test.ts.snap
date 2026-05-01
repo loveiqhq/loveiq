@@ -22,11 +22,11 @@ exports[`waitlistEarlyAccessEmail > HTML output matches snapshot 1`] = `
     <td style="padding:24px 32px 8px;">
       <table role="presentation" cellpadding="0" cellspacing="0">
         <tr>
-          <td style="width:32px; height:32px; vertical-align:middle;">
-            <img src="https://loveiq.org/apple-touch-icon.png" alt="LoveIQ" width="32" height="32" style="display:block; border-radius:8px;" />
+          <td style="width:36px; height:32px; vertical-align:middle;">
+            <img src="https://loveiq.org/apple-touch-icon.png" alt="LoveIQ" width="36" height="32" style="display:block; border-radius:8px;" />
           </td>
-          <td style="padding-left:12px; font-family:Georgia,'Times New Roman',serif; font-size:18px; font-weight:600; color:#111111; letter-spacing:-0.2px; vertical-align:middle;">
-            LoveIQ
+          <td style="padding-left:12px; font-family:Georgia,'Times New Roman',serif; font-size:20px; font-weight:700; letter-spacing:-0.2px; vertical-align:middle; line-height:1;">
+            <span style="color:#111111;">Love</span><span style="color:#C167CF; background:linear-gradient(105deg,#D05976 20.51%,#C167CF 48.14%,#8887F6 79.16%); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;">IQ</span>
           </td>
         </tr>
       </table>
@@ -111,7 +111,6 @@ exports[`waitlistEarlyAccessEmail > HTML output matches snapshot 1`] = `
   <tr>
     <td style="padding:24px 32px 32px; background-color:#f7f7f8; border-top:1px solid #eeeef1;">
       <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
-        
         <tr>
           <td align="center" style="font-family:'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; font-size:13px; color:#111111; padding-bottom:4px;">
             <span style="font-weight:400;">Copyright © 2026</span>

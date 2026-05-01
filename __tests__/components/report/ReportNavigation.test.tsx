@@ -20,7 +20,7 @@ describe("ReportNavigation", () => {
 
     render(<ReportNavigation activeSectionId="core_motivation" sections={sections} />);
 
-    expect(screen.getByAltText(/loveiq/i)).toBeInTheDocument();
+    expect(screen.getAllByLabelText(/loveiq report/i).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: /share report/i })[0]).toBeInTheDocument();
     expect(screen.getAllByText(/full report/i).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("navigation")[0]).toBeInTheDocument();

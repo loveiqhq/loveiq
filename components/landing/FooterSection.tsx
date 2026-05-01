@@ -1,6 +1,6 @@
-import Image from "next/image";
 import Link from "next/link";
 import type { FC } from "react";
+import { LoveIQMark, LoveIQWordmark } from "@/components/branding/LoveIQBrand";
 
 const FooterSection: FC = () => {
   return (
@@ -13,16 +13,9 @@ const FooterSection: FC = () => {
           {/* Brand Column */}
           <div className="space-y-4">
             <div className="flex items-center gap-2.5">
-              <Image
-                src="/favicon.svg"
-                alt=""
-                width={28}
-                height={28}
-                unoptimized
-                className="h-7 w-7 rounded-full shadow-[0_8px_18px_rgba(0,0,0,0.28)]"
-              />
-              <h2 id="footer-heading" className="font-serif text-xl font-semibold text-white">
-                LoveIQ
+              <LoveIQMark className="h-7 w-8 shrink-0" width={32} height={28} />
+              <h2 id="footer-heading">
+                <LoveIQWordmark className="text-xl" />
               </h2>
             </div>
             <p className="max-w-xs text-sm leading-relaxed text-[#9CA3AF]">

@@ -3051,10 +3051,9 @@ input.autofill-dark:-internal-autofill-previewed {
     padding: 0.5rem 0;
   }
 
-  .report-pricing-modal__testimonial {
-    gap: 1.75rem;
-    margin-top: 3rem;
-    padding: 1.75rem 1.5rem;
+  .report-pricing-modal__testimonials {
+    margin-top: 2.25rem;
+    padding: 1.75rem 1.25rem 2rem;
   }
 }
 
@@ -3402,100 +3401,254 @@ input.autofill-dark:-internal-autofill-previewed {
   background-image: url("/payment-logos/amex.svg");
 }
 
-.report-pricing-modal__testimonial {
-  display: grid;
-  gap: 1.5rem;
-  width: min(100%, 42rem);
-  margin: 2rem auto 0;
-  padding: clamp(1.5rem, 4vw, 2.5rem);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 16px;
-  background: #0c0614;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  box-shadow:
-    0 20px 25px -5px rgba(0, 0, 0, 0.1),
-    0 8px 10px -6px rgba(0, 0, 0, 0.1);
-}
-
-.report-pricing-modal__stars {
+.report-pricing-modal__testimonials {
   display: flex;
-  gap: 0.375rem;
-  color: #fe6839;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 1.25rem;
+  width: calc(100% + 2rem);
+  margin: 2.5rem -1rem -2rem;
+  padding: 2rem 2rem 2.5rem;
+  background: #120a1c;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
 }
 
-.report-pricing-modal__stars svg {
-  width: 1rem;
-  height: 1rem;
+.report-pricing-modal__testimonials-viewport {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
 }
 
-.report-pricing-modal__quote {
+.report-pricing-modal__testimonials-viewport::before,
+.report-pricing-modal__testimonials-viewport::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 32px;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.report-pricing-modal__testimonials-viewport::before {
+  left: 0;
+  background: linear-gradient(to right, #120a1c, transparent);
+}
+
+.report-pricing-modal__testimonials-viewport::after {
+  right: 0;
+  background: linear-gradient(to left, #120a1c, transparent);
+}
+
+.report-pricing-modal__testimonials-track {
+  display: flex;
+  align-items: stretch;
+  width: max-content;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: pan-y;
+  will-change: transform;
+}
+
+.report-pricing-modal__testimonials-track:active {
+  cursor: grabbing;
+}
+
+.report-pricing-modal__testimonial-card {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 10px 10px 20px;
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  background: #150a22;
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  box-shadow:
+    0 10px 15px -3px rgba(0, 0, 0, 0.3),
+    0 4px 6px -4px rgba(0, 0, 0, 0.3);
+  transform: translateY(0);
+  transform-origin: center;
+  will-change: transform, box-shadow;
+  transition:
+    transform 0.55s cubic-bezier(0.25, 0.4, 0.25, 1),
+    box-shadow 0.55s cubic-bezier(0.25, 0.4, 0.25, 1),
+    border-color 0.4s ease-out;
+}
+
+@media (hover: hover) {
+  .report-pricing-modal__testimonial-card:hover {
+    transform: translateY(-4px);
+    border-color: rgba(254, 104, 57, 0.22);
+    box-shadow:
+      0 22px 38px -10px rgba(0, 0, 0, 0.55),
+      0 12px 22px -8px rgba(254, 104, 57, 0.18);
+  }
+}
+
+.report-pricing-modal__testimonial-head {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  padding: 0.625rem 0.625rem 0;
+}
+
+.report-pricing-modal__testimonial-avatar {
+  flex-shrink: 0;
+  width: 82px;
+  height: 82px;
+  overflow: hidden;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.report-pricing-modal__testimonial-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  -webkit-user-drag: none;
+}
+
+.report-pricing-modal__testimonial-id {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.report-pricing-modal__testimonial-name {
   margin: 0;
-  color: #9ca3af;
-  font-family: var(--font-serif);
-  font-size: clamp(1.05rem, 1.6vw, 1.25rem);
-  font-style: normal;
+  color: #fff;
+  font-family: var(--font-sans);
+  font-size: 1.125rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.report-pricing-modal__testimonial-role {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.85);
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
   font-weight: 400;
   line-height: 1.4;
 }
 
-.report-pricing-modal__quote em {
+.report-pricing-modal__testimonial-stars {
+  display: flex;
+  flex-shrink: 0;
+  gap: 4px;
+  color: #fe6839;
+}
+
+.report-pricing-modal__testimonial-stars svg {
+  width: 18px;
+  height: 18px;
+}
+
+.report-pricing-modal__testimonial-quote {
+  margin: 0;
+  padding: 0.5rem 0.625rem 0;
+  color: #d1d5db;
+  font-family: var(--font-serif);
+  font-size: 1.125rem;
+  font-style: italic;
+  font-weight: 400;
+  line-height: 1.6;
+}
+
+.report-pricing-modal__testimonial-quote em {
   color: #fff;
   font-family: var(--font-serif);
   font-style: italic;
-  font-weight: 500;
+  font-weight: 700;
 }
 
-.report-pricing-modal__person {
+.report-pricing-modal__testimonial-controls {
   display: flex;
   align-items: center;
-  gap: 1rem;
-  padding-top: 0.5rem;
+  justify-content: center;
+  gap: 1.25rem;
 }
 
-.report-pricing-modal__avatar {
-  flex-shrink: 0;
-  width: 2.5rem;
-  height: 2.5rem;
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 9999px;
-  box-shadow:
-    0 10px 15px -3px rgba(0, 0, 0, 0.1),
-    0 4px 6px -4px rgba(0, 0, 0, 0.1);
-}
-
-.report-pricing-modal__avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.report-pricing-modal__author-copy {
-  display: grid;
-  gap: 0.125rem;
-}
-
-.report-pricing-modal__author-copy strong {
+.report-pricing-modal__testimonial-arrow {
   display: inline-flex;
-  gap: 0.3rem;
-  align-items: baseline;
+  align-items: center;
+  justify-content: center;
+  width: 2.625rem;
+  height: 2.625rem;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  background: #1e102e;
   color: #fff;
-  font-size: 0.875rem;
-  font-weight: 500;
-  line-height: 1.25;
+  cursor: pointer;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    transform 0.15s ease;
 }
 
-.report-pricing-modal__author-copy strong span {
-  color: #6b7280;
-  font-weight: 300;
+.report-pricing-modal__testimonial-arrow:hover {
+  background: #2a1840;
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
-.report-pricing-modal__author-copy em {
-  color: #9ca3af;
-  font-size: 0.75rem;
-  font-style: normal;
-  line-height: 1.3;
+.report-pricing-modal__testimonial-arrow:active {
+  transform: scale(0.95);
+}
+
+.report-pricing-modal__testimonial-arrow:focus-visible {
+  outline: 2px solid #fe6839;
+  outline-offset: 2px;
+}
+
+.report-pricing-modal__testimonial-dots {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.report-pricing-modal__testimonial-dot {
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  border: none;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+  transition:
+    background-color 0.3s ease,
+    transform 0.3s ease;
+}
+
+.report-pricing-modal__testimonial-dot:hover {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.report-pricing-modal__testimonial-dot.is-active {
+  background: #fe6839;
+  transform: scale(1.15);
+}
+
+.report-pricing-modal__testimonial-dot:focus-visible {
+  outline: 2px solid #fe6839;
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .report-pricing-modal__testimonials-track {
+    transition: none !important;
+  }
+
+  .report-pricing-modal__testimonial-arrow,
+  .report-pricing-modal__testimonial-dot {
+    transition: none;
+  }
 }
 
 @media (min-width: 960px) {
@@ -3760,16 +3913,15 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 .report-mobile-topbar__logo {
-  width: 32px;
+  width: 36px;
   height: 32px;
-  border-radius: 9999px;
   flex-shrink: 0;
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.28);
 }
 
 .report-mobile-topbar__wordmark {
   color: #fff;
   font-family: var(--font-serif);
+  font-weight: 700;
   font-size: 18px;
   line-height: 24px;
   letter-spacing: -0.3px;
@@ -3879,15 +4031,15 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 .report-chapter-panel__logo {
-  width: 40px;
+  width: 45px;
   height: 40px;
-  border-radius: 12px;
   flex-shrink: 0;
 }
 
 .report-chapter-panel__brand-text {
   color: #fff;
   font-family: var(--font-serif);
+  font-weight: 700;
   font-size: 24px;
   line-height: 32px;
   letter-spacing: -0.6px;
@@ -3998,19 +4150,35 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 .report-sidebar__logo {
-  width: 40px;
+  width: 45px;
   height: 40px;
-  border-radius: 12px;
   flex-shrink: 0;
 }
 
 .report-sidebar__brand-text {
   color: #fff;
   font-family: var(--font-serif);
+  font-weight: 700;
   font-size: 24px;
   line-height: 32px;
   letter-spacing: -0.6px;
   white-space: nowrap;
+}
+
+.report-mobile-topbar__love,
+.report-chapter-panel__love,
+.report-sidebar__love {
+  color: #fff;
+}
+
+.report-mobile-topbar__iq,
+.report-chapter-panel__iq,
+.report-sidebar__iq {
+  background: linear-gradient(105deg, #d05976 20.51%, #c167cf 48.14%, #8887f6 79.16%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
 }
 
 /* Action buttons */
@@ -5862,16 +6030,29 @@ input.autofill-dark:-internal-autofill-previewed {
   gap: 8px;
 }
 
-.report-footer__heart {
-  width: 20px;
-  height: 20px;
-  color: rgba(255, 255, 255, 0.5);
+.report-footer__mark {
+  width: 28px;
+  height: auto;
+  flex-shrink: 0;
 }
 
 .report-footer__logo {
   font-family: var(--font-serif);
+  font-weight: 700;
   font-size: 20px;
+  line-height: 1;
+}
+
+.report-footer__logo-love {
   color: rgba(255, 255, 255, 0.7);
+}
+
+.report-footer__logo-iq {
+  background: linear-gradient(105deg, #d05976 20.51%, #c167cf 48.14%, #8887f6 79.16%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
 }
 
 .report-footer__disclaimer {
@@ -6531,34 +6712,77 @@ input.autofill-dark:-internal-autofill-previewed {
     width: 4.99rem;
   }
 
-  .report-pricing-modal__testimonial {
+  .report-pricing-modal__testimonials {
     width: 100%;
-    margin-top: 1.4rem;
-    padding: 1.2rem 1rem;
-    gap: 0.7rem;
+    margin: 1.6rem 0 0;
+    padding: 1.5rem 0.75rem 1.75rem;
   }
 
-  .report-pricing-modal__avatar {
-    width: 3.2rem;
-    height: 3.2rem;
+  .report-pricing-modal__testimonials-viewport::before,
+  .report-pricing-modal__testimonials-viewport::after {
+    width: 16px;
   }
 
-  .report-pricing-modal__stars svg {
-    width: 0.95rem;
-    height: 0.95rem;
+  .report-pricing-modal__testimonial-card {
+    gap: 0.875rem;
+    padding: 0.875rem 0.875rem 1.125rem;
+    border-radius: 20px;
   }
 
-  .report-pricing-modal__quote {
-    font-size: 0.98rem;
-    line-height: 1.44;
+  .report-pricing-modal__testimonial-head {
+    flex-wrap: wrap;
+    gap: 0.625rem 0.875rem;
+    align-items: center;
+    padding: 0.25rem 0.125rem 0;
   }
 
-  .report-pricing-modal__author-copy strong {
-    font-size: 0.92rem;
+  .report-pricing-modal__testimonial-avatar {
+    width: 56px;
+    height: 56px;
   }
 
-  .report-pricing-modal__author-copy em {
-    font-size: 0.74rem;
+  .report-pricing-modal__testimonial-id {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .report-pricing-modal__testimonial-name {
+    font-size: 0.9375rem;
+    line-height: 1.3;
+  }
+
+  .report-pricing-modal__testimonial-role {
+    font-size: 0.8125rem;
+    line-height: 1.3;
+  }
+
+  .report-pricing-modal__testimonial-stars {
+    flex: 1 0 100%;
+    justify-content: flex-start;
+    gap: 3px;
+    margin-top: 0.125rem;
+  }
+
+  .report-pricing-modal__testimonial-stars svg {
+    width: 15px;
+    height: 15px;
+  }
+
+  .report-pricing-modal__testimonial-quote {
+    padding: 0 0.125rem;
+    font-size: 0.9375rem;
+    line-height: 1.55;
+  }
+
+  .report-pricing-modal__testimonial-controls {
+    gap: 0.875rem;
+    margin-top: 0.75rem;
+  }
+
+  .report-pricing-modal__testimonial-arrow {
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 12px;
   }
 
   .report-themed-block__preview--practice .report-premium-overlay {

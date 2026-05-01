@@ -1,19 +1,25 @@
 import type { FC } from "react";
+import Image from "next/image";
 
 const ReportFooter: FC = () => (
   <footer className="report-footer">
     <div className="report-footer__brand">
-      <svg
-        className="report-footer__heart"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.4"
-        aria-hidden="true"
-      >
-        <path d="M12 20s-7-4.35-7-10a4 4 0 0 1 7-2.4A4 4 0 0 1 19 10c0 5.65-7 10-7 10Z" />
-      </svg>
-      <span className="report-footer__logo">LoveIQ</span>
+      <Image
+        src="/images/loveiq-mark.svg"
+        alt=""
+        width={32}
+        height={28}
+        unoptimized
+        className="report-footer__mark"
+      />
+      <span className="report-footer__logo" aria-label="LoveIQ">
+        <span aria-hidden="true" className="report-footer__logo-love">
+          Love
+        </span>
+        <span aria-hidden="true" className="report-footer__logo-iq">
+          IQ
+        </span>
+      </span>
     </div>
 
     <p className="report-footer__disclaimer">

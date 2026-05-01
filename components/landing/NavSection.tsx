@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useRef } from "react";
 import type { FC } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { trackStartSurvey } from "@/lib/analytics";
+import { LoveIQMark, LoveIQWordmark } from "@/components/branding/LoveIQBrand";
 
 const navLinks = [
   { label: "Home", href: "/" },
@@ -211,15 +211,8 @@ const NavSection: FC = () => {
                   }
                 }}
               >
-                <Image
-                  src="/favicon.svg"
-                  alt=""
-                  width={28}
-                  height={28}
-                  unoptimized
-                  className="h-7 w-7 rounded-full shadow-[0_8px_18px_rgba(0,0,0,0.28)]"
-                />
-                <span className="font-serif text-xl font-semibold text-white">LoveIQ</span>
+                <LoveIQMark className="h-7 w-8 shrink-0" width={32} height={28} priority />
+                <LoveIQWordmark className="text-xl" />
               </Link>
             </div>
 

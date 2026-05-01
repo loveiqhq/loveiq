@@ -31,7 +31,7 @@ const organizationSchema = {
   "@type": "Organization",
   name: "LoveIQ",
   url: siteUrl,
-  logo: `${siteUrl}/images/LoveiqLogo.svg`,
+  logo: `${siteUrl}/images/loveiq-mark-512.png`,
   contactPoint: {
     "@type": "ContactPoint",
     email: "hello@loveiq.org",
