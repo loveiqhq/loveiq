@@ -73,24 +73,35 @@ const DimensionSection: FC<Props> = ({
     : archetypeHtml;
   const normalizedArchetypeHtml = normalizeReportHtml(resolvedArchetypeHtml);
 
+  // Premium sections without an archetype-specific block (e.g. "Arousal,
+  // Desire & Pleasure", "About Fantasies", "Living Fantasies") store their
+  // body in `generalContent`. When locked we move that body INTO the blurred
+  // slot so the PremiumOverlay has a sized parent to anchor against and the
+  // user sees a consistent tease pattern across all premium chapters.
+  const isLocked = isPremium && !unlocked;
+  const lockedBodyComesFromIntro = isLocked && !normalizedArchetypeHtml && !!introHtml;
+  const blurredBodyHtml = lockedBodyComesFromIntro ? introHtml : normalizedArchetypeHtml;
+  const showVisibleIntro = !lockedBodyComesFromIntro && !!introHtml;
+  const showVisiblePanel = !lockedBodyComesFromIntro && !!panelHtml;
+
   function handleUnlock() {
     onUnlock?.();
   }
 
   return (
     <div className="report-flow report-flow--gap-xl">
-      {introHtml ? (
+      {showVisibleIntro ? (
         <div
           className={`report-prose ${sectionId === "the_loveiq_concept" ? "report-prose--lead" : ""}`}
           dangerouslySetInnerHTML={{ __html: introHtml }}
         />
       ) : null}
 
-      {panelHtml ? (
+      {showVisiblePanel ? (
         <div className="report-prose" dangerouslySetInnerHTML={{ __html: panelHtml }} />
       ) : null}
 
-      {normalizedArchetypeHtml || (isPremium && !unlocked) ? (
+      {blurredBodyHtml || (isPremium && !unlocked) ? (
         <div className={archetypeContentStackClassName}>
           {headingBlock ? (
             <div
@@ -100,13 +111,13 @@ const DimensionSection: FC<Props> = ({
           ) : null}
 
           <div className="report-themed-block">
-            {isPremium && !unlocked ? (
+            {isLocked ? (
               <div className="report-themed-block__preview report-themed-block__preview--locked">
-                {normalizedArchetypeHtml ? (
+                {blurredBodyHtml ? (
                   <div
                     className="report-prose report-themed-block__blurred"
                     aria-hidden="true"
-                    dangerouslySetInnerHTML={{ __html: normalizedArchetypeHtml }}
+                    dangerouslySetInnerHTML={{ __html: blurredBodyHtml }}
                   />
                 ) : null}
                 <PremiumOverlay
