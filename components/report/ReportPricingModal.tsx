@@ -346,7 +346,12 @@ const ReportPricingModal: FC<Props> = ({
                   {isShare ? (
                     "Upgrade your plan to share your results"
                   ) : targetArchetype ? (
-                    `Unlock the ${targetArchetype} report`
+                    <>
+                      Unlock your full report of{" "}
+                      <span className="report-pricing-modal__title-accent">
+                        the {targetArchetype}
+                      </span>
+                    </>
                   ) : isOffer ? (
                     <>
                       <span className="report-pricing-modal__title-accent">
