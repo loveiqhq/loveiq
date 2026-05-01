@@ -9,6 +9,7 @@ import {
   ensurePersonalReportForSubmission,
   getReportAccessPlanForSubmission,
   recordReportSessionView,
+  resolveUnlockedArchetypeTiers,
   resolveUnlockedArchetypes,
 } from "@/lib/report/personalReport";
 import { getReportPriceQuotesForContext } from "@/lib/pricing/reportPricing";
@@ -327,6 +328,7 @@ export async function GET(request: Request) {
     let accessPlan: "essentials" | "full_report" | "all_reports" | null = null;
     let pricingQuotes: ReportPricingQuotesResponse = null;
     let unlockedArchetypeColumn: string[] = [];
+    let archetypeTiersFromDb: Record<string, "essentials" | "full_report"> = {};
 
     try {
       await ensurePersonalReportForSubmission({
@@ -337,6 +339,7 @@ export async function GET(request: Request) {
       const access = await getReportAccessPlanForSubmission(submission.id);
       accessPlan = access.accessPlan;
       unlockedArchetypeColumn = access.unlockedArchetypeColumn ?? [];
+      archetypeTiersFromDb = access.archetypeTiers ?? {};
 
       if (access.personalReportId && !accessPlan) {
         await recordReportSessionView({
@@ -386,6 +389,13 @@ export async function GET(request: Request) {
     const primaryArchetype = scoring.v5_primary_archetype || scoring.primary_archetype;
     const unlockedArchetypes = resolveUnlockedArchetypes({
       accessPlan,
+      archetypeTiers: archetypeTiersFromDb,
+      columnValues: unlockedArchetypeColumn,
+      primaryArchetype,
+    });
+    const archetypeTiers = resolveUnlockedArchetypeTiers({
+      accessPlan,
+      archetypeTiers: archetypeTiersFromDb,
       columnValues: unlockedArchetypeColumn,
       primaryArchetype,
     });
@@ -444,6 +454,7 @@ export async function GET(request: Request) {
       snapshotAnswers: isShareAccess ? null : snapshotAnswers,
       pricingQuotes,
       unlockedArchetypes,
+      archetypeTiers,
       archetypeContent: filteredArchetypeContent,
       practiceTendencies: filteredPracticeTendencies,
     });

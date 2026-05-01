@@ -16,9 +16,9 @@ vi.mock("../../lib/logger", () => ({
 }));
 
 vi.mock("../../lib/report/personalReport", () => ({
-  addUnlockedArchetypeForPersonalReport: vi.fn(),
   ensurePersonalReportForSubmission: vi.fn(),
   resolveSubmissionAccessContext: vi.fn(),
+  upsertArchetypeTierForPersonalReport: vi.fn(),
 }));
 
 vi.mock("../../lib/pricing/reportPricing", () => ({
@@ -27,9 +27,9 @@ vi.mock("../../lib/pricing/reportPricing", () => ({
 
 import { processStripeWebhookEvent } from "../../lib/checkout/fulfillment";
 import {
-  addUnlockedArchetypeForPersonalReport,
   ensurePersonalReportForSubmission,
   resolveSubmissionAccessContext,
+  upsertArchetypeTierForPersonalReport,
 } from "../../lib/report/personalReport";
 import { markReportPriceQuotePurchased } from "../../lib/pricing/reportPricing";
 
@@ -57,7 +57,7 @@ describe("checkout fulfillment", () => {
       id: 5,
     });
     vi.mocked(markReportPriceQuotePurchased).mockResolvedValue(undefined);
-    vi.mocked(addUnlockedArchetypeForPersonalReport).mockResolvedValue([]);
+    vi.mocked(upsertArchetypeTierForPersonalReport).mockResolvedValue({});
   });
 
   afterEach(() => {
@@ -244,7 +244,7 @@ describe("checkout fulfillment", () => {
       })
     );
     expect(markReportPriceQuotePurchased).toHaveBeenCalledWith({ paymentId: 41, quoteId: 8 });
-    expect(addUnlockedArchetypeForPersonalReport).not.toHaveBeenCalled();
+    expect(upsertArchetypeTierForPersonalReport).not.toHaveBeenCalled();
   });
 
   it("appends unlocked archetype when full_report checkout includes metadata.archetype", async () => {
@@ -354,9 +354,10 @@ describe("checkout fulfillment", () => {
       stripe: stripe as never,
     });
 
-    expect(addUnlockedArchetypeForPersonalReport).toHaveBeenCalledWith({
+    expect(upsertArchetypeTierForPersonalReport).toHaveBeenCalledWith({
       archetype: "Spark Seeker",
       personalReportId: 5,
+      tier: "full_report",
     });
   });
 
@@ -447,7 +448,7 @@ describe("checkout fulfillment", () => {
       stripe: stripe as never,
     });
 
-    expect(addUnlockedArchetypeForPersonalReport).not.toHaveBeenCalled();
+    expect(upsertArchetypeTierForPersonalReport).not.toHaveBeenCalled();
   });
 
   it("returns early when the webhook event was already processed", async () => {

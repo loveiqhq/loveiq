@@ -30,10 +30,12 @@ vi.mock("../../lib/report/personalReport", () => ({
   ensurePersonalReportForSubmission: vi.fn().mockResolvedValue({ id: 99 }),
   getReportAccessPlanForSubmission: vi.fn().mockResolvedValue({
     accessPlan: null,
+    archetypeTiers: {},
     personalReportId: 99,
     unlockedArchetypeColumn: [],
   }),
   recordReportSessionView: vi.fn().mockResolvedValue(undefined),
+  resolveUnlockedArchetypeTiers: vi.fn(() => ({})),
   resolveUnlockedArchetypes: vi.fn(() => []),
 }));
 
@@ -75,7 +77,9 @@ describe("GET /api/report", () => {
     mockGetClientIp.mockReturnValue("1.2.3.4");
     vi.mocked(getReportAccessPlanForSubmission).mockResolvedValue({
       accessPlan: null,
+      archetypeTiers: {},
       personalReportId: 99,
+      unlockedArchetypeColumn: [],
     });
     vi.mocked(getReportPriceQuotesForContext).mockResolvedValue(null);
     vi.mocked(recordReportSessionView).mockResolvedValue(undefined);
@@ -294,7 +298,9 @@ describe("GET /api/report", () => {
     allowRateLimit();
     vi.mocked(getReportAccessPlanForSubmission).mockResolvedValueOnce({
       accessPlan: "full_report",
+      archetypeTiers: {},
       personalReportId: 99,
+      unlockedArchetypeColumn: [],
     });
 
     mockFetchWithTimeout

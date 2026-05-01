@@ -47,6 +47,12 @@ export interface ReportData {
   pricingQuotes: Record<ReportPurchasePlanId, ReportPriceQuoteSnapshot> | null;
   unlockedArchetypes: string[];
   /**
+   * Per-archetype tier the user holds: `{ "Sage": "essentials", "Lover":
+   * "full_report" }`. Drives `isSectionUnlockedForPlan` so a user who bought
+   * Essentials for Sage but Full Report for Lover sees the right gate on each.
+   */
+  archetypeTiers: Record<string, "essentials" | "full_report">;
+  /**
    * Archetype prose, server-filtered to only include (blockId, archetypeName)
    * pairs the user has paid access to. The previous design imported the whole
    * static map into the client bundle — anyone could read every archetype's

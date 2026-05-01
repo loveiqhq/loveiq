@@ -278,6 +278,7 @@ interface ReportPageProps {
 
 interface ReportExperienceProps {
   accessPlan: ReportAccessPlan;
+  archetypeTiers: Record<string, "essentials" | "full_report">;
   devParam: string | null;
   feedbacks: Record<string, "up" | "down" | null>;
   isPricingModalOpen: boolean;
@@ -325,6 +326,7 @@ interface ReportExperienceProps {
 
 const ReportExperience: FC<ReportExperienceProps> = ({
   accessPlan,
+  archetypeTiers,
   devParam,
   feedbacks,
   isPricingModalOpen,
@@ -440,6 +442,8 @@ const ReportExperience: FC<ReportExperienceProps> = ({
     };
   }, [resolvedSections]);
 
+  const viewArchetypeTier = archetypeTiers[viewArchetype] ?? null;
+
   return (
     <main
       id="main-content"
@@ -528,6 +532,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                 );
                 const isSummaryUnlocked = isSectionUnlockedForPlan({
                   accessPlan,
+                  archetypeTier: viewArchetypeTier,
                   isPremium: section.isPremium,
                   sectionId: section.id,
                 });
@@ -628,6 +633,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
               if (section.sectionNumber === 8) {
                 const isBackendUnlocked = isSectionUnlockedForPlan({
                   accessPlan,
+                  archetypeTier: viewArchetypeTier,
                   isPremium: section.isPremium,
                   sectionId: section.id,
                 });
@@ -659,6 +665,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
               if (section.sectionNumber === 27) {
                 const isBackendUnlocked = isSectionUnlockedForPlan({
                   accessPlan,
+                  archetypeTier: viewArchetypeTier,
                   isPremium: section.isPremium,
                   sectionId: section.id,
                 });
@@ -691,6 +698,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
 
               const isBackendUnlocked = isSectionUnlockedForPlan({
                 accessPlan,
+                archetypeTier: viewArchetypeTier,
                 isPremium: section.isPremium,
                 sectionId: section.id,
               });
@@ -727,13 +735,14 @@ const ReportExperience: FC<ReportExperienceProps> = ({
       <ReportPricingModal
         accessPlan={accessPlan}
         archetype={primaryArchetype}
+        archetypeTiers={archetypeTiers}
         open={isPricingModalOpen}
         onClose={onClosePricingModal}
         onUnlock={onBeginCheckout}
         quotes={pricingQuotes}
         returnFocusRef={mainContentRef}
         targetArchetype={pricingTargetArchetype}
-        unlockedArchetypes={Array.from(unlockedArchetypes)}
+        primaryArchetype={primaryArchetype}
         variant={pricingVariant}
       />
       {viewMode === "owner" && ownerToken ? (
@@ -905,7 +914,9 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
         token,
       });
     }
-    const archetypeForCheckout = plan === "full_report" ? (archetype ?? null) : null;
+    // Essentials + Full Report are per-archetype; All Reports is a global
+    // unlock so it stays archetype-less.
+    const archetypeForCheckout = plan === "all_reports" ? null : (archetype ?? null);
     router.push(buildReportCheckoutHref({ archetype: archetypeForCheckout, plan, token }));
   };
 
@@ -1019,6 +1030,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       key={`${token ?? "browser"}:${sessionId ?? "anon"}`}
       devParam={devParam}
       accessPlan={data.accessPlan}
+      archetypeTiers={data.archetypeTiers ?? {}}
       feedbacks={feedbacks}
       isPricingModalOpen={isPricingModalOpen}
       isShareModalOpen={isShareModalOpen}

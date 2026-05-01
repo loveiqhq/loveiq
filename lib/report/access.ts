@@ -63,36 +63,31 @@ export function doesAccessPlanCover(
  * Per-archetype ownership for the pricing modal.
  *
  * The pricing modal can open scoped to a specific archetype (e.g. when a user
- * clicks rank 2 in "Probability of Other Archetypes"). Ownership state has to
- * be evaluated *for that archetype*, not for the user globally:
+ * clicks rank 2 in "Probability of Other Archetypes"). Ownership is decided
+ * per archetype, not globally:
  *
- *   - `all_reports` covers every archetype, every tier.
- *   - For the **primary** archetype, the user's `accessPlan` (highest tier
- *     across all payments) is the source of truth — same logic as
- *     `doesAccessPlanCover`.
- *   - For a **non-primary** archetype, only `full_report` purchases are
- *     tracked (`personal_report.unlocked_archetypes`). If the archetype is in
- *     that list, both `essentials` and `full_report` cards are owned. If
- *     not, neither is owned for that archetype — we never assume a primary
- *     plan carries over.
+ *   - `all_reports` covers every archetype at full_report tier.
+ *   - For any archetype, if the user has bought `full_report` for it both
+ *     Essentials and Full Report cards show as owned.
+ *   - If the user has bought `essentials` for it the Essentials card shows as
+ *     owned and Full Report stays buyable (upgrade path).
+ *   - The `unlockedTier` argument is the tier the user holds for the
+ *     specific archetype the modal is scoped to (null = nothing yet).
  */
 export function isPlanOwnedForArchetype({
   accessPlan,
-  isPrimary,
-  isUnlockedNonPrimary,
   targetPlan,
+  unlockedTier,
 }: {
   accessPlan: ReportAccessPlan;
-  isPrimary: boolean;
-  isUnlockedNonPrimary: boolean;
   targetPlan: ReportPurchasePlanId;
+  unlockedTier: "essentials" | "full_report" | null;
 }): boolean {
   if (accessPlan === "all_reports") return true;
   if (targetPlan === "all_reports") return false;
-  if (isPrimary) return doesAccessPlanCover(accessPlan, targetPlan);
-  if (targetPlan === "full_report" || targetPlan === "essentials") {
-    return isUnlockedNonPrimary;
-  }
+  if (!unlockedTier) return false;
+  if (targetPlan === "essentials") return true; // any tier covers essentials
+  if (targetPlan === "full_report") return unlockedTier === "full_report";
   return false;
 }
 
@@ -100,18 +95,30 @@ export function isSectionIncludedInEssentials(sectionId: string) {
   return ESSENTIALS_SECTION_SET.has(sectionId);
 }
 
+/**
+ * Decide whether a section is unlocked for the user. `archetypeTier` is the
+ * tier the user holds for the archetype being viewed; if it's `null` we fall
+ * back to the global `accessPlan` (still relevant for `all_reports` and for
+ * the legacy primary-only path).
+ */
 export function isSectionUnlockedForPlan({
   accessPlan,
+  archetypeTier,
   isPremium,
   sectionId,
 }: {
   accessPlan: ReportAccessPlan;
+  archetypeTier?: "essentials" | "full_report" | null;
   isPremium: boolean;
   sectionId: string;
 }) {
   if (!isPremium) return true;
-  if (!accessPlan) return false;
-  if (accessPlan === "full_report" || accessPlan === "all_reports") return true;
+  if (accessPlan === "all_reports") return true;
+  const effectiveTier =
+    archetypeTier ??
+    (accessPlan === "full_report" || accessPlan === "essentials" ? accessPlan : null);
+  if (!effectiveTier) return false;
+  if (effectiveTier === "full_report") return true;
   return isSectionIncludedInEssentials(sectionId);
 }
 

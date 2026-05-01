@@ -189,11 +189,11 @@ describe("POST /api/stripe/checkout-session", () => {
     expect(markReportPriceQuoteCheckoutStarted).toHaveBeenCalledWith({ quoteId: 22 });
   });
 
-  it("rejects archetype when plan is not full_report", async () => {
+  it("rejects archetype when plan is all_reports (global unlock has no archetype scope)", async () => {
     const res = await POST(
       makeRequest({
         archetype: "Spark Seeker",
-        plan: "essentials",
+        plan: "all_reports",
         reportSessionId: "02d88f31-eceb-4402-940d-c8cd98d01848",
       })
     );

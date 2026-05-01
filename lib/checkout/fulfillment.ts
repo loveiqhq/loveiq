@@ -178,9 +178,9 @@ import {
   getStripeCheckoutPromotionSummary,
 } from "./stripeCheckout";
 import {
-  addUnlockedArchetypeForPersonalReport,
   ensurePersonalReportForSubmission,
   resolveSubmissionAccessContext,
+  upsertArchetypeTierForPersonalReport,
 } from "@/lib/report/personalReport";
 import { isArchetypeName } from "@/lib/report/archetypeSlug";
 import { markReportPriceQuotePurchased } from "@/lib/pricing/reportPricing";
@@ -770,16 +770,21 @@ async function syncCheckoutSessionPayment({
     status: eventStatus,
   });
 
-  if (eventStatus === "succeeded" && plan === "full_report" && unlockedArchetype) {
+  if (
+    eventStatus === "succeeded" &&
+    unlockedArchetype &&
+    (plan === "essentials" || plan === "full_report")
+  ) {
     try {
-      await addUnlockedArchetypeForPersonalReport({
+      await upsertArchetypeTierForPersonalReport({
         archetype: unlockedArchetype,
         personalReportId: personalReport.id,
+        tier: plan,
       });
     } catch (err) {
       logger.warn(
-        { archetype: unlockedArchetype, err, personalReportId: personalReport.id },
-        "Unable to persist unlocked archetype after checkout"
+        { archetype: unlockedArchetype, err, personalReportId: personalReport.id, tier: plan },
+        "Unable to persist archetype tier after checkout"
       );
     }
   }

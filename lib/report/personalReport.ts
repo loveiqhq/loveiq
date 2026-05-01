@@ -24,12 +24,32 @@ interface SubmissionAccessContext {
   userId: number | null;
 }
 
+export type ArchetypeTier = "essentials" | "full_report";
+
+export type ArchetypeTierMap = Record<string, ArchetypeTier>;
+
+function isArchetypeTier(value: unknown): value is ArchetypeTier {
+  return value === "essentials" || value === "full_report";
+}
+
+function sanitizeArchetypeTierMap(value: unknown): ArchetypeTierMap {
+  if (!value || typeof value !== "object") return {};
+  const result: ArchetypeTierMap = {};
+  for (const [key, tier] of Object.entries(value as Record<string, unknown>)) {
+    if (isArchetypeName(key) && isArchetypeTier(tier)) {
+      result[key] = tier;
+    }
+  }
+  return result;
+}
+
 interface PersonalReportRow {
   id: number;
   payment_id: number | null;
   payment_status: string | null;
   url?: string | null;
   unlocked_archetypes?: string[] | null;
+  archetype_tiers?: Record<string, unknown> | null;
 }
 
 function getSupabaseServiceConfig() {
@@ -183,7 +203,7 @@ export async function resolveSubmissionAccessContext({
 
 async function fetchPersonalReportForSubmission(submissionId: number) {
   const response = await supabaseServiceFetch(
-    `/rest/v1/personal_report?survey_submission_id=eq.${submissionId}&select=id,payment_id,payment_status,url,unlocked_archetypes&limit=1`
+    `/rest/v1/personal_report?survey_submission_id=eq.${submissionId}&select=id,payment_id,payment_status,url,unlocked_archetypes,archetype_tiers&limit=1`
   );
 
   if (!response.ok) {
@@ -290,6 +310,7 @@ export async function getPaidPlansForSubmission(
 
 export async function getReportAccessPlanForSubmission(submissionId: number): Promise<{
   accessPlan: ReportAccessPlan;
+  archetypeTiers: ArchetypeTierMap;
   personalReportId: number | null;
   unlockedArchetypeColumn: string[];
 }> {
@@ -298,6 +319,7 @@ export async function getReportAccessPlanForSubmission(submissionId: number): Pr
   if (!personalReport) {
     return {
       accessPlan: null,
+      archetypeTiers: {},
       personalReportId: null,
       unlockedArchetypeColumn: [],
     };
@@ -330,17 +352,81 @@ export async function getReportAccessPlanForSubmission(submissionId: number): Pr
 
   return {
     accessPlan: strongestPlan,
+    archetypeTiers: sanitizeArchetypeTierMap(personalReport.archetype_tiers ?? {}),
     personalReportId: personalReport.id,
     unlockedArchetypeColumn: columnValues,
   };
 }
 
-export function resolveUnlockedArchetypes({
+/**
+ * Resolves which archetypes the user can view, plus the tier they hold for
+ * each. The primary archetype is always seeded. `accessPlan === "all_reports"`
+ * promotes every known archetype to `full_report` tier.
+ */
+export function resolveUnlockedArchetypeTiers({
   accessPlan,
+  archetypeTiers,
   columnValues,
   primaryArchetype,
 }: {
   accessPlan: ReportAccessPlan;
+  archetypeTiers: ArchetypeTierMap | undefined | null;
+  columnValues: string[] | undefined | null;
+  primaryArchetype: string;
+}): ArchetypeTierMap {
+  if (accessPlan === "all_reports") {
+    return Object.fromEntries(
+      KNOWN_ARCHETYPES.map((name) => [name, "full_report" as ArchetypeTier])
+    );
+  }
+
+  const result: ArchetypeTierMap = {};
+
+  // Per-archetype tiers from the new column take precedence.
+  if (archetypeTiers) {
+    for (const [name, tier] of Object.entries(archetypeTiers)) {
+      if (isArchetypeName(name) && isArchetypeTier(tier)) {
+        result[name] = tier;
+      }
+    }
+  }
+
+  // Legacy column: any archetype here without a tier is implicitly full_report.
+  if (Array.isArray(columnValues)) {
+    for (const name of columnValues) {
+      if (!isArchetypeName(name)) continue;
+      if (!result[name]) result[name] = "full_report";
+    }
+  }
+
+  // The primary archetype is always viewable. Tier comes from accessPlan; if
+  // the user has a per-archetype tier already (e.g. they bought essentials on
+  // primary explicitly), keep the strongest.
+  if (isArchetypeName(primaryArchetype)) {
+    const primaryTier: ArchetypeTier | null =
+      accessPlan === "full_report" || accessPlan === "essentials" ? accessPlan : null;
+    if (primaryTier) {
+      const current = result[primaryArchetype];
+      if (current !== "full_report") {
+        result[primaryArchetype] = primaryTier === "full_report" ? "full_report" : primaryTier;
+      }
+    } else if (!result[primaryArchetype]) {
+      // No paid plan yet — leave primary out of the tier map. Callers that want
+      // a name list still get primary via `resolveUnlockedArchetypes`.
+    }
+  }
+
+  return result;
+}
+
+export function resolveUnlockedArchetypes({
+  accessPlan,
+  archetypeTiers,
+  columnValues,
+  primaryArchetype,
+}: {
+  accessPlan: ReportAccessPlan;
+  archetypeTiers?: ArchetypeTierMap | null;
   columnValues: string[] | undefined | null;
   primaryArchetype: string;
 }): string[] {
@@ -348,40 +434,50 @@ export function resolveUnlockedArchetypes({
     return [...KNOWN_ARCHETYPES];
   }
 
-  const source = Array.isArray(columnValues) ? columnValues : [];
-  const set = new Set<string>(source.filter(isArchetypeName));
+  const tiers = resolveUnlockedArchetypeTiers({
+    accessPlan,
+    archetypeTiers: archetypeTiers ?? {},
+    columnValues,
+    primaryArchetype,
+  });
+  const set = new Set<string>(Object.keys(tiers));
 
+  // The primary archetype is viewable even on the free plan (free sections
+  // still render); ensure the name list includes it regardless of tier.
   if (isArchetypeName(primaryArchetype)) {
-    set.add(primaryArchetype);
-  }
-
-  if (accessPlan === "full_report" && isArchetypeName(primaryArchetype)) {
     set.add(primaryArchetype);
   }
 
   return Array.from(set);
 }
 
-export async function addUnlockedArchetypeForPersonalReport({
+/**
+ * Persists a per-archetype tier on the personal_report row.
+ * Atomic via the `upsert_archetype_tier` Postgres RPC — racing webhooks (e.g.
+ * two checkout sessions for the same report finishing within ms) merge under
+ * a single row write lock with "highest tier wins" semantics.
+ */
+export async function upsertArchetypeTierForPersonalReport({
   archetype,
   personalReportId,
+  tier,
 }: {
   archetype: string;
   personalReportId: number;
-}): Promise<string[]> {
+  tier: ArchetypeTier;
+}): Promise<ArchetypeTierMap> {
   if (!isArchetypeName(archetype)) {
     throw new Error("invalid_archetype");
   }
+  if (!isArchetypeTier(tier)) {
+    throw new Error("invalid_tier");
+  }
 
-  // Atomic JSONB merge via Postgres RPC. The prior read-modify-write pattern
-  // raced when two webhooks for the same personal_report fired close in time —
-  // both read the same baseline list and the second write clobbered the first
-  // archetype. The RPC performs the dedupe + write in a single statement so
-  // Postgres serializes it via the row write lock.
-  const response = await supabaseServiceFetch("/rest/v1/rpc/add_unlocked_archetype", {
+  const response = await supabaseServiceFetch("/rest/v1/rpc/upsert_archetype_tier", {
     body: JSON.stringify({
       p_personal_report_id: personalReportId,
       p_archetype: archetype,
+      p_tier: tier,
     }),
     headers: { Prefer: "return=representation" },
     method: "POST",
@@ -389,20 +485,30 @@ export async function addUnlockedArchetypeForPersonalReport({
 
   if (!response.ok) {
     logger.error(
-      { personalReportId, status: response.status },
-      "Unable to persist unlocked archetype"
+      { personalReportId, status: response.status, tier },
+      "Unable to persist archetype tier"
     );
-    throw new Error("unlocked_archetypes_update_failed");
+    throw new Error("archetype_tier_update_failed");
   }
 
   const payload = await response.json().catch(() => null);
-  // PostgREST returns the function's RETURNS jsonb value directly. Filter
-  // through isArchetypeName so callers get the same `string[]` shape the
-  // previous implementation returned.
-  if (Array.isArray(payload)) {
-    return payload.filter(isArchetypeName);
-  }
-  return [];
+  return sanitizeArchetypeTierMap(payload);
+}
+
+/** @deprecated Use upsertArchetypeTierForPersonalReport with tier="full_report". */
+export async function addUnlockedArchetypeForPersonalReport({
+  archetype,
+  personalReportId,
+}: {
+  archetype: string;
+  personalReportId: number;
+}): Promise<string[]> {
+  const tiers = await upsertArchetypeTierForPersonalReport({
+    archetype,
+    personalReportId,
+    tier: "full_report",
+  });
+  return Object.keys(tiers).filter(isArchetypeName);
 }
 
 export async function addUnlockedArchetypeForSubmission({

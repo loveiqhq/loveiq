@@ -40,8 +40,8 @@ const createCheckoutSessionSchema = z
   .refine((value) => !!(value.reportSessionId || value.reportToken), {
     message: "Report context required.",
   })
-  .refine((value) => !value.archetype || value.plan === "full_report", {
-    message: "Per-archetype unlocks are only available on the full_report plan.",
+  .refine((value) => !value.archetype || value.plan !== "all_reports", {
+    message: "All-reports purchases are global and don't accept an archetype.",
   });
 
 const RATE_LIMIT_CONFIG = {

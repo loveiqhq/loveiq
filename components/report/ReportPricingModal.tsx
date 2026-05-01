@@ -24,11 +24,16 @@ import { isPlanOwnedForArchetype, type ReportAccessPlan } from "@/lib/report/acc
 interface Props {
   accessPlan?: ReportAccessPlan;
   archetype: string;
+  /** Per-archetype tier the user already owns (essentials | full_report). */
+  archetypeTiers?: Record<string, "essentials" | "full_report">;
   open: boolean;
   onClose: () => void;
   onUnlock: (plan: ReportPurchasePlanId, archetype?: string | null) => void;
-  /** Archetypes the user has individually unlocked at full_report tier. */
-  unlockedArchetypes?: ReadonlyArray<string>;
+  /**
+   * The user's primary archetype. Used to resolve the right tier when the
+   * modal is opened without `targetArchetype` (i.e. scoped to primary).
+   */
+  primaryArchetype?: string | null;
   quotes: Record<ReportPurchasePlanId, ReportPriceQuoteSnapshot> | null;
   returnFocusRef?: MutableRefObject<HTMLElement | null>;
   targetArchetype?: string | null;
@@ -117,20 +122,22 @@ function getCardPricing(
 const ReportPricingModal: FC<Props> = ({
   accessPlan = null,
   archetype,
+  archetypeTiers,
   open,
   onClose,
   onUnlock,
+  primaryArchetype = null,
   quotes,
   returnFocusRef,
   targetArchetype = null,
-  unlockedArchetypes,
   variant = "default",
 }) => {
-  // The modal is scoped to `targetArchetype` when set (non-primary tile clicked
-  // in "Probability of Other Archetypes"); otherwise it's about the primary.
-  const isPrimaryScope = targetArchetype === null;
-  const isUnlockedNonPrimary =
-    !isPrimaryScope && !!targetArchetype && !!unlockedArchetypes?.includes(targetArchetype);
+  // The modal can be scoped to a specific archetype (`targetArchetype`, set
+  // when the user clicks a row in "Probability of Other Archetypes") or to
+  // the primary archetype. In either case, ownership is resolved per-archetype
+  // via the per-archetype tier map.
+  const scopeArchetype = targetArchetype ?? primaryArchetype ?? archetype;
+  const unlockedTier = (scopeArchetype && archetypeTiers?.[scopeArchetype]) || null;
   const dialogRef = useRef<HTMLDivElement>(null);
   const scrollRegionRef = useRef<HTMLDivElement>(null);
   const didOpenRef = useRef(false);
@@ -388,9 +395,8 @@ const ReportPricingModal: FC<Props> = ({
                       : card.title;
                   const isOwned = isPlanOwnedForArchetype({
                     accessPlan,
-                    isPrimary: isPrimaryScope,
-                    isUnlockedNonPrimary,
                     targetPlan: card.plan,
+                    unlockedTier,
                   });
 
                   return (
