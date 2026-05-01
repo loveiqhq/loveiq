@@ -361,7 +361,10 @@ export async function GET(request: Request) {
       logger.warn({ err, submissionId: submission.id }, "Unable to sync report access state");
     }
 
-    if (!accessPlan && !isShareAccess) {
+    // Fetch quotes for any user who can still upgrade (no plan, or essentials/
+    // full_report — they may want a higher tier). Skip only `all_reports`
+    // (top tier; nothing left to sell) and shared viewers.
+    if (accessPlan !== "all_reports" && !isShareAccess) {
       try {
         pricingQuotes = await getReportPriceQuotesForContext({
           pricingSessionId: tokenParsed?.success
