@@ -216,11 +216,6 @@ function CheckoutReviewSurface({
             : "Preparing secure checkout…"}
       </button>
 
-      <p className="checkout-payment-stack__note" role="status">
-        Payment happens on Stripe&apos;s hosted checkout page for the most reliable experience
-        across browsers and devices.
-      </p>
-
       <CheckoutTrustFooter />
     </div>
   );
