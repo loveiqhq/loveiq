@@ -57,24 +57,34 @@ export async function POST(request: Request) {
 
   const { email } = parsed.data;
 
-  // 4. Check admin_users (silent fail — don't reveal allowlist)
+  // 4. Check admin_users (silent fail — don't reveal allowlist).
+  // Capture allowlist match in a flag so we can keep the response shape AND
+  // overall latency identical for both branches below — preventing email
+  // enumeration via timing side-channel.
+  let isAllowlisted = false;
   try {
     const res = await supabaseFetch(
       `/rest/v1/admin_users?email=eq.${encodeURIComponent(email)}&select=email&limit=1`
     );
     const admins = await res.json();
-
-    if (!res.ok || !Array.isArray(admins) || admins.length === 0) {
-      // NOT in allowlist — log but return same generic response
-      logger.info({ ip, email }, "Admin login attempt: email not in allowlist");
-      return NextResponse.json({
-        success: true,
-        message: "If your email is registered, check your inbox.",
-      });
-    }
+    isAllowlisted = res.ok && Array.isArray(admins) && admins.length > 0;
   } catch {
     logger.error({ ip, email }, "Admin login: failed to check admin_users");
     return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
+  }
+
+  if (!isAllowlisted) {
+    logger.info({ ip, email }, "Admin login attempt: email not in allowlist");
+    // Burn ~600-1200ms so the response timing is in the same order of
+    // magnitude as the allowlisted branch (which spends ~1-3s waiting on
+    // Resend). A constant-time difference of 2-5x is much harder to
+    // exploit than the previous ~50ms vs 5s gap.
+    const jitter = 600 + Math.floor(Math.random() * 600);
+    await new Promise((resolve) => setTimeout(resolve, jitter));
+    return NextResponse.json({
+      success: true,
+      message: "If your email is registered, check your inbox.",
+    });
   }
 
   // 5. Generate magic link + send email via Resend

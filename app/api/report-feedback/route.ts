@@ -4,11 +4,22 @@ import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { getBreaker, CircuitOpenError } from "@/lib/circuit-breaker";
 import { verifyCsrfToken } from "@/lib/csrf";
+import { reportSections } from "@/data/report-general";
 import logger from "@/lib/logger";
+
+// Whitelist sectionId against the canonical section list. Without this
+// allowlist, an attacker can pollute the feedback table with fictional
+// section IDs ("premium_unlocked", "secret_archetype", etc.) and use the
+// endpoint to enumerate or fingerprint internal section names.
+const VALID_SECTION_IDS = new Set<string>(reportSections.map((section) => section.id));
 
 const schema = z.object({
   sessionId: z.string().uuid(),
-  sectionId: z.string().min(1).max(100),
+  sectionId: z
+    .string()
+    .min(1)
+    .max(200)
+    .refine((id) => VALID_SECTION_IDS.has(id), { message: "unknown_section" }),
   feedback: z.enum(["up", "down"]),
   comment: z.string().max(1000).optional(),
   issue: z.string().max(100).optional(),

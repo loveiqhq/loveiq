@@ -37,7 +37,7 @@ const INITIAL: ReportSharesState = {
 };
 
 const SEAT_LIMIT_BY_PLAN: Record<NonNullable<ReportSharesState["plan"]>, number> = {
-  essentials: 0,
+  essentials: 1,
   full_report: 2,
   all_reports: 2,
 };

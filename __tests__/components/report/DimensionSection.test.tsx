@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import userEvent from "@testing-library/user-event";
 import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import DimensionSection from "@/components/report/sections/DimensionSection";
 import { archetypeContent } from "@/data/report-archetypes";
 
@@ -163,15 +163,18 @@ describe("DimensionSection", () => {
     );
   });
 
-  it("reveals the restored Explorer of Edges recommendations after unlock", async () => {
+  it("calls onUnlock when the unlock CTA is clicked, and reveals content once the parent flips isUnlocked", async () => {
     const user = userEvent.setup();
+    const handleUnlock = vi.fn();
 
-    const { container } = render(
+    const { container, rerender } = render(
       <DimensionSection
         archetype="Explorer of Edges"
         archetypeHtml={archetypeContent.recommendations["Explorer of Edges"]}
         generalHtml="<p>A curated set of resources to deepen understanding and support practical growth.</p>"
         isPremium={true}
+        isUnlocked={false}
+        onUnlock={handleUnlock}
         sectionId="recommendations"
         sectionTitle="Recommendations"
       />
@@ -180,28 +183,41 @@ describe("DimensionSection", () => {
     const scoped = within(container);
 
     await user.click(scoped.getByRole("button", { name: /unlock report/i }));
+    expect(handleUnlock).toHaveBeenCalledTimes(1);
+    // Section stays locked until the parent (after webhook fulfillment) flips isUnlocked.
+    expect(scoped.getByRole("button", { name: /unlock report/i })).toBeInTheDocument();
+
+    rerender(
+      <DimensionSection
+        archetype="Explorer of Edges"
+        archetypeHtml={archetypeContent.recommendations["Explorer of Edges"]}
+        generalHtml="<p>A curated set of resources to deepen understanding and support practical growth.</p>"
+        isPremium={true}
+        isUnlocked={true}
+        onUnlock={handleUnlock}
+        sectionId="recommendations"
+        sectionTitle="Recommendations"
+      />
+    );
 
     expect(scoped.queryByRole("button", { name: /unlock report/i })).not.toBeInTheDocument();
     expect(scoped.getByText(/The Deep Psychology of BDSM and Kink/i)).toBeInTheDocument();
   });
 
-  it("shows a placeholder note instead of a blank unlocked recommendations panel", async () => {
-    const user = userEvent.setup();
-
+  it("shows a placeholder note instead of a blank unlocked recommendations panel", () => {
     const { container } = render(
       <DimensionSection
         archetype="Explorer of Edges"
         archetypeHtml="<h2></h2>"
         generalHtml="<p>A curated set of resources to deepen understanding and support practical growth.</p>"
         isPremium={true}
+        isUnlocked={true}
         sectionId="recommendations"
         sectionTitle="Recommendations"
       />
     );
 
     const scoped = within(container);
-
-    await user.click(scoped.getByRole("button", { name: /unlock report/i }));
 
     expect(
       scoped.getByText(/Recommendations for this archetype are being finalized/i)

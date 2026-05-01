@@ -99,14 +99,14 @@ describe("POST /api/report/share/verify", () => {
     expect(res.status).toBe(404);
   });
 
-  it("403 when email mismatches share recipient", async () => {
+  it("404 when email mismatches share recipient (unified with missing-token shape to prevent token enumeration)", async () => {
     allowCsrf();
     allowRateLimit();
     mockResolveShare.mockResolvedValue({
       share: { id: 1, recipient_email: "owner@example.com" },
     });
     const res = await POST(postRequest({ shareToken: VALID_SHARE_TOKEN, email: "wrong@x.io" }));
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(404);
   });
 
   it("200 + Set-Cookie on email match (case-insensitive)", async () => {

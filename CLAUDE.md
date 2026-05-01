@@ -187,28 +187,59 @@ loveiq-web/
 
 Copy `.env.example` to `.env.local` and fill values:
 
-| Variable                         | Required    | Purpose                                                           |
-| -------------------------------- | ----------- | ----------------------------------------------------------------- |
-| `NEXT_PUBLIC_SITE_URL`           | Yes         | Canonical URL for metadata                                        |
-| `SUPABASE_URL`                   | For forms   | Waitlist database                                                 |
-| `SUPABASE_SERVICE_ROLE_KEY`      | For forms   | Supabase auth (server-only!)                                      |
-| `RESEND_API_KEY`                 | For forms   | Email sending                                                     |
-| `RESEND_FROM`                    | No          | From address (default: `LoveIQ <hello@send.loveiq.org>`)          |
-| `RESEND_REPLY_TO`                | No          | Reply-to address                                                  |
-| `NEXT_PUBLIC_RECAPTCHA_SITE_KEY` | For contact | reCAPTCHA client key                                              |
-| `RECAPTCHA_SECRET_KEY`           | For contact | reCAPTCHA server key                                              |
-| `SLACK_WAITLIST_WEBHOOK_URL`     | No          | Slack notifications for waitlist signups                          |
-| `SLACK_CONTACT_WEBHOOK_URL`      | No          | Slack notifications for contact form                              |
-| `SLACK_SURVEY_WEBHOOK_URL`       | No          | Slack notifications for survey submissions                        |
-| `STAGING_PASSWORD`               | For staging | Password gate for staging deployment                              |
-| `NEXT_PUBLIC_SUPABASE_URL`       | For admin   | Supabase project URL (browser-safe, for admin auth SDK)           |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY`  | For admin   | Supabase anon key (browser-safe, for admin auth SDK)              |
-| `SURVEY_CLOSE_PASSWORD`          | For admin   | Password required to close/pause the survey (server-only)         |
-| `CONTACT_TO_EMAIL`               | For contact | Contact form recipient                                            |
-| `NEXT_PUBLIC_GTM_ID`             | No          | GTM container ID (optional, falls back to direct gtag.js)         |
-| `LOG_LEVEL`                      | No          | Pino log level (fatal/error/warn/info/debug/trace; default: info) |
+| Variable                                   | Required     | Purpose                                                                           |
+| ------------------------------------------ | ------------ | --------------------------------------------------------------------------------- |
+| `NEXT_PUBLIC_SITE_URL`                     | Yes          | Canonical URL for metadata                                                        |
+| `SUPABASE_URL`                             | For forms    | Waitlist database                                                                 |
+| `SUPABASE_SERVICE_ROLE_KEY`                | For forms    | Supabase auth (server-only!)                                                      |
+| `RESEND_API_KEY`                           | For forms    | Email sending                                                                     |
+| `RESEND_FROM`                              | No           | From address (default: `LoveIQ <hello@send.loveiq.org>`)                          |
+| `RESEND_REPLY_TO`                          | No           | Reply-to address                                                                  |
+| `NEXT_PUBLIC_RECAPTCHA_SITE_KEY`           | For contact  | reCAPTCHA client key                                                              |
+| `RECAPTCHA_SECRET_KEY`                     | For contact  | reCAPTCHA server key                                                              |
+| `SLACK_WAITLIST_WEBHOOK_URL`               | No           | Slack notifications for waitlist signups                                          |
+| `SLACK_CONTACT_WEBHOOK_URL`                | No           | Slack notifications for contact form                                              |
+| `SLACK_SURVEY_WEBHOOK_URL`                 | No           | Slack notifications for survey submissions                                        |
+| `STAGING_PASSWORD`                         | For staging  | Password gate for staging deployment                                              |
+| `NEXT_PUBLIC_SUPABASE_URL`                 | For admin    | Supabase project URL (browser-safe, for admin auth SDK)                           |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY`            | For admin    | Supabase anon key (browser-safe, for admin auth SDK)                              |
+| `SURVEY_CLOSE_PASSWORD`                    | For admin    | Password required to close/pause the survey (server-only)                         |
+| `CONTACT_TO_EMAIL`                         | For contact  | Contact form recipient                                                            |
+| `NEXT_PUBLIC_GTM_ID`                       | No           | GTM container ID (optional, falls back to direct gtag.js)                         |
+| `LOG_LEVEL`                                | No           | Pino log level (fatal/error/warn/info/debug/trace; default: info)                 |
+| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`       | For checkout | Browser-safe Stripe publishable key (`pk_test_...` sandbox or `pk_live_...` prod) |
+| `STRIPE_SECRET_KEY`                        | For checkout | Server-only Stripe secret (`sk_test_...` sandbox or `sk_live_...` prod)           |
+| `STRIPE_WEBHOOK_SECRET`                    | For checkout | Webhook signing secret (`whsec_...`) per Stripe dashboard endpoint                |
+| `STRIPE_CHECKOUT_ENABLED`                  | For checkout | `true` to create real Stripe sessions; default `false`                            |
+| `NEXT_PUBLIC_STRIPE_CHECKOUT_PREVIEW_MODE` | No           | `false` for normal flow; `true` adds a "preview" banner only                      |
 
 **The site renders without env vars.** Forms will fail gracefully with error messages.
+
+### Stripe checkout
+
+The paywall on `/report` is always enforced — clicking a locked premium section opens the pricing modal. Purchases unlock by tier:
+
+- `essentials` plan → essentials sections only
+- `full_report` plan → essentials + full-report sections
+- `all_reports` plan → all sections across every archetype
+
+Sandbox and live mode both run the real fulfillment path. To test in sandbox use Stripe test card `4242 4242 4242 4242` (any future date, any CVC). After a successful test purchase, the webhook fulfills the access plan onto the report.
+
+Required Vercel env vars (test or production):
+
+```
+STRIPE_CHECKOUT_ENABLED=true
+NEXT_PUBLIC_STRIPE_CHECKOUT_PREVIEW_MODE=false
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_... | pk_live_...
+STRIPE_SECRET_KEY=sk_test_... | sk_live_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+```
+
+Stripe dashboard webhook endpoint: `https://<your-domain>/api/stripe/webhook` — subscribe to `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`, `checkout.session.expired`, `charge.refunded`, `charge.dispute.created`, `charge.dispute.closed`. Disputed payments re-lock the report automatically; if the merchant wins the dispute (`charge.dispute.closed` with `status=won`), access is restored.
+
+For local sandbox testing, install Stripe CLI and run `stripe listen --forward-to localhost:3000/api/stripe/webhook`. Use the printed `whsec_...` as `STRIPE_WEBHOOK_SECRET`.
+
+If `STRIPE_CHECKOUT_ENABLED=true` but any Stripe key is missing, the server logs an error on first checkout/webhook hit and the route returns 503. No silent failure.
 
 ---
 

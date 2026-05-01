@@ -1,7 +1,17 @@
 import Stripe from "stripe";
-import type { ReportPurchasePlanId } from "./reportPurchase";
 import type { ReportAccessPlan } from "@/lib/report/access";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
+import logger from "@/lib/logger";
+
+// Pinning the API version makes Stripe API changes deterministic — they cannot
+// silently shift behavior on us between SDK upgrades.
+//
+// IMPORTANT: This pin only affects outbound SDK calls. The Stripe dashboard's
+// webhook endpoint config has its own per-endpoint API version. Both must
+// agree, or webhook event payload shapes can drift from what the parsing
+// code below expects. Verify in Stripe dashboard → Developers → Webhooks
+// → click endpoint → "API version" matches the constant below.
+const STRIPE_API_VERSION = "2026-03-25.dahlia" as const;
 
 export const STRIPE_CHECKOUT_DISABLED_MESSAGE =
   "Checkout preview only. Payments are not enabled in this environment yet.";
@@ -162,31 +172,41 @@ export function isStripeCheckoutEnabled() {
   return process.env.STRIPE_CHECKOUT_ENABLED === "true";
 }
 
+let hasWarnedMissingConfig = false;
+
+function warnIfMisconfigured() {
+  if (hasWarnedMissingConfig) return;
+  if (!isStripeCheckoutEnabled()) return;
+
+  const missing: string[] = [];
+  if (!process.env.STRIPE_SECRET_KEY) missing.push("STRIPE_SECRET_KEY");
+  if (!process.env.STRIPE_WEBHOOK_SECRET) missing.push("STRIPE_WEBHOOK_SECRET");
+  if (!process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY) {
+    missing.push("NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY");
+  }
+
+  if (missing.length > 0) {
+    hasWarnedMissingConfig = true;
+    logger.error(
+      { missing },
+      "Stripe checkout flag is enabled but required Stripe env vars are missing — checkout will return 503"
+    );
+  }
+}
+
 export function getStripeServerClient() {
   const secretKey = process.env.STRIPE_SECRET_KEY;
 
   if (!secretKey) {
+    warnIfMisconfigured();
     return null;
   }
 
   if (!stripeClient) {
-    stripeClient = new Stripe(secretKey);
+    stripeClient = new Stripe(secretKey, { apiVersion: STRIPE_API_VERSION });
   }
 
   return stripeClient;
-}
-
-export function getStripePriceId(plan: ReportPurchasePlanId) {
-  switch (plan) {
-    case "essentials":
-      return process.env.STRIPE_PRICE_ID_ESSENTIALS ?? null;
-    case "full_report":
-      return process.env.STRIPE_PRICE_ID_FULL_REPORT ?? null;
-    case "all_reports":
-      return process.env.STRIPE_PRICE_ID_ALL_REPORTS ?? null;
-    default:
-      return null;
-  }
 }
 
 export async function getStripeCheckoutCustomerEmail({
@@ -213,7 +233,9 @@ export async function getStripeCheckoutCustomerEmail({
 
   if (reportToken) {
     const tokenResponse = await fetchWithTimeout(
-      `${supabaseUrl}/rest/v1/report_access_token?token=eq.${encodeURIComponent(reportToken)}&select=survey_submission_id&limit=1`,
+      // Reject revoked tokens here too — a leaked token shouldn't be able
+      // to initiate a Stripe session that would later unlock the report.
+      `${supabaseUrl}/rest/v1/report_access_token?token=eq.${encodeURIComponent(reportToken)}&revoked_at=is.null&select=survey_submission_id&limit=1`,
       {
         cache: "no-store",
         headers,

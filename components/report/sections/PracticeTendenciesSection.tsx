@@ -3,20 +3,30 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type FC } from "react";
 import { createPortal } from "react-dom";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
-import {
-  reportPracticeTendencies,
-  type ReportPracticeTendencyContent,
-  type ReportPracticeTendencyGroup,
-  type ReportPracticeTendencyRow,
-} from "@/data/report-practice-tendencies";
+import type { ReportPracticeTendencyRow } from "@/data/report-practice-tendencies";
+import type {
+  ReportPracticeTendencyContentForUser,
+  ReportPracticeTendencyGroupForUser,
+} from "@/components/report/hooks/useReportData";
 import {
   extractPracticeSectionIntroHtml,
   extractReportHtmlBlocks,
 } from "@/components/report/reportContent";
 
+// Internal aliases for the legacy API used by PracticeRow / PracticeGroupTable.
+type ReportPracticeTendencyGroup = ReportPracticeTendencyGroupForUser;
+type ReportPracticeTendencyContent = ReportPracticeTendencyContentForUser;
+
 interface Props {
   archetype: string;
   archetypeHtml: string | null;
+  /**
+   * Practice tendency content for the current archetype, server-filtered. When
+   * the practice section is locked the server ships only the free-preview row
+   * + totalRowCount per group; otherwise full rows are present.
+   * Null when the user has no access to this archetype's practice content.
+   */
+  content: ReportPracticeTendencyContentForUser | null;
   generalHtml: string;
   isPremium: boolean;
   isUnlocked?: boolean;
@@ -128,19 +138,28 @@ const InfoGlyph: FC<{ className?: string }> = ({ className }) => (
 const PracticeMetricCell: FC<{
   label: string;
   tone: MetricTone;
-  value: number;
+  value: number | null;
 }> = ({ label, tone, value }) => {
-  const percent = toPercent(value);
-  const fillStyle = buildPracticeMetricFillStyle(percent);
+  // value === null marks a locked-row placeholder. Premium scores must NEVER
+  // hit the DOM behind a CSS overlay — DevTools would surface them. Render a
+  // visible "--" with no underlying numeric value when locked.
+  const isLocked = value === null;
+  const percent = isLocked ? null : toPercent(value);
+  const fillStyle =
+    percent === null ? buildPracticeMetricFillStyle(0) : buildPracticeMetricFillStyle(percent);
 
   return (
     <div
-      className={`report-practice-table__metric report-practice-table__metric--${tone}`}
+      className={`report-practice-table__metric report-practice-table__metric--${tone}${
+        isLocked ? " report-practice-table__metric--locked" : ""
+      }`}
       role="cell"
     >
       <span className="report-practice-table__metric-mobile-label">{label}</span>
       <div className="report-practice-table__metric-content">
-        <span className="report-practice-table__metric-value">{percent}%</span>
+        <span className="report-practice-table__metric-value">
+          {percent === null ? "--" : `${percent}%`}
+        </span>
         <span className="report-practice-table__metric-bar" aria-hidden="true">
           <span style={fillStyle} />
         </span>
@@ -240,7 +259,11 @@ const PracticeGroupLocked: FC<{
   tier: PremiumOverlayTier;
 }> = ({ archetype, group, onUnlock, sectionTitle, tier }) => {
   const freeRow = group.rows[0] ?? null;
-  const lockedRows = group.rows.slice(1);
+  // The server only ships the first row when the section is locked. Use the
+  // server-supplied total row count to render placeholder cells for the
+  // locked remainder — premium scores must not exist in the JSON response.
+  const lockedRowCount = Math.max(0, group.totalRowCount - group.rows.length);
+  const lockedRows = Array.from({ length: lockedRowCount }, (_, i) => i);
   const useCompactLockedCard = COMPACT_LOCKED_GROUP_TITLES.has(group.title);
 
   return (
@@ -307,30 +330,23 @@ const PracticeGroupLocked: FC<{
                 className={`report-practice-table__locked-section${useCompactLockedCard ? " report-practice-table__locked-section--compact" : ""}`}
                 role="presentation"
               >
-                {lockedRows.map((row) => (
+                {lockedRows.map((_row, index) => (
+                  // Premium rows: render NEITHER the practice name NOR the scores
+                  // when locked. The cover overlay sits on top, but the DOM
+                  // payload must contain no extractable premium data.
                   <div
-                    key={row.practice}
+                    key={`locked-${index}`}
                     className="report-practice-table__row report-practice-table__row--locked"
                     role="row"
                   >
                     <div className="report-practice-table__practice" role="cell">
                       <div className="report-practice-table__practice-stack">
-                        <span className="report-practice-table__practice-label">
-                          {row.practice}
-                        </span>
+                        <span className="report-practice-table__practice-label">Locked</span>
                         <InfoGlyph className="report-practice-table__info-glyph report-practice-table__info-glyph--muted" />
                       </div>
                     </div>
-                    <PracticeMetricCell
-                      label="Fantasy Pull"
-                      tone="fantasy"
-                      value={row.fantasyPull}
-                    />
-                    <PracticeMetricCell
-                      label="Actual Pleasure"
-                      tone="pleasure"
-                      value={row.actualPleasure}
-                    />
+                    <PracticeMetricCell label="Fantasy Pull" tone="fantasy" value={null} />
+                    <PracticeMetricCell label="Actual Pleasure" tone="pleasure" value={null} />
                   </div>
                 ))}
 
@@ -648,6 +664,7 @@ const PracticePanel: FC<{
 
 const PracticeTendenciesSection: FC<Props> = ({
   archetype,
+  content,
   generalHtml,
   isPremium,
   isUnlocked = false,
@@ -655,17 +672,10 @@ const PracticeTendenciesSection: FC<Props> = ({
   sectionTitle,
   tier = "full_report",
 }) => {
-  const [locallyUnlocked, setLocallyUnlocked] = useState(false);
-  const unlocked = isUnlocked || locallyUnlocked;
-  const content = reportPracticeTendencies[archetype];
+  const unlocked = isUnlocked;
 
   function handleUnlock() {
-    if (onUnlock) {
-      onUnlock();
-      return;
-    }
-
-    setLocallyUnlocked(true);
+    onUnlock?.();
   }
 
   if (!content) {

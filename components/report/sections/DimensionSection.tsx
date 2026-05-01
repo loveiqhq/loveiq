@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FC } from "react";
+import type { FC } from "react";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import {
   ensureSexualStageHighlight,
@@ -39,8 +39,7 @@ const DimensionSection: FC<Props> = ({
   sectionTitle,
   tier = "full_report",
 }) => {
-  const [locallyUnlocked, setLocallyUnlocked] = useState(false);
-  const unlocked = isUnlocked || locallyUnlocked;
+  const unlocked = isUnlocked;
   const normalizedGeneralHtml =
     sectionId === "sexual_stage"
       ? ensureSexualStageHighlight(generalHtml, { isLocked: isStageValueLocked })
@@ -75,12 +74,7 @@ const DimensionSection: FC<Props> = ({
   const normalizedArchetypeHtml = normalizeReportHtml(resolvedArchetypeHtml);
 
   function handleUnlock() {
-    if (onUnlock) {
-      onUnlock();
-      return;
-    }
-
-    setLocallyUnlocked(true);
+    onUnlock?.();
   }
 
   return (
@@ -107,12 +101,7 @@ const DimensionSection: FC<Props> = ({
 
           <div className="report-themed-block">
             {isPremium && !unlocked ? (
-              <div className="report-themed-block__preview">
-                <div
-                  className="report-prose report-themed-block__blurred"
-                  aria-hidden="true"
-                  dangerouslySetInnerHTML={{ __html: normalizedArchetypeHtml }}
-                />
+              <div className="report-themed-block__preview report-themed-block__preview--locked">
                 <PremiumOverlay
                   archetype={archetype}
                   sectionTitle={sectionTitle}

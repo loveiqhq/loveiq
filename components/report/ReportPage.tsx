@@ -10,11 +10,12 @@ import {
   type FC,
 } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { archetypeContent } from "@/data/report-archetypes";
 import { reportSections } from "@/data/report-general";
+import { escapeHtml } from "@/lib/html-escape";
 import { cacheReportCheckoutQuote } from "@/lib/checkout/reportCheckoutQuoteCache";
 import { buildReportCheckoutHref, type ReportPurchasePlanId } from "@/lib/checkout/reportPurchase";
 import type { ReportPriceQuoteSnapshot } from "@/lib/pricing/reportPricing";
+import { canSharePlan } from "@/lib/report/planAccess";
 import InviteModal from "@/components/survey/InviteModal";
 import FooterSection from "@/components/landing/FooterSection";
 import ReportNavigation from "./ReportNavigation";
@@ -24,7 +25,6 @@ import SectionFeedback from "./SectionFeedback";
 import ShareReportModal from "./ShareReportModal";
 import ShareVerifyGate from "./ShareVerifyGate";
 import SharedViewerBanner from "./SharedViewerBanner";
-import ViewingBanner from "./ViewingBanner";
 import {
   getReportSessionId,
   setReportPricingSessionId,
@@ -211,19 +211,23 @@ function replacePlaceholders(
     userName: string;
   }
 ) {
+  // Every substitution lands in a dangerouslySetInnerHTML; escape every
+  // value (user-controlled or server-derived) so a malicious first name or
+  // a future server-side change can't inject HTML/script. The labels below
+  // are plain text by contract — escaping them is a safe no-op.
   return normalizeReportHtml(
     html
-      .replace(/\{\{USER_NAME\}\}/g, values.userName)
+      .replace(/\{\{USER_NAME\}\}/g, escapeHtml(values.userName))
       .replace(
         /\{\{CORE_ARCHETYPE\}\}/g,
-        `<span class="report-archetype-name">${values.archetype}</span>`
+        `<span class="report-archetype-name">${escapeHtml(values.archetype)}</span>`
       )
       .replace(/\{\{CORE_ARCHETYPE_SCORE\}\}/g, String(Math.round(values.matchScore)))
-      .replace(/\{\{CORE_ARCHETYPE_MOTTO\}\}/g, values.motto)
-      .replace(/\{\{REPORT_DATE\}\}/g, values.reportDate)
-      .replace(/\{\{SEXUAL_STAGE\}\}/g, values.snapshot.stage ?? "")
-      .replace(/\{\{IMPORTANCE_OF_SEX\}\}/g, values.snapshot.importanceLabel)
-      .replace(/\{\{SEXUAL_SATISFACTION\}\}/g, values.snapshot.satisfactionLabel)
+      .replace(/\{\{CORE_ARCHETYPE_MOTTO\}\}/g, escapeHtml(values.motto))
+      .replace(/\{\{REPORT_DATE\}\}/g, escapeHtml(values.reportDate))
+      .replace(/\{\{SEXUAL_STAGE\}\}/g, escapeHtml(values.snapshot.stage ?? ""))
+      .replace(/\{\{IMPORTANCE_OF_SEX\}\}/g, escapeHtml(values.snapshot.importanceLabel))
+      .replace(/\{\{SEXUAL_SATISFACTION\}\}/g, escapeHtml(values.snapshot.satisfactionLabel))
       .replace(/<table>[\s\S]*?<\/table>/g, "")
   );
 }
@@ -289,7 +293,7 @@ interface ReportExperienceProps {
   ownerToken: string | null;
   percentages: Record<string, number>;
   pricingTargetArchetype: string | null;
-  pricingVariant: "default" | "offer";
+  pricingVariant: "default" | "offer" | "share";
   placeholderValues: {
     archetype: string;
     matchScore: number;
@@ -300,10 +304,14 @@ interface ReportExperienceProps {
   };
   primaryArchetype: string;
   pricingQuotes: Record<ReportPurchasePlanId, ReportPriceQuoteSnapshot> | null;
+  archetypeContent: Record<string, Record<string, string>>;
+  practiceTendencies: Record<
+    string,
+    import("./hooks/useReportData").ReportPracticeTendencyContentForUser
+  >;
   ranking: string[];
   reportDate: string;
   resolvedSections: ReturnType<typeof resolveReportSections>;
-  returnToPrimaryHref: string;
   snapshot: SnapshotContent;
   submitFeedback: (sectionId: string, payload: FeedbackPayload) => void;
   submitted: Record<string, boolean>;
@@ -334,12 +342,13 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   placeholderValues,
   primaryArchetype,
   pricingQuotes,
+  archetypeContent,
+  practiceTendencies,
   pricingTargetArchetype,
   pricingVariant,
   ranking,
   reportDate,
   resolvedSections,
-  returnToPrimaryHref,
   snapshot,
   submitFeedback,
   submitted,
@@ -352,8 +361,20 @@ const ReportExperience: FC<ReportExperienceProps> = ({
 }) => {
   const mainContentRef = useRef<HTMLElement | null>(null);
   const [activeSectionId, setActiveSectionId] = useState(resolvedSections[0]?.id ?? "welcome");
-  const [showInvite, setShowInvite] = useState(false);
-  const [unlockedSections, setUnlockedSections] = useState<Record<string, boolean>>({});
+  // Auto-open the Refer-a-Friend modal when the page is loaded with ?invite=1.
+  // Reminder emails (`invite-reminder-1`/`-2`) deep-link to /report?invite=1
+  // — they would silently fail without this auto-open.
+  const reportSearchParams = useSearchParams();
+  const shouldAutoOpenInvite = viewMode === "owner" && reportSearchParams.get("invite") === "1";
+  const [showInvite, setShowInvite] = useState(shouldAutoOpenInvite);
+  const autoOpenedInviteRef = useRef(shouldAutoOpenInvite);
+  useEffect(() => {
+    if (autoOpenedInviteRef.current) return;
+    if (!shouldAutoOpenInvite) return;
+    autoOpenedInviteRef.current = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setShowInvite(true);
+  }, [shouldAutoOpenInvite]);
   const clickLockUntilRef = useRef(0);
 
   const handleSectionClick = (sectionId: string) => {
@@ -361,17 +382,8 @@ const ReportExperience: FC<ReportExperienceProps> = ({
     setActiveSectionId(sectionId);
   };
 
-  // TEMP (beta): any unlock CTA unlocks every section so testers don't
-  // have to click each one. Revert once paywall gating is re-enabled —
-  // original body set only the clicked sectionId to true.
   const unlockSection = (_sectionId: string) => {
-    setUnlockedSections((current) => {
-      const allAlreadyUnlocked = resolvedSections.every((s) => current[s.id]);
-      if (allAlreadyUnlocked) return current;
-      const next: Record<string, boolean> = { ...current };
-      for (const s of resolvedSections) next[s.id] = true;
-      return next;
-    });
+    onOpenPricingModal();
   };
 
   useEffect(() => {
@@ -459,9 +471,6 @@ const ReportExperience: FC<ReportExperienceProps> = ({
         </div>
       )}
       {viewMode === "shared" && <SharedViewerBanner ownerFirstName={ownerFirstName} />}
-      {viewArchetype !== primaryArchetype && (
-        <ViewingBanner archetypeName={viewArchetype} returnHref={returnToPrimaryHref} />
-      )}
       <div
         className={[
           "report-page__shell-wrap",
@@ -488,7 +497,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
               const generalHtml = replacePlaceholders(section.generalContent, placeholderValues);
               const archetypeHtml = normalizeReportHtml(
                 section.archetypeBlockId
-                  ? (archetypeContent[section.archetypeBlockId]?.[viewArchetype] ?? null)
+                  ? (archetypeContent?.[section.archetypeBlockId]?.[viewArchetype] ?? null)
                   : null
               );
 
@@ -535,7 +544,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                       archetypeHtml={summaryHtml}
                       generalHtml=""
                       isPremium={section.isPremium}
-                      isUnlocked={isSummaryUnlocked || (unlockedSections[section.id] ?? false)}
+                      isUnlocked={isSummaryUnlocked}
                       onUnlock={() => unlockSection(section.id)}
                       sectionId={section.id}
                       sectionTitle={title}
@@ -636,7 +645,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                       archetypeHtml={archetypeHtml}
                       generalHtml={generalHtml}
                       isPremium={section.isPremium}
-                      isUnlocked={isBackendUnlocked || (unlockedSections[section.id] ?? false)}
+                      isUnlocked={isBackendUnlocked}
                       onUnlock={() => unlockSection(section.id)}
                       sectionTitle={title}
                       tier={
@@ -666,9 +675,10 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     <PracticeTendenciesSection
                       archetype={viewArchetype}
                       archetypeHtml={archetypeHtml}
+                      content={practiceTendencies[viewArchetype] ?? null}
                       generalHtml={generalHtml}
                       isPremium={section.isPremium}
-                      isUnlocked={isBackendUnlocked || (unlockedSections[section.id] ?? false)}
+                      isUnlocked={isBackendUnlocked}
                       onUnlock={() => unlockSection(section.id)}
                       sectionTitle={practiceSectionTitle}
                       tier={
@@ -700,7 +710,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     generalHtml={generalHtml}
                     isPremium={section.isPremium}
                     isStageValueLocked={isStageValueLocked}
-                    isUnlocked={isBackendUnlocked || (unlockedSections[section.id] ?? false)}
+                    isUnlocked={isBackendUnlocked}
                     onUnlock={() => unlockSection(section.id)}
                     sectionId={section.id}
                     sectionTitle={title}
@@ -780,13 +790,10 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     pricingSessionIdOverride: pricingSessionIdFromUrl,
   });
   const { feedbacks, submitted, submitFeedback } = useSectionFeedback(sessionId);
-  const [locallyUnlocked, setLocallyUnlocked] = useState<string[]>([]);
   const [isPricingModalOpen, setIsPricingModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [pricingTargetArchetype, setPricingTargetArchetype] = useState<string | null>(null);
-  const [pricingVariant, setPricingVariant] = useState<"default" | "offer">(
-    isOfferLink ? "offer" : "default"
-  );
+  const [pricingVariant, setPricingVariant] = useState<"default" | "offer" | "share">("offer");
   const autoOpenedPricingRef = useRef(false);
   const autoOpenedOfferRef = useRef(false);
 
@@ -800,14 +807,18 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   useEffect(() => {
     if (autoOpenedPricingRef.current) return;
     if (!data) return;
-    const paywallDisabled = process.env.NEXT_PUBLIC_DISABLE_PAYWALL === "1";
-    if (paywallDisabled) return;
     if (viewMode === "shared") return;
     if (accessPlan !== null) return;
+    // Only auto-open when the discount ladder has progressed (24h+ since
+    // survey). At step 0 (just finished the report) the modal stays closed —
+    // user opens it explicitly via locked-section CTAs or archetype tiles.
+    const quotes = data.pricingQuotes;
+    const hasLadderDiscount =
+      !!quotes && Object.values(quotes).some((quote) => quote && quote.discountStep >= 1);
+    if (!hasLadderDiscount) return;
     autoOpenedPricingRef.current = true;
-    // One-shot auto-open when the unpaid report first loads; guarded by
-    // autoOpenedPricingRef so it never cascades.
     // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPricingVariant("offer");
     setIsPricingModalOpen(true);
   }, [accessPlan, data, viewMode]);
 
@@ -834,10 +845,9 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     if (apiUnlocked) {
       for (const name of apiUnlocked) set.add(name);
     }
-    for (const name of locallyUnlocked) set.add(name);
     if (primaryArchetypeFromData) set.add(primaryArchetypeFromData);
     return set;
-  }, [apiUnlocked, locallyUnlocked, primaryArchetypeFromData]);
+  }, [apiUnlocked, primaryArchetypeFromData]);
 
   const archetypeSlugParam = searchParams.get("archetype");
   const requestedArchetype = fromArchetypeSlug(archetypeSlugParam);
@@ -876,48 +886,11 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
         return;
       }
 
-      const paywallDisabled = process.env.NEXT_PUBLIC_DISABLE_PAYWALL === "1";
-      if (!paywallDisabled) {
-        setPricingTargetArchetype(name === primaryArchetypeFromData ? null : name);
-        setPricingVariant("default");
-        setIsPricingModalOpen(true);
-        return;
-      }
-
-      void (async () => {
-        try {
-          const csrfToken = getCsrfToken();
-          const body: Record<string, string> = { archetype: name };
-          if (token) body.token = token;
-          else if (sessionId) body.sessionId = sessionId;
-          const res = await fetch("/api/report/unlock-archetype", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "x-csrf-token": csrfToken,
-            },
-            body: JSON.stringify(body),
-          });
-          if (!res.ok) return;
-          const json = (await res.json()) as { unlockedArchetypes?: string[] };
-          const returned = Array.isArray(json.unlockedArchetypes) ? json.unlockedArchetypes : [];
-          setLocallyUnlocked((prev) => Array.from(new Set([...prev, ...returned, name])));
-          navigateTo(name);
-        } catch {
-          // swallow — user can retry
-        }
-      })();
+      setPricingTargetArchetype(name === primaryArchetypeFromData ? null : name);
+      setPricingVariant("offer");
+      setIsPricingModalOpen(true);
     },
-    [
-      devParam,
-      pathname,
-      primaryArchetypeFromData,
-      returnToPrimaryHref,
-      router,
-      sessionId,
-      token,
-      unlockedArchetypes,
-    ]
+    [devParam, pathname, primaryArchetypeFromData, returnToPrimaryHref, router, unlockedArchetypes]
   );
 
   const beginCheckout = (plan: ReportPurchasePlanId, archetype?: string | null) => {
@@ -937,14 +910,24 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   const closePricingModal = useCallback(() => {
     setIsPricingModalOpen(false);
     setPricingTargetArchetype(null);
-    setPricingVariant("default");
+    setPricingVariant("offer");
   }, []);
 
-  const openShareModal = useCallback(() => setIsShareModalOpen(true), []);
+  const openShareModal = useCallback(() => {
+    // Free-plan users see the pricing modal in "share" variant instead of the
+    // share form — they have nothing to share until they purchase a plan.
+    if (!canSharePlan(accessPlan)) {
+      setPricingTargetArchetype(null);
+      setPricingVariant("share");
+      setIsPricingModalOpen(true);
+      return;
+    }
+    setIsShareModalOpen(true);
+  }, [accessPlan]);
   const closeShareModal = useCallback(() => setIsShareModalOpen(false), []);
   const openPricingModal = useCallback(() => {
     setPricingTargetArchetype(null);
-    setPricingVariant("default");
+    setPricingVariant("offer");
     setIsPricingModalOpen(true);
   }, []);
 
@@ -1050,12 +1033,13 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       placeholderValues={placeholderValues}
       primaryArchetype={primaryArchetype}
       pricingQuotes={data.pricingQuotes}
+      archetypeContent={data.archetypeContent ?? {}}
+      practiceTendencies={data.practiceTendencies ?? {}}
       pricingTargetArchetype={pricingTargetArchetype}
       pricingVariant={pricingVariant}
       ranking={ranking}
       reportDate={reportDate}
       resolvedSections={resolvedSections}
-      returnToPrimaryHref={returnToPrimaryHref}
       snapshot={snapshot}
       submitFeedback={submitFeedback}
       submitted={submitted}

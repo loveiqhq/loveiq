@@ -4,8 +4,11 @@ import { getBreaker } from "@/lib/circuit-breaker";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import logger from "@/lib/logger";
 import { reportAllEmail } from "@/lib/emails/report-all";
+import { reportAllBEmail } from "@/lib/emails/report-all-b";
 import { reportEssentialsEmail } from "@/lib/emails/report-essentials";
 import { reportFullEmail } from "@/lib/emails/report-full";
+import { reportFullBEmail } from "@/lib/emails/report-full-b";
+import { pickEmailVariant } from "@/lib/emails/ab-variant";
 import {
   getReportPurchasePlan,
   isReportPurchasePlanId,
@@ -18,6 +21,29 @@ function getResend(): Resend | null {
   if (!key) return null;
   if (!_resend) _resend = new Resend(key);
   return _resend;
+}
+
+// Defensive shape check for `event.data.object`. Stripe's webhook event
+// `event.data.object` is loosely typed; before casting to a domain shape, make
+// sure the payload at least looks like a Stripe object so we surface a clean
+// error instead of throwing on a deeply-nested undefined.
+function isStripeObjectShape(value: unknown): value is { id?: string; object?: string } {
+  return typeof value === "object" && value !== null;
+}
+
+// Stripe error objects can include customer email, payment method last4, and
+// other PII not covered by the global pino redact path list. Strip them down
+// to a safe shape before logging.
+function sanitizeError(error: unknown): Record<string, string | undefined> {
+  if (error instanceof Error) {
+    const stripeCode = (error as { code?: string }).code;
+    return {
+      name: error.name,
+      message: error.message,
+      ...(typeof stripeCode === "string" ? { code: stripeCode } : {}),
+    };
+  }
+  return { name: "UnknownError" };
 }
 
 async function lookupRecipientForSubmission(submissionId: number): Promise<{
@@ -62,10 +88,12 @@ async function sendPurchaseEmail({
   plan,
   reportTokenOverride,
   submissionId,
+  unlockedArchetype,
 }: {
   plan: ReportPurchasePlanId;
   reportTokenOverride: string | null;
   submissionId: number;
+  unlockedArchetype?: string | null;
 }): Promise<void> {
   if (plan !== "essentials" && plan !== "full_report" && plan !== "all_reports") {
     return;
@@ -89,12 +117,37 @@ async function sendPurchaseEmail({
     ? `${siteUrl}/report/${encodeURIComponent(reportToken)}`
     : `${siteUrl}/report`;
 
+  // Essentials has a single template; full_report and all_reports run an A/B
+  // copy test. Variant is deterministic per recipient (hashed email) so retries
+  // and dashboards stay consistent.
+  const variant =
+    plan === "essentials" ? "a" : pickEmailVariant(recipient.email, `purchase-${plan}`);
+
   const tpl =
     plan === "all_reports"
-      ? reportAllEmail({ firstName: recipient.firstName, reportUrl, siteUrl })
+      ? variant === "b"
+        ? reportAllBEmail({ firstName: recipient.firstName, reportUrl, siteUrl })
+        : reportAllEmail({ firstName: recipient.firstName, reportUrl, siteUrl })
       : plan === "essentials"
-        ? reportEssentialsEmail({ firstName: recipient.firstName, reportUrl, siteUrl })
-        : reportFullEmail({ firstName: recipient.firstName, reportUrl, siteUrl });
+        ? reportEssentialsEmail({
+            firstName: recipient.firstName,
+            reportUrl,
+            siteUrl,
+            unlockedArchetype: unlockedArchetype ?? null,
+          })
+        : variant === "b"
+          ? reportFullBEmail({
+              firstName: recipient.firstName,
+              reportUrl,
+              siteUrl,
+              unlockedArchetype: unlockedArchetype ?? null,
+            })
+          : reportFullEmail({
+              firstName: recipient.firstName,
+              reportUrl,
+              siteUrl,
+              unlockedArchetype: unlockedArchetype ?? null,
+            });
 
   try {
     const { error } = await Promise.race([
@@ -105,18 +158,19 @@ async function sendPurchaseEmail({
         subject: tpl.subject,
         html: tpl.html,
         text: tpl.text,
+        headers: { "X-LoveIQ-Variant": variant },
       }),
       new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error("Resend timeout")), 8_000)
       ),
     ]);
     if (error) {
-      logger.error({ error, plan, submissionId }, "Purchase email send failed");
+      logger.error({ error, plan, submissionId, variant }, "Purchase email send failed");
     } else {
-      logger.info({ plan, submissionId }, "Purchase email sent");
+      logger.info({ plan, submissionId, variant }, "Purchase email sent");
     }
   } catch (err) {
-    logger.error({ err, plan, submissionId }, "Purchase email error");
+    logger.error({ err, plan, submissionId, variant }, "Purchase email error");
   }
 }
 import {
@@ -140,7 +194,7 @@ interface ServiceFetchOptions {
   timeoutMs?: number;
 }
 
-type PaymentStatus = "canceled" | "failed" | "refunded" | "succeeded";
+type PaymentStatus = "canceled" | "disputed" | "failed" | "refunded" | "succeeded";
 
 function getSupabaseServiceConfig() {
   const url = process.env.SUPABASE_URL;
@@ -281,6 +335,12 @@ async function upsertWebhookEventRecord({
   });
 
   if (!createResponse.ok) {
+    // Concurrent webhook retries may race past the lookup above and both attempt
+    // to insert. The unique index on stripe_event_id collapses one of them with
+    // a 409 Conflict — treat as already-recorded rather than retrying.
+    if (createResponse.status === 409) {
+      return null;
+    }
     throw new Error("payment_webhook_event_create_failed");
   }
 
@@ -732,6 +792,7 @@ async function syncCheckoutSessionPayment({
           ? settledSession.metadata.reportToken
           : null,
       submissionId: context.submissionId,
+      unlockedArchetype,
     });
   }
 
@@ -800,6 +861,80 @@ async function syncRefundEvent({ charge, event }: { charge: Stripe.Charge; event
   });
 }
 
+// Chargebacks: Stripe holds the funds the moment the dispute is created. We
+// mirror that on our side so the report re-locks automatically — the access
+// query filters payments by status=succeeded, so flipping to disputed drops
+// the row from access computation. If the merchant later wins the dispute,
+// Stripe emits charge.dispute.closed with status=won and we restore the row.
+async function syncDisputeEvent({
+  dispute,
+  event,
+  outcome,
+}: {
+  dispute: Stripe.Dispute;
+  event: Stripe.Event;
+  outcome: "opened" | "closed";
+}) {
+  const chargeId = typeof dispute.charge === "string" ? dispute.charge : dispute.charge?.id;
+  const paymentIntentId =
+    typeof dispute.payment_intent === "string"
+      ? dispute.payment_intent
+      : (dispute.payment_intent?.id ?? null);
+
+  const existingPayment = await fetchExistingPayment({
+    stripeChargeId: chargeId ?? null,
+    stripePaymentIntentId: paymentIntentId,
+  });
+
+  if (!existingPayment?.id) {
+    await upsertWebhookEventRecord({
+      event,
+      processed: false,
+      processingError: "payment_not_found_for_dispute",
+      stripePaymentIntentId: paymentIntentId,
+    });
+    return;
+  }
+
+  // Re-lock on dispute open. On close, only restore if the merchant won —
+  // lost / warning_closed / charge_refunded outcomes leave the payment locked.
+  const restoreToSucceeded = outcome === "closed" && dispute.status === "won";
+  const nextStatus = restoreToSucceeded ? "succeeded" : "disputed";
+
+  const updateResponse = await supabaseServiceFetch(
+    `/rest/v1/payment?id=eq.${existingPayment.id}`,
+    {
+      body: JSON.stringify({
+        status: nextStatus,
+        updated_date_time: new Date().toISOString(),
+      }),
+      headers: { Prefer: "return=minimal" },
+      method: "PATCH",
+    }
+  );
+
+  if (!updateResponse.ok) {
+    throw new Error("payment_dispute_update_failed");
+  }
+
+  if (existingPayment.personal_report_id) {
+    await updatePersonalReportPayment({
+      amount: toAmount(dispute.amount),
+      paymentId: existingPayment.id,
+      personalReportId: existingPayment.personal_report_id,
+      status: nextStatus,
+    });
+  }
+
+  await upsertWebhookEventRecord({
+    event,
+    paymentId: existingPayment.id,
+    processed: true,
+    processingError: null,
+    stripePaymentIntentId: paymentIntentId,
+  });
+}
+
 export async function processStripeWebhookEvent({
   event,
   stripe,
@@ -810,6 +945,16 @@ export async function processStripeWebhookEvent({
   try {
     const existingWebhookEvent = await fetchWebhookEventRecord(event.id);
     if (existingWebhookEvent?.processed) {
+      return;
+    }
+
+    if (!isStripeObjectShape(event.data.object)) {
+      await upsertWebhookEventRecord({
+        event,
+        processed: false,
+        processingError: "event_payload_invalid_shape",
+        stripePaymentIntentId: null,
+      });
       return;
     }
 
@@ -842,6 +987,20 @@ export async function processStripeWebhookEvent({
       case "charge.refunded":
         await syncRefundEvent({ charge: event.data.object as Stripe.Charge, event });
         return;
+      case "charge.dispute.created":
+        await syncDisputeEvent({
+          dispute: event.data.object as Stripe.Dispute,
+          event,
+          outcome: "opened",
+        });
+        return;
+      case "charge.dispute.closed":
+        await syncDisputeEvent({
+          dispute: event.data.object as Stripe.Dispute,
+          event,
+          outcome: "closed",
+        });
+        return;
       default:
         await upsertWebhookEventRecord({
           event,
@@ -852,7 +1011,7 @@ export async function processStripeWebhookEvent({
     }
   } catch (error) {
     logger.error(
-      { error, eventId: event.id, type: event.type },
+      { err: sanitizeError(error), eventId: event.id, type: event.type },
       "Stripe webhook fulfillment failed"
     );
 

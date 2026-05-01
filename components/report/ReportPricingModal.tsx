@@ -18,6 +18,7 @@ import {
   type ReportPurchasePlanId,
 } from "@/lib/checkout/reportPurchase";
 import type { ReportPriceQuoteSnapshot } from "@/lib/pricing/reportPricing";
+import { getReportTheme, getReportThemeStyle } from "./reportTheme";
 
 interface Props {
   archetype: string;
@@ -28,16 +29,19 @@ interface Props {
   returnFocusRef?: MutableRefObject<HTMLElement | null>;
   targetArchetype?: string | null;
   /**
-   * "default" (current behaviour) vs "offer" — triggered from the discount email
-   * deep-link (?offer=1). Swaps the headline, recolours the first clause to
-   * orange, and surfaces the "Extra N% OFF" inline pill on the Full card when
-   * the ladder has progressed past 50%.
+   * "default" — original behaviour.
+   * "offer" — discount email deep-link (?offer=1): orange-accent headline +
+   *   "Extra N% OFF" pill on the Full card when ladder has progressed past 50%.
+   * "share" — opened when a free-plan user taps the share button: header copy
+   *   pivots to the sharing pitch (Figma node 6389-106).
    */
-  variant?: "default" | "offer";
+  variant?: "default" | "offer" | "share";
 }
 
 const FOCUSABLE_SELECTOR =
   'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+
+const SHOW_TESTIMONIAL = true;
 
 interface ScrollLockState {
   htmlOverflow: string;
@@ -81,20 +85,30 @@ function getCardPricing(
       badge: null,
       priceLabel: "Pricing unavailable",
       strikePriceLabel: null,
+      startingStrikePriceLabel: null,
     };
   }
 
   const currentCents = quote.currentPriceCents;
   const strikeCents = quote.msrpCents;
+  const startingCents = quote.startingPriceCents;
   // Hide strike when the MSRP and current price are equal (e.g. legacy
   // pre-migration rows where `msrpCents` backfilled to the same value) so the
   // modal doesn't render a pointless line-through over an identical number.
   const strikeEligible = typeof strikeCents === "number" && strikeCents > currentCents;
+  // Secondary strike = the regular sale price (between MSRP and current). Only
+  // shown in offer mode when the discount ladder has dropped current below
+  // starting AND starting is itself below MSRP.
+  const startingEligible =
+    typeof startingCents === "number" &&
+    startingCents > currentCents &&
+    (!strikeEligible || (typeof strikeCents === "number" && startingCents < strikeCents));
   return {
     available: true,
     badge: getReportPurchaseBadgeFromPrice({ strikeCents, currentCents }),
     priceLabel: formatReportPurchasePrice(currentCents),
     strikePriceLabel: strikeEligible ? getReportPurchaseStrikePrice(strikeCents) : null,
+    startingStrikePriceLabel: startingEligible ? getReportPurchaseStrikePrice(startingCents) : null,
   };
 }
 
@@ -117,14 +131,15 @@ const ReportPricingModal: FC<Props> = ({
   const [focusMode, setFocusMode] = useState<"keyboard" | "pointer">("pointer");
 
   const isOffer = variant === "offer";
-  const subtitle = targetArchetype
-    ? `Unlock the complete ${targetArchetype} report \u2014 full attachment, desire drivers, practices, and growth paths for this archetype.`
-    : isOffer
-      ? "Unlock your complete archetype report \u2014 comprehensive coverage of your archetype probabilities, sexual stage, attachment style, desire drivers, and growth paths."
-      : `Unlock your complete ${archetype} report \u2014 attachment style, core insecurities, confidence, love language, arousal, desire drivers, fantasies, and more.`;
-  const planCards = targetArchetype
-    ? REPORT_PURCHASE_PLANS.filter((card) => card.plan === "full_report")
-    : REPORT_PURCHASE_PLANS;
+  const isShare = variant === "share";
+  const subtitle = isShare
+    ? "Your current plan does not include report sharing. Upgrade to learn more about yourself, share your insights, and spark honest, meaningful conversations."
+    : targetArchetype
+      ? `Unlock the complete ${targetArchetype} report \u2014 full attachment, desire drivers, practices, and growth paths for this archetype.`
+      : isOffer
+        ? "Unlock your complete archetype report \u2014 comprehensive coverage of your archetype probabilities, sexual stage, attachment style, desire drivers, and growth paths."
+        : `Unlock your complete ${archetype} report \u2014 attachment style, core insecurities, confidence, love language, arousal, desire drivers, fantasies, and more.`;
+  const planCards = REPORT_PURCHASE_PLANS;
 
   // "Extra N% OFF" pill on Full card — communicates the ladder depth relative
   // to the starting-sale price (NOT MSRP), so it reads as bonus savings on top
@@ -139,6 +154,9 @@ const ReportPricingModal: FC<Props> = ({
       : 0;
   const showExtraDiscountPill =
     isOffer && !!fullQuote && fullQuote.discountStep >= 2 && extraDiscountPct > 0;
+
+  const themeArchetype = targetArchetype ?? archetype;
+  const themeStyle = getReportThemeStyle(getReportTheme(themeArchetype));
 
   useEffect(() => {
     if (open) {
@@ -273,6 +291,7 @@ const ReportPricingModal: FC<Props> = ({
       data-focus-mode={focusMode}
       data-variant={variant}
       aria-hidden={!open}
+      style={themeStyle}
     >
       <div className="report-pricing-modal__backdrop" aria-hidden="true" onClick={onClose} />
 
@@ -310,20 +329,30 @@ const ReportPricingModal: FC<Props> = ({
             <div className="report-pricing-modal__inner">
               <div className="report-pricing-modal__header">
                 <span className="report-pricing-modal__eyebrow">
-                  Don&apos;t miss out on truly understanding your sexuality
+                  {isShare
+                    ? "Ready to share your report insights?"
+                    : "Don\u2019t miss out on truly understanding your sexuality"}
                 </span>
                 <h2 id="report-pricing-modal-title" className="report-pricing-modal__title">
-                  {targetArchetype ? (
+                  {isShare ? (
+                    "Upgrade your plan to share your results"
+                  ) : targetArchetype ? (
                     `Unlock the ${targetArchetype} report`
                   ) : isOffer ? (
                     <>
                       <span className="report-pricing-modal__title-accent">
                         Secure your extra discount now,
-                      </span>{" "}
-                      to unlock your full report
+                      </span>
+                      <br />
+                      <span className="report-pricing-modal__title-tail">
+                        to unlock your full report
+                      </span>
                     </>
                   ) : (
-                    "Unlock your full report"
+                    <>
+                      Unlock your full report of{" "}
+                      <span className="report-pricing-modal__title-accent">the {archetype}</span>
+                    </>
                   )}
                 </h2>
                 <p id="report-pricing-modal-copy" className="report-pricing-modal__copy">
@@ -355,13 +384,14 @@ const ReportPricingModal: FC<Props> = ({
                           : "report-pricing-card--side",
                         card.badge || card.featuredLabel ? "report-pricing-card--with-badge" : "",
                         card.tone === "highlight" ? "report-pricing-card--highlight" : "",
+                        card.plan === "essentials" ? "report-pricing-card--essentials" : "",
                       ]
                         .filter(Boolean)
                         .join(" ")}
                     >
-                      {pricing.badge || card.featuredLabel ? (
+                      {(pricing.badge && !isOffer) || card.featuredLabel ? (
                         <div className="report-pricing-card__badges">
-                          {pricing.badge ? (
+                          {pricing.badge && !isOffer ? (
                             <span className="report-pricing-card__badge">{pricing.badge}</span>
                           ) : null}
                           {card.featuredLabel ? (
@@ -390,23 +420,38 @@ const ReportPricingModal: FC<Props> = ({
                           aria-hidden={pricing.strikePriceLabel ? undefined : "true"}
                         >
                           {pricing.strikePriceLabel
-                            ? `${pricing.strikePriceLabel} ${card.priceSuffix === "one-time" ? "one time off" : card.priceSuffix}`
+                            ? `${pricing.strikePriceLabel} ${card.priceSuffix === "one-time" ? "one off" : card.priceSuffix}`
                             : "\u00a0"}
                         </span>
+                        {isOffer && pricing.startingStrikePriceLabel ? (
+                          <span className="report-pricing-card__strike report-pricing-card__strike--secondary">
+                            {pricing.startingStrikePriceLabel} /
+                            {card.priceSuffix === "one-time" ? "one off" : card.priceSuffix}
+                          </span>
+                        ) : null}
                         <div className="report-pricing-card__price-row">
                           <strong>{pricing.priceLabel}</strong>
-                          {pricing.available ? (
+                          {pricing.available && !isOffer ? (
                             <span>
-                              /{card.priceSuffix === "one-time" ? "one time off" : card.priceSuffix}
+                              /{card.priceSuffix === "one-time" ? "one off" : card.priceSuffix}
                             </span>
                           ) : null}
-                          {card.plan === "full_report" && showExtraDiscountPill ? (
-                            <span
-                              className="report-pricing-card__extra-pill"
-                              aria-label={`Extra ${extraDiscountPct} percent off`}
-                            >
-                              Extra {extraDiscountPct}% OFF
-                            </span>
+                          {isOffer && pricing.available ? (
+                            card.plan === "full_report" && showExtraDiscountPill ? (
+                              <span
+                                className="report-pricing-card__extra-pill"
+                                aria-label={`Extra ${extraDiscountPct} percent off`}
+                              >
+                                EXTRA {extraDiscountPct}% OFF
+                              </span>
+                            ) : pricing.badge ? (
+                              <span
+                                className="report-pricing-card__extra-pill"
+                                aria-label={pricing.badge}
+                              >
+                                {pricing.badge}
+                              </span>
+                            ) : null
                           ) : null}
                         </div>
                       </div>
@@ -476,44 +521,33 @@ const ReportPricingModal: FC<Props> = ({
                 <PricingMethodMark logo="amex" label="American Express" />
               </div>
 
-              <figure className="report-pricing-modal__testimonial">
-                <div className="report-pricing-modal__person">
-                  <div className="report-pricing-modal__avatar">
-                    <Image
-                      src="/images/testimonial-richard.png"
-                      alt="Richard"
-                      width={82}
-                      height={82}
-                    />
+              {SHOW_TESTIMONIAL ? (
+                <figure className="report-pricing-modal__testimonial">
+                  <div className="report-pricing-modal__stars" aria-label="5 out of 5 stars">
+                    {Array.from({ length: 5 }).map((_, index) => (
+                      <svg key={index} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                        <path d="m8 1.5 1.72 3.48 3.84.56-2.78 2.71.66 3.83L8 10.27l-3.44 1.81.66-3.83L2.44 5.54l3.84-.56L8 1.5Z" />
+                      </svg>
+                    ))}
                   </div>
-                  <div className="report-pricing-modal__author-copy">
-                    <strong>Richard, 34</strong>
-                    <em>Manager / Spark seeker</em>
-                  </div>
-                </div>
-                <div className="report-pricing-modal__stars" aria-label="5 out of 5 stars">
-                  {Array.from({ length: 5 }).map((_, index) => (
-                    <svg key={index} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-                      <path d="m8 1.5 1.72 3.48 3.84.56-2.78 2.71.66 3.83L8 10.27l-3.44 1.81.66-3.83L2.44 5.54l3.84-.56L8 1.5Z" />
-                    </svg>
-                  ))}
-                </div>
-                <blockquote className="report-pricing-modal__quote">
-                  {isOffer ? (
-                    <>
-                      &ldquo;Unlocking my report was{" "}
-                      <em>one of the best investments made for my sexuality.</em> It is shockingly
-                      precise&rdquo;
-                    </>
-                  ) : (
-                    <>
-                      &ldquo;The results were <em>more insightful than I expected</em>. It connected
-                      dots between emotional triggers and communication styles I hadn&rsquo;t
-                      noticed before. Solid UX, too.&rdquo;
-                    </>
-                  )}
-                </blockquote>
-              </figure>
+                  <blockquote className="report-pricing-modal__quote">
+                    &ldquo;Unlocking my report was{" "}
+                    <em>one of the best investments made for my sexuality.</em> It is shockingly
+                    precise&rdquo;
+                  </blockquote>
+                  <figcaption className="report-pricing-modal__person">
+                    <div className="report-pricing-modal__avatar">
+                      <Image src="/images/testimonial-richard.png" alt="" width={80} height={80} />
+                    </div>
+                    <div className="report-pricing-modal__author-copy">
+                      <strong>
+                        Dr. Tobias V. <span>40</span>
+                      </strong>
+                      <em>Berlin, Germany</em>
+                    </div>
+                  </figcaption>
+                </figure>
+              ) : null}
             </div>
           </div>
         </div>

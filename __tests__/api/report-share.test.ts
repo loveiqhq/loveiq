@@ -183,15 +183,35 @@ describe("POST /api/report/share", () => {
     expect(res.status).toBe(400);
   });
 
-  it("returns 403 when plan is not shareable (essentials)", async () => {
+  it("allows essentials plan to share (1 seat)", async () => {
     allowCsrf();
     allowRateLimit();
     defaultOwner();
     mockGetPlan.mockResolvedValue("essentials");
+    mockCreateShare.mockResolvedValue({
+      ok: true,
+      row: {
+        id: 321,
+        personal_report_id: 99,
+        recipient_email: "r@x.io",
+        share_token: VALID_SHARE_TOKEN,
+        shared_by_user_id: 7,
+        plan_at_share: "essentials",
+        last_viewed_at: null,
+        view_count: 0,
+        revoked_at: null,
+        created_at: "2026-04-30T00:00:00Z",
+      },
+    });
     const res = await POST(
       postRequest({ ownerToken: VALID_OWNER_TOKEN, recipientEmail: "r@x.io" })
     );
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.seatLimit).toBe(1);
+    expect(mockCreateShare).toHaveBeenCalledWith(
+      expect.objectContaining({ plan: "essentials", seatLimit: 1 })
+    );
   });
 
   it("returns 403 when plan is null (unpaid)", async () => {
@@ -264,15 +284,17 @@ describe("POST /api/report/share", () => {
     });
     expect(json.seatLimit).toBe(2);
 
-    // Email scheduled with correct share URL
+    // Email scheduled. Subject is determined by the A/B/C variant assigned to
+    // this recipient — assert that one of the three known subjects was used
+    // so the test stays stable regardless of how `r@x.io` hashes.
     expect(mockScheduleAfterResponse).toHaveBeenCalled();
     await new Promise((r) => setTimeout(r, 0));
-    expect(mockResendSend).toHaveBeenCalledWith(
-      expect.objectContaining({
-        to: "r@x.io",
-        subject: "A LoveIQ report has been shared with you",
-      })
-    );
+    const sent = mockResendSend.mock.calls[0]?.[0] as { to?: string; subject?: string } | undefined;
+    expect(sent?.to).toBe("r@x.io");
+    expect([
+      "A LoveIQ report has been shared with you",
+      "Something personal I wanted you to see",
+    ]).toContain(sent?.subject);
   });
 
   it("forwards personalMessage to RPC and email", async () => {
@@ -394,7 +416,7 @@ describe("GET /api/report/share", () => {
     });
   });
 
-  it("returns seatLimit 0 for essentials plan", async () => {
+  it("returns seatLimit 1 for essentials plan", async () => {
     allowRateLimit();
     defaultOwner();
     mockGetPlan.mockResolvedValue("essentials");
@@ -402,7 +424,7 @@ describe("GET /api/report/share", () => {
     const res = await GET(getRequest(VALID_OWNER_TOKEN));
     expect(res.status).toBe(200);
     const json = await res.json();
-    expect(json.seatLimit).toBe(0);
+    expect(json.seatLimit).toBe(1);
     expect(json.plan).toBe("essentials");
   });
 });

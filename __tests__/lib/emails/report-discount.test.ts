@@ -139,7 +139,7 @@ describe("reportDiscountEmail", () => {
     });
     expect(result.html).toContain("Essentials only:");
     expect(result.html).toContain("Full report:");
-    expect(result.html).toContain("All reports:");
+    expect(result.html).toContain("All 14 reports:");
     expect(result.html).toContain("Secure discount on report");
   });
 

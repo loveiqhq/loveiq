@@ -6,6 +6,9 @@ import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
 import { scheduleAfterResponse } from "@/lib/after-response";
 import logger from "@/lib/logger";
 import { reportSharedEmail } from "@/lib/emails/report-shared";
+import { reportSharedBEmail } from "@/lib/emails/report-shared-b";
+import { reportSharedCEmail } from "@/lib/emails/report-shared-c";
+import { pickFromVariants } from "@/lib/emails/ab-variant";
 import {
   canSharePlan,
   getReportPlanByPersonalReportId,
@@ -92,7 +95,7 @@ export async function POST(request: Request) {
 
   if (!canSharePlan(plan)) {
     return NextResponse.json(
-      { error: "Sharing is available on the Full Report and All Reports plans." },
+      { error: "Sharing is available after purchasing a report." },
       { status: 403 }
     );
   }
@@ -106,7 +109,7 @@ export async function POST(request: Request) {
       personalReportId: owner.personalReportId,
       recipientEmail,
       sharedByUserId: owner.ownerUserId,
-      plan: plan as "full_report" | "all_reports",
+      plan: plan as "essentials" | "full_report" | "all_reports",
       seatLimit,
       shareToken,
       personalMessage,
@@ -142,14 +145,36 @@ export async function POST(request: Request) {
   const shareUrl = `${siteUrl}/report/${row.share_token}`;
   const resend = getResend();
   if (resend) {
+    // 3-way A/B/C copy test:
+    //   A = original ("Check out LoveIQ" CTA, link below CTA)
+    //   B = "View report now" CTA + inline link (Figma 5813-551)
+    //   C = "Something personal I wanted you to see" subject + P.S. (Figma 5813-467)
+    // Variant is deterministic per recipient email so retries land on the same
+    // copy and dashboards stay coherent.
+    const variant = pickFromVariants(recipientEmail, "report-share", ["a", "b", "c"] as const);
     scheduleAfterResponse("report-share-email", async () => {
       try {
-        const tpl = reportSharedEmail({
-          ownerFirstName: owner.ownerFirstName,
-          shareUrl,
-          siteUrl,
-          personalMessage,
-        });
+        const tpl =
+          variant === "b"
+            ? reportSharedBEmail({
+                ownerFirstName: owner.ownerFirstName,
+                shareUrl,
+                siteUrl,
+                personalMessage,
+              })
+            : variant === "c"
+              ? reportSharedCEmail({
+                  ownerFirstName: owner.ownerFirstName,
+                  shareUrl,
+                  siteUrl,
+                  personalMessage,
+                })
+              : reportSharedEmail({
+                  ownerFirstName: owner.ownerFirstName,
+                  shareUrl,
+                  siteUrl,
+                  personalMessage,
+                });
         const { error } = await Promise.race([
           resend.emails.send({
             from: process.env.RESEND_FROM || "LoveIQ <hello@send.loveiq.org>",
@@ -158,16 +183,19 @@ export async function POST(request: Request) {
             subject: tpl.subject,
             html: tpl.html,
             text: tpl.text,
+            headers: { "X-LoveIQ-Variant": variant },
           }),
           new Promise<never>((_, reject) =>
             setTimeout(() => reject(new Error("Resend timeout")), 8_000)
           ),
         ]);
         if (error) {
-          logger.error({ error, shareId: row.id }, "report-share email send failed");
+          logger.error({ error, shareId: row.id, variant }, "report-share email send failed");
+        } else {
+          logger.info({ shareId: row.id, variant }, "report-share email sent");
         }
       } catch (err) {
-        logger.error({ err, shareId: row.id }, "report-share email error");
+        logger.error({ err, shareId: row.id, variant }, "report-share email error");
       }
     });
   } else {
@@ -228,15 +256,21 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Service temporarily unavailable." }, { status: 503 });
   }
 
-  return NextResponse.json({
-    plan,
-    seatLimit,
-    seatsUsed: shares.length,
-    shares: shares.map((s) => ({
-      id: s.id,
-      recipientEmail: s.recipient_email,
-      createdAt: s.created_at,
-      lastViewedAt: s.last_viewed_at,
-    })),
-  });
+  return NextResponse.json(
+    {
+      plan,
+      seatLimit,
+      seatsUsed: shares.length,
+      shares: shares.map((s) => ({
+        id: s.id,
+        recipientEmail: s.recipient_email,
+        createdAt: s.created_at,
+        lastViewedAt: s.last_viewed_at,
+      })),
+    },
+    {
+      // List of share recipients = personal data. Don't cache.
+      headers: { "Cache-Control": "no-store, no-cache, must-revalidate" },
+    }
+  );
 }

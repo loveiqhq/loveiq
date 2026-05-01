@@ -6,10 +6,11 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 const mockRouterPush = vi.fn();
 const mockCacheReportCheckoutQuote = vi.fn();
 
+const mockSearchParams = vi.fn(() => new URLSearchParams());
 vi.mock("next/navigation", () => ({
   usePathname: () => "/report",
   useRouter: () => ({ push: mockRouterPush }),
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => mockSearchParams(),
 }));
 
 const mockGetReportSessionId = vi.fn();
@@ -35,6 +36,9 @@ vi.mock("@/lib/checkout/reportCheckoutQuoteCache", () => ({
 }));
 
 import ReportPage from "@/components/report/ReportPage";
+import { archetypeContent } from "@/data/report-archetypes";
+import { reportPracticeTendencies } from "@/data/report-practice-tendencies";
+import type { ReportPracticeTendencyContentForUser } from "@/components/report/hooks/useReportData";
 
 const REPORT_MODAL_TEST_TIMEOUT_MS = 60_000;
 const mockScrollTo = vi.fn();
@@ -73,7 +77,7 @@ describe("ReportPage", () => {
             currentPriceCents: 1499,
             initialPriceCents: 1499,
             discountMultiplier: 1,
-            discountStep: 0,
+            discountStep: 1,
             pricingClusterId:
               "B-essentials-essentials_center-tier_2-desktop-google-serious-engaged-d0",
             countryTier: "tier_2",
@@ -105,7 +109,7 @@ describe("ReportPage", () => {
             currentPriceCents: 2749,
             initialPriceCents: 2999,
             discountMultiplier: 1,
-            discountStep: 0,
+            discountStep: 1,
             pricingClusterId: "B-full_report-full_center-tier_2-desktop-google-serious-engaged-d0",
             countryTier: "tier_2",
             countryMultiplier: 1,
@@ -136,7 +140,7 @@ describe("ReportPage", () => {
             currentPriceCents: 11499,
             initialPriceCents: 12999,
             discountMultiplier: 1,
-            discountStep: 0,
+            discountStep: 1,
             pricingClusterId: "B-all_reports-all_center-tier_2-desktop-google-serious-engaged-d0",
             countryTier: "tier_2",
             countryMultiplier: 1,
@@ -158,10 +162,50 @@ describe("ReportPage", () => {
             viewCount: 1,
           },
         },
+        unlockedArchetypes: ["Emotional Voyeur"],
+        // Server filter parity: tests now ship the same per-archetype content
+        // shape that the live API returns. Free tier => content for the
+        // primary archetype only, scoped to non-premium sections; the bundled
+        // sections ignore archetypes outside the unlocked set.
+        archetypeContent: buildArchetypeContentMock(["Emotional Voyeur"]),
+        practiceTendencies: buildPracticeTendenciesMock(["Emotional Voyeur"], false),
       },
       status: "success",
       error: null,
     };
+  }
+
+  function buildArchetypeContentMock(unlocked: string[]): Record<string, Record<string, string>> {
+    const result: Record<string, Record<string, string>> = {};
+    for (const blockId of Object.keys(archetypeContent)) {
+      for (const archetype of unlocked) {
+        const html = archetypeContent[blockId]?.[archetype];
+        if (!html) continue;
+        if (!result[blockId]) result[blockId] = {};
+        result[blockId][archetype] = html;
+      }
+    }
+    return result;
+  }
+
+  function buildPracticeTendenciesMock(
+    unlocked: string[],
+    sectionUnlocked: boolean
+  ): Record<string, ReportPracticeTendencyContentForUser> {
+    const result: Record<string, ReportPracticeTendencyContentForUser> = {};
+    for (const archetype of unlocked) {
+      const raw = reportPracticeTendencies[archetype];
+      if (!raw) continue;
+      result[archetype] = {
+        introBlocks: raw.introBlocks,
+        groups: raw.groups.map((g) => ({
+          title: g.title,
+          rows: sectionUnlocked ? g.rows : g.rows.length > 0 ? [g.rows[0]] : [],
+          totalRowCount: g.rows.length,
+        })),
+      };
+    }
+    return result;
   }
 
   beforeEach(() => {
@@ -276,6 +320,10 @@ describe("ReportPage", () => {
       const response = buildSuccessResponse();
       response.data.pricingQuotes = null;
       mockUseReportData.mockReturnValue(response);
+      // ?offer=1 forces the modal open even without quotes — same path the
+      // discount-email deep-link uses, and it's the only way the modal can
+      // open when there's no quote data to derive a discount step from.
+      mockSearchParams.mockReturnValueOnce(new URLSearchParams("offer=1"));
 
       render(<ReportPage />);
 
@@ -307,17 +355,16 @@ describe("ReportPage", () => {
       );
 
       expect(growthSection).toBeInTheDocument();
+      // Premium HTML must NOT be in the DOM behind a CSS blur — only the
+      // PremiumOverlay placeholder is rendered when locked.
       expect(growthSection?.querySelector(".report-themed-block__blurred")).not.toBeInTheDocument();
-      expect(growthSection?.querySelector(".report-premium-overlay")).not.toBeInTheDocument();
+      expect(growthSection?.querySelector(".report-premium-overlay")).toBeInTheDocument();
     },
     REPORT_MODAL_TEST_TIMEOUT_MS
   );
 
   it(
-    // TEMP (beta): one unlock click reveals every section — see
-    // unlockSection in ReportPage.tsx. Restore single-section expectation
-    // when the paywall is re-enabled.
-    "reveals all premium sections from a single click (temp beta unlock)",
+    "opens the pricing modal when a locked premium section CTA is clicked, and keeps the section locked until checkout completes",
     async () => {
       const user = userEvent.setup();
       mockUseReportData.mockReturnValue(buildSuccessResponse());
@@ -330,16 +377,20 @@ describe("ReportPage", () => {
       const firstSectionUnlockButton = container.querySelector(
         ".report-section .report-premium-overlay__cta"
       ) as HTMLButtonElement | null;
-      const lockedSectionCount = container.querySelectorAll(".report-premium-overlay__cta").length;
+      const lockedSectionCountBefore = container.querySelectorAll(
+        ".report-premium-overlay__cta"
+      ).length;
 
       expect(firstSectionUnlockButton).toBeTruthy();
-      expect(lockedSectionCount).toBeGreaterThan(1);
+      expect(lockedSectionCountBefore).toBeGreaterThan(1);
 
       await user.click(firstSectionUnlockButton!);
 
-      await waitFor(() => {
-        expect(container.querySelectorAll(".report-premium-overlay__cta")).toHaveLength(0);
-      });
+      // Pricing modal opens — does NOT auto-unlock the section.
+      await waitFor(() => expect(screen.getByRole("dialog")).toBeInTheDocument());
+      expect(container.querySelectorAll(".report-premium-overlay__cta").length).toBe(
+        lockedSectionCountBefore
+      );
       expect(mockRouterPush).not.toHaveBeenCalled();
     },
     REPORT_MODAL_TEST_TIMEOUT_MS

@@ -28,6 +28,7 @@ import SurveyConfirmation from "./SurveyConfirmation";
 import PreReportWizard from "./PreReportWizard";
 import ProcessingSequence from "./ProcessingSequence";
 import ReportReady from "./ReportReady";
+import SurveyPauseModal from "./SurveyPauseModal";
 
 type CompletionPhase = "processing" | "ready" | "wizard" | "done";
 
@@ -52,6 +53,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
   const { autoAdvance, toggleAutoAdvance } = useAutoAdvance();
 
   const [animKey, setAnimKey] = useState(0);
+  const [showPauseModal, setShowPauseModal] = useState(false);
   const hasTrackedStart = useRef(false);
   const hasCompleted = useRef(false);
   const touchStartX = useRef<number | null>(null);
@@ -201,8 +203,17 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
     if (question) {
       trackSurveyPause(question.qId, progress);
     }
+    setShowPauseModal(true);
+  }, [question, progress, trackNavigation, savePartial]);
+
+  const handleResumeFromPause = useCallback(() => {
+    setShowPauseModal(false);
+  }, []);
+
+  const handleExitFromPause = useCallback(() => {
+    setShowPauseModal(false);
     onExit();
-  }, [question, progress, onExit, trackNavigation, savePartial]);
+  }, [onExit]);
 
   // Handle answer change
   const handleChange = useCallback(
@@ -430,6 +441,13 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
           />
         </div>
       </div>
+
+      <SurveyPauseModal
+        open={showPauseModal}
+        email={(answers["00000"] as string) || ""}
+        onResume={handleResumeFromPause}
+        onExit={handleExitFromPause}
+      />
     </main>
   );
 };

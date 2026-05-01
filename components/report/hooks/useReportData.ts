@@ -9,6 +9,24 @@ import {
 import type { ReportPriceQuoteSnapshot } from "@/lib/pricing/reportPricing";
 import type { ReportPurchasePlanId } from "@/lib/checkout/reportPurchase";
 
+export interface ReportPracticeTendencyRowData {
+  practice: string;
+  fantasyPull: number;
+  actualPleasure: number;
+  description: string | null;
+}
+
+export interface ReportPracticeTendencyGroupForUser {
+  title: string;
+  rows: ReportPracticeTendencyRowData[];
+  totalRowCount: number;
+}
+
+export interface ReportPracticeTendencyContentForUser {
+  introBlocks: string[];
+  groups: ReportPracticeTendencyGroupForUser[];
+}
+
 export interface ReportData {
   accessPlan: "essentials" | "full_report" | "all_reports" | null;
   userName: string | null;
@@ -23,9 +41,22 @@ export interface ReportData {
   snapshotAnswers: {
     currentSexualSatisfaction: number | null;
     importanceOfSex: number | null;
-  };
+  } | null;
   pricingQuotes: Record<ReportPurchasePlanId, ReportPriceQuoteSnapshot> | null;
   unlockedArchetypes: string[];
+  /**
+   * Archetype prose, server-filtered to only include (blockId, archetypeName)
+   * pairs the user has paid access to. The previous design imported the whole
+   * static map into the client bundle — anyone could read every archetype's
+   * premium copy via DevTools regardless of their plan.
+   */
+  archetypeContent: Record<string, Record<string, string>>;
+  /**
+   * Practice tendency content, server-filtered. When the practice section is
+   * locked we ship only the free-preview row plus the total row count so the
+   * locked-state placeholders render correctly without leaking premium scores.
+   */
+  practiceTendencies: Record<string, ReportPracticeTendencyContentForUser>;
 }
 
 export interface ReportRequestError {

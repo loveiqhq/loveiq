@@ -8,6 +8,8 @@ import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { verifyCsrfToken } from "@/lib/csrf";
 import logger from "@/lib/logger";
 import { surveyCompleteEmail } from "@/lib/emails/survey-complete";
+import { surveyCompleteBEmail } from "@/lib/emails/survey-complete-b";
+import { pickEmailVariant } from "@/lib/emails/ab-variant";
 import { ensurePersonalReportForSubmission } from "@/lib/report/personalReport";
 import type { SurveyAnswers } from "@/lib/survey/types";
 import {
@@ -249,11 +251,11 @@ export async function POST(request: Request) {
         ? `${siteUrl}/report/${encodeURIComponent(reportToken)}`
         : `${siteUrl}/report`;
 
-      const tpl = surveyCompleteEmail({
-        firstName: normalizedFirstName,
-        reportUrl,
-        siteUrl,
-      });
+      const variant = pickEmailVariant(normalizedEmail, "survey-complete");
+      const tpl =
+        variant === "b"
+          ? surveyCompleteBEmail({ firstName: normalizedFirstName, reportUrl, siteUrl })
+          : surveyCompleteEmail({ firstName: normalizedFirstName, reportUrl, siteUrl });
 
       try {
         const { error } = await Promise.race([
@@ -264,33 +266,41 @@ export async function POST(request: Request) {
             subject: tpl.subject,
             html: tpl.html,
             text: tpl.text,
+            headers: { "X-LoveIQ-Variant": variant },
           }),
           new Promise<never>((_, reject) =>
             setTimeout(() => reject(new Error("Resend timeout")), 8_000)
           ),
         ]);
         if (error) {
-          logger.error({ error, submissionId }, "Survey complete email send failed");
+          logger.error({ error, submissionId, variant }, "Survey complete email send failed");
         } else {
-          logger.info({ submissionId }, "Survey complete email sent");
+          logger.info({ submissionId, variant }, "Survey complete email sent");
         }
       } catch (err) {
-        logger.error({ err, submissionId }, "Survey complete email error");
+        logger.error({ err, submissionId, variant }, "Survey complete email error");
       }
     });
 
-    return NextResponse.json({
-      success: true,
-      ...(reportToken ? { reportToken } : {}),
-      ...(scoringSummary
-        ? {
-            primaryArchetype: scoringSummary.primaryArchetype,
-            ...(scoringSummary.v5PrimaryArchetype
-              ? { v5PrimaryArchetype: scoringSummary.v5PrimaryArchetype }
-              : {}),
-          }
-        : {}),
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        ...(reportToken ? { reportToken } : {}),
+        ...(scoringSummary
+          ? {
+              primaryArchetype: scoringSummary.primaryArchetype,
+              ...(scoringSummary.v5PrimaryArchetype
+                ? { v5PrimaryArchetype: scoringSummary.v5PrimaryArchetype }
+                : {}),
+            }
+          : {}),
+      },
+      {
+        // The response carries a fresh report access token + the user's
+        // primary archetype — never let intermediaries cache it.
+        headers: { "Cache-Control": "no-store, no-cache, must-revalidate" },
+      }
+    );
   } catch (err) {
     if ((err as Error).message === "supabase_not_configured") {
       return NextResponse.json({ error: "Service unavailable." }, { status: 503 });

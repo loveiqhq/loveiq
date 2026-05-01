@@ -9,7 +9,7 @@ import {
 export type { ReportAccessPlan } from "@/lib/report/access";
 
 export const SHARE_SEAT_LIMIT_BY_PLAN: Record<NonNullable<ReportAccessPlan>, number> = {
-  essentials: 0,
+  essentials: 1,
   full_report: 2,
   all_reports: 2,
 };
@@ -20,6 +20,7 @@ export function getShareSeatLimit(plan: ReportAccessPlan): number {
     case "all_reports":
       return 2;
     case "essentials":
+      return 1;
     case null:
     default:
       return 0;

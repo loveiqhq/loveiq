@@ -2,14 +2,17 @@ export const EMAIL_FONT =
   "'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif";
 const SHOW_EMAIL_SOCIAL_ICONS = false;
 
-export function escapeHtml(input: string): string {
-  return input
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
+export function buildArchetypeReportUrl(reportUrl: string, archetypeSlug: string | null): string {
+  if (!archetypeSlug) return reportUrl;
+  const separator = reportUrl.includes("?") ? "&" : "?";
+  return `${reportUrl}${separator}archetype=${encodeURIComponent(archetypeSlug)}`;
 }
+
+// Re-export from the shared util so existing email-template imports keep
+// working. Use `@/lib/html-escape` for new call sites — emails should not be
+// the canonical location for a generic HTML helper.
+import { escapeHtml } from "@/lib/html-escape";
+export { escapeHtml };
 
 export function renderBrandHeader(siteUrl: string): string {
   const logoUrl = `${siteUrl}/apple-touch-icon.png`;

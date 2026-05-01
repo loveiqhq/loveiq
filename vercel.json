@@ -8,6 +8,24 @@
     {
       "path": "/api/cron/report-discount-email",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/invite-reminders",
+      "schedule": "0 10 * * *"
     }
-  ]
+  ],
+  "functions": {
+    "app/api/stripe/webhook/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/cron/survey-paused/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/cron/report-discount-email/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/cron/invite-reminders/route.ts": {
+      "maxDuration": 60
+    }
+  }
 }

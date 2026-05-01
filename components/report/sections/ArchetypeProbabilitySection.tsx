@@ -126,7 +126,7 @@ const ArchetypeProbabilitySection: FC<Props> = ({
             onClick={() => onUnlock(primaryArchetype)}
           >
             {isPrimaryUnlocked ? <ArrowIcon /> : <LockIcon />}
-            <span>{isPrimaryUnlocked ? "View Full Report" : "Unlock Full Report"}</span>
+            <span>{isPrimaryUnlocked ? "View report" : "Unlock Full Report"}</span>
           </button>
         </div>
 
@@ -197,7 +197,7 @@ const ArchetypeProbabilitySection: FC<Props> = ({
                   onClick={() => onUnlock(name)}
                 >
                   {isRowUnlocked ? <ArrowIcon /> : <LockIcon />}
-                  <span>{isRowUnlocked ? "View Full Report" : "Unlock Full Report"}</span>
+                  <span>{isRowUnlocked ? "View report" : "Unlock Full Report"}</span>
                 </button>
 
                 {!isLast && !isHovered && <div className="report-prob__row-border" />}

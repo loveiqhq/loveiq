@@ -1,20 +1,45 @@
-import { EMAIL_FONT, escapeHtml, renderCtaButton, wrapEmailShell } from "@/lib/emails/shared";
+import {
+  EMAIL_FONT,
+  buildArchetypeReportUrl,
+  escapeHtml,
+  renderCtaButton,
+  wrapEmailShell,
+} from "@/lib/emails/shared";
+import { toArchetypeSlug } from "@/lib/report/archetypeSlug";
 
 export interface ReportEssentialsEmailParams {
   firstName?: string | null;
   reportUrl: string;
   siteUrl: string;
+  unlockedArchetype?: string | null;
 }
 
 export function reportEssentialsEmail({
   firstName,
   reportUrl,
   siteUrl,
+  unlockedArchetype,
 }: ReportEssentialsEmailParams) {
   const safeFirstName = firstName?.trim() ? escapeHtml(firstName.trim()) : "there";
   const displayName = firstName?.trim() || "there";
-  const subject = `Your full report is ready, ${displayName}`;
-  const previewText = "Thank you for trusting us. Your Essentials report is ready.";
+  const trimmedArchetype = unlockedArchetype?.trim() ?? "";
+  const safeArchetype = trimmedArchetype ? escapeHtml(trimmedArchetype) : "";
+  const archetypeSlug = trimmedArchetype ? toArchetypeSlug(trimmedArchetype) : null;
+  const targetReportUrl = buildArchetypeReportUrl(reportUrl, archetypeSlug);
+
+  const subject = trimmedArchetype
+    ? `Your ${trimmedArchetype} essentials report is ready, ${displayName}`
+    : `Your report is ready, ${displayName}`;
+  const previewText = trimmedArchetype
+    ? `Thank you for unlocking the ${trimmedArchetype} essentials report.`
+    : "Thank you for trusting us. Your Essentials report is ready.";
+
+  const insideHtml = trimmedArchetype
+    ? `<strong style="font-weight:700;">Your ${safeArchetype} Essentials report is ready.</strong>`
+    : `<strong style="font-weight:700;">Your Essentials report is ready.</strong>`;
+  const ctaLabel = trimmedArchetype
+    ? `View your ${trimmedArchetype} essentials report`
+    : "View your essentials report";
 
   const bodyHtml = `
   <tr>
@@ -33,16 +58,19 @@ export function reportEssentialsEmail({
         Thank you for trusting us with something this personal. That means a lot to us.
       </p>
       <p style="margin:0 0 16px 0; font-family:${EMAIL_FONT}; font-size:17px; line-height:1.55; color:#000000;">
-        <strong style="font-weight:700;">Your Essentials report is ready.</strong>
+        ${insideHtml}
+      </p>
+      <p style="margin:0 0 16px 0; font-family:${EMAIL_FONT}; font-size:17px; line-height:1.55; color:#000000;">
+        Inside, you&rsquo;ll find three dimensions that together give you a grounded read on how you experience desire and connection &mdash; your archetype probabilities, core motivation, and relational stage. Most people have felt these patterns for years. Now you&rsquo;ll have language for them.
       </p>
       <p style="margin:0 0 24px 0; font-family:${EMAIL_FONT}; font-size:17px; line-height:1.55; color:#000000;">
-        Inside, you&rsquo;ll find three dimensions that together give you a grounded read on how you experience desire and connection &mdash; your archetype probabilities, core motivation, and relational stage. Most people have felt these patterns for years. Now you&rsquo;ll have language for them.
+        You can also <strong style="font-weight:700;">share the report</strong> with one person you trust &mdash; sometimes the most valuable insight is a conversation it starts.
       </p>
     </td>
   </tr>
   <tr>
     <td align="center" style="padding:8px 32px 24px;">
-      ${renderCtaButton({ href: reportUrl, label: "View your Essentials Report" })}
+      ${renderCtaButton({ href: targetReportUrl, label: ctaLabel })}
     </td>
   </tr>
   <tr>
@@ -78,17 +106,21 @@ export function reportEssentialsEmail({
   const html = wrapEmailShell({ bodyHtml, previewText, siteUrl, title: subject });
 
   const text = [
-    `Your full report is ready, ${displayName}`,
+    subject,
     "",
     `Hi ${displayName},`,
     "",
     "Thank you for trusting us with something this personal. That means a lot to us.",
     "",
-    "Your Essentials report is ready.",
+    trimmedArchetype
+      ? `Your ${trimmedArchetype} Essentials report is ready.`
+      : "Your Essentials report is ready.",
     "",
     "Inside, you'll find three dimensions that together give you a grounded read on how you experience desire and connection — your archetype probabilities, core motivation, and relational stage. Most people have felt these patterns for years. Now you'll have language for them.",
     "",
-    `View your Essentials Report: ${reportUrl}`,
+    "You can also share the report with one person you trust — sometimes the most valuable insight is a conversation it starts.",
+    "",
+    `${ctaLabel}: ${targetReportUrl}`,
     "",
     "Why it's worth a look:",
     "- Built on psychology + real response patterns",

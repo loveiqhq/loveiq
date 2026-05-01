@@ -31,7 +31,7 @@ export interface ReportShareRow {
   recipient_email: string;
   share_token: string;
   shared_by_user_id: number | null;
-  plan_at_share: "full_report" | "all_reports";
+  plan_at_share: "essentials" | "full_report" | "all_reports";
   personal_message: string | null;
   last_viewed_at: string | null;
   view_count: number;
@@ -110,8 +110,10 @@ export async function resolveOwnerFromAccessToken(
 ): Promise<OwnerAccessContext | null> {
   if (!REPORT_ACCESS_TOKEN_REGEX.test(token)) return null;
 
+  // revoked_at=is.null filters out tokens flagged for revocation by ops
+  // (e.g. after a leak). Backed by partial index idx_report_access_token_active_token.
   const tokenRes = await supabaseFetch(
-    `/rest/v1/report_access_token?token=eq.${encodeURIComponent(token)}&select=survey_submission_id&limit=1`
+    `/rest/v1/report_access_token?token=eq.${encodeURIComponent(token)}&revoked_at=is.null&select=survey_submission_id&limit=1`
   );
   if (!tokenRes.ok) return null;
   const tokenRows = (await tokenRes.json()) as Array<{ survey_submission_id: number | null }>;
@@ -259,7 +261,7 @@ export async function createReportShareViaRpc(params: {
   personalReportId: number;
   recipientEmail: string;
   sharedByUserId: number | null;
-  plan: "full_report" | "all_reports";
+  plan: "essentials" | "full_report" | "all_reports";
   seatLimit: number;
   shareToken: string;
   personalMessage?: string | null;

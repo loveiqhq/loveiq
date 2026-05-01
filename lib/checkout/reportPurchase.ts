@@ -32,30 +32,17 @@ export const DEFAULT_REPORT_PURCHASE_PLAN_ID: ReportPurchasePlanId = "full_repor
 
 export const REPORT_PURCHASE_PLANS: ReportPurchasePlan[] = [
   {
-    ctaLabel: "Unlock Essentials",
+    ctaLabel: "Unlock essentials",
     description: "Built for those with limited time",
     features: [
-      {
-        label: "Includes the following chapter:",
-      },
-      {
-        icon: "none",
-        label: "Basic Archetype Info",
-        tone: "muted",
-      },
-      {
-        icon: "none",
-        label: "Core Desire Drivers",
-        tone: "muted",
-      },
-      {
-        icon: "none",
-        label: "Initial Growth Paths",
-        tone: "muted",
-      },
-      {
-        label: "Share report with 1 extra email",
-      },
+      { label: "Includes the following chapters:" },
+      { icon: "none", label: "- Summary of the archetype", tone: "muted" },
+      { icon: "none", label: "- Attachment Style", tone: "muted" },
+      { icon: "none", label: "- Core Insecurities", tone: "muted" },
+      { icon: "none", label: "- Confidence Level", tone: "muted" },
+      { icon: "none", label: "- Typical Beliefs", tone: "muted" },
+      { label: "Unlocked report summary" },
+      { label: "Share report with 1 extra email" },
     ],
     plan: "essentials",
     priceCents: 1999,
@@ -67,19 +54,12 @@ export const REPORT_PURCHASE_PLANS: ReportPurchasePlan[] = [
     description: "Perfect for individuals who want to dive deep",
     featuredLabel: "Most popular",
     features: [
-      {
-        label: "14-day money-back guarantee",
-        tone: "emphasis",
-      },
-      {
-        label: "Get full access to the report",
-      },
-      {
-        label: "18 analysed dimensions",
-      },
-      {
-        label: "Share report with 2 extra emails",
-      },
+      { label: "14-day money-back guarantee", tone: "emphasis" },
+      { label: "Get full access to the report" },
+      { label: "30+ analysed chapters" },
+      { label: "Personalized growth paths" },
+      { label: "Everything from Essentials and more" },
+      { label: "Share report with 2 extra emails" },
     ],
     plan: "full_report",
     priceCents: 2999,
@@ -91,19 +71,15 @@ export const REPORT_PURCHASE_PLANS: ReportPurchasePlan[] = [
     ctaLabel: "Unlock all reports",
     description: "Built for those wanting to explore all archetypes",
     features: [
-      {
-        label: "All 14 archetypes unlocked",
-        tone: "emphasis",
-      },
-      {
-        label: "All benefits as full report",
-        tone: "emphasis",
-      },
+      { label: "All 14 archetypes unlocked", tone: "emphasis" },
+      { label: "All benefits as full report" },
+      { label: "A complete map of human desire patterns" },
+      { label: "Decode attraction & compatibility" },
     ],
     plan: "all_reports",
     priceCents: 25900,
     priceSuffix: "one-time",
-    title: "All reports",
+    title: "All 14 reports",
   },
 ];
 

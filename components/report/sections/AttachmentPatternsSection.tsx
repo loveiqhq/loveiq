@@ -58,8 +58,7 @@ const AttachmentPatternsSection: FC<Props> = ({
   sectionTitle,
   tier = "essentials",
 }) => {
-  const [locallyUnlocked, setLocallyUnlocked] = useState(false);
-  const unlocked = isUnlocked || locallyUnlocked;
+  const unlocked = isUnlocked;
   const [isRevealed, setIsRevealed] = useState(false);
 
   useEffect(() => {
@@ -75,12 +74,7 @@ const AttachmentPatternsSection: FC<Props> = ({
   const normalizedArchetypeHtml = normalizeReportHtml(archetypeHtml);
 
   function handleUnlock() {
-    if (onUnlock) {
-      onUnlock();
-      return;
-    }
-
-    setLocallyUnlocked(true);
+    onUnlock?.();
   }
 
   return (
@@ -169,12 +163,7 @@ const AttachmentPatternsSection: FC<Props> = ({
 
           <div className="report-themed-block">
             {isPremium && !unlocked ? (
-              <div className="report-themed-block__preview">
-                <div
-                  className="report-prose report-themed-block__blurred"
-                  aria-hidden="true"
-                  dangerouslySetInnerHTML={{ __html: normalizedArchetypeHtml }}
-                />
+              <div className="report-themed-block__preview report-themed-block__preview--locked">
                 <PremiumOverlay
                   archetype={archetype}
                   sectionTitle={sectionTitle}

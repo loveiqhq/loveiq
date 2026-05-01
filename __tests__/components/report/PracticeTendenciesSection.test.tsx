@@ -4,9 +4,39 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import PracticeTendenciesSection from "@/components/report/sections/PracticeTendenciesSection";
 import { reportSections } from "@/data/report-general";
+import { reportPracticeTendencies } from "@/data/report-practice-tendencies";
+import type { ReportPracticeTendencyContentForUser } from "@/components/report/hooks/useReportData";
 
 const practiceGeneralHtml =
   reportSections.find((section) => section.sectionNumber === 27)?.generalContent ?? "";
+
+// Helpers that mirror the server-side filter in app/api/report/route.ts so
+// section-level tests exercise the same shapes the real client receives.
+function buildFullContent(archetype: string): ReportPracticeTendencyContentForUser {
+  const raw = reportPracticeTendencies[archetype];
+  if (!raw) throw new Error(`No practice content for archetype ${archetype}`);
+  return {
+    introBlocks: raw.introBlocks,
+    groups: raw.groups.map((g) => ({
+      title: g.title,
+      rows: g.rows,
+      totalRowCount: g.rows.length,
+    })),
+  };
+}
+
+function buildLockedContent(archetype: string): ReportPracticeTendencyContentForUser {
+  const raw = reportPracticeTendencies[archetype];
+  if (!raw) throw new Error(`No practice content for archetype ${archetype}`);
+  return {
+    introBlocks: raw.introBlocks,
+    groups: raw.groups.map((g) => ({
+      title: g.title,
+      rows: g.rows.length > 0 ? [g.rows[0]] : [],
+      totalRowCount: g.rows.length,
+    })),
+  };
+}
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -18,6 +48,7 @@ describe("PracticeTendenciesSection", () => {
       <PracticeTendenciesSection
         archetype="Spark Seeker"
         archetypeHtml={null}
+        content={buildFullContent("Spark Seeker")}
         generalHtml={practiceGeneralHtml}
         isPremium={false}
         sectionTitle="Typical Sexual Fantasy & Practice Tendencies"
@@ -45,6 +76,7 @@ describe("PracticeTendenciesSection", () => {
       <PracticeTendenciesSection
         archetype="Spark Seeker"
         archetypeHtml={null}
+        content={buildFullContent("Spark Seeker")}
         generalHtml={practiceGeneralHtml}
         isPremium={false}
         sectionTitle="Typical Sexual Fantasy & Practice Tendencies"
@@ -113,6 +145,7 @@ describe("PracticeTendenciesSection", () => {
       <PracticeTendenciesSection
         archetype="Spark Seeker"
         archetypeHtml={null}
+        content={buildFullContent("Spark Seeker")}
         generalHtml={practiceGeneralHtml}
         isPremium={false}
         sectionTitle="Typical Sexual Fantasy & Practice Tendencies"
@@ -151,6 +184,7 @@ describe("PracticeTendenciesSection", () => {
       <PracticeTendenciesSection
         archetype="Spark Seeker"
         archetypeHtml={null}
+        content={buildFullContent("Spark Seeker")}
         generalHtml={practiceGeneralHtml}
         isPremium={false}
         sectionTitle="Typical Sexual Fantasy & Practice Tendencies"
@@ -185,6 +219,7 @@ describe("PracticeTendenciesSection", () => {
       <PracticeTendenciesSection
         archetype="Spark Seeker"
         archetypeHtml={null}
+        content={buildLockedContent("Spark Seeker")}
         generalHtml={practiceGeneralHtml}
         isPremium={true}
         sectionTitle="Typical Sexual Fantasy & Practice Tendencies"
@@ -213,6 +248,7 @@ describe("PracticeTendenciesSection", () => {
       <PracticeTendenciesSection
         archetype="Spark Seeker"
         archetypeHtml={null}
+        content={buildLockedContent("Spark Seeker")}
         generalHtml={practiceGeneralHtml}
         isPremium={true}
         sectionTitle="Typical Sexual Fantasy & Practice Tendencies"

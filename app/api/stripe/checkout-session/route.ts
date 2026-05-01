@@ -16,6 +16,10 @@ import {
 import { getReportPurchasePlan } from "@/lib/checkout/reportPurchase";
 import { verifyCsrfToken } from "@/lib/csrf";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
+import {
+  getPaidPlansForSubmission,
+  resolveSubmissionAccessContext,
+} from "@/lib/report/personalReport";
 import logger from "@/lib/logger";
 import {
   getReportPriceQuoteForContext,
@@ -162,6 +166,25 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Service unavailable." }, { status: 503 });
     }
 
+    // Refuse to start a Stripe session if a succeeded payment for the same
+    // plan already exists on this report — guards against the two-tab
+    // double-purchase race. Best-effort: a Supabase blip drops to a warn-log
+    // and lets checkout proceed (webhook idempotency is the secondary defense).
+    try {
+      const accessContext = await resolveSubmissionAccessContext({
+        reportSessionId: parsed.data.reportSessionId ?? null,
+        reportToken: parsed.data.reportToken ?? null,
+      });
+      if (accessContext) {
+        const paidPlans = await getPaidPlansForSubmission(accessContext.submissionId);
+        if (paidPlans.includes(parsed.data.plan)) {
+          return NextResponse.json({ error: "You already own this plan." }, { status: 409 });
+        }
+      }
+    } catch (err) {
+      logger.warn({ err }, "checkout-session: paid-plan precheck failed; allowing checkout");
+    }
+
     const plan = getReportPurchasePlan(parsed.data.plan);
     const archetypeName = parsed.data.archetype ?? null;
     const archetypeSlug = archetypeName ? toArchetypeSlug(archetypeName) : null;
@@ -234,9 +257,24 @@ export async function POST(request: Request) {
       url: session.url,
     };
 
-    return NextResponse.json(successResponse);
+    // Personal Stripe session URL — never let intermediaries cache. Without
+    // this header, a shared proxy or browser back-cache could replay another
+    // user's checkout link.
+    return NextResponse.json(successResponse, {
+      headers: { "Cache-Control": "no-store, no-cache, must-revalidate" },
+    });
   } catch (error) {
-    logger.error({ error }, "Stripe checkout session creation failed");
+    const sanitized =
+      error instanceof Error
+        ? {
+            name: error.name,
+            message: error.message,
+            ...(typeof (error as { code?: string }).code === "string"
+              ? { code: (error as { code?: string }).code }
+              : {}),
+          }
+        : { name: "UnknownError" };
+    logger.error({ err: sanitized }, "Stripe checkout session creation failed");
     return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
   }
 }

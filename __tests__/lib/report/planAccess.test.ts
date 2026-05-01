@@ -6,8 +6,8 @@ describe("getShareSeatLimit", () => {
     expect(getShareSeatLimit(null)).toBe(0);
   });
 
-  it("essentials has zero seats (spec)", () => {
-    expect(getShareSeatLimit("essentials")).toBe(0);
+  it("essentials grants 1 seat", () => {
+    expect(getShareSeatLimit("essentials")).toBe(1);
   });
 
   it("full_report grants 2 seats", () => {
@@ -20,12 +20,12 @@ describe("getShareSeatLimit", () => {
 });
 
 describe("canSharePlan", () => {
-  it("returns false for free and essentials", () => {
+  it("returns false only for the free (null) plan", () => {
     expect(canSharePlan(null)).toBe(false);
-    expect(canSharePlan("essentials")).toBe(false);
   });
 
-  it("returns true for full_report and all_reports", () => {
+  it("returns true for essentials, full_report, and all_reports", () => {
+    expect(canSharePlan("essentials")).toBe(true);
     expect(canSharePlan("full_report")).toBe(true);
     expect(canSharePlan("all_reports")).toBe(true);
   });

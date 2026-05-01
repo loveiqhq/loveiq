@@ -6,6 +6,7 @@ import {
   isReportPurchasePlan,
   type ReportAccessPlan,
 } from "@/lib/report/access";
+import type { ReportPurchasePlanId } from "@/lib/checkout/reportPurchase";
 import { KNOWN_ARCHETYPES, isArchetypeName } from "@/lib/report/archetypeSlug";
 
 const SUPABASE_TIMEOUT_MS = 8_000;
@@ -90,7 +91,9 @@ function getRelatedUser(
 
 async function lookupSubmissionIdByToken(reportToken: string) {
   const response = await supabaseServiceFetch(
-    `/rest/v1/report_access_token?token=eq.${encodeURIComponent(reportToken)}&select=survey_submission_id&limit=1`
+    // revoked_at=is.null gates every token-driven submission lookup; ops
+    // can revoke a leaked token by stamping the row.
+    `/rest/v1/report_access_token?token=eq.${encodeURIComponent(reportToken)}&revoked_at=is.null&select=survey_submission_id&limit=1`
   );
 
   if (!response.ok) {
@@ -233,12 +236,56 @@ export async function ensurePersonalReportForSubmission({
     method: "POST",
   });
 
+  // Concurrent webhooks for the same submission can race past the existence
+  // check above and both attempt to insert. The unique constraint on
+  // survey_submission_id collapses one of them with a 409 — recover by
+  // refetching the row the winner just created instead of throwing.
+  if (response.status === 409) {
+    const existingAfterRace = await fetchPersonalReportForSubmission(submissionId);
+    if (existingAfterRace) {
+      return existingAfterRace;
+    }
+  }
+
   if (!response.ok) {
     throw new Error("personal_report_create_failed");
   }
 
   const rows = (await response.json()) as PersonalReportRow[];
   return rows[0] ?? null;
+}
+
+/**
+ * Lists every succeeded plan a submission has already paid for. Used by
+ * checkout-session to refuse a duplicate purchase of the same plan tier.
+ * Returns an empty array if no payments exist.
+ */
+export async function getPaidPlansForSubmission(
+  submissionId: number
+): Promise<ReportPurchasePlanId[]> {
+  const personalReport = await fetchPersonalReportForSubmission(submissionId);
+  if (!personalReport) return [];
+
+  const response = await supabaseServiceFetch(
+    `/rest/v1/payment?personal_report_id=eq.${personalReport.id}&status=eq.succeeded&select=metadata`
+  );
+
+  if (!response.ok) {
+    throw new Error("payment_lookup_failed");
+  }
+
+  const rows = (await response.json()) as Array<{
+    metadata: Record<string, unknown> | null;
+  }>;
+
+  const paid = new Set<ReportPurchasePlanId>();
+  for (const row of rows) {
+    const candidate = row.metadata?.plan;
+    if (isReportPurchasePlan(candidate)) {
+      paid.add(candidate);
+    }
+  }
+  return Array.from(paid);
 }
 
 export async function getReportAccessPlanForSubmission(submissionId: number): Promise<{
@@ -315,19 +362,6 @@ export function resolveUnlockedArchetypes({
   return Array.from(set);
 }
 
-async function fetchPersonalReportById(personalReportId: number) {
-  const response = await supabaseServiceFetch(
-    `/rest/v1/personal_report?id=eq.${personalReportId}&select=id,payment_id,payment_status,url,unlocked_archetypes&limit=1`
-  );
-
-  if (!response.ok) {
-    throw new Error("personal_report_lookup_failed");
-  }
-
-  const rows = (await response.json()) as PersonalReportRow[];
-  return rows[0] ?? null;
-}
-
 export async function addUnlockedArchetypeForPersonalReport({
   archetype,
   personalReportId,
@@ -339,39 +373,36 @@ export async function addUnlockedArchetypeForPersonalReport({
     throw new Error("invalid_archetype");
   }
 
-  const personalReport = await fetchPersonalReportById(personalReportId);
-  if (!personalReport) {
-    throw new Error("personal_report_not_found");
-  }
+  // Atomic JSONB merge via Postgres RPC. The prior read-modify-write pattern
+  // raced when two webhooks for the same personal_report fired close in time —
+  // both read the same baseline list and the second write clobbered the first
+  // archetype. The RPC performs the dedupe + write in a single statement so
+  // Postgres serializes it via the row write lock.
+  const response = await supabaseServiceFetch("/rest/v1/rpc/add_unlocked_archetype", {
+    body: JSON.stringify({
+      p_personal_report_id: personalReportId,
+      p_archetype: archetype,
+    }),
+    headers: { Prefer: "return=representation" },
+    method: "POST",
+  });
 
-  const existing = Array.isArray(personalReport.unlocked_archetypes)
-    ? personalReport.unlocked_archetypes.filter(isArchetypeName)
-    : [];
-
-  if (existing.includes(archetype)) {
-    return existing;
-  }
-
-  const next = Array.from(new Set([...existing, archetype]));
-
-  const updateResponse = await supabaseServiceFetch(
-    `/rest/v1/personal_report?id=eq.${personalReport.id}`,
-    {
-      body: JSON.stringify({ unlocked_archetypes: next }),
-      headers: { Prefer: "return=minimal" },
-      method: "PATCH",
-    }
-  );
-
-  if (!updateResponse.ok) {
+  if (!response.ok) {
     logger.error(
-      { personalReportId, status: updateResponse.status },
+      { personalReportId, status: response.status },
       "Unable to persist unlocked archetype"
     );
     throw new Error("unlocked_archetypes_update_failed");
   }
 
-  return next;
+  const payload = await response.json().catch(() => null);
+  // PostgREST returns the function's RETURNS jsonb value directly. Filter
+  // through isArchetypeName so callers get the same `string[]` shape the
+  // previous implementation returned.
+  if (Array.isArray(payload)) {
+    return payload.filter(isArchetypeName);
+  }
+  return [];
 }
 
 export async function addUnlockedArchetypeForSubmission({

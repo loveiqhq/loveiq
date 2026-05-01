@@ -210,7 +210,11 @@ export async function GET(request: Request) {
       sessionStatus: session.status ?? null,
     };
 
-    return NextResponse.json(successResponse);
+    // Status-poll endpoint exposes payment + access plan — must always come
+    // from origin, never from a cache.
+    return NextResponse.json(successResponse, {
+      headers: { "Cache-Control": "no-store, no-cache, must-revalidate" },
+    });
   } catch (error) {
     logger.error({ error }, "Stripe checkout session status lookup failed");
     return NextResponse.json({ error: "Unable to process request." }, { status: 500 });

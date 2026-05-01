@@ -60,7 +60,10 @@ export async function POST(request: Request) {
   response.cookies.set("staging_session", expected, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
+    // strict matches /api/staging-logout and prevents cross-site form posts
+    // from forging staging logins. The staging gate is the only thing
+    // protecting pre-prod content — keep CSRF surface minimal.
+    sameSite: "strict",
     path: "/",
     maxAge: 60 * 60 * 24 * 7, // 7 days
   });

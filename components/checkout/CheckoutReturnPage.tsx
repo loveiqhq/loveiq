@@ -75,8 +75,11 @@ const CheckoutReturnPage: FC<Props> = ({
   useEffect(() => {
     if (!sessionId) return;
     const resolvedSessionId = sessionId;
-    const MAX_UNLOCK_CHECK_ATTEMPTS = 8;
-    const UNLOCK_CHECK_DELAY_MS = 1_500;
+    // Webhook fulfillment can take a few seconds under load (multiple Supabase
+    // writes) and Stripe may even retry once. Polling for ~30s gives the
+    // happy path room without making the user stare at "loading" forever.
+    const MAX_UNLOCK_CHECK_ATTEMPTS = 15;
+    const UNLOCK_CHECK_DELAY_MS = 2_000;
 
     let cancelled = false;
     let attempts = 0;
@@ -230,8 +233,12 @@ const CheckoutReturnPage: FC<Props> = ({
                 Payment status: <strong>{state.paymentStatus ?? "unknown"}</strong>
               </p>
               <p className="checkout-return__copy">
-                Your purchase is confirmed. Use the button below if the report does not open
-                automatically.
+                Your purchase is confirmed. Unlock can take up to a minute. If the report does not
+                open automatically, use the button below or email{" "}
+                <a className="checkout-return__link" href="mailto:hello@loveiq.org">
+                  hello@loveiq.org
+                </a>{" "}
+                with your receipt.
               </p>
             </>
           ) : state.status === "ready" ? (

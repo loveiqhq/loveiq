@@ -57,16 +57,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Service temporarily unavailable." }, { status: 503 });
   }
 
-  if (!share) {
-    // Generic 404 — same shape used by /api/report so we never leak whether the
-    // share was missing vs. revoked vs. wrong-email.
-    return NextResponse.json({ error: "Report not found." }, { status: 404 });
-  }
-
   // Constant-time email comparison so attackers can't brute-force via timing.
-  const ownerStored = share.share.recipient_email; // already lowercase per RPC normalization
-  if (!constantTimeEqualString(candidateEmail, ownerStored)) {
-    return NextResponse.json({ error: "That email doesn't match this invite." }, { status: 403 });
+  // Always run the comparison (even if `share` is null) so that response
+  // shape AND latency are identical for missing-token vs wrong-email — an
+  // attacker with a guessed token cannot distinguish "token invalid" from
+  // "token valid, wrong email".
+  const ownerStored = share?.share.recipient_email ?? "";
+  const emailMatches = constantTimeEqualString(candidateEmail, ownerStored);
+
+  if (!share || !emailMatches) {
+    return NextResponse.json({ error: "Report not found." }, { status: 404 });
   }
 
   const cookieHeader = buildVerifyCookieHeader(share.share.id, candidateEmail);

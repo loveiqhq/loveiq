@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import { inviteEmail } from "@/lib/emails/invite";
+import { inviteBEmail } from "@/lib/emails/invite-b";
+import { pickEmailVariant } from "@/lib/emails/ab-variant";
 import { z } from "zod";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
 import { scheduleAfterResponse } from "@/lib/after-response";
@@ -58,14 +60,18 @@ export async function POST(request: Request) {
   const { recipientEmail, referrerEmail, referrerName, personalMessage } = parsed.data;
   const normalizedRecipient = recipientEmail.toLowerCase().trim();
 
-  // 4. Build UTM-tagged CTA URL (A/B variant assigned randomly)
-  const variant: "a" | "b" = Math.random() < 0.5 ? "a" : "b";
+  // 4. Build UTM-tagged CTA URL (deterministic A/B variant per recipient)
+  const variant = pickEmailVariant(normalizedRecipient, "invite");
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://loveiq.org";
   // eslint-disable-next-line no-secrets/no-secrets
   const ctaUrl = `${siteUrl}?utm_source=loveiq_email&utm_medium=email&utm_campaign=refer_a_friend&utm_content=version_${variant}&utm_term=report_purchaser`;
 
-  // 5. Build email
-  const tpl = inviteEmail({ referrerName, ctaUrl, siteUrl, variant, personalMessage });
+  // 5. Build email — variant A keeps the original framing, variant B uses the
+  // first-person testimonial copy (Figma node 5319-1846).
+  const tpl =
+    variant === "b"
+      ? inviteBEmail({ referrerName, ctaUrl, siteUrl, personalMessage })
+      : inviteEmail({ referrerName, ctaUrl, siteUrl, variant, personalMessage });
 
   // 6. Send email via Resend + track in DB (after response)
   const resendKey = process.env.RESEND_API_KEY;
@@ -87,16 +93,17 @@ export async function POST(request: Request) {
           subject: tpl.subject,
           html: tpl.html,
           text: tpl.text,
+          headers: { "X-LoveIQ-Variant": variant },
         }),
         new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error("Resend timeout")), 8_000)
         ),
       ]);
       if (error) {
-        logger.error({ error }, "Invite email send failed");
+        logger.error({ error, variant }, "Invite email send failed");
       }
     } catch (err) {
-      logger.error({ err }, "Invite email error");
+      logger.error({ err, variant }, "Invite email error");
     }
 
     // Track in Supabase

@@ -12,6 +12,10 @@ import {
   resolveUnlockedArchetypes,
 } from "@/lib/report/personalReport";
 import { getReportPriceQuotesForContext } from "@/lib/pricing/reportPricing";
+import {
+  buildArchetypeContentForUser,
+  buildPracticeTendenciesForUser,
+} from "@/lib/report/contentGating";
 import logger from "@/lib/logger";
 import type { ReportPriceQuoteSnapshot } from "@/lib/pricing/reportPricing";
 import type { ReportPurchasePlanId } from "@/lib/checkout/reportPurchase";
@@ -34,7 +38,7 @@ const tokenSchema = z.object({
 
 const RATE_LIMIT_CONFIG = {
   bucket: "report-view",
-  limit: 30,
+  limit: 10,
   windowMs: 60_000,
 };
 
@@ -181,7 +185,9 @@ export async function GET(request: Request) {
         // Owner — look up report_access_token → submission_id.
         const tokenRes = await getBreaker("supabase").fire(() =>
           fetchWithTimeout(
-            `${supabaseUrl}/rest/v1/report_access_token?token=eq.${encodeURIComponent(token)}&select=survey_submission_id&limit=1`,
+            // revoked_at=is.null lets ops invalidate a leaked token without
+            // dropping the row. Backed by idx_report_access_token_active_token.
+            `${supabaseUrl}/rest/v1/report_access_token?token=eq.${encodeURIComponent(token)}&revoked_at=is.null&select=survey_submission_id&limit=1`,
             { headers, cache: "no-store", timeoutMs: SUPABASE_TIMEOUT_MS }
           )
         );
@@ -412,7 +418,13 @@ export async function GET(request: Request) {
       }
     }
 
-    return NextResponse.json({
+    const filteredArchetypeContent = buildArchetypeContentForUser(accessPlan, unlockedArchetypes);
+    const filteredPracticeTendencies = buildPracticeTendenciesForUser(
+      accessPlan,
+      unlockedArchetypes
+    );
+
+    const response = NextResponse.json({
       accessPlan,
       userName: getSubmissionUserName(submission),
       userEmail: isShareAccess ? null : getSubmissionUserEmail(submission),
@@ -423,10 +435,21 @@ export async function GET(request: Request) {
       percentages: scoring.v5_percentages || scoring.percentages || {},
       reportDate: submission.created_date_time,
       diagnostics: scoring.diagnostics ?? null,
-      snapshotAnswers,
+      // snapshotAnswers contains the owner's intimate survey responses
+      // (current satisfaction, importance of sex). Owner sees them; shared
+      // viewers do NOT — those are personal, not part of the archetype gift.
+      snapshotAnswers: isShareAccess ? null : snapshotAnswers,
       pricingQuotes,
       unlockedArchetypes,
+      archetypeContent: filteredArchetypeContent,
+      practiceTendencies: filteredPracticeTendencies,
     });
+    // Personal report data — never let public proxies, browsers, or shared
+    // computers cache the response. Stripe payment status, owner email, and
+    // unlocked archetype lists must always come from the live origin.
+    response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
+    response.headers.set("Pragma", "no-cache");
+    return response;
   } catch (err) {
     if (err instanceof CircuitOpenError) {
       logger.warn("Supabase circuit open on report lookup");

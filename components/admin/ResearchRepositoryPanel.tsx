@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import AdminCommentsThread from "@/components/admin/AdminCommentsThread";
 import { useAdminFetch } from "@/components/admin/hooks/useAdminFetch";
 import { getCsrfToken } from "@/lib/csrf-client";
+import { safeHref } from "@/lib/safe-href";
 
 export type ResearchRepositoryDraftInput = {
   title: string;
@@ -859,14 +860,18 @@ export default function ResearchRepositoryPanel({
                       >
                         Queue review
                       </button>
-                      {entry.source_href && (
-                        <a
-                          href={entry.source_href}
-                          className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-text-primary transition hover:bg-white/10"
-                        >
-                          Open source
-                        </a>
-                      )}
+                      {/* Admin-input URL — gate scheme to block javascript:/data: */}
+                      {(() => {
+                        const safe = safeHref(entry.source_href);
+                        return safe ? (
+                          <a
+                            href={safe}
+                            className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-text-primary transition hover:bg-white/10"
+                          >
+                            Open source
+                          </a>
+                        ) : null;
+                      })()}
                     </div>
                   </div>
 
@@ -916,16 +921,19 @@ export default function ResearchRepositoryPanel({
                     </div>
                   )}
 
-                  {entry.primary_metric_href && (
-                    <div className="mt-4">
-                      <a
-                        href={entry.primary_metric_href}
-                        className="text-sm text-accent-purple transition hover:text-accent-purple/80"
-                      >
-                        Open linked metric
-                      </a>
-                    </div>
-                  )}
+                  {(() => {
+                    const safe = safeHref(entry.primary_metric_href);
+                    return safe ? (
+                      <div className="mt-4">
+                        <a
+                          href={safe}
+                          className="text-sm text-accent-purple transition hover:text-accent-purple/80"
+                        >
+                          Open linked metric
+                        </a>
+                      </div>
+                    ) : null;
+                  })()}
 
                   <AdminCommentsThread
                     resourceType="research-entry"

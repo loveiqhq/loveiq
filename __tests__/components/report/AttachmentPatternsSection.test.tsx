@@ -32,7 +32,11 @@ describe("AttachmentPatternsSection", () => {
     expect(screen.getByRole("heading", { name: "Secure attachment" })).toBeInTheDocument();
     expect(screen.getByText(/Sensual Connector/i)).toBeInTheDocument();
     expect(screen.getByText(/Relational Nurturer/i)).toBeInTheDocument();
-    expect(container.querySelector(".report-themed-block__blurred")).toBeInTheDocument();
+    // Locked premium HTML must not be rendered to the DOM — only the overlay
+    // placeholder. Verify a paying-equivalent inspection cannot reveal copy.
+    expect(container.querySelector(".report-themed-block__blurred")).not.toBeInTheDocument();
+    expect(container.querySelector(".report-premium-overlay")).toBeInTheDocument();
+    expect(container.textContent).not.toContain("Attachment style of the Spark Seeker");
     expect(container.querySelector(".report-rich-heading")).toHaveTextContent(
       "Attachment Style of the Spark Seeker"
     );

@@ -18,6 +18,7 @@ import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import logger from "@/lib/logger";
 import { reportDiscountEmail } from "@/lib/emails/report-discount";
 import { getReportPriceQuotesForContext } from "@/lib/pricing/reportPricing";
+import { getReportPlanByPersonalReportId } from "@/lib/report/planAccess";
 import type { ReportPurchasePlanId } from "@/lib/checkout/reportPurchase";
 import type { ReportPriceQuoteSnapshot } from "@/lib/pricing/reportPricing";
 
@@ -243,6 +244,7 @@ export async function GET(request: Request) {
     skippedAlreadySent: 0,
     skippedNoEmail: 0,
     skippedNoToken: 0,
+    skippedAlreadyPaid: 0,
     failed: 0,
   };
 
@@ -257,6 +259,24 @@ export async function GET(request: Request) {
         if (alreadySent.includes(step)) {
           summary.skippedAlreadySent++;
           continue;
+        }
+
+        // Cross-quote paid check: the quote-level `purchased_at` filter at
+        // fetchCandidates only catches users who paid via this exact quote.
+        // A user who bought via a different pricing session would still slip
+        // through. Look up the strongest succeeded plan on the personal_report
+        // and skip if anything is paid.
+        try {
+          const currentPlan = await getReportPlanByPersonalReportId(candidate.personal_report_id);
+          if (currentPlan) {
+            summary.skippedAlreadyPaid++;
+            continue;
+          }
+        } catch (err) {
+          logger.warn(
+            { err, quoteId: candidate.id, personalReportId: candidate.personal_report_id },
+            "report-discount-email: paid-plan check failed; sending email anyway"
+          );
         }
 
         const email = candidate.app_user?.email?.trim() ?? "";

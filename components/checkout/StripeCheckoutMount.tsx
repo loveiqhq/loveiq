@@ -20,7 +20,7 @@ const stripePromise = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
   : null;
 const isPreviewMode = process.env.NEXT_PUBLIC_STRIPE_CHECKOUT_PREVIEW_MODE === "true";
 const previewModeMessage =
-  "Preview mode is active. You can confirm Stripe test payments here, but purchases still do not unlock LoveIQ reports yet.";
+  "You're checking out in Stripe test mode. Use card 4242 4242 4242 4242 with any future date and any CVC. No real charge will be made.";
 const compactCheckoutMediaQuery = "(max-width: 640px)";
 
 export interface StripeCheckoutSummary {

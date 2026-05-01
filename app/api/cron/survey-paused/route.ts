@@ -21,6 +21,8 @@ import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { getBreaker } from "@/lib/circuit-breaker";
 import logger from "@/lib/logger";
 import { surveyPausedEmail } from "@/lib/emails/survey-paused";
+import { surveyPausedBEmail } from "@/lib/emails/survey-paused-b";
+import { pickEmailVariant } from "@/lib/emails/ab-variant";
 import { getSurveyContactInfo } from "@/lib/survey/utils";
 import type { SurveyAnswers } from "@/lib/survey/types";
 
@@ -133,7 +135,11 @@ export async function GET(request: Request) {
         continue;
       }
 
-      const tpl = surveyPausedEmail({ firstName, resumeUrl, siteUrl });
+      const variant = pickEmailVariant(email, "survey-paused");
+      const tpl =
+        variant === "b"
+          ? surveyPausedBEmail({ firstName, resumeUrl, siteUrl })
+          : surveyPausedEmail({ firstName, resumeUrl, siteUrl });
 
       try {
         const { error } = await Promise.race([
@@ -144,6 +150,7 @@ export async function GET(request: Request) {
             subject: tpl.subject,
             html: tpl.html,
             text: tpl.text,
+            headers: { "X-LoveIQ-Variant": variant },
           }),
           new Promise<never>((_, reject) =>
             setTimeout(() => reject(new Error("Resend timeout")), 8_000)
@@ -151,13 +158,13 @@ export async function GET(request: Request) {
         ]);
         if (error) {
           summary.errors++;
-          logger.error({ error, sessionId: row.session_id }, "Paused email send failed");
+          logger.error({ error, sessionId: row.session_id, variant }, "Paused email send failed");
         } else {
           summary.sent++;
         }
       } catch (err) {
         summary.errors++;
-        logger.error({ err, sessionId: row.session_id }, "Paused email error");
+        logger.error({ err, sessionId: row.session_id, variant }, "Paused email error");
       }
     }
 
