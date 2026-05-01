@@ -62,9 +62,9 @@ const SUBHEADING_SECTIONS = new Set([
 ]);
 
 function resolveAccessTier(section: ReportSection): AccessTier {
+  if (!section.isPremium) return "free";
   if (isSectionIncludedInEssentials(section.id)) return "essentials";
-  if (section.isPremium) return "full_report";
-  return "free";
+  return "full_report";
 }
 
 function resolveNavType(section: ReportSection): NavType {
