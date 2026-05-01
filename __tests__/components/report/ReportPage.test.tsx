@@ -355,9 +355,12 @@ describe("ReportPage", () => {
       );
 
       expect(growthSection).toBeInTheDocument();
-      // Premium HTML must NOT be in the DOM behind a CSS blur — only the
-      // PremiumOverlay placeholder is rendered when locked.
-      expect(growthSection?.querySelector(".report-themed-block__blurred")).not.toBeInTheDocument();
+      // Locked premium HTML now renders inside `.report-themed-block__blurred`
+      // so the client can blur it visually behind the overlay (visual tease,
+      // not byte-level paywall — see plan "whimsical-greeting-popcorn").
+      const blurred = growthSection?.querySelector(".report-themed-block__blurred");
+      expect(blurred).toBeInTheDocument();
+      expect(blurred?.getAttribute("aria-hidden")).toBe("true");
       expect(growthSection?.querySelector(".report-premium-overlay")).toBeInTheDocument();
     },
     REPORT_MODAL_TEST_TIMEOUT_MS

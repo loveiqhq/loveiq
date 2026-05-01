@@ -32,7 +32,11 @@ function buildLockedContent(archetype: string): ReportPracticeTendencyContentFor
     introBlocks: raw.introBlocks,
     groups: raw.groups.map((g) => ({
       title: g.title,
-      rows: g.rows.length > 0 ? [g.rows[0]] : [],
+      // Locked wire shape: all rows ship with names; metrics null past index 0.
+      // See `lib/report/contentGating.ts#buildPracticeTendenciesForUser`.
+      rows: g.rows.map((row, i) =>
+        i === 0 ? { ...row } : { ...row, fantasyPull: null, actualPleasure: null }
+      ),
       totalRowCount: g.rows.length,
     })),
   };

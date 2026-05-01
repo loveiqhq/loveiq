@@ -32,11 +32,15 @@ describe("AttachmentPatternsSection", () => {
     expect(screen.getByRole("heading", { name: "Secure attachment" })).toBeInTheDocument();
     expect(screen.getByText(/Sensual Connector/i)).toBeInTheDocument();
     expect(screen.getByText(/Relational Nurturer/i)).toBeInTheDocument();
-    // Locked premium HTML must not be rendered to the DOM — only the overlay
-    // placeholder. Verify a paying-equivalent inspection cannot reveal copy.
-    expect(container.querySelector(".report-themed-block__blurred")).not.toBeInTheDocument();
+    // Locked premium HTML renders inside `.report-themed-block__blurred` so
+    // the client can blur it visually behind the overlay (visual tease, not
+    // byte-level paywall — see plan "whimsical-greeting-popcorn"). The
+    // overlay sits absolutely on top.
+    const blurred = container.querySelector(".report-themed-block__blurred");
+    expect(blurred).toBeInTheDocument();
+    expect(blurred?.getAttribute("aria-hidden")).toBe("true");
+    expect(blurred).toHaveTextContent("Attachment style of the Spark Seeker");
     expect(container.querySelector(".report-premium-overlay")).toBeInTheDocument();
-    expect(container.textContent).not.toContain("Attachment style of the Spark Seeker");
     expect(container.querySelector(".report-rich-heading")).toHaveTextContent(
       "Attachment Style of the Spark Seeker"
     );

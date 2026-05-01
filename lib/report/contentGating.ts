@@ -1,12 +1,12 @@
 /**
  * Server-side premium-content filters.
  *
- * SECURITY-CRITICAL: these decide what archetype prose + practice scores
- * land in the JSON response a client receives. The client cannot reveal
- * paid content via DevTools, React state mutation, or network inspection
- * BECAUSE the bytes were never sent in the first place. Any regression
- * here re-opens the paywall — see `__tests__/lib/report/contentGating.test.ts`
- * for the regression suite.
+ * Product decision (see plan "whimsical-greeting-popcorn"): on locked
+ * premium sections we ship the archetype prose so the client can render
+ * it blurred behind a `PremiumOverlay` (visual tease). Practice-tendency
+ * metric values stay server-stripped — the numbers are the paid value
+ * and must not reach the DOM. Practice names ship in full so the locked
+ * rows can show what's there.
  *
  * Inputs:
  *   - `accessPlan`: null | "essentials" | "full_report" | "all_reports"
@@ -19,21 +19,25 @@
  */
 
 import { archetypeContent } from "@/data/report-archetypes";
-import {
-  reportPracticeTendencies,
-  type ReportPracticeTendencyRow,
-} from "@/data/report-practice-tendencies";
+import { reportPracticeTendencies } from "@/data/report-practice-tendencies";
 import { reportSections } from "@/data/report-general";
 import { isSectionUnlockedForPlan, type ReportAccessPlan } from "@/lib/report/access";
 
 export const PRACTICE_SECTION_ID = "typical_sexual_fantasy_amp_practice_tendencies";
 
+export interface PracticeTendencyRowForUser {
+  practice: string;
+  fantasyPull: number | null;
+  actualPleasure: number | null;
+  description: string | null;
+}
+
 export interface PracticeTendencyGroupForUser {
   title: string;
-  rows: ReportPracticeTendencyRow[];
-  // Original group row count. When the section is locked we ship only
-  // [rows[0]] for the free-preview row; the client uses
-  // (totalRowCount - rows.length) to render placeholder cells.
+  rows: PracticeTendencyRowForUser[];
+  // Original group row count. Kept on the wire so the client can render
+  // the right number of locked placeholder cells if a future change ships
+  // fewer rows than the data file holds.
   totalRowCount: number;
 }
 
@@ -54,13 +58,9 @@ export function buildArchetypeContentForUser(
     const block = archetypeContent[section.archetypeBlockId];
     if (!block) continue;
 
-    const sectionUnlocked = isSectionUnlockedForPlan({
-      accessPlan,
-      isPremium: section.isPremium ?? false,
-      sectionId: section.id,
-    });
-    if (!sectionUnlocked) continue;
-
+    // Always ship archetype prose. The client renders it blurred behind
+    // a PremiumOverlay when `isSectionUnlockedForPlan` is false. Whether
+    // the section is locked is recomputed on the client from `accessPlan`.
     for (const archetype of unlockedSet) {
       const html = block[archetype];
       if (!html) continue;
@@ -96,18 +96,22 @@ export function buildPracticeTendenciesForUser(
         introBlocks: content.introBlocks,
         groups: content.groups.map((g) => ({
           title: g.title,
-          rows: g.rows,
+          rows: g.rows.map((row) => ({ ...row })),
           totalRowCount: g.rows.length,
         })),
       };
     } else {
-      // Locked — ship only the free-preview row and the original row count.
-      // Client renders placeholder cells for (totalRowCount - rows.length).
+      // Locked — keep practice names and the free-preview row's numbers,
+      // null out scores on every other row so cells render "--" with the
+      // existing CSS blur. Names tease what's behind the paywall; metric
+      // numbers are the paid value and must stay out of the DOM.
       result[archetype] = {
         introBlocks: content.introBlocks,
         groups: content.groups.map((g) => ({
           title: g.title,
-          rows: g.rows.length > 0 ? [g.rows[0]] : [],
+          rows: g.rows.map((row, i) =>
+            i === 0 ? { ...row } : { ...row, fantasyPull: null, actualPleasure: null }
+          ),
           totalRowCount: g.rows.length,
         })),
       };

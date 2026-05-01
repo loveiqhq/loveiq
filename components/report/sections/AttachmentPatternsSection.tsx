@@ -164,6 +164,13 @@ const AttachmentPatternsSection: FC<Props> = ({
           <div className="report-themed-block">
             {isPremium && !unlocked ? (
               <div className="report-themed-block__preview report-themed-block__preview--locked">
+                {normalizedArchetypeHtml ? (
+                  <div
+                    className="report-prose report-themed-block__blurred"
+                    aria-hidden="true"
+                    dangerouslySetInnerHTML={{ __html: normalizedArchetypeHtml }}
+                  />
+                ) : null}
                 <PremiumOverlay
                   archetype={archetype}
                   sectionTitle={sectionTitle}

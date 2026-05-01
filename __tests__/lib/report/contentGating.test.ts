@@ -1,13 +1,15 @@
 /**
- * The strongest paywall guarantee on the server: even if a sophisticated
- * attacker hits /api/report and inspects the raw JSON response (or mutates
- * React state in DevTools to flip `accessPlan` client-side), they CANNOT
- * see locked archetype prose or practice scores because those bytes were
- * never sent. This suite proves the gating functions in
- * `lib/report/contentGating.ts` enforce that contract.
+ * Server-side content gating contract.
  *
- * If any test here fails, the paywall is potentially bypassed — investigate
- * before merging.
+ * Product decision (see plan "whimsical-greeting-popcorn"): on locked
+ * premium sections, archetype prose AND practice names ship to the client
+ * so the UI can render a blurred tease behind a `PremiumOverlay`. The
+ * **paid value** — practice metric numbers — stays server-stripped on
+ * every locked row past the free-preview row 0.
+ *
+ * If any test here fails, either the paywall opened more than intended
+ * (metrics leaked) or it closed unexpectedly (the tease regressed) —
+ * investigate before merging.
  */
 
 import { describe, expect, it } from "vitest";
@@ -24,54 +26,20 @@ const PREMIUM_BLOCK_IDS = reportSections
   .filter((s) => s.isPremium && s.archetypeBlockId)
   .map((s) => s.archetypeBlockId as string);
 
-const NON_PREMIUM_ARCHETYPE_BLOCK_IDS = reportSections
-  .filter((s) => !s.isPremium && s.archetypeBlockId)
-  .map((s) => s.archetypeBlockId as string);
-
 const ANY_ARCHETYPE = "Sensual Connector";
 const OTHER_ARCHETYPE = "Spark Seeker";
 
-describe("buildArchetypeContentForUser — server gates premium HTML by plan", () => {
-  it("free plan + only primary archetype → no premium block ships", () => {
+describe("buildArchetypeContentForUser — ships archetype HTML for client-side blur", () => {
+  it("free plan still ships premium HTML for the primary archetype (client renders blurred + overlay)", () => {
     const result = buildArchetypeContentForUser(null, [ANY_ARCHETYPE]);
 
     for (const blockId of PREMIUM_BLOCK_IDS) {
+      const block = archetypeContent[blockId];
+      if (!block?.[ANY_ARCHETYPE]) continue;
       expect(
-        result[blockId],
-        `premium block ${blockId} leaked to a non-paying user`
-      ).toBeUndefined();
-    }
-  });
-
-  it("free plan still ships non-premium block HTML for the primary archetype", () => {
-    const result = buildArchetypeContentForUser(null, [ANY_ARCHETYPE]);
-    // At least one non-premium archetype-specific block exists per archetype.
-    const hasAnyFreeContent = NON_PREMIUM_ARCHETYPE_BLOCK_IDS.some(
-      (blockId) => result[blockId]?.[ANY_ARCHETYPE]
-    );
-    expect(hasAnyFreeContent).toBe(true);
-  });
-
-  it("essentials plan blocks every premium-but-not-essentials section", async () => {
-    const { ESSENTIALS_SECTION_IDS } = await import("@/lib/report/access");
-    const essentials = new Set<string>(ESSENTIALS_SECTION_IDS);
-    const result = buildArchetypeContentForUser("essentials", [ANY_ARCHETYPE]);
-
-    for (const section of reportSections) {
-      if (!section.archetypeBlockId || !section.isPremium) continue;
-      const ships = result[section.archetypeBlockId]?.[ANY_ARCHETYPE] !== undefined;
-      if (essentials.has(section.id)) {
-        // Essentials-tier premium content SHOULD ship for essentials users.
-        if (archetypeContent[section.archetypeBlockId]?.[ANY_ARCHETYPE]) {
-          expect(ships, `essentials section ${section.id} missing`).toBe(true);
-        }
-      } else {
-        // Full-report-only premium MUST NOT ship.
-        expect(
-          ships,
-          `non-essentials premium section ${section.id} (block ${section.archetypeBlockId}) leaked to essentials user`
-        ).toBe(false);
-      }
+        result[blockId]?.[ANY_ARCHETYPE],
+        `premium block ${blockId} should ship for the primary archetype so it can be blurred`
+      ).toBe(block[ANY_ARCHETYPE]);
     }
   });
 
@@ -90,14 +58,13 @@ describe("buildArchetypeContentForUser — server gates premium HTML by plan", (
     }
   });
 
-  it("full_report plan does NOT ship non-unlocked archetypes", () => {
+  it("does NOT ship archetypes outside the unlocked set (per-archetype gate still enforced)", () => {
     const result = buildArchetypeContentForUser("full_report", [ANY_ARCHETYPE]);
-    // Pick an archetype the user did NOT unlock
     const NEVER_UNLOCKED = "Spark Seeker";
     for (const blockId of PREMIUM_BLOCK_IDS) {
       expect(
         result[blockId]?.[NEVER_UNLOCKED],
-        `archetype ${NEVER_UNLOCKED} leaked to a full_report user who hasn't unlocked it`
+        `archetype ${NEVER_UNLOCKED} leaked to a user who hasn't unlocked it`
       ).toBeUndefined();
     }
   });
@@ -115,9 +82,7 @@ describe("buildArchetypeContentForUser — server gates premium HTML by plan", (
     }
   });
 
-  it("never includes data for archetypes outside the unlocked set", () => {
-    // If an attacker tampered with the request to claim a non-existent
-    // archetype, the filter rejects silently — no row in result.
+  it("ignores fake archetype names (no row leaks for an unknown key)", () => {
     const result = buildArchetypeContentForUser("all_reports", ["__fake_archetype__"]);
     for (const blockId of PREMIUM_BLOCK_IDS) {
       expect(result[blockId]?.["__fake_archetype__"]).toBeUndefined();
@@ -125,60 +90,79 @@ describe("buildArchetypeContentForUser — server gates premium HTML by plan", (
   });
 });
 
-describe("buildPracticeTendenciesForUser — server gates practice scores by plan", () => {
-  it("free plan ships only the FIRST row + total count per group (no premium scores)", () => {
+describe("buildPracticeTendenciesForUser — ships names, hides numbers when locked", () => {
+  it("free plan ships every row with practice names; metrics nulled past row 0", () => {
     const result = buildPracticeTendenciesForUser(null, [ANY_ARCHETYPE]);
-    const archetypeContent = result[ANY_ARCHETYPE];
-    expect(archetypeContent).toBeDefined();
-
-    if (!archetypeContent) return;
+    const userContent = result[ANY_ARCHETYPE];
+    expect(userContent).toBeDefined();
+    if (!userContent) return;
 
     const original = reportPracticeTendencies[ANY_ARCHETYPE];
     expect(original).toBeDefined();
+    if (!original) return;
 
-    for (let i = 0; i < archetypeContent.groups.length; i++) {
-      const group = archetypeContent.groups[i];
-      const originalGroup = original!.groups[i];
+    for (let i = 0; i < userContent.groups.length; i++) {
+      const group = userContent.groups[i];
+      const originalGroup = original.groups[i];
 
-      // CONTRACT: locked groups ship at most 1 row (the free-preview).
-      expect(
-        group.rows.length,
-        "free plan must not include premium practice rows"
-      ).toBeLessThanOrEqual(1);
-
-      // totalRowCount preserves the original count so client can render placeholders.
+      // All rows ship — names tease what's there.
+      expect(group.rows.length).toBe(originalGroup.rows.length);
       expect(group.totalRowCount).toBe(originalGroup.rows.length);
 
-      // The shipped row must be the FIRST row of the original (free preview)
-      if (group.rows.length === 1) {
-        expect(group.rows[0]).toEqual(originalGroup.rows[0]);
-      }
+      group.rows.forEach((row, rowIndex) => {
+        // Practice name always ships
+        expect(row.practice).toBe(originalGroup.rows[rowIndex].practice);
+
+        if (rowIndex === 0) {
+          // Free-preview row keeps real metric numbers
+          expect(row.fantasyPull).toBe(originalGroup.rows[rowIndex].fantasyPull);
+          expect(row.actualPleasure).toBe(originalGroup.rows[rowIndex].actualPleasure);
+        } else {
+          // Locked rows: metric numbers MUST NOT reach the wire (paid value)
+          expect(
+            row.fantasyPull,
+            `fantasyPull leaked on locked row ${rowIndex} of group ${group.title}`
+          ).toBeNull();
+          expect(
+            row.actualPleasure,
+            `actualPleasure leaked on locked row ${rowIndex} of group ${group.title}`
+          ).toBeNull();
+        }
+      });
     }
   });
 
-  it("full_report plan ships all rows", () => {
-    const result = buildPracticeTendenciesForUser("full_report", [ANY_ARCHETYPE]);
-    const archetypeContent = result[ANY_ARCHETYPE];
-    const original = reportPracticeTendencies[ANY_ARCHETYPE];
-
-    if (!archetypeContent || !original) return;
-
-    for (let i = 0; i < archetypeContent.groups.length; i++) {
-      expect(archetypeContent.groups[i].rows.length).toBe(original.groups[i].rows.length);
-    }
-  });
-
-  it("essentials plan does NOT include practice content (practice section is non-essentials premium)", () => {
-    // Practice section is full-report only; essentials should ship only the
-    // free-preview row, not the full set.
+  it("essentials plan also locks practice metrics (practice section is full-report tier)", () => {
     const result = buildPracticeTendenciesForUser("essentials", [ANY_ARCHETYPE]);
-    const archetypeContent = result[ANY_ARCHETYPE];
-    if (!archetypeContent) return;
+    const userContent = result[ANY_ARCHETYPE];
+    if (!userContent) return;
 
     const original = reportPracticeTendencies[ANY_ARCHETYPE]!;
-    for (let i = 0; i < archetypeContent.groups.length; i++) {
-      expect(archetypeContent.groups[i].rows.length).toBeLessThanOrEqual(1);
-      expect(archetypeContent.groups[i].totalRowCount).toBe(original.groups[i].rows.length);
+    for (let i = 0; i < userContent.groups.length; i++) {
+      const group = userContent.groups[i];
+      expect(group.totalRowCount).toBe(original.groups[i].rows.length);
+      group.rows.forEach((row, rowIndex) => {
+        if (rowIndex === 0) return;
+        expect(row.fantasyPull).toBeNull();
+        expect(row.actualPleasure).toBeNull();
+      });
+    }
+  });
+
+  it("full_report plan ships full metric numbers on every row", () => {
+    const result = buildPracticeTendenciesForUser("full_report", [ANY_ARCHETYPE]);
+    const userContent = result[ANY_ARCHETYPE];
+    const original = reportPracticeTendencies[ANY_ARCHETYPE];
+    if (!userContent || !original) return;
+
+    for (let i = 0; i < userContent.groups.length; i++) {
+      const group = userContent.groups[i];
+      const originalGroup = original.groups[i];
+      expect(group.rows.length).toBe(originalGroup.rows.length);
+      group.rows.forEach((row, rowIndex) => {
+        expect(row.fantasyPull).toBe(originalGroup.rows[rowIndex].fantasyPull);
+        expect(row.actualPleasure).toBe(originalGroup.rows[rowIndex].actualPleasure);
+      });
     }
   });
 

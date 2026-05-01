@@ -11,8 +11,10 @@ import type { ReportPurchasePlanId } from "@/lib/checkout/reportPurchase";
 
 export interface ReportPracticeTendencyRowData {
   practice: string;
-  fantasyPull: number;
-  actualPleasure: number;
+  // Server nulls these on locked rows past index 0 — names tease, numbers stay
+  // server-stripped. See `lib/report/contentGating.ts`.
+  fantasyPull: number | null;
+  actualPleasure: number | null;
   description: string | null;
 }
 

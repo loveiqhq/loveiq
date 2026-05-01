@@ -3,11 +3,14 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type FC } from "react";
 import { createPortal } from "react-dom";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
-import type { ReportPracticeTendencyRow } from "@/data/report-practice-tendencies";
 import type {
   ReportPracticeTendencyContentForUser,
   ReportPracticeTendencyGroupForUser,
+  ReportPracticeTendencyRowData,
 } from "@/components/report/hooks/useReportData";
+
+// Wire-side row alias; metrics may be null on locked rows past index 0.
+type ReportPracticeTendencyRow = ReportPracticeTendencyRowData;
 import {
   extractPracticeSectionIntroHtml,
   extractReportHtmlBlocks,
@@ -259,11 +262,11 @@ const PracticeGroupLocked: FC<{
   tier: PremiumOverlayTier;
 }> = ({ archetype, group, onUnlock, sectionTitle, tier }) => {
   const freeRow = group.rows[0] ?? null;
-  // The server only ships the first row when the section is locked. Use the
-  // server-supplied total row count to render placeholder cells for the
-  // locked remainder — premium scores must not exist in the JSON response.
-  const lockedRowCount = Math.max(0, group.totalRowCount - group.rows.length);
-  const lockedRows = Array.from({ length: lockedRowCount }, (_, i) => i);
+  // Row 0 ships with real metric values (free preview). Rows 1+ ship with
+  // their practice names but `fantasyPull` / `actualPleasure` nulled out by
+  // `buildPracticeTendenciesForUser` — names tease what's behind the paywall,
+  // numbers stay server-stripped. The cover overlay sits over columns 2–3.
+  const lockedRows = group.rows.slice(1);
   const useCompactLockedCard = COMPACT_LOCKED_GROUP_TITLES.has(group.title);
 
   return (
@@ -330,10 +333,7 @@ const PracticeGroupLocked: FC<{
                 className={`report-practice-table__locked-section${useCompactLockedCard ? " report-practice-table__locked-section--compact" : ""}`}
                 role="presentation"
               >
-                {lockedRows.map((_row, index) => (
-                  // Premium rows: render NEITHER the practice name NOR the scores
-                  // when locked. The cover overlay sits on top, but the DOM
-                  // payload must contain no extractable premium data.
+                {lockedRows.map((row, index) => (
                   <div
                     key={`locked-${index}`}
                     className="report-practice-table__row report-practice-table__row--locked"
@@ -341,12 +341,22 @@ const PracticeGroupLocked: FC<{
                   >
                     <div className="report-practice-table__practice" role="cell">
                       <div className="report-practice-table__practice-stack">
-                        <span className="report-practice-table__practice-label">Locked</span>
+                        <span className="report-practice-table__practice-label">
+                          {row.practice}
+                        </span>
                         <InfoGlyph className="report-practice-table__info-glyph report-practice-table__info-glyph--muted" />
                       </div>
                     </div>
-                    <PracticeMetricCell label="Fantasy Pull" tone="fantasy" value={null} />
-                    <PracticeMetricCell label="Actual Pleasure" tone="pleasure" value={null} />
+                    <PracticeMetricCell
+                      label="Fantasy Pull"
+                      tone="fantasy"
+                      value={row.fantasyPull}
+                    />
+                    <PracticeMetricCell
+                      label="Actual Pleasure"
+                      tone="pleasure"
+                      value={row.actualPleasure}
+                    />
                   </div>
                 ))}
 
