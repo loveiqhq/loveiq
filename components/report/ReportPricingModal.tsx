@@ -8,7 +8,6 @@ import {
   type MutableRefObject,
   type TouchEvent as ReactTouchEvent,
 } from "react";
-import Image from "next/image";
 import {
   REPORT_PURCHASE_PLANS,
   formatReportPurchasePrice,
@@ -18,6 +17,7 @@ import {
   type ReportPurchasePlanId,
 } from "@/lib/checkout/reportPurchase";
 import type { ReportPriceQuoteSnapshot } from "@/lib/pricing/reportPricing";
+import PricingTestimonialsCarousel from "./PricingTestimonialsCarousel";
 import { getReportTheme, getReportThemeStyle } from "./reportTheme";
 
 interface Props {
@@ -40,8 +40,6 @@ interface Props {
 
 const FOCUSABLE_SELECTOR =
   'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
-
-const SHOW_TESTIMONIAL = true;
 
 interface ScrollLockState {
   htmlOverflow: string;
@@ -521,33 +519,7 @@ const ReportPricingModal: FC<Props> = ({
                 <PricingMethodMark logo="amex" label="American Express" />
               </div>
 
-              {SHOW_TESTIMONIAL ? (
-                <figure className="report-pricing-modal__testimonial">
-                  <div className="report-pricing-modal__stars" aria-label="5 out of 5 stars">
-                    {Array.from({ length: 5 }).map((_, index) => (
-                      <svg key={index} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-                        <path d="m8 1.5 1.72 3.48 3.84.56-2.78 2.71.66 3.83L8 10.27l-3.44 1.81.66-3.83L2.44 5.54l3.84-.56L8 1.5Z" />
-                      </svg>
-                    ))}
-                  </div>
-                  <blockquote className="report-pricing-modal__quote">
-                    &ldquo;Unlocking my report was{" "}
-                    <em>one of the best investments made for my sexuality.</em> It is shockingly
-                    precise&rdquo;
-                  </blockquote>
-                  <figcaption className="report-pricing-modal__person">
-                    <div className="report-pricing-modal__avatar">
-                      <Image src="/images/testimonial-richard.png" alt="" width={80} height={80} />
-                    </div>
-                    <div className="report-pricing-modal__author-copy">
-                      <strong>
-                        Dr. Tobias V. <span>40</span>
-                      </strong>
-                      <em>Berlin, Germany</em>
-                    </div>
-                  </figcaption>
-                </figure>
-              ) : null}
+              <PricingTestimonialsCarousel />
             </div>
           </div>
         </div>
