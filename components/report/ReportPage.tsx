@@ -288,7 +288,7 @@ interface ReportExperienceProps {
   onClosePricingModal: () => void;
   onCloseShareModal: () => void;
   onOpenShareModal: () => void;
-  onOpenPricingModal: () => void;
+  onOpenPricingModal: (archetype?: string | null) => void;
   onUnlockArchetype: (archetypeName: string) => void;
   ownerFirstName: string | null;
   ownerToken: string | null;
@@ -385,7 +385,11 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   };
 
   const unlockSection = (_sectionId: string) => {
-    onOpenPricingModal();
+    // Scope the upgrade modal to the archetype the user is currently viewing,
+    // not the primary. Otherwise a buyer who already owns essentials/full on
+    // primary X would see the modal flag both cards as "Your current plan"
+    // when they're trying to upgrade Y.
+    onOpenPricingModal(viewArchetype || null);
   };
 
   useEffect(() => {
@@ -938,11 +942,19 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     setIsShareModalOpen(true);
   }, [accessPlan]);
   const closeShareModal = useCallback(() => setIsShareModalOpen(false), []);
-  const openPricingModal = useCallback(() => {
-    setPricingTargetArchetype(null);
-    setPricingVariant("offer");
-    setIsPricingModalOpen(true);
-  }, []);
+  const openPricingModal = useCallback(
+    (archetype?: string | null) => {
+      // Scope the modal to the archetype the user is currently upgrading. If
+      // a caller doesn't pass one, fall back to whichever archetype is being
+      // viewed (locked-section CTAs in /report?archetype=Y must upgrade Y,
+      // not primary). null = primary archetype.
+      const scope = archetype ?? null;
+      setPricingTargetArchetype(scope && scope !== primaryArchetypeFromData ? scope : null);
+      setPricingVariant("offer");
+      setIsPricingModalOpen(true);
+    },
+    [primaryArchetypeFromData]
+  );
 
   if (status === "loading") {
     return (
