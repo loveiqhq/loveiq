@@ -1,4 +1,26 @@
+// @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+
+const EXPECTED_WAITLIST_SEND_TO = `AW-18068690553/${["guQ3CPHxh5cc", "EPms6adD"].join("")}`;
+const clearConsentCookie = () => {
+  document.cookie = "cookieyes-consent=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/";
+};
+
+const setConsentCookie = ({
+  analytics = false,
+  advertisement = false,
+}: {
+  analytics?: boolean;
+  advertisement?: boolean;
+} = {}) => {
+  document.cookie = `cookieyes-consent=${[
+    "consent:yes",
+    "action:yes",
+    "necessary:yes",
+    `analytics:${analytics ? "yes" : "no"}`,
+    `advertisement:${advertisement ? "yes" : "no"}`,
+  ].join(",")}; path=/`;
+};
 
 // Must re-import in each test file to get fresh module state
 let track: typeof import("../../lib/analytics").track;
@@ -8,11 +30,13 @@ let trackWaitlistSignup: typeof import("../../lib/analytics").trackWaitlistSignu
 let trackSurveyStart: typeof import("../../lib/analytics").trackSurveyStart;
 let trackSurveyComplete: typeof import("../../lib/analytics").trackSurveyComplete;
 let trackReportPurchase: typeof import("../../lib/analytics").trackReportPurchase;
+let trackGoogleAdsWaitlistConversion: typeof import("../../lib/analytics").trackGoogleAdsWaitlistConversion;
 
 describe("analytics", () => {
   const originalWindow = globalThis.window;
 
   beforeEach(async () => {
+    clearConsentCookie();
     // Dynamically import to reset module state
     vi.resetModules();
     const mod = await import("../../lib/analytics");
@@ -23,13 +47,17 @@ describe("analytics", () => {
     trackSurveyStart = mod.trackSurveyStart;
     trackSurveyComplete = mod.trackSurveyComplete;
     trackReportPurchase = mod.trackReportPurchase;
+    trackGoogleAdsWaitlistConversion = mod.trackGoogleAdsWaitlistConversion;
   });
 
   afterEach(() => {
+    clearConsentCookie();
     // Restore window
     if (originalWindow === undefined) {
       // @ts-expect-error - restoring undefined window for SSR test
       delete globalThis.window;
+    } else {
+      globalThis.window = originalWindow;
     }
     // Clean up dataLayer
     if (globalThis.window) {
@@ -46,14 +74,45 @@ describe("analytics", () => {
     });
 
     it("does nothing when gtag is not available", () => {
+      setConsentCookie({ analytics: true });
       globalThis.window = { ...globalThis.window } as typeof globalThis.window;
+      globalThis.window.__loveiqAnalyticsEnabled = true;
       delete globalThis.window.gtag;
       expect(() => track("test_event")).not.toThrow();
     });
 
+    it("does nothing when analytics is not enabled", () => {
+      const mockGtag = vi.fn();
+      setConsentCookie({ analytics: true });
+      globalThis.window = { ...globalThis.window, gtag: mockGtag } as typeof globalThis.window;
+
+      track("test_event");
+
+      expect(mockGtag).not.toHaveBeenCalled();
+    });
+
+    it("does nothing when analytics consent is not granted", () => {
+      const mockGtag = vi.fn();
+      setConsentCookie({ advertisement: true });
+      globalThis.window = {
+        ...globalThis.window,
+        gtag: mockGtag,
+        __loveiqAnalyticsEnabled: true,
+      } as typeof globalThis.window;
+
+      track("test_event");
+
+      expect(mockGtag).not.toHaveBeenCalled();
+    });
+
     it("calls window.gtag with event name", () => {
       const mockGtag = vi.fn();
-      globalThis.window = { ...globalThis.window, gtag: mockGtag } as typeof globalThis.window;
+      setConsentCookie({ analytics: true });
+      globalThis.window = {
+        ...globalThis.window,
+        gtag: mockGtag,
+        __loveiqAnalyticsEnabled: true,
+      } as typeof globalThis.window;
 
       track("test_event");
 
@@ -62,7 +121,12 @@ describe("analytics", () => {
 
     it("calls window.gtag with event name and params", () => {
       const mockGtag = vi.fn();
-      globalThis.window = { ...globalThis.window, gtag: mockGtag } as typeof globalThis.window;
+      setConsentCookie({ analytics: true });
+      globalThis.window = {
+        ...globalThis.window,
+        gtag: mockGtag,
+        __loveiqAnalyticsEnabled: true,
+      } as typeof globalThis.window;
 
       track("test_event", { key: "value" });
 
@@ -71,7 +135,12 @@ describe("analytics", () => {
 
     it("pushes to dataLayer for GTM consumption", () => {
       const mockGtag = vi.fn();
-      globalThis.window = { ...globalThis.window, gtag: mockGtag } as typeof globalThis.window;
+      setConsentCookie({ analytics: true });
+      globalThis.window = {
+        ...globalThis.window,
+        gtag: mockGtag,
+        __loveiqAnalyticsEnabled: true,
+      } as typeof globalThis.window;
 
       track("test_event", { key: "value" });
 
@@ -84,7 +153,12 @@ describe("analytics", () => {
 
     it("initializes dataLayer if not present", () => {
       const mockGtag = vi.fn();
-      globalThis.window = { ...globalThis.window, gtag: mockGtag } as typeof globalThis.window;
+      setConsentCookie({ analytics: true });
+      globalThis.window = {
+        ...globalThis.window,
+        gtag: mockGtag,
+        __loveiqAnalyticsEnabled: true,
+      } as typeof globalThis.window;
       delete globalThis.window.dataLayer;
 
       track("first_event");
@@ -97,7 +171,12 @@ describe("analytics", () => {
   describe("trackStartSurvey", () => {
     it("fires cta_click with start_survey and location", () => {
       const mockGtag = vi.fn();
-      globalThis.window = { ...globalThis.window, gtag: mockGtag } as typeof globalThis.window;
+      setConsentCookie({ analytics: true });
+      globalThis.window = {
+        ...globalThis.window,
+        gtag: mockGtag,
+        __loveiqAnalyticsEnabled: true,
+      } as typeof globalThis.window;
 
       trackStartSurvey("hero");
 
@@ -109,7 +188,12 @@ describe("analytics", () => {
 
     it("passes nav location", () => {
       const mockGtag = vi.fn();
-      globalThis.window = { ...globalThis.window, gtag: mockGtag } as typeof globalThis.window;
+      setConsentCookie({ analytics: true });
+      globalThis.window = {
+        ...globalThis.window,
+        gtag: mockGtag,
+        __loveiqAnalyticsEnabled: true,
+      } as typeof globalThis.window;
 
       trackStartSurvey("nav");
 
@@ -123,7 +207,12 @@ describe("analytics", () => {
   describe("trackLearnMore", () => {
     it("fires cta_click with learn_more and location", () => {
       const mockGtag = vi.fn();
-      globalThis.window = { ...globalThis.window, gtag: mockGtag } as typeof globalThis.window;
+      setConsentCookie({ analytics: true });
+      globalThis.window = {
+        ...globalThis.window,
+        gtag: mockGtag,
+        __loveiqAnalyticsEnabled: true,
+      } as typeof globalThis.window;
 
       trackLearnMore("hero");
 
@@ -137,7 +226,12 @@ describe("analytics", () => {
   describe("trackWaitlistSignup", () => {
     it("fires waitlist_signup event with source", () => {
       const mockGtag = vi.fn();
-      globalThis.window = { ...globalThis.window, gtag: mockGtag } as typeof globalThis.window;
+      setConsentCookie({ analytics: true });
+      globalThis.window = {
+        ...globalThis.window,
+        gtag: mockGtag,
+        __loveiqAnalyticsEnabled: true,
+      } as typeof globalThis.window;
 
       trackWaitlistSignup("landing-modal");
 
@@ -151,7 +245,12 @@ describe("analytics", () => {
   describe("trackSurveyStart (dual-fire)", () => {
     it("fires both legacy survey_start and new survey_started", () => {
       const mockGtag = vi.fn();
-      globalThis.window = { ...globalThis.window, gtag: mockGtag } as typeof globalThis.window;
+      setConsentCookie({ analytics: true });
+      globalThis.window = {
+        ...globalThis.window,
+        gtag: mockGtag,
+        __loveiqAnalyticsEnabled: true,
+      } as typeof globalThis.window;
 
       trackSurveyStart();
 
@@ -164,7 +263,12 @@ describe("analytics", () => {
   describe("trackSurveyComplete (dual-fire)", () => {
     it("fires both legacy survey_complete and new survey_completed with duration", () => {
       const mockGtag = vi.fn();
-      globalThis.window = { ...globalThis.window, gtag: mockGtag } as typeof globalThis.window;
+      setConsentCookie({ analytics: true });
+      globalThis.window = {
+        ...globalThis.window,
+        gtag: mockGtag,
+        __loveiqAnalyticsEnabled: true,
+      } as typeof globalThis.window;
 
       trackSurveyComplete(120000);
 
@@ -177,7 +281,12 @@ describe("analytics", () => {
   describe("trackReportPurchase", () => {
     it("fires report_purchase event with required params", () => {
       const mockGtag = vi.fn();
-      globalThis.window = { ...globalThis.window, gtag: mockGtag } as typeof globalThis.window;
+      setConsentCookie({ analytics: true });
+      globalThis.window = {
+        ...globalThis.window,
+        gtag: mockGtag,
+        __loveiqAnalyticsEnabled: true,
+      } as typeof globalThis.window;
 
       trackReportPurchase({
         value: 29.99,
@@ -198,7 +307,12 @@ describe("analytics", () => {
 
     it("fires report_purchase with full pricing cluster params", () => {
       const mockGtag = vi.fn();
-      globalThis.window = { ...globalThis.window, gtag: mockGtag } as typeof globalThis.window;
+      setConsentCookie({ analytics: true });
+      globalThis.window = {
+        ...globalThis.window,
+        gtag: mockGtag,
+        __loveiqAnalyticsEnabled: true,
+      } as typeof globalThis.window;
 
       trackReportPurchase({
         value: 19.99,
@@ -226,6 +340,59 @@ describe("analytics", () => {
           initial_price: 39.99,
         })
       );
+    });
+  });
+
+  describe("trackGoogleAdsWaitlistConversion", () => {
+    it("does nothing when gtag is not available", () => {
+      setConsentCookie({ advertisement: true });
+      globalThis.window = { ...globalThis.window } as typeof globalThis.window;
+      globalThis.window.__loveiqGoogleAdsEnabled = true;
+      delete globalThis.window.gtag;
+
+      expect(() => trackGoogleAdsWaitlistConversion()).not.toThrow();
+    });
+
+    it("does nothing when Google Ads is not enabled", () => {
+      const mockGtag = vi.fn();
+      setConsentCookie({ advertisement: true });
+      globalThis.window = { ...globalThis.window, gtag: mockGtag } as typeof globalThis.window;
+
+      trackGoogleAdsWaitlistConversion();
+
+      expect(mockGtag).not.toHaveBeenCalled();
+    });
+
+    it("does nothing when advertisement consent is not granted", () => {
+      const mockGtag = vi.fn();
+      setConsentCookie({ analytics: true });
+      globalThis.window = {
+        ...globalThis.window,
+        gtag: mockGtag,
+        __loveiqGoogleAdsEnabled: true,
+      } as typeof globalThis.window;
+
+      trackGoogleAdsWaitlistConversion();
+
+      expect(mockGtag).not.toHaveBeenCalled();
+    });
+
+    it("fires the Google Ads conversion event", () => {
+      const mockGtag = vi.fn();
+      setConsentCookie({ advertisement: true });
+      globalThis.window = {
+        ...globalThis.window,
+        gtag: mockGtag,
+        __loveiqGoogleAdsEnabled: true,
+      } as typeof globalThis.window;
+
+      trackGoogleAdsWaitlistConversion();
+
+      expect(mockGtag).toHaveBeenCalledWith("event", "conversion", {
+        send_to: EXPECTED_WAITLIST_SEND_TO,
+        value: 1.0,
+        currency: "MXN",
+      });
     });
   });
 });

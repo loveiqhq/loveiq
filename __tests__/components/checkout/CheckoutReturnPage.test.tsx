@@ -190,7 +190,10 @@ describe("CheckoutReturnPage", () => {
     await waitFor(() => expect(screen.getByText(/unlocking your report/i)).toBeInTheDocument());
     expect(mockTrackReportPurchase).not.toHaveBeenCalled();
 
-    await new Promise((resolve) => setTimeout(resolve, 1_600));
+    // Polling re-fetches every UNLOCK_CHECK_DELAY_MS (2000ms in component).
+    // Wait long enough that the second fetch is guaranteed to have resolved
+    // even under suite-wide CPU contention.
+    await new Promise((resolve) => setTimeout(resolve, 2_500));
 
     await waitFor(() =>
       expect(
@@ -204,8 +207,8 @@ describe("CheckoutReturnPage", () => {
       transaction_id: "cs_test_456",
     });
 
-    await new Promise((resolve) => setTimeout(resolve, 1_300));
+    await new Promise((resolve) => setTimeout(resolve, 1_500));
 
     expect(mockRouterReplace).toHaveBeenCalledWith("/report/rpt_ABCDEFGHIJKLMNOPQRST");
-  }, 10000);
+  }, 15000);
 });

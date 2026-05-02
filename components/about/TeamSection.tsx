@@ -94,16 +94,16 @@ const TeamSection: FC = () => {
       imageScale: 1,
       imagePosition: "center 50%",
     },
-    {
-      name: "Adna Njuhović",
-      role: "Growth Lead",
-      image: "/about/team-adna-njuhovic.png",
-      linkedinUrl: "https://www.linkedin.com/in/adna-njuhovic/",
-      socials: ["linkedin"],
-      hoverColor: "orange",
-      imageScale: 1.05,
-      imagePosition: "center 25%",
-    },
+    // {
+    //   name: "Adna Njuhović",
+    //   role: "Growth Lead",
+    //   image: "/about/team-adna-njuhovic.png",
+    //   linkedinUrl: "https://www.linkedin.com/in/adna-njuhovic/",
+    //   socials: ["linkedin"],
+    //   hoverColor: "orange",
+    //   imageScale: 1.05,
+    //   imagePosition: "center 25%",
+    // },
     {
       name: "Ismar Fazlić",
       role: "Design Lead",
@@ -117,12 +117,13 @@ const TeamSection: FC = () => {
     {
       name: "Marcus Börner",
       role: "Strategy Lead",
-      image: "/about/team-marcus-borner.png",
+      image: "/about/marcus.png",
       linkedinUrl: "https://www.linkedin.com/in/marcusb1/",
       socials: ["linkedin"],
       hoverColor: "orange",
       imageScale: 1,
-      imagePosition: "center center",
+      imagePosition: "center 0%",
+      imageOffsetY: "-20%",
     },
   ];
 

@@ -880,7 +880,7 @@ const QuoteSection = () => (
           <span className="pointer-events-none absolute inset-0 rounded-full bg-white/10 opacity-0 transition duration-300 group-hover:opacity-100" />
           <span className="pointer-events-none absolute inset-[-12%] rounded-full border border-white/15 mix-blend-screen opacity-70" />
           <span className="relative z-10 transition-colors duration-500 group-hover:text-black">
-            Start survey now
+            Start test now
           </span>
           <svg
             aria-hidden

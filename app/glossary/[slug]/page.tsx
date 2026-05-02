@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import GlossaryTermPage from "@/components/glossary/GlossaryTermPage";
-import { getTermBySlug, getAllSlugs } from "@/data/glossary-data";
+import { getTermBySlug, getAllSlugs, resolveRelatedTerms } from "@/data/glossary-data";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.loveiq.org";
 
@@ -86,7 +86,10 @@ export default async function Page({ params }: PageProps) {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }}
       />
-      <GlossaryTermPage term={term} />
+      <GlossaryTermPage
+        term={term}
+        relatedTermsWithLinks={resolveRelatedTerms(term.relatedTerms)}
+      />
     </>
   );
 }

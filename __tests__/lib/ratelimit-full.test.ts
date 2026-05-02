@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // Mock logger before importing ratelimit
 vi.mock("../../lib/logger", () => ({
@@ -9,33 +9,96 @@ vi.mock("../../lib/logger", () => ({
   },
 }));
 
-// The ratelimit module reads env at the top level, so we must set env BEFORE import
-process.env.SUPABASE_URL = "https://test.supabase.co";
-process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-key";
+// Mock @upstash/redis
+const mockIncr = vi.fn();
+const mockExpire = vi.fn();
+const mockSet = vi.fn();
+const mockTtl = vi.fn();
 
-import { checkRateLimit, checkCooldown } from "../../lib/ratelimit";
+vi.mock("@upstash/redis", () => {
+  return {
+    Redis: class MockRedis {
+      incr = mockIncr;
+      expire = mockExpire;
+      set = mockSet;
+      ttl = mockTtl;
+    },
+  };
+});
 
-describe("checkRateLimit", () => {
+// Set KV env vars so Redis client is created
+process.env.KV_REST_API_URL = "https://test-redis.upstash.io";
+process.env.KV_REST_API_TOKEN = "test-token";
+
+// Import after mocks are set up
+const { checkRateLimit, checkCooldown } = await import("../../lib/ratelimit");
+
+describe("checkRateLimit (Redis)", () => {
   beforeEach(() => {
-    vi.restoreAllMocks();
+    vi.clearAllMocks();
   });
 
-  it("falls back to in-memory rate limiting on network error", async () => {
-    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("Network error"));
+  it("allows request when under limit", async () => {
+    mockIncr.mockResolvedValue(1);
+    mockExpire.mockResolvedValue(1);
 
     const result = await checkRateLimit("1.2.3.4", {
-      bucket: "test-net-error",
+      bucket: "test",
       limit: 5,
       windowMs: 60000,
     });
 
     expect(result.allowed).toBe(true);
-    // In-memory fallback counts the current request (limit - 1)
     expect(result.remaining).toBe(4);
+    expect(mockIncr).toHaveBeenCalledWith("rl:test:1.2.3.4");
+    // First request sets expiry
+    expect(mockExpire).toHaveBeenCalledWith("rl:test:1.2.3.4", 60);
+  });
+
+  it("sets expiry only on first request in window", async () => {
+    mockIncr.mockResolvedValue(3);
+
+    const result = await checkRateLimit("1.2.3.4", {
+      bucket: "test",
+      limit: 5,
+      windowMs: 60000,
+    });
+
+    expect(result.allowed).toBe(true);
+    expect(result.remaining).toBe(2);
+    // count > 1, so expire should NOT be called
+    expect(mockExpire).not.toHaveBeenCalled();
+  });
+
+  it("blocks request when over limit", async () => {
+    mockIncr.mockResolvedValue(6);
+
+    const result = await checkRateLimit("1.2.3.4", {
+      bucket: "test",
+      limit: 5,
+      windowMs: 60000,
+    });
+
+    expect(result.allowed).toBe(false);
+    expect(result.remaining).toBe(0);
+  });
+
+  it("fails open on Redis error", async () => {
+    mockIncr.mockRejectedValue(new Error("Redis connection failed"));
+
+    const result = await checkRateLimit("1.2.3.4", {
+      bucket: "test-error",
+      limit: 5,
+      windowMs: 60000,
+    });
+
+    expect(result.allowed).toBe(true);
+    expect(result.remaining).toBe(5);
   });
 
   it("returns a valid resetAt date", async () => {
-    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("fail"));
+    mockIncr.mockResolvedValue(1);
+    mockExpire.mockResolvedValue(1);
     const before = Date.now();
 
     const result = await checkRateLimit("1.2.3.4", {
@@ -46,39 +109,52 @@ describe("checkRateLimit", () => {
 
     expect(result.resetAt.getTime()).toBeGreaterThanOrEqual(before);
   });
-
-  it("returns remaining minus one on error (in-memory fallback)", async () => {
-    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("fail"));
-
-    const result = await checkRateLimit("192.168.1.1", {
-      bucket: "contact-err",
-      limit: 3,
-      windowMs: 30000,
-    });
-
-    // In-memory fallback counts the current request (limit - 1)
-    expect(result.allowed).toBe(true);
-    expect(result.remaining).toBe(2);
-  });
 });
 
-describe("checkCooldown", () => {
+describe("checkCooldown (Redis)", () => {
   beforeEach(() => {
-    vi.restoreAllMocks();
+    vi.clearAllMocks();
   });
 
-  it("fails open on fetch error", async () => {
-    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("Network error"));
+  it("allows when cooldown has passed (SET NX returns OK)", async () => {
+    mockSet.mockResolvedValue("OK");
 
     const result = await checkCooldown("test@example.com", "waitlist-email", 60000);
+
     expect(result.allowed).toBe(true);
     expect(result.retryAfterMs).toBe(0);
+    expect(mockSet).toHaveBeenCalledWith("cd:waitlist-email:test@example.com", expect.any(Number), {
+      nx: true,
+      ex: 60,
+    });
   });
 
-  it("returns zero retryAfterMs on error", async () => {
-    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("fail"));
+  it("blocks when cooldown is active (SET NX returns null)", async () => {
+    mockSet.mockResolvedValue(null);
+    mockTtl.mockResolvedValue(45);
 
     const result = await checkCooldown("test@example.com", "waitlist-email", 60000);
+
+    expect(result.allowed).toBe(false);
+    expect(result.retryAfterMs).toBe(45000);
+  });
+
+  it("uses cooldownMs as fallback when TTL is non-positive", async () => {
+    mockSet.mockResolvedValue(null);
+    mockTtl.mockResolvedValue(-1);
+
+    const result = await checkCooldown("test@example.com", "waitlist-email", 60000);
+
+    expect(result.allowed).toBe(false);
+    expect(result.retryAfterMs).toBe(60000);
+  });
+
+  it("fails open on Redis error", async () => {
+    mockSet.mockRejectedValue(new Error("Redis connection failed"));
+
+    const result = await checkCooldown("test@example.com", "waitlist-email", 60000);
+
+    expect(result.allowed).toBe(true);
     expect(result.retryAfterMs).toBe(0);
   });
 });

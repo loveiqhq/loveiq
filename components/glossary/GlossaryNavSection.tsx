@@ -226,7 +226,7 @@ const GlossaryNavSection: FC = () => {
                 <span className="pointer-events-none absolute inset-0 rounded-full bg-white/10 opacity-0 transition duration-300 group-hover:opacity-100" />
                 <span className="pointer-events-none absolute inset-[-12%] rounded-full border border-white/15 mix-blend-screen opacity-70" />
                 <span className="relative z-10 transition-colors duration-500 group-hover:text-black">
-                  Start survey now
+                  Start test now
                 </span>
                 <svg
                   aria-hidden
@@ -300,7 +300,7 @@ const GlossaryNavSection: FC = () => {
                   href="/survey"
                   role="menuitem"
                   tabIndex={menuOpen ? 0 : -1}
-                  aria-label="Start survey now"
+                  aria-label="Start test now"
                   className="group relative flex items-center justify-center gap-2 overflow-hidden rounded-full bg-gradient-brand mx-2 mt-1 px-6 py-3 text-sm font-semibold text-white shadow-pill transition hover:translate-y-[-2px] focus-visible-ring"
                   onClick={() => {
                     trackStartSurvey("nav");
@@ -317,7 +317,7 @@ const GlossaryNavSection: FC = () => {
                   />
                   <span className="pointer-events-none absolute inset-0 rounded-full bg-white/10 opacity-0 transition duration-300 group-hover:opacity-100" />
                   <span className="relative z-10 transition-colors duration-500 group-hover:text-black">
-                    Start survey now
+                    Start test now
                   </span>
                   <svg
                     aria-hidden

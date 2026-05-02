@@ -1,4 +1,10 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+
+// Mock @upstash/redis so the module can be imported without the package installed
+vi.mock("@upstash/redis", () => ({
+  Redis: class MockRedis {},
+}));
+
 import { getClientIp } from "../../lib/ratelimit";
 
 function makeRequest(headers: Record<string, string> = {}): Request {

@@ -115,7 +115,7 @@ const ChallengeVisionSection: FC = () => {
                 Our Mission
               </h3>
               <p className="text-base leading-[1.4] text-[#9CA3AF]">
-                We exists to{" "}
+                We exist to{" "}
                 <span className="text-white">
                   help people understand their emotional patterns and grow
                 </span>

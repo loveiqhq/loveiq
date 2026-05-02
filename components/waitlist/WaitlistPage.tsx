@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useState, useMemo } from "react";
-import { trackWaitlistSignup } from "@/lib/analytics";
+import { trackGoogleAdsWaitlistConversion, trackWaitlistSignup } from "@/lib/analytics";
 import { getStoredUtm } from "@/lib/utm";
 
 const faqs = [
@@ -12,7 +12,7 @@ const faqs = [
       "Early Access members get priority entry to our platform before the public launch, exclusive content, and a locked-in lifetime discount on premium features.",
   },
   {
-    question: "What's included in the survey?",
+    question: "What's included in the test?",
     answer:
       "Our comprehensive assessment covers 5 key psychological dimensions of intimacy. You'll receive a detailed report outlining your unique profile immediately after completion.",
   },
@@ -122,8 +122,12 @@ export default function WaitlistPage() {
         const data = await res.json().catch(() => ({}));
         throw new Error(data?.error || "Something went wrong");
       }
+      const data = (await res.json().catch(() => ({}))) as { already?: boolean };
       setStatus("success");
-      trackWaitlistSignup("waitlist_page");
+      if (!data.already) {
+        trackWaitlistSignup("waitlist_page");
+        trackGoogleAdsWaitlistConversion();
+      }
     } catch (err) {
       setStatus("error");
       setErrorMessage(err instanceof Error ? err.message : "Unable to join waitlist.");

@@ -33,6 +33,9 @@ html {
   -moz-osx-font-smoothing: grayscale;
   /* Remove tap highlight flash on iOS/Android */
   -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  -moz-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {

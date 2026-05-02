@@ -8,6 +8,7 @@ import { NonceProvider } from "@/components/NonceProvider";
 import HydrationMarker from "@/components/HydrationMarker";
 import UtmCapture from "@/components/UtmCapture";
 import { GtmScript, GtmNoScript } from "@/components/GtmScript";
+import WebVitals from "@/components/WebVitals";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.loveiq.org";
 
@@ -246,21 +247,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang="en" className={`${manrope.variable} ${lora.variable}`}>
       <head>
-        <link
-          rel="preload"
-          as="video"
-          href="/couple-hero-mobile.mp4"
-          type="video/mp4"
-          media="(max-width: 640px)"
-        />
-        <link
-          rel="preload"
-          as="video"
-          href="/couple-hero.mp4"
-          type="video/mp4"
-          media="(min-width: 641px)"
-        />
         <link rel="preconnect" href="https://cdn-cookieyes.com" />
+        <link rel="preconnect" href="https://t.contentsquare.net" />
         <link rel="preconnect" href="https://www.googletagmanager.com" />
         <link rel="dns-prefetch" href="https://www.google.com" />
         <link rel="dns-prefetch" href="https://www.gstatic.com" />
@@ -268,23 +256,58 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <Script
           id="cookieyes"
           src="https://cdn-cookieyes.com/client_data/761bc9303937f7b41b200de8ed556d45/script.js"
-          strategy="afterInteractive"
+          strategy="lazyOnload"
           nonce={nonce}
         />
         <GtmScript nonce={nonce} />
         <Script
+          id="ga-loader"
           src="https://www.googletagmanager.com/gtag/js?id=G-QTYY69L46N"
           strategy="lazyOnload"
           nonce={nonce}
+          data-cookieyes="cookieyes-analytics"
         />
-        <Script id="ga-init" strategy="lazyOnload" nonce={nonce}>
+        <Script
+          id="ga-init"
+          strategy="lazyOnload"
+          nonce={nonce}
+          data-cookieyes="cookieyes-analytics"
+        >
           {`
             window.dataLayer = window.dataLayer || [];
-            function gtag(){dataLayer.push(arguments);}
-            gtag('js', new Date());
-            gtag('config', 'G-QTYY69L46N', {
+            window.gtag = window.gtag || function(){window.dataLayer.push(arguments);}
+            if (!window.__loveiqGtagBootstrapped) {
+              window.gtag('js', new Date());
+              window.__loveiqGtagBootstrapped = true;
+            }
+            window.__loveiqAnalyticsEnabled = true;
+            window.gtag('config', 'G-QTYY69L46N', {
               page_path: window.location.pathname,
             });
+          `}
+        </Script>
+        <Script
+          id="google-ads-loader"
+          src="https://www.googletagmanager.com/gtag/js?id=AW-18068690553"
+          strategy="lazyOnload"
+          nonce={nonce}
+          data-cookieyes="cookieyes-advertisement"
+        />
+        <Script
+          id="google-ads-init"
+          strategy="lazyOnload"
+          nonce={nonce}
+          data-cookieyes="cookieyes-advertisement"
+        >
+          {`
+            window.dataLayer = window.dataLayer || [];
+            window.gtag = window.gtag || function(){window.dataLayer.push(arguments);}
+            if (!window.__loveiqGtagBootstrapped) {
+              window.gtag('js', new Date());
+              window.__loveiqGtagBootstrapped = true;
+            }
+            window.__loveiqGoogleAdsEnabled = true;
+            window.gtag('config', 'AW-18068690553');
           `}
         </Script>
         <script
@@ -303,8 +326,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareApplicationSchema) }}
         />
-        {}
-        <script src="https://t.contentsquare.net/uxa/f1a8d593041c0.js" async />
+        {/* Contentsquare UXA tag — keep raw + synchronous (no async) so the
+            vendor verifier finds CS_CONF/_uxa globals immediately. */}
+        <script src="https://t.contentsquare.net/uxa/f1a8d593041c0.js" />
       </head>
       <body className="bg-white dark:bg-[#050208]">
         <GtmNoScript />
@@ -316,6 +340,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         </a>
         <HydrationMarker />
         <UtmCapture />
+        <WebVitals />
         <NonceProvider nonce={nonce}>
           <SmoothScroll>{children}</SmoothScroll>
         </NonceProvider>

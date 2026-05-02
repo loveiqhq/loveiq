@@ -1,0 +1,8 @@
+# OSV Scanner ignore list
+# https://google.github.io/osv-scanner/configuration/
+
+[[IgnoredVulns]]
+id = "GHSA-5f7q-jpqc-wp7h"
+# Next.js PPR DoS — fixed in 16.1.5, OSV database incorrectly flags 16.2.x.
+# This site does not use PPR (experimental.ppr) or NEXT_PRIVATE_MINIMAL_MODE.
+reason = "False positive: fixed in 16.1.5, we run 16.2.x; PPR not enabled"

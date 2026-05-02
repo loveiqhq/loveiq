@@ -45,7 +45,7 @@ test.describe("CTA buttons", () => {
     await page.goto("/");
     const navCta = page
       .locator("nav")
-      .getByRole("link", { name: /start survey now/i })
+      .getByRole("link", { name: /start test now/i })
       .first();
     await expect(navCta).toHaveAttribute("href", "/survey");
   });

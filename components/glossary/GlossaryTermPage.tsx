@@ -4,12 +4,12 @@ import type { FC } from "react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { GlossaryTerm } from "@/data/glossary-data";
-import { glossaryTerms } from "@/data/glossary-data";
 import GlossaryNavSection from "./GlossaryNavSection";
 import FooterSection from "@/components/landing/FooterSection";
 
 interface GlossaryTermPageProps {
   term: GlossaryTerm;
+  relatedTermsWithLinks: Array<{ name: string; slug: string | null }>;
 }
 
 function slugify(text: string): string {
@@ -141,7 +141,7 @@ const MythRealityCard: FC<MythRealityCardProps> = ({
   );
 };
 
-const GlossaryTermPage: FC<GlossaryTermPageProps> = ({ term }) => {
+const GlossaryTermPage: FC<GlossaryTermPageProps> = ({ term, relatedTermsWithLinks }) => {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -166,15 +166,6 @@ const GlossaryTermPage: FC<GlossaryTermPageProps> = ({ term }) => {
 
     return () => observer.disconnect();
   }, []);
-
-  // Find related terms that exist in our glossary
-  const relatedTermsWithLinks = term.relatedTerms.map((relatedTerm) => {
-    const found = glossaryTerms.find((t) => t.term.toLowerCase() === relatedTerm.toLowerCase());
-    return {
-      name: relatedTerm,
-      slug: found ? found.slug : null,
-    };
-  });
 
   return (
     <main className="relative bg-[#0A0510] text-white min-h-screen">

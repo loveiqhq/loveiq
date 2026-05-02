@@ -7,7 +7,7 @@ import Link from "next/link";
 import GlossaryNavSection from "./GlossaryNavSection";
 import FooterSection from "@/components/landing/FooterSection";
 import { trackStartSurvey } from "@/lib/analytics";
-import { glossaryTerms as allTerms, type GlossaryTerm } from "@/data/glossary-data";
+import type { GlossaryTerm } from "@/data/glossary-data";
 
 const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 
@@ -24,9 +24,15 @@ const GlossaryPage: FC = () => {
   const router = useRouter();
   const pathname = usePathname();
 
+  const [allTerms, setAllTerms] = useState<GlossaryTerm[]>([]);
   const [searchQuery, setSearchQuery] = useState(searchParams.get("q") ?? "");
   const [activeFilter, setActiveFilter] = useState("all");
   const [activeLetter, setActiveLetter] = useState("A");
+
+  // Lazy-load the full glossary data (688KB) only when this page is visited
+  useEffect(() => {
+    import("@/data/glossary-data").then((mod) => setAllTerms(mod.glossaryTerms));
+  }, []);
 
   const handleSearchChange = (value: string) => {
     setSearchQuery(value);
@@ -67,7 +73,7 @@ const GlossaryPage: FC = () => {
       clearTimeout(timeoutId);
       observer.disconnect();
     };
-  }, [activeFilter, searchQuery]);
+  }, [activeFilter, searchQuery, allTerms]);
 
   // Group terms by first letter
   const termsByLetter = useMemo(() => {
@@ -87,7 +93,7 @@ const GlossaryPage: FC = () => {
     }
 
     return grouped;
-  }, []);
+  }, [allTerms]);
 
   const scrollToLetter = (letter: string) => {
     setActiveLetter(letter);
@@ -378,7 +384,7 @@ const GlossaryPage: FC = () => {
                 <span className="pointer-events-none absolute inset-0 rounded-full bg-white/10 opacity-0 transition duration-300 group-hover:opacity-100" />
                 <span className="pointer-events-none absolute inset-[-12%] rounded-full border border-white/15 mix-blend-screen opacity-70" />
                 <span className="relative z-10 transition-colors duration-500 group-hover:text-black">
-                  Start survey now
+                  Start test now
                 </span>
                 <svg
                   aria-hidden
