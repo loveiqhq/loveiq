@@ -146,6 +146,7 @@ Canonical role hierarchy from `lib/admin/roles.ts`:
 | `/api/admin/pulse/at-risk`                 | `GET`   | `viewer+`      | [`app/api/admin/pulse/at-risk/route.ts`](../app/api/admin/pulse/at-risk/route.ts)                                 |
 | `/api/admin/retention`                     | `GET`   | `viewer+`      | [`app/api/admin/retention/route.ts`](../app/api/admin/retention/route.ts)                                         |
 | `/api/admin/revenue`                       | `GET`   | `admin`        | [`app/api/admin/revenue/route.ts`](../app/api/admin/revenue/route.ts)                                             |
+| `/api/admin/revenue/pricing-clusters`      | `GET`   | `admin`        | [`app/api/admin/revenue/pricing-clusters/route.ts`](../app/api/admin/revenue/pricing-clusters/route.ts)           |
 | `/api/admin/revenue/transactions`          | `GET`   | `admin`        | [`app/api/admin/revenue/transactions/route.ts`](../app/api/admin/revenue/transactions/route.ts)                   |
 
 ### Strategy, Intelligence, and Operational Analytics

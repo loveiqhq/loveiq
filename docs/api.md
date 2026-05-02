@@ -10,18 +10,30 @@ Survey product-flow details such as step orchestration, storage, autosave, and r
 
 ## Route Inventory
 
-| Route                  | Methods | Notes                                                    |
-| ---------------------- | ------- | -------------------------------------------------------- |
-| `/api/contact`         | `POST`  | Contact form submission.                                 |
-| `/api/health`          | `GET`   | Service health check with dependency status.             |
-| `/api/invite`          | `POST`  | Invite email request with async delivery/tracking.       |
-| `/api/invite-tracking` | `POST`  | Invite share tracking.                                   |
-| `/api/staging-login`   | `POST`  | Password gate login for staging.                         |
-| `/api/staging-logout`  | `POST`  | Clears the staging cookie and redirects to `/login`.     |
-| `/api/survey`          | `POST`  | Completed survey submission.                             |
-| `/api/survey-partial`  | `POST`  | Partial survey autosave.                                 |
-| `/api/survey-tracking` | `POST`  | Survey behavior event batch ingest.                      |
-| `/api/waitlist`        | `POST`  | Waitlist signup with async email and Slack notification. |
+| Route                                 | Methods     | Notes                                                                                |
+| ------------------------------------- | ----------- | ------------------------------------------------------------------------------------ |
+| `/api/contact`                        | `POST`      | Contact form submission.                                                             |
+| `/api/cron/invite-reminders`          | `GET`       | Scheduled job: send invite reminder emails. Authenticated via `CRON_SECRET`.         |
+| `/api/cron/report-discount-email`     | `GET`       | Scheduled job: send report-pricing discount nudges. Authenticated via `CRON_SECRET`. |
+| `/api/cron/survey-paused`             | `GET`       | Scheduled job: nudge users who paused the survey. Authenticated via `CRON_SECRET`.   |
+| `/api/health`                         | `GET`       | Service health check with dependency status.                                         |
+| `/api/invite`                         | `POST`      | Invite email request with async delivery/tracking.                                   |
+| `/api/invite-tracking`                | `POST`      | Invite share tracking.                                                               |
+| `/api/price`                          | `GET`       | Returns the dynamic price quote for a viewer's session.                              |
+| `/api/report`                         | `GET`       | Returns the personal report payload for a token or session ID.                       |
+| `/api/report-feedback`                | `POST`      | Records thumbs-up / thumbs-down feedback per report section.                         |
+| `/api/report/share`                   | `GET, POST` | Lists or creates report-share grants for the report owner.                           |
+| `/api/report/share/[id]`              | `DELETE`    | Revokes a single report-share grant by ID.                                           |
+| `/api/report/share/verify`            | `POST`      | Validates a share token + recipient email; sets the share viewer cookie.             |
+| `/api/staging-login`                  | `POST`      | Password gate login for staging.                                                     |
+| `/api/staging-logout`                 | `POST`      | Clears the staging cookie and redirects to `/login`.                                 |
+| `/api/stripe/checkout-session`        | `POST`      | Creates a Stripe Checkout session for a report purchase plan.                        |
+| `/api/stripe/checkout-session-status` | `GET`       | Polls the status of a Stripe Checkout session and the user's resulting access plan.  |
+| `/api/stripe/webhook`                 | `POST`      | Stripe webhook receiver. Verified via Stripe signature header (no CSRF).             |
+| `/api/survey`                         | `POST`      | Completed survey submission.                                                         |
+| `/api/survey-partial`                 | `POST`      | Partial survey autosave.                                                             |
+| `/api/survey-tracking`                | `POST`      | Survey behavior event batch ingest.                                                  |
+| `/api/waitlist`                       | `POST`      | Waitlist signup with async email and Slack notification.                             |
 
 ## Shared Behavior
 

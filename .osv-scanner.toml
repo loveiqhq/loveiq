@@ -6,3 +6,20 @@ id = "GHSA-5f7q-jpqc-wp7h"
 # Next.js PPR DoS — fixed in 16.1.5, OSV database incorrectly flags 16.2.x.
 # This site does not use PPR (experimental.ppr) or NEXT_PRIVATE_MINIMAL_MODE.
 reason = "False positive: fixed in 16.1.5, we run 16.2.x; PPR not enabled"
+
+[[IgnoredVulns]]
+id = "GHSA-qx2v-qp2m-jg93"
+# postcss < 8.4.31 line-return parsing issue. Reported against the
+# `dependencies: { postcss: 8.4.31 }` declaration inside next's manifest,
+# but the npm `overrides: { postcss: "$postcss" }` resolves every actual
+# install to ^8.5.10 (verified via `npm ls postcss` → 8.5.13 deduped
+# everywhere). The 8.4.31 reference exists only as metadata in the
+# lockfile, not as an installed copy.
+reason = "False positive: actual installed postcss is 8.5.13 via npm overrides"
+
+[[IgnoredVulns]]
+id = "GHSA-w5hq-g745-h8pq"
+# uuid v10 advisory. We override transitive uuid to >=11.0.0; any
+# remaining v10 reference is a manifest-only declaration in a
+# transitive dep, not an installed version.
+reason = "Transitive uuid pinned to >=11.0.0 via npm overrides"
