@@ -495,7 +495,19 @@ const ReportPricingModal: FC<Props> = ({
                         disabled={isOwned || !pricing.available}
                         aria-disabled={isOwned || !pricing.available}
                         onClick={
-                          isOwned ? undefined : () => onUnlock(card.plan, targetArchetype ?? null)
+                          isOwned
+                            ? undefined
+                            : () =>
+                                onUnlock(
+                                  card.plan,
+                                  // Essentials + Full Report are per-archetype; if the modal
+                                  // wasn't opened scoped to a specific tile, the buyer is
+                                  // upgrading their primary archetype. all_reports is global
+                                  // and the parent strips archetype anyway.
+                                  card.plan === "all_reports"
+                                    ? null
+                                    : (targetArchetype ?? primaryArchetype ?? archetype)
+                                )
                         }
                       >
                         {isOwned

@@ -31,7 +31,8 @@ export default async function Page({ searchParams }: Props) {
   }
 
   const archetypeName = fromArchetypeSlug(rawArchetype);
-  const archetype = rawPlan === "full_report" ? archetypeName : null;
+  // Essentials + Full Report are per-archetype; All Reports is global.
+  const archetype = rawPlan === "all_reports" ? null : archetypeName;
 
   return <CheckoutPage planId={rawPlan} token={token} archetype={archetype} />;
 }

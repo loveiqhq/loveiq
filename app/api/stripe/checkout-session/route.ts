@@ -42,7 +42,14 @@ const createCheckoutSessionSchema = z
   })
   .refine((value) => !value.archetype || value.plan !== "all_reports", {
     message: "All-reports purchases are global and don't accept an archetype.",
-  });
+  })
+  .refine(
+    (value) =>
+      value.plan === "all_reports" || (typeof value.archetype === "string" && !!value.archetype),
+    {
+      message: "Essentials and Full Report purchases require an archetype.",
+    }
+  );
 
 const RATE_LIMIT_CONFIG = {
   bucket: "checkout-session",

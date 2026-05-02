@@ -382,7 +382,7 @@ export function resolveUnlockedArchetypeTiers({
 
   const result: ArchetypeTierMap = {};
 
-  // Per-archetype tiers from the new column take precedence.
+  // Per-archetype tiers from the new column are authoritative.
   if (archetypeTiers) {
     for (const [name, tier] of Object.entries(archetypeTiers)) {
       if (isArchetypeName(name) && isArchetypeTier(tier)) {
@@ -391,11 +391,15 @@ export function resolveUnlockedArchetypeTiers({
     }
   }
 
-  // Legacy column: any archetype here without a tier is implicitly full_report.
-  if (Array.isArray(columnValues)) {
+  // Legacy column is a mirror of archetype_tiers keys (kept in sync by
+  // upsert_archetype_tier). Only fall back to it when archetype_tiers is
+  // empty — otherwise stale legacy entries (e.g. rows seeded before the
+  // backfill, or partially updated by direct SQL) would phantom-unlock
+  // non-primary archetypes at full_report tier.
+  if (Object.keys(result).length === 0 && Array.isArray(columnValues)) {
     for (const name of columnValues) {
       if (!isArchetypeName(name)) continue;
-      if (!result[name]) result[name] = "full_report";
+      result[name] = "full_report";
     }
   }
 

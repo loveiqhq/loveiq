@@ -181,5 +181,39 @@ describe("report access helpers", () => {
         })
       ).toBe(false);
     });
+
+    it("global accessPlan does NOT mark a non-primary archetype as owned", () => {
+      // User owns Essentials for X (primary). Modal scoped to Y, no Y entry
+      // in the per-archetype tier map → unlockedTier === null. Neither card
+      // should be owned for Y just because a global accessPlan is set.
+      expect(
+        isPlanOwnedForArchetype({
+          accessPlan: "essentials",
+          targetPlan: "essentials",
+          unlockedTier: null,
+        })
+      ).toBe(false);
+      expect(
+        isPlanOwnedForArchetype({
+          accessPlan: "essentials",
+          targetPlan: "full_report",
+          unlockedTier: null,
+        })
+      ).toBe(false);
+      expect(
+        isPlanOwnedForArchetype({
+          accessPlan: "full_report",
+          targetPlan: "essentials",
+          unlockedTier: null,
+        })
+      ).toBe(false);
+      expect(
+        isPlanOwnedForArchetype({
+          accessPlan: "full_report",
+          targetPlan: "full_report",
+          unlockedTier: null,
+        })
+      ).toBe(false);
+    });
   });
 });

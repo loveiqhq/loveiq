@@ -230,6 +230,35 @@ function normalizePlan(value: unknown): ReportPurchasePlanId | null {
   return typeof value === "string" && isReportPurchasePlanId(value) ? value : null;
 }
 
+/**
+ * Defensive fallback for webhook fulfillment: when a per-archetype plan
+ * (essentials/full_report) arrives without a valid `archetype` metadata
+ * field — e.g. an older client built before the per-archetype refactor —
+ * resolve the buyer's primary archetype from `scoring_result` so the tier
+ * write still lands. Returns null if scoring isn't available; the caller
+ * logs and skips the tier write in that case.
+ */
+async function lookupPrimaryArchetypeForSubmission(submissionId: number): Promise<string | null> {
+  try {
+    const response = await supabaseServiceFetch(
+      `/rest/v1/scoring_result?survey_submission_id=eq.${submissionId}&select=primary_archetype,v5_primary_archetype&limit=1`
+    );
+    if (!response.ok) return null;
+    const rows = (await response.json()) as Array<{
+      primary_archetype: string | null;
+      v5_primary_archetype: string | null;
+    }>;
+    const row = rows[0];
+    if (!row) return null;
+    const candidate = row.v5_primary_archetype ?? row.primary_archetype;
+    return typeof candidate === "string" && isArchetypeName(candidate) ? candidate : null;
+  } catch (err) {
+    // eslint-disable-next-line no-secrets/no-secrets -- log message, not a secret
+    logger.warn({ err, submissionId }, "lookupPrimaryArchetypeForSubmission failed");
+    return null;
+  }
+}
+
 function toAmount(value: number | null | undefined) {
   if (typeof value !== "number") return null;
   return value / 100;
@@ -770,21 +799,30 @@ async function syncCheckoutSessionPayment({
     status: eventStatus,
   });
 
-  if (
-    eventStatus === "succeeded" &&
-    unlockedArchetype &&
-    (plan === "essentials" || plan === "full_report")
-  ) {
-    try {
-      await upsertArchetypeTierForPersonalReport({
-        archetype: unlockedArchetype,
-        personalReportId: personalReport.id,
-        tier: plan,
-      });
-    } catch (err) {
-      logger.warn(
-        { archetype: unlockedArchetype, err, personalReportId: personalReport.id, tier: plan },
-        "Unable to persist archetype tier after checkout"
+  if (eventStatus === "succeeded" && (plan === "essentials" || plan === "full_report")) {
+    // If the checkout session lacked a valid archetype metadata field,
+    // resolve the buyer's primary archetype from scoring_result. This
+    // prevents silent fulfillment loss when an older client (or a flow
+    // that opens the modal without a target tile) sends archetype="".
+    const archetypeForTier =
+      unlockedArchetype ?? (await lookupPrimaryArchetypeForSubmission(context.submissionId));
+    if (archetypeForTier) {
+      try {
+        await upsertArchetypeTierForPersonalReport({
+          archetype: archetypeForTier,
+          personalReportId: personalReport.id,
+          tier: plan,
+        });
+      } catch (err) {
+        logger.warn(
+          { archetype: archetypeForTier, err, personalReportId: personalReport.id, tier: plan },
+          "Unable to persist archetype tier after checkout"
+        );
+      }
+    } else {
+      logger.error(
+        { personalReportId: personalReport.id, plan, submissionId: context.submissionId },
+        "No archetype available for tier persistence — purchase recorded but tier write skipped"
       );
     }
   }

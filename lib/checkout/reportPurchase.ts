@@ -1,3 +1,5 @@
+import { toArchetypeSlug } from "@/lib/report/archetypeSlug";
+
 export const REPORT_ACCESS_TOKEN_REGEX = /^rpt_[a-zA-Z0-9]{20}$/;
 
 export const REPORT_PURCHASE_PLAN_IDS = ["essentials", "full_report", "all_reports"] as const;
@@ -122,7 +124,14 @@ export function buildReportCheckoutHref({
   }
 
   if (archetype) {
-    params.set("archetype", archetype);
+    // /checkout reads archetype as a slug (toArchetypeSlug-compatible) and
+    // calls fromArchetypeSlug on it. Slugify here so the URL stays stable
+    // and de-slugification round-trips cleanly for any archetype name with
+    // spaces (e.g. "Emotional Voyeur" → "emotional-voyeur").
+    const slug = toArchetypeSlug(archetype);
+    if (slug) {
+      params.set("archetype", slug);
+    }
   }
 
   return `/checkout?${params.toString()}`;

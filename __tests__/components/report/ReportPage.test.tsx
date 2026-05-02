@@ -447,7 +447,9 @@ describe("ReportPage", () => {
         token: undefined,
       });
       await waitFor(() =>
-        expect(mockRouterPush).toHaveBeenCalledWith("/checkout?plan=full_report")
+        expect(mockRouterPush).toHaveBeenCalledWith(
+          "/checkout?plan=full_report&archetype=emotional-voyeur"
+        )
       );
       expect(container.querySelector(".report-premium-overlay__cta")).toBeInTheDocument();
     },

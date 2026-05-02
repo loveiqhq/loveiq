@@ -98,6 +98,7 @@ describe("POST /api/stripe/checkout-session", () => {
   it("returns the disabled placeholder payload while checkout is not enabled", async () => {
     const res = await POST(
       makeRequest({
+        archetype: "Spark Seeker",
         plan: "full_report",
         reportSessionId: "02d88f31-eceb-4402-940d-c8cd98d01848",
       })
@@ -155,6 +156,7 @@ describe("POST /api/stripe/checkout-session", () => {
 
     const res = await POST(
       makeRequest({
+        archetype: "Spark Seeker",
         plan: "full_report",
         reportSessionId: "02d88f31-eceb-4402-940d-c8cd98d01848",
       })
@@ -168,7 +170,7 @@ describe("POST /api/stripe/checkout-session", () => {
     expect(createSession).toHaveBeenCalledWith(
       expect.objectContaining({
         allow_promotion_codes: true,
-        cancel_url: "http://localhost/checkout?plan=full_report",
+        cancel_url: "http://localhost/checkout?plan=full_report&archetype=spark-seeker",
         customer_email: "test@example.com",
         line_items: [
           expect.objectContaining({
@@ -179,11 +181,12 @@ describe("POST /api/stripe/checkout-session", () => {
           }),
         ],
         metadata: expect.objectContaining({
+          archetype: "Spark Seeker",
           requestIp: "127.0.0.1",
           requestUserAgent: "Mozilla/5.0 (Vitest)",
         }),
         success_url:
-          "http://localhost/checkout/return?plan=full_report&session_id={CHECKOUT_SESSION_ID}",
+          "http://localhost/checkout/return?plan=full_report&session_id={CHECKOUT_SESSION_ID}&archetype=spark-seeker",
       })
     );
     expect(markReportPriceQuoteCheckoutStarted).toHaveBeenCalledWith({ quoteId: 22 });
