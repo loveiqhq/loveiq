@@ -138,6 +138,18 @@ const ReportPricingModal: FC<Props> = ({
   // via the per-archetype tier map.
   const scopeArchetype = targetArchetype ?? primaryArchetype ?? archetype;
   const unlockedTier = (scopeArchetype && archetypeTiers?.[scopeArchetype]) || null;
+  if (typeof window !== "undefined" && open) {
+    // eslint-disable-next-line no-console, no-restricted-syntax
+    console.log("[pricing-modal:diag]", {
+      accessPlan,
+      archetype,
+      archetypeTiers,
+      primaryArchetype,
+      scopeArchetype,
+      targetArchetype,
+      unlockedTier,
+    });
+  }
   const dialogRef = useRef<HTMLDivElement>(null);
   const scrollRegionRef = useRef<HTMLDivElement>(null);
   const didOpenRef = useRef(false);
