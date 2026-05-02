@@ -140,7 +140,7 @@ const ReportPricingModal: FC<Props> = ({
   const unlockedTier = (scopeArchetype && archetypeTiers?.[scopeArchetype]) || null;
   if (typeof window !== "undefined" && open) {
     // eslint-disable-next-line no-console, no-restricted-syntax
-    console.log("[pricing-modal:diag]", {
+    console.warn("[pricing-modal:diag]", {
       accessPlan,
       archetype,
       archetypeTiers,
