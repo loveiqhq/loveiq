@@ -1,5 +1,7 @@
 # Technology Stack
 
+> **Last verified:** 2026-03-27 | **Verified against:** package.json dependencies and devDependencies
+
 **Analysis Date:** 2026-02-25
 
 ## Languages
@@ -55,6 +57,8 @@
 
 - Resend ^6.9.2 - Transactional email service (`package.json`, `app/api/waitlist/route.ts`, `app/api/contact/route.ts`)
 - Zod ^4.3.6 - Schema validation (`package.json`, `app/api/waitlist/route.ts`, `app/api/contact/route.ts`)
+- @supabase/supabase-js ^2.99.1 - Supabase client (database + auth) (`package.json`, `lib/admin/`)
+- @supabase/ssr ^0.9.0 - Supabase server-side auth helpers for Next.js (`package.json`, `lib/admin/`)
 - Lenis ^1.3.17 - Smooth scroll library (`components/SmoothScroll.tsx`)
 
 **Observability:**
@@ -87,8 +91,15 @@
   - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` - Database
   - `RESEND_API_KEY`, `RESEND_FROM`, `RESEND_REPLY_TO` - Email
   - `RECAPTCHA_SECRET_KEY` - Spam protection
-  - `SLACK_WAITLIST_WEBHOOK_URL`, `SLACK_CONTACT_WEBHOOK_URL` - Notifications
-  - `NEXT_PUBLIC_SITE_URL` - Public site URL
+  - `SLACK_WAITLIST_WEBHOOK_URL`, `SLACK_CONTACT_WEBHOOK_URL`, `SLACK_SURVEY_WEBHOOK_URL` - Notifications
+  - `STAGING_PASSWORD` - Staging environment auth
+  - `CONTACT_TO_EMAIL` - Contact form recipient
+  - Note: Admin panel auth uses Supabase Auth (magic links), not an env var password
+  - `SURVEY_CLOSE_PASSWORD` - Survey pause/close protection
+  - `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_RECAPTCHA_SITE_KEY` - Public client-side vars
+  - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` - Admin panel auth (browser-safe)
+  - `NEXT_PUBLIC_GTM_ID` - Google Tag Manager (optional)
+  - `LOG_LEVEL` - Pino log level (optional, default: info)
 
 **Build:**
 
@@ -115,4 +126,5 @@
 ---
 
 _Stack analysis: 2026-02-25_
+_Last updated: 2026-03-27_
 _Update after major dependency changes_

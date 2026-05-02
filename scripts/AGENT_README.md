@@ -1,26 +1,16 @@
 # scripts/
 
-One-off and maintenance scripts (Node.js). Not part of the application bundle.
+One-off Node.js scripts for data generation and database tooling. Not part of the application bundle.
 
-## What belongs here
+## Key Conventions
 
-- Data generation scripts
-- Database migration helpers
-- Build-time tooling scripts
+- All data-generation scripts read CSV sources from `data/` and write TypeScript files back to `data/`. They are idempotent and safe to re-run.
+- Scripts use plain Node.js (no TypeScript compilation required). Run with `node scripts/<name>.js`.
 
-## What does NOT belong here
+## File Manifest
 
-- Application code → use `app/` or `lib/`
-- Test files → use `__tests__/` or `e2e/`
-
-## Key files
-
-| File                 | Purpose                                                                  |
-| -------------------- | ------------------------------------------------------------------------ |
-| `update-glossary.js` | Reads `data/glossary-source.csv`, writes updated `data/glossary-data.ts` |
-
-## Running scripts
-
-```bash
-node scripts/update-glossary.js   # regenerate glossary data from CSV
-```
+| Script                     | Input                       | Output                   | Purpose                          |
+| -------------------------- | --------------------------- | ------------------------ | -------------------------------- |
+| `update-glossary.js`       | `data/glossary-source.csv`  | `data/glossary-data.ts`  | Regenerate glossary terms        |
+| `update-survey.js`         | `data/survey-source.csv`    | `data/survey-data.ts`    | Regenerate survey questions      |
+| `update-scoring-config.js` | `data/scoring-config/*.csv` | `data/scoring-config.ts` | Regenerate scoring engine config |

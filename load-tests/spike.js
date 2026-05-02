@@ -25,11 +25,13 @@ export const options = {
   ],
   thresholds: {
     http_req_duration: ["p(95)<5000"],
-    http_req_failed: ["rate<0.05"],
+    // Exclude waitlist API probe (expected 403) from failure rate
+    "http_req_failed{page:/}": ["rate<0.05"],
+    "http_req_failed{page:/api/health}": ["rate<0.05"],
   },
 };
 
-export default function () {
+export default function spikeTest() {
   // Mix of page loads and API health checks under spike conditions
   const path = Math.random() < 0.8 ? "/" : "/api/health";
   const res = http.get(`${BASE_URL}${path}`, {

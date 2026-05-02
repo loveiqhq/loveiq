@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { createSupabaseMiddleware } from "./lib/supabase-middleware";
 import logger from "./lib/logger";
 
 const isProduction = process.env.NODE_ENV === "production";
@@ -40,16 +41,28 @@ export async function proxy(request: NextRequest) {
     const path = request.nextUrl.pathname;
     const isPublic =
       path === "/login" ||
+      path === "/api/health" ||
+      path === "/api/stripe/webhook" ||
+      path.startsWith("/api/cron/") ||
       path.startsWith("/api/staging-") ||
+      path.startsWith("/admin") ||
       path.startsWith("/_next/") ||
       path.startsWith("/images/") ||
-      path === "/favicon.ico";
+      path.startsWith("/emails/") ||
+      path === "/favicon.ico" ||
+      path === "/favicon.svg" ||
+      path === "/apple-touch-icon.png";
 
     if (!isPublic) {
       const session = request.cookies.get("staging_session")?.value;
       const expected = await getStagingPasswordHash(STAGING_PASSWORD);
       if (session !== expected) {
-        return NextResponse.redirect(new URL("/login", request.url));
+        const loginUrl = new URL("/login", request.url);
+        const nextPath = `${request.nextUrl.pathname}${request.nextUrl.search}`;
+        if (nextPath.startsWith("/") && !nextPath.startsWith("//")) {
+          loginUrl.searchParams.set("next", nextPath);
+        }
+        return NextResponse.redirect(loginUrl);
       }
     }
   }
@@ -58,6 +71,14 @@ export async function proxy(request: NextRequest) {
   const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
 
   const isDev = !isProduction;
+  const googleFontStyleSources = "https://fonts.googleapis.com";
+  const googleFontSources = "https://fonts.gstatic.com";
+  const stripeScriptSources = "https://js.stripe.com https://*.js.stripe.com";
+  const stripeImageSources = "https://*.stripe.com";
+  const stripeConnectSources =
+    "https://api.stripe.com https://m.stripe.com https://m.stripe.network https://r.stripe.com";
+  const stripeFrameSources =
+    "https://js.stripe.com https://*.js.stripe.com https://hooks.stripe.com https://checkout.stripe.com";
 
   // Build CSP header
   // Production: 'self' + 'unsafe-inline' + explicit external domain allowlist.
@@ -71,12 +92,13 @@ export async function proxy(request: NextRequest) {
     "default-src 'self'",
     isDev
       ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'"
-      : `script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://www.google-analytics.com https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/ https://cdn-cookieyes.com https://cookieyes.com https://t.contentsquare.net https://*.contentsquare.net https://*.hotjar.com`,
-    "style-src 'self' 'unsafe-inline'", // Tailwind requires unsafe-inline for styles
-    "img-src 'self' data: blob: https://images.unsplash.com https://www.google-analytics.com https://www.googletagmanager.com https://cdn-cookieyes.com https://*.hotjar.com",
+      : `script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://www.google-analytics.com https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/ https://cdn-cookieyes.com https://cookieyes.com https://connect.facebook.net https://analytics.tiktok.com https://t.contentsquare.net https://*.contentsquare.net https://*.hotjar.com ${stripeScriptSources}`,
+    `style-src 'self' 'unsafe-inline' ${googleFontStyleSources}`, // Tailwind requires unsafe-inline for styles
+    `font-src 'self' data: ${googleFontSources}`,
+    `img-src 'self' data: blob: https://images.unsplash.com https://www.google-analytics.com https://www.googletagmanager.com https://cdn-cookieyes.com https://flagcdn.com https://www.facebook.com https://*.hotjar.com ${stripeImageSources}`,
     "media-src 'self'",
-    `connect-src 'self'${isDev ? " ws://localhost:* http://localhost:*" : ""} https://www.google-analytics.com https://www.googletagmanager.com https://images.unsplash.com https://www.google.com/recaptcha/ https://cdn-cookieyes.com https://log.cookieyes.com https://cookieyes.com https://*.contentsquare.net https://*.hotjar.com https://*.hotjar.io`,
-    "frame-src 'self' https://www.google.com/recaptcha/ https://recaptcha.google.com/recaptcha/ https://www.gstatic.com/recaptcha/ https://cdn-cookieyes.com https://*.hotjar.com",
+    `connect-src 'self'${isDev ? " ws://localhost:* http://localhost:*" : ""} https://www.google-analytics.com https://www.googletagmanager.com https://images.unsplash.com https://www.google.com/recaptcha/ https://cdn-cookieyes.com https://log.cookieyes.com https://cookieyes.com https://www.facebook.com https://analytics.tiktok.com https://*.contentsquare.net https://*.hotjar.com https://*.hotjar.io ${stripeConnectSources}`,
+    `frame-src 'self' https://www.google.com/recaptcha/ https://recaptcha.google.com/recaptcha/ https://www.gstatic.com/recaptcha/ https://cdn-cookieyes.com https://*.hotjar.com ${stripeFrameSources}`,
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",
@@ -97,6 +119,30 @@ export async function proxy(request: NextRequest) {
       headers: requestHeaders,
     },
   });
+
+  // Admin gate: verify Supabase Auth session for /admin routes
+  const adminPath = request.nextUrl.pathname;
+  if (adminPath.startsWith("/admin")) {
+    const isAdminPublic =
+      adminPath === "/admin/login" ||
+      adminPath === "/api/admin/login" ||
+      adminPath === "/api/admin/logout" ||
+      adminPath.startsWith("/admin/auth/"); // callback route
+
+    if (!isAdminPublic) {
+      const supabase = createSupabaseMiddleware(request, response);
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        return NextResponse.redirect(new URL("/admin/login", request.url));
+      }
+
+      // Pass user email to API routes via header for audit logging
+      requestHeaders.set("x-admin-email", user.email || "");
+    }
+  }
 
   // Set security headers on response
   response.headers.set("Content-Security-Policy", cspHeader);
@@ -125,6 +171,8 @@ export async function proxy(request: NextRequest) {
   }
 
   // Security logging for API routes (3.4)
+  // Note: This IP is for observability logging only, not for security decisions
+  // (rate limiting uses getClientIp() which trusts only x-real-ip).
   if (request.nextUrl.pathname.startsWith("/api/")) {
     const ip =
       request.headers.get("x-real-ip") ||

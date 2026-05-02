@@ -1,33 +1,22 @@
 # e2e/
 
-End-to-end browser tests (Playwright).
+End-to-end browser tests using Playwright. Tests run against a production build across 5 browser projects (Desktop Chrome/Firefox/Safari, Mobile Chrome, Mobile Safari).
 
-## What belongs here
+## Key Conventions
 
-- Full browser test specs covering user flows
-- Playwright helper utilities
+- Run with `npm run test:e2e` (builds prod, starts server, runs all browsers).
+- E2E tests belong in CI only, never in pre-push hooks (they take 3-6 minutes).
+- Use `data-testid` attributes for stable selectors. When a locator matches multiple elements (e.g., nav links in desktop + mobile menus), use `.first()` or scope to a container.
 
-## What does NOT belong here
+## Test Files
 
-- Unit tests → use `__tests__/`
-- Load tests → use `load-tests/`
-
-## Key files
-
-| File                   | Purpose                               |
-| ---------------------- | ------------------------------------- |
-| `smoke.spec.ts`        | Critical path smoke tests (run first) |
-| `navigation.spec.ts`   | Navigation and routing tests          |
-| `pages.spec.ts`        | Page render and content tests         |
-| `interactions.spec.ts` | Form and interactive element tests    |
-| `a11y.spec.ts`         | Accessibility tests                   |
-
-## Running tests
-
-```bash
-npm run test:e2e     # full E2E suite (builds prod, starts server, runs all browsers)
-```
-
-Browser projects: Desktop Chrome/Firefox/Safari, Mobile Chrome (Pixel 7), Mobile Safari (iPhone 15 Pro).
-
-> E2E belongs in CI, not pre-push hooks — too slow (~3–6 min).
+| File                        | Scope                                      |
+| --------------------------- | ------------------------------------------ |
+| `smoke.spec.ts`             | Critical paths (homepage loads, nav works) |
+| `navigation.spec.ts`        | All navigation links and routing           |
+| `pages.spec.ts`             | Page content and metadata                  |
+| `interactions.spec.ts`      | Forms, buttons, interactive elements       |
+| `a11y.spec.ts`              | Accessibility (axe-core WCAG checks)       |
+| `admin.spec.ts`             | Admin panel flows                          |
+| `survey.spec.ts`            | Survey wizard flow                         |
+| `visual-regression.spec.ts` | Screenshot comparison tests                |

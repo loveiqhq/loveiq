@@ -1,0 +1,163 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`waitlistEarlyAccessEmail > HTML output matches snapshot 1`] = `
+"<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="x-apple-disable-message-reformatting">
+<meta name="color-scheme" content="light only">
+<meta name="supported-color-schemes" content="light only">
+<title>You are chosen — early access to your LoveIQ insights</title>
+</head>
+<body style="margin:0; padding:0; background-color:#f7f7f8; font-family:'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; color:#000000; -webkit-font-smoothing:antialiased;">
+<div style="display:none; max-height:0; overflow:hidden; opacity:0; color:transparent;">LoveIQ is now live and you’re among the first early users invited from our waitlist.</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f7f7f8;">
+  <tr>
+    <td align="center" style="padding:24px 12px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px; background-color:#ffffff; border-radius:8px; overflow:hidden;">
+        
+  <tr>
+    <td style="padding:24px 32px 8px;">
+      <table role="presentation" cellpadding="0" cellspacing="0">
+        <tr>
+          <td style="width:32px; height:32px; vertical-align:middle;">
+            <img src="https://loveiq.org/apple-touch-icon.png" alt="LoveIQ" width="32" height="32" style="display:block; border-radius:8px;" />
+          </td>
+          <td style="padding-left:12px; font-family:Georgia,'Times New Roman',serif; font-size:20px; font-weight:700; letter-spacing:-0.2px; vertical-align:middle; line-height:1;">
+            <span style="color:#111111;">Love</span><span style="color:#C167CF; background:linear-gradient(105deg,#D05976 20.51%,#C167CF 48.14%,#8887F6 79.16%); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;">IQ</span>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+        
+  <tr>
+    <td style="padding:24px 32px 8px;">
+      <h1 style="margin:0; font-family:'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; font-size:26px; font-weight:600; line-height:1.35; color:#000000; letter-spacing:-0.3px;">
+        You are chosen for early access!
+      </h1>
+    </td>
+  </tr>
+  <tr>
+    <td style="padding:16px 32px 0;">
+      <p style="margin:0 0 16px 0; font-family:'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; font-size:17px; line-height:1.55; color:#000000;">
+        Hi Alice,
+      </p>
+      <p style="margin:0 0 16px 0; font-family:'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; font-size:17px; line-height:1.55; color:#000000;">
+        After years of research and months of building, LoveIQ is now live and you&rsquo;re among the first early users invited from our waitlist.
+      </p>
+      <p style="margin:0 0 12px 0; font-family:'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; font-size:17px; line-height:1.55; color:#000000;">
+        Early feedback has been strong:
+      </p>
+      <ul style="margin:0 0 16px 0; padding-left:22px; font-family:'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; font-size:17px; line-height:1.55; color:#000000;">
+        <li style="margin:0 0 6px 0;">
+          &ldquo;<strong style="font-weight:700;">Surprisingly accurate,</strong> it put words to patterns I never understood.&rdquo;
+        </li>
+        <li style="margin:0 0 6px 0;">
+          &ldquo;Insightful without being judgmental. <strong style="font-weight:700;">I actually learned something about myself.</strong>&rdquo;
+        </li>
+        <li style="margin:0 0 6px 0;">
+          &ldquo;<strong style="font-weight:700;">It was worth all the time</strong> spent on it&rdquo;
+        </li>
+      </ul>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" style="padding:8px 32px 24px;">
+      
+  <table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin:0 auto;">
+    <tr>
+      <td align="center" bgcolor="#5900AC" style="border-radius:9999px;  box-shadow:0 0 15px rgba(254,104,57,0.2);">
+        <a href="https://loveiq.org/survey" target="_blank" style="display:inline-block; padding:13px 28px; font-family:'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; font-size:14px; font-weight:600; color:#ffffff; text-decoration:none; letter-spacing:0.2px; line-height:20px;">
+          Start your LoveIQ test&nbsp;&rarr;
+        </a>
+      </td>
+    </tr>
+  </table>
+    </td>
+  </tr>
+  <tr>
+    <td style="padding:8px 32px 8px;">
+      <p style="margin:0 0 12px 0; font-family:'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; font-size:17px; line-height:1.55; color:#000000; font-weight:700;">
+        What you&rsquo;ll get:
+      </p>
+      <ul style="margin:0 0 16px 0; padding-left:22px; font-family:'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; font-size:17px; line-height:1.55; color:#000000;">
+        <li style="margin:0 0 6px 0;">A clear report of your sexual archetype</li>
+        <li style="margin:0 0 6px 0;">Insights into your desire &amp; intimacy patterns</li>
+        <li style="margin:0 0 6px 0;">Language to better understand and communicate your needs</li>
+      </ul>
+      <p style="margin:16px 0 24px 0; font-family:'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; font-size:17px; line-height:1.55; color:#000000;">
+        It takes ~15 minutes &mdash; and the payoff is clarity most people never get.
+      </p>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" style="padding:16px 32px 32px;">
+      <p style="margin:0 0 12px 0; font-family:'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; font-size:16px; line-height:1.55; color:#000000; text-align:center;">
+        If you have any questions you can always reach us at
+        <a href="mailto:hello@loveiq.org" style="color:#1a73e8; text-decoration:underline;">hello@loveiq.org</a>.
+      </p>
+      <p style="margin:0 0 16px 0; font-family:'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; font-size:16px; line-height:1.55; color:#000000; text-align:center;">
+        We&rsquo;ll help you pick up right where you left off.
+      </p>
+      <p style="margin:0; font-family:'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; font-size:16px; line-height:1.55; color:#000000; text-align:center;">
+        With kindness,<br />Your LoveIQ team
+      </p>
+    </td>
+  </tr>
+        
+  <tr>
+    <td style="padding:24px 32px 32px; background-color:#f7f7f8; border-top:1px solid #eeeef1;">
+      <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
+        <tr>
+          <td align="center" style="font-family:'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; font-size:13px; color:#111111; padding-bottom:4px;">
+            <span style="font-weight:400;">Copyright © 2026</span>
+            <span style="font-weight:600;">&nbsp;Applied Psychometrics UG</span>
+          </td>
+        </tr>
+        <tr>
+          <td align="center" style="font-family:'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; font-size:13px; font-style:italic; color:#111111; font-weight:300; line-height:1.5;">
+            A science-led psychometric<br />research and insights platform
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+</body>
+</html>"
+`;
+
+exports[`waitlistEarlyAccessEmail > text output matches snapshot 1`] = `
+"You are chosen — early access to your LoveIQ insights
+
+Hi Alice,
+
+After years of research and months of building, LoveIQ is now live and you're among the first early users invited from our waitlist.
+
+Early feedback has been strong:
+- "Surprisingly accurate, it put words to patterns I never understood."
+- "Insightful without being judgmental. I actually learned something about myself."
+- "It was worth all the time spent on it"
+
+Start your LoveIQ test: https://loveiq.org/survey
+
+What you'll get:
+- A clear report of your sexual archetype
+- Insights into your desire & intimacy patterns
+- Language to better understand and communicate your needs
+
+It takes ~15 minutes — and the payoff is clarity most people never get.
+
+If you have any questions you can always reach us at hello@loveiq.org.
+
+We'll help you pick up right where you left off.
+
+With kindness,
+Your LoveIQ team"
+`;

@@ -631,13 +631,13 @@ const TeaserCard: FC = () => (
     <div className="relative flex flex-col items-center gap-1 sm:gap-3 w-full overflow-hidden py-1 sm:py-3">
       {/* Faded outer items hidden on mobile to save space */}
       <span className="hidden sm:block font-serif sm:text-[16px] lg:text-[18px] leading-[24px] text-white/20">
-        Emotional Voyeur
+        Erotic Blueprint
       </span>
       <div className="flex items-center gap-1.5">
         <span className="h-1 w-1 rounded-full bg-[#130b17]" aria-hidden />
         <span className="h-1 w-1 rounded-full bg-white/40" aria-hidden />
         <span className="font-serif text-[13px] sm:text-[18px] lg:text-[21px] leading-[22px] sm:leading-[24px] text-white/40">
-          Explorer of Edges
+          Relational Healer
         </span>
       </div>
       <div className="flex items-center gap-2 sm:gap-3 rounded-xl border border-white/10 bg-white/5 px-3 sm:px-6 py-1.5 sm:py-3 shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-4px_rgba(0,0,0,0.1)] backdrop-blur-sm">
@@ -654,19 +654,19 @@ const TeaserCard: FC = () => (
         </span>
       </div>
       <span className="hidden sm:block font-serif sm:text-[16px] lg:text-[18px] leading-[24px] text-white/20">
-        Analytical Sexualist
+        Storm Chaser
       </span>
     </div>
 
     {/* Bottom section */}
     <div className="relative flex flex-col items-center">
       <p className="font-sans text-[11px] sm:text-[14px] lg:text-[16px] font-medium leading-[15px] sm:leading-[19.5px] text-center text-[#D1D5DB] max-w-[240px] sm:max-w-[444px] mb-3 sm:mb-5">
-        To explore all 14 archetypes, start our test and discover which ones fit you best.
+        To explore all 14 archetypes, start our survey and discover which ones fit you best.
       </p>
 
       <Link
-        href="/waitlist"
-        aria-label="Start test now - discover your archetype"
+        href="/survey"
+        aria-label="Start survey now - discover your archetype"
         className="group relative inline-flex items-center justify-center gap-2 overflow-hidden rounded-full bg-gradient-brand px-5 py-2.5 sm:px-6 sm:py-3 text-[12px] sm:text-[14px] font-semibold text-white shadow-pill transition hover:translate-y-[-2px] focus-visible-ring"
         onClick={() => trackStartSurvey("archetype-teaser")}
       >
@@ -675,7 +675,7 @@ const TeaserCard: FC = () => (
           className="pointer-events-none absolute inset-0 bg-white opacity-0 transition-opacity duration-500 group-hover:opacity-100"
         />
         <span className="relative z-10 transition-colors duration-500 group-hover:text-black">
-          Start test now
+          Start survey now
         </span>
         <svg
           aria-hidden
@@ -693,7 +693,7 @@ const TeaserCard: FC = () => (
       </Link>
 
       <p className="mt-1.5 sm:mt-3 font-sans text-[9px] sm:text-[10px] font-bold leading-[18px] sm:leading-[20px] tracking-[1.4px] uppercase text-white/40 text-center">
-        {"\u2022"}Takes 15 minutes {"\u2022"} No account required
+        {"\u2022"}Takes 10 minutes {"\u2022"} No account required
       </p>
     </div>
   </div>

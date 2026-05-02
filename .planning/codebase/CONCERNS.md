@@ -1,76 +1,86 @@
 # Codebase Concerns
 
+> **Last verified:** 2026-03-15 | **Verified against:** implemented features (admin dashboard, Supabase Auth), open issues
+
 **Analysis Date:** 2025-01-14
 
 ## Tech Debt
 
-**In-memory rate limiting:**
+**Email enumeration timing (low priority):**
 
-- Issue: Rate limiting uses in-memory Maps that don't persist across serverless function instances
-- Files: `app/api/waitlist/route.ts`, `app/api/contact/route.ts`
-- Why: Quick implementation for MVP
-- Impact: Rate limiting ineffective in serverless (each instance has fresh state)
-- Fix approach: Move to Redis or Upstash for distributed rate limiting
-
-**Deep relative imports:**
-
-- Issue: Import paths like `../../../lib/emails/waitlist` are hard to maintain
+- Issue: Timing attack could theoretically reveal if email exists in waitlist
 - Files: `app/api/waitlist/route.ts`
-- Why: No path aliases configured
-- Impact: Refactoring file locations requires updating many imports
-- Fix approach: Add path aliases in `tsconfig.json` (e.g., `@/lib/*`)
+- Current mitigation: Same success response for existing emails
+- Impact: Minimal — current mitigation is adequate
 
-**Generic section naming:**
+## Resolved Items
 
-- Issue: Components named `Section05` through `Section12` don't describe purpose
-- Files: `components/landing/Section05.tsx` through `Section12.tsx`
-- Why: Likely matches original design mockup naming
-- Impact: Hard to find specific section without checking content
-- Fix approach: Rename to descriptive names (e.g., `TestimonialsSection`, `PricingSection`)
+**In-memory rate limiting:** RESOLVED (2026-01)
 
-**Temporary files in root:**
+- Was: Rate limiting used in-memory Maps that reset across serverless instances
+- Fix: Supabase-backed persistent rate limiting in `lib/ratelimit.ts`
+- Evidence: `checkRateLimit()` writes to Supabase `rate_limits` table
 
-- Issue: Large temporary files committed or present in root
-- Files: `tmp_index.css` (~402KB), `tmp_index.js` (~8.5MB), `tmp_loveiq.html`
-- Why: Development artifacts not cleaned up
-- Impact: Clutters repository, increases clone size
-- Fix approach: Delete files and add to `.gitignore`
+**Deep relative imports:** RESOLVED (2026-01)
+
+- Was: Import paths like `../../../lib/emails/waitlist` hard to maintain
+- Fix: `@/*` path alias configured in `tsconfig.json`
+- Evidence: All cross-directory imports use `@/lib/*`, `@/components/*`
+
+**Generic section naming:** RESOLVED (2026-01)
+
+- Was: Components named `Section05` through `Section12` with no description
+- Fix: Renamed to descriptive names: `S01Hero.tsx` through `S14CTA.tsx`
+- Evidence: `components/landing/S01Hero.tsx` ... `S14CTA.tsx`
+
+**Temporary files in root:** RESOLVED (2026-01)
+
+- Was: `tmp_index.css`, `tmp_index.js`, `tmp_loveiq.html` committed
+- Fix: Files deleted and patterns added to `.gitignore`
+
+**No CSRF protection:** RESOLVED (2026-01)
+
+- Was: No CSRF token validation on API routes
+- Fix: Double-submit cookie pattern in `lib/csrf.ts`, verified in all API routes
+- Evidence: `verifyCsrfToken()` called in waitlist + contact route handlers
+
+**No tests:** RESOLVED (2026-02)
+
+- Was: Zero test coverage
+- Fix: Vitest unit tests in `__tests__/`, Playwright E2E tests in `e2e/`
+- Evidence: `npm test` runs unit tests, `npm run test:e2e` runs Playwright
+
+**No .env.example:** RESOLVED (2026-01)
+
+- Was: No template for required environment variables
+- Fix: `.env.example` created with placeholder values
+
+**ffmpeg-static in devDependencies:** RESOLVED (2026-01)
+
+- Was: Unusual dependency with unclear purpose
+- Fix: Removed from `package.json`
+
+**No admin dashboard:** RESOLVED (2026-03)
+
+- Was: Cannot view waitlist signups without database access
+- Fix: Full admin panel at `/admin/*` with dashboard, submission browser, CSV export, and survey status toggle
+- Auth: Supabase Auth magic link emails with `admin_users` email allowlist table
+- Evidence: `app/admin/`, `app/api/admin/`, `lib/admin/`, `components/admin/`
 
 ## Known Bugs
 
 **None detected in code review**
 
-- Note: No runtime testing performed; bugs may exist but weren't visible in static analysis
+- Unit tests (Vitest) and E2E tests (Playwright) provide regression coverage
 
 ## Security Considerations
 
 **Hardcoded GA tracking ID:**
 
 - Risk: Google Analytics ID visible in source code
-- File: `app/layout.tsx` (line 115-121)
+- File: `app/layout.tsx`
 - Current mitigation: GA IDs are designed to be public
 - Recommendations: Consider moving to environment variable if privacy-sensitive
-
-**In-memory rate limiting bypass:**
-
-- Risk: Rate limiting can be bypassed by hitting different serverless instances
-- Files: `app/api/waitlist/route.ts`, `app/api/contact/route.ts`
-- Current mitigation: None
-- Recommendations: Implement Redis-based rate limiting (Upstash is Vercel-compatible)
-
-**No CSRF protection on API routes:**
-
-- Risk: Cross-site request forgery possible on form endpoints
-- Files: `app/api/waitlist/route.ts`, `app/api/contact/route.ts`
-- Current mitigation: Rate limiting, honeypot fields, reCAPTCHA (contact only)
-- Recommendations: Add CSRF tokens for sensitive operations
-
-**Email enumeration possible:**
-
-- Risk: Timing attack could reveal if email exists in waitlist
-- File: `app/api/waitlist/route.ts` (existing check returns faster)
-- Current mitigation: Same success response for existing emails
-- Recommendations: Current mitigation is adequate
 
 ## Performance Bottlenecks
 
@@ -93,15 +103,13 @@
 - Common failures: Webhook returns non-200, network timeout
 - Files: `app/api/waitlist/route.ts`, `app/api/contact/route.ts`
 - Safe modification: Slack failures are already non-blocking (async, caught)
-- Test coverage: None
 
 **CSP header configuration:**
 
 - Why fragile: Adding new third-party scripts requires CSP updates
 - Common failures: Scripts blocked silently, features break
-- File: `next.config.js` (lines 29-41)
+- File: `proxy.ts`
 - Safe modification: Test thoroughly in dev before deploy
-- Test coverage: None
 
 ## Scaling Limits
 
@@ -121,13 +129,6 @@
 
 ## Dependencies at Risk
 
-**ffmpeg-static in devDependencies:**
-
-- Risk: Unusual dependency for a web marketing site, purpose unclear
-- File: `package.json`
-- Impact: Increases install time/size unnecessarily
-- Migration plan: Remove if unused, document if used
-
 **Zod 4.x:**
 
 - Risk: Major version bump may have breaking changes
@@ -137,12 +138,13 @@
 
 ## Missing Critical Features
 
-**No user authentication:**
+**No end-user authentication:**
 
 - Problem: Cannot identify returning waitlist members
 - Current workaround: Email-based identification only
 - Blocks: Member area, personalized content
 - Implementation complexity: Medium (Supabase Auth available)
+- Note: Admin panel now has authentication via Supabase Auth magic links (see resolved item below)
 
 **No email verification:**
 
@@ -151,40 +153,12 @@
 - Blocks: Clean email list for launches
 - Implementation complexity: Low (add verification flow)
 
-**No admin dashboard:**
-
-- Problem: Cannot view waitlist signups without database access
-- Current workaround: Direct Supabase dashboard access
-- Blocks: Non-technical team members viewing signups
-- Implementation complexity: Medium
-
-## Test Coverage Gaps
-
-**No tests:**
-
-- What's not tested: Everything
-- Risk: Regressions undetected, refactoring risky
-- Priority: High (at least for API routes)
-- Difficulty to test: Low for unit tests, medium for integration tests
-
-**Specific high-risk untested areas:**
-
-- Zod validation schemas
-- Rate limiting logic
-- Email template generation
-- Supabase API integration
-- Resend email sending
-
 ## Documentation Gaps
 
-**No .env.example:**
-
-- What's missing: Template for required environment variables
-- Risk: New developers don't know which vars to set
-- Current docs: `SECURITY.md` lists variables but no template file
-- Fix: Create `.env.example` with placeholder values
+**None critical** — `CLAUDE.md`, `SECURITY.md`, `DEVELOPMENT.md`, `CONTRIBUTING.md`, and `docs/api.md` cover the main areas.
 
 ---
 
 _Concerns audit: 2025-01-14_
+_Last updated: 2026-03-15_
 _Update as issues are fixed or new ones discovered_

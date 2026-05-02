@@ -5,17 +5,7 @@ const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.loveiq.org";
 
 const coreRoutes = ["/"];
 
-const mainRoutes = ["/about", "/glossary", "/waitlist", "/trust-zone"];
-
-const legalRoutes = [
-  "/privacy-policy",
-  "/terms-of-use",
-  "/terms-and-conditions",
-  "/medical-disclaimer",
-  "/cookies",
-  "/digital-content-terms",
-  "/imprint",
-];
+const mainRoutes = ["/about", "/glossary", "/waitlist", "/survey", "/trust-zone"];
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const siteLastModified = new Date();
@@ -34,19 +24,14 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: 0.8,
   }));
 
-  const legalEntries = legalRoutes.map((path) => ({
-    url: `${siteUrl}${path}`,
-    lastModified: siteLastModified,
-    changeFrequency: "yearly" as const,
-    priority: 0.3,
-  }));
+  const glossaryLastModified = new Date("2026-02-28");
 
   const glossaryEntries = getAllSlugs().map((slug) => ({
     url: `${siteUrl}/glossary/${slug}`,
-    lastModified: siteLastModified,
+    lastModified: glossaryLastModified,
     changeFrequency: "monthly" as const,
     priority: 0.7,
   }));
 
-  return [...coreEntries, ...mainEntries, ...legalEntries, ...glossaryEntries];
+  return [...coreEntries, ...mainEntries, ...glossaryEntries];
 }

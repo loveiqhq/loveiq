@@ -1,8 +1,9 @@
-import { NextResponse, after } from "next/server";
+import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import { waitlistEmail } from "@/lib/emails/waitlist";
 import { z } from "zod";
 import { checkRateLimit, checkCooldown, getClientIp } from "@/lib/ratelimit";
+import { scheduleAfterResponse } from "@/lib/after-response";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { getBreaker, CircuitOpenError } from "@/lib/circuit-breaker";
 import { verifyCsrfToken } from "@/lib/csrf";
@@ -13,6 +14,7 @@ type Payload = {
   source?: string;
   firstName?: string | null;
   website?: string | null; // honeypot
+  utmTracker?: string | null;
 };
 
 const tableName = "waitlist_user"; // matches Supabase table name
@@ -31,6 +33,7 @@ const waitlistSchema = z.object({
   source: z.string().max(120).optional(),
   firstName: z.string().max(80).optional().nullable(),
   website: z.string().max(0).optional().nullable(), // honeypot must be empty
+  utmTracker: z.string().max(500).optional().nullable(),
 });
 
 const RESEND_TIMEOUT_MS = 8_000;
@@ -43,22 +46,6 @@ const RATE_LIMIT_CONFIG = {
 };
 
 const EMAIL_COOLDOWN_MS = 60_000; // 1 minute per email
-
-/**
- * Schedule a side-effect to run after the response is sent.
- * Uses Next.js `after()` so the serverless function stays alive until the work
- * completes instead of being killed the moment the response is flushed.
- * Falls back to fire-and-forget `void` in test environments where the
- * Next.js request lifecycle is not active.
- */
-function scheduleAfterResponse(fn: () => Promise<void>): void {
-  try {
-    after(fn);
-  } catch {
-    void fn();
-  }
-}
-
 async function sendConfirmationEmail(to: string, firstName: string | null) {
   const from = process.env.RESEND_FROM || "LoveIQ <hello@send.loveiq.org>";
   const replyTo = process.env.RESEND_REPLY_TO || "hello@loveiq.org";
@@ -90,10 +77,12 @@ const notifySlackWaitlist = async ({
   email,
   firstName,
   source,
+  utmSource,
 }: {
   email: string;
   firstName?: string | null;
   source?: string | null;
+  utmSource?: string | null;
 }) => {
   const url = process.env.SLACK_WAITLIST_WEBHOOK_URL;
 
@@ -104,7 +93,7 @@ const notifySlackWaitlist = async ({
 
   // Mask to avoid sending full PII to Slack
   const maskedEmail = email.replace(/^(.).+(@.+)$/, "$1***$2");
-  const text = `New waitlist signup: ${firstName ? `*${firstName}* ` : ""}${maskedEmail}${source ? ` (source: ${source})` : ""}`;
+  const text = `New waitlist signup: ${firstName ? `*${firstName}* ` : ""}${maskedEmail}${source ? ` (source: ${source})` : ""}${utmSource ? ` [utm: ${utmSource}]` : ""}`;
 
   try {
     logger.info({ maskedEmail, source: source || "n/a" }, "Sending Slack waitlist notification");
@@ -158,7 +147,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   }
 
-  const { email, source, firstName, website } = parsed.data;
+  const { email, source, firstName, website, utmTracker } = parsed.data;
   const normalizedEmail = email.trim().toLowerCase();
   const normalizedFirstName = firstName?.trim() || null;
 
@@ -218,6 +207,16 @@ export async function POST(request: Request) {
     );
   }
 
+  // Parse UTM tracker JSON safely for JSONB storage
+  let parsedUtm: Record<string, string> | null = null;
+  if (utmTracker) {
+    try {
+      parsedUtm = JSON.parse(utmTracker);
+    } catch {
+      // Malformed UTM JSON — store null
+    }
+  }
+
   if (!existingRes.ok) {
     return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
   }
@@ -231,6 +230,7 @@ export async function POST(request: Request) {
     email: normalizedEmail,
     source: source?.trim() || "landing-modal",
     created_date_time: new Date().toISOString(),
+    ...(parsedUtm && { utm_tracker: parsedUtm }),
   };
 
   let response: Response;
@@ -274,9 +274,16 @@ export async function POST(request: Request) {
   // DB insert succeeded — return success immediately.
   // Email and Slack run after the response so the serverless function stays
   // alive until they finish, but a failure never blocks or fails the response.
-  scheduleAfterResponse(() => sendConfirmationEmail(normalizedEmail, normalizedFirstName));
-  scheduleAfterResponse(() =>
-    notifySlackWaitlist({ email: normalizedEmail, firstName: normalizedFirstName, source })
+  scheduleAfterResponse("waitlist-confirmation-email", () =>
+    sendConfirmationEmail(normalizedEmail, normalizedFirstName)
+  );
+  scheduleAfterResponse("waitlist-slack-notification", () =>
+    notifySlackWaitlist({
+      email: normalizedEmail,
+      firstName: normalizedFirstName,
+      source,
+      utmSource: parsedUtm?.utm_source ?? null,
+    })
   );
 
   return NextResponse.json({ success: true });

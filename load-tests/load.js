@@ -28,7 +28,7 @@ export const options = {
   },
 };
 
-export default function () {
+export default function loadTest() {
   // Weighted: landing page gets most traffic
   const pages = ["/", "/", "/", "/waitlist", "/about", "/glossary", "/api/health"];
   const path = pages[Math.floor(Math.random() * pages.length)];

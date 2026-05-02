@@ -185,8 +185,16 @@ jobs:
           echo "Checking for common Next.js security issues..."
 
           # Check for dangerouslySetInnerHTML usage
-          # Excludes JSON.stringify usage (safe JSON-LD structured data pattern)
-          if grep -r "dangerouslySetInnerHTML" app/ components/ --include="*.tsx" --include="*.jsx" | grep -v "JSON\.stringify"; then
+          # Excludes:
+          #  - JSON.stringify usage (safe JSON-LD structured data pattern in app/layout.tsx)
+          #  - components/report/sections/ and components/report/ReportPage.tsx — these
+          #    render escaped report-prose HTML built from sanitized server data
+          #    (lib/report/contentGating.ts + the report data pipeline). Substitution
+          #    helpers escape every variable; the HTML body comes from our own .docx
+          #    pipeline, not user input. Reviewed and intentional.
+          if grep -r "dangerouslySetInnerHTML" app/ components/ --include="*.tsx" --include="*.jsx" \
+              | grep -v "JSON\.stringify" \
+              | grep -vE "components/report/(sections/|ReportPage\.tsx)"; then
             echo "⚠️  Found dangerouslySetInnerHTML usage - review for XSS risks"
             exit 1
           fi
@@ -240,8 +248,13 @@ jobs:
           echo "Validating API route security patterns..."
 
           # Check that all API routes use CSRF verification
-          # Excludes staging-* routes: dev-only endpoints that return 404 in production
-          for file in $(find app/api -name 'route.ts' -not -path "*/staging-*" 2>/dev/null); do
+          # Excludes:
+          #  - staging-* routes (dev-only endpoints that return 404 in production)
+          #  - stripe/webhook (verified via Stripe signature header instead of CSRF)
+          for file in $(find app/api -name 'route.ts' \
+              -not -path "*/staging-*" \
+              -not -path "*/stripe/webhook/*" \
+              2>/dev/null); do
             if [ -f "$file" ] && grep -q "export.*POST\|export.*PUT\|export.*DELETE\|export.*PATCH" "$file"; then
               if ! grep -q "verifyCsrfToken" "$file"; then
                 echo "⚠️  $file: POST/PUT/DELETE/PATCH route missing CSRF verification"
@@ -251,8 +264,13 @@ jobs:
           done
 
           # Check that all API routes use rate limiting
-          # Excludes staging-* routes: dev-only endpoints that return 404 in production
-          for file in $(find app/api -name 'route.ts' -not -path "*/staging-*" 2>/dev/null); do
+          # Excludes:
+          #  - staging-* routes (dev-only endpoints that return 404 in production)
+          #  - stripe/webhook (Stripe retries delivery; rate-limiting it would drop legitimate events)
+          for file in $(find app/api -name 'route.ts' \
+              -not -path "*/staging-*" \
+              -not -path "*/stripe/webhook/*" \
+              2>/dev/null); do
             if [ -f "$file" ] && grep -q "export.*POST" "$file"; then
               if ! grep -q "checkRateLimit" "$file"; then
                 echo "⚠️  $file: POST route missing rate limiting"
@@ -262,8 +280,15 @@ jobs:
           done
 
           # Check that all API routes use Zod validation
-          # Excludes staging-* routes: dev-only endpoints that return 404 in production
-          for file in $(find app/api -name 'route.ts' -not -path "*/staging-*" 2>/dev/null); do
+          # Excludes:
+          #  - staging-* routes (dev-only endpoints that return 404 in production)
+          #  - stripe/webhook (validated via stripe.webhooks.constructEvent signature check)
+          #  - admin/logout (no body to validate; just clears the auth session)
+          for file in $(find app/api -name 'route.ts' \
+              -not -path "*/staging-*" \
+              -not -path "*/stripe/webhook/*" \
+              -not -path "*/admin/logout/*" \
+              2>/dev/null); do
             if [ -f "$file" ] && grep -q "export.*POST\|export.*PUT" "$file"; then
               if ! grep -q "z\.object\|zod" "$file"; then
                 echo "⚠️  $file: Route missing Zod schema validation"

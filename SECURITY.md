@@ -1,8 +1,14 @@
 # Security Guide
 
+> Owner: CODEOWNERS default
+> Last verified: 2026-04-05
+> Verified against: `.env.example`, `proxy.ts`, `lib/csrf.ts`, `lib/ratelimit.ts`, `.github/workflows/security.yml`
+
 ## Environment & secrets
 
-- Set all secrets only in Vercel env vars (never in client bundles): `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`, `RESEND_FROM`, `RESEND_REPLY_TO`, `CONTACT_TO_EMAIL`, `NEXT_PUBLIC_SITE_URL`.
+- **Server-only secrets** (set only in Vercel env vars, never in client bundles): `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`, `RECAPTCHA_SECRET_KEY`, `SLACK_WAITLIST_WEBHOOK_URL`, `SLACK_CONTACT_WEBHOOK_URL`, `SLACK_SURVEY_WEBHOOK_URL`, `STAGING_PASSWORD`, `SURVEY_CLOSE_PASSWORD`.
+- **Server config** (not secret but server-only): `SUPABASE_URL`, `RESEND_FROM`, `RESEND_REPLY_TO`, `CONTACT_TO_EMAIL`.
+- **Client-safe** (`NEXT_PUBLIC_*` prefix, exposed in browser bundles by design): `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_RECAPTCHA_SITE_KEY`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_GTM_ID`.
 - Never expose the Supabase service role key to the client; keep all DB access server-side.
 
 ## Secrets rotation schedule
@@ -13,6 +19,8 @@
 | `RESEND_API_KEY`            | Quarterly / on incident | Resend Dashboard → API Keys → Create new → Delete old |
 | `RECAPTCHA_SECRET_KEY`      | Annually / on incident  | Google reCAPTCHA Admin → Settings → Regenerate        |
 | `SLACK_*_WEBHOOK_URL`       | On incident only        | Slack App → Incoming Webhooks → Add new → Remove old  |
+| `STAGING_PASSWORD`          | On incident only        | Update in Vercel env vars → Redeploy                  |
+| `SURVEY_CLOSE_PASSWORD`     | On incident only        | Update in Vercel env vars → Redeploy                  |
 
 **Rotation checklist:**
 

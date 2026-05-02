@@ -1,8 +1,11 @@
 name: Load Test
 
-# Manual trigger only — do not run on every push.
-# Run before any major launch, marketing campaign, or traffic event.
+# Manual trigger + weekly scheduled smoke test on staging.
+# Run manually before any major launch, marketing campaign, or traffic event.
 on:
+  schedule:
+    # Every Monday at 6:00 AM UTC — smoke test against staging
+    - cron: "0 6 * * 1"
   workflow_dispatch:
     inputs:
       test_type:
@@ -24,8 +27,12 @@ permissions:
 
 jobs:
   load-test:
-    name: k6 ${{ inputs.test_type }} test → ${{ inputs.target_url }}
+    name: k6 ${{ inputs.test_type || 'smoke' }} test → ${{ inputs.target_url || 'https://staging.loveiq.org' }}
     runs-on: ubuntu-latest
+    env:
+      # Default to smoke/staging for scheduled runs (inputs.* is empty on schedule)
+      TEST_TYPE: ${{ inputs.test_type || 'smoke' }}
+      TARGET_URL: ${{ inputs.target_url || 'https://staging.loveiq.org' }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
@@ -41,17 +48,17 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y k6
 
-      - name: Run ${{ inputs.test_type }} test
+      - name: Run ${{ env.TEST_TYPE }} test
         run: |
           k6 run \
-            -e BASE_URL="${{ inputs.target_url }}" \
+            -e BASE_URL="${{ env.TARGET_URL }}" \
             --out json=k6-results.json \
-            load-tests/${{ inputs.test_type }}.js
+            load-tests/${{ env.TEST_TYPE }}.js
 
       - name: Upload results
         if: always()
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
-          name: k6-results-${{ inputs.test_type }}
+          name: k6-results-${{ env.TEST_TYPE }}
           path: k6-results.json
           retention-days: 30

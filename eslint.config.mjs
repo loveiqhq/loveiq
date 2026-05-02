@@ -4,7 +4,15 @@ import noSecretsPlugin from "eslint-plugin-no-secrets";
 
 const eslintConfig = [
   {
-    ignores: ["scripts/*-output.js", ".next/**", "node_modules/**", "out/**"],
+    ignores: [
+      "scripts/*-output.js",
+      ".next/**",
+      "node_modules/**",
+      "out/**",
+      "coverage/**",
+      "playwright-report/**",
+      "test-results/**",
+    ],
   },
   ...nextConfig,
   {

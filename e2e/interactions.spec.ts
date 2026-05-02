@@ -41,13 +41,13 @@ test.describe("FAQ accordion (landing page)", () => {
 });
 
 test.describe("CTA buttons", () => {
-  test("nav CTA links to /waitlist", async ({ page }) => {
+  test("nav CTA links to /survey", async ({ page }) => {
     await page.goto("/");
     const navCta = page
       .locator("nav")
       .getByRole("link", { name: /start test now/i })
       .first();
-    await expect(navCta).toHaveAttribute("href", "/waitlist");
+    await expect(navCta).toHaveAttribute("href", "/survey");
   });
 });
 

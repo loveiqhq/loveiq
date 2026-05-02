@@ -45,3 +45,24 @@ export async function verifyCsrfToken(request: Request): Promise<boolean> {
 
   return result === 0;
 }
+
+/**
+ * Verify CSRF token from a body field (for sendBeacon which cannot set headers).
+ * Compares the provided token against the cookie value using constant-time comparison.
+ */
+export async function verifyCsrfTokenFromBody(bodyToken: string | undefined): Promise<boolean> {
+  if (!bodyToken) return false;
+
+  const cookieStore = await cookies();
+  const cookieToken = cookieStore.get(CSRF_COOKIE_NAME)?.value;
+
+  if (!cookieToken) return false;
+  if (cookieToken.length !== bodyToken.length) return false;
+
+  let result = 0;
+  for (let i = 0; i < cookieToken.length; i++) {
+    result |= cookieToken.charCodeAt(i) ^ bodyToken.charCodeAt(i);
+  }
+
+  return result === 0;
+}

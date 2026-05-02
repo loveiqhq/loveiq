@@ -1,7 +1,21 @@
 import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 
-const criticalRoutes = ["/", "/about", "/waitlist", "/glossary", "/trust-zone"];
+const criticalRoutes = [
+  "/",
+  "/about",
+  "/waitlist",
+  "/glossary",
+  "/trust-zone",
+  "/survey",
+  "/privacy-policy",
+  "/terms-of-use",
+  "/terms-and-conditions",
+  "/medical-disclaimer",
+  "/digital-content-terms",
+  "/cookies",
+  "/imprint",
+];
 
 for (const route of criticalRoutes) {
   test(`${route} — no critical accessibility violations`, async ({ page }) => {

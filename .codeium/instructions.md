@@ -88,6 +88,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { verifyCsrfToken } from "@/lib/csrf";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
+import logger from "@/lib/logger";
 
 const schema = z.object({
   email: z.string().email().max(320),
@@ -135,7 +136,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ success: true });
   } catch (err) {
-    console.error("Error in route-name:", err);
+    logger.error({ err }, "Error in route-name");
     return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
   }
 }
@@ -230,7 +231,7 @@ try {
   // ... operation
 } catch (err) {
   // Log details for debugging (server-side only)
-  console.error("Detailed context for debugging:", err);
+  logger.error({ err }, "Detailed context for debugging");
 
   // Return generic message to user
   return NextResponse.json({ error: "Unable to process request." }, { status: 500 });

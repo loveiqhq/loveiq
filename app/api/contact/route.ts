@@ -1,7 +1,8 @@
-import { NextResponse, after } from "next/server";
+import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import { z } from "zod";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
+import { scheduleAfterResponse } from "@/lib/after-response";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { getBreaker, CircuitOpenError } from "@/lib/circuit-breaker";
 import { verifyCsrfToken } from "@/lib/csrf";
@@ -10,14 +11,6 @@ import logger from "@/lib/logger";
 const RESEND_TIMEOUT_MS = 5_000;
 
 /** See waitlist/route.ts — same pattern. */
-function scheduleAfterResponse(fn: () => Promise<void>): void {
-  try {
-    after(fn);
-  } catch {
-    void fn();
-  }
-}
-
 // Lazy initialization to avoid build-time errors when env vars are not set
 let _resend: Resend | null = null;
 function getResend(): Resend {
@@ -188,15 +181,31 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Captcha failed. Please try again." }, { status: 400 });
   }
 
-  // Sanitize email for use in Reply-To header to prevent header injection
-  // Remove any newlines, carriage returns, or null bytes
-  const sanitizedReplyTo = email.replace(/[\r\n\0]/g, "").trim();
+  // Strip CRLF / null bytes from any field that flows into an email header.
+  // Resend likely sanitizes internally, but defense-in-depth at the app
+  // layer prevents accidental regression if the SDK changes. The Subject
+  // header is the highest-risk vector — newline-injection there can spawn
+  // additional headers (Bcc, Cc) under permissive mailers.
+  function stripHeaderUnsafe(value: string): string {
+    return value.replace(/[\r\n\0]/g, "").trim();
+  }
 
-  // Additional validation - reject if sanitization changed the email
-  // (indicates attempted header injection)
+  const sanitizedReplyTo = stripHeaderUnsafe(email);
   if (sanitizedReplyTo !== email.trim()) {
     logger.warn("Potential header injection attempt in email");
     return NextResponse.json({ error: "Invalid email format." }, { status: 400 });
+  }
+
+  const sanitizedFirstName = stripHeaderUnsafe(firstName);
+  const sanitizedLastName = stripHeaderUnsafe(lastName);
+  const sanitizedPhone = stripHeaderUnsafe(phone);
+  if (
+    sanitizedFirstName !== firstName.trim() ||
+    sanitizedLastName !== lastName.trim() ||
+    sanitizedPhone !== phone.trim()
+  ) {
+    logger.warn("Potential header injection attempt in name/phone field");
+    return NextResponse.json({ error: "Invalid input." }, { status: 400 });
   }
 
   const from = process.env.RESEND_FROM || "LoveIQ <hello@send.loveiq.org>";
@@ -207,11 +216,11 @@ export async function POST(request: Request) {
         from,
         to: contactToEmail!,
         replyTo: sanitizedReplyTo,
-        subject: `New contact request from ${firstName} ${lastName}`,
+        subject: `New contact request from ${sanitizedFirstName} ${sanitizedLastName}`,
         text: [
-          `Name: ${firstName} ${lastName}`,
-          `Email: ${email}`,
-          `Phone: ${phone}`,
+          `Name: ${sanitizedFirstName} ${sanitizedLastName}`,
+          `Email: ${sanitizedReplyTo}`,
+          `Phone: ${sanitizedPhone}`,
           "",
           message,
         ].join("\n"),
@@ -243,7 +252,7 @@ export async function POST(request: Request) {
   logger.info({ duration_ms: Date.now() - routeStart }, "contact: total route duration");
 
   // Slack runs after the response — keeps the function alive but never blocks it
-  scheduleAfterResponse(() =>
+  scheduleAfterResponse("contact-slack-notification", () =>
     sendSlackContactNotification({ firstName, lastName, email, phone, message })
   );
 

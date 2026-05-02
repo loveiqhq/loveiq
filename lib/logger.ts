@@ -16,6 +16,18 @@ const logger = pino({
       "*.lastName",
       "name",
       "*.name",
+      // Tokens are not strictly secrets but appear in URLs and grant access
+      // when leaked; redact defensively across all common shapes.
+      "token",
+      "*.token",
+      "reportToken",
+      "*.reportToken",
+      "ownerToken",
+      "*.ownerToken",
+      "shareToken",
+      "*.shareToken",
+      "csrfToken",
+      "*.csrfToken",
     ],
     censor: "[REDACTED]",
   },

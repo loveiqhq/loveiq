@@ -1,12 +1,17 @@
 import { NextResponse } from "next/server";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
+import logger from "@/lib/logger";
 
 const REQUIRED_ENV_VARS = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "RESEND_API_KEY"];
 
+// Liveness probe. Externally reachable (uptime monitors, load balancers) so the
+// response body MUST NOT reveal which env vars are missing, which third-party
+// services are configured, or anything else that helps an attacker fingerprint
+// the deployment. Diagnostics live in the server logs only.
 export async function GET() {
-  const missingEnv = REQUIRED_ENV_VARS.filter((v) => !process.env[v]);
+  const missingEnv = REQUIRED_ENV_VARS.filter((envName) => !process.env[envName]);
 
-  let supabaseStatus: "ok" | "error" | "unconfigured" = "unconfigured";
+  let supabaseOk = false;
   if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
     try {
       const res = await fetchWithTimeout(`${process.env.SUPABASE_URL}/rest/v1/`, {
@@ -17,23 +22,32 @@ export async function GET() {
         cache: "no-store",
         timeoutMs: 3000,
       });
-      supabaseStatus = res.ok ? "ok" : "error";
+      supabaseOk = res.ok;
     } catch {
-      supabaseStatus = "error";
+      supabaseOk = false;
     }
   }
 
-  const healthy = missingEnv.length === 0 && supabaseStatus === "ok";
+  const healthy = missingEnv.length === 0 && supabaseOk;
+
+  if (!healthy) {
+    // Diagnostic detail goes to the server log so operators can debug
+    // without leaking config to anonymous callers.
+    logger.warn(
+      {
+        missingEnvCount: missingEnv.length,
+        missingEnv,
+        supabaseOk,
+      },
+      "Health check failed"
+    );
+  }
 
   return NextResponse.json(
+    { ok: healthy },
     {
-      ok: healthy,
-      checks: {
-        supabase: supabaseStatus,
-        resend: process.env.RESEND_API_KEY ? "configured" : "unconfigured",
-        env: missingEnv.length === 0 ? "ok" : `missing: ${missingEnv.join(", ")}`,
-      },
-    },
-    { status: healthy ? 200 : 503 }
+      status: healthy ? 200 : 503,
+      headers: { "Cache-Control": "no-store, no-cache, must-revalidate" },
+    }
   );
 }

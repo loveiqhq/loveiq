@@ -39,6 +39,12 @@ jobs:
           cache: "npm"
       - run: npm ci
       - run: npm run test:coverage
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage/lcov.info
+          fail_ci_if_error: false
 
   build:
     name: Build
@@ -60,6 +66,18 @@ jobs:
         env:
           NEXT_PUBLIC_SITE_URL: https://www.loveiq.org
           NEXT_PUBLIC_RECAPTCHA_SITE_KEY: dummy
+
+  docs-impact:
+    name: Documentation Impact Check
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          fetch-depth: 0
+      - run: bash scripts/check-docs-impact.sh origin/${{ github.base_ref }}
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
 
   smoke-test:
     name: Smoke Test (Production)

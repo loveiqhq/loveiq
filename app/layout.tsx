@@ -6,6 +6,8 @@ import { headers } from "next/headers";
 import SmoothScroll from "@/components/SmoothScroll";
 import { NonceProvider } from "@/components/NonceProvider";
 import HydrationMarker from "@/components/HydrationMarker";
+import UtmCapture from "@/components/UtmCapture";
+import { GtmScript, GtmNoScript } from "@/components/GtmScript";
 import WebVitals from "@/components/WebVitals";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.loveiq.org";
@@ -30,7 +32,7 @@ const organizationSchema = {
   "@type": "Organization",
   name: "LoveIQ",
   url: siteUrl,
-  logo: `${siteUrl}/images/LoveiqLogo.svg`,
+  logo: `${siteUrl}/images/loveiq-mark-512.png`,
   contactPoint: {
     "@type": "ContactPoint",
     email: "hello@loveiq.org",
@@ -235,6 +237,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 5,
   userScalable: true,
+  viewportFit: "cover",
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
@@ -256,6 +259,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           strategy="lazyOnload"
           nonce={nonce}
         />
+        <GtmScript nonce={nonce} />
         <Script
           id="ga-loader"
           src="https://www.googletagmanager.com/gtag/js?id=G-QTYY69L46N"
@@ -327,6 +331,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <script src="https://t.contentsquare.net/uxa/f1a8d593041c0.js" />
       </head>
       <body className="bg-white dark:bg-[#050208]">
+        <GtmNoScript />
         <a
           href="#main-content"
           className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:rounded-lg focus:bg-white focus:px-4 focus:py-2 focus:text-black focus:shadow-lg"
@@ -334,6 +339,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           Skip to main content
         </a>
         <HydrationMarker />
+        <UtmCapture />
         <WebVitals />
         <NonceProvider nonce={nonce}>
           <SmoothScroll>{children}</SmoothScroll>

@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useRef } from "react";
 import type { FC } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { trackStartSurvey } from "@/lib/analytics";
+import { LoveIQMark, LoveIQWordmark } from "@/components/branding/LoveIQBrand";
 
 const navLinks = [
   { label: "Home", href: "/" },
@@ -199,8 +199,8 @@ const NavSection: FC = () => {
       <div className="content-shell">
         <div className="relative z-10 pointer-events-auto">
           <div className="pointer-events-none absolute inset-[-10px] rounded-[999px] bg-[radial-gradient(80%_120%_at_50%_50%,rgba(0,0,0,0.55),transparent_65%)] blur-3xl" />
-          <nav className="relative mx-auto flex w-full items-center justify-between gap-1.5 rounded-[999px] bg-gradient-to-r from-[#1b0f2a] via-[#120a20] to-[#1b0f2a] px-2 py-2 shadow-[0_25px_80px_rgba(0,0,0,0.55)] backdrop-blur sm:gap-5 sm:px-3 sm:pl-6 sm:pr-2 sm:py-[6px] sm:max-w-[1200px]">
-            <div className="flex min-w-0 items-center gap-2 sm:flex-1">
+          <nav className="relative mx-auto flex w-full items-center justify-between gap-2 rounded-[999px] bg-gradient-to-r from-[#1b0f2a] via-[#120a20] to-[#1b0f2a] px-3 py-2 shadow-[0_25px_80px_rgba(0,0,0,0.55)] backdrop-blur sm:gap-5 sm:pl-6 sm:pr-2 sm:py-[6px] sm:max-w-[1200px]">
+            <div className="flex flex-1 items-center gap-2">
               <Link
                 href="/"
                 className="flex items-center gap-2 focus-visible-ring"
@@ -211,15 +211,8 @@ const NavSection: FC = () => {
                   }
                 }}
               >
-                <Image
-                  src="/favicon.svg"
-                  alt=""
-                  width={28}
-                  height={28}
-                  unoptimized
-                  className="h-7 w-7 rounded-full shadow-[0_8px_18px_rgba(0,0,0,0.28)]"
-                />
-                <span className="font-serif text-xl font-semibold text-white">LoveIQ</span>
+                <LoveIQMark className="h-7 w-8 shrink-0" width={32} height={28} priority />
+                <LoveIQWordmark className="text-xl" />
               </Link>
             </div>
 
@@ -235,7 +228,7 @@ const NavSection: FC = () => {
               ))}
             </div>
 
-            <div className="flex items-center justify-end gap-2 sm:flex-1 sm:gap-2">
+            <div className="flex flex-1 items-center justify-end gap-2 sm:gap-2">
               {navLinks.slice(0, 3).map((item) => (
                 <Link
                   key={item.href}
@@ -246,9 +239,9 @@ const NavSection: FC = () => {
                 </Link>
               ))}
               <Link
-                href="/waitlist"
-                aria-label="Start test now - navigation"
-                className="group relative inline-flex shrink-0 items-center justify-center gap-1 overflow-hidden whitespace-nowrap rounded-full bg-gradient-brand px-2.5 py-2 text-[12px] font-semibold text-white shadow-pill transition hover:translate-y-[-2px] focus-visible-ring sm:gap-2 sm:px-6 sm:py-3 sm:text-sm"
+                href="/survey"
+                aria-label="Start survey now - navigation"
+                className="group relative inline-flex shrink-0 items-center justify-center gap-1.5 overflow-hidden whitespace-nowrap rounded-full bg-gradient-brand px-3.5 py-2 text-[12px] font-semibold text-white shadow-pill transition hover:translate-y-[-2px] focus-visible-ring sm:gap-2 sm:px-6 sm:py-3 sm:text-sm"
                 onClick={() => trackStartSurvey("nav")}
               >
                 <span
@@ -262,7 +255,7 @@ const NavSection: FC = () => {
                 <span className="pointer-events-none absolute inset-0 rounded-full bg-white/10 opacity-0 transition duration-300 group-hover:opacity-100" />
                 <span className="pointer-events-none absolute inset-[-12%] rounded-full border border-white/15 mix-blend-screen opacity-70" />
                 <span className="relative z-10 transition-colors duration-500 group-hover:text-black">
-                  Start test now
+                  Start survey now
                 </span>
                 <svg
                   aria-hidden
@@ -333,10 +326,10 @@ const NavSection: FC = () => {
                 style={{ transitionDelay: menuOpen ? "320ms" : "0ms" }}
               >
                 <Link
-                  href="/waitlist"
+                  href="/survey"
                   role="menuitem"
                   tabIndex={menuOpen ? 0 : -1}
-                  aria-label="Start test now"
+                  aria-label="Start survey now"
                   className="group relative flex items-center justify-center gap-2 overflow-hidden rounded-full bg-gradient-brand mx-2 mt-1 px-6 py-3 text-sm font-semibold text-white shadow-pill transition hover:translate-y-[-2px] focus-visible-ring"
                   onClick={() => {
                     trackStartSurvey("nav");
@@ -353,7 +346,7 @@ const NavSection: FC = () => {
                   />
                   <span className="pointer-events-none absolute inset-0 rounded-full bg-white/10 opacity-0 transition duration-300 group-hover:opacity-100" />
                   <span className="relative z-10 transition-colors duration-500 group-hover:text-black">
-                    Start test now
+                    Start survey now
                   </span>
                   <svg
                     aria-hidden

@@ -1,0 +1,311 @@
+rule_id,question_id,answer_code,answer_label,archetype_name,score_add
+1,01003,complicated,Feels complicated or inconsistent,Sensual Connector,0.4
+2,01003,complicated,Feels complicated or inconsistent,Spiritual Lover,0.2
+3,01003,complicated,Feels complicated or inconsistent,Approval Seeker,0.3
+4,01003,complicated,Feels complicated or inconsistent,Quiet Withdrawer,0.6
+5,01003,deprioritized,Present but often deprioritized,Relational Nurturer,0.4
+6,01003,deprioritized,Present but often deprioritized,Minimalist Companion,0.4
+7,01003,deprioritized,Present but often deprioritized,Loyal Ritualist,0.3
+8,01003,deprioritized,Present but often deprioritized,Quiet Withdrawer,0.3
+9,01003,engaged,Satisfied & actively engaged,Sensual Connector,0.2
+10,01003,engaged,Satisfied & actively engaged,Spark Seeker,0.3
+11,01003,engaged,Satisfied & actively engaged,Exhibitionist Performer,0.2
+12,01003,engaged,Satisfied & actively engaged,Power Orchestrator,0.3
+13,01003,engaged,Satisfied & actively engaged,Loyal Ritualist,0.3
+14,01003,figuring_out,Unsure / still figuring it out,Curious Apprentice,0.5
+15,01003,figuring_out,Unsure / still figuring it out,Emotional Voyeur,0.3
+16,01003,figuring_out,Unsure / still figuring it out,Analytical Sexualist,0.3
+17,01003,frustrated,Frustrated or unfulfilled,Sensual Connector,0.3
+18,01003,frustrated,Frustrated or unfulfilled,Explorer of Edges,0.4
+19,01003,frustrated,Frustrated or unfulfilled,Approval Seeker,0.3
+20,01003,not_focus,Currently not a focus for me,Minimalist Companion,0.6
+21,01003,not_focus,Currently not a focus for me,Quiet Withdrawer,0.5
+22,01003,wanting_more,Want more than I currently have,Spark Seeker,0.3
+23,01003,wanting_more,Want more than I currently have,Explorer of Edges,0.3
+24,01003,wanting_more,Want more than I currently have,Curious Apprentice,0.3
+25,02001,low_lately,Desire has been low lately,Sensual Connector,0.2
+26,02001,low_lately,Desire has been low lately,Relational Nurturer,0.2
+27,02001,low_lately,Desire has been low lately,Minimalist Companion,0.3
+28,02001,low_lately,Desire has been low lately,Quiet Withdrawer,0.5
+29,02001,planned,I need a planned ‘window’ to get into it,Curious Apprentice,0.6
+30,02001,planned,I need a planned ‘window’ to get into it,Minimalist Companion,1.0
+31,02001,planned,I need a planned ‘window’ to get into it,Power Orchestrator,0.4
+32,02001,planned,I need a planned ‘window’ to get into it,Loyal Ritualist,1.1
+33,02001,planned,I need a planned ‘window’ to get into it,Analytical Sexualist,0.9
+34,02001,responsive,I usually warm up after affectionate/erotic cues (responsive),Sensual Connector,0.9
+35,02001,responsive,I usually warm up after affectionate/erotic cues (responsive),Relational Nurturer,0.7
+36,02001,responsive,I usually warm up after affectionate/erotic cues (responsive),Spiritual Lover,0.7
+37,02001,responsive,I usually warm up after affectionate/erotic cues (responsive),Loyal Ritualist,0.3
+38,02001,responsive,I usually warm up after affectionate/erotic cues (responsive),Approval Seeker,0.6
+39,02001,spontaneous,I often feel desire spontaneously (it starts inside me),Spark Seeker,0.9
+40,02001,spontaneous,I often feel desire spontaneously (it starts inside me),Exhibitionist Performer,0.5
+41,02001,spontaneous,I often feel desire spontaneously (it starts inside me),Explorer of Edges,0.5
+42,02001,spontaneous,I often feel desire spontaneously (it starts inside me),Power Orchestrator,0.6
+43,02001,varies,It varies a lot by partner/context,Spark Seeker,0.4
+44,02001,varies,It varies a lot by partner/context,Exhibitionist Performer,0.3
+45,02001,varies,It varies a lot by partner/context,Curious Apprentice,0.5
+45,02001,varies,It varies a lot by partner/context,Emotional Voyeur,0.3
+45,02001,varies,It varies a lot by partner/context,Relational Nurturer,0.3
+46,02004,i_start,I initiate,Spark Seeker,0.52
+47,02004,i_start,I initiate,Exhibitionist Performer,0.26
+48,02004,i_start,I initiate,Explorer of Edges,0.26
+49,02004,i_start,I initiate,Power Orchestrator,0.455
+50,02004,partner_starts,My partner initiates,Sensual Connector,0.52
+51,02004,partner_starts,My partner initiates,Relational Nurturer,0.39
+52,02004,partner_starts,My partner initiates,Spiritual Lover,0.39
+53,02004,partner_starts,My partner initiates,Approval Seeker,0.325
+54,02004,partner_starts,My partner initiates,Quiet Withdrawer,0.195
+55,02004,plan_window,We make space for it intentionally,Curious Apprentice,0.325
+56,02004,plan_window,We make space for it intentionally,Minimalist Companion,0.52
+57,02004,plan_window,We make space for it intentionally,Loyal Ritualist,0.585
+58,02004,plan_window,We make space for it intentionally,Analytical Sexualist,0.52
+59,02004,playful,It unfolds naturally and either of us may begin,Spark Seeker,0.585
+60,02004,playful,It unfolds naturally and either of us may begin,Exhibitionist Performer,0.26
+61,02004,playful,It unfolds naturally and either of us may begin,Curious Apprentice,0.39
+62,03003,adventurous,Novel or adventurous,Spark Seeker,0.525
+63,03003,adventurous,Novel or adventurous,Exhibitionist Performer,0.225
+64,03003,adventurous,Novel or adventurous,Explorer of Edges,0.45
+65,03003,adventurous,Novel or adventurous,Curious Apprentice,0.3
+66,03003,edge_taboo,"Edge, taboo, or transgression",Spark Seeker,0.375
+67,03003,edge_taboo,"Edge, taboo, or transgression",Exhibitionist Performer,0.225
+68,03003,edge_taboo,"Edge, taboo, or transgression",Explorer of Edges,0.6
+69,03003,edge_taboo,"Edge, taboo, or transgression",Emotional Voyeur,0.15
+70,03003,edge_taboo,"Edge, taboo, or transgression",Power Orchestrator,0.225
+71,03003,other,Something else,Curious Apprentice,0.15
+72,03003,private,Private and protected,Sensual Connector,0.225
+73,03003,private,Private and protected,Relational Nurturer,0.225
+74,03003,private,Private and protected,Spiritual Lover,0.15
+75,03003,private,Private and protected,Minimalist Companion,0.45
+76,03003,private,Private and protected,Emotional Voyeur,0.375
+77,03003,private,Private and protected,Loyal Ritualist,0.15
+78,03003,private,Private and protected,Quiet Withdrawer,0.375
+79,03003,ritualized,Deliberate or ritualized,Sensual Connector,0.225
+80,03003,ritualized,Deliberate or ritualized,Relational Nurturer,0.15
+81,03003,ritualized,Deliberate or ritualized,Spiritual Lover,0.6
+82,03003,ritualized,Deliberate or ritualized,Power Orchestrator,0.375
+83,03003,ritualized,Deliberate or ritualized,Loyal Ritualist,0.6
+84,03003,ritualized,Deliberate or ritualized,Analytical Sexualist,0.3
+85,03003,spontaneous,Spontaneous or unplanned,Sensual Connector,0.15
+86,03003,spontaneous,Spontaneous or unplanned,Spark Seeker,0.525
+87,03003,spontaneous,Spontaneous or unplanned,Exhibitionist Performer,0.3
+88,03003,spontaneous,Spontaneous or unplanned,Explorer of Edges,0.3
+89,03003,spontaneous,Spontaneous or unplanned,Curious Apprentice,0.15
+90,03003,visible_semipublic,Visible or semi-public,Spark Seeker,0.375
+91,03003,visible_semipublic,Visible or semi-public,Exhibitionist Performer,0.9
+92,03003,visible_semipublic,Visible or semi-public,Explorer of Edges,0.3
+93,03003,visible_semipublic,Visible or semi-public,Emotional Voyeur,0.15
+94,03003,visible_semipublic,Visible or semi-public,Approval Seeker,0.35
+95,03005,connection,"Connection-led (warmth, affection, closeness)",Sensual Connector,1.0
+96,03005,connection,"Connection-led (warmth, affection, closeness)",Relational Nurturer,0.8
+97,03005,connection,"Connection-led (warmth, affection, closeness)",Spiritual Lover,0.9
+98,03005,connection,"Connection-led (warmth, affection, closeness)",Approval Seeker,0.5
+99,03005,fantasy,"Fantasy/imagination-led (role-play, mental imagery, erotica/audio/visual)",Exhibitionist Performer,0.6
+100,03005,fantasy,"Fantasy/imagination-led (role-play, mental imagery, erotica/audio/visual)",Explorer of Edges,0.9
+101,03005,fantasy,"Fantasy/imagination-led (role-play, mental imagery, erotica/audio/visual)",Emotional Voyeur,1.1
+102,03005,mastery,"Mastery/competence-led (technique, skill-building)",Curious Apprentice,0.6
+103,03005,mastery,"Mastery/competence-led (technique, skill-building)",Power Orchestrator,0.4
+104,03005,mastery,"Mastery/competence-led (technique, skill-building)",Analytical Sexualist,1.2
+105,03005,novelty,"Novelty/adventure-led (new ideas, toys, new settings)",Spark Seeker,1.1
+106,03005,novelty,"Novelty/adventure-led (new ideas, toys, new settings)",Exhibitionist Performer,0.6
+107,03005,novelty,"Novelty/adventure-led (new ideas, toys, new settings)",Explorer of Edges,0.8
+108,03005,novelty,"Novelty/adventure-led (new ideas, toys, new settings)",Curious Apprentice,0.6
+109,03005,safety,"Safety/context-led (privacy, low stress, no interruptions)",Sensual Connector,0.6
+110,03005,safety,"Safety/context-led (privacy, low stress, no interruptions)",Relational Nurturer,0.4
+111,03005,safety,"Safety/context-led (privacy, low stress, no interruptions)",Minimalist Companion,0.9
+112,03005,safety,"Safety/context-led (privacy, low stress, no interruptions)",Loyal Ritualist,0.5
+113,03005,safety,"Safety/context-led (privacy, low stress, no interruptions)",Quiet Withdrawer,0.7
+114,03005,sensation,Sensation-led (touch/tempo/teasing),Sensual Connector,0.6
+115,03005,sensation,Sensation-led (touch/tempo/teasing),Spark Seeker,0.5
+116,03005,sensation,Sensation-led (touch/tempo/teasing),Exhibitionist Performer,0.4
+117,03005,varies,Not sure / varies a lot,Spark Seeker,0.2
+118,03005,varies,Not sure / varies a lot,Curious Apprentice,0.3
+119,03006,guidance,Structure and feedback,Curious Apprentice,0.56
+120,03006,guidance,Structure and feedback,Approval Seeker,0.28
+121,03006,guidance,Structure and feedback,Analytical Sexualist,0.77
+122,03006,intuition,Natural flow and spontaneity,Sensual Connector,0.63
+123,03006,intuition,Natural flow and spontaneity,Relational Nurturer,0.42
+124,03006,intuition,Natural flow and spontaneity,Spiritual Lover,0.49
+125,03006,intuition,Natural flow and spontaneity,Minimalist Companion,0.28
+126,03006,learning_by_doing,Curiosity and experimentation,Spark Seeker,0.49
+127,03006,learning_by_doing,Curiosity and experimentation,Exhibitionist Performer,0.21
+128,03006,learning_by_doing,Curiosity and experimentation,Explorer of Edges,0.42
+129,03006,learning_by_doing,Curiosity and experimentation,Curious Apprentice,0.56
+130,03006,learning_by_doing,Curiosity and experimentation,Power Orchestrator,0.35
+131,03006,non_deliberate,I prefer not to make it a deliberate process,Minimalist Companion,0.56
+132,03006,non_deliberate,I prefer not to make it a deliberate process,Emotional Voyeur,0.28
+133,03006,non_deliberate,I prefer not to make it a deliberate process,Loyal Ritualist,0.35
+134,03006,non_deliberate,I prefer not to make it a deliberate process,Quiet Withdrawer,0.49
+135,03006,non_deliberate,I prefer not to make it a deliberate process,Emotional Voyeur,0.3
+136,03010,adventurous_boundaries,"Adventurous, with clear boundaries",Spark Seeker,0.14
+137,03010,adventurous_boundaries,"Adventurous, with clear boundaries",Explorer of Edges,0.315
+138,03010,adventurous_boundaries,"Adventurous, with clear boundaries",Curious Apprentice,0.175
+139,03010,adventurous_boundaries,"Adventurous, with clear boundaries",Power Orchestrator,0.21
+140,03010,adventurous_boundaries,"Adventurous, with clear boundaries",Analytical Sexualist,0.4
+141,03010,balanced,Balanced,Sensual Connector,0.175
+142,03010,balanced,Balanced,Curious Apprentice,0.245
+143,03010,balanced,Balanced,Spiritual Lover,0.14
+144,03010,balanced,Balanced,Approval Seeker,0.3
+145,03010,edge_taboo,Strong edge or taboo energy,Spark Seeker,0.14
+146,03010,edge_taboo,Strong edge or taboo energy,Exhibitionist Performer,0.175
+147,03010,edge_taboo,Strong edge or taboo energy,Explorer of Edges,0.49
+148,03010,edge_taboo,Strong edge or taboo energy,Emotional Voyeur,0.175
+149,03010,edge_taboo,Strong edge or taboo energy,Power Orchestrator,0.14
+150,03010,safe_novelty,"Mostly safe, with a little novelty",Sensual Connector,0.28
+151,03010,safe_novelty,"Mostly safe, with a little novelty",Relational Nurturer,0.21
+152,03010,safe_novelty,"Mostly safe, with a little novelty",Curious Apprentice,0.105
+153,03010,safe_novelty,"Mostly safe, with a little novelty",Loyal Ritualist,0.175
+154,03010,very_safe,Very safe and predictable,Sensual Connector,0.175
+155,03010,very_safe,Very safe and predictable,Minimalist Companion,0.35
+156,03010,very_safe,Very safe and predictable,Loyal Ritualist,0.315
+157,03010,very_safe,Very safe and predictable,Quiet Withdrawer,0.28
+158,03013,absorbed,Neither—being absorbed in sensation/connection is hottest,Sensual Connector,0.8
+159,03013,absorbed,Neither—being absorbed in sensation/connection is hottest,Relational Nurturer,0.5
+160,03013,absorbed,Neither—being absorbed in sensation/connection is hottest,Exhibitionist Performer,-0.8
+161,03013,absorbed,Neither—being absorbed in sensation/connection is hottest,Spiritual Lover,0.7
+162,03013,absorbed,Neither—being absorbed in sensation/connection is hottest,Emotional Voyeur,-1.0
+163,03013,absorbed,Neither—being absorbed in sensation/connection is hottest,Analytical Sexualist,0.3
+164,03013,not_sure,Not sure,Exhibitionist Performer,-0.5
+165,03013,not_sure,Not sure,Curious Apprentice,0.2
+166,03013,not_sure,Not sure,Emotional Voyeur,-0.5
+166,03013,not_sure,Not sure,Approval Seeker,0.25
+167,03013,watched,"Being watched/admired (mirror, performance vibe)",Spark Seeker,0.4
+168,03013,watched,"Being watched/admired (mirror, performance vibe)",Exhibitionist Performer,1.5
+169,03013,watched,"Being watched/admired (mirror, performance vibe)",Emotional Voyeur,-0.8
+170,03013,watched,"Being watched/admired (mirror, performance vibe)",Power Orchestrator,0.3
+170,03013,watched,"Being watched/admired (mirror, performance vibe)",Approval Seeker,0.4
+171,03013,watching,Watching my partner / observing is hottest,Exhibitionist Performer,-0.8
+172,03013,watching,Watching my partner / observing is hottest,Explorer of Edges,0.4
+173,03013,watching,Watching my partner / observing is hottest,Emotional Voyeur,1.6
+174,08003,angry,Protest / get angry,Spark Seeker,0.4
+175,08003,angry,Protest / get angry,Explorer of Edges,0.3
+176,08003,angry,Protest / get angry,Power Orchestrator,0.4
+177,08003,calm,Self-soothe and stay grounded,Sensual Connector,0.4
+178,08003,calm,Self-soothe and stay grounded,Relational Nurturer,0.4
+179,08003,calm,Self-soothe and stay grounded,Curious Apprentice,0.3
+180,08003,calm,Self-soothe and stay grounded,Spiritual Lover,0.5
+181,08003,calm,Self-soothe and stay grounded,Loyal Ritualist,0.6
+182,08003,calm,Self-soothe and stay grounded,Emotional Voyeur,0.4
+183,08003,calm,Self-soothe and stay grounded,Analytical Sexualist,0.4
+184,08003,pursue,Seek reassurance / pursue,Sensual Connector,0.4
+185,08003,pursue,Seek reassurance / pursue,Relational Nurturer,0.6
+186,08003,pursue,Seek reassurance / pursue,Approval Seeker,0.9
+187,08003,varies,Varies,Curious Apprentice,0.2
+188,08003,withdraw,Shut down / withdraw,Minimalist Companion,0.6
+189,08003,withdraw,Shut down / withdraw,Emotional Voyeur,0.5
+190,08003,withdraw,Shut down / withdraw,Power Orchestrator,0.4
+191,08003,withdraw,Shut down / withdraw,Quiet Withdrawer,0.9
+192,10002,direct_phrases,Brief direct words,Explorer of Edges,0.8
+193,10002,direct_phrases,Brief direct words,Power Orchestrator,0.64
+194,10002,direct_phrases,Brief direct words,Analytical Sexualist,0.4
+195,10002,expressive,Ongoing verbal feedback,Spark Seeker,0.4
+196,10002,expressive,Ongoing verbal feedback,Exhibitionist Performer,0.88
+197,10002,expressive,Ongoing verbal feedback,Curious Apprentice,0.32
+198,10002,expressive,Ongoing verbal feedback,Approval Seeker,0.32
+199,10002,nonverbal,Mostly nonverbal cues,Spiritual Lover,0.32
+200,10002,nonverbal,Mostly nonverbal cues,Minimalist Companion,0.4
+201,10002,nonverbal,Mostly nonverbal cues,Emotional Voyeur,0.48
+202,10002,nonverbal,Mostly nonverbal cues,Quiet Withdrawer,0.48
+203,10002,reassurance,Emotional check-ins,Sensual Connector,0.48
+204,10002,reassurance,Emotional check-ins,Relational Nurturer,0.8
+205,10002,reassurance,Emotional check-ins,Spiritual Lover,0.4
+206,10002,reassurance,Emotional check-ins,Approval Seeker,0.64
+207,10002,touch_body,Touch and body cues,Sensual Connector,0.8
+208,10002,touch_body,Touch and body cues,Relational Nurturer,0.48
+209,10002,touch_body,Touch and body cues,Spiritual Lover,0.4
+210,10002,touch_body,Touch and body cues,Minimalist Companion,0.32
+211,10002,very_little,I communicate very little,Minimalist Companion,0.48
+212,10002,very_little,I communicate very little,Emotional Voyeur,0.56
+213,10002,very_little,I communicate very little,Quiet Withdrawer,0.88
+214,11001,depends,Not sure / depends a lot,Curious Apprentice,0.16
+215,11001,egalitarian,I prefer egalitarian/no roles,Sensual Connector,0.4
+216,11001,egalitarian,I prefer egalitarian/no roles,Curious Apprentice,0.24
+217,11001,egalitarian,I prefer egalitarian/no roles,Loyal Ritualist,0.32
+218,11001,egalitarian,I prefer egalitarian/no roles,Analytical Sexualist,0.4
+218,11001,egalitarian,I prefer egalitarian/no roles,Emotional Voyeur,0.35
+219,11001,lead,I like to lead/direct,Spark Seeker,0.32
+220,11001,lead,I like to lead/direct,Explorer of Edges,0.48
+221,11001,lead,I like to lead/direct,Power Orchestrator,1.28
+222,11001,surrender,I like to surrender/be led,Relational Nurturer,0.4
+223,11001,surrender,I like to surrender/be led,Explorer of Edges,0.32
+224,11001,surrender,I like to surrender/be led,Minimalist Companion,0.32
+225,11001,surrender,I like to surrender/be led,Approval Seeker,0.48
+226,11001,surrender,I like to surrender/be led,Quiet Withdrawer,0.32
+227,11001,switch,I like switching depending on mood,Sensual Connector,0.24
+228,11001,switch,I like switching depending on mood,Spark Seeker,0.56
+229,11001,switch,I like switching depending on mood,Exhibitionist Performer,0.4
+230,11001,switch,I like switching depending on mood,Explorer of Edges,0.48
+231,11001,switch,I like switching depending on mood,Curious Apprentice,0.32
+232,14020,bonding,Bonding and closeness,Sensual Connector,0.63
+233,14020,bonding,Bonding and closeness,Relational Nurturer,0.54
+234,14020,bonding,Bonding and closeness,Spiritual Lover,0.27
+235,14020,bonding,Bonding and closeness,Loyal Ritualist,0.27
+236,14020,bonding,Bonding and closeness,Approval Seeker,0.225
+237,14020,comfort,Comfort and familiarity,Sensual Connector,0.27
+238,14020,comfort,Comfort and familiarity,Minimalist Companion,0.63
+239,14020,comfort,Comfort and familiarity,Loyal Ritualist,0.72
+240,14020,escape,Escape and relief,Spark Seeker,0.36
+241,14020,escape,Escape and relief,Explorer of Edges,0.72
+242,14020,escape,Escape and relief,Emotional Voyeur,0.18
+243,14020,escape,Escape and relief,Quiet Withdrawer,0.225
+244,14020,healing,Healing and soothing,Sensual Connector,0.405
+245,14020,healing,Healing and soothing,Relational Nurturer,0.765
+246,14020,healing,Healing and soothing,Quiet Withdrawer,0.18
+247,14020,intensity,Intensity and edge,Spark Seeker,0.585
+248,14020,intensity,Intensity and edge,Exhibitionist Performer,0.315
+249,14020,intensity,Intensity and edge,Explorer of Edges,0.72
+250,14020,intensity,Intensity and edge,Power Orchestrator,0.36
+251,14020,meaning,Meaning and devotion,Sensual Connector,0.36
+252,14020,meaning,Meaning and devotion,Relational Nurturer,0.225
+253,14020,meaning,Meaning and devotion,Spiritual Lover,0.81
+254,14020,meaning,Meaning and devotion,Loyal Ritualist,0.27
+255,14020,meaning,Meaning and devotion,Analytical Sexualist,0.35
+256,14020,novelty,Novelty and discovery,Spark Seeker,0.54
+257,14020,novelty,Novelty and discovery,Exhibitionist Performer,0.27
+258,14020,novelty,Novelty and discovery,Explorer of Edges,0.45
+259,14020,novelty,Novelty and discovery,Curious Apprentice,0.585
+260,14020,pleasure,Pleasure and play,Spark Seeker,0.72
+261,14020,pleasure,Pleasure and play,Exhibitionist Performer,0.36
+262,14020,pleasure,Pleasure and play,Curious Apprentice,0.27
+263,14020,power,Power and polarity,Spark Seeker,0.36
+264,14020,power,Power and polarity,Explorer of Edges,0.45
+265,14020,power,Power and polarity,Power Orchestrator,0.765
+266,14020,service,Giving and service,Relational Nurturer,0.72
+267,14020,service,Giving and service,Approval Seeker,0.36
+268,14020,validation,Feeling desired,Spark Seeker,0.225
+269,14020,validation,Feeling desired,Exhibitionist Performer,0.765
+270,14020,validation,Feeling desired,Power Orchestrator,0.315
+271,14020,validation,Feeling desired,Approval Seeker,0.72
+272,16005,awakening,Awakening / Exploring,Spark Seeker,0.3
+273,16005,awakening,Awakening / Exploring,Curious Apprentice,0.6
+274,16005,evolving,Evolving / Transcending,Sensual Connector,0.2
+275,16005,evolving,Evolving / Transcending,Spiritual Lover,0.9
+276,16005,expanding,Expanding / Experimenting,Spark Seeker,0.6
+277,16005,expanding,Expanding / Experimenting,Exhibitionist Performer,0.4
+278,16005,expanding,Expanding / Experimenting,Explorer of Edges,0.5
+279,16005,expanding,Expanding / Experimenting,Power Orchestrator,0.4
+279,16005,expanding,Expanding / Experimenting,Analytical Sexualist,0.35
+280,16005,grounded,Grounded / Integrated,Analytical Sexualist,0.4
+280,16005,grounded,Grounded / Integrated,Sensual Connector,0.3
+281,16005,grounded,Grounded / Integrated,Loyal Ritualist,0.6
+282,16005,recharging,Recharging / Pausing,Minimalist Companion,0.4
+283,16005,recharging,Recharging / Pausing,Quiet Withdrawer,0.5
+284,16005,recharging,Recharging / Pausing,Emotional Voyeur,0.3
+285,16005,repairing,Repairing / Reconnecting,Sensual Connector,0.4
+286,16005,repairing,Repairing / Reconnecting,Relational Nurturer,0.5
+287,16005,repairing,Repairing / Reconnecting,Approval Seeker,0.3
+288,16006,awakening,Awakening / Exploring,Spark Seeker,0.2
+289,16006,awakening,Awakening / Exploring,Curious Apprentice,0.4
+290,16006,evolving,Evolving / Transcending,Sensual Connector,0.2
+291,16006,evolving,Evolving / Transcending,Spiritual Lover,0.6
+292,16006,expanding,Expanding / Experimenting,Spark Seeker,0.4
+293,16006,expanding,Expanding / Experimenting,Exhibitionist Performer,0.2
+294,16006,expanding,Expanding / Experimenting,Explorer of Edges,0.3
+294,16006,expanding,Expanding / Experimenting,Analytical Sexualist,0.3
+295,16006,grounded,Grounded / Integrated,Analytical Sexualist,0.35
+295,16006,grounded,Grounded / Integrated,Sensual Connector,0.2
+296,16006,grounded,Grounded / Integrated,Loyal Ritualist,0.5
+297,16006,recharging,Recharging / Pausing,Minimalist Companion,0.2
+298,16006,recharging,Recharging / Pausing,Quiet Withdrawer,0.3
+299,16006,repairing,Repairing / Reconnecting,Sensual Connector,0.2
+300,16006,repairing,Repairing / Reconnecting,Approval Seeker,0.3
+301,16006,repairing,Repairing / Reconnecting,Relational Nurturer,0.3

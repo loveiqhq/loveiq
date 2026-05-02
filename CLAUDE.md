@@ -9,8 +9,11 @@ npm install          # Install dependencies
 npm run dev          # Start dev server at http://localhost:3000
 npm run build        # Production build
 npm run lint         # Run ESLint
+npm test             # Run unit tests once (Vitest)
 npm run start        # Run production build locally
 npm run analyze      # Bundle size analysis (opens visual treemap)
+npm run check        # Lint + test + build (full CI check)
+npm run setup        # Install deps + create .env.local from .env.example
 ```
 
 ---
@@ -23,15 +26,44 @@ loveiq-web/
 │   ├── api/
 │   │   ├── contact/route.ts    # Contact form → Resend + Slack
 │   │   ├── waitlist/route.ts   # Waitlist signup → Supabase + Resend + Slack
-│   │   └── health/route.ts     # Health check endpoint
+│   │   ├── survey/route.ts     # Survey submission → Supabase RPC + Slack
+│   │   ├── health/route.ts     # Health check endpoint
+│   │   ├── staging-login/route.ts   # Staging environment auth
+│   │   ├── staging-logout/route.ts  # Staging environment auth
+│   │   ├── survey-tracking/route.ts # Survey behavior tracking → Supabase
+│   │   ├── invite/route.ts         # Invite email sending → Resend + Supabase
+│   │   ├── invite-tracking/route.ts # Invite share method tracking → Supabase
+│   │   ├── survey-partial/route.ts  # Partial survey save (draft) → Supabase
+│   │   └── admin/                   # Admin panel API routes
+│   │       ├── login/route.ts       # Admin login (magic link via Supabase Auth)
+│   │       ├── logout/route.ts      # Admin logout
+│   │       ├── stats/route.ts       # Dashboard analytics
+│   │       ├── submissions/route.ts # Submission list (paginated)
+│   │       ├── submissions/[id]/route.ts # Submission CRUD (GET/PATCH/DELETE)
+│   │       ├── export/route.ts      # CSV export
+│   │       ├── survey-status/route.ts # Survey active/closed toggle
+│   │       └── product-kpis/route.ts  # Product KPI data (static)
+│   ├── admin/                   # Admin panel pages (Supabase Auth-protected)
+│   │   ├── auth/callback/route.ts # Magic link callback handler
+│   │   ├── layout.tsx           # Admin shell (sidebar + header)
+│   │   ├── login/page.tsx       # Admin login page (email + magic link)
+│   │   ├── page.tsx             # Dashboard
+│   │   ├── submissions/page.tsx # Submission browser
+│   │   ├── submissions/[id]/page.tsx # Submission detail
+│   │   ├── survey-status/page.tsx   # Survey status toggle
+│   │   └── product-kpis/page.tsx   # Product KPIs dashboard
 │   ├── about/page.tsx          # About page
+│   ├── login/page.tsx          # Staging login page
 │   ├── waitlist/page.tsx       # Waitlist standalone page
 │   ├── glossary/               # Glossary pages (index + [slug])
 │   ├── trust-zone/             # Trust zone pages
+│   ├── survey/page.tsx         # Survey / intro wizard
 │   ├── [legal pages]           # privacy-policy, terms-*, cookies, imprint, etc.
 │   ├── globals.css             # CSS variables + Tailwind + animations
 │   ├── layout.tsx              # Root layout (fonts, scripts, metadata)
 │   ├── page.tsx                # Landing page entry
+│   ├── error.tsx                # Error boundary page
+│   ├── global-error.tsx         # Root error boundary
 │   ├── robots.ts               # robots.txt generation
 │   └── sitemap.ts              # sitemap.xml generation
 ├── components/
@@ -44,23 +76,79 @@ loveiq-web/
 │   ├── about/                  # About page sections
 │   ├── glossary/               # Glossary components
 │   ├── legal/                  # Legal page nav component
+│   ├── survey/                 # Survey / intro wizard + pre-report wizard components
+│   │   ├── SurveyPage.tsx      # Orchestrator (intro → wizard → consent → engine)
+│   │   ├── SurveyEngine.tsx    # Question loop + completion phases
+│   │   ├── PreReportWizard.tsx  # 5-slide post-submission wizard
+│   │   ├── SurveyConfirmation.tsx # Processing/success/error screens
+│   │   ├── questions/          # Question type components (SingleChoice, Scale, etc.)
+│   │   └── hooks/              # Survey state, submission, and tracking hooks
+│   ├── admin/                  # Admin panel components
+│   │   ├── AdminLoginForm.tsx  # Admin login form
+│   │   ├── AdminSidebar.tsx    # Sidebar navigation
+│   │   ├── AdminHeader.tsx     # Mobile header with hamburger
+│   │   ├── AdminStatsDashboard.tsx  # Standalone stats dashboard component
+│   │   ├── SubmissionBrowser.tsx # Filterable submission list
+│   │   ├── SubmissionDetail.tsx # Single submission view + actions
+│   │   ├── SurveyStatus.tsx    # Survey active/closed toggle
+│   │   ├── ProductKpiDashboard.tsx # Product KPIs dashboard + CSV download
+│   │   ├── kpi-tabs/           # KPI tab components
+│   │   │   ├── KpiDataTable.tsx    # Generic sortable table
+│   │   │   ├── ReportSectionsTab.tsx # Report sections tab
+│   │   │   ├── QuestionsTab.tsx     # Survey questions tab
+│   │   │   └── ChaptersTab.tsx      # Survey chapters tab
+│   │   └── hooks/useAdminFetch.ts # Generic data fetching hook
+│   ├── staging/                # Staging login form
+│   ├── not-found/              # 404 page component
+│   ├── trust-zone/             # Trust zone page component
+│   ├── waitlist/               # Waitlist page component
+│   ├── NonceProvider.tsx       # CSP nonce context provider
+│   ├── HydrationMarker.tsx     # Client hydration marker
 │   └── SmoothScroll.tsx        # Lenis smooth scroll wrapper
 ├── lib/
 │   ├── analytics.ts            # GA4 event tracking helpers
-│   ├── csrf.ts                 # CSRF token verification
+│   ├── csrf.ts                 # CSRF token verification (server-side)
+│   ├── csrf-client.ts          # CSRF token reader (client-side)
 │   ├── ratelimit.ts            # IP-based rate limiting (Supabase-backed)
+│   ├── circuit-breaker.ts      # Circuit breaker pattern for external calls
+│   ├── logger.ts               # pino structured logging
 │   ├── fetch-with-timeout.ts   # Fetch wrapper with timeout
+│   ├── utm.ts                  # UTM parameter handling
+│   ├── supabase-middleware.ts  # Supabase Auth client for middleware (proxy.ts)
+│   ├── admin/
+│   │   ├── auth.ts             # Admin session verification
+│   │   ├── audit.ts            # Admin action audit logging
+│   │   ├── format.ts           # Display formatting (maskEmail)
+│   │   ├── roles.ts            # Role management
+│   │   ├── supabase.ts         # Supabase fetch helper for admin routes
+│   │   └── supabase-server.ts  # Server-side Supabase client
 │   └── emails/
+│       ├── admin-magic-link.ts # Admin magic link email template
+│       ├── invite.ts           # Invite email template
 │       └── waitlist.ts         # Waitlist confirmation email template
 ├── data/
 │   ├── glossary-data.ts        # Auto-generated glossary terms (688KB, from CSV)
-│   └── glossary-source.csv     # Source CSV; regenerate via `node scripts/update-glossary.js`
+│   ├── glossary-source.csv     # Source CSV; regenerate via `node scripts/update-glossary.js`
+│   ├── survey-data.ts          # Survey questions and structure
+│   ├── survey-source.csv       # Source CSV for survey questions
+│   ├── countries.ts            # Country list for survey forms
+│   ├── scoring-config.ts       # Auto-generated scoring config (from CSVs)
+│   ├── scoring-config/         # Source CSVs for archetype scoring (12 files)
+│   ├── product-kpis.ts         # Report section KPI data (static/sample) + Question/Chapter KPI interfaces (live from Supabase)
+│   └── product-kpis/           # Source CSV for report sections (1 file; questions/chapters now live)
+├── scripts/                    # Build/data scripts (update-glossary.js, update-survey.js, etc.)
 ├── public/                     # Static assets (images, videos)
 ├── proxy.ts                    # Middleware: CSP headers, CSRF cookies, security logging
 ├── .github/workflows/
-│   ├── security.yml            # Comprehensive security scanning (secrets, SAST, dependencies, SBOM)
-│   └── codeql.yml              # Advanced CodeQL analysis
-├── .planning/                  # Architecture docs (ARCHITECTURE.md, CONVENTIONS.md, etc.)
+│   ├── ci.yml                  # Build + lint + test
+│   ├── security.yml            # Security scanning (secrets, SAST, dependencies, SBOM)
+│   ├── codeql.yml              # Advanced CodeQL analysis
+│   ├── release.yml             # Release workflow
+│   ├── health-monitor.yml      # Health monitoring
+│   ├── lighthouse.yml          # Lighthouse CI
+│   └── load-test.yml           # Load testing
+├── .planning/                  # Architecture docs (ARCHITECTURE.md, CONVENTIONS.md, AGENTS.md, etc.)
+├── FILE_INDEX.md               # Task-based file lookup (find any file by what you want to do)
 ├── SECURITY.md                 # Security guidelines + secrets rotation
 ├── DEVELOPMENT.md              # Development setup guide
 └── [config files]              # package.json, tsconfig.json, tailwind.config.js, etc.
@@ -72,18 +160,25 @@ loveiq-web/
 
 **Type:** Static marketing site with API routes (Next.js 16 App Router)
 
-**No user authentication.** This is a pre-launch marketing site with waitlist collection.
+**No end-user authentication.** This is a pre-launch marketing site with waitlist collection. The admin panel (`/admin/*`) uses Supabase Auth with magic link emails; see `admin_users` table for the email allowlist.
 
 ### Data Flow
 
 1. **Page Load:** SSR → Client hydration → Smooth scroll init → Analytics pageview
 2. **Waitlist Signup:** Form → CSRF check → Rate limit → Zod validation → Honeypot check → Supabase insert → Resend email → Slack notification
 3. **Contact Form:** Form → reCAPTCHA → CSRF check → Rate limit → Zod validation → Resend email → Slack notification
+4. **Survey Submission:** Form → CSRF check → Rate limit → Zod validation → Honeypot check → Email cooldown → Supabase RPC → Slack notification
+5. **Pre-Report Wizard:** Survey submit success → 3s success animation → fade to PreReportWizard (5 slides) → SurveyConfirmation final CTA
+6. **Survey Tracking:** Question transition → Buffer events → Flush batch → CSRF check → Rate limit → Zod validation → Supabase insert
+7. **Admin Panel:** `/admin/*` → Supabase Auth middleware gate (magic link session) → API routes with session + CSRF + rate limit → Supabase queries
+8. **Invite Send:** Form → CSRF check → Rate limit → Zod validation → Resend email (after response) → Supabase invite_event insert (after response)
+9. **Invite Tracking:** Share button click → CSRF check → Rate limit → Zod validation → Supabase invite_event insert
+10. **Survey Partial Save:** Auto-save on question transition → CSRF check (header or body for sendBeacon) → Rate limit → Zod validation → Supabase upsert (survey_partial_save)
 
 ### Key Boundaries
 
 - **Server-only secrets:** Supabase service key, Resend API key, reCAPTCHA secret, Slack webhooks
-- **Client-safe:** Only `NEXT_PUBLIC_*` vars (site URL, reCAPTCHA site key)
+- **Client-safe:** Only `NEXT_PUBLIC_*` vars (site URL, reCAPTCHA site key, Supabase URL + anon key)
 - **No direct DB client:** All Supabase access via REST API in API routes
 
 ---
@@ -92,21 +187,62 @@ loveiq-web/
 
 Copy `.env.example` to `.env.local` and fill values:
 
-| Variable                         | Required    | Purpose                                                  |
-| -------------------------------- | ----------- | -------------------------------------------------------- |
-| `NEXT_PUBLIC_SITE_URL`           | Yes         | Canonical URL for metadata                               |
-| `SUPABASE_URL`                   | For forms   | Waitlist database                                        |
-| `SUPABASE_SERVICE_ROLE_KEY`      | For forms   | Supabase auth (server-only!)                             |
-| `RESEND_API_KEY`                 | For forms   | Email sending                                            |
-| `RESEND_FROM`                    | No          | From address (default: `LoveIQ <hello@send.loveiq.org>`) |
-| `RESEND_REPLY_TO`                | No          | Reply-to address                                         |
-| `NEXT_PUBLIC_RECAPTCHA_SITE_KEY` | For contact | reCAPTCHA client key                                     |
-| `RECAPTCHA_SECRET_KEY`           | For contact | reCAPTCHA server key                                     |
-| `SLACK_WAITLIST_WEBHOOK_URL`     | No          | Slack notifications                                      |
-| `SLACK_CONTACT_WEBHOOK_URL`      | No          | Slack notifications                                      |
-| `CONTACT_TO_EMAIL`               | For contact | Contact form recipient                                   |
+| Variable                                   | Required     | Purpose                                                                           |
+| ------------------------------------------ | ------------ | --------------------------------------------------------------------------------- |
+| `NEXT_PUBLIC_SITE_URL`                     | Yes          | Canonical URL for metadata                                                        |
+| `SUPABASE_URL`                             | For forms    | Waitlist database                                                                 |
+| `SUPABASE_SERVICE_ROLE_KEY`                | For forms    | Supabase auth (server-only!)                                                      |
+| `RESEND_API_KEY`                           | For forms    | Email sending                                                                     |
+| `RESEND_FROM`                              | No           | From address (default: `LoveIQ <hello@send.loveiq.org>`)                          |
+| `RESEND_REPLY_TO`                          | No           | Reply-to address                                                                  |
+| `NEXT_PUBLIC_RECAPTCHA_SITE_KEY`           | For contact  | reCAPTCHA client key                                                              |
+| `RECAPTCHA_SECRET_KEY`                     | For contact  | reCAPTCHA server key                                                              |
+| `SLACK_WAITLIST_WEBHOOK_URL`               | No           | Slack notifications for waitlist signups                                          |
+| `SLACK_CONTACT_WEBHOOK_URL`                | No           | Slack notifications for contact form                                              |
+| `SLACK_SURVEY_WEBHOOK_URL`                 | No           | Slack notifications for survey submissions                                        |
+| `STAGING_PASSWORD`                         | For staging  | Password gate for staging deployment                                              |
+| `NEXT_PUBLIC_SUPABASE_URL`                 | For admin    | Supabase project URL (browser-safe, for admin auth SDK)                           |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY`            | For admin    | Supabase anon key (browser-safe, for admin auth SDK)                              |
+| `SURVEY_CLOSE_PASSWORD`                    | For admin    | Password required to close/pause the survey (server-only)                         |
+| `CONTACT_TO_EMAIL`                         | For contact  | Contact form recipient                                                            |
+| `NEXT_PUBLIC_GTM_ID`                       | No           | GTM container ID (optional, falls back to direct gtag.js)                         |
+| `LOG_LEVEL`                                | No           | Pino log level (fatal/error/warn/info/debug/trace; default: info)                 |
+| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`       | For checkout | Browser-safe Stripe publishable key (`pk_test_...` sandbox or `pk_live_...` prod) |
+| `STRIPE_SECRET_KEY`                        | For checkout | Server-only Stripe secret (`sk_test_...` sandbox or `sk_live_...` prod)           |
+| `STRIPE_WEBHOOK_SECRET`                    | For checkout | Webhook signing secret (`whsec_...`) per Stripe dashboard endpoint                |
+| `STRIPE_CHECKOUT_ENABLED`                  | For checkout | `true` to create real Stripe sessions; default `false`                            |
+| `NEXT_PUBLIC_STRIPE_CHECKOUT_PREVIEW_MODE` | No           | `false` for normal flow; `true` adds a "preview" banner only                      |
+| `KV_REST_API_URL`                          | For prod     | Upstash Redis REST URL — backs the rate limiter; falls back to in-memory if unset |
+| `KV_REST_API_TOKEN`                        | For prod     | Upstash Redis REST token — paired with `KV_REST_API_URL`                          |
+| `CRON_SECRET`                              | For crons    | Bearer token for `/api/cron/*` endpoints; required when those crons are deployed  |
 
 **The site renders without env vars.** Forms will fail gracefully with error messages.
+
+### Stripe checkout
+
+The paywall on `/report` is always enforced — clicking a locked premium section opens the pricing modal. Purchases unlock by tier:
+
+- `essentials` plan → essentials sections only
+- `full_report` plan → essentials + full-report sections
+- `all_reports` plan → all sections across every archetype
+
+Sandbox and live mode both run the real fulfillment path. To test in sandbox use Stripe test card `4242 4242 4242 4242` (any future date, any CVC). After a successful test purchase, the webhook fulfills the access plan onto the report.
+
+Required Vercel env vars (test or production):
+
+```
+STRIPE_CHECKOUT_ENABLED=true
+NEXT_PUBLIC_STRIPE_CHECKOUT_PREVIEW_MODE=false
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_... | pk_live_...
+STRIPE_SECRET_KEY=sk_test_... | sk_live_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+```
+
+Stripe dashboard webhook endpoint: `https://<your-domain>/api/stripe/webhook` — subscribe to `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`, `checkout.session.expired`, `charge.refunded`, `charge.dispute.created`, `charge.dispute.closed`. Disputed payments re-lock the report automatically; if the merchant wins the dispute (`charge.dispute.closed` with `status=won`), access is restored.
+
+For local sandbox testing, install Stripe CLI and run `stripe listen --forward-to localhost:3000/api/stripe/webhook`. Use the printed `whsec_...` as `STRIPE_WEBHOOK_SECRET`.
+
+If `STRIPE_CHECKOUT_ENABLED=true` but any Stripe key is missing, the server logs an error on first checkout/webhook hit and the route returns 503. No silent failure.
 
 ---
 
@@ -170,10 +306,17 @@ The middleware (`proxy.ts`) relaxes CSP in dev mode:
 
 ## CI/CD
 
-**GitHub Actions** (`.github/workflows/security.yml`):
+**GitHub Actions** (`.github/workflows/`):
 
-1. **Security Audit:** `npm audit --audit-level=high` - Fails on high/critical vulnerabilities
-2. **Build & Lint:** `npm run lint` + `npm run build`
+- `ci.yml` — Build + lint + test on push/PR
+- `security.yml` — Security scanning (secrets, SAST, dependencies, SBOM)
+- `codeql.yml` — Advanced CodeQL analysis
+- `docs-truth.yml` — Documentation truth validation (links, scripts, env vars)
+- `release.yml` — Release workflow
+- `health-monitor.yml` — Health monitoring
+- `lighthouse.yml` — Lighthouse CI
+- `load-test.yml` — Load testing
+- `visual-regression.yml` — Visual regression testing (Playwright screenshots)
 
 Runs on push/PR to `main`.
 
@@ -247,6 +390,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { verifyCsrfToken } from "@/lib/csrf";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
+import logger from "@/lib/logger";
 
 const schema = z.object({
   email: z.string().email().max(320),
@@ -277,7 +421,7 @@ export async function POST(request: Request) {
     // ... do work
     return NextResponse.json({ success: true });
   } catch (err) {
-    console.error("Error:", err);
+    logger.error({ err }, "Error processing example");
     return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
   }
 }
@@ -321,7 +465,7 @@ Always return `{ error: string }` or `{ success: true }`. Keep error messages ge
 3. Include rate limiting (`checkRateLimit`)
 4. Add Zod schema for input validation
 5. Use generic error messages
-6. Log errors with `console.error`
+6. Log errors with `logger` from `@/lib/logger`
 
 #### Add a New Environment Variable
 
@@ -382,7 +526,7 @@ When working in this codebase:
 6. **Test the build** - `npm run build` must succeed
 7. **Preserve security** - Don't weaken CSP, rate limits, or CSRF checks
 8. **Keep error messages generic** - Avoid information disclosure
-9. **Use existing utilities** - `lib/ratelimit.ts`, `lib/csrf.ts`, `lib/analytics.ts`
+9. **Use existing utilities** - `lib/ratelimit.ts`, `lib/csrf.ts`, `lib/analytics.ts`, `lib/logger.ts`, `lib/circuit-breaker.ts`, `lib/fetch-with-timeout.ts`
 10. **Document unknowns** - If uncertain, note assumptions and which files to check
 11. **Clean up temporary files** - If you create any `.md` files for planning, implementation logs, fix summaries, or debugging notes (e.g., in `.planning/` or repo root), **delete them once the task is complete**. Only permanent documentation (like this file, `SECURITY.md`, `DEVELOPMENT.md`, `.planning/codebase/*`) should remain in the repo.
 
@@ -452,8 +596,11 @@ Check browser DevTools Network tab for response. Common causes:
 
 ## File Quick Reference
 
+> For a complete task-based file index, see [`FILE_INDEX.md`](FILE_INDEX.md).
+
 | Need to...               | Look at...                                                |
 | ------------------------ | --------------------------------------------------------- |
+| Find any file by task    | `FILE_INDEX.md`                                           |
 | Add landing section      | `components/landing/LandingPage.tsx`, existing `S##*.tsx` |
 | Modify navigation        | `components/landing/NavSection.tsx`                       |
 | Modify footer            | `components/landing/FooterSection.tsx`                    |

@@ -1,5 +1,9 @@
 # GitHub Configuration
 
+> Owner: CODEOWNERS default
+> Last verified: 2026-04-05
+> Verified against: `.github/workflows/**`, `.github/pull_request_template.md`, `scripts/check-docs-impact.sh`, `scripts/check-docs-truth.mjs`
+
 This directory contains GitHub-specific configuration files for CI/CD, security, and automation.
 
 ## Files
@@ -7,6 +11,16 @@ This directory contains GitHub-specific configuration files for CI/CD, security,
 ### `workflows/`
 
 GitHub Actions workflow definitions.
+
+#### `docs-truth.yml`
+
+Source-driven documentation validation.
+
+- Verifies markdown links across the canonical doc set
+- Verifies documented npm scripts and env vars against repo truth
+- Verifies `docs/versions.md` against `package.json` and CI
+- Verifies `docs/api.md` and `docs/admin-api.md` cover the live route inventory
+- Runs Prettier against markdown files
 
 #### `security.yml`
 
@@ -44,6 +58,14 @@ Includes:
 
 Developer checklist for security compliance when making changes.
 
+### `pull_request_template.md`
+
+Pull request contract for:
+
+- summary and change list
+- test declarations
+- documentation impact declarations
+
 ## Security Results
 
 View security findings in:
@@ -69,6 +91,7 @@ Enable these in **Settings → Code security and analysis**:
 - Review security scan results from scheduled workflows
 - Triage and address findings
 - Merge Dependabot PRs after review
+- Review docs truth failures or drift warnings if any fired during the week
 
 ### Monthly
 
@@ -85,8 +108,10 @@ Enable these in **Settings → Code security and analysis**:
 ## Documentation
 
 - `../SECURITY.md` - Main security guide and incident response
-- `../SECURITY_SCANNING.md` - Detailed scanning documentation
-- `../CLAUDE.md` - Codebase conventions and architecture
+- `../DEVELOPMENT.md` - Local setup, env vars, and validation
+- `../docs/api.md` - Public API reference
+- `../docs/admin-api.md` - Admin API reference
+- `../docs/versions.md` - Pinned versions
 - `SECURITY_CHECKLIST.md` - Developer security checklist
 
 ## Support
@@ -95,5 +120,5 @@ For issues with GitHub workflows:
 
 1. Check workflow logs in Actions tab
 2. Verify repository security settings are enabled
-3. Review `SECURITY_SCANNING.md` for troubleshooting
-4. Contact security team at security@loveiq.org
+3. Review `SECURITY_CHECKLIST.md` for troubleshooting
+4. Route unresolved issues to the repo owners in `.github/CODEOWNERS`

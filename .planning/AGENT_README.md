@@ -24,4 +24,5 @@ Architecture documentation and planning artifacts. Not shipped; for developers a
 | `codebase/TESTING.md`       | Full E2E and unit test reference                                   |
 | `codebase/STRUCTURE.md`     | Directory structure documentation                                  |
 | `codebase/CONCERNS.md`      | Known concerns and trade-offs                                      |
+| `AGENTS.md`                 | Sub-agent system definitions (7 agents with prompts and tools)     |
 | `AI_OPTIMIZATION_PROMPT.md` | Original AI repository optimization prompt                         |

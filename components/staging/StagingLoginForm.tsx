@@ -1,13 +1,25 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { getCsrfToken } from "@/lib/csrf-client";
+import { LoveIQMark, LoveIQWordmark } from "@/components/branding/LoveIQBrand";
+
+function getSafeNextPath(value: string | null) {
+  if (!value || !value.startsWith("/") || value.startsWith("//")) {
+    return "/";
+  }
+
+  return value;
+}
 
 export default function StagingLoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const nextPath = getSafeNextPath(searchParams.get("next"));
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -17,12 +29,15 @@ export default function StagingLoginForm() {
     try {
       const res = await fetch("/api/staging-login", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-csrf-token": getCsrfToken(),
+        },
         body: JSON.stringify({ password }),
       });
 
       if (res.ok) {
-        router.push("/");
+        router.push(nextPath);
       } else {
         setError("Incorrect password");
       }
@@ -38,7 +53,8 @@ export default function StagingLoginForm() {
       <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-surface p-8 shadow-card">
         <div className="mb-8 text-center">
           <div className="mb-3 flex items-center justify-center gap-2">
-            <span className="font-serif text-2xl font-semibold text-text-primary">LoveIQ</span>
+            <LoveIQMark className="h-7 w-8 shrink-0" width={32} height={28} />
+            <LoveIQWordmark className="text-2xl" />
             <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
               Staging
             </span>

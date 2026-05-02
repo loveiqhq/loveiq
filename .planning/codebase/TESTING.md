@@ -1,6 +1,6 @@
 # Testing Patterns
 
-**Last Updated:** 2026-02-15
+> **Last verified:** 2026-03-15 | **Verified against:** vitest.config.ts, playwright.config.ts, **tests**/, e2e/ spec files
 
 ## Test Framework
 
@@ -26,17 +26,33 @@ npm run test:coverage # Run tests with coverage report
 ```
 __tests__/
 ├── api/
-│   ├── contact-validation.test.ts   # Contact form Zod schema tests
-│   └── waitlist-validation.test.ts  # Waitlist Zod schema tests
+│   ├── contact-validation.test.ts     # Contact form Zod schema tests
+│   ├── waitlist-validation.test.ts    # Waitlist Zod schema tests
+│   ├── admin-export.test.ts           # Admin CSV export tests
+│   ├── admin-login.test.ts            # Admin login tests
+│   ├── admin-stats.test.ts            # Admin dashboard stats tests
+│   ├── admin-submission-detail.test.ts # Admin submission detail tests
+│   ├── admin-submissions.test.ts      # Admin submission list tests
+│   ├── admin-survey-status.test.ts    # Admin survey status tests
+│   ├── admin-product-kpis.test.ts     # Admin product KPIs tests
+│   ├── health.test.ts                 # Health check tests
+│   ├── logout.test.ts                 # Logout tests
+│   └── survey-tracking.test.ts        # Survey tracking tests
 ├── lib/
-│   ├── analytics.test.ts            # GA4 event tracking tests
-│   ├── csrf.test.ts                 # CSRF token verification tests
-│   ├── fetch-with-timeout.test.ts   # Fetch wrapper timeout tests
-│   ├── ratelimit.test.ts            # IP extraction + rate limit tests
+│   ├── analytics.test.ts             # GA4 event tracking tests
+│   ├── csrf.test.ts                  # CSRF token verification tests
+│   ├── csrf-body.test.ts             # CSRF body verification tests
+│   ├── fetch-with-timeout.test.ts    # Fetch wrapper timeout tests
+│   ├── ratelimit.test.ts             # IP extraction + rate limit tests
+│   ├── ratelimit-full.test.ts        # Full rate limit flow tests
+│   ├── circuit-breaker.test.ts       # Circuit breaker tests
+│   ├── admin/auth.test.ts            # Admin auth tests
+│   ├── scoring/                      # Scoring engine tests (32 tests)
 │   └── emails/
-│       └── waitlist.test.ts         # Email template + XSS prevention tests
-├── proxy.test.ts                    # Middleware security header tests
-└── fixtures/                        # Shared test data
+│       └── waitlist.test.ts          # Email template + XSS prevention tests
+├── components/survey/hooks/          # Survey hook tests
+├── proxy.test.ts                     # Middleware security header tests
+└── fixtures/                         # Shared test data
 ```
 
 ## Test Structure

@@ -14,7 +14,8 @@
 - [ ] Tested manually in browser (if UI change)
 - [ ] No secrets committed (check `.env.example` if adding env vars)
 - [ ] Security controls preserved (CSP, CSRF, rate limiting)
-- [ ] Documentation updated (if applicable)
+- [ ] Documentation updated
+- [ ] No doc impact
 
 ## Screenshots
 

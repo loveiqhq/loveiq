@@ -6,7 +6,7 @@ import { trackStartSurvey } from "@/lib/analytics";
 
 const features = [
   {
-    title: "Guided educational test",
+    title: "Guided educational survey",
     description: "Built with psychology & relationship science.",
   },
   {
@@ -75,8 +75,8 @@ const S09Report: FC = () => {
 
           <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center">
             <a
-              href="/waitlist"
-              aria-label="Start test now - get your report"
+              href="/survey"
+              aria-label="Start survey now - get your report"
               className="group relative inline-flex items-center justify-center gap-2 overflow-hidden rounded-full bg-gradient-brand px-6 py-3 text-[16px] font-semibold leading-6 text-white shadow-pill transition hover:translate-y-[-2px] focus-visible-ring"
               onClick={() => trackStartSurvey("report_section")}
             >
@@ -91,7 +91,7 @@ const S09Report: FC = () => {
               <span className="pointer-events-none absolute inset-0 rounded-full bg-white/10 opacity-0 transition duration-300 group-hover:opacity-100" />
               <span className="pointer-events-none absolute inset-[-12%] rounded-full border border-white/15 mix-blend-screen opacity-70" />
               <span className="relative z-10 transition-colors duration-500 group-hover:text-black">
-                Start test now
+                Start survey now
               </span>
               <svg
                 aria-hidden

@@ -26,6 +26,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { verifyCsrfToken } from "@/lib/csrf";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
+import logger from "@/lib/logger";
 
 const schema = z.object({
   email: z.string().email(),
@@ -59,7 +60,7 @@ export async function POST(request: Request) {
     // ...
     return NextResponse.json({ success: true });
   } catch (err) {
-    console.error("Error:", err);
+    logger.error({ err }, "Error processing request");
     return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
   }
 }
@@ -165,13 +166,12 @@ npx @cyclonedx/cyclonedx-npm --output-file sbom.json
 
 ## 📚 Documentation Links
 
-| Need to...             | Read                       |
-| ---------------------- | -------------------------- |
-| Enable GitHub features | `GITHUB_SECURITY_SETUP.md` |
-| Understand scanning    | `SECURITY_SCANNING.md`     |
-| Follow best practices  | `SECURITY_CHECKLIST.md`    |
-| Review security policy | `SECURITY.md`              |
-| Understand codebase    | `CLAUDE.md`                |
+| Need to...             | Read                    |
+| ---------------------- | ----------------------- |
+| Enable GitHub features | `.github/README.md`     |
+| Follow best practices  | `SECURITY_CHECKLIST.md` |
+| Review security policy | `SECURITY.md`           |
+| Understand codebase    | `CLAUDE.md`             |
 
 ---
 

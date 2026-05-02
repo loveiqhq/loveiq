@@ -5,6 +5,7 @@ const routes = [
   "/about",
   "/waitlist",
   "/glossary",
+  "/glossary/abandonment-insecurity",
   "/trust-zone",
   "/privacy-policy",
   "/terms-of-use",
@@ -13,6 +14,7 @@ const routes = [
   "/digital-content-terms",
   "/cookies",
   "/imprint",
+  "/survey",
 ];
 
 for (const path of routes) {

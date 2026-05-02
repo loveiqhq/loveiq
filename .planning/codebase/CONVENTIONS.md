@@ -1,19 +1,21 @@
 # Coding Conventions
 
+> **Last verified:** 2026-03-15 | **Verified against:** ESLint config, tsconfig.json, Prettier config, component naming patterns
+
 **Analysis Date:** 2025-01-14
 
 ## Naming Patterns
 
 **Files:**
 
-- PascalCase for React components: `HeroSection.tsx`, `LandingPage.tsx`
-- camelCase for utilities: `analytics.ts`, `waitlist.ts`
+- PascalCase for React components: `S01Hero.tsx`, `LandingPage.tsx`
+- camelCase for utilities: `analytics.ts`, `ratelimit.ts`
 - kebab-case for directories: `app/api/waitlist/`
-- Numbered sections: `Section05.tsx` through `Section12.tsx`
+- Numbered landing sections: `S01Hero.tsx` through `S14CTA.tsx`
 
 **Functions:**
 
-- camelCase for all functions: `getClientIp`, `isRateLimited`, `notifySlackWaitlist`
+- camelCase for all functions: `getClientIp`, `checkRateLimit`, `verifyCsrfToken`
 - Descriptive async functions: `verifyCaptcha`, `sendSlackContactNotification`
 - Event handlers: Not observed (no interactive client forms in reviewed code)
 
@@ -33,15 +35,14 @@
 
 **Formatting:**
 
-- No Prettier config detected (likely using IDE defaults)
-- 2-space indentation (observed)
+- Prettier 3.8.1 configured with lint-staged
+- 2-space indentation
 - Double quotes for JSX attributes
-- No trailing commas in objects (inconsistent)
 - Semicolons required
 
 **Linting:**
 
-- ESLint with `next/core-web-vitals` preset (`.eslintrc.json`)
+- ESLint flat config (`eslint.config.mjs`)
 - Run: `npm run lint`
 - Strict TypeScript enabled (`tsconfig.json`)
 
@@ -51,8 +52,8 @@
 
 1. React/Next.js imports (`next/script`, `next/font/google`)
 2. External packages (`resend`, `zod`)
-3. Internal modules (`../lib/emails/waitlist`)
-4. Relative imports (`./HeroSection`)
+3. Internal modules (`@/lib/csrf`, `@/lib/ratelimit`)
+4. Relative imports (`./S01Hero`)
 5. Type imports (`type { Metadata }`)
 
 **Grouping:**
@@ -62,8 +63,9 @@
 
 **Path Aliases:**
 
-- None configured (using relative imports)
-- Example: `../../../lib/emails/waitlist` (deep relative paths)
+- `@/*` alias configured in `tsconfig.json` (maps to project root)
+- Used for all cross-directory imports: `@/lib/*`, `@/components/*`, `@/app/*`
+- Same-directory imports still use `./`
 
 ## Error Handling
 
@@ -72,13 +74,13 @@
 - Try/catch for external API calls
 - Return early with error responses
 - JSON response with `error` field
-- HTTP status codes: 400 (validation), 429 (rate limit), 500 (server error)
+- HTTP status codes: 400 (validation), 403 (CSRF), 429 (rate limit), 500 (server error)
 
 **Error Types:**
 
 - No custom error classes
 - Plain Error objects or string messages
-- Console.error for logging
+- pino structured logging for errors
 
 **Example Pattern:**
 
@@ -86,11 +88,11 @@
 try {
   const res = await fetch(url, options);
   if (!res.ok) {
-    console.error("Failed:", res.status);
+    logger.error("Failed:", res.status);
     return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
   }
 } catch (err) {
-  console.error("Error:", err);
+  logger.error("Error:", err);
   return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
 }
 ```
@@ -99,14 +101,15 @@ try {
 
 **Framework:**
 
-- Console methods only (console.log, console.warn, console.error)
-- No structured logging library
+- pino structured logging (`lib/logger.ts`)
+- @vercel/otel for OpenTelemetry integration
 
 **Patterns:**
 
-- `console.log` for success operations: `console.log("Slack webhook sent:", res.status)`
-- `console.warn` for missing optional config: `console.warn("Slack webhook missing...")`
-- `console.error` for failures: `console.error("Slack webhook failed:", res.status, body)`
+- `logger.info` for success operations
+- `logger.warn` for missing optional config
+- `logger.error` for failures
+- Slack notifications for important events
 
 **Where:**
 
@@ -178,7 +181,7 @@ export default ComponentName;
 
 - Inline Tailwind classes in JSX
 - CSS custom properties for design tokens (in `globals.css`)
-- Theme constants in `components/theme.ts` for reusable class strings
+- Design tokens extended in `tailwind.config.js`
 
 **Class Organization:**
 
@@ -214,4 +217,5 @@ if (!parsed.success) {
 ---
 
 _Convention analysis: 2025-01-14_
+_Last updated: 2026-03-05_
 _Update when patterns change_

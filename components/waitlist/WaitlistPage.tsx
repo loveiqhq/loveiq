@@ -1,8 +1,9 @@
 "use client";
 
 import Image from "next/image";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { trackGoogleAdsWaitlistConversion, trackWaitlistSignup } from "@/lib/analytics";
+import { getStoredUtm } from "@/lib/utm";
 
 const faqs = [
   {
@@ -92,6 +93,7 @@ export default function WaitlistPage() {
   const [website, setWebsite] = useState(""); // honeypot
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const utmTracker = useMemo(() => getStoredUtm(), []);
 
   const handleSubmit = async () => {
     if (!email || !email.includes("@")) {
@@ -114,7 +116,7 @@ export default function WaitlistPage() {
           "Content-Type": "application/json",
           "x-csrf-token": csrfToken,
         },
-        body: JSON.stringify({ email, source: "waitlist-page", website }),
+        body: JSON.stringify({ email, source: "waitlist-page", website, utmTracker }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -222,7 +224,11 @@ export default function WaitlistPage() {
                   type="email"
                   name="email"
                   aria-label="Email address"
-                  className="h-12 min-w-0 w-full border-none bg-transparent pr-3 text-base text-white placeholder-white/60 focus:outline-none focus:ring-0 sm:pr-12"
+                  className="autofill-dark h-12 min-w-0 w-full border-none bg-transparent pr-3 text-base text-white placeholder-white/60 focus:outline-none focus:ring-0 sm:pr-12"
+                  style={{
+                    ["--autofill-font-size" as string]: "16px",
+                    ["--autofill-font-size-sm" as string]: "16px",
+                  }}
                   placeholder="name@email.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -235,10 +241,7 @@ export default function WaitlistPage() {
                   required
                 />
                 <button
-                  type="button"
-                  onClick={() => {
-                    if (status !== "loading") handleSubmit();
-                  }}
+                  type="submit"
                   className="justify-self-end whitespace-nowrap rounded-full bg-gradient-brand px-4 py-2.5 text-sm font-semibold text-white shadow-pill transition-colors sm:px-7 sm:py-3 sm:text-base disabled:opacity-100 disabled:cursor-pointer"
                   disabled={status === "loading"}
                 >

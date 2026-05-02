@@ -33,9 +33,10 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("NavSection", () => {
-  it("renders LoveIQ logo text", () => {
+  it("renders LoveIQ wordmark", () => {
     render(<NavSection />);
-    expect(screen.getByText("LoveIQ")).toBeInTheDocument();
+    // Wordmark uses aria-label since "Love" and "IQ" are styled as separate spans
+    expect(screen.getAllByLabelText("LoveIQ").length).toBeGreaterThan(0);
   });
 
   it("renders hamburger button in DOM", () => {
@@ -88,10 +89,10 @@ describe("NavSection", () => {
     expect(homeLinks[0]).toHaveAttribute("href", "/");
   });
 
-  it("Start test now CTA links to /waitlist", () => {
+  it("Start survey now CTA links to /survey", () => {
     render(<NavSection />);
-    const ctaLinks = screen.getAllByRole("link", { name: /start test now/i });
+    const ctaLinks = screen.getAllByRole("link", { name: /start survey now/i });
     expect(ctaLinks.length).toBeGreaterThan(0);
-    ctaLinks.forEach((link) => expect(link).toHaveAttribute("href", "/waitlist"));
+    ctaLinks.forEach((link) => expect(link).toHaveAttribute("href", "/survey"));
   });
 });

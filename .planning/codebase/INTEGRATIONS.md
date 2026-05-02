@@ -1,5 +1,7 @@
 # External Integrations
 
+> **Last verified:** 2026-03-15 | **Verified against:** API routes, lib/ utilities, .env.example, Supabase migrations
+
 **Analysis Date:** 2025-01-14
 
 ## APIs & External Services
@@ -7,7 +9,7 @@
 **Email Service:**
 
 - Resend - Transactional emails (waitlist confirmation, contact form)
-  - SDK/Client: `resend` npm package v6.6.0
+  - SDK/Client: `resend` npm package v6.9.2
   - Auth: API key in `RESEND_API_KEY` env var
   - From address: `RESEND_FROM` env var (default: `LoveIQ <hello@send.loveiq.org>`)
   - Reply-to: `RESEND_REPLY_TO` env var (default: `hello@loveiq.org`)
@@ -27,16 +29,22 @@
   - Contact webhook: `SLACK_CONTACT_WEBHOOK_URL` env var
   - Used in: `app/api/waitlist/route.ts`, `app/api/contact/route.ts`
 
+**Cookie Consent:**
+
+- CookieYes - Cookie consent banner
+  - Integration: External script loaded in `app/layout.tsx`
+  - CSP: `cdn-cookieyes.com` allowed in `proxy.ts`
+
 ## Data Storage
 
 **Databases:**
 
-- Supabase PostgreSQL - Waitlist signups storage
+- Supabase PostgreSQL
   - Connection: REST API via `SUPABASE_URL` env var
   - Auth: Service role key in `SUPABASE_SERVICE_ROLE_KEY` env var
-  - Tables: `waitlist_user` (waitlist), `rate_limits` (rate limiting)
-  - Used in: `app/api/waitlist/route.ts`, `lib/ratelimit.ts`
-  - Note: Direct REST API calls, no ORM
+  - Tables: `waitlist_user` (waitlist), `rate_limits` (rate limiting), `admin_users` (admin email allowlist), `scoring_result` (survey scoring)
+  - Used in: `app/api/waitlist/route.ts`, `lib/ratelimit.ts`, `lib/admin/supabase.ts`
+  - Note: Direct REST API calls, no ORM; also used via `@supabase/supabase-js` + `@supabase/ssr` for admin auth
 
 **File Storage:**
 
@@ -48,14 +56,29 @@
 
 ## Authentication & Identity
 
-**Auth Provider:**
+**Admin Auth:**
 
-- Not detected (no user authentication system)
+- Supabase Auth - Magic link email authentication for admin panel
+  - SDK/Client: `@supabase/supabase-js` + `@supabase/ssr`
+  - Flow: Admin enters email → magic link sent → callback at `/admin/auth/callback` → session cookie set
+  - Access control: `admin_users` table in Supabase acts as email allowlist
+  - Session management: Server-side via `@supabase/ssr` cookie helpers (`lib/admin/supabase-server.ts`, `lib/supabase-middleware.ts`)
+  - Role support: `lib/admin/roles.ts` (role-based access control)
+  - Audit logging: `lib/admin/audit.ts`
+  - Used in: `app/admin/`, `app/api/admin/`, `lib/admin/`
+
+**End-User Auth:**
+
+- None (no end-user authentication system)
 - Site is marketing/landing page only
+
+**Staging Auth:**
+
+- Staging environment uses basic password auth (`app/api/staging-login/route.ts`)
 
 **OAuth Integrations:**
 
-- Not applicable
+- Not applicable (magic links are passwordless, not OAuth)
 
 ## Monitoring & Observability
 
@@ -74,20 +97,20 @@
 
 **Logs:**
 
-- Console logging only (stdout/stderr)
-- Used in API routes for debugging
-
-## CI/CD & Deployment
-
-**Hosting:**
-
-- Vercel-ready (Next.js framework)
-  - Deployment: Not configured in repo (likely Vercel dashboard)
-  - Environment vars: Configured externally
+- pino structured logging (`lib/logger.ts`)
+- @vercel/otel for OpenTelemetry integration
+- Slack notifications for important events
 
 **CI Pipeline:**
 
-- Not detected (no GitHub Actions or similar in repo)
+- GitHub Actions - 7 workflows in `.github/workflows/`:
+  - `ci.yml` - Build + lint + test
+  - `security.yml` - Security scanning (secrets, SAST, dependencies, SBOM)
+  - `codeql.yml` - Advanced CodeQL analysis
+  - `release.yml` - Release workflow
+  - `health-monitor.yml` - Health monitoring
+  - `lighthouse.yml` - Lighthouse CI
+  - `load-test.yml` - Load testing
 
 ## Environment Configuration
 
@@ -103,15 +126,17 @@
   - `SLACK_WAITLIST_WEBHOOK_URL`, `SLACK_CONTACT_WEBHOOK_URL`
   - `CONTACT_TO_EMAIL`
 - Secrets location: `.env.local` (gitignored)
+- Template: `.env.example`
 
 **Staging:**
 
-- Not documented
+- Deployed on Vercel (staging branch)
+- Protected by staging login gate
 
 **Production:**
 
-- Secrets management: Vercel environment variables (assumed)
-- Security headers: Configured in `next.config.js`
+- Secrets management: Vercel environment variables
+- Security headers: Configured in `proxy.ts`
 
 ## Webhooks & Callbacks
 
@@ -126,16 +151,17 @@
 
 ## Third-Party Script CSP
 
-Content Security Policy in `next.config.js` allows:
+Content Security Policy in `proxy.ts` allows:
 
 - `googletagmanager.com` - Analytics
 - `google-analytics.com` - Analytics
 - `google.com/recaptcha` - reCAPTCHA
 - `gstatic.com/recaptcha` - reCAPTCHA assets
+- `cdn-cookieyes.com` - Cookie consent
 - `images.unsplash.com` - Stock images
-- `figma.com` - Design assets
 
 ---
 
 _Integration audit: 2025-01-14_
+_Last updated: 2026-03-15_
 _Update when adding/removing external services_

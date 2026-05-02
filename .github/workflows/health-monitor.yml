@@ -13,8 +13,13 @@ permissions:
 
 jobs:
   health-check:
-    name: Production Health Check
+    name: Environment Health Check
     runs-on: ubuntu-latest
+    env:
+      TARGET_NAME: >-
+        ${{ github.event_name == 'push' && github.ref == 'refs/heads/staging' && 'staging' || 'production' }}
+      TARGET_URL: >-
+        ${{ github.event_name == 'push' && github.ref == 'refs/heads/staging' && 'https://staging.loveiq.org' || 'https://www.loveiq.org' }}
     steps:
       - name: Wait for Vercel deployment
         # Only wait after a push — scheduled/manual runs check current prod state
@@ -23,28 +28,35 @@ jobs:
 
       - name: Check /api/health
         id: health
+        env:
+          STAGING_BYPASS_TOKEN: ${{ secrets.VERCEL_STAGING_PROTECTION_BYPASS }}
         run: |
-          RESPONSE=$(curl -s -w "\n%{http_code}" https://www.loveiq.org/api/health)
+          HEALTH_URL="$TARGET_URL/api/health"
+          CURL_ARGS=(-s -L -w "\n%{http_code}")
+
+          if [ "$TARGET_NAME" = "staging" ]; then
+            if [ -z "$STAGING_BYPASS_TOKEN" ]; then
+              echo "Missing VERCEL_STAGING_PROTECTION_BYPASS secret"
+              exit 1
+            fi
+
+            COOKIE_JAR="$(mktemp)"
+            HEALTH_URL="$HEALTH_URL?x-vercel-set-bypass-cookie=true&x-vercel-protection-bypass=$STAGING_BYPASS_TOKEN"
+            CURL_ARGS=(-s -L -c "$COOKIE_JAR" -b "$COOKIE_JAR" -w "\n%{http_code}")
+          fi
+
+          RESPONSE=$(curl "${CURL_ARGS[@]}" "$HEALTH_URL")
           HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
-          BODY=$(echo "$RESPONSE" | head -n-1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+          BODY_PREVIEW=$(printf '%s' "$BODY" | tr '\n' ' ' | tr '\r' ' ' | sed 's/[[:space:]]\+/ /g' | cut -c1-400)
 
           echo "HTTP status: $HTTP_STATUS"
-          echo "Response body: $BODY"
+          echo "Response preview: $BODY_PREVIEW"
           echo "http_status=$HTTP_STATUS" >> $GITHUB_OUTPUT
-          echo "body=$BODY" >> $GITHUB_OUTPUT
 
           if [ "$HTTP_STATUS" -ne 200 ]; then
             echo "HEALTH CHECK FAILED: status $HTTP_STATUS"
             exit 1
           fi
 
-          echo "Health check passed"
-
-      - name: Alert Slack on failure
-        if: failure()
-        run: |
-          curl -s -X POST "${{ secrets.SLACK_WAITLIST_WEBHOOK_URL }}" \
-            -H "Content-Type: application/json" \
-            -d "{
-              \"text\": \":rotating_light: *loveiq.org health check FAILED*\nStatus: ${{ steps.health.outputs.http_status }}\nResponse: ${{ steps.health.outputs.body }}\nCheck: https://www.loveiq.org/api/health\"
-            }"
+          echo "$TARGET_NAME health check passed"

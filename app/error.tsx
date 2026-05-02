@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import Link from "next/link";
+import { LoveIQMark, LoveIQWordmark } from "@/components/branding/LoveIQBrand";
 
 interface ErrorPageProps {
   error: Error & { digest?: string };
@@ -21,10 +22,10 @@ export default function ErrorPage({ error, reset }: ErrorPageProps) {
         <div className="animate-float2 absolute -right-[15%] bottom-[10%] h-[450px] w-[450px] rounded-full bg-[radial-gradient(circle,rgba(156,125,255,0.14)_0%,transparent_70%)]" />
       </div>
 
-      {/* Minimal header — text-only logo to avoid server component imports in error boundary */}
       <header className="relative z-10 flex items-center px-6 py-6 sm:px-10">
-        <Link href="/" className="focus-visible-ring rounded-md">
-          <span className="font-serif text-xl font-semibold text-text-primary">LoveIQ</span>
+        <Link href="/" className="focus-visible-ring inline-flex items-center gap-2 rounded-md">
+          <LoveIQMark className="h-7 w-8 shrink-0" width={32} height={28} />
+          <LoveIQWordmark className="text-xl" />
         </Link>
       </header>
 

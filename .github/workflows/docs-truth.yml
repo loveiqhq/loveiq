@@ -1,0 +1,57 @@
+name: Documentation Truth Check
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "**/*.md"
+      - "app/api/**/route.ts"
+      - "lib/admin/roles.ts"
+      - "package.json"
+      - "package-lock.json"
+      - ".env.example"
+      - "proxy.ts"
+      - "scripts/check-docs-truth.mjs"
+      - "scripts/check-docs-impact.sh"
+      - ".github/pull_request_template.md"
+      - ".github/workflows/docs-truth.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "**/*.md"
+      - "app/api/**/route.ts"
+      - "lib/admin/roles.ts"
+      - "package.json"
+      - "package-lock.json"
+      - ".env.example"
+      - "proxy.ts"
+      - "scripts/check-docs-truth.mjs"
+      - "scripts/check-docs-impact.sh"
+      - ".github/pull_request_template.md"
+      - ".github/workflows/docs-truth.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  docs-truth:
+    name: Documentation Truth
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - run: npm ci
+
+      - name: Run source-driven documentation checks
+        run: npm run docs:truth
+
+      - name: Check markdown formatting
+        run: npx prettier --check "**/*.md"

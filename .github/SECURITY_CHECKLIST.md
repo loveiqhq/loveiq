@@ -1,5 +1,9 @@
 # Security Checklist for Developers
 
+> Owner: CODEOWNERS default
+> Last verified: 2026-04-05
+> Verified against: `SECURITY.md`, `proxy.ts`, `lib/csrf.ts`, `lib/ratelimit.ts`, `app/api/**`, `.env.example`
+
 Use this checklist when making changes to ensure security compliance.
 
 ## Before Committing
@@ -51,7 +55,7 @@ export async function POST(request: Request) {
     // ... do work
     return NextResponse.json({ success: true });
   } catch (err) {
-    console.error("Error:", err);
+    logger.error({ err }, "Error processing request");
     return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
   }
 }
@@ -93,7 +97,7 @@ When adding or updating dependencies:
 When adding new environment variables:
 
 - [ ] Added to `.env.example` with description
-- [ ] Documented in `CLAUDE.md` Environment Variables section
+- [ ] Documented in `DEVELOPMENT.md` and `SECURITY.md` when security-sensitive
 - [ ] Server-only secrets NOT prefixed with `NEXT_PUBLIC_`
 - [ ] Updated `SECURITY.md` if it's a secret (rotation schedule)
 - [ ] Build succeeds without the variable (graceful degradation)
@@ -125,10 +129,10 @@ When reviewing PRs, pay special attention to:
 - ❌ SQL injection (not applicable - we use REST API)
 - ❌ XSS (dangerouslySetInnerHTML, unescaped user input)
 - ❌ CSRF (missing token verification)
-- ❌ Broken authentication (not applicable - no auth yet)
+- ❌ Broken authentication (admin panel uses Supabase Auth magic links)
 - ❌ Sensitive data exposure (logging secrets, error messages)
 - ❌ XXE (not applicable - no XML parsing)
-- ❌ Broken access control (not applicable - no auth yet)
+- ❌ Broken access control (admin panel uses email allowlist via `admin_users` table)
 - ❌ Security misconfiguration (missing headers, insecure defaults)
 - ❌ Known vulnerable components (outdated dependencies)
 - ❌ Insufficient logging (no security event tracking)
@@ -172,9 +176,9 @@ If you discover a security issue:
 ## Resources
 
 - `SECURITY.md` - Main security guide
-- `SECURITY_SCANNING.md` - Detailed scanning documentation
-- `CLAUDE.md` - Codebase conventions and patterns
+- `DEVELOPMENT.md` - Local setup and env var reference
 - `.github/workflows/security.yml` - CI/CD security workflow
+- `docs/api.md` and `docs/admin-api.md` - API behavior reference
 
 ## Quick Commands
 
@@ -195,5 +199,5 @@ npm audit
 npx @cyclonedx/cyclonedx-npm --output-file sbom.json
 
 # Search for potential secrets
-grep -r "api[_-]key\|secret\|password" app/ lib/ --include="*.ts"
+rg -n --glob "*.ts" "(api[_-]key|secret|password)" app lib
 ```
