@@ -17,9 +17,10 @@ import { getReportPurchasePlan } from "@/lib/checkout/reportPurchase";
 import { verifyCsrfToken } from "@/lib/csrf";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
 import {
-  getPaidPlansForSubmission,
+  getReportAccessPlanForSubmission,
   resolveSubmissionAccessContext,
 } from "@/lib/report/personalReport";
+import { isPlanOwnedForArchetype } from "@/lib/report/access";
 import logger from "@/lib/logger";
 import {
   getReportPriceQuoteForContext,
@@ -173,18 +174,30 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Service unavailable." }, { status: 503 });
     }
 
-    // Refuse to start a Stripe session if a succeeded payment for the same
-    // plan already exists on this report — guards against the two-tab
-    // double-purchase race. Best-effort: a Supabase blip drops to a warn-log
-    // and lets checkout proceed (webhook idempotency is the secondary defense).
+    // Refuse to start a Stripe session if the user already owns the requested
+    // plan FOR THE REQUESTED ARCHETYPE — guards against the two-tab
+    // double-purchase race. Per-archetype: owning essentials/full_report on
+    // archetype X does NOT block buying the same tier on archetype Y.
+    // Best-effort: a Supabase blip drops to a warn-log and lets checkout
+    // proceed (webhook idempotency is the secondary defense).
     try {
       const accessContext = await resolveSubmissionAccessContext({
         reportSessionId: parsed.data.reportSessionId ?? null,
         reportToken: parsed.data.reportToken ?? null,
       });
       if (accessContext) {
-        const paidPlans = await getPaidPlansForSubmission(accessContext.submissionId);
-        if (paidPlans.includes(parsed.data.plan)) {
+        const access = await getReportAccessPlanForSubmission(accessContext.submissionId);
+        const requestedArchetype = parsed.data.archetype ?? null;
+        const unlockedTier =
+          requestedArchetype && access.archetypeTiers[requestedArchetype]
+            ? access.archetypeTiers[requestedArchetype]
+            : null;
+        const alreadyOwned = isPlanOwnedForArchetype({
+          accessPlan: access.accessPlan,
+          targetPlan: parsed.data.plan,
+          unlockedTier,
+        });
+        if (alreadyOwned) {
           return NextResponse.json({ error: "You already own this plan." }, { status: 409 });
         }
       }
