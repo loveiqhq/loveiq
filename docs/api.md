@@ -14,6 +14,7 @@ Survey product-flow details such as step orchestration, storage, autosave, and r
 | ------------------------------------- | ----------- | ------------------------------------------------------------------------------------ |
 | `/api/contact`                        | `POST`      | Contact form submission.                                                             |
 | `/api/cron/invite-reminders`          | `GET`       | Scheduled job: send invite reminder emails. Authenticated via `CRON_SECRET`.         |
+| `/api/cron/payment-fulfillment-sweep` | `GET`       | Scheduled job: rescue paid-but-locked reports. Authenticated via `CRON_SECRET`.      |
 | `/api/cron/report-discount-email`     | `GET`       | Scheduled job: send report-pricing discount nudges. Authenticated via `CRON_SECRET`. |
 | `/api/cron/survey-paused`             | `GET`       | Scheduled job: nudge users who paused the survey. Authenticated via `CRON_SECRET`.   |
 | `/api/health`                         | `GET`       | Service health check with dependency status.                                         |

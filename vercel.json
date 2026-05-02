@@ -12,6 +12,10 @@
     {
       "path": "/api/cron/invite-reminders",
       "schedule": "0 10 * * *"
+    },
+    {
+      "path": "/api/cron/payment-fulfillment-sweep",
+      "schedule": "*/30 * * * *"
     }
   ],
   "functions": {
@@ -25,6 +29,9 @@
       "maxDuration": 60
     },
     "app/api/cron/invite-reminders/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/cron/payment-fulfillment-sweep/route.ts": {
       "maxDuration": 60
     }
   }
