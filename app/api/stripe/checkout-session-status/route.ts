@@ -10,6 +10,7 @@ import {
   type StripeCheckoutPurchaseAnalytics,
   type StripeCheckoutSessionStatusResponse,
 } from "@/lib/checkout/stripeCheckout";
+import { processStripeWebhookEvent } from "@/lib/checkout/fulfillment";
 import {
   getReportAccessPlanForSubmission,
   resolveSubmissionAccessContext,
@@ -200,6 +201,54 @@ export async function GET(request: Request) {
         { error, sessionId: session.id },
         "Report access lookup failed during checkout status"
       );
+    }
+
+    // Fallback fulfillment: if Stripe says the checkout is paid + complete but
+    // our DB has no access plan yet, the webhook either hasn't run or never
+    // delivered (e.g. signing-secret mismatch, missing live-mode endpoint,
+    // misconfigured Stripe → Vercel network path). Synthesize a
+    // checkout.session.completed event and run the same fulfillment pipeline
+    // the webhook would. Both paths are idempotent — processStripeWebhookEvent
+    // dedupes on stripe_event_id, and the inner payment writer dedupes on
+    // stripe_payment_intent_id / stripe_charge_id — so a real webhook arriving
+    // later just no-ops.
+    if (!accessPlan && session.payment_status === "paid" && session.status === "complete") {
+      try {
+        const syntheticEvent = {
+          id: `cs_status_poll_${session.id}`,
+          type: "checkout.session.completed",
+          data: { object: session },
+          created: Math.floor(Date.now() / 1000),
+          api_version: stripe.getApiField("version"),
+          livemode: Boolean(session.livemode),
+          pending_webhooks: 0,
+          request: { id: null, idempotency_key: null },
+          object: "event",
+        } as unknown as Stripe.Event;
+
+        await processStripeWebhookEvent({ event: syntheticEvent, stripe });
+
+        // Re-resolve access plan after fallback fulfillment so the response
+        // reflects the just-written tier (otherwise the page polls again
+        // unnecessarily).
+        const context = await resolveSubmissionAccessContext({
+          reportSessionId,
+          reportToken,
+        });
+        if (context?.submissionId) {
+          const access = await getReportAccessPlanForSubmission(context.submissionId);
+          accessPlan = access.accessPlan;
+        }
+
+        logger.info(
+          { sessionId: session.id, accessPlan },
+          "Status-poll fallback fulfillment ran (webhook missed delivery)"
+        );
+      } catch (error) {
+        // Don't fail the status response — the user can still see paymentStatus
+        // and sessionStatus; ops can replay the webhook from Stripe Dashboard.
+        logger.error({ error, sessionId: session.id }, "Status-poll fallback fulfillment failed");
+      }
     }
 
     const successResponse: StripeCheckoutSessionStatusResponse = {
