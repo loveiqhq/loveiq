@@ -635,6 +635,23 @@ async function syncCheckoutSessionPayment({
 }) {
   const plan = normalizePlan(session.metadata?.plan);
   if (!plan) {
+    // Sessions can expire (or async-fail) before any plan metadata was set —
+    // e.g. user abandons checkout, or a malformed session never reached the
+    // plan-selection step. Nothing was charged, so nothing to fulfill: mark
+    // the event processed and return rather than re-trying forever.
+    if (eventStatus !== "succeeded") {
+      logger.info(
+        { eventId: event.id, eventStatus, sessionId: session.id, type: event.type },
+        "Skipping non-success checkout event without plan metadata"
+      );
+      await upsertWebhookEventRecord({
+        event,
+        processed: true,
+        processingError: null,
+        stripePaymentIntentId: null,
+      });
+      return;
+    }
     throw new Error("stripe_checkout_missing_plan");
   }
 

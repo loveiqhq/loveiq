@@ -577,4 +577,57 @@ describe("checkout fulfillment", () => {
     expect(stripe.checkout.sessions.retrieve).not.toHaveBeenCalled();
     expect(markReportPriceQuotePurchased).not.toHaveBeenCalled();
   });
+
+  it("gracefully marks expired checkout sessions without plan metadata as processed", async () => {
+    let webhookProcessed = false;
+    mockFetchWithTimeout.mockImplementation(
+      async (url: string, options?: { body?: string; method?: string }) => {
+        if (url.includes("/rest/v1/payment_webhook_event?stripe_event_id=eq.")) {
+          return createJsonResponse([]);
+        }
+        if (options?.method === "POST" && url.endsWith("/rest/v1/payment_webhook_event")) {
+          if (options.body?.includes('"processed":true')) webhookProcessed = true;
+          return createJsonResponse([{ id: 200 }]);
+        }
+        throw new Error(`Unexpected fetch call: ${options?.method ?? "GET"} ${url}`);
+      }
+    );
+
+    const stripe = {
+      charges: { retrieve: vi.fn() },
+      checkout: {
+        sessions: {
+          retrieve: vi.fn().mockResolvedValue({
+            id: "cs_test_expired_no_plan",
+            amount_total: 0,
+            currency: "eur",
+            customer: null,
+            metadata: {},
+            payment_intent: null,
+            payment_status: "unpaid",
+            total_details: { amount_discount: 0 },
+          }),
+        },
+      },
+      paymentIntents: { retrieve: vi.fn() },
+    };
+
+    await processStripeWebhookEvent({
+      event: {
+        id: "evt_test_expired_no_plan",
+        type: "checkout.session.expired",
+        data: {
+          object: {
+            id: "cs_test_expired_no_plan",
+            metadata: {},
+          },
+        },
+      } as never,
+      stripe: stripe as never,
+    });
+
+    expect(webhookProcessed).toBe(true);
+    expect(upsertArchetypeTierForPersonalReport).not.toHaveBeenCalled();
+    expect(unlockAllArchetypesForPersonalReport).not.toHaveBeenCalled();
+  });
 });

@@ -237,6 +237,37 @@ export async function POST(request: Request) {
       });
     });
 
+    // Once the submission is persisted, the partial-save row is dead weight
+    // and contains PII (raw answers). Delete it so we don't retain abandoned
+    // drafts past the point of need. A pg_cron job sweeps any stragglers
+    // (e.g. session_id mismatch or pre-cleanup-deploy rows).
+    if (sessionId) {
+      const supabaseUrl = process.env.SUPABASE_URL;
+      const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (supabaseUrl && serviceKey) {
+        scheduleAfterResponse("survey-partial-cleanup", async () => {
+          try {
+            await fetchWithTimeout(
+              `${supabaseUrl}/rest/v1/survey_partial_save?session_id=eq.${encodeURIComponent(
+                sessionId
+              )}`,
+              {
+                method: "DELETE",
+                headers: {
+                  apikey: serviceKey,
+                  Authorization: `Bearer ${serviceKey}`,
+                  Prefer: "return=minimal",
+                },
+                timeoutMs: 5000,
+              }
+            );
+          } catch (err) {
+            logger.warn({ err, sessionId, submissionId }, "Failed to delete partial save");
+          }
+        });
+      }
+    }
+
     scheduleAfterResponse("survey-complete-email", async () => {
       if (isExisting) return;
 
