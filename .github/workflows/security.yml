@@ -283,9 +283,11 @@ jobs:
           # Excludes:
           #  - staging-* routes (dev-only endpoints that return 404 in production)
           #  - stripe/webhook (validated via stripe.webhooks.constructEvent signature check)
+          #  - admin/logout (no body to validate; just clears the auth session)
           for file in $(find app/api -name 'route.ts' \
               -not -path "*/staging-*" \
               -not -path "*/stripe/webhook/*" \
+              -not -path "*/admin/logout/*" \
               2>/dev/null); do
             if [ -f "$file" ] && grep -q "export.*POST\|export.*PUT" "$file"; then
               if ! grep -q "z\.object\|zod" "$file"; then
