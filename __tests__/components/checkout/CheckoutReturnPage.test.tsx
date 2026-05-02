@@ -74,26 +74,32 @@ describe("CheckoutReturnPage", () => {
         screen.getByText(/payment complete\. your report is unlocked\. redirecting you now/i)
       ).toBeInTheDocument()
     );
-    expect(mockTrackReportPurchase).toHaveBeenCalledWith({
-      value: 27.49,
-      currency: "EUR",
-      transaction_id: "cs_test_123",
-      pricing_cluster_id: "cluster",
-      base_price_bucket: "full_center",
-      experiment_group: "B",
-      discount_step: 1,
-      country_tier: "tier_2",
-      device_type: "Desktop",
-      traffic_source: "google",
-      engagement_score: 40,
-      behavioral_bucket: "serious",
-      initial_price: 29.99,
-      promotion_code: "LOVEIQ20",
-      coupon_id: "coupon_loveiq_20",
-      coupon_name: "LOVEIQ 20% Off",
-      coupon_percent_off: 20,
-      discount_amount: 5.5,
-    });
+    // Wrap in waitFor: the trackReportPurchase effect runs in a separate
+    // microtask after the success-state render. Under CI CPU pressure, the
+    // effect can lag the DOM update by a tick or two — polling avoids the
+    // race without bumping arbitrary timeouts.
+    await waitFor(() =>
+      expect(mockTrackReportPurchase).toHaveBeenCalledWith({
+        value: 27.49,
+        currency: "EUR",
+        transaction_id: "cs_test_123",
+        pricing_cluster_id: "cluster",
+        base_price_bucket: "full_center",
+        experiment_group: "B",
+        discount_step: 1,
+        country_tier: "tier_2",
+        device_type: "Desktop",
+        traffic_source: "google",
+        engagement_score: 40,
+        behavioral_bucket: "serious",
+        initial_price: 29.99,
+        promotion_code: "LOVEIQ20",
+        coupon_id: "coupon_loveiq_20",
+        coupon_name: "LOVEIQ 20% Off",
+        coupon_percent_off: 20,
+        discount_amount: 5.5,
+      })
+    );
 
     expect(screen.getByRole("link", { name: /go to unlocked report/i })).toHaveAttribute(
       "href",
@@ -137,14 +143,16 @@ describe("CheckoutReturnPage", () => {
         screen.getByText(/payment complete\. your report is unlocked\. redirecting you now/i)
       ).toBeInTheDocument()
     );
-    expect(mockTrackReportPurchase).toHaveBeenCalledWith({
-      value: 0,
-      currency: "EUR",
-      transaction_id: "cs_test_free_123",
-      promotion_code: "LOVEIQ100",
-      coupon_percent_off: 100,
-      discount_amount: 24.49,
-    });
+    await waitFor(() =>
+      expect(mockTrackReportPurchase).toHaveBeenCalledWith({
+        value: 0,
+        currency: "EUR",
+        transaction_id: "cs_test_free_123",
+        promotion_code: "LOVEIQ100",
+        coupon_percent_off: 100,
+        discount_amount: 24.49,
+      })
+    );
   });
 
   it("keeps polling while payment is complete but backend access is still syncing", async () => {
@@ -200,11 +208,13 @@ describe("CheckoutReturnPage", () => {
         screen.getByText(/payment complete\. your report is unlocked\. redirecting you now/i)
       ).toBeInTheDocument()
     );
-    expect(mockTrackReportPurchase).toHaveBeenCalledTimes(1);
-    expect(mockTrackReportPurchase).toHaveBeenCalledWith({
-      value: 114.99,
-      currency: "EUR",
-      transaction_id: "cs_test_456",
+    await waitFor(() => {
+      expect(mockTrackReportPurchase).toHaveBeenCalledTimes(1);
+      expect(mockTrackReportPurchase).toHaveBeenCalledWith({
+        value: 114.99,
+        currency: "EUR",
+        transaction_id: "cs_test_456",
+      });
     });
 
     await new Promise((resolve) => setTimeout(resolve, 1_500));
