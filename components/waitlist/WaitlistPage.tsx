@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useState, useMemo } from "react";
-import { trackGoogleAdsWaitlistConversion, trackWaitlistSignup } from "@/lib/analytics";
+import { trackWaitlistSignup } from "@/lib/analytics";
 import { getStoredUtm } from "@/lib/utm";
 
 const faqs = [
@@ -126,7 +126,6 @@ export default function WaitlistPage() {
       setStatus("success");
       if (!data.already) {
         trackWaitlistSignup("waitlist_page");
-        trackGoogleAdsWaitlistConversion();
       }
     } catch (err) {
       setStatus("error");

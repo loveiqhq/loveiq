@@ -24,18 +24,14 @@ vi.mock("next/image", () => ({
 }));
 
 const mockTrackWaitlistSignup = vi.fn();
-const mockTrackGoogleAdsWaitlistConversion = vi.fn();
 vi.mock("@/lib/analytics", () => ({
   trackWaitlistSignup: (...args: unknown[]) => mockTrackWaitlistSignup(...args),
-  trackGoogleAdsWaitlistConversion: (...args: unknown[]) =>
-    mockTrackGoogleAdsWaitlistConversion(...args),
 }));
 
 let mockFetch: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   mockTrackWaitlistSignup.mockClear();
-  mockTrackGoogleAdsWaitlistConversion.mockClear();
   document.cookie = "__csrf=test-token";
   mockFetch = vi.fn();
   globalThis.fetch = mockFetch;
@@ -103,20 +99,7 @@ describe("WaitlistPage", () => {
     expect(mockTrackWaitlistSignup).toHaveBeenCalledWith("waitlist_page");
   });
 
-  it("successful API response fires Google Ads conversion tracking", async () => {
-    mockFetch.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ success: true }),
-    } as Response);
-    const user = userEvent.setup();
-    render(<WaitlistPage />);
-    await user.type(screen.getByPlaceholderText("name@email.com"), "test@example.com");
-    await user.click(screen.getByRole("button", { name: /join waitlist/i }));
-    await screen.findByText("You're In!");
-    expect(mockTrackGoogleAdsWaitlistConversion).toHaveBeenCalledTimes(1);
-  });
-
-  it("duplicate waitlist responses show success without firing conversion tracking", async () => {
+  it("duplicate waitlist responses show success without firing analytics tracking", async () => {
     mockFetch.mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({ success: true, already: true }),
@@ -127,7 +110,6 @@ describe("WaitlistPage", () => {
     await user.click(screen.getByRole("button", { name: /join waitlist/i }));
     await screen.findByText("You're In!");
     expect(mockTrackWaitlistSignup).not.toHaveBeenCalled();
-    expect(mockTrackGoogleAdsWaitlistConversion).not.toHaveBeenCalled();
   });
 
   it("API error response shows error message from body", async () => {

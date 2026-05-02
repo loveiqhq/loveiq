@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-const EXPECTED_WAITLIST_SEND_TO = `AW-18068690553/${["guQ3CPHxh5cc", "EPms6adD"].join("")}`;
+const EXPECTED_PURCHASE_SEND_TO = `AW-18068690553/${["guQ3CPHxh5cc", "EPms6adD"].join("")}`;
 const clearConsentCookie = () => {
   document.cookie = "cookieyes-consent=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/";
 };
@@ -30,7 +30,7 @@ let trackWaitlistSignup: typeof import("../../lib/analytics").trackWaitlistSignu
 let trackSurveyStart: typeof import("../../lib/analytics").trackSurveyStart;
 let trackSurveyComplete: typeof import("../../lib/analytics").trackSurveyComplete;
 let trackReportPurchase: typeof import("../../lib/analytics").trackReportPurchase;
-let trackGoogleAdsWaitlistConversion: typeof import("../../lib/analytics").trackGoogleAdsWaitlistConversion;
+let trackGoogleAdsPurchaseConversion: typeof import("../../lib/analytics").trackGoogleAdsPurchaseConversion;
 
 describe("analytics", () => {
   const originalWindow = globalThis.window;
@@ -47,7 +47,7 @@ describe("analytics", () => {
     trackSurveyStart = mod.trackSurveyStart;
     trackSurveyComplete = mod.trackSurveyComplete;
     trackReportPurchase = mod.trackReportPurchase;
-    trackGoogleAdsWaitlistConversion = mod.trackGoogleAdsWaitlistConversion;
+    trackGoogleAdsPurchaseConversion = mod.trackGoogleAdsPurchaseConversion;
   });
 
   afterEach(() => {
@@ -343,14 +343,20 @@ describe("analytics", () => {
     });
   });
 
-  describe("trackGoogleAdsWaitlistConversion", () => {
+  describe("trackGoogleAdsPurchaseConversion", () => {
+    const purchaseParams = {
+      value: 27.49,
+      currency: "EUR",
+      transaction_id: "cs_test_123",
+    };
+
     it("does nothing when gtag is not available", () => {
       setConsentCookie({ advertisement: true });
       globalThis.window = { ...globalThis.window } as typeof globalThis.window;
       globalThis.window.__loveiqGoogleAdsEnabled = true;
       delete globalThis.window.gtag;
 
-      expect(() => trackGoogleAdsWaitlistConversion()).not.toThrow();
+      expect(() => trackGoogleAdsPurchaseConversion(purchaseParams)).not.toThrow();
     });
 
     it("does nothing when Google Ads is not enabled", () => {
@@ -358,7 +364,7 @@ describe("analytics", () => {
       setConsentCookie({ advertisement: true });
       globalThis.window = { ...globalThis.window, gtag: mockGtag } as typeof globalThis.window;
 
-      trackGoogleAdsWaitlistConversion();
+      trackGoogleAdsPurchaseConversion(purchaseParams);
 
       expect(mockGtag).not.toHaveBeenCalled();
     });
@@ -372,12 +378,12 @@ describe("analytics", () => {
         __loveiqGoogleAdsEnabled: true,
       } as typeof globalThis.window;
 
-      trackGoogleAdsWaitlistConversion();
+      trackGoogleAdsPurchaseConversion(purchaseParams);
 
       expect(mockGtag).not.toHaveBeenCalled();
     });
 
-    it("fires the Google Ads conversion event", () => {
+    it("fires the Google Ads conversion event with dynamic value, currency, and transaction_id", () => {
       const mockGtag = vi.fn();
       setConsentCookie({ advertisement: true });
       globalThis.window = {
@@ -386,12 +392,42 @@ describe("analytics", () => {
         __loveiqGoogleAdsEnabled: true,
       } as typeof globalThis.window;
 
-      trackGoogleAdsWaitlistConversion();
+      trackGoogleAdsPurchaseConversion(purchaseParams);
 
       expect(mockGtag).toHaveBeenCalledWith("event", "conversion", {
-        send_to: EXPECTED_WAITLIST_SEND_TO,
-        value: 1.0,
-        currency: "MXN",
+        send_to: EXPECTED_PURCHASE_SEND_TO,
+        value: 27.49,
+        currency: "EUR",
+        transaction_id: "cs_test_123",
+      });
+    });
+
+    it("trackReportPurchase fires both GA4 and Google Ads conversion when both consents granted", () => {
+      const mockGtag = vi.fn();
+      setConsentCookie({ analytics: true, advertisement: true });
+      globalThis.window = {
+        ...globalThis.window,
+        gtag: mockGtag,
+        __loveiqAnalyticsEnabled: true,
+        __loveiqGoogleAdsEnabled: true,
+      } as typeof globalThis.window;
+
+      trackReportPurchase(purchaseParams);
+
+      expect(mockGtag).toHaveBeenCalledWith(
+        "event",
+        "report_purchase",
+        expect.objectContaining({
+          value: 27.49,
+          currency: "EUR",
+          transaction_id: "cs_test_123",
+        })
+      );
+      expect(mockGtag).toHaveBeenCalledWith("event", "conversion", {
+        send_to: EXPECTED_PURCHASE_SEND_TO,
+        value: 27.49,
+        currency: "EUR",
+        transaction_id: "cs_test_123",
       });
     });
   });

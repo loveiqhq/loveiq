@@ -2,8 +2,8 @@ type GTag = (command: "event", eventName: string, params?: Record<string, unknow
 type ConsentCategory = "analytics" | "advertisement";
 
 const GOOGLE_ADS_TAG_ID = "AW-18068690553";
-const GOOGLE_ADS_WAITLIST_LABEL = ["guQ3CPHxh5cc", "EPms6adD"].join("");
-const GOOGLE_ADS_WAITLIST_SEND_TO = `${GOOGLE_ADS_TAG_ID}/${GOOGLE_ADS_WAITLIST_LABEL}`;
+const GOOGLE_ADS_PURCHASE_LABEL = ["guQ3CPHxh5cc", "EPms6adD"].join("");
+const GOOGLE_ADS_PURCHASE_SEND_TO = `${GOOGLE_ADS_TAG_ID}/${GOOGLE_ADS_PURCHASE_LABEL}`;
 const COOKIEYES_CONSENT_COOKIE = "cookieyes-consent";
 
 declare global {
@@ -118,16 +118,18 @@ export interface ReportPurchaseParams {
 
 export const trackReportPurchase = (params: ReportPurchaseParams) => {
   track("report_purchase", params as unknown as Record<string, unknown>);
+  trackGoogleAdsPurchaseConversion(params);
 };
 
-export const trackGoogleAdsWaitlistConversion = () => {
+export const trackGoogleAdsPurchaseConversion = (params: ReportPurchaseParams) => {
   if (typeof window === "undefined") return;
   if (!window.__loveiqGoogleAdsEnabled) return;
   if (!hasCookieYesConsent("advertisement")) return;
 
   window.gtag?.("event", "conversion", {
-    send_to: GOOGLE_ADS_WAITLIST_SEND_TO,
-    value: 1.0,
-    currency: "MXN",
+    send_to: GOOGLE_ADS_PURCHASE_SEND_TO,
+    value: typeof params.value === "number" ? params.value : 1.0,
+    currency: params.currency || "MXN",
+    transaction_id: params.transaction_id || "",
   });
 };
