@@ -630,4 +630,212 @@ describe("checkout fulfillment", () => {
     expect(upsertArchetypeTierForPersonalReport).not.toHaveBeenCalled();
     expect(unlockAllArchetypesForPersonalReport).not.toHaveBeenCalled();
   });
+
+  describe("Slack purchase notification", () => {
+    const SLACK_URL = "https://hooks.slack.com/services/TEST/PAYMENTS/secret";
+
+    function setupHappyPathMocks(opts: { existingPayment?: boolean } = {}) {
+      const slackCalls: Array<{ url: string; body: string }> = [];
+
+      mockFetchWithTimeout.mockImplementation(
+        async (
+          url: string,
+          options?: { body?: string; method?: string; headers?: Record<string, string> }
+        ) => {
+          // Slack webhook (capture for assertions)
+          if (url.startsWith("https://hooks.slack.com/")) {
+            slackCalls.push({ url, body: options?.body ?? "" });
+            return { ok: true, status: 200, text: async () => "" } as Response;
+          }
+          if (url.includes("/rest/v1/payment_webhook_event?stripe_event_id=eq.")) {
+            return createJsonResponse([]);
+          }
+          if (
+            url.includes("/rest/v1/payment?stripe_charge_id=eq.") ||
+            url.includes("/rest/v1/payment?stripe_payment_intent_id=eq.")
+          ) {
+            return createJsonResponse(opts.existingPayment ? [{ id: 99 }] : []);
+          }
+          // Recipient lookup for the Slack payload
+          if (url.includes("/rest/v1/survey_submission?id=eq.70&select=")) {
+            return createJsonResponse([
+              { app_user: { email: "Eman@LoveIQ.org", first_name: "Eman" } },
+            ]);
+          }
+          if (options?.method === "POST" && url.endsWith("/rest/v1/payment")) {
+            return createJsonResponse([{ id: 101 }]);
+          }
+          if (url.includes("/rest/v1/payment_item?payment_id=eq.")) {
+            return createJsonResponse([]);
+          }
+          if (options?.method === "POST" && url.endsWith("/rest/v1/payment_item")) {
+            return createJsonResponse([{ id: 11 }]);
+          }
+          if (options?.method === "PATCH" && url.includes("/rest/v1/personal_report?id=eq.5")) {
+            return createJsonResponse([]);
+          }
+          if (options?.method === "PATCH" && url.includes("/rest/v1/payment?id=eq.")) {
+            return createJsonResponse([]);
+          }
+          if (options?.method === "POST" && url.endsWith("/rest/v1/payment_webhook_event")) {
+            return createJsonResponse([{ id: 102 }]);
+          }
+          throw new Error(`Unexpected fetch call: ${options?.method ?? "GET"} ${url}`);
+        }
+      );
+
+      return slackCalls;
+    }
+
+    function buildStripe(
+      plan: "essentials" | "full_report" | "all_reports",
+      archetype?: string,
+      paymentIntent: string | null = "pi_test_slack_001"
+    ) {
+      return {
+        charges: { retrieve: vi.fn().mockResolvedValue({ id: "ch_test_slack_001" }) },
+        checkout: {
+          sessions: {
+            retrieve: vi.fn().mockResolvedValue({
+              id: "cs_test_slack_001",
+              amount_total: 1999,
+              currency: "eur",
+              customer: null,
+              metadata: {
+                plan,
+                ...(archetype ? { archetype } : {}),
+                reportToken: "rpt_ABCDEFGHIJKLMNOPQRST",
+              },
+              payment_intent: paymentIntent,
+              payment_status: "paid",
+              total_details: { amount_discount: 0 },
+            }),
+          },
+        },
+        paymentIntents: {
+          retrieve: vi.fn().mockResolvedValue({
+            id: paymentIntent ?? "pi_test_slack_001",
+            latest_charge: "ch_test_slack_001",
+          }),
+        },
+      };
+    }
+
+    it("fires one Slack ping with masked email + plan + archetype + amount on first fulfillment", async () => {
+      process.env.SLACK_PAYMENTS_WEBHOOK_URL = SLACK_URL;
+      const slackCalls = setupHappyPathMocks();
+
+      await processStripeWebhookEvent({
+        event: {
+          id: "evt_slack_first_fulfillment",
+          type: "checkout.session.completed",
+          data: {
+            object: {
+              id: "cs_test_slack_001",
+              metadata: {
+                plan: "full_report",
+                archetype: "Relational Nurturer",
+                reportToken: "rpt_ABCDEFGHIJKLMNOPQRST",
+              },
+            },
+          },
+        } as never,
+        stripe: buildStripe("full_report", "Relational Nurturer") as never,
+      });
+
+      expect(slackCalls).toHaveLength(1);
+      const body = JSON.parse(slackCalls[0]!.body) as { text: string; username: string };
+      expect(body.username).toBe("payment_notification");
+      expect(body.text).toContain("*Eman*");
+      // lookupRecipientForSubmission lowercases the email before returning it,
+      // so the masked output is also lowercase.
+      expect(body.text).toContain("e***@loveiq.org");
+      expect(body.text).toContain("Full report");
+      expect(body.text).toContain("Relational Nurturer");
+      expect(body.text).toContain("EUR 19.99");
+
+      delete process.env.SLACK_PAYMENTS_WEBHOOK_URL;
+    });
+
+    it("omits archetype suffix on all_reports purchase", async () => {
+      process.env.SLACK_PAYMENTS_WEBHOOK_URL = SLACK_URL;
+      const slackCalls = setupHappyPathMocks();
+
+      await processStripeWebhookEvent({
+        event: {
+          id: "evt_slack_all_reports",
+          type: "checkout.session.completed",
+          data: {
+            object: {
+              id: "cs_test_slack_001",
+              metadata: {
+                plan: "all_reports",
+                reportToken: "rpt_ABCDEFGHIJKLMNOPQRST",
+              },
+            },
+          },
+        } as never,
+        stripe: buildStripe("all_reports") as never,
+      });
+
+      expect(slackCalls).toHaveLength(1);
+      const body = JSON.parse(slackCalls[0]!.body) as { text: string };
+      expect(body.text).toContain("All 14 reports");
+      expect(body.text).not.toMatch(/\([A-Z][a-z]+ [A-Z][a-z]+\)/);
+
+      delete process.env.SLACK_PAYMENTS_WEBHOOK_URL;
+    });
+
+    it("skips the Slack ping when SLACK_PAYMENTS_WEBHOOK_URL is unset", async () => {
+      delete process.env.SLACK_PAYMENTS_WEBHOOK_URL;
+      const slackCalls = setupHappyPathMocks();
+
+      await processStripeWebhookEvent({
+        event: {
+          id: "evt_slack_no_env",
+          type: "checkout.session.completed",
+          data: {
+            object: {
+              id: "cs_test_slack_001",
+              metadata: {
+                plan: "full_report",
+                archetype: "Spark Seeker",
+                reportToken: "rpt_ABCDEFGHIJKLMNOPQRST",
+              },
+            },
+          },
+        } as never,
+        stripe: buildStripe("full_report", "Spark Seeker") as never,
+      });
+
+      expect(slackCalls).toHaveLength(0);
+    });
+
+    it("skips the Slack ping on re-delivery (existing payment row)", async () => {
+      process.env.SLACK_PAYMENTS_WEBHOOK_URL = SLACK_URL;
+      const slackCalls = setupHappyPathMocks({ existingPayment: true });
+
+      await processStripeWebhookEvent({
+        event: {
+          id: "evt_slack_redelivery",
+          type: "checkout.session.completed",
+          data: {
+            object: {
+              id: "cs_test_slack_001",
+              metadata: {
+                plan: "full_report",
+                archetype: "Spark Seeker",
+                reportToken: "rpt_ABCDEFGHIJKLMNOPQRST",
+              },
+            },
+          },
+        } as never,
+        stripe: buildStripe("full_report", "Spark Seeker") as never,
+      });
+
+      expect(slackCalls).toHaveLength(0);
+
+      delete process.env.SLACK_PAYMENTS_WEBHOOK_URL;
+    });
+  });
 });

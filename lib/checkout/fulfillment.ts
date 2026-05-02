@@ -70,6 +70,65 @@ async function lookupRecipientForSubmission(submissionId: number): Promise<{
   }
 }
 
+async function notifySlackPurchase({
+  amount,
+  archetype,
+  currency,
+  email,
+  firstName,
+  paymentId,
+  plan,
+  submissionId,
+}: {
+  amount: number | null;
+  archetype: string | null;
+  currency: string | null;
+  email: string | null;
+  firstName: string | null;
+  paymentId: number;
+  plan: ReportPurchasePlanId;
+  submissionId: number;
+}) {
+  const url = process.env.SLACK_PAYMENTS_WEBHOOK_URL;
+
+  if (!url) {
+    logger.info(
+      { paymentId, plan, submissionId },
+      "Slack payments webhook env unset — skipping purchase notification"
+    );
+    return;
+  }
+
+  const planLabel = getReportPurchasePlan(plan).title;
+  const archetypeSuffix = plan === "all_reports" || !archetype ? "" : ` (${archetype})`;
+  const safeName = firstName?.trim() || "anonymous";
+  const safeEmail = email?.trim() || null;
+  const maskedEmail = safeEmail ? safeEmail.replace(/^(.).+(@.+)$/, "$1***$2") : "no-email";
+  const formattedAmount =
+    typeof amount === "number" && Number.isFinite(amount)
+      ? `${(currency ?? "EUR").toUpperCase()} ${amount.toFixed(2)}`
+      : "amount unknown";
+
+  const text = `:credit_card: New purchase: *${safeName}* (${maskedEmail}) — ${planLabel}${archetypeSuffix} — ${formattedAmount}`;
+
+  try {
+    logger.info({ paymentId, plan, submissionId }, "Sending Slack purchase notification");
+    const res = await fetchWithTimeout(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, username: "payment_notification" }),
+      timeoutMs: 5000,
+    });
+
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      logger.error({ paymentId, plan, status: res.status, body }, "Slack purchase webhook failed");
+    }
+  } catch (err) {
+    logger.error({ err, paymentId, plan }, "Slack purchase webhook error");
+  }
+}
+
 async function lookupReportTokenForSubmission(submissionId: number): Promise<string | null> {
   try {
     const response = await supabaseServiceFetch(
@@ -731,6 +790,11 @@ async function syncCheckoutSessionPayment({
     stripeChargeId: charge?.id ?? null,
     stripePaymentIntentId: paymentIntentId,
   });
+  // Cross-source dedupe for Slack: webhook + status-poll fallback + cron sweep
+  // can all reach this function. We only want one Slack ping per unique
+  // purchase, so gate the notification on whether THIS run is the first
+  // write — i.e. there was no payment row before we got here.
+  const isFirstFulfillment = !existingPayment;
 
   const rawArchetypeMetadata = settledSession.metadata?.archetype ?? null;
   const unlockedArchetype =
@@ -869,6 +933,24 @@ async function syncCheckoutSessionPayment({
       submissionId: context.submissionId,
       unlockedArchetype,
     });
+
+    // Slack ping — fires once per unique purchase. isFirstFulfillment is
+    // false on Stripe re-deliveries, on the cs_status_poll_* synthetic
+    // event from the success-page fallback, and on any future code path
+    // that reaches this function with a payment row already in place.
+    if (isFirstFulfillment) {
+      const recipient = await lookupRecipientForSubmission(context.submissionId);
+      await notifySlackPurchase({
+        amount,
+        archetype: unlockedArchetype,
+        currency: settledSession.currency ?? null,
+        email: recipient.email,
+        firstName: recipient.firstName,
+        paymentId,
+        plan,
+        submissionId: context.submissionId,
+      });
+    }
   }
 
   await upsertWebhookEventRecord({

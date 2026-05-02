@@ -200,6 +200,7 @@ Copy `.env.example` to `.env.local` and fill values:
 | `SLACK_WAITLIST_WEBHOOK_URL`               | No           | Slack notifications for waitlist signups                                          |
 | `SLACK_CONTACT_WEBHOOK_URL`                | No           | Slack notifications for contact form                                              |
 | `SLACK_SURVEY_WEBHOOK_URL`                 | No           | Slack notifications for survey submissions                                        |
+| `SLACK_PAYMENTS_WEBHOOK_URL`               | No           | Slack notifications for report purchases                                          |
 | `STAGING_PASSWORD`                         | For staging  | Password gate for staging deployment                                              |
 | `NEXT_PUBLIC_SUPABASE_URL`                 | For admin    | Supabase project URL (browser-safe, for admin auth SDK)                           |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY`            | For admin    | Supabase anon key (browser-safe, for admin auth SDK)                              |
