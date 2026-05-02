@@ -804,7 +804,10 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     sessionId: token ? null : sessionId,
     pricingSessionIdOverride: pricingSessionIdFromUrl,
   });
-  const { feedbacks, submitted, submitFeedback } = useSectionFeedback(sessionId);
+  // Pass both identifiers — the hook prefers whichever is present and the API
+  // resolves the user server-side. Token is the durable identifier (works
+  // cross-device); sessionId is the legacy in-storage one.
+  const { feedbacks, submitted, submitFeedback } = useSectionFeedback(sessionId, token);
   const [isPricingModalOpen, setIsPricingModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [pricingTargetArchetype, setPricingTargetArchetype] = useState<string | null>(null);

@@ -499,6 +499,37 @@ export async function upsertArchetypeTierForPersonalReport({
   return sanitizeArchetypeTierMap(payload);
 }
 
+/**
+ * Promotes every known archetype to `full_report` tier on a personal_report.
+ * Used by the `all_reports` purchase path so the stored archetype_tiers
+ * jsonb (and the legacy `unlocked_archetypes` column kept in sync via the
+ * RPC) reflects the full unlock instead of leaving the row at the buyer's
+ * primary archetype only.
+ */
+export async function unlockAllArchetypesForPersonalReport(
+  personalReportId: number
+): Promise<ArchetypeTierMap> {
+  const response = await supabaseServiceFetch("/rest/v1/rpc/unlock_all_archetypes", {
+    body: JSON.stringify({
+      p_personal_report_id: personalReportId,
+      p_archetype_names: [...KNOWN_ARCHETYPES],
+    }),
+    headers: { Prefer: "return=representation" },
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    logger.error(
+      { personalReportId, status: response.status },
+      "Unable to bulk-unlock archetypes for all_reports purchase"
+    );
+    throw new Error("archetype_tier_update_failed");
+  }
+
+  const payload = await response.json().catch(() => null);
+  return sanitizeArchetypeTierMap(payload);
+}
+
 /** @deprecated Use upsertArchetypeTierForPersonalReport with tier="full_report". */
 export async function addUnlockedArchetypeForPersonalReport({
   archetype,

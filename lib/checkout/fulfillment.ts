@@ -180,6 +180,7 @@ import {
 import {
   ensurePersonalReportForSubmission,
   resolveSubmissionAccessContext,
+  unlockAllArchetypesForPersonalReport,
   upsertArchetypeTierForPersonalReport,
 } from "@/lib/report/personalReport";
 import { isArchetypeName } from "@/lib/report/archetypeSlug";
@@ -823,6 +824,20 @@ async function syncCheckoutSessionPayment({
       logger.error(
         { personalReportId: personalReport.id, plan, submissionId: context.submissionId },
         "No archetype available for tier persistence — purchase recorded but tier write skipped"
+      );
+    }
+  } else if (eventStatus === "succeeded" && plan === "all_reports") {
+    // The all-reports plan unlocks every archetype at full_report tier.
+    // Resolver code synthesizes this at read time, but persisting the tiers
+    // here keeps admin queries / CSV exports / reporting in sync with the
+    // user's actual access without forcing every read path to know about
+    // the all_reports special case.
+    try {
+      await unlockAllArchetypesForPersonalReport(personalReport.id);
+    } catch (err) {
+      logger.warn(
+        { err, personalReportId: personalReport.id, plan },
+        "Unable to persist all-archetypes tier after checkout"
       );
     }
   }

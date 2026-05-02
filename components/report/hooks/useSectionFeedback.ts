@@ -11,13 +11,17 @@ export interface FeedbackPayload {
   issue?: string;
 }
 
-export function useSectionFeedback(sessionId: string | null) {
+export function useSectionFeedback(sessionId: string | null, token?: string | null) {
   const [feedbacks, setFeedbacks] = useState<Record<string, FeedbackValue>>({});
   const [submitted, setSubmitted] = useState<Record<string, boolean>>({});
 
   const submitFeedback = useCallback(
     async (sectionId: string, payload: FeedbackPayload) => {
-      if (!sessionId) return;
+      // Either identifier is enough — the API resolves the user server-side.
+      // Bailing only when both are missing prevents silent feedback loss when
+      // sessionStorage is cleared between survey and report viewing (e.g. user
+      // clicks the report email link on a different device).
+      if (!sessionId && !token) return;
 
       startTransition(() => {
         setFeedbacks((current) => ({ ...current, [sectionId]: payload.feedback }));
@@ -32,7 +36,12 @@ export function useSectionFeedback(sessionId: string | null) {
             "Content-Type": "application/json",
             "x-csrf-token": csrfToken,
           },
-          body: JSON.stringify({ ...payload, sectionId, sessionId }),
+          body: JSON.stringify({
+            ...payload,
+            sectionId,
+            ...(sessionId ? { sessionId } : {}),
+            ...(token ? { token } : {}),
+          }),
         });
       } catch {
         startTransition(() => {
@@ -40,7 +49,7 @@ export function useSectionFeedback(sessionId: string | null) {
         });
       }
     },
-    [sessionId]
+    [sessionId, token]
   );
 
   return { feedbacks, submitted, submitFeedback };

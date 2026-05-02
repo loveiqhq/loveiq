@@ -18,6 +18,7 @@ vi.mock("../../lib/logger", () => ({
 vi.mock("../../lib/report/personalReport", () => ({
   ensurePersonalReportForSubmission: vi.fn(),
   resolveSubmissionAccessContext: vi.fn(),
+  unlockAllArchetypesForPersonalReport: vi.fn(),
   upsertArchetypeTierForPersonalReport: vi.fn(),
 }));
 
@@ -29,6 +30,7 @@ import { processStripeWebhookEvent } from "../../lib/checkout/fulfillment";
 import {
   ensurePersonalReportForSubmission,
   resolveSubmissionAccessContext,
+  unlockAllArchetypesForPersonalReport,
   upsertArchetypeTierForPersonalReport,
 } from "../../lib/report/personalReport";
 import { markReportPriceQuotePurchased } from "../../lib/pricing/reportPricing";
@@ -58,6 +60,7 @@ describe("checkout fulfillment", () => {
     });
     vi.mocked(markReportPriceQuotePurchased).mockResolvedValue(undefined);
     vi.mocked(upsertArchetypeTierForPersonalReport).mockResolvedValue({});
+    vi.mocked(unlockAllArchetypesForPersonalReport).mockResolvedValue({});
   });
 
   afterEach(() => {
@@ -359,6 +362,82 @@ describe("checkout fulfillment", () => {
       personalReportId: 5,
       tier: "full_report",
     });
+  });
+
+  it("bulk-unlocks every archetype on an all_reports purchase", async () => {
+    mockFetchWithTimeout.mockImplementation(
+      async (url: string, options?: { body?: string; method?: string }) => {
+        if (url.includes("/rest/v1/payment_webhook_event?stripe_event_id=eq.")) {
+          return createJsonResponse([]);
+        }
+        if (
+          url.includes("/rest/v1/payment?stripe_charge_id=eq.") ||
+          url.includes("/rest/v1/payment?stripe_payment_intent_id=eq.")
+        ) {
+          return createJsonResponse([]);
+        }
+        if (options?.method === "POST" && url.endsWith("/rest/v1/payment")) {
+          return createJsonResponse([{ id: 99 }]);
+        }
+        if (url.includes("/rest/v1/payment_item?payment_id=eq.99")) {
+          return createJsonResponse([]);
+        }
+        if (options?.method === "POST" && url.endsWith("/rest/v1/payment_item")) {
+          return createJsonResponse([{ id: 9 }]);
+        }
+        if (options?.method === "PATCH" && url.includes("/rest/v1/personal_report?id=eq.5")) {
+          return createJsonResponse([]);
+        }
+        if (options?.method === "POST" && url.endsWith("/rest/v1/payment_webhook_event")) {
+          return createJsonResponse([{ id: 100 }]);
+        }
+        throw new Error(`Unexpected fetch call: ${options?.method ?? "GET"} ${url}`);
+      }
+    );
+
+    const stripe = {
+      charges: { retrieve: vi.fn() },
+      checkout: {
+        sessions: {
+          retrieve: vi.fn().mockResolvedValue({
+            id: "cs_test_all_reports_999",
+            amount_total: 12949,
+            currency: "eur",
+            customer: null,
+            metadata: {
+              plan: "all_reports",
+              reportToken: "rpt_ABCDEFGHIJKLMNOPQRST",
+              requestIp: "127.0.0.1",
+              requestUserAgent: "Mozilla/5.0 (Vitest)",
+            },
+            payment_intent: null,
+            payment_status: "paid",
+            total_details: { amount_discount: 0 },
+          }),
+        },
+      },
+      paymentIntents: { retrieve: vi.fn() },
+    };
+
+    await processStripeWebhookEvent({
+      event: {
+        id: "evt_test_all_reports",
+        type: "checkout.session.completed",
+        data: {
+          object: {
+            id: "cs_test_all_reports_999",
+            metadata: {
+              plan: "all_reports",
+              reportToken: "rpt_ABCDEFGHIJKLMNOPQRST",
+            },
+          },
+        },
+      } as never,
+      stripe: stripe as never,
+    });
+
+    expect(unlockAllArchetypesForPersonalReport).toHaveBeenCalledWith(5);
+    expect(upsertArchetypeTierForPersonalReport).not.toHaveBeenCalled();
   });
 
   it("does not append unlocked archetype when metadata.archetype is unknown", async () => {
