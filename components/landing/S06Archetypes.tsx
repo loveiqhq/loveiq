@@ -630,9 +630,13 @@ const TeaserCard: FC = () => (
     {/* Archetype name stack */}
     <div className="relative flex flex-col items-center gap-1 sm:gap-3 w-full overflow-hidden py-1 sm:py-3">
       {/* Faded outer items hidden on mobile to save space */}
-      <span className="hidden sm:block font-serif sm:text-[16px] lg:text-[18px] leading-[24px] text-white/20">
-        Erotic Blueprint
-      </span>
+      <div className="hidden sm:flex items-center gap-1.5">
+        <span className="h-1 w-1 rounded-full bg-[#130b17]" aria-hidden />
+        <span className="h-1 w-1 rounded-full bg-white/20" aria-hidden />
+        <span className="font-serif sm:text-[16px] lg:text-[18px] leading-[24px] text-white/20">
+          Curious Apprentice
+        </span>
+      </div>
       <div className="flex items-center gap-1.5">
         <span className="h-1 w-1 rounded-full bg-[#130b17]" aria-hidden />
         <span className="h-1 w-1 rounded-full bg-white/40" aria-hidden />
@@ -653,9 +657,13 @@ const TeaserCard: FC = () => (
           Loyal Ritualist
         </span>
       </div>
-      <span className="hidden sm:block font-serif sm:text-[16px] lg:text-[18px] leading-[24px] text-white/20">
-        Storm Chaser
-      </span>
+      <div className="hidden sm:flex items-center gap-1.5">
+        <span className="h-1 w-1 rounded-full bg-[#130b17]" aria-hidden />
+        <span className="h-1 w-1 rounded-full bg-white/20" aria-hidden />
+        <span className="font-serif sm:text-[16px] lg:text-[18px] leading-[24px] text-white/20">
+          Minimalist Companion
+        </span>
+      </div>
     </div>
 
     {/* Bottom section */}
@@ -895,9 +903,9 @@ const S06Archetypes: FC = () => {
           </span>
         </h2>
         <p className="mt-6 sm:mt-8 text-[16px] sm:text-[18px] lg:text-[20px] leading-relaxed text-[#d1d5db] max-w-[1000px] mx-auto">
-          <span className="font-extrabold text-white">No one is just a single archetype.</span> We
-          all express a unique mix, shaped by context, history, and relationships. That&apos;s why
-          our mission is to help you explore the archetypes that resonate most with you.
+          None of us is just one archetype. We all express a unique mix, shaped by context, history,
+          and relationships. That&apos;s why our mission is to help you explore the archetypes that
+          resonate most with you.
         </p>
       </div>
 

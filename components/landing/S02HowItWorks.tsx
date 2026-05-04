@@ -4,7 +4,7 @@ const steps = [
   {
     step: "Step One",
     title: "Take the Assessment",
-    description: "We’ll guide you through eight key dimensions that shape your sexual life.",
+    description: "We’ll guide you through key dimensions that shape our sexual life.",
     badge: "~15 minutes",
     variant: "sliders",
   },
@@ -19,7 +19,7 @@ const steps = [
   {
     step: "Step Three",
     title: "Grow With Guidance",
-    description: "Discover insights that spark real behavioral change for deeper fulfillment.",
+    description: "Work on actions that create lasting change and deeper fulfillment.",
     badge: "Life enhancing impact",
     variant: "chat",
   },

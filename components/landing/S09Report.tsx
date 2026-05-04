@@ -14,12 +14,12 @@ const features = [
     description: "Showing our individual patterns and challenges.",
   },
   {
-    title: "10+ detailed report sections",
+    title: "20+ detailed report sections",
     description: "Covering turn-ons, fears, strengths & growth paths.",
   },
   {
     title: "Tailored recommendations",
-    description: "Curated books & courses for your archetype.",
+    description: "Curated resources for our archetypes & preferences.",
   },
 ];
 

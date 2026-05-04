@@ -92,7 +92,7 @@ const S14CTA: FC = () => {
               <circle cx="12" cy="12" r="10" />
               <path d="M12 6v6l4 2" />
             </svg>
-            <span>Takes 10 minutes</span>
+            <span>Takes 15 minutes</span>
             <span className="h-1.5 w-1.5 rounded-full bg-white/60" aria-hidden />
             <span>No account required</span>
           </div>

@@ -2,9 +2,9 @@ import type { FC } from "react";
 
 const cards = [
   {
-    title: "Instant Results",
+    title: "Actionable",
     description:
-      "No waiting. Receive your comprehensive analysis immediately upon completing the test.",
+      "Personalized next steps, bite-size practices, and guided reflection prompts, so you know exactly what to try this week.",
     tone: "from-[#ff8a5a] to-[#f26d4f]",
   },
   {

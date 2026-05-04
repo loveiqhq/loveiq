@@ -3,7 +3,7 @@
 import type { FC } from "react";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
-import { trackLearnMore, trackStartSurvey } from "@/lib/analytics";
+import { trackStartSurvey } from "@/lib/analytics";
 
 const noopSubscribe = () => () => {};
 const getVideoSrc = () =>
@@ -120,15 +120,15 @@ const S01Hero: FC = () => {
         </div>
 
         <p className="animate-on-scroll mt-8 max-w-3xl text-lg leading-relaxed text-text-secondary sm:text-xl">
-          Grounded in state of the art science &amp; research.{" "}
+          Grounded in state-of-the-art science &amp; research.{" "}
           <strong className="font-semibold text-white">
-            In just 10 minutes, unlock a freemium personalized report
+            In just 15 minutes, unlock a freemium personalized report
           </strong>{" "}
-          decoding your sexual archetype and patterns, so you can upgrade your intimate life with
-          clarity
+          decoding your sexual archetype and patterns, so you get clear, practical steps to improve
+          intimacy.
         </p>
 
-        <div className="animate-on-scroll mt-12 flex flex-col items-center gap-4 sm:flex-row">
+        <div className="animate-on-scroll mt-8 flex justify-center">
           <div className="relative rounded-full p-0 shadow-[0_28px_90px_rgba(254,104,57,0.28),0_14px_50px_rgba(0,0,0,0.45)]">
             <Link
               href="/survey"
@@ -164,13 +164,25 @@ const S01Hero: FC = () => {
               </svg>
             </Link>
           </div>
-          <Link
-            href="#about"
-            className="inline-flex h-[58px] min-w-[190px] items-center justify-center rounded-full border border-white/30 bg-white/0 px-6 text-sm font-semibold text-white shadow-[0_25px_60px_rgba(0,0,0,0.35)] transition hover:-translate-y-[2px] focus-visible-ring"
-            onClick={() => trackLearnMore("hero")}
+        </div>
+
+        <div className="animate-on-scroll mt-4 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/75 sm:text-xs">
+          <svg
+            aria-hidden
+            className="h-4 w-4"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
           >
-            Learn more
-          </Link>
+            <circle cx="12" cy="12" r="10" />
+            <path d="M12 6v6l4 2" />
+          </svg>
+          <span>Takes 15 minutes</span>
+          <span className="h-1.5 w-1.5 rounded-full bg-white/60" aria-hidden />
+          <span>No account required</span>
         </div>
 
         <p className="animate-on-scroll mt-12 text-center text-base leading-7 text-white">

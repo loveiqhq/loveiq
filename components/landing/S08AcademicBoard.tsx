@@ -88,10 +88,6 @@ const S08AcademicBoard: FC = () => {
         >
           Supported by academic multidisciplinary expertise
         </h2>
-        <p className="mx-auto mt-6 max-w-2xl text-center text-lg font-light leading-relaxed text-text-secondary">
-          Our Academic Board supports us that what we build is grounded in science, ethics and state
-          of the art methodology.
-        </p>
       </div>
 
       <div className="mt-12 flex flex-wrap justify-center gap-6 pb-8 sm:mt-16">
