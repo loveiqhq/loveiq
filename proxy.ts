@@ -92,7 +92,7 @@ export async function proxy(request: NextRequest) {
     "default-src 'self'",
     isDev
       ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'"
-      : `script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://www.google-analytics.com https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/ https://cdn-cookieyes.com https://cookieyes.com https://connect.facebook.net https://analytics.tiktok.com https://t.contentsquare.net https://*.contentsquare.net https://*.hotjar.com ${stripeScriptSources}`,
+      : `script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://www.google-analytics.com https://googleads.g.doubleclick.net https://www.googleadservices.com https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/ https://cdn-cookieyes.com https://cookieyes.com https://connect.facebook.net https://analytics.tiktok.com https://t.contentsquare.net https://*.contentsquare.net https://*.hotjar.com ${stripeScriptSources}`,
     `style-src 'self' 'unsafe-inline' ${googleFontStyleSources}`, // Tailwind requires unsafe-inline for styles
     `font-src 'self' data: ${googleFontSources}`,
     `img-src 'self' data: blob: https://images.unsplash.com https://www.google-analytics.com https://www.googletagmanager.com https://googleads.g.doubleclick.net https://www.googleadservices.com https://www.google.com https://cdn-cookieyes.com https://flagcdn.com https://www.facebook.com https://*.hotjar.com ${stripeImageSources}`,
