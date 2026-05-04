@@ -187,7 +187,7 @@ const CheckoutReturnPage: FC<Props> = ({
     }
 
     trackedTransactionIdRef.current = state.purchaseAnalytics.transaction_id;
-    trackReportPurchase(state.purchaseAnalytics);
+    trackReportPurchase({ ...state.purchaseAnalytics, item_name: plan.title });
   }, [isPaidAndComplete, state]);
 
   useEffect(() => {

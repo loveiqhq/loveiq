@@ -94,6 +94,8 @@ export interface ReportPurchaseParams {
   currency: string;
   /** Unique order/transaction ID for deduplication. */
   transaction_id: string;
+  /** Plan / product display name for GA4 ecommerce items[0].item_name. */
+  item_name?: string;
   /** Full pricing cluster ID, e.g. "B-US-iOS-google-engaged". */
   pricing_cluster_id?: string;
   /** Elasticity test bucket (A/B/C). */
@@ -117,7 +119,35 @@ export interface ReportPurchaseParams {
 }
 
 export const trackReportPurchase = (params: ReportPurchaseParams) => {
-  track("report_purchase", params as unknown as Record<string, unknown>);
+  if (typeof window === "undefined") return;
+  if (!window.__loveiqAnalyticsEnabled) return;
+  if (!hasCookieYesConsent("analytics")) return;
+
+  window.dataLayer = window.dataLayer || [];
+  window.dataLayer.push({
+    event: "purchase",
+    transaction_id: params.transaction_id,
+    value: params.value,
+    currency: params.currency,
+    items: [
+      {
+        item_name: params.item_name || "LoveIQ Report",
+        price: params.value,
+        quantity: 1,
+      },
+    ],
+    pricing_cluster_id: params.pricing_cluster_id,
+    base_price_bucket: params.base_price_bucket,
+    experiment_group: params.experiment_group,
+    discount_step: params.discount_step,
+    country_tier: params.country_tier,
+    device_type: params.device_type,
+    traffic_source: params.traffic_source,
+    engagement_score: params.engagement_score,
+    behavioral_bucket: params.behavioral_bucket,
+    initial_price: params.initial_price,
+  });
+
   trackGoogleAdsPurchaseConversion(params);
 };
 

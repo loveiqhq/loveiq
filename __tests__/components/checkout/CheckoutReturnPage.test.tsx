@@ -83,6 +83,7 @@ describe("CheckoutReturnPage", () => {
         value: 27.49,
         currency: "EUR",
         transaction_id: "cs_test_123",
+        item_name: "Full report",
         pricing_cluster_id: "cluster",
         base_price_bucket: "full_center",
         experiment_group: "B",
@@ -148,6 +149,7 @@ describe("CheckoutReturnPage", () => {
         value: 0,
         currency: "EUR",
         transaction_id: "cs_test_free_123",
+        item_name: "Full report",
         promotion_code: "LOVEIQ100",
         coupon_percent_off: 100,
         discount_amount: 24.49,
@@ -214,6 +216,7 @@ describe("CheckoutReturnPage", () => {
         value: 114.99,
         currency: "EUR",
         transaction_id: "cs_test_456",
+        item_name: "All 14 reports",
       });
     });
 

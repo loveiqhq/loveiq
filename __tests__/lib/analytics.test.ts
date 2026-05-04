@@ -279,12 +279,12 @@ describe("analytics", () => {
   });
 
   describe("trackReportPurchase", () => {
-    it("fires report_purchase event with required params", () => {
-      const mockGtag = vi.fn();
+    it("pushes GA4 ecommerce purchase event into dataLayer with items array", () => {
       setConsentCookie({ analytics: true });
+      const dataLayer: Array<Record<string, unknown>> = [];
       globalThis.window = {
         ...globalThis.window,
-        gtag: mockGtag,
+        dataLayer,
         __loveiqAnalyticsEnabled: true,
       } as typeof globalThis.window;
 
@@ -292,25 +292,47 @@ describe("analytics", () => {
         value: 29.99,
         currency: "EUR",
         transaction_id: "txn_123",
+        item_name: "Full report",
       });
 
-      expect(mockGtag).toHaveBeenCalledWith(
-        "event",
-        "report_purchase",
+      expect(dataLayer).toContainEqual(
         expect.objectContaining({
+          event: "purchase",
+          transaction_id: "txn_123",
           value: 29.99,
           currency: "EUR",
-          transaction_id: "txn_123",
+          items: [{ item_name: "Full report", price: 29.99, quantity: 1 }],
         })
       );
     });
 
-    it("fires report_purchase with full pricing cluster params", () => {
-      const mockGtag = vi.fn();
+    it("falls back to default item_name when not provided", () => {
       setConsentCookie({ analytics: true });
+      const dataLayer: Array<Record<string, unknown>> = [];
       globalThis.window = {
         ...globalThis.window,
-        gtag: mockGtag,
+        dataLayer,
+        __loveiqAnalyticsEnabled: true,
+      } as typeof globalThis.window;
+
+      trackReportPurchase({
+        value: 19.99,
+        currency: "USD",
+        transaction_id: "txn_default",
+      });
+
+      expect(dataLayer[0]).toMatchObject({
+        event: "purchase",
+        items: [{ item_name: "LoveIQ Report", price: 19.99, quantity: 1 }],
+      });
+    });
+
+    it("preserves A/B + attribution context fields on the purchase push", () => {
+      setConsentCookie({ analytics: true });
+      const dataLayer: Array<Record<string, unknown>> = [];
+      globalThis.window = {
+        ...globalThis.window,
+        dataLayer,
         __loveiqAnalyticsEnabled: true,
       } as typeof globalThis.window;
 
@@ -318,6 +340,7 @@ describe("analytics", () => {
         value: 19.99,
         currency: "EUR",
         transaction_id: "txn_456",
+        item_name: "Essentials only",
         pricing_cluster_id: "B-DE-iOS-google-engaged",
         base_price_bucket: "A",
         experiment_group: "B",
@@ -330,16 +353,31 @@ describe("analytics", () => {
         initial_price: 39.99,
       });
 
-      expect(mockGtag).toHaveBeenCalledWith(
-        "event",
-        "report_purchase",
-        expect.objectContaining({
-          pricing_cluster_id: "B-DE-iOS-google-engaged",
-          discount_step: 2,
-          traffic_source: "facebook",
-          initial_price: 39.99,
-        })
-      );
+      expect(dataLayer[0]).toMatchObject({
+        event: "purchase",
+        pricing_cluster_id: "B-DE-iOS-google-engaged",
+        discount_step: 2,
+        traffic_source: "facebook",
+        initial_price: 39.99,
+      });
+    });
+
+    it("does not push when analytics consent is not granted", () => {
+      setConsentCookie({ advertisement: true });
+      const dataLayer: Array<Record<string, unknown>> = [];
+      globalThis.window = {
+        ...globalThis.window,
+        dataLayer,
+        __loveiqAnalyticsEnabled: true,
+      } as typeof globalThis.window;
+
+      trackReportPurchase({
+        value: 19.99,
+        currency: "EUR",
+        transaction_id: "txn_no_consent",
+      });
+
+      expect(dataLayer).toHaveLength(0);
     });
   });
 
@@ -402,22 +440,23 @@ describe("analytics", () => {
       });
     });
 
-    it("trackReportPurchase fires both GA4 and Google Ads conversion when both consents granted", () => {
+    it("trackReportPurchase pushes GA4 purchase to dataLayer and fires Google Ads conversion when both consents granted", () => {
       const mockGtag = vi.fn();
       setConsentCookie({ analytics: true, advertisement: true });
+      const dataLayer: Array<Record<string, unknown>> = [];
       globalThis.window = {
         ...globalThis.window,
         gtag: mockGtag,
+        dataLayer,
         __loveiqAnalyticsEnabled: true,
         __loveiqGoogleAdsEnabled: true,
       } as typeof globalThis.window;
 
       trackReportPurchase(purchaseParams);
 
-      expect(mockGtag).toHaveBeenCalledWith(
-        "event",
-        "report_purchase",
+      expect(dataLayer).toContainEqual(
         expect.objectContaining({
+          event: "purchase",
           value: 27.49,
           currency: "EUR",
           transaction_id: "cs_test_123",
