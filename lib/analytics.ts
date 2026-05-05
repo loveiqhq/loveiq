@@ -69,10 +69,56 @@ export const trackSurveyAnswer = (qId: string, chapter: string) => {
   track("survey_answer", { question_id: qId, chapter });
 };
 
-export const trackSurveyComplete = (durationMs: number) => {
+export const trackSurveyProgress = (
+  questionId: string,
+  questionIndex: number,
+  totalQuestions: number
+) => {
+  const progress_pct = totalQuestions > 0 ? Math.round((questionIndex / totalQuestions) * 100) : 0;
+  track("survey_progress", {
+    question_id: questionId,
+    question_index: questionIndex,
+    progress_pct,
+  });
+};
+
+export const trackSurveyComplete = (durationMs: number, totalQuestions?: number) => {
   // TODO: Remove legacy "survey_complete" after 2026-06-01
   track("survey_complete", { duration_ms: durationMs });
-  track("survey_completed", { duration_ms: durationMs });
+  track("survey_completed", {
+    duration_ms: durationMs,
+    completion_time_seconds: Math.round(durationMs / 1000),
+    ...(typeof totalQuestions === "number" ? { total_questions: totalQuestions } : {}),
+  });
+};
+
+export const trackReportViewed = (
+  reportType: "essentials" | "full_report" | "all_reports" | "locked",
+  archetype?: string | null
+) => {
+  track("report_viewed", {
+    report_type: reportType,
+    ...(archetype ? { archetype } : {}),
+  });
+};
+
+export interface PaywallPlanItem {
+  plan: "essentials" | "full_report" | "all_reports";
+  price: number;
+  currency: string;
+}
+
+export const trackPaywallView = (items: PaywallPlanItem[]) => {
+  if (!items.length) return;
+  track("paywall_view", { currency: items[0].currency, items });
+};
+
+export const trackBeginCheckout = (
+  plan: "essentials" | "full_report" | "all_reports",
+  price: number,
+  currency: string
+) => {
+  track("begin_checkout", { plan, price, currency });
 };
 
 export const trackSurveyPause = (qId: string, progress: number) => {

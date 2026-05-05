@@ -95,6 +95,7 @@ vi.mock("@/data/survey-data", () => ({
 vi.mock("@/lib/analytics", () => ({
   trackSurveyStart: vi.fn(),
   trackSurveyAnswer: vi.fn(),
+  trackSurveyProgress: vi.fn(),
   trackSurveyComplete: vi.fn(),
   trackSurveyPause: vi.fn(),
 }));

@@ -35,6 +35,15 @@ vi.mock("@/lib/checkout/reportCheckoutQuoteCache", () => ({
   cacheReportCheckoutQuote: (...args: unknown[]) => mockCacheReportCheckoutQuote(...args),
 }));
 
+const mockTrackReportViewed = vi.fn();
+const mockTrackPaywallView = vi.fn();
+const mockTrackBeginCheckout = vi.fn();
+vi.mock("@/lib/analytics", () => ({
+  trackReportViewed: (...args: unknown[]) => mockTrackReportViewed(...args),
+  trackPaywallView: (...args: unknown[]) => mockTrackPaywallView(...args),
+  trackBeginCheckout: (...args: unknown[]) => mockTrackBeginCheckout(...args),
+}));
+
 import ReportPage from "@/components/report/ReportPage";
 import { archetypeContent } from "@/data/report-archetypes";
 import { reportPracticeTendencies } from "@/data/report-practice-tendencies";
@@ -209,6 +218,10 @@ describe("ReportPage", () => {
   }
 
   beforeEach(() => {
+    mockTrackReportViewed.mockReset();
+    mockTrackPaywallView.mockReset();
+    mockTrackBeginCheckout.mockReset();
+
     vi.stubGlobal(
       "IntersectionObserver",
       class MockIntersectionObserver implements IntersectionObserver {
@@ -314,6 +327,15 @@ describe("ReportPage", () => {
     ).toBeInTheDocument();
   });
 
+  it("fires trackReportViewed once on data success with locked accessPlan + primaryArchetype", async () => {
+    mockUseReportData.mockReturnValue(buildSuccessResponse());
+
+    render(<ReportPage />);
+
+    await waitFor(() => expect(mockTrackReportViewed).toHaveBeenCalledTimes(1));
+    expect(mockTrackReportViewed).toHaveBeenCalledWith("locked", "Emotional Voyeur");
+  });
+
   it(
     "surfaces pricing as unavailable when backend quotes are missing",
     () => {
@@ -344,6 +366,13 @@ describe("ReportPage", () => {
 
       expect(screen.getByRole("heading", { name: /unlock your full report/i })).toBeInTheDocument();
       expect(container.querySelector(".report-pricing-modal__scroll-region")).toBeInTheDocument();
+
+      await waitFor(() => expect(mockTrackPaywallView).toHaveBeenCalledTimes(1));
+      expect(mockTrackPaywallView).toHaveBeenCalledWith([
+        expect.objectContaining({ plan: "essentials", currency: "EUR" }),
+        expect.objectContaining({ plan: "full_report", currency: "EUR" }),
+        expect.objectContaining({ plan: "all_reports", currency: "EUR" }),
+      ]);
 
       await user.click(screen.getByRole("button", { name: /close pricing modal/i }));
 
@@ -440,6 +469,7 @@ describe("ReportPage", () => {
 
       await user.click(screen.getByRole("button", { name: /^unlock full report$/i }));
 
+      expect(mockTrackBeginCheckout).toHaveBeenCalledWith("full_report", expect.any(Number), "EUR");
       expect(mockCacheReportCheckoutQuote).toHaveBeenCalledWith({
         plan: "full_report",
         quote: buildSuccessResponse().data.pricingQuotes.full_report,

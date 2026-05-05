@@ -14,6 +14,7 @@ import CountryQuestion from "./questions/CountryQuestion";
 import {
   trackSurveyStart,
   trackSurveyAnswer,
+  trackSurveyProgress,
   trackSurveyComplete,
   trackSurveyPause,
 } from "@/lib/analytics";
@@ -166,7 +167,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
       hasCompleted.current = true;
       trackNavigation("complete");
       const duration = Date.now() - new Date(startedAt).getTime();
-      trackSurveyComplete(duration);
+      trackSurveyComplete(duration, totalQuestions);
       submitSurvey(answers, startedAt, utmTracker);
       goTo(totalQuestions); // one past the end → triggers completion
       return;
@@ -175,6 +176,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
     trackNavigation("forward");
     if (question) {
       trackSurveyAnswer(question.qId, question.chapter);
+      trackSurveyProgress(question.qId, currentIndex + 1, totalQuestions);
     }
     goTo(currentIndex + 1);
   }, [

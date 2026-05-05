@@ -20,6 +20,7 @@ import type { ReportPriceQuoteSnapshot } from "@/lib/pricing/reportPricing";
 import PricingTestimonialsCarousel from "./PricingTestimonialsCarousel";
 import { getReportTheme, getReportThemeStyle } from "./reportTheme";
 import { isPlanOwnedForArchetype, type ReportAccessPlan } from "@/lib/report/access";
+import { trackBeginCheckout, trackPaywallView, type PaywallPlanItem } from "@/lib/analytics";
 
 interface Props {
   accessPlan?: ReportAccessPlan;
@@ -173,6 +174,30 @@ const ReportPricingModal: FC<Props> = ({
 
   const themeArchetype = targetArchetype ?? archetype;
   const themeStyle = getReportThemeStyle(getReportTheme(themeArchetype));
+
+  const paywallViewFiredRef = useRef(false);
+  useEffect(() => {
+    if (!open) {
+      paywallViewFiredRef.current = false;
+      return;
+    }
+    if (paywallViewFiredRef.current) return;
+    if (!quotes) return;
+    const items: PaywallPlanItem[] = REPORT_PURCHASE_PLANS.reduce<PaywallPlanItem[]>((acc, p) => {
+      const quote = quotes[p.plan];
+      if (quote) {
+        acc.push({
+          plan: p.plan,
+          price: quote.currentPriceCents / 100,
+          currency: quote.currency,
+        });
+      }
+      return acc;
+    }, []);
+    if (items.length === 0) return;
+    paywallViewFiredRef.current = true;
+    trackPaywallView(items);
+  }, [open, quotes]);
 
   useEffect(() => {
     if (open) {
@@ -497,7 +522,15 @@ const ReportPricingModal: FC<Props> = ({
                         onClick={
                           isOwned
                             ? undefined
-                            : () =>
+                            : () => {
+                                const quote = quotes?.[card.plan];
+                                if (quote) {
+                                  trackBeginCheckout(
+                                    card.plan,
+                                    quote.currentPriceCents / 100,
+                                    quote.currency
+                                  );
+                                }
                                 onUnlock(
                                   card.plan,
                                   // Essentials + Full Report are per-archetype; if the modal
@@ -507,7 +540,8 @@ const ReportPricingModal: FC<Props> = ({
                                   card.plan === "all_reports"
                                     ? null
                                     : (targetArchetype ?? primaryArchetype ?? archetype)
-                                )
+                                );
+                              }
                         }
                       >
                         {isOwned

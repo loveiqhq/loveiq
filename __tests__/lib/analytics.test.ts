@@ -28,7 +28,11 @@ let trackStartSurvey: typeof import("../../lib/analytics").trackStartSurvey;
 let trackLearnMore: typeof import("../../lib/analytics").trackLearnMore;
 let trackWaitlistSignup: typeof import("../../lib/analytics").trackWaitlistSignup;
 let trackSurveyStart: typeof import("../../lib/analytics").trackSurveyStart;
+let trackSurveyProgress: typeof import("../../lib/analytics").trackSurveyProgress;
 let trackSurveyComplete: typeof import("../../lib/analytics").trackSurveyComplete;
+let trackReportViewed: typeof import("../../lib/analytics").trackReportViewed;
+let trackPaywallView: typeof import("../../lib/analytics").trackPaywallView;
+let trackBeginCheckout: typeof import("../../lib/analytics").trackBeginCheckout;
 let trackReportPurchase: typeof import("../../lib/analytics").trackReportPurchase;
 let trackGoogleAdsPurchaseConversion: typeof import("../../lib/analytics").trackGoogleAdsPurchaseConversion;
 
@@ -45,7 +49,11 @@ describe("analytics", () => {
     trackLearnMore = mod.trackLearnMore;
     trackWaitlistSignup = mod.trackWaitlistSignup;
     trackSurveyStart = mod.trackSurveyStart;
+    trackSurveyProgress = mod.trackSurveyProgress;
     trackSurveyComplete = mod.trackSurveyComplete;
+    trackReportViewed = mod.trackReportViewed;
+    trackPaywallView = mod.trackPaywallView;
+    trackBeginCheckout = mod.trackBeginCheckout;
     trackReportPurchase = mod.trackReportPurchase;
     trackGoogleAdsPurchaseConversion = mod.trackGoogleAdsPurchaseConversion;
   });
@@ -261,7 +269,7 @@ describe("analytics", () => {
   });
 
   describe("trackSurveyComplete (dual-fire)", () => {
-    it("fires both legacy survey_complete and new survey_completed with duration", () => {
+    it("fires legacy survey_complete and enriched survey_completed with completion_time_seconds", () => {
       const mockGtag = vi.fn();
       setConsentCookie({ analytics: true });
       globalThis.window = {
@@ -273,8 +281,163 @@ describe("analytics", () => {
       trackSurveyComplete(120000);
 
       expect(mockGtag).toHaveBeenCalledWith("event", "survey_complete", { duration_ms: 120000 });
-      expect(mockGtag).toHaveBeenCalledWith("event", "survey_completed", { duration_ms: 120000 });
+      expect(mockGtag).toHaveBeenCalledWith("event", "survey_completed", {
+        duration_ms: 120000,
+        completion_time_seconds: 120,
+      });
       expect(mockGtag).toHaveBeenCalledTimes(2);
+    });
+
+    it("includes total_questions on survey_completed when provided", () => {
+      const mockGtag = vi.fn();
+      setConsentCookie({ analytics: true });
+      globalThis.window = {
+        ...globalThis.window,
+        gtag: mockGtag,
+        __loveiqAnalyticsEnabled: true,
+      } as typeof globalThis.window;
+
+      trackSurveyComplete(60000, 35);
+
+      expect(mockGtag).toHaveBeenCalledWith("event", "survey_completed", {
+        duration_ms: 60000,
+        completion_time_seconds: 60,
+        total_questions: 35,
+      });
+    });
+  });
+
+  describe("trackSurveyProgress", () => {
+    it("emits survey_progress with question_id, question_index, and computed progress_pct", () => {
+      const mockGtag = vi.fn();
+      setConsentCookie({ analytics: true });
+      globalThis.window = {
+        ...globalThis.window,
+        gtag: mockGtag,
+        __loveiqAnalyticsEnabled: true,
+      } as typeof globalThis.window;
+
+      trackSurveyProgress("Q07", 5, 10);
+
+      expect(mockGtag).toHaveBeenCalledWith("event", "survey_progress", {
+        question_id: "Q07",
+        question_index: 5,
+        progress_pct: 50,
+      });
+    });
+
+    it("returns 0 progress when totalQuestions is zero (defensive)", () => {
+      const mockGtag = vi.fn();
+      setConsentCookie({ analytics: true });
+      globalThis.window = {
+        ...globalThis.window,
+        gtag: mockGtag,
+        __loveiqAnalyticsEnabled: true,
+      } as typeof globalThis.window;
+
+      trackSurveyProgress("Q01", 0, 0);
+
+      expect(mockGtag).toHaveBeenCalledWith(
+        "event",
+        "survey_progress",
+        expect.objectContaining({ progress_pct: 0 })
+      );
+    });
+  });
+
+  describe("trackReportViewed", () => {
+    it("emits report_viewed with report_type and archetype when given", () => {
+      const mockGtag = vi.fn();
+      setConsentCookie({ analytics: true });
+      globalThis.window = {
+        ...globalThis.window,
+        gtag: mockGtag,
+        __loveiqAnalyticsEnabled: true,
+      } as typeof globalThis.window;
+
+      trackReportViewed("full_report", "The Sage");
+
+      expect(mockGtag).toHaveBeenCalledWith("event", "report_viewed", {
+        report_type: "full_report",
+        archetype: "The Sage",
+      });
+    });
+
+    it("omits archetype param when null/undefined", () => {
+      const mockGtag = vi.fn();
+      setConsentCookie({ analytics: true });
+      globalThis.window = {
+        ...globalThis.window,
+        gtag: mockGtag,
+        __loveiqAnalyticsEnabled: true,
+      } as typeof globalThis.window;
+
+      trackReportViewed("locked", null);
+
+      expect(mockGtag).toHaveBeenCalledWith("event", "report_viewed", {
+        report_type: "locked",
+      });
+    });
+  });
+
+  describe("trackPaywallView", () => {
+    it("emits paywall_view with currency from first item and full items array", () => {
+      const mockGtag = vi.fn();
+      setConsentCookie({ analytics: true });
+      globalThis.window = {
+        ...globalThis.window,
+        gtag: mockGtag,
+        __loveiqAnalyticsEnabled: true,
+      } as typeof globalThis.window;
+
+      trackPaywallView([
+        { plan: "essentials", price: 19.99, currency: "EUR" },
+        { plan: "full_report", price: 29.99, currency: "EUR" },
+        { plan: "all_reports", price: 259.0, currency: "EUR" },
+      ]);
+
+      expect(mockGtag).toHaveBeenCalledWith("event", "paywall_view", {
+        currency: "EUR",
+        items: [
+          { plan: "essentials", price: 19.99, currency: "EUR" },
+          { plan: "full_report", price: 29.99, currency: "EUR" },
+          { plan: "all_reports", price: 259.0, currency: "EUR" },
+        ],
+      });
+    });
+
+    it("does nothing when items array is empty", () => {
+      const mockGtag = vi.fn();
+      setConsentCookie({ analytics: true });
+      globalThis.window = {
+        ...globalThis.window,
+        gtag: mockGtag,
+        __loveiqAnalyticsEnabled: true,
+      } as typeof globalThis.window;
+
+      trackPaywallView([]);
+
+      expect(mockGtag).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("trackBeginCheckout", () => {
+    it("emits begin_checkout with plan, price, currency", () => {
+      const mockGtag = vi.fn();
+      setConsentCookie({ analytics: true });
+      globalThis.window = {
+        ...globalThis.window,
+        gtag: mockGtag,
+        __loveiqAnalyticsEnabled: true,
+      } as typeof globalThis.window;
+
+      trackBeginCheckout("full_report", 29.99, "EUR");
+
+      expect(mockGtag).toHaveBeenCalledWith("event", "begin_checkout", {
+        plan: "full_report",
+        price: 29.99,
+        currency: "EUR",
+      });
     });
   });
 

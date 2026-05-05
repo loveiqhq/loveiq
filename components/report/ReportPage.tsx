@@ -51,6 +51,7 @@ import {
 } from "@/lib/report/access";
 import { fromArchetypeSlug, isArchetypeName, toArchetypeSlug } from "@/lib/report/archetypeSlug";
 import { getCsrfToken } from "@/lib/csrf-client";
+import { trackReportViewed } from "@/lib/analytics";
 
 interface SnapshotContent {
   importanceLabel: string;
@@ -822,6 +823,15 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   const ownerToken = viewMode === "owner" ? (token ?? data?.ownerToken ?? null) : null;
 
   const accessPlan = data?.accessPlan ?? null;
+
+  const reportViewedFiredRef = useRef(false);
+  useEffect(() => {
+    if (reportViewedFiredRef.current) return;
+    if (!data) return;
+    reportViewedFiredRef.current = true;
+    trackReportViewed(accessPlan ?? "locked", data.primaryArchetype ?? null);
+  }, [data, accessPlan]);
+
   useEffect(() => {
     if (autoOpenedPricingRef.current) return;
     if (!data) return;
