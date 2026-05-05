@@ -120,34 +120,37 @@ Canonical role hierarchy from `lib/admin/roles.ts`:
 
 ### Growth, Funnel, Journey, and Revenue Analytics
 
-| Route                                      | Methods | Minimum access | Source                                                                                                            |
-| ------------------------------------------ | ------- | -------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `/api/admin/comparisons/correlation`       | `GET`   | `viewer+`      | [`app/api/admin/comparisons/correlation/route.ts`](../app/api/admin/comparisons/correlation/route.ts)             |
-| `/api/admin/comparisons/segment`           | `GET`   | `viewer+`      | [`app/api/admin/comparisons/segment/route.ts`](../app/api/admin/comparisons/segment/route.ts)                     |
-| `/api/admin/comparisons/segment-migration` | `GET`   | `viewer+`      | [`app/api/admin/comparisons/segment-migration/route.ts`](../app/api/admin/comparisons/segment-migration/route.ts) |
-| `/api/admin/funnels/cohorts`               | `GET`   | `viewer+`      | [`app/api/admin/funnels/cohorts/route.ts`](../app/api/admin/funnels/cohorts/route.ts)                             |
-| `/api/admin/funnels/conversion`            | `GET`   | `viewer+`      | [`app/api/admin/funnels/conversion/route.ts`](../app/api/admin/funnels/conversion/route.ts)                       |
-| `/api/admin/funnels/impact-comparison`     | `GET`   | `viewer+`      | [`app/api/admin/funnels/impact-comparison/route.ts`](../app/api/admin/funnels/impact-comparison/route.ts)         |
-| `/api/admin/growth/acquisition-quality`    | `GET`   | `viewer+`      | [`app/api/admin/growth/acquisition-quality/route.ts`](../app/api/admin/growth/acquisition-quality/route.ts)       |
-| `/api/admin/growth/control-tower`          | `GET`   | `viewer+`      | [`app/api/admin/growth/control-tower/route.ts`](../app/api/admin/growth/control-tower/route.ts)                   |
-| `/api/admin/growth/creative-intelligence`  | `GET`   | `viewer+`      | [`app/api/admin/growth/creative-intelligence/route.ts`](../app/api/admin/growth/creative-intelligence/route.ts)   |
-| `/api/admin/growth/embed-performance`      | `GET`   | `viewer+`      | [`app/api/admin/growth/embed-performance/route.ts`](../app/api/admin/growth/embed-performance/route.ts)           |
-| `/api/admin/growth/geography`              | `GET`   | `viewer+`      | [`app/api/admin/growth/geography/route.ts`](../app/api/admin/growth/geography/route.ts)                           |
-| `/api/admin/growth/leak-debugger`          | `GET`   | `viewer+`      | [`app/api/admin/growth/leak-debugger/route.ts`](../app/api/admin/growth/leak-debugger/route.ts)                   |
-| `/api/admin/growth/recovery`               | `GET`   | `viewer+`      | [`app/api/admin/growth/recovery/route.ts`](../app/api/admin/growth/recovery/route.ts)                             |
-| `/api/admin/growth/referrals`              | `GET`   | `viewer+`      | [`app/api/admin/growth/referrals/route.ts`](../app/api/admin/growth/referrals/route.ts)                           |
-| `/api/admin/growth/value-attribution`      | `GET`   | `viewer+`      | [`app/api/admin/growth/value-attribution/route.ts`](../app/api/admin/growth/value-attribution/route.ts)           |
-| `/api/admin/growth/waitlist-conversion`    | `GET`   | `viewer+`      | [`app/api/admin/growth/waitlist-conversion/route.ts`](../app/api/admin/growth/waitlist-conversion/route.ts)       |
-| `/api/admin/growth-opportunities`          | `GET`   | `viewer+`      | [`app/api/admin/growth-opportunities/route.ts`](../app/api/admin/growth-opportunities/route.ts)                   |
-| `/api/admin/growth-signal-intelligence`    | `GET`   | `viewer+`      | [`app/api/admin/growth-signal-intelligence/route.ts`](../app/api/admin/growth-signal-intelligence/route.ts)       |
-| `/api/admin/invite-network`                | `GET`   | `viewer+`      | [`app/api/admin/invite-network/route.ts`](../app/api/admin/invite-network/route.ts)                               |
-| `/api/admin/journey`                       | `GET`   | `viewer+`      | [`app/api/admin/journey/route.ts`](../app/api/admin/journey/route.ts)                                             |
-| `/api/admin/pulse/activity`                | `GET`   | `viewer+`      | [`app/api/admin/pulse/activity/route.ts`](../app/api/admin/pulse/activity/route.ts)                               |
-| `/api/admin/pulse/at-risk`                 | `GET`   | `viewer+`      | [`app/api/admin/pulse/at-risk/route.ts`](../app/api/admin/pulse/at-risk/route.ts)                                 |
-| `/api/admin/retention`                     | `GET`   | `viewer+`      | [`app/api/admin/retention/route.ts`](../app/api/admin/retention/route.ts)                                         |
-| `/api/admin/revenue`                       | `GET`   | `admin`        | [`app/api/admin/revenue/route.ts`](../app/api/admin/revenue/route.ts)                                             |
-| `/api/admin/revenue/pricing-clusters`      | `GET`   | `admin`        | [`app/api/admin/revenue/pricing-clusters/route.ts`](../app/api/admin/revenue/pricing-clusters/route.ts)           |
-| `/api/admin/revenue/transactions`          | `GET`   | `admin`        | [`app/api/admin/revenue/transactions/route.ts`](../app/api/admin/revenue/transactions/route.ts)                   |
+| Route                                      | Methods             | Minimum access                    | Source                                                                                                            |
+| ------------------------------------------ | ------------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `/api/admin/analytics/core-kpis`           | `GET`               | `viewer+`                         | [`app/api/admin/analytics/core-kpis/route.ts`](../app/api/admin/analytics/core-kpis/route.ts)                     |
+| `/api/admin/analytics/export`              | `GET`               | `admin`                           | [`app/api/admin/analytics/export/route.ts`](../app/api/admin/analytics/export/route.ts)                           |
+| `/api/admin/analytics/marketing-spend`     | `GET, POST, DELETE` | `viewer+` (GET) / `admin` (write) | [`app/api/admin/analytics/marketing-spend/route.ts`](../app/api/admin/analytics/marketing-spend/route.ts)         |
+| `/api/admin/comparisons/correlation`       | `GET`               | `viewer+`                         | [`app/api/admin/comparisons/correlation/route.ts`](../app/api/admin/comparisons/correlation/route.ts)             |
+| `/api/admin/comparisons/segment`           | `GET`               | `viewer+`                         | [`app/api/admin/comparisons/segment/route.ts`](../app/api/admin/comparisons/segment/route.ts)                     |
+| `/api/admin/comparisons/segment-migration` | `GET`               | `viewer+`                         | [`app/api/admin/comparisons/segment-migration/route.ts`](../app/api/admin/comparisons/segment-migration/route.ts) |
+| `/api/admin/funnels/cohorts`               | `GET`               | `viewer+`                         | [`app/api/admin/funnels/cohorts/route.ts`](../app/api/admin/funnels/cohorts/route.ts)                             |
+| `/api/admin/funnels/conversion`            | `GET`               | `viewer+`                         | [`app/api/admin/funnels/conversion/route.ts`](../app/api/admin/funnels/conversion/route.ts)                       |
+| `/api/admin/funnels/impact-comparison`     | `GET`               | `viewer+`                         | [`app/api/admin/funnels/impact-comparison/route.ts`](../app/api/admin/funnels/impact-comparison/route.ts)         |
+| `/api/admin/growth/acquisition-quality`    | `GET`               | `viewer+`                         | [`app/api/admin/growth/acquisition-quality/route.ts`](../app/api/admin/growth/acquisition-quality/route.ts)       |
+| `/api/admin/growth/control-tower`          | `GET`               | `viewer+`                         | [`app/api/admin/growth/control-tower/route.ts`](../app/api/admin/growth/control-tower/route.ts)                   |
+| `/api/admin/growth/creative-intelligence`  | `GET`               | `viewer+`                         | [`app/api/admin/growth/creative-intelligence/route.ts`](../app/api/admin/growth/creative-intelligence/route.ts)   |
+| `/api/admin/growth/embed-performance`      | `GET`               | `viewer+`                         | [`app/api/admin/growth/embed-performance/route.ts`](../app/api/admin/growth/embed-performance/route.ts)           |
+| `/api/admin/growth/geography`              | `GET`               | `viewer+`                         | [`app/api/admin/growth/geography/route.ts`](../app/api/admin/growth/geography/route.ts)                           |
+| `/api/admin/growth/leak-debugger`          | `GET`               | `viewer+`                         | [`app/api/admin/growth/leak-debugger/route.ts`](../app/api/admin/growth/leak-debugger/route.ts)                   |
+| `/api/admin/growth/recovery`               | `GET`               | `viewer+`                         | [`app/api/admin/growth/recovery/route.ts`](../app/api/admin/growth/recovery/route.ts)                             |
+| `/api/admin/growth/referrals`              | `GET`               | `viewer+`                         | [`app/api/admin/growth/referrals/route.ts`](../app/api/admin/growth/referrals/route.ts)                           |
+| `/api/admin/growth/value-attribution`      | `GET`               | `viewer+`                         | [`app/api/admin/growth/value-attribution/route.ts`](../app/api/admin/growth/value-attribution/route.ts)           |
+| `/api/admin/growth/waitlist-conversion`    | `GET`               | `viewer+`                         | [`app/api/admin/growth/waitlist-conversion/route.ts`](../app/api/admin/growth/waitlist-conversion/route.ts)       |
+| `/api/admin/growth-opportunities`          | `GET`               | `viewer+`                         | [`app/api/admin/growth-opportunities/route.ts`](../app/api/admin/growth-opportunities/route.ts)                   |
+| `/api/admin/growth-signal-intelligence`    | `GET`               | `viewer+`                         | [`app/api/admin/growth-signal-intelligence/route.ts`](../app/api/admin/growth-signal-intelligence/route.ts)       |
+| `/api/admin/invite-network`                | `GET`               | `viewer+`                         | [`app/api/admin/invite-network/route.ts`](../app/api/admin/invite-network/route.ts)                               |
+| `/api/admin/journey`                       | `GET`               | `viewer+`                         | [`app/api/admin/journey/route.ts`](../app/api/admin/journey/route.ts)                                             |
+| `/api/admin/pulse/activity`                | `GET`               | `viewer+`                         | [`app/api/admin/pulse/activity/route.ts`](../app/api/admin/pulse/activity/route.ts)                               |
+| `/api/admin/pulse/at-risk`                 | `GET`               | `viewer+`                         | [`app/api/admin/pulse/at-risk/route.ts`](../app/api/admin/pulse/at-risk/route.ts)                                 |
+| `/api/admin/retention`                     | `GET`               | `viewer+`                         | [`app/api/admin/retention/route.ts`](../app/api/admin/retention/route.ts)                                         |
+| `/api/admin/revenue`                       | `GET`               | `admin`                           | [`app/api/admin/revenue/route.ts`](../app/api/admin/revenue/route.ts)                                             |
+| `/api/admin/revenue/pricing-clusters`      | `GET`               | `admin`                           | [`app/api/admin/revenue/pricing-clusters/route.ts`](../app/api/admin/revenue/pricing-clusters/route.ts)           |
+| `/api/admin/revenue/transactions`          | `GET`               | `admin`                           | [`app/api/admin/revenue/transactions/route.ts`](../app/api/admin/revenue/transactions/route.ts)                   |
 
 ### Strategy, Intelligence, and Operational Analytics
 
