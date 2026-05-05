@@ -47,19 +47,16 @@ const HeroSection: FC = () => {
 
         {/* Heading */}
         <h1 className="mb-12 flex flex-col items-center gap-2 font-serif text-4xl font-medium leading-[1.1] tracking-tight text-white sm:text-5xl md:mb-32 md:gap-4 md:text-6xl lg:text-[80px]">
-          {/* Line 1: "We exists to help" */}
           <div className="flex flex-wrap justify-center gap-[0.25em]">
-            <AnimatedText text="We exists to help" baseDelay={50} />
+            <AnimatedText text="We exist to help" baseDelay={50} />
           </div>
 
-          {/* Line 2: "us better" */}
           <div className="mt-1 flex flex-wrap justify-center gap-[0.25em] md:mt-2">
-            <AnimatedText text="us better" baseDelay={850} />
+            <AnimatedText text="people better" baseDelay={850} />
           </div>
 
-          {/* Line 3: "understand ourselves." */}
           <div className="mt-1 flex flex-wrap justify-center gap-[0.25em] md:mt-2">
-            <AnimatedText text="understand ourselves." baseDelay={1500} />
+            <AnimatedText text="understand themselves." baseDelay={1500} />
           </div>
         </h1>
 

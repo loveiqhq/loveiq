@@ -168,9 +168,9 @@ const TeamSection: FC = () => {
             </div>
           </div>
           <p className="mx-auto mt-6 max-w-2xl text-lg font-light leading-relaxed text-gray-400">
-            We&apos;ve combined years experience, cutting-edge psychology, technology and intuitive
-            design to create a platform that gives you intense visibility into your emotional
-            well-being to master real life change &amp; growth.
+            We&apos;ve combined years of clinical experience, cutting-edge psychology, and intuitive
+            design to create a platform that gives you complete visibility into your emotional
+            well-being.
           </p>
         </div>
 

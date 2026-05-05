@@ -47,7 +47,7 @@ const AboutPage: FC = () => {
         <ChallengeVisionSection />
         <SolutionSection />
         <ProcessSection />
-        <PublicationsSection />
+        {/* <PublicationsSection /> */}
         <TeamSection />
         <ContactSection />
       </div>

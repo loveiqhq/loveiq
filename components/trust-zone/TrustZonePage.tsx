@@ -266,7 +266,7 @@ const HeroSection = () => (
       />
     </div>
     <div className="absolute bottom-0 left-0 right-0 h-[45%] bg-gradient-to-t from-[#0a0510] via-[#0a0510]/80 to-transparent" />
-    <div className="absolute -bottom-[237px] left-1/2 h-[600px] w-[600px] -translate-x-1/2 rounded-full bg-[#2e0147] blur-[250px] animate-pulse-glow" />
+    <div className="absolute top-[55%] left-1/2 h-[700px] w-[700px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#4a0d6e] blur-[160px] opacity-80 animate-pulse-glow" />
     <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
     <div className="content-shell relative z-10 flex flex-col items-center px-4 pt-40 pb-24 md:pt-[208px] md:pb-[176px]">
       <h1
@@ -897,21 +897,26 @@ const QuoteSection = () => (
           </svg>
         </Link>
 
-        <div className="reveal-on-scroll stagger-2 flex items-center gap-2 text-[10px] sm:text-sm font-bold uppercase tracking-[1px] text-white/40">
-          <span className="flex items-center gap-1 whitespace-nowrap">
-            <IconEncrypted />
-            Encrypted
-          </span>
-          <span className="h-1 w-1 rounded-full bg-white/40" />
-          <span className="flex items-center gap-1 whitespace-nowrap">
-            <IconAnonymous />
-            Anonymous
-          </span>
-          <span className="h-1 w-1 rounded-full bg-white/40" />
-          <span className="flex items-center gap-1 whitespace-nowrap">
-            <IconSafeZone />
-            Safe Zone
-          </span>
+        <div className="flex flex-col items-center gap-1">
+          <div className="reveal-on-scroll stagger-2 flex items-center gap-2 text-[10px] sm:text-sm font-bold uppercase tracking-[1px] text-white/40">
+            <span className="flex items-center gap-1 whitespace-nowrap">
+              <IconEncrypted />
+              Encrypted
+            </span>
+            <span className="h-1 w-1 rounded-full bg-white/40" />
+            <span className="flex items-center gap-1 whitespace-nowrap">
+              <IconAnonymous />
+              Anonymous
+            </span>
+            <span className="h-1 w-1 rounded-full bg-white/40" />
+            <span className="flex items-center gap-1 whitespace-nowrap">
+              <IconSafeZone />
+              Safe Zone
+            </span>
+          </div>
+          <p className="reveal-on-scroll stagger-3 text-[10px] sm:text-sm font-bold uppercase tracking-[1px] text-white/40">
+            No account required
+          </p>
         </div>
       </div>
     </div>

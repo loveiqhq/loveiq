@@ -425,9 +425,9 @@ const ProcessSection: FC = () => {
       icon: <TransformIcon />,
     },
     {
-      title: "Surveys",
+      title: "Tests",
       description:
-        "We developed guided surveys across different disciplines designed for people to learn and reflect efficiently.",
+        "We developed guided tests across different disciplines designed for people to learn and reflect efficiently.",
       icon: <FileCheckIcon />,
     },
     {
@@ -456,7 +456,7 @@ const ProcessSection: FC = () => {
             </h2>
             <p className="reveal-on-scroll stagger-1 max-w-[512px] text-lg font-light leading-relaxed text-[#9CA3AF] md:text-xl">
               We work like a coach that never stops learning by continuously consuming new research,
-              books, and practical expertise to transform that knowledge into easy understandable,
+              books, and practical expertise to transform that knowledge into easy-to-understand,
               actionable, and personalized insights for our users.
             </p>
           </div>
