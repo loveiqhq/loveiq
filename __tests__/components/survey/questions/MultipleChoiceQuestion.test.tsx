@@ -134,11 +134,11 @@ describe("MultipleChoiceQuestion", () => {
     expect(onChange).toHaveBeenCalledWith(["B"]);
   });
 
-  it("shows selection count", () => {
+  it("shows Multiple choice badge", () => {
     render(
       <MultipleChoiceQuestion question={baseQuestion} value={["A", "C"]} onChange={vi.fn()} />
     );
-    expect(screen.getByText("(2 selected)")).toBeInTheDocument();
+    expect(screen.getByText("Multiple choice")).toBeInTheDocument();
   });
 
   it("handles null value gracefully", () => {
@@ -202,7 +202,7 @@ describe("MultipleChoiceQuestion", () => {
       <MultipleChoiceQuestion question={cappedQuestion} value={["A", "C"]} onChange={vi.fn()} />
     );
 
-    expect(screen.getByText("(2 / 3 selected)")).toBeInTheDocument();
+    expect(screen.getByText("Multiple choice")).toBeInTheDocument();
   });
 
   it("blocks selecting more than the configured max", async () => {
@@ -213,7 +213,6 @@ describe("MultipleChoiceQuestion", () => {
     await user.click(screen.getByTestId("choice-D"));
 
     expect(screen.getByRole("alert")).toHaveTextContent(/up to 3 options/i);
-    expect(screen.getByText("(3 / 3 selected)")).toBeInTheDocument();
     expect(screen.getByTestId("choice-D")).toHaveAttribute("aria-checked", "false");
   });
 
@@ -225,7 +224,6 @@ describe("MultipleChoiceQuestion", () => {
     await user.click(screen.getByTestId("choice-A"));
 
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-    expect(screen.getByText("(2 / 3 selected)")).toBeInTheDocument();
     expect(screen.getByTestId("choice-A")).toHaveAttribute("aria-checked", "false");
   });
 
@@ -241,6 +239,5 @@ describe("MultipleChoiceQuestion", () => {
     );
 
     expect(screen.getByRole("alert")).toHaveTextContent(/up to 3 options/i);
-    expect(screen.getByText("(4 / 3 selected)")).toBeInTheDocument();
   });
 });

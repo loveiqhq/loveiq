@@ -12,6 +12,7 @@ import S08AcademicBoard from "./S08AcademicBoard";
 import S09Report from "./S09Report";
 import S10Pillars from "./S10Pillars";
 import S12WhyWeCreated from "./S12WhyWeCreated";
+import S15Testimonials from "./S15Testimonials";
 import S13FAQ from "./S13FAQ";
 import S14CTA from "./S14CTA";
 import FooterSection from "./FooterSection";
@@ -23,6 +24,7 @@ const LandingPage: FC = () => {
       <NavSection />
       <S01Hero />
       <S05ValueFeatures />
+      <S15Testimonials />
       <S12WhyWeCreated />
       <S06Archetypes />
       <S10Pillars />

@@ -48,12 +48,6 @@ const MultipleChoiceQuestion: FC<MultipleChoiceQuestionProps> = ({
   };
 
   const subtitle = question.formatGuidance || "Select all that apply";
-  const selectionCountLabel =
-    typeof maxSelections === "number"
-      ? `(${selected.length} / ${maxSelections} selected)`
-      : selected.length > 0
-        ? `(${selected.length} selected)`
-        : null;
 
   return (
     <div className="flex flex-col gap-5">
@@ -61,10 +55,12 @@ const MultipleChoiceQuestion: FC<MultipleChoiceQuestionProps> = ({
         <h2 className="font-serif text-[31px] font-medium leading-[1.2] text-white break-words sm:text-[39px]">
           {question.question}
         </h2>
-        <p className="font-sans text-[15px] font-medium text-[#a78bfa]">
-          {subtitle}
-          {selectionCountLabel && <span className="ml-2 text-white/60">{selectionCountLabel}</span>}
-        </p>
+        <div className="flex items-center gap-3">
+          <p className="font-sans text-[13px] font-medium text-[#a78bfa]/80">{subtitle}</p>
+          <span className="shrink-0 rounded-full bg-[#8870cb] px-3 py-1 font-sans text-[12px] font-medium tracking-[0.3px] text-white">
+            Multiple choice
+          </span>
+        </div>
       </div>
 
       {showLimitMessage && typeof maxSelections === "number" && (
