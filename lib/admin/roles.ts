@@ -82,6 +82,8 @@ export const ROUTE_PERMISSIONS: Record<string, AdminRole> = {
   "GET:/api/admin/workspace-maturity": "viewer",
   "GET:/api/admin/access-risk": "viewer",
   "GET:/api/admin/what-changed": "viewer",
+  "GET:/api/admin/analytics/core-kpis": "viewer",
+  "GET:/api/admin/analytics/marketing-spend": "viewer",
   // PATCH/POST endpoints — editor
   "PATCH:/api/admin/submissions/[id]": "editor",
   "PATCH:/api/admin/submissions/bulk": "editor",
@@ -103,4 +105,7 @@ export const ROUTE_PERMISSIONS: Record<string, AdminRole> = {
   "PATCH:/api/admin/survey-status": "admin",
   "GET:/api/admin/digest": "admin",
   "GET:/api/admin/audit": "admin",
+  "POST:/api/admin/analytics/marketing-spend": "admin",
+  "DELETE:/api/admin/analytics/marketing-spend": "admin",
+  "GET:/api/admin/analytics/export": "admin",
 };

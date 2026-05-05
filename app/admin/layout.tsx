@@ -12,6 +12,7 @@ const pageTitles: Record<string, string> = {
   "/admin/submissions": "Submissions",
   "/admin/survey-status": "Survey Status",
   "/admin/product-kpis": "Product KPIs",
+  "/admin/analytics": "Core KPIs",
   "/admin/funnels": "Funnels & Cohorts",
   "/admin/comparisons": "Comparisons",
   "/admin/answers": "Answer Explorer",
@@ -61,6 +62,8 @@ const pageDescriptions: Record<string, string> = {
     "Toggle the survey open or closed. Changes take effect immediately for all users.",
   "/admin/product-kpis":
     "Track product health metrics: completion rates, question scores, and chapter engagement.",
+  "/admin/analytics":
+    "Single source of truth for marketing, funnel, monetization, engagement, virality, retention, and segmentation KPIs.",
   "/admin/funnels":
     "Analyze conversion funnels and cohort retention to see where users drop off or progress.",
   "/admin/comparisons": "Compare metrics across time periods, archetypes, or cohorts side by side.",

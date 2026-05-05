@@ -48,6 +48,11 @@ const navItems = [
 
 const analyticsItems = [
   {
+    href: "/admin/analytics",
+    label: "Core KPIs",
+    icon: "M9 19V6l7 13V6m4 13V10m-4 9V3m-8 16V13",
+  },
+  {
     href: "/admin/funnels",
     label: "Funnels & Cohorts",
     icon: "M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12",
