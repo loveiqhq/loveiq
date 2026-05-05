@@ -74,6 +74,28 @@ const PeopleIcon: FC = () => (
   </svg>
 );
 
+const InfoCircleIcon: FC<{ className?: string; color?: string }> = ({
+  className = "h-5 w-5",
+  color = "currentColor",
+}) => (
+  <svg className={className} viewBox="0 0 20 20" fill="none" aria-hidden="true">
+    <circle cx="10" cy="10" r="9" stroke={color} strokeWidth="1.5" />
+    <path d="M10 9v5" stroke={color} strokeWidth="1.5" strokeLinecap="round" />
+    <circle cx="10" cy="6.5" r="0.75" fill={color} />
+  </svg>
+);
+
+const LabelTagIcon: FC = () => (
+  <svg className="h-4 w-4 shrink-0" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+    <path
+      d="M3 5a2 2 0 0 1 2-2h7.172a2 2 0 0 1 1.414.586l3.828 3.828a2 2 0 0 1 0 2.828L13.586 14.07A2 2 0 0 1 12.172 14.657H5a2 2 0 0 1-2-2V5Z"
+      stroke="rgba(251,44,54,0.7)"
+      strokeWidth="1.5"
+    />
+    <circle cx="7" cy="9" r="1.25" fill="rgba(251,44,54,0.7)" />
+  </svg>
+);
+
 /* ------------------------------------------------------------------ */
 /*  Animation helpers                                                  */
 /* ------------------------------------------------------------------ */
@@ -106,6 +128,50 @@ const BackgroundOrbs: FC = () => (
       className="absolute h-[300px] w-[300px] rounded-full blur-[100px]"
       style={{ background: "rgba(254,104,57,0.06)", right: "5%", bottom: "15%" }}
     />
+  </div>
+);
+
+/* ------------------------------------------------------------------ */
+/*  CantFindEmail card                                                 */
+/* ------------------------------------------------------------------ */
+const CantFindEmail: FC = () => (
+  <div className="w-full rounded-2xl border border-[rgba(251,44,54,0.3)] bg-[rgba(251,44,54,0.12)] p-6">
+    <div className="flex items-start gap-4">
+      {/* Red icon circle */}
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[rgba(251,44,54,0.2)]">
+        <InfoCircleIcon className="h-5 w-5" color="rgba(251,44,54,0.9)" />
+      </div>
+
+      {/* Content */}
+      <div className="flex flex-col gap-2">
+        <h3 className="font-serif text-[18px] font-medium text-white">
+          Can&rsquo;t find our email?
+        </h3>
+        <p className="font-sans text-[13px] font-light text-white/70">
+          In case you cannot find our email in your inbox.
+        </p>
+
+        <p className="mt-1 font-sans text-[13px] font-medium text-white/90">Check your:</p>
+
+        <ul className="ml-1 flex flex-col gap-1">
+          <li className="flex items-center gap-2">
+            <InfoCircleIcon className="h-4 w-4 shrink-0" color="rgba(251,44,54,0.7)" />
+            <span className="font-sans text-[13px] font-medium text-white/70">
+              Spam or junk folder
+            </span>
+          </li>
+          <li className="flex items-center gap-2">
+            <LabelTagIcon />
+            <span className="font-sans text-[13px] font-medium text-white/70">Promotions tab</span>
+          </li>
+        </ul>
+
+        <p className="mt-1 font-sans text-[13px] font-medium text-[#ff6467]">
+          Mark the email as <strong className="font-bold">Not Spam</strong> to ensure future emails
+          reach you.
+        </p>
+      </div>
+    </div>
   </div>
 );
 
@@ -179,16 +245,28 @@ const ReportReady: FC<ReportReadyProps> = ({ name, email, onContinue }) => {
           were yesterday.
         </p>
 
+        {/* Primary CTA — above the info card */}
+        <div className="mt-10 w-full max-w-[448px]" {...fadeUp(650)}>
+          <button
+            type="button"
+            onClick={handleContinue}
+            className="flex w-full items-center justify-center gap-3 rounded-full bg-[#ff795b] px-6 py-4 font-sans text-[18px] font-extrabold text-white shadow-[0_10px_15px_-3px_rgba(255,121,91,0.2),0_4px_6px_-4px_rgba(255,121,91,0.2)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_14px_20px_-3px_rgba(255,121,91,0.28)] focus-visible-ring"
+          >
+            View your free report
+            <ArrowRightIcon />
+          </button>
+        </div>
+
         {/* Instructions card */}
-        <div className="mt-10 w-full max-w-[448px]" {...scaleIn(700)}>
+        <div className="mt-6 w-full max-w-[448px]" {...scaleIn(800)}>
           <div className="flex flex-col gap-8 rounded-2xl border border-[rgba(58,37,89,0.6)] bg-[rgba(21,10,34,0.8)] p-8 shadow-[0_0_30px_0_rgba(168,85,247,0.03)] backdrop-blur-[2px]">
-            {/* Section 1: Click below */}
+            {/* Section 1: Click above */}
             <div className="flex flex-col gap-1">
               <h2 className="font-serif text-[18px] font-medium leading-[28px] text-white">
-                Click below to see your report now
+                Click above to see your report now
               </h2>
               <p className="font-sans text-[16px] font-light leading-[23px] text-[#9ca3af]">
-                Your personalized report is compiled and ready. Click the button below to review
+                Your personalized report is compiled and ready. Click the button above to review
                 your results immediately.
               </p>
             </div>
@@ -196,7 +274,8 @@ const ReportReady: FC<ReportReadyProps> = ({ name, email, onContinue }) => {
             {/* Section 2: Check inbox */}
             <div className="flex flex-col gap-1">
               <h2 className="font-serif text-[18px] font-medium leading-[28px] text-white">
-                Check your inbox for <span className="text-[#c084fc]">{maskedEmail}</span>
+                In addition, check your inbox for{" "}
+                <span className="text-[#c084fc]">{maskedEmail}</span>
               </h2>
               <p className="font-sans text-[16px] font-light leading-[23px] text-[#9ca3af]">
                 We&rsquo;ve emailed a secure report link to your address.
@@ -207,26 +286,20 @@ const ReportReady: FC<ReportReadyProps> = ({ name, email, onContinue }) => {
           </div>
         </div>
 
-        {/* Action buttons */}
-        <div className="mt-12 flex w-full max-w-[448px] flex-col gap-4" {...fadeUp(1000)}>
-          {/* Primary CTA */}
-          <button
-            type="button"
-            onClick={handleContinue}
-            className="flex w-full items-center justify-center gap-3 rounded-full bg-[#ff795b] px-6 py-4 font-sans text-[18px] font-extrabold text-white shadow-[0_10px_15px_-3px_rgba(255,121,91,0.2),0_4px_6px_-4px_rgba(255,121,91,0.2)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_14px_20px_-3px_rgba(255,121,91,0.28)] focus-visible-ring"
-          >
-            View your free report
-            <ArrowRightIcon />
-          </button>
+        {/* Can't find our email? card */}
+        <div className="mt-6 w-full max-w-[448px]" {...scaleIn(950)}>
+          <CantFindEmail />
+        </div>
 
-          {/* Secondary — opens refer-a-friend modal */}
+        {/* Refer a friend button */}
+        <div className="mt-4 w-full max-w-[448px]" {...fadeUp(1100)}>
           <button
             type="button"
             onClick={() => setShowInvite(true)}
             className="flex h-16 w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-[17px] font-sans text-[14px] font-medium text-[#d1d5db] shadow-[0_10px_15px_-3px_rgba(0,0,0,0.2),0_4px_6px_-4px_rgba(0,0,0,0.2)] transition-all duration-300 hover:bg-white/10 focus-visible-ring"
           >
             <PeopleIcon />
-            Refer a Friend
+            Refer a friend
           </button>
         </div>
       </div>
@@ -242,7 +315,7 @@ const ReportReady: FC<ReportReadyProps> = ({ name, email, onContinue }) => {
       {/* Footer */}
       <footer
         className="relative z-10 flex flex-col items-center gap-4 pb-8"
-        {...fadeUp(1200, 400)}
+        {...fadeUp(1300, 400)}
       >
         <div className="flex items-center gap-3 font-sans text-[14px] font-light text-[#6b7280]">
           <Link href="/privacy-policy" className="transition hover:text-white/50">
