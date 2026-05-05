@@ -121,6 +121,24 @@ export const trackBeginCheckout = (
   track("begin_checkout", { plan, price, currency });
 };
 
+export type ReportEngagementThreshold = 60 | 300 | 600;
+export type ReportEngagementType = "essentials" | "full_report" | "all_reports" | "locked";
+
+export const trackReportEngagement = (
+  thresholdSeconds: ReportEngagementThreshold,
+  reportType: ReportEngagementType,
+  archetype: string | null,
+  scrollDepthPct: number
+) => {
+  const minutes = thresholdSeconds / 60;
+  track(`report_engagement_${minutes}min`, {
+    engagement_seconds: thresholdSeconds,
+    report_type: reportType,
+    ...(archetype ? { archetype } : {}),
+    scroll_depth_pct: scrollDepthPct,
+  });
+};
+
 export const trackSurveyPause = (qId: string, progress: number) => {
   track("survey_pause", { question_id: qId, progress_pct: progress });
 };

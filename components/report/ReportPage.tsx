@@ -52,6 +52,7 @@ import {
 import { fromArchetypeSlug, isArchetypeName, toArchetypeSlug } from "@/lib/report/archetypeSlug";
 import { getCsrfToken } from "@/lib/csrf-client";
 import { trackReportViewed } from "@/lib/analytics";
+import { useReportEngagementTimers } from "./hooks/useReportEngagementTimers";
 
 interface SnapshotContent {
   importanceLabel: string;
@@ -831,6 +832,11 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     reportViewedFiredRef.current = true;
     trackReportViewed(accessPlan ?? "locked", data.primaryArchetype ?? null);
   }, [data, accessPlan]);
+
+  useReportEngagementTimers({
+    reportType: data ? (accessPlan ?? "locked") : null,
+    archetype: data?.primaryArchetype ?? null,
+  });
 
   useEffect(() => {
     if (autoOpenedPricingRef.current) return;

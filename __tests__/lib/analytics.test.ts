@@ -33,6 +33,7 @@ let trackSurveyComplete: typeof import("../../lib/analytics").trackSurveyComplet
 let trackReportViewed: typeof import("../../lib/analytics").trackReportViewed;
 let trackPaywallView: typeof import("../../lib/analytics").trackPaywallView;
 let trackBeginCheckout: typeof import("../../lib/analytics").trackBeginCheckout;
+let trackReportEngagement: typeof import("../../lib/analytics").trackReportEngagement;
 let trackReportPurchase: typeof import("../../lib/analytics").trackReportPurchase;
 let trackGoogleAdsPurchaseConversion: typeof import("../../lib/analytics").trackGoogleAdsPurchaseConversion;
 
@@ -54,6 +55,7 @@ describe("analytics", () => {
     trackReportViewed = mod.trackReportViewed;
     trackPaywallView = mod.trackPaywallView;
     trackBeginCheckout = mod.trackBeginCheckout;
+    trackReportEngagement = mod.trackReportEngagement;
     trackReportPurchase = mod.trackReportPurchase;
     trackGoogleAdsPurchaseConversion = mod.trackGoogleAdsPurchaseConversion;
   });
@@ -437,6 +439,49 @@ describe("analytics", () => {
         plan: "full_report",
         price: 29.99,
         currency: "EUR",
+      });
+    });
+  });
+
+  describe("trackReportEngagement", () => {
+    it.each([
+      [60, "report_engagement_1min"],
+      [300, "report_engagement_5min"],
+      [600, "report_engagement_10min"],
+    ] as const)("emits %s payload with %s event name", (seconds, expectedEventName) => {
+      const mockGtag = vi.fn();
+      setConsentCookie({ analytics: true });
+      globalThis.window = {
+        ...globalThis.window,
+        gtag: mockGtag,
+        __loveiqAnalyticsEnabled: true,
+      } as typeof globalThis.window;
+
+      trackReportEngagement(seconds, "full_report", "Sage", 42);
+
+      expect(mockGtag).toHaveBeenCalledWith("event", expectedEventName, {
+        engagement_seconds: seconds,
+        report_type: "full_report",
+        archetype: "Sage",
+        scroll_depth_pct: 42,
+      });
+    });
+
+    it("omits archetype param when null", () => {
+      const mockGtag = vi.fn();
+      setConsentCookie({ analytics: true });
+      globalThis.window = {
+        ...globalThis.window,
+        gtag: mockGtag,
+        __loveiqAnalyticsEnabled: true,
+      } as typeof globalThis.window;
+
+      trackReportEngagement(60, "locked", null, 25);
+
+      expect(mockGtag).toHaveBeenCalledWith("event", "report_engagement_1min", {
+        engagement_seconds: 60,
+        report_type: "locked",
+        scroll_depth_pct: 25,
       });
     });
   });
