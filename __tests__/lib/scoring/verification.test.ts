@@ -209,7 +209,7 @@ const categoricalQuestions: Record<string, string[]> = {
     "Want more than I currently have",
     "Frustrated or unfulfilled",
     "Feels complicated or inconsistent",
-    "Present but often deprioritized",
+    "Present, but not a priority right now",
     "Currently not a focus for me",
     "Unsure / still figuring it out",
   ],
@@ -217,14 +217,14 @@ const categoricalQuestions: Record<string, string[]> = {
     "Spontaneous",
     "Responsive",
     "Planned window",
-    "Varies by partner/context",
+    "Varies by person or context",
     "Desire has been low lately",
   ],
   "02004": [
     "I initiate",
-    "My partner initiates",
-    "We make space for it intentionally",
-    "It unfolds naturally and either of us may begin",
+    "I’m usually not the one to initiate",
+    "A planned opening works best for me",
+    "Initiation flows organically, without a set role or expectation",
   ],
   "03003": [
     "Private and protected",
@@ -259,7 +259,7 @@ const categoricalQuestions: Record<string, string[]> = {
   ],
   "03013": [
     "Being watched / admired",
-    "Watching my partner",
+    "Watching or observing another person",
     "Absorbed in sensation / connection",
     "Not sure",
   ],
@@ -508,9 +508,9 @@ describe("Full realistic survey response", () => {
       "09013": 2, // Strategy
 
       // Categorical boost questions
-      "01003": "Present but often deprioritized",
+      "01003": "Present, but not a priority right now",
       "02001": "Responsive",
-      "02004": "My partner initiates",
+      "02004": "I’m usually not the one to initiate",
       "03003": ["Private and protected"],
       "03005": "Connection-led",
       "03006": "Natural flow and spontaneity",

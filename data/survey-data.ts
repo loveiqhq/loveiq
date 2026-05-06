@@ -148,7 +148,7 @@ export const surveyQuestions: SurveyQuestion[] = [
       "Want more than I currently have",
       "Frustrated or unfulfilled",
       "Feels complicated or inconsistent",
-      "Present but often deprioritized",
+      "Present, but not a priority right now",
       "Currently not a focus for me",
       "Unsure / still figuring it out",
     ],
@@ -183,7 +183,7 @@ export const surveyQuestions: SurveyQuestion[] = [
           "sexuality is present, but mixed signals, changing desire, shame, pain, mismatch, or emotional difficulty make it hard to feel simple and steady",
       },
       {
-        option: "Present but often deprioritized",
+        option: "Present, but not a priority right now",
         explanation:
           "sexuality matters, but stress, work, parenting, health, grief, logistics, or general life load often push it lower on the list",
       },
@@ -204,7 +204,7 @@ export const surveyQuestions: SurveyQuestion[] = [
     qId: "01005",
     cId: 1,
     chapter: "Current Sexual Wellbeing & Pain Points",
-    question: "I often crave more novelty and variety in my sexual experiences.",
+    question: "I often crave more novelty and variety in my sexual life.",
     answerType: "scale",
     options: [],
     required: true,
@@ -334,20 +334,21 @@ export const surveyQuestions: SurveyQuestion[] = [
     qId: "02001",
     cId: 2,
     chapter: "Spontaneous Desire VS Responsive Desire",
-    question: "How does desire most often begin for you?",
+    question:
+      "When you think about times you’ve wanted sex, what usually happened before the desire showed up?",
     answerType: "single",
     options: [
       "Spontaneous",
       "Responsive",
       "Planned window",
-      "Varies by partner/context",
+      "Varies by person or context",
       "Desire has been low lately",
     ],
     required: true,
     guide:
-      "Think about your usual recent pattern. If it changes by partner or stress, answer from your most typical baseline.",
+      "Think about your recent usual pattern, not one unusual moment. Choose the option that best describes what tends to come before desire becomes available.",
     supportAndGuidance:
-      "Think about your usual recent pattern. If it changes by partner or stress, answer from your most typical baseline.",
+      "Think about your recent usual pattern, not one unusual moment. Choose the option that best describes what tends to come before desire becomes available.",
     comment:
       "Helps identify your primary desire activation pattern, which is important for archetype scoring and recommendation logic.",
     howAnswerIsUsed:
@@ -355,28 +356,26 @@ export const surveyQuestions: SurveyQuestion[] = [
     answerOptionsExplained: [
       {
         option: "Spontaneous",
-        explanation:
-          "desire often appears internally before touch, initiation, or strong erotic cues",
+        explanation: "Nothing much had to happen first; desire often appeared on its own",
       },
       {
         option: "Responsive",
         explanation:
-          "desire usually grows after affection, erotic cues, or the right relational or physical conditions are already present",
+          "Desire usually appeared after affection, closeness, touch, flirting, or erotic cues",
       },
       {
         option: "Planned window",
         explanation:
-          "desire tends to come more easily when intimacy has protected time, space, and lower pressure",
+          "Desire tends to come more easily when sex has protected time, space, and lower pressure",
       },
       {
-        option: "Varies by partner/context",
+        option: "Varies by person or context",
         explanation:
-          "your desire pattern depends strongly on who you are with or the situation you are in",
+          "What happened before desire showed up changed depending on the person or situation",
       },
       {
         option: "Desire has been low lately",
-        explanation:
-          "your current desire feels meaningfully lower than your own usual baseline, regardless of style",
+        explanation: "Desire has been low enough recently that no clear pattern stands out",
       },
     ],
     formatGuidance: "Select one option.",
@@ -385,7 +384,7 @@ export const surveyQuestions: SurveyQuestion[] = [
     qId: "02002",
     cId: 2,
     chapter: "Spontaneous Desire VS Responsive Desire",
-    question: "My sexual desire usually builds after affection, touch, or other erotic cues.",
+    question: "My sexual desire usually builds only after affection, touch, or other erotic cues.",
     answerType: "scale",
     options: [],
     required: true,
@@ -402,7 +401,7 @@ export const surveyQuestions: SurveyQuestion[] = [
       {
         option: "1 = Not at all true",
         explanation:
-          "desire usually appears on its own, before someone else initiates or before affectionate cues are needed",
+          "desire usually appears on its own, before another person initiates or before affectionate cues are needed",
       },
       {
         option: "2 = Mostly not true",
@@ -412,7 +411,7 @@ export const surveyQuestions: SurveyQuestion[] = [
       {
         option: "3 = Slightly not true",
         explanation:
-          "desire can be helped by affection, though it still often appears without needing much activation from someone else",
+          "desire can be helped by affection, though it still often appears without needing much activation from another person",
       },
       {
         option: "4 = Mixed / depends",
@@ -450,14 +449,14 @@ export const surveyQuestions: SurveyQuestion[] = [
     qId: "02003",
     cId: 2,
     chapter: "Spontaneous Desire VS Responsive Desire",
-    question: "I enjoy intimacy more when it’s planned rather than spontaneous.",
+    question: "I enjoy sex more when it’s planned rather than spontaneous.",
     answerType: "scale",
     options: [],
     required: true,
     guide:
-      "Answer from what genuinely helps intimacy go well for you, not what sounds most romantic. Planned can mean scheduled or simply protected and expected.",
+      "Answer from what genuinely feels better, not what sounds most romantic. Planned can mean scheduled or simply expected.",
     supportAndGuidance:
-      "Answer from what genuinely helps intimacy go well for you, not what sounds most romantic. Planned can mean scheduled or simply protected and expected.",
+      "Answer from what genuinely feels better, not what sounds most romantic. Planned can mean scheduled or simply expected.",
     scaleLabels: { low: "Not at all true", high: "Very true" },
     comment:
       "Helps determine whether anticipation and structure support desire better than spontaneity.",
@@ -487,17 +486,17 @@ export const surveyQuestions: SurveyQuestion[] = [
       {
         option: "5 = Slightly true",
         explanation:
-          "planned intimacy often helps your enjoyment, even if spontaneity can still work sometimes",
+          "planned sex often helps your enjoyment, even if spontaneity can still work sometimes",
       },
       {
         option: "6 = Mostly true",
         explanation:
-          "planned intimacy usually feels easier, safer, or more successful for you than spontaneous intimacy",
+          "planned sex usually feels easier, safer, or more successful for you than spontaneous intimacy",
       },
       {
         option: "7 = Very true",
         explanation:
-          "planned intimacy usually feels easier, safer, more enjoyable, or more successful than spontaneous intimacy",
+          "planned sex usually feels easier, safer, more enjoyable, or more successful than spontaneous intimacy",
       },
     ],
     hoverStates: {
@@ -515,19 +514,19 @@ export const surveyQuestions: SurveyQuestion[] = [
     qId: "02004",
     cId: 2,
     chapter: "Spontaneous Desire VS Responsive Desire",
-    question: "What kind of initiation tends to work best for you?",
+    question: "What kind of sexual initiation tends to work best for you?",
     answerType: "single",
     options: [
       "I initiate",
-      "My partner initiates",
-      "We make space for it intentionally",
-      "It unfolds naturally and either of us may begin",
+      "I’m usually not the one to initiate",
+      "A planned opening works best for me",
+      "Initiation flows organically, without a set role or expectation",
     ],
     required: true,
     guide:
-      "Focus on what most often leads to your best experiences. If your current relationship reflects a real shift, let that count.",
+      "Think about what most often leads to good experiences. Initiation can mean who makes the first move, signals interest, or creates the opening.",
     supportAndGuidance:
-      "Focus on what most often leads to your best experiences. If your current relationship reflects a real shift, let that count.",
+      "Think about what most often leads to good experiences. Initiation can mean who makes the first move, signals interest, or creates the opening.",
     comment:
       "Helps distinguish self-starting, partner-led, mutual, and planned initiation patterns.",
     howAnswerIsUsed:
@@ -535,20 +534,21 @@ export const surveyQuestions: SurveyQuestion[] = [
     answerOptionsExplained: [
       {
         option: "I initiate",
-        explanation: "You are the one who starts it or clearly signals the first move",
+        explanation: "You usually like starting things or clearly signaling interest first",
       },
       {
-        option: "My partner initiates",
-        explanation: "Your partner starts it and you respond from there",
-      },
-      {
-        option: "We make space for it intentionally",
+        option: "I’m usually not the one to initiate",
         explanation:
-          "Sex has some planning, intention, or protected space rather than relying on the moment alone",
+          "You tend to respond better when the other person starts or signals interest first",
       },
       {
-        option: "It unfolds naturally and either of us may begin",
-        explanation: "Sex emerges organically and the first move can come from either person",
+        option: "A planned opening works best for me",
+        explanation:
+          "Intimacy works better when there is time, privacy, and some shared expectation",
+      },
+      {
+        option: "Initiation flows organically, without a set role or expectation",
+        explanation: "Intimacy tends to emerge naturally, without anyone being expected to start",
       },
     ],
     formatGuidance: "Select one option.",
@@ -762,50 +762,49 @@ export const surveyQuestions: SurveyQuestion[] = [
     cId: 3,
     chapter: "Arousal Styles — Cues, Conditions & Brakes",
     question:
-      "I usually prefer sex to feel intense, charged, or high-energy rather than soft, gentle, or low-pressure.",
+      "I usually prefer sex to feel intense, charged, or high-energy rather than soft, gentle, or calm.",
     answerType: "scale",
     options: [],
     required: true,
-    guide:
-      "Answer from your broader pattern, not one mood or partner. This item is about the kind of erotic energy that most often feels right for you.",
+    guide: "Answer from the erotic energy you usually prefer, not one mood or experience.",
     supportAndGuidance:
-      "Answer from your broader pattern, not one mood or partner. This item is about the kind of erotic energy that most often feels right for you.",
+      "Answer from the erotic energy you usually prefer, not one mood or experience.",
     scaleLabels: { low: "Not at all true", high: "Very true" },
     comment: "Helps position your erotic style on a calm-to-intense spectrum.",
     howAnswerIsUsed: "Helps position your erotic style on a calm-to-intense spectrum.",
     answerOptionsExplained: [
       {
         option: "1 = Not at all true",
-        explanation: "you tend to prefer slower, safer, softer, or more grounded sexual energy",
+        explanation:
+          "You strongly prefer sex to feel softer, gentler, calmer, or more grounded than intense",
       },
       {
         option: "2 = Mostly not true",
-        explanation:
-          "you usually lean toward gentle, low-pressure, tender, or calming sexual energy rather than strong intensity",
+        explanation: "You usually lean toward gentle, tender, calm, or slower sexual energy",
       },
       {
         option: "3 = Slightly not true",
         explanation:
-          "you can enjoy some activation, but overall you still prefer sexuality to stay more soft than intense",
+          "You can enjoy some activation, but generally prefer sex to stay more soft than intense",
       },
       {
         option: "4 = Mixed / depends",
         explanation:
-          "you enjoy a mix of softness and intensity, depending on context, mood, or partner dynamic",
+          "You enjoy both softness and intensity, depending on context, mood, or dynamic",
       },
       {
         option: "5 = Slightly true",
         explanation:
-          "you often prefer more charge, edge, or activation, even if some softness still matters",
+          "You often prefer more charge, edge, or activation, though softness still matters",
       },
       {
         option: "6 = Mostly true",
-        explanation: "you are usually drawn to stronger, faster, or more charged erotic energy",
+        explanation: "You are usually drawn to stronger, faster, or more charged erotic energy",
       },
       {
         option: "7 = Very true",
         explanation:
-          "you tend to prefer stronger energy, more activation, or a higher-voltage erotic tone",
+          "You strongly prefer high-intensity, high-charge, or high-activation erotic energy",
       },
     ],
     hoverStates: {
@@ -1071,34 +1070,34 @@ export const surveyQuestions: SurveyQuestion[] = [
     answerType: "single",
     options: [
       "Being watched / admired",
-      "Watching my partner",
+      "Watching or observing another person",
       "Absorbed in sensation / connection",
       "Not sure",
     ],
     required: true,
     guide:
-      "Think about fantasy or real-life situations when sex is working well, and focus on the perspective that carries the strongest erotic pull for you.",
+      "Answer from fantasy or real experience; choose the perspective with the strongest erotic pull.",
     supportAndGuidance:
-      "Think about fantasy or real-life situations when sex is working well, and focus on the perspective that carries the strongest erotic pull for you.",
+      "Answer from fantasy or real experience; choose the perspective with the strongest erotic pull.",
     comment: "Helps distinguish being seen, watching, and inward/relational arousal patterns.",
     howAnswerIsUsed:
       "Helps distinguish being seen, watching, and inward/relational arousal patterns.",
     answerOptionsExplained: [
       {
         option: "Being watched / admired",
-        explanation: "arousal rises when you feel seen, desired, noticed, or a little performative",
+        explanation: "Arousal rises when you feel seen, desired, noticed, or a little performative",
       },
       {
-        option: "Watching my partner",
+        option: "Watching or observing another person",
         explanation:
-          "observing their body, expressions, responses, or pleasure is what most strongly turns you on",
+          "Arousal rises from seeing another person’s body, expressions, reactions, pleasure, or erotic energy",
       },
       {
         option: "Absorbed in sensation / connection",
         explanation:
-          "your turn-on is less about seeing or being seen and more about disappearing into feeling, body, and connection",
+          "Your turn-on is less about seeing or being seen and more about disappearing into feeling, body, or connection",
       },
-      { option: "Not sure", explanation: "none of these patterns clearly stands out right now" },
+      { option: "Not sure", explanation: "None of these patterns clearly stands out right now" },
     ],
     formatGuidance: "Select one option.",
   },
@@ -1106,7 +1105,7 @@ export const surveyQuestions: SurveyQuestion[] = [
     qId: "03014",
     cId: 3,
     chapter: "Arousal Styles — Cues, Conditions & Brakes",
-    question: "I can usually reach orgasm with a partner when I want to.",
+    question: "During sex, I can usually reach orgasm when I want to.",
     answerType: "scale",
     options: [],
     required: true,
@@ -1234,7 +1233,7 @@ export const surveyQuestions: SurveyQuestion[] = [
     qId: "08003",
     cId: 8,
     chapter: "Attachment Style & Emotional Safety",
-    question: "When my partner pulls away, I usually…",
+    question: "When someone I feel close to pulls away, I usually…",
     answerType: "single",
     options: [
       "Seek reassurance / pursue",
@@ -1283,15 +1282,14 @@ export const surveyQuestions: SurveyQuestion[] = [
     qId: "08004",
     cId: 8,
     chapter: "Attachment Style & Emotional Safety",
-    question:
-      "In relationships, I usually want more closeness and togetherness than space and independence.",
+    question: "I usually want more closeness and togetherness than space and independence.",
     answerType: "scale",
     options: [],
     required: true,
     guide:
-      "Answer from your current relational baseline. If this relationship reflects a lasting shift in how you do closeness and independence, let that matter.",
+      "If current relationship reflects a lasting shift in how you do closeness and independence, let that matter.",
     supportAndGuidance:
-      "Answer from your current relational baseline. If this relationship reflects a lasting shift in how you do closeness and independence, let that matter.",
+      "If current relationship reflects a lasting shift in how you do closeness and independence, let that matter.",
     scaleLabels: { low: "Not at all true", high: "Very true" },
     comment:
       "Places you on a closeness-versus-distance pattern that shapes intimacy recommendations.",
@@ -1300,37 +1298,38 @@ export const surveyQuestions: SurveyQuestion[] = [
     answerOptionsExplained: [
       {
         option: "1 = Not at all true",
-        explanation: "relationships often feel unstable, threatening, or hard to trust for you",
+        explanation:
+          "you typically value autonomy and space; togetherness can feel constraining or overwhelming",
       },
       {
         option: "2 = Mostly not true",
         explanation:
-          "security is often hard to sustain, and worry, distrust, or withdrawal tend to show up more than steadiness",
+          "you generally prefer independence; closeness matters less to you than freedom",
       },
       {
         option: "3 = Slightly not true",
         explanation:
-          "some parts of you can feel secure, but insecurity still outweighs steadiness overall",
+          "you appreciate some closeness, but independence and personal space feel more important",
       },
       {
         option: "4 = Mixed / depends",
         explanation:
-          "some parts of you feel secure, but worry, withdrawal, or instability still show up in meaningful ways",
+          "you value closeness and independence equally, or your preference shifts depending on the person or life stage",
       },
       {
         option: "5 = Slightly true",
         explanation:
-          "you often can feel secure, even though certain triggers or patterns still shake that steadiness",
+          "you usually prefer more togetherness than space, though independence still matters to you",
       },
       {
         option: "6 = Mostly true",
         explanation:
-          "you usually feel relatively safe, trusting, and steady in relationships, even if not perfectly all the time",
+          "you strongly prefer closeness and togetherness; you feel less satisfied without frequent connection",
       },
       {
         option: "7 = Very true",
         explanation:
-          "you generally feel worthy of love, able to trust closeness, and able to stay relatively steady through distance or conflict",
+          "you strongly prefer closeness and togetherness; independence feels much less important than connection",
       },
     ],
     hoverStates: {
@@ -1472,7 +1471,7 @@ export const surveyQuestions: SurveyQuestion[] = [
     cId: 8,
     chapter: "Attachment Style & Emotional Safety",
     question:
-      "I tend to lose sexual interest when my partner becomes too emotionally dependent on me.",
+      "I tend to lose sexual interest when another person becomes too emotionally dependent on me.",
     answerType: "scale",
     options: [],
     required: true,
@@ -1603,7 +1602,7 @@ export const surveyQuestions: SurveyQuestion[] = [
     qId: "10002",
     cId: 10,
     chapter: "Communication Style",
-    question: "During intimacy, how do you most naturally communicate what you want?",
+    question: "During sex, how do you most naturally communicate what you want?",
     answerType: "multiple",
     options: [
       "Touch and body cues",
@@ -1777,7 +1776,7 @@ export const surveyQuestions: SurveyQuestion[] = [
     qId: "10005",
     cId: 10,
     chapter: "Communication Style",
-    question: "If my partner is quiet or neutral during sex, my arousal drops.",
+    question: "If the other person is quiet or neutral during sex, my arousal drops.",
     answerType: "scale",
     options: [],
     required: true,
@@ -1794,27 +1793,27 @@ export const surveyQuestions: SurveyQuestion[] = [
       {
         option: "1 = Not at all true",
         explanation:
-          "your arousal does not depend much on visible feedback or expressiveness from your partner",
+          "your arousal does not depend much on visible feedback or expressiveness from the other person",
       },
       {
         option: "2 = Mostly not true",
         explanation:
-          "a quiet or neutral partner may register a little, but it usually does not lower your arousal much",
+          "a quiet or neutral counterpart may register a little, but it usually does not lower your arousal much",
       },
       {
         option: "3 = Slightly not true",
         explanation:
-          "feedback matters somewhat, though you can usually stay engaged even if your partner is hard to read",
+          "feedback matters somewhat, though you can usually stay engaged even if the other person is hard to read",
       },
       {
         option: "4 = Mixed / depends",
         explanation:
-          "a quiet or neutral partner can affect your arousal in some situations, but not always strongly",
+          "a quiet or neutral counterpart can affect your arousal in some situations, but not always strongly",
       },
       {
         option: "5 = Slightly true",
         explanation:
-          "when your partner is hard to read, your arousal often drops at least somewhat",
+          "whenthe other person is hard to read, your arousal often drops at least somewhat",
       },
       {
         option: "6 = Mostly true",
@@ -1823,7 +1822,7 @@ export const surveyQuestions: SurveyQuestion[] = [
       },
       {
         option: "7 = Very true",
-        explanation: "when your partner is hard to read, your arousal often drops noticeably",
+        explanation: "when the other person is hard to read, your arousal often drops noticeably",
       },
     ],
     hoverStates: {
@@ -1867,12 +1866,12 @@ export const surveyQuestions: SurveyQuestion[] = [
       {
         option: "Surrender / be led",
         explanation:
-          "you feel most alive when receiving, following, or allowing someone else to steer",
+          "you feel most alive when receiving, following, or allowing another person to steer",
       },
       {
         option: "Switch",
         explanation:
-          "you enjoy moving between leading and following depending on mood, context, or partner",
+          "you enjoy moving between leading and following depending on mood, context, or who is involved",
       },
       {
         option: "Egalitarian / no roles",
@@ -1894,9 +1893,9 @@ export const surveyQuestions: SurveyQuestion[] = [
     options: [],
     required: true,
     guide:
-      "Structure can be light or explicit. Answer from whether clear expectations, roles, or agreed rules tend to make intimacy feel easier, safer, or hotter.",
+      "Structure can be light or explicit. Answer from whether clear expectations, roles, or agreed rules tend to make sex feel easier, safer, or hotter.",
     supportAndGuidance:
-      "Structure can be light or explicit. Answer from whether clear expectations, roles, or agreed rules tend to make intimacy feel easier, safer, or hotter.",
+      "Structure can be light or explicit. Answer from whether clear expectations, roles, or agreed rules tend to make sex feel easier, safer, or hotter.",
     scaleLabels: { low: "Not at all true", high: "Very true" },
     comment:
       "We use this to tell whether rules, roles, and explicit agreements make sex feel freer for you rather than restrictive.",
@@ -1954,8 +1953,7 @@ export const surveyQuestions: SurveyQuestion[] = [
     qId: "11003",
     cId: 11,
     chapter: "Partner-Related Needs",
-    question:
-      "In sex, my attention naturally goes more toward my partner’s experience than toward my own.",
+    question: "In sex, my attention naturally goes more toward who I’m with than toward myself.",
     answerType: "scale",
     options: [],
     required: true,
@@ -1971,34 +1969,36 @@ export const surveyQuestions: SurveyQuestion[] = [
     answerOptionsExplained: [
       {
         option: "1 = Not at all true",
-        explanation: "my attention is usually much more on my own experience than on my partner’s",
+        explanation:
+          "my attention is usually much more on my own experience than the other person’s",
       },
       {
         option: "2 = Mostly not true",
-        explanation: "my attention tends to stay more on my own experience than on my partner’s",
+        explanation: "my attention tends to stay more on my own experience than the other person’s",
       },
       {
         option: "3 = Slightly not true",
-        explanation: "my attention is somewhat more on my own experience than on my partner’s",
+        explanation: "my attention is somewhat more on my own experience than the other person’s",
       },
       {
         option: "4 = Mixed / depends",
-        explanation: "my attention feels fairly balanced, or it depends on the context or partner",
+        explanation:
+          "my attention feels fairly balanced, or it depends on the context or who I'm with",
       },
       {
         option: "5 = Slightly true",
         explanation:
-          "my attention tends to go somewhat more toward my partner’s experience than toward my own",
+          "my attention tends to go somewhat more toward the other person’s experience than toward my own",
       },
       {
         option: "6 = Mostly true",
         explanation:
-          "my attention usually goes more toward my partner’s experience than toward my own",
+          "my attention usually goes more toward the other person’s experience than toward my own",
       },
       {
         option: "7 = Very true",
         explanation:
-          "my attention strongly and naturally goes more toward my partner’s experience than toward my own",
+          "my attention strongly and naturally goes more toward the other person’s experience than toward my own",
       },
     ],
     hoverStates: {
@@ -2017,14 +2017,14 @@ export const surveyQuestions: SurveyQuestion[] = [
     cId: 11,
     chapter: "Partner-Related Needs",
     question:
-      "I feel most connected sexually when I’m soothing or stabilizing my partner’s emotions.",
+      "When my the other person feels emotionally vulnerable or unsettled, soothing or reassuring them can deepen my sexual connection.",
     answerType: "scale",
     options: [],
     required: true,
     guide:
-      "For some people this deepens erotic connection; for others it pulls them into caregiving. Answer from what usually happens in your system.",
+      "This can include insecurity, anxiety, shame, or overwhelm—not just checking if the person is enjoying sex.",
     supportAndGuidance:
-      "For some people this deepens erotic connection; for others it pulls them into caregiving. Answer from what usually happens in your system.",
+      "This can include insecurity, anxiety, shame, or overwhelm—not just checking if the person is enjoying sex.",
     scaleLabels: { low: "Not true at all", high: "Very true" },
     comment:
       "This is a very strong clue for whether caregiving and emotional soothing are part of what makes sex feel connecting for you.",
@@ -2033,37 +2033,32 @@ export const surveyQuestions: SurveyQuestion[] = [
     answerOptionsExplained: [
       {
         option: "1 = Not true at all",
-        explanation:
-          "soothing or emotionally stabilizing your partner does not usually increase sexual connection for you",
+        explanation: "This does not deepen connection and may pull you out of desire",
       },
       {
         option: "2 = Mostly not true",
-        explanation:
-          "caregiving may matter relationally, but it is usually not what creates sexual connection for you",
+        explanation: "You care, but soothing them usually does not increase sexual connection",
       },
       {
         option: "3 = Slightly not true",
-        explanation:
-          "this can feel connecting at times, though it is not usually a major source of erotic closeness",
+        explanation: "It may help occasionally, but it is not usually connecting for you",
       },
       {
         option: "4 = Mixed / depends",
-        explanation: "this can feel connecting in some contexts, but not consistently",
+        explanation: "It depends on who I'm with, situation, intensity, or timing",
       },
       {
         option: "5 = Slightly true",
-        explanation:
-          "caregiving, calming, or emotional holding often adds some sense of sexual connection for you",
+        explanation: "It can add some warmth or closeness, but is not central",
       },
       {
         option: "6 = Mostly true",
-        explanation:
-          "soothing or stabilizing your partner’s emotions is often part of what helps you feel sexually connected",
+        explanation: "Reassuring or grounding them often deepens your sexual connection",
       },
       {
         option: "7 = Very true",
         explanation:
-          "caregiving, calming, or emotionally holding your partner often deepens your sense of sexual connection",
+          "Helping them feel emotionally safe strongly increases intimacy and connection",
       },
     ],
     hoverStates: {
@@ -2102,9 +2097,9 @@ export const surveyQuestions: SurveyQuestion[] = [
     supportAndGuidance:
       "Several motives may fit. Focus on the recurring drivers that bring your desire online most reliably, not every reason sex can matter.",
     comment:
-      "This is one of the most important direct questions in the survey because it tells us what actually pulls desire online for you: bonding, play, novelty, power, meaning, repair, comfort, intensity, escape, or service.",
+      "This is one of the most important direct questions in the assessment because it tells us what actually pulls desire online for you: bonding, play, novelty, power, meaning, repair, comfort, intensity, escape, or service.",
     howAnswerIsUsed:
-      "This is one of the most important direct questions in the survey because it tells us what actually pulls desire online for you: bonding, play, novelty, power, meaning, repair, comfort, intensity, escape, or service.",
+      "This is one of the most important direct questions in the assessment because it tells us what actually pulls desire online for you: bonding, play, novelty, power, meaning, repair, comfort, intensity, escape, or service.",
     answerOptionsExplained: [
       { option: "Bonding and closeness", explanation: "Feeling emotionally close opens desire" },
       {
@@ -2625,15 +2620,15 @@ export const surveyQuestions: SurveyQuestion[] = [
     answerType: "multiple",
     options: [
       "Wanting sex more often (desire)",
-      "Feeling more pleasure or orgasm",
+      "More pleasure or orgasm",
       "Less pain or physical discomfort",
       "Feeling more connected & close",
-      "Communicating needs more clearly",
+      "Communicating more clearly",
       "More excitement & novelty",
       "Feeling more confident in my body",
       "Improving connection to my own sexuality",
       "Healing past hurt or blocks",
-      "Being more aligned with my partner",
+      "Being more aligned with someone I’m involved with",
       "Something else",
     ],
     required: true,
@@ -2652,7 +2647,7 @@ export const surveyQuestions: SurveyQuestion[] = [
           "wanting sex more often or getting turned on more easily would make the biggest difference right now",
       },
       {
-        option: "Feeling more pleasure or orgasm",
+        option: "More pleasure or orgasm",
         explanation:
           "greater enjoyment, responsiveness, or orgasm access feels like the main lever for improvement",
       },
@@ -2667,7 +2662,7 @@ export const surveyQuestions: SurveyQuestion[] = [
           "more emotional safety, closeness, and openness would make the biggest difference",
       },
       {
-        option: "Communicating needs more clearly",
+        option: "Communicating more clearly",
         explanation:
           "clearer expression of needs, boundaries, and desires would improve things most",
       },
@@ -2690,7 +2685,7 @@ export const surveyQuestions: SurveyQuestion[] = [
           "shame, fear, grief, hurt, or unresolved emotional blocks need attention first",
       },
       {
-        option: "Being more aligned with my partner",
+        option: "Being more aligned with someone I’m involved with",
         explanation:
           "mismatch in desire, timing, expectations, roles, or relational rhythm feels like the main issue",
       },
@@ -2716,9 +2711,9 @@ export const surveyQuestions: SurveyQuestion[] = [
       "Answer from your real priorities in this season of life, not from what you think you should care about.",
     scaleLabels: { low: "Not true at all", high: "Very true" },
     comment:
-      "This tells us whether to make your recommendations more immediate and action-oriented or more exploratory and low-pressure.",
+      "This tells us whether to make your recommendations more immediate and action-oriented or more exploratory and grounded.",
     howAnswerIsUsed:
-      "This tells us whether to make your recommendations more immediate and action-oriented or more exploratory and low-pressure.",
+      "This tells us whether to make your recommendations more immediate and action-oriented or more exploratory and grounded.",
     answerOptionsExplained: [
       {
         option: "1 = Not true at all",
@@ -2893,32 +2888,32 @@ export const surveyQuestions: SurveyQuestion[] = [
       {
         option: "Recharging / Pausing",
         explanation:
-          "sexuality feels quieter right now, and rest, lower pressure, or recovery matter most",
+          "Sex or desire feels quieter right now, and rest, space, or lower pressure matters most",
       },
       {
         option: "Repairing / Reconnecting",
         explanation:
-          "you are rebuilding trust, safety, openness, or connection after stress, pain, shame, or disconnection",
+          "You are rebuilding safety, trust, closeness, or openness after stress, hurt, shame, or disconnection",
       },
       {
         option: "Awakening / Exploring",
         explanation:
-          "desire feels curious and alive, and you are discovering what fits with lower-pressure exploration",
+          "You are beginning to feel more curiosity, aliveness, or interest in what you like and want",
       },
       {
         option: "Expanding / Experimenting",
         explanation:
-          "you feel more confident and want greater expression, communication, novelty, or play",
+          "You feel ready for more play, novelty, confidence, communication, or erotic range",
       },
       {
         option: "Grounded / Integrated",
         explanation:
-          "sexuality feels steadier and more established, with fulfillment coming through consistency, rhythm, and presence",
+          "Sexuality feels relatively steady, natural, and integrated into your life or relationship",
       },
       {
         option: "Evolving / Transcending",
         explanation:
-          "sexuality feels expansive, meaningful, and connected to deeper emotional, creative, or spiritual dimensions",
+          "Sexuality feels connected to deeper intimacy, meaning, growth, creativity, or spirituality",
       },
     ],
     formatGuidance: "Select one option.",
@@ -2939,9 +2934,9 @@ export const surveyQuestions: SurveyQuestion[] = [
     ],
     required: true,
     guide:
-      "Think of this as your realistic north star for the next 3–6 months. It does not need to be the highest stage, only the direction that feels meaningful and workable.",
+      "Several may appeal, but pick the direction that would make the biggest positive difference for you right now.",
     supportAndGuidance:
-      "Think of this as your realistic north star for the next 3–6 months. It does not need to be the highest stage, only the direction that feels meaningful and workable.",
+      "Several may appeal, but pick the direction that would make the biggest positive difference for you right now.",
     comment:
       "This shows the direction you want to grow, so recommendations aim toward your desired phase instead of only describing the present.",
     howAnswerIsUsed:
@@ -2950,32 +2945,31 @@ export const surveyQuestions: SurveyQuestion[] = [
       {
         option: "Recharging / Pausing",
         explanation:
-          "sexuality feels quieter right now, and rest, lower pressure, or recovery matter most",
+          "I want less pressure around sex, with more rest, space, ease, or permission to slow down",
       },
       {
         option: "Repairing / Reconnecting",
         explanation:
-          "you are rebuilding trust, safety, openness, or connection after stress, pain, shame, or disconnection",
+          "I want to rebuild trust, safety, closeness, or openness after stress, hurt, shame, distance, or disconnection",
       },
       {
         option: "Awakening / Exploring",
         explanation:
-          "desire feels curious and alive, and you are discovering what fits with lower-pressure exploration",
+          "I want to feel more curious, alive, and in touch with what I like, want, or might enjoy",
       },
       {
         option: "Expanding / Experimenting",
-        explanation:
-          "you feel more confident and want greater expression, communication, novelty, or play",
+        explanation: "I want more play, novelty, confidence, communication, or erotic range",
       },
       {
         option: "Grounded / Integrated",
         explanation:
-          "sexuality feels steadier and more established, with fulfillment coming through consistency, rhythm, and presence",
+          "I want sexuality to feel steadier, more natural, and more consistently part of my life or relationship",
       },
       {
         option: "Evolving / Transcending",
         explanation:
-          "sexuality feels expansive, meaningful, and connected to deeper emotional, creative, or spiritual dimensions",
+          "I want sexuality to feel deeper, more meaningful, more intimate, or connected to growth, devotion, creativity, or spirituality",
       },
     ],
     formatGuidance: "Select one option.",
@@ -3230,7 +3224,7 @@ export const surveyQuestions: SurveyQuestion[] = [
     options: [
       "I’m not sure what would actually help",
       "I don’t have enough time or energy",
-      "My partner isn’t aligned or engaged",
+      "Someone I’m involved with isn’t aligned or engaged",
       "It doesn’t feel emotionally safe yet",
       "Shame, pressure, or self-judgment get in the way",
       "Physical pain or body-related issues",
@@ -3258,7 +3252,7 @@ export const surveyQuestions: SurveyQuestion[] = [
         explanation: "life load leaves too little bandwidth for focus, repair, or experimentation",
       },
       {
-        option: "My partner isn’t aligned or engaged",
+        option: "Someone I’m involved with isn’t aligned or engaged",
         explanation:
           "your partner does not feel available, willing, or on the same page enough for meaningful progress",
       },
