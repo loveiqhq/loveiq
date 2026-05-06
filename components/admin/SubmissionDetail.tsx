@@ -174,9 +174,13 @@ export default function SubmissionDetail({ id, mode = "submission" }: Submission
     !isPartial && submission.report_token
       ? `${siteUrl}/report/${encodeURIComponent(submission.report_token)}`
       : null;
+  // Hotjar's filtered-playback deep-link URL is undocumented and varies by
+  // workspace. We send admins to the bare recordings list and surface the
+  // hjUid in a copyable chip so they can paste it into Hotjar's own filter
+  // UI — that's the only path that's been stable across Hotjar versions.
   const hotjarUrl =
     !isPartial && submission.hotjar_user_id && hotjarSiteId
-      ? `https://insights.hotjar.com/sites/${hotjarSiteId}/playbacks/list?filter=user_attributes_user_id:${encodeURIComponent(submission.hotjar_user_id)}`
+      ? `https://insights.hotjar.com/sites/${hotjarSiteId}/playbacks`
       : null;
 
   return (
@@ -208,16 +212,27 @@ export default function SubmissionDetail({ id, mode = "submission" }: Submission
                 href={hotjarUrl}
                 target="_blank"
                 rel="noreferrer noopener"
+                title="Opens the Hotjar recordings list. Paste the hjUid (next to this button) into Hotjar's filter to see only this user's sessions."
                 className="rounded-lg border border-orange-500/30 bg-orange-500/10 px-3 py-1.5 text-xs font-medium text-orange-300 transition hover:bg-orange-500/20"
               >
                 Hotjar recordings ↗
               </a>
-              <span
-                className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 font-mono text-[11px] text-text-muted"
-                title="Hotjar user_id — paste into Hotjar's user-attribute search if the deep-link filter does not match."
+              <button
+                type="button"
+                onClick={() => {
+                  if (
+                    typeof navigator !== "undefined" &&
+                    navigator.clipboard &&
+                    submission.hotjar_user_id
+                  ) {
+                    void navigator.clipboard.writeText(submission.hotjar_user_id);
+                  }
+                }}
+                className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 font-mono text-[11px] text-text-muted transition hover:bg-white/10"
+                title="Click to copy. Paste into Hotjar → Recordings → Filter → User attribute → user_id."
               >
-                hjUid: {submission.hotjar_user_id}
-              </span>
+                hjUid: {submission.hotjar_user_id} ⎘
+              </button>
             </>
           )}
           {!hotjarUrl && submission.session_id && (
