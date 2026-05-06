@@ -12,7 +12,8 @@ npm run lint         # Run ESLint
 npm test             # Run unit tests once (Vitest)
 npm run start        # Run production build locally
 npm run analyze      # Bundle size analysis (opens visual treemap)
-npm run check        # Lint + test + build (full CI check)
+npm run docs:check   # Docs-truth + markdown prettier (mirrors docs-truth CI job)
+npm run check        # Lint + test + docs:check + build (full CI check)
 npm run setup        # Install deps + create .env.local from .env.example
 ```
 

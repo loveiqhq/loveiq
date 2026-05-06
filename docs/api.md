@@ -17,6 +17,7 @@ Survey product-flow details such as step orchestration, storage, autosave, and r
 | `/api/cron/payment-fulfillment-sweep` | `GET`       | Scheduled job: rescue paid-but-locked reports. Authenticated via `CRON_SECRET`.      |
 | `/api/cron/report-discount-email`     | `GET`       | Scheduled job: send report-pricing discount nudges. Authenticated via `CRON_SECRET`. |
 | `/api/cron/survey-paused`             | `GET`       | Scheduled job: nudge users who paused the survey. Authenticated via `CRON_SECRET`.   |
+| `/api/analytics-event`                | `POST`      | Persist allowlisted report-engagement events to `analytics_event` (FK-validated).    |
 | `/api/health`                         | `GET`       | Service health check with dependency status.                                         |
 | `/api/invite`                         | `POST`      | Invite email request with async delivery/tracking.                                   |
 | `/api/invite-tracking`                | `POST`      | Invite share tracking.                                                               |
