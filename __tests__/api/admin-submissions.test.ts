@@ -127,15 +127,36 @@ describe("GET /api/admin/submissions", () => {
     );
   });
 
-  it("includes email filter in PostgREST query with inner join", async () => {
+  it("includes full-text search filter in PostgREST query with inner join", async () => {
+    mockSubmissionsOk();
+
+    const res = await GET(makeRequest("?q=alice"));
+    expect(res.status).toBe(200);
+
+    const queryUrl = mockSupabaseFetch.mock.calls[1][0] as string;
+    expect(queryUrl).toContain("app_user!fk_survey_submission_user!inner");
+    expect(queryUrl).toContain("app_user.or=(email.ilike.*alice*,first_name.ilike.*alice*)");
+  });
+
+  it("treats numeric q as id-only search (no app_user join filter)", async () => {
+    mockSubmissionsOk();
+
+    const res = await GET(makeRequest("?q=42"));
+    expect(res.status).toBe(200);
+
+    const queryUrl = mockSupabaseFetch.mock.calls[0][0] as string;
+    expect(queryUrl).toContain("&id=eq.42");
+    expect(queryUrl).not.toContain("app_user.or=");
+  });
+
+  it("accepts the legacy `email` param as an alias for `q`", async () => {
     mockSubmissionsOk();
 
     const res = await GET(makeRequest("?email=alice"));
     expect(res.status).toBe(200);
 
     const queryUrl = mockSupabaseFetch.mock.calls[1][0] as string;
-    expect(queryUrl).toContain("app_user!fk_survey_submission_user!inner");
-    expect(queryUrl).toContain("app_user.email=ilike.*alice*");
+    expect(queryUrl).toContain("app_user.or=(email.ilike.*alice*,first_name.ilike.*alice*)");
   });
 
   it("includes archetype filter in PostgREST query with inner join", async () => {

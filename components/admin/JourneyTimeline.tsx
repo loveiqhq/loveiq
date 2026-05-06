@@ -22,6 +22,16 @@ const typeColors: Record<string, string> = {
   survey_complete: "bg-green-400",
   scored: "bg-accent-orange",
   invite_sent: "bg-accent-orange/60",
+  email_sent_waitlist_confirm: "bg-blue-300",
+  email_sent_report_link: "bg-green-300",
+  email_sent_invite: "bg-orange-300",
+  report_shared: "bg-pink-400",
+  report_viewed: "bg-emerald-300",
+  paywall_view: "bg-yellow-300",
+  begin_checkout: "bg-yellow-400",
+  report_engagement_1min: "bg-emerald-400/70",
+  report_engagement_5min: "bg-emerald-500/80",
+  report_engagement_10min: "bg-emerald-600",
 };
 
 function formatTime(iso: string): string {

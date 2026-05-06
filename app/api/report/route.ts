@@ -438,6 +438,7 @@ export async function GET(request: Request) {
     );
 
     const response = NextResponse.json({
+      submissionId: submission.id,
       accessPlan,
       userName: getSubmissionUserName(submission),
       userEmail: isShareAccess ? null : getSubmissionUserEmail(submission),

@@ -7,6 +7,7 @@ import type { SurveyAnswers } from "@/lib/survey/types";
 import { getSurveyContactInfo } from "@/lib/survey/utils";
 import type { AnswerValue } from "./useSurveyState";
 import { getSessionId, setReportSessionId, setReportToken } from "./surveySession";
+import { readHotjarUserId } from "@/lib/hotjar";
 import {
   clearPendingCompletion,
   loadPendingCompletion,
@@ -59,6 +60,7 @@ export function useSubmitSurvey() {
       setStatus("submitting");
 
       try {
+        const hotjarUserId = readHotjarUserId();
         const res = await fetch("/api/survey", {
           method: "POST",
           headers: {
@@ -73,6 +75,7 @@ export function useSubmitSurvey() {
             durationMs: payload.durationMs,
             ...(payload.utmTracker ? { utmTracker: payload.utmTracker } : {}),
             ...(payload.sessionId ? { sessionId: payload.sessionId } : {}),
+            ...(hotjarUserId ? { hotjarUserId } : {}),
           }),
         });
 

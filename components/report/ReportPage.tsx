@@ -51,7 +51,7 @@ import {
 } from "@/lib/report/access";
 import { fromArchetypeSlug, isArchetypeName, toArchetypeSlug } from "@/lib/report/archetypeSlug";
 import { getCsrfToken } from "@/lib/csrf-client";
-import { trackReportViewed } from "@/lib/analytics";
+import { setReportSubmissionContext, trackReportViewed } from "@/lib/analytics";
 import { useReportEngagementTimers } from "./hooks/useReportEngagementTimers";
 
 interface SnapshotContent {
@@ -830,6 +830,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     if (reportViewedFiredRef.current) return;
     if (!data) return;
     reportViewedFiredRef.current = true;
+    setReportSubmissionContext(data.submissionId ?? null);
     trackReportViewed(accessPlan ?? "locked", data.primaryArchetype ?? null);
   }, [data, accessPlan]);
 

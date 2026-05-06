@@ -34,12 +34,15 @@ loveiq-web/
 │   │   ├── invite/route.ts         # Invite email sending → Resend + Supabase
 │   │   ├── invite-tracking/route.ts # Invite share method tracking → Supabase
 │   │   ├── survey-partial/route.ts  # Partial survey save (draft) → Supabase
+│   │   ├── analytics-event/route.ts # Persist report-engagement events to analytics_event (CSRF + rate-limited; allowlisted event types only)
 │   │   └── admin/                   # Admin panel API routes
 │   │       ├── login/route.ts       # Admin login (magic link via Supabase Auth)
 │   │       ├── logout/route.ts      # Admin logout
 │   │       ├── stats/route.ts       # Dashboard analytics
-│   │       ├── submissions/route.ts # Submission list (paginated)
-│   │       ├── submissions/[id]/route.ts # Submission CRUD (GET/PATCH/DELETE)
+│   │       ├── submissions/route.ts # Submission list (paginated, full-text search, per-column sort, is_likely_test flag)
+│   │       ├── submissions/[id]/route.ts # Submission CRUD (GET/PATCH/DELETE; GET also returns report_token + hotjar_user_id)
+│   │       ├── submissions/[id]/timeline/route.ts # User journey timeline (waitlist, emails, shares, report engagement events)
+│   │       ├── submissions/bulk-delete/route.ts # Bulk delete test submissions (admin role; server re-verifies is_likely_test)
 │   │       ├── export/route.ts      # CSV export
 │   │       ├── survey-status/route.ts # Survey active/closed toggle
 │   │       └── product-kpis/route.ts  # Product KPI data (static)
@@ -187,35 +190,37 @@ loveiq-web/
 
 Copy `.env.example` to `.env.local` and fill values:
 
-| Variable                                   | Required     | Purpose                                                                           |
-| ------------------------------------------ | ------------ | --------------------------------------------------------------------------------- |
-| `NEXT_PUBLIC_SITE_URL`                     | Yes          | Canonical URL for metadata                                                        |
-| `SUPABASE_URL`                             | For forms    | Waitlist database                                                                 |
-| `SUPABASE_SERVICE_ROLE_KEY`                | For forms    | Supabase auth (server-only!)                                                      |
-| `RESEND_API_KEY`                           | For forms    | Email sending                                                                     |
-| `RESEND_FROM`                              | No           | From address (default: `LoveIQ <hello@send.loveiq.org>`)                          |
-| `RESEND_REPLY_TO`                          | No           | Reply-to address                                                                  |
-| `NEXT_PUBLIC_RECAPTCHA_SITE_KEY`           | For contact  | reCAPTCHA client key                                                              |
-| `RECAPTCHA_SECRET_KEY`                     | For contact  | reCAPTCHA server key                                                              |
-| `SLACK_WAITLIST_WEBHOOK_URL`               | No           | Slack notifications for waitlist signups                                          |
-| `SLACK_CONTACT_WEBHOOK_URL`                | No           | Slack notifications for contact form                                              |
-| `SLACK_SURVEY_WEBHOOK_URL`                 | No           | Slack notifications for survey submissions                                        |
-| `SLACK_PAYMENTS_WEBHOOK_URL`               | No           | Slack notifications for report purchases                                          |
-| `STAGING_PASSWORD`                         | For staging  | Password gate for staging deployment                                              |
-| `NEXT_PUBLIC_SUPABASE_URL`                 | For admin    | Supabase project URL (browser-safe, for admin auth SDK)                           |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY`            | For admin    | Supabase anon key (browser-safe, for admin auth SDK)                              |
-| `SURVEY_CLOSE_PASSWORD`                    | For admin    | Password required to close/pause the survey (server-only)                         |
-| `CONTACT_TO_EMAIL`                         | For contact  | Contact form recipient                                                            |
-| `NEXT_PUBLIC_GTM_ID`                       | No           | GTM container ID (optional, falls back to direct gtag.js)                         |
-| `LOG_LEVEL`                                | No           | Pino log level (fatal/error/warn/info/debug/trace; default: info)                 |
-| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`       | For checkout | Browser-safe Stripe publishable key (`pk_test_...` sandbox or `pk_live_...` prod) |
-| `STRIPE_SECRET_KEY`                        | For checkout | Server-only Stripe secret (`sk_test_...` sandbox or `sk_live_...` prod)           |
-| `STRIPE_WEBHOOK_SECRET`                    | For checkout | Webhook signing secret (`whsec_...`) per Stripe dashboard endpoint                |
-| `STRIPE_CHECKOUT_ENABLED`                  | For checkout | `true` to create real Stripe sessions; default `false`                            |
-| `NEXT_PUBLIC_STRIPE_CHECKOUT_PREVIEW_MODE` | No           | `false` for normal flow; `true` adds a "preview" banner only                      |
-| `KV_REST_API_URL`                          | For prod     | Upstash Redis REST URL — backs the rate limiter; falls back to in-memory if unset |
-| `KV_REST_API_TOKEN`                        | For prod     | Upstash Redis REST token — paired with `KV_REST_API_URL`                          |
-| `CRON_SECRET`                              | For crons    | Bearer token for `/api/cron/*` endpoints; required when those crons are deployed  |
+| Variable                                   | Required     | Purpose                                                                                                    |
+| ------------------------------------------ | ------------ | ---------------------------------------------------------------------------------------------------------- |
+| `NEXT_PUBLIC_SITE_URL`                     | Yes          | Canonical URL for metadata                                                                                 |
+| `SUPABASE_URL`                             | For forms    | Waitlist database                                                                                          |
+| `SUPABASE_SERVICE_ROLE_KEY`                | For forms    | Supabase auth (server-only!)                                                                               |
+| `RESEND_API_KEY`                           | For forms    | Email sending                                                                                              |
+| `RESEND_FROM`                              | No           | From address (default: `LoveIQ <hello@send.loveiq.org>`)                                                   |
+| `RESEND_REPLY_TO`                          | No           | Reply-to address                                                                                           |
+| `NEXT_PUBLIC_RECAPTCHA_SITE_KEY`           | For contact  | reCAPTCHA client key                                                                                       |
+| `RECAPTCHA_SECRET_KEY`                     | For contact  | reCAPTCHA server key                                                                                       |
+| `SLACK_WAITLIST_WEBHOOK_URL`               | No           | Slack notifications for waitlist signups                                                                   |
+| `SLACK_CONTACT_WEBHOOK_URL`                | No           | Slack notifications for contact form                                                                       |
+| `SLACK_SURVEY_WEBHOOK_URL`                 | No           | Slack notifications for survey submissions                                                                 |
+| `SLACK_PAYMENTS_WEBHOOK_URL`               | No           | Slack notifications for report purchases                                                                   |
+| `STAGING_PASSWORD`                         | For staging  | Password gate for staging deployment                                                                       |
+| `NEXT_PUBLIC_SUPABASE_URL`                 | For admin    | Supabase project URL (browser-safe, for admin auth SDK)                                                    |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY`            | For admin    | Supabase anon key (browser-safe, for admin auth SDK)                                                       |
+| `SURVEY_CLOSE_PASSWORD`                    | For admin    | Password required to close/pause the survey (server-only)                                                  |
+| `CONTACT_TO_EMAIL`                         | For contact  | Contact form recipient                                                                                     |
+| `NEXT_PUBLIC_GTM_ID`                       | No           | GTM container ID (optional, falls back to direct gtag.js)                                                  |
+| `LOG_LEVEL`                                | No           | Pino log level (fatal/error/warn/info/debug/trace; default: info)                                          |
+| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`       | For checkout | Browser-safe Stripe publishable key (`pk_test_...` sandbox or `pk_live_...` prod)                          |
+| `STRIPE_SECRET_KEY`                        | For checkout | Server-only Stripe secret (`sk_test_...` sandbox or `sk_live_...` prod)                                    |
+| `STRIPE_WEBHOOK_SECRET`                    | For checkout | Webhook signing secret (`whsec_...`) per Stripe dashboard endpoint                                         |
+| `STRIPE_CHECKOUT_ENABLED`                  | For checkout | `true` to create real Stripe sessions; default `false`                                                     |
+| `NEXT_PUBLIC_STRIPE_CHECKOUT_PREVIEW_MODE` | No           | `false` for normal flow; `true` adds a "preview" banner only                                               |
+| `KV_REST_API_URL`                          | For prod     | Upstash Redis REST URL — backs the rate limiter; falls back to in-memory if unset                          |
+| `KV_REST_API_TOKEN`                        | For prod     | Upstash Redis REST token — paired with `KV_REST_API_URL`                                                   |
+| `CRON_SECRET`                              | For crons    | Bearer token for `/api/cron/*` endpoints; required when those crons are deployed                           |
+| `NEXT_PUBLIC_HOTJAR_SITE_ID`               | No           | Numeric Hotjar site id; loads the recording snippet (consent-gated) and enables admin recording deep-links |
+| `ADMIN_TEST_EMAIL_REGEX`                   | No           | Override the staff-email regex used to flag test submissions (default `^.+@loveiq\.org$`)                  |
 
 **The site renders without env vars.** Forms will fail gracefully with error messages.
 

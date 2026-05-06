@@ -240,6 +240,10 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
+const HOTJAR_SITE_ID_RAW = process.env.NEXT_PUBLIC_HOTJAR_SITE_ID;
+const hotjarSiteId =
+  HOTJAR_SITE_ID_RAW && /^\d+$/.test(HOTJAR_SITE_ID_RAW) ? HOTJAR_SITE_ID_RAW : null;
+
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const headersList = await headers();
   const nonce = headersList.get("x-nonce") || "";
@@ -310,6 +314,16 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             window.gtag('config', 'AW-18068690553');
           `}
         </Script>
+        {hotjarSiteId && (
+          <Script
+            id="hotjar-init"
+            strategy="lazyOnload"
+            nonce={nonce}
+            data-cookieyes="cookieyes-analytics"
+          >
+            {`(function(h,o,t,j,a,r){h.hj=h.hj||function(){(h.hj.q=h.hj.q||[]).push(arguments)};h._hjSettings={hjid:${hotjarSiteId},hjsv:6};a=o.getElementsByTagName('head')[0];r=o.createElement('script');r.async=1;r.src=t+h._hjSettings.hjid+j+h._hjSettings.hjsv;a.appendChild(r);})(window,document,'https://static.hotjar.com/c/hotjar-','.js?sv=');`}
+          </Script>
+        )}
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationSchema) }}

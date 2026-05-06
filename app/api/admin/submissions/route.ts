@@ -10,6 +10,7 @@ import { supabaseFetch } from "@/lib/admin/supabase";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
 import logger from "@/lib/logger";
 import { buildPartialSubmissionRecord, type SurveyPartialRow } from "@/lib/admin/survey-partials";
+import { evaluateTestSubmission } from "@/lib/admin/test-submission";
 
 export const dynamic = "force-dynamic";
 
@@ -23,9 +24,10 @@ function topGap(values: Record<string, number> | null | undefined): number | nul
   return Math.round((sorted[0] - sorted[1]) * 10) / 10;
 }
 
-function matchesEmailFilter(email: string, filter: string) {
-  if (!filter) return true;
-  return email.toLowerCase().includes(filter.toLowerCase());
+function matchesTextQuery(row: { email: string; first_name: string }, query: string) {
+  if (!query) return true;
+  const haystack = `${row.email} ${row.first_name}`.toLowerCase();
+  return haystack.includes(query.toLowerCase());
 }
 
 function chunk<T>(items: T[], size: number): T[][] {
@@ -34,6 +36,50 @@ function chunk<T>(items: T[], size: number): T[][] {
     chunks.push(items.slice(index, index + size));
   }
   return chunks;
+}
+
+type SortField =
+  | "priority"
+  | "started_at"
+  | "completed_at"
+  | "email"
+  | "first_name"
+  | "status"
+  | "archetype_v4"
+  | "archetype_v5"
+  | "duration_ms";
+
+type SortDir = "asc" | "desc";
+
+const VALID_SORT_FIELDS: ReadonlySet<SortField> = new Set<SortField>([
+  "priority",
+  "started_at",
+  "completed_at",
+  "email",
+  "first_name",
+  "status",
+  "archetype_v4",
+  "archetype_v5",
+  "duration_ms",
+]);
+
+/**
+ * Parse `sort=field:dir` while keeping the legacy `priority` / `date_desc` /
+ * `date_asc` aliases so saved views and bookmarks don't break.
+ */
+function parseSort(raw: string): { field: SortField; dir: SortDir } {
+  if (!raw || raw === "priority") return { field: "priority", dir: "desc" };
+  if (raw === "date_desc") return { field: "completed_at", dir: "desc" };
+  if (raw === "date_asc") return { field: "completed_at", dir: "asc" };
+
+  const [field, dir] = raw.split(":");
+  if (VALID_SORT_FIELDS.has(field as SortField)) {
+    return {
+      field: field as SortField,
+      dir: dir === "asc" ? "asc" : "desc",
+    };
+  }
+  return { field: "priority", dir: "desc" };
 }
 
 export async function GET(request: Request) {
@@ -59,14 +105,21 @@ export async function GET(request: Request) {
   const page = Math.max(1, parseInt(url.searchParams.get("page") || "1", 10));
   const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get("limit") || "20", 10)));
   const status = url.searchParams.get("status") || "";
-  const email = url.searchParams.get("email") || "";
+  // Backwards compat: `email` is the legacy field name kept for saved views.
+  const q = (url.searchParams.get("q") || url.searchParams.get("email") || "").trim();
   const archetype = url.searchParams.get("archetype") || "";
   const dateFrom = url.searchParams.get("dateFrom") || "";
   const dateTo = url.searchParams.get("dateTo") || "";
-  const sortParam = url.searchParams.get("sort") || "priority";
-  const sort: "priority" | "date_desc" | "date_asc" =
-    sortParam === "date_desc" || sortParam === "date_asc" ? sortParam : "priority";
-  const dateAscending = sort === "date_asc";
+  const testOnly = url.searchParams.get("test") === "1";
+
+  const sort = parseSort(url.searchParams.get("sort") || "priority");
+  const dateAscending =
+    sort.field === "started_at" || sort.field === "completed_at" ? sort.dir === "asc" : false;
+
+  // When q parses as a positive integer, treat as id-only search; otherwise
+  // it's a full-text search across email + first_name.
+  const numericQuery = /^\d+$/.test(q) ? Number(q) : null;
+  const textQuery = numericQuery === null ? q : "";
 
   const offset = (page - 1) * limit;
   const includePartials = !status || status === "partial" || status === "pending_completion";
@@ -75,8 +128,14 @@ export async function GET(request: Request) {
   try {
     let partialRecords: Array<ReturnType<typeof buildPartialSubmissionRecord>> = [];
 
-    if (includePartials && !archetype) {
-      const partialOrder = dateAscending ? "saved_at.asc" : "saved_at.desc";
+    if (includePartials && !archetype && numericQuery === null) {
+      const partialOrder =
+        sort.field === "started_at"
+          ? `started_at.${sort.dir}.nullslast`
+          : sort.field === "completed_at" || sort.field === "priority"
+            ? `saved_at.${sort.dir === "asc" ? "asc" : "desc"}`
+            : `saved_at.desc`;
+
       let partialQuery = `/rest/v1/survey_partial_save?select=id,session_id,answers,current_index,started_at,saved_at,utm_tracker&order=${partialOrder}`;
       if (dateFrom) partialQuery += `&saved_at=gte.${encodeURIComponent(dateFrom)}`;
       if (dateTo) {
@@ -121,7 +180,7 @@ export async function GET(request: Request) {
       partialRecords = partialRows
         .filter((row) => !matchedSessionIds.has(row.session_id))
         .map(buildPartialSubmissionRecord)
-        .filter((row) => matchesEmailFilter(row.email, email))
+        .filter((row) => matchesTextQuery(row, textQuery))
         .filter((row) => (status ? row.status === status : true));
     }
 
@@ -152,7 +211,7 @@ export async function GET(request: Request) {
     let completedTotal = 0;
 
     if (includeCompleted) {
-      const userJoin = email
+      const userJoin = textQuery
         ? "app_user!fk_survey_submission_user!inner(email,first_name)"
         : "app_user!fk_survey_submission_user(email,first_name)";
       const scoringJoin = archetype
@@ -160,14 +219,36 @@ export async function GET(request: Request) {
         : "scoring_result(primary_archetype,v5_primary_archetype,percentages,v5_percentages)";
       const completedFetchSize = Math.max(limit, offset + limit + partialRecords.length);
 
-      const completedOrder = dateAscending ? "created_date_time.asc" : "created_date_time.desc";
+      const completedOrder = (() => {
+        switch (sort.field) {
+          case "started_at":
+            return `start_date_time.${sort.dir}.nullslast`;
+          case "duration_ms":
+            return `duration_ms.${sort.dir}.nullslast`;
+          case "status":
+            return `status.${sort.dir}`;
+          case "completed_at":
+          case "priority":
+          default:
+            return `created_date_time.${dateAscending ? "asc" : "desc"}`;
+        }
+      })();
       let query = `/rest/v1/survey_submission?select=id,status,start_date_time,created_date_time,duration_ms,${userJoin},${scoringJoin}&order=${completedOrder}`;
       if (status) query += `&status=eq.${encodeURIComponent(status)}`;
       if (dateFrom) query += `&start_date_time=gte.${encodeURIComponent(dateFrom)}`;
       if (dateTo) {
         query += `&start_date_time=lte.${encodeURIComponent(dateTo + "T23:59:59.999Z")}`;
       }
-      if (email) query += `&app_user.email=ilike.*${encodeURIComponent(email)}*`;
+      if (numericQuery !== null) {
+        query += `&id=eq.${numericQuery}`;
+      } else if (textQuery) {
+        // `,` and `(` would break the OR group; strip then escape ilike wildcards.
+        const safeText = textQuery.replace(/[(),]/g, " ").trim();
+        if (safeText) {
+          const pattern = `*${encodeURIComponent(safeText)}*`;
+          query += `&app_user.or=(email.ilike.${pattern},first_name.ilike.${pattern})`;
+        }
+      }
       if (archetype)
         query += `&scoring_result.primary_archetype=eq.${encodeURIComponent(archetype)}`;
 
@@ -313,30 +394,30 @@ export async function GET(request: Request) {
       });
     }
 
-    const merged = [...partialRecords, ...completedRows];
-    if (sort === "date_desc") {
-      merged.sort(
-        (left, right) =>
-          new Date(right.completed_at).getTime() - new Date(left.completed_at).getTime()
-      );
-    } else if (sort === "date_asc") {
-      merged.sort(
-        (left, right) =>
-          new Date(left.completed_at).getTime() - new Date(right.completed_at).getTime()
-      );
-    } else {
-      merged.sort(
-        (left, right) =>
-          right.priority_score - left.priority_score ||
-          new Date(right.completed_at).getTime() - new Date(left.completed_at).getTime()
-      );
-    }
-    const submissions = merged.slice(offset, offset + limit);
+    const merged = [...partialRecords, ...completedRows].map((row) => {
+      const evaluation = evaluateTestSubmission({
+        recordType: row.record_type,
+        email: row.email,
+        durationMs: row.duration_ms,
+        answerCount: row.answer_count,
+        startedAt: row.started_at,
+        savedAt: row.saved_at,
+      });
+      return {
+        ...row,
+        is_likely_test: evaluation.isLikelyTest,
+        test_reasons: evaluation.reasons,
+      };
+    });
+
+    const filtered = testOnly ? merged.filter((row) => row.is_likely_test) : merged;
+    const sorted = applySort(filtered, sort);
+    const submissions = sorted.slice(offset, offset + limit);
 
     return NextResponse.json(
       {
         submissions,
-        total: completedTotal + partialRecords.length,
+        total: testOnly ? sorted.length : completedTotal + partialRecords.length,
         page,
         limit,
       },
@@ -350,4 +431,72 @@ export async function GET(request: Request) {
     logger.error({ err }, "Admin submissions error");
     return NextResponse.json({ error: "Unable to load submissions." }, { status: 500 });
   }
+}
+
+interface SortableRow {
+  email: string;
+  first_name: string;
+  status: string;
+  started_at: string;
+  completed_at: string;
+  duration_ms: number | null;
+  primary_archetype: string | null;
+  v5_primary_archetype: string | null;
+  priority_score: number;
+}
+
+function applySort<T extends SortableRow>(
+  rows: T[],
+  sort: { field: SortField; dir: SortDir }
+): T[] {
+  const dir = sort.dir === "asc" ? 1 : -1;
+  const cmpString = (a: string | null, b: string | null) => {
+    const av = a ?? "";
+    const bv = b ?? "";
+    return av.localeCompare(bv) * dir;
+  };
+  const cmpNumber = (a: number | null | undefined, b: number | null | undefined) => {
+    const av = a ?? Number.NEGATIVE_INFINITY;
+    const bv = b ?? Number.NEGATIVE_INFINITY;
+    return (av - bv) * dir;
+  };
+  const cmpDate = (a: string, b: string) => (new Date(a).getTime() - new Date(b).getTime()) * dir;
+
+  const sorted = [...rows];
+  switch (sort.field) {
+    case "priority":
+      sorted.sort(
+        (l, r) =>
+          (sort.dir === "asc"
+            ? l.priority_score - r.priority_score
+            : r.priority_score - l.priority_score) ||
+          new Date(r.completed_at).getTime() - new Date(l.completed_at).getTime()
+      );
+      break;
+    case "started_at":
+      sorted.sort((l, r) => cmpDate(l.started_at, r.started_at));
+      break;
+    case "completed_at":
+      sorted.sort((l, r) => cmpDate(l.completed_at, r.completed_at));
+      break;
+    case "email":
+      sorted.sort((l, r) => cmpString(l.email, r.email));
+      break;
+    case "first_name":
+      sorted.sort((l, r) => cmpString(l.first_name, r.first_name));
+      break;
+    case "status":
+      sorted.sort((l, r) => cmpString(l.status, r.status));
+      break;
+    case "archetype_v4":
+      sorted.sort((l, r) => cmpString(l.primary_archetype, r.primary_archetype));
+      break;
+    case "archetype_v5":
+      sorted.sort((l, r) => cmpString(l.v5_primary_archetype, r.v5_primary_archetype));
+      break;
+    case "duration_ms":
+      sorted.sort((l, r) => cmpNumber(l.duration_ms, r.duration_ms));
+      break;
+  }
+  return sorted;
 }

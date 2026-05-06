@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect, useMemo } from "react";
 import { useAdminFetch } from "./hooks/useAdminFetch";
 import { isScoringPendingSubmission } from "@/lib/admin/submission-scoring";
 import FilterBar from "./FilterBar";
-import SubmissionTable from "./SubmissionTable";
+import SubmissionTable, { type SortState } from "./SubmissionTable";
 import Pagination from "./Pagination";
 import BulkActionBar from "./BulkActionBar";
 import SavedViewsBar from "./SavedViewsBar";
@@ -36,35 +36,55 @@ interface SubmissionsData {
     answer_count: number | null;
     current_index: number | null;
     recoverable: boolean;
+    is_likely_test?: boolean;
+    test_reasons?: string[];
   }>;
   total: number;
   page: number;
   limit: number;
 }
 
-type SortValue = "priority" | "date_desc" | "date_asc";
+interface BaseFilters {
+  status: string;
+  email: string;
+  archetype: string;
+  dateFrom: string;
+  dateTo: string;
+}
+
+interface ExtendedFilters extends BaseFilters {
+  testOnly: boolean;
+}
+
+const DEFAULT_FILTERS: ExtendedFilters = {
+  status: "",
+  email: "",
+  archetype: "",
+  dateFrom: "",
+  dateTo: "",
+  testOnly: false,
+};
+
+const DEFAULT_SORT: SortState = { field: "priority", dir: "desc" };
 
 export default function SubmissionBrowser() {
   const [page, setPage] = useState(1);
-  const [filters, setFilters] = useState({
-    status: "",
-    email: "",
-    archetype: "",
-    dateFrom: "",
-    dateTo: "",
-  });
-  const [sort, setSort] = useState<SortValue>("priority");
+  const [filters, setFilters] = useState<ExtendedFilters>(DEFAULT_FILTERS);
+  const [sort, setSort] = useState<SortState>(DEFAULT_SORT);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [filterKey, setFilterKey] = useState(0);
 
   const params = useMemo(() => {
     const p: Record<string, string> = { page: String(page), limit: "20" };
     if (filters.status) p.status = filters.status;
-    if (filters.email) p.email = filters.email;
+    if (filters.email) p.q = filters.email;
     if (filters.archetype) p.archetype = filters.archetype;
     if (filters.dateFrom) p.dateFrom = filters.dateFrom;
     if (filters.dateTo) p.dateTo = filters.dateTo;
-    if (sort !== "priority") p.sort = sort;
+    if (filters.testOnly) p.test = "1";
+    if (sort.field !== "priority" || sort.dir !== "desc") {
+      p.sort = `${sort.field}:${sort.dir}`;
+    }
     return p;
   }, [page, filters, sort]);
 
@@ -73,20 +93,22 @@ export default function SubmissionBrowser() {
     params
   );
 
-  const handleFilterChange = useCallback((newFilters: typeof filters) => {
+  const handleFilterChange = useCallback((newFilters: ExtendedFilters) => {
     setFilters(newFilters);
     setPage(1);
     setSelectedIds(new Set());
   }, []);
 
-  const handleSortChange = useCallback((next: SortValue) => {
+  const handleSortChange = useCallback((next: SortState) => {
     setSort(next);
     setPage(1);
     setSelectedIds(new Set());
   }, []);
 
-  const handleApplyView = useCallback((viewFilters: typeof filters) => {
-    setFilters(viewFilters);
+  // SavedViewsBar and ExportPresetsBar persist a smaller filter shape (no
+  // testOnly). When a view applies, reset transient flags.
+  const handleApplyView = useCallback((viewFilters: BaseFilters) => {
+    setFilters({ ...viewFilters, testOnly: false });
     setPage(1);
     setSelectedIds(new Set());
     setFilterKey((k) => k + 1);
@@ -146,6 +168,26 @@ export default function SubmissionBrowser() {
     };
   }, [data]);
 
+  // Are every selected submission flagged as a test? Used to gate bulk delete.
+  const allSelectedAreTests = useMemo(() => {
+    if (selectedIds.size === 0) return false;
+    const submissions = data?.submissions ?? [];
+    const byId = new Map<number, boolean>();
+    for (const s of submissions) {
+      if (typeof s.id === "number") byId.set(s.id, !!s.is_likely_test);
+    }
+    for (const id of selectedIds) {
+      if (!byId.get(id)) return false;
+    }
+    return true;
+  }, [selectedIds, data]);
+
+  // Saved-views bars persist a filter shape without `testOnly`. Strip locally.
+  const persistedFilters: BaseFilters = useMemo(() => {
+    const { status, email, archetype, dateFrom, dateTo } = filters;
+    return { status, email, archetype, dateFrom, dateTo };
+  }, [filters]);
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -162,17 +204,11 @@ export default function SubmissionBrowser() {
         </a>
       </div>
 
-      <SavedViewsBar filters={filters} onApplyView={handleApplyView} />
+      <SavedViewsBar filters={persistedFilters} onApplyView={handleApplyView} />
 
-      <ExportPresetsBar filters={filters} onApplyPreset={handleApplyView} />
+      <ExportPresetsBar filters={persistedFilters} onApplyPreset={handleApplyView} />
 
-      <FilterBar
-        key={filterKey}
-        onFilterChange={handleFilterChange}
-        initialFilters={filters}
-        sort={sort}
-        onSortChange={handleSortChange}
-      />
+      <FilterBar key={filterKey} onFilterChange={handleFilterChange} initialFilters={filters} />
 
       {!loading && !error && data && (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -232,10 +268,13 @@ export default function SubmissionBrowser() {
             selectable
             selectedIds={selectedIds}
             onSelectionChange={setSelectedIds}
+            sort={sort}
+            onSortChange={handleSortChange}
           />
           {selectedIds.size > 0 && (
             <BulkActionBar
               selectedIds={selectedIds}
+              allSelectedAreTests={allSelectedAreTests}
               onClear={() => setSelectedIds(new Set())}
               onComplete={handleBulkComplete}
             />

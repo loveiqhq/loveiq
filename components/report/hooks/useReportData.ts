@@ -30,6 +30,8 @@ export interface ReportPracticeTendencyContentForUser {
 }
 
 export interface ReportData {
+  /** Numeric survey_submission.id — used to attach analytics_event rows. */
+  submissionId?: number | null;
   accessPlan: "essentials" | "full_report" | "all_reports" | null;
   userName: string | null;
   userEmail: string | null;

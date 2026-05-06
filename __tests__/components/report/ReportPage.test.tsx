@@ -42,6 +42,7 @@ vi.mock("@/lib/analytics", () => ({
   trackReportViewed: (...args: unknown[]) => mockTrackReportViewed(...args),
   trackPaywallView: (...args: unknown[]) => mockTrackPaywallView(...args),
   trackBeginCheckout: (...args: unknown[]) => mockTrackBeginCheckout(...args),
+  setReportSubmissionContext: vi.fn(),
 }));
 
 import ReportPage from "@/components/report/ReportPage";

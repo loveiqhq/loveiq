@@ -26,6 +26,26 @@ interface Submission {
   answer_count: number | null;
   current_index: number | null;
   recoverable: boolean;
+  is_likely_test?: boolean;
+  test_reasons?: string[];
+}
+
+export type SortField =
+  | "priority"
+  | "started_at"
+  | "completed_at"
+  | "email"
+  | "first_name"
+  | "status"
+  | "archetype_v4"
+  | "archetype_v5"
+  | "duration_ms";
+
+export type SortDir = "asc" | "desc";
+
+export interface SortState {
+  field: SortField;
+  dir: SortDir;
 }
 
 interface SubmissionTableProps {
@@ -33,6 +53,8 @@ interface SubmissionTableProps {
   selectable?: boolean;
   selectedIds?: Set<number>;
   onSelectionChange?: (ids: Set<number>) => void;
+  sort?: SortState;
+  onSortChange?: (sort: SortState) => void;
 }
 
 function formatDate(iso: string): string {
@@ -59,11 +81,68 @@ const priorityColors: Record<Submission["priority_label"], string> = {
   low: "bg-emerald-500/10 text-emerald-300",
 };
 
+interface SortableHeaderProps {
+  field: SortField | null;
+  label: string;
+  sort?: SortState;
+  onSortChange?: (sort: SortState) => void;
+  className?: string;
+}
+
+function SortableHeader({ field, label, sort, onSortChange, className }: SortableHeaderProps) {
+  const baseTh = `px-4 py-3 font-medium ${className ?? ""}`;
+  if (!field || !onSortChange) {
+    return <th className={baseTh}>{label}</th>;
+  }
+  const activeField: SortField = field;
+  const handleSort = onSortChange;
+
+  const isActive = sort?.field === activeField;
+  const ariaSort: "ascending" | "descending" | "none" = isActive
+    ? sort?.dir === "asc"
+      ? "ascending"
+      : "descending"
+    : "none";
+  const arrow = isActive ? (sort?.dir === "asc" ? "▲" : "▼") : "↕";
+
+  function toggle() {
+    if (!isActive) {
+      handleSort({ field: activeField, dir: "desc" });
+      return;
+    }
+    handleSort({ field: activeField, dir: sort?.dir === "asc" ? "desc" : "asc" });
+  }
+
+  return (
+    <th className={baseTh} aria-sort={ariaSort}>
+      <button
+        type="button"
+        onClick={toggle}
+        className={`group inline-flex items-center gap-1 outline-none transition ${
+          isActive ? "text-text-primary" : "hover:text-text-primary"
+        }`}
+      >
+        <span>{label}</span>
+        <span
+          aria-hidden="true"
+          className={`text-[10px] transition ${
+            isActive ? "opacity-100" : "opacity-30 group-hover:opacity-70"
+          }`}
+        >
+          {arrow}
+        </span>
+      </button>
+    </th>
+  );
+}
+
 export default function SubmissionTable({
   submissions,
   selectable = false,
   selectedIds,
   onSelectionChange,
+  sort,
+  onSortChange,
 }: SubmissionTableProps) {
   const allSelected =
     selectable &&
@@ -119,16 +198,46 @@ export default function SubmissionTable({
                 />
               </th>
             )}
-            <th className="px-4 py-3 font-medium">Email</th>
-            <th className="px-4 py-3 font-medium">Name</th>
-            <th className="px-4 py-3 font-medium">Status</th>
-            <th className="px-4 py-3 font-medium">Priority</th>
-            <th className="px-4 py-3 font-medium">Archetype (V4)</th>
-            <th className="px-4 py-3 font-medium">Archetype (V5)</th>
-            <th className="px-4 py-3 font-medium">Review Signals</th>
-            <th className="px-4 py-3 font-medium">Started</th>
-            <th className="px-4 py-3 font-medium">Completed / Saved</th>
-            <th className="px-4 py-3 font-medium">Actions</th>
+            <SortableHeader field="email" label="Email" sort={sort} onSortChange={onSortChange} />
+            <SortableHeader
+              field="first_name"
+              label="Name"
+              sort={sort}
+              onSortChange={onSortChange}
+            />
+            <SortableHeader field="status" label="Status" sort={sort} onSortChange={onSortChange} />
+            <SortableHeader
+              field="priority"
+              label="Priority"
+              sort={sort}
+              onSortChange={onSortChange}
+            />
+            <SortableHeader
+              field="archetype_v4"
+              label="Archetype (V4)"
+              sort={sort}
+              onSortChange={onSortChange}
+            />
+            <SortableHeader
+              field="archetype_v5"
+              label="Archetype (V5)"
+              sort={sort}
+              onSortChange={onSortChange}
+            />
+            <SortableHeader field={null} label="Review Signals" />
+            <SortableHeader
+              field="started_at"
+              label="Started"
+              sort={sort}
+              onSortChange={onSortChange}
+            />
+            <SortableHeader
+              field="completed_at"
+              label="Completed / Saved"
+              sort={sort}
+              onSortChange={onSortChange}
+            />
+            <SortableHeader field={null} label="Actions" />
           </tr>
         </thead>
         <tbody>
@@ -143,7 +252,12 @@ export default function SubmissionTable({
             });
 
             return (
-              <tr key={submission.id} className="border-b border-white/5 hover:bg-white/[0.02]">
+              <tr
+                key={submission.id}
+                className={`border-b border-white/5 hover:bg-white/[0.02] ${
+                  submission.is_likely_test ? "bg-red-500/[0.03]" : ""
+                }`}
+              >
                 {selectable && (
                   <td className="px-4 py-3">
                     {isSelectableSubmission ? (
@@ -159,7 +273,19 @@ export default function SubmissionTable({
                     )}
                   </td>
                 )}
-                <td className="px-4 py-3 text-text-primary">{maskEmail(submission.email)}</td>
+                <td className="px-4 py-3 text-text-primary">
+                  <div className="flex items-center gap-2">
+                    <span>{maskEmail(submission.email)}</span>
+                    {submission.is_likely_test && (
+                      <span
+                        className="rounded-full border border-red-500/30 bg-red-500/10 px-1.5 py-px text-[10px] font-medium uppercase text-red-300"
+                        title={`Test: ${submission.test_reasons?.join(", ") ?? "n/a"}`}
+                      >
+                        Test
+                      </span>
+                    )}
+                  </div>
+                </td>
                 <td className="px-4 py-3 text-text-primary">{submission.first_name}</td>
                 <td className="px-4 py-3">
                   <span

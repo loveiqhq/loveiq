@@ -25,36 +25,30 @@ interface Filters {
   archetype: string;
   dateFrom: string;
   dateTo: string;
+  testOnly: boolean;
 }
-
-export type SortOption = "priority" | "date_desc" | "date_asc";
 
 interface FilterBarProps {
   onFilterChange: (filters: Filters) => void;
   initialFilters?: Filters;
-  sort?: SortOption;
-  onSortChange?: (sort: SortOption) => void;
 }
 
-export default function FilterBar({
-  onFilterChange,
-  initialFilters,
-  sort,
-  onSortChange,
-}: FilterBarProps) {
+export default function FilterBar({ onFilterChange, initialFilters }: FilterBarProps) {
   const [status, setStatus] = useState(initialFilters?.status || "");
   const [email, setEmail] = useState(initialFilters?.email || "");
   const [archetype, setArchetype] = useState(initialFilters?.archetype || "");
   const [dateFrom, setDateFrom] = useState(initialFilters?.dateFrom || "");
   const [dateTo, setDateTo] = useState(initialFilters?.dateTo || "");
+  const [testOnly, setTestOnly] = useState(initialFilters?.testOnly ?? false);
 
-  // Debounce email search
+  // Debounce text-search; non-text filters propagate immediately on change
+  // anyway because they share this effect (cheap to debounce all of them).
   useEffect(() => {
     const timer = setTimeout(() => {
-      onFilterChange({ status, email, archetype, dateFrom, dateTo });
+      onFilterChange({ status, email, archetype, dateFrom, dateTo, testOnly });
     }, 300);
     return () => clearTimeout(timer);
-  }, [status, email, archetype, dateFrom, dateTo, onFilterChange]);
+  }, [status, email, archetype, dateFrom, dateTo, testOnly, onFilterChange]);
 
   return (
     <div className="flex flex-wrap items-center gap-3">
@@ -102,11 +96,11 @@ export default function FilterBar({
 
       <input
         type="text"
-        placeholder="Search email..."
+        placeholder="Search email, name, or ID…"
         value={email}
         onChange={(e) => setEmail(e.target.value)}
-        className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-text-primary placeholder:text-text-muted outline-none"
-        aria-label="Search by email"
+        className="min-w-[260px] rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-text-primary placeholder:text-text-muted outline-none"
+        aria-label="Search by email, name, or submission ID"
       />
 
       <input
@@ -125,24 +119,21 @@ export default function FilterBar({
         aria-label="To date"
       />
 
-      {onSortChange && (
-        <select
-          value={sort ?? "priority"}
-          onChange={(e) => onSortChange(e.target.value as SortOption)}
-          className="rounded-lg border border-white/10 bg-[#1a1025] px-3 py-2 text-sm text-text-primary outline-none"
-          aria-label="Sort submissions"
-        >
-          <option value="priority" className="bg-[#1a1025] text-gray-200">
-            Sort: Priority
-          </option>
-          <option value="date_desc" className="bg-[#1a1025] text-gray-200">
-            Sort: Newest first
-          </option>
-          <option value="date_asc" className="bg-[#1a1025] text-gray-200">
-            Sort: Oldest first
-          </option>
-        </select>
-      )}
+      <label
+        className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium transition ${
+          testOnly
+            ? "border-red-500/40 bg-red-500/10 text-red-300"
+            : "border-white/10 bg-white/5 text-text-muted hover:bg-white/10"
+        }`}
+      >
+        <input
+          type="checkbox"
+          checked={testOnly}
+          onChange={(e) => setTestOnly(e.target.checked)}
+          className="h-3.5 w-3.5 rounded border-white/20 bg-transparent accent-red-500"
+        />
+        Test only
+      </label>
     </div>
   );
 }

@@ -15,6 +15,7 @@ import type { SurveyAnswers } from "@/lib/survey/types";
 import {
   computeSurveyScoring,
   ensureSubmissionScored,
+  setSubmissionHotjarUserId,
   submitSurveyOnce,
 } from "@/lib/survey/server";
 
@@ -53,6 +54,7 @@ const surveySchema = z.object({
   durationMs: z.number().int().min(0).max(86_400_000),
   utmTracker: z.string().max(500).optional().nullable(),
   sessionId: z.string().regex(UUID_RE).optional().nullable(),
+  hotjarUserId: z.string().max(64).optional().nullable(),
   website: z.string().max(0).optional().nullable(),
 });
 
@@ -141,8 +143,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   }
 
-  const { email, firstName, answers, startedAt, durationMs, utmTracker, sessionId, website } =
-    parsed.data;
+  const {
+    email,
+    firstName,
+    answers,
+    startedAt,
+    durationMs,
+    utmTracker,
+    sessionId,
+    hotjarUserId,
+    website,
+  } = parsed.data;
   const normalizedEmail = email.trim().toLowerCase();
   const normalizedFirstName = firstName.trim();
 
@@ -179,6 +190,12 @@ export async function POST(request: Request) {
       answers as SurveyAnswers,
       scoringResult
     );
+
+    // Optional: persist Hotjar user_id for admin recording deep-link.
+    // Only on first submission for this session — re-submits keep the original.
+    if (!isExisting && hotjarUserId) {
+      await setSubmissionHotjarUserId(submissionId, hotjarUserId);
+    }
 
     // Generate permanent report access token (non-blocking — fire and forget)
     let reportToken: string | undefined;

@@ -28,6 +28,8 @@ interface SubmissionData {
     answer_count?: number | null;
     current_index?: number | null;
     recoverable?: boolean;
+    report_token?: string | null;
+    hotjar_user_id?: string | null;
   };
   answers: Array<{
     q_id: string;
@@ -165,6 +167,18 @@ export default function SubmissionDetail({ id, mode = "submission" }: Submission
   const { submission, answers, scoring } = data;
   const isPartial = mode === "partial" || submission.record_type === "partial";
 
+  const siteUrl =
+    (process.env.NEXT_PUBLIC_SITE_URL || "").replace(/\/$/, "") || "https://loveiq.org";
+  const hotjarSiteId = process.env.NEXT_PUBLIC_HOTJAR_SITE_ID || "";
+  const reportUrl =
+    !isPartial && submission.report_token
+      ? `${siteUrl}/report/${encodeURIComponent(submission.report_token)}`
+      : null;
+  const hotjarUrl =
+    !isPartial && submission.hotjar_user_id && hotjarSiteId
+      ? `https://insights.hotjar.com/sites/${hotjarSiteId}/playbacks/list?filter=user_attributes_user_id:${encodeURIComponent(submission.hotjar_user_id)}`
+      : null;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
@@ -175,6 +189,47 @@ export default function SubmissionDetail({ id, mode = "submission" }: Submission
           {isPartial ? "Saved Session" : `Submission #${submission.id}`}
         </h2>
       </div>
+
+      {(reportUrl || hotjarUrl || (!isPartial && submission.session_id)) && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-white/10 bg-surface px-5 py-3 text-sm">
+          {reportUrl && (
+            <a
+              href={reportUrl}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="rounded-lg border border-accent-purple/30 bg-accent-purple/10 px-3 py-1.5 text-xs font-medium text-accent-purple transition hover:bg-accent-purple/20"
+            >
+              View report ↗
+            </a>
+          )}
+          {hotjarUrl && submission.hotjar_user_id && (
+            <>
+              <a
+                href={hotjarUrl}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="rounded-lg border border-orange-500/30 bg-orange-500/10 px-3 py-1.5 text-xs font-medium text-orange-300 transition hover:bg-orange-500/20"
+              >
+                Hotjar recordings ↗
+              </a>
+              <span
+                className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 font-mono text-[11px] text-text-muted"
+                title="Hotjar user_id — paste into Hotjar's user-attribute search if the deep-link filter does not match."
+              >
+                hjUid: {submission.hotjar_user_id}
+              </span>
+            </>
+          )}
+          {!hotjarUrl && submission.session_id && (
+            <span
+              className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 font-mono text-[11px] text-text-muted"
+              title="Survey session id — paste into Hotjar user-attribute search if no recording is linked yet."
+            >
+              session: {submission.session_id}
+            </span>
+          )}
+        </div>
+      )}
 
       <div className="rounded-xl border border-white/10 bg-surface p-5">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

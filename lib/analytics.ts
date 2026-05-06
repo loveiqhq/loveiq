@@ -1,3 +1,5 @@
+import { getCsrfToken } from "@/lib/csrf-client";
+
 type GTag = (command: "event", eventName: string, params?: Record<string, unknown>) => void;
 type ConsentCategory = "analytics" | "advertisement";
 
@@ -13,8 +15,75 @@ declare global {
     __loveiqAnalyticsEnabled?: boolean;
     __loveiqGoogleAdsEnabled?: boolean;
     __loveiqGtagBootstrapped?: boolean;
+    __loveiqReportSubmissionId?: number | null;
   }
 }
+
+const PERSISTED_EVENTS = new Set([
+  "report_viewed",
+  "paywall_view",
+  "begin_checkout",
+  "report_engagement_1min",
+  "report_engagement_5min",
+  "report_engagement_10min",
+]);
+
+/**
+ * Set on /report page load. Lets the persistence layer attach the submission
+ * id (FK target on analytics_event) without every call site repeating it.
+ */
+export const setReportSubmissionContext = (submissionId: number | null | undefined) => {
+  if (typeof window === "undefined") return;
+  window.__loveiqReportSubmissionId = submissionId ?? null;
+};
+
+const persistAnalyticsEvent = (
+  eventType: string,
+  metadata: Record<string, unknown> | undefined,
+  durationMs?: number
+) => {
+  if (typeof window === "undefined") return;
+  if (!PERSISTED_EVENTS.has(eventType)) return;
+  if (!hasCookieYesConsent("analytics")) return;
+
+  const submissionId = window.__loveiqReportSubmissionId ?? null;
+  // No submission context = nothing to persist (the timeline keys off
+  // submission_id). The event still went to GA4; only durable storage is
+  // skipped.
+  if (!submissionId) return;
+
+  const csrf = getCsrfToken();
+  if (!csrf) return;
+
+  const url = "/api/analytics-event";
+  const headerBody = {
+    event_type: eventType,
+    submission_id: submissionId,
+    metadata,
+    duration_ms: durationMs,
+  };
+
+  // Prefer sendBeacon when available — it survives page navigations. Beacon
+  // can't set custom headers, so we encode CSRF in the body too; the route
+  // accepts either header- or body-supplied tokens.
+  if (navigator.sendBeacon) {
+    const beaconBody = JSON.stringify({ ...headerBody, _csrf: csrf });
+    const blob = new Blob([beaconBody], { type: "application/json" });
+    if (navigator.sendBeacon(url, blob)) return;
+  }
+
+  fetch(url, {
+    method: "POST",
+    keepalive: true,
+    headers: {
+      "Content-Type": "application/json",
+      "x-csrf-token": csrf,
+    },
+    body: JSON.stringify(headerBody),
+  }).catch(() => {
+    /* non-blocking — durable storage is best effort */
+  });
+};
 
 const getCookieValue = (name: string) => {
   if (typeof document === "undefined") return null;
@@ -96,10 +165,12 @@ export const trackReportViewed = (
   reportType: "essentials" | "full_report" | "all_reports" | "locked",
   archetype?: string | null
 ) => {
-  track("report_viewed", {
+  const params = {
     report_type: reportType,
     ...(archetype ? { archetype } : {}),
-  });
+  };
+  track("report_viewed", params);
+  persistAnalyticsEvent("report_viewed", params);
 };
 
 export interface PaywallPlanItem {
@@ -110,7 +181,9 @@ export interface PaywallPlanItem {
 
 export const trackPaywallView = (items: PaywallPlanItem[]) => {
   if (!items.length) return;
-  track("paywall_view", { currency: items[0].currency, items });
+  const params = { currency: items[0].currency, items };
+  track("paywall_view", params);
+  persistAnalyticsEvent("paywall_view", params);
 };
 
 export const trackBeginCheckout = (
@@ -118,7 +191,9 @@ export const trackBeginCheckout = (
   price: number,
   currency: string
 ) => {
-  track("begin_checkout", { plan, price, currency });
+  const params = { plan, price, currency };
+  track("begin_checkout", params);
+  persistAnalyticsEvent("begin_checkout", params);
 };
 
 export type ReportEngagementThreshold = 60 | 300 | 600;
@@ -131,12 +206,15 @@ export const trackReportEngagement = (
   scrollDepthPct: number
 ) => {
   const minutes = thresholdSeconds / 60;
-  track(`report_engagement_${minutes}min`, {
+  const eventName = `report_engagement_${minutes}min`;
+  const params = {
     engagement_seconds: thresholdSeconds,
     report_type: reportType,
     ...(archetype ? { archetype } : {}),
     scroll_depth_pct: scrollDepthPct,
-  });
+  };
+  track(eventName, params);
+  persistAnalyticsEvent(eventName, params, thresholdSeconds * 1000);
 };
 
 export const trackSurveyPause = (qId: string, progress: number) => {

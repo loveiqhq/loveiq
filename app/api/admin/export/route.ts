@@ -81,12 +81,17 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url);
   const status = url.searchParams.get("status") || "";
-  const email = url.searchParams.get("email") || "";
+  // `q` is the new full-text param shared with the submissions list; `email`
+  // remains as a back-compat alias for previously saved presets.
+  const q = (url.searchParams.get("q") || url.searchParams.get("email") || "").trim();
   const archetype = url.searchParams.get("archetype") || "";
   const dateFrom = url.searchParams.get("dateFrom") || "";
   const dateTo = url.searchParams.get("dateTo") || "";
 
-  const userJoin = email
+  const numericQuery = /^\d+$/.test(q) ? Number(q) : null;
+  const textQuery = numericQuery === null ? q : "";
+
+  const userJoin = textQuery
     ? "app_user!fk_survey_submission_user!inner(email,first_name)"
     : "app_user!fk_survey_submission_user(email,first_name)";
   const scoringJoin = archetype ? ",scoring_result!inner(primary_archetype)" : "";
@@ -95,7 +100,15 @@ export async function GET(request: Request) {
   if (status) query += `&status=eq.${encodeURIComponent(status)}`;
   if (dateFrom) query += `&start_date_time=gte.${encodeURIComponent(dateFrom)}`;
   if (dateTo) query += `&start_date_time=lte.${encodeURIComponent(dateTo + "T23:59:59.999Z")}`;
-  if (email) query += `&app_user.email=ilike.*${encodeURIComponent(email)}*`;
+  if (numericQuery !== null) {
+    query += `&id=eq.${numericQuery}`;
+  } else if (textQuery) {
+    const safeText = textQuery.replace(/[(),]/g, " ").trim();
+    if (safeText) {
+      const pattern = `*${encodeURIComponent(safeText)}*`;
+      query += `&app_user.or=(email.ilike.${pattern},first_name.ilike.${pattern})`;
+    }
+  }
   if (archetype) query += `&scoring_result.primary_archetype=eq.${encodeURIComponent(archetype)}`;
 
   try {
