@@ -1,0 +1,69 @@
+name: Waitlist early-access broadcast
+
+# Sends the waitlist early-access invitation
+# (lib/emails/waitlist-early-access.ts) to every active waitlist_user row.
+#
+# Auto-fires once on 2026-05-07 07:00 UTC (= 09:00 Sarajevo CEST). Subsequent
+# yearly fires are no-ops because every row will be marked sent in
+# waitlist_user.early_access_email_sent_at.
+#
+# Manual trigger: workflow_dispatch — pick apply=true to actually send,
+# optionally set "only" to a single email for smoke-testing.
+
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: "Set true to actually send (false = dry-run)"
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+      only:
+        description: "Optional: restrict to a single email (smoke test). Leave blank for full broadcast."
+        required: false
+        default: ""
+        type: string
+  schedule:
+    - cron: "0 7 7 5 *" # 2026-05-07 07:00 UTC = 09:00 Sarajevo (CEST)
+
+permissions:
+  contents: read
+
+concurrency:
+  group: waitlist-early-access-broadcast
+  cancel-in-progress: false
+
+jobs:
+  send:
+    name: Send broadcast
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+      - name: Run broadcast script
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          NEXT_PUBLIC_SITE_URL: ${{ secrets.NEXT_PUBLIC_SITE_URL }}
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_APPLY: ${{ inputs.apply }}
+          INPUT_ONLY: ${{ inputs.only }}
+        run: |
+          set -euo pipefail
+          ARGS=()
+          if [ "$EVENT_NAME" = "schedule" ] || [ "${INPUT_APPLY:-false}" = "true" ]; then
+            ARGS+=("--apply")
+          fi
+          if [ -n "${INPUT_ONLY:-}" ]; then
+            ARGS+=("--only=${INPUT_ONLY}")
+          fi
+          npx tsx scripts/send-waitlist-early-access.ts "${ARGS[@]}"
