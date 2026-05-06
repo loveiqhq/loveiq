@@ -666,7 +666,7 @@ const SlideScreen: FC<{
         />
       </div>
       <div
-        className="relative z-10 mx-auto flex w-full max-w-[1120px] flex-1 flex-col px-7 py-12 sm:px-10 sm:py-14"
+        className="relative z-10 mx-auto flex w-full max-w-[1120px] flex-1 flex-col px-7 py-12 pb-28 sm:px-10 sm:py-14 sm:pb-14"
         style={{
           paddingLeft: "max(1.75rem, env(safe-area-inset-left, 0px))",
           paddingRight: "max(1.75rem, env(safe-area-inset-right, 0px))",
@@ -714,7 +714,12 @@ const SlideScreen: FC<{
                 animation: "survey-fade-up 700ms cubic-bezier(0.16,1,0.3,1) 0ms both",
               }}
             >
-              <Icon />
+              {/* Mobile: 34×34; desktop: natural 80×80 */}
+              <div className="relative w-[34px] h-[34px] flex-shrink-0 sm:w-[80px] sm:h-[80px]">
+                <div className="absolute top-0 left-0 origin-top-left scale-[0.425] sm:scale-100">
+                  <Icon />
+                </div>
+              </div>
             </div>
 
             <h2
@@ -787,11 +792,12 @@ const SlideScreen: FC<{
               </button>
             </div>
 
+            {/* Inline continue — desktop only */}
             <button
               type="button"
               onClick={handleNext}
               aria-label="Continue to next slide"
-              className="inline-flex h-[48px] items-center gap-3 rounded-full bg-[#FE6839] px-7 sm:px-8 text-[14px] font-bold uppercase leading-[20px] tracking-[1.4px] text-white shadow-[0_10px_15px_-3px_rgba(254,104,57,0.2),0_4px_6px_-4px_rgba(254,104,57,0.2)] transition hover:-translate-y-[1px] hover:shadow-[0_14px_20px_-3px_rgba(254,104,57,0.28)] focus-visible-ring"
+              className="hidden sm:inline-flex h-[48px] items-center gap-3 rounded-full bg-[#FE6839] px-8 text-[14px] font-bold uppercase leading-[20px] tracking-[1.4px] text-white shadow-[0_10px_15px_-3px_rgba(254,104,57,0.2),0_4px_6px_-4px_rgba(254,104,57,0.2)] transition hover:-translate-y-[1px] hover:shadow-[0_14px_20px_-3px_rgba(254,104,57,0.28)] focus-visible-ring"
             >
               Continue
               <ArrowRight className="h-[18px] w-[18px]" />
@@ -799,6 +805,21 @@ const SlideScreen: FC<{
           </div>
         </div>
       </div>
+
+      {/* Sticky continue button — mobile only, fixed bottom-right */}
+      <button
+        type="button"
+        onClick={handleNext}
+        aria-label="Continue to next slide"
+        className="sm:hidden fixed z-10 inline-flex h-[52px] items-center gap-3 rounded-full bg-[#FE6839] px-7 text-[14px] font-bold uppercase leading-[20px] tracking-[1.4px] text-white shadow-[0_10px_30px_-3px_rgba(254,104,57,0.45)] transition hover:-translate-y-[1px] focus-visible-ring"
+        style={{
+          right: "max(1.5rem, env(safe-area-inset-right, 1.5rem))",
+          bottom: "max(1.75rem, env(safe-area-inset-bottom, 1.75rem))",
+        }}
+      >
+        Continue
+        <ArrowRight className="h-[18px] w-[18px]" />
+      </button>
 
       {/* Dark overlay — crossfades in when leaving last slide for consent */}
       {slideIndex === TOTAL_STEPS - 1 && (

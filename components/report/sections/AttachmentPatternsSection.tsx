@@ -4,6 +4,8 @@ import { useEffect, useState, type CSSProperties, type FC } from "react";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import {
   extractAttachmentSectionContent,
+  extractReportHtmlBlocks,
+  joinReportHtmlBlocks,
   normalizeReportHtml,
   type ReportAttachmentPattern,
 } from "../reportContent";
@@ -72,6 +74,13 @@ const AttachmentPatternsSection: FC<Props> = ({
     ? "report-flow__stack report-flow__stack--md"
     : "report-flow__stack report-flow__stack--lg";
   const normalizedArchetypeHtml = normalizeReportHtml(archetypeHtml);
+  const isLocked = isPremium && !unlocked;
+  const blurredBlocks = isLocked ? extractReportHtmlBlocks(normalizedArchetypeHtml ?? "") : [];
+  const hasTeaserSplit = blurredBlocks.length >= 4;
+  const teaserBlock = hasTeaserSplit ? blurredBlocks[0] : null;
+  const remainingBlurHtml = hasTeaserSplit
+    ? joinReportHtmlBlocks(blurredBlocks.slice(1))
+    : normalizedArchetypeHtml;
 
   function handleUnlock() {
     onUnlock?.();
@@ -162,22 +171,30 @@ const AttachmentPatternsSection: FC<Props> = ({
           ) : null}
 
           <div className="report-themed-block">
-            {isPremium && !unlocked ? (
-              <div className="report-themed-block__preview report-themed-block__preview--locked">
-                {normalizedArchetypeHtml ? (
+            {isLocked ? (
+              <>
+                {teaserBlock ? (
                   <div
-                    className="report-prose report-themed-block__blurred"
-                    aria-hidden="true"
-                    dangerouslySetInnerHTML={{ __html: normalizedArchetypeHtml }}
+                    className="report-prose report-themed-block__teaser"
+                    dangerouslySetInnerHTML={{ __html: teaserBlock }}
                   />
                 ) : null}
-                <PremiumOverlay
-                  archetype={archetype}
-                  sectionTitle={sectionTitle}
-                  tier={tier}
-                  onUnlock={handleUnlock}
-                />
-              </div>
+                <div className="report-themed-block__preview report-themed-block__preview--locked report-themed-block__preview--has-teaser">
+                  {remainingBlurHtml ? (
+                    <div
+                      className="report-prose report-themed-block__blurred"
+                      aria-hidden="true"
+                      dangerouslySetInnerHTML={{ __html: remainingBlurHtml }}
+                    />
+                  ) : null}
+                  <PremiumOverlay
+                    archetype={archetype}
+                    sectionTitle={sectionTitle}
+                    tier={tier}
+                    onUnlock={handleUnlock}
+                  />
+                </div>
+              </>
             ) : normalizedArchetypeHtml ? (
               <div
                 className="report-prose"

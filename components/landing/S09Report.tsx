@@ -31,7 +31,7 @@ const S09Report: FC = () => {
     >
       <div className="content-shell relative grid gap-12 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
         <div className="space-y-8">
-          <div className="space-y-4">
+          <div className="animate-on-scroll space-y-4">
             <h2
               id="report-heading"
               className="font-serif text-[40px] leading-[1.05] tracking-[-0.03em] sm:text-[52px] md:text-[64px] md:leading-[1.05]"
@@ -45,8 +45,11 @@ const S09Report: FC = () => {
           </div>
 
           <div className="space-y-8">
-            {features.map((item) => (
-              <div key={item.title} className="group flex gap-3">
+            {features.map((item, idx) => (
+              <div
+                key={item.title}
+                className={`animate-on-scroll stagger-${idx + 1} group flex gap-3`}
+              >
                 <div className="mt-[2px] flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-white/5 text-accent-orange shadow-soft transition duration-300 ease-out group-hover:-translate-y-[2px] group-hover:scale-105 group-hover:bg-gradient-to-br group-hover:from-[#f26d4f] group-hover:via-[#ff9450] group-hover:to-[#f26d4f] group-hover:text-white">
                   <svg
                     aria-hidden
@@ -73,7 +76,7 @@ const S09Report: FC = () => {
             ))}
           </div>
 
-          <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center">
+          <div className="animate-on-scroll stagger-5 flex flex-col items-start gap-4 sm:flex-row sm:items-center">
             <a
               href="/survey"
               aria-label="Start test now - get your report"
@@ -129,7 +132,7 @@ const S09Report: FC = () => {
           </div>
         </div>
 
-        <div className="relative flex items-center justify-center group">
+        <div className="animate-on-scroll stagger-2 relative flex items-center justify-center group">
           {/* Rotated gradient background card */}
           <div
             className="absolute -right-4 top-6 bottom-6 hidden w-[320px] -rotate-[5deg] rounded-[32px] blur-[0.5px] transition-transform duration-700 ease-[cubic-bezier(0.2,0.8,0.2,1)] will-change-transform transform-gpu group-hover:-rotate-[3deg] group-hover:translate-x-1 group-hover:translate-y-1 md:block"

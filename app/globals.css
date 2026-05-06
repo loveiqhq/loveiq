@@ -1359,6 +1359,12 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #ff4d4d;
 }
 
+.report-fb__thumb:disabled {
+  opacity: 0.5;
+  cursor: default;
+  pointer-events: none;
+}
+
 @media (hover: hover) {
   .report-fb__thumb:first-child:hover {
     color: #2aff8f;
@@ -2213,10 +2219,30 @@ input.autofill-dark:-internal-autofill-previewed {
   position: relative;
 }
 
+.report-themed-block__preview--has-teaser {
+  min-height: 380px;
+}
+
 .report-themed-block__blurred {
   user-select: none;
   filter: blur(4.55px);
   opacity: 0.5;
+}
+
+.report-themed-block__teaser {
+  position: relative;
+  pointer-events: none;
+  user-select: none;
+}
+.report-themed-block__teaser::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 24px;
+  background: linear-gradient(to bottom, transparent, #150c23);
+  pointer-events: none;
 }
 
 .report-premium-overlay {

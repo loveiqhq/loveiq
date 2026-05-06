@@ -142,7 +142,7 @@ const S10Pillars: FC = () => {
           return (
             <div
               key={card.title}
-              className="group relative flex flex-1 flex-col items-start justify-center gap-4 rounded-[32px] border border-white/10 bg-[#150A22] px-10 py-12 shadow-[0_25px_50px_-12px_rgba(167,139,250,0.1)] transition-all duration-500 ease-out transform-gpu hover:-translate-y-2 hover:shadow-[0_25px_60px_-12px_rgba(167,139,250,0.25)]"
+              className={`animate-on-scroll ${idx > 0 ? `stagger-${idx}` : ""} group relative flex flex-1 flex-col items-start justify-center gap-4 rounded-[32px] border border-white/10 bg-[#150A22] px-10 py-12 shadow-[0_25px_50px_-12px_rgba(167,139,250,0.1)] transition-all duration-500 ease-out transform-gpu hover:-translate-y-2 hover:shadow-[0_25px_60px_-12px_rgba(167,139,250,0.25)]`}
             >
               <div
                 className="pointer-events-none absolute inset-0 rounded-[32px] bg-[radial-gradient(circle_at_50%_50%,rgba(167,139,250,0.15),transparent_70%)] opacity-0 transition-opacity duration-500 group-hover:opacity-100"

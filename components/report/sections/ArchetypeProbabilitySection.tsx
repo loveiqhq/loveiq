@@ -10,6 +10,7 @@ interface Props {
   primaryArchetype: string;
   ranking: string[];
   unlockedArchetypes: Set<string>;
+  viewArchetype: string;
 }
 
 const INITIAL_COUNT = 3;
@@ -52,6 +53,7 @@ const ArchetypeProbabilitySection: FC<Props> = ({
   primaryArchetype,
   ranking,
   unlockedArchetypes,
+  viewArchetype,
 }) => {
   const [expanded, setExpanded] = useState(false);
   const [hoveredName, setHoveredName] = useState<string | null>(null);
@@ -120,14 +122,16 @@ const ArchetypeProbabilitySection: FC<Props> = ({
             <PrimaryIcon className="report-prob__hero-icon-svg" />
           </div>
 
-          <button
-            className="report-prob__hero-cta"
-            type="button"
-            onClick={() => onUnlock(primaryArchetype)}
-          >
-            {isPrimaryUnlocked ? <ArrowIcon /> : <LockIcon />}
-            <span>{isPrimaryUnlocked ? "View report" : "Unlock Full Report"}</span>
-          </button>
+          {viewArchetype !== primaryArchetype && (
+            <button
+              className="report-prob__hero-cta"
+              type="button"
+              onClick={() => onUnlock(primaryArchetype)}
+            >
+              {isPrimaryUnlocked ? <ArrowIcon /> : <LockIcon />}
+              <span>{isPrimaryUnlocked ? "View report" : "Unlock Full Report"}</span>
+            </button>
+          )}
         </div>
 
         {/* Secondary archetypes */}

@@ -15,7 +15,7 @@ const S14CTA: FC = () => {
       </div>
       <div className="pointer-events-none absolute inset-0 bg-noise opacity-12" />
       <div className="content-shell relative flex max-w-5xl flex-col items-center gap-8 text-center">
-        <div className="space-y-8">
+        <div className="animate-on-scroll space-y-8">
           <h2 className="font-serif text-[48px] leading-[1.05] font-semibold sm:text-[60px] md:text-[72px] md:leading-[1.05]">
             Ready to understand{" "}
             <span className="relative inline-block -top-1 align-baseline italic text-[#FE6839]">
@@ -44,7 +44,7 @@ const S14CTA: FC = () => {
           </p>
         </div>
 
-        <div className="flex flex-col items-center gap-6">
+        <div className="animate-on-scroll stagger-1 flex flex-col items-center gap-6">
           <a
             href="/survey"
             aria-label="Start test now - take the first step"

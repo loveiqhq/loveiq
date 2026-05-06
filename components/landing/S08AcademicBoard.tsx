@@ -84,7 +84,7 @@ const S08AcademicBoard: FC = () => {
       <div className="content-shell flex flex-col items-center gap-8">
         <h2
           id="academic-board-heading"
-          className="max-w-[889px] text-center font-serif text-3xl font-normal leading-tight tracking-[-0.02em] text-white sm:text-4xl md:text-5xl lg:text-[64px] lg:leading-[64px] lg:tracking-[-1.2px]"
+          className="animate-on-scroll max-w-[889px] text-center font-serif text-3xl font-normal leading-tight tracking-[-0.02em] text-white sm:text-4xl md:text-5xl lg:text-[64px] lg:leading-[64px] lg:tracking-[-1.2px]"
         >
           Supported by academic multidisciplinary expertise
         </h2>
@@ -94,7 +94,7 @@ const S08AcademicBoard: FC = () => {
         {experts.map((expert, index) => (
           <div
             key={expert.name}
-            className="relative h-[528px] w-[340px] overflow-hidden rounded-[24px] border border-white/10 shadow-[0_20px_35px_rgba(0,0,0,0.45)]"
+            className={`animate-on-scroll ${index > 0 ? `stagger-${index}` : ""} relative h-[528px] w-[340px] overflow-hidden rounded-[24px] border border-white/10 shadow-[0_20px_35px_rgba(0,0,0,0.45)]`}
           >
             {/* Photo */}
             <Image

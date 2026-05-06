@@ -96,7 +96,7 @@ const S05ValueFeatures: FC = () => {
         <div className="pointer-events-none absolute -left-[302px] top-[52.275px] h-[160px] w-[160px] rounded-full bg-[#FE6839] mix-blend-screen blur-[99.5px]" />
         <div className="pointer-events-none absolute -right-[1014.5px] bottom-[136px] h-[257px] w-[257px] rounded-full bg-[#541475] mix-blend-screen blur-[100px]" />
 
-        <div className="lg:hidden space-y-3">
+        <div className="lg:hidden space-y-3 animate-on-scroll">
           <h2
             id="value-heading"
             className="font-serif text-[34px] leading-[1.05] text-white sm:text-[38px]"
@@ -105,7 +105,7 @@ const S05ValueFeatures: FC = () => {
           </h2>
         </div>
 
-        <div className="relative overflow-hidden rounded-[24px] border border-[rgba(255,255,255,0.08)] bg-[#0A0510] shadow-[0_30px_90px_rgba(0,0,0,0.55)] aspect-square lg:aspect-auto lg:h-[640px] order-1 w-full lg:order-1 lg:max-w-[456px]">
+        <div className="animate-on-scroll relative overflow-hidden rounded-[24px] border border-[rgba(255,255,255,0.08)] bg-[#0A0510] shadow-[0_30px_90px_rgba(0,0,0,0.55)] aspect-square lg:aspect-auto lg:h-[640px] order-1 w-full lg:order-1 lg:max-w-[456px]">
           <div className="relative h-full w-full overflow-hidden rounded-[24px]">
             {loadVideo && videoSrc && (
               <video
@@ -126,13 +126,16 @@ const S05ValueFeatures: FC = () => {
         <div className="relative space-y-8 order-2 lg:order-2">
           <h2
             id="value-heading"
-            className="hidden font-serif text-[34px] leading-[1.05] text-white sm:text-[38px] lg:text-[44px] lg:block"
+            className="hidden animate-on-scroll font-serif text-[34px] leading-[1.05] text-white sm:text-[38px] lg:text-[44px] lg:block"
           >
             Great intimacy requires a vocabulary most of us were never taught.
           </h2>
           <div className="space-y-6">
-            {bullets.map((item) => (
-              <div key={item.title} className="group flex gap-3 rounded-2xl bg-transparent p-4">
+            {bullets.map((item, idx) => (
+              <div
+                key={item.title}
+                className={`animate-on-scroll ${idx > 0 ? `stagger-${idx}` : ""} group flex gap-3 rounded-2xl bg-transparent p-4`}
+              >
                 <div
                   className="mt-0.5 flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-[#241433]/80 text-[#cbb8ff] shadow-[0_16px_50px_rgba(0,0,0,0.35)] transition duration-300 ease-out group-hover:-translate-y-1 group-hover:scale-[1.03] group-hover:border-white/20 group-hover:bg-gradient-to-br group-hover:from-[#f26d4f] group-hover:via-[#9c7dff] group-hover:to-[#5d7cff] group-hover:text-[#0d0715]"
                   aria-hidden

@@ -599,6 +599,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                       primaryArchetype={primaryArchetype}
                       ranking={ranking}
                       unlockedArchetypes={unlockedArchetypes}
+                      viewArchetype={viewArchetype}
                     />
                   </ReportSection>
                 );

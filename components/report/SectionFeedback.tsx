@@ -69,6 +69,7 @@ const SectionFeedback: FC<Props> = ({ onFeedback, sectionTitle, value, isSent })
       <div className="report-fb__thumbs">
         <button
           type="button"
+          disabled={isSent}
           aria-label={`This resonates: ${sectionTitle}`}
           className={`report-fb__thumb ${
             value === "up" || sentDirection === "up" || step === "positive" ? "is-selected" : ""
@@ -79,6 +80,7 @@ const SectionFeedback: FC<Props> = ({ onFeedback, sectionTitle, value, isSent })
         </button>
         <button
           type="button"
+          disabled={isSent}
           aria-label={`This does not resonate: ${sectionTitle}`}
           className={`report-fb__thumb ${
             value === "down" ||

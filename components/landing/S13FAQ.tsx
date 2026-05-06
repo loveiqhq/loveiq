@@ -181,10 +181,10 @@ const S13FAQ: FC = () => {
       aria-labelledby="faq-heading"
     >
       <div className="content-shell relative flex max-w-4xl flex-col items-center gap-8">
-        <div className="flex items-center gap-2 rounded-full border border-border bg-white/5 px-4 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-[#FE6839]">
+        <div className="animate-on-scroll flex items-center gap-2 rounded-full border border-border bg-white/5 px-4 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-[#FE6839]">
           FAQs
         </div>
-        <div className="space-y-3 text-center">
+        <div className="animate-on-scroll stagger-1 space-y-3 text-center">
           <h2
             id="faq-heading"
             className="font-serif text-3xl leading-tight sm:text-4xl md:text-5xl"
@@ -194,7 +194,7 @@ const S13FAQ: FC = () => {
           </h2>
         </div>
 
-        <div className="flex w-full flex-col gap-3 sm:gap-4">
+        <div className="animate-on-scroll stagger-2 flex w-full flex-col gap-3 sm:gap-4">
           {faqs.map((item) => (
             <FAQItem key={item.question} question={item.question} answer={item.answer} />
           ))}
