@@ -169,18 +169,18 @@ export default function SubmissionDetail({ id, mode = "submission" }: Submission
 
   const siteUrl =
     (process.env.NEXT_PUBLIC_SITE_URL || "").replace(/\/$/, "") || "https://loveiq.org";
-  const hotjarSiteId = process.env.NEXT_PUBLIC_HOTJAR_SITE_ID || "";
+  // Hotjar accounts on this workspace have been migrated to Contentsquare,
+  // so the recordings live at app.contentsquare.com — `insights.hotjar.com`
+  // just redirects to the Surveys list. Set NEXT_PUBLIC_CONTENTSQUARE_PROJECT_ID
+  // to the Contentsquare project number (e.g. 743568) to enable the chip.
+  const contentsquareProjectId = process.env.NEXT_PUBLIC_CONTENTSQUARE_PROJECT_ID || "";
   const reportUrl =
     !isPartial && submission.report_token
       ? `${siteUrl}/report/${encodeURIComponent(submission.report_token)}`
       : null;
-  // Hotjar's filtered-playback deep-link URL is undocumented and varies by
-  // workspace. We send admins to the bare recordings list and surface the
-  // hjUid in a copyable chip so they can paste it into Hotjar's own filter
-  // UI — that's the only path that's been stable across Hotjar versions.
-  const hotjarUrl =
-    !isPartial && submission.hotjar_user_id && hotjarSiteId
-      ? `https://insights.hotjar.com/sites/${hotjarSiteId}/playbacks`
+  const sessionReplayUrl =
+    !isPartial && submission.hotjar_user_id && contentsquareProjectId
+      ? `https://app.contentsquare.com/#/session-replay?project=${encodeURIComponent(contentsquareProjectId)}`
       : null;
 
   return (
@@ -194,7 +194,7 @@ export default function SubmissionDetail({ id, mode = "submission" }: Submission
         </h2>
       </div>
 
-      {(reportUrl || hotjarUrl || (!isPartial && submission.session_id)) && (
+      {(reportUrl || sessionReplayUrl || (!isPartial && submission.session_id)) && (
         <div className="flex flex-wrap items-center gap-3 rounded-xl border border-white/10 bg-surface px-5 py-3 text-sm">
           {reportUrl && (
             <a
@@ -206,16 +206,16 @@ export default function SubmissionDetail({ id, mode = "submission" }: Submission
               View report ↗
             </a>
           )}
-          {hotjarUrl && submission.hotjar_user_id && (
+          {sessionReplayUrl && submission.hotjar_user_id && (
             <>
               <a
-                href={hotjarUrl}
+                href={sessionReplayUrl}
                 target="_blank"
                 rel="noreferrer noopener"
-                title="Opens the Hotjar recordings list. Paste the hjUid (next to this button) into Hotjar's filter to see only this user's sessions."
+                title="Opens Contentsquare Session Replay. Paste the hjUid (next to this button) into the User-ID / User-attribute filter to see only this user's sessions."
                 className="rounded-lg border border-orange-500/30 bg-orange-500/10 px-3 py-1.5 text-xs font-medium text-orange-300 transition hover:bg-orange-500/20"
               >
-                Hotjar recordings ↗
+                Session replay ↗
               </a>
               <button
                 type="button"
@@ -229,13 +229,13 @@ export default function SubmissionDetail({ id, mode = "submission" }: Submission
                   }
                 }}
                 className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 font-mono text-[11px] text-text-muted transition hover:bg-white/10"
-                title="Click to copy. Paste into Hotjar → Recordings → Filter → User attribute → user_id."
+                title="Click to copy. Paste into Contentsquare → Session Replay → Filter → User ID."
               >
                 hjUid: {submission.hotjar_user_id} ⎘
               </button>
             </>
           )}
-          {!hotjarUrl && submission.session_id && (
+          {!sessionReplayUrl && submission.session_id && (
             <span
               className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 font-mono text-[11px] text-text-muted"
               title="Survey session id — paste into Hotjar user-attribute search if no recording is linked yet."
