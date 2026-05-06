@@ -68,7 +68,8 @@ const VALID_SORT_FIELDS: ReadonlySet<SortField> = new Set<SortField>([
  * `date_asc` aliases so saved views and bookmarks don't break.
  */
 function parseSort(raw: string): { field: SortField; dir: SortDir } {
-  if (!raw || raw === "priority") return { field: "priority", dir: "desc" };
+  if (!raw || raw === "completed_at") return { field: "completed_at", dir: "desc" };
+  if (raw === "priority") return { field: "priority", dir: "desc" };
   if (raw === "date_desc") return { field: "completed_at", dir: "desc" };
   if (raw === "date_asc") return { field: "completed_at", dir: "asc" };
 
@@ -79,7 +80,7 @@ function parseSort(raw: string): { field: SortField; dir: SortDir } {
       dir: dir === "asc" ? "asc" : "desc",
     };
   }
-  return { field: "priority", dir: "desc" };
+  return { field: "completed_at", dir: "desc" };
 }
 
 export async function GET(request: Request) {
@@ -112,7 +113,7 @@ export async function GET(request: Request) {
   const dateTo = url.searchParams.get("dateTo") || "";
   const testOnly = url.searchParams.get("test") === "1";
 
-  const sort = parseSort(url.searchParams.get("sort") || "priority");
+  const sort = parseSort(url.searchParams.get("sort") || "completed_at");
   const dateAscending =
     sort.field === "started_at" || sort.field === "completed_at" ? sort.dir === "asc" : false;
 

@@ -235,7 +235,7 @@ describe("GET /api/admin/submissions", () => {
     expect(json.submissions[0].priority_label).toBe("low");
   });
 
-  it("defaults sort to priority (created_date_time.desc, priority-first JS sort)", async () => {
+  it("defaults sort to completed_at desc (latest received first, no priority-first JS sort)", async () => {
     mockSubmissionsOk();
 
     const res = await GET(makeRequest());
@@ -246,6 +246,12 @@ describe("GET /api/admin/submissions", () => {
 
     expect(partialQuery).toContain("order=saved_at.desc");
     expect(completedQuery).toContain("order=created_date_time.desc");
+
+    // Lock the new behavior: pure date order, not the legacy priority-first JS sort.
+    // id=2 has the newer created_date_time (2025-01-02) so it must come first.
+    const json = await res.json();
+    expect(json.submissions[0].id).toBe(2);
+    expect(json.submissions[1].id).toBe(1);
   });
 
   it("sort=date_desc orders by created_date_time descending", async () => {
@@ -280,7 +286,7 @@ describe("GET /api/admin/submissions", () => {
     expect(completedQuery).toContain("order=created_date_time.asc");
   });
 
-  it("ignores unknown sort values and falls back to priority", async () => {
+  it("ignores unknown sort values and falls back to completed_at desc", async () => {
     mockSubmissionsOk();
 
     const res = await GET(makeRequest("?sort=bogus"));

@@ -65,7 +65,7 @@ const DEFAULT_FILTERS: ExtendedFilters = {
   testOnly: false,
 };
 
-const DEFAULT_SORT: SortState = { field: "priority", dir: "desc" };
+const DEFAULT_SORT: SortState = { field: "completed_at", dir: "desc" };
 
 export default function SubmissionBrowser() {
   const [page, setPage] = useState(1);
@@ -82,7 +82,7 @@ export default function SubmissionBrowser() {
     if (filters.dateFrom) p.dateFrom = filters.dateFrom;
     if (filters.dateTo) p.dateTo = filters.dateTo;
     if (filters.testOnly) p.test = "1";
-    if (sort.field !== "priority" || sort.dir !== "desc") {
+    if (sort.field !== "completed_at" || sort.dir !== "desc") {
       p.sort = `${sort.field}:${sort.dir}`;
     }
     return p;

@@ -90,7 +90,7 @@ interface SortableHeaderProps {
 }
 
 function SortableHeader({ field, label, sort, onSortChange, className }: SortableHeaderProps) {
-  const baseTh = `px-4 py-3 font-medium ${className ?? ""}`;
+  const baseTh = `px-4 py-2 font-medium ${className ?? ""}`;
   if (!field || !onSortChange) {
     return <th className={baseTh}>{label}</th>;
   }
@@ -188,7 +188,7 @@ export default function SubmissionTable({
         <thead>
           <tr className="border-b border-white/10 text-text-muted">
             {selectable && (
-              <th className="px-4 py-3">
+              <th className="px-4 py-2">
                 <input
                   type="checkbox"
                   checked={allSelected}
@@ -198,6 +198,12 @@ export default function SubmissionTable({
                 />
               </th>
             )}
+            <SortableHeader
+              field="completed_at"
+              label="Completed / Saved"
+              sort={sort}
+              onSortChange={onSortChange}
+            />
             <SortableHeader field="email" label="Email" sort={sort} onSortChange={onSortChange} />
             <SortableHeader
               field="first_name"
@@ -231,12 +237,6 @@ export default function SubmissionTable({
               sort={sort}
               onSortChange={onSortChange}
             />
-            <SortableHeader
-              field="completed_at"
-              label="Completed / Saved"
-              sort={sort}
-              onSortChange={onSortChange}
-            />
             <SortableHeader field={null} label="Actions" />
           </tr>
         </thead>
@@ -259,7 +259,7 @@ export default function SubmissionTable({
                 }`}
               >
                 {selectable && (
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-2">
                     {isSelectableSubmission ? (
                       <input
                         type="checkbox"
@@ -273,7 +273,14 @@ export default function SubmissionTable({
                     )}
                   </td>
                 )}
-                <td className="px-4 py-3 text-text-primary">
+                <td className="px-4 py-2 text-text-muted">
+                  {formatDate(
+                    submission.record_type === "partial"
+                      ? submission.saved_at
+                      : submission.completed_at
+                  )}
+                </td>
+                <td className="px-4 py-2 text-text-primary">
                   <div className="flex items-center gap-2">
                     <span>{maskEmail(submission.email)}</span>
                     {submission.is_likely_test && (
@@ -286,15 +293,15 @@ export default function SubmissionTable({
                     )}
                   </div>
                 </td>
-                <td className="px-4 py-3 text-text-primary">{submission.first_name}</td>
-                <td className="px-4 py-3">
+                <td className="px-4 py-2 text-text-primary">{submission.first_name}</td>
+                <td className="px-4 py-2">
                   <span
                     className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusColors[submission.status] || "bg-white/5 text-text-muted"}`}
                   >
                     {submission.status}
                   </span>
                 </td>
-                <td className="px-4 py-3">
+                <td className="px-4 py-2">
                   <div className="flex items-center gap-2">
                     <span
                       className={`rounded-full px-2 py-0.5 text-xs font-medium uppercase ${priorityColors[submission.priority_label]}`}
@@ -304,7 +311,7 @@ export default function SubmissionTable({
                     <span className="text-xs text-text-muted">{submission.priority_score}</span>
                   </div>
                 </td>
-                <td className="px-4 py-3 text-text-muted">
+                <td className="px-4 py-2 text-text-muted">
                   {submission.primary_archetype ? (
                     <span className="rounded-full bg-accent-purple/10 px-2 py-0.5 text-xs font-medium text-accent-purple">
                       {submission.primary_archetype}
@@ -317,7 +324,7 @@ export default function SubmissionTable({
                     <span className="text-xs text-text-muted">&mdash;</span>
                   )}
                 </td>
-                <td className="px-4 py-3 text-text-muted">
+                <td className="px-4 py-2 text-text-muted">
                   {submission.v5_primary_archetype ? (
                     <span className="rounded-full bg-accent-orange/10 px-2 py-0.5 text-xs font-medium text-accent-orange">
                       {submission.v5_primary_archetype}
@@ -326,7 +333,7 @@ export default function SubmissionTable({
                     <span className="text-xs text-text-muted">&mdash;</span>
                   )}
                 </td>
-                <td className="max-w-[260px] px-4 py-3">
+                <td className="max-w-[260px] px-4 py-2">
                   {submission.review_reasons.length > 0 ? (
                     <div className="flex flex-wrap gap-1.5">
                       {submission.review_reasons.slice(0, 2).map((reason) => (
@@ -347,15 +354,8 @@ export default function SubmissionTable({
                     <span className="text-xs text-text-muted">&mdash;</span>
                   )}
                 </td>
-                <td className="px-4 py-3 text-text-muted">{formatDate(submission.started_at)}</td>
-                <td className="px-4 py-3 text-text-muted">
-                  {formatDate(
-                    submission.record_type === "partial"
-                      ? submission.saved_at
-                      : submission.completed_at
-                  )}
-                </td>
-                <td className="px-4 py-3">
+                <td className="px-4 py-2 text-text-muted">{formatDate(submission.started_at)}</td>
+                <td className="px-4 py-2">
                   <a href={submission.detail_href} className="text-accent-purple hover:underline">
                     View
                   </a>
