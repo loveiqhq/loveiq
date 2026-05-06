@@ -14,7 +14,11 @@ import type {
   StripeCheckoutSessionStatusResponse,
 } from "@/lib/checkout/stripeCheckout";
 import type { ReportAccessPlan } from "@/lib/report/access";
-import { trackReportPurchase } from "@/lib/analytics";
+import {
+  setReportSubmissionContext,
+  trackPaywallUnlocked,
+  trackReportPurchase,
+} from "@/lib/analytics";
 import { toArchetypeSlug } from "@/lib/report/archetypeSlug";
 
 type ReturnState =
@@ -32,6 +36,7 @@ type ReturnState =
       purchaseAnalytics: StripeCheckoutPurchaseAnalytics | null;
       sessionStatus: string | null;
       status: "ready";
+      surveySubmissionId: number | null;
     };
 
 interface Props {
@@ -143,6 +148,7 @@ const CheckoutReturnPage: FC<Props> = ({
           purchaseAnalytics: json.purchaseAnalytics ?? null,
           sessionStatus,
           status: "ready",
+          surveySubmissionId: json.surveySubmissionId ?? null,
         });
       } catch {
         if (!cancelled) {
@@ -188,7 +194,22 @@ const CheckoutReturnPage: FC<Props> = ({
 
     trackedTransactionIdRef.current = state.purchaseAnalytics.transaction_id;
     trackReportPurchase({ ...state.purchaseAnalytics, item_name: plan.title });
-  }, [isPaidAndComplete, state]);
+
+    // Persist a durable "paywall_unlocked" event to analytics_event so the
+    // admin submission funnel can show the conversion as a timestamp +
+    // surface it in the chronological timeline. The persistence layer keys
+    // off __loveiqReportSubmissionId, which the report page sets but
+    // /checkout/return is a separate route, so re-bind it here.
+    if (state.surveySubmissionId) {
+      setReportSubmissionContext(state.surveySubmissionId);
+      trackPaywallUnlocked(
+        planId,
+        state.purchaseAnalytics.value,
+        state.purchaseAnalytics.currency,
+        state.purchaseAnalytics.transaction_id
+      );
+    }
+  }, [isPaidAndComplete, state, plan.title, planId]);
 
   useEffect(() => {
     if (!canReturnToUnlockedReport) {

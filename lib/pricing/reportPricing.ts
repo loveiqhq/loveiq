@@ -67,19 +67,19 @@ interface PricingBucket {
 }
 const PLAN_BUCKETS: Record<ReportPurchasePlanId, readonly PricingBucket[]> = {
   essentials: [
-    { code: "A", weight: 34, msrpCents: 2999, startingCents: 2249 },
-    { code: "B", weight: 33, msrpCents: 1999, startingCents: 1499 },
-    { code: "C", weight: 33, msrpCents: 999, startingCents: 749 },
+    { code: "A", weight: 20, msrpCents: 2999, startingCents: 1999 },
+    { code: "B", weight: 10, msrpCents: 1999, startingCents: 1499 },
+    { code: "C", weight: 70, msrpCents: 999, startingCents: 499 },
   ],
   full_report: [
-    { code: "A", weight: 34, msrpCents: 6999, startingCents: 3499 },
-    { code: "B", weight: 33, msrpCents: 5999, startingCents: 2999 },
-    { code: "C", weight: 33, msrpCents: 4999, startingCents: 2499 },
+    { code: "A", weight: 20, msrpCents: 6999, startingCents: 3499 },
+    { code: "B", weight: 10, msrpCents: 5999, startingCents: 2999 },
+    { code: "C", weight: 70, msrpCents: 4999, startingCents: 899 },
   ],
   all_reports: [
-    { code: "A", weight: 34, msrpCents: 35900, startingCents: 17949 },
-    { code: "B", weight: 33, msrpCents: 25900, startingCents: 12949 },
-    { code: "C", weight: 33, msrpCents: 15900, startingCents: 7949 },
+    { code: "A", weight: 20, msrpCents: 35900, startingCents: 17950 },
+    { code: "B", weight: 10, msrpCents: 25900, startingCents: 12950 },
+    { code: "C", weight: 70, msrpCents: 15900, startingCents: 4999 },
   ],
 };
 

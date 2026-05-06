@@ -180,6 +180,7 @@ describe("GET /api/stripe/checkout-session-status", () => {
         discount_amount: 5.5,
       },
       sessionStatus: "complete",
+      surveySubmissionId: 63,
     });
     expect(resolveSubmissionAccessContext).toHaveBeenCalledWith({
       reportSessionId: "02d88f31-eceb-4402-940d-c8cd98d01848",

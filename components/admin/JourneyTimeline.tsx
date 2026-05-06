@@ -29,6 +29,7 @@ const typeColors: Record<string, string> = {
   report_viewed: "bg-emerald-300",
   paywall_view: "bg-yellow-300",
   begin_checkout: "bg-yellow-400",
+  paywall_unlocked: "bg-green-500",
   report_engagement_1min: "bg-emerald-400/70",
   report_engagement_5min: "bg-emerald-500/80",
   report_engagement_10min: "bg-emerald-600",

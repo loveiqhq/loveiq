@@ -29,6 +29,7 @@ const ALLOWED_EVENTS = [
   "report_viewed",
   "paywall_view",
   "begin_checkout",
+  "paywall_unlocked",
   "report_engagement_1min",
   "report_engagement_5min",
   "report_engagement_10min",
@@ -46,6 +47,7 @@ function entityTypeFor(event: AllowedEvent): string {
     case "paywall_view":
       return "paywall";
     case "begin_checkout":
+    case "paywall_unlocked":
       return "checkout";
   }
 }

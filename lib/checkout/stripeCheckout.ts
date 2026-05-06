@@ -63,6 +63,7 @@ export type StripeCheckoutSessionStatusResponse =
       paymentStatus: string | null;
       purchaseAnalytics: StripeCheckoutPurchaseAnalytics | null;
       sessionStatus: string | null;
+      surveySubmissionId: number | null;
     };
 
 let stripeClient: Stripe | null = null;

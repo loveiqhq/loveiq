@@ -8,6 +8,7 @@ import BarChart from "./BarChart";
 import ConfirmDialog from "./ConfirmDialog";
 import JourneyTimeline from "./JourneyTimeline";
 import NotesSection from "./NotesSection";
+import UserFunnelCard from "./UserFunnelCard";
 import { getCsrfToken } from "@/lib/csrf-client";
 import { maskEmail } from "@/lib/admin/format";
 
@@ -351,6 +352,7 @@ export default function SubmissionDetail({ id, mode = "submission" }: Submission
       </div>
 
       {!isPartial && <JourneyTimeline id={id} />}
+      {!isPartial && <UserFunnelCard id={id} />}
 
       <div className="rounded-xl border border-white/10 bg-surface p-5">
         <h3 className="mb-4 text-sm font-semibold text-text-primary">

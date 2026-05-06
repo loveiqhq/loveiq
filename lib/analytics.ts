@@ -23,6 +23,7 @@ const PERSISTED_EVENTS = new Set([
   "report_viewed",
   "paywall_view",
   "begin_checkout",
+  "paywall_unlocked",
   "report_engagement_1min",
   "report_engagement_5min",
   "report_engagement_10min",
@@ -194,6 +195,26 @@ export const trackBeginCheckout = (
   const params = { plan, price, currency };
   track("begin_checkout", params);
   persistAnalyticsEvent("begin_checkout", params);
+};
+
+/**
+ * Persists the "paywall unlocked" event when a checkout return page confirms
+ * a successful purchase. Mirrors `trackReportPurchase` (GA4 dataLayer) but
+ * lands in `analytics_event` so the admin submission funnel can show the
+ * conversion as a durable timestamp.
+ *
+ * Idempotency: callers gate on the same `transaction_id` localStorage key as
+ * `trackReportPurchase`, so a refresh of the return page doesn't double-write.
+ */
+export const trackPaywallUnlocked = (
+  plan: "essentials" | "full_report" | "all_reports",
+  priceEur: number,
+  currency: string,
+  transactionId: string
+) => {
+  const params = { plan, price: priceEur, currency, transaction_id: transactionId };
+  track("paywall_unlocked", params);
+  persistAnalyticsEvent("paywall_unlocked", params);
 };
 
 export type ReportEngagementThreshold = 60 | 300 | 600;

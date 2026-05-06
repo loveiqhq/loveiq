@@ -185,6 +185,7 @@ export async function GET(request: Request) {
         ? session.metadata.reportToken
         : null;
     let accessPlan = null;
+    let surveySubmissionId: number | null = null;
 
     try {
       const context = await resolveSubmissionAccessContext({
@@ -193,6 +194,7 @@ export async function GET(request: Request) {
       });
 
       if (context?.submissionId) {
+        surveySubmissionId = context.submissionId;
         const access = await getReportAccessPlanForSubmission(context.submissionId);
         accessPlan = access.accessPlan;
       }
@@ -236,6 +238,7 @@ export async function GET(request: Request) {
           reportToken,
         });
         if (context?.submissionId) {
+          surveySubmissionId = context.submissionId;
           const access = await getReportAccessPlanForSubmission(context.submissionId);
           accessPlan = access.accessPlan;
         }
@@ -257,6 +260,7 @@ export async function GET(request: Request) {
       paymentStatus: session.payment_status ?? null,
       purchaseAnalytics: getPurchaseAnalytics(session),
       sessionStatus: session.status ?? null,
+      surveySubmissionId,
     };
 
     // Status-poll endpoint exposes payment + access plan — must always come
