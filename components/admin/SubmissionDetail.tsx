@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useAdminFetch } from "./hooks/useAdminFetch";
 import AnswerDisplay from "./AnswerDisplay";
 import BarChart from "./BarChart";
@@ -10,6 +10,60 @@ import JourneyTimeline from "./JourneyTimeline";
 import NotesSection from "./NotesSection";
 import { getCsrfToken } from "@/lib/csrf-client";
 import { maskEmail } from "@/lib/admin/format";
+
+/**
+ * Click-to-copy chip used for the hjUid and the survey session id. Tries the
+ * modern `navigator.clipboard.writeText` first, falls back to a hidden
+ * textarea + `document.execCommand("copy")` for environments where the
+ * Clipboard API is missing or rejects (sandboxed iframes, some embedded
+ * browsers). Shows a transient ✓ Copied state so the click is visible.
+ */
+function CopyableChip({ label, value, title }: { label: string; value: string; title: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(async () => {
+    if (!value) return;
+    let ok = false;
+    try {
+      if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(value);
+        ok = true;
+      }
+    } catch {
+      ok = false;
+    }
+    if (!ok && typeof document !== "undefined") {
+      try {
+        const textarea = document.createElement("textarea");
+        textarea.value = value;
+        textarea.setAttribute("readonly", "");
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.select();
+        ok = document.execCommand("copy");
+        document.body.removeChild(textarea);
+      } catch {
+        ok = false;
+      }
+    }
+    if (ok) {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1200);
+    }
+  }, [value]);
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      title={title}
+      className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 font-mono text-[11px] text-text-muted transition hover:bg-white/10"
+    >
+      {copied ? "✓ Copied" : `${label} ⎘`}
+    </button>
+  );
+}
 
 interface SubmissionData {
   submission: {
@@ -217,31 +271,19 @@ export default function SubmissionDetail({ id, mode = "submission" }: Submission
               >
                 Session replay ↗
               </a>
-              <button
-                type="button"
-                onClick={() => {
-                  if (
-                    typeof navigator !== "undefined" &&
-                    navigator.clipboard &&
-                    submission.hotjar_user_id
-                  ) {
-                    void navigator.clipboard.writeText(submission.hotjar_user_id);
-                  }
-                }}
-                className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 font-mono text-[11px] text-text-muted transition hover:bg-white/10"
+              <CopyableChip
+                label={`hjUid: ${submission.hotjar_user_id}`}
+                value={submission.hotjar_user_id}
                 title="Click to copy. Paste into Contentsquare → Session Replay → Filter → User ID."
-              >
-                hjUid: {submission.hotjar_user_id} ⎘
-              </button>
+              />
             </>
           )}
           {!sessionReplayUrl && submission.session_id && (
-            <span
-              className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 font-mono text-[11px] text-text-muted"
-              title="Survey session id — paste into Hotjar user-attribute search if no recording is linked yet."
-            >
-              session: {submission.session_id}
-            </span>
+            <CopyableChip
+              label={`session: ${submission.session_id}`}
+              value={submission.session_id}
+              title="Click to copy the survey session id. Paste into Contentsquare or Hotjar's user-attribute search if no recording link is available."
+            />
           )}
         </div>
       )}
