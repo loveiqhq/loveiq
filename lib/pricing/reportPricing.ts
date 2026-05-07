@@ -574,13 +574,14 @@ export function getPricingExperimentGroup(personalReportId: number): PricingExpe
 
 /**
  * Deterministic bucket selection using the hash-of-personalReportId seeded
- * against the weighted distribution (A=34%, B=33%, C=33%). Same user always
- * lands in the same bucket for the same plan.
+ * against the weighted distribution (A=20%, B=10%, C=70%). One bucket per
+ * user — the same code (A/B/C) is applied across all three plans so the
+ * tier ladder stays monotonic (Full Report ≥ Essentials, All ≥ Full).
  */
 function pickBucket(plan: ReportPurchasePlanId, personalReportId: number): PricingBucket {
   // eslint-disable-next-line security/detect-object-injection -- plan is a closed union of internal purchase-plan ids.
   const buckets = PLAN_BUCKETS[plan];
-  const draw = hashString(`bucket:${personalReportId}:${plan}`) % 100;
+  const draw = hashString(`bucket:${personalReportId}`) % 100;
   let running = 0;
   for (const bucket of buckets) {
     running += bucket.weight;
@@ -1543,3 +1544,11 @@ export function getPricingBucketsForPlan(plan: ReportPurchasePlanId) {
   // eslint-disable-next-line security/detect-object-injection -- plan is a closed union.
   return PLAN_BUCKETS[plan];
 }
+
+/**
+ * Test-only surface — production code should call `getReportPriceQuoteForContext`
+ * which internally invokes `pickBucket`. Exposed here so the bucket-coherence
+ * invariant ("same user lands the same A/B/C across all 3 plans") can be
+ * asserted directly without mocking the full Supabase fetch chain.
+ */
+export const __testing__ = { pickBucket };

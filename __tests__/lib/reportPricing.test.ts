@@ -17,6 +17,7 @@ vi.mock("../../lib/report/personalReport", () => ({
 }));
 
 import {
+  __testing__,
   getDiscountAdjustment,
   getPricingBucketsForPlan,
   getReportPriceQuoteForContext,
@@ -127,6 +128,38 @@ describe("reportPricing", () => {
         const total = getPricingBucketsForPlan(plan).reduce((s, b) => s + b.weight, 0);
         expect(total).toBe(100);
       }
+    });
+  });
+
+  describe("pickBucket invariant — one bucket per user", () => {
+    // Locks the post-fix invariant: a single personalReportId hashes to the
+    // same bucket code (A/B/C) across all three plans, so the tier ladder
+    // stays monotonic (Full Report ≥ Essentials, All ≥ Full).
+    it("returns the same bucket code across all three plans for any personalReportId", () => {
+      const plans = ["essentials", "full_report", "all_reports"] as const;
+      // Sample a wide range of ids to cover hashString collisions and edge cases.
+      const ids = [1, 2, 3, 7, 11, 42, 99, 100, 121, 122, 123, 500, 9_999, 1_234_567];
+
+      for (const id of ids) {
+        const codes = plans.map((plan) => __testing__.pickBucket(plan, id).code);
+        expect(new Set(codes).size).toBe(1);
+      }
+    });
+
+    it("distributes buckets across the weighted A=20% / B=10% / C=70% spread", () => {
+      const counts: Record<"A" | "B" | "C", number> = { A: 0, B: 0, C: 0 };
+      const sample = 10_000;
+      for (let id = 1; id <= sample; id++) {
+        const code = __testing__.pickBucket("essentials", id).code;
+        counts[code] += 1;
+      }
+      // Allow ±3% tolerance for hash skew on a 10k sample.
+      expect(counts.A / sample).toBeGreaterThan(0.17);
+      expect(counts.A / sample).toBeLessThan(0.23);
+      expect(counts.B / sample).toBeGreaterThan(0.07);
+      expect(counts.B / sample).toBeLessThan(0.13);
+      expect(counts.C / sample).toBeGreaterThan(0.67);
+      expect(counts.C / sample).toBeLessThan(0.73);
     });
   });
 
