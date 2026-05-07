@@ -1,14 +1,12 @@
 name: Waitlist early-access broadcast
 
 # Sends the waitlist early-access invitation
-# (lib/emails/waitlist-early-access.ts) to every active waitlist_user row.
+# (lib/emails/waitlist-early-access.ts) to active waitlist_user rows that
+# haven't already received it. Idempotent via
+# waitlist_user.early_access_email_sent_at — already-sent rows are skipped.
 #
-# Auto-fires once on 2026-05-07 07:00 UTC (= 09:00 Sarajevo CEST). Subsequent
-# yearly fires are no-ops because every row will be marked sent in
-# waitlist_user.early_access_email_sent_at.
-#
-# Manual trigger: workflow_dispatch — pick apply=true to actually send,
-# optionally set "only" to a single email for smoke-testing.
+# Manual-only trigger. Pick apply=true to actually send, optionally set
+# "only" to a single email for smoke-testing.
 
 on:
   workflow_dispatch:
@@ -26,8 +24,6 @@ on:
         required: false
         default: ""
         type: string
-  schedule:
-    - cron: "0 7 7 5 *" # 2026-05-07 07:00 UTC = 09:00 Sarajevo (CEST)
 
 permissions:
   contents: read
@@ -54,13 +50,12 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           NEXT_PUBLIC_SITE_URL: ${{ secrets.NEXT_PUBLIC_SITE_URL }}
-          EVENT_NAME: ${{ github.event_name }}
           INPUT_APPLY: ${{ inputs.apply }}
           INPUT_ONLY: ${{ inputs.only }}
         run: |
           set -euo pipefail
           ARGS=()
-          if [ "$EVENT_NAME" = "schedule" ] || [ "${INPUT_APPLY:-false}" = "true" ]; then
+          if [ "${INPUT_APPLY:-false}" = "true" ]; then
             ARGS+=("--apply")
           fi
           if [ -n "${INPUT_ONLY:-}" ]; then
