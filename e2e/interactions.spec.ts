@@ -81,25 +81,3 @@ test.describe("Footer links", () => {
     ).toHaveAttribute("href", "/terms-and-conditions");
   });
 });
-
-test.describe("Waitlist form", () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto("/waitlist");
-    await page.locator("html[data-hydrated]").waitFor({ state: "attached" });
-  });
-
-  test("email input is present", async ({ page }) => {
-    await expect(page.getByRole("textbox", { name: /email address/i })).toBeVisible();
-  });
-
-  test("submit button is present", async ({ page }) => {
-    await expect(page.getByRole("button", { name: /join waitlist/i })).toBeVisible();
-  });
-
-  test("submitting without a valid email shows a validation error", async ({ page }) => {
-    // The email input is required; submit without a value
-    await page.getByRole("button", { name: /join waitlist/i }).click();
-    // Expect the error status region to contain an error message
-    await expect(page.locator('[role="status"]').filter({ hasText: /valid email/i })).toBeVisible();
-  });
-});

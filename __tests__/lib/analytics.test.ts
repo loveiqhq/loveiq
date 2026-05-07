@@ -26,7 +26,6 @@ const setConsentCookie = ({
 let track: typeof import("../../lib/analytics").track;
 let trackStartSurvey: typeof import("../../lib/analytics").trackStartSurvey;
 let trackLearnMore: typeof import("../../lib/analytics").trackLearnMore;
-let trackWaitlistSignup: typeof import("../../lib/analytics").trackWaitlistSignup;
 let trackSurveyStart: typeof import("../../lib/analytics").trackSurveyStart;
 let trackSurveyProgress: typeof import("../../lib/analytics").trackSurveyProgress;
 let trackSurveyComplete: typeof import("../../lib/analytics").trackSurveyComplete;
@@ -48,7 +47,6 @@ describe("analytics", () => {
     track = mod.track;
     trackStartSurvey = mod.trackStartSurvey;
     trackLearnMore = mod.trackLearnMore;
-    trackWaitlistSignup = mod.trackWaitlistSignup;
     trackSurveyStart = mod.trackSurveyStart;
     trackSurveyProgress = mod.trackSurveyProgress;
     trackSurveyComplete = mod.trackSurveyComplete;
@@ -229,25 +227,6 @@ describe("analytics", () => {
       expect(mockGtag).toHaveBeenCalledWith("event", "cta_click", {
         cta: "learn_more",
         location: "hero",
-      });
-    });
-  });
-
-  describe("trackWaitlistSignup", () => {
-    it("fires waitlist_signup event with source", () => {
-      const mockGtag = vi.fn();
-      setConsentCookie({ analytics: true });
-      globalThis.window = {
-        ...globalThis.window,
-        gtag: mockGtag,
-        __loveiqAnalyticsEnabled: true,
-      } as typeof globalThis.window;
-
-      trackWaitlistSignup("landing-modal");
-
-      expect(mockGtag).toHaveBeenCalledWith("event", "waitlist_signup", {
-        method: "form",
-        source: "landing-modal",
       });
     });
   });

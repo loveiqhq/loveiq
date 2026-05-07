@@ -9,7 +9,7 @@
 ## Project Overview
 **Type:** Next.js 16 App Router marketing website
 **Stack:** TypeScript, React, Tailwind CSS, Supabase, Resend
-**Purpose:** Pre-launch marketing with waitlist and contact forms
+**Purpose:** Pre-launch marketing with assessment funnel and contact form
 **Auth:** None (no user authentication)
 
 ## Security-First Approach

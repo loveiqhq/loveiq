@@ -61,17 +61,6 @@ test.describe("Visual Regression", () => {
     });
   });
 
-  test("waitlist page full screenshot", async ({ page }) => {
-    await page.goto("/waitlist");
-    await page.waitForLoadState("networkidle");
-    await disableAnimations(page);
-    await page.waitForTimeout(500);
-    await expect(page).toHaveScreenshot("waitlist-page.png", {
-      fullPage: true,
-      maxDiffPixelRatio: 0.01,
-    });
-  });
-
   test("survey intro screenshot", async ({ page }) => {
     await page.goto("/survey");
     await page.waitForLoadState("networkidle");

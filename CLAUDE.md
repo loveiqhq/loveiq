@@ -26,7 +26,6 @@ loveiq-web/
 ├── app/                        # Next.js App Router (pages + API routes)
 │   ├── api/
 │   │   ├── contact/route.ts    # Contact form → Resend + Slack
-│   │   ├── waitlist/route.ts   # Waitlist signup → Supabase + Resend + Slack
 │   │   ├── survey/route.ts     # Survey submission → Supabase RPC + Slack
 │   │   ├── health/route.ts     # Health check endpoint
 │   │   ├── staging-login/route.ts   # Staging environment auth
@@ -58,7 +57,6 @@ loveiq-web/
 │   │   └── product-kpis/page.tsx   # Product KPIs dashboard
 │   ├── about/page.tsx          # About page
 │   ├── login/page.tsx          # Staging login page
-│   ├── waitlist/page.tsx       # Waitlist standalone page
 │   ├── glossary/               # Glossary pages (index + [slug])
 │   ├── trust-zone/             # Trust zone pages
 │   ├── survey/page.tsx         # Survey / intro wizard
@@ -105,7 +103,6 @@ loveiq-web/
 │   ├── staging/                # Staging login form
 │   ├── not-found/              # 404 page component
 │   ├── trust-zone/             # Trust zone page component
-│   ├── waitlist/               # Waitlist page component
 │   ├── NonceProvider.tsx       # CSP nonce context provider
 │   ├── HydrationMarker.tsx     # Client hydration marker
 │   └── SmoothScroll.tsx        # Lenis smooth scroll wrapper
@@ -128,8 +125,7 @@ loveiq-web/
 │   │   └── supabase-server.ts  # Server-side Supabase client
 │   └── emails/
 │       ├── admin-magic-link.ts # Admin magic link email template
-│       ├── invite.ts           # Invite email template
-│       └── waitlist.ts         # Waitlist confirmation email template
+│       └── invite.ts           # Invite email template
 ├── data/
 │   ├── glossary-data.ts        # Auto-generated glossary terms (688KB, from CSV)
 │   ├── glossary-source.csv     # Source CSV; regenerate via `node scripts/update-glossary.js`
@@ -164,20 +160,19 @@ loveiq-web/
 
 **Type:** Static marketing site with API routes (Next.js 16 App Router)
 
-**No end-user authentication.** This is a pre-launch marketing site with waitlist collection. The admin panel (`/admin/*`) uses Supabase Auth with magic link emails; see `admin_users` table for the email allowlist.
+**No end-user authentication.** This is a pre-launch marketing site driven by the assessment funnel at `/survey`. The admin panel (`/admin/*`) uses Supabase Auth with magic link emails; see `admin_users` table for the email allowlist.
 
 ### Data Flow
 
 1. **Page Load:** SSR → Client hydration → Smooth scroll init → Analytics pageview
-2. **Waitlist Signup:** Form → CSRF check → Rate limit → Zod validation → Honeypot check → Supabase insert → Resend email → Slack notification
-3. **Contact Form:** Form → reCAPTCHA → CSRF check → Rate limit → Zod validation → Resend email → Slack notification
-4. **Survey Submission:** Form → CSRF check → Rate limit → Zod validation → Honeypot check → Email cooldown → Supabase RPC → Slack notification
-5. **Pre-Report Wizard:** Survey submit success → 3s success animation → fade to PreReportWizard (5 slides) → SurveyConfirmation final CTA
-6. **Survey Tracking:** Question transition → Buffer events → Flush batch → CSRF check → Rate limit → Zod validation → Supabase insert
-7. **Admin Panel:** `/admin/*` → Supabase Auth middleware gate (magic link session) → API routes with session + CSRF + rate limit → Supabase queries
-8. **Invite Send:** Form → CSRF check → Rate limit → Zod validation → Resend email (after response) → Supabase invite_event insert (after response)
-9. **Invite Tracking:** Share button click → CSRF check → Rate limit → Zod validation → Supabase invite_event insert
-10. **Survey Partial Save:** Auto-save on question transition → CSRF check (header or body for sendBeacon) → Rate limit → Zod validation → Supabase upsert (survey_partial_save)
+2. **Contact Form:** Form → reCAPTCHA → CSRF check → Rate limit → Zod validation → Resend email → Slack notification
+3. **Survey Submission:** Form → CSRF check → Rate limit → Zod validation → Honeypot check → Email cooldown → Supabase RPC → Slack notification
+4. **Pre-Report Wizard:** Survey submit success → 3s success animation → fade to PreReportWizard (5 slides) → SurveyConfirmation final CTA
+5. **Survey Tracking:** Question transition → Buffer events → Flush batch → CSRF check → Rate limit → Zod validation → Supabase insert
+6. **Admin Panel:** `/admin/*` → Supabase Auth middleware gate (magic link session) → API routes with session + CSRF + rate limit → Supabase queries
+7. **Invite Send:** Form → CSRF check → Rate limit → Zod validation → Resend email (after response) → Supabase invite_event insert (after response)
+8. **Invite Tracking:** Share button click → CSRF check → Rate limit → Zod validation → Supabase invite_event insert
+9. **Survey Partial Save:** Auto-save on question transition → CSRF check (header or body for sendBeacon) → Rate limit → Zod validation → Supabase upsert (survey_partial_save)
 
 ### Key Boundaries
 
@@ -194,14 +189,13 @@ Copy `.env.example` to `.env.local` and fill values:
 | Variable                                   | Required     | Purpose                                                                                              |
 | ------------------------------------------ | ------------ | ---------------------------------------------------------------------------------------------------- |
 | `NEXT_PUBLIC_SITE_URL`                     | Yes          | Canonical URL for metadata                                                                           |
-| `SUPABASE_URL`                             | For forms    | Waitlist database                                                                                    |
+| `SUPABASE_URL`                             | For forms    | Survey + admin database                                                                              |
 | `SUPABASE_SERVICE_ROLE_KEY`                | For forms    | Supabase auth (server-only!)                                                                         |
 | `RESEND_API_KEY`                           | For forms    | Email sending                                                                                        |
 | `RESEND_FROM`                              | No           | From address (default: `LoveIQ <hello@send.loveiq.org>`)                                             |
 | `RESEND_REPLY_TO`                          | No           | Reply-to address                                                                                     |
 | `NEXT_PUBLIC_RECAPTCHA_SITE_KEY`           | For contact  | reCAPTCHA client key                                                                                 |
 | `RECAPTCHA_SECRET_KEY`                     | For contact  | reCAPTCHA server key                                                                                 |
-| `SLACK_WAITLIST_WEBHOOK_URL`               | No           | Slack notifications for waitlist signups                                                             |
 | `SLACK_CONTACT_WEBHOOK_URL`                | No           | Slack notifications for contact form                                                                 |
 | `SLACK_SURVEY_WEBHOOK_URL`                 | No           | Slack notifications for survey submissions                                                           |
 | `SLACK_PAYMENTS_WEBHOOK_URL`               | No           | Slack notifications for report purchases                                                             |
@@ -503,14 +497,14 @@ Always return `{ error: string }` or `{ success: true }`. Keep error messages ge
 
 - All API inputs validated with Zod
 - Email addresses normalized (lowercase, trimmed)
-- HTML escaped in email templates (`lib/emails/waitlist.ts`)
+- HTML escaped in email templates (`lib/emails/invite.ts`)
 - Header injection prevented in contact form
 
 ### Rate Limiting
 
 - IP-based rate limiting on all form endpoints
 - Persisted in Supabase (survives deployments)
-- Email-based cooldown on waitlist
+- Email-based cooldown on survey submissions
 
 ### CSRF Protection
 
@@ -612,8 +606,8 @@ Check browser DevTools Network tab for response. Common causes:
 | Add landing section      | `components/landing/LandingPage.tsx`, existing `S##*.tsx` |
 | Modify navigation        | `components/landing/NavSection.tsx`                       |
 | Modify footer            | `components/landing/FooterSection.tsx`                    |
-| Add API endpoint         | `app/api/waitlist/route.ts` (reference)                   |
-| Change email template    | `lib/emails/waitlist.ts`                                  |
+| Add API endpoint         | `app/api/contact/route.ts` (reference)                    |
+| Change email template    | `lib/emails/invite.ts`                                    |
 | Add analytics event      | `lib/analytics.ts`                                        |
 | Modify design tokens     | `app/globals.css` (CSS vars), `tailwind.config.js`        |
 | Update security headers  | `proxy.ts`                                                |

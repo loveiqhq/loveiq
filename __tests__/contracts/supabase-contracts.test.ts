@@ -14,8 +14,6 @@ import { describe, it, expect } from "vitest";
 import {
   RateLimitResponseSchema,
   CooldownResponseSchema,
-  WaitlistIdempotencyResponseSchema,
-  WaitlistInsertResponseSchema,
   SurveySubmitResponseSchema,
   BehaviorStatsResponseSchema,
   AnswerDistributionResponseSchema,
@@ -85,72 +83,7 @@ describe("CooldownResponseSchema", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 3. WaitlistIdempotencyResponseSchema
-// ---------------------------------------------------------------------------
-describe("WaitlistIdempotencyResponseSchema", () => {
-  it("accepts array with matching record", () => {
-    const data = [{ id: "abc-123-uuid" }];
-    expect(() => WaitlistIdempotencyResponseSchema.parse(data)).not.toThrow();
-  });
-
-  it("accepts empty array (email not found)", () => {
-    expect(() => WaitlistIdempotencyResponseSchema.parse([])).not.toThrow();
-  });
-
-  it("rejects record with numeric id", () => {
-    // The route casts id as string; numeric would be a schema mismatch
-    const data = [{ id: 42 }];
-    expect(() => WaitlistIdempotencyResponseSchema.parse(data)).toThrow();
-  });
-
-  it("rejects record missing id field", () => {
-    const data = [{ email: "alice@example.com" }];
-    expect(() => WaitlistIdempotencyResponseSchema.parse(data)).toThrow();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// 4. WaitlistInsertResponseSchema
-// ---------------------------------------------------------------------------
-describe("WaitlistInsertResponseSchema", () => {
-  it("accepts valid inserted row", () => {
-    const data = [
-      {
-        id: 1,
-        email: "alice@example.com",
-        source: "landing-modal",
-        created_date_time: "2024-01-01T00:00:00.000Z",
-      },
-    ];
-    expect(() => WaitlistInsertResponseSchema.parse(data)).not.toThrow();
-  });
-
-  it("rejects row with string id (Supabase serial id is numeric)", () => {
-    const data = [
-      {
-        id: "uuid-string",
-        email: "alice@example.com",
-        source: "landing-modal",
-        created_date_time: "2024-01-01T00:00:00.000Z",
-      },
-    ];
-    expect(() => WaitlistInsertResponseSchema.parse(data)).toThrow();
-  });
-
-  it("rejects row missing source field", () => {
-    const data = [
-      {
-        id: 1,
-        email: "alice@example.com",
-        created_date_time: "2024-01-01T00:00:00.000Z",
-      },
-    ];
-    expect(() => WaitlistInsertResponseSchema.parse(data)).toThrow();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// 5. SurveySubmitResponseSchema
+// 3. SurveySubmitResponseSchema
 // ---------------------------------------------------------------------------
 describe("SurveySubmitResponseSchema", () => {
   it("accepts success: true without error field", () => {

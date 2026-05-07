@@ -41,31 +41,30 @@ After startup:
 
 ### Required for specific features
 
-| Variable                         | Purpose                                  | Required for local dev?                                                      |
-| -------------------------------- | ---------------------------------------- | ---------------------------------------------------------------------------- |
-| `NEXT_PUBLIC_SITE_URL`           | Canonical URL, metadata, and email links | Recommended                                                                  |
-| `SUPABASE_URL`                   | Supabase REST base URL                   | Required for waitlist, survey, admin data, and health checks                 |
-| `SUPABASE_SERVICE_ROLE_KEY`      | Server-side Supabase access              | Required for waitlist, survey, tracking, and health checks                   |
-| `RESEND_API_KEY`                 | Transactional email delivery             | Required for waitlist emails, contact email, invite email, and health checks |
-| `NEXT_PUBLIC_RECAPTCHA_SITE_KEY` | Contact form reCAPTCHA client key        | Required for contact form UI                                                 |
-| `RECAPTCHA_SECRET_KEY`           | Contact form reCAPTCHA verification      | Required for contact form submissions                                        |
-| `NEXT_PUBLIC_SUPABASE_URL`       | Browser-safe Supabase auth URL           | Required for admin auth UI                                                   |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY`  | Browser-safe Supabase auth key           | Required for admin auth UI                                                   |
+| Variable                         | Purpose                                  | Required for local dev?                                     |
+| -------------------------------- | ---------------------------------------- | ----------------------------------------------------------- |
+| `NEXT_PUBLIC_SITE_URL`           | Canonical URL, metadata, and email links | Recommended                                                 |
+| `SUPABASE_URL`                   | Supabase REST base URL                   | Required for survey, admin data, and health checks          |
+| `SUPABASE_SERVICE_ROLE_KEY`      | Server-side Supabase access              | Required for survey, tracking, and health checks            |
+| `RESEND_API_KEY`                 | Transactional email delivery             | Required for contact email, invite email, and health checks |
+| `NEXT_PUBLIC_RECAPTCHA_SITE_KEY` | Contact form reCAPTCHA client key        | Required for contact form UI                                |
+| `RECAPTCHA_SECRET_KEY`           | Contact form reCAPTCHA verification      | Required for contact form submissions                       |
+| `NEXT_PUBLIC_SUPABASE_URL`       | Browser-safe Supabase auth URL           | Required for admin auth UI                                  |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY`  | Browser-safe Supabase auth key           | Required for admin auth UI                                  |
 
 ### Optional
 
-| Variable                     | Purpose                                                     |
-| ---------------------------- | ----------------------------------------------------------- |
-| `RESEND_FROM`                | Override sender identity for LoveIQ emails                  |
-| `RESEND_REPLY_TO`            | Override reply-to address for outbound email                |
-| `CONTACT_TO_EMAIL`           | Destination inbox for `/api/contact`                        |
-| `SLACK_WAITLIST_WEBHOOK_URL` | Waitlist signup notifications                               |
-| `SLACK_CONTACT_WEBHOOK_URL`  | Contact form notifications                                  |
-| `SLACK_SURVEY_WEBHOOK_URL`   | Survey completion notifications                             |
-| `STAGING_PASSWORD`           | Enables the staging password gate and `/api/staging-login`  |
-| `SURVEY_CLOSE_PASSWORD`      | Required to close the survey via `/api/admin/survey-status` |
-| `NEXT_PUBLIC_GTM_ID`         | Optional Google Tag Manager container ID                    |
-| `LOG_LEVEL`                  | Pino log level override                                     |
+| Variable                    | Purpose                                                     |
+| --------------------------- | ----------------------------------------------------------- |
+| `RESEND_FROM`               | Override sender identity for LoveIQ emails                  |
+| `RESEND_REPLY_TO`           | Override reply-to address for outbound email                |
+| `CONTACT_TO_EMAIL`          | Destination inbox for `/api/contact`                        |
+| `SLACK_CONTACT_WEBHOOK_URL` | Contact form notifications                                  |
+| `SLACK_SURVEY_WEBHOOK_URL`  | Survey completion notifications                             |
+| `STAGING_PASSWORD`          | Enables the staging password gate and `/api/staging-login`  |
+| `SURVEY_CLOSE_PASSWORD`     | Required to close the survey via `/api/admin/survey-status` |
+| `NEXT_PUBLIC_GTM_ID`        | Optional Google Tag Manager container ID                    |
+| `LOG_LEVEL`                 | Pino log level override                                     |
 
 ## Validation Commands
 

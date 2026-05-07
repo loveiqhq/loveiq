@@ -18,6 +18,12 @@ const nextConfig = {
     // Remove console.log in production
     removeConsole: process.env.NODE_ENV === "production" ? { exclude: ["error", "warn"] } : false,
   },
+  async redirects() {
+    return [
+      // /waitlist was retired — keep external links working by sending them into the survey funnel.
+      { source: "/waitlist", destination: "/survey", permanent: true },
+    ];
+  },
   // Cache headers for static public assets (security headers are in proxy.ts)
   async headers() {
     return [

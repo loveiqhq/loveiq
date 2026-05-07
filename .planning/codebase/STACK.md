@@ -55,8 +55,8 @@
 
 **Critical:**
 
-- Resend ^6.9.2 - Transactional email service (`package.json`, `app/api/waitlist/route.ts`, `app/api/contact/route.ts`)
-- Zod ^4.3.6 - Schema validation (`package.json`, `app/api/waitlist/route.ts`, `app/api/contact/route.ts`)
+- Resend ^6.9.2 - Transactional email service (`package.json`, `app/api/contact/route.ts`, `app/api/invite/route.ts`)
+- Zod ^4.3.6 - Schema validation (`package.json`, `app/api/contact/route.ts`, `app/api/survey/route.ts`)
 - @supabase/supabase-js ^2.99.1 - Supabase client (database + auth) (`package.json`, `lib/admin/`)
 - @supabase/ssr ^0.9.0 - Supabase server-side auth helpers for Next.js (`package.json`, `lib/admin/`)
 - Lenis ^1.3.17 - Smooth scroll library (`components/SmoothScroll.tsx`)

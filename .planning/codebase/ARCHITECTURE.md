@@ -13,7 +13,7 @@
 - Next.js 16 App Router architecture
 - Server-side rendering for pages
 - Client components for interactivity
-- API routes for form handling (waitlist, contact, survey) and staging auth
+- API routes for form handling (contact, survey, invite) and staging auth
 - No end-user authentication; admin panel uses Supabase Auth magic links with `admin_users` email allowlist
 - CSRF protection via double-submit cookie pattern
 - Supabase-backed rate limiting on all form endpoints
@@ -33,7 +33,7 @@
 - Purpose: Reusable UI components organized by page
 - Contains: React components (Server + Client)
 - Location: `components/` directory
-- Subdirectories: `landing/`, `about/`, `glossary/`, `legal/`, `survey/`, `trust-zone/`, `staging/`, `not-found/`, `waitlist/`, `admin/`
+- Subdirectories: `landing/`, `about/`, `glossary/`, `legal/`, `survey/`, `trust-zone/`, `staging/`, `not-found/`, `admin/`
 - Depends on: CSS custom properties (globals.css), Tailwind CSS
 - Used by: Pages
 
@@ -73,22 +73,6 @@
 5. Smooth scroll initialized (Lenis)
 6. Google Analytics tracks page view
 
-**Waitlist Signup Flow:**
-
-1. User submits email via modal/form
-2. Client-side validation (basic)
-3. POST to `/api/waitlist`
-4. CSRF token verification (`lib/csrf.ts`)
-5. Rate limiting check (IP-based, Supabase-backed)
-6. Server validates with Zod schema
-7. Honeypot check (bot detection)
-8. Check Supabase for existing email
-9. Insert new signup to Supabase
-10. Send confirmation email via Resend
-11. Notify Slack webhook
-12. Return success response
-13. Client shows success state
-
 **Contact Form Flow:**
 
 1. User fills contact form on About page
@@ -123,7 +107,7 @@
 - Stateless - No persistent client state
 - Form state managed locally in components
 - No global state management (Redux, Context)
-- Server state: Database (Supabase) for waitlist and rate limiting
+- Server state: Database (Supabase) for survey submissions, historical waitlist_user data, and rate limiting
 
 ## Key Abstractions
 
@@ -137,14 +121,14 @@
 **API Route Handlers:**
 
 - Purpose: Server-side form processing
-- Examples: `app/api/waitlist/route.ts`, `app/api/contact/route.ts`, `app/api/survey/route.ts`
+- Examples: `app/api/contact/route.ts`, `app/api/survey/route.ts`, `app/api/invite/route.ts`
 - Pattern: Next.js Route Handlers with CSRF + rate limiting + Zod validation
 - Features: CSRF protection, Supabase-backed rate limiting, validation, honeypot
 
 **Analytics Helpers:**
 
 - Purpose: Typed event tracking
-- Examples: `track()`, `trackStartSurvey()`, `trackWaitlistSignup()`
+- Examples: `track()`, `trackStartSurvey()`, `trackSurveyComplete()`
 - Pattern: Wrapper functions around gtag
 - Location: `lib/analytics.ts`
 
@@ -160,7 +144,6 @@
 
 - `/` - `app/page.tsx` → `LandingPage`
 - `/about` - `app/about/page.tsx` → `AboutPage`
-- `/waitlist` - `app/waitlist/page.tsx`
 - `/survey` - `app/survey/page.tsx` → `SurveyPage`
 - `/glossary` - `app/glossary/page.tsx` → Glossary index
 - `/glossary/[slug]` - `app/glossary/[slug]/page.tsx` → Glossary term
@@ -176,7 +159,6 @@
 
 **API Routes:**
 
-- `/api/waitlist` - `app/api/waitlist/route.ts`
 - `/api/contact` - `app/api/contact/route.ts`
 - `/api/survey` - `app/api/survey/route.ts`
 - `/api/health` - `app/api/health/route.ts`
@@ -208,7 +190,7 @@
 **Logging:**
 
 - pino structured logging (`lib/logger.ts`)
-- Slack notifications for important events (waitlist signups, contact submissions)
+- Slack notifications for important events (survey submissions, contact submissions, payments)
 - @vercel/otel for OpenTelemetry integration
 
 **Validation:**

@@ -10,7 +10,6 @@ import logger from "@/lib/logger";
 
 const RESEND_TIMEOUT_MS = 5_000;
 
-/** See waitlist/route.ts — same pattern. */
 // Lazy initialization to avoid build-time errors when env vars are not set
 let _resend: Resend | null = null;
 function getResend(): Resend {

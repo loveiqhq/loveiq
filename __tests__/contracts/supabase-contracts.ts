@@ -8,7 +8,6 @@
  *
  * Source references (route files that cast these shapes):
  *   - lib/ratelimit.ts          → RateLimitResponseSchema, CooldownResponseSchema
- *   - app/api/waitlist/route.ts → WaitlistIdempotencyResponseSchema, WaitlistInsertResponseSchema
  *   - app/api/survey/route.ts   → SurveySubmitResponseSchema
  *   - app/api/admin/stats/route.ts
  *       → BehaviorStatsResponseSchema, AnswerDistributionResponseSchema, WaitlistStatsResponseSchema
@@ -44,33 +43,7 @@ export const CooldownResponseSchema = z.array(
 );
 
 // ---------------------------------------------------------------------------
-// 3. WaitlistIdempotencyResponseSchema
-//    Source: app/api/waitlist/route.ts — SELECT id for duplicate check
-//    Code:   (await existingRes.json()) as Array<{ id: string }>
-// ---------------------------------------------------------------------------
-export const WaitlistIdempotencyResponseSchema = z.array(
-  z.object({
-    id: z.string(),
-  })
-);
-
-// ---------------------------------------------------------------------------
-// 4. WaitlistInsertResponseSchema
-//    Source: app/api/waitlist/route.ts — INSERT with Prefer: return=representation
-//    Code:   [{ id: "new-id" }] (the route only checks array length / circuit)
-//    The real Supabase insert representation returns the inserted row.
-// ---------------------------------------------------------------------------
-export const WaitlistInsertResponseSchema = z.array(
-  z.object({
-    id: z.number(),
-    email: z.string(),
-    source: z.string(),
-    created_date_time: z.string(),
-  })
-);
-
-// ---------------------------------------------------------------------------
-// 5. SurveySubmitResponseSchema
+// 3. SurveySubmitResponseSchema
 //    Source: app/api/survey/route.ts — RPC `submit_survey`
 //    Code:   rpcResult?.success === false / rpcResult.error
 // ---------------------------------------------------------------------------

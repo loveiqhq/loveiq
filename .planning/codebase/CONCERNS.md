@@ -8,12 +8,19 @@
 
 **Email enumeration timing (low priority):**
 
-- Issue: Timing attack could theoretically reveal if email exists in waitlist
-- Files: `app/api/waitlist/route.ts`
+- Issue: Timing attack could theoretically reveal if email exists in survey submissions
+- Files: `app/api/survey/route.ts`
 - Current mitigation: Same success response for existing emails
 - Impact: Minimal — current mitigation is adequate
 
 ## Resolved Items
+
+**Public waitlist surface retired:** RESOLVED (2026-05)
+
+- Was: `/waitlist` page + `/api/waitlist` route still live after the funnel moved to `/survey`
+- Fix: Deleted public page, API route, signup email template, and broadcast pipeline; `/waitlist` 301-redirects to `/survey` via `next.config.js`
+- `waitlist_user` table preserved for admin growth analytics (historical data only, no new inserts)
+- Evidence: `next.config.js` redirects block, no `app/waitlist/` or `app/api/waitlist/` directories
 
 **In-memory rate limiting:** RESOLVED (2026-01)
 
@@ -23,7 +30,7 @@
 
 **Deep relative imports:** RESOLVED (2026-01)
 
-- Was: Import paths like `../../../lib/emails/waitlist` hard to maintain
+- Was: Import paths like `../../../lib/emails/invite` hard to maintain
 - Fix: `@/*` path alias configured in `tsconfig.json`
 - Evidence: All cross-directory imports use `@/lib/*`, `@/components/*`
 
@@ -42,7 +49,7 @@
 
 - Was: No CSRF token validation on API routes
 - Fix: Double-submit cookie pattern in `lib/csrf.ts`, verified in all API routes
-- Evidence: `verifyCsrfToken()` called in waitlist + contact route handlers
+- Evidence: `verifyCsrfToken()` called in survey + contact + invite route handlers
 
 **No tests:** RESOLVED (2026-02)
 
@@ -62,7 +69,7 @@
 
 **No admin dashboard:** RESOLVED (2026-03)
 
-- Was: Cannot view waitlist signups without database access
+- Was: Cannot view survey submissions or waitlist signups without database access
 - Fix: Full admin panel at `/admin/*` with dashboard, submission browser, CSV export, and survey status toggle
 - Auth: Supabase Auth magic link emails with `admin_users` email allowlist table
 - Evidence: `app/admin/`, `app/api/admin/`, `lib/admin/`, `components/admin/`
@@ -92,7 +99,7 @@
 
 **Potential future concern:**
 
-- If waitlist grows very large, Supabase REST queries without pagination could slow down
+- If survey submissions grow very large, Supabase REST queries without pagination could slow down
 - Currently not an issue for check-existence queries
 
 ## Fragile Areas
@@ -101,7 +108,7 @@
 
 - Why fragile: Webhook URLs can be revoked/changed, no retry logic
 - Common failures: Webhook returns non-200, network timeout
-- Files: `app/api/waitlist/route.ts`, `app/api/contact/route.ts`
+- Files: `app/api/survey/route.ts`, `app/api/contact/route.ts`, `app/api/stripe/webhook/route.ts`
 - Safe modification: Slack failures are already non-blocking (async, caught)
 
 **CSP header configuration:**
@@ -140,15 +147,15 @@
 
 **No end-user authentication:**
 
-- Problem: Cannot identify returning waitlist members
-- Current workaround: Email-based identification only
+- Problem: Cannot identify returning users across sessions
+- Current workaround: Email-based identification on survey submission only
 - Blocks: Member area, personalized content
 - Implementation complexity: Medium (Supabase Auth available)
 - Note: Admin panel now has authentication via Supabase Auth magic links (see resolved item below)
 
 **No email verification:**
 
-- Problem: Waitlist signups not verified (fake emails possible)
+- Problem: Survey signups not verified (fake emails possible)
 - Current workaround: None
 - Blocks: Clean email list for launches
 - Implementation complexity: Low (add verification flow)

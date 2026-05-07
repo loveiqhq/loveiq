@@ -11,36 +11,38 @@
 
 ### 1.1 Assets
 
-| Asset                     | Classification          | Location                       | Risk Level |
-| ------------------------- | ----------------------- | ------------------------------ | ---------- |
-| Waitlist emails           | PII / Business-Critical | Supabase `waitlist_user` table | HIGH       |
-| Contact form submissions  | PII                     | Resend email + Slack webhook   | MEDIUM     |
-| Supabase service role key | Secret                  | `.env.local` / Vercel env vars | CRITICAL   |
-| Resend API key            | Secret                  | `.env.local` / Vercel env vars | HIGH       |
-| reCAPTCHA secret key      | Secret                  | `.env.local` / Vercel env vars | MEDIUM     |
-| Slack webhook URLs        | Secret                  | `.env.local` / Vercel env vars | MEDIUM     |
-| Google Analytics ID       | Public                  | `app/layout.tsx`               | LOW        |
-| Source code               | Intellectual Property   | Git repository                 | MEDIUM     |
+| Asset                     | Classification          | Location                                       | Risk Level |
+| ------------------------- | ----------------------- | ---------------------------------------------- | ---------- |
+| Survey submissions        | PII / Business-Critical | Supabase `survey_submission` table             | HIGH       |
+| Historical waitlist data  | PII                     | Supabase `waitlist_user` table (read-only now) | MEDIUM     |
+| Contact form submissions  | PII                     | Resend email + Slack webhook                   | MEDIUM     |
+| Supabase service role key | Secret                  | `.env.local` / Vercel env vars                 | CRITICAL   |
+| Resend API key            | Secret                  | `.env.local` / Vercel env vars                 | HIGH       |
+| reCAPTCHA secret key      | Secret                  | `.env.local` / Vercel env vars                 | MEDIUM     |
+| Slack webhook URLs        | Secret                  | `.env.local` / Vercel env vars                 | MEDIUM     |
+| Google Analytics ID       | Public                  | `app/layout.tsx`                               | LOW        |
+| Source code               | Intellectual Property   | Git repository                                 | MEDIUM     |
 
 ### 1.2 Potential Attackers
 
-| Attacker              | Motivation                            | Capability |
-| --------------------- | ------------------------------------- | ---------- |
-| Spammers/Bots         | Pollute waitlist, abuse email service | LOW-MEDIUM |
-| Competitors           | Scrape waitlist data, DoS             | MEDIUM     |
-| Malicious users       | XSS injection, data enumeration       | MEDIUM     |
-| Supply chain attacker | Compromise dependencies               | HIGH       |
-| Insider threat        | Data exfiltration                     | MEDIUM     |
+| Attacker              | Motivation                          | Capability |
+| --------------------- | ----------------------------------- | ---------- |
+| Spammers/Bots         | Pollute survey, abuse email service | LOW-MEDIUM |
+| Competitors           | Scrape submission data, DoS         | MEDIUM     |
+| Malicious users       | XSS injection, data enumeration     | MEDIUM     |
+| Supply chain attacker | Compromise dependencies             | HIGH       |
+| Insider threat        | Data exfiltration                   | MEDIUM     |
 
 ### 1.3 Entry Points
 
-| Entry Point          | Type            | Authentication                     | File Location                         |
-| -------------------- | --------------- | ---------------------------------- | ------------------------------------- |
-| `/api/waitlist` POST | Form submission | CSRF + rate-limited + honeypot     | `app/api/waitlist/route.ts`           |
-| `/api/contact` POST  | Form submission | CSRF + reCAPTCHA v2 + rate-limited | `app/api/contact/route.ts`            |
-| `/api/health` GET    | Health check    | None                               | `app/api/health/route.ts`             |
-| Landing page forms   | Client UI       | None                               | `app/waitlist/page.tsx`               |
-| Contact form         | Client UI       | reCAPTCHA widget                   | `components/about/ContactSection.tsx` |
+| Entry Point         | Type            | Authentication                     | File Location                         |
+| ------------------- | --------------- | ---------------------------------- | ------------------------------------- |
+| `/api/survey` POST  | Form submission | CSRF + rate-limited + honeypot     | `app/api/survey/route.ts`             |
+| `/api/contact` POST | Form submission | CSRF + reCAPTCHA v2 + rate-limited | `app/api/contact/route.ts`            |
+| `/api/invite` POST  | Form submission | CSRF + rate-limited                | `app/api/invite/route.ts`             |
+| `/api/health` GET   | Health check    | None                               | `app/api/health/route.ts`             |
+| Survey wizard       | Client UI       | None                               | `app/survey/page.tsx`                 |
+| Contact form        | Client UI       | reCAPTCHA widget                   | `components/about/ContactSection.tsx` |
 
 ---
 
@@ -53,9 +55,10 @@
 | `SUPABASE_SERVICE_ROLE_KEY`  | ✅ Server-only | Full DB access        |
 | `RESEND_API_KEY`             | ✅ Server-only | Email abuse           |
 | `RECAPTCHA_SECRET_KEY`       | ✅ Server-only | CAPTCHA bypass        |
-| `SLACK_WAITLIST_WEBHOOK_URL` | ✅ Server-only | Notification spoofing |
 | `SLACK_CONTACT_WEBHOOK_URL`  | ✅ Server-only | Notification spoofing |
-| Waitlist email list          | ✅ Server-only | Privacy breach        |
+| `SLACK_SURVEY_WEBHOOK_URL`   | ✅ Server-only | Notification spoofing |
+| `STRIPE_SECRET_KEY`          | ✅ Server-only | Payment fraud         |
+| Survey + waitlist email list | ✅ Server-only | Privacy breach        |
 
 ### 2.2 Data Safe for Client
 
@@ -80,7 +83,7 @@
 
 ### 3.2 Server-Side / API Routes
 
-#### `/api/waitlist/route.ts`
+#### `/api/survey/route.ts`
 
 | Check               | Status             | Evidence                                         |
 | ------------------- | ------------------ | ------------------------------------------------ |
@@ -90,7 +93,7 @@
 | Honeypot            | ✅ Present         | `website: z.string().max(0)`                     |
 | Email normalization | ✅                 | `email.trim().toLowerCase()`                     |
 | SQL injection       | ✅ No raw SQL      | Uses Supabase REST API with `encodeURIComponent` |
-| Idempotency         | ✅                 | Prevents email enumeration                       |
+| Email cooldown      | ✅                 | 5-minute per-email cooldown                      |
 | Error messages      | ✅ Generic         | No internal details leaked                       |
 | PII masking (Slack) | ✅                 | Email masked in notifications                    |
 
@@ -124,14 +127,14 @@
 
 ### 3.4 Third-Party Integrations
 
-| Service          | Security Status         | Concerns                                                   |
-| ---------------- | ----------------------- | ---------------------------------------------------------- |
-| Supabase         | ✅ Secrets server-only  | RLS policy status unknown                                  |
-| Resend           | ✅ Secrets server-only  | Email template properly escaped (`lib/emails/waitlist.ts`) |
-| Slack webhooks   | ✅ Secrets server-only  | PII masked in both waitlist and contact notifications      |
-| reCAPTCHA        | ✅ Properly verified    | No score threshold (v2 checkbox)                           |
-| Google Analytics | ✅ Public ID acceptable | No PII should be sent                                      |
-| CookieYes        | ✅ External script      | Consent banner integration                                 |
+| Service          | Security Status         | Concerns                                                  |
+| ---------------- | ----------------------- | --------------------------------------------------------- |
+| Supabase         | ✅ Secrets server-only  | RLS policy status unknown                                 |
+| Resend           | ✅ Secrets server-only  | Email templates properly escaped (`lib/emails/invite.ts`) |
+| Slack webhooks   | ✅ Secrets server-only  | PII masked in survey, contact, and payment notifications  |
+| reCAPTCHA        | ✅ Properly verified    | No score threshold (v2 checkbox)                          |
+| Google Analytics | ✅ Public ID acceptable | No PII should be sent                                     |
+| CookieYes        | ✅ External script      | Consent banner integration                                |
 
 ### 3.5 Security Headers (`proxy.ts`)
 

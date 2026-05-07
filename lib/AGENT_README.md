@@ -29,11 +29,10 @@ Use [`admin/AGENT_README.md`](admin/AGENT_README.md) for admin-specific auth, an
 
 ### `emails/`
 
-| File                  | Purpose                              | Primary consumers              |
-| --------------------- | ------------------------------------ | ------------------------------ |
-| `waitlist.ts`         | Waitlist confirmation email template | `app/api/waitlist/route.ts`    |
-| `admin-magic-link.ts` | Admin magic-link email template      | `app/api/admin/login/route.ts` |
-| `invite.ts`           | Invite email template                | `app/api/invite/route.ts`      |
+| File                  | Purpose                         | Primary consumers              |
+| --------------------- | ------------------------------- | ------------------------------ |
+| `admin-magic-link.ts` | Admin magic-link email template | `app/api/admin/login/route.ts` |
+| `invite.ts`           | Invite email template           | `app/api/invite/route.ts`      |
 
 ### `scoring/`
 

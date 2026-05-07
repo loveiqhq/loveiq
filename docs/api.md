@@ -35,53 +35,12 @@ Survey product-flow details such as step orchestration, storage, autosave, and r
 | `/api/survey`                         | `POST`      | Completed survey submission.                                                         |
 | `/api/survey-partial`                 | `POST`      | Partial survey autosave.                                                             |
 | `/api/survey-tracking`                | `POST`      | Survey behavior event batch ingest.                                                  |
-| `/api/waitlist`                       | `POST`      | Waitlist signup with async email and Slack notification.                             |
 
 ## Shared Behavior
 
 - `POST` routes use IP-based rate limiting and return `Retry-After` on `429`.
 - `POST /api/survey-partial` and `POST /api/survey-tracking` also accept `_csrf` in the request body for `sendBeacon` compatibility.
 - `POST /api/invite` returns success before downstream email delivery and tracking complete. The side effects run after the response.
-
-## POST /api/waitlist
-
-Adds an email to the waitlist.
-
-**Rate limit:** 5 requests per minute per IP, plus a 1 minute cooldown per email.
-
-**Request body:**
-
-```json
-{
-  "email": "user@example.com",
-  "source": "landing-modal",
-  "firstName": "Jane",
-  "website": "",
-  "utmTracker": "{\"utm_source\":\"newsletter\"}"
-}
-```
-
-| Field        | Type   | Required | Notes                                                                  |
-| ------------ | ------ | -------- | ---------------------------------------------------------------------- |
-| `email`      | string | Yes      | Valid email, max 320 chars.                                            |
-| `source`     | string | No       | Source label, max 120 chars. Defaults to `landing-modal` when omitted. |
-| `firstName`  | string | No       | Max 80 chars.                                                          |
-| `website`    | string | No       | Honeypot field and must stay empty.                                    |
-| `utmTracker` | string | No       | JSON string stored when it parses successfully. Max 500 chars.         |
-
-**Responses:**
-
-| Status | Body                                              | Meaning                                                         |
-| ------ | ------------------------------------------------- | --------------------------------------------------------------- |
-| 200    | `{ "success": true }`                             | Signup saved.                                                   |
-| 200    | `{ "success": true, "already": true }`            | Email already existed or a concurrent insert won the race.      |
-| 400    | `{ "error": "Invalid input" }`                    | Validation failed or honeypot was filled.                       |
-| 403    | `{ "error": "Invalid request." }`                 | Missing or invalid CSRF token.                                  |
-| 429    | `{ "error": "Please try again later." }`          | IP rate limit hit.                                              |
-| 429    | `{ "error": "Please wait before retrying." }`     | Email cooldown still active.                                    |
-| 500    | `{ "error": "Unable to process request." }`       | Supabase request failed after configuration checks passed.      |
-| 503    | `{ "error": "Service unavailable." }`             | Required Supabase config is missing.                            |
-| 503    | `{ "error": "Service temporarily unavailable." }` | Supabase circuit breaker is open or the backend is unavailable. |
 
 ## POST /api/contact
 

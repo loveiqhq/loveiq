@@ -10,7 +10,7 @@
 
 - PascalCase for React components: `S01Hero.tsx`, `LandingPage.tsx`
 - camelCase for utilities: `analytics.ts`, `ratelimit.ts`
-- kebab-case for directories: `app/api/waitlist/`
+- kebab-case for directories: `app/api/contact/`
 - Numbered landing sections: `S01Hero.tsx` through `S14CTA.tsx`
 
 **Functions:**

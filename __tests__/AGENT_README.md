@@ -12,7 +12,6 @@ Unit tests (Vitest) that mirror the source directory structure.
 
 | Test File                                      | Source File                               |
 | ---------------------------------------------- | ----------------------------------------- |
-| `api/waitlist-validation.test.ts`              | `app/api/waitlist/route.ts`               |
 | `api/contact-validation.test.ts`               | `app/api/contact/route.ts`                |
 | `api/health.test.ts`                           | `app/api/health/route.ts`                 |
 | `api/staging-login.test.ts`                    | `app/api/staging-login/route.ts`          |
@@ -26,12 +25,10 @@ Unit tests (Vitest) that mirror the source directory structure.
 | `lib/ratelimit-full.test.ts`                   | `lib/ratelimit.ts` (full integration)     |
 | `lib/circuit-breaker.test.ts`                  | `lib/circuit-breaker.ts`                  |
 | `lib/admin/auth.test.ts`                       | `lib/admin/auth.ts`                       |
-| `lib/emails/waitlist.test.ts`                  | `lib/emails/waitlist.ts`                  |
 | `lib/scoring/engine.test.ts`                   | `lib/scoring/engine.ts`                   |
 | `lib/scoring/config.test.ts`                   | `lib/scoring/config.ts`                   |
 | `components/admin/AdminLoginForm.test.tsx`     | `components/admin/AdminLoginForm.tsx`     |
 | `components/staging/StagingLoginForm.test.tsx` | `components/staging/StagingLoginForm.tsx` |
-| `components/waitlist/WaitlistPage.test.tsx`    | `components/waitlist/WaitlistPage.tsx`    |
 | `proxy.test.ts`                                | `proxy.ts`                                |
 
 ## Regression Test Convention

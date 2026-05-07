@@ -16,7 +16,7 @@
 - Next.js 16 App Router marketing site
 - TypeScript + React + Tailwind CSS
 - No user authentication (pre-launch marketing)
-- API routes for waitlist/contact forms
+- API routes for survey/contact/invite forms
 
 ### Critical Security Rules
 

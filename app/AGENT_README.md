@@ -5,7 +5,7 @@ Next.js App Router directory containing all pages and API routes.
 ## Key Conventions
 
 - Pages are thin wrappers that import their content from `components/<page-name>/`. Keep business logic and UI out of `app/` files.
-- All new API routes must include CSRF verification, rate limiting, and Zod validation. Use `app/api/waitlist/route.ts` as the canonical reference.
+- All new API routes must include CSRF verification, rate limiting, and Zod validation. Use `app/api/contact/route.ts` as the canonical reference.
 - Legal pages follow a flat structure: `app/{legal-slug}/page.tsx`.
 
 ## Page Route Map
@@ -14,7 +14,6 @@ Next.js App Router directory containing all pages and API routes.
 | ------------------------- | --------------------------------- | --------------------------------------------- |
 | `/`                       | `page.tsx`                        | `components/landing/LandingPage.tsx`          |
 | `/about`                  | `about/page.tsx`                  | `components/about/AboutPage.tsx`              |
-| `/waitlist`               | `waitlist/page.tsx`               | `components/waitlist/WaitlistPage.tsx`        |
 | `/survey`                 | `survey/page.tsx`                 | `components/survey/SurveyPage.tsx`            |
 | `/glossary`               | `glossary/page.tsx`               | `components/glossary/GlossaryPage.tsx`        |
 | `/glossary/[slug]`        | `glossary/[slug]/page.tsx`        | `components/glossary/GlossaryTermPage.tsx`    |
@@ -39,7 +38,6 @@ Use [`admin/AGENT_README.md`](admin/AGENT_README.md) for the full admin page-rou
 
 | Endpoint                      | Method(s)        | File                                  | Purpose                     |
 | ----------------------------- | ---------------- | ------------------------------------- | --------------------------- |
-| `/api/waitlist`               | POST             | `api/waitlist/route.ts`               | Waitlist signup             |
 | `/api/contact`                | POST             | `api/contact/route.ts`                | Contact form                |
 | `/api/survey`                 | POST             | `api/survey/route.ts`                 | Survey submission + scoring |
 | `/api/survey-tracking`        | POST             | `api/survey-tracking/route.ts`        | Survey behavioral analytics |

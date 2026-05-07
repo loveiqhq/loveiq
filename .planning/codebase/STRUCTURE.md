@@ -11,7 +11,6 @@ loveiq-web/
 ├── app/                        # Next.js App Router pages and API routes
 │   ├── api/                    # API route handlers
 │   │   ├── contact/route.ts    # Contact form endpoint
-│   │   ├── waitlist/route.ts   # Waitlist signup endpoint
 │   │   ├── survey/route.ts     # Survey submission endpoint
 │   │   ├── health/route.ts     # Health check endpoint
 │   │   ├── staging-login/route.ts   # Staging auth (staging only)
@@ -40,7 +39,6 @@ loveiq-web/
 │   │   └── auth/
 │   │       └── callback/route.ts    # Supabase Auth magic link callback
 │   ├── about/                  # About page
-│   ├── waitlist/               # Waitlist standalone page
 │   ├── survey/                 # Survey / intro wizard page
 │   ├── glossary/               # Glossary pages (index + [slug])
 │   ├── trust-zone/             # Trust zone page
@@ -117,8 +115,7 @@ loveiq-web/
 │   │   └── index.ts            # Public API
 │   └── emails/                 # Email templates
 │       ├── admin-magic-link.ts # Admin magic link email
-│       ├── invite.ts           # Invite email template
-│       └── waitlist.ts         # Waitlist confirmation email
+│       └── invite.ts           # Invite email template
 ├── data/                       # Static data files
 │   ├── glossary-data.ts        # Auto-generated glossary terms (from CSV)
 │   ├── glossary-source.csv     # Source CSV for glossary
@@ -182,7 +179,7 @@ loveiq-web/
 
 - Purpose: Server-side API endpoints
 - Contains: Route handlers for form submissions and utilities
-- Key files: `waitlist/route.ts`, `contact/route.ts`, `survey/route.ts`, `health/route.ts`
+- Key files: `contact/route.ts`, `survey/route.ts`, `invite/route.ts`, `health/route.ts`
 - Pattern: Each endpoint in its own directory with `route.ts`
 
 **components/**
@@ -247,12 +244,12 @@ loveiq-web/
 
 **Core Logic:**
 
-- `app/api/waitlist/route.ts` - Waitlist signup handler
 - `app/api/contact/route.ts` - Contact form handler
+- `app/api/survey/route.ts` - Survey submission handler
 - `lib/analytics.ts` - Analytics event tracking
 - `lib/csrf.ts` - CSRF token verification
 - `lib/ratelimit.ts` - Supabase-backed rate limiting
-- `lib/emails/waitlist.ts` - Email template
+- `lib/emails/invite.ts` - Email template
 - `proxy.ts` - Middleware (CSP, CSRF cookies, security logging)
 
 **Styling:**
@@ -274,7 +271,7 @@ loveiq-web/
 
 - `PascalCase.tsx` - React components (e.g., `S01Hero.tsx`, `LandingPage.tsx`)
 - `camelCase.ts` - Utility/library files (e.g., `analytics.ts`, `ratelimit.ts`)
-- `kebab-case` - Directories (e.g., `app/api/waitlist/`)
+- `kebab-case` - Directories (e.g., `app/api/contact/`)
 - `route.ts` - Next.js API route handlers
 
 **Directories:**

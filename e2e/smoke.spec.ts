@@ -66,10 +66,4 @@ test.describe("smoke tests", () => {
     // Next.js returns 404 for unknown routes
     expect(res?.status()).toBe(404);
   });
-
-  test("waitlist API rejects GET method", async ({ request }) => {
-    const res = await request.get("/api/waitlist");
-    // App Router returns 405 for unsupported methods
-    expect(res.status()).toBe(405);
-  });
 });

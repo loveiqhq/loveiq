@@ -8,9 +8,6 @@
 
 | Task                        | Files                                                                                         |
 | --------------------------- | --------------------------------------------------------------------------------------------- |
-| Waitlist signup UI          | `components/waitlist/WaitlistPage.tsx`                                                        |
-| Waitlist API endpoint       | `app/api/waitlist/route.ts`                                                                   |
-| Waitlist confirmation email | `lib/emails/waitlist.ts`                                                                      |
 | Contact form UI             | `components/about/ContactSection.tsx` (embedded in About page)                                |
 | Contact form API endpoint   | `app/api/contact/route.ts`                                                                    |
 | Survey UI & question flow   | `components/survey/SurveyEngine.tsx`, `components/survey/SurveyPage.tsx`                      |
@@ -112,11 +109,10 @@
 
 ## Email Templates
 
-| Task                        | Files                            |
-| --------------------------- | -------------------------------- |
-| Waitlist confirmation email | `lib/emails/waitlist.ts`         |
-| Admin magic link email      | `lib/emails/admin-magic-link.ts` |
-| Invite email template       | `lib/emails/invite.ts`           |
+| Task                   | Files                            |
+| ---------------------- | -------------------------------- |
+| Admin magic link email | `lib/emails/admin-magic-link.ts` |
+| Invite email template  | `lib/emails/invite.ts`           |
 
 ## Glossary
 

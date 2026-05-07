@@ -4,7 +4,7 @@
 
 **Type:** Next.js 16 App Router marketing website
 **Stack:** TypeScript + React + Tailwind CSS + Supabase + Resend
-**Purpose:** Pre-launch marketing with waitlist/contact forms
+**Purpose:** Pre-launch marketing with assessment funnel + contact form
 **Authentication:** None
 
 ## Documentation to Read
@@ -147,7 +147,7 @@ export async function POST(request: Request) {
 | Type             | Location              | Example                                |
 | ---------------- | --------------------- | -------------------------------------- |
 | Landing sections | `components/landing/` | `S01Hero.tsx`, `S02Features.tsx`       |
-| API routes       | `app/api/`            | `app/api/waitlist/route.ts`            |
+| API routes       | `app/api/`            | `app/api/contact/route.ts`             |
 | Utilities        | `lib/`                | `lib/csrf.ts`, `lib/ratelimit.ts`      |
 | Pages            | `app/`                | `app/about/page.tsx`                   |
 | Components       | `components/`         | `components/glossary/GlossaryCard.tsx` |

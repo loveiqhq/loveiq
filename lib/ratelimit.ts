@@ -33,7 +33,7 @@ interface RateLimitResult {
 }
 
 interface RateLimitConfig {
-  /** Unique identifier for the rate limit bucket (e.g., "waitlist", "contact") */
+  /** Unique identifier for the rate limit bucket (e.g., "survey", "contact") */
   bucket: string;
   /** Maximum requests allowed in the window */
   limit: number;

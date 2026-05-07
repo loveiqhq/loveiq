@@ -6,7 +6,7 @@
 
 ## Environment & secrets
 
-- **Server-only secrets** (set only in Vercel env vars, never in client bundles): `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`, `RECAPTCHA_SECRET_KEY`, `SLACK_WAITLIST_WEBHOOK_URL`, `SLACK_CONTACT_WEBHOOK_URL`, `SLACK_SURVEY_WEBHOOK_URL`, `STAGING_PASSWORD`, `SURVEY_CLOSE_PASSWORD`.
+- **Server-only secrets** (set only in Vercel env vars, never in client bundles): `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`, `RECAPTCHA_SECRET_KEY`, `SLACK_CONTACT_WEBHOOK_URL`, `SLACK_SURVEY_WEBHOOK_URL`, `SLACK_PAYMENTS_WEBHOOK_URL`, `STAGING_PASSWORD`, `SURVEY_CLOSE_PASSWORD`.
 - **Server config** (not secret but server-only): `SUPABASE_URL`, `RESEND_FROM`, `RESEND_REPLY_TO`, `CONTACT_TO_EMAIL`.
 - **Client-safe** (`NEXT_PUBLIC_*` prefix, exposed in browser bundles by design): `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_RECAPTCHA_SITE_KEY`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_GTM_ID`.
 - Never expose the Supabase service role key to the client; keep all DB access server-side.
@@ -37,19 +37,19 @@
 
 ## Monitoring & alerts
 
-- Watch Vercel logs for spikes or 429/500s on `/api/waitlist`.
+- Watch Vercel logs for spikes or 429/500s on `/api/survey` and `/api/contact`.
 - Monitor Supabase logs for insert anomalies and rate spikes; enable row-level auditing if available.
 - Monitor Resend dashboard for bounce/complaint rates; alert on send failures.
 - Add Google Search Console/GA alerts for traffic anomalies.
 
 ## Backups & exports
 
-- Export waitlist data regularly from Supabase (CSV or snapshots) and store securely.
+- Export survey and waitlist_user data regularly from Supabase (CSV or snapshots) and store securely.
 - Test restores periodically to ensure data integrity.
 
 ## Abuse protection
 
-- Rate limit and cooldown on `/api/waitlist` (in place).
+- Rate limit and cooldown on `/api/survey` and `/api/contact` (in place).
 - Honeypot field on forms; consider adding CAPTCHA via env-flagged toggle if abuse increases.
 - Keep generic error messages to avoid information disclosure.
 

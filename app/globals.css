@@ -669,35 +669,6 @@ input.autofill-dark:-internal-autofill-previewed {
   animation: glossary-orb-right 20s ease-in-out infinite;
 }
 
-/* Simple up/down float animations for waitlist */
-@keyframes float-up-down {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-40px);
-  }
-}
-
-@keyframes float-up-down-reverse {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(40px);
-  }
-}
-
-.animate-float-up-down {
-  animation: float-up-down 8s ease-in-out infinite;
-}
-
-.animate-float-up-down-reverse {
-  animation: float-up-down-reverse 10s ease-in-out infinite;
-}
-
 /* Mobile navbar hide/show animation */
 .nav-header {
   /* No static transform, will-change, or backface-visibility here — any of these

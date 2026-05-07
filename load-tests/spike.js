@@ -8,7 +8,7 @@
  * Thresholds are more lenient than load test — we expect some slowdown under a spike.
  * Fails if p95 > 5s or error rate > 5%.
  *
- * Also tests that /api/waitlist POST with no CSRF returns 403, not 500
+ * Also tests that /api/contact POST with no CSRF returns 403, not 500
  * (verifies the route is alive and processing requests).
  */
 
@@ -25,7 +25,7 @@ export const options = {
   ],
   thresholds: {
     http_req_duration: ["p(95)<5000"],
-    // Exclude waitlist API probe (expected 403) from failure rate
+    // Exclude contact API probe (expected 403) from failure rate
     "http_req_failed{page:/}": ["rate<0.05"],
     "http_req_failed{page:/api/health}": ["rate<0.05"],
   },
@@ -42,18 +42,18 @@ export default function spikeTest() {
     "status 200": (r) => r.status === 200,
   });
 
-  // Also probe the waitlist API — expects 403 (CSRF missing), not 500
+  // Also probe the contact API — expects 403 (CSRF missing), not 500
   if (Math.random() < 0.2) {
     const apiRes = http.post(
-      `${BASE_URL}/api/waitlist`,
-      JSON.stringify({ email: "test@test.com" }),
+      `${BASE_URL}/api/contact`,
+      JSON.stringify({ name: "test", email: "test@test.com", message: "x" }),
       {
         headers: { "Content-Type": "application/json" },
-        tags: { page: "/api/waitlist" },
+        tags: { page: "/api/contact" },
       }
     );
     check(apiRes, {
-      "waitlist API alive (403 CSRF, not 500)": (r) => r.status === 403,
+      "contact API alive (403 CSRF, not 500)": (r) => r.status === 403,
     });
   }
 

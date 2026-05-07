@@ -22,7 +22,7 @@ export const options = {
 };
 
 export default function smokeTest() {
-  const pages = ["/", "/waitlist", "/about", "/api/health"];
+  const pages = ["/", "/survey", "/about", "/api/health"];
 
   for (const path of pages) {
     const res = http.get(`${BASE_URL}${path}`, {

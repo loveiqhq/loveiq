@@ -125,10 +125,6 @@ export const trackLearnMore = (location: "hero") => {
   track("cta_click", { cta: "learn_more", location });
 };
 
-export const trackWaitlistSignup = (source: string) => {
-  track("waitlist_signup", { method: "form", source });
-};
-
 export const trackSurveyStart = () => {
   // TODO: Remove legacy "survey_start" after 2026-06-01
   track("survey_start");

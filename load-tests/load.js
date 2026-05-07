@@ -8,7 +8,7 @@
  * Fails if p95 > 3s or error rate > 1%.
  *
  * Tests pages only (no API writes) to avoid creating test data in production.
- * To test the waitlist API, point BASE_URL at a staging environment.
+ * To test the survey/contact APIs, point BASE_URL at a staging environment.
  */
 
 import http from "k6/http";
@@ -30,7 +30,7 @@ export const options = {
 
 export default function loadTest() {
   // Weighted: landing page gets most traffic
-  const pages = ["/", "/", "/", "/waitlist", "/about", "/glossary", "/api/health"];
+  const pages = ["/", "/", "/", "/survey", "/about", "/glossary", "/api/health"];
   const path = pages[Math.floor(Math.random() * pages.length)];
 
   const res = http.get(`${BASE_URL}${path}`, {

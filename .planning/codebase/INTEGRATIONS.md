@@ -8,12 +8,12 @@
 
 **Email Service:**
 
-- Resend - Transactional emails (waitlist confirmation, contact form)
+- Resend - Transactional emails (contact form, invite emails, admin magic links)
   - SDK/Client: `resend` npm package v6.9.2
   - Auth: API key in `RESEND_API_KEY` env var
   - From address: `RESEND_FROM` env var (default: `LoveIQ <hello@send.loveiq.org>`)
   - Reply-to: `RESEND_REPLY_TO` env var (default: `hello@loveiq.org`)
-  - Used in: `app/api/waitlist/route.ts`, `app/api/contact/route.ts`
+  - Used in: `app/api/contact/route.ts`, `app/api/invite/route.ts`, `app/api/admin/login/route.ts`
 
 **Spam Protection:**
 
@@ -24,10 +24,11 @@
 
 **Notifications:**
 
-- Slack Webhooks - Team notifications for signups and contacts
-  - Waitlist webhook: `SLACK_WAITLIST_WEBHOOK_URL` env var
+- Slack Webhooks - Team notifications for surveys, contacts, and payments
   - Contact webhook: `SLACK_CONTACT_WEBHOOK_URL` env var
-  - Used in: `app/api/waitlist/route.ts`, `app/api/contact/route.ts`
+  - Survey webhook: `SLACK_SURVEY_WEBHOOK_URL` env var
+  - Payments webhook: `SLACK_PAYMENTS_WEBHOOK_URL` env var
+  - Used in: `app/api/contact/route.ts`, `app/api/survey/route.ts`, `app/api/stripe/webhook/route.ts`
 
 **Cookie Consent:**
 
@@ -42,8 +43,8 @@
 - Supabase PostgreSQL
   - Connection: REST API via `SUPABASE_URL` env var
   - Auth: Service role key in `SUPABASE_SERVICE_ROLE_KEY` env var
-  - Tables: `waitlist_user` (waitlist), `rate_limits` (rate limiting), `admin_users` (admin email allowlist), `scoring_result` (survey scoring)
-  - Used in: `app/api/waitlist/route.ts`, `lib/ratelimit.ts`, `lib/admin/supabase.ts`
+  - Tables: `survey_submission` (survey responses), `waitlist_user` (historical waitlist signups, retired surface), `rate_limits` (rate limiting), `admin_users` (admin email allowlist), `scoring_result` (survey scoring)
+  - Used in: `app/api/survey/route.ts`, `lib/ratelimit.ts`, `lib/admin/supabase.ts`
   - Note: Direct REST API calls, no ORM; also used via `@supabase/supabase-js` + `@supabase/ssr` for admin auth
 
 **File Storage:**
@@ -89,7 +90,8 @@
   - Integration: Google Tag Manager via `next/script`
   - Custom events via `lib/analytics.ts`:
     - `cta_click` - CTA button tracking
-    - `waitlist_signup` - Signup tracking
+    - `survey_started` / `survey_progress` / `survey_complete` - Funnel tracking
+    - `report_viewed` / `paywall_view` / `begin_checkout` - Report engagement
 
 **Error Tracking:**
 
@@ -123,7 +125,7 @@
   - `NEXT_PUBLIC_SITE_URL`
 - Optional env vars:
   - `RESEND_FROM`, `RESEND_REPLY_TO`
-  - `SLACK_WAITLIST_WEBHOOK_URL`, `SLACK_CONTACT_WEBHOOK_URL`
+  - `SLACK_CONTACT_WEBHOOK_URL`, `SLACK_SURVEY_WEBHOOK_URL`, `SLACK_PAYMENTS_WEBHOOK_URL`
   - `CONTACT_TO_EMAIL`
 - Secrets location: `.env.local` (gitignored)
 - Template: `.env.example`
@@ -146,8 +148,9 @@
 
 **Outgoing:**
 
-- Slack notifications for waitlist signups (`app/api/waitlist/route.ts`)
+- Slack notifications for survey submissions (`app/api/survey/route.ts`)
 - Slack notifications for contact submissions (`app/api/contact/route.ts`)
+- Slack notifications for Stripe payments (`app/api/stripe/webhook/route.ts`)
 
 ## Third-Party Script CSP
 

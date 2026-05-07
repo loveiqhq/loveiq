@@ -6,7 +6,7 @@ const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.loveiq.org";
 const coreRoutes = ["/"];
 
 // /survey and /report are intentionally excluded — disallowed in robots.ts.
-const mainRoutes = ["/about", "/glossary", "/waitlist", "/trust-zone"];
+const mainRoutes = ["/about", "/glossary", "/trust-zone"];
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const siteLastModified = new Date();

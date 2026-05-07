@@ -17,7 +17,6 @@ All React UI components, organized by page or domain in subdirectories.
 | `survey/`     | 26    | `SurveyPage.tsx`                            | `/survey`                       |
 | `admin/`      | 170   | `admin/AGENT_README.md`                     | `/admin/*`                      |
 | `glossary/`   | 3     | `GlossaryPage.tsx` / `GlossaryTermPage.tsx` | `/glossary`, `/glossary/[slug]` |
-| `waitlist/`   | 1     | `WaitlistPage.tsx`                          | `/waitlist`                     |
 | `staging/`    | 1     | `StagingLoginForm.tsx`                      | `/login`                        |
 | `not-found/`  | 1     | `NotFoundPage.tsx`                          | 404 page                        |
 | `trust-zone/` | 1     | `TrustZonePage.tsx`                         | `/trust-zone`                   |

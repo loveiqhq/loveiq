@@ -27,7 +27,6 @@ npm run test:coverage # Run tests with coverage report
 __tests__/
 ├── api/
 │   ├── contact-validation.test.ts     # Contact form Zod schema tests
-│   ├── waitlist-validation.test.ts    # Waitlist Zod schema tests
 │   ├── admin-export.test.ts           # Admin CSV export tests
 │   ├── admin-login.test.ts            # Admin login tests
 │   ├── admin-stats.test.ts            # Admin dashboard stats tests
@@ -48,8 +47,7 @@ __tests__/
 │   ├── circuit-breaker.test.ts       # Circuit breaker tests
 │   ├── admin/auth.test.ts            # Admin auth tests
 │   ├── scoring/                      # Scoring engine tests (32 tests)
-│   └── emails/
-│       └── waitlist.test.ts          # Email template + XSS prevention tests
+│   └── emails/                       # Email template + XSS prevention tests
 ├── components/survey/hooks/          # Survey hook tests
 ├── proxy.test.ts                     # Middleware security header tests
 └── fixtures/                         # Shared test data
@@ -117,7 +115,7 @@ npx playwright show-report # Open last HTML report
 e2e/
 ├── smoke.spec.ts        # Landing, nav, footer, security headers, 404, API
 ├── navigation.spec.ts   # Desktop nav links + mobile hamburger
-├── interactions.spec.ts # FAQ accordion, CTA hrefs, footer links, waitlist form
+├── interactions.spec.ts # FAQ accordion, CTA hrefs, footer links
 ├── pages.spec.ts        # Static routes: status 200 + title check
 └── a11y.spec.ts         # Accessibility audits via axe-core
 ```

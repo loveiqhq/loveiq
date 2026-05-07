@@ -146,11 +146,11 @@ describe("proxy middleware", () => {
   });
 
   it("logs API requests via logger", () => {
-    proxy(makeNextRequest("http://localhost:3000/api/waitlist"));
+    proxy(makeNextRequest("http://localhost:3000/api/contact"));
     expect(logger.info).toHaveBeenCalledWith(
       expect.objectContaining({
         type: "api_request",
-        path: "/api/waitlist",
+        path: "/api/contact",
       })
     );
   });

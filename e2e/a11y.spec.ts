@@ -4,7 +4,6 @@ import AxeBuilder from "@axe-core/playwright";
 const criticalRoutes = [
   "/",
   "/about",
-  "/waitlist",
   "/glossary",
   "/trust-zone",
   "/survey",
