@@ -53,7 +53,7 @@ const S12WhyWeCreated: FC = () => {
               <div className="relative flex h-[200px] flex-col rounded-[24px] border border-white/5 bg-[#0A0510] px-5 pt-4 pb-5">
                 {/* Dots inside inner box */}
                 <div className="mb-4 flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-[#fe6839]" />
+                  <span className="h-2 w-2 rounded-full bg-[rgba(84,20,117,0.4)]" />
                   <span className="h-2 w-2 rounded-full bg-white/20" />
                   <span className="h-2 w-2 rounded-full bg-white/20" />
                 </div>
@@ -66,8 +66,8 @@ const S12WhyWeCreated: FC = () => {
 
                   <div className="relative flex w-full max-w-[220px] flex-col gap-4">
                     <div className="relative h-2 overflow-hidden rounded-full bg-white/10">
-                      <div className="absolute inset-y-0 left-0 w-[42%] rounded-full bg-gradient-to-r from-[#541475] to-[#8b5cf6] shadow-[0_0_12px_rgba(139,92,246,0.35)] transition-transform duration-500 group-hover:scale-[1.02] origin-left" />
-                      <div className="absolute inset-y-0 right-0 w-[54%] rounded-full bg-gradient-to-l from-[#a78bfa] to-[#8b5cf6] opacity-70 transition-transform duration-500 group-hover:scale-[1.02] origin-right" />
+                      <div className="absolute inset-y-0 left-0 w-[42%] rounded-full bg-[#a78bfa] shadow-[0_0_10px_rgba(139,92,246,0.3)]" />
+                      <div className="absolute inset-y-0 right-0 w-[54%] rounded-full bg-[#fe6839]" />
                     </div>
                     <div className="relative">
                       <span className="absolute -top-12 left-[42%] -translate-x-1/2 rounded-md bg-[#541475] px-2 py-1 text-[10px] font-bold text-white opacity-0 shadow-lg transition-all duration-300 group-hover:-translate-y-1 group-hover:opacity-100">
@@ -82,7 +82,7 @@ const S12WhyWeCreated: FC = () => {
                   </div>
 
                   <div className="flex items-center gap-3 text-xs text-white/70">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full border border-[rgba(255,255,255,0.1)] bg-[rgba(255,255,255,0.05)] transition-colors duration-300 group-hover:bg-[#541475]/20">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/5 transition-colors duration-300 group-hover:bg-[#541475]/20">
                       <svg
                         width="14"
                         height="14"
@@ -90,23 +90,28 @@ const S12WhyWeCreated: FC = () => {
                         fill="none"
                         xmlns="http://www.w3.org/2000/svg"
                       >
-                        <path
-                          d="M11.0833 12.25V11.0833C11.0833 9.79553 10.0378 8.75 8.75 8.75H5.25001C3.9622 8.75 2.91667 9.79553 2.91667 11.0833V12.25"
+                        <circle cx="7" cy="5.5" r="3.5" stroke="#F3F4F6" strokeWidth="1.2" />
+                        <line
+                          x1="7"
+                          y1="9"
+                          x2="7"
+                          y2="13"
                           stroke="#F3F4F6"
-                          strokeWidth="1.16667"
+                          strokeWidth="1.2"
                           strokeLinecap="round"
-                          strokeLinejoin="round"
                         />
-                        <path
-                          d="M4.66667 4.08333C4.66667 5.37113 5.7122 6.41667 7.00001 6.41667C8.28781 6.41667 9.33334 5.37113 9.33334 4.08333C9.33334 2.79553 8.28781 1.75 7.00001 1.75C5.7122 1.75 4.66667 2.79553 4.66667 4.08333V4.08333"
+                        <line
+                          x1="5"
+                          y1="11"
+                          x2="9"
+                          y2="11"
                           stroke="#F3F4F6"
-                          strokeWidth="1.16667"
+                          strokeWidth="1.2"
                           strokeLinecap="round"
-                          strokeLinejoin="round"
                         />
                       </svg>
                     </div>
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-white/5 transition-colors duration-300 delay-75 group-hover:bg-[#8b5cf6]/20">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/5 transition-colors duration-300 group-hover:bg-[#8b5cf6]/20">
                       <svg
                         width="14"
                         height="14"
@@ -114,33 +119,23 @@ const S12WhyWeCreated: FC = () => {
                         fill="none"
                         xmlns="http://www.w3.org/2000/svg"
                       >
-                        <path
-                          d="M9.33334 12.25V11.0833C9.33334 9.79553 8.28781 8.75 7 8.75H3.50001C2.2122 8.75 1.16667 9.79553 1.16667 11.0833V12.25"
+                        <circle cx="5.5" cy="8.5" r="3.5" stroke="#F3F4F6" strokeWidth="1.2" />
+                        <line
+                          x1="8.5"
+                          y1="5.5"
+                          x2="13"
+                          y2="1"
                           stroke="#F3F4F6"
-                          strokeWidth="1.16667"
+                          strokeWidth="1.2"
                           strokeLinecap="round"
-                          strokeLinejoin="round"
                         />
-                        <path
-                          d="M2.91667 4.08333C2.91667 5.37113 3.9622 6.41667 5.25001 6.41667C6.53781 6.41667 7.58334 5.37113 7.58334 4.08333C7.58334 2.79553 6.53781 1.75 5.25001 1.75C3.9622 1.75 2.91667 2.79553 2.91667 4.08333H2.91667"
+                        <polyline
+                          points="9,1 13,1 13,5"
                           stroke="#F3F4F6"
-                          strokeWidth="1.16667"
+                          strokeWidth="1.2"
                           strokeLinecap="round"
                           strokeLinejoin="round"
-                        />
-                        <path
-                          d="M12.8333 12.2499V11.0832C12.8325 10.0198 12.1129 9.09152 11.0833 8.82568"
-                          stroke="#F3F4F6"
-                          strokeWidth="1.16667"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                        <path
-                          d="M9.33333 1.82568C10.3658 2.09003 11.0879 3.02034 11.0879 4.0861C11.0879 5.15186 10.3658 6.08217 9.33333 6.34652"
-                          stroke="#F3F4F6"
-                          strokeWidth="1.16667"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
+                          fill="none"
                         />
                       </svg>
                     </div>
@@ -238,43 +233,52 @@ const S12WhyWeCreated: FC = () => {
               <div className="relative flex h-[200px] flex-col rounded-[24px] border border-white/5 bg-[#0A0510] px-5 pt-4 pb-5">
                 {/* Dots inside inner box */}
                 <div className="mb-2 flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-[#541475]" />
+                  <span className="h-2 w-2 rounded-full bg-[#2e0147]" />
                   <span className="h-2 w-2 rounded-full bg-white/20" />
                   <span className="h-2 w-2 rounded-full bg-white/20" />
                 </div>
 
-                <div className="flex flex-1 flex-col items-center justify-center gap-4">
-                  <div className="flex h-14 w-14 items-center justify-center rounded-xl border border-white/10 bg-gradient-to-br from-[#2e0147] to-[#541475] text-white shadow-[0_18px_40px_rgba(0,0,0,0.35)] transition-transform duration-500 group-hover:rotate-6">
+                <div className="flex flex-1 flex-col items-center justify-center gap-4 pt-2">
+                  {/* Message-circle-heart app icon */}
+                  <div
+                    className="flex h-16 w-16 items-center justify-center rounded-[16px] border border-white/5 shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-4px_rgba(0,0,0,0.1)] transition-transform duration-500 group-hover:scale-105"
+                    style={{
+                      backgroundImage:
+                        "linear-gradient(135deg, rgb(46,1,71) 0%, rgb(84,20,117) 100%)",
+                    }}
+                  >
                     <svg
-                      width="24"
-                      height="24"
-                      viewBox="0 0 28 28"
+                      width="32"
+                      height="32"
+                      viewBox="0 0 32 32"
                       fill="none"
                       xmlns="http://www.w3.org/2000/svg"
                     >
                       <path
-                        d="M22.1667 16.3333C23.905 14.63 25.6667 12.5883 25.6667 9.91667C25.6667 6.37521 22.7914 3.5 19.25 3.5C17.1967 3.5 15.75 4.08333 14 5.83333C12.25 4.08333 10.8033 3.5 8.74999 3.5C5.20854 3.5 2.33333 6.37521 2.33333 9.91667C2.33333 12.6 4.08333 14.6417 5.83333 16.3333L14 24.5L22.1667 16.3333"
+                        d="M28 15c0 6.627-5.373 12-12 12a11.94 11.94 0 01-5.5-1.333L4 28l2.333-6.5A11.94 11.94 0 014 16C4 9.373 9.373 4 16 4s12 5.373 12 11z"
                         stroke="white"
-                        strokeWidth="2.33333"
+                        strokeWidth="1.8"
                         strokeLinecap="round"
                         strokeLinejoin="round"
                       />
                       <path
-                        d="M14 15.1665L12.8333 13.9998L15.1667 11.6665L11.6667 8.1665"
+                        d="M16 14.5c0-1.105.895-2 2-2s2 .895 2 2c0 2-2 3.5-4 4.5-2-1-4-2.5-4-4.5a2 2 0 012-2c.828 0 1.572.503 2 1.5z"
                         stroke="white"
-                        strokeWidth="2.33333"
+                        strokeWidth="1.5"
                         strokeLinecap="round"
                         strokeLinejoin="round"
                       />
                     </svg>
                   </div>
+
+                  {/* Bar chart widget */}
                   <div className="flex flex-col items-center gap-1.5">
-                    <div className="inline-flex h-[36px] items-end gap-[5px] rounded-lg border border-white/5 bg-white/5 px-3 py-1.5">
-                      <div className="h-2.5 w-1.5 rounded-[2px] bg-[#2e0147] transition-all duration-300 group-hover:h-5" />
-                      <div className="h-4 w-1.5 rounded-[2px] bg-[#3a1b54] transition-all duration-300 delay-75 group-hover:h-2.5" />
-                      <div className="h-1.5 w-1.5 rounded-[2px] bg-[#4a226c] transition-all duration-300 delay-100 group-hover:h-4" />
-                      <div className="h-5 w-1.5 rounded-[2px] bg-[#5b2a82] transition-all duration-300 delay-150 group-hover:h-6" />
-                      <div className="h-8 w-1.5 rounded-[2px] bg-[#f87171] transition-all duration-300 delay-200 group-hover:h-3" />
+                    <div className="inline-flex h-[51px] items-end gap-[6px] rounded-[8px] border border-white/5 bg-white/5 px-[17px] py-[9px]">
+                      <div className="h-3 w-1.5 rounded-t-[2px] bg-[#2e0147]" />
+                      <div className="h-5 w-1.5 rounded-t-[2px] bg-[rgba(46,1,71,0.8)]" />
+                      <div className="h-2 w-1.5 rounded-t-[2px] bg-[rgba(46,1,71,0.6)]" />
+                      <div className="h-4 w-1.5 rounded-t-[2px] bg-[rgba(46,1,71,0.4)]" />
+                      <div className="h-8 w-1.5 rounded-t-[2px] bg-[rgba(239,68,68,0.8)]" />
                     </div>
                     <p className="text-[10px] font-semibold text-[#f97316] opacity-0 transition-opacity duration-300 group-hover:opacity-100">
                       Fulfillment Gap Detected
