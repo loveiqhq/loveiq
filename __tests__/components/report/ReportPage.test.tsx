@@ -487,6 +487,94 @@ describe("ReportPage", () => {
     REPORT_MODAL_TEST_TIMEOUT_MS
   );
 
+  it(
+    "does not auto-open the pricing modal at discountStep 0 (under 24h)",
+    () => {
+      const response = buildSuccessResponse();
+      response.data.pricingQuotes!.essentials.discountStep = 0;
+      response.data.pricingQuotes!.full_report.discountStep = 0;
+      response.data.pricingQuotes!.all_reports.discountStep = 0;
+      mockUseReportData.mockReturnValue(response);
+
+      render(<ReportPage />);
+
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    },
+    REPORT_MODAL_TEST_TIMEOUT_MS
+  );
+
+  it(
+    "opens the pricing modal in default variant when a locked section is clicked under 24h (discountStep 0)",
+    async () => {
+      const user = userEvent.setup();
+      const response = buildSuccessResponse();
+      response.data.pricingQuotes!.essentials.discountStep = 0;
+      response.data.pricingQuotes!.full_report.discountStep = 0;
+      response.data.pricingQuotes!.all_reports.discountStep = 0;
+      mockUseReportData.mockReturnValue(response);
+
+      const { container } = render(<ReportPage />);
+
+      const lockedCta = container.querySelector(
+        ".report-section .report-premium-overlay__cta"
+      ) as HTMLButtonElement | null;
+      expect(lockedCta).toBeTruthy();
+
+      await user.click(lockedCta!);
+
+      await waitFor(() => expect(screen.getByRole("dialog")).toBeInTheDocument());
+      const modalRoot = container.querySelector(".report-pricing-modal");
+      expect(modalRoot?.getAttribute("data-variant")).toBe("default");
+      expect(container.querySelector(".report-pricing-card__extra-pill")).not.toBeInTheDocument();
+    },
+    REPORT_MODAL_TEST_TIMEOUT_MS
+  );
+
+  it(
+    "opens the pricing modal in offer variant when a locked section is clicked at discountStep 1+",
+    async () => {
+      const user = userEvent.setup();
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
+
+      const { container } = render(<ReportPage />);
+
+      // Close the auto-opened modal first, then click a locked section.
+      await user.click(screen.getByRole("button", { name: /close pricing modal/i }));
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+      const lockedCta = container.querySelector(
+        ".report-section .report-premium-overlay__cta"
+      ) as HTMLButtonElement | null;
+      expect(lockedCta).toBeTruthy();
+
+      await user.click(lockedCta!);
+
+      await waitFor(() => expect(screen.getByRole("dialog")).toBeInTheDocument());
+      const modalRoot = container.querySelector(".report-pricing-modal");
+      expect(modalRoot?.getAttribute("data-variant")).toBe("offer");
+    },
+    REPORT_MODAL_TEST_TIMEOUT_MS
+  );
+
+  it(
+    "?offer=1 forces offer variant even at discountStep 0 (email deep-link override)",
+    async () => {
+      const response = buildSuccessResponse();
+      response.data.pricingQuotes!.essentials.discountStep = 0;
+      response.data.pricingQuotes!.full_report.discountStep = 0;
+      response.data.pricingQuotes!.all_reports.discountStep = 0;
+      mockUseReportData.mockReturnValue(response);
+      mockSearchParams.mockReturnValueOnce(new URLSearchParams("offer=1"));
+
+      const { container } = render(<ReportPage />);
+
+      await waitFor(() => expect(screen.getByRole("dialog")).toBeInTheDocument());
+      const modalRoot = container.querySelector(".report-pricing-modal");
+      expect(modalRoot?.getAttribute("data-variant")).toBe("offer");
+    },
+    REPORT_MODAL_TEST_TIMEOUT_MS
+  );
+
   it("does not open the pricing modal when backend access is already paid", () => {
     const paid = buildSuccessResponse();
     paid.data.accessPlan = "full_report";

@@ -814,9 +814,19 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   const [isPricingModalOpen, setIsPricingModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [pricingTargetArchetype, setPricingTargetArchetype] = useState<string | null>(null);
-  const [pricingVariant, setPricingVariant] = useState<"default" | "offer" | "share">("offer");
+  const [pricingVariant, setPricingVariant] = useState<"default" | "offer" | "share">("default");
   const autoOpenedPricingRef = useRef(false);
   const autoOpenedOfferRef = useRef(false);
+
+  // Offer variant (Figma 6297-1431) is gated to the 24h+ ladder step. Before
+  // step 1 every manual open shows the default pricing modal (Figma 6755-1035).
+  // The discount-email deep-link (?offer=1) overrides the time gate.
+  const shouldShowOfferVariant = useMemo(() => {
+    if (isOfferLink) return true;
+    const qs = data?.pricingQuotes;
+    if (!qs) return false;
+    return Object.values(qs).some((q) => q && q.discountStep >= 1);
+  }, [data?.pricingQuotes, isOfferLink]);
 
   const viewMode: "owner" | "shared" = data?.viewMode === "shared" ? "shared" : "owner";
   const ownerFirstName = data?.ownerFirstName ?? null;
@@ -923,10 +933,18 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       }
 
       setPricingTargetArchetype(name === primaryArchetypeFromData ? null : name);
-      setPricingVariant("offer");
+      setPricingVariant(shouldShowOfferVariant ? "offer" : "default");
       setIsPricingModalOpen(true);
     },
-    [devParam, pathname, primaryArchetypeFromData, returnToPrimaryHref, router, unlockedArchetypes]
+    [
+      devParam,
+      pathname,
+      primaryArchetypeFromData,
+      returnToPrimaryHref,
+      router,
+      shouldShowOfferVariant,
+      unlockedArchetypes,
+    ]
   );
 
   const beginCheckout = (plan: ReportPurchasePlanId, archetype?: string | null) => {
@@ -948,7 +966,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   const closePricingModal = useCallback(() => {
     setIsPricingModalOpen(false);
     setPricingTargetArchetype(null);
-    setPricingVariant("offer");
+    setPricingVariant("default");
   }, []);
 
   const openShareModal = useCallback(() => {
@@ -971,10 +989,10 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       // not primary). null = primary archetype.
       const scope = archetype ?? null;
       setPricingTargetArchetype(scope && scope !== primaryArchetypeFromData ? scope : null);
-      setPricingVariant("offer");
+      setPricingVariant(shouldShowOfferVariant ? "offer" : "default");
       setIsPricingModalOpen(true);
     },
-    [primaryArchetypeFromData]
+    [primaryArchetypeFromData, shouldShowOfferVariant]
   );
 
   if (status === "loading") {
