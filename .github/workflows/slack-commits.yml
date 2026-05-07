@@ -1,0 +1,105 @@
+name: Slack Commit Notifications
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  notify:
+    name: Post commits to Slack
+    runs-on: ubuntu-latest
+    if: ${{ github.event.commits != null && github.event.commits[0] != null }}
+    steps:
+      - name: Send Slack message
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_COMMITS_WEBHOOK_URL }}
+          PAYLOAD: ${{ toJson(github.event) }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+          PUSHER: ${{ github.event.pusher.name }}
+          COMPARE_URL: ${{ github.event.compare }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${SLACK_WEBHOOK_URL:-}" ]; then
+            echo "SLACK_COMMITS_WEBHOOK_URL not set; skipping."
+            exit 0
+          fi
+
+          BODY=$(python3 <<'PY'
+          import json, os, re
+
+          event = json.loads(os.environ["PAYLOAD"])
+          repo = os.environ["REPO"]
+          branch = os.environ["BRANCH"]
+          pusher = os.environ.get("PUSHER") or "unknown"
+          compare_url = os.environ.get("COMPARE_URL") or ""
+
+          commits = event.get("commits") or []
+          if not commits:
+              print(json.dumps({"text": ""}))
+              raise SystemExit(0)
+
+          STRIP_PATTERNS = [
+              re.compile(r"^\s*Co-[Aa]uthored-[Bb]y:.*$"),
+              re.compile(r"^\s*Signed-off-by:.*$"),
+              re.compile(r"^\s*Generated\s+with\s+\[?Claude", re.IGNORECASE),
+              re.compile(r"^\s*\U0001f916\s*Generated", re.IGNORECASE),
+              re.compile(r"^\s*\U0001f916.*Claude\s*Code", re.IGNORECASE),
+          ]
+
+          def clean(message: str) -> tuple[str, str]:
+              lines = message.splitlines()
+              subject = lines[0].strip() if lines else ""
+              body_lines = lines[1:]
+              kept = []
+              for line in body_lines:
+                  if any(p.match(line) for p in STRIP_PATTERNS):
+                      continue
+                  kept.append(line.rstrip())
+              while kept and kept[0].strip() == "":
+                  kept.pop(0)
+              while kept and kept[-1].strip() == "":
+                  kept.pop()
+              return subject, "\n".join(kept).strip()
+
+          header = f"*<https://github.com/{repo}|{repo}>* — `{branch}` pushed by *{pusher}* ({len(commits)} commit{'s' if len(commits) != 1 else ''})"
+          if compare_url:
+              header = f"{header} • <{compare_url}|view diff>"
+
+          blocks = [{"type": "section", "text": {"type": "mrkdwn", "text": header}}]
+
+          for c in commits:
+              sha = (c.get("id") or "")[:7]
+              url = c.get("url") or ""
+              author = ((c.get("author") or {}).get("name")) or "unknown"
+              subject, body = clean(c.get("message") or "")
+              link = f"<{url}|`{sha}`>" if url else f"`{sha}`"
+              text = f"{link} *{subject}* — _{author}_"
+              if body:
+                  body_trim = body if len(body) <= 2500 else body[:2500] + "…"
+                  text = f"{text}\n```\n{body_trim}\n```"
+              blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": text}})
+
+          fallback = f"{repo} {branch}: {len(commits)} commit(s)"
+          print(json.dumps({"text": fallback, "blocks": blocks}))
+          PY
+          )
+
+          if [ -z "$BODY" ] || [ "$BODY" = '{"text": ""}' ]; then
+            echo "No commits to send."
+            exit 0
+          fi
+
+          curl --fail --silent --show-error \
+            -X POST \
+            -H "Content-Type: application/json" \
+            --data "$BODY" \
+            "$SLACK_WEBHOOK_URL"
