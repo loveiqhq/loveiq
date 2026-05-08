@@ -10,31 +10,33 @@ Survey product-flow details such as step orchestration, storage, autosave, and r
 
 ## Route Inventory
 
-| Route                                 | Methods     | Notes                                                                                |
-| ------------------------------------- | ----------- | ------------------------------------------------------------------------------------ |
-| `/api/contact`                        | `POST`      | Contact form submission.                                                             |
-| `/api/cron/invite-reminders`          | `GET`       | Scheduled job: send invite reminder emails. Authenticated via `CRON_SECRET`.         |
-| `/api/cron/payment-fulfillment-sweep` | `GET`       | Scheduled job: rescue paid-but-locked reports. Authenticated via `CRON_SECRET`.      |
-| `/api/cron/report-discount-email`     | `GET`       | Scheduled job: send report-pricing discount nudges. Authenticated via `CRON_SECRET`. |
-| `/api/cron/survey-paused`             | `GET`       | Scheduled job: nudge users who paused the survey. Authenticated via `CRON_SECRET`.   |
-| `/api/analytics-event`                | `POST`      | Persist allowlisted report-engagement events to `analytics_event` (FK-validated).    |
-| `/api/health`                         | `GET`       | Service health check with dependency status.                                         |
-| `/api/invite`                         | `POST`      | Invite email request with async delivery/tracking.                                   |
-| `/api/invite-tracking`                | `POST`      | Invite share tracking.                                                               |
-| `/api/price`                          | `GET`       | Returns the dynamic price quote for a viewer's session.                              |
-| `/api/report`                         | `GET`       | Returns the personal report payload for a token or session ID.                       |
-| `/api/report-feedback`                | `POST`      | Records thumbs-up / thumbs-down feedback per report section.                         |
-| `/api/report/share`                   | `GET, POST` | Lists or creates report-share grants for the report owner.                           |
-| `/api/report/share/[id]`              | `DELETE`    | Revokes a single report-share grant by ID.                                           |
-| `/api/report/share/verify`            | `POST`      | Validates a share token + recipient email; sets the share viewer cookie.             |
-| `/api/staging-login`                  | `POST`      | Password gate login for staging.                                                     |
-| `/api/staging-logout`                 | `POST`      | Clears the staging cookie and redirects to `/login`.                                 |
-| `/api/stripe/checkout-session`        | `POST`      | Creates a Stripe Checkout session for a report purchase plan.                        |
-| `/api/stripe/checkout-session-status` | `GET`       | Polls the status of a Stripe Checkout session and the user's resulting access plan.  |
-| `/api/stripe/webhook`                 | `POST`      | Stripe webhook receiver. Verified via Stripe signature header (no CSRF).             |
-| `/api/survey`                         | `POST`      | Completed survey submission.                                                         |
-| `/api/survey-partial`                 | `POST`      | Partial survey autosave.                                                             |
-| `/api/survey-tracking`                | `POST`      | Survey behavior event batch ingest.                                                  |
+| Route                                 | Methods     | Notes                                                                                            |
+| ------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------ |
+| `/api/contact`                        | `POST`      | Contact form submission.                                                                         |
+| `/api/cron/invite-reminders`          | `GET`       | Scheduled job: send invite reminder emails. Authenticated via `CRON_SECRET`.                     |
+| `/api/cron/payment-fulfillment-sweep` | `GET`       | Scheduled job: rescue paid-but-locked reports. Authenticated via `CRON_SECRET`.                  |
+| `/api/cron/report-discount-email`     | `GET`       | Scheduled job: send report-pricing discount nudges. Authenticated via `CRON_SECRET`.             |
+| `/api/cron/survey-paused`             | `GET`       | Scheduled job: nudge users who paused the survey. Authenticated via `CRON_SECRET`.               |
+| `/api/analytics-event`                | `POST`      | Persist allowlisted report-engagement events to `analytics_event` (FK-validated).                |
+| `/api/health`                         | `GET`       | Service health check with dependency status.                                                     |
+| `/api/invite`                         | `POST`      | Invite email request with async delivery/tracking.                                               |
+| `/api/invite-tracking`                | `POST`      | Invite share tracking.                                                                           |
+| `/api/price`                          | `GET`       | Returns the dynamic price quote for a viewer's session.                                          |
+| `/api/report`                         | `GET`       | Returns the personal report payload for a token or session ID.                                   |
+| `/api/report-feedback`                | `POST`      | Records thumbs-up / thumbs-down feedback per report section.                                     |
+| `/api/report/share`                   | `GET, POST` | Lists or creates report-share grants for the report owner.                                       |
+| `/api/report/share/[id]`              | `DELETE`    | Revokes a single report-share grant by ID.                                                       |
+| `/api/report/share/verify`            | `POST`      | Validates a share token + recipient email; sets the share viewer cookie.                         |
+| `/api/staging-login`                  | `POST`      | Password gate login for staging.                                                                 |
+| `/api/staging-logout`                 | `POST`      | Clears the staging cookie and redirects to `/login`.                                             |
+| `/api/stripe/checkout-session`        | `POST`      | Creates a Stripe Checkout session for a report purchase plan.                                    |
+| `/api/stripe/checkout-session-status` | `GET`       | Polls the status of a Stripe Checkout session and the user's resulting access plan.              |
+| `/api/resend/webhook`                 | `POST`      | Resend webhook receiver for bounce/complaint suppression. Verified via Svix signature (no CSRF). |
+| `/api/stripe/webhook`                 | `POST`      | Stripe webhook receiver. Verified via Stripe signature header (no CSRF).                         |
+| `/api/survey`                         | `POST`      | Completed survey submission.                                                                     |
+| `/api/survey-partial`                 | `POST`      | Partial survey autosave.                                                                         |
+| `/api/survey-tracking`                | `POST`      | Survey behavior event batch ingest.                                                              |
+| `/api/unsubscribe`                    | `GET, POST` | Email unsubscribe. GET returns confirmation page; POST handles RFC 8058 one-click.               |
 
 ## Shared Behavior
 
