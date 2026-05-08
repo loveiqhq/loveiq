@@ -28,6 +28,7 @@ import logger from "@/lib/logger";
 import { inviteReminder1Email } from "@/lib/emails/invite-reminder-1";
 import { inviteReminder2Email } from "@/lib/emails/invite-reminder-2";
 import { buildUnsubscribeUrl } from "@/lib/emails/unsubscribe-token";
+import { isEmailSuppressed } from "@/lib/emails/suppression";
 
 function safeCompare(a: string, b: string): boolean {
   const aBuf = Buffer.from(a);
@@ -151,6 +152,7 @@ export async function GET(request: Request) {
     skippedCooldown: 0,
     skippedOutOfWindow: 0,
     skippedWrongPlan: 0,
+    skippedSuppressed: 0,
     errors: 0,
   };
 
@@ -169,6 +171,11 @@ export async function GET(request: Request) {
       const firstName = row.app_user?.first_name?.trim() || null;
       if (!email) {
         summary.skippedNoEmail++;
+        continue;
+      }
+
+      if (await isEmailSuppressed(email)) {
+        summary.skippedSuppressed++;
         continue;
       }
 

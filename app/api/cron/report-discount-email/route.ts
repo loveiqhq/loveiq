@@ -18,6 +18,7 @@ import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import logger from "@/lib/logger";
 import { reportDiscountEmail } from "@/lib/emails/report-discount";
 import { buildUnsubscribeUrl } from "@/lib/emails/unsubscribe-token";
+import { isEmailSuppressed } from "@/lib/emails/suppression";
 import { getReportPriceQuotesForContext } from "@/lib/pricing/reportPricing";
 import { getReportPlanByPersonalReportId } from "@/lib/report/planAccess";
 import type { ReportPurchasePlanId } from "@/lib/checkout/reportPurchase";
@@ -254,6 +255,7 @@ export async function GET(request: Request) {
     skippedNoEmail: 0,
     skippedNoToken: 0,
     skippedAlreadyPaid: 0,
+    skippedSuppressed: 0,
     failed: 0,
   };
 
@@ -291,6 +293,11 @@ export async function GET(request: Request) {
         const email = candidate.app_user?.email?.trim() ?? "";
         if (!email) {
           summary.skippedNoEmail++;
+          continue;
+        }
+
+        if (await isEmailSuppressed(email)) {
+          summary.skippedSuppressed++;
           continue;
         }
 

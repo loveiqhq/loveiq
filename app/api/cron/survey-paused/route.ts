@@ -24,6 +24,7 @@ import { surveyPausedEmail } from "@/lib/emails/survey-paused";
 import { surveyPausedBEmail } from "@/lib/emails/survey-paused-b";
 import { pickEmailVariant } from "@/lib/emails/ab-variant";
 import { buildUnsubscribeUrl } from "@/lib/emails/unsubscribe-token";
+import { isEmailSuppressed } from "@/lib/emails/suppression";
 import { getSurveyContactInfo } from "@/lib/survey/utils";
 import type { SurveyAnswers } from "@/lib/survey/types";
 
@@ -114,7 +115,14 @@ export async function GET(request: Request) {
   const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://loveiq.org").replace(/\/$/, "");
   const resumeUrl = `${siteUrl}/survey`;
 
-  const summary = { candidates: 0, sent: 0, skippedSubmitted: 0, skippedCooldown: 0, errors: 0 };
+  const summary = {
+    candidates: 0,
+    sent: 0,
+    skippedSubmitted: 0,
+    skippedCooldown: 0,
+    skippedSuppressed: 0,
+    errors: 0,
+  };
 
   try {
     const candidates = await fetchCandidates();
@@ -124,6 +132,11 @@ export async function GET(request: Request) {
       const answers = (row.answers ?? {}) as SurveyAnswers;
       const { email, firstName } = getSurveyContactInfo(answers);
       if (!email) continue;
+
+      if (await isEmailSuppressed(email)) {
+        summary.skippedSuppressed++;
+        continue;
+      }
 
       if (await isSubmitted(row.session_id)) {
         summary.skippedSubmitted++;
