@@ -187,8 +187,6 @@ import SurveyEngine from "@/components/survey/SurveyEngine";
 
 beforeEach(() => {
   vi.useFakeTimers();
-  localStorage.clear();
-  sessionStorage.clear();
   mockCurrentIndex = 0;
   mockProgress = 0;
   mockSubmitStatus = "idle";

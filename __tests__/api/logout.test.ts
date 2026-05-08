@@ -4,6 +4,12 @@ vi.mock("../../lib/csrf", () => ({
   verifyCsrfToken: vi.fn().mockResolvedValue(true),
 }));
 
+vi.mock("../../lib/ratelimit", () => ({
+  checkRateLimit: vi.fn().mockResolvedValue({ allowed: true }),
+  getClientIp: vi.fn().mockReturnValue("127.0.0.1"),
+  checkCooldown: vi.fn().mockResolvedValue({ allowed: true }),
+}));
+
 vi.mock("../../lib/admin/supabase-server", () => ({
   createSupabaseServer: vi.fn().mockResolvedValue({
     auth: {
