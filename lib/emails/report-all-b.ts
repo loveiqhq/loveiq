@@ -35,9 +35,15 @@ export interface ReportAllBEmailParams {
   firstName?: string | null;
   reportUrl: string;
   siteUrl: string;
+  unsubscribeUrl?: string;
 }
 
-export function reportAllBEmail({ firstName, reportUrl, siteUrl }: ReportAllBEmailParams) {
+export function reportAllBEmail({
+  firstName,
+  reportUrl,
+  siteUrl,
+  unsubscribeUrl,
+}: ReportAllBEmailParams) {
   const safeFirstName = firstName?.trim() ? escapeHtml(firstName.trim()) : "there";
   const greetingText = firstName?.trim() || "there";
   const subject = `Something came up across all 14 archetypes, ${greetingText}.`;
@@ -120,7 +126,7 @@ export function reportAllBEmail({ firstName, reportUrl, siteUrl }: ReportAllBEma
     </td>
   </tr>`;
 
-  const html = wrapEmailShell({ bodyHtml, previewText, siteUrl, title: subject });
+  const html = wrapEmailShell({ bodyHtml, previewText, siteUrl, title: subject, unsubscribeUrl });
 
   const text = [
     `Something came up across all 14 archetypes, ${greetingText}.`,

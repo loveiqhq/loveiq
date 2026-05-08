@@ -11,6 +11,7 @@ export interface ReportEssentialsEmailParams {
   firstName?: string | null;
   reportUrl: string;
   siteUrl: string;
+  unsubscribeUrl?: string;
   unlockedArchetype?: string | null;
 }
 
@@ -19,6 +20,7 @@ export function reportEssentialsEmail({
   reportUrl,
   siteUrl,
   unlockedArchetype,
+  unsubscribeUrl,
 }: ReportEssentialsEmailParams) {
   const safeFirstName = firstName?.trim() ? escapeHtml(firstName.trim()) : "there";
   const displayName = firstName?.trim() || "there";
@@ -103,7 +105,7 @@ export function reportEssentialsEmail({
     </td>
   </tr>`;
 
-  const html = wrapEmailShell({ bodyHtml, previewText, siteUrl, title: subject });
+  const html = wrapEmailShell({ bodyHtml, previewText, siteUrl, title: subject, unsubscribeUrl });
 
   const text = [
     subject,

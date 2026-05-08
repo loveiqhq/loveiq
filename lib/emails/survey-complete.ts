@@ -4,9 +4,15 @@ export interface SurveyCompleteEmailParams {
   firstName?: string | null;
   reportUrl: string;
   siteUrl: string;
+  unsubscribeUrl?: string;
 }
 
-export function surveyCompleteEmail({ firstName, reportUrl, siteUrl }: SurveyCompleteEmailParams) {
+export function surveyCompleteEmail({
+  firstName,
+  reportUrl,
+  siteUrl,
+  unsubscribeUrl,
+}: SurveyCompleteEmailParams) {
   const safeFirstName = firstName?.trim() ? escapeHtml(firstName.trim()) : "there";
   const subject = "Your LoveIQ report is ready";
   const previewText = "You finished your LoveIQ test. Your personalized report is now ready.";
@@ -75,6 +81,7 @@ export function surveyCompleteEmail({ firstName, reportUrl, siteUrl }: SurveyCom
     previewText,
     siteUrl,
     title: subject,
+    unsubscribeUrl,
   });
 
   const text = [

@@ -9,9 +9,15 @@ export interface SurveyPausedBEmailParams {
   firstName?: string | null;
   resumeUrl: string;
   siteUrl: string;
+  unsubscribeUrl?: string;
 }
 
-export function surveyPausedBEmail({ firstName, resumeUrl, siteUrl }: SurveyPausedBEmailParams) {
+export function surveyPausedBEmail({
+  firstName,
+  resumeUrl,
+  siteUrl,
+  unsubscribeUrl,
+}: SurveyPausedBEmailParams) {
   const safeFirstName = firstName?.trim() ? escapeHtml(firstName.trim()) : "there";
   const greetingText = firstName?.trim() || "there";
   const subject = "Continue your LoveIQ survey";
@@ -61,7 +67,7 @@ export function surveyPausedBEmail({ firstName, resumeUrl, siteUrl }: SurveyPaus
     </td>
   </tr>`;
 
-  const html = wrapEmailShell({ bodyHtml, previewText, siteUrl, title: subject });
+  const html = wrapEmailShell({ bodyHtml, previewText, siteUrl, title: subject, unsubscribeUrl });
 
   const text = [
     "Continue your LoveIQ survey",

@@ -17,6 +17,7 @@ import { getBreaker } from "@/lib/circuit-breaker";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import logger from "@/lib/logger";
 import { reportDiscountEmail } from "@/lib/emails/report-discount";
+import { buildUnsubscribeUrl } from "@/lib/emails/unsubscribe-token";
 import { getReportPriceQuotesForContext } from "@/lib/pricing/reportPricing";
 import { getReportPlanByPersonalReportId } from "@/lib/report/planAccess";
 import type { ReportPurchasePlanId } from "@/lib/checkout/reportPurchase";
@@ -168,6 +169,7 @@ interface SendContext {
   reportToken: string;
   siteUrl: string;
   resend: Resend;
+  unsubscribeUrl: string | undefined;
 }
 
 async function sendOne(ctx: SendContext): Promise<"sent" | "failed"> {
@@ -190,17 +192,24 @@ async function sendOne(ctx: SendContext): Promise<"sent" | "failed"> {
     siteUrl: ctx.siteUrl,
     ctaUrl,
     quotes: quotesForEmail,
+    unsubscribeUrl: ctx.unsubscribeUrl,
   });
 
   try {
     const { error } = await Promise.race([
       ctx.resend.emails.send({
-        from: process.env.RESEND_FROM || "LoveIQ <hello@send.loveiq.org>",
+        from: process.env.RESEND_FROM || "LoveIQ <hello@loveiq.org>",
         to: ctx.email,
         replyTo: process.env.RESEND_REPLY_TO || "hello@loveiq.org",
         subject: tpl.subject,
         html: tpl.html,
         text: tpl.text,
+        headers: ctx.unsubscribeUrl
+          ? {
+              "List-Unsubscribe": `<${ctx.unsubscribeUrl}>`,
+              "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+            }
+          : undefined,
       }),
       new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error("Resend timeout")), RESEND_TIMEOUT_MS)
@@ -292,6 +301,10 @@ export async function GET(request: Request) {
         }
 
         const firstName = candidate.app_user?.first_name?.trim() || null;
+        const unsubSecret = process.env.UNSUBSCRIBE_SECRET;
+        const unsubscribeUrl = unsubSecret
+          ? buildUnsubscribeUrl(email, siteUrl, unsubSecret)
+          : undefined;
 
         const outcome = await sendOne({
           candidate,
@@ -300,6 +313,7 @@ export async function GET(request: Request) {
           reportToken,
           siteUrl,
           resend,
+          unsubscribeUrl,
         });
 
         if (outcome === "sent") {

@@ -12,6 +12,7 @@ export interface InviteBEmailParams {
   ctaUrl: string;
   referrerName?: string | null;
   siteUrl: string;
+  unsubscribeUrl?: string;
   personalMessage?: string | null;
 }
 
@@ -24,6 +25,7 @@ export function inviteBEmail({
   referrerName,
   siteUrl,
   personalMessage,
+  unsubscribeUrl,
 }: InviteBEmailParams) {
   const firstName = referrerName?.trim() ? referrerName.trim().split(/\s+/)[0] : null;
   const safeFirstName = firstName ? escapeHtml(firstName) : "A friend";
@@ -90,7 +92,7 @@ export function inviteBEmail({
     </td>
   </tr>`;
 
-  const html = wrapEmailShell({ bodyHtml, previewText, siteUrl, title: subject });
+  const html = wrapEmailShell({ bodyHtml, previewText, siteUrl, title: subject, unsubscribeUrl });
 
   const bodyForText = isCustom
     ? userMessage

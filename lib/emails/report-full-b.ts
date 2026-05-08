@@ -17,6 +17,7 @@ export interface ReportFullBEmailParams {
   firstName?: string | null;
   reportUrl: string;
   siteUrl: string;
+  unsubscribeUrl?: string;
   unlockedArchetype?: string | null;
 }
 
@@ -25,6 +26,7 @@ export function reportFullBEmail({
   reportUrl,
   siteUrl,
   unlockedArchetype,
+  unsubscribeUrl,
 }: ReportFullBEmailParams) {
   const safeFirstName = firstName?.trim() ? escapeHtml(firstName.trim()) : "there";
   const greetingText = firstName?.trim() || "there";
@@ -101,7 +103,7 @@ export function reportFullBEmail({
     </td>
   </tr>`;
 
-  const html = wrapEmailShell({ bodyHtml, previewText, siteUrl, title: subject });
+  const html = wrapEmailShell({ bodyHtml, previewText, siteUrl, title: subject, unsubscribeUrl });
 
   const text = [
     "Something specific came up in your results…",

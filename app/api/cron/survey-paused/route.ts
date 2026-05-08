@@ -23,6 +23,7 @@ import logger from "@/lib/logger";
 import { surveyPausedEmail } from "@/lib/emails/survey-paused";
 import { surveyPausedBEmail } from "@/lib/emails/survey-paused-b";
 import { pickEmailVariant } from "@/lib/emails/ab-variant";
+import { buildUnsubscribeUrl } from "@/lib/emails/unsubscribe-token";
 import { getSurveyContactInfo } from "@/lib/survey/utils";
 import type { SurveyAnswers } from "@/lib/survey/types";
 
@@ -135,22 +136,33 @@ export async function GET(request: Request) {
         continue;
       }
 
+      const unsubSecret = process.env.UNSUBSCRIBE_SECRET;
+      const unsubscribeUrl = unsubSecret
+        ? buildUnsubscribeUrl(email, siteUrl, unsubSecret)
+        : undefined;
+
       const variant = pickEmailVariant(email, "survey-paused");
       const tpl =
         variant === "b"
-          ? surveyPausedBEmail({ firstName, resumeUrl, siteUrl })
-          : surveyPausedEmail({ firstName, resumeUrl, siteUrl });
+          ? surveyPausedBEmail({ firstName, resumeUrl, siteUrl, unsubscribeUrl })
+          : surveyPausedEmail({ firstName, resumeUrl, siteUrl, unsubscribeUrl });
 
       try {
         const { error } = await Promise.race([
           resend.emails.send({
-            from: process.env.RESEND_FROM || "LoveIQ <hello@send.loveiq.org>",
+            from: process.env.RESEND_FROM || "LoveIQ <hello@loveiq.org>",
             to: email,
             replyTo: process.env.RESEND_REPLY_TO || "hello@loveiq.org",
             subject: tpl.subject,
             html: tpl.html,
             text: tpl.text,
-            headers: { "X-LoveIQ-Variant": variant },
+            headers: {
+              "X-LoveIQ-Variant": variant,
+              ...(unsubscribeUrl && {
+                "List-Unsubscribe": `<${unsubscribeUrl}>`,
+                "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+              }),
+            },
           }),
           new Promise<never>((_, reject) =>
             setTimeout(() => reject(new Error("Resend timeout")), 8_000)

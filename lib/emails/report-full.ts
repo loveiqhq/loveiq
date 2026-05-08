@@ -11,6 +11,7 @@ export interface ReportFullEmailParams {
   firstName?: string | null;
   reportUrl: string;
   siteUrl: string;
+  unsubscribeUrl?: string;
   unlockedArchetype?: string | null;
 }
 
@@ -19,6 +20,7 @@ export function reportFullEmail({
   reportUrl,
   siteUrl,
   unlockedArchetype,
+  unsubscribeUrl,
 }: ReportFullEmailParams) {
   const safeFirstName = firstName?.trim() ? escapeHtml(firstName.trim()) : "there";
   const displayName = firstName?.trim() || "there";
@@ -106,7 +108,7 @@ export function reportFullEmail({
     </td>
   </tr>`;
 
-  const html = wrapEmailShell({ bodyHtml, previewText, siteUrl, title: subject });
+  const html = wrapEmailShell({ bodyHtml, previewText, siteUrl, title: subject, unsubscribeUrl });
 
   const text = [
     subject,

@@ -34,7 +34,16 @@ export function renderBrandHeader(siteUrl: string): string {
   </tr>`;
 }
 
-export function renderBrandFooter(): string {
+export function renderBrandFooter(unsubscribeUrl?: string): string {
+  const unsubscribeRow = unsubscribeUrl
+    ? `
+        <tr>
+          <td align="center" style="padding-top:10px; font-family:${EMAIL_FONT}; font-size:12px; color:#999999;">
+            <a href="${escapeHtml(unsubscribeUrl)}" style="color:#999999; text-decoration:underline;">Unsubscribe</a>
+          </td>
+        </tr>`
+    : "";
+
   return `
   <tr>
     <td style="padding:24px 32px 32px; background-color:#f7f7f8; border-top:1px solid #eeeef1;">
@@ -50,6 +59,7 @@ export function renderBrandFooter(): string {
             A science-led psychometric<br />research and insights platform
           </td>
         </tr>
+        ${unsubscribeRow}
       </table>
     </td>
   </tr>`;
@@ -80,6 +90,7 @@ export interface EmailShellParams {
   previewText?: string;
   siteUrl: string;
   title: string;
+  unsubscribeUrl?: string;
 }
 
 export function wrapEmailShell({
@@ -87,6 +98,7 @@ export function wrapEmailShell({
   previewText,
   siteUrl,
   title,
+  unsubscribeUrl,
 }: EmailShellParams): string {
   const preview = previewText
     ? `<div style="display:none; max-height:0; overflow:hidden; opacity:0; color:transparent;">${escapeHtml(previewText)}</div>`
@@ -110,7 +122,7 @@ ${preview}
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px; background-color:#ffffff; border-radius:8px; overflow:hidden;">
         ${renderBrandHeader(siteUrl)}
         ${bodyHtml}
-        ${renderBrandFooter()}
+        ${renderBrandFooter(unsubscribeUrl)}
       </table>
     </td>
   </tr>

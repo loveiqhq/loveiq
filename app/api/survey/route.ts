@@ -9,6 +9,7 @@ import { verifyCsrfToken } from "@/lib/csrf";
 import logger from "@/lib/logger";
 import { surveyCompleteEmail } from "@/lib/emails/survey-complete";
 import { surveyCompleteBEmail } from "@/lib/emails/survey-complete-b";
+import { buildUnsubscribeUrl } from "@/lib/emails/unsubscribe-token";
 import { pickEmailVariant } from "@/lib/emails/ab-variant";
 import { ensurePersonalReportForSubmission } from "@/lib/report/personalReport";
 import type { SurveyAnswers } from "@/lib/survey/types";
@@ -299,22 +300,43 @@ export async function POST(request: Request) {
         ? `${siteUrl}/report/${encodeURIComponent(reportToken)}`
         : `${siteUrl}/report`;
 
+      const unsubSecret = process.env.UNSUBSCRIBE_SECRET;
+      const unsubscribeUrl = unsubSecret
+        ? buildUnsubscribeUrl(normalizedEmail, siteUrl, unsubSecret)
+        : undefined;
+
       const variant = pickEmailVariant(normalizedEmail, "survey-complete");
       const tpl =
         variant === "b"
-          ? surveyCompleteBEmail({ firstName: normalizedFirstName, reportUrl, siteUrl })
-          : surveyCompleteEmail({ firstName: normalizedFirstName, reportUrl, siteUrl });
+          ? surveyCompleteBEmail({
+              firstName: normalizedFirstName,
+              reportUrl,
+              siteUrl,
+              unsubscribeUrl,
+            })
+          : surveyCompleteEmail({
+              firstName: normalizedFirstName,
+              reportUrl,
+              siteUrl,
+              unsubscribeUrl,
+            });
 
       try {
         const { error } = await Promise.race([
           resend.emails.send({
-            from: process.env.RESEND_FROM || "LoveIQ <hello@send.loveiq.org>",
+            from: process.env.RESEND_FROM || "LoveIQ <hello@loveiq.org>",
             to: normalizedEmail,
             replyTo: process.env.RESEND_REPLY_TO || "hello@loveiq.org",
             subject: tpl.subject,
             html: tpl.html,
             text: tpl.text,
-            headers: { "X-LoveIQ-Variant": variant },
+            headers: {
+              "X-LoveIQ-Variant": variant,
+              ...(unsubscribeUrl && {
+                "List-Unsubscribe": `<${unsubscribeUrl}>`,
+                "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+              }),
+            },
           }),
           new Promise<never>((_, reject) =>
             setTimeout(() => reject(new Error("Resend timeout")), 8_000)

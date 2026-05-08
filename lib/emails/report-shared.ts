@@ -5,6 +5,7 @@ export interface ReportSharedEmailParams {
   recipientFirstName?: string | null;
   shareUrl: string;
   siteUrl: string;
+  unsubscribeUrl?: string;
   personalMessage?: string | null;
 }
 
@@ -41,6 +42,7 @@ export function reportSharedEmail({
   shareUrl,
   siteUrl,
   personalMessage,
+  unsubscribeUrl,
 }: ReportSharedEmailParams) {
   const owner = ownerDisplay(ownerFirstName);
   const subject = "A LoveIQ report has been shared with you";
@@ -85,7 +87,7 @@ export function reportSharedEmail({
     </td>
   </tr>`;
 
-  const html = wrapEmailShell({ bodyHtml, previewText, siteUrl, title: subject });
+  const html = wrapEmailShell({ bodyHtml, previewText, siteUrl, title: subject, unsubscribeUrl });
 
   const messageText = personalMessage?.trim() ? `\n${personalMessage.trim()}\n` : "";
 

@@ -27,6 +27,7 @@ import { getBreaker } from "@/lib/circuit-breaker";
 import logger from "@/lib/logger";
 import { inviteReminder1Email } from "@/lib/emails/invite-reminder-1";
 import { inviteReminder2Email } from "@/lib/emails/invite-reminder-2";
+import { buildUnsubscribeUrl } from "@/lib/emails/unsubscribe-token";
 
 function safeCompare(a: string, b: string): boolean {
   const aBuf = Buffer.from(a);
@@ -191,21 +192,32 @@ export async function GET(request: Request) {
         continue;
       }
 
+      const unsubSecret = process.env.UNSUBSCRIBE_SECRET;
+      const unsubscribeUrl = unsubSecret
+        ? buildUnsubscribeUrl(email, siteUrl, unsubSecret)
+        : undefined;
+
       const tpl =
         reminder === 1
-          ? inviteReminder1Email({ firstName, inviteCtaUrl, siteUrl })
-          : inviteReminder2Email({ firstName, inviteCtaUrl, siteUrl });
+          ? inviteReminder1Email({ firstName, inviteCtaUrl, siteUrl, unsubscribeUrl })
+          : inviteReminder2Email({ firstName, inviteCtaUrl, siteUrl, unsubscribeUrl });
 
       try {
         const { error } = await Promise.race([
           resend.emails.send({
-            from: process.env.RESEND_FROM || "LoveIQ <hello@send.loveiq.org>",
+            from: process.env.RESEND_FROM || "LoveIQ <hello@loveiq.org>",
             to: email,
             replyTo: process.env.RESEND_REPLY_TO || "hello@loveiq.org",
             subject: tpl.subject,
             html: tpl.html,
             text: tpl.text,
-            headers: { "X-LoveIQ-Reminder": String(reminder) },
+            headers: {
+              "X-LoveIQ-Reminder": String(reminder),
+              ...(unsubscribeUrl && {
+                "List-Unsubscribe": `<${unsubscribeUrl}>`,
+                "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+              }),
+            },
           }),
           new Promise<never>((_, reject) =>
             setTimeout(() => reject(new Error("Resend timeout")), 8_000)

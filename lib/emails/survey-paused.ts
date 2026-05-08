@@ -4,9 +4,15 @@ export interface SurveyPausedEmailParams {
   firstName?: string | null;
   resumeUrl: string;
   siteUrl: string;
+  unsubscribeUrl?: string;
 }
 
-export function surveyPausedEmail({ firstName, resumeUrl, siteUrl }: SurveyPausedEmailParams) {
+export function surveyPausedEmail({
+  firstName,
+  resumeUrl,
+  siteUrl,
+  unsubscribeUrl,
+}: SurveyPausedEmailParams) {
   const safeFirstName = firstName?.trim() ? escapeHtml(firstName.trim()) : "there";
   const subject = "You paused your LoveIQ survey";
   const previewText = "We saved your progress. Pick up where you left off.";
@@ -60,7 +66,7 @@ export function surveyPausedEmail({ firstName, resumeUrl, siteUrl }: SurveyPause
     </td>
   </tr>`;
 
-  const html = wrapEmailShell({ bodyHtml, previewText, siteUrl, title: subject });
+  const html = wrapEmailShell({ bodyHtml, previewText, siteUrl, title: subject, unsubscribeUrl });
 
   const text = [
     "Don't leave your story unfinished",

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import { inviteEmail } from "@/lib/emails/invite";
 import { inviteBEmail } from "@/lib/emails/invite-b";
+import { buildUnsubscribeUrl } from "@/lib/emails/unsubscribe-token";
 import { pickEmailVariant } from "@/lib/emails/ab-variant";
 import { z } from "zod";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
@@ -68,10 +69,14 @@ export async function POST(request: Request) {
 
   // 5. Build email — variant A keeps the original framing, variant B uses the
   // first-person testimonial copy (Figma node 5319-1846).
+  const unsubSecret = process.env.UNSUBSCRIBE_SECRET;
+  const unsubscribeUrl = unsubSecret
+    ? buildUnsubscribeUrl(normalizedRecipient, siteUrl, unsubSecret)
+    : undefined;
   const tpl =
     variant === "b"
-      ? inviteBEmail({ referrerName, ctaUrl, siteUrl, personalMessage })
-      : inviteEmail({ referrerName, ctaUrl, siteUrl, variant, personalMessage });
+      ? inviteBEmail({ referrerName, ctaUrl, siteUrl, personalMessage, unsubscribeUrl })
+      : inviteEmail({ referrerName, ctaUrl, siteUrl, variant, personalMessage, unsubscribeUrl });
 
   // 6. Send email via Resend + track in DB (after response)
   const resendKey = process.env.RESEND_API_KEY;
@@ -87,13 +92,19 @@ export async function POST(request: Request) {
     try {
       const { error } = await Promise.race([
         getResend().emails.send({
-          from: process.env.RESEND_FROM || "LoveIQ <hello@send.loveiq.org>",
+          from: process.env.RESEND_FROM || "LoveIQ <hello@loveiq.org>",
           to: normalizedRecipient,
           replyTo: process.env.RESEND_REPLY_TO || "hello@loveiq.org",
           subject: tpl.subject,
           html: tpl.html,
           text: tpl.text,
-          headers: { "X-LoveIQ-Variant": variant },
+          headers: {
+            "X-LoveIQ-Variant": variant,
+            ...(unsubscribeUrl && {
+              "List-Unsubscribe": `<${unsubscribeUrl}>`,
+              "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+            }),
+          },
         }),
         new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error("Resend timeout")), 8_000)

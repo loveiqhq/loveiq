@@ -10,12 +10,14 @@ export interface InviteReminder1EmailParams {
   /** URL that opens the Refer-a-Friend modal on the report page (deep-link). */
   inviteCtaUrl: string;
   siteUrl: string;
+  unsubscribeUrl?: string;
 }
 
 export function inviteReminder1Email({
   firstName,
   inviteCtaUrl,
   siteUrl,
+  unsubscribeUrl,
 }: InviteReminder1EmailParams) {
   const safeFirstName = firstName?.trim() ? escapeHtml(firstName.trim()) : "there";
   const greetingText = firstName?.trim() || "there";
@@ -68,7 +70,7 @@ export function inviteReminder1Email({
     </td>
   </tr>`;
 
-  const html = wrapEmailShell({ bodyHtml, previewText, siteUrl, title: subject });
+  const html = wrapEmailShell({ bodyHtml, previewText, siteUrl, title: subject, unsubscribeUrl });
 
   const text = [
     "Could this help a friend?",

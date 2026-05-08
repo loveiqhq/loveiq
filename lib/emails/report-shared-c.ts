@@ -14,6 +14,7 @@ export interface ReportSharedCEmailParams {
   recipientFirstName?: string | null;
   shareUrl: string;
   siteUrl: string;
+  unsubscribeUrl?: string;
   personalMessage?: string | null;
 }
 
@@ -49,6 +50,7 @@ export function reportSharedCEmail({
   shareUrl,
   siteUrl,
   personalMessage,
+  unsubscribeUrl,
 }: ReportSharedCEmailParams) {
   const owner = ownerDisplay(ownerFirstName);
   const subject = "Something personal I wanted you to see";
@@ -101,7 +103,7 @@ export function reportSharedCEmail({
     </td>
   </tr>`;
 
-  const html = wrapEmailShell({ bodyHtml, previewText, siteUrl, title: subject });
+  const html = wrapEmailShell({ bodyHtml, previewText, siteUrl, title: subject, unsubscribeUrl });
 
   const messageText = personalMessage?.trim() ? `\n${personalMessage.trim()}\n` : "";
 

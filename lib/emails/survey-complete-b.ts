@@ -9,12 +9,14 @@ export interface SurveyCompleteBEmailParams {
   firstName?: string | null;
   reportUrl: string;
   siteUrl: string;
+  unsubscribeUrl?: string;
 }
 
 export function surveyCompleteBEmail({
   firstName,
   reportUrl,
   siteUrl,
+  unsubscribeUrl,
 }: SurveyCompleteBEmailParams) {
   const safeFirstName = firstName?.trim() ? escapeHtml(firstName.trim()) : "there";
   const greetingText = firstName?.trim() || "there";
@@ -86,7 +88,7 @@ export function surveyCompleteBEmail({
     </td>
   </tr>`;
 
-  const html = wrapEmailShell({ bodyHtml, previewText, siteUrl, title: subject });
+  const html = wrapEmailShell({ bodyHtml, previewText, siteUrl, title: subject, unsubscribeUrl });
 
   const text = [
     "This might surprise you…",

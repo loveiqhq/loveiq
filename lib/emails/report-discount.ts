@@ -18,6 +18,7 @@ export interface ReportDiscountEmailParams {
    */
   quotes: Partial<Record<ReportPurchasePlanId, ReportPriceQuoteSnapshot>> | null;
   siteUrl: string;
+  unsubscribeUrl?: string;
 }
 
 const PLAN_TAGLINES: Record<ReportPurchasePlanId, string> = {
@@ -131,6 +132,7 @@ export function reportDiscountEmail({
   firstName,
   quotes,
   siteUrl,
+  unsubscribeUrl,
 }: ReportDiscountEmailParams) {
   const name = firstNameDisplay(firstName);
   const subject = "Special deal on your personal report";
@@ -204,7 +206,7 @@ export function reportDiscountEmail({
     </td>
   </tr>`;
 
-  const html = wrapEmailShell({ bodyHtml, previewText, siteUrl, title: subject });
+  const html = wrapEmailShell({ bodyHtml, previewText, siteUrl, title: subject, unsubscribeUrl });
 
   const text = [
     subject,

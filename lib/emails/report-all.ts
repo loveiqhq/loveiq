@@ -29,9 +29,15 @@ export interface ReportAllEmailParams {
   firstName?: string | null;
   reportUrl: string;
   siteUrl: string;
+  unsubscribeUrl?: string;
 }
 
-export function reportAllEmail({ firstName, reportUrl, siteUrl }: ReportAllEmailParams) {
+export function reportAllEmail({
+  firstName,
+  reportUrl,
+  siteUrl,
+  unsubscribeUrl,
+}: ReportAllEmailParams) {
   const safeFirstName = firstName?.trim() ? escapeHtml(firstName.trim()) : "there";
   const displayName = firstName?.trim() || "there";
   const subject = `All 14 archetypes are now yours, ${displayName}`;
@@ -113,7 +119,7 @@ export function reportAllEmail({ firstName, reportUrl, siteUrl }: ReportAllEmail
     </td>
   </tr>`;
 
-  const html = wrapEmailShell({ bodyHtml, previewText, siteUrl, title: subject });
+  const html = wrapEmailShell({ bodyHtml, previewText, siteUrl, title: subject, unsubscribeUrl });
 
   const text = [
     `All 14 archetypes are now yours, ${displayName}`,

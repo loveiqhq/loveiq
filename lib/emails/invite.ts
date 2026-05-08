@@ -5,11 +5,18 @@ export interface InviteEmailParams {
   ctaUrl: string;
   referrerName?: string | null;
   siteUrl: string;
+  unsubscribeUrl?: string;
   variant?: "a" | "b";
   personalMessage?: string | null;
 }
 
-export function inviteEmail({ ctaUrl, referrerName, siteUrl, personalMessage }: InviteEmailParams) {
+export function inviteEmail({
+  ctaUrl,
+  referrerName,
+  siteUrl,
+  personalMessage,
+  unsubscribeUrl,
+}: InviteEmailParams) {
   const firstName = referrerName?.trim() ? referrerName.trim().split(/\s+/)[0] : null;
   const safeFirstName = firstName ? escapeHtml(firstName) : "A friend";
 
@@ -58,7 +65,7 @@ export function inviteEmail({ ctaUrl, referrerName, siteUrl, personalMessage }: 
     </td>
   </tr>`;
 
-  const html = wrapEmailShell({ bodyHtml, previewText, siteUrl, title: subject });
+  const html = wrapEmailShell({ bodyHtml, previewText, siteUrl, title: subject, unsubscribeUrl });
 
   const text = [
     "You should definitely try LoveIQ",
