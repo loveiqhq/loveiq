@@ -1,0 +1,48 @@
+import { NextResponse } from "next/server";
+import { verifyUnsubscribeToken } from "@/lib/emails/unsubscribe-token";
+import { addToSuppression } from "@/lib/emails/suppression";
+import logger from "@/lib/logger";
+
+function getSecret(): string | null {
+  return process.env.UNSUBSCRIBE_SECRET || null;
+}
+
+// Browser-facing confirmation page — linked from the email footer
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const token = searchParams.get("token") ?? "";
+  const secret = getSecret();
+  const email = secret ? verifyUnsubscribeToken(token, secret) : null;
+
+  if (!email) {
+    return new Response("Invalid or expired unsubscribe link.", {
+      status: 400,
+      headers: { "Content-Type": "text/plain" },
+    });
+  }
+
+  await addToSuppression(email, "unsubscribed");
+  logger.info({ email }, "Email unsubscribed via GET");
+
+  const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://loveiq.org").replace(/\/$/, "");
+  // eslint-disable-next-line no-secrets/no-secrets
+  const html = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Unsubscribed</title><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="font-family:sans-serif;max-width:480px;margin:60px auto;padding:0 24px;text-align:center"><h1 style="font-size:24px;font-weight:600">You've been unsubscribed</h1><p style="color:#555;line-height:1.6">You won't receive marketing emails from LoveIQ anymore.</p><p style="margin-top:32px"><a href="${siteUrl}" style="color:#5900AC;text-decoration:none;font-weight:600">← Back to LoveIQ</a></p></body></html>`;
+  return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8" } });
+}
+
+// RFC 8058 one-click unsubscribe — called by email clients, not browsers.
+// The client POSTs with body: List-Unsubscribe=One-Click
+export async function POST(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const token = searchParams.get("token") ?? "";
+  const secret = getSecret();
+  const email = secret ? verifyUnsubscribeToken(token, secret) : null;
+
+  if (!email) {
+    return NextResponse.json({ error: "Invalid token." }, { status: 400 });
+  }
+
+  await addToSuppression(email, "unsubscribed");
+  logger.info({ email }, "Email unsubscribed via one-click POST");
+  return NextResponse.json({ ok: true });
+}
