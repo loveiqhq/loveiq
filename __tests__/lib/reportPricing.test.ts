@@ -98,27 +98,27 @@ describe("reportPricing", () => {
     });
   });
 
-  describe("bucket catalogue (Pricing.xlsx)", () => {
-    it("essentials buckets match xlsx MSRP / starting-sale pairs", () => {
+  describe("bucket catalogue (Tracking & Pricing - Prices (1).csv)", () => {
+    it("essentials buckets match csv MSRP / starting-sale pairs", () => {
       expect(getPricingBucketsForPlan("essentials")).toEqual([
-        { code: "A", weight: 20, msrpCents: 2999, startingCents: 1999 },
-        { code: "B", weight: 10, msrpCents: 1999, startingCents: 1499 },
-        { code: "C", weight: 70, msrpCents: 999, startingCents: 499 },
+        { code: "A", weight: 20, msrpCents: 2999, startingCents: 799 },
+        { code: "B", weight: 10, msrpCents: 1999, startingCents: 699 },
+        { code: "C", weight: 70, msrpCents: 999, startingCents: 299 },
       ]);
     });
 
-    it("full_report buckets match xlsx MSRP / starting-sale pairs", () => {
+    it("full_report buckets match csv MSRP / starting-sale pairs", () => {
       expect(getPricingBucketsForPlan("full_report")).toEqual([
-        { code: "A", weight: 20, msrpCents: 6999, startingCents: 3499 },
-        { code: "B", weight: 10, msrpCents: 5999, startingCents: 2999 },
-        { code: "C", weight: 70, msrpCents: 4999, startingCents: 899 },
+        { code: "A", weight: 20, msrpCents: 6999, startingCents: 999 },
+        { code: "B", weight: 10, msrpCents: 5999, startingCents: 899 },
+        { code: "C", weight: 70, msrpCents: 4999, startingCents: 499 },
       ]);
     });
 
-    it("all_reports buckets match xlsx MSRP / starting-sale pairs", () => {
+    it("all_reports buckets match csv MSRP / starting-sale pairs", () => {
       expect(getPricingBucketsForPlan("all_reports")).toEqual([
-        { code: "A", weight: 20, msrpCents: 35900, startingCents: 17950 },
-        { code: "B", weight: 10, msrpCents: 25900, startingCents: 12950 },
+        { code: "A", weight: 20, msrpCents: 35900, startingCents: 9900 },
+        { code: "B", weight: 10, msrpCents: 25900, startingCents: 8900 },
         { code: "C", weight: 70, msrpCents: 15900, startingCents: 4999 },
       ]);
     });

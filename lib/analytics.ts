@@ -22,6 +22,7 @@ declare global {
 const PERSISTED_EVENTS = new Set([
   "report_viewed",
   "paywall_view",
+  "price_shown",
   "begin_checkout",
   "paywall_unlocked",
   "report_engagement_1min",
@@ -115,6 +116,16 @@ export const track = (name: string, params?: Record<string, unknown>) => {
   window.dataLayer.push({ event: name, ...params });
 };
 
+/**
+ * Landing page view — top of the funnel per the Tracking & Pricing CSV.
+ * GA4-only: there's no submission yet, so durable persistence to
+ * `analytics_event` (which keys off survey_submission_id) is intentionally
+ * skipped. Counts on GA4 alone for pre-submission funnel reporting.
+ */
+export const trackLandingPageView = () => {
+  track("landing_page_view");
+};
+
 export const trackStartSurvey = (
   location: "nav" | "hero" | "report_section" | "footer" | "archetype-teaser"
 ) => {
@@ -181,6 +192,43 @@ export const trackPaywallView = (items: PaywallPlanItem[]) => {
   const params = { currency: items[0].currency, items };
   track("paywall_view", params);
   persistAnalyticsEvent("paywall_view", params);
+};
+
+export interface PriceShownParams {
+  plan: "essentials" | "full_report" | "all_reports";
+  /** Final EUR amount the user sees (post-multipliers, post-ladder, normalized). */
+  price: number;
+  /** ISO currency code, e.g. "EUR". */
+  currency: string;
+  /**
+   * Elasticity bucket. Expected to be "A" | "B" | "C" but typed as `string`
+   * because legacy quotes (pre-2026-04 migration) may carry codes like
+   * "full_center". Downstream analytics treats unknown values as "other".
+   */
+  bucket: string;
+  /** Full pricing cluster ID, e.g. "B-US-iOS-google-engaged". */
+  pricing_cluster_id: string;
+  /** Discount ladder step: 0 = initial, 1–4 = ladder. */
+  discount_step: number;
+  /** A/B experiment group: "A" (baseline) or "B" (full dynamic). */
+  experiment_group?: "A" | "B";
+  /** MSRP anchor (struck-out reference price). */
+  msrp?: number;
+  /** Initial price before ladder discount. */
+  initial_price?: number;
+}
+
+/**
+ * Fires once per (plan, pricing_cluster_id) the first time a quote is rendered
+ * to the user — typically when `ReportPricingModal` paints. Powers the
+ * "Price Shown" column in the user-tracking funnel + per-cluster CVR analysis.
+ * Callers must dedupe (a useRef set is fine) so a modal re-open doesn't
+ * double-count.
+ */
+export const trackPriceShown = (params: PriceShownParams) => {
+  const payload = params as unknown as Record<string, unknown>;
+  track("price_shown", payload);
+  persistAnalyticsEvent("price_shown", payload);
 };
 
 export const trackBeginCheckout = (

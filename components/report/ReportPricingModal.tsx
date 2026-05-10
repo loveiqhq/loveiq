@@ -20,7 +20,12 @@ import type { ReportPriceQuoteSnapshot } from "@/lib/pricing/reportPricing";
 import PricingTestimonialsCarousel from "./PricingTestimonialsCarousel";
 import { getReportTheme, getReportThemeStyle } from "./reportTheme";
 import { isPlanOwnedForArchetype, type ReportAccessPlan } from "@/lib/report/access";
-import { trackBeginCheckout, trackPaywallView, type PaywallPlanItem } from "@/lib/analytics";
+import {
+  trackBeginCheckout,
+  trackPaywallView,
+  trackPriceShown,
+  type PaywallPlanItem,
+} from "@/lib/analytics";
 
 interface Props {
   accessPlan?: ReportAccessPlan;
@@ -197,6 +202,34 @@ const ReportPricingModal: FC<Props> = ({
     if (items.length === 0) return;
     paywallViewFiredRef.current = true;
     trackPaywallView(items);
+  }, [open, quotes]);
+
+  // Per-plan `price_shown` emit. Deduped by (plan, pricingClusterId, discountStep)
+  // so re-opening the modal or the ladder advancing emits a new event without
+  // double-counting a stable render. Powers the "Price Shown" funnel column +
+  // per-cluster CVR analysis.
+  const priceShownFiredRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!open) return;
+    if (!quotes) return;
+    for (const card of REPORT_PURCHASE_PLANS) {
+      const quote = quotes[card.plan];
+      if (!quote) continue;
+      const dedupeKey = `${card.plan}:${quote.pricingClusterId}:${quote.discountStep}`;
+      if (priceShownFiredRef.current.has(dedupeKey)) continue;
+      priceShownFiredRef.current.add(dedupeKey);
+      trackPriceShown({
+        plan: card.plan,
+        price: quote.currentPriceCents / 100,
+        currency: quote.currency,
+        bucket: quote.basePriceBucket,
+        pricing_cluster_id: quote.pricingClusterId,
+        discount_step: quote.discountStep,
+        experiment_group: quote.experimentGroup,
+        msrp: quote.msrpCents / 100,
+        initial_price: quote.initialPriceCents / 100,
+      });
+    }
   }, [open, quotes]);
 
   useEffect(() => {

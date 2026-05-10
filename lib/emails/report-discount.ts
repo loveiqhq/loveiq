@@ -47,14 +47,14 @@ function computePlanPricing(
   plan: ReportPurchasePlan,
   quote: ReportPriceQuoteSnapshot | undefined
 ): PlanPricing {
-  // Strike = MSRP. Floor at catalogue `priceCents` so a stale/incomplete quote
-  // (msrp missing or accidentally equal to the discounted current) never wipes
-  // out the strike + saved line.
+  // Strike = the live quote MSRP when present. Fall back to catalogue
+  // `priceCents` (Bucket-B MSRP) only when the quote is missing or its msrp is
+  // not a valid positive number — this preserves bucket-C strikes (€49.99)
+  // from being inflated by the higher Bucket-B catalogue floor.
   const quoteMsrp = quote?.msrpCents;
-  const strikeCents = Math.max(
-    Number.isFinite(quoteMsrp) ? (quoteMsrp as number) : 0,
-    plan.priceCents
-  );
+  const validQuoteMsrp =
+    typeof quoteMsrp === "number" && Number.isFinite(quoteMsrp) && quoteMsrp > 0;
+  const strikeCents = validQuoteMsrp ? quoteMsrp : plan.priceCents;
   const currentCents = quote?.currentPriceCents ?? plan.priceCents;
 
   if (

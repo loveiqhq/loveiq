@@ -28,6 +28,7 @@ import logger from "@/lib/logger";
 const ALLOWED_EVENTS = [
   "report_viewed",
   "paywall_view",
+  "price_shown",
   "begin_checkout",
   "paywall_unlocked",
   "report_engagement_1min",
@@ -45,6 +46,7 @@ function entityTypeFor(event: AllowedEvent): string {
     case "report_engagement_10min":
       return "report";
     case "paywall_view":
+    case "price_shown":
       return "paywall";
     case "begin_checkout":
     case "paywall_unlocked":

@@ -35,6 +35,8 @@ let trackBeginCheckout: typeof import("../../lib/analytics").trackBeginCheckout;
 let trackReportEngagement: typeof import("../../lib/analytics").trackReportEngagement;
 let trackReportPurchase: typeof import("../../lib/analytics").trackReportPurchase;
 let trackGoogleAdsPurchaseConversion: typeof import("../../lib/analytics").trackGoogleAdsPurchaseConversion;
+let trackLandingPageView: typeof import("../../lib/analytics").trackLandingPageView;
+let trackPriceShown: typeof import("../../lib/analytics").trackPriceShown;
 
 describe("analytics", () => {
   const originalWindow = globalThis.window;
@@ -56,6 +58,8 @@ describe("analytics", () => {
     trackReportEngagement = mod.trackReportEngagement;
     trackReportPurchase = mod.trackReportPurchase;
     trackGoogleAdsPurchaseConversion = mod.trackGoogleAdsPurchaseConversion;
+    trackLandingPageView = mod.trackLandingPageView;
+    trackPriceShown = mod.trackPriceShown;
   });
 
   afterEach(() => {
@@ -399,6 +403,58 @@ describe("analytics", () => {
       trackPaywallView([]);
 
       expect(mockGtag).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("trackLandingPageView", () => {
+    it("fires landing_page_view event to gtag (GA4-only, no params)", () => {
+      const mockGtag = vi.fn();
+      setConsentCookie({ analytics: true });
+      globalThis.window = {
+        ...globalThis.window,
+        gtag: mockGtag,
+        __loveiqAnalyticsEnabled: true,
+      } as typeof globalThis.window;
+
+      trackLandingPageView();
+
+      expect(mockGtag).toHaveBeenCalledWith("event", "landing_page_view", undefined);
+    });
+  });
+
+  describe("trackPriceShown", () => {
+    it("emits price_shown to gtag with full pricing-cluster metadata", () => {
+      const mockGtag = vi.fn();
+      setConsentCookie({ analytics: true });
+      globalThis.window = {
+        ...globalThis.window,
+        gtag: mockGtag,
+        __loveiqAnalyticsEnabled: true,
+      } as typeof globalThis.window;
+
+      trackPriceShown({
+        plan: "full_report",
+        price: 9.99,
+        currency: "EUR",
+        bucket: "A",
+        pricing_cluster_id: "B-full_report-A-tier_2-iOS-google-engaged-d0",
+        discount_step: 0,
+        experiment_group: "B",
+        msrp: 69.99,
+        initial_price: 9.99,
+      });
+
+      expect(mockGtag).toHaveBeenCalledWith(
+        "event",
+        "price_shown",
+        expect.objectContaining({
+          plan: "full_report",
+          price: 9.99,
+          bucket: "A",
+          pricing_cluster_id: "B-full_report-A-tier_2-iOS-google-engaged-d0",
+          discount_step: 0,
+        })
+      );
     });
   });
 

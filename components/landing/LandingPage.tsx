@@ -1,5 +1,6 @@
 import type { FC } from "react";
 import ScrollAnimator from "./ScrollAnimator";
+import LandingPageTracker from "./LandingPageTracker";
 import NavSection from "./NavSection";
 import S01Hero from "./S01Hero";
 import S02HowItWorks from "./S02HowItWorks";
@@ -21,6 +22,7 @@ const LandingPage: FC = () => {
   return (
     <main id="main-content" className="relative bg-page text-text-primary">
       <ScrollAnimator />
+      <LandingPageTracker />
       <NavSection />
       <S01Hero />
       <S05ValueFeatures />

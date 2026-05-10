@@ -38,10 +38,12 @@ vi.mock("@/lib/checkout/reportCheckoutQuoteCache", () => ({
 const mockTrackReportViewed = vi.fn();
 const mockTrackPaywallView = vi.fn();
 const mockTrackBeginCheckout = vi.fn();
+const mockTrackPriceShown = vi.fn();
 vi.mock("@/lib/analytics", () => ({
   trackReportViewed: (...args: unknown[]) => mockTrackReportViewed(...args),
   trackPaywallView: (...args: unknown[]) => mockTrackPaywallView(...args),
   trackBeginCheckout: (...args: unknown[]) => mockTrackBeginCheckout(...args),
+  trackPriceShown: (...args: unknown[]) => mockTrackPriceShown(...args),
   setReportSubmissionContext: vi.fn(),
 }));
 

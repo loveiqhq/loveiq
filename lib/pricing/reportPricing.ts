@@ -15,7 +15,7 @@ const SUPABASE_TIMEOUT_MS = 8_000;
 const QUOTE_VALIDITY_MS = 21 * 24 * 60 * 60 * 1_000;
 
 /**
- * Per-plan discount ladder — values come from Pricing.xlsx (rows 8-11).
+ * Per-plan discount ladder — source: `Tracking & Pricing - Prices (1).csv` rows 6-9.
  * Essentials + Full Report share the same ladder that deepens to -70% at 14d.
  * All Reports caps at -30% past 72h so the premium tier never free-falls.
  * Multipliers are applied to the quote's `starting_price` (NOT to MSRP).
@@ -53,9 +53,10 @@ const PRICING_SIGNAL_SELECT = [
 ].join(",");
 
 /**
- * Pricing.xlsx buckets — each plan has 3 buckets (A / B / C) with a weighted
- * distribution. MSRP is the struck-out anchor shown in the discount email and
- * modal; `startingCents` is the initial sale price before any ladder discount.
+ * Pricing buckets — source: `Tracking & Pricing - Prices (1).csv` rows 2-4.
+ * Each plan has 3 buckets (A / B / C) with a weighted distribution (20/10/70).
+ * MSRP is the struck-out anchor shown in the discount email and modal;
+ * `startingCents` is the initial sale price before any ladder discount.
  * The ladder multipliers in `PLAN_LADDERS` are applied to `startingCents`.
  */
 export type PricingBucketCode = "A" | "B" | "C";
@@ -67,18 +68,18 @@ interface PricingBucket {
 }
 const PLAN_BUCKETS: Record<ReportPurchasePlanId, readonly PricingBucket[]> = {
   essentials: [
-    { code: "A", weight: 20, msrpCents: 2999, startingCents: 1999 },
-    { code: "B", weight: 10, msrpCents: 1999, startingCents: 1499 },
-    { code: "C", weight: 70, msrpCents: 999, startingCents: 499 },
+    { code: "A", weight: 20, msrpCents: 2999, startingCents: 799 },
+    { code: "B", weight: 10, msrpCents: 1999, startingCents: 699 },
+    { code: "C", weight: 70, msrpCents: 999, startingCents: 299 },
   ],
   full_report: [
-    { code: "A", weight: 20, msrpCents: 6999, startingCents: 3499 },
-    { code: "B", weight: 10, msrpCents: 5999, startingCents: 2999 },
-    { code: "C", weight: 70, msrpCents: 4999, startingCents: 899 },
+    { code: "A", weight: 20, msrpCents: 6999, startingCents: 999 },
+    { code: "B", weight: 10, msrpCents: 5999, startingCents: 899 },
+    { code: "C", weight: 70, msrpCents: 4999, startingCents: 499 },
   ],
   all_reports: [
-    { code: "A", weight: 20, msrpCents: 35900, startingCents: 17950 },
-    { code: "B", weight: 10, msrpCents: 25900, startingCents: 12950 },
+    { code: "A", weight: 20, msrpCents: 35900, startingCents: 9900 },
+    { code: "B", weight: 10, msrpCents: 25900, startingCents: 8900 },
     { code: "C", weight: 70, msrpCents: 15900, startingCents: 4999 },
   ],
 };
@@ -1111,7 +1112,7 @@ function buildQuotePayload({
       ? existingQuote.initial_price_timestamp
       : now.toISOString();
 
-  // Initial price rules (Pricing.xlsx + MVP doc):
+  // Initial price rules (Tracking & Pricing - Prices (1).csv + MVP doc):
   //   Group A  → initial = starting (no contextual adjustments).
   //   Group B  → initial = min(msrp, starting × country × device × traffic ×
   //              behavioral × engagement). The MVP doc's "Full Dynamic Pricing
