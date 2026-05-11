@@ -4,12 +4,7 @@ import { useState, useRef, useLayoutEffect, type FC } from "react";
 
 const faqs = [
   {
-    question: "Is this a test or an ongoing journey?",
-    answer:
-      "LoveIQ is not a one-off quiz. It is a guided journey of self-understanding. You begin with a core assessment, and your profile can deepen over time as you explore additional topics, reflections, and optional follow-ups. Continued engagement allows your insights to become more precise and personalized.",
-  },
-  {
-    question: "What exactly does this app do?",
+    question: "What exactly does LoveIQ do?",
     answer:
       "LoveIQ analyzes how you think, feel, communicate, and relate. It translates your responses into a personalized archetype profile and relationship intelligence report that highlights patterns, strengths, challenges, and compatibility dynamics.",
   },
@@ -21,12 +16,12 @@ const faqs = [
   {
     question: "What kind of results will I receive?",
     answer:
-      "Depending on the product you use, your results may include: Archetype match scores; Trait patterns across psychological dimensions; Strengths, challenges, and blind spots; Practical insights for attraction, communication, intimacy, and long-term compatibility. The reports are designed to feel both emotionally resonant and scientifically grounded.",
+      "Your results will include core archetype, other archetype match scores, attachment style, communication style, risk orientation, strengths and challenges, practical insights and much more. The report is designed to feel both emotionally resonant and scientifically grounded.",
   },
   {
     question: "Who is this app for?",
     answer:
-      "LoveIQ is for anyone seeking deeper clarity about themselves and their relationship patterns—whether single, dating, or in a long-term partnership. It is especially relevant for people who value self-awareness, emotional intelligence, and personal growth.",
+      "LoveIQ is for anyone seeking deeper clarity about their sexuality and relationship patterns. It is especially relevant for people who value self-awareness, emotional intelligence, and personal growth.",
   },
   {
     question: "Is it based on science?",
@@ -39,14 +34,9 @@ const faqs = [
       "Accuracy depends on the clarity and honesty of your inputs. The model identifies consistent patterns across multiple dimensions, going beyond a casual personality quiz. While no system can capture every nuance of a person, many users report that the insights feel precise and personally meaningful.",
   },
   {
-    question: "Will I get recommendations or next steps?",
-    answer:
-      "Yes. Your profile includes tailored suggestions such as communication strategies, dating insights, intimacy considerations, and long-term growth paths. Optional follow-up modules allow for deeper exploration.",
-  },
-  {
     question: "Is it anonymous?",
     answer:
-      "Yes. You can use LoveIQ with only an email address, and in some cases without entering your name. Your answers are private unless you choose to share your results.",
+      "Yes. You can use LoveIQ with only an email address, to which your results will be delivered.",
   },
   {
     question: "Can I talk to a professional or coach through the app?",
@@ -56,12 +46,12 @@ const faqs = [
   {
     question: "Is it free?",
     answer:
-      "You can start with a free introductory assessment. Full reports and advanced insights are available through a one-time purchase.",
+      "You can start with a free LoveIQ assessment. Full report or specialized bundles are available through a one-time purchase.",
   },
   {
     question: "How long does the first assessment take?",
     answer:
-      "Most users complete the initial assessment in 7–12 minutes. It is mobile-friendly, intuitive, and can be paused and resumed at any time.",
+      "Most users complete the initial assessment in 15 minutes. It is mobile-friendly, intuitive, and can be paused and resumed at any time.",
   },
   {
     question: "Can I save progress, revisit results, or share with a partner?",

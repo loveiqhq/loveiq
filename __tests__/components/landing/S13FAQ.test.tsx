@@ -9,19 +9,19 @@ afterEach(cleanup);
 describe("S13FAQ", () => {
   it("renders first FAQ question text", () => {
     render(<S13FAQ />);
-    expect(screen.getByText(/is this a test or an ongoing journey/i)).toBeInTheDocument();
+    expect(screen.getByText(/what exactly does loveiq do/i)).toBeInTheDocument();
   });
 
-  it("renders all 13 FAQ question buttons", () => {
+  it("renders all 11 FAQ question buttons", () => {
     render(<S13FAQ />);
     const buttons = screen.getAllByRole("button");
-    expect(buttons).toHaveLength(13);
+    expect(buttons).toHaveLength(11);
   });
 
   it("click question sets aria-expanded to true", async () => {
     const user = userEvent.setup();
     render(<S13FAQ />);
-    const button = screen.getByRole("button", { name: /is this a test or an ongoing journey/i });
+    const button = screen.getByRole("button", { name: /what exactly does loveiq do/i });
     expect(button).toHaveAttribute("aria-expanded", "false");
     await user.click(button);
     expect(button).toHaveAttribute("aria-expanded", "true");
@@ -30,7 +30,7 @@ describe("S13FAQ", () => {
   it("click open question again sets aria-expanded to false", async () => {
     const user = userEvent.setup();
     render(<S13FAQ />);
-    const button = screen.getByRole("button", { name: /is this a test or an ongoing journey/i });
+    const button = screen.getByRole("button", { name: /what exactly does loveiq do/i });
     await user.click(button);
     await user.click(button);
     expect(button).toHaveAttribute("aria-expanded", "false");
