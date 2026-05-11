@@ -118,7 +118,7 @@ describeMaybe("payment_webhook_event idempotency (real DB)", () => {
 
 if (!SHOULD_RUN) {
   // Surface a clear log line so CI shows the test was intentionally skipped, not silently passed.
-   
+
   console.log(
     "[integration] payment-webhook-idempotency skipped — set SUPABASE_TEST_URL + SUPABASE_TEST_SERVICE_ROLE_KEY to run."
   );
