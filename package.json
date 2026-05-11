@@ -51,7 +51,7 @@
   "dependencies": {
     "@stripe/react-stripe-js": "^6.3.0",
     "@stripe/stripe-js": "^9.4.0",
-    "@supabase/ssr": "^0.9.0",
+    "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.105.4",
     "@upstash/redis": "^1.38.0",
     "@vercel/otel": "^2.1.2",
