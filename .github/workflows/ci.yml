@@ -43,6 +43,9 @@ jobs:
         # Pinned to SHA — codecov-action runs with the upload token; tag-pinning
         # would let a force-pushed tag exfiltrate it. Verify against
         # https://github.com/codecov/codecov-action/releases when bumping.
+        # Dependabot PRs run without access to repo secrets — skip the upload
+        # rather than fail the gate. Tests still ran + passed in the prior step.
+        if: github.actor != 'dependabot[bot]'
         uses: codecov/codecov-action@75cd11691c0faa626561e295848008c8a7dddffe # v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -108,7 +111,10 @@ jobs:
   docs-impact:
     name: Documentation Impact Check
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+    # Skip Dependabot PRs: their bodies are auto-generated and don't carry
+    # the "No doc impact" checkbox, but every dep bump touches package.json
+    # (toolchain surface). Human reviewers still see the diff before merge.
+    if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
