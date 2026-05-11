@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act, cleanup } from "@testing-library/react";
-import type { SurveyQuestion } from "@/data/survey-data";
+import { makeSurveyQuestion } from "@/__tests__/__fixtures__/survey";
 
 import { useSurveyTracking } from "@/components/survey/hooks/useSurveyTracking";
 
@@ -9,8 +9,10 @@ import { useSurveyTracking } from "@/components/survey/hooks/useSurveyTracking";
 
 const SESSION_KEY = "loveiq-survey-session";
 
-function makeQuestion(overrides: Partial<SurveyQuestion> = {}): SurveyQuestion {
-  return {
+// Re-exports the shared survey question factory with this file's chapter
+// default. Override any field via the argument.
+const makeQuestion = (overrides: Parameters<typeof makeSurveyQuestion>[0] = {}) =>
+  makeSurveyQuestion({
     qId: "q1",
     cId: 1,
     chapter: "Chapter A",
@@ -18,11 +20,8 @@ function makeQuestion(overrides: Partial<SurveyQuestion> = {}): SurveyQuestion {
     answerType: "single",
     options: ["Yes", "No"],
     required: true,
-    guide: "",
-    supportAndGuidance: "",
     ...overrides,
-  };
-}
+  });
 
 function mockSessionStorage() {
   const store: Record<string, string> = {};

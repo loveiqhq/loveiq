@@ -294,7 +294,8 @@ const ProcessingSequence: FC<ProcessingSequenceProps> = ({ onComplete, submitDon
   useEffect(() => {
     if (stepIndex >= STEPS.length) return;
 
-    const step = STEPS[stepIndex];
+    // stepIndex < STEPS.length checked above; STEPS[stepIndex] is defined.
+    const step = STEPS[stepIndex]!;
     const timer = setTimeout(() => {
       if (stepIndex >= STEPS.length - 1) {
         stepsComplete.current = true;
@@ -320,7 +321,8 @@ const ProcessingSequence: FC<ProcessingSequenceProps> = ({ onComplete, submitDon
     }
   }, [submitDone, fireComplete]);
 
-  const step = STEPS[stepIndex] ?? STEPS[STEPS.length - 1];
+  // STEPS is non-empty by construction; the fallback ensures `step` is defined.
+  const step = (STEPS[stepIndex] ?? STEPS[STEPS.length - 1])!;
   const Icon = step.icon;
 
   // Icon transitions: scale inside the circle

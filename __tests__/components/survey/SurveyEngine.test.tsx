@@ -44,53 +44,16 @@ vi.mock("@/components/survey/hooks/useSurveyTracking", () => ({
   useSurveyTracking: () => ({ trackNavigation: mockTrackNavigation }),
 }));
 
-vi.mock("@/data/survey-data", () => ({
-  surveyQuestions: [
-    {
-      qId: "q1",
-      cId: 1,
-      question: "Q1?",
-      answerType: "single",
-      options: ["A", "B"],
-      chapter: "ch1",
-      required: true,
-      guide: "",
-    },
-    {
-      qId: "q2",
-      cId: 1,
-      question: "Q2?",
-      answerType: "scale",
-      chapter: "ch1",
-      required: false,
-      options: [],
-      guide: "",
-      scaleLabels: { low: "Low", high: "High" },
-    },
-    {
-      qId: "q3",
-      cId: 2,
-      question: "Q3?",
-      answerType: "open",
-      chapter: "ch2",
-      required: false,
-      options: [],
-      guide: "",
-    },
-    {
-      qId: "q4",
-      cId: 2,
-      question: "Q4?",
-      answerType: "multiple",
-      chapter: "ch2",
-      required: true,
-      options: ["A", "B", "C", "D"],
-      guide: "",
-      maxSelections: 3,
-    },
-  ],
-  chapterIntros: [],
-}));
+// Mock survey questions sourced from the shared fixture factory so a schema
+// change to SurveyQuestion is a one-file edit. The async factory is required
+// because vi.mock() hoists above the top-level imports.
+vi.mock("@/data/survey-data", async () => {
+  const { defaultSurveyQuestions } = await import("@/__tests__/__fixtures__/survey");
+  return {
+    surveyQuestions: defaultSurveyQuestions(),
+    chapterIntros: [],
+  };
+});
 
 vi.mock("@/lib/analytics", () => ({
   trackSurveyStart: vi.fn(),

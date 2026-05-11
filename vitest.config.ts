@@ -5,33 +5,33 @@ export default defineConfig({
   test: {
     environment: "node",
     setupFiles: ["__tests__/setup.ts"],
-    exclude: ["node_modules", "e2e", ".next"],
-    // Heavy report sections render multi-hundred-KB data files; under full-suite
-    // parallel load these can exceed the 5s default. 60s gives flake headroom.
-    testTimeout: 60_000,
-    hookTimeout: 60_000,
+    // Integration tests live in __tests__/integration/ and need real external
+    // services (Supabase test branch, etc.). They are excluded from default
+    // `npm test` and run via `npm run test:integration` only.
+    exclude: ["node_modules", "e2e", ".next", "__tests__/integration/**"],
+    // 15s is enough for the heaviest report-section render under parallel load
+    // (measured: 99th-percentile ~6s on CI). 60s previously masked perf regressions.
+    // Per-test override via `it("…", { timeout: 30_000 }, …)` if you genuinely need it.
+    testTimeout: 15_000,
+    hookTimeout: 15_000,
     coverage: {
       provider: "v8",
       include: ["lib/**/*.ts", "app/api/**/*.ts", "proxy.ts"],
       // What we deliberately exclude from coverage gating:
-      //  - admin/**       internal operator tooling (100+ analytical endpoints)
       //  - cron/**        scheduled glue that hits external services (Resend, Stripe)
       //  - scoring/index, scoring/types  re-exports + type-only files
       //  - emails/admin-magic-link, emails/invite, emails/report-all,
       //    emails/report-essentials, emails/report-full, emails/survey-complete,
       //    emails/survey-paused — A-side templates of the A/B email pairs
       //    where the B variant carries identical structural test coverage
-      // The thresholds gate the customer-facing flow: waitlist, contact, survey,
-      // scoring, checkout, report rendering, share verification, ratelimit,
-      // CSRF, html-escape, and the request-side proxy.
+      // Admin routes (app/api/admin/**, lib/admin/**) are now in scope: largest
+      // API surface — must contribute to the 60/65/50 thresholds.
       exclude: [
         "node_modules",
         ".next",
         "__tests__",
         "data/glossary-data.ts",
-        "app/api/admin/**",
         "app/api/cron/**",
-        "lib/admin/**",
         "lib/scoring/index.ts",
         "lib/scoring/types.ts",
         "lib/emails/admin-magic-link.ts",

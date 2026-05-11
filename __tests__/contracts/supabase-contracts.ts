@@ -357,3 +357,97 @@ export const ResearchIntelligenceAnswerResponseSchema = z.array(
       .nullable(),
   })
 );
+
+// ---------------------------------------------------------------------------
+// 15. StuckPaymentRpcResponseSchema
+//     Source: app/api/cron/payment-fulfillment-sweep/route.ts — RPC
+//             `find_stuck_payments` response
+//     Code:   const rows = (await response.json()) as Array<{
+//               payment_id, personal_report_id, plan, archetype, primary_archetype
+//             }>
+// ---------------------------------------------------------------------------
+export const StuckPaymentRpcResponseSchema = z.array(
+  z.object({
+    payment_id: z.number(),
+    personal_report_id: z.number(),
+    plan: z.string(),
+    archetype: z.string().nullable(),
+    primary_archetype: z.string().nullable(),
+  })
+);
+
+// ---------------------------------------------------------------------------
+// 16. SucceededPaymentLookupResponseSchema
+//     Source: lib/report/planAccess.ts — getReportPlanByPersonalReportId
+//     Code:   /rest/v1/payment?personal_report_id=eq.X&status=eq.succeeded
+//             &select=metadata,payment_date_time
+//     Used by: report-discount-email cron (cross-quote paid check).
+// ---------------------------------------------------------------------------
+export const SucceededPaymentLookupResponseSchema = z.array(
+  z.object({
+    metadata: z.record(z.unknown()).nullable(),
+    payment_date_time: z.string().optional(),
+  })
+);
+
+// ---------------------------------------------------------------------------
+// 17. PredictiveInsightsRpcResponseSchema
+//     Source: /rest/v1/rpc/get_predictive_insights
+//     Consumed by: lib/admin/strategy.ts (buildStrategySnapshot),
+//                  lib/admin/forecasting.ts (buildForecastSnapshot)
+//     Row shape mirrors lib/admin/strategy/types.ts:StrategyPredictiveInsightRow.
+//     RPC body varies by row `type` — passthrough preserves extra fields.
+// ---------------------------------------------------------------------------
+export const PredictiveInsightsRpcResponseSchema = z.array(
+  z
+    .object({
+      type: z.string(),
+      title: z.string(),
+      detail: z.string().optional(),
+      description: z.string().optional(),
+      confidence: z.enum(["high", "medium", "low"]),
+      priority: z.number(),
+      trend: z.enum(["up", "down", "flat"]).optional(),
+      metric: z.string().optional(),
+    })
+    .passthrough()
+);
+
+// ---------------------------------------------------------------------------
+// 18. SegmentMetricsSnapshotResponseSchema
+//     Source: /rest/v1/rpc/get_segment_metrics_snapshot,
+//             /rest/v1/rpc/get_segment_metrics_by_rules
+//     Consumed by: app/api/admin/comparisons/segment/route.ts
+//     Both RPCs return the same shape.
+// ---------------------------------------------------------------------------
+export const SegmentMetricsSnapshotResponseSchema = z.object({
+  total_submissions: z.number(),
+  completed: z.number(),
+  avg_duration_ms: z.number(),
+  archetype_distribution: z.array(
+    z.object({
+      archetype: z.string(),
+      count: z.number(),
+    })
+  ),
+});
+
+// ---------------------------------------------------------------------------
+// 19. SegmentMatchCountRpcResponseSchema
+//     Source: /rest/v1/rpc/get_segment_match_count
+//     Consumed by: app/api/admin/segments/route.ts (preview / create / update)
+//     The route passes `result.count` and `result.sample` straight through.
+// ---------------------------------------------------------------------------
+export const SegmentMatchCountRpcResponseSchema = z.object({
+  count: z.number(),
+  sample: z
+    .array(
+      z.object({
+        id: z.number(),
+        email: z.string().nullable().optional(),
+        archetype: z.string().nullable().optional(),
+        created_date_time: z.string().nullable().optional(),
+      })
+    )
+    .optional(),
+});

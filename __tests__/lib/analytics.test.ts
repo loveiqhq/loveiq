@@ -235,8 +235,8 @@ describe("analytics", () => {
     });
   });
 
-  describe("trackSurveyStart (dual-fire)", () => {
-    it("fires both legacy survey_start and new survey_started", () => {
+  describe("trackSurveyStart", () => {
+    it("fires survey_started", () => {
       const mockGtag = vi.fn();
       setConsentCookie({ analytics: true });
       globalThis.window = {
@@ -247,14 +247,13 @@ describe("analytics", () => {
 
       trackSurveyStart();
 
-      expect(mockGtag).toHaveBeenCalledWith("event", "survey_start", undefined);
       expect(mockGtag).toHaveBeenCalledWith("event", "survey_started", undefined);
-      expect(mockGtag).toHaveBeenCalledTimes(2);
+      expect(mockGtag).toHaveBeenCalledTimes(1);
     });
   });
 
-  describe("trackSurveyComplete (dual-fire)", () => {
-    it("fires legacy survey_complete and enriched survey_completed with completion_time_seconds", () => {
+  describe("trackSurveyComplete", () => {
+    it("fires survey_completed with duration_ms + completion_time_seconds", () => {
       const mockGtag = vi.fn();
       setConsentCookie({ analytics: true });
       globalThis.window = {
@@ -265,12 +264,11 @@ describe("analytics", () => {
 
       trackSurveyComplete(120000);
 
-      expect(mockGtag).toHaveBeenCalledWith("event", "survey_complete", { duration_ms: 120000 });
       expect(mockGtag).toHaveBeenCalledWith("event", "survey_completed", {
         duration_ms: 120000,
         completion_time_seconds: 120,
       });
-      expect(mockGtag).toHaveBeenCalledTimes(2);
+      expect(mockGtag).toHaveBeenCalledTimes(1);
     });
 
     it("includes total_questions on survey_completed when provided", () => {

@@ -92,8 +92,9 @@ export async function GET(request: Request) {
       return {
         sessionId: sid,
         eventCount: events.length,
-        firstEvent: events[0].event_time,
-        lastEvent: events[events.length - 1].event_time,
+        // events.length is verified non-zero by the caller's filter; first/last defined.
+        firstEvent: events[0]!.event_time,
+        lastEvent: events[events.length - 1]!.event_time,
         totalTimeMs,
         maxQuestionReached: maxQ,
         backtracks,

@@ -158,7 +158,7 @@ const S11Testimonials: FC = () => {
                     aria-hidden="true"
                   >
                     <Image
-                      src={avatars[idx]?.src ?? avatars[0].src}
+                      src={avatars[idx]?.src ?? avatars[0]!.src}
                       alt={item.name}
                       width={56}
                       height={56}

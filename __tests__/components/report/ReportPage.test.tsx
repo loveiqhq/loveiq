@@ -416,7 +416,9 @@ describe("ReportPage", () => {
         ".report-premium-overlay__cta"
       ).length;
 
-      expect(firstSectionUnlockButton).toBeTruthy();
+      expect(firstSectionUnlockButton).toBeInstanceOf(HTMLButtonElement);
+      expect(firstSectionUnlockButton!.disabled).toBe(false);
+      expect(firstSectionUnlockButton!.textContent?.trim().length ?? 0).toBeGreaterThan(0);
       expect(lockedSectionCountBefore).toBeGreaterThan(1);
 
       await user.click(firstSectionUnlockButton!);
@@ -472,7 +474,14 @@ describe("ReportPage", () => {
 
       await user.click(screen.getByRole("button", { name: /^unlock full report$/i }));
 
-      expect(mockTrackBeginCheckout).toHaveBeenCalledWith("full_report", expect.any(Number), "EUR");
+      // Price must be a positive, finite EUR amount (matches the pricingQuotes fixture).
+      expect(mockTrackBeginCheckout).toHaveBeenCalledTimes(1);
+      const [plan, price, currency] = mockTrackBeginCheckout.mock.calls[0];
+      expect(plan).toBe("full_report");
+      expect(currency).toBe("EUR");
+      expect(typeof price).toBe("number");
+      expect(Number.isFinite(price)).toBe(true);
+      expect(price).toBeGreaterThan(0);
       expect(mockCacheReportCheckoutQuote).toHaveBeenCalledWith({
         plan: "full_report",
         quote: buildSuccessResponse().data.pricingQuotes.full_report,
@@ -520,7 +529,8 @@ describe("ReportPage", () => {
       const lockedCta = container.querySelector(
         ".report-section .report-premium-overlay__cta"
       ) as HTMLButtonElement | null;
-      expect(lockedCta).toBeTruthy();
+      expect(lockedCta).toBeInstanceOf(HTMLButtonElement);
+      expect(lockedCta!.disabled).toBe(false);
 
       await user.click(lockedCta!);
 
@@ -547,7 +557,8 @@ describe("ReportPage", () => {
       const lockedCta = container.querySelector(
         ".report-section .report-premium-overlay__cta"
       ) as HTMLButtonElement | null;
-      expect(lockedCta).toBeTruthy();
+      expect(lockedCta).toBeInstanceOf(HTMLButtonElement);
+      expect(lockedCta!.disabled).toBe(false);
 
       await user.click(lockedCta!);
 

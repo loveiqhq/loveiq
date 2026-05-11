@@ -1,7 +1,9 @@
 name: Load Test
 
-# Manual trigger + weekly scheduled smoke test on staging.
-# Run manually before any major launch, marketing campaign, or traffic event.
+# Triggers:
+#  - Weekly cron (Mon 06:00 UTC): full smoke against staging
+#  - Manual dispatch: choose smoke/load/spike + target
+#  - PR (paths-filtered): smoke only, against the Vercel preview URL
 on:
   schedule:
     # Every Monday at 6:00 AM UTC — smoke test against staging
@@ -21,17 +23,28 @@ on:
         description: "Target URL (defaults to production)"
         required: false
         default: "https://www.loveiq.org"
+  pull_request:
+    branches: [main]
+    paths:
+      - "app/api/**"
+      - "proxy.ts"
+      - "next.config.*"
+      - "lib/**"
+      - "load-tests/**"
+      - ".github/workflows/load-test.yml"
 
 permissions:
   contents: read
 
 jobs:
   load-test:
-    name: k6 ${{ inputs.test_type || 'smoke' }} test → ${{ inputs.target_url || 'https://staging.loveiq.org' }}
+    name: k6 ${{ inputs.test_type || 'smoke' }} test
     runs-on: ubuntu-latest
     env:
-      # Default to smoke/staging for scheduled runs (inputs.* is empty on schedule)
-      TEST_TYPE: ${{ inputs.test_type || 'smoke' }}
+      # PR runs always smoke; cron + dispatch use the dispatched type or default to smoke.
+      TEST_TYPE: ${{ github.event_name == 'pull_request' && 'smoke' || inputs.test_type || 'smoke' }}
+      # PR runs target staging (stable, always-on). Cron defaults to staging too. Dispatch can override.
+      # If you want per-PR preview testing, set repo var VERCEL_PREVIEW_URL and adjust this expression.
       TARGET_URL: ${{ inputs.target_url || 'https://staging.loveiq.org' }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -48,6 +61,15 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y k6
 
+      - name: Verify target reachable
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${TARGET_URL}/api/health" || echo "000")
+          echo "Health check: HTTP $STATUS at ${TARGET_URL}/api/health"
+          if [ "$STATUS" -ne 200 ]; then
+            echo "ERROR: ${TARGET_URL} not healthy"
+            exit 1
+          fi
+
       - name: Run ${{ env.TEST_TYPE }} test
         run: |
           k6 run \
@@ -59,6 +81,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
-          name: k6-results-${{ env.TEST_TYPE }}
+          name: k6-results-${{ env.TEST_TYPE }}-${{ github.run_id }}
           path: k6-results.json
           retention-days: 30

@@ -104,7 +104,8 @@ export async function GET(request: Request) {
     for (const a of assignments) {
       tagUsage[a.tag_id] = (tagUsage[a.tag_id] || 0) + 1;
       if (!submissionTags[a.submission_id]) submissionTags[a.submission_id] = [];
-      submissionTags[a.submission_id].push(a.tag_id);
+      // Just initialised in the if-block above; the lookup is defined.
+      submissionTags[a.submission_id]!.push(a.tag_id);
 
       const tagName = tagById.get(a.tag_id)?.name;
       if (tagName && isWorkflowTagName(tagName)) {
@@ -220,7 +221,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Unable to assign tag." }, { status: 500 });
       }
 
-      logAdminAction({
+      void logAdminAction({
         admin_email: admin.email,
         action: "assign_tag",
         resource_type: "submission_tag_assignment",
@@ -297,7 +298,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Unable to create workflow tags." }, { status: 500 });
       }
 
-      await logAdminAction({
+      await void logAdminAction({
         admin_email: admin.email,
         action: "seed_workflow_tags",
         resource_type: "submission_tag",
@@ -336,7 +337,7 @@ export async function POST(request: Request) {
 
     const rows = (await res.json()) as Array<{ id: number }>;
 
-    logAdminAction({
+    void logAdminAction({
       admin_email: admin.email,
       action: "create_tag",
       resource_type: "submission_tag",

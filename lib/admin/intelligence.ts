@@ -1,21 +1,33 @@
 import { buildAnomalySnapshot } from "@/lib/admin/alerts";
 import { buildCreativeIntelligenceSnapshot } from "@/lib/admin/creative-intelligence";
+type CreativeIntelligenceSnapshot = Awaited<ReturnType<typeof buildCreativeIntelligenceSnapshot>>;
+import type { ConversionLeakDebuggerSnapshot } from "@/lib/admin/conversion-leak-debugger";
 import { buildConversionLeakDebuggerSnapshot } from "@/lib/admin/conversion-leak-debugger";
 import { buildDriftDetectorSnapshot } from "@/lib/admin/drift-detector";
 import { buildExperimentRegistrySnapshot } from "@/lib/admin/experiment-registry";
+import type { ForecastSnapshot } from "@/lib/admin/forecasting";
 import { buildForecastSnapshot } from "@/lib/admin/forecasting";
 import { buildGrowthControlTowerSnapshot } from "@/lib/admin/growth-control-tower";
+type GrowthControlTowerSnapshot = Awaited<ReturnType<typeof buildGrowthControlTowerSnapshot>>;
 import { buildIncidentCorrelationSnapshot } from "@/lib/admin/incident-correlation";
 import { buildAllAdminKnowledgeArtifacts } from "@/lib/admin/knowledge";
 import { excerpt, semanticScore } from "@/lib/admin/next-level";
 import { buildAdminOsSnapshot } from "@/lib/admin/os";
+import type { ProductAdoptionSnapshot } from "@/lib/admin/product-adoption";
 import { buildProductAdoptionSnapshot } from "@/lib/admin/product-adoption";
+import type { ProductExperienceHealthSnapshot } from "@/lib/admin/product-experience-health";
 import { buildProductExperienceHealthSnapshot } from "@/lib/admin/product-experience-health";
 import { buildProductIssueRadarSnapshot } from "@/lib/admin/product-issue-radar";
+import type { ProductIssueRadarSnapshot } from "@/lib/admin/product-issue-types";
+import type { RecoveryPlaybookSnapshot } from "@/lib/admin/recovery-playbook";
 import { buildRecoveryPlaybookSnapshot } from "@/lib/admin/recovery-playbook";
+import type { ResearchIntelligenceSnapshot } from "@/lib/admin/research-intelligence";
 import { buildResearchIntelligenceSnapshot } from "@/lib/admin/research-intelligence";
+import type { StrategyPlanningSnapshot } from "@/lib/admin/strategy-planning";
 import { buildStrategyPlanningSnapshot } from "@/lib/admin/strategy-planning";
 import { buildStrategySnapshot } from "@/lib/admin/strategy";
+type StrategySnapshot = Awaited<ReturnType<typeof buildStrategySnapshot>>;
+import type { ValueRealizationSnapshot } from "@/lib/admin/value-realization";
 import { buildValueRealizationSnapshot } from "@/lib/admin/value-realization";
 import { buildWorkspaceMaturitySnapshot } from "@/lib/admin/workspace-maturity";
 import type {
@@ -30,203 +42,32 @@ import type {
   AdminIntelligenceSurface,
   AdminIntelligenceTone,
 } from "@/lib/admin/intelligence-types";
+import {
+  PRODUCT_ADOPTION_HREF,
+  SURFACES,
+  combineEvidence,
+  ensureDays,
+  ensureSurface,
+  filterSections,
+  makeDraft,
+  makeEvidence,
+  makeItem,
+  makeSection,
+  scoreAnswerConfidence,
+  summarizeItems,
+  surfacePrompts,
+} from "@/lib/admin/intelligence/helpers";
 
-const SURFACES: AdminIntelligenceSurface[] = [
-  "command-center",
-  "product",
-  "growth",
-  "strategy",
-  "health",
-  "experiments",
-  "research",
-];
-const PRODUCT_ADOPTION_HREF = `/admin/product-kpis?tab=${encodeURIComponent("Feature Adoption")}`;
-
-function ensureSurface(value: string | null | undefined): AdminIntelligenceSurface {
-  return SURFACES.includes(value as AdminIntelligenceSurface)
-    ? (value as AdminIntelligenceSurface)
-    : "command-center";
-}
-
-function ensureDays(value: number): number {
-  if (!Number.isFinite(value)) return 30;
-  return Math.min(Math.max(Math.round(value), 7), 365);
-}
-
-function makeEvidence(label: string, value: string, href: string): AdminIntelligenceEvidence {
-  return { label, value, href };
-}
-
-function makeDraft(
-  kind: AdminIntelligenceDraft["kind"],
-  title: string,
-  detail: string,
-  href: string
-): AdminIntelligenceDraft {
-  const sourceType =
-    kind === "experiment"
-      ? "experiment"
-      : kind === "hypothesis" || kind === "investigation"
-        ? "investigation"
-        : "general";
-
-  return {
-    kind,
-    title,
-    detail,
-    href,
-    actionSeed:
-      kind === "brief"
-        ? null
-        : {
-            title,
-            description: detail,
-            sourceType,
-            metricKey: null,
-            expectedImpact: null,
-            linkedHref: href,
-          },
-  };
-}
-
-function makeItem(input: {
-  id: string;
-  title: string;
-  detail: string;
-  tone: AdminIntelligenceTone;
-  confidence: AdminIntelligenceConfidence;
-  capabilities: string[];
-  recommendation: string;
-  caveat?: string | null;
-  href: string;
-  evidence?: AdminIntelligenceEvidence[];
-  draft?: AdminIntelligenceDraft | null;
-}): AdminIntelligenceItem {
-  return {
-    id: input.id,
-    title: input.title,
-    detail: input.detail,
-    tone: input.tone,
-    confidence: input.confidence,
-    capabilities: input.capabilities,
-    recommendation: input.recommendation,
-    caveat: input.caveat ?? null,
-    href: input.href,
-    evidence: input.evidence ?? [],
-    draft: input.draft ?? null,
-  };
-}
-
-function makeSection(
-  key: string,
-  title: string,
-  summary: string,
-  items: AdminIntelligenceItem[]
-): AdminIntelligenceSection | null {
-  if (items.length === 0) return null;
-  return { key, title, summary, items };
-}
-
-function filterSections(
-  sections: Array<AdminIntelligenceSection | null>
-): AdminIntelligenceSection[] {
-  return sections.filter((section): section is AdminIntelligenceSection => Boolean(section));
-}
-
-function surfacePrompts(surface: AdminIntelligenceSurface): AdminIntelligencePrompt[] {
-  if (surface === "product") {
-    return [
-      { label: "Why did completion drop?", query: "Why is completion dropping?" },
-      { label: "Top friction", query: "What is the biggest product friction right now?" },
-      { label: "Launch risk", query: "Which launch needs attention first?" },
-      { label: "Hypothesis", query: "What product hypothesis should we test next?" },
-    ];
-  }
-  if (surface === "growth") {
-    return [
-      { label: "Leak source", query: "Where is the biggest conversion leak?" },
-      { label: "Paid waste", query: "Which channels are wasting quality traffic?" },
-      { label: "Recovery move", query: "What recovery play should we run next?" },
-      { label: "Creative fit", query: "Which message best fits high-quality users?" },
-    ];
-  }
-  if (surface === "strategy") {
-    return [
-      { label: "Best bet", query: "Which strategic bet should we scale next?" },
-      { label: "Market risk", query: "What market move needs a response?" },
-      { label: "Forecast risk", query: "Which forecast is weakest right now?" },
-      { label: "Opportunity", query: "What is the highest-value opportunity now?" },
-    ];
-  }
-  if (surface === "health") {
-    return [
-      { label: "Root cause", query: "What is the most likely root cause of risk right now?" },
-      { label: "Trust risk", query: "Which trust issue affects business decisions most?" },
-      { label: "Drift", query: "What drift needs intervention first?" },
-      { label: "Policy", query: "Where is governance slipping?" },
-    ];
-  }
-  if (surface === "experiments") {
-    return [
-      { label: "Decision ready", query: "Which experiment is ready for a decision?" },
-      { label: "Interference", query: "Which experiments may be interfering?" },
-      { label: "Weak signal", query: "Which experiment is weakest on rigor?" },
-      { label: "Next test", query: "What experiment should we design next?" },
-    ];
-  }
-  if (surface === "research") {
-    return [
-      { label: "Strongest emotion", query: "Where is sentiment intensity highest right now?" },
-      { label: "Top pain", query: "Which research theme carries the most pain?" },
-      { label: "Contradictions", query: "Which contradiction needs review first?" },
-      { label: "Emerging concern", query: "What new sentiment trend is emerging?" },
-    ];
-  }
-  return [
-    { label: "What matters now?", query: "What matters most right now?" },
-    { label: "Next action", query: "What should leadership do next?" },
-    { label: "Main risk", query: "What is the biggest risk right now?" },
-    { label: "Decision memory", query: "Which decision needs a review?" },
-  ];
-}
-
-function combineEvidence(items: AdminIntelligenceItem[], limit = 6): AdminIntelligenceEvidence[] {
-  const seen = new Set<string>();
-  const output: AdminIntelligenceEvidence[] = [];
-  for (const item of items) {
-    for (const evidence of item.evidence) {
-      const key = `${evidence.label}|${evidence.value}|${evidence.href}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      output.push(evidence);
-      if (output.length >= limit) return output;
-    }
-  }
-  return output;
-}
-
-function scoreAnswerConfidence(score: number): AdminIntelligenceConfidence {
-  if (score >= 48) return "high";
-  if (score >= 24) return "medium";
-  return "low";
-}
-
-function summarizeItems(items: AdminIntelligenceItem[]): string {
-  if (items.length === 0) {
-    return "No grounded signal matched this query in the current intelligence snapshot.";
-  }
-  if (items.length === 1) {
-    return `${items[0].title}. ${items[0].recommendation}`;
-  }
-  return `${items[0].title}. ${items[0].recommendation} Next strongest signal: ${items[1].title}. ${items[1].recommendation}`;
-}
+// Surface-building helpers (ensureSurface, makeItem, makeSection, …) live in
+// ./intelligence/helpers.ts. This file owns the per-surface snapshot builders
+// and the public entry points (buildAdminIntelligenceSnapshot, etc.).
 
 function buildCommandCenterSnapshot(
   days: number,
-  os: any,
-  maturity: any
+  os: Awaited<ReturnType<typeof buildAdminOsSnapshot>>,
+  maturity: Awaited<ReturnType<typeof buildWorkspaceMaturitySnapshot>>
 ): AdminIntelligenceSnapshot {
-  const driverItems = (os.leadingIndicators ?? []).slice(0, 4).map((indicator: any) =>
+  const driverItems = (os.leadingIndicators ?? []).slice(0, 4).map((indicator) =>
     makeItem({
       id: `leading-${indicator.metricKey}-${indicator.leadingMetricKey}`,
       title: `${indicator.leadingMetricLabel} is moving ${indicator.signalState} on ${indicator.metricLabel}`,
@@ -255,7 +96,7 @@ function buildCommandCenterSnapshot(
     })
   );
 
-  const actionItems = (os.actionBoard?.items ?? []).slice(0, 4).map((item: any) =>
+  const actionItems = (os.actionBoard?.items ?? []).slice(0, 4).map((item) =>
     makeItem({
       id: `action-${item.id}`,
       title: item.title,
@@ -292,7 +133,7 @@ function buildCommandCenterSnapshot(
     })
   );
 
-  const decisionItems = (os.decisionBoard ?? []).slice(0, 4).map((item: any) =>
+  const decisionItems = (os.decisionBoard ?? []).slice(0, 4).map((item) =>
     makeItem({
       id: `decision-${item.id}`,
       title: item.title,
@@ -360,12 +201,12 @@ function buildCommandCenterSnapshot(
 
 function buildProductSnapshot(
   days: number,
-  issueRadar: any,
-  experience: any,
-  adoption: any,
-  research: any
+  issueRadar: ProductIssueRadarSnapshot,
+  experience: ProductExperienceHealthSnapshot,
+  adoption: ProductAdoptionSnapshot,
+  research: ResearchIntelligenceSnapshot
 ): AdminIntelligenceSnapshot {
-  const issueItems = (issueRadar.priorityIssues ?? []).slice(0, 4).map((issue: any) =>
+  const issueItems = (issueRadar.priorityIssues ?? []).slice(0, 4).map((issue) =>
     makeItem({
       id: issue.id,
       title: issue.title,
@@ -389,7 +230,7 @@ function buildProductSnapshot(
     })
   );
 
-  const adoptionItems = (adoption.launches ?? []).slice(0, 4).map((launch: any) =>
+  const adoptionItems = (adoption.launches ?? []).slice(0, 4).map((launch) =>
     makeItem({
       id: `launch-${launch.id}`,
       title: launch.title,
@@ -423,7 +264,7 @@ function buildProductSnapshot(
     })
   );
 
-  const healthItems = (experience.areas ?? []).slice(0, 3).map((area: any) =>
+  const healthItems = (experience.areas ?? []).slice(0, 3).map((area) =>
     makeItem({
       id: `area-${area.key}`,
       title: `${area.label} experience is ${area.tone}`,
@@ -442,33 +283,26 @@ function buildProductSnapshot(
     })
   );
 
-  const researchItems = (research.contradictions ?? [])
-    .slice(0, 2)
-    .map((item: any, index: number) =>
-      makeItem({
-        id: `research-contradiction-${index}`,
-        title: item.title || "Behavior / research contradiction",
-        detail:
-          item.summary ||
-          item.detail ||
-          "Research and behavior are pulling in different directions.",
-        tone: "watch",
-        confidence: "medium",
-        capabilities: ["contradiction detector", "feedback-to-hypothesis", "research synthesis"],
-        recommendation:
-          item.recommendation || "Turn this contradiction into a testable product hypothesis.",
-        href: item.href || "/admin/research",
-        evidence: [
-          makeEvidence("Surface", "Research intelligence", item.href || "/admin/research"),
-        ],
-        draft: makeDraft(
-          "hypothesis",
-          item.title || "Investigate contradiction",
-          item.recommendation || item.summary || "Review research and behavior side by side.",
-          item.href || "/admin/research"
-        ),
-      })
-    );
+  const researchItems = (research.contradictions ?? []).slice(0, 2).map((item, index) =>
+    makeItem({
+      id: `research-contradiction-${index}`,
+      title: item.title || "Behavior / research contradiction",
+      detail: item.detail || "Research and behavior are pulling in different directions.",
+      tone: "watch",
+      confidence: "medium",
+      capabilities: ["contradiction detector", "feedback-to-hypothesis", "research synthesis"],
+      recommendation:
+        item.recommendation || "Turn this contradiction into a testable product hypothesis.",
+      href: item.href || "/admin/research",
+      evidence: [makeEvidence("Surface", "Research intelligence", item.href || "/admin/research")],
+      draft: makeDraft(
+        "hypothesis",
+        item.title || "Investigate contradiction",
+        item.recommendation || item.detail || "Review research and behavior side by side.",
+        item.href || "/admin/research"
+      ),
+    })
+  );
 
   return {
     generatedAt: new Date().toISOString(),
@@ -510,13 +344,13 @@ function buildProductSnapshot(
 
 function buildGrowthSnapshot(
   days: number,
-  control: any,
-  leak: any,
-  creative: any,
-  value: any,
-  recovery: any
+  control: GrowthControlTowerSnapshot,
+  leak: ConversionLeakDebuggerSnapshot,
+  creative: CreativeIntelligenceSnapshot,
+  value: ValueRealizationSnapshot,
+  recovery: RecoveryPlaybookSnapshot
 ): AdminIntelligenceSnapshot {
-  const priorityItems = (control.priorities ?? []).slice(0, 4).map((priority: any, index: number) =>
+  const priorityItems = (control.priorities ?? []).slice(0, 4).map((priority, index) =>
     makeItem({
       id: `priority-${index}`,
       title: priority.title,
@@ -531,43 +365,30 @@ function buildGrowthSnapshot(
     })
   );
 
-  const leakItems = (leak.strongestLeaks ?? leak.leaks ?? [])
-    .slice(0, 3)
-    .map((item: any, index: number) =>
-      makeItem({
-        id: `leak-${index}`,
-        title:
-          item.title ||
-          `${item.dimensionLabel || item.dimension}: ${item.segmentLabel || item.label}`,
-        detail:
-          item.summary ||
-          item.detail ||
-          item.explanation ||
-          "Largest observed conversion leak in the current window.",
-        tone: item.tone === "critical" ? "risk" : "watch",
-        confidence: item.confidence || "medium",
-        capabilities: ["conversion leak debugger", "funnel diagnosis", "channel quality"],
-        recommendation:
-          item.recommendation || "Inspect the leaking segment before scaling traffic into it.",
-        caveat: item.trustNote || null,
-        href: item.href || "/admin/growth",
-        evidence: [
-          makeEvidence(
-            "Dimension",
-            item.dimensionLabel || item.dimension || "Leak",
-            item.href || "/admin/growth"
-          ),
-        ],
-        draft: makeDraft(
-          "investigation",
-          item.title || "Investigate leak",
-          item.recommendation || item.detail || "Debug the strongest leak path.",
-          item.href || "/admin/growth"
-        ),
-      })
-    );
+  const leakItems = (leak.priorities ?? []).slice(0, 3).map((item, index) =>
+    makeItem({
+      id: `leak-${index}`,
+      title: `${item.dimension}: ${item.label}`,
+      detail: item.explanation,
+      tone: item.leakRate >= 25 ? "risk" : "watch",
+      confidence: item.confidence,
+      capabilities: ["conversion leak debugger", "funnel diagnosis", "channel quality"],
+      recommendation: "Inspect the leaking segment before scaling traffic into it.",
+      href: item.href,
+      evidence: [
+        makeEvidence("Stage", item.leakStageLabel, item.href),
+        makeEvidence("Leak rate", `${item.leakRate}%`, item.href),
+      ],
+      draft: makeDraft(
+        "investigation",
+        `Investigate ${item.dimension} leak: ${item.label}`,
+        item.explanation,
+        item.href
+      ),
+    })
+  );
 
-  const creativeItems = (creative.creatives ?? []).slice(0, 3).map((item: any, index: number) =>
+  const creativeItems = (creative.creatives ?? []).slice(0, 3).map((item, index) =>
     makeItem({
       id: `creative-${index}`,
       title: `${item.content} (${item.source})`,
@@ -595,57 +416,48 @@ function buildGrowthSnapshot(
     })
   );
 
-  const valueItems = (value.predictiveSignals ?? value.signals ?? [])
-    .slice(0, 2)
-    .map((item: any, index: number) =>
-      makeItem({
-        id: `value-${index}`,
-        title: item.title || item.signal || "Value realization signal",
-        detail: item.summary || item.detail || "Behavior strongly linked to realized value.",
-        tone: "good",
-        confidence: item.confidence || "medium",
-        capabilities: ["value realization", "retention driver", "monetization insight"],
-        recommendation:
-          item.recommendation || "Use this signal to prioritize quality cohorts, not just volume.",
-        href: item.href || "/admin/growth",
-        evidence: [makeEvidence("Surface", "Value realization", item.href || "/admin/growth")],
-        draft: makeDraft(
-          "action",
-          item.title || "Use value signal",
-          item.recommendation ||
-            item.summary ||
-            "Turn this value signal into a tracked growth action.",
-          item.href || "/admin/growth"
-        ),
-      })
-    );
+  const valueItems = (value.signals ?? []).slice(0, 2).map((item, index) =>
+    makeItem({
+      id: `value-${index}`,
+      title: `Value signal: ${item.signal}`,
+      detail: `${item.strongestOutcome} leads with ${item.strongestLift}pp lift on a ${item.audience}-user audience.`,
+      tone: "good",
+      confidence: item.audience >= 20 ? "high" : "medium",
+      capabilities: ["value realization", "retention driver", "monetization insight"],
+      recommendation: "Use this signal to prioritize quality cohorts, not just volume.",
+      href: "/admin/growth",
+      evidence: [
+        makeEvidence("Audience", String(item.audience), "/admin/growth"),
+        makeEvidence("Strongest lift", `${item.strongestLift}pp`, "/admin/growth"),
+      ],
+      draft: makeDraft(
+        "action",
+        `Use value signal: ${item.signal}`,
+        `Turn the ${item.signal} signal into a tracked growth action.`,
+        "/admin/growth"
+      ),
+    })
+  );
 
   const recoveryItems = (recovery.playbookGroups ?? [])
-    .flatMap((group: any) => group.items ?? [])
+    .flatMap((group) => group.items ?? [])
     .slice(0, 2)
-    .map((item: any, index: number) =>
+    .map((item, index) =>
       makeItem({
         id: `recovery-${index}`,
-        title: item.title || item.segmentLabel || "Recovery playbook",
-        detail: item.intervention || item.summary || "Recovery intervention for a weak cohort.",
+        title: item.title,
+        detail: item.intervention || item.summary,
         tone: item.attention === "risk" ? "risk" : item.attention === "scale" ? "good" : "watch",
         confidence: item.priority === "high" ? "high" : "medium",
         capabilities: ["recovery playbook", "churn rescue", "owner suggestion"],
-        recommendation:
-          item.intervention || item.nextMove || "Assign an owner and run the recovery play.",
-        href: item.linkedHref || item.href || "/admin/growth",
-        evidence: [
-          makeEvidence(
-            "Owner",
-            item.ownerRole || "Growth",
-            item.linkedHref || item.href || "/admin/growth"
-          ),
-        ],
+        recommendation: item.intervention,
+        href: item.linkedHref,
+        evidence: [makeEvidence("Owner", item.ownerRole, item.linkedHref)],
         draft: makeDraft(
           "action",
-          item.actionTitle || item.title || "Recovery action",
-          item.intervention || item.summary || "Run the recovery playbook.",
-          item.linkedHref || item.href || "/admin/growth"
+          item.actionTitle || item.title,
+          item.intervention || item.summary,
+          item.linkedHref
         ),
       })
     );
@@ -690,11 +502,11 @@ function buildGrowthSnapshot(
 
 function buildStrategySurfaceSnapshot(
   days: number,
-  strategy: any,
-  planning: any,
-  forecast: any
+  strategy: StrategySnapshot,
+  planning: StrategyPlanningSnapshot,
+  forecast: ForecastSnapshot
 ): AdminIntelligenceSnapshot {
-  const opportunityItems = (strategy.opportunities?.backlog ?? []).slice(0, 4).map((item: any) =>
+  const opportunityItems = (strategy.opportunities?.backlog ?? []).slice(0, 4).map((item) =>
     makeItem({
       id: `opportunity-${item.title}`,
       title: item.title,
@@ -714,7 +526,7 @@ function buildStrategySurfaceSnapshot(
   );
 
   const betItems = [
-    ...(planning.bets ?? []).slice(0, 2).map((bet: any) =>
+    ...(planning.bets ?? []).slice(0, 2).map((bet) =>
       makeItem({
         id: `bet-${bet.id}`,
         title: bet.title,
@@ -744,7 +556,7 @@ function buildStrategySurfaceSnapshot(
         ),
       })
     ),
-    ...(planning.competitiveWatch ?? []).slice(0, 2).map((move: any) =>
+    ...(planning.competitiveWatch ?? []).slice(0, 2).map((move) =>
       makeItem({
         id: `competitive-${move.id}`,
         title: `${move.competitorName}: ${move.title}`,
@@ -775,7 +587,7 @@ function buildStrategySurfaceSnapshot(
     ),
   ];
 
-  const forecastItems = (forecast.modules ?? []).slice(0, 4).map((module: any) =>
+  const forecastItems = (forecast.modules ?? []).slice(0, 4).map((module) =>
     makeItem({
       id: `forecast-${module.key}`,
       title: `${module.label} forecast is ${module.trend}`,
@@ -816,7 +628,7 @@ function buildStrategySurfaceSnapshot(
     days,
     surface: "strategy",
     title: "Strategy Intelligence",
-    headline: `${(strategy.opportunities?.backlog ?? []).length} ranked opportunities, ${(planning.bets ?? []).length} tracked bets, and ${(forecast.modules ?? []).filter((module: any) => module.confidence === "low").length} low-confidence forecasts.`,
+    headline: `${(strategy.opportunities?.backlog ?? []).length} ranked opportunities, ${(planning.bets ?? []).length} tracked bets, and ${(forecast.modules ?? []).filter((module) => module.confidence === "low").length} low-confidence forecasts.`,
     summary:
       "This strategy layer keeps ranked opportunities, strategic bets, and forecast confidence in one explainable decision surface.",
     prompts: surfacePrompts("strategy"),
@@ -845,12 +657,12 @@ function buildStrategySurfaceSnapshot(
 
 function buildHealthSurfaceSnapshot(
   days: number,
-  anomalies: any,
-  incidents: any,
-  drift: any,
-  maturity: any
+  anomalies: Awaited<ReturnType<typeof buildAnomalySnapshot>>,
+  incidents: Awaited<ReturnType<typeof buildIncidentCorrelationSnapshot>>,
+  drift: Awaited<ReturnType<typeof buildDriftDetectorSnapshot>>,
+  maturity: Awaited<ReturnType<typeof buildWorkspaceMaturitySnapshot>>
 ): AdminIntelligenceSnapshot {
-  const anomalyItems = (anomalies.items ?? []).slice(0, 3).map((item: any) =>
+  const anomalyItems = (anomalies.items ?? []).slice(0, 3).map((item) =>
     makeItem({
       id: `anomaly-${item.id}`,
       title: item.title,
@@ -877,7 +689,7 @@ function buildHealthSurfaceSnapshot(
     })
   );
 
-  const incidentItems = (incidents.entries ?? []).slice(0, 3).map((entry: any) =>
+  const incidentItems = (incidents.entries ?? []).slice(0, 3).map((entry) =>
     makeItem({
       id: `incident-${entry.id}`,
       title: entry.title,
@@ -904,7 +716,7 @@ function buildHealthSurfaceSnapshot(
     })
   );
 
-  const driftItems = (drift.findings ?? []).slice(0, 3).map((finding: any) =>
+  const driftItems = (drift.findings ?? []).slice(0, 3).map((finding) =>
     makeItem({
       id: `drift-${finding.id}`,
       title: finding.title,
@@ -930,7 +742,7 @@ function buildHealthSurfaceSnapshot(
   );
 
   const weakestDimension = [...(maturity.dimensions ?? [])].sort(
-    (left: any, right: any) => left.score - right.score
+    (left, right) => left.score - right.score
   )[0];
   if (weakestDimension) {
     driftItems.push(
@@ -992,8 +804,10 @@ function buildHealthSurfaceSnapshot(
   };
 }
 
-function experimentInterferenceItems(registry: any): AdminIntelligenceItem[] {
-  const experiments = (registry.experiments ?? []).filter((item: any) =>
+function experimentInterferenceItems(
+  registry: Awaited<ReturnType<typeof buildExperimentRegistrySnapshot>>
+): AdminIntelligenceItem[] {
+  const experiments = (registry.experiments ?? []).filter((item) =>
     ["active", "paused"].includes(item.status)
   );
   const items: AdminIntelligenceItem[] = [];
@@ -1041,8 +855,11 @@ function experimentInterferenceItems(registry: any): AdminIntelligenceItem[] {
   return items.slice(0, 3);
 }
 
-function buildExperimentSurfaceSnapshot(days: number, registry: any): AdminIntelligenceSnapshot {
-  const readyItems = (registry.scorecard?.readyQueue ?? []).slice(0, 3).map((item: any) =>
+function buildExperimentSurfaceSnapshot(
+  days: number,
+  registry: Awaited<ReturnType<typeof buildExperimentRegistrySnapshot>>
+): AdminIntelligenceSnapshot {
+  const readyItems = (registry.scorecard?.readyQueue ?? []).slice(0, 3).map((item) =>
     makeItem({
       id: `ready-${item.id}`,
       title: item.name,
@@ -1071,7 +888,7 @@ function buildExperimentSurfaceSnapshot(days: number, registry: any): AdminIntel
   );
 
   const riskItems = [
-    ...(registry.scorecard?.riskQueue ?? []).slice(0, 3).map((item: any) =>
+    ...(registry.scorecard?.riskQueue ?? []).slice(0, 3).map((item) =>
       makeItem({
         id: `risk-${item.id}`,
         title: item.name,
@@ -1101,7 +918,7 @@ function buildExperimentSurfaceSnapshot(days: number, registry: any): AdminIntel
     ...experimentInterferenceItems(registry),
   ].slice(0, 4);
 
-  const weakSignalItems = (registry.scorecard?.weakSignalQueue ?? []).slice(0, 4).map((item: any) =>
+  const weakSignalItems = (registry.scorecard?.weakSignalQueue ?? []).slice(0, 4).map((item) =>
     makeItem({
       id: `weak-${item.id}`,
       title: item.name,
@@ -1161,8 +978,11 @@ function buildExperimentSurfaceSnapshot(days: number, registry: any): AdminIntel
   };
 }
 
-function buildResearchSurfaceSnapshot(days: number, research: any): AdminIntelligenceSnapshot {
-  const signalItems = (research.signals ?? []).slice(0, 3).map((item: any) =>
+function buildResearchSurfaceSnapshot(
+  days: number,
+  research: Awaited<ReturnType<typeof buildResearchIntelligenceSnapshot>>
+): AdminIntelligenceSnapshot {
+  const signalItems = (research.signals ?? []).slice(0, 3).map((item) =>
     makeItem({
       id: `research-signal-${item.title}`,
       title: item.title,
@@ -1192,7 +1012,7 @@ function buildResearchSurfaceSnapshot(days: number, research: any): AdminIntelli
     })
   );
 
-  const painItems = (research.painQuestions ?? []).slice(0, 3).map((question: any) =>
+  const painItems = (research.painQuestions ?? []).slice(0, 3).map((question) =>
     makeItem({
       id: `research-pain-${question.questionId}`,
       title: `High-intensity sentiment: ${question.questionLabel}`,
@@ -1220,7 +1040,7 @@ function buildResearchSurfaceSnapshot(days: number, research: any): AdminIntelli
     })
   );
 
-  const contradictionItems = (research.contradictions ?? []).slice(0, 2).map((item: any) =>
+  const contradictionItems = (research.contradictions ?? []).slice(0, 2).map((item) =>
     makeItem({
       id: `research-contradiction-${item.key}`,
       title: item.title,

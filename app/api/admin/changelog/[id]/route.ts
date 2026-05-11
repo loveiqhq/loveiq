@@ -98,7 +98,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       return NextResponse.json({ error: "Unable to update entry." }, { status: 500 });
     }
 
-    logAdminAction({
+    void logAdminAction({
       admin_email: admin.email,
       action: "update_changelog_entry",
       resource_type: "product_changelog",
@@ -153,7 +153,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
       return NextResponse.json({ error: "Unable to delete entry." }, { status: 500 });
     }
 
-    logAdminAction({
+    void logAdminAction({
       admin_email: admin.email,
       action: "delete_changelog_entry",
       resource_type: "product_changelog",

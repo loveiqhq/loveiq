@@ -60,4 +60,11 @@ describe("GET /api/admin/lifecycle-intelligence", () => {
     expect(res.status).toBe(200);
     expect(mockBuildLifecycleIntelligenceSnapshot).toHaveBeenCalledWith("research", 45);
   });
+
+  it("returns 429 when rate-limited", async () => {
+    mockCheckRateLimit.mockResolvedValue({ allowed: false, remaining: 0, resetAt: new Date() });
+    const res = await GET(new Request("http://localhost/api/admin/lifecycle-intelligence"));
+    expect(res.status).toBe(429);
+    expect(mockBuildLifecycleIntelligenceSnapshot).not.toHaveBeenCalled();
+  });
 });

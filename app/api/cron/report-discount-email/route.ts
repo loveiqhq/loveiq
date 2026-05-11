@@ -26,6 +26,9 @@ import type { ReportPriceQuoteSnapshot } from "@/lib/pricing/reportPricing";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+// Fail-safe before Vercel's 60s default so a stuck Resend / Supabase call
+// surfaces as our own 504 with telemetry instead of a silent kill.
+export const maxDuration = 50;
 
 const CANDIDATE_LIMIT = 500;
 const RESEND_TIMEOUT_MS = 8_000;

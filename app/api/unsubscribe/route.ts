@@ -3,6 +3,13 @@ import { verifyUnsubscribeToken } from "@/lib/emails/unsubscribe-token";
 import { addToSuppression } from "@/lib/emails/suppression";
 import logger from "@/lib/logger";
 
+// CSRF-exempt by design. The HMAC-signed `token` URL param IS the auth.
+// Email clients (Gmail, Outlook, Apple Mail) call the RFC 8058 one-click
+// endpoint without browser cookies; they couldn't include a CSRF token
+// even if we required one. The token already authenticates the request
+// via UNSUBSCRIBE_SECRET — see lib/emails/unsubscribe-token.ts. The
+// exemption is also documented in `proxy.ts`.
+
 function getSecret(): string | null {
   return process.env.UNSUBSCRIBE_SECRET || null;
 }

@@ -1,6 +1,8 @@
 import nextConfig from "eslint-config-next";
 import securityPlugin from "eslint-plugin-security";
 import noSecretsPlugin from "eslint-plugin-no-secrets";
+import tseslint from "@typescript-eslint/eslint-plugin";
+import tsparser from "@typescript-eslint/parser";
 
 const eslintConfig = [
   {
@@ -15,6 +17,23 @@ const eslintConfig = [
     ],
   },
   ...nextConfig,
+  {
+    // Type-aware rules for server-side code. no-floating-promises catches async
+    // calls without await/.catch — a recurring class of silent failures in
+    // API routes (e.g., logger.error not awaited inside a handler).
+    files: ["app/api/**/*.ts", "lib/**/*.ts", "proxy.ts"],
+    languageOptions: {
+      parser: tsparser,
+      parserOptions: {
+        project: "./tsconfig.json",
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+    plugins: { "@typescript-eslint": tseslint },
+    rules: {
+      "@typescript-eslint/no-floating-promises": ["error", { ignoreVoid: true, ignoreIIFE: true }],
+    },
+  },
   {
     // eslint-plugin-security: detect unsafe patterns in server-side code
     files: ["app/api/**/*.ts", "lib/**/*.ts", "proxy.ts"],
@@ -45,8 +64,10 @@ const eslintConfig = [
         },
       ],
 
-      // Enforce consistent error handling
-      "no-console": ["warn", { allow: ["warn", "error", "info"] }],
+      // Enforce consistent error handling. Error so it blocks merges; warnings drift.
+      // `warn`/`error`/`info` allowed for intentional diagnostics; raw console.log
+      // is the smell we want to catch before it lands in prod bundles.
+      "no-console": ["error", { allow: ["warn", "error", "info"] }],
 
       // Prevent dangerous patterns
       "no-restricted-syntax": [

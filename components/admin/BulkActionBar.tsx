@@ -76,7 +76,7 @@ export default function BulkActionBar({
         const skippedCount = body.skipped.length;
         setDeleteSummary(
           skippedCount > 0
-            ? `Deleted ${body.deleted}, skipped ${skippedCount} (e.g. ${body.skipped[0].reason}).`
+            ? `Deleted ${body.deleted}, skipped ${skippedCount} (e.g. ${body.skipped[0]!.reason}).`
             : `Deleted ${body.deleted}.`
         );
       }

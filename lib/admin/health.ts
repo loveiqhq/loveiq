@@ -152,8 +152,9 @@ export async function buildHealthStatusSnapshot(): Promise<AdminHealthSnapshot> 
     if (res.ok) {
       const rows = (await res.json()) as Array<{ created_date_time: string }>;
       if (rows.length > 0) {
+        // rows.length > 0 checked above.
         const ageHours = Math.round(
-          (Date.now() - new Date(rows[0].created_date_time).getTime()) / 3_600_000
+          (Date.now() - new Date(rows[0]!.created_date_time).getTime()) / 3_600_000
         );
         pipelineFreshnessHours = ageHours;
         services.push({

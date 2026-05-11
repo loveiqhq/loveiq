@@ -210,8 +210,7 @@ export async function buildAnomalySnapshot(inputDays: number): Promise<AdminAnom
     severity: pendingExperimentDecisions > 0 ? "watch" : "good",
     detail: `${pendingExperimentDecisions} experiments have crossed their decision date without closure.`,
     href: "/admin/experiments",
-    ownerEmail:
-      strategy.experiments.items.find((item: any) => item.decisionDate)?.ownerEmail ?? null,
+    ownerEmail: strategy.experiments.items.find((item) => item.decisionDate)?.ownerEmail ?? null,
   });
 
   const staleDecisionReviews = decisions.filter((item) => {

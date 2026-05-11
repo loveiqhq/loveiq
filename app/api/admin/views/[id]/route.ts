@@ -47,7 +47,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   if (views.length === 0) {
     return NextResponse.json({ error: "View not found." }, { status: 404 });
   }
-  if (views[0].admin_email !== admin.email) {
+  if (views[0]!.admin_email !== admin.email) {
     return NextResponse.json({ error: "You can only delete your own views." }, { status: 403 });
   }
 

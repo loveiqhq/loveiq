@@ -104,8 +104,30 @@ describe("admin executive memo route", () => {
 
     const json = await res.json();
     expect(typeof json.headline).toBe("string");
+    expect(json.headline.length).toBeGreaterThan(0);
     expect(json.metrics.activeExperiments).toBe(1);
     expect(json.sections.actions.length).toBeGreaterThan(0);
-    expect(json.trust).toBeDefined();
+    // Trust descriptor must contain the source identifier + mode the route builds.
+    // (staleAfterHours is consumed internally to derive `warning`; not echoed back.)
+    expect(json.trust).toMatchObject({
+      source: "executive-memo",
+      mode: "derived",
+      sampleSize: expect.any(Number),
+    });
+    expect(json.trust).toHaveProperty("freshnessHours");
+    expect(json.trust).toHaveProperty("warning");
+  });
+
+  it("returns 401 without admin session", async () => {
+    mockVerifyAdminSession.mockResolvedValue(null);
+    const res = await GET(new Request("http://localhost/api/admin/executive-memo"));
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 429 when rate-limited", async () => {
+    mockCheckRateLimit.mockResolvedValue({ allowed: false, remaining: 0, resetAt: new Date() });
+    const res = await GET(new Request("http://localhost/api/admin/executive-memo"));
+    expect(res.status).toBe(429);
+    expect(mockSupabaseFetch).not.toHaveBeenCalled();
   });
 });

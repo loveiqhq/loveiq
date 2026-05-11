@@ -49,7 +49,7 @@ export default function RetentionFunnelTab({ days }: { days: number }) {
         <div className="space-y-3">
           {funnel.map((stage, idx) => {
             const pct = (stage.count / maxCount) * 100;
-            const prevCount = idx > 0 ? funnel[idx - 1].count : stage.count;
+            const prevCount = idx > 0 ? funnel[idx - 1]!.count : stage.count;
             const convRate = prevCount > 0 ? Math.round((stage.count / prevCount) * 100) : 100;
             return (
               <div key={stage.stage}>

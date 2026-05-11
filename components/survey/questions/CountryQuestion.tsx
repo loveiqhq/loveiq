@@ -133,9 +133,10 @@ const CountryQuestion: FC<CountryQuestionProps> = ({ question, value, onChange }
       case "Enter":
         e.preventDefault();
         if (highlightIndex >= 0 && highlightIndex < filtered.length) {
-          selectCountry(filtered[highlightIndex]);
+          // highlightIndex bounds checked above.
+          selectCountry(filtered[highlightIndex]!);
         } else if (filtered.length === 1) {
-          selectCountry(filtered[0]);
+          selectCountry(filtered[0]!);
         }
         break;
       case "Escape":

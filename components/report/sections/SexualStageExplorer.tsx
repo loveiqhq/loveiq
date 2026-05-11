@@ -131,8 +131,9 @@ const SexualStageExplorer: FC<Props> = ({ userStageLabel }) => {
     const el = rootRef.current;
     if (!el || isRevealed) return;
     const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
+      (entries) => {
+        const entry = entries[0];
+        if (entry?.isIntersecting) {
           setIsRevealed(true);
           observer.disconnect();
         }
@@ -265,7 +266,8 @@ const SexualStageExplorer: FC<Props> = ({ userStageLabel }) => {
   // the large card at the top of the orbit. Hovering/selecting other chips
   // swaps the detail card content without changing this anchor.
   const anchorStageId: StageId = userStageId ?? "awakening";
-  const anchorStage = STAGES.find((s) => s.id === anchorStageId) ?? STAGES[2];
+  // STAGES has 6 entries; index 2 always exists. Both branches return Stage, never undefined.
+  const anchorStage: Stage = STAGES.find((s) => s.id === anchorStageId) ?? STAGES[2]!;
   const ringStages = useMemo(() => STAGES.filter((s) => s.id !== anchorStageId), [anchorStageId]);
 
   // Order around the orbit, going clockwise from top: anchor first, then the
@@ -283,7 +285,8 @@ const SexualStageExplorer: FC<Props> = ({ userStageLabel }) => {
       e.preventDefault();
       const dir = isRight ? 1 : -1;
       const nextIdx = (currentIndex + dir + orbitOrder.length) % orbitOrder.length;
-      const nextId = orbitOrder[nextIdx].id;
+      // nextIdx is mod orbitOrder.length, so the lookup is always defined.
+      const nextId = orbitOrder[nextIdx]!.id;
       setSelectedId(nextId);
       const root = rootRef.current;
       if (!root) return;

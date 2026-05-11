@@ -29,7 +29,8 @@ export default function PresenceIndicator() {
         const state = channel.presenceState<PresenceState>();
         const users: PresenceState[] = [];
         for (const key in state) {
-          for (const presence of state[key]) {
+          // `key` comes from `for…in state`, so the lookup is defined.
+          for (const presence of state[key]!) {
             users.push(presence);
           }
         }

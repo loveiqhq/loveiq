@@ -159,4 +159,30 @@ describe("admin investigations route", () => {
       })
     );
   });
+
+  it("GET returns 401 without admin session", async () => {
+    mockVerifyAdminSession.mockResolvedValue(null);
+    const res = await GET(makeGetRequest());
+    expect(res.status).toBe(401);
+  });
+
+  it("GET returns 429 when rate-limited", async () => {
+    mockCheckRateLimit.mockResolvedValue({ allowed: false, remaining: 0, resetAt: new Date() });
+    const res = await GET(makeGetRequest());
+    expect(res.status).toBe(429);
+    expect(mockSupabaseFetch).not.toHaveBeenCalled();
+  });
+
+  it("POST returns 403 when CSRF token invalid", async () => {
+    mockVerifyCsrfToken.mockResolvedValue(false);
+    const res = await POST(
+      makePostRequest({
+        action: "create",
+        title: "x",
+        status: "needs-review",
+        priority: "low",
+      })
+    );
+    expect(res.status).toBe(403);
+  });
 });

@@ -89,6 +89,22 @@ describe("GET /api/admin/submissions", () => {
     expect(res.status).toBe(401);
   });
 
+  it("returns 429 when rate-limited (Supabase is never hit)", async () => {
+    mockCheckRateLimit.mockResolvedValue({ allowed: false, remaining: 0, resetAt: new Date() });
+
+    const res = await GET(makeRequest());
+    expect(res.status).toBe(429);
+    expect(mockSupabaseFetch).not.toHaveBeenCalled();
+  });
+
+  it("allows viewer role (read-only endpoint)", async () => {
+    mockVerifyAdminSession.mockResolvedValue({ email: "viewer@test.com", role: "viewer" });
+    mockSubmissionsOk();
+
+    const res = await GET(makeRequest());
+    expect(res.status).toBe(200);
+  });
+
   it("returns 500 when Supabase query fails", async () => {
     mockSupabaseFetch.mockResolvedValueOnce({ ok: false, status: 500 });
 

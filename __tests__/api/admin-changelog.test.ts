@@ -162,4 +162,36 @@ describe("admin changelog route", () => {
       })
     );
   });
+
+  it("GET returns 401 without admin session", async () => {
+    mockVerifyAdminSession.mockResolvedValue(null);
+    const res = await GET(new Request("http://localhost/api/admin/changelog"));
+    expect(res.status).toBe(401);
+  });
+
+  it("GET returns 429 when rate-limited", async () => {
+    mockCheckRateLimit.mockResolvedValue({ allowed: false, remaining: 0, resetAt: new Date() });
+    const res = await GET(new Request("http://localhost/api/admin/changelog"));
+    expect(res.status).toBe(429);
+    expect(mockSupabaseFetch).not.toHaveBeenCalled();
+  });
+
+  it("POST returns 403 when CSRF token invalid", async () => {
+    mockVerifyCsrfToken.mockResolvedValue(false);
+    const res = await POST(
+      new Request("http://localhost/api/admin/changelog", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-csrf-token": "token" },
+        body: JSON.stringify({
+          kind: "decision",
+          entryType: "decision",
+          title: "x",
+          rationale: "x",
+          expectedImpact: "x",
+          status: "approved",
+        }),
+      })
+    );
+    expect(res.status).toBe(403);
+  });
 });

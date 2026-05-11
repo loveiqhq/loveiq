@@ -69,7 +69,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Saved session not found." }, { status: 404 });
     }
 
-    const partial = partialRows[0];
+    // partialRows.length checked > 0 above; [0] is non-undefined.
+    const partial = partialRows[0]!;
     const record = buildPartialSubmissionRecord(partial);
     if (!record.recoverable) {
       return NextResponse.json(

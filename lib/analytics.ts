@@ -137,8 +137,6 @@ export const trackLearnMore = (location: "hero") => {
 };
 
 export const trackSurveyStart = () => {
-  // TODO: Remove legacy "survey_start" after 2026-06-01
-  track("survey_start");
   track("survey_started");
 };
 
@@ -160,8 +158,6 @@ export const trackSurveyProgress = (
 };
 
 export const trackSurveyComplete = (durationMs: number, totalQuestions?: number) => {
-  // TODO: Remove legacy "survey_complete" after 2026-06-01
-  track("survey_complete", { duration_ms: durationMs });
   track("survey_completed", {
     duration_ms: durationMs,
     completion_time_seconds: Math.round(durationMs / 1000),
@@ -189,7 +185,8 @@ export interface PaywallPlanItem {
 
 export const trackPaywallView = (items: PaywallPlanItem[]) => {
   if (!items.length) return;
-  const params = { currency: items[0].currency, items };
+  // items.length > 0 checked above.
+  const params = { currency: items[0]!.currency, items };
   track("paywall_view", params);
   persistAnalyticsEvent("paywall_view", params);
 };

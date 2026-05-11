@@ -54,7 +54,8 @@ export async function PATCH(
   if (notes.length === 0) {
     return NextResponse.json({ error: "Note not found." }, { status: 404 });
   }
-  if (notes[0].admin_email !== admin.email) {
+  // notes.length checked > 0 above; [0] is defined.
+  if (notes[0]!.admin_email !== admin.email) {
     return NextResponse.json({ error: "You can only edit your own notes." }, { status: 403 });
   }
 
@@ -126,7 +127,7 @@ export async function DELETE(
   if (notes.length === 0) {
     return NextResponse.json({ error: "Note not found." }, { status: 404 });
   }
-  if (notes[0].admin_email !== admin.email && !hasRole(admin.role, "admin")) {
+  if (notes[0]!.admin_email !== admin.email && !hasRole(admin.role, "admin")) {
     return NextResponse.json({ error: "Forbidden." }, { status: 403 });
   }
 

@@ -3,8 +3,9 @@ name: Visual Regression
 # Weekly scheduled run + manual trigger for on-demand checks.
 on:
   schedule:
-    # Every Monday at 6:00 AM UTC
-    - cron: "0 6 * * 1"
+    # Mon 06:30 UTC — staggered 30 min off load-test.yml's 06:00 to avoid
+    # runner contention (both are heavy long-running jobs).
+    - cron: "30 6 * * 1"
   workflow_dispatch:
     inputs:
       target_url:
@@ -19,6 +20,7 @@ jobs:
   visual-regression:
     name: Playwright visual regression
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       TARGET_URL: ${{ inputs.target_url || 'https://staging.loveiq.org' }}
     steps:

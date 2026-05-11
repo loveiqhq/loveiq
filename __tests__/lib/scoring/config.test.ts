@@ -56,6 +56,55 @@ describe("getScoringConfig", () => {
     expect(config.v5CategoricalInterceptByArchetype["Spark Seeker"]).toBeCloseTo(2.8870234, 6);
   });
 
+  it("V8: per-archetype v5_categorical_intercept_scale is variable, not a V7 constant", () => {
+    // V7 used a constant 0.5; V8 ranges 0.5103–1.8031 across the 14 archetypes.
+    const scales = Array.from(config.v5Calibration.values()).map(
+      (c) => c.v5CategoricalInterceptScale
+    );
+    expect(scales).toHaveLength(14);
+    for (const s of scales) {
+      expect(s).toBeGreaterThanOrEqual(0.5103);
+      expect(s).toBeLessThanOrEqual(1.8031);
+    }
+    // Spread proves they are not a constant.
+    const min = Math.min(...scales);
+    const max = Math.max(...scales);
+    expect(max - min).toBeGreaterThan(0.5);
+  });
+
+  it("V8: 12 gates load (was 9 in V7) with the 3 new V8 gates present", () => {
+    expect(config.gates).toHaveLength(12);
+    const newV8Gates = [
+      { archetype: "Curious Apprentice", dimension: "DIM_TURNON_EXPRESS" },
+      { archetype: "Emotional Voyeur", dimension: "DIM_EDGE_NEED" },
+      { archetype: "Emotional Voyeur", dimension: "DIM_AVOIDANT" },
+    ];
+    for (const expected of newV8Gates) {
+      const found = config.gates.find(
+        (g) => g.archetype === expected.archetype && g.dimension === expected.dimension
+      );
+      expect(found).toBeDefined();
+    }
+  });
+
+  it("V8: Emotional Voyeur DIM_AVOIDANT prototype is 0.8 (was 0.7 in V7)", () => {
+    // V8 migration retuned this prototype value 0.7 → 0.8.
+    expect(config.prototypes.get("Emotional Voyeur||DIM_AVOIDANT")).toBeCloseTo(0.8, 6);
+  });
+
+  it("V8: categorical boost score_add is applied as final post-scaled value", () => {
+    // V8 reduced categorical_boost_rules to 6 columns; score_add is the final
+    // post-scaled value (no external multiplier). Engine should use it as-is.
+    // Sample boost: q03013 (gaze) "watched" → Exhibitionist Performer.
+    const watchedBoosts = config.boosts.get("03013||watched");
+    expect(watchedBoosts).toBeDefined();
+    const exhibBoost = watchedBoosts!.find((b) => b.archetype === "Exhibitionist Performer");
+    expect(exhibBoost).toBeDefined();
+    // Boost values are bounded (V8 final values are typically -3 to +3).
+    expect(Math.abs(exhibBoost!.scoreAdd)).toBeLessThanOrEqual(5);
+    expect(exhibBoost!.scoreAdd).not.toBe(0);
+  });
+
   it("has multiselectScoringQuestions with 3 questions", () => {
     expect(config.multiselectScoringQuestions).toBeInstanceOf(Set);
     expect(config.multiselectScoringQuestions.size).toBe(3);

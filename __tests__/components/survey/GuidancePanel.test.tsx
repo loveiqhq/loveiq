@@ -3,20 +3,11 @@ import { render, screen, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, afterEach } from "vitest";
 import GuidancePanel from "@/components/survey/GuidancePanel";
-import type { SurveyQuestion } from "@/data/survey-data";
+import { makeOpenQuestion } from "@/__tests__/__fixtures__/survey";
 
 afterEach(cleanup);
 
-const baseQuestion: SurveyQuestion = {
-  qId: "q1",
-  question: "Test question?",
-  answerType: "open",
-  chapter: "ch1",
-  required: false,
-  guide: "",
-  supportAndGuidance: "",
-  options: [],
-} as SurveyQuestion;
+const baseQuestion = makeOpenQuestion({ qId: "q1", question: "Test question?" });
 
 describe("GuidancePanel", () => {
   it("returns null when no supportAndGuidance, comment, or answerOptionsExplained", () => {

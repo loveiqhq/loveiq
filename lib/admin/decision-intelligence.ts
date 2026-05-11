@@ -783,7 +783,8 @@ export async function buildDecisionCommandAnswer(
       const score = queryWords.reduce(
         (total, word) => total + (haystack.includes(word) ? 10 : 0),
         item.capabilities.some((capability) =>
-          normalizedQuery.toLowerCase().includes(capability.split(" ")[0])
+          // split(" ") always returns ≥1 entries when input is non-empty; default to "".
+          normalizedQuery.toLowerCase().includes(capability.split(" ")[0] ?? "")
         )
           ? 6
           : 0

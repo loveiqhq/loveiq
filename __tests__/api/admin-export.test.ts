@@ -264,6 +264,19 @@ describe("GET /api/admin/export", () => {
     vi.useRealTimers();
   });
 
+  it("returns 429 when rate-limited", async () => {
+    mockCheckRateLimit.mockResolvedValue({ allowed: false, remaining: 0, resetAt: new Date() });
+    const res = await GET(makeRequest());
+    expect(res.status).toBe(429);
+    expect(mockSupabaseFetch).not.toHaveBeenCalled();
+  });
+
+  it("returns 403 for viewer role (export is editor-only)", async () => {
+    mockVerifyAdminSession.mockResolvedValue({ email: "v@test.com", role: "viewer" });
+    const res = await GET(makeRequest());
+    expect(res.status).toBe(403);
+  });
+
   it("preserves legacy single-answer rows after single-to-multiple migrations", async () => {
     mockSupabaseFetch.mockResolvedValueOnce({
       ok: true,

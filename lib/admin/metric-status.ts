@@ -236,14 +236,17 @@ export async function buildMetricStatusSnapshot(inputDays: number): Promise<Metr
   ]);
 
   const rowByMetricKey = new Map(statusRows.map((row) => [row.metric_key, row]));
-  const benchmarkByKey = new Map(
+  // Widen the key type to `string` so registry entries (whose metric_key is a
+  // generic string) can lookup against the narrower literal-union benchmark
+  // keys without an `as any` cast. Unknown keys simply return undefined.
+  const benchmarkByKey = new Map<string, (typeof benchmarkDefinitions)[number]>(
     benchmarkDefinitions.map((benchmark) => [benchmark.key, benchmark])
   );
-  const northStarByKey = new Map(
-    strategySnapshot.northStar.map((metric: any) => [metric.key, metric])
-  );
+  // northStar / guardrails come typed off the strategy snapshot return shape;
+  // TS infers the map element type from the array.
+  const northStarByKey = new Map(strategySnapshot.northStar.map((metric) => [metric.key, metric]));
   const guardrailByMetricKey = new Map(
-    strategySnapshot.guardrails.items.map((item: any) => [
+    strategySnapshot.guardrails.items.map((item) => [
       GUARDRAIL_TO_METRIC_KEY[item.label] ?? item.label,
       item,
     ])
@@ -251,7 +254,7 @@ export async function buildMetricStatusSnapshot(inputDays: number): Promise<Metr
 
   const baseStatuses = registrySnapshot.entries.map((entry) => {
     const row = rowByMetricKey.get(entry.metric_key);
-    const benchmark = benchmarkByKey.get(entry.metric_key as any);
+    const benchmark = benchmarkByKey.get(entry.metric_key);
     const guardrail = guardrailByMetricKey.get(entry.metric_key);
     const derivedState = benchmark
       ? benchmarkState({

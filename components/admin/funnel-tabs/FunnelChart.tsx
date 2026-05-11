@@ -29,7 +29,7 @@ export default function FunnelChart({ stages }: FunnelChartProps) {
       {stages.map((stage, idx) => {
         const widthPct = Math.max((stage.count / maxCount) * 100, 4);
         const opacity = OPACITY_STEPS[Math.min(idx, OPACITY_STEPS.length - 1)];
-        const prevCount = idx > 0 ? stages[idx - 1].count : null;
+        const prevCount = idx > 0 ? stages[idx - 1]!.count : null;
         const dropOffPct =
           prevCount != null && prevCount > 0
             ? Math.round(((prevCount - stage.count) / prevCount) * 100)

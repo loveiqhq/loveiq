@@ -112,6 +112,13 @@ describe("GET /api/admin/survey-status", () => {
     const json = await res.json();
     expect(json).toEqual({ id: 1, active: false });
   });
+
+  it("returns 429 when rate-limited", async () => {
+    mockCheckRateLimit.mockResolvedValue({ allowed: false, remaining: 0, resetAt: new Date() });
+    const res = await GET(makeGetRequest());
+    expect(res.status).toBe(429);
+    expect(mockSupabaseFetch).not.toHaveBeenCalled();
+  });
 });
 
 describe("PATCH /api/admin/survey-status", () => {

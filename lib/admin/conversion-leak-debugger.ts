@@ -310,7 +310,8 @@ function deviceFromMetadata(metadata: Record<string, unknown> | null) {
   if (normalized.includes("desktop")) return "Desktop";
   if (normalized.includes("tablet")) return "Tablet";
   if (normalized.includes("mobile") || normalized.includes("phone")) return "Mobile";
-  return normalized[0].toUpperCase() + normalized.slice(1);
+  // normalized is verified non-empty above (`!normalized` early return).
+  return normalized[0]!.toUpperCase() + normalized.slice(1);
 }
 
 function compareLeakStages(aggregate: LeakAggregate) {
@@ -321,13 +322,14 @@ function compareLeakStages(aggregate: LeakAggregate) {
     { stage: "report_to_paid", from: aggregate.reported, to: aggregate.paid },
   ];
 
+  // `candidates` has 4 static entries, so the sorted [0] is always defined.
   return candidates
     .map((candidate) => {
       const leakCount = Math.max(candidate.from - candidate.to, 0);
       const leakRate = candidate.from > 0 ? round1((leakCount / candidate.from) * 100) : 0;
       return { ...candidate, leakCount, leakRate };
     })
-    .sort((a, b) => b.leakCount - a.leakCount || b.leakRate - a.leakRate)[0];
+    .sort((a, b) => b.leakCount - a.leakCount || b.leakRate - a.leakRate)[0]!;
 }
 
 function explanationForLeak(input: {

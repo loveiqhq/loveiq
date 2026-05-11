@@ -9,339 +9,68 @@ import { fetchMetricValue, loadBenchmarkDefinitions } from "@/lib/admin/metric-l
 import { supabaseFetch } from "@/lib/admin/supabase";
 import { WORKFLOW_TAGS, isWorkflowTagName } from "@/lib/admin/workflow-tags";
 import logger from "@/lib/logger";
+import {
+  LEAKAGE_HINTS,
+  METRIC_LABELS,
+  PIPELINE_STAGE_ORDER,
+  PREDICTION_LABELS,
+  ROOT_CAUSE_LABELS,
+} from "@/lib/admin/strategy/constants";
+import type {
+  StrategyAdminNoteRow,
+  StrategyAnnotationRow,
+  StrategyChangelogRow,
+  StrategyDecisionEntryRow,
+  StrategyDecisionReviewRow,
+  StrategyExperimentRow,
+  StrategyFlaggedSubmissionRow,
+  StrategyGoalRow,
+  StrategyInvestigationRow,
+  StrategyPipelineSnapshot,
+  StrategyPredictiveInsightRow,
+  StrategyScoringRow,
+  StrategyScoringRowRaw,
+  StrategySubmissionRow,
+  StrategyTagAssignmentRow,
+  StrategyTagRow,
+  StrategyWaitlistRow,
+} from "@/lib/admin/strategy/types";
+import {
+  benchmarkStatus,
+  clamp,
+  clampDays,
+  completionInRange,
+  completionRate,
+  confidenceToScore,
+  countInRange,
+  daysSinceIso,
+  daysUntilDate,
+  delta,
+  durationMinutes,
+  effortToScore,
+  formatMetric,
+  goalDrivers,
+  inRange,
+  metricLabel,
+  normalizeConversionPipeline,
+  normalizeSubmission,
+  priorityWeight,
+  round1,
+  shiftDays,
+  stageValue,
+  timeToSignalScore,
+  topGap,
+} from "@/lib/admin/strategy/helpers";
 
-const METRIC_LABELS = new Map<string, string>(
-  Object.entries({
-    total_submissions: "Total Submissions",
-    completion_rate: "Completion Rate",
-    waitlist_signups: "Waitlist Signups",
-    scored_count: "Scored Submissions",
-    workflow_needs_review: "Needs Review Queue",
-    workflow_root_cause_found: "Root Cause Found",
-    workflow_question_change_candidate: "Question Change Candidates",
-    workflow_monitoring: "Monitoring Queue",
-  })
-);
+// Pipeline types live in ./strategy/types.ts. Pure helpers (round1, clamp,
+// stageValue, topGap, normalizeConversionPipeline, goalDrivers, …) live in
+// ./strategy/helpers.ts.
 
-const PREDICTION_LABELS = new Map<string, string>(
-  Object.entries({
-    volume_projection: "Volume Projection",
-    abandonment_predictor: "Abandonment Predictor",
-    utm_conversion: "UTM Conversion",
-    archetype_trend: "Archetype Trend",
-    friction_zone: "Friction Zone",
-    completion_time: "Completion Time",
-    revenue_forecast: "Revenue Forecast",
-  })
-);
-
-const ROOT_CAUSE_LABELS = new Map<string, string>(
-  Object.entries({
-    "question-friction": "Question friction",
-    "traffic-quality": "Traffic quality",
-    "scoring-mismatch": "Scoring mismatch",
-    "release-regression": "Release regression",
-    "report-engagement": "Report engagement",
-    "data-quality": "Data quality",
-    unknown: "Unknown",
-  })
-);
-
-const LEAKAGE_HINTS = new Map<string, { cause: string }>(
-  Object.entries({
-    "Waitlist Signups->Survey Started": {
-      cause: "Activation friction or traffic quality",
-    },
-    "Survey Started->Survey Completed": {
-      cause: "Survey friction and abandonment pressure",
-    },
-    "Survey Completed->Scored": {
-      cause: "Scoring lag or failed scoring runs",
-    },
-    "Scored->Report Generated": {
-      cause: "Report generation or delivery gap",
-    },
-    "Report Generated->Report Viewed": {
-      cause: "Engagement or distribution gap",
-    },
-    "Report Viewed->Payment Completed": {
-      cause: "Pricing or value communication gap",
-    },
-  })
-);
-
-const PIPELINE_STAGE_ORDER = [
-  { key: "waitlist_signups", label: "Waitlist Signups" },
-  { key: "survey_started", label: "Survey Started" },
-  { key: "survey_completed", label: "Survey Completed" },
-  { key: "scored", label: "Scored" },
-  { key: "report_generated", label: "Report Generated" },
-  { key: "report_viewed", label: "Report Viewed" },
-  { key: "payment_completed", label: "Payment Completed" },
-] as const;
-
-const round1 = (value: number) => Math.round(value * 10) / 10;
-const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
-const clampDays = (days: number) => (Number.isNaN(days) ? 30 : Math.min(Math.max(days, 7), 90));
-const shiftDays = (base: Date, days: number) => {
-  const copy = new Date(base);
-  copy.setUTCDate(copy.getUTCDate() + days);
-  return copy;
-};
-const completionRate = (rows: Array<{ status: string }>) =>
-  rows.length === 0
-    ? 0
-    : round1((rows.filter((row) => row.status === "completed").length / rows.length) * 100);
-const durationMinutes = (rows: Array<{ duration_ms: number | null }>) => {
-  const durations = rows
-    .map((row) => row.duration_ms)
-    .filter((value): value is number => value != null && value > 0);
-  return durations.length === 0
-    ? null
-    : round1(durations.reduce((sum, value) => sum + value, 0) / durations.length / 60_000);
-};
-
-interface StrategyPipelineStage {
-  key: string;
-  label: string;
-  value: number;
-}
-
-interface StrategyPipelineConversionRate {
-  from: string;
-  to: string;
-  rate: number;
-}
-
-interface StrategyPipelineUtmSource {
-  source: string;
-  signups: number;
-  started: number;
-  total: number;
-  completed: number;
-  conversionRate: number;
-}
-
-interface StrategyPipelineSnapshot {
-  stages: StrategyPipelineStage[];
-  conversionRates: StrategyPipelineConversionRate[];
-  utmSources: StrategyPipelineUtmSource[];
-}
-const formatMetric = (value: number | null, unit: "percent" | "minutes" | "count") =>
-  value == null
-    ? "—"
-    : unit === "percent"
-      ? `${round1(value)}%`
-      : unit === "minutes"
-        ? `${round1(value)}m`
-        : value.toLocaleString();
-const delta = (current: number, previous: number) =>
-  previous === 0 ? (current === 0 ? 0 : 100) : round1(((current - previous) / previous) * 100);
-const benchmarkStatus = (
-  value: number | null,
-  direction: "higher" | "lower",
-  target: number,
-  warning: number
-) => {
-  if (value == null) return "watch";
-  if (direction === "higher") return value >= target ? "good" : value >= warning ? "watch" : "risk";
-  return value <= target ? "good" : value <= warning ? "watch" : "risk";
-};
-const normalizeSubmission = (value: any) => (Array.isArray(value) ? (value[0] ?? null) : value);
-const priorityWeight = (value: string) => (value === "high" ? 0 : value === "medium" ? 1 : 2);
-const inRange = (value: string, start: string, end: string) => value >= start && value < end;
-const countInRange = (rows: Array<{ created_date_time: string }>, start: string, end: string) =>
-  rows.filter((row) => inRange(row.created_date_time, start, end)).length;
-const completionInRange = (rows: any[], start: string, end: string) =>
-  completionRate(rows.filter((row) => inRange(row.created_date_time, start, end)));
-function normalizeConversionPipeline(raw: any): StrategyPipelineSnapshot {
-  const rawStages =
-    raw?.stages && !Array.isArray(raw.stages) && typeof raw.stages === "object"
-      ? new Map(Object.entries(raw.stages as Record<string, unknown>))
-      : new Map<string, unknown>();
-  const existingStages = Array.isArray(raw?.stages) ? raw.stages : [];
-  const stages = PIPELINE_STAGE_ORDER.map(({ key, label }) => {
-    const existing = existingStages.find((item: any) => item?.label === label);
-    return {
-      key,
-      label,
-      value: Number(existing?.value ?? rawStages.get(key) ?? 0),
-    };
-  });
-
-  const conversionRates = Array.isArray(raw?.conversionRates)
-    ? raw.conversionRates.map((item: any) => ({
-        from: String(item?.from ?? ""),
-        to: String(item?.to ?? ""),
-        rate: Number(item?.rate ?? 0),
-      }))
-    : stages.slice(0, -1).map((fromStage, index) => {
-        const toStage = stages[index + 1];
-        return {
-          from: fromStage.label,
-          to: toStage.label,
-          rate: fromStage.value > 0 ? round1((toStage.value / fromStage.value) * 100) : 0,
-        };
-      });
-
-  const utmSources = Array.isArray(raw?.utmSources)
-    ? raw.utmSources.map((item: any) => ({
-        source: String(item?.source ?? "Direct"),
-        signups: Number(item?.signups ?? item?.total ?? item?.count ?? 0),
-        started: Number(item?.started ?? item?.total ?? item?.count ?? 0),
-        total: Number(item?.total ?? item?.count ?? 0),
-        completed: Number(item?.completed ?? 0),
-        conversionRate: Number(item?.conversionRate ?? 0),
-      }))
-    : Array.isArray(raw?.by_utm)
-      ? raw.by_utm.map((item: any) => ({
-          source: String(item?.source ?? "Direct"),
-          signups: Number(item?.signups ?? item?.total ?? 0),
-          started: Number(item?.started ?? item?.total ?? 0),
-          total: Number(item?.total ?? 0),
-          completed: Number(item?.completed ?? 0),
-          conversionRate: Number(item?.conversion_rate ?? 0),
-        }))
-      : [];
-
-  return { stages, conversionRates, utmSources };
-}
-
-const stageValue = (pipeline: StrategyPipelineSnapshot, label: string) =>
-  pipeline.stages.find((stage: any) => stage.label === label)?.value ?? 0;
-const metricLabel = (key: string) => METRIC_LABELS.get(key) ?? key;
-const topGap = (values: Record<string, number> | null | undefined) => {
-  if (!values) return null;
-  const sorted = Object.values(values)
-    .filter((value) => Number.isFinite(value))
-    .sort((a, b) => b - a);
-  if (sorted.length === 0) return null;
-  if (sorted.length === 1) return Math.round(sorted[0] * 10) / 10;
-  return Math.round((sorted[0] - sorted[1]) * 10) / 10;
-};
-const confidenceToScore = (value: "high" | "medium" | "low") =>
-  value === "high" ? 90 : value === "medium" ? 65 : 40;
-const effortToScore = (value: "low" | "medium" | "high") =>
-  value === "low" ? 85 : value === "medium" ? 60 : 35;
-const timeToSignalScore = (value: "fast" | "medium" | "slow") =>
-  value === "fast" ? 85 : value === "medium" ? 60 : 35;
-const daysUntilDate = (value: string | null) => {
-  if (!value) return null;
-  const parsed = new Date(`${value}T00:00:00.000Z`).getTime();
-  if (Number.isNaN(parsed)) return null;
-  return Math.ceil((parsed - Date.now()) / 86_400_000);
-};
-const daysSinceIso = (value: string) => {
-  const parsed = new Date(value).getTime();
-  if (Number.isNaN(parsed)) return 0;
-  return Math.max(0, Math.floor((Date.now() - parsed) / 86_400_000));
-};
-
-function goalDrivers(
-  metricKey: string,
-  days: number,
-  pipeline: StrategyPipelineSnapshot,
-  topChannel: any,
-  topLeakage: any,
-  highPriorityCases: number,
-  scoringAgreement: number | null,
-  currentValue: number | null
-) {
-  if (metricKey === "total_submissions") {
-    return [
-      {
-        label: "Waitlist -> start",
-        value: `${stageValue(pipeline, "Survey Started")} starts from ${stageValue(pipeline, "Waitlist Signups")} signups`,
-        href: buildFunnelsHref({ days, tab: "Conversion Funnel" }),
-      },
-      {
-        label: "Best source",
-        value: topChannel
-          ? `${topChannel.source} at ${topChannel.conversionRate}% conversion`
-          : "No strong source split yet",
-        href: buildFunnelsHref({ days, tab: "Cohort Analysis", groupBy: "utm" }),
-      },
-      {
-        label: "Queue pressure",
-        value: `${highPriorityCases} high-priority cases open`,
-        href: buildGoalsHref({ status: "active", metricKey: "open_high_priority_cases" }),
-      },
-    ];
-  }
-
-  if (metricKey === "completion_rate") {
-    return [
-      {
-        label: "Biggest leak",
-        value: topLeakage
-          ? `${topLeakage.from} -> ${topLeakage.to} loses ${topLeakage.lossCount} users`
-          : "No major leak yet",
-        href: topLeakage?.href ?? buildProductKpiHref({ days, tab: "Survey Questions" }),
-      },
-      {
-        label: "Scoring agreement",
-        value:
-          scoringAgreement == null
-            ? "Not enough scored submissions"
-            : `${scoringAgreement}% agreement`,
-        href: buildScorecardHref({ days, tab: "Scorecard" }),
-      },
-      {
-        label: "Case pressure",
-        value: `${highPriorityCases} high-priority cases can depress trust`,
-        href: buildGoalsHref({ status: "active", metricKey: "open_high_priority_cases" }),
-      },
-    ];
-  }
-
-  if (metricKey === "scored_count") {
-    return [
-      {
-        label: "Completed submissions",
-        value: `${stageValue(pipeline, "Survey Completed")} completions ready for scoring`,
-        href: buildFunnelsHref({ days, tab: "Conversion Funnel" }),
-      },
-      {
-        label: "Scoring agreement",
-        value:
-          scoringAgreement == null
-            ? "Engine comparison unavailable"
-            : `${scoringAgreement}% agreement`,
-        href: buildScorecardHref({ days, tab: "Scorecard" }),
-      },
-      {
-        label: "Current output",
-        value: currentValue == null ? "No score data yet" : `${currentValue} all-time scored rows`,
-        href: buildScorecardHref({ days, tab: "Scorecard" }),
-      },
-    ];
-  }
-
-  return [
-    {
-      label: "Queue pressure",
-      value: `${highPriorityCases} high-priority cases open`,
-      href: buildGoalsHref({ status: "active", metricKey: "open_high_priority_cases" }),
-    },
-    {
-      label: "Biggest leak",
-      value: topLeakage
-        ? `${topLeakage.lossRate}% lost at ${topLeakage.from} -> ${topLeakage.to}`
-        : "No leak signal yet",
-      href: topLeakage?.href ?? buildFunnelsHref({ days, tab: "Conversion Funnel" }),
-    },
-    {
-      label: "Best source",
-      value: topChannel
-        ? `${topChannel.source} converts at ${topChannel.conversionRate}%`
-        : "No source winner yet",
-      href: buildFunnelsHref({ days, tab: "Cohort Analysis", groupBy: "utm" }),
-    },
-  ];
-}
-
-export async function buildStrategySnapshot(inputDays: number) {
-  const days = clampDays(inputDays);
+// Phase 1 of buildStrategySnapshot: fire 19 parallel Supabase fetches +
+// forecast/benchmark helpers, parse each response at the type boundary, and
+// return a single named struct so the rest of the function can stop
+// indexing into a positional array.
+async function fetchStrategyData(days: number) {
   const now = new Date();
   const currentSince = shiftDays(now, -days).toISOString();
   const previousSince = shiftDays(now, -(days * 2)).toISOString();
@@ -450,39 +179,59 @@ export async function buildStrategySnapshot(inputDays: number) {
     throw new Error("strategy_snapshot_failed");
   }
 
-  const [
-    goals,
-    submissionsCurrent,
-    submissionsPrevious,
-    waitlistCurrent,
-    waitlistPrevious,
-    flaggedSubmissions,
-    scoringCurrentRaw,
-    scoringPreviousRaw,
-    investigations,
-    changelog,
-    annotations,
-    tags,
-    assignments,
-    adminNotes,
-    experiments,
-    decisionEntries,
-    decisionReviews,
-    predictiveInsights,
-    pipeline,
-    forecastSnapshot,
-    benchmarkDefinitions,
-  ] = await Promise.all([
-    ...responses.map((response) => response.json()),
+  // Parse Supabase responses + run the two helper promises in parallel, then
+  // type each destructured value at the boundary. The order MUST match the
+  // `responses` array (defined above as 19 fetches) plus the two trailing
+  // helpers. Downstream code can rely on these types without `as any` casts.
+  const parsedResponses = await Promise.all([
+    ...responses.map((response) => response.json() as Promise<unknown>),
     buildForecastSnapshot(days),
     loadBenchmarkDefinitions(),
   ]);
 
-  const scoringCurrent = (scoringCurrentRaw as any[]).map((row) => ({
+  return {
+    currentSince,
+    previousSince,
+    impactSince,
+    goals: parsedResponses[0] as StrategyGoalRow[],
+    submissionsCurrent: parsedResponses[1] as StrategySubmissionRow[],
+    submissionsPrevious: parsedResponses[2] as StrategySubmissionRow[],
+    waitlistCurrent: parsedResponses[3] as StrategyWaitlistRow[],
+    waitlistPrevious: parsedResponses[4] as StrategyWaitlistRow[],
+    flaggedSubmissions: parsedResponses[5] as StrategyFlaggedSubmissionRow[],
+    scoringCurrentRaw: parsedResponses[6] as StrategyScoringRowRaw[],
+    scoringPreviousRaw: parsedResponses[7] as StrategyScoringRowRaw[],
+    investigations: parsedResponses[8] as StrategyInvestigationRow[],
+    changelog: parsedResponses[9] as StrategyChangelogRow[],
+    annotations: parsedResponses[10] as StrategyAnnotationRow[],
+    tags: parsedResponses[11] as StrategyTagRow[],
+    assignments: parsedResponses[12] as StrategyTagAssignmentRow[],
+    adminNotes: parsedResponses[13] as StrategyAdminNoteRow[],
+    experiments: parsedResponses[14] as StrategyExperimentRow[],
+    decisionEntries: parsedResponses[15] as StrategyDecisionEntryRow[],
+    decisionReviews: parsedResponses[16] as StrategyDecisionReviewRow[],
+    predictiveInsights: parsedResponses[17],
+    pipeline: parsedResponses[18],
+    forecastSnapshot: parsedResponses[19] as Awaited<ReturnType<typeof buildForecastSnapshot>>,
+    benchmarkDefinitions: parsedResponses[20] as Awaited<
+      ReturnType<typeof loadBenchmarkDefinitions>
+    >,
+  };
+}
+
+type StrategyData = Awaited<ReturnType<typeof fetchStrategyData>>;
+type StrategyMetrics = ReturnType<typeof computeStrategyMetrics>;
+
+// Phase 2: derive scoring agreement, ambiguity, pipeline normalization, and
+// leakage from the raw fetched data. Pure function — no Supabase calls.
+function computeStrategyMetrics(data: StrategyData, days: number) {
+  const { scoringCurrentRaw, scoringPreviousRaw, pipeline, investigations } = data;
+
+  const scoringCurrent = scoringCurrentRaw.map((row) => ({
     ...row,
     survey_submission: normalizeSubmission(row.survey_submission),
   }));
-  const scoringPrevious = (scoringPreviousRaw as any[]).map((row) => ({
+  const scoringPrevious = scoringPreviousRaw.map((row) => ({
     ...row,
     survey_submission: normalizeSubmission(row.survey_submission),
   }));
@@ -516,14 +265,14 @@ export async function buildStrategySnapshot(inputDays: number) {
   });
   const normalizedPipeline = normalizeConversionPipeline(pipeline);
   const topChannel = [...normalizedPipeline.utmSources].sort(
-    (a: any, b: any) => b.conversionRate - a.conversionRate
+    (a, b) => b.conversionRate - a.conversionRate
   )[0];
-  const highPriorityCases = (investigations as any[]).filter(
+  const highPriorityCases = investigations.filter(
     (item) => item.status !== "closed" && item.priority === "high"
   ).length;
 
   const leakage = normalizedPipeline.conversionRates
-    .map((item: any) => {
+    .map((item) => {
       const from = stageValue(normalizedPipeline, item.from);
       const to = stageValue(normalizedPipeline, item.to);
       const pairKey = `${item.from}->${item.to}`;
@@ -545,53 +294,45 @@ export async function buildStrategySnapshot(inputDays: number) {
                 : "/admin/pipeline",
       };
     })
-    .filter((item: any) => item.lossCount > 0)
-    .sort((a: any, b: any) => b.lossCount - a.lossCount);
+    .filter((item) => item.lossCount > 0)
+    .sort((a, b) => b.lossCount - a.lossCount);
   const topLeakage = leakage[0];
 
-  const goalValues = await Promise.all(
-    (goals as any[]).map(async (goal) => ({
-      ...goal,
-      currentValue: await fetchMetricValue(goal.metric_key),
-    }))
-  );
+  return {
+    scoringCurrent,
+    scoringPrevious,
+    scoringAgreementCurrent,
+    scoringAgreementPrevious,
+    ambiguousCases,
+    normalizedPipeline,
+    topChannel,
+    highPriorityCases,
+    leakage,
+    topLeakage,
+  };
+}
 
-  const goalExplainers = goalValues.map((goal) => {
-    const progressPct =
-      goal.currentValue == null || goal.target_value <= 0
-        ? 0
-        : Math.min(100, round1((goal.currentValue / goal.target_value) * 100));
-    return {
-      id: goal.id,
-      label: goal.label,
-      metricKey: goal.metric_key,
-      metricLabel: metricLabel(goal.metric_key),
-      currentValue: goal.currentValue,
-      targetValue: goal.target_value,
-      progressPct,
-      deadline: goal.deadline,
-      status: progressPct >= 100 ? "on-track" : progressPct >= 70 ? "watch" : "off-track",
-      href: buildGoalsHref({ goalId: goal.id, metricKey: goal.metric_key, status: "active" }),
-      drivers: goalDrivers(
-        goal.metric_key,
-        days,
-        normalizedPipeline,
-        topChannel,
-        topLeakage,
-        highPriorityCases,
-        scoringAgreementCurrent,
-        goal.currentValue
-      ),
-    };
-  });
+// Phase 3: build the work-queue (investigations + flagged submissions +
+// scoring disagreements + ambiguous cases + admin notes + workflow-tagged
+// submissions) with workflow-stage breakdown. Pure function.
+function computeWorkQueue(data: StrategyData, metrics: StrategyMetrics) {
+  const { tags, assignments, investigations, flaggedSubmissions, adminNotes, currentSince } = data;
+  const { scoringCurrent, ambiguousCases } = metrics;
 
-  const tagById = new Map((tags as any[]).map((tag) => [tag.id, tag]));
+  const tagById = new Map(tags.map((tag) => [tag.id, tag]));
   const workflowStages = new Map(
     WORKFLOW_TAGS.map((tag) => [tag.name, { ...tag, submissionIds: new Set<number>() }])
   );
-  const workflowQueue: any[] = [];
+  const workflowQueue: Array<{
+    title: string;
+    detail: string;
+    priority: "high" | "medium" | "low";
+    type: string;
+    href: string;
+    updatedAt: string;
+  }> = [];
 
-  for (const assignment of assignments as any[]) {
+  for (const assignment of assignments) {
     const tag = tagById.get(assignment.tag_id);
     if (!tag || !isWorkflowTagName(tag.name)) continue;
     const stage = workflowStages.get(tag.name)!;
@@ -613,8 +354,8 @@ export async function buildStrategySnapshot(inputDays: number) {
     }
   }
 
-  const workQueueItems = [
-    ...(investigations as any[])
+  const items = [
+    ...investigations
       .filter((item) => item.status !== "closed")
       .map((item) => ({
         title: item.title,
@@ -626,7 +367,7 @@ export async function buildStrategySnapshot(inputDays: number) {
         href: item.submission_id ? `/admin/submissions/${item.submission_id}` : "/admin/tags",
         updatedAt: item.updated_at,
       })),
-    ...(flaggedSubmissions as any[]).slice(0, 8).map((item) => ({
+    ...flaggedSubmissions.slice(0, 8).map((item) => ({
       title: `Submission #${item.id} is flagged`,
       detail: "Manual review required in the submissions browser.",
       priority: "high",
@@ -636,11 +377,10 @@ export async function buildStrategySnapshot(inputDays: number) {
     })),
     ...scoringCurrent
       .filter(
-        (item: any) =>
-          item.v5_primary_archetype && item.primary_archetype !== item.v5_primary_archetype
+        (item) => item.v5_primary_archetype && item.primary_archetype !== item.v5_primary_archetype
       )
       .slice(0, 8)
-      .map((item: any) => ({
+      .map((item) => ({
         title: `Submission #${item.survey_submission_id} scoring disagreement`,
         detail: `${item.primary_archetype} vs ${item.v5_primary_archetype}`,
         priority: "medium",
@@ -648,7 +388,7 @@ export async function buildStrategySnapshot(inputDays: number) {
         href: `/admin/submissions/${item.survey_submission_id}`,
         updatedAt: item.survey_submission?.created_date_time ?? currentSince,
       })),
-    ...ambiguousCases.slice(0, 6).map((item: any) => ({
+    ...ambiguousCases.slice(0, 6).map((item) => ({
       title: `Submission #${item.survey_submission_id} is ambiguous`,
       detail: "Tight scoring gap between top candidates requires review.",
       priority: "medium",
@@ -656,7 +396,7 @@ export async function buildStrategySnapshot(inputDays: number) {
       href: "/admin/scoring",
       updatedAt: item.survey_submission?.created_date_time ?? currentSince,
     })),
-    ...(adminNotes as any[]).slice(0, 6).map((item) => ({
+    ...adminNotes.slice(0, 6).map((item) => ({
       title: `Recent note on submission #${item.submission_id}`,
       detail: `${item.admin_email}: ${String(item.content).slice(0, 90)}`,
       priority: "low",
@@ -667,29 +407,41 @@ export async function buildStrategySnapshot(inputDays: number) {
     ...workflowQueue,
   ]
     .sort(
-      (a: any, b: any) =>
+      (a, b) =>
         priorityWeight(a.priority) - priorityWeight(b.priority) ||
         new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
     )
     .slice(0, 20);
 
-  const submissionsForImpact = [
-    ...(submissionsPrevious as any[]),
-    ...(submissionsCurrent as any[]),
-  ];
-  const waitlistForImpact = [...(waitlistPrevious as any[]), ...(waitlistCurrent as any[])];
-  const releaseImpactEntries = (changelog as any[]).slice(0, 8).map((entry) => {
+  return { workflowStages, items };
+}
+
+// Phase 4: derive release-impact entries from the changelog by sliding a
+// ±7d window over submission + waitlist counts and completion-rate deltas
+// around each event date. Pure function.
+function computeReleaseImpact(data: StrategyData) {
+  const {
+    changelog,
+    annotations,
+    submissionsCurrent,
+    submissionsPrevious,
+    waitlistCurrent,
+    waitlistPrevious,
+  } = data;
+  const submissionsForImpact = [...submissionsPrevious, ...submissionsCurrent];
+  const waitlistForImpact = [...waitlistPrevious, ...waitlistCurrent];
+  return changelog.slice(0, 8).map((entry) => {
     const eventStart = new Date(`${entry.event_date}T00:00:00.000Z`);
     const preStart = shiftDays(eventStart, -7).toISOString();
     const postEnd = shiftDays(eventStart, 7).toISOString();
     const eventIso = eventStart.toISOString();
     const preSubmissions = countInRange(submissionsForImpact, preStart, eventIso);
     const postSubmissions = countInRange(submissionsForImpact, eventIso, postEnd);
-    const preCompletion = completionInRange(submissionsForImpact as any[], preStart, eventIso);
-    const postCompletion = completionInRange(submissionsForImpact as any[], eventIso, postEnd);
+    const preCompletion = completionInRange(submissionsForImpact, preStart, eventIso);
+    const postCompletion = completionInRange(submissionsForImpact, eventIso, postEnd);
     const preWaitlist = countInRange(waitlistForImpact, preStart, eventIso);
     const postWaitlist = countInRange(waitlistForImpact, eventIso, postEnd);
-    const linkedChartCount = (annotations as any[]).filter(
+    const linkedChartCount = annotations.filter(
       (annotation) => annotation.annotation_date === entry.event_date
     ).length;
     const notes: string[] = [];
@@ -718,20 +470,26 @@ export async function buildStrategySnapshot(inputDays: number) {
       href: "/admin/changelog",
     };
   });
+}
 
+// Phase 5: build the per-archetype momentum table — current count, previous
+// count, delta, trend direction. Returns the raw maps too so the orchestrator
+// can re-use them for the archetype leaderboard.
+function computeArchetypeMomentum(metrics: StrategyMetrics) {
+  const { scoringCurrent, scoringPrevious } = metrics;
   const archetypeCurrent = new Map<string, number>();
   const archetypePrevious = new Map<string, number>();
-  for (const row of scoringCurrent as any[]) {
+  for (const row of scoringCurrent) {
     const archetype = row.primary_archetype;
     if (!archetype) continue;
     archetypeCurrent.set(archetype, (archetypeCurrent.get(archetype) ?? 0) + 1);
   }
-  for (const row of scoringPrevious as any[]) {
+  for (const row of scoringPrevious) {
     const archetype = row.primary_archetype;
     if (!archetype) continue;
     archetypePrevious.set(archetype, (archetypePrevious.get(archetype) ?? 0) + 1);
   }
-  const archetypeMomentum = [...archetypeCurrent.entries()]
+  const momentum = [...archetypeCurrent.entries()]
     .map(([archetype, currentCount]) => {
       const previousCount = archetypePrevious.get(archetype) ?? 0;
       const deltaValue = currentCount - previousCount;
@@ -746,10 +504,19 @@ export async function buildStrategySnapshot(inputDays: number) {
     })
     .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
     .slice(0, 8);
+  return { archetypeCurrent, archetypePrevious, momentum };
+}
 
-  const opportunityFormula = "45% impact + 25% confidence + 15% effort + 15% time-to-signal";
-  const opportunityBacklog = [
-    ...(predictiveInsights as any[]).map((insight) => {
+const OPPORTUNITY_FORMULA = "45% impact + 25% confidence + 15% effort + 15% time-to-signal";
+type ReleaseImpactEntry = ReturnType<typeof computeReleaseImpact>[number];
+
+// Phase 6: rank the opportunity backlog. Sources: predictive-insight rows
+// from get_predictive_insights and release-impact entries with negative
+// completion or submission deltas. Each item is scored on a
+// 45/25/15/15 impact/confidence/effort/time-to-signal weighting.
+function computeOpportunityBacklog(data: StrategyData, releaseImpactEntries: ReleaseImpactEntry[]) {
+  return [
+    ...(data.predictiveInsights as StrategyPredictiveInsightRow[]).map((insight) => {
       const confidence = insight.confidence as "high" | "medium" | "low";
       const effort =
         insight.type === "utm_conversion" ||
@@ -797,7 +564,7 @@ export async function buildStrategySnapshot(inputDays: number) {
           confidence: confidenceScore,
           effort: effortScore,
           timeToSignal: timeScore,
-          formula: opportunityFormula,
+          formula: OPPORTUNITY_FORMULA,
         },
         href:
           insight.type === "utm_conversion"
@@ -843,19 +610,102 @@ export async function buildStrategySnapshot(inputDays: number) {
             confidence: confidenceScore,
             effort: effortScore,
             timeToSignal: timeScore,
-            formula: opportunityFormula,
+            formula: OPPORTUNITY_FORMULA,
           },
           href: entry.href,
         };
       }),
   ]
-    .sort((a: any, b: any) => b.score - a.score)
+    .sort((a, b) => b.score - a.score)
     .slice(0, 10);
+}
 
-  const benchmarks = benchmarkDefinitions.map((benchmark: any) => {
+export async function buildStrategySnapshot(inputDays: number) {
+  const days = clampDays(inputDays);
+  const data = await fetchStrategyData(days);
+  const {
+    goals,
+    submissionsCurrent,
+    submissionsPrevious,
+    waitlistCurrent,
+    waitlistPrevious,
+    flaggedSubmissions,
+    investigations,
+    changelog,
+    annotations,
+    adminNotes,
+    experiments,
+    decisionEntries,
+    decisionReviews,
+    predictiveInsights,
+    forecastSnapshot,
+    benchmarkDefinitions,
+  } = data;
+
+  const metrics = computeStrategyMetrics(data, days);
+  const {
+    scoringCurrent,
+    scoringPrevious,
+    scoringAgreementCurrent,
+    scoringAgreementPrevious,
+    ambiguousCases,
+    normalizedPipeline,
+    topChannel,
+    highPriorityCases,
+    leakage,
+    topLeakage,
+  } = metrics;
+
+  const goalValues = await Promise.all(
+    goals.map(async (goal) => ({
+      ...goal,
+      currentValue: await fetchMetricValue(goal.metric_key),
+    }))
+  );
+
+  const goalExplainers = goalValues.map((goal) => {
+    const progressPct =
+      goal.currentValue == null || goal.target_value <= 0
+        ? 0
+        : Math.min(100, round1((goal.currentValue / goal.target_value) * 100));
+    return {
+      id: goal.id,
+      label: goal.label,
+      metricKey: goal.metric_key,
+      metricLabel: metricLabel(goal.metric_key),
+      currentValue: goal.currentValue,
+      targetValue: goal.target_value,
+      progressPct,
+      deadline: goal.deadline,
+      status: progressPct >= 100 ? "on-track" : progressPct >= 70 ? "watch" : "off-track",
+      href: buildGoalsHref({ goalId: goal.id, metricKey: goal.metric_key, status: "active" }),
+      drivers: goalDrivers(
+        goal.metric_key,
+        days,
+        normalizedPipeline,
+        topChannel,
+        topLeakage,
+        highPriorityCases,
+        scoringAgreementCurrent,
+        goal.currentValue
+      ),
+    };
+  });
+
+  const { workflowStages, items: workQueueItems } = computeWorkQueue(data, metrics);
+  const releaseImpactEntries = computeReleaseImpact(data);
+  const {
+    archetypeCurrent,
+    archetypePrevious,
+    momentum: archetypeMomentum,
+  } = computeArchetypeMomentum(metrics);
+
+  const opportunityBacklog = computeOpportunityBacklog(data, releaseImpactEntries);
+
+  const benchmarks = benchmarkDefinitions.map((benchmark) => {
     const currentValue =
       benchmark.key === "completion_rate"
-        ? completionRate(submissionsCurrent as any[])
+        ? completionRate(submissionsCurrent)
         : benchmark.key === "waitlist_to_start_rate"
           ? stageValue(normalizedPipeline, "Waitlist Signups") > 0
             ? round1(
@@ -867,7 +717,7 @@ export async function buildStrategySnapshot(inputDays: number) {
           : benchmark.key === "scoring_agreement"
             ? scoringAgreementCurrent
             : benchmark.key === "avg_duration_minutes"
-              ? durationMinutes(submissionsCurrent as any[])
+              ? durationMinutes(submissionsCurrent)
               : highPriorityCases;
 
     return {
@@ -888,36 +738,34 @@ export async function buildStrategySnapshot(inputDays: number) {
     {
       key: "waitlist_signups",
       label: "Demand",
-      delta: delta((waitlistCurrent as any[]).length, (waitlistPrevious as any[]).length),
+      delta: delta(waitlistCurrent.length, waitlistPrevious.length),
       description: "Top-of-funnel demand entering the system",
       href: buildFunnelsHref({ days, tab: "Conversion Funnel" }),
-      displayValue: String((waitlistCurrent as any[]).length),
+      displayValue: String(waitlistCurrent.length),
     },
     {
       key: "total_submissions",
       label: "Starts",
-      delta: delta((submissionsCurrent as any[]).length, (submissionsPrevious as any[]).length),
+      delta: delta(submissionsCurrent.length, submissionsPrevious.length),
       description: "Users who actually started the survey",
       href: buildFunnelsHref({ days, tab: "Conversion Funnel" }),
-      displayValue: String((submissionsCurrent as any[]).length),
+      displayValue: String(submissionsCurrent.length),
     },
     {
       key: "completion_rate",
       label: "Completion",
-      delta: round1(
-        completionRate(submissionsCurrent as any[]) - completionRate(submissionsPrevious as any[])
-      ),
+      delta: round1(completionRate(submissionsCurrent) - completionRate(submissionsPrevious)),
       description: "Share of starts that finish",
       href: buildProductKpiHref({ days, tab: "Survey Chapters" }),
-      displayValue: `${completionRate(submissionsCurrent as any[])}%`,
+      displayValue: `${completionRate(submissionsCurrent)}%`,
     },
     {
       key: "scored_count",
       label: "Scored",
-      delta: delta((scoringCurrent as any[]).length, (scoringPrevious as any[]).length),
+      delta: delta(scoringCurrent.length, scoringPrevious.length),
       description: "Outputs entering the scoring layer",
       href: buildScorecardHref({ days, tab: "Scorecard" }),
-      displayValue: String((scoringCurrent as any[]).length),
+      displayValue: String(scoringCurrent.length),
     },
     {
       key: "scoring_agreement",
@@ -957,7 +805,7 @@ export async function buildStrategySnapshot(inputDays: number) {
               },
               {
                 label: "Forecast",
-                value: `${forecastSnapshot.modules.find((item: any) => item.key === "completion_rate")?.forecastValue ?? 0}% next`,
+                value: `${forecastSnapshot.modules.find((item) => item.key === "completion_rate")?.forecastValue ?? 0}% next`,
                 href: buildProductKpiHref({ days, tab: "Survey Chapters" }),
               },
             ]
@@ -970,7 +818,7 @@ export async function buildStrategySnapshot(inputDays: number) {
               {
                 label: "Forecast",
                 value: String(
-                  forecastSnapshot.modules.find((item: any) => item.key === "submissions")
+                  forecastSnapshot.modules.find((item) => item.key === "submissions")
                     ?.forecastValue ?? 0
                 ),
                 href: buildFunnelsHref({ days, tab: "Conversion Funnel" }),
@@ -985,7 +833,7 @@ export async function buildStrategySnapshot(inputDays: number) {
       drivers: [
         {
           label: "Waitlist signups",
-          value: `${(waitlistCurrent as any[]).length}`,
+          value: `${waitlistCurrent.length}`,
           href: buildFunnelsHref({ days, tab: "Conversion Funnel" }),
         },
         {
@@ -1001,7 +849,7 @@ export async function buildStrategySnapshot(inputDays: number) {
       drivers: [
         {
           label: "Starts",
-          value: `${(submissionsCurrent as any[]).length}`,
+          value: `${submissionsCurrent.length}`,
           href: buildFunnelsHref({ days, tab: "Conversion Funnel" }),
         },
         {
@@ -1017,7 +865,7 @@ export async function buildStrategySnapshot(inputDays: number) {
       drivers: [
         {
           label: "Scored",
-          value: `${(scoringCurrent as any[]).length}`,
+          value: `${scoringCurrent.length}`,
           href: buildScorecardHref({ days, tab: "Scorecard" }),
         },
         {
@@ -1031,8 +879,8 @@ export async function buildStrategySnapshot(inputDays: number) {
       label: "Commercial Value",
       href: "/admin/revenue",
       drivers: forecastSnapshot.modules
-        .filter((item: any) => item.key === "report_views" || item.key === "revenue")
-        .map((item: any) => ({
+        .filter((item) => item.key === "report_views" || item.key === "revenue")
+        .map((item) => ({
           label: item.label,
           value: `${item.forecastValue}`,
           href: item.href,
@@ -1067,24 +915,24 @@ export async function buildStrategySnapshot(inputDays: number) {
       `${archetypeMomentum[0].archetype} shows the strongest current archetype movement (${archetypeMomentum[0].delta >= 0 ? "+" : ""}${archetypeMomentum[0].delta} vs previous window).`
     );
   }
-  if ((experiments as any[]).some((item) => item.status === "active")) {
+  if (experiments.some((item) => item.status === "active")) {
     narrative.push(
-      `${(experiments as any[]).filter((item) => item.status === "active").length} experiment(s) are currently active in the registry.`
+      `${experiments.filter((item) => item.status === "active").length} experiment(s) are currently active in the registry.`
     );
   }
 
   const guardrails = [
     {
       label: "Completion",
-      current: completionRate(submissionsCurrent as any[]),
+      current: completionRate(submissionsCurrent),
       target: 65,
       status:
-        completionRate(submissionsCurrent as any[]) >= 65
+        completionRate(submissionsCurrent) >= 65
           ? "good"
-          : completionRate(submissionsCurrent as any[]) >= 50
+          : completionRate(submissionsCurrent) >= 50
             ? "watch"
             : "risk",
-      detail: `${(submissionsCurrent as any[]).filter((row) => row.status === "completed").length}/${(submissionsCurrent as any[]).length} starts completed`,
+      detail: `${submissionsCurrent.filter((row) => row.status === "completed").length}/${submissionsCurrent.length} starts completed`,
       href: buildProductKpiHref({ days, tab: "Survey Chapters" }),
     },
     {
@@ -1145,18 +993,17 @@ export async function buildStrategySnapshot(inputDays: number) {
         }
       : null,
     scoringCurrent.some(
-      (item: any) =>
-        item.v5_primary_archetype && item.primary_archetype !== item.v5_primary_archetype
+      (item) => item.v5_primary_archetype && item.primary_archetype !== item.v5_primary_archetype
     )
       ? {
           title: "Scoring disagreement pressure is rising",
           cause: "scoring-mismatch",
           confidence: "medium" as const,
-          evidence: `${(scoringCurrent as any[]).filter((item) => item.v5_primary_archetype && item.primary_archetype !== item.v5_primary_archetype).length} disagreements in the current window.`,
+          evidence: `${scoringCurrent.filter((item) => item.v5_primary_archetype && item.primary_archetype !== item.v5_primary_archetype).length} disagreements in the current window.`,
           href: "/admin/scoring",
         }
       : null,
-  ].filter(Boolean);
+  ].filter((item): item is NonNullable<typeof item> => item !== null);
 
   const analystBriefs = [
     {
@@ -1403,7 +1250,7 @@ export async function buildStrategySnapshot(inputDays: number) {
         topLeakage
           ? `${topLeakage.lossCount} users are currently lost in the top leak path.`
           : "Leakage is not concentrated in one dominant handoff.",
-        `${(experiments as any[]).filter((item) => item.status === "active").length} experiments are active in the registry.`,
+        `${experiments.filter((item) => item.status === "active").length} experiments are active in the registry.`,
         `${decisionReviewSummary.awaitingOutcome} logged decisions still need measured product outcomes.`,
       ],
       actions: [
@@ -1424,7 +1271,7 @@ export async function buildStrategySnapshot(inputDays: number) {
         ? `${topOpportunity.title} is currently the highest-leverage scored growth move on the backlog.`
         : "No scored growth move is leading the backlog yet.",
       bullets: [
-        `${(waitlistCurrent as any[]).length} demand events landed in the current window.`,
+        `${waitlistCurrent.length} demand events landed in the current window.`,
         topOpportunity
           ? `Time-to-signal is ${topOpportunity.timeToSignal}, effort is ${topOpportunity.effort}.`
           : "Opportunity scoring inputs will show effort and time-to-signal once backlog items exist.",
@@ -1486,21 +1333,21 @@ export async function buildStrategySnapshot(inputDays: number) {
     benchmarks,
     workQueue: {
       summary: {
-        openCases: (investigations as any[]).filter((item) => item.status !== "closed").length,
-        overdueCases: (investigations as any[]).filter(
+        openCases: investigations.filter((item) => item.status !== "closed").length,
+        overdueCases: investigations.filter(
           (item) =>
             item.status !== "closed" &&
             item.due_date != null &&
             item.due_date < new Date().toISOString().slice(0, 10)
         ).length,
         highPriorityCases,
-        flaggedSubmissions: (flaggedSubmissions as any[]).length,
-        scoringDisagreements: (scoringCurrent as any[]).filter(
+        flaggedSubmissions: flaggedSubmissions.length,
+        scoringDisagreements: scoringCurrent.filter(
           (item) =>
             item.v5_primary_archetype && item.primary_archetype !== item.v5_primary_archetype
         ).length,
         ambiguousCases: ambiguousCases.length,
-        recentNotes: (adminNotes as any[]).length,
+        recentNotes: adminNotes.length,
         workflowCoverage: new Set(
           [...workflowStages.values()].flatMap((stage) => [...stage.submissionIds])
         ).size,
@@ -1509,7 +1356,7 @@ export async function buildStrategySnapshot(inputDays: number) {
     },
     releaseImpact: {
       entries: releaseImpactEntries,
-      annotations: (annotations as any[]).slice(0, 12).map((annotation) => ({
+      annotations: annotations.slice(0, 12).map((annotation) => ({
         id: annotation.id,
         chartKey: annotation.chart_key,
         annotationDate: annotation.annotation_date,
@@ -1522,7 +1369,7 @@ export async function buildStrategySnapshot(inputDays: number) {
       archetypeMomentum,
       leaderboards: {
         channels: [...normalizedPipeline.utmSources]
-          .sort((a: any, b: any) => b.conversionRate - a.conversionRate)
+          .sort((a, b) => b.conversionRate - a.conversionRate)
           .slice(0, 8),
         archetypes: [...archetypeCurrent.entries()]
           .map(([archetype, count]) => ({
@@ -1547,16 +1394,16 @@ export async function buildStrategySnapshot(inputDays: number) {
     },
     experiments: {
       summary: {
-        total: (experiments as any[]).length,
-        active: (experiments as any[]).filter((item) => item.status === "active").length,
-        pendingDecision: (experiments as any[]).filter(
+        total: experiments.length,
+        active: experiments.filter((item) => item.status === "active").length,
+        pendingDecision: experiments.filter(
           (item) =>
             item.decision_date != null &&
             item.decision_date <= new Date().toISOString().slice(0, 10) &&
             item.status !== "archived"
         ).length,
       },
-      items: (experiments as any[]).slice(0, 8).map((item) => ({
+      items: experiments.slice(0, 8).map((item) => ({
         id: item.id,
         name: item.name,
         status: item.status,

@@ -123,7 +123,7 @@ export const reportThemes: Record<string, ReportTheme> = {
     riskSegments: 1,
     confidence: "Moderate",
     confidenceSegments: 2,
-    iconFit: reportArchetypeIconFits["Sensual Connector"],
+    iconFit: reportArchetypeIconFits["Sensual Connector"]!,
     Icon: HeartIcon,
   }),
   "Spark Seeker": makeTheme({
@@ -140,7 +140,7 @@ export const reportThemes: Record<string, ReportTheme> = {
     riskSegments: 3,
     confidence: "High",
     confidenceSegments: 3,
-    iconFit: reportArchetypeIconFits["Spark Seeker"],
+    iconFit: reportArchetypeIconFits["Spark Seeker"]!,
     Icon: SparklesIcon,
   }),
   "Relational Nurturer": makeTheme({
@@ -157,7 +157,7 @@ export const reportThemes: Record<string, ReportTheme> = {
     riskSegments: 1,
     confidence: "Moderate",
     confidenceSegments: 2,
-    iconFit: reportArchetypeIconFits["Relational Nurturer"],
+    iconFit: reportArchetypeIconFits["Relational Nurturer"]!,
     Icon: SproutIcon,
   }),
   "Exhibitionist Performer": makeTheme({
@@ -174,7 +174,7 @@ export const reportThemes: Record<string, ReportTheme> = {
     riskSegments: 3,
     confidence: "High",
     confidenceSegments: 3,
-    iconFit: reportArchetypeIconFits["Exhibitionist Performer"],
+    iconFit: reportArchetypeIconFits["Exhibitionist Performer"]!,
     Icon: SpotlightIcon,
   }),
   "Explorer of Edges": makeTheme({
@@ -191,7 +191,7 @@ export const reportThemes: Record<string, ReportTheme> = {
     riskSegments: 3,
     confidence: "High",
     confidenceSegments: 3,
-    iconFit: reportArchetypeIconFits["Explorer of Edges"],
+    iconFit: reportArchetypeIconFits["Explorer of Edges"]!,
     Icon: TargetIcon,
   }),
   "Curious Apprentice": makeTheme({
@@ -208,7 +208,7 @@ export const reportThemes: Record<string, ReportTheme> = {
     riskSegments: 2,
     confidence: "Moderate",
     confidenceSegments: 2,
-    iconFit: reportArchetypeIconFits["Curious Apprentice"],
+    iconFit: reportArchetypeIconFits["Curious Apprentice"]!,
     Icon: CuriousApprenticeIcon,
   }),
   "Spiritual Lover": makeTheme({
@@ -225,7 +225,7 @@ export const reportThemes: Record<string, ReportTheme> = {
     riskSegments: 1,
     confidence: "Moderate",
     confidenceSegments: 2,
-    iconFit: reportArchetypeIconFits["Spiritual Lover"],
+    iconFit: reportArchetypeIconFits["Spiritual Lover"]!,
     Icon: LeafIcon,
   }),
   "Minimalist Companion": makeTheme({
@@ -242,7 +242,7 @@ export const reportThemes: Record<string, ReportTheme> = {
     riskSegments: 1,
     confidence: "Low",
     confidenceSegments: 1,
-    iconFit: reportArchetypeIconFits["Minimalist Companion"],
+    iconFit: reportArchetypeIconFits["Minimalist Companion"]!,
     Icon: DotsIcon,
   }),
   "Emotional Voyeur": makeTheme({
@@ -259,7 +259,7 @@ export const reportThemes: Record<string, ReportTheme> = {
     riskSegments: 1,
     confidence: "Low",
     confidenceSegments: 1,
-    iconFit: reportArchetypeIconFits["Emotional Voyeur"],
+    iconFit: reportArchetypeIconFits["Emotional Voyeur"]!,
     Icon: MirrorIcon,
   }),
   "Power Orchestrator": makeTheme({
@@ -276,7 +276,7 @@ export const reportThemes: Record<string, ReportTheme> = {
     riskSegments: 3,
     confidence: "High",
     confidenceSegments: 3,
-    iconFit: reportArchetypeIconFits["Power Orchestrator"],
+    iconFit: reportArchetypeIconFits["Power Orchestrator"]!,
     Icon: GridIcon,
   }),
   "Loyal Ritualist": makeTheme({
@@ -293,7 +293,7 @@ export const reportThemes: Record<string, ReportTheme> = {
     riskSegments: 1,
     confidence: "Moderate",
     confidenceSegments: 2,
-    iconFit: reportArchetypeIconFits["Loyal Ritualist"],
+    iconFit: reportArchetypeIconFits["Loyal Ritualist"]!,
     Icon: RepeatIcon,
   }),
   "Approval Seeker": makeTheme({
@@ -310,7 +310,7 @@ export const reportThemes: Record<string, ReportTheme> = {
     riskSegments: 1,
     confidence: "Low",
     confidenceSegments: 1,
-    iconFit: reportArchetypeIconFits["Approval Seeker"],
+    iconFit: reportArchetypeIconFits["Approval Seeker"]!,
     Icon: ThumbsUpIcon,
   }),
   "Analytical Sexualist": makeTheme({
@@ -327,7 +327,7 @@ export const reportThemes: Record<string, ReportTheme> = {
     riskSegments: 2,
     confidence: "Moderate",
     confidenceSegments: 2,
-    iconFit: reportArchetypeIconFits["Analytical Sexualist"],
+    iconFit: reportArchetypeIconFits["Analytical Sexualist"]!,
     Icon: AnalyticalSexualistIcon,
   }),
   "Quiet Withdrawer": makeTheme({
@@ -344,14 +344,16 @@ export const reportThemes: Record<string, ReportTheme> = {
     riskSegments: 1,
     confidence: "Low",
     confidenceSegments: 1,
-    iconFit: reportArchetypeIconFits["Quiet Withdrawer"],
+    iconFit: reportArchetypeIconFits["Quiet Withdrawer"]!,
     Icon: FadeIcon,
   }),
 };
 
-const fallbackTheme = reportThemes["Spark Seeker"];
+// "Spark Seeker" is statically defined in `reportThemes` above; the non-null
+// assertion is safe and lets `getReportTheme` always return a defined theme.
+const fallbackTheme = reportThemes["Spark Seeker"]!;
 
-export function getReportTheme(archetype: string) {
+export function getReportTheme(archetype: string): ReportTheme {
   return reportThemes[archetype] ?? fallbackTheme;
 }
 

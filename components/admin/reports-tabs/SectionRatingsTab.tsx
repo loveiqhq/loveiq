@@ -31,7 +31,7 @@ const columns: Column<SectionRating>[] = [
     sortable: false,
     format: (v) => {
       const comments = v as unknown as string[];
-      return comments.length > 0 ? comments[0].slice(0, 80) : "—";
+      return comments.length > 0 ? comments[0]!.slice(0, 80) : "—";
     },
   },
 ];

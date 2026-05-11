@@ -20,8 +20,9 @@ function topGap(values: Record<string, number> | null | undefined): number | nul
     .filter((value) => Number.isFinite(value))
     .sort((a, b) => b - a);
   if (sorted.length === 0) return null;
-  if (sorted.length === 1) return Math.round(sorted[0] * 10) / 10;
-  return Math.round((sorted[0] - sorted[1]) * 10) / 10;
+  // Length-guarded accesses are safe.
+  if (sorted.length === 1) return Math.round(sorted[0]! * 10) / 10;
+  return Math.round((sorted[0]! - sorted[1]!) * 10) / 10;
 }
 
 function matchesTextQuery(row: { email: string; first_name: string }, query: string) {

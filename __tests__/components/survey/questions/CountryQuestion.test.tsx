@@ -26,17 +26,17 @@ vi.mock("@/data/countries", () => {
 Element.prototype.scrollIntoView = vi.fn();
 
 import CountryQuestion from "@/components/survey/questions/CountryQuestion";
+import { makeSurveyQuestion } from "@/__tests__/__fixtures__/survey";
 
-const QUESTION = {
+const QUESTION = makeSurveyQuestion({
   qId: "q_country",
   cId: 1,
   chapter: "Background",
   question: "Where are you from?",
-  answerType: "country" as const,
+  answerType: "country",
   options: [],
   required: false,
-  guide: "",
-};
+});
 
 afterEach(cleanup);
 

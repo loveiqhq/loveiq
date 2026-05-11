@@ -285,8 +285,8 @@ const S03PerfectFor: FC = () => {
             handleDragEnd();
             setIsPaused(false);
           }}
-          onTouchStart={(e) => handleDragStart(e.touches[0].clientX, e.touches[0].clientY)}
-          onTouchMove={(e) => handleDragMove(e.touches[0].clientX, e.touches[0].clientY, e)}
+          onTouchStart={(e) => handleDragStart(e.touches[0]!.clientX, e.touches[0]!.clientY)}
+          onTouchMove={(e) => handleDragMove(e.touches[0]!.clientX, e.touches[0]!.clientY, e)}
           onTouchEnd={handleDragEnd}
           onMouseEnter={() => setIsPaused(true)}
         >

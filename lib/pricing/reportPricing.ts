@@ -591,7 +591,8 @@ function pickBucket(plan: ReportPurchasePlanId, personalReportId: number): Prici
     }
   }
   // Weights sum to 100; the loop always returns, but fall through defensively.
-  return buckets[buckets.length - 1];
+  // Callers only pass non-empty `buckets`, so the final index is defined.
+  return buckets[buckets.length - 1]!;
 }
 
 function bucketFromCode(

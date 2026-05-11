@@ -340,6 +340,19 @@ describe("DELETE /api/admin/submissions/[id]", () => {
     expect(json.error).toBe("Unable to delete.");
   });
 
+  it("returns 429 when rate-limited", async () => {
+    mockCheckRateLimit.mockResolvedValue({ allowed: false, remaining: 0, resetAt: new Date() });
+    const res = await DELETE(makeDeleteRequest("1"), makeParams("1"));
+    expect(res.status).toBe(429);
+    expect(mockSupabaseFetch).not.toHaveBeenCalled();
+  });
+
+  it("returns 403 for viewer role (delete requires admin)", async () => {
+    mockVerifyAdminSession.mockResolvedValue({ email: "v@test.com", role: "viewer" });
+    const res = await DELETE(makeDeleteRequest("1"), makeParams("1"));
+    expect(res.status).toBe(403);
+  });
+
   it("returns 200 on successful cascade delete", async () => {
     // Report check → no reports
     mockSupabaseFetch.mockResolvedValueOnce({ ok: true, json: async () => [] });

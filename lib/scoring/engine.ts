@@ -49,14 +49,16 @@ export function scale1_7to0_1(x: unknown): number | null {
 
 export function softmax(scores: Record<string, number>, temperature = 1.0): Record<string, number> {
   const keys = Object.keys(scores);
-  const vals = keys.map((k) => scores[k] / Math.max(temperature, 1e-9));
+  // `keys` is taken from `scores`, so `scores[k]` is always defined.
+  const vals = keys.map((k) => scores[k]! / Math.max(temperature, 1e-9));
   const m = Math.max(...vals);
   const exps = vals.map((v) => Math.exp(v - m));
   const z = exps.reduce((a, b) => a + b, 0) || 1.0;
 
   const out: Record<string, number> = {};
   keys.forEach((k, i) => {
-    out[k] = exps[i] / z;
+    // `exps[i]` is defined because we iterate `keys` and `exps` was built from the same map.
+    out[k] = exps[i]! / z;
   });
   return out;
 }
@@ -118,7 +120,7 @@ function canonicalizeQid(rawQid: string, knownQids: Set<string>): string {
     if (knownQids.has(padded)) return padded;
 
     const matches = [...knownQids].filter((k) => k.endsWith(qid));
-    if (matches.length === 1) return matches[0];
+    if (matches.length === 1) return matches[0]!;
   }
 
   return qid;
@@ -262,20 +264,23 @@ function applyBoostsNonCentered(
 
   for (const [qid, answerCodes] of pairsByQuestion) {
     if (config.multiselectScoringQuestions.has(qid) && answerCodes.length > 1) {
-      // Multiselect MAX: per-archetype MAX across selected answer-code boosts
+      // Multiselect MAX: per-archetype MAX across selected answer-code boosts.
+      // `maxBoost` is initialised for every archetype, and `rule.archetype` is
+      // always one of those archetypes (the boost rules reference the same set).
       const maxBoost: Record<string, number> = {};
       for (const a of config.archetypes) maxBoost[a] = 0;
       for (const ac of answerCodes) {
         for (const rule of config.boosts.get(`${qid}||${ac}`) || []) {
-          maxBoost[rule.archetype] = Math.max(maxBoost[rule.archetype], rule.scoreAdd);
+          maxBoost[rule.archetype] = Math.max(maxBoost[rule.archetype]!, rule.scoreAdd);
         }
       }
-      for (const a of config.archetypes) scores[a] += maxBoost[a];
+      // `scores` is keyed by every archetype upstream; `a` is one of them.
+      for (const a of config.archetypes) scores[a] = (scores[a] ?? 0) + maxBoost[a]!;
     } else {
       // Single-select or non-multiselect: apply each boost directly
       for (const ac of answerCodes) {
         for (const rule of config.boosts.get(`${qid}||${ac}`) || []) {
-          scores[rule.archetype] += rule.scoreAdd;
+          scores[rule.archetype] = (scores[rule.archetype] ?? 0) + rule.scoreAdd;
         }
       }
     }
@@ -324,13 +329,16 @@ function computeV5Scores(
 ): V5ScoringResult {
   const archetypes = config.archetypes;
 
-  // Step 6 (V5): Base similarity — recompute independently from V4
+  // Step 6 (V5): Base similarity — recompute independently from V4.
+  // `dimId` is taken from `Object.keys(weightsFinal)`, so `weightsFinal[dimId]`
+  // and `uDimensions[dimId]` (which shares the same key set, built in Step 4)
+  // are both always defined.
   const rawTotal: Record<string, number> = {};
   for (const archetype of archetypes) {
     let s = 0.0;
     for (const dimId of Object.keys(weightsFinal)) {
       const p = config.prototypes.get(`${archetype}||${dimId}`) ?? 0.5;
-      s += weightsFinal[dimId] * (1 - Math.abs(uDimensions[dimId] - p));
+      s += weightsFinal[dimId]! * (1 - Math.abs((uDimensions[dimId] ?? 0.5) - p));
     }
     rawTotal[archetype] = s;
   }
@@ -345,7 +353,8 @@ function computeV5Scores(
     else if (gate.operator === "<") passes = val < gate.value;
     else if (gate.operator === "==") passes = val === gate.value;
     if (!passes) {
-      rawTotal[gate.archetype] += gate.scoreAdjustmentIfFail;
+      // gate.archetype is one of `archetypes`, which initialised `rawTotal` above.
+      rawTotal[gate.archetype] = (rawTotal[gate.archetype] ?? 0) + gate.scoreAdjustmentIfFail;
     }
   }
 
@@ -355,7 +364,8 @@ function computeV5Scores(
   // Step 8.5 (V5): Optional per-archetype categorical intercept correction
   if (config.v5CategoricalInterceptEnabled) {
     for (const archetype of archetypes) {
-      rawTotal[archetype] -= config.v5CategoricalInterceptByArchetype[archetype] ?? 0.0;
+      rawTotal[archetype] =
+        (rawTotal[archetype] ?? 0) - (config.v5CategoricalInterceptByArchetype[archetype] ?? 0.0);
     }
   }
 
@@ -370,7 +380,8 @@ function computeV5Scores(
       rawMax = 0;
     for (const dimId of Object.keys(weightsFinal)) {
       const helper = config.v5Helpers.get(`${archetype}||${dimId}`);
-      const adjW = weightsFinal[dimId];
+      // dimId is taken from `weightsFinal`'s own keys; the value is always defined.
+      const adjW = weightsFinal[dimId]!;
 
       if (helper) {
         rawMin += adjW * helper.minCoeff;
@@ -387,11 +398,13 @@ function computeV5Scores(
     anchors[archetype] = { rawMin, rawMean, rawMax };
   }
 
-  // Step 10: Map raw_total to 0-100 percentage
+  // Step 10: Map raw_total to 0-100 percentage.
+  // `anchors` and `rawTotal` are keyed by every entry in `archetypes`,
+  // initialised in steps 9 and 6 respectively. Safe to assert non-null.
   const rawPct: Record<string, number> = {};
   for (const archetype of archetypes) {
-    const { rawMin, rawMean, rawMax } = anchors[archetype];
-    const rt = rawTotal[archetype];
+    const { rawMin, rawMean, rawMax } = anchors[archetype]!;
+    const rt = rawTotal[archetype]!;
 
     let pct: number;
     if (rawMean === rawMin) {
@@ -408,10 +421,11 @@ function computeV5Scores(
     rawPct[archetype] = clamp(pct, 0, 100);
   }
 
-  // Step 11: Rank archetypes
+  // Step 11: Rank archetypes. `a` and `b` are taken from `archetypes`, and
+  // `rawPct` / `rawTotal` are keyed by every archetype.
   const ranked = [...archetypes].sort((a, b) => {
-    if (rawPct[b] !== rawPct[a]) return rawPct[b] - rawPct[a];
-    if (rawTotal[b] !== rawTotal[a]) return rawTotal[b] - rawTotal[a];
+    if (rawPct[b] !== rawPct[a]) return rawPct[b]! - rawPct[a]!;
+    if (rawTotal[b] !== rawTotal[a]) return rawTotal[b]! - rawTotal[a]!;
     return (config.archetypeIds[a] ?? 0) - (config.archetypeIds[b] ?? 0);
   });
 
@@ -421,11 +435,13 @@ function computeV5Scores(
   const finalPct: Record<string, number> = {};
   const gaps: Record<string, number> = {};
 
-  finalPct[ranked[0]] = rawPct[ranked[0]]; // Rank 1 unchanged
+  // `archetypes` is non-empty by config invariant (14 V8 archetypes), so ranked[0] exists.
+  const topArchetype = ranked[0]!;
+  finalPct[topArchetype] = rawPct[topArchetype]!; // Rank 1 unchanged
 
   for (let i = 1; i < ranked.length; i++) {
-    const prevArchetype = ranked[i - 1];
-    const currArchetype = ranked[i];
+    const prevArchetype = ranked[i - 1]!;
+    const currArchetype = ranked[i]!;
 
     const prevId = config.archetypeIds[prevArchetype] ?? 0;
     const currId = config.archetypeIds[currArchetype] ?? 0;
@@ -440,14 +456,14 @@ function computeV5Scores(
 
     finalPct[currArchetype] = Math.max(
       0,
-      Math.min(rawPct[currArchetype], finalPct[prevArchetype] - gap)
+      Math.min(rawPct[currArchetype]!, finalPct[prevArchetype]! - gap)
     );
   }
 
-  // Step 13: Round final scores
+  // Step 13: Round final scores. `finalPct` is keyed by every archetype.
   const roundFactor = Math.pow(10, config.v5RoundDigits);
   for (const a of archetypes) {
-    finalPct[a] = Math.round(finalPct[a] * roundFactor) / roundFactor;
+    finalPct[a] = Math.round(finalPct[a]! * roundFactor) / roundFactor;
   }
 
   return {
@@ -455,7 +471,7 @@ function computeV5Scores(
     rawPct,
     finalPct,
     ranking: ranked,
-    primaryArchetype: ranked[0],
+    primaryArchetype: topArchetype,
     diagnostics: {
       anchors,
       gaps,
@@ -557,22 +573,23 @@ export function scoreArchetypes(
       else if (rule.operator === "==") ok = ov === rule.threshold;
 
       if (ok && Object.prototype.hasOwnProperty.call(weightsFinal, rule.dimensionId)) {
-        weightsFinal[rule.dimensionId] *= rule.multiplier;
+        weightsFinal[rule.dimensionId] = (weightsFinal[rule.dimensionId] ?? 0) * rule.multiplier;
       }
     }
 
     for (const dimId of Object.keys(weightsFinal)) {
-      weightsFinal[dimId] = clamp(weightsFinal[dimId], wmClampMin, wmClampMax);
+      // dimId is from `Object.keys(weightsFinal)`, so the lookup is always defined.
+      weightsFinal[dimId] = clamp(weightsFinal[dimId]!, wmClampMin, wmClampMax);
     }
   }
 
-  // Step 6: Base similarity score
+  // Step 6: Base similarity score. Same indexing invariants as the V5 path.
   const rawScore: Record<string, number> = {};
   for (const archetype of config.archetypes) {
     let s = 0.0;
     for (const dimId of Object.keys(weightsFinal)) {
       const p = config.prototypes.get(`${archetype}||${dimId}`) ?? 0.5;
-      s += weightsFinal[dimId] * (1 - Math.abs(uDimensions[dimId] - p));
+      s += weightsFinal[dimId]! * (1 - Math.abs((uDimensions[dimId] ?? 0.5) - p));
     }
     rawScore[archetype] = s;
   }
@@ -588,7 +605,8 @@ export function scoreArchetypes(
     else if (gate.operator === "==") passes = val === gate.value;
 
     if (!passes) {
-      rawScore[gate.archetype] += gate.scoreAdjustmentIfFail;
+      // gate.archetype ∈ config.archetypes which initialised `rawScore`.
+      rawScore[gate.archetype] = (rawScore[gate.archetype] ?? 0) + gate.scoreAdjustmentIfFail;
     }
   }
 
@@ -627,13 +645,14 @@ export function scoreArchetypes(
             answerBoost[rule.archetype] = rule.scoreAdd;
           }
           for (const a of config.archetypes) {
-            maxBoostPerArchetype[a] = Math.max(maxBoostPerArchetype[a], answerBoost[a]);
+            // Both records are keyed by every archetype.
+            maxBoostPerArchetype[a] = Math.max(maxBoostPerArchetype[a]!, answerBoost[a]!);
           }
         }
         const meanBoost =
           Object.values(maxBoostPerArchetype).reduce((a, b) => a + b, 0) / nArchetypes;
         for (const a of config.archetypes) {
-          rawScore[a] += maxBoostPerArchetype[a] - meanBoost;
+          rawScore[a] = (rawScore[a] ?? 0) + maxBoostPerArchetype[a]! - meanBoost;
         }
       } else {
         // Single-select or non-multiselect: existing centering behavior
@@ -651,7 +670,7 @@ export function scoreArchetypes(
 
           const meanBoost = Object.values(boostVector).reduce((a, b) => a + b, 0) / nArchetypes;
           for (const a of config.archetypes) {
-            rawScore[a] += boostVector[a] - meanBoost;
+            rawScore[a] = (rawScore[a] ?? 0) + boostVector[a]! - meanBoost;
           }
         }
       }
@@ -664,29 +683,30 @@ export function scoreArchetypes(
   // Step 9: Archetype bias
   if (biasEnabled) {
     for (const a of config.archetypes) {
-      rawScore[a] += biasScale * (config.bias[a] ?? 0.0);
+      rawScore[a] = (rawScore[a] ?? 0) + biasScale * (config.bias[a] ?? 0.0);
     }
   }
 
-  // Step 10: Softmax
+  // Step 10: Softmax. `probs` is keyed by every key from `rawScore`; we iterate
+  // its own `Object.keys`, so the lookup is always defined.
   let probs = softmax(rawScore, temperature);
   if (softmaxFloor > 0) {
     for (const a of Object.keys(probs)) {
-      probs[a] += softmaxFloor;
+      probs[a] = probs[a]! + softmaxFloor;
     }
     const z = Object.values(probs).reduce((a, b) => a + b, 0) || 1.0;
     for (const a of Object.keys(probs)) {
-      probs[a] /= z;
+      probs[a] = probs[a]! / z;
     }
   }
 
   const percent: Record<string, number> = {};
   for (const a of Object.keys(probs)) {
-    percent[a] = 100 * probs[a];
+    percent[a] = 100 * probs[a]!;
   }
 
-  // Determine primary archetype
-  let primaryArchetype = config.archetypes[0];
+  // Determine primary archetype. config.archetypes is non-empty (14 archetypes per V8).
+  let primaryArchetype: string = config.archetypes[0]!;
   let maxPercent = -Infinity;
   for (const [a, p] of Object.entries(percent)) {
     if (p > maxPercent) {

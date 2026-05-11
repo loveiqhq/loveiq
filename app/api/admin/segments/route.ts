@@ -238,7 +238,7 @@ export async function POST(request: Request) {
       if (existing.length === 0) {
         return NextResponse.json({ error: "Not found." }, { status: 404 });
       }
-      if (existing[0].admin_email !== admin.email && !hasRole(admin.role, "admin")) {
+      if (existing[0]!.admin_email !== admin.email && !hasRole(admin.role, "admin")) {
         return NextResponse.json({ error: "Forbidden." }, { status: 403 });
       }
 
@@ -305,7 +305,7 @@ export async function POST(request: Request) {
       if (existing.length === 0) {
         return NextResponse.json({ error: "Not found." }, { status: 404 });
       }
-      if (existing[0].admin_email !== admin.email && !hasRole(admin.role, "admin")) {
+      if (existing[0]!.admin_email !== admin.email && !hasRole(admin.role, "admin")) {
         return NextResponse.json({ error: "Forbidden." }, { status: 403 });
       }
 

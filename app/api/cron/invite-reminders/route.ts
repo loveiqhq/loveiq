@@ -39,6 +39,9 @@ function safeCompare(a: string, b: string): boolean {
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+// Fail-safe before Vercel's 60s default so a stuck send surfaces as our
+// own 504 with telemetry instead of a silent kill.
+export const maxDuration = 50;
 
 const REMINDER_1_MIN_DAYS = 3;
 const REMINDER_1_MAX_DAYS = 7;

@@ -58,4 +58,11 @@ describe("GET /api/admin/growth-opportunities", () => {
     expect(res.status).toBe(200);
     expect(mockBuildGrowthOpportunitySnapshot).toHaveBeenCalledWith(45, "admin@test.com");
   });
+
+  it("returns 429 when rate-limited", async () => {
+    mockCheckRateLimit.mockResolvedValue({ allowed: false, remaining: 0, resetAt: new Date() });
+    const res = await GET(new Request("http://localhost/api/admin/growth-opportunities"));
+    expect(res.status).toBe(429);
+    expect(mockBuildGrowthOpportunitySnapshot).not.toHaveBeenCalled();
+  });
 });

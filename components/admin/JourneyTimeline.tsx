@@ -108,8 +108,9 @@ export default function JourneyTimeline({ id }: { id: string }) {
           {data.events.map((event, i) => {
             const gap =
               i > 0
-                ? new Date(event.timestamp).getTime() -
-                  new Date(data.events[i - 1].timestamp).getTime()
+                ? // i > 0 so i-1 is in bounds.
+                  new Date(event.timestamp).getTime() -
+                  new Date(data.events[i - 1]!.timestamp).getTime()
                 : 0;
             const showGap = gap > 3600_000; // > 1 hour
 

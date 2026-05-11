@@ -297,9 +297,9 @@ const PricingTestimonialsCarousel: FC = () => {
           }}
           onTouchStart={(e) => {
             isPausedRef.current = true;
-            handleDragStart(e.touches[0].clientX, e.touches[0].clientY);
+            handleDragStart(e.touches[0]!.clientX, e.touches[0]!.clientY);
           }}
-          onTouchMove={(e) => handleDragMove(e.touches[0].clientX, e.touches[0].clientY, e)}
+          onTouchMove={(e) => handleDragMove(e.touches[0]!.clientX, e.touches[0]!.clientY, e)}
           onTouchEnd={() => {
             handleDragEnd();
             isPausedRef.current = false;

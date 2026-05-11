@@ -87,9 +87,9 @@ const GlossaryPage: FC = () => {
       grouped[firstLetter].push(term);
     }
 
-    // Sort each group alphabetically
+    // Sort each group alphabetically. `letter` is taken from Object.keys(grouped).
     for (const letter of Object.keys(grouped)) {
-      grouped[letter].sort((a, b) => a.term.localeCompare(b.term));
+      grouped[letter]!.sort((a, b) => a.term.localeCompare(b.term));
     }
 
     return grouped;

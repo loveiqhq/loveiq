@@ -3,20 +3,15 @@ import { render, screen, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import OpenResponseQuestion from "@/components/survey/questions/OpenResponseQuestion";
-import type { SurveyQuestion } from "@/data/survey-data";
+import { makeOpenQuestion } from "@/__tests__/__fixtures__/survey";
 
 afterEach(cleanup);
 
-const baseQuestion: SurveyQuestion = {
+const baseQuestion = makeOpenQuestion({
   qId: "q1",
   question: "What is your name?",
-  answerType: "open",
-  chapter: "ch1",
   required: true,
-  guide: "",
-  supportAndGuidance: "",
-  options: [],
-} as SurveyQuestion;
+});
 
 describe("OpenResponseQuestion", () => {
   it("renders question text", () => {

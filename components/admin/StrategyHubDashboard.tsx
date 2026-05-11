@@ -10,278 +10,38 @@ import StatCard from "@/components/admin/StatCard";
 import StrategyPlanningTab from "@/components/admin/StrategyPlanningTab";
 import TimeRangeSelector from "@/components/admin/TimeRangeSelector";
 import KpiDataTable, { type Column } from "@/components/admin/kpi-tabs/KpiDataTable";
+import type {
+  BenchmarkStatus,
+  Confidence,
+  DecisionReviewState,
+  OpportunityEffort,
+  QueuePriority,
+  StrategyData,
+  TimeToSignal,
+} from "@/components/admin/StrategyHubDashboard/types";
+import {
+  TABS,
+  benchmarkStatusClasses,
+  confidenceClasses,
+  decisionReviewClasses,
+  deltaColor,
+  effortClasses,
+  goalStatusClasses,
+  queuePriorityClasses,
+  signed,
+  strategyRangeOptions,
+  timeToSignalClasses,
+} from "@/components/admin/StrategyHubDashboard/styles";
+import {
+  MiniMetric,
+  NarrativeCard,
+  ReviewStateBadge,
+  ScoreInputPill,
+} from "@/components/admin/StrategyHubDashboard/subcomponents";
 
-type BenchmarkStatus = "good" | "watch" | "risk";
-type QueuePriority = "high" | "medium" | "low";
-type Confidence = "high" | "medium" | "low";
-type OpportunityEffort = "low" | "medium" | "high";
-type TimeToSignal = "fast" | "medium" | "slow";
-type DecisionReviewState = "due" | "upcoming" | "stale" | "validated" | "missing-outcome";
-
-interface StrategyData {
-  days: number;
-  generatedAt: string;
-  northStar: Array<{
-    key: string;
-    label: string;
-    delta: number;
-    description: string;
-    href: string;
-    displayValue: string;
-    drilldowns: Array<{ label: string; value: string; href: string }>;
-  }>;
-  northStarTree: Array<{
-    label: string;
-    href: string;
-    drivers: Array<{ label: string; value: string; href: string }>;
-  }>;
-  goals: Array<{
-    id: number;
-    label: string;
-    metricLabel: string;
-    currentValue: number | null;
-    targetValue: number;
-    progressPct: number;
-    deadline: string | null;
-    status: "on-track" | "watch" | "off-track";
-    href: string;
-    drivers: Array<{ label: string; value: string; href: string }>;
-  }>;
-  benchmarks: Array<{
-    key: string;
-    label: string;
-    description: string;
-    referenceLabel: string;
-    href: string;
-    currentLabel: string;
-    targetLabel: string;
-    status: BenchmarkStatus;
-  }>;
-  workQueue: {
-    summary: {
-      openCases: number;
-      overdueCases: number;
-      highPriorityCases: number;
-      flaggedSubmissions: number;
-      scoringDisagreements: number;
-      ambiguousCases: number;
-      recentNotes: number;
-      workflowCoverage: number;
-    };
-    items: Array<{
-      title: string;
-      detail: string;
-      priority: QueuePriority;
-      type: string;
-      href: string;
-      updatedAt: string;
-    }>;
-  };
-  releaseImpact: {
-    entries: Array<{
-      id: number;
-      title: string;
-      category: string;
-      eventDate: string;
-      deltaSubmissions: number;
-      deltaCompletionRate: number;
-      deltaWaitlist: number;
-      linkedChartCount: number;
-      notes: string[];
-      href: string;
-    }>;
-    annotations: Array<{ id: number; chartKey: string; annotationDate: string; note: string }>;
-  };
-  opportunities: {
-    backlog: Array<{
-      title: string;
-      source: string;
-      confidence: Confidence;
-      effort: OpportunityEffort;
-      timeToSignal: TimeToSignal;
-      score: number;
-      impact: string;
-      detail: string;
-      scoreInputs: {
-        impact: number;
-        confidence: number;
-        effort: number;
-        timeToSignal: number;
-        formula: string;
-      };
-      href: string;
-    }>;
-    funnelLeakage: Array<{
-      from: string;
-      to: string;
-      lossCount: number;
-      lossRate: number;
-      likelyCause: string;
-      href: string;
-    }>;
-    archetypeMomentum: Array<{
-      archetype: string;
-      currentCount: number;
-      previousCount: number;
-      delta: number;
-      href: string;
-    }>;
-    leaderboards: {
-      channels: Array<{ source: string; total: number; completed: number; conversionRate: number }>;
-      archetypes: Array<{ archetype: string; count: number; delta: number }>;
-      workflow: Array<{ stage: string; submissions: number; color: string }>;
-    };
-  };
-  forecasts: {
-    generatedAt: string;
-    modules: Array<{
-      key: string;
-      label: string;
-      forecastValue: number;
-      lowerBound: number;
-      upperBound: number;
-      confidence: Confidence;
-      href: string;
-    }>;
-  };
-  experiments: {
-    summary: {
-      total: number;
-      active: number;
-      pendingDecision: number;
-    };
-    items: Array<{
-      id: number;
-      name: string;
-      status: string;
-      primaryMetricKey: string;
-      ownerEmail: string | null;
-      decisionDate: string | null;
-      href: string;
-    }>;
-  };
-  decisionReview: {
-    summary: {
-      total: number;
-      due: number;
-      stale: number;
-      awaitingOutcome: number;
-      openReviews: number;
-    };
-    items: Array<{
-      id: number;
-      title: string;
-      entryType: "decision" | "scoring-change" | "memo";
-      status: "draft" | "approved" | "monitoring" | "validated" | "rolled-back";
-      primaryMetricKey: string | null;
-      ownerEmail: string | null;
-      reviewDate: string | null;
-      daysUntilReview: number | null;
-      daysSinceUpdate: number;
-      openReviewCount: number;
-      expectedImpact: string | null;
-      measuredOutcome: string | null;
-      comparisonLabel: string;
-      detail: string;
-      reviewState: DecisionReviewState;
-      href: string;
-    }>;
-  };
-  briefGenerator: {
-    generatedAt: string;
-    packs: Array<{
-      audience: "Executive" | "Strategy" | "Product" | "Growth" | "Tech";
-      tone: BenchmarkStatus;
-      headline: string;
-      summary: string;
-      bullets: string[];
-      actions: string[];
-      href: string;
-      copyText: string;
-    }>;
-  };
-  narrative: string[];
-  analyst: {
-    briefs: Array<{ role: string; summary: string }>;
-  };
-  guardrails: {
-    healthy: number;
-    breached: number;
-    items: Array<{
-      label: string;
-      current: number;
-      target: number;
-      status: BenchmarkStatus;
-      detail: string;
-      href: string;
-    }>;
-  };
-  triage: Array<{
-    title: string;
-    cause: string;
-    confidence: Confidence;
-    evidence: string;
-    href: string;
-  }>;
-}
-
-const TABS = [
-  "North Star",
-  "Work Queue",
-  "Release Impact",
-  "Opportunities",
-  "Guardrails",
-  "Decision Review",
-  "Auto Briefs",
-  "Strategy Planning",
-] as const;
-const benchmarkStatusClasses: Record<BenchmarkStatus, string> = {
-  good: "border-emerald-500/20 bg-emerald-500/10 text-emerald-300",
-  watch: "border-amber-500/20 bg-amber-500/10 text-amber-200",
-  risk: "border-red-500/20 bg-red-500/10 text-red-300",
-};
-const goalStatusClasses: Record<StrategyData["goals"][number]["status"], string> = {
-  "on-track": "bg-emerald-500/10 text-emerald-300",
-  watch: "bg-amber-500/10 text-amber-200",
-  "off-track": "bg-red-500/10 text-red-300",
-};
-const queuePriorityClasses: Record<QueuePriority, string> = {
-  high: "bg-red-500/10 text-red-300",
-  medium: "bg-amber-500/10 text-amber-200",
-  low: "bg-white/10 text-text-muted",
-};
-const confidenceClasses: Record<Confidence, string> = {
-  high: "bg-emerald-500/10 text-emerald-300",
-  medium: "bg-amber-500/10 text-amber-200",
-  low: "bg-white/10 text-text-muted",
-};
-const effortClasses: Record<OpportunityEffort, string> = {
-  low: "bg-emerald-500/10 text-emerald-300",
-  medium: "bg-amber-500/10 text-amber-200",
-  high: "bg-red-500/10 text-red-300",
-};
-const timeToSignalClasses: Record<TimeToSignal, string> = {
-  fast: "bg-emerald-500/10 text-emerald-300",
-  medium: "bg-amber-500/10 text-amber-200",
-  slow: "bg-white/10 text-text-muted",
-};
-const decisionReviewClasses: Record<DecisionReviewState, string> = {
-  due: "bg-amber-500/10 text-amber-200",
-  upcoming: "bg-white/10 text-text-muted",
-  stale: "bg-red-500/10 text-red-300",
-  validated: "bg-emerald-500/10 text-emerald-300",
-  "missing-outcome": "bg-cyan-500/10 text-cyan-300",
-};
-const strategyRangeOptions = [
-  { days: 7, label: "7d", ariaLabel: "Last 7 days" },
-  { days: 30, label: "30d", ariaLabel: "Last 30 days" },
-  { days: 90, label: "90d", ariaLabel: "Last 90 days" },
-] as const;
-
-const deltaColor = (delta: number) =>
-  delta > 0 ? "text-emerald-300" : delta < 0 ? "text-red-300" : "text-text-muted";
-const signed = (value: number, suffix = "") =>
-  value === 0 ? `0${suffix}` : `${value > 0 ? "+" : ""}${value}${suffix}`;
+// Types, tone Records, and small subcomponents live under
+// ./StrategyHubDashboard/. This file owns the main dashboard component and its
+// column-builder helpers.
 
 const opportunityColumns = (): Column<StrategyData["opportunities"]["backlog"][number]>[] => [
   { key: "title", label: "Opportunity" },
@@ -1329,45 +1089,6 @@ export default function StrategyHubDashboard() {
       )}
 
       {activeTab === "Strategy Planning" && <StrategyPlanningTab />}
-    </div>
-  );
-}
-
-function ScoreInputPill({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-lg border border-white/10 bg-surface px-3 py-2">
-      <p className="text-[10px] uppercase tracking-wide text-text-muted">{label}</p>
-      <p className="mt-1 text-sm font-medium text-text-primary">{Math.round(value)}</p>
-    </div>
-  );
-}
-
-function ReviewStateBadge({ state }: { state: DecisionReviewState }) {
-  return (
-    <span
-      className={`rounded-full px-2 py-0.5 text-[11px] uppercase tracking-wide ${decisionReviewClasses[state]}`}
-    >
-      {state.replace("-", " ")}
-    </span>
-  );
-}
-
-function MiniMetric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg border border-white/10 bg-surface px-3 py-2">
-      <p className="text-[10px] uppercase tracking-wide text-text-muted">{label}</p>
-      <p className="mt-1 text-sm text-text-primary">{value}</p>
-    </div>
-  );
-}
-
-function NarrativeCard({ label, value }: { label: string; value: string | null }) {
-  if (!value) return null;
-
-  return (
-    <div className="rounded-lg border border-white/10 bg-surface px-3 py-3">
-      <p className="text-[10px] uppercase tracking-wide text-text-muted">{label}</p>
-      <p className="mt-2 text-sm text-text-primary">{value}</p>
     </div>
   );
 }

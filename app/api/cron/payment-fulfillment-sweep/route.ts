@@ -32,6 +32,9 @@ import logger from "@/lib/logger";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+// Fail-safe before Vercel's 60s function budget so a stuck Supabase call
+// surfaces as our own 504 with telemetry, not a silent Vercel kill.
+export const maxDuration = 50;
 
 const SUPABASE_TIMEOUT_MS = 8_000;
 // Cap so a single sweep never overruns Vercel's 60s function budget. If the

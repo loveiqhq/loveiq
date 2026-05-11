@@ -4,6 +4,21 @@ import { test, expect } from "@playwright/test";
 // First run creates golden images in e2e/visual-regression.spec.ts-snapshots/
 // Subsequent runs compare against golden images
 // Update golden images: npx playwright test visual-regression --update-snapshots
+//
+// ─── BASELINE FRESHNESS ─────────────────────────────────────────────────────
+// Track when each spec's golden images were last reviewed against the live UI.
+// If a baseline gets older than ~90 days, schedule a refresh — otherwise
+// "no regression" silently rots and stale screenshots become noise.
+//
+//   landing-page          last reviewed: 2026-05-11 — initial baseline
+//   about-page            last reviewed: 2026-05-11 — initial baseline
+//   survey-intro          last reviewed: 2026-05-11 — initial baseline
+//   glossary-page         last reviewed: 2026-05-11 — initial baseline
+//   admin-login           last reviewed: 2026-05-11 — initial baseline
+//   nav-mobile-menu-open  last reviewed: 2026-05-11 — initial baseline
+//
+// To refresh: bump the date here, run `npx playwright test visual-regression
+// --update-snapshots --project="Desktop Chrome"`, eyeball every diff, commit.
 
 // Helper to disable all animations/transitions for stable screenshots
 async function disableAnimations(page: import("@playwright/test").Page) {
@@ -19,6 +34,23 @@ async function disableAnimations(page: import("@playwright/test").Page) {
       video { visibility: hidden !important; }
     `,
   });
+}
+
+// Deterministic "everything has settled" wait — replaces ad-hoc waitForTimeout
+// in screenshot tests. Waits for fonts to load and one extra requestAnimationFrame
+// pass so any layout caused by font-swap is visible before capture.
+async function waitForVisualReady(page: import("@playwright/test").Page) {
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        const done = () => requestAnimationFrame(() => resolve());
+        if (document.fonts && document.fonts.ready) {
+          document.fonts.ready.then(done);
+        } else {
+          done();
+        }
+      })
+  );
 }
 
 test.describe("Visual Regression", () => {
@@ -42,7 +74,10 @@ test.describe("Visual Regression", () => {
         iframe { visibility: hidden !important; }
       `,
     });
-    await page.waitForTimeout(2000);
+    // Landing page has lots of scroll-triggered content + late-arriving images.
+    // Wait for fonts + network idle a second time to catch any deferred fetches.
+    await waitForVisualReady(page);
+    await page.waitForLoadState("networkidle");
     await expect(page).toHaveScreenshot("landing-page.png", {
       fullPage: true,
       maxDiffPixelRatio: 0.03,
@@ -54,7 +89,7 @@ test.describe("Visual Regression", () => {
     await page.goto("/about");
     await page.waitForLoadState("networkidle");
     await disableAnimations(page);
-    await page.waitForTimeout(500);
+    await waitForVisualReady(page);
     await expect(page).toHaveScreenshot("about-page.png", {
       fullPage: true,
       maxDiffPixelRatio: 0.01,
@@ -65,7 +100,7 @@ test.describe("Visual Regression", () => {
     await page.goto("/survey");
     await page.waitForLoadState("networkidle");
     await disableAnimations(page);
-    await page.waitForTimeout(500);
+    await waitForVisualReady(page);
     await expect(page).toHaveScreenshot("survey-intro.png", {
       fullPage: true,
       maxDiffPixelRatio: 0.01,
@@ -76,7 +111,7 @@ test.describe("Visual Regression", () => {
     await page.goto("/glossary");
     await page.waitForLoadState("networkidle");
     await disableAnimations(page);
-    await page.waitForTimeout(500);
+    await waitForVisualReady(page);
     await expect(page).toHaveScreenshot("glossary-page.png", {
       fullPage: true,
       maxDiffPixelRatio: 0.01,
@@ -87,7 +122,7 @@ test.describe("Visual Regression", () => {
     await page.goto("/admin/login");
     await page.waitForLoadState("networkidle");
     await disableAnimations(page);
-    await page.waitForTimeout(500);
+    await waitForVisualReady(page);
     await expect(page).toHaveScreenshot("admin-login.png", {
       fullPage: true,
       maxDiffPixelRatio: 0.01,
@@ -113,7 +148,7 @@ test.describe("Component Visual Regression", () => {
     const menuButton = page.locator("button[aria-label*='menu' i], button[aria-label*='Menu' i]");
     if (await menuButton.isVisible().catch(() => false)) {
       await menuButton.click();
-      await page.waitForTimeout(500);
+      await waitForVisualReady(page);
       await expect(page).toHaveScreenshot("nav-mobile-menu-open.png", {
         maxDiffPixelRatio: 0.02,
       });

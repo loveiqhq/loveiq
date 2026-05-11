@@ -57,7 +57,26 @@ describe("admin org directory route", () => {
 
     const json = await res.json();
     expect(json.summary.totalAssets).toBeGreaterThan(0);
-    expect(json.assets[0].trust).toBeDefined();
+    // Trust descriptor must include source + mode metadata, not just be non-null.
+    expect(json.assets[0].trust).toMatchObject({
+      source: expect.any(String),
+      mode: expect.stringMatching(/^(derived|measured|estimated|asserted)$/),
+    });
+    expect(typeof json.assets[0].trust.source).toBe("string");
+    expect(json.assets[0].trust.source.length).toBeGreaterThan(0);
     expect(json.assets.some((asset: { owner: string | null }) => asset.owner != null)).toBe(true);
+  });
+
+  it("returns 401 without admin session", async () => {
+    mockVerifyAdminSession.mockResolvedValue(null);
+    const res = await GET(new Request("http://localhost/api/admin/org"));
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 429 when rate-limited", async () => {
+    mockCheckRateLimit.mockResolvedValue({ allowed: false, remaining: 0, resetAt: new Date() });
+    const res = await GET(new Request("http://localhost/api/admin/org"));
+    expect(res.status).toBe(429);
+    expect(mockSupabaseFetch).not.toHaveBeenCalled();
   });
 });

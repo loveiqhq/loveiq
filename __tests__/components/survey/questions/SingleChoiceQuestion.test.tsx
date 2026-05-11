@@ -25,22 +25,21 @@ vi.mock("@/components/survey/questions/ChoiceCard", () => ({
 }));
 
 import SingleChoiceQuestion from "@/components/survey/questions/SingleChoiceQuestion";
-import type { SurveyQuestion } from "@/data/survey-data";
+import { makeAnswerOptionsExplained, makeSurveyQuestion } from "@/__tests__/__fixtures__/survey";
 
 afterEach(cleanup);
 
-const question = {
+const question = makeSurveyQuestion({
   qId: "q1",
   question: "Pick one",
   answerType: "single",
   options: ["Option A", "Option B", "Other"],
-  answerOptionsExplained: [
-    { option: "Option A", explanation: "Explanation for A" },
-    { option: "Option B", explanation: "Explanation for B" },
-  ],
-  chapter: "ch1",
+  answerOptionsExplained: makeAnswerOptionsExplained([
+    ["Option A", "Explanation for A"],
+    ["Option B", "Explanation for B"],
+  ]),
   required: true,
-} as unknown as SurveyQuestion;
+});
 
 describe("SingleChoiceQuestion", () => {
   it("renders all options", () => {

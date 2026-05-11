@@ -26,8 +26,9 @@ function topGap(values: Record<string, number> | null): number | null {
     .filter((value) => Number.isFinite(value))
     .sort((a, b) => b - a);
   if (sorted.length === 0) return null;
-  if (sorted.length === 1) return Math.round(sorted[0] * 10) / 10;
-  return Math.round((sorted[0] - sorted[1]) * 10) / 10;
+  // Length-guarded sorted[0]/sorted[1] accesses are safe.
+  if (sorted.length === 1) return Math.round(sorted[0]! * 10) / 10;
+  return Math.round((sorted[0]! - sorted[1]!) * 10) / 10;
 }
 
 function confidenceBucket(

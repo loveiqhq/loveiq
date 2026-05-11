@@ -4,18 +4,14 @@ import userEvent from "@testing-library/user-event";
 import { vi, describe, it, expect, afterEach } from "vitest";
 
 import ScaleQuestion from "@/components/survey/questions/ScaleQuestion";
+import { makeScaleQuestion } from "@/__tests__/__fixtures__/survey";
 
-const QUESTION = {
+const QUESTION = makeScaleQuestion("Disagree", "Agree", {
   qId: "q1",
   cId: 1,
   chapter: "Wellbeing",
   question: "Rate this",
-  answerType: "scale" as const,
-  options: [],
-  required: false,
-  guide: "",
-  scaleLabels: { low: "Disagree", high: "Agree" },
-};
+});
 
 afterEach(cleanup);
 

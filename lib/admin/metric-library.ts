@@ -106,8 +106,10 @@ const WORKFLOW_METRIC_TO_TAG_NAME = {
 export function parseUtmSource(tracker: string | null, fallback = "Direct"): string {
   if (!tracker?.trim()) return fallback;
   try {
-    const parsed = JSON.parse(tracker);
-    return parsed.utm_source || fallback;
+    const parsed = JSON.parse(tracker) as Record<string, unknown>;
+    return typeof parsed.utm_source === "string" && parsed.utm_source.trim()
+      ? parsed.utm_source
+      : fallback;
   } catch {
     return tracker.trim();
   }
@@ -135,7 +137,8 @@ async function fetchWorkflowSubmissionCountByTagName(name: string): Promise<numb
   if (tags.length === 0) return 0;
 
   const assignmentRes = await supabaseFetch(
-    `/rest/v1/submission_tag_assignment?select=submission_id&tag_id=eq.${tags[0].id}`,
+    // tags.length > 0 verified by the `if (tags.length === 0) return 0;` check above.
+    `/rest/v1/submission_tag_assignment?select=submission_id&tag_id=eq.${tags[0]!.id}`,
     { headers: { Range: "0-9999" } }
   );
   if (!assignmentRes.ok) return null;
@@ -311,7 +314,8 @@ export async function fetchMetricValue(metricKey: string): Promise<number | null
       case WORKFLOW_QUESTION_CHANGE_CANDIDATE_KEY:
       case "workflow_monitoring": {
         const workflowName =
-          WORKFLOW_METRIC_TO_TAG_NAME[metricKey as keyof typeof WORKFLOW_METRIC_TO_TAG_NAME];
+          // Branch matches one of the WORKFLOW_METRIC_TO_TAG_NAME keys; lookup defined.
+          WORKFLOW_METRIC_TO_TAG_NAME[metricKey as keyof typeof WORKFLOW_METRIC_TO_TAG_NAME]!;
         return fetchWorkflowSubmissionCountByTagName(workflowName);
       }
       default:

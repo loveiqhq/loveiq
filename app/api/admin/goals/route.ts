@@ -141,7 +141,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Unable to update goal." }, { status: 500 });
       }
 
-      logAdminAction({
+      void logAdminAction({
         admin_email: admin.email,
         action: "update_goal_status",
         resource_type: "admin_goals",
@@ -177,7 +177,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Unable to delete goal." }, { status: 500 });
       }
 
-      logAdminAction({
+      void logAdminAction({
         admin_email: admin.email,
         action: "delete_goal",
         resource_type: "admin_goals",
@@ -220,7 +220,7 @@ export async function POST(request: Request) {
 
     const rows = (await res.json()) as Array<{ id: number }>;
 
-    logAdminAction({
+    void logAdminAction({
       admin_email: admin.email,
       action: "create_goal",
       resource_type: "admin_goals",

@@ -121,7 +121,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
           .filter(([name]) => name !== archetypeName)
           .sort((a, b) => (b[1] as number) - (a[1] as number));
         if (sorted.length > 0) {
-          const second = sorted[0][0];
+          // sorted.length > 0 checked above; [0][0] is the key string.
+          const second = sorted[0]![0];
           incrementCount(secondaryMap, second);
         }
       }

@@ -139,8 +139,9 @@ const SurveyPauseModal: FC<SurveyPauseModalProps> = ({ open, email, onResume, on
       ].filter((el): el is HTMLButtonElement => el !== null);
 
       if (focusables.length === 0) return;
-      const first = focusables[0];
-      const last = focusables[focusables.length - 1];
+      // focusables.length checked > 0 above; first/last are defined.
+      const first = focusables[0]!;
+      const last = focusables[focusables.length - 1]!;
       const active = document.activeElement as HTMLElement | null;
 
       if (e.shiftKey) {

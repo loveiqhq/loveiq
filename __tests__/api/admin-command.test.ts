@@ -65,4 +65,17 @@ describe("GET /api/admin/command", () => {
       "admin@test.com"
     );
   });
+
+  it("returns 401 without admin session", async () => {
+    mockVerifyAdminSession.mockResolvedValue(null);
+    const res = await GET(new Request("http://localhost/api/admin/command?q=test"));
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 429 when rate-limited", async () => {
+    mockCheckRateLimit.mockResolvedValue({ allowed: false, remaining: 0, resetAt: new Date() });
+    const res = await GET(new Request("http://localhost/api/admin/command?q=test"));
+    expect(res.status).toBe(429);
+    expect(mockBuildAdminCommandAnswer).not.toHaveBeenCalled();
+  });
 });

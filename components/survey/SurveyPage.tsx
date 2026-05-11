@@ -593,7 +593,8 @@ const SlideScreen: FC<{
 }> = ({ slideIndex, onContinue, onBack, onSkip }) => {
   const [isLeaving, setIsLeaving] = useState(false);
   const [isLeavingForward, setIsLeavingForward] = useState(false);
-  const slide = slides[slideIndex] ?? slides[0];
+  // slides is non-empty by construction; the fallback ensures `slide` is defined.
+  const slide = (slides[slideIndex] ?? slides[0])!;
   const Icon = slideIcons[slide.icon] ?? SparkleIcon;
 
   const handleNext = useCallback(() => {
@@ -629,12 +630,13 @@ const SlideScreen: FC<{
   // Swipe gesture support for mobile
   const touchStartX = useRef<number | null>(null);
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    touchStartX.current = e.touches[0].clientX;
+    // TouchEvent always fires with at least one touch point.
+    touchStartX.current = e.touches[0]!.clientX;
   }, []);
   const handleTouchEnd = useCallback(
     (e: React.TouchEvent) => {
       if (touchStartX.current === null) return;
-      const delta = touchStartX.current - e.changedTouches[0].clientX;
+      const delta = touchStartX.current - e.changedTouches[0]!.clientX;
       touchStartX.current = null;
       if (Math.abs(delta) < 50) return;
       if (delta > 0)

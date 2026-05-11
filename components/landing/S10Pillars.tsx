@@ -138,7 +138,8 @@ const S10Pillars: FC = () => {
     >
       <div className="content-shell relative flex flex-col gap-6 lg:flex-row">
         {cards.map((card, idx) => {
-          const Icon = icons[idx];
+          // `cards` and `icons` have the same length; `idx` is valid for both.
+          const Icon = icons[idx]!;
           return (
             <div
               key={card.title}

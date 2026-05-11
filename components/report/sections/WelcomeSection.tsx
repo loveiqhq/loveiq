@@ -82,8 +82,9 @@ const WelcomeSection: FC<Props> = ({ feedbackWidget, generalHtml, sectionId, sna
     if (!element) return;
 
     const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
+      (entries) => {
+        const entry = entries[0];
+        if (entry?.isIntersecting) {
           setIsVisible(true);
           observer.disconnect();
         }
@@ -157,7 +158,8 @@ const WelcomeSection: FC<Props> = ({ feedbackWidget, generalHtml, sectionId, sna
           stage={snapshot.stage}
           description={
             snapshot.stage
-              ? (stageDescriptions[snapshot.stage] ?? stageDescriptions["Grounded / Integrated"])
+              ? // Fallback key "Grounded / Integrated" is statically present in stageDescriptions.
+                (stageDescriptions[snapshot.stage] ?? stageDescriptions["Grounded / Integrated"]!)
               : ""
           }
         />

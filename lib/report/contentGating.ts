@@ -67,7 +67,8 @@ export function buildArchetypeContentForUser(
       if (!result[section.archetypeBlockId]) {
         result[section.archetypeBlockId] = {};
       }
-      result[section.archetypeBlockId][archetype] = html;
+      // Just initialised above; the lookup is defined.
+      result[section.archetypeBlockId]![archetype] = html;
     }
   }
   return result;

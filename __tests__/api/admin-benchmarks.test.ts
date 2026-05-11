@@ -121,4 +121,39 @@ describe("admin benchmarks route", () => {
       })
     );
   });
+
+  it("GET returns 401 without admin session", async () => {
+    mockVerifyAdminSession.mockResolvedValue(null);
+    const res = await GET(new Request("http://localhost/api/admin/benchmarks"));
+    expect(res.status).toBe(401);
+  });
+
+  it("GET returns 429 when rate-limited", async () => {
+    mockCheckRateLimit.mockResolvedValue({ allowed: false, remaining: 0, resetAt: new Date() });
+    const res = await GET(new Request("http://localhost/api/admin/benchmarks"));
+    expect(res.status).toBe(429);
+    expect(mockSupabaseFetch).not.toHaveBeenCalled();
+  });
+
+  it("POST returns 403 for viewer role (benchmarks require editor)", async () => {
+    mockVerifyAdminSession.mockResolvedValue({ email: "v@test.com", role: "viewer" });
+    const res = await POST(
+      new Request("http://localhost/api/admin/benchmarks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-csrf-token": "token" },
+        body: JSON.stringify({
+          action: "create",
+          metric_key: "completion_rate",
+          label: "Completion Rate",
+          source_name: "Internal",
+          benchmark_type: "internal",
+          target_value: 72,
+          warning_value: 60,
+          direction: "higher",
+          unit: "percent",
+        }),
+      })
+    );
+    expect(res.status).toBe(403);
+  });
 });

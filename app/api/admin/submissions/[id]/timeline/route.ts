@@ -57,7 +57,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     if (subs.length === 0) {
       return NextResponse.json({ error: "Submission not found." }, { status: 404 });
     }
-    const sub = subs[0];
+    // subs.length checked > 0 above; [0] is non-undefined.
+    const sub = subs[0]!;
     const events: TimelineEvent[] = [];
 
     // 2. Check waitlist signup
@@ -69,10 +70,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         const wlData = (await wlRes.json()) as Array<{
           waitlist_user: { created_date_time: string } | null;
         }>;
-        if (wlData.length > 0 && wlData[0].waitlist_user) {
+        if (wlData.length > 0 && wlData[0]!.waitlist_user) {
           events.push({
             type: "waitlist_signup",
-            timestamp: wlData[0].waitlist_user.created_date_time,
+            timestamp: wlData[0]!.waitlist_user.created_date_time,
             label: "Joined waitlist",
           });
         }
@@ -147,9 +148,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       if (scores.length > 0) {
         events.push({
           type: "scored",
-          timestamp: scores[0].scored_at,
+          timestamp: scores[0]!.scored_at,
           label: "Archetype scored",
-          detail: scores[0].primary_archetype,
+          detail: scores[0]!.primary_archetype,
         });
       }
     }
@@ -163,12 +164,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         const wlData = (await wlRes.json()) as Array<{
           waitlist_user: { created_date_time: string; email: string } | null;
         }>;
-        if (wlData.length > 0 && wlData[0].waitlist_user) {
+        if (wlData.length > 0 && wlData[0]!.waitlist_user) {
           events.push({
             type: "email_sent_waitlist_confirm",
-            timestamp: wlData[0].waitlist_user.created_date_time,
+            timestamp: wlData[0]!.waitlist_user.created_date_time,
             label: "Email: waitlist confirmation",
-            detail: wlData[0].waitlist_user.email,
+            detail: wlData[0]!.waitlist_user.email,
           });
         }
       }
@@ -186,7 +187,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         if (tokens.length > 0) {
           events.push({
             type: "email_sent_report_link",
-            timestamp: tokens[0].created_at,
+            timestamp: tokens[0]!.created_at,
             label: "Email: report link",
             detail: sub.app_user?.email,
           });

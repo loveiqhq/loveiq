@@ -215,10 +215,11 @@ async function fetchBatches<T>(ids: number[], builder: (batch: number[]) => stri
 }
 
 function cohortFromScore(score: number) {
-  if (score >= 75) return COHORTS[3];
-  if (score >= 50) return COHORTS[2];
-  if (score >= 25) return COHORTS[1];
-  return COHORTS[0];
+  // COHORTS is a static 4-tuple; every index 0–3 is defined.
+  if (score >= 75) return COHORTS[3]!;
+  if (score >= 50) return COHORTS[2]!;
+  if (score >= 25) return COHORTS[1]!;
+  return COHORTS[0]!;
 }
 
 function movementType(previousKey: CohortKey, currentKey: CohortKey): MovementType {

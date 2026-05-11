@@ -49,7 +49,8 @@ function FunnelVisualization({ stages }: { stages: PipelineStage[] }) {
           const widthPct = Math.max(20, (stage.value / maxValue) * 100);
           const conversionToNext =
             i < stages.length - 1 && stage.value > 0
-              ? Math.round((stages[i + 1].value / stage.value) * 100)
+              ? // i < stages.length - 1 → i+1 is in bounds.
+                Math.round((stages[i + 1]!.value / stage.value) * 100)
               : null;
           return (
             <div key={stage.label} className="flex items-center gap-3">

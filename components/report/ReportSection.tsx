@@ -52,7 +52,8 @@ const ReportSection: FC<Props> = ({
 }) => {
   const ref = useRef<HTMLElement>(null);
   const [isVisible, setIsVisible] = useState(false);
-  const [eyebrow, ...titleSegments] = title.split(/:\s+/);
+  // String.prototype.split always returns ≥1 entries, so the first element is defined.
+  const [eyebrow, ...titleSegments] = title.split(/:\s+/) as [string, ...string[]];
   const hasSplitTitle = titleSegments.length > 0;
   const resolvedTitle = hasSplitTitle ? titleSegments.join(": ").trim() : title;
 
@@ -81,8 +82,9 @@ const ReportSection: FC<Props> = ({
     let rafId: number | null = null;
 
     const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting || entry.intersectionRatio > 0) {
+      (entries) => {
+        const entry = entries[0];
+        if (entry && (entry.isIntersecting || entry.intersectionRatio > 0)) {
           setIsVisible(true);
           observer.disconnect();
         }

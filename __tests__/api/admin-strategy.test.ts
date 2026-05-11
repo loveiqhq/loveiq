@@ -66,4 +66,11 @@ describe("GET /api/admin/strategy", () => {
     expect(json.narrative).toEqual(["All quiet."]);
     expect(json.workQueue.summary.openCases).toBe(1);
   });
+
+  it("returns 429 when rate-limited", async () => {
+    mockCheckRateLimit.mockResolvedValue({ allowed: false, remaining: 0, resetAt: new Date() });
+    const res = await GET(makeRequest());
+    expect(res.status).toBe(429);
+    expect(mockBuildStrategySnapshot).not.toHaveBeenCalled();
+  });
 });

@@ -167,11 +167,12 @@ function splitAttachmentExamples(descriptionHtml: string) {
     return { descriptionHtml, examples: [] as string[] };
   }
 
+  // exampleMatch is a RegExpMatchArray; [0] is the full match, [1] is the captured group.
   const descriptionWithoutExamples = normalizeReportHtml(
     descriptionHtml.replace(exampleMatch[0], "").replace(/<p>\s*<\/p>/gi, "")
   );
 
-  const examples = getReportBlockText(exampleMatch[1])
+  const examples = getReportBlockText(exampleMatch[1]!)
     .split(/\s*,\s*/)
     .map((entry) => entry.trim())
     .filter(Boolean);
@@ -188,7 +189,7 @@ function parseAttachmentPatternHeading(block: string) {
   const strongMatch = block.match(/<strong>([\s\S]*?)<\/strong>/i);
   if (!strongMatch) return null;
 
-  const title = normalizeAttachmentPatternTitle(getReportBlockText(strongMatch[1]));
+  const title = normalizeAttachmentPatternTitle(getReportBlockText(strongMatch[1]!));
   if (!ATTACHMENT_PATTERN_TITLES.has(title.toLowerCase())) return null;
 
   const afterStrong = block
@@ -293,6 +294,7 @@ function parsePracticeTableRows(tableHtml: string): ReportPracticeTendencyRow[] 
     );
 
     if (!practice || /^practice$/i.test(practice)) return [];
+    if (fantasyPullText == null || actualPleasureText == null) return [];
 
     const fantasyPull = parsePracticeIntensity(fantasyPullText);
     const actualPleasure = parsePracticeIntensity(actualPleasureText);

@@ -335,7 +335,7 @@ export async function POST(request: Request) {
       }
 
       const rows = (await res.json()) as Array<{ id: number }>;
-      logAdminAction({
+      void logAdminAction({
         admin_email: admin.email,
         action: "create_changelog_entry",
         resource_type: "product_changelog",
@@ -390,7 +390,7 @@ export async function POST(request: Request) {
     }
 
     const rows = (await res.json()) as Array<{ id: number }>;
-    logAdminAction({
+    void logAdminAction({
       admin_email: admin.email,
       action:
         entryType === "scoring-change"
@@ -455,7 +455,7 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "Unable to update decision entry." }, { status: 500 });
     }
 
-    logAdminAction({
+    void logAdminAction({
       admin_email: admin.email,
       action: "update_decision_entry",
       resource_type: "admin_decision_entry",

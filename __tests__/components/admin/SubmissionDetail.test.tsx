@@ -72,7 +72,13 @@ describe("SubmissionDetail", () => {
       refetch: mockRefetch,
     });
     render(<SubmissionDetail id="1" />);
-    expect(document.querySelector(".animate-spin")).toBeTruthy();
+    const spinner = document.querySelector(".animate-spin");
+    expect(spinner).toBeInstanceOf(HTMLElement);
+    // Spinner must be visible (not display:none) — guards against a regression
+    // that renders the loading state but hides it accidentally.
+    const styles = window.getComputedStyle(spinner as HTMLElement);
+    expect(styles.display).not.toBe("none");
+    expect(styles.visibility).not.toBe("hidden");
   });
 
   it("shows error message on error", () => {

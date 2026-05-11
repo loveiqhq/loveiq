@@ -374,7 +374,8 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete }) => {
     return () => cancelAnimationFrame(raf);
   }, []);
 
-  const slide = slides[slideIndex];
+  // slideIndex is bounded to [0, slides.length-1] by the navigation handlers below.
+  const slide = slides[slideIndex]!;
   const Icon = slide.icon;
 
   const handleNext = useCallback(() => {
@@ -418,15 +419,16 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete }) => {
 
   // Touch swipe — only trigger on primarily horizontal gestures
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    touchStartX.current = e.touches[0].clientX;
-    touchStartY.current = e.touches[0].clientY;
+    // TouchEvent always fires with at least one touch point; `[0]` is defined.
+    touchStartX.current = e.touches[0]!.clientX;
+    touchStartY.current = e.touches[0]!.clientY;
   }, []);
 
   const handleTouchEnd = useCallback(
     (e: React.TouchEvent) => {
       if (touchStartX.current === null || touchStartY.current === null) return;
-      const deltaX = touchStartX.current - e.changedTouches[0].clientX;
-      const deltaY = touchStartY.current - e.changedTouches[0].clientY;
+      const deltaX = touchStartX.current - e.changedTouches[0]!.clientX;
+      const deltaY = touchStartY.current - e.changedTouches[0]!.clientY;
       touchStartX.current = null;
       touchStartY.current = null;
       if (Math.abs(deltaX) < 50) return;

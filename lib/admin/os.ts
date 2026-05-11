@@ -533,13 +533,11 @@ function leadTone(
   snapshot: Awaited<ReturnType<typeof buildStrategySnapshot>>
 ): AdminOsTone {
   const riskLabels = new Set(
-    snapshot.guardrails.items
-      .filter((item: any) => item.status === "risk")
-      .map((item: any) => item.label)
+    snapshot.guardrails.items.filter((item) => item.status === "risk").map((item) => item.label)
   );
 
   if (role === "strategy") {
-    return snapshot.goals.some((item: any) => item.status === "off-track") ? "risk" : "watch";
+    return snapshot.goals.some((item) => item.status === "off-track") ? "risk" : "watch";
   }
   if (role === "product") {
     return riskLabels.has("Completion") ? "risk" : "watch";
@@ -556,7 +554,7 @@ function buildRoleSummaries(
   snapshot: Awaited<ReturnType<typeof buildStrategySnapshot>>
 ): AdminOsRoleSummary[] {
   const briefByRole = new Map(
-    snapshot.analyst.briefs.map((item: any) => [String(item.role).toLowerCase(), item.summary])
+    snapshot.analyst.briefs.map((item) => [String(item.role).toLowerCase(), item.summary])
   );
 
   return [
@@ -595,7 +593,7 @@ function buildRoleSummaries(
 function buildWatchlist(
   snapshot: Awaited<ReturnType<typeof buildStrategySnapshot>>
 ): AdminOsBrief[] {
-  return snapshot.triage.slice(0, 6).map((item: any) => ({
+  return snapshot.triage.slice(0, 6).map((item) => ({
     title: item.title,
     detail: `${item.cause}: ${item.evidence}`,
     tone: item.confidence === "high" ? "risk" : "watch",
@@ -723,10 +721,8 @@ export async function buildLeadCockpitSnapshot(
   });
 
   const timeline = await fetchRecentTimeline(roleActions.slice(0, 4), decisions.slice(0, 4));
-  const northStarByKey = new Map(snapshot.northStar.map((item: any) => [item.key, item]));
-  const guardrailByLabel = new Map(
-    snapshot.guardrails.items.map((item: any) => [item.label, item])
-  );
+  const northStarByKey = new Map(snapshot.northStar.map((item) => [item.key, item]));
+  const guardrailByLabel = new Map(snapshot.guardrails.items.map((item) => [item.label, item]));
   const topChannel = snapshot.opportunities.leaderboards.channels[0];
   const topLeak = snapshot.opportunities.funnelLeakage[0];
   const leadingIndicatorsByRole = {
@@ -751,7 +747,7 @@ export async function buildLeadCockpitSnapshot(
       generatedAt: new Date().toISOString(),
       days,
       summary:
-        snapshot.analyst.briefs.find((item: any) => item.role === "Strategy")?.summary ??
+        snapshot.analyst.briefs.find((item) => item.role === "Strategy")?.summary ??
         snapshot.narrative[0] ??
         "No strategy summary available.",
       metrics: [
@@ -794,17 +790,17 @@ export async function buildLeadCockpitSnapshot(
       ],
       priorities: [
         ...buildWatchlist(snapshot).slice(0, 3),
-        ...snapshot.opportunities.backlog.slice(0, 3).map((item: any) => ({
+        ...snapshot.opportunities.backlog.slice(0, 3).map((item) => ({
           title: item.title,
           detail: `${item.source} with ${item.impact} impact and score ${item.score}.`,
           tone: item.impact === "high" ? ("watch" as const) : ("good" as const),
           href: item.href,
         })),
       ],
-      supporting: snapshot.goals.slice(0, 4).map((item: any) => ({
+      supporting: snapshot.goals.slice(0, 4).map((item) => ({
         label: item.label,
         value: `${item.progressPct}%`,
-        detail: `${item.metricLabel}: ${item.currentValueLabel ?? item.currentValue ?? "-"}.`,
+        detail: `${item.metricLabel}: ${item.currentValue ?? "-"}.`,
         href: item.href,
       })),
       leadingIndicators: leadingIndicatorsByRole.strategy,
@@ -820,7 +816,7 @@ export async function buildLeadCockpitSnapshot(
       generatedAt: new Date().toISOString(),
       days,
       summary:
-        snapshot.analyst.briefs.find((item: any) => item.role === "Product")?.summary ??
+        snapshot.analyst.briefs.find((item) => item.role === "Product")?.summary ??
         "No product summary available.",
       metrics: [
         compactMetric(
@@ -859,7 +855,7 @@ export async function buildLeadCockpitSnapshot(
         ),
       ],
       priorities: [
-        ...snapshot.releaseImpact.entries.slice(0, 3).map((item: any) => ({
+        ...snapshot.releaseImpact.entries.slice(0, 3).map((item) => ({
           title: item.title,
           detail: `${item.deltaCompletionRate} pp completion and ${item.deltaSubmissions} start delta.`,
           tone:
@@ -872,7 +868,7 @@ export async function buildLeadCockpitSnapshot(
           .filter((item) => /question|release|scoring/.test(item.detail))
           .slice(0, 3),
       ],
-      supporting: snapshot.workQueue.items.slice(0, 4).map((item: any) => ({
+      supporting: snapshot.workQueue.items.slice(0, 4).map((item) => ({
         label: item.title,
         value: item.priority,
         detail: item.detail,
@@ -886,9 +882,10 @@ export async function buildLeadCockpitSnapshot(
 
   if (role === "growth") {
     const topChannelTone: AdminOsTone =
-      topChannel?.conversionRate >= 50
+      // Treat missing rate as 0 (worst tone). topChannel itself may be undefined.
+      (topChannel?.conversionRate ?? 0) >= 50
         ? "good"
-        : topChannel?.conversionRate >= 25
+        : (topChannel?.conversionRate ?? 0) >= 25
           ? "watch"
           : "risk";
 
@@ -898,7 +895,7 @@ export async function buildLeadCockpitSnapshot(
       generatedAt: new Date().toISOString(),
       days,
       summary:
-        snapshot.analyst.briefs.find((item: any) => item.role === "Growth")?.summary ??
+        snapshot.analyst.briefs.find((item) => item.role === "Growth")?.summary ??
         "No growth summary available.",
       metrics: [
         compactMetric(
@@ -942,11 +939,9 @@ export async function buildLeadCockpitSnapshot(
       ],
       priorities: [
         ...snapshot.opportunities.backlog
-          .filter(
-            (item: any) => item.source === "Release Impact" || item.source === "UTM Conversion"
-          )
+          .filter((item) => item.source === "Release Impact" || item.source === "UTM Conversion")
           .slice(0, 4)
-          .map((item: any) => ({
+          .map((item) => ({
             title: item.title,
             detail: `${item.detail} Score ${item.score}.`,
             tone: item.impact === "high" ? ("watch" as const) : ("good" as const),
@@ -954,7 +949,7 @@ export async function buildLeadCockpitSnapshot(
           })),
         ...buildWatchlist(snapshot).slice(0, 2),
       ],
-      supporting: snapshot.opportunities.leaderboards.channels.slice(0, 4).map((item: any) => ({
+      supporting: snapshot.opportunities.leaderboards.channels.slice(0, 4).map((item) => ({
         label: item.source,
         value: `${item.conversionRate}%`,
         detail: `${item.started} starts from ${item.signups} signups.`,
@@ -972,7 +967,7 @@ export async function buildLeadCockpitSnapshot(
     generatedAt: new Date().toISOString(),
     days,
     summary:
-      snapshot.analyst.briefs.find((item: any) => item.role === "Tech")?.summary ??
+      snapshot.analyst.briefs.find((item) => item.role === "Tech")?.summary ??
       "No tech summary available.",
     metrics: [
       ...systemMetrics,

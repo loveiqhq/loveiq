@@ -63,4 +63,11 @@ describe("GET /api/admin/knowledge", () => {
       "risk"
     );
   });
+
+  it("returns 429 when rate-limited", async () => {
+    mockCheckRateLimit.mockResolvedValue({ allowed: false, remaining: 0, resetAt: new Date() });
+    const res = await GET(new Request("http://localhost/api/admin/knowledge"));
+    expect(res.status).toBe(429);
+    expect(mockBuildAdminKnowledgeSnapshot).not.toHaveBeenCalled();
+  });
 });

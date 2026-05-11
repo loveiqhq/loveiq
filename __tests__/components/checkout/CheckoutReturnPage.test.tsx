@@ -107,9 +107,12 @@ describe("CheckoutReturnPage", () => {
       "/report/rpt_ABCDEFGHIJKLMNOPQRST"
     );
 
-    await new Promise((resolve) => setTimeout(resolve, 1_300));
-
-    expect(mockRouterReplace).toHaveBeenCalledWith("/report/rpt_ABCDEFGHIJKLMNOPQRST");
+    // Component schedules router.replace after a ~1s success-toast delay.
+    // waitFor polls until the call lands instead of sleeping past the timer.
+    await waitFor(
+      () => expect(mockRouterReplace).toHaveBeenCalledWith("/report/rpt_ABCDEFGHIJKLMNOPQRST"),
+      { timeout: 3000 }
+    );
   }, 10000);
 
   it("treats no_payment_required as a successful unlock for fully discounted checkouts", async () => {
@@ -201,14 +204,14 @@ describe("CheckoutReturnPage", () => {
     expect(mockTrackReportPurchase).not.toHaveBeenCalled();
 
     // Polling re-fetches every UNLOCK_CHECK_DELAY_MS (2000ms in component).
-    // Wait long enough that the second fetch is guaranteed to have resolved
-    // even under suite-wide CPU contention.
-    await new Promise((resolve) => setTimeout(resolve, 2_500));
-
-    await waitFor(() =>
-      expect(
-        screen.getByText(/payment complete\. your report is unlocked\. redirecting you now/i)
-      ).toBeInTheDocument()
+    // waitFor with a generous timeout lets the second poll fire and resolve
+    // without sleeping past it.
+    await waitFor(
+      () =>
+        expect(
+          screen.getByText(/payment complete\. your report is unlocked\. redirecting you now/i)
+        ).toBeInTheDocument(),
+      { timeout: 5000 }
     );
     await waitFor(() => {
       expect(mockTrackReportPurchase).toHaveBeenCalledTimes(1);
@@ -220,8 +223,9 @@ describe("CheckoutReturnPage", () => {
       });
     });
 
-    await new Promise((resolve) => setTimeout(resolve, 1_500));
-
-    expect(mockRouterReplace).toHaveBeenCalledWith("/report/rpt_ABCDEFGHIJKLMNOPQRST");
+    await waitFor(
+      () => expect(mockRouterReplace).toHaveBeenCalledWith("/report/rpt_ABCDEFGHIJKLMNOPQRST"),
+      { timeout: 3000 }
+    );
   }, 15000);
 });

@@ -37,6 +37,9 @@ function safeCompare(a: string, b: string): boolean {
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+// Fail-safe before Vercel's 60s default so a stuck Supabase call surfaces
+// as our own 504 with telemetry instead of a silent kill.
+export const maxDuration = 50;
 
 const PAUSE_AGE_MIN_MINUTES = 60;
 const PAUSE_AGE_MAX_HOURS = 24;

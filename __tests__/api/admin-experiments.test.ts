@@ -172,6 +172,33 @@ describe("admin experiments route", () => {
     expect(mockBuildExperimentRegistrySnapshot).toHaveBeenCalledWith("admin@test.com");
   });
 
+  it("GET returns 401 without admin session", async () => {
+    mockVerifyAdminSession.mockResolvedValue(null);
+    const res = await GET(new Request("http://localhost/api/admin/experiments"));
+    expect(res.status).toBe(401);
+  });
+
+  it("GET returns 429 when rate-limited", async () => {
+    mockCheckRateLimit.mockResolvedValue({ allowed: false, remaining: 0, resetAt: new Date() });
+    const res = await GET(new Request("http://localhost/api/admin/experiments"));
+    expect(res.status).toBe(429);
+  });
+
+  it("POST returns 403 when CSRF token invalid", async () => {
+    mockVerifyCsrfToken.mockResolvedValue(false);
+    const res = await POST(
+      new Request("http://localhost/api/admin/experiments", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: "Test experiment",
+          primary_metric_key: "completion_rate",
+        }),
+      })
+    );
+    expect(res.status).toBe(403);
+  });
+
   it("creates an experiment and writes an audit log", async () => {
     mockSupabaseFetch.mockResolvedValueOnce({
       ok: true,

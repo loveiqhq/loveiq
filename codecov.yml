@@ -1,0 +1,42 @@
+# Codecov gate — complements Vitest's absolute thresholds with delta gating.
+# Vitest in vitest.config.ts enforces absolute coverage (lines:60, functions:65, branches:50).
+# This file gates per-PR coverage delta and patch coverage.
+
+coverage:
+  status:
+    project:
+      default:
+        # Project coverage may not drop more than 1% vs. base.
+        target: auto
+        threshold: 1%
+        # Don't fail if base coverage hasn't been reported yet (first PR after flag flip).
+        if_no_uploads: error
+        if_not_found: success
+    patch:
+      default:
+        # New/modified lines must hit 80% coverage.
+        target: 80%
+        # If a PR touches no covered files, don't fail.
+        if_not_found: success
+
+# Apply same exclusions as vitest.config.ts so reports align.
+ignore:
+  - "node_modules/**"
+  - ".next/**"
+  - "__tests__/**"
+  - "data/glossary-data.ts"
+  - "app/api/cron/**"
+  - "lib/scoring/index.ts"
+  - "lib/scoring/types.ts"
+  - "lib/emails/admin-magic-link.ts"
+  - "lib/emails/invite.ts"
+  - "lib/emails/report-all.ts"
+  - "lib/emails/report-essentials.ts"
+  - "lib/emails/report-full.ts"
+  - "lib/emails/survey-complete.ts"
+  - "lib/emails/survey-paused.ts"
+
+comment:
+  layout: "reach,diff,flags,tree"
+  behavior: default
+  require_changes: false

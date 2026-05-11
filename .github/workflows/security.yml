@@ -14,9 +14,10 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
+  # Workflow-level default kept minimal. security-events:write is granted only
+  # to the codeql-analysis job that actually uploads SARIF results;
+  # pull-requests:write is unused here (no PR comment posting).
   contents: read
-  security-events: write
-  pull-requests: write
 
 jobs:
   # Secret scanning to detect hardcoded credentials
@@ -39,7 +40,10 @@ jobs:
     name: SAST - Semgrep
     runs-on: ubuntu-latest
     container:
-      image: semgrep/semgrep:1.116.0
+      # Pinned by digest — image tags can be force-pushed. Bump together
+      # with the version comment when upgrading. Digest source: Docker Hub
+      # https://hub.docker.com/v2/repositories/semgrep/semgrep/tags/1.116.0
+      image: semgrep/semgrep:1.116.0@sha256:70dbbcab41ba5899d21c081c90f7a08c624dd68ff551c7f76ca9e6d74ec30a22
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -68,6 +72,7 @@ jobs:
     name: CodeQL Analysis
     runs-on: ubuntu-latest
     permissions:
+      # Job-scoped — only this job needs security-events:write for SARIF upload.
       actions: read
       contents: read
       security-events: write
@@ -127,7 +132,12 @@ jobs:
 
       - name: Scan for known vulnerabilities (OSV)
         run: |
+          # SHA-256 of osv-scanner v1.9.2 linux/amd64 — must match the published
+          # release. Mismatch = supply chain tamper, abort. Verify and bump
+          # together when upgrading.
+          OSV_SHA256="d6af4b67fa5de658598bd2d445efb99e90d1734b3146962418719c4350ecb74b"
           curl -sSfL "https://github.com/google/osv-scanner/releases/download/v1.9.2/osv-scanner_linux_amd64" -o /tmp/osv-scanner
+          echo "${OSV_SHA256}  /tmp/osv-scanner" | sha256sum -c -
           chmod +x /tmp/osv-scanner
           /tmp/osv-scanner --config=.osv-scanner.toml --lockfile=package-lock.json
 
@@ -157,8 +167,8 @@ jobs:
             cat eslint-results.json | jq '.'
           fi
 
-      - name: Run tests
-        run: npm test
+      # Unit tests run in the dedicated `test` job in ci.yml — duplicating here
+      # would burn an extra ~38s of runner minutes on every push.
 
       - name: Standard ESLint
         run: npm run lint

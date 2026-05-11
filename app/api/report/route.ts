@@ -202,7 +202,8 @@ export async function GET(request: Request) {
         if (!Array.isArray(tokenRows) || tokenRows.length === 0) {
           return NextResponse.json({ error: "Report not found." }, { status: 404 });
         }
-        submissionId = tokenRows[0].survey_submission_id;
+        // tokenRows.length checked > 0 above, so [0] is non-undefined.
+        submissionId = tokenRows[0]!.survey_submission_id;
       }
 
       if (!submissionId) {
@@ -234,7 +235,8 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Report not found." }, { status: 404 });
     }
 
-    const submission = submissions[0];
+    // submissions.length checked > 0 above; [0] is non-undefined.
+    const submission = submissions[0]!;
 
     // 6. Look up scoring_result by survey_submission_id
     const snapshotAnswerQids = SNAPSHOT_QUESTION_QIDS.join(",");
@@ -289,7 +291,8 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Report not found." }, { status: 404 });
     }
 
-    const scoring = scoringRows[0];
+    // scoringRows.length checked > 0 above; [0] is non-undefined.
+    const scoring = scoringRows[0]!;
     let snapshotAnswers: SnapshotAnswers = {
       currentSexualSatisfaction: null,
       importanceOfSex: null,

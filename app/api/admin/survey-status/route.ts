@@ -105,7 +105,8 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "No survey found." }, { status: 404 });
     }
 
-    const surveyId = surveys[0].id;
+    // surveys.length checked > 0 above; [0] is defined.
+    const surveyId = surveys[0]!.id;
     const newStatus = body.active ? "active" : "closed";
 
     const res = await supabaseFetch(`/rest/v1/survey?id=eq.${surveyId}`, {

@@ -23,7 +23,8 @@ export default function PagePresence() {
         const state = channel.presenceState();
         let count = 0;
         for (const key in state) {
-          count += state[key].length;
+          // `key` comes from `for…in state`, so the lookup is defined.
+          count += state[key]!.length;
         }
         setViewerCount(Math.max(count - 1, 0));
       })

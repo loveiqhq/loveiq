@@ -66,7 +66,7 @@ describe("useReportEngagementTimers", () => {
       60,
       "full_report",
       null,
-      expect.any(Number)
+      0 // scrollDepthPct — tests above do not scroll, so the observed max is 0
     );
   });
 
@@ -84,7 +84,7 @@ describe("useReportEngagementTimers", () => {
       60,
       "locked",
       "Emotional Voyeur",
-      expect.any(Number)
+      0 // scrollDepthPct
     );
 
     act(() => {
@@ -96,7 +96,7 @@ describe("useReportEngagementTimers", () => {
       300,
       "locked",
       "Emotional Voyeur",
-      expect.any(Number)
+      0 // scrollDepthPct
     );
 
     act(() => {
@@ -108,7 +108,7 @@ describe("useReportEngagementTimers", () => {
       600,
       "locked",
       "Emotional Voyeur",
-      expect.any(Number)
+      0 // scrollDepthPct — tests above do not scroll, so the observed max is 0
     );
   });
 
@@ -149,7 +149,7 @@ describe("useReportEngagementTimers", () => {
       60,
       "full_report",
       null,
-      expect.any(Number)
+      0 // scrollDepthPct — tests above do not scroll, so the observed max is 0
     );
   });
 

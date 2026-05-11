@@ -66,4 +66,11 @@ describe("GET /api/admin/network-strategy-intelligence", () => {
       "admin@test.com"
     );
   });
+
+  it("returns 429 when rate-limited", async () => {
+    mockCheckRateLimit.mockResolvedValue({ allowed: false, remaining: 0, resetAt: new Date() });
+    const res = await GET(new Request("http://localhost/api/admin/network-strategy-intelligence"));
+    expect(res.status).toBe(429);
+    expect(mockBuildNetworkStrategyIntelligenceSnapshot).not.toHaveBeenCalled();
+  });
 });

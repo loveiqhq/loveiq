@@ -1,6 +1,5 @@
 "use client";
 
-import type { ReactNode } from "react";
 import { startTransition, useState } from "react";
 import AdminCommentsThread from "@/components/admin/AdminCommentsThread";
 import { useAdminFetch } from "@/components/admin/hooks/useAdminFetch";
@@ -17,107 +16,33 @@ import type {
   InitiativeStatus,
   StrategyPlanningSnapshot,
 } from "@/lib/admin/strategy-planning";
+import {
+  betTone,
+  confidenceTone,
+  dependencyTone,
+  impactTone,
+  initiativeTone,
+  inputClassName,
+  priorityTone,
+} from "@/components/admin/StrategyPlanningTab/styles";
+import {
+  emptyBetForm,
+  emptyCompetitiveWatchForm,
+  emptyDependencyForm,
+  emptyInitiativeForm,
+} from "@/components/admin/StrategyPlanningTab/forms";
+import {
+  Badge,
+  EmptyState,
+  FormField,
+  MetricCard,
+  NarrativeCard,
+} from "@/components/admin/StrategyPlanningTab/subcomponents";
+
+// Tone tables, form factories, and small subcomponents live under
+// ./StrategyPlanningTab/. This file owns the main tab component.
 
 type ComposerType = "initiative" | "bet" | "competitive-watch" | "metric-dependency" | null;
-
-const initiativeTone: Record<InitiativeStatus, string> = {
-  planned: "bg-white/10 text-text-muted",
-  active: "bg-emerald-500/10 text-emerald-300",
-  watch: "bg-amber-500/10 text-amber-200",
-  blocked: "bg-red-500/10 text-red-300",
-  completed: "bg-cyan-500/10 text-cyan-300",
-};
-
-const priorityTone: Record<InitiativePriority, string> = {
-  low: "bg-white/10 text-text-muted",
-  medium: "bg-amber-500/10 text-amber-200",
-  high: "bg-red-500/10 text-red-300",
-};
-
-const betTone: Record<BetStatus, string> = {
-  proposed: "bg-white/10 text-text-muted",
-  active: "bg-emerald-500/10 text-emerald-300",
-  validated: "bg-cyan-500/10 text-cyan-300",
-  invalidated: "bg-red-500/10 text-red-300",
-  parked: "bg-amber-500/10 text-amber-200",
-};
-
-const confidenceTone: Record<BetConfidence, string> = {
-  low: "bg-white/10 text-text-muted",
-  medium: "bg-amber-500/10 text-amber-200",
-  high: "bg-emerald-500/10 text-emerald-300",
-};
-
-const impactTone: Record<ImpactLevel, string> = {
-  low: "bg-white/10 text-text-muted",
-  medium: "bg-cyan-500/10 text-cyan-300",
-  high: "bg-amber-500/10 text-amber-200",
-  critical: "bg-red-500/10 text-red-300",
-};
-
-const dependencyTone: Record<DependencyStrength, string> = {
-  weak: "bg-white/10 text-text-muted",
-  medium: "bg-cyan-500/10 text-cyan-300",
-  strong: "bg-emerald-500/10 text-emerald-300",
-};
-
-const inputClassName =
-  "w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:border-white/20 focus:outline-none";
-
-function emptyInitiativeForm() {
-  return {
-    title: "",
-    description: "",
-    status: "planned" as InitiativeStatus,
-    priority: "medium" as InitiativePriority,
-    owner_email: "",
-    goal_id: "",
-    primary_metric_key: "",
-    secondary_metric_keys: [] as string[],
-    expected_impact: "",
-    review_date: "",
-    linked_href: "",
-  };
-}
-
-function emptyBetForm() {
-  return {
-    title: "",
-    hypothesis: "",
-    status: "proposed" as BetStatus,
-    confidence: "medium" as BetConfidence,
-    upside_note: "",
-    downside_note: "",
-    primary_metric_key: "",
-    review_date: "",
-    owner_email: "",
-    decision_note: "",
-  };
-}
-
-function emptyCompetitiveWatchForm() {
-  return {
-    competitor_name: "",
-    move_type: "feature" as CompetitiveMoveType,
-    title: "",
-    detail: "",
-    impact_level: "medium" as ImpactLevel,
-    primary_metric_key: "",
-    recommended_response: "",
-    source_href: "",
-    observed_at: "",
-  };
-}
-
-function emptyDependencyForm() {
-  return {
-    parent_metric_key: "",
-    child_metric_key: "",
-    relationship_strength: "medium" as DependencyStrength,
-    hypothesis_note: "",
-    evidence_note: "",
-  };
-}
 
 export default function StrategyPlanningTab() {
   const { data, loading, error, refetch } = useAdminFetch<StrategyPlanningSnapshot>(
@@ -1428,57 +1353,6 @@ export default function StrategyPlanningTab() {
           ))}
         </div>
       </section>
-    </div>
-  );
-}
-
-function FormField({
-  label,
-  children,
-  className = "",
-}: {
-  label: string;
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <div className={className}>
-      <label className="mb-1 block text-xs text-text-muted">{label}</label>
-      {children}
-    </div>
-  );
-}
-
-function Badge({ className, children }: { className: string; children: ReactNode }) {
-  return (
-    <span className={`rounded-full px-2 py-0.5 text-[11px] uppercase tracking-wide ${className}`}>
-      {children}
-    </span>
-  );
-}
-
-function MetricCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg border border-white/10 bg-surface px-3 py-3">
-      <p className="text-xs uppercase tracking-wide text-text-muted">{label}</p>
-      <p className="mt-1 text-sm font-medium text-text-primary">{value}</p>
-    </div>
-  );
-}
-
-function NarrativeCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg border border-white/10 bg-surface px-3 py-3">
-      <p className="text-xs uppercase tracking-wide text-text-muted">{label}</p>
-      <p className="mt-1 text-sm text-text-primary">{value}</p>
-    </div>
-  );
-}
-
-function EmptyState({ text }: { text: string }) {
-  return (
-    <div className="rounded-xl border border-dashed border-white/10 p-6 text-sm text-text-muted">
-      {text}
     </div>
   );
 }

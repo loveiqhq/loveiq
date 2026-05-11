@@ -192,6 +192,14 @@ describe("GET /api/admin/stats", () => {
     expect(res.status).toBe(401);
   });
 
+  it("returns 429 when rate-limited", async () => {
+    mockCheckRateLimit.mockResolvedValue({ allowed: false, remaining: 0, resetAt: new Date() });
+
+    const res = await GET(makeRequest());
+    expect(res.status).toBe(429);
+    expect(mockSupabaseFetch).not.toHaveBeenCalled();
+  });
+
   it("returns 500 when any core Supabase query fails", async () => {
     mockSupabaseFetch
       .mockResolvedValueOnce({ ok: false, status: 500 })

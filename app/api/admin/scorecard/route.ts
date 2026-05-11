@@ -78,7 +78,8 @@ export async function GET(request: Request) {
           totalRevisions: 0,
         };
       }
-      const s = stats[a.survey_question_id];
+      // stats[a.survey_question_id] is initialised in the if-block above; safe.
+      const s = stats[a.survey_question_id]!;
       s.totalAnswers++;
       if (a.was_skipped) s.skipped++;
       if (a.time_spent_seconds != null && a.time_spent_seconds > 0) {

@@ -66,7 +66,8 @@ function escapeCSV(value: string): string {
 
 function downloadCsv(rows: Record<string, unknown>[], filename: string) {
   if (rows.length === 0) return;
-  const headers = Object.keys(rows[0]);
+  // rows.length > 0 checked above.
+  const headers = Object.keys(rows[0]!);
   const lines = [
     headers.map(escapeCSV).join(","),
     ...rows.map((row) =>
@@ -104,12 +105,14 @@ export default function ProductKpiDashboard() {
   const stats = useMemo(() => {
     if (!data) return null;
 
+    // reduce's seed is the first element; if the filtered array is empty, the
+    // reduce returns it directly. `highestFriction` may legitimately be undefined
+    // when data.reportSections itself is empty — handle below.
     const highestFriction = data.reportSections
       .filter((s) => s.frictionIndex != null)
-      .reduce(
-        (max, s) => ((s.frictionIndex ?? -Infinity) > (max.frictionIndex ?? -Infinity) ? s : max),
-        data.reportSections[0]
-      );
+      .reduce<
+        (typeof data.reportSections)[number] | undefined
+      >((max, s) => (max == null || (s.frictionIndex ?? -Infinity) > (max.frictionIndex ?? -Infinity) ? s : max), data.reportSections[0]);
 
     const chaptersWithData = data.chapters.filter((c) => c.completionPct != null);
     const avgCompletion =

@@ -104,8 +104,9 @@ const ShareReportModal: FC<Props> = ({
       if (event.key !== "Tab") return;
       const focusables = dialogRef.current?.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR);
       if (!focusables || focusables.length === 0) return;
-      const first = focusables[0];
-      const last = focusables[focusables.length - 1];
+      // focusables.length checked > 0 above; first/last are defined.
+      const first = focusables[0]!;
+      const last = focusables[focusables.length - 1]!;
       const active = document.activeElement;
       if (event.shiftKey && active === first) {
         event.preventDefault();

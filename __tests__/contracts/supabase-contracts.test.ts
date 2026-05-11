@@ -22,10 +22,15 @@ import {
   AnswerDetailResponseSchema,
   ExportAnswerResponseSchema,
   SurveyStatusResponseSchema,
+  StuckPaymentRpcResponseSchema,
+  SucceededPaymentLookupResponseSchema,
   WaitlistStatsResponseSchema,
   TextAnalysisAnswerResponseSchema,
   SegmentDeltaSubmissionResponseSchema,
   ResearchIntelligenceAnswerResponseSchema,
+  PredictiveInsightsRpcResponseSchema,
+  SegmentMetricsSnapshotResponseSchema,
+  SegmentMatchCountRpcResponseSchema,
 } from "./supabase-contracts";
 
 // ---------------------------------------------------------------------------
@@ -590,5 +595,220 @@ describe("ResearchIntelligenceAnswerResponseSchema", () => {
       },
     ];
     expect(() => ResearchIntelligenceAnswerResponseSchema.parse(data)).toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 15. StuckPaymentRpcResponseSchema
+//     payment-fulfillment-sweep cron — find_stuck_payments RPC.
+// ---------------------------------------------------------------------------
+describe("StuckPaymentRpcResponseSchema", () => {
+  const validRow = {
+    payment_id: 1,
+    personal_report_id: 5,
+    plan: "full_report",
+    archetype: "Spark Seeker",
+    primary_archetype: "Spark Seeker",
+  };
+
+  it("accepts a full row with both archetype fields populated", () => {
+    expect(() => StuckPaymentRpcResponseSchema.parse([validRow])).not.toThrow();
+  });
+
+  it("accepts rows with null archetype + null primary_archetype (all_reports plan)", () => {
+    expect(() =>
+      StuckPaymentRpcResponseSchema.parse([
+        { ...validRow, plan: "all_reports", archetype: null, primary_archetype: null },
+      ])
+    ).not.toThrow();
+  });
+
+  it("accepts an empty array (no stuck payments)", () => {
+    expect(() => StuckPaymentRpcResponseSchema.parse([])).not.toThrow();
+  });
+
+  it("rejects rows missing payment_id", () => {
+    const { payment_id: _payment_id, ...rest } = validRow;
+    expect(() => StuckPaymentRpcResponseSchema.parse([rest])).toThrow();
+  });
+
+  it("rejects payment_id as a string", () => {
+    expect(() => StuckPaymentRpcResponseSchema.parse([{ ...validRow, payment_id: "1" }])).toThrow();
+  });
+
+  it("rejects plan as null", () => {
+    expect(() => StuckPaymentRpcResponseSchema.parse([{ ...validRow, plan: null }])).toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 16. SucceededPaymentLookupResponseSchema
+//     planAccess.getReportPlanByPersonalReportId — succeeded-payment lookup.
+// ---------------------------------------------------------------------------
+describe("SucceededPaymentLookupResponseSchema", () => {
+  it("accepts an empty array (no succeeded payments)", () => {
+    expect(() => SucceededPaymentLookupResponseSchema.parse([])).not.toThrow();
+  });
+
+  it("accepts rows with metadata.plan populated", () => {
+    expect(() =>
+      SucceededPaymentLookupResponseSchema.parse([
+        { metadata: { plan: "essentials" }, payment_date_time: "2026-04-01T12:00:00.000Z" },
+      ])
+    ).not.toThrow();
+  });
+
+  it("accepts rows with metadata: null (legitimate edge case)", () => {
+    expect(() => SucceededPaymentLookupResponseSchema.parse([{ metadata: null }])).not.toThrow();
+  });
+
+  it("rejects rows missing metadata altogether", () => {
+    expect(() =>
+      SucceededPaymentLookupResponseSchema.parse([{ payment_date_time: "2026-04-01T00:00:00Z" }])
+    ).toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 17. PredictiveInsightsRpcResponseSchema
+// ---------------------------------------------------------------------------
+describe("PredictiveInsightsRpcResponseSchema", () => {
+  it("accepts a valid row", () => {
+    expect(() =>
+      PredictiveInsightsRpcResponseSchema.parse([
+        {
+          type: "utm_conversion",
+          title: "google → high quality",
+          description: "Lift in conversions for google source.",
+          confidence: "high",
+          priority: 1,
+          trend: "up",
+        },
+      ])
+    ).not.toThrow();
+  });
+
+  it("accepts type-specific extra fields via passthrough", () => {
+    expect(() =>
+      PredictiveInsightsRpcResponseSchema.parse([
+        {
+          type: "abandonment_predictor",
+          title: "Q3 abandonment spike",
+          confidence: "medium",
+          priority: 2,
+          // type-specific fields the RPC sometimes returns:
+          q_id: "03002",
+          abandon_count: 7,
+        },
+      ])
+    ).not.toThrow();
+  });
+
+  it("rejects rows with invalid confidence enum", () => {
+    expect(() =>
+      PredictiveInsightsRpcResponseSchema.parse([
+        { type: "x", title: "t", confidence: "definitely", priority: 1 },
+      ])
+    ).toThrow();
+  });
+
+  it("rejects rows missing priority", () => {
+    expect(() =>
+      PredictiveInsightsRpcResponseSchema.parse([{ type: "x", title: "t", confidence: "high" }])
+    ).toThrow();
+  });
+
+  it("accepts an empty array (no insights this window)", () => {
+    expect(() => PredictiveInsightsRpcResponseSchema.parse([])).not.toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 18. SegmentMetricsSnapshotResponseSchema
+// ---------------------------------------------------------------------------
+describe("SegmentMetricsSnapshotResponseSchema", () => {
+  it("accepts a valid snapshot", () => {
+    expect(() =>
+      SegmentMetricsSnapshotResponseSchema.parse({
+        total_submissions: 42,
+        completed: 35,
+        avg_duration_ms: 95_000,
+        archetype_distribution: [
+          { archetype: "Spark Seeker", count: 12 },
+          { archetype: "Romantic Idealist", count: 8 },
+        ],
+      })
+    ).not.toThrow();
+  });
+
+  it("accepts an empty archetype_distribution array", () => {
+    expect(() =>
+      SegmentMetricsSnapshotResponseSchema.parse({
+        total_submissions: 0,
+        completed: 0,
+        avg_duration_ms: 0,
+        archetype_distribution: [],
+      })
+    ).not.toThrow();
+  });
+
+  it("rejects when total_submissions is missing", () => {
+    expect(() =>
+      SegmentMetricsSnapshotResponseSchema.parse({
+        completed: 1,
+        avg_duration_ms: 1000,
+        archetype_distribution: [],
+      })
+    ).toThrow();
+  });
+
+  it("rejects archetype_distribution entries without count", () => {
+    expect(() =>
+      SegmentMetricsSnapshotResponseSchema.parse({
+        total_submissions: 1,
+        completed: 1,
+        avg_duration_ms: 1000,
+        archetype_distribution: [{ archetype: "X" }],
+      })
+    ).toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 19. SegmentMatchCountRpcResponseSchema
+// ---------------------------------------------------------------------------
+describe("SegmentMatchCountRpcResponseSchema", () => {
+  it("accepts response with count only", () => {
+    expect(() => SegmentMatchCountRpcResponseSchema.parse({ count: 17 })).not.toThrow();
+  });
+
+  it("accepts response with count + sample", () => {
+    expect(() =>
+      SegmentMatchCountRpcResponseSchema.parse({
+        count: 2,
+        sample: [
+          {
+            id: 1,
+            email: "a@test.com",
+            archetype: "Spark Seeker",
+            created_date_time: "2026-05-01T00:00:00Z",
+          },
+          { id: 2, email: null, archetype: null, created_date_time: null },
+        ],
+      })
+    ).not.toThrow();
+  });
+
+  it("rejects when count is missing", () => {
+    expect(() => SegmentMatchCountRpcResponseSchema.parse({ sample: [] })).toThrow();
+  });
+
+  it("rejects sample entries missing id", () => {
+    expect(() =>
+      SegmentMatchCountRpcResponseSchema.parse({
+        count: 1,
+        sample: [{ email: "x@test.com" }],
+      })
+    ).toThrow();
   });
 });

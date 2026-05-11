@@ -1,5 +1,21 @@
 import "@testing-library/jest-dom/vitest";
-import { beforeEach, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, vi } from "vitest";
+import { server } from "./__fixtures__/msw-server";
+
+// MSW node server — global lifecycle. Tests opt in by registering handlers
+// via `server.use(http.get(…))` in their own setup. Unhandled requests now
+// hard-error so accidental real-network calls fail loudly. Legacy
+// vi.mock-based fetch mocks still work — they replace fetchWithTimeout
+// before it can call `fetch`, so MSW never sees those requests.
+beforeAll(() => {
+  server.listen({ onUnhandledRequest: "error" });
+});
+afterEach(() => {
+  server.resetHandlers();
+});
+afterAll(() => {
+  server.close();
+});
 
 // jsdom does not implement window.matchMedia, but several report components
 // use it to detect prefers-reduced-motion. Per-test stubGlobal calls have

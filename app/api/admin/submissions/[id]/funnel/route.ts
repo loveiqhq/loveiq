@@ -119,7 +119,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     if (subs.length === 0) {
       return NextResponse.json({ error: "Submission not found." }, { status: 404 });
     }
-    const sub = subs[0];
+    // subs.length checked > 0 above; [0] is non-undefined.
+    const sub = subs[0]!;
 
     const progressTimestamps: Record<
       "progress_25_at" | "progress_50_at" | "progress_75_at",

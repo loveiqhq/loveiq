@@ -130,7 +130,7 @@ describe("scoreArchetypes", () => {
   });
 
   it("gate penalty applies when dimension is below threshold", () => {
-    // Explorer of Edges gate: DIM_EDGE_NEED >= 0.7, scoreAdjustmentIfFail -2
+    // Explorer of Edges gate: DIM_EDGE_NEED >= 0.6, scoreAdjustmentIfFail -1
     // Set edge need very low (1 on 1-7 scale = 0.0)
     const lowEdge = scoreArchetypes(config, { "03012": 1 });
     // Set edge need very high (7 on 1-7 scale = 1.0)
@@ -140,6 +140,49 @@ describe("scoreArchetypes", () => {
     expect(highEdge.percent["Explorer of Edges"]).toBeGreaterThan(
       lowEdge.percent["Explorer of Edges"]
     );
+  });
+
+  // V8-new gates (added 2026-04-19):
+  //  - Curious Apprentice / DIM_TURNON_EXPRESS / >=0.5 / -1.41
+  //  - Emotional Voyeur   / DIM_EDGE_NEED      / >=0.35 / -0.5
+  //  - Emotional Voyeur   / DIM_AVOIDANT       / >=0.55 / -1.5
+
+  it("V8 gate: Curious Apprentice penalised when DIM_TURNON_EXPRESS below 0.5", () => {
+    // qid 10003 maps to DIM_TURNON_EXPRESS, scale 1-7 → 0-1
+    const lowExpress = scoreArchetypes(config, { "10003": 1 }); // 0.0 → fails gate
+    const highExpress = scoreArchetypes(config, { "10003": 7 }); // 1.0 → passes
+    expect(highExpress.rawScore["Curious Apprentice"]).toBeGreaterThan(
+      lowExpress.rawScore["Curious Apprentice"]
+    );
+  });
+
+  it("V8 gate: Emotional Voyeur penalised when DIM_EDGE_NEED below 0.35", () => {
+    // qid 03012 = DIM_EDGE_NEED, scale 1-7 → 0-1; threshold 0.35 ≈ value 3.1 on 1-7
+    const lowEdge = scoreArchetypes(config, { "03012": 1 }); // 0.0 → fails
+    const passEdge = scoreArchetypes(config, { "03012": 4 }); // 0.5 → passes
+    expect(passEdge.rawScore["Emotional Voyeur"]).toBeGreaterThan(
+      lowEdge.rawScore["Emotional Voyeur"]
+    );
+  });
+
+  it("V8 gate: Emotional Voyeur penalised when DIM_AVOIDANT below 0.55", () => {
+    // qid 08012 = DIM_AVOIDANT, scale 1-7 → 0-1; threshold 0.55 ≈ value 4.3 on 1-7
+    const lowAvoid = scoreArchetypes(config, { "08012": 1 }); // 0.0 → fails
+    const highAvoid = scoreArchetypes(config, { "08012": 7 }); // 1.0 → passes
+    expect(highAvoid.rawScore["Emotional Voyeur"]).toBeGreaterThan(
+      lowAvoid.rawScore["Emotional Voyeur"]
+    );
+  });
+
+  it("V8: all 12 gates load with non-zero penalties and existing archetypes/dimensions", () => {
+    expect(config.gates).toHaveLength(12);
+    for (const g of config.gates) {
+      expect(config.archetypes).toContain(g.archetype);
+      expect(config.dimensions[g.dimension]).toBeDefined();
+      expect(g.scoreAdjustmentIfFail).toBeLessThan(0);
+      expect(g.value).toBeGreaterThan(0);
+      expect(g.value).toBeLessThanOrEqual(1);
+    }
   });
 
   it("weight modifiers reduce dimension weight under stress", () => {

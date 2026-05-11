@@ -1,12 +1,21 @@
 import { buildCreativeIntelligenceSnapshot } from "@/lib/admin/creative-intelligence";
+type CreativeIntelligenceSnapshot = Awaited<ReturnType<typeof buildCreativeIntelligenceSnapshot>>;
+import type { ConversionLeakDebuggerSnapshot } from "@/lib/admin/conversion-leak-debugger";
 import { buildConversionLeakDebuggerSnapshot } from "@/lib/admin/conversion-leak-debugger";
 import { buildProductKpiHref } from "@/lib/admin/drilldowns";
 import { buildGrowthControlTowerSnapshot } from "@/lib/admin/growth-control-tower";
+type GrowthControlTowerSnapshot = Awaited<ReturnType<typeof buildGrowthControlTowerSnapshot>>;
+import type { ProductAdoptionSnapshot } from "@/lib/admin/product-adoption";
 import { buildProductAdoptionSnapshot } from "@/lib/admin/product-adoption";
+import type { ProductExperienceHealthSnapshot } from "@/lib/admin/product-experience-health";
 import { buildProductExperienceHealthSnapshot } from "@/lib/admin/product-experience-health";
 import { buildProductIssueRadarSnapshot } from "@/lib/admin/product-issue-radar";
+import type { ProductIssueRadarSnapshot } from "@/lib/admin/product-issue-types";
+import type { RecoveryPlaybookSnapshot } from "@/lib/admin/recovery-playbook";
 import { buildRecoveryPlaybookSnapshot } from "@/lib/admin/recovery-playbook";
+import type { ResearchIntelligenceSnapshot } from "@/lib/admin/research-intelligence";
 import { buildResearchIntelligenceSnapshot } from "@/lib/admin/research-intelligence";
+import type { ValueRealizationSnapshot } from "@/lib/admin/value-realization";
 import { buildValueRealizationSnapshot } from "@/lib/admin/value-realization";
 import type {
   AdminIntelligenceDraft,
@@ -127,13 +136,13 @@ function confidenceFromScore(score: number): "high" | "medium" | "low" {
 
 function buildProductExplanationSnapshot(
   days: number,
-  issueRadar: any,
-  experience: any,
-  adoption: any,
-  research: any
+  issueRadar: ProductIssueRadarSnapshot,
+  experience: ProductExperienceHealthSnapshot,
+  adoption: ProductAdoptionSnapshot,
+  research: ResearchIntelligenceSnapshot
 ): AdminIntelligenceSnapshot {
   const driverItems = [
-    ...(issueRadar.priorityIssues ?? []).slice(0, 3).map((issue: any) => ({
+    ...(issueRadar.priorityIssues ?? []).slice(0, 3).map((issue) => ({
       score: issue.impactScore ?? 50,
       item: makeItem({
         id: `product-driver-issue-${issue.id}`,
@@ -157,7 +166,7 @@ function buildProductExplanationSnapshot(
         ),
       }),
     })),
-    ...(experience.areas ?? []).slice(0, 3).map((area: any) => ({
+    ...(experience.areas ?? []).slice(0, 3).map((area) => ({
       score: 100 - (area.score ?? 60),
       item: makeItem({
         id: `product-driver-area-${area.key}`,
@@ -182,9 +191,9 @@ function buildProductExplanationSnapshot(
       }),
     })),
     ...(adoption.launches ?? [])
-      .filter((launch: any) => launch.adoptionState !== "validated")
+      .filter((launch) => launch.adoptionState !== "validated")
       .slice(0, 2)
-      .map((launch: any) => ({
+      .map((launch) => ({
         score:
           launch.adoptionState === "attention"
             ? 84
@@ -229,8 +238,8 @@ function buildProductExplanationSnapshot(
     .map((entry) => entry.item);
 
   const journeyItems = [
-    ...(issueRadar.contextHotspots ?? []).flatMap((group: any) =>
-      (group.items ?? []).slice(0, 2).map((item: any) =>
+    ...(issueRadar.contextHotspots ?? []).flatMap((group) =>
+      (group.items ?? []).slice(0, 2).map((item) =>
         makeItem({
           id: `product-journey-${group.dimension}-${item.label}`,
           title: `${group.dimension} hotspot: ${item.label}`,
@@ -253,7 +262,7 @@ function buildProductExplanationSnapshot(
         })
       )
     ),
-    ...(issueRadar.chapterHotspots ?? []).slice(0, 2).map((item: any) =>
+    ...(issueRadar.chapterHotspots ?? []).slice(0, 2).map((item) =>
       makeItem({
         id: `product-journey-chapter-${item.label}`,
         title: `Chapter hotspot: ${item.label}`,
@@ -279,14 +288,11 @@ function buildProductExplanationSnapshot(
   ].slice(0, 5);
 
   const hypothesisItems = [
-    ...(research.contradictions ?? []).slice(0, 2).map((item: any, index: number) =>
+    ...(research.contradictions ?? []).slice(0, 2).map((item, index) =>
       makeItem({
         id: `product-hypothesis-contradiction-${index}`,
         title: item.title || "Behavior and research contradiction",
-        detail:
-          item.summary ||
-          item.detail ||
-          "Research and behavior are moving in different directions.",
+        detail: item.detail || "Research and behavior are moving in different directions.",
         tone: "watch",
         confidence: "medium",
         capabilities: ["feedback-to-hypothesis", "contradiction detector", "product experiment"],
@@ -300,12 +306,12 @@ function buildProductExplanationSnapshot(
         draft: makeDraft(
           "hypothesis",
           item.title || "Investigate contradiction",
-          item.recommendation || item.summary || "Compare user claims with observed behavior.",
+          item.recommendation || item.detail || "Compare user claims with observed behavior.",
           item.href || "/admin/research"
         ),
       })
     ),
-    ...(research.themes ?? []).slice(0, 2).map((theme: any) =>
+    ...(research.themes ?? []).slice(0, 2).map((theme) =>
       makeItem({
         id: `product-hypothesis-theme-${theme.theme}`,
         title: `Theme-led hypothesis: ${theme.theme}`,
@@ -328,7 +334,7 @@ function buildProductExplanationSnapshot(
         ),
       })
     ),
-    ...(research.answerQuality?.questions ?? []).slice(0, 1).map((question: any) =>
+    ...(research.answerQuality?.questions ?? []).slice(0, 1).map((question) =>
       makeItem({
         id: `product-hypothesis-quality-${question.questionId}`,
         title: `Low-information hypothesis: ${question.questionLabel}`,
@@ -390,14 +396,14 @@ function buildProductExplanationSnapshot(
 
 function buildGrowthExplanationSnapshot(
   days: number,
-  control: any,
-  leak: any,
-  creative: any,
-  recovery: any,
-  value: any
+  control: GrowthControlTowerSnapshot,
+  leak: ConversionLeakDebuggerSnapshot,
+  creative: CreativeIntelligenceSnapshot,
+  recovery: RecoveryPlaybookSnapshot,
+  value: ValueRealizationSnapshot
 ): AdminIntelligenceSnapshot {
   const driverItems = [
-    ...(control.priorities ?? []).slice(0, 3).map((priority: any, index: number) => ({
+    ...(control.priorities ?? []).slice(0, 3).map((priority, index) => ({
       score: priority.tone === "risk" ? 82 : priority.tone === "good" ? 68 : 56,
       item: makeItem({
         id: `growth-driver-priority-${index}`,
@@ -412,7 +418,7 @@ function buildGrowthExplanationSnapshot(
         draft: makeDraft("action", priority.title, priority.detail, priority.href),
       }),
     })),
-    ...(leak.priorities ?? []).slice(0, 2).map((item: any) => ({
+    ...(leak.priorities ?? []).slice(0, 2).map((item) => ({
       score: item.leakRate + item.leakCount,
       item: makeItem({
         id: `growth-driver-leak-${item.dimension}-${item.label}`,
@@ -435,7 +441,7 @@ function buildGrowthExplanationSnapshot(
         ),
       }),
     })),
-    ...(value.signals ?? []).slice(0, 1).map((signal: any) => ({
+    ...(value.signals ?? []).slice(0, 1).map((signal) => ({
       score: Math.max(
         signal.monetizationLift,
         signal.retentionLift,
@@ -470,10 +476,10 @@ function buildGrowthExplanationSnapshot(
     .map((entry) => entry.item);
 
   const recoveryItems = (recovery.playbookGroups ?? [])
-    .flatMap((group: any) => group.items ?? [])
-    .filter((item: any) => item.priority === "high" || item.attention === "risk")
+    .flatMap((group) => group.items ?? [])
+    .filter((item) => item.priority === "high" || item.attention === "risk")
     .slice(0, 2)
-    .map((item: any) =>
+    .map((item) =>
       makeItem({
         id: `growth-journey-recovery-${item.id}`,
         title: item.title,
@@ -501,7 +507,7 @@ function buildGrowthExplanationSnapshot(
     );
 
   const journeyItems = [
-    ...(leak.priorities ?? []).slice(0, 3).map((item: any) =>
+    ...(leak.priorities ?? []).slice(0, 3).map((item) =>
       makeItem({
         id: `growth-journey-leak-${item.dimension}-${item.label}`,
         title: `${item.dimension} anomaly: ${item.label}`,
@@ -527,7 +533,7 @@ function buildGrowthExplanationSnapshot(
   ].slice(0, 5);
 
   const hypothesisItems = [
-    ...(creative.messageThemes ?? []).slice(0, 2).map((theme: any) =>
+    ...(creative.messageThemes ?? []).slice(0, 2).map((theme) =>
       makeItem({
         id: `growth-hypothesis-theme-${theme.theme}`,
         title: `Message hypothesis: ${theme.theme}`,
@@ -550,7 +556,7 @@ function buildGrowthExplanationSnapshot(
         ),
       })
     ),
-    ...(leak.priorities ?? []).slice(0, 1).map((item: any) =>
+    ...(leak.priorities ?? []).slice(0, 1).map((item) =>
       makeItem({
         id: `growth-hypothesis-leak-${item.dimension}-${item.label}`,
         title: `Leak hypothesis: ${item.dimension} -> ${item.label}`,
@@ -572,7 +578,7 @@ function buildGrowthExplanationSnapshot(
         ),
       })
     ),
-    ...(value.signals ?? []).slice(0, 1).map((signal: any) =>
+    ...(value.signals ?? []).slice(0, 1).map((signal) =>
       makeItem({
         id: `growth-hypothesis-value-${signal.signal}`,
         title: `Value hypothesis: encourage ${signal.signal}`,

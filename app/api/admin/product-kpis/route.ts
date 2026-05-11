@@ -226,8 +226,9 @@ export async function GET(request: Request) {
         };
       }
 
-      const entryN = cQuestions[0].reachN;
-      const lastReachN = cQuestions[cQuestions.length - 1].reachN;
+      // cQuestions.length > 0 checked in the early-return above.
+      const entryN = cQuestions[0]!.reachN;
+      const lastReachN = cQuestions[cQuestions.length - 1]!.reachN;
       const dropoffNSum = cQuestions.reduce((s, q) => s + (q.dropoffN ?? 0), 0);
       const totalTime = cQuestions.reduce((s, q) => s + (q.avgActiveTimeS ?? 0), 0);
       const totalBacktrack = cQuestions.reduce((s, q) => s + (q.backtrackN ?? 0), 0);

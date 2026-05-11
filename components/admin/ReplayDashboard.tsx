@@ -295,7 +295,8 @@ export default function ReplayDashboard() {
                   color: "text-text-muted",
                   label: e.direction,
                 };
-                const startTime = new Date(detailData.events[0].eventTime).getTime();
+                // Only rendered when detailData.events is non-empty (caller guard).
+                const startTime = new Date(detailData.events[0]!.eventTime).getTime();
                 const elapsed = new Date(e.eventTime).getTime() - startTime;
                 const mins = Math.floor(elapsed / 60_000);
                 const secs = Math.floor((elapsed % 60_000) / 1000);

@@ -1003,6 +1003,110 @@ function buildUnknownUnknownWhyItMatters(input: {
   return `${input.term} is novel relative to the current taxonomy and needs human review to decide whether it is noise or a new research signal.`;
 }
 
+// Phase 1: fetch the 7 input streams + the optional precomputed effectiveness
+// snapshot. Pure data layer; no business logic.
+async function fetchResearchData(
+  days: number,
+  since: string | null,
+  previousSince: string | null,
+  precomputedEffectiveness?: QuestionEffectivenessSnapshot
+) {
+  const [
+    insightsRes,
+    currentAnswers,
+    previousAnswers,
+    currentArchetypes,
+    previousArchetypes,
+    contradictionAnswers,
+    effectiveness,
+  ] = await Promise.all([
+    supabaseFetch("/rest/v1/rpc/get_automated_insights", {
+      method: "POST",
+      body: JSON.stringify({ p_days: days }),
+    }),
+    fetchAnswers(since),
+    fetchAnswers(previousSince, since),
+    fetchArchetypes(since),
+    fetchArchetypes(previousSince, since),
+    fetchContradictionAnswers(since ?? new Date().toISOString()),
+    precomputedEffectiveness
+      ? Promise.resolve(precomputedEffectiveness)
+      : buildQuestionEffectivenessSnapshot(days),
+  ]);
+
+  const rpc = insightsRes.ok ? ((await insightsRes.json()) as RpcResult) : null;
+
+  return {
+    rpc,
+    currentAnswers,
+    previousAnswers,
+    currentArchetypes,
+    previousArchetypes,
+    contradictionAnswers,
+    effectiveness,
+  };
+}
+
+// Phase 2: derive top-level research signals from the get_automated_insights
+// RPC payload. Pure transform — no I/O.
+function buildSignalsFromRpc(rpc: RpcResult | null): ResearchIntelligenceSnapshot["signals"] {
+  const signals: ResearchIntelligenceSnapshot["signals"] = [];
+  if (rpc?.period_comparison) {
+    const period = rpc.period_comparison;
+    if (
+      period.current_completion_rate != null &&
+      period.previous_completion_rate != null &&
+      period.current_completion_rate < period.previous_completion_rate
+    ) {
+      signals.push({
+        title: "Completion quality regressed",
+        detail: `${period.current_completion_rate}% now vs ${period.previous_completion_rate}% previously.`,
+        severity: "critical",
+        href: "/admin/funnels",
+      });
+    }
+    if (
+      period.current_avg_duration_min != null &&
+      period.previous_avg_duration_min != null &&
+      period.current_avg_duration_min > period.previous_avg_duration_min
+    ) {
+      signals.push({
+        title: "Survey effort increased",
+        detail: `${period.current_avg_duration_min}m average now vs ${period.previous_avg_duration_min}m previously.`,
+        severity: "warning",
+        href: "/admin/question-effectiveness",
+      });
+    }
+  }
+  if (rpc?.high_friction_questions?.[0]) {
+    const question = rpc.high_friction_questions[0];
+    signals.push({
+      title: "High-friction text behavior detected",
+      detail: `${formatQuestionLabel(question.q_id)} is taking ${question.avg_time_sec}s on average.`,
+      severity: "warning",
+      href: "/admin/question-effectiveness",
+    });
+  }
+  if (rpc?.top_drop_off_questions?.[0]) {
+    const question = rpc.top_drop_off_questions[0];
+    signals.push({
+      title: "Largest drop-off point is still open",
+      detail: `${formatQuestionLabel(question.q_id)} caused ${question.abandon_count} exits.`,
+      severity: "critical",
+      href: "/admin/abandonment",
+    });
+  }
+  if (rpc?.fastest_growing_archetype) {
+    signals.push({
+      title: `${rpc.fastest_growing_archetype.archetype} is gaining share`,
+      detail: `${rpc.fastest_growing_archetype.current} current vs ${rpc.fastest_growing_archetype.previous} previous results.`,
+      severity: "info",
+      href: "/admin/archetypes",
+    });
+  }
+  return signals;
+}
+
 export async function buildResearchIntelligenceSnapshot(
   inputDays: number,
   precomputedEffectiveness?: QuestionEffectivenessSnapshot
@@ -1012,85 +1116,17 @@ export async function buildResearchIntelligenceSnapshot(
   const previousSince = makeSince(days * 2);
 
   try {
-    const [
-      insightsRes,
+    const {
+      rpc,
       currentAnswers,
       previousAnswers,
       currentArchetypes,
       previousArchetypes,
       contradictionAnswers,
       effectiveness,
-    ] = await Promise.all([
-      supabaseFetch("/rest/v1/rpc/get_automated_insights", {
-        method: "POST",
-        body: JSON.stringify({ p_days: days }),
-      }),
-      fetchAnswers(since),
-      fetchAnswers(previousSince, since),
-      fetchArchetypes(since),
-      fetchArchetypes(previousSince, since),
-      fetchContradictionAnswers(since ?? new Date().toISOString()),
-      precomputedEffectiveness
-        ? Promise.resolve(precomputedEffectiveness)
-        : buildQuestionEffectivenessSnapshot(days),
-    ]);
+    } = await fetchResearchData(days, since, previousSince, precomputedEffectiveness);
 
-    const rpc = insightsRes.ok ? ((await insightsRes.json()) as RpcResult) : null;
-
-    const signals: ResearchIntelligenceSnapshot["signals"] = [];
-    if (rpc?.period_comparison) {
-      const period = rpc.period_comparison;
-      if (
-        period.current_completion_rate != null &&
-        period.previous_completion_rate != null &&
-        period.current_completion_rate < period.previous_completion_rate
-      ) {
-        signals.push({
-          title: "Completion quality regressed",
-          detail: `${period.current_completion_rate}% now vs ${period.previous_completion_rate}% previously.`,
-          severity: "critical",
-          href: "/admin/funnels",
-        });
-      }
-      if (
-        period.current_avg_duration_min != null &&
-        period.previous_avg_duration_min != null &&
-        period.current_avg_duration_min > period.previous_avg_duration_min
-      ) {
-        signals.push({
-          title: "Survey effort increased",
-          detail: `${period.current_avg_duration_min}m average now vs ${period.previous_avg_duration_min}m previously.`,
-          severity: "warning",
-          href: "/admin/question-effectiveness",
-        });
-      }
-    }
-    if (rpc?.high_friction_questions?.[0]) {
-      const question = rpc.high_friction_questions[0];
-      signals.push({
-        title: "High-friction text behavior detected",
-        detail: `${formatQuestionLabel(question.q_id)} is taking ${question.avg_time_sec}s on average.`,
-        severity: "warning",
-        href: "/admin/question-effectiveness",
-      });
-    }
-    if (rpc?.top_drop_off_questions?.[0]) {
-      const question = rpc.top_drop_off_questions[0];
-      signals.push({
-        title: "Largest drop-off point is still open",
-        detail: `${formatQuestionLabel(question.q_id)} caused ${question.abandon_count} exits.`,
-        severity: "critical",
-        href: "/admin/abandonment",
-      });
-    }
-    if (rpc?.fastest_growing_archetype) {
-      signals.push({
-        title: `${rpc.fastest_growing_archetype.archetype} is gaining share`,
-        detail: `${rpc.fastest_growing_archetype.current} current vs ${rpc.fastest_growing_archetype.previous} previous results.`,
-        severity: "info",
-        href: "/admin/archetypes",
-      });
-    }
+    const signals = buildSignalsFromRpc(rpc);
 
     const themeMap = new Map<
       string,

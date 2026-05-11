@@ -13,14 +13,16 @@ function median(nums: number[]): number | null {
   if (nums.length === 0) return null;
   const sorted = [...nums].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+  // sorted.length > 0 above; both branches access valid indices.
+  return sorted.length % 2 === 0 ? (sorted[mid - 1]! + sorted[mid]!) / 2 : sorted[mid]!;
 }
 
 function percentile(nums: number[], p: number): number | null {
   if (nums.length === 0) return null;
   const sorted = [...nums].sort((a, b) => a - b);
   const idx = Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length));
-  return sorted[idx];
+  // idx is clamped to sorted.length - 1; valid index.
+  return sorted[idx]!;
 }
 
 function ageBucket(birthday: string | null | undefined): string | null {

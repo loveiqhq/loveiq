@@ -280,7 +280,8 @@ export async function GET(request: Request) {
     }
 
     if (data.high_friction_questions?.length) {
-      const worst = data.high_friction_questions[0];
+      // Length checked > 0 above; [0] is non-undefined.
+      const worst = data.high_friction_questions[0]!;
       pushInsight(insights, {
         type: "triage",
         severity: "warning",
@@ -300,7 +301,8 @@ export async function GET(request: Request) {
     }
 
     if (data.top_drop_off_questions?.length) {
-      const top = data.top_drop_off_questions[0];
+      // Length checked > 0 above; [0] is non-undefined.
+      const top = data.top_drop_off_questions[0]!;
       pushInsight(insights, {
         type: "triage",
         severity: "critical",
@@ -371,12 +373,13 @@ export async function GET(request: Request) {
       .sort((a, b) => b.total - a.total);
 
     if (comparableSources.length >= 2) {
+      // Length checked >= 2 above; [0] of a sorted copy is non-undefined.
       const worstSource = [...comparableSources].sort(
         (a, b) => a.completionRate - b.completionRate || b.flaggedRate - a.flaggedRate
-      )[0];
+      )[0]!;
       const bestSource = [...comparableSources].sort(
         (a, b) => b.completionRate - a.completionRate || a.flaggedRate - b.flaggedRate
-      )[0];
+      )[0]!;
 
       if (bestSource.completionRate - worstSource.completionRate >= 20) {
         pushInsight(insights, {

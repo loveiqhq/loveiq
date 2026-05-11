@@ -354,7 +354,7 @@ export async function buildAdminKnowledgeSnapshot(
                 title: "Likely incident driver path",
                 summary: excerpt(
                   (topIncident.suspectedDrivers ?? [])
-                    .map((driver: any) => `${driver.kind}: ${driver.title}`)
+                    .map((driver) => `${driver.kind}: ${driver.title}`)
                     .join(" -> ") || "No suspected drivers recorded."
                 ),
                 tone: "watch",
@@ -477,7 +477,7 @@ export async function buildAdminKnowledgeSnapshot(
           id: "command-meeting-pack",
           type: "meeting-pack",
           title: "Leadership meeting pack",
-          summary: excerpt((os.briefs ?? []).map((brief: any) => brief.detail).join(" ")),
+          summary: excerpt((os.briefs ?? []).map((brief) => brief.detail).join(" ")),
           tone: "watch",
           confidence: "high",
           href: "/admin/operating-review",

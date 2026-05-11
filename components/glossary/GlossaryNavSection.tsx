@@ -122,8 +122,9 @@ const GlossaryNavSection: FC = () => {
       "a, button, [tabindex]:not([tabindex='-1'])"
     );
     if (focusable.length === 0) return;
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
+    // focusable.length checked > 0 above; first/last are defined.
+    const first = focusable[0]!;
+    const last = focusable[focusable.length - 1]!;
     first.focus();
 
     const trapFocus = (e: KeyboardEvent) => {

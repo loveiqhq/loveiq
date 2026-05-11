@@ -267,13 +267,14 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
   // Touch swipe — only trigger on primarily horizontal gestures
   useEffect(() => {
     const handleTouchStart = (e: TouchEvent) => {
-      touchStartX.current = e.touches[0].clientX;
-      touchStartY.current = e.touches[0].clientY;
+      // TouchEvent always fires with at least one touch point.
+      touchStartX.current = e.touches[0]!.clientX;
+      touchStartY.current = e.touches[0]!.clientY;
     };
     const handleTouchEnd = (e: TouchEvent) => {
       if (touchStartX.current === null || touchStartY.current === null) return;
-      const diffX = e.changedTouches[0].clientX - touchStartX.current;
-      const diffY = e.changedTouches[0].clientY - touchStartY.current;
+      const diffX = e.changedTouches[0]!.clientX - touchStartX.current;
+      const diffY = e.changedTouches[0]!.clientY - touchStartY.current;
       touchStartX.current = null;
       touchStartY.current = null;
       if (Math.abs(diffX) < 50) return;

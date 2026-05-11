@@ -40,11 +40,49 @@ jobs:
       - run: npm ci
       - run: npm run test:coverage
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
+        # Pinned to SHA — codecov-action runs with the upload token; tag-pinning
+        # would let a force-pushed tag exfiltrate it. Verify against
+        # https://github.com/codecov/codecov-action/releases when bumping.
+        uses: codecov/codecov-action@75cd11691c0faa626561e295848008c8a7dddffe # v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage/lcov.info
-          fail_ci_if_error: false
+          # CODECOV_TOKEN confirmed present (2026-03-20). Upload failures now block merges.
+          # codecov.yml defines project (auto, 1% drop allowed) + patch (80%) gates.
+          fail_ci_if_error: true
+
+  integration:
+    name: Integration (real DB)
+    runs-on: ubuntu-latest
+    needs: [lint]
+    # Requires a Supabase test-branch URL + service role key. PRs from forks (no
+    # access to secrets) and any repo without these secrets set skip this job.
+    if: ${{ github.event.pull_request.head.repo.full_name == github.repository || github.event_name == 'push' }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+      - name: Skip if test secrets unset
+        id: gate
+        run: |
+          if [ -z "${SUPABASE_TEST_URL}" ] || [ -z "${SUPABASE_TEST_SERVICE_ROLE_KEY}" ]; then
+            echo "Integration test secrets unset — skipping."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          SUPABASE_TEST_URL: ${{ secrets.SUPABASE_TEST_URL }}
+          SUPABASE_TEST_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_TEST_SERVICE_ROLE_KEY }}
+      - name: Run integration tests
+        if: steps.gate.outputs.run == 'true'
+        run: npm run test:integration
+        env:
+          SUPABASE_TEST_URL: ${{ secrets.SUPABASE_TEST_URL }}
+          SUPABASE_TEST_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_TEST_SERVICE_ROLE_KEY }}
 
   build:
     name: Build
@@ -85,22 +123,43 @@ jobs:
     needs: [build]
     # Only run on pushes to main — not on PRs (no prod deploy happens on PRs)
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    # Concurrency group ensures only ONE smoke-test runs against prod at a time.
+    # Prevents the "two pushes <4min apart, smoke-test races against the wrong
+    # deployment" failure mode. Newer pushes cancel any in-flight check.
+    concurrency:
+      group: smoke-test-prod
+      cancel-in-progress: true
+    timeout-minutes: 10
+    env:
+      PROD_URL: ${{ vars.PROD_URL || 'https://www.loveiq.org' }}
+      EXPECTED_SHA: ${{ github.sha }}
     steps:
-      - name: Wait for Vercel deployment
-        run: sleep 60
-      - name: Health check with retry
+      - name: Health check with deployment-id verification
         run: |
-          for i in {1..8}; do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://www.loveiq.org/api/health)
-            echo "Attempt $i: HTTP $STATUS"
-            if [ "$STATUS" -eq 200 ]; then
-              echo "Production health check passed"
-              exit 0
+          # Poll /api/health for HTTP 200 AND verify the response was served by a
+          # Vercel deployment that includes THIS commit. We read both the standard
+          # vercel id header and the X-Vercel-Cache to detect stale CDN replies.
+          # Up to ~6 minutes of polling (24 × 15s) — Vercel typically deploys in 90s
+          # but cold-cache + slow regions can stretch to ~5 min.
+          for i in $(seq 1 24); do
+            HEADERS=$(curl -sIm 10 "${PROD_URL}/api/health" || true)
+            STATUS=$(printf '%s' "$HEADERS" | head -1 | awk '{print $2}')
+            DEPLOY_ID=$(printf '%s' "$HEADERS" | grep -i '^x-vercel-id:' | tr -d '\r' | awk '{print $2}')
+            CACHE=$(printf '%s' "$HEADERS" | grep -i '^x-vercel-cache:' | tr -d '\r' | awk '{print $2}')
+            echo "Attempt $i: HTTP=$STATUS deploy=$DEPLOY_ID cache=$CACHE"
+            if [ "$STATUS" = "200" ] && [ -n "$DEPLOY_ID" ] && [ "$CACHE" != "HIT" ]; then
+              # Optional: probe a build-stamp endpoint exposing commit SHA. If the
+              # endpoint exists, fail when SHA mismatches (means we're hitting an
+              # older deployment). Soft-pass when endpoint absent.
+              BUILD_SHA=$(curl -sm 10 "${PROD_URL}/api/build-info" 2>/dev/null | grep -oE '"sha"\s*:\s*"[^"]+"' | head -1 | sed 's/.*"sha"\s*:\s*"\([^"]*\)".*/\1/')
+              if [ -n "$BUILD_SHA" ] && [ "$BUILD_SHA" != "$EXPECTED_SHA" ]; then
+                echo "Deployment SHA $BUILD_SHA != expected $EXPECTED_SHA — waiting"
+              else
+                echo "Production health check passed (deploy=$DEPLOY_ID, sha=${BUILD_SHA:-unknown})"
+                exit 0
+              fi
             fi
-            if [ "$i" -lt 8 ]; then
-              echo "Not healthy yet, waiting 30s..."
-              sleep 30
-            fi
+            if [ "$i" -lt 24 ]; then sleep 15; fi
           done
-          echo "ERROR: /api/health did not return 200 after 8 attempts (~4 min)"
+          echo "ERROR: /api/health did not return fresh 200 within ~6 minutes"
           exit 1

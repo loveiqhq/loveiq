@@ -161,8 +161,9 @@ function getFieldConfig(fieldValue: string) {
 
 function defaultOperatorForField(fieldValue: string): string {
   const field = getFieldConfig(fieldValue);
-  const ops = OPERATORS[field.type] ?? OPERATORS.text;
-  return ops[0].value;
+  // Every OPERATORS bucket (and the .text fallback) has at least one entry.
+  const ops = (OPERATORS[field.type] ?? OPERATORS.text)!;
+  return ops[0]!.value;
 }
 
 function defaultValueForField(fieldValue: string): string | number | boolean {
@@ -200,7 +201,7 @@ function ConditionRow({
   onRemove: () => void;
 }) {
   const field = getFieldConfig(condition.field);
-  const operators = OPERATORS[field.type] ?? OPERATORS.text;
+  const operators = (OPERATORS[field.type] ?? OPERATORS.text)!;
 
   function handleFieldChange(newField: string) {
     onChange({

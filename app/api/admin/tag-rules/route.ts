@@ -121,7 +121,7 @@ export async function POST(request: Request) {
       const res = await supabaseFetch(`/rest/v1/admin_tag_rules?id=eq.${parsed.data.ruleId}`, {
         method: "PATCH",
         headers: { Prefer: "return=minimal" },
-        body: JSON.stringify({ is_active: !rows[0].is_active }),
+        body: JSON.stringify({ is_active: !rows[0]!.is_active }),
       });
 
       if (!res.ok) {
@@ -129,12 +129,12 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Unable to toggle rule." }, { status: 500 });
       }
 
-      logAdminAction({
+      void logAdminAction({
         admin_email: admin.email,
         action: "toggle_tag_rule",
         resource_type: "admin_tag_rules",
         resource_id: String(parsed.data.ruleId),
-        metadata: { newState: !rows[0].is_active },
+        metadata: { newState: !rows[0]!.is_active },
         ip,
       });
 
@@ -166,7 +166,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Unable to delete rule." }, { status: 500 });
       }
 
-      logAdminAction({
+      void logAdminAction({
         admin_email: admin.email,
         action: "delete_tag_rule",
         resource_type: "admin_tag_rules",
@@ -248,7 +248,7 @@ export async function POST(request: Request) {
         }
       }
 
-      logAdminAction({
+      void logAdminAction({
         admin_email: admin.email,
         action: "run_tag_rules",
         resource_type: "admin_tag_rules",
@@ -291,7 +291,7 @@ export async function POST(request: Request) {
 
     const rows = (await res.json()) as Array<{ id: number }>;
 
-    logAdminAction({
+    void logAdminAction({
       admin_email: admin.email,
       action: "create_tag_rule",
       resource_type: "admin_tag_rules",

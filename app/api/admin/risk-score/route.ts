@@ -39,7 +39,8 @@ const DISPOSABLE_DOMAINS = new Set([
 ]);
 
 function computeRiskScore(events: BehaviorEvent[]): SessionRisk {
-  const sessionId = events[0].session_id;
+  // Callers only invoke this with non-empty `events`; first/last are defined.
+  const sessionId = events[0]!.session_id;
   const backtracks = events.filter((e) => e.direction === "back").length;
   const forwards = events.filter((e) => e.direction === "forward").length;
   const completed = events.some((e) => e.direction === "complete");
@@ -48,7 +49,7 @@ function computeRiskScore(events: BehaviorEvent[]): SessionRisk {
   const times = events.map((e) => e.time_spent_ms || 0).filter((t) => t > 0);
   const avgTimeMs = times.length > 0 ? times.reduce((s, t) => s + t, 0) / times.length : 0;
   const totalTimeMs = times.reduce((sum, value) => sum + value, 0);
-  const lastEvent = events[events.length - 1];
+  const lastEvent = events[events.length - 1]!;
 
   const factors: string[] = [];
   let risk = 0;

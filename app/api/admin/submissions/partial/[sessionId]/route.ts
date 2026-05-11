@@ -57,8 +57,9 @@ export async function GET(
       return NextResponse.json({ error: "Not found." }, { status: 404 });
     }
 
-    const submission = buildPartialSubmissionRecord(rows[0]);
-    const answers = buildPartialAnswerDetails(rows[0].answers);
+    // rows.length checked > 0 above; [0] is defined.
+    const submission = buildPartialSubmissionRecord(rows[0]!);
+    const answers = buildPartialAnswerDetails(rows[0]!.answers);
 
     return NextResponse.json({
       submission,

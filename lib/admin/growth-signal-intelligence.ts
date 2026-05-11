@@ -240,7 +240,7 @@ function buildObjectionItems(input: {
       recommendation:
         matchingTerms.length === 0
           ? `Formalize ${theme.theme.toLowerCase()} as an active objection term, then align creative and onboarding copy against it instead of leaving it implicit.`
-          : `Refresh the ${matchingTerms[0].label.toLowerCase()} taxonomy node with the current evidence and test whether copy that resolves it improves downstream quality.`,
+          : `Refresh the ${matchingTerms[0]!.label.toLowerCase()} taxonomy node with the current evidence and test whether copy that resolves it improves downstream quality.`,
       caveat:
         contradictionMatches.length > 0
           ? `${contradictionMatches.length} contradiction signal(s) hit the same question cluster, so the objection may reflect both expectation and product reality.`

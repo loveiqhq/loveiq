@@ -155,7 +155,12 @@ describe("POST /api/admin/login (magic link)", () => {
     expect(res.status).toBe(500);
     // Should NOT have returned success
     const json = await res.json();
-    expect(json.error).toBeDefined();
+    expect(typeof json.error).toBe("string");
+    expect(json.error.length).toBeGreaterThan(0);
+    // Generic message — must NOT leak the upstream "from address not verified" detail.
+    expect(json.error.toLowerCase()).not.toContain("from address");
+    expect(json.error.toLowerCase()).not.toContain("resend");
+    expect(json.success).toBeUndefined();
   });
 
   it("returns 500 when generate_link fails", async () => {

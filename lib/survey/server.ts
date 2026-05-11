@@ -190,9 +190,10 @@ export async function fetchScoringSummary(
 
   if (rows.length === 0) return null;
 
+  // rows.length > 0 checked above.
   return {
-    primaryArchetype: rows[0].primary_archetype,
-    v5PrimaryArchetype: rows[0].v5_primary_archetype ?? null,
+    primaryArchetype: rows[0]!.primary_archetype,
+    v5PrimaryArchetype: rows[0]!.v5_primary_archetype ?? null,
   };
 }
 

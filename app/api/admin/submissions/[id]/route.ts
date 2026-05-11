@@ -105,10 +105,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     let reportToken: string | null = null;
     if (tokenRes?.ok) {
       const rows = (await tokenRes.json()) as Array<{ token: string }>;
-      if (rows.length > 0) reportToken = rows[0].token;
+      if (rows.length > 0) reportToken = rows[0]!.token;
     }
 
-    const raw = submissions[0];
+    // submissions.length checked > 0 above; [0] is non-undefined.
+    const raw = submissions[0]!;
     const submission = {
       id: raw.id,
       email: raw.app_user?.email || "",

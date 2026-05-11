@@ -27,23 +27,22 @@ vi.mock("@/components/survey/questions/ChoiceCard", () => ({
 }));
 
 import MultipleChoiceQuestion from "@/components/survey/questions/MultipleChoiceQuestion";
-import type { SurveyQuestion } from "@/data/survey-data";
+import { makeAnswerOptionsExplained, makeSurveyQuestion } from "@/__tests__/__fixtures__/survey";
 
 afterEach(cleanup);
 
-const baseQuestion = {
+const baseQuestion = makeSurveyQuestion({
   qId: "q1",
   question: "Pick your favorites",
   answerType: "multiple",
   options: ["A", "B", "C", "D", "Other"],
-  answerOptionsExplained: [
-    { option: "A", explanation: "Explanation for A" },
-    { option: "B", explanation: "Explanation for B" },
-    { option: "C", explanation: "Explanation for C" },
-  ],
-  chapter: "ch1",
+  answerOptionsExplained: makeAnswerOptionsExplained([
+    ["A", "Explanation for A"],
+    ["B", "Explanation for B"],
+    ["C", "Explanation for C"],
+  ]),
   required: false,
-} as unknown as SurveyQuestion;
+});
 
 function ControlledQuestion({
   question = baseQuestion,

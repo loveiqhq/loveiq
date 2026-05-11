@@ -18,6 +18,7 @@ Survey product-flow details such as step orchestration, storage, autosave, and r
 | `/api/cron/report-discount-email`     | `GET`       | Scheduled job: send report-pricing discount nudges. Authenticated via `CRON_SECRET`.             |
 | `/api/cron/survey-paused`             | `GET`       | Scheduled job: nudge users who paused the survey. Authenticated via `CRON_SECRET`.               |
 | `/api/analytics-event`                | `POST`      | Persist allowlisted report-engagement events to `analytics_event` (FK-validated).                |
+| `/api/build-info`                     | `GET`       | Returns the Vercel deployment id + commit SHA; consumed by the CI smoke-test step.               |
 | `/api/health`                         | `GET`       | Service health check with dependency status.                                                     |
 | `/api/invite`                         | `POST`      | Invite email request with async delivery/tracking.                                               |
 | `/api/invite-tracking`                | `POST`      | Invite share tracking.                                                                           |
@@ -302,6 +303,24 @@ Creates a `staging_session` cookie when the submitted password matches `STAGING_
 ## POST /api/staging-logout
 
 Clears the `staging_session` cookie and redirects to `/login`.
+
+## GET /api/build-info
+
+Returns the commit SHA + Vercel deployment id for the running deploy. Consumed by the CI `smoke-test` job to verify it hit the deployment it just published (catches stale CDN caches + out-of-order deploys).
+
+**Cache:** `no-store`.
+
+**Response:**
+
+```json
+{
+  "sha": "abc123…",
+  "builtAt": "dpl_…",
+  "env": "production"
+}
+```
+
+Any of the fields may be `null` outside Vercel (local dev, CI host without commit env). No auth, no secrets — provenance only.
 
 ## GET /api/health
 

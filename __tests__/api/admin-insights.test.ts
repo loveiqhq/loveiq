@@ -82,4 +82,17 @@ describe("GET /api/admin/insights", () => {
       json.insights.some((insight: { category: string }) => insight.category === "acquisition")
     ).toBe(true);
   });
+
+  it("returns 401 without admin session", async () => {
+    mockVerifyAdminSession.mockResolvedValue(null);
+    const res = await GET(makeRequest());
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 429 when rate-limited", async () => {
+    mockCheckRateLimit.mockResolvedValue({ allowed: false, remaining: 0, resetAt: new Date() });
+    const res = await GET(makeRequest());
+    expect(res.status).toBe(429);
+    expect(mockSupabaseFetch).not.toHaveBeenCalled();
+  });
 });

@@ -60,4 +60,11 @@ describe("GET /api/admin/explanations", () => {
     expect(res.status).toBe(200);
     expect(mockBuildAdminExplanationSnapshot).toHaveBeenCalledWith("growth", 21, "admin@test.com");
   });
+
+  it("returns 429 when rate-limited", async () => {
+    mockCheckRateLimit.mockResolvedValue({ allowed: false, remaining: 0, resetAt: new Date() });
+    const res = await GET(new Request("http://localhost/api/admin/explanations"));
+    expect(res.status).toBe(429);
+    expect(mockBuildAdminExplanationSnapshot).not.toHaveBeenCalled();
+  });
 });

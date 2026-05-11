@@ -76,7 +76,7 @@ export default function GoalTracker() {
   const { searchParams, setQueryState } = useAdminQueryState();
   const [showForm, setShowForm] = useState(false);
   const [formLabel, setFormLabel] = useState("");
-  const [formMetric, setFormMetric] = useState(METRIC_OPTIONS[0].value);
+  const [formMetric, setFormMetric] = useState(METRIC_OPTIONS[0]!.value);
   const [formTarget, setFormTarget] = useState("");
   const [formDeadline, setFormDeadline] = useState("");
   const [submitting, setSubmitting] = useState(false);

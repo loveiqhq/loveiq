@@ -78,4 +78,17 @@ describe("GET /api/admin/research-intelligence", () => {
     expect(res.headers.get("Cache-Control")).toBe("no-store, max-age=0");
     expect(mockBuildResearchIntelligenceSnapshot).toHaveBeenCalledWith(45);
   });
+
+  it("returns 401 without admin session", async () => {
+    mockVerifyAdminSession.mockResolvedValue(null);
+    const res = await GET(new Request("http://localhost/api/admin/research-intelligence"));
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 429 when rate-limited", async () => {
+    mockCheckRateLimit.mockResolvedValue({ allowed: false, remaining: 0, resetAt: new Date() });
+    const res = await GET(new Request("http://localhost/api/admin/research-intelligence"));
+    expect(res.status).toBe(429);
+    expect(mockBuildResearchIntelligenceSnapshot).not.toHaveBeenCalled();
+  });
 });

@@ -108,4 +108,17 @@ describe("GET /api/admin/search/semantic", () => {
     const body = (await res.json()) as { results: unknown[] };
     expect(body.results).toEqual([]);
   });
+
+  it("returns 401 without admin session", async () => {
+    mockVerifyAdminSession.mockResolvedValue(null);
+    const res = await GET(new Request("http://localhost/api/admin/search/semantic?q=growth"));
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 429 when rate-limited", async () => {
+    mockCheckRateLimit.mockResolvedValue({ allowed: false, remaining: 0, resetAt: new Date() });
+    const res = await GET(new Request("http://localhost/api/admin/search/semantic?q=growth"));
+    expect(res.status).toBe(429);
+    expect(mockBuildAllAdminKnowledgeArtifacts).not.toHaveBeenCalled();
+  });
 });
