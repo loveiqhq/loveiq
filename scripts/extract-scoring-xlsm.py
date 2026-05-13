@@ -8,7 +8,10 @@ Zero third-party deps: uses stdlib zipfile + xml.etree.ElementTree only.
 Usage:
   python scripts/extract-scoring-xlsm.py [path-to-xlsm]
 
-Defaults to .source-artifacts/scoring-v8/Scoring Config - Identify Your Sexual Archetype V8.xlsm.
+Defaults to .source-artifacts/scoring-v9/Scoring_Workbook_v9.xlsm.
+
+Non-data sheets named in SKIP_SHEETS (e.g. README, changelog) are skipped
+so they don't produce CSVs the codegen step doesn't know how to consume.
 """
 from __future__ import annotations
 
@@ -22,10 +25,10 @@ from xml.etree import ElementTree as ET
 NS = {"main": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
 REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 
-DEFAULT_XLSM = (
-    ".source-artifacts/scoring-v8/Scoring Config - Identify Your Sexual Archetype V8.xlsm"
-)
+DEFAULT_XLSM = ".source-artifacts/scoring-v9/Scoring_Workbook_v9.xlsm"
 OUTPUT_DIR = Path("data/scoring-config")
+
+SKIP_SHEETS = {"README", "changelog"}
 
 
 def col_letter_to_idx(col: str) -> int:
@@ -134,8 +137,12 @@ def main() -> int:
         rel_map = {r.get("Id"): r.get("Target") for r in rels}
 
         written: list[tuple[str, int]] = []
+        skipped: list[str] = []
         for sh in sheets:
             name = sh["name"]
+            if name in SKIP_SHEETS:
+                skipped.append(name)
+                continue
             target = rel_map[sh["rid"]]
             sheet_path = target if target.startswith("xl/") else f"xl/{target.lstrip('/')}"
             rows = sheet_rows(zf, sheet_path, shared)
@@ -148,6 +155,8 @@ def main() -> int:
     print(f"Extracted {len(written)} sheet(s) from {xlsm_path} -> {OUTPUT_DIR}/")
     for name, n in written:
         print(f"  {name}.csv  ({n} rows)")
+    if skipped:
+        print(f"Skipped non-data sheets: {', '.join(skipped)}")
     return 0
 
 
