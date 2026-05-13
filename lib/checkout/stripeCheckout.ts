@@ -11,7 +11,7 @@ import logger from "@/lib/logger";
 // agree, or webhook event payload shapes can drift from what the parsing
 // code below expects. Verify in Stripe dashboard → Developers → Webhooks
 // → click endpoint → "API version" matches the constant below.
-const STRIPE_API_VERSION = "2026-04-22.dahlia" as const;
+const STRIPE_API_VERSION = "2026-03-25.dahlia" as const;
 
 export const STRIPE_CHECKOUT_DISABLED_MESSAGE =
   "Checkout preview only. Payments are not enabled in this environment yet.";
