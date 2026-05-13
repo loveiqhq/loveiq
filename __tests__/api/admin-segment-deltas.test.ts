@@ -49,7 +49,7 @@ describe("GET /api/admin/segments/deltas", () => {
           utm_tracker: JSON.stringify({ utm_source: "google" }),
           created_date_time: new Date(now - 12 * 60 * 60 * 1000).toISOString(),
           scoring_result: {
-            primary_archetype: "Approval Seeker",
+            primary_archetype: "Tender Devotee",
           },
         },
       ],
@@ -64,7 +64,7 @@ describe("GET /api/admin/segments/deltas", () => {
       expect.arrayContaining([
         expect.objectContaining({
           dimension: "archetype",
-          key: "Approval Seeker",
+          key: "Tender Devotee",
         }),
       ])
     );

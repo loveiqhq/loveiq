@@ -6,15 +6,15 @@ const ARCHETYPE_NAMES = [
   "Sensual Connector",
   "Spark Seeker",
   "Relational Nurturer",
-  "Exhibitionist Performer",
+  "Radiant Performer",
   "Explorer of Edges",
   "Curious Apprentice",
   "Spiritual Lover",
   "Minimalist Companion",
   "Emotional Voyeur",
-  "Power Orchestrator",
+  "Authority Conductor",
   "Loyal Ritualist",
-  "Approval Seeker",
+  "Tender Devotee",
 ];
 
 const CHART_COLORS = ["#9c7dff", "#f26d4f", "#22c55e", "#3b82f6"];

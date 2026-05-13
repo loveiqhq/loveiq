@@ -122,7 +122,7 @@ describe("reportContent normalization", () => {
     });
     expect(content.patterns[1]).toMatchObject({
       title: "Anxious attachment",
-      examples: ["Approval Seeker"],
+      examples: ["Tender Devotee"],
     });
     expect(content.outroHtml).toContain("Attachment style is <strong>not static</strong>");
     expect(content.headingBlock).toContain("Attachment Style of the {{CORE_ARCHETYPE}}");

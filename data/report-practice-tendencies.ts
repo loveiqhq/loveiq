@@ -1945,7 +1945,7 @@ export const reportPracticeTendencies: Record<string, ReportPracticeTendencyCont
       },
     ],
   },
-  "Exhibitionist Performer": {
+  "Radiant Performer": {
     introBlocks: [
       "<p>These scores <strong>do not define you as an individual</strong>. They are <strong>probability-based estimates derived from aggregated research and observed patterns across archetypes.</strong></p>",
       "<p>They <strong>reflect what is statistically more common, not what is fixed or deterministic for you individually.</strong> Every person is unique, and real-world preferences are shaped by personal experience, context, development, and the combination of multiple archetypes within you.</p>",
@@ -5801,7 +5801,7 @@ export const reportPracticeTendencies: Record<string, ReportPracticeTendencyCont
       },
     ],
   },
-  "Power Orchestrator": {
+  "Authority Conductor": {
     introBlocks: [
       "<p>These scores <strong>do not define you as an individual</strong>. They are <strong>probability-based estimates derived from aggregated research and observed patterns across archetypes.</strong></p>",
       "<p>They <strong>reflect what is statistically more common, not what is fixed or deterministic for you individually.</strong> Every person is unique, and real-world preferences are shaped by personal experience, context, development, and the combination of multiple archetypes within you.</p>",
@@ -7085,7 +7085,7 @@ export const reportPracticeTendencies: Record<string, ReportPracticeTendencyCont
       },
     ],
   },
-  "Approval Seeker": {
+  "Tender Devotee": {
     introBlocks: [
       "<p>These scores <strong>do not define you as an individual</strong>. They are <strong>probability-based estimates derived from aggregated research and observed patterns across archetypes.</strong></p>",
       "<p>They <strong>reflect what is statistically more common, not what is fixed or deterministic for you individually.</strong> Every person is unique, and real-world preferences are shaped by personal experience, context, development, and the combination of multiple archetypes within you.</p>",

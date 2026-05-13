@@ -25,7 +25,7 @@ describe("reportAllBEmail", () => {
     });
     // 14 archetype names — sample the first and last in display order.
     expect(html).toContain("Spark Seeker");
-    expect(html).toContain("Approval Seeker");
+    expect(html).toContain("Tender Devotee");
     expect(html).toContain("Analytical Sexualist");
     expect(html).toMatch(/archetype=spark-seeker/);
   });

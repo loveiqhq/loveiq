@@ -496,7 +496,7 @@ describe("TextAnalysisAnswerResponseSchema", () => {
     },
     survey_submission: {
       scoring_result: {
-        primary_archetype: "Approval Seeker",
+        primary_archetype: "Tender Devotee",
       },
     },
   };
@@ -567,7 +567,7 @@ describe("ResearchIntelligenceAnswerResponseSchema", () => {
     survey_submission: {
       created_date_time: "2026-04-05T10:00:00.000Z",
       scoring_result: {
-        primary_archetype: "Approval Seeker",
+        primary_archetype: "Tender Devotee",
       },
     },
   };
@@ -590,7 +590,7 @@ describe("ResearchIntelligenceAnswerResponseSchema", () => {
         ...validRow,
         survey_submission: {
           ...validRow.survey_submission,
-          scoring_result: [{ primary_archetype: "Approval Seeker" }],
+          scoring_result: [{ primary_archetype: "Tender Devotee" }],
         },
       },
     ];

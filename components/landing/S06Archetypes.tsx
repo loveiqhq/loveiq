@@ -85,7 +85,7 @@ const archetypes: Archetype[] = [
     typicalConfidence: "Moderate",
   },
   {
-    name: "Power Orchestrator",
+    name: "Authority Conductor",
     tagline: '"I set the frame—and we play inside it."',
     color: "#ff9f1c",
     icon: (
@@ -163,7 +163,7 @@ const archetypes: Archetype[] = [
     typicalConfidence: "High",
   },
   {
-    name: "Approval Seeker",
+    name: "Tender Devotee",
     tagline: '"Tell me I\'m enough."',
     color: "#e7b3c2",
     icon: (
@@ -216,7 +216,7 @@ const archetypes: Archetype[] = [
     typicalConfidence: "Low",
   },
   {
-    name: "Exhibitionist Performer",
+    name: "Radiant Performer",
     tagline: '"Watch me shine."',
     color: "#e6b65c",
     icon: (

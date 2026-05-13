@@ -41,8 +41,8 @@ const sampleRows = [
     scoring_result: {
       primary_archetype: "Spark Seeker",
       v5_primary_archetype: "Spark Seeker",
-      percentages: { "Spark Seeker": 80, "Approval Seeker": 20 },
-      v5_percentages: { "Spark Seeker": 81, "Approval Seeker": 19 },
+      percentages: { "Spark Seeker": 80, "Tender Devotee": 20 },
+      v5_percentages: { "Spark Seeker": 81, "Tender Devotee": 19 },
     },
   },
   {
@@ -322,10 +322,10 @@ describe("GET /api/admin/submissions", () => {
         duration_ms: 60_000,
         app_user: { email: "charlie@test.com", first_name: "Charlie" },
         scoring_result: {
-          primary_archetype: "Approval Seeker",
+          primary_archetype: "Tender Devotee",
           v5_primary_archetype: "Sensual Connector",
-          percentages: { "Approval Seeker": 55, "Sensual Connector": 45 },
-          v5_percentages: { "Approval Seeker": 49, "Sensual Connector": 51 },
+          percentages: { "Tender Devotee": 55, "Sensual Connector": 45 },
+          v5_percentages: { "Tender Devotee": 49, "Sensual Connector": 51 },
         },
       },
     ]);
@@ -334,7 +334,7 @@ describe("GET /api/admin/submissions", () => {
     const json = await res.json();
 
     expect(json.submissions[0]).toMatchObject({
-      primary_archetype: "Approval Seeker",
+      primary_archetype: "Tender Devotee",
       v5_primary_archetype: "Sensual Connector",
     });
     expect(json.submissions[0].review_reasons).toContain("V4 and V5 disagree");

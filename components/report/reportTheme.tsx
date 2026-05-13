@@ -160,8 +160,8 @@ export const reportThemes: Record<string, ReportTheme> = {
     iconFit: reportArchetypeIconFits["Relational Nurturer"]!,
     Icon: SproutIcon,
   }),
-  "Exhibitionist Performer": makeTheme({
-    archetype: "Exhibitionist Performer",
+  "Radiant Performer": makeTheme({
+    archetype: "Radiant Performer",
     accent: "#E5B85A",
     iconBackground: "#E5B85A",
     motto: '"Watch me shine."',
@@ -174,7 +174,7 @@ export const reportThemes: Record<string, ReportTheme> = {
     riskSegments: 3,
     confidence: "High",
     confidenceSegments: 3,
-    iconFit: reportArchetypeIconFits["Exhibitionist Performer"]!,
+    iconFit: reportArchetypeIconFits["Radiant Performer"]!,
     Icon: SpotlightIcon,
   }),
   "Explorer of Edges": makeTheme({
@@ -262,8 +262,8 @@ export const reportThemes: Record<string, ReportTheme> = {
     iconFit: reportArchetypeIconFits["Emotional Voyeur"]!,
     Icon: MirrorIcon,
   }),
-  "Power Orchestrator": makeTheme({
-    archetype: "Power Orchestrator",
+  "Authority Conductor": makeTheme({
+    archetype: "Authority Conductor",
     accent: "#F3A62A",
     iconBackground: "#F3A62A",
     motto: '"I set the frame\u2014and we play inside it."',
@@ -276,7 +276,7 @@ export const reportThemes: Record<string, ReportTheme> = {
     riskSegments: 3,
     confidence: "High",
     confidenceSegments: 3,
-    iconFit: reportArchetypeIconFits["Power Orchestrator"]!,
+    iconFit: reportArchetypeIconFits["Authority Conductor"]!,
     Icon: GridIcon,
   }),
   "Loyal Ritualist": makeTheme({
@@ -296,8 +296,8 @@ export const reportThemes: Record<string, ReportTheme> = {
     iconFit: reportArchetypeIconFits["Loyal Ritualist"]!,
     Icon: RepeatIcon,
   }),
-  "Approval Seeker": makeTheme({
-    archetype: "Approval Seeker",
+  "Tender Devotee": makeTheme({
+    archetype: "Tender Devotee",
     accent: "#E7B6C8",
     iconBackground: "#E2AEC2",
     motto: '"Tell me I\'m enough."',
@@ -310,7 +310,7 @@ export const reportThemes: Record<string, ReportTheme> = {
     riskSegments: 1,
     confidence: "Low",
     confidenceSegments: 1,
-    iconFit: reportArchetypeIconFits["Approval Seeker"]!,
+    iconFit: reportArchetypeIconFits["Tender Devotee"]!,
     Icon: ThumbsUpIcon,
   }),
   "Analytical Sexualist": makeTheme({

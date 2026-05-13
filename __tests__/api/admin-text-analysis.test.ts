@@ -43,7 +43,7 @@ describe("GET /api/admin/text-analysis", () => {
           },
           survey_submission: {
             scoring_result: {
-              primary_archetype: "Approval Seeker",
+              primary_archetype: "Tender Devotee",
             },
           },
         },
@@ -58,7 +58,7 @@ describe("GET /api/admin/text-analysis", () => {
     expect(json.responses).toEqual([
       expect.objectContaining({
         id: 1,
-        archetype: "Approval Seeker",
+        archetype: "Tender Devotee",
       }),
     ]);
   });

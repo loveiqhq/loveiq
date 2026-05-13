@@ -47,7 +47,7 @@ describe("buildResearchIntelligenceSnapshot", () => {
             survey_submission: {
               created_date_time: "2026-04-05T10:00:00.000Z",
               scoring_result: {
-                primary_archetype: "Approval Seeker",
+                primary_archetype: "Tender Devotee",
               },
             },
           },
@@ -96,7 +96,7 @@ describe("buildResearchIntelligenceSnapshot", () => {
       expect.arrayContaining([
         expect.objectContaining({
           theme: "trust",
-          leadingArchetype: "Approval Seeker",
+          leadingArchetype: "Tender Devotee",
         }),
       ])
     );

@@ -10,10 +10,10 @@ import { KNOWN_ARCHETYPES, toArchetypeSlug, type ArchetypeName } from "@/lib/rep
 const ARCHETYPE_DISPLAY_ORDER: readonly ArchetypeName[] = [
   "Spark Seeker",
   "Sensual Connector",
-  "Power Orchestrator",
+  "Authority Conductor",
   "Loyal Ritualist",
   "Minimalist Companion",
-  "Exhibitionist Performer",
+  "Radiant Performer",
   "Curious Apprentice",
   "Relational Nurturer",
   "Explorer of Edges",
@@ -21,7 +21,7 @@ const ARCHETYPE_DISPLAY_ORDER: readonly ArchetypeName[] = [
   "Analytical Sexualist",
   "Spiritual Lover",
   "Quiet Withdrawer",
-  "Approval Seeker",
+  "Tender Devotee",
 ] as const;
 
 function buildArchetypeUrl(reportUrl: string, archetype: ArchetypeName): string {

@@ -34,13 +34,13 @@ describe("CoreArchetypeSection", () => {
       <CoreArchetypeSection
         archetypeHtml="<p>Power-specific narrative.</p>"
         matchScore={88}
-        theme={reportThemes["Power Orchestrator"]}
+        theme={reportThemes["Authority Conductor"]}
       />
     );
 
     const motto = container.querySelector(".report-hero-card__motto");
 
-    expect(screen.getByRole("heading", { name: /power orchestrator/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /authority conductor/i })).toBeInTheDocument();
     expect(motto).toBeInTheDocument();
     expect(motto).toHaveTextContent('Motto: "I set the frame—and we play inside it."');
     expect(screen.getByText(/^power$/i)).toBeInTheDocument();
@@ -81,7 +81,7 @@ describe("CoreArchetypeSection", () => {
       <CoreArchetypeSection
         archetypeHtml={null}
         matchScore={91}
-        theme={reportThemes["Power Orchestrator"]}
+        theme={reportThemes["Authority Conductor"]}
       />
     );
 
@@ -169,7 +169,7 @@ describe("CoreArchetypeSection match strength animation", () => {
       <CoreArchetypeSection
         archetypeHtml={null}
         matchScore={88}
-        theme={reportThemes["Power Orchestrator"]}
+        theme={reportThemes["Authority Conductor"]}
       />
     );
 
@@ -196,7 +196,7 @@ describe("CoreArchetypeSection match strength animation", () => {
       <CoreArchetypeSection
         archetypeHtml={null}
         matchScore={72}
-        theme={reportThemes["Power Orchestrator"]}
+        theme={reportThemes["Authority Conductor"]}
       />
     );
 

@@ -270,7 +270,7 @@ export const reportArchetypeIconFits: Record<string, ReportIconFit> = {
     hero: { width: "50px", height: "50px", mobileWidth: "54px", mobileHeight: "54px" },
     row: { width: "38px", height: "38px" },
   },
-  "Exhibitionist Performer": {
+  "Radiant Performer": {
     hero: { width: "46px", height: "52px", mobileWidth: "50px", mobileHeight: "56px" },
     row: { width: "34px", height: "39px" },
   },
@@ -294,7 +294,7 @@ export const reportArchetypeIconFits: Record<string, ReportIconFit> = {
     hero: { width: "46px", height: "46px", mobileWidth: "50px", mobileHeight: "50px" },
     row: { width: "34px", height: "34px" },
   },
-  "Power Orchestrator": {
+  "Authority Conductor": {
     hero: { width: "46px", height: "46px", mobileWidth: "50px", mobileHeight: "50px" },
     row: { width: "34px", height: "34px" },
   },
@@ -302,7 +302,7 @@ export const reportArchetypeIconFits: Record<string, ReportIconFit> = {
     hero: { width: "52px", height: "44px", mobileWidth: "56px", mobileHeight: "48px" },
     row: { width: "38px", height: "32px" },
   },
-  "Approval Seeker": {
+  "Tender Devotee": {
     hero: { width: "44px", height: "44px", mobileWidth: "48px", mobileHeight: "48px" },
     row: { width: "32px", height: "32px" },
   },
