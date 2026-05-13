@@ -860,8 +860,8 @@ const QuoteSection = () => (
         />
       </div>
       <p className="reveal-on-scroll relative z-10 mx-auto max-w-[900px] font-serif text-[28px] leading-[36px] md:text-[48px] md:leading-[56px] tracking-[-1.2px] text-white">
-        &quot;This is a space designed for honest reflection — even on thoughts and desires
-        we&apos;ve never spoken aloud.&quot;
+        This is a space designed for honest reflection — even on thoughts and desires we&apos;ve
+        never spoken aloud.
       </p>
 
       <div className="relative z-10 flex flex-col items-center gap-6 pt-6">
