@@ -76,7 +76,7 @@ const archetypeBoosts: Record<string, Record<string, unknown>> = {
     "10002": ["reassurance"],
     "14020": ["healing"],
   },
-  "Exhibitionist Performer": {
+  "Radiant Performer": {
     "02001": "spontaneous",
     "03003": ["visible_semipublic"],
     "03005": "sensation",
@@ -115,23 +115,23 @@ const archetypeBoosts: Record<string, Record<string, unknown>> = {
     "16005": "evolving",
   },
   "Minimalist Companion": {
-    "01003": "not_focus",
     "02001": "planned",
     "03003": ["private"],
     "03005": "safety",
     "08003": "withdraw",
     "10002": ["nonverbal", "very_little"],
     "14020": ["comfort"],
+    "16005": "recharging",
   },
   "Emotional Voyeur": {
-    "01003": "not_focus",
     "03005": "fantasy",
     "03013": "watching",
     "08003": "withdraw",
     "10002": ["nonverbal", "very_little"],
     "14020": ["escape"],
+    "16005": "recharging",
   },
-  "Power Orchestrator": {
+  "Authority Conductor": {
     "02001": "spontaneous",
     "02004": "i_start",
     "03003": ["ritualized"],
@@ -149,7 +149,7 @@ const archetypeBoosts: Record<string, Record<string, unknown>> = {
     "11001": "egalitarian",
     "14020": ["comfort"],
   },
-  "Approval Seeker": {
+  "Tender Devotee": {
     "02001": "responsive",
     "03005": "connection",
     "08003": "pursue",
@@ -167,7 +167,6 @@ const archetypeBoosts: Record<string, Record<string, unknown>> = {
     "14020": ["novelty"],
   },
   "Quiet Withdrawer": {
-    "01003": "not_focus",
     "02001": "low_lately",
     "03003": ["private"],
     "03005": "safety",
@@ -204,15 +203,6 @@ describe("Every archetype is achievable as primaryArchetype", () => {
 
 // All categorical questions used in scoring, with their exact survey labels
 const categoricalQuestions: Record<string, string[]> = {
-  "01003": [
-    "Satisfied & actively engaged",
-    "Want more than I currently have",
-    "Frustrated or unfulfilled",
-    "Feels complicated or inconsistent",
-    "Present, but not a priority right now",
-    "Currently not a focus for me",
-    "Unsure / still figuring it out",
-  ],
   "02001": [
     "Spontaneous",
     "Responsive",
@@ -315,15 +305,6 @@ const categoricalQuestions: Record<string, string[]> = {
     "Yes, both physical and mental health",
     "I'm not sure",
     "Prefer not to answer",
-  ],
-  "16004": [
-    "Within 7 days",
-    "Within 30 days",
-    "1\u20133 months",
-    "3\u20136 months",
-    "6\u201312 months",
-    "Later than 12 months",
-    "Not sure yet",
   ],
 };
 
@@ -508,7 +489,6 @@ describe("Full realistic survey response", () => {
       "09013": 2, // Strategy
 
       // Categorical boost questions
-      "01003": "Present, but not a priority right now",
       "02001": "Responsive",
       "02004": "I’m usually not the one to initiate",
       "03003": ["Private and protected"],
@@ -549,8 +529,6 @@ describe("Full realistic survey response", () => {
       "15011": "Heterosexual",
       "16001": "Emotional safety & connection",
       "16002": 5, // Urgency
-      "16003": 6, // Change efficacy
-      "16004": "Within 30 days",
       "16007": "I use a structured tool/app/journal to guide me",
 
       // Multi-select

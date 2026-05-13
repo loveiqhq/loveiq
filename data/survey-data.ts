@@ -138,69 +138,6 @@ export const surveyQuestions: SurveyQuestion[] = [
     formatGuidance: "Select how true this statement is for you.",
   },
   {
-    qId: "01003",
-    cId: 1,
-    chapter: "Current Sexual Wellbeing & Pain Points",
-    question: "Which statement best describes your relationship with sexuality right now?",
-    answerType: "single",
-    options: [
-      "Satisfied & actively engaged",
-      "Want more than I currently have",
-      "Frustrated or unfulfilled",
-      "Feels complicated or inconsistent",
-      "Present, but not a priority right now",
-      "Currently not a focus for me",
-      "Unsure / still figuring it out",
-    ],
-    required: true,
-    guide:
-      "Think about your current season, not your ideal self. If more than one partly fits, focus on the one that feels most central right now.",
-    supportAndGuidance:
-      "Think about your current season, not your ideal self. If more than one partly fits, focus on the one that feels most central right now.",
-    comment:
-      "Helps distinguish whether lower sexual engagement reflects preference, life load, or emotional/relational difficulty.",
-    howAnswerIsUsed:
-      "Helps distinguish whether lower sexual engagement reflects preference, life load, or emotional/relational difficulty.",
-    answerOptionsExplained: [
-      {
-        option: "Satisfied & actively engaged",
-        explanation:
-          "sexuality currently feels alive, available, and broadly working for you; you are not mainly in a problem-solving mode right now",
-      },
-      {
-        option: "Want more than I currently have",
-        explanation:
-          "sexuality matters to you, and you feel a meaningful gap between what you want and what you are currently experiencing",
-      },
-      {
-        option: "Frustrated or unfulfilled",
-        explanation:
-          "your current sexual reality feels clearly lacking, disappointing, stuck, or far from what you want",
-      },
-      {
-        option: "Feels complicated or inconsistent",
-        explanation:
-          "sexuality is present, but mixed signals, changing desire, shame, pain, mismatch, or emotional difficulty make it hard to feel simple and steady",
-      },
-      {
-        option: "Present, but not a priority right now",
-        explanation:
-          "sexuality matters, but stress, work, parenting, health, grief, logistics, or general life load often push it lower on the list",
-      },
-      {
-        option: "Currently not a focus for me",
-        explanation:
-          "sexuality is genuinely lower priority for you right now by preference or life stage, not mainly because something is wrong",
-      },
-      {
-        option: "Unsure / still figuring it out",
-        explanation:
-          "your current relationship with sexuality feels mixed, unclear, or still in discovery, and no single option fully captures it",
-      },
-    ],
-    formatGuidance: "Select one option.",
-  },
-  {
     qId: "01005",
     cId: 1,
     chapter: "Current Sexual Wellbeing & Pain Points",
@@ -2758,109 +2695,6 @@ export const surveyQuestions: SurveyQuestion[] = [
     formatGuidance: "Select how true this statement is for you.",
   },
   {
-    qId: "16003",
-    cId: 16,
-    chapter: "Next Steps & Preferences",
-    question: "Meaningful change in my sexuality feels possible for me in the next 3–6 months.",
-    answerType: "scale",
-    options: [],
-    required: true,
-    guide:
-      "Think about your real schedule, energy, support, and relationship context. This is about what feels possible in actual life, not only in theory.",
-    supportAndGuidance:
-      "Think about your real schedule, energy, support, and relationship context. This is about what feels possible in actual life, not only in theory.",
-    scaleLabels: { low: "Not true at all", high: "Very true" },
-    comment:
-      "This helps us decide whether to emphasize momentum-building, confidence-building, or a slower, steadier path.",
-    howAnswerIsUsed:
-      "This helps us decide whether to emphasize momentum-building, confidence-building, or a slower, steadier path.",
-    answerOptionsExplained: [
-      {
-        option: "1 = Not true at all",
-        explanation: "meaningful change currently feels unlikely, blocked, or hard to imagine",
-      },
-      {
-        option: "2 = Mostly not true",
-        explanation:
-          "change feels technically possible, but it is difficult to picture it happening in your current circumstances",
-      },
-      {
-        option: "3 = Slightly not true",
-        explanation:
-          "some progress seems conceivable, though it still feels uncertain, limited, or hard to trust",
-      },
-      {
-        option: "4 = Mixed / depends",
-        explanation:
-          "some movement feels realistic, but there are still clear uncertainties or obstacles",
-      },
-      {
-        option: "5 = Slightly true",
-        explanation:
-          "change feels reasonably within reach if the right effort, support, or conditions come together",
-      },
-      {
-        option: "6 = Mostly true",
-        explanation: "meaningful change feels realistic and achievable in your current life",
-      },
-      {
-        option: "7 = Very true",
-        explanation: "progress feels believable, reachable, and workable in your current life",
-      },
-    ],
-    hoverStates: {
-      "1": "Not true at all",
-      "2": "Mostly not true",
-      "3": "Slightly not true",
-      "4": "Mixed / depends",
-      "5": "Slightly true",
-      "6": "Mostly true",
-      "7": "Very true",
-    },
-    formatGuidance: "Select how true this statement is for you.",
-  },
-  {
-    qId: "16004",
-    cId: 16,
-    chapter: "Next Steps & Preferences",
-    question:
-      "If you had a clear plan that felt like a good fit, when would you realistically start?",
-    answerType: "single",
-    options: [
-      "Within 7 days",
-      "Within 30 days",
-      "1–3 months",
-      "3–6 months",
-      "6–12 months",
-      "Later than 12 months",
-      "Not sure yet",
-    ],
-    required: true,
-    guide:
-      "Assume the plan is clear and genuinely fits you. Then answer from your real timing, not your fantasy self with more time and energy.",
-    supportAndGuidance:
-      "Assume the plan is clear and genuinely fits you. Then answer from your real timing, not your fantasy self with more time and energy.",
-    comment: "We use this to match recommendations to your real timing, not an ideal timeline.",
-    howAnswerIsUsed:
-      "We use this to match recommendations to your real timing, not an ideal timeline.",
-    answerOptionsExplained: [
-      { option: "Within 7 days", explanation: "you would likely begin almost immediately" },
-      { option: "Within 30 days", explanation: "you would likely start soon, but not right away" },
-      { option: "1–3 months", explanation: "change feels relevant, but not yet immediate" },
-      {
-        option: "3–6 months",
-        explanation: "this matters, though it is more of a medium-term step",
-      },
-      { option: "6–12 months", explanation: "action feels more distant for now" },
-      {
-        option: "Later than 12 months",
-        explanation: "this is not something you see yourself beginning soon",
-      },
-      { option: "Not sure yet", explanation: "your timing feels unclear or undecided" },
-    ],
-    formatGuidance: "Select one option.",
-  },
-  {
     qId: "16005",
     cId: 16,
     chapter: "Next Steps & Preferences",
@@ -3287,6 +3121,25 @@ export const surveyQuestions: SurveyQuestion[] = [
       },
     ],
     formatGuidance: "Select all that apply.",
+  },
+  {
+    qId: "16015",
+    cId: 16,
+    chapter: "Next Steps & Preferences",
+    question: "Would you like to receive free LoveIQ hints and insights?",
+    answerType: "single",
+    options: ["Yes", "No"],
+    required: false,
+    guide: "This question is optional. Your answer here does not affect your archetype results.",
+    supportAndGuidance:
+      "This question is optional. Your answer here does not affect your archetype results.",
+    comment: "Marketing opt-in only (not used in scoring).",
+    howAnswerIsUsed: "Marketing opt-in only (not used in scoring).",
+    answerOptionsExplained: [
+      { option: "Yes", explanation: "subscribe me to free LoveIQ hints and insights" },
+      { option: "No", explanation: "no thanks, do not subscribe me" },
+    ],
+    formatGuidance: "Select one option.",
   },
 ];
 

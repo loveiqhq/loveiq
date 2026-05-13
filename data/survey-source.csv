@@ -20,31 +20,6 @@ Q_ID,C_ID,Category & chapter,Question ,Answer format,Answer format guidance,Defa
 5 = Slightly true
 6 = Mostly true
 7 = Very true",Provides baseline context for interpreting your report. This does not directly define your archetype.,N/A,
-01003,1,Current Sexual Wellbeing & Pain Points,Which statement best describes your relationship with sexuality right now?,Single choice,Select one option.,N/A,"Think about your current season, not your ideal self. If more than one partly fits, focus on the one that feels most central right now.","Satisfied & actively engaged
-
-Want more than I currently have
-
-Frustrated or unfulfilled
-
-Feels complicated or inconsistent
-
-Present, but not a priority right now
-
-Currently not a focus for me
-
-Unsure / still figuring it out","Satisfied & actively engaged = sexuality currently feels alive, available, and broadly working for you; you are not mainly in a problem-solving mode right now.
-
-Want more than I currently have = sexuality matters to you, and you feel a meaningful gap between what you want and what you are currently experiencing.
-
-Frustrated or unfulfilled = your current sexual reality feels clearly lacking, disappointing, stuck, or far from what you want.
-
-Feels complicated or inconsistent = sexuality is present, but mixed signals, changing desire, shame, pain, mismatch, or emotional difficulty make it hard to feel simple and steady.
-
-Present, but not a priority right now = sexuality matters, but stress, work, parenting, health, grief, logistics, or general life load often push it lower on the list.
-
-Currently not a focus for me = sexuality is genuinely lower priority for you right now by preference or life stage, not mainly because something is wrong.
-
-Unsure / still figuring it out = your current relationship with sexuality feels mixed, unclear, or still in discovery, and no single option fully captures it.",,"Helps distinguish whether lower sexual engagement reflects preference, life load, or emotional/relational difficulty.",N/A,
 01005,1,Current Sexual Wellbeing & Pain Points,I often crave more novelty and variety in my sexual life.,1-7 scale,Select how true this statement is for you.,N/A,"Answer from your usual pattern. Novelty can mean new activities, fantasies, roles, pacing, settings, or simply wanting things to feel less same-same.",1→7,"1 = Not at all true: familiarity, steadiness, and known patterns usually feel more satisfying to you than novelty or change.
 
 2 = Mostly not true: you may enjoy occasional variation, but novelty is usually not an important driver of your sexuality.
@@ -726,38 +701,6 @@ Something else = your most important lever for change is something different fro
 5 = Slightly true
 6 = Mostly true
 7 = Very true",This tells us whether to make your recommendations more immediate and action-oriented or more exploratory and grounded.,N/A,
-16003,16,Next Steps & Preferences,Meaningful change in my sexuality feels possible for me in the next 3–6 months.,1-7 scale,Select how true this statement is for you.,N/A,"Think about your real schedule, energy, support, and relationship context. This is about what feels possible in actual life, not only in theory.",1→7,"1 = Not true at all: meaningful change currently feels unlikely, blocked, or hard to imagine.
-
-2 = Mostly not true: change feels technically possible, but it is difficult to picture it happening in your current circumstances.
-
-3 = Slightly not true: some progress seems conceivable, though it still feels uncertain, limited, or hard to trust.
-
-4 = Mixed / depends: some movement feels realistic, but there are still clear uncertainties or obstacles.
-
-5 = Slightly true: change feels reasonably within reach if the right effort, support, or conditions come together.
-
-6 = Mostly true: meaningful change feels realistic and achievable in your current life.
-
-7 = Very true: progress feels believable, reachable, and workable in your current life.","1 = Not true at all
-2 = Mostly not true
-3 = Slightly not true
-4 = Mixed / depends
-5 = Slightly true
-6 = Mostly true
-7 = Very true","This helps us decide whether to emphasize momentum-building, confidence-building, or a slower, steadier path.",N/A,
-16004,16,Next Steps & Preferences,"If you had a clear plan that felt like a good fit, when would you realistically start?",Single choice,Select one option.,N/A,"Assume the plan is clear and genuinely fits you. Then answer from your real timing, not your fantasy self with more time and energy.","- Within 7 days
-- Within 30 days
-- 1–3 months
-- 3–6 months
-- 6–12 months
-- Later than 12 months
-- Not sure yet","Within 7 days = you would likely begin almost immediately.
-Within 30 days = you would likely start soon, but not right away.
-1–3 months = change feels relevant, but not yet immediate.
-3–6 months = this matters, though it is more of a medium-term step.
-6–12 months = action feels more distant for now.
-Later than 12 months = this is not something you see yourself beginning soon.
-Not sure yet = your timing feels unclear or undecided.",,"We use this to match recommendations to your real timing, not an ideal timeline.",N/A,
 16005,16,Next Steps & Preferences,"When you reflect on your current sexuality and pleasure, which description feels most true for you?",Single choice,Select one option.,N/A,"Think of this as your current season, not a fixed identity. Focus on the phase that feels closest to your baseline over the past 4–8 weeks.","- Recharging / Pausing
 - Repairing / Reconnecting
 - Awakening / Exploring
@@ -890,3 +833,6 @@ I struggle to stay consistent over time = starting is easier than sustaining eff
 Nothing major is in the way right now = no significant obstacle currently seems to be blocking improvement.
 
 Something else = another meaningful blocker matters more than the options listed here.",,This tells us which obstacles to prioritize first so the report focuses on what is actually blocking progress.,N/A,
+16015,16,Next Steps & Preferences,Would you like to receive free LoveIQ hints and insights?,Single choice,Select one option.,N/A,This question is optional. Your answer here does not affect your archetype results.,"- Yes
+- No","Yes = subscribe me to free LoveIQ hints and insights.
+No = no thanks, do not subscribe me.",,Marketing opt-in only (not used in scoring).,N/A,

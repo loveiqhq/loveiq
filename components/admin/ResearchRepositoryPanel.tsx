@@ -703,7 +703,7 @@ export default function ResearchRepositoryPanel({
                     setForm((current) => ({ ...current, question_id: event.target.value }))
                   }
                   className={INPUT_CLASS}
-                  placeholder="e.g. 01003"
+                  placeholder="e.g. 01002"
                 />
               </FormField>
               <FormField label="Theme">

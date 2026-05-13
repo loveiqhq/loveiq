@@ -220,7 +220,9 @@ function main() {
     const answerOptions = (row["Answer options"] || row["Answer Options"] || "").trim();
     const answerTypeRaw = (row["Answer format"] || row["Answer Type"] || "").trim();
     const howAnswerIsUsed = cleanText(row["How this answer will be used"] || row["Comment"] || "");
-    const required = true;
+    // Marketing opt-in questions (e.g. Q16015) are not required.
+    // Convention: "Marketing opt-in" in the "How this answer will be used" column flips required→false.
+    const required = !/marketing opt-in/i.test(howAnswerIsUsed);
     const supportAndGuidance = cleanText(
       row["Support and guidance"] || row["Guide (display)"] || ""
     );

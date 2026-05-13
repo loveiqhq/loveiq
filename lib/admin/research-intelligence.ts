@@ -426,7 +426,7 @@ async function fetchArchetypes(
 }
 
 async function fetchContradictionAnswers(since: string): Promise<DiagnosticAnswerRow[]> {
-  const qIds = ["01002", "01003", "01006", "02001", "02002", "16013", "16014"];
+  const qIds = ["01002", "01006", "02001", "02002", "16013", "16014"];
   const query =
     "/rest/v1/survey_submission_answer?select=" +
     "survey_submission_id,answer_text,normalized_value," +
@@ -599,75 +599,27 @@ function buildContradictionSignals(rows: DiagnosticAnswerRow[]): ContradictionSi
   });
 
   pushSignal({
-    key: "satisfaction-description-mismatch",
-    title: "Overall satisfaction clashes with current-state description",
-    detail:
-      "High or very low satisfaction scores are being paired with an opposite self-description of current sexuality.",
-    severity: "critical",
-    href: "/admin/research",
-    recommendation:
-      "Tighten the framing between the satisfaction scale and the current-state label question so they measure distinct concepts.",
-    requiredQids: ["01002", "01003"],
-    match: (answers) => {
-      const satisfaction = answers.get("01002");
-      const state = answers.get("01003");
-      if (!satisfaction || !state || satisfaction.numeric == null) return null;
-      if (satisfaction.numeric >= 6 && hasValue(state, "frustrated or unfulfilled")) {
-        return contradictionEvidence("01002", satisfaction, "01003", state);
-      }
-      if (satisfaction.numeric <= 2 && hasValue(state, "satisfied actively engaged")) {
-        return contradictionEvidence("01002", satisfaction, "01003", state);
-      }
-      return null;
-    },
-  });
-
-  pushSignal({
-    key: "priority-focus-mismatch",
-    title: "Low stated focus conflicts with high stated importance",
-    detail:
-      "Some respondents say sexuality is not a current focus while rating understanding it as highly important.",
-    severity: "warning",
-    href: "/admin/research",
-    recommendation:
-      "Clarify whether the question is asking about current attention, personal priority, or available bandwidth.",
-    requiredQids: ["01003", "16013"],
-    match: (answers) => {
-      const state = answers.get("01003");
-      const importance = answers.get("16013");
-      if (!state || !importance || importance.numeric == null) return null;
-      if (hasValue(state, "currently not a focus") && importance.numeric >= 6) {
-        return contradictionEvidence("01003", state, "16013", importance);
-      }
-      return null;
-    },
-  });
-
-  pushSignal({
     key: "no-blockers-major-distress",
     title: "No-blocker claim conflicts with visible distress or pain",
     detail:
-      "Some respondents report that nothing major is blocking progress while also reporting severe dissatisfaction, pain, or frustration.",
+      "Some respondents report that nothing major is blocking progress while also reporting severe dissatisfaction or pain.",
     severity: "warning",
     href: "/admin/research",
     recommendation:
       "Review blocker wording and consider splitting situational blockers from internal or body-based constraints.",
-    requiredQids: ["16014", "01002", "01003", "01006"],
+    requiredQids: ["16014", "01002", "01006"],
     match: (answers) => {
       const blockers = answers.get("16014");
       const satisfaction = answers.get("01002");
-      const state = answers.get("01003");
       const pain = answers.get("01006");
-      if (!blockers || !satisfaction || !state || !pain) return null;
+      if (!blockers || !satisfaction || !pain) return null;
       if (!hasValue(blockers, "nothing major")) return null;
 
       const isDistressed =
         (satisfaction.numeric != null && satisfaction.numeric <= 2) ||
-        hasValue(state, "frustrated or unfulfilled") ||
-        hasValue(state, "complicated or inconsistent") ||
         (pain.numeric != null && pain.numeric >= 5);
 
-      return isDistressed ? contradictionEvidence("16014", blockers, "01003", state) : null;
+      return isDistressed ? contradictionEvidence("16014", blockers, "01002", satisfaction) : null;
     },
   });
 

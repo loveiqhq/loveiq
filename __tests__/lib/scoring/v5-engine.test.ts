@@ -135,7 +135,7 @@ describe("V5 deterministic seeded spacing", () => {
     const result = scoreArchetypes(config, {
       "01005": 6,
       "03013": "watched",
-      "01003": "engaged",
+      "16005": "awakening",
     });
     const ranking = result.v5!.ranking;
     for (let i = 1; i < ranking.length; i++) {
@@ -184,7 +184,6 @@ describe("V5 does not affect V4 output", () => {
     const answers = {
       "01005": 6,
       "03013": "watched",
-      "01003": "engaged",
       "16005": "awakening",
     };
     const withV5 = scoreArchetypes(config, answers);
@@ -210,7 +209,7 @@ describe("V5 excludes V4-only features", () => {
   it("V5 rawTotal differs from V4 rawScore (no bias, no centering)", () => {
     const result = scoreArchetypes(config, {
       "01005": 6,
-      "01003": "engaged",
+      "02001": "Spontaneous",
     });
     // V4 applies bias and centering; V5 does not
     // At least one archetype should have different raw scores
@@ -316,7 +315,7 @@ describe("V5 full realistic survey", () => {
   it("produces valid V5 output with comprehensive answers", () => {
     const result = scoreArchetypes(config, {
       "01005": 6,
-      "01003": "Satisfied & actively engaged",
+      "02001": "Spontaneous",
       "02002": 5,
       "02003": 3,
       "03004": 6,

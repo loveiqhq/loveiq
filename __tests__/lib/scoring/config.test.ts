@@ -95,10 +95,10 @@ describe("getScoringConfig", () => {
   it("V8: categorical boost score_add is applied as final post-scaled value", () => {
     // V8 reduced categorical_boost_rules to 6 columns; score_add is the final
     // post-scaled value (no external multiplier). Engine should use it as-is.
-    // Sample boost: q03013 (gaze) "watched" → Exhibitionist Performer.
+    // Sample boost: q03013 (gaze) "watched" → Radiant Performer.
     const watchedBoosts = config.boosts.get("03013||watched");
     expect(watchedBoosts).toBeDefined();
-    const exhibBoost = watchedBoosts!.find((b) => b.archetype === "Exhibitionist Performer");
+    const exhibBoost = watchedBoosts!.find((b) => b.archetype === "Radiant Performer");
     expect(exhibBoost).toBeDefined();
     // Boost values are bounded (V8 final values are typically -3 to +3).
     expect(Math.abs(exhibBoost!.scoreAdd)).toBeLessThanOrEqual(5);

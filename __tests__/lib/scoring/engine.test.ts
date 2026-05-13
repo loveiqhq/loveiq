@@ -103,7 +103,7 @@ describe("scoreArchetypes", () => {
   it("handles label-to-code resolution for categorical questions", () => {
     // Survey stores full labels; engine should resolve to codes
     const result = scoreArchetypes(config, {
-      "01003": "Satisfied & actively engaged",
+      "02001": "Spontaneous",
     });
     expect(result.percent).toBeDefined();
     const sum = Object.values(result.percent).reduce((a, b) => a + b, 0);
@@ -208,11 +208,11 @@ describe("scoreArchetypes", () => {
     const withBoost = scoreArchetypes(config, {
       "03013": "watched", // gaze orientation: Being watched
     });
-    // Exhibitionist Performer should be boosted
-    // (watched has +1.8 for Exhibitionist Performer)
+    // Radiant Performer should be boosted
+    // (watched has +1.8 for Radiant Performer)
     const noBoost = scoreArchetypes(config, {});
-    expect(withBoost.percent["Exhibitionist Performer"]).toBeGreaterThan(
-      noBoost.percent["Exhibitionist Performer"]
+    expect(withBoost.percent["Radiant Performer"]).toBeGreaterThan(
+      noBoost.percent["Radiant Performer"]
     );
   });
 
@@ -247,7 +247,6 @@ describe("scoreArchetypes", () => {
     const result = scoreArchetypes(config, {
       "01005": 6,
       "03013": "watched",
-      "01003": "engaged",
       "16005": "awakening",
       "16008": ["structured_steps", "conversation_prompts"],
       "16014": ["stress", "mismatch_with_partner"],
