@@ -113,10 +113,6 @@ vi.mock("@/components/survey/SurveyNav", () => ({
   ),
 }));
 
-vi.mock("@/components/survey/GuideAvatar", () => ({
-  default: () => <div data-testid="guide-avatar" />,
-}));
-
 vi.mock("@/components/survey/GuidancePanel", () => ({
   default: () => <div data-testid="guidance-panel" />,
 }));

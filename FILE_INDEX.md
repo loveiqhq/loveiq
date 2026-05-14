@@ -74,14 +74,12 @@
 | Hero section             | `components/landing/S01Hero.tsx`          |
 | How It Works             | `components/landing/S02HowItWorks.tsx`    |
 | Perfect For              | `components/landing/S03PerfectFor.tsx`    |
-| Trusted By               | `components/landing/S04TrustedBy.tsx`     |
 | Value Features           | `components/landing/S05ValueFeatures.tsx` |
 | Archetypes               | `components/landing/S06Archetypes.tsx`    |
 | Sample Profile           | `components/landing/S07SampleProfile.tsx` |
 | Academic Board           | `components/landing/S08AcademicBoard.tsx` |
 | Report Preview           | `components/landing/S09Report.tsx`        |
 | Pillars                  | `components/landing/S10Pillars.tsx`       |
-| Testimonials             | `components/landing/S11Testimonials.tsx`  |
 | Why We Created           | `components/landing/S12WhyWeCreated.tsx`  |
 | FAQ                      | `components/landing/S13FAQ.tsx`           |
 | CTA                      | `components/landing/S14CTA.tsx`           |
