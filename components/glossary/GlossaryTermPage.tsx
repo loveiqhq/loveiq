@@ -5,7 +5,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { GlossaryTerm } from "@/data/glossary-data";
 import GlossaryNavSection from "./GlossaryNavSection";
-import FooterSection from "@/components/landing/FooterSection";
+import FooterSection from "@features/landing/ui/FooterSection";
 
 interface GlossaryTermPageProps {
   term: GlossaryTerm;

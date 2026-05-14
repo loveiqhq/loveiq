@@ -5,7 +5,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import GlossaryNavSection from "./GlossaryNavSection";
-import FooterSection from "@/components/landing/FooterSection";
+import FooterSection from "@features/landing/ui/FooterSection";
 import { trackStartSurvey } from "@/lib/analytics";
 import type { GlossaryTerm } from "@/data/glossary-data";
 

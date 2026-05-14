@@ -2,7 +2,7 @@
 import { render, screen, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, afterEach } from "vitest";
-import S13FAQ from "@/components/landing/S13FAQ";
+import S13FAQ from "@features/landing/ui/S13FAQ";
 
 afterEach(cleanup);
 

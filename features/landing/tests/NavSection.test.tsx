@@ -2,7 +2,7 @@
 import { render, screen, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
-import NavSection from "@/components/landing/NavSection";
+import NavSection from "@features/landing/ui/NavSection";
 
 vi.mock("next/link", () => ({
   default: ({

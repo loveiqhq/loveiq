@@ -5,7 +5,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { useEffect } from "react";
 import LegalNavSection from "@/components/legal/LegalNavSection";
-import FooterSection from "@/components/landing/FooterSection";
+import FooterSection from "@features/landing/ui/FooterSection";
 
 const Pill = ({ children, className = "" }: { children: ReactNode; className?: string }) => (
   <span

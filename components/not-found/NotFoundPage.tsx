@@ -1,7 +1,7 @@
 import type { FC } from "react";
 import Link from "next/link";
-import NavSection from "@/components/landing/NavSection";
-import FooterSection from "@/components/landing/FooterSection";
+import NavSection from "@features/landing/ui/NavSection";
+import FooterSection from "@features/landing/ui/FooterSection";
 
 const NotFoundPage: FC = () => {
   return (

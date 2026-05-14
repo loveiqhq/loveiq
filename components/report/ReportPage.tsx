@@ -17,7 +17,7 @@ import { buildReportCheckoutHref, type ReportPurchasePlanId } from "@/lib/checko
 import type { ReportPriceQuoteSnapshot } from "@/lib/pricing/reportPricing";
 import { canSharePlan } from "@/lib/report/planAccess";
 import InviteModal from "@/components/survey/InviteModal";
-import FooterSection from "@/components/landing/FooterSection";
+import FooterSection from "@features/landing/ui/FooterSection";
 import ReportNavigation from "./ReportNavigation";
 import ReportPricingModal from "./ReportPricingModal";
 import ReportSection from "./ReportSection";
