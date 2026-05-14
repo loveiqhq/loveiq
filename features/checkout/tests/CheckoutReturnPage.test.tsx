@@ -10,7 +10,7 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: mockRouterReplace }),
 }));
 
-vi.mock("@/lib/analytics", () => ({
+vi.mock("@features/analytics/client", () => ({
   trackReportPurchase: (...args: unknown[]) => mockTrackReportPurchase(...args),
 }));
 

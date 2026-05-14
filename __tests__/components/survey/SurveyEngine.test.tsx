@@ -54,7 +54,7 @@ vi.mock("@/data/survey-data", async () => {
   };
 });
 
-vi.mock("@/lib/analytics", () => ({
+vi.mock("@features/analytics/client", () => ({
   trackSurveyStart: vi.fn(),
   trackSurveyAnswer: vi.fn(),
   trackSurveyProgress: vi.fn(),

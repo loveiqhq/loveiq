@@ -17,7 +17,7 @@ import {
   trackSurveyProgress,
   trackSurveyComplete,
   trackSurveyPause,
-} from "@/lib/analytics";
+} from "@features/analytics/client";
 import { useSubmitSurvey } from "./hooks/useSubmitSurvey";
 import { useSurveyTracking } from "./hooks/useSurveyTracking";
 import { useUtmCapture } from "./hooks/useUtmCapture";

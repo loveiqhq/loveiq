@@ -25,7 +25,7 @@ import {
   trackPaywallView,
   trackPriceShown,
   type PaywallPlanItem,
-} from "@/lib/analytics";
+} from "@features/analytics/client";
 
 interface Props {
   accessPlan?: ReportAccessPlan;

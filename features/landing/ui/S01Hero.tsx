@@ -3,7 +3,7 @@
 import type { FC } from "react";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
-import { trackStartSurvey } from "@/lib/analytics";
+import { trackStartSurvey } from "@features/analytics/client";
 
 const noopSubscribe = () => () => {};
 const getVideoSrc = () =>

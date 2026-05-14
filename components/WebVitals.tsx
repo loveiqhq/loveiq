@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { onCLS, onFCP, onINP, onLCP, onTTFB } from "web-vitals";
-import { track } from "@/lib/analytics";
+import { track } from "@features/analytics/client";
 
 function sendToGA4(name: string, value: number, id: string, rating: string) {
   track("web_vitals", {

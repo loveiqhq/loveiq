@@ -2,7 +2,7 @@
 
 import { useRef, useState, useEffect, useCallback, type FC } from "react";
 import Link from "next/link";
-import { trackStartSurvey } from "@/lib/analytics";
+import { trackStartSurvey } from "@features/analytics/client";
 
 interface Archetype {
   name: string;

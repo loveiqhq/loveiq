@@ -23,19 +23,19 @@ const setConsentCookie = ({
 };
 
 // Must re-import in each test file to get fresh module state
-let track: typeof import("../../lib/analytics").track;
-let trackStartSurvey: typeof import("../../lib/analytics").trackStartSurvey;
-let trackSurveyStart: typeof import("../../lib/analytics").trackSurveyStart;
-let trackSurveyProgress: typeof import("../../lib/analytics").trackSurveyProgress;
-let trackSurveyComplete: typeof import("../../lib/analytics").trackSurveyComplete;
-let trackReportViewed: typeof import("../../lib/analytics").trackReportViewed;
-let trackPaywallView: typeof import("../../lib/analytics").trackPaywallView;
-let trackBeginCheckout: typeof import("../../lib/analytics").trackBeginCheckout;
-let trackReportEngagement: typeof import("../../lib/analytics").trackReportEngagement;
-let trackReportPurchase: typeof import("../../lib/analytics").trackReportPurchase;
-let trackGoogleAdsPurchaseConversion: typeof import("../../lib/analytics").trackGoogleAdsPurchaseConversion;
-let trackLandingPageView: typeof import("../../lib/analytics").trackLandingPageView;
-let trackPriceShown: typeof import("../../lib/analytics").trackPriceShown;
+let track: typeof import("@features/analytics/client").track;
+let trackStartSurvey: typeof import("@features/analytics/client").trackStartSurvey;
+let trackSurveyStart: typeof import("@features/analytics/client").trackSurveyStart;
+let trackSurveyProgress: typeof import("@features/analytics/client").trackSurveyProgress;
+let trackSurveyComplete: typeof import("@features/analytics/client").trackSurveyComplete;
+let trackReportViewed: typeof import("@features/analytics/client").trackReportViewed;
+let trackPaywallView: typeof import("@features/analytics/client").trackPaywallView;
+let trackBeginCheckout: typeof import("@features/analytics/client").trackBeginCheckout;
+let trackReportEngagement: typeof import("@features/analytics/client").trackReportEngagement;
+let trackReportPurchase: typeof import("@features/analytics/client").trackReportPurchase;
+let trackGoogleAdsPurchaseConversion: typeof import("@features/analytics/client").trackGoogleAdsPurchaseConversion;
+let trackLandingPageView: typeof import("@features/analytics/client").trackLandingPageView;
+let trackPriceShown: typeof import("@features/analytics/client").trackPriceShown;
 
 describe("analytics", () => {
   const originalWindow = globalThis.window;
@@ -44,7 +44,7 @@ describe("analytics", () => {
     clearConsentCookie();
     // Dynamically import to reset module state
     vi.resetModules();
-    const mod = await import("../../lib/analytics");
+    const mod = await import("@features/analytics/client");
     track = mod.track;
     trackStartSurvey = mod.trackStartSurvey;
     trackSurveyStart = mod.trackSurveyStart;

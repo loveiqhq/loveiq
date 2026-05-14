@@ -18,7 +18,7 @@ import {
   setReportSubmissionContext,
   trackPaywallUnlocked,
   trackReportPurchase,
-} from "@/lib/analytics";
+} from "@features/analytics/client";
 import { toArchetypeSlug } from "@/lib/report/archetypeSlug";
 
 type ReturnState =

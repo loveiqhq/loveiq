@@ -13,7 +13,7 @@ vi.mock("next/link", () => ({
 
 vi.mock("next/navigation", () => ({ usePathname: () => "/survey" }));
 vi.mock("@/lib/csrf-client", () => ({ getCsrfToken: () => "test-token" }));
-vi.mock("@/lib/analytics", () => ({
+vi.mock("@features/analytics/client", () => ({
   trackSurveyInvite: vi.fn(),
   trackShare: vi.fn(),
 }));

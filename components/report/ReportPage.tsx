@@ -53,7 +53,7 @@ import {
   type ReportAccessPlan,
 } from "@/lib/report/access";
 import { fromArchetypeSlug, isArchetypeName, toArchetypeSlug } from "@/lib/report/archetypeSlug";
-import { setReportSubmissionContext, trackReportViewed } from "@/lib/analytics";
+import { setReportSubmissionContext, trackReportViewed } from "@features/analytics/client";
 import { useReportEngagementTimers } from "./hooks/useReportEngagementTimers";
 
 interface SnapshotContent {

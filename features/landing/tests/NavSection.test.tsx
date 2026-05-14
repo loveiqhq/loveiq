@@ -22,7 +22,7 @@ vi.mock("next/link", () => ({
   ),
 }));
 
-vi.mock("@/lib/analytics", () => ({
+vi.mock("@features/analytics/client", () => ({
   trackStartSurvey: vi.fn(),
 }));
 

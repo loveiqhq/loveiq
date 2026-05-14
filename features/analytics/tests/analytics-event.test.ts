@@ -1,25 +1,25 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("../../lib/csrf", () => ({
+vi.mock("@/lib/csrf", () => ({
   verifyCsrfToken: vi.fn().mockResolvedValue(true),
   verifyCsrfTokenFromBody: vi.fn().mockResolvedValue(true),
 }));
 
-vi.mock("../../lib/ratelimit", () => ({
+vi.mock("@/lib/ratelimit", () => ({
   checkRateLimit: vi.fn().mockResolvedValue({ allowed: true, remaining: 59, resetAt: new Date() }),
   getClientIp: vi.fn().mockReturnValue("127.0.0.1"),
 }));
 
 const mockSupabaseFetch = vi.fn();
-vi.mock("../../lib/admin/supabase", () => ({
+vi.mock("@/lib/admin/supabase", () => ({
   supabaseFetch: (...args: unknown[]) => mockSupabaseFetch(...args),
 }));
 
-vi.mock("../../lib/logger", () => ({
+vi.mock("@/lib/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
-import { POST } from "../../app/api/analytics-event/route";
+import { POST } from "@/app/api/analytics-event/route";
 
 function makeRequest(body: unknown) {
   return new Request("http://localhost/api/analytics-event", {

@@ -6,7 +6,7 @@ import InviteModal from "@features/invite/ui/InviteModal";
 const trackSurveyInvite = vi.fn();
 
 vi.mock("@/lib/csrf-client", () => ({ getCsrfToken: () => "test-token" }));
-vi.mock("@/lib/analytics", () => ({
+vi.mock("@features/analytics/client", () => ({
   trackSurveyInvite: (...args: unknown[]) => trackSurveyInvite(...args),
 }));
 

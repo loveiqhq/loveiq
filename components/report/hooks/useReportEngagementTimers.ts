@@ -5,7 +5,7 @@ import {
   trackReportEngagement,
   type ReportEngagementThreshold,
   type ReportEngagementType,
-} from "@/lib/analytics";
+} from "@features/analytics/client";
 
 const MILESTONES: ReadonlyArray<ReportEngagementThreshold> = [60, 300, 600];
 

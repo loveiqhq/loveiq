@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 
 const mockTrackReportEngagement = vi.fn();
-vi.mock("@/lib/analytics", () => ({
+vi.mock("@features/analytics/client", () => ({
   trackReportEngagement: (...args: unknown[]) => mockTrackReportEngagement(...args),
 }));
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { trackLandingPageView } from "@/lib/analytics";
+import { trackLandingPageView } from "@features/analytics/client";
 
 /**
  * Fires `landing_page_view` to GA4 once per page load. Top-of-funnel signal

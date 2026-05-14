@@ -2,24 +2,24 @@ import { describe, it, expect, vi, beforeAll, beforeEach } from "vitest";
 
 // --- Mocks (must be before imports) ---
 
-vi.mock("../../lib/logger", () => ({
+vi.mock("@/lib/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
 const mockVerifyCsrf = vi.fn<() => Promise<boolean>>();
-vi.mock("../../lib/csrf", () => ({
+vi.mock("@/lib/csrf", () => ({
   verifyCsrfToken: (...args: unknown[]) => mockVerifyCsrf(...(args as [])),
 }));
 
 const mockCheckRateLimit = vi.fn();
 const mockGetClientIp = vi.fn();
-vi.mock("../../lib/ratelimit", () => ({
+vi.mock("@/lib/ratelimit", () => ({
   checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
   getClientIp: (...args: unknown[]) => mockGetClientIp(...args),
 }));
 
 const mockFetchWithTimeout = vi.fn();
-vi.mock("../../lib/fetch-with-timeout", () => ({
+vi.mock("@/lib/fetch-with-timeout", () => ({
   fetchWithTimeout: (...args: unknown[]) => mockFetchWithTimeout(...args),
 }));
 
@@ -41,7 +41,7 @@ beforeAll(async () => {
   process.env.CONTACT_TO_EMAIL = "team@loveiq.org";
   process.env.RESEND_API_KEY = "re_test_key";
 
-  const mod = await import("../../app/api/contact/route");
+  const mod = await import("@/app/api/contact/route");
   POST = mod.POST;
 });
 
