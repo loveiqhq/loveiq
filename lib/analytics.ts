@@ -132,10 +132,6 @@ export const trackStartSurvey = (
   track("cta_click", { cta: "start_survey", location });
 };
 
-export const trackLearnMore = (location: "hero") => {
-  track("cta_click", { cta: "learn_more", location });
-};
-
 export const trackSurveyStart = () => {
   track("survey_started");
 };
