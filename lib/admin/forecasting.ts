@@ -396,7 +396,6 @@ export async function buildForecastSnapshot(inputDays: number): Promise<Forecast
 
   const submissionsPrevious = submissions.filter((row) => row.created_date_time < currentSince);
   const submissionsCurrent = submissions.filter((row) => row.created_date_time >= currentSince);
-  const reportsPrevious = reports.filter((row) => row.created_date_time < currentSince);
   const reportsCurrent = reports.filter((row) => row.created_date_time >= currentSince);
   const sessionsPrevious = reportSessions.filter((row) => row.started_at < currentSince);
   const sessionsCurrent = reportSessions.filter((row) => row.started_at >= currentSince);

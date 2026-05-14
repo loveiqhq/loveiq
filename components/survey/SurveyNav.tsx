@@ -41,14 +41,7 @@ const ChevronRight: FC<{ className?: string }> = ({ className = "h-4 w-4" }) => 
   </svg>
 );
 
-const SurveyNav: FC<SurveyNavProps> = ({
-  canGoBack,
-  canGoNext,
-  hasAnswer,
-  statusText,
-  onPrevious,
-  onNext,
-}) => {
+const SurveyNav: FC<SurveyNavProps> = ({ canGoBack, canGoNext, hasAnswer, onPrevious, onNext }) => {
   return (
     <nav className="flex items-center justify-between gap-3">
       {/* Previous */}

@@ -18,7 +18,6 @@ interface TrackingEvent {
 
 const FLUSH_SIZE = 5;
 const FLUSH_INTERVAL_MS = 15_000;
-const MAX_BUFFER_SIZE = 100;
 
 export function useSurveyTracking(
   currentIndex: number,

@@ -372,5 +372,3 @@ export function getReportThemeIconStyle(
 ): CSSProperties {
   return getReportIconVars(theme.iconFit, slot);
 }
-
-export { reportArchetypeIconFits };

@@ -125,7 +125,6 @@ export async function GET(request: Request) {
     const auditLogs = (await auditRes.json()) as AuditRow[];
     const openReviews = (await reviewsRes.json()) as ReviewRow[];
 
-    const adminsByEmail = new Map(admins.map((entry) => [entry.email, entry]));
     const auditByAdmin = new Map<string, AuditRow[]>();
     for (const row of auditLogs) {
       const existing = auditByAdmin.get(row.admin_email) ?? [];

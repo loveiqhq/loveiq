@@ -109,10 +109,6 @@ const GlossaryPage: FC = () => {
     }
   };
 
-  const hasTermsForLetter = (letter: string) => {
-    return termsByLetter[letter] && termsByLetter[letter].length > 0;
-  };
-
   const filteredTerms = useMemo(() => {
     const result: Record<string, GlossaryTerm[]> = {};
 

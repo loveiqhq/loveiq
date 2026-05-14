@@ -41,7 +41,6 @@ const ScaleQuestion: FC<ScaleQuestionProps> = ({ question, value, onChange }) =>
     [onChange]
   );
 
-  const activeValue = value ?? hoveredValue;
   const displayValue = value;
   const selectedExplanation = displayValue ? getValueExplanation(displayValue, question) : null;
 

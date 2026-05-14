@@ -11,8 +11,6 @@ import { WORKFLOW_TAGS, isWorkflowTagName } from "@/lib/admin/workflow-tags";
 import logger from "@/lib/logger";
 import {
   LEAKAGE_HINTS,
-  METRIC_LABELS,
-  PIPELINE_STAGE_ORDER,
   PREDICTION_LABELS,
   ROOT_CAUSE_LABELS,
 } from "@/lib/admin/strategy/constants";
@@ -26,9 +24,7 @@ import type {
   StrategyFlaggedSubmissionRow,
   StrategyGoalRow,
   StrategyInvestigationRow,
-  StrategyPipelineSnapshot,
   StrategyPredictiveInsightRow,
-  StrategyScoringRow,
   StrategyScoringRowRaw,
   StrategySubmissionRow,
   StrategyTagAssignmentRow,
@@ -50,7 +46,6 @@ import {
   effortToScore,
   formatMetric,
   goalDrivers,
-  inRange,
   metricLabel,
   normalizeConversionPipeline,
   normalizeSubmission,
@@ -631,13 +626,11 @@ export async function buildStrategySnapshot(inputDays: number) {
     waitlistPrevious,
     flaggedSubmissions,
     investigations,
-    changelog,
     annotations,
     adminNotes,
     experiments,
     decisionEntries,
     decisionReviews,
-    predictiveInsights,
     forecastSnapshot,
     benchmarkDefinitions,
   } = data;

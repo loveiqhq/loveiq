@@ -1,6 +1,5 @@
 import { buildChannelEfficiencySnapshot } from "@/lib/admin/channel-efficiency";
 import { buildCreativeIntelligenceSnapshot } from "@/lib/admin/creative-intelligence";
-import type { ResearchIntelligenceSnapshot } from "@/lib/admin/research-intelligence";
 import { buildResearchIntelligenceSnapshot } from "@/lib/admin/research-intelligence";
 import { buildResearchTaxonomySnapshot } from "@/lib/admin/research-taxonomy";
 import { clampDays } from "@/lib/admin/next-level";
@@ -152,11 +151,6 @@ function fitTone(score: number, starts: number): AdminIntelligenceTone {
   if (score >= 68 && starts >= 12) return "good";
   if (score < 45 && starts >= 12) return "risk";
   return "watch";
-}
-
-function questionOverlap(questionIds: string[], research: ResearchIntelligenceSnapshot): number {
-  return research.painQuestions.filter((question) => questionIds.includes(question.questionId))
-    .length;
 }
 
 function buildObjectionItems(input: {

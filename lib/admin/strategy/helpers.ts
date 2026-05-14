@@ -63,7 +63,7 @@ export const normalizeSubmission = (value: unknown) =>
 export const priorityWeight = (value: string) =>
   value === "high" ? 0 : value === "medium" ? 1 : 2;
 
-export const inRange = (value: string, start: string, end: string) => value >= start && value < end;
+const inRange = (value: string, start: string, end: string) => value >= start && value < end;
 
 export const countInRange = (
   rows: Array<{ created_date_time: string }>,

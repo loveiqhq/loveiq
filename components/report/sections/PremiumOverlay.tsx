@@ -11,7 +11,7 @@ interface Props {
   onUnlock?: () => void;
 }
 
-const PremiumOverlay: FC<Props> = ({ archetype, sectionTitle, tier, onUnlock }) => (
+const PremiumOverlay: FC<Props> = ({ archetype, tier, onUnlock }) => (
   <div className="report-premium-overlay">
     <div className="report-premium-overlay__card">
       <div className="report-premium-overlay__icon" aria-hidden="true">
