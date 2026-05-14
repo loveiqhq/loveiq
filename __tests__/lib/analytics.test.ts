@@ -25,7 +25,6 @@ const setConsentCookie = ({
 // Must re-import in each test file to get fresh module state
 let track: typeof import("../../lib/analytics").track;
 let trackStartSurvey: typeof import("../../lib/analytics").trackStartSurvey;
-let trackLearnMore: typeof import("../../lib/analytics").trackLearnMore;
 let trackSurveyStart: typeof import("../../lib/analytics").trackSurveyStart;
 let trackSurveyProgress: typeof import("../../lib/analytics").trackSurveyProgress;
 let trackSurveyComplete: typeof import("../../lib/analytics").trackSurveyComplete;
@@ -48,7 +47,6 @@ describe("analytics", () => {
     const mod = await import("../../lib/analytics");
     track = mod.track;
     trackStartSurvey = mod.trackStartSurvey;
-    trackLearnMore = mod.trackLearnMore;
     trackSurveyStart = mod.trackSurveyStart;
     trackSurveyProgress = mod.trackSurveyProgress;
     trackSurveyComplete = mod.trackSurveyComplete;
@@ -212,25 +210,6 @@ describe("analytics", () => {
       expect(mockGtag).toHaveBeenCalledWith("event", "cta_click", {
         cta: "start_survey",
         location: "nav",
-      });
-    });
-  });
-
-  describe("trackLearnMore", () => {
-    it("fires cta_click with learn_more and location", () => {
-      const mockGtag = vi.fn();
-      setConsentCookie({ analytics: true });
-      globalThis.window = {
-        ...globalThis.window,
-        gtag: mockGtag,
-        __loveiqAnalyticsEnabled: true,
-      } as typeof globalThis.window;
-
-      trackLearnMore("hero");
-
-      expect(mockGtag).toHaveBeenCalledWith("event", "cta_click", {
-        cta: "learn_more",
-        location: "hero",
       });
     });
   });
