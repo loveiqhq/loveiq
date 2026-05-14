@@ -17,7 +17,7 @@ import {
   buildReportCheckoutHref,
   type ReportPurchasePlanId,
 } from "@features/checkout/server/reportPurchase";
-import type { ReportPriceQuoteSnapshot } from "@/lib/pricing/reportPricing";
+import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import { canSharePlan } from "@/lib/report/planAccess";
 import InviteModal from "@features/invite/ui/InviteModal";
 import FooterSection from "@features/landing/ui/FooterSection";

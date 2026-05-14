@@ -6,7 +6,7 @@ import {
   type ReportPurchasePlan,
   type ReportPurchasePlanId,
 } from "@features/checkout/server/reportPurchase";
-import type { ReportPriceQuoteSnapshot } from "@/lib/pricing/reportPricing";
+import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 
 export interface ReportDiscountEmailParams {
   ctaUrl: string;

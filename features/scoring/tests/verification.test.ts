@@ -8,9 +8,9 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { scoreArchetypes } from "@/lib/scoring/engine";
-import { getScoringConfig } from "@/lib/scoring/config";
-import type { ScoringConfig } from "@/lib/scoring/types";
+import { scoreArchetypes } from "@features/scoring/logic/engine";
+import { getScoringConfig } from "@features/scoring/logic/config";
+import type { ScoringConfig } from "@features/scoring/logic/types";
 
 const config = getScoringConfig();
 

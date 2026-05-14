@@ -39,7 +39,7 @@ vi.mock("../../lib/report/personalReport", () => ({
   resolveUnlockedArchetypes: vi.fn(() => []),
 }));
 
-vi.mock("../../lib/pricing/reportPricing", () => ({
+vi.mock("@features/pricing/logic/reportPricing", () => ({
   getReportPriceQuotesForContext: vi.fn().mockResolvedValue(null),
 }));
 
@@ -51,7 +51,7 @@ import {
   getReportAccessPlanForSubmission,
   recordReportSessionView,
 } from "../../lib/report/personalReport";
-import { getReportPriceQuotesForContext } from "../../lib/pricing/reportPricing";
+import { getReportPriceQuotesForContext } from "@features/pricing/logic/reportPricing";
 
 function makeRequest(sessionId = "550e8400-e29b-41d4-a716-446655440000") {
   return new Request(`http://localhost:3000/api/report?sessionId=${sessionId}`);

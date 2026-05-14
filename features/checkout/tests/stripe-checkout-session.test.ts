@@ -21,7 +21,7 @@ vi.mock("@features/checkout/server/stripeCheckout", () => ({
   isStripeCheckoutEnabled: vi.fn().mockReturnValue(false),
 }));
 
-vi.mock("@/lib/pricing/reportPricing", () => ({
+vi.mock("@features/pricing/logic/reportPricing", () => ({
   getReportPriceQuoteForContext: vi.fn(),
   markReportPriceQuoteCheckoutStarted: vi.fn().mockResolvedValue(undefined),
 }));
@@ -37,7 +37,7 @@ import {
 import {
   getReportPriceQuoteForContext,
   markReportPriceQuoteCheckoutStarted,
-} from "@/lib/pricing/reportPricing";
+} from "@features/pricing/logic/reportPricing";
 
 function makeRequest(body: unknown) {
   return new Request("http://localhost/api/stripe/checkout-session", {

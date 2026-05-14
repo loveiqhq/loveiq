@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { getScoringConfig } from "@/lib/scoring/config";
+import { getScoringConfig } from "@features/scoring/logic/config";
 
 describe("getScoringConfig", () => {
   const config = getScoringConfig();

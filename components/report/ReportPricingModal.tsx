@@ -16,7 +16,7 @@ import {
   type ReportPurchasePlan,
   type ReportPurchasePlanId,
 } from "@features/checkout/server/reportPurchase";
-import type { ReportPriceQuoteSnapshot } from "@/lib/pricing/reportPricing";
+import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import PricingTestimonialsCarousel from "./PricingTestimonialsCarousel";
 import { getReportTheme, getReportThemeStyle } from "./reportTheme";
 import { isPlanOwnedForArchetype, type ReportAccessPlan } from "@/lib/report/access";

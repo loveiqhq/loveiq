@@ -22,7 +22,7 @@ vi.mock("@/lib/report/personalReport", () => ({
   upsertArchetypeTierForPersonalReport: vi.fn(),
 }));
 
-vi.mock("@/lib/pricing/reportPricing", () => ({
+vi.mock("@features/pricing/logic/reportPricing", () => ({
   markReportPriceQuotePurchased: vi.fn(),
 }));
 
@@ -33,7 +33,7 @@ import {
   unlockAllArchetypesForPersonalReport,
   upsertArchetypeTierForPersonalReport,
 } from "@/lib/report/personalReport";
-import { markReportPriceQuotePurchased } from "@/lib/pricing/reportPricing";
+import { markReportPriceQuotePurchased } from "@features/pricing/logic/reportPricing";
 
 function createJsonResponse(body: unknown, ok = true) {
   return {

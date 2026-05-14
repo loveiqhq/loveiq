@@ -1,7 +1,7 @@
 import { getBreaker } from "@/lib/circuit-breaker";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import logger from "@/lib/logger";
-import { getScoringConfig, scoreArchetypes, type ScoringResult } from "@/lib/scoring";
+import { getScoringConfig, scoreArchetypes, type ScoringResult } from "@features/scoring/logic";
 import type { SurveyAnswers } from "./types";
 
 const SUPABASE_TIMEOUT_MS = 8000;

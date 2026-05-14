@@ -21,7 +21,7 @@ import {
   getDiscountAdjustment,
   getPricingBucketsForPlan,
   getReportPriceQuoteForContext,
-} from "../../lib/pricing/reportPricing";
+} from "@features/pricing/logic/reportPricing";
 import {
   ensurePersonalReportForSubmission,
   resolveSubmissionAccessContext,

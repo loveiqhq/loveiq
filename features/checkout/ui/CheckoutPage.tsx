@@ -23,7 +23,7 @@ import {
   STRIPE_CHECKOUT_DISABLED_MESSAGE,
   type StripeCheckoutSessionResponse,
 } from "@features/checkout/server/stripeCheckout";
-import type { ReportPriceQuoteSnapshot } from "@/lib/pricing/reportPricing";
+import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 
 const subscribeNoop = () => () => {};
 

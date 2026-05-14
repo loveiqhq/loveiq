@@ -243,7 +243,7 @@ import {
   upsertArchetypeTierForPersonalReport,
 } from "@/lib/report/personalReport";
 import { isArchetypeName } from "@/lib/report/archetypeSlug";
-import { markReportPriceQuotePurchased } from "@/lib/pricing/reportPricing";
+import { markReportPriceQuotePurchased } from "@features/pricing/logic/reportPricing";
 
 const SUPABASE_TIMEOUT_MS = 8_000;
 

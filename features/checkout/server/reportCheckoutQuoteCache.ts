@@ -1,4 +1,4 @@
-import type { ReportPriceQuoteSnapshot } from "@/lib/pricing/reportPricing";
+import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import type { ReportPurchasePlanId } from "./reportPurchase";
 
 const REPORT_CHECKOUT_QUOTE_CACHE_PREFIX = "loveiq-report-checkout-quote";

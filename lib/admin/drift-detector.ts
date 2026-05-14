@@ -6,7 +6,7 @@ import {
 import { buildResearchIntelligenceSnapshot } from "@/lib/admin/research-intelligence";
 import { supabaseFetch } from "@/lib/admin/supabase";
 import { WORKFLOW_TAGS } from "@/lib/admin/workflow-tags";
-import { getScoringConfig } from "@/lib/scoring/config";
+import { getScoringConfig } from "@features/scoring/logic/config";
 import logger from "@/lib/logger";
 
 export type DriftCategoryKey =

@@ -6,7 +6,7 @@ import logger from "@/lib/logger";
 import {
   getReportPriceQuoteForContext,
   getReportPriceQuotesForContext,
-} from "@/lib/pricing/reportPricing";
+} from "@features/pricing/logic/reportPricing";
 import {
   REPORT_ACCESS_TOKEN_REGEX,
   REPORT_PURCHASE_PLAN_IDS,

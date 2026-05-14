@@ -25,7 +25,7 @@ import logger from "@/lib/logger";
 import {
   getReportPriceQuoteForContext,
   markReportPriceQuoteCheckoutStarted,
-} from "@/lib/pricing/reportPricing";
+} from "@features/pricing/logic/reportPricing";
 
 export const runtime = "nodejs";
 

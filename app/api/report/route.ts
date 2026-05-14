@@ -12,13 +12,13 @@ import {
   resolveUnlockedArchetypeTiers,
   resolveUnlockedArchetypes,
 } from "@/lib/report/personalReport";
-import { getReportPriceQuotesForContext } from "@/lib/pricing/reportPricing";
+import { getReportPriceQuotesForContext } from "@features/pricing/logic/reportPricing";
 import {
   buildArchetypeContentForUser,
   buildPracticeTendenciesForUser,
 } from "@/lib/report/contentGating";
 import logger from "@/lib/logger";
-import type { ReportPriceQuoteSnapshot } from "@/lib/pricing/reportPricing";
+import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import type { ReportPurchasePlanId } from "@features/checkout/server/reportPurchase";
 import {
   REPORT_SHARE_TOKEN_REGEX,

@@ -19,10 +19,10 @@ import logger from "@/lib/logger";
 import { reportDiscountEmail } from "@/lib/emails/report-discount";
 import { buildUnsubscribeUrl } from "@/lib/emails/unsubscribe-token";
 import { isEmailSuppressed } from "@/lib/emails/suppression";
-import { getReportPriceQuotesForContext } from "@/lib/pricing/reportPricing";
+import { getReportPriceQuotesForContext } from "@features/pricing/logic/reportPricing";
 import { getReportPlanByPersonalReportId } from "@/lib/report/planAccess";
 import type { ReportPurchasePlanId } from "@features/checkout/server/reportPurchase";
-import type { ReportPriceQuoteSnapshot } from "@/lib/pricing/reportPricing";
+import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

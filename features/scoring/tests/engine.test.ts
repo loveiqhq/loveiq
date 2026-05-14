@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { scoreArchetypes, scale1_7to0_1, softmax } from "@/lib/scoring/engine";
-import { getScoringConfig } from "@/lib/scoring/config";
-import type { ScoringConfig } from "@/lib/scoring/types";
+import { scoreArchetypes, scale1_7to0_1, softmax } from "@features/scoring/logic/engine";
+import { getScoringConfig } from "@features/scoring/logic/config";
+import type { ScoringConfig } from "@features/scoring/logic/types";
 
 // ─── Unit tests for helper functions ─────────────────────────────────────────
 

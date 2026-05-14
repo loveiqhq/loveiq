@@ -13,7 +13,7 @@ vi.mock("@/lib/logger", () => ({
   default: { error: vi.fn(), warn: vi.fn(), info: vi.fn() },
 }));
 
-vi.mock("@/lib/pricing/reportPricing", () => ({
+vi.mock("@features/pricing/logic/reportPricing", () => ({
   getReportPriceQuoteForContext: vi.fn(),
   getReportPriceQuotesForContext: vi.fn(),
 }));
@@ -24,7 +24,7 @@ import { checkRateLimit } from "@/lib/ratelimit";
 import {
   getReportPriceQuoteForContext,
   getReportPriceQuotesForContext,
-} from "@/lib/pricing/reportPricing";
+} from "@features/pricing/logic/reportPricing";
 
 describe("GET /api/price", () => {
   beforeEach(() => {
