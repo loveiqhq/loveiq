@@ -340,9 +340,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareApplicationSchema) }}
         />
-        {/* Contentsquare UXA tag — keep raw + synchronous (no async) so the
-            vendor verifier finds CS_CONF/_uxa globals immediately. */}
-        <script src="https://t.contentsquare.net/uxa/f1a8d593041c0.js" />
+        {/* Contentsquare UXA tag — keep raw (not next/script) so the vendor
+            verifier finds CS_CONF/_uxa globals on page load. `defer` is used
+            instead of `async` so script execution is ordered relative to other
+            head scripts and globals are set before DOMContentLoaded. This
+            unblocks HTML parsing for users on slow networks. */}
+        <script src="https://t.contentsquare.net/uxa/f1a8d593041c0.js" defer />
       </head>
       <body className="bg-white dark:bg-[#050208]">
         <GtmNoScript />
