@@ -530,40 +530,6 @@ export async function unlockAllArchetypesForPersonalReport(
   return sanitizeArchetypeTierMap(payload);
 }
 
-/** @deprecated Use upsertArchetypeTierForPersonalReport with tier="full_report". */
-export async function addUnlockedArchetypeForPersonalReport({
-  archetype,
-  personalReportId,
-}: {
-  archetype: string;
-  personalReportId: number;
-}): Promise<string[]> {
-  const tiers = await upsertArchetypeTierForPersonalReport({
-    archetype,
-    personalReportId,
-    tier: "full_report",
-  });
-  return Object.keys(tiers).filter(isArchetypeName);
-}
-
-export async function addUnlockedArchetypeForSubmission({
-  archetype,
-  submissionId,
-}: {
-  archetype: string;
-  submissionId: number;
-}): Promise<string[]> {
-  const personalReport = await fetchPersonalReportForSubmission(submissionId);
-  if (!personalReport) {
-    throw new Error("personal_report_not_found");
-  }
-
-  return addUnlockedArchetypeForPersonalReport({
-    archetype,
-    personalReportId: personalReport.id,
-  });
-}
-
 export async function recordReportSessionView({
   ipAddress,
   personalReportId,
