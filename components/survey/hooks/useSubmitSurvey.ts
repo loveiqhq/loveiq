@@ -6,7 +6,7 @@ import { getCsrfToken } from "@/lib/csrf-client";
 import type { SurveyAnswers } from "@/lib/survey/types";
 import { getSurveyContactInfo } from "@/lib/survey/utils";
 import type { AnswerValue } from "./useSurveyState";
-import { getSessionId, setReportSessionId, setReportToken } from "./surveySession";
+import { getSessionId, setReportSessionId } from "./surveySession";
 import { readHotjarUserId } from "@/lib/hotjar";
 import {
   clearPendingCompletion,
@@ -84,7 +84,6 @@ export function useSubmitSurvey() {
           try {
             const json = (await res.json()) as { reportToken?: string };
             if (json.reportToken) {
-              setReportToken(json.reportToken);
               setReportTokenState(json.reportToken);
             }
           } catch {
