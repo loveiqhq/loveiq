@@ -153,7 +153,11 @@ export async function proxy(request: NextRequest) {
     "Permissions-Policy",
     "geolocation=(), microphone=(), camera=(), autoplay=(self), payment=()"
   );
-  response.headers.set("Strict-Transport-Security", "max-age=63072000; includeSubDomains");
+  // 6 months — long enough to satisfy HSTS best practice and security scanners,
+  // short enough to give operational room if a cert/CDN migration is ever needed.
+  // Shortening server-side is forward-safe: existing browsers retain their cached
+  // longer max-age until that TTL expires.
+  response.headers.set("Strict-Transport-Security", "max-age=15768000; includeSubDomains");
   // Cross-Origin-Opener-Policy for origin isolation
   response.headers.set("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
 

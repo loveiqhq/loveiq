@@ -135,6 +135,9 @@ const sendSlackContactNotification = async (payload: {
 
 export async function POST(request: Request) {
   const routeStart = Date.now();
+  // Server-Timing stage timestamps. Markers ship in the success response so
+  // engineers can read per-stage durations from DevTools Network → Timing.
+  const tStart = performance.now();
 
   // Verify CSRF token
   const csrfValid = await verifyCsrfToken(request);
@@ -173,12 +176,16 @@ export async function POST(request: Request) {
 
   const { firstName, lastName, phone, email, message, captcha } = parsed.data;
 
+  // End of gate (CSRF + rate limit + parse). Captcha begins next.
+  const tGate = performance.now();
+
   const captchaStart = Date.now();
   const captchaOk = await verifyCaptcha(captcha, ip);
   logger.info({ duration_ms: Date.now() - captchaStart }, "contact: reCAPTCHA verify");
   if (!captchaOk) {
     return NextResponse.json({ error: "Captcha failed. Please try again." }, { status: 400 });
   }
+  const tCaptcha = performance.now();
 
   // Strip CRLF / null bytes from any field that flows into an email header.
   // Resend likely sanitizes internally, but defense-in-depth at the app
@@ -250,10 +257,19 @@ export async function POST(request: Request) {
   logger.info({ duration_ms: Date.now() - resendStart }, "contact: resend email");
   logger.info({ duration_ms: Date.now() - routeStart }, "contact: total route duration");
 
+  // End of user-blocking work. Slack notification runs post-response.
+  const tEmail = performance.now();
+
   // Slack runs after the response — keeps the function alive but never blocks it
   scheduleAfterResponse("contact-slack-notification", () =>
     sendSlackContactNotification({ firstName, lastName, email, phone, message })
   );
 
-  return NextResponse.json({ success: true });
+  const serverTiming = [
+    `gate;dur=${(tGate - tStart).toFixed(1)}`,
+    `captcha;dur=${(tCaptcha - tGate).toFixed(1)}`,
+    `email;dur=${(tEmail - tCaptcha).toFixed(1)}`,
+  ].join(", ");
+
+  return NextResponse.json({ success: true }, { headers: { "Server-Timing": serverTiming } });
 }

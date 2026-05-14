@@ -120,6 +120,10 @@ const notifySlackSurvey = async ({
 };
 
 export async function POST(request: Request) {
+  // Server-Timing stage timestamps. Markers ship in the success response so
+  // engineers can read per-stage durations from DevTools Network → Timing.
+  const tStart = performance.now();
+
   const csrfValid = await verifyCsrfToken(request);
   if (!csrfValid) {
     return NextResponse.json({ error: "Invalid request." }, { status: 403 });
@@ -173,6 +177,9 @@ export async function POST(request: Request) {
     );
   }
 
+  // End of gate (CSRF + rate limit + parse + cooldown). Scoring is sync.
+  const tGate = performance.now();
+
   const questionCount = Object.keys(answers).filter((key) => !key.endsWith("_other")).length;
   const scoringResult = computeSurveyScoring(answers as SurveyAnswers);
 
@@ -186,48 +193,65 @@ export async function POST(request: Request) {
       utmTracker,
       sessionId,
     });
-    const scoringSummary = await ensureSubmissionScored(
-      submissionId,
-      answers as SurveyAnswers,
-      scoringResult
-    );
+    const tSubmit = performance.now();
 
-    // Optional: persist Hotjar user_id for admin recording deep-link.
-    // Only on first submission for this session — re-submits keep the original.
-    if (!isExisting && hotjarUserId) {
-      await setSubmissionHotjarUserId(submissionId, hotjarUserId);
-    }
+    // Three independent post-submit writes run concurrently. Each only needs
+    // submissionId (already in scope), writes a different table/column, and
+    // has no data-flow dependency on the others. Failure semantics are
+    // preserved per branch via try/catch or `.catch()`:
+    //   - scoring: returns the summary or null on internal error (existing)
+    //   - hotjar PATCH: lib swallows failures internally; defensive .catch keeps Promise.all alive
+    //   - report-token POST: failure clears reportToken so the response omits it
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    let reportToken: string | undefined =
+      supabaseUrl && serviceKey ? generateReportToken() : undefined;
 
-    // Generate permanent report access token (non-blocking — fire and forget)
-    let reportToken: string | undefined;
-    try {
-      const supabaseUrl = process.env.SUPABASE_URL;
-      const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-      if (supabaseUrl && serviceKey) {
-        reportToken = generateReportToken();
-        const tokenRes = await fetchWithTimeout(`${supabaseUrl}/rest/v1/report_access_token`, {
-          method: "POST",
-          headers: {
-            apikey: serviceKey,
-            Authorization: `Bearer ${serviceKey}`,
-            "Content-Type": "application/json",
-            Prefer: "return=minimal",
-          },
-          body: JSON.stringify({
-            token: reportToken,
-            survey_submission_id: submissionId,
-          }),
-          timeoutMs: 5000,
-        });
-        if (!tokenRes.ok) {
-          logger.error({ status: tokenRes.status }, "Failed to create report access token");
-          reportToken = undefined;
-        }
-      }
-    } catch (err) {
-      logger.error({ err }, "Error creating report access token");
-      reportToken = undefined;
-    }
+    const reportTokenPromise: Promise<void> =
+      reportToken && supabaseUrl && serviceKey
+        ? fetchWithTimeout(`${supabaseUrl}/rest/v1/report_access_token`, {
+            method: "POST",
+            headers: {
+              apikey: serviceKey,
+              Authorization: `Bearer ${serviceKey}`,
+              "Content-Type": "application/json",
+              Prefer: "return=minimal",
+            },
+            body: JSON.stringify({
+              token: reportToken,
+              survey_submission_id: submissionId,
+            }),
+            timeoutMs: 5000,
+          })
+            .then((res) => {
+              if (!res.ok) {
+                logger.error({ status: res.status }, "Failed to create report access token");
+                reportToken = undefined;
+              }
+            })
+            .catch((err) => {
+              logger.error({ err }, "Error creating report access token");
+              reportToken = undefined;
+            })
+        : Promise.resolve();
+
+    const hotjarPromise: Promise<void> =
+      !isExisting && hotjarUserId
+        ? setSubmissionHotjarUserId(submissionId, hotjarUserId).catch(() => {
+            // setSubmissionHotjarUserId already swallows internally; defensive
+            // catch here keeps Promise.all alive if that ever changes.
+          })
+        : Promise.resolve();
+
+    const [scoringSummary] = await Promise.all([
+      ensureSubmissionScored(submissionId, answers as SurveyAnswers, scoringResult),
+      hotjarPromise,
+      reportTokenPromise,
+    ]);
+
+    // End of user-blocking work. Everything below is fire-and-forget via
+    // scheduleAfterResponse and does not affect response latency.
+    const tPost = performance.now();
 
     scheduleAfterResponse("survey-slack-notification", async () => {
       if (isExisting) {
@@ -352,6 +376,12 @@ export async function POST(request: Request) {
       }
     });
 
+    const serverTiming = [
+      `gate;dur=${(tGate - tStart).toFixed(1)}`,
+      `submit;dur=${(tSubmit - tGate).toFixed(1)}`,
+      `post-submit;dur=${(tPost - tSubmit).toFixed(1)}`,
+    ].join(", ");
+
     return NextResponse.json(
       {
         success: true,
@@ -368,7 +398,10 @@ export async function POST(request: Request) {
       {
         // The response carries a fresh report access token + the user's
         // primary archetype — never let intermediaries cache it.
-        headers: { "Cache-Control": "no-store, no-cache, must-revalidate" },
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate",
+          "Server-Timing": serverTiming,
+        },
       }
     );
   } catch (err) {

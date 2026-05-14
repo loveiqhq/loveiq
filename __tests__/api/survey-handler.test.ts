@@ -321,4 +321,78 @@ describe("POST /api/survey", () => {
       expect.objectContaining({ bucket: "survey", limit: 3 })
     );
   });
+
+  it("writes scoring, hotjar, and report-token after submit (parallelization contract)", async () => {
+    // This test pins the contract that AFTER submitSurveyOnce returns, the
+    // route performs three independent writes: scoring_result upsert,
+    // survey_submission.hotjar_user_id PATCH (when hotjarUserId is provided
+    // and the row is new), and report_access_token POST. The test uses
+    // URL-based mockImplementation rather than ordered mockResolvedValueOnce
+    // so it passes whether the three writes run serially or via Promise.all.
+    allowCsrf();
+    allowRateLimit();
+    allowCooldown();
+
+    const SUBMISSION_ID = 4242;
+    const HOTJAR_USER_ID = "hj-user-xyz";
+    const SESSION_ID = "11111111-2222-3333-4444-555555555555";
+
+    mockFetchWithTimeout.mockImplementation((url: string, init?: { method?: string }) => {
+      const method = (init?.method || "GET").toUpperCase();
+      if (typeof url === "string" && url.includes("/rpc/submit_survey")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ success: true, submission_id: SUBMISSION_ID }),
+        });
+      }
+      // fetchScoringSummary: return empty so storeScoringResult fires.
+      // setSubmissionHotjarUserId PATCH, report_access_token POST,
+      // and any session lookup all return ok with an empty body.
+      return Promise.resolve({ ok: true, json: async () => [] });
+    });
+
+    const res = await POST(
+      makeRequest({
+        ...validBody(),
+        sessionId: SESSION_ID,
+        hotjarUserId: HOTJAR_USER_ID,
+      })
+    );
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.success).toBe(true);
+    expect(json.reportToken).toMatch(/^rpt_/);
+
+    const calls = mockFetchWithTimeout.mock.calls.map((c) => ({
+      url: c[0] as string,
+      method: ((c[1] as { method?: string })?.method || "GET").toUpperCase(),
+      body: (c[1] as { body?: string })?.body,
+    }));
+
+    // Scoring upsert: POST to scoring_result with the new submissionId
+    const scoringWrite = calls.find(
+      (c) => c.url.includes("/rest/v1/scoring_result") && c.method === "POST"
+    );
+    expect(scoringWrite, "expected POST to scoring_result").toBeDefined();
+    expect(JSON.parse(scoringWrite!.body!)).toMatchObject({
+      survey_submission_id: SUBMISSION_ID,
+    });
+
+    // Hotjar PATCH: setSubmissionHotjarUserId on survey_submission row
+    const hotjarPatch = calls.find(
+      (c) => c.url.includes("/rest/v1/survey_submission") && c.method === "PATCH"
+    );
+    expect(hotjarPatch, "expected PATCH to survey_submission").toBeDefined();
+    expect(JSON.parse(hotjarPatch!.body!)).toMatchObject({
+      hotjar_user_id: HOTJAR_USER_ID,
+    });
+
+    // Report token POST: creates a row in report_access_token
+    const tokenPost = calls.find((c) => c.url.includes("/rest/v1/report_access_token"));
+    expect(tokenPost, "expected POST to report_access_token").toBeDefined();
+    const tokenBody = JSON.parse(tokenPost!.body!);
+    expect(tokenBody.survey_submission_id).toBe(SUBMISSION_ID);
+    expect(tokenBody.token).toMatch(/^rpt_/);
+  });
 });

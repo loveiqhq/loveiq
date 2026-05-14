@@ -14,6 +14,10 @@ import logger from "./logger";
 // Initialize Redis client from Vercel KV env vars
 let redis: Redis | null = null;
 
+// Once-per-process gate so the "KV missing in prod" log fires once per cold
+// start, not once per request (avoid Vercel log flood / alert fatigue).
+let missingKvLogged = false;
+
 function getRedis(): Redis | null {
   if (redis) return redis;
 
@@ -24,6 +28,18 @@ function getRedis(): Redis | null {
 
   redis = new Redis({ url, token });
   return redis;
+}
+
+function logMissingKvOnce(): void {
+  if (missingKvLogged) return;
+  missingKvLogged = true;
+  if (process.env.NODE_ENV === "production") {
+    logger.error(
+      "[ratelimit] KV_REST_API_URL / KV_REST_API_TOKEN missing in production — using in-memory fallback. Per-instance state will not coordinate across regions or warm containers, so rate limits may be under-enforced."
+    );
+  } else {
+    logger.warn("[ratelimit] Redis not configured, using in-memory fallback");
+  }
 }
 
 interface RateLimitResult {
@@ -108,7 +124,7 @@ export async function checkRateLimit(
 
   // If Redis is not configured, use in-memory fallback
   if (!kv) {
-    logger.warn("[ratelimit] Redis not configured, using in-memory fallback");
+    logMissingKvOnce();
     return checkMemoryRateLimit(compositeKey, config);
   }
 
