@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
-import GlossaryPage from "@/components/glossary/GlossaryPage";
+import GlossaryPage from "@features/glossary/ui/GlossaryPage";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.loveiq.org";
 

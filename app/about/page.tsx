@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import AboutPage from "@/components/about/AboutPage";
+import AboutPage from "@features/about/ui/AboutPage";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.loveiq.org";
 

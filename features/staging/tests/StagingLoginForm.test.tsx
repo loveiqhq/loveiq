@@ -14,7 +14,7 @@ vi.mock("@/lib/csrf-client", () => ({
   getCsrfToken: () => "test-csrf-token",
 }));
 
-import StagingLoginForm from "@/components/staging/StagingLoginForm";
+import StagingLoginForm from "@features/staging/ui/StagingLoginForm";
 
 let mockFetch: ReturnType<typeof vi.fn>;
 

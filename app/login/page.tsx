@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import StagingLoginForm from "@/components/staging/StagingLoginForm";
+import StagingLoginForm from "@features/staging/ui/StagingLoginForm";
 
 export const metadata: Metadata = {
   title: "Login | LoveIQ Staging",
