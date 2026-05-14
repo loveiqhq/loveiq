@@ -57,7 +57,15 @@ const verifyCaptcha = async (token: string, ip: string) => {
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: params.toString(),
         cache: "no-store",
-        timeoutMs: 3000, // 3s: fits Vercel free plan budget (rate limit 3s + captcha 3s + resend 5s = ~11s)
+        // 5s: gives APAC / high-latency mobile users real headroom. The
+        // Google siteverify endpoint is US-hosted so non-US RTT is 150–400ms.
+        // The previous 3s caused legitimate APAC submissions to hit timeout
+        // and trip the circuit breaker, which fails open — degrading the
+        // security posture rather than the UX. Budget: ratelimit ~10ms +
+        // captcha 5s + resend 5s + retry (1s + 5s) ≈ 16s worst-case. Stays
+        // under Vercel function default (60s) but exceeds Hobby (10s) only
+        // on a triple-failure path.
+        timeoutMs: 5000,
       })
     );
 

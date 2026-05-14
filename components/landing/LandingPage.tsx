@@ -1,4 +1,5 @@
 import type { FC } from "react";
+import dynamic from "next/dynamic";
 import ScrollAnimator from "./ScrollAnimator";
 import LandingPageTracker from "./LandingPageTracker";
 import NavSection from "./NavSection";
@@ -14,9 +15,15 @@ import S09Report from "./S09Report";
 import S10Pillars from "./S10Pillars";
 import S12WhyWeCreated from "./S12WhyWeCreated";
 import S15Testimonials from "./S15Testimonials";
-import S13FAQ from "./S13FAQ";
-import S14CTA from "./S14CTA";
-import FooterSection from "./FooterSection";
+
+// Bottom-of-fold sections are code-split via next/dynamic to reduce the
+// initial client JS for the landing route. SSR stays on (default behavior
+// in App Router server components) so SEO and first paint are unchanged —
+// only the client hydration chunks for these three sections move off the
+// critical path.
+const S13FAQ = dynamic(() => import("./S13FAQ"));
+const S14CTA = dynamic(() => import("./S14CTA"));
+const FooterSection = dynamic(() => import("./FooterSection"));
 
 const LandingPage: FC = () => {
   return (
