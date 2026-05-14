@@ -208,7 +208,6 @@ function main() {
   console.log(`CSV: Parsed ${records.length} records`);
 
   const questions = [];
-  const chapterIntros = [];
 
   for (const row of records) {
     const qId = (row["Q_ID"] || "").trim();
@@ -235,11 +234,10 @@ function main() {
 
     const answerType = mapAnswerType(answerTypeRaw, answerOptions);
 
-    // Chapter intro: no answer type
+    // Rows without an answer type are descriptive chapter-intro rows in the
+    // source CSV. They used to feed a `chapterIntros` array; that data was
+    // never consumed in production, so the rows are skipped silently now.
     if (!answerType) {
-      // Build intro text from the question/description field + answerOptions
-      const introText = [question, answerOptions].filter(Boolean).join("\n\n");
-      chapterIntros.push({ cId, chapter, text: introText });
       continue;
     }
 
@@ -307,10 +305,8 @@ function main() {
 
   // Sort by Q_ID string
   questions.sort((a, b) => a.qId.localeCompare(b.qId));
-  chapterIntros.sort((a, b) => a.cId - b.cId);
 
   console.log(`Questions: ${questions.length}`);
-  console.log(`Chapter intros: ${chapterIntros.length}`);
 
   // ─── Generate TypeScript ────────────────────────────────────────────────────
   let output = `// Auto-generated from data/survey-source.csv — do not edit manually
@@ -342,12 +338,6 @@ export interface SurveyQuestion {
   hoverStates?: Record<number, string>;
   formatGuidance?: string;
   maxSelections?: number;
-}
-
-export interface ChapterIntro {
-  cId: number;
-  chapter: string;
-  text: string;
 }
 
 export const surveyQuestions: SurveyQuestion[] = [\n`;
@@ -395,24 +385,11 @@ export const surveyQuestions: SurveyQuestion[] = [\n`;
     output += `  }${comma}\n`;
   }
 
-  output += `];\n\nexport const chapterIntros: ChapterIntro[] = [\n`;
-
-  for (let i = 0; i < chapterIntros.length; i++) {
-    const c = chapterIntros[i];
-    const comma = i < chapterIntros.length - 1 ? "," : "";
-    output += `  {\n`;
-    output += `    cId: ${c.cId},\n`;
-    output += `    chapter: ${JSON.stringify(c.chapter)},\n`;
-    output += `    text: ${JSON.stringify(c.text)},\n`;
-    output += `  }${comma}\n`;
-  }
-
   output += `];\n`;
 
   fs.writeFileSync(tsPath, output, "utf-8");
   console.log(`\nWritten ${tsPath}`);
   console.log(`  ${questions.length} questions`);
-  console.log(`  ${chapterIntros.length} chapter intros`);
 }
 
 main();

@@ -51,7 +51,6 @@ vi.mock("@/data/survey-data", async () => {
   const { defaultSurveyQuestions } = await import("@/__tests__/__fixtures__/survey");
   return {
     surveyQuestions: defaultSurveyQuestions(),
-    chapterIntros: [],
   };
 });
 
