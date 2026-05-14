@@ -3,21 +3,21 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getCsrfToken } from "@/lib/csrf-client";
 
-export interface ReportShareItem {
+interface ReportShareItem {
   id: number;
   recipientEmail: string;
   createdAt: string;
   lastViewedAt: string | null;
 }
 
-export interface ReportSharesState {
+interface ReportSharesState {
   plan: "essentials" | "full_report" | "all_reports" | null;
   seatLimit: number;
   seatsUsed: number;
   shares: ReportShareItem[];
 }
 
-export interface UseReportSharesResult extends ReportSharesState {
+interface UseReportSharesResult extends ReportSharesState {
   loading: boolean;
   submitting: boolean;
   error: string | null;
