@@ -4,7 +4,7 @@ import {
   REPORT_ACCESS_TOKEN_REGEX,
   REPORT_PURCHASE_PLAN_IDS,
   type ReportPurchasePlanId,
-} from "@/lib/checkout/reportPurchase";
+} from "@features/checkout/server/reportPurchase";
 import { KNOWN_ARCHETYPES, toArchetypeSlug } from "@/lib/report/archetypeSlug";
 import {
   STRIPE_CHECKOUT_DISABLED_MESSAGE,
@@ -12,8 +12,8 @@ import {
   getStripeServerClient,
   isStripeCheckoutEnabled,
   type StripeCheckoutSessionResponse,
-} from "@/lib/checkout/stripeCheckout";
-import { getReportPurchasePlan } from "@/lib/checkout/reportPurchase";
+} from "@features/checkout/server/stripeCheckout";
+import { getReportPurchasePlan } from "@features/checkout/server/reportPurchase";
 import { verifyCsrfToken } from "@/lib/csrf";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
 import {

@@ -1,15 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../../lib/ratelimit", () => ({
+vi.mock("@/lib/ratelimit", () => ({
   checkRateLimit: vi.fn().mockResolvedValue({ allowed: true, remaining: 29, resetAt: new Date() }),
   getClientIp: vi.fn().mockReturnValue("127.0.0.1"),
 }));
 
-vi.mock("../../lib/logger", () => ({
+vi.mock("@/lib/logger", () => ({
   default: { warn: vi.fn(), error: vi.fn() },
 }));
 
-vi.mock("../../lib/checkout/stripeCheckout", () => ({
+vi.mock("@features/checkout/server/stripeCheckout", () => ({
   STRIPE_CHECKOUT_DISABLED_MESSAGE:
     "Checkout preview only. Payments are not enabled in this environment yet.",
   STRIPE_CHECKOUT_SESSION_EXPAND: [
@@ -56,17 +56,20 @@ vi.mock("../../lib/checkout/stripeCheckout", () => ({
   isStripeCheckoutEnabled: vi.fn().mockReturnValue(false),
 }));
 
-vi.mock("../../lib/report/personalReport", () => ({
+vi.mock("@/lib/report/personalReport", () => ({
   getReportAccessPlanForSubmission: vi.fn(),
   resolveSubmissionAccessContext: vi.fn(),
 }));
 
-import { GET } from "../../app/api/stripe/checkout-session-status/route";
-import { getStripeServerClient, isStripeCheckoutEnabled } from "../../lib/checkout/stripeCheckout";
+import { GET } from "@/app/api/stripe/checkout-session-status/route";
+import {
+  getStripeServerClient,
+  isStripeCheckoutEnabled,
+} from "@features/checkout/server/stripeCheckout";
 import {
   getReportAccessPlanForSubmission,
   resolveSubmissionAccessContext,
-} from "../../lib/report/personalReport";
+} from "@/lib/report/personalReport";
 
 describe("GET /api/stripe/checkout-session-status", () => {
   beforeEach(() => {

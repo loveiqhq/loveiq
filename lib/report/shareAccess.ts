@@ -2,7 +2,7 @@ import { randomBytes } from "crypto";
 import { getBreaker } from "@/lib/circuit-breaker";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import logger from "@/lib/logger";
-import { REPORT_ACCESS_TOKEN_REGEX } from "@/lib/checkout/reportPurchase";
+import { REPORT_ACCESS_TOKEN_REGEX } from "@features/checkout/server/reportPurchase";
 
 export const REPORT_SHARE_TOKEN_REGEX = /^rpts_[A-Za-z0-9]{20}$/;
 export { REPORT_ACCESS_TOKEN_REGEX };

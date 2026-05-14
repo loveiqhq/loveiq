@@ -5,7 +5,7 @@ import {
   getReportPurchasePlan,
   type ReportPurchasePlan,
   type ReportPurchasePlanId,
-} from "@/lib/checkout/reportPurchase";
+} from "@features/checkout/server/reportPurchase";
 import type { ReportPriceQuoteSnapshot } from "@/lib/pricing/reportPricing";
 
 export interface ReportDiscountEmailParams {

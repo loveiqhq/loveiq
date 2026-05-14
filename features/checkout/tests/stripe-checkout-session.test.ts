@@ -1,19 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../../lib/csrf", () => ({
+vi.mock("@/lib/csrf", () => ({
   verifyCsrfToken: vi.fn().mockResolvedValue(true),
 }));
 
-vi.mock("../../lib/ratelimit", () => ({
+vi.mock("@/lib/ratelimit", () => ({
   checkRateLimit: vi.fn().mockResolvedValue({ allowed: true, remaining: 9, resetAt: new Date() }),
   getClientIp: vi.fn().mockReturnValue("127.0.0.1"),
 }));
 
-vi.mock("../../lib/logger", () => ({
+vi.mock("@/lib/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
-vi.mock("../../lib/checkout/stripeCheckout", () => ({
+vi.mock("@features/checkout/server/stripeCheckout", () => ({
   STRIPE_CHECKOUT_DISABLED_MESSAGE:
     "Checkout preview only. Payments are not enabled in this environment yet.",
   getStripeCheckoutCustomerEmail: vi.fn(),
@@ -21,23 +21,23 @@ vi.mock("../../lib/checkout/stripeCheckout", () => ({
   isStripeCheckoutEnabled: vi.fn().mockReturnValue(false),
 }));
 
-vi.mock("../../lib/pricing/reportPricing", () => ({
+vi.mock("@/lib/pricing/reportPricing", () => ({
   getReportPriceQuoteForContext: vi.fn(),
   markReportPriceQuoteCheckoutStarted: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { POST } from "../../app/api/stripe/checkout-session/route";
-import { verifyCsrfToken } from "../../lib/csrf";
-import { checkRateLimit } from "../../lib/ratelimit";
+import { POST } from "@/app/api/stripe/checkout-session/route";
+import { verifyCsrfToken } from "@/lib/csrf";
+import { checkRateLimit } from "@/lib/ratelimit";
 import {
   getStripeCheckoutCustomerEmail,
   getStripeServerClient,
   isStripeCheckoutEnabled,
-} from "../../lib/checkout/stripeCheckout";
+} from "@features/checkout/server/stripeCheckout";
 import {
   getReportPriceQuoteForContext,
   markReportPriceQuoteCheckoutStarted,
-} from "../../lib/pricing/reportPricing";
+} from "@/lib/pricing/reportPricing";
 
 function makeRequest(body: unknown) {
   return new Request("http://localhost/api/stripe/checkout-session", {

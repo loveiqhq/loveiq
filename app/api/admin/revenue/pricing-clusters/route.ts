@@ -3,7 +3,10 @@ import { z } from "zod";
 import { verifyAdminSession } from "@/lib/admin/auth";
 import { hasRole } from "@/lib/admin/roles";
 import { supabaseFetch } from "@/lib/admin/supabase";
-import { REPORT_PURCHASE_PLAN_IDS, type ReportPurchasePlanId } from "@/lib/checkout/reportPurchase";
+import {
+  REPORT_PURCHASE_PLAN_IDS,
+  type ReportPurchasePlanId,
+} from "@features/checkout/server/reportPurchase";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
 import logger from "@/lib/logger";
 

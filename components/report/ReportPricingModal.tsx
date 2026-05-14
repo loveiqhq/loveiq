@@ -15,7 +15,7 @@ import {
   getReportPurchaseStrikePrice,
   type ReportPurchasePlan,
   type ReportPurchasePlanId,
-} from "@/lib/checkout/reportPurchase";
+} from "@features/checkout/server/reportPurchase";
 import type { ReportPriceQuoteSnapshot } from "@/lib/pricing/reportPricing";
 import PricingTestimonialsCarousel from "./PricingTestimonialsCarousel";
 import { getReportTheme, getReportThemeStyle } from "./reportTheme";

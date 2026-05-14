@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { reportDiscountEmail } from "@/lib/emails/report-discount";
 import type { ReportPriceQuoteSnapshot } from "@/lib/pricing/reportPricing";
-import type { ReportPurchasePlanId } from "@/lib/checkout/reportPurchase";
+import type { ReportPurchasePlanId } from "@features/checkout/server/reportPurchase";
 
 function makeQuote(overrides: Partial<ReportPriceQuoteSnapshot>): ReportPriceQuoteSnapshot {
   return {

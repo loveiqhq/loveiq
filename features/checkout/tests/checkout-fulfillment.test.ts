@@ -2,38 +2,38 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockFetchWithTimeout = vi.fn();
 
-vi.mock("../../lib/fetch-with-timeout", () => ({
+vi.mock("@/lib/fetch-with-timeout", () => ({
   fetchWithTimeout: (...args: Parameters<typeof mockFetchWithTimeout>) =>
     mockFetchWithTimeout(...args),
 }));
 
-vi.mock("../../lib/circuit-breaker", () => ({
+vi.mock("@/lib/circuit-breaker", () => ({
   getBreaker: () => ({ fire: (fn: () => Promise<unknown>) => fn() }),
 }));
 
-vi.mock("../../lib/logger", () => ({
+vi.mock("@/lib/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
-vi.mock("../../lib/report/personalReport", () => ({
+vi.mock("@/lib/report/personalReport", () => ({
   ensurePersonalReportForSubmission: vi.fn(),
   resolveSubmissionAccessContext: vi.fn(),
   unlockAllArchetypesForPersonalReport: vi.fn(),
   upsertArchetypeTierForPersonalReport: vi.fn(),
 }));
 
-vi.mock("../../lib/pricing/reportPricing", () => ({
+vi.mock("@/lib/pricing/reportPricing", () => ({
   markReportPriceQuotePurchased: vi.fn(),
 }));
 
-import { processStripeWebhookEvent } from "../../lib/checkout/fulfillment";
+import { processStripeWebhookEvent } from "@features/checkout/server/fulfillment";
 import {
   ensurePersonalReportForSubmission,
   resolveSubmissionAccessContext,
   unlockAllArchetypesForPersonalReport,
   upsertArchetypeTierForPersonalReport,
-} from "../../lib/report/personalReport";
-import { markReportPriceQuotePurchased } from "../../lib/pricing/reportPricing";
+} from "@/lib/report/personalReport";
+import { markReportPriceQuotePurchased } from "@/lib/pricing/reportPricing";
 
 function createJsonResponse(body: unknown, ok = true) {
   return {

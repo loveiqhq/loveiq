@@ -6,7 +6,7 @@ import { getBreaker, CircuitOpenError } from "@/lib/circuit-breaker";
 import { verifyCsrfToken } from "@/lib/csrf";
 import { reportSections } from "@/data/report-general";
 import { resolveSubmissionAccessContext } from "@/lib/report/personalReport";
-import { REPORT_ACCESS_TOKEN_REGEX } from "@/lib/checkout/reportPurchase";
+import { REPORT_ACCESS_TOKEN_REGEX } from "@features/checkout/server/reportPurchase";
 import logger from "@/lib/logger";
 
 // Whitelist sectionId against the canonical section list. Without this

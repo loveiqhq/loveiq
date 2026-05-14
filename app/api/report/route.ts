@@ -19,7 +19,7 @@ import {
 } from "@/lib/report/contentGating";
 import logger from "@/lib/logger";
 import type { ReportPriceQuoteSnapshot } from "@/lib/pricing/reportPricing";
-import type { ReportPurchasePlanId } from "@/lib/checkout/reportPurchase";
+import type { ReportPurchasePlanId } from "@features/checkout/server/reportPurchase";
 import {
   REPORT_SHARE_TOKEN_REGEX,
   markShareViewed,

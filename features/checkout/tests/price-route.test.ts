@@ -1,30 +1,30 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../../lib/csrf", () => ({
+vi.mock("@/lib/csrf", () => ({
   verifyCsrfToken: vi.fn().mockResolvedValue(true),
 }));
 
-vi.mock("../../lib/ratelimit", () => ({
+vi.mock("@/lib/ratelimit", () => ({
   checkRateLimit: vi.fn().mockResolvedValue({ allowed: true, remaining: 59, resetAt: new Date() }),
   getClientIp: vi.fn().mockReturnValue("127.0.0.1"),
 }));
 
-vi.mock("../../lib/logger", () => ({
+vi.mock("@/lib/logger", () => ({
   default: { error: vi.fn(), warn: vi.fn(), info: vi.fn() },
 }));
 
-vi.mock("../../lib/pricing/reportPricing", () => ({
+vi.mock("@/lib/pricing/reportPricing", () => ({
   getReportPriceQuoteForContext: vi.fn(),
   getReportPriceQuotesForContext: vi.fn(),
 }));
 
-import { GET } from "../../app/api/price/route";
-import { verifyCsrfToken } from "../../lib/csrf";
-import { checkRateLimit } from "../../lib/ratelimit";
+import { GET } from "@/app/api/price/route";
+import { verifyCsrfToken } from "@/lib/csrf";
+import { checkRateLimit } from "@/lib/ratelimit";
 import {
   getReportPriceQuoteForContext,
   getReportPriceQuotesForContext,
-} from "../../lib/pricing/reportPricing";
+} from "@/lib/pricing/reportPricing";
 
 describe("GET /api/price", () => {
   beforeEach(() => {

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import CheckoutPage from "@/components/checkout/CheckoutPage";
+import CheckoutPage from "@features/checkout/ui/CheckoutPage";
 
 const mockGetReportSessionId = vi.fn();
 const mockGetReportPricingSessionId = vi.fn();
@@ -51,7 +51,7 @@ vi.mock("@/components/survey/hooks/surveySession", () => ({
   getReportSessionId: () => mockGetReportSessionId(),
 }));
 
-vi.mock("@/lib/checkout/reportCheckoutQuoteCache", () => ({
+vi.mock("@features/checkout/server/reportCheckoutQuoteCache", () => ({
   cacheReportCheckoutQuote: (...args: unknown[]) => mockCacheReportCheckoutQuote(...args),
   getCachedReportCheckoutQuote: (...args: unknown[]) => mockGetCachedReportCheckoutQuote(...args),
 }));

@@ -5,22 +5,22 @@ const mockConstructEvent = vi.fn();
 const mockIsStripeCheckoutEnabled = vi.fn();
 const mockGetStripeServerClient = vi.fn();
 
-vi.mock("../../lib/logger", () => ({
+vi.mock("@/lib/logger", () => ({
   default: { info: vi.fn(), error: vi.fn() },
 }));
 
-vi.mock("../../lib/checkout/fulfillment", () => ({
+vi.mock("@features/checkout/server/fulfillment", () => ({
   processStripeWebhookEvent: (...args: unknown[]) => mockProcessStripeWebhookEvent(...args),
 }));
 
-vi.mock("../../lib/checkout/stripeCheckout", () => ({
+vi.mock("@features/checkout/server/stripeCheckout", () => ({
   getStripeServerClient: (...args: unknown[]) => mockGetStripeServerClient(...args),
   isStripeCheckoutEnabled: (...args: unknown[]) => mockIsStripeCheckoutEnabled(...args),
 }));
 
 process.env.STRIPE_WEBHOOK_SECRET = "whsec_test";
 
-import { POST } from "../../app/api/stripe/webhook/route";
+import { POST } from "@/app/api/stripe/webhook/route";
 
 function makeRequest(payload = "{}") {
   return new Request("http://localhost/api/stripe/webhook", {

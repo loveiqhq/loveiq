@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
-import CheckoutReturnPage from "@/components/checkout/CheckoutReturnPage";
+import CheckoutReturnPage from "@features/checkout/ui/CheckoutReturnPage";
 import {
   DEFAULT_REPORT_PURCHASE_PLAN_ID,
   isReportAccessToken,
   isReportPurchasePlanId,
-} from "@/lib/checkout/reportPurchase";
+} from "@features/checkout/server/reportPurchase";
 import { fromArchetypeSlug } from "@/lib/report/archetypeSlug";
 
 export const metadata: Metadata = {

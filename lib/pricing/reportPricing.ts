@@ -4,7 +4,7 @@ import {
   DEFAULT_REPORT_PURCHASE_PLAN_ID,
   REPORT_PURCHASE_PLAN_IDS,
   type ReportPurchasePlanId,
-} from "@/lib/checkout/reportPurchase";
+} from "@features/checkout/server/reportPurchase";
 import {
   resolveSubmissionAccessContext,
   ensurePersonalReportForSubmission,

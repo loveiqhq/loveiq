@@ -6,7 +6,7 @@ import {
   isReportPurchasePlan,
   type ReportAccessPlan,
 } from "@/lib/report/access";
-import type { ReportPurchasePlanId } from "@/lib/checkout/reportPurchase";
+import type { ReportPurchasePlanId } from "@features/checkout/server/reportPurchase";
 import { KNOWN_ARCHETYPES, isArchetypeName } from "@/lib/report/archetypeSlug";
 
 const SUPABASE_TIMEOUT_MS = 8_000;

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import CheckoutReturnPage from "@/components/checkout/CheckoutReturnPage";
+import CheckoutReturnPage from "@features/checkout/ui/CheckoutReturnPage";
 
 const mockRouterReplace = vi.fn();
 const mockTrackReportPurchase = vi.fn();

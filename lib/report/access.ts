@@ -1,5 +1,5 @@
 import { reportSections } from "@/data/report-general";
-import type { ReportPurchasePlanId } from "@/lib/checkout/reportPurchase";
+import type { ReportPurchasePlanId } from "@features/checkout/server/reportPurchase";
 
 export const ESSENTIALS_SECTION_IDS = [
   "summary",

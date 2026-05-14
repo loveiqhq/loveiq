@@ -8,11 +8,11 @@ import {
   getReportPurchasePlan,
   getReportReturnHref,
   type ReportPurchasePlanId,
-} from "@/lib/checkout/reportPurchase";
+} from "@features/checkout/server/reportPurchase";
 import type {
   StripeCheckoutPurchaseAnalytics,
   StripeCheckoutSessionStatusResponse,
-} from "@/lib/checkout/stripeCheckout";
+} from "@features/checkout/server/stripeCheckout";
 import type { ReportAccessPlan } from "@/lib/report/access";
 import {
   setReportSubmissionContext,

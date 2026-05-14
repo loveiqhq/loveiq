@@ -31,7 +31,7 @@ vi.mock("@/components/report/hooks/useSectionFeedback", () => ({
   }),
 }));
 
-vi.mock("@/lib/checkout/reportCheckoutQuoteCache", () => ({
+vi.mock("@features/checkout/server/reportCheckoutQuoteCache", () => ({
   cacheReportCheckoutQuote: (...args: unknown[]) => mockCacheReportCheckoutQuote(...args),
 }));
 

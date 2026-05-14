@@ -12,8 +12,11 @@ import {
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { reportSections } from "@/data/report-general";
 import { escapeHtml } from "@/lib/html-escape";
-import { cacheReportCheckoutQuote } from "@/lib/checkout/reportCheckoutQuoteCache";
-import { buildReportCheckoutHref, type ReportPurchasePlanId } from "@/lib/checkout/reportPurchase";
+import { cacheReportCheckoutQuote } from "@features/checkout/server/reportCheckoutQuoteCache";
+import {
+  buildReportCheckoutHref,
+  type ReportPurchasePlanId,
+} from "@features/checkout/server/reportPurchase";
 import type { ReportPriceQuoteSnapshot } from "@/lib/pricing/reportPricing";
 import { canSharePlan } from "@/lib/report/planAccess";
 import InviteModal from "@features/invite/ui/InviteModal";

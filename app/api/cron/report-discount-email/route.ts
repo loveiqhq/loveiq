@@ -21,7 +21,7 @@ import { buildUnsubscribeUrl } from "@/lib/emails/unsubscribe-token";
 import { isEmailSuppressed } from "@/lib/emails/suppression";
 import { getReportPriceQuotesForContext } from "@/lib/pricing/reportPricing";
 import { getReportPlanByPersonalReportId } from "@/lib/report/planAccess";
-import type { ReportPurchasePlanId } from "@/lib/checkout/reportPurchase";
+import type { ReportPurchasePlanId } from "@features/checkout/server/reportPurchase";
 import type { ReportPriceQuoteSnapshot } from "@/lib/pricing/reportPricing";
 
 export const runtime = "nodejs";

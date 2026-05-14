@@ -14,15 +14,15 @@ import {
   getReportPurchaseStrikePrice,
   getReportReturnHref,
   type ReportPurchasePlanId,
-} from "@/lib/checkout/reportPurchase";
+} from "@features/checkout/server/reportPurchase";
 import {
   cacheReportCheckoutQuote,
   getCachedReportCheckoutQuote,
-} from "@/lib/checkout/reportCheckoutQuoteCache";
+} from "@features/checkout/server/reportCheckoutQuoteCache";
 import {
   STRIPE_CHECKOUT_DISABLED_MESSAGE,
   type StripeCheckoutSessionResponse,
-} from "@/lib/checkout/stripeCheckout";
+} from "@features/checkout/server/stripeCheckout";
 import type { ReportPriceQuoteSnapshot } from "@/lib/pricing/reportPricing";
 
 const subscribeNoop = () => () => {};

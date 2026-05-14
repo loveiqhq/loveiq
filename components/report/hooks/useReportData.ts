@@ -7,7 +7,7 @@ import {
   getReportPricingSessionId,
 } from "@/components/survey/hooks/surveySession";
 import type { ReportPriceQuoteSnapshot } from "@/lib/pricing/reportPricing";
-import type { ReportPurchasePlanId } from "@/lib/checkout/reportPurchase";
+import type { ReportPurchasePlanId } from "@features/checkout/server/reportPurchase";
 
 export interface ReportPracticeTendencyRowData {
   practice: string;

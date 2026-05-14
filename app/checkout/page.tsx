@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import CheckoutPage from "@/components/checkout/CheckoutPage";
+import CheckoutPage from "@features/checkout/ui/CheckoutPage";
 import {
   getReportReturnHref,
   isReportAccessToken,
   isReportPurchasePlanId,
-} from "@/lib/checkout/reportPurchase";
+} from "@features/checkout/server/reportPurchase";
 import { fromArchetypeSlug } from "@/lib/report/archetypeSlug";
 
 export const metadata: Metadata = {

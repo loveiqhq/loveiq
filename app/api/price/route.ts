@@ -7,7 +7,10 @@ import {
   getReportPriceQuoteForContext,
   getReportPriceQuotesForContext,
 } from "@/lib/pricing/reportPricing";
-import { REPORT_ACCESS_TOKEN_REGEX, REPORT_PURCHASE_PLAN_IDS } from "@/lib/checkout/reportPurchase";
+import {
+  REPORT_ACCESS_TOKEN_REGEX,
+  REPORT_PURCHASE_PLAN_IDS,
+} from "@features/checkout/server/reportPurchase";
 
 const querySchema = z
   .object({
