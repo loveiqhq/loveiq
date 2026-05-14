@@ -105,7 +105,9 @@ describe("proxy middleware", () => {
   it("sets Strict-Transport-Security", () => {
     proxy(makeNextRequest());
     const hsts = mockResponseHeaders.get("Strict-Transport-Security");
-    expect(hsts).toContain("max-age=63072000");
+    // 6 months — long enough for HSTS best practice, short enough to give
+    // operational room. See proxy.ts comment above the header for rationale.
+    expect(hsts).toContain("max-age=15768000");
     expect(hsts).toContain("includeSubDomains");
   });
 
