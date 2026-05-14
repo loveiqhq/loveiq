@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
-import { inviteEmail } from "@/lib/emails/invite";
-import { inviteBEmail } from "@/lib/emails/invite-b";
+import { inviteEmail } from "@features/invite/emails/invite";
+import { inviteBEmail } from "@features/invite/emails/invite-b";
 import { buildUnsubscribeUrl } from "@/lib/emails/unsubscribe-token";
 import { pickEmailVariant } from "@/lib/emails/ab-variant";
 import { z } from "zod";

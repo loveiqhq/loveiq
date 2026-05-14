@@ -25,8 +25,8 @@ import { checkCooldown } from "@/lib/ratelimit";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { getBreaker } from "@/lib/circuit-breaker";
 import logger from "@/lib/logger";
-import { inviteReminder1Email } from "@/lib/emails/invite-reminder-1";
-import { inviteReminder2Email } from "@/lib/emails/invite-reminder-2";
+import { inviteReminder1Email } from "@features/invite/emails/invite-reminder-1";
+import { inviteReminder2Email } from "@features/invite/emails/invite-reminder-2";
 import { buildUnsubscribeUrl } from "@/lib/emails/unsubscribe-token";
 import { isEmailSuppressed } from "@/lib/emails/suppression";
 

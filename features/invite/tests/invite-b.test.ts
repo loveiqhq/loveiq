@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { inviteBEmail } from "../../../lib/emails/invite-b";
+import { inviteBEmail } from "@features/invite/emails/invite-b";
 
 const SITE_URL = "https://loveiq.org";
 const CTA_URL = "https://loveiq.org?utm_campaign=refer";

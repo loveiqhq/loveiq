@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { inviteReminder1Email } from "../../../lib/emails/invite-reminder-1";
-import { inviteReminder2Email } from "../../../lib/emails/invite-reminder-2";
+import { inviteReminder1Email } from "@features/invite/emails/invite-reminder-1";
+import { inviteReminder2Email } from "@features/invite/emails/invite-reminder-2";
 
 const SITE_URL = "https://loveiq.org";
 const INVITE_CTA_URL = "https://loveiq.org/report?invite=1";

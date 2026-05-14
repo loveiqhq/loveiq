@@ -16,7 +16,7 @@ import { cacheReportCheckoutQuote } from "@/lib/checkout/reportCheckoutQuoteCach
 import { buildReportCheckoutHref, type ReportPurchasePlanId } from "@/lib/checkout/reportPurchase";
 import type { ReportPriceQuoteSnapshot } from "@/lib/pricing/reportPricing";
 import { canSharePlan } from "@/lib/report/planAccess";
-import InviteModal from "@/components/survey/InviteModal";
+import InviteModal from "@features/invite/ui/InviteModal";
 import FooterSection from "@features/landing/ui/FooterSection";
 import ReportNavigation from "./ReportNavigation";
 import ReportPricingModal from "./ReportPricingModal";

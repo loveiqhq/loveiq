@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, type FC } from "react";
 import Link from "next/link";
-import InviteModal from "./InviteModal";
+import InviteModal from "@features/invite/ui/InviteModal";
 
 const EASING = "cubic-bezier(0.16, 1, 0.3, 1)";
 

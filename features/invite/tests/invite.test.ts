@@ -1,17 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockCheckRateLimit = vi.fn();
-vi.mock("../../lib/ratelimit", () => ({
+vi.mock("@/lib/ratelimit", () => ({
   checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
   getClientIp: vi.fn().mockReturnValue("127.0.0.1"),
 }));
 
 const mockVerifyCsrfToken = vi.fn();
-vi.mock("../../lib/csrf", () => ({
+vi.mock("@/lib/csrf", () => ({
   verifyCsrfToken: (...args: unknown[]) => mockVerifyCsrfToken(...(args as [])),
 }));
 
-vi.mock("../../lib/after-response", () => ({
+vi.mock("@/lib/after-response", () => ({
   scheduleAfterResponse: vi.fn(),
 }));
 
@@ -21,41 +21,40 @@ vi.mock("resend", () => ({
   })),
 }));
 
-vi.mock("../../lib/emails/invite", () => ({
+vi.mock("@features/invite/emails/invite", () => ({
   inviteEmail: vi.fn().mockReturnValue({ subject: "s", html: "<p>h</p>", text: "t" }),
 }));
 
-vi.mock("../../lib/emails/invite-b", () => ({
+vi.mock("@features/invite/emails/invite-b", () => ({
   inviteBEmail: vi.fn().mockReturnValue({ subject: "s", html: "<p>h</p>", text: "t" }),
 }));
 
-vi.mock("../../lib/emails/unsubscribe-token", () => ({
+vi.mock("@/lib/emails/unsubscribe-token", () => ({
   buildUnsubscribeUrl: vi.fn().mockReturnValue("https://example.test/unsub"),
 }));
 
-vi.mock("../../lib/emails/ab-variant", () => ({
+vi.mock("@/lib/emails/ab-variant", () => ({
   pickEmailVariant: vi.fn().mockReturnValue("a"),
 }));
 
-vi.mock("../../lib/fetch-with-timeout", () => ({
+vi.mock("@/lib/fetch-with-timeout", () => ({
   fetchWithTimeout: vi.fn().mockResolvedValue({ ok: true, status: 201 }),
 }));
 
-vi.mock("../../lib/circuit-breaker", async () => {
-  const actual = await vi.importActual<typeof import("../../lib/circuit-breaker")>(
-    "../../lib/circuit-breaker"
-  );
+vi.mock("@/lib/circuit-breaker", async () => {
+  const actual =
+    await vi.importActual<typeof import("@/lib/circuit-breaker")>("@/lib/circuit-breaker");
   return {
     ...actual,
     getBreaker: () => ({ fire: (fn: () => Promise<unknown>) => fn() }),
   };
 });
 
-vi.mock("../../lib/logger", () => ({
+vi.mock("@/lib/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
-import { POST } from "../../app/api/invite/route";
+import { POST } from "@/app/api/invite/route";
 
 function makeRequest(body: unknown): Request {
   return new Request("http://localhost/api/invite", {
