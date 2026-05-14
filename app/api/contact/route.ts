@@ -265,11 +265,15 @@ export async function POST(request: Request) {
     sendSlackContactNotification({ firstName, lastName, email, phone, message })
   );
 
+  // Per-stage timing in Server-Timing format. Header name is X-Server-Timing
+  // rather than Server-Timing because Vercel's edge strips Server-Timing from
+  // Function responses (see vercel/next.js#12382, discussion #62353). Visible
+  // in DevTools Network → Headers → Response Headers.
   const serverTiming = [
     `gate;dur=${(tGate - tStart).toFixed(1)}`,
     `captcha;dur=${(tCaptcha - tGate).toFixed(1)}`,
     `email;dur=${(tEmail - tCaptcha).toFixed(1)}`,
   ].join(", ");
 
-  return NextResponse.json({ success: true }, { headers: { "Server-Timing": serverTiming } });
+  return NextResponse.json({ success: true }, { headers: { "X-Server-Timing": serverTiming } });
 }

@@ -263,6 +263,26 @@ describe("POST /api/survey", () => {
     expect(json.success).toBe(true);
   });
 
+  it("emits X-Server-Timing header with gate/submit/post-submit markers on success", async () => {
+    // X-Server-Timing (not standard Server-Timing) because Vercel's edge
+    // strips the standard name from Function responses. Same value format.
+    allowCsrf();
+    allowRateLimit();
+    allowCooldown();
+    mockSupabaseRpcOk();
+
+    const res = await POST(makeRequest());
+    expect(res.status).toBe(200);
+
+    const serverTiming = res.headers.get("X-Server-Timing");
+    expect(serverTiming, "expected X-Server-Timing header on the 200 response").not.toBeNull();
+    // Same value format as W3C Server-Timing: `name;dur=<ms>` entries
+    // comma-separated.
+    expect(serverTiming).toMatch(/gate;dur=[\d.]+/);
+    expect(serverTiming).toMatch(/submit;dur=[\d.]+/);
+    expect(serverTiming).toMatch(/post-submit;dur=[\d.]+/);
+  });
+
   it("forwards utmTracker to Supabase RPC when provided", async () => {
     allowCsrf();
     allowRateLimit();

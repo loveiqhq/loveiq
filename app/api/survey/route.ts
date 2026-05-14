@@ -376,6 +376,10 @@ export async function POST(request: Request) {
       }
     });
 
+    // Per-stage timing in Server-Timing format. Header name is X-Server-Timing
+    // rather than Server-Timing because Vercel's edge strips Server-Timing
+    // from Function responses (see vercel/next.js#12382, discussion #62353).
+    // Visible in DevTools Network → Headers → Response Headers.
     const serverTiming = [
       `gate;dur=${(tGate - tStart).toFixed(1)}`,
       `submit;dur=${(tSubmit - tGate).toFixed(1)}`,
@@ -400,7 +404,7 @@ export async function POST(request: Request) {
         // primary archetype — never let intermediaries cache it.
         headers: {
           "Cache-Control": "no-store, no-cache, must-revalidate",
-          "Server-Timing": serverTiming,
+          "X-Server-Timing": serverTiming,
         },
       }
     );
