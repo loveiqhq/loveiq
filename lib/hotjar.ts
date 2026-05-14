@@ -13,7 +13,7 @@
 
 const HOTJAR_USER_ID_MAX = 64;
 
-export function getHotjarSiteId(): string | null {
+function getHotjarSiteId(): string | null {
   const id = process.env.NEXT_PUBLIC_HOTJAR_SITE_ID;
   if (!id || !/^\d+$/.test(id)) return null;
   return id;
