@@ -319,12 +319,6 @@ test.describe("Survey — Full happy path", () => {
     await expect(page.getByText("0%")).toBeVisible();
     await expect(page.getByRole("button", { name: /previous/i })).toBeDisabled();
 
-    // Dismiss chapter intro popup (GuideAvatar) so it doesn't block clicks on mobile
-    const gotItBtn = page.getByRole("button", { name: /got it/i });
-    if (await gotItBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await gotItBtn.click();
-    }
-
     await page.getByRole("textbox").fill("test@example.com");
 
     // --- Q2: "What is your name?" (open/text, required) ---

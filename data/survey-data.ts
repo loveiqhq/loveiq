@@ -29,12 +29,6 @@ export interface SurveyQuestion {
   maxSelections?: number;
 }
 
-export interface ChapterIntro {
-  cId: number;
-  chapter: string;
-  text: string;
-}
-
 export const surveyQuestions: SurveyQuestion[] = [
   {
     qId: "00000",
@@ -3140,38 +3134,5 @@ export const surveyQuestions: SurveyQuestion[] = [
       { option: "No", explanation: "no thanks, do not subscribe me" },
     ],
     formatGuidance: "Select one option.",
-  },
-];
-
-export const chapterIntros: ChapterIntro[] = [
-  {
-    cId: 2,
-    chapter: "Spontaneous Desire VS Responsive Desire",
-    text: "Desire can appear before stimulation (spontaneous) or build after affectionate/erotic cues (responsive), like touch or fantasy. Both are common and healthy.",
-  },
-  {
-    cId: 3,
-    chapter: "Arousal Styles — Cues, Conditions & Brakes",
-    text: "An arousal style is the mix of cues and conditions that move you toward or away from arousal. It’s not a diagnosis; it shifts with context, and consent sets the boundary for what actually happens.",
-  },
-  {
-    cId: 8,
-    chapter: "Attachment Style & Emotional Safety",
-    text: "How we bond shapes how safe our body feels in sex. When closeness, distance, and repair work for us, desire can unfold instead of going into defense.",
-  },
-  {
-    cId: 10,
-    chapter: "Communication Style",
-    text: "Great sex is easier when we can name what we like and hear each other clearly. Communication is a skill, not a personality trait, and tiny scripts help.",
-  },
-  {
-    cId: 15,
-    chapter: "Background & Lifestyle",
-    text: "This section covers basic background information and daily habits. These details help us understand how lifestyle factors shape wellbeing and how you prefer to learn/grow.",
-  },
-  {
-    cId: 16,
-    chapter: "Next Steps & Preferences",
-    text: "These final questions help tailor your next-step suggestions and how we present them.",
   },
 ];

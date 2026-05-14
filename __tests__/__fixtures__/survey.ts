@@ -8,12 +8,7 @@
 // each need a manual update. Routing everything through this factory turns a
 // schema change into a one-file edit.
 
-import type {
-  AnswerOptionExplained,
-  AnswerType,
-  ChapterIntro,
-  SurveyQuestion,
-} from "@/data/survey-data";
+import type { AnswerOptionExplained, AnswerType, SurveyQuestion } from "@/data/survey-data";
 
 type SurveyQuestionOverrides = Partial<SurveyQuestion>;
 
@@ -82,16 +77,6 @@ export function defaultSurveyQuestions(): SurveyQuestion[] {
   ];
 }
 
-/** Build a ChapterIntro with sensible defaults. */
-export function makeChapterIntro(overrides: Partial<ChapterIntro> = {}): ChapterIntro {
-  return {
-    cId: 1,
-    chapter: "ch1",
-    text: "Sample chapter intro",
-    ...overrides,
-  };
-}
-
 /** Convenience: a single-choice question with N answer options labelled A, B, C… */
 export function makeSingleChoiceQuestion(
   optionCount: number,
@@ -138,4 +123,4 @@ export function makeAnswerOptionsExplained(
   return pairs.map(([option, explanation]) => ({ option, explanation }));
 }
 
-export type { AnswerType, ChapterIntro, SurveyQuestion };
+export type { AnswerType, SurveyQuestion };
