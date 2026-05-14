@@ -9,7 +9,6 @@ import {
   normalizeGuardrails,
   type ExperimentRow,
 } from "@/lib/admin/experiment-registry";
-import { ADMIN_METRIC_OPTIONS } from "@/lib/admin/metric-library";
 import { hasRole } from "@/lib/admin/roles";
 import { supabaseFetch } from "@/lib/admin/supabase";
 import { verifyCsrfToken } from "@/lib/csrf";

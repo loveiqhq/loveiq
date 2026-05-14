@@ -125,12 +125,6 @@ function average(values: number[]) {
     : null;
 }
 
-function averageNumber(values: number[]) {
-  return values.length > 0
-    ? round1(values.reduce((sum, value) => sum + value, 0) / values.length)
-    : 0;
-}
-
 function stageBucket(
   currentIndex: number,
   earlyThreshold: number,

@@ -10,20 +10,11 @@ import StatCard from "@/components/admin/StatCard";
 import StrategyPlanningTab from "@/components/admin/StrategyPlanningTab";
 import TimeRangeSelector from "@/components/admin/TimeRangeSelector";
 import KpiDataTable, { type Column } from "@/components/admin/kpi-tabs/KpiDataTable";
-import type {
-  BenchmarkStatus,
-  Confidence,
-  DecisionReviewState,
-  OpportunityEffort,
-  QueuePriority,
-  StrategyData,
-  TimeToSignal,
-} from "@/components/admin/StrategyHubDashboard/types";
+import type { StrategyData } from "@/components/admin/StrategyHubDashboard/types";
 import {
   TABS,
   benchmarkStatusClasses,
   confidenceClasses,
-  decisionReviewClasses,
   deltaColor,
   effortClasses,
   goalStatusClasses,

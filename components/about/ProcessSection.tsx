@@ -55,7 +55,14 @@ const FileCheckIcon: FC<{ className?: string }> = ({ className = "w-8 h-8" }) =>
 );
 
 const ChartIcon: FC<{ className?: string }> = ({ className = "w-8 h-8" }) => (
-  <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <svg
+    width="32"
+    height="32"
+    viewBox="0 0 32 32"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    className={className}
+  >
     <path
       d="M4 4V25.3333C4 26.0406 4.28095 26.7189 4.78105 27.219C5.28115 27.719 5.95942 28 6.66667 28H28"
       stroke="#A78BFA"

@@ -1,12 +1,5 @@
 import { parseUtmSource } from "@/lib/admin/metric-library";
 
-export type DeviceType = "desktop" | "mobile" | "tablet" | "unknown";
-
-export interface UserAgentBreakdown {
-  browser: string;
-  device: DeviceType;
-}
-
 export interface TrustDescriptor {
   source: string;
   mode: "live" | "derived" | "sampled" | "materialized";
@@ -73,15 +66,6 @@ export function makeSince(days: number): string | null {
   return days > 0 ? new Date(Date.now() - days * 86_400_000).toISOString() : null;
 }
 
-export function safeJson<T>(value: string | null, fallback: T): T {
-  if (!value?.trim()) return fallback;
-  try {
-    return JSON.parse(value) as T;
-  } catch {
-    return fallback;
-  }
-}
-
 export function parseUtmTracker(tracker: string | null): Record<string, string> {
   if (!tracker?.trim()) return {};
   try {
@@ -113,35 +97,6 @@ export function classifyPlacement(tracker: string | null): string {
   if (/(embed|widget|iframe|partner)/.test(combined)) return "Embedded";
   if (/(paid|meta|google|campaign|newsletter|email|social)/.test(combined)) return "Campaign";
   return parsed.utm_source ? "Channel Landing" : "Hosted";
-}
-
-export function parseUserAgent(userAgent: string | null): UserAgentBreakdown {
-  if (!userAgent?.trim()) {
-    return { browser: "Unknown", device: "unknown" };
-  }
-
-  const ua = userAgent.toLowerCase();
-  const browser = ua.includes("firefox")
-    ? "Firefox"
-    : ua.includes("edg/")
-      ? "Edge"
-      : ua.includes("chrome")
-        ? "Chrome"
-        : ua.includes("safari")
-          ? "Safari"
-          : ua.includes("opera") || ua.includes("opr/")
-            ? "Opera"
-            : "Other";
-
-  const device: DeviceType = /(ipad|tablet)/.test(ua)
-    ? "tablet"
-    : /(iphone|android|mobile)/.test(ua)
-      ? "mobile"
-      : /(windows|macintosh|linux|x11)/.test(ua)
-        ? "desktop"
-        : "unknown";
-
-  return { browser, device };
 }
 
 export function hoursSince(iso: string | null): number | null {
@@ -179,10 +134,6 @@ export function buildTrustDescriptor(input: {
   };
 }
 
-export function uniqueCount<T>(items: T[]): number {
-  return new Set(items).size;
-}
-
 export function median(values: number[]): number | null {
   if (values.length === 0) return null;
   const sorted = [...values].sort((a, b) => a - b);
@@ -196,11 +147,6 @@ export function median(values: number[]): number | null {
     : upper != null
       ? round1(upper)
       : null;
-}
-
-export function formatSigned(value: number, suffix = ""): string {
-  if (value === 0) return `0${suffix}`;
-  return `${value > 0 ? "+" : ""}${value}${suffix}`;
 }
 
 function normalizeToken(value: string): string {

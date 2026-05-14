@@ -50,7 +50,6 @@ import {
   type ReportAccessPlan,
 } from "@/lib/report/access";
 import { fromArchetypeSlug, isArchetypeName, toArchetypeSlug } from "@/lib/report/archetypeSlug";
-import { getCsrfToken } from "@/lib/csrf-client";
 import { setReportSubmissionContext, trackReportViewed } from "@/lib/analytics";
 import { useReportEngagementTimers } from "./hooks/useReportEngagementTimers";
 
@@ -351,7 +350,6 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   pricingTargetArchetype,
   pricingVariant,
   ranking,
-  reportDate,
   resolvedSections,
   snapshot,
   submitFeedback,

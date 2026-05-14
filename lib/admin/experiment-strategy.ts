@@ -101,10 +101,6 @@ function filterSections(
   return sections.filter((section): section is AdminIntelligenceSection => Boolean(section));
 }
 
-function experimentHref(id?: number) {
-  return id ? `/admin/experiments#experiment-${id}` : "/admin/experiments";
-}
-
 function buildGrowthTabHref(tab: string) {
   return `/admin/growth?${new URLSearchParams({ tab }).toString()}`;
 }

@@ -31,35 +31,6 @@ const LinkedInIcon: FC = () => (
   </svg>
 );
 
-const TwitterIcon: FC = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="#6b7280">
-    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-  </svg>
-);
-
-const GlobeIcon: FC = () => (
-  <svg
-    width="18"
-    height="18"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="#6b7280"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <circle cx="12" cy="12" r="10" />
-    <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" />
-    <path d="M2 12h20" />
-  </svg>
-);
-
-const DribbbleIcon: FC = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="#6b7280">
-    <path d="M12 0C5.372 0 0 5.373 0 12s5.372 12 12 12 12-5.373 12-12S18.628 0 12 0zm9.885 11.441c-2.575-.422-4.943-.445-7.103-.073a42.153 42.153 0 0 0-.767-1.68c2.316-1 4.108-2.276 5.363-3.822a9.857 9.857 0 0 1 2.507 5.575zm-3.842-6.91c-1.139 1.398-2.817 2.56-5.028 3.476a42.566 42.566 0 0 0-3.387-5.292 9.9 9.9 0 0 1 8.415 1.816zM7.73 3.615a40.51 40.51 0 0 1 3.407 5.227c-2.617.895-5.695 1.347-9.21 1.347-.082 0-.164-.001-.246-.001a9.902 9.902 0 0 1 6.049-6.573zM2.115 12.003c0-.032.001-.065.002-.097.082.001.165.002.248.002 4.012 0 7.509-.552 10.492-1.653.235.494.456.993.664 1.497-3.633 1.147-6.4 3.253-8.303 6.317a9.862 9.862 0 0 1-3.103-6.066zm4.456 7.379c1.745-2.834 4.27-4.78 7.584-5.842.814 2.115 1.415 4.35 1.802 6.708a9.855 9.855 0 0 1-9.386-.866zm10.931-.181a40.483 40.483 0 0 0-1.649-6.283c1.936-.283 4.058-.214 6.365.207a9.887 9.887 0 0 1-4.716 6.076z" />
-  </svg>
-);
-
 const TeamSection: FC = () => {
   const team = [
     {
@@ -126,21 +97,6 @@ const TeamSection: FC = () => {
       imageOffsetY: "-20%",
     },
   ];
-
-  const getSocialIcon = (social: string) => {
-    switch (social) {
-      case "linkedin":
-        return <LinkedInIcon />;
-      case "twitter":
-        return <TwitterIcon />;
-      case "globe":
-        return <GlobeIcon />;
-      case "dribbble":
-        return <DribbbleIcon />;
-      default:
-        return null;
-    }
-  };
 
   return (
     <section

@@ -160,7 +160,7 @@ async function fetchMetricOptions(): Promise<ResearchRepositoryMetricOption[]> {
   }
 }
 
-export async function fetchResearchRepositoryEntries(): Promise<AdminResearchRepositoryEntry[]> {
+async function fetchResearchRepositoryEntries(): Promise<AdminResearchRepositoryEntry[]> {
   try {
     const res = await supabaseFetch(
       "/rest/v1/admin_research_repository_entry?select=*&order=updated_at.desc",

@@ -15,35 +15,6 @@ const Pill = ({ children, className = "" }: { children: ReactNode; className?: s
   </span>
 );
 
-const IconCheck = () => (
-  <svg
-    aria-hidden
-    viewBox="0 0 24 24"
-    className="h-4 w-4 text-[#fe6839]"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-  >
-    <path d="M20 6 9 17l-5-5" />
-  </svg>
-);
-
-const IconShield = () => (
-  <svg aria-hidden viewBox="0 0 24 24" className="h-4 w-4 text-white">
-    <path
-      d="M12 3 4.5 6v6.5c0 4.174 3.009 8.06 7.5 9.5 4.491-1.44 7.5-5.326 7.5-9.5V6Z"
-      fill="currentColor"
-      opacity="0.3"
-    />
-    <path
-      d="M12 3 4.5 6v6.5c0 4.174 3.009 8.06 7.5 9.5 4.491-1.44 7.5-5.326 7.5-9.5V6Z"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.4"
-    />
-  </svg>
-);
-
 const IconShieldAlert = () => (
   <svg
     aria-hidden
@@ -75,20 +46,6 @@ const IconGavel = () => (
     <path d="M15.0001 12L5.62706 21.373C4.79918 22.2011 3.45471 22.2014 2.62656 21.3735C1.79841 20.5456 1.79818 19.2011 2.62606 18.373L12.0001 9" />
     <path d="M18 15L22 11" />
     <path d="M21.5 11.5L19.586 9.586C19.2109 9.21101 19.0001 8.70239 19 8.172V7.828C18.9999 7.29761 18.7891 6.78899 18.414 6.414L16.757 4.757C15.6321 3.63232 14.1067 3.00034 12.516 3H9L10.243 4.243C11.3679 5.36812 11.9999 6.89397 12 8.485V10L14 12H15.172C15.7024 12.0001 16.211 12.2109 16.586 12.586L18.5 14.5" />
-  </svg>
-);
-
-const IconLock = () => (
-  <svg
-    aria-hidden
-    viewBox="0 0 24 24"
-    className="h-4 w-4 text-white"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.5"
-  >
-    <rect x="5" y="11" width="14" height="9" rx="2.5" />
-    <path d="M9 11V8a3 3 0 0 1 6 0v3" />
   </svg>
 );
 

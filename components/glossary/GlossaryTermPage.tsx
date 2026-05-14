@@ -12,13 +12,6 @@ interface GlossaryTermPageProps {
   relatedTermsWithLinks: Array<{ name: string; slug: string | null }>;
 }
 
-function slugify(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
-}
-
 interface MythRealityCardProps {
   myth: string;
   reality: string;

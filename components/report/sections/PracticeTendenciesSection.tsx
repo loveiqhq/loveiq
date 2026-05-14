@@ -472,7 +472,7 @@ const PracticePanel: FC<{
   archetype: string;
   content: ReportPracticeTendencyContent;
   interactive: boolean;
-}> = ({ archetype, content, interactive }) => {
+}> = ({ content, interactive }) => {
   const rootRef = useRef<HTMLDivElement>(null);
   const desktopPopoverRef = useRef<HTMLDivElement | null>(null);
   const [openRowId, setOpenRowId] = useState<string | null>(null);

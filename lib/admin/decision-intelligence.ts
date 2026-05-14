@@ -1,9 +1,5 @@
 import { buildAdminSignalGraphSnapshot } from "@/lib/admin/graph";
 import type { AdminSignalGraphPath } from "@/lib/admin/graph-types";
-import {
-  buildAdminIntelligenceSnapshot,
-  parseAdminIntelligenceSurface,
-} from "@/lib/admin/intelligence";
 import type {
   AdminIntelligenceDraft,
   AdminIntelligenceEvidence,
@@ -757,44 +753,4 @@ export async function buildDecisionIntelligenceSnapshot(
   ]);
 
   return buildCommandSnapshot({ days, os, graph, simulations });
-}
-
-export async function buildDecisionCommandAnswer(
-  query: string,
-  inputSurface: string | null | undefined,
-  inputDays: number,
-  adminEmail?: string
-) {
-  const surface = parseDecisionIntelligenceSurface(inputSurface);
-  const normalizedQuery = query.trim();
-  const snapshot = await buildDecisionIntelligenceSnapshot(surface, inputDays, adminEmail);
-  const intelligence = await buildAdminIntelligenceSnapshot(
-    parseAdminIntelligenceSurface(surface),
-    inputDays,
-    adminEmail
-  );
-
-  const queryWords = normalizedQuery.toLowerCase().split(/\s+/).filter(Boolean);
-  const rankedItems = [...snapshot.sections, ...intelligence.sections]
-    .flatMap((section) => section.items)
-    .map((item) => {
-      const haystack =
-        `${item.title} ${item.detail} ${item.recommendation} ${item.capabilities.join(" ")}`.toLowerCase();
-      const score = queryWords.reduce(
-        (total, word) => total + (haystack.includes(word) ? 10 : 0),
-        item.capabilities.some((capability) =>
-          // split(" ") always returns ≥1 entries when input is non-empty; default to "".
-          normalizedQuery.toLowerCase().includes(capability.split(" ")[0] ?? "")
-        )
-          ? 6
-          : 0
-      );
-      return { item, score };
-    })
-    .filter((entry) => entry.score > 0)
-    .sort((left, right) => right.score - left.score)
-    .slice(0, 3)
-    .map((entry) => entry.item);
-
-  return rankedItems;
 }

@@ -55,11 +55,7 @@ function stripResultParagraph(html: string) {
  * - Medium user → position 2 or 3 is the user bar
  * - High user → position 4 is the user bar
  */
-const ImportanceOfSexualitySection: FC<Props> = ({
-  generalHtml,
-  importanceLabel,
-  importanceValue,
-}) => {
+const ImportanceOfSexualitySection: FC<Props> = ({ generalHtml, importanceValue }) => {
   const band = getBand(importanceValue);
   const userValue = importanceValue ?? 4;
   const userHeight = valueToHeight(userValue);

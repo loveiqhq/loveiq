@@ -111,7 +111,6 @@ export async function buildWorkspaceMaturitySnapshot(): Promise<WorkspaceMaturit
 
   const coveredMetrics = metricEntries.length;
   const ownedMetrics = metricEntries.filter((entry) => entry.owner_email).length;
-  const reviewedMetrics = metricEntries.filter((entry) => entry.last_reviewed_at).length;
   const trustedMetrics = metricEntries.filter(
     (entry) => entry.source_of_truth && entry.formula && entry.trust_note
   ).length;

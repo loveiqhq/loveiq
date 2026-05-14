@@ -18,7 +18,7 @@ const ARCHETYPE_DISPLAY_ORDER: readonly ArchetypeName[] = [
   "Approval Seeker",
 ] as const;
 
-function buildArchetypeUrl(siteUrl: string, reportUrl: string, archetype: ArchetypeName): string {
+function buildArchetypeUrl(reportUrl: string, archetype: ArchetypeName): string {
   const slug = toArchetypeSlug(archetype);
   if (!slug) return reportUrl;
   const separator = reportUrl.includes("?") ? "&" : "?";
@@ -45,7 +45,7 @@ export function reportAllEmail({
 
   const archetypesHtml = ARCHETYPE_DISPLAY_ORDER.filter((name) => KNOWN_ARCHETYPES.includes(name))
     .map((name) => {
-      const url = buildArchetypeUrl(siteUrl, reportUrl, name);
+      const url = buildArchetypeUrl(reportUrl, name);
       return `
       <tr>
         <td style="padding:0 0 16px 0;">
@@ -61,7 +61,7 @@ export function reportAllEmail({
     .join("");
 
   const archetypesText = ARCHETYPE_DISPLAY_ORDER.map(
-    (name) => `${name}\n${buildArchetypeUrl(siteUrl, reportUrl, name)}`
+    (name) => `${name}\n${buildArchetypeUrl(reportUrl, name)}`
   ).join("\n\n");
 
   const bodyHtml = `

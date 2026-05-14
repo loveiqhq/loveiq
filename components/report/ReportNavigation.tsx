@@ -430,13 +430,4 @@ const NavBadge: FC<{ tier: AccessTier }> = ({ tier }) => {
   return <span className={`report-nav-chip ${modifier}`}>{label}</span>;
 };
 
-const LockBadge: FC = () => (
-  <span className="report-nav-lock" aria-hidden="true">
-    <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.15">
-      <rect x="2.1" y="5.2" width="7.8" height="4.7" rx="1.2" />
-      <path d="M3.6 5.2V3.9a2.4 2.4 0 1 1 4.8 0v1.3" />
-    </svg>
-  </span>
-);
-
 export default ReportNavigation;

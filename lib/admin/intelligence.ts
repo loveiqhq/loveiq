@@ -32,15 +32,9 @@ import { buildValueRealizationSnapshot } from "@/lib/admin/value-realization";
 import { buildWorkspaceMaturitySnapshot } from "@/lib/admin/workspace-maturity";
 import type {
   AdminCommandAnswer,
-  AdminIntelligenceConfidence,
-  AdminIntelligenceDraft,
-  AdminIntelligenceEvidence,
   AdminIntelligenceItem,
-  AdminIntelligencePrompt,
-  AdminIntelligenceSection,
   AdminIntelligenceSnapshot,
   AdminIntelligenceSurface,
-  AdminIntelligenceTone,
 } from "@/lib/admin/intelligence-types";
 import {
   PRODUCT_ADOPTION_HREF,
