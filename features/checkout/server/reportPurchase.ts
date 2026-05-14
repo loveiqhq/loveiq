@@ -1,4 +1,4 @@
-import { toArchetypeSlug } from "@/lib/report/archetypeSlug";
+import { toArchetypeSlug } from "@features/report/server/archetypeSlug";
 
 export const REPORT_ACCESS_TOKEN_REGEX = /^rpt_[a-zA-Z0-9]{20}$/;
 

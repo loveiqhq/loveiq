@@ -56,7 +56,7 @@ vi.mock("@features/checkout/server/stripeCheckout", () => ({
   isStripeCheckoutEnabled: vi.fn().mockReturnValue(false),
 }));
 
-vi.mock("@/lib/report/personalReport", () => ({
+vi.mock("@features/report/server/personalReport", () => ({
   getReportAccessPlanForSubmission: vi.fn(),
   resolveSubmissionAccessContext: vi.fn(),
 }));
@@ -69,7 +69,7 @@ import {
 import {
   getReportAccessPlanForSubmission,
   resolveSubmissionAccessContext,
-} from "@/lib/report/personalReport";
+} from "@features/report/server/personalReport";
 
 describe("GET /api/stripe/checkout-session-status", () => {
   beforeEach(() => {

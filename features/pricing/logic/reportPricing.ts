@@ -8,7 +8,7 @@ import {
 import {
   resolveSubmissionAccessContext,
   ensurePersonalReportForSubmission,
-} from "@/lib/report/personalReport";
+} from "@features/report/server/personalReport";
 import { parseUtmSource } from "@features/survey/server/utils";
 
 const SUPABASE_TIMEOUT_MS = 8_000;

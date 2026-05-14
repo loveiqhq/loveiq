@@ -15,7 +15,7 @@ vi.mock("@/lib/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
-vi.mock("@/lib/report/personalReport", () => ({
+vi.mock("@features/report/server/personalReport", () => ({
   ensurePersonalReportForSubmission: vi.fn(),
   resolveSubmissionAccessContext: vi.fn(),
   unlockAllArchetypesForPersonalReport: vi.fn(),

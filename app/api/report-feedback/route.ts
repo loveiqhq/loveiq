@@ -5,7 +5,7 @@ import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { getBreaker, CircuitOpenError } from "@/lib/circuit-breaker";
 import { verifyCsrfToken } from "@/lib/csrf";
 import { reportSections } from "@/data/report-general";
-import { resolveSubmissionAccessContext } from "@/lib/report/personalReport";
+import { resolveSubmissionAccessContext } from "@features/report/server/personalReport";
 import { REPORT_ACCESS_TOKEN_REGEX } from "@features/checkout/server/reportPurchase";
 import logger from "@/lib/logger";
 

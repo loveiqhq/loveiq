@@ -13,13 +13,13 @@ import type {
   StripeCheckoutPurchaseAnalytics,
   StripeCheckoutSessionStatusResponse,
 } from "@features/checkout/server/stripeCheckout";
-import type { ReportAccessPlan } from "@/lib/report/access";
+import type { ReportAccessPlan } from "@features/report/server/access";
 import {
   setReportSubmissionContext,
   trackPaywallUnlocked,
   trackReportPurchase,
 } from "@features/analytics/client";
-import { toArchetypeSlug } from "@/lib/report/archetypeSlug";
+import { toArchetypeSlug } from "@features/report/server/archetypeSlug";
 
 type ReturnState =
   | {

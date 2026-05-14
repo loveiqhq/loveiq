@@ -11,12 +11,12 @@ import {
   recordReportSessionView,
   resolveUnlockedArchetypeTiers,
   resolveUnlockedArchetypes,
-} from "@/lib/report/personalReport";
+} from "@features/report/server/personalReport";
 import { getReportPriceQuotesForContext } from "@features/pricing/logic/reportPricing";
 import {
   buildArchetypeContentForUser,
   buildPracticeTendenciesForUser,
-} from "@/lib/report/contentGating";
+} from "@features/report/server/contentGating";
 import logger from "@/lib/logger";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import type { ReportPurchasePlanId } from "@features/checkout/server/reportPurchase";
@@ -24,8 +24,8 @@ import {
   REPORT_SHARE_TOKEN_REGEX,
   markShareViewed,
   resolveShareFromToken,
-} from "@/lib/report/shareAccess";
-import { maskEmail, verifyCookieForShare } from "@/lib/report/shareVerify";
+} from "@features/report/server/shareAccess";
+import { maskEmail, verifyCookieForShare } from "@features/report/server/shareVerify";
 
 const sessionIdSchema = z.object({
   pricingSessionId: z.string().uuid().optional(),

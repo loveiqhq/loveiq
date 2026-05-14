@@ -5,22 +5,22 @@ import { verifyCsrfToken } from "@/lib/csrf";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
 import { scheduleAfterResponse } from "@/lib/after-response";
 import logger from "@/lib/logger";
-import { reportSharedEmail } from "@/lib/emails/report-shared";
-import { reportSharedBEmail } from "@/lib/emails/report-shared-b";
-import { reportSharedCEmail } from "@/lib/emails/report-shared-c";
+import { reportSharedEmail } from "@features/report/server/emails/report-shared";
+import { reportSharedBEmail } from "@features/report/server/emails/report-shared-b";
+import { reportSharedCEmail } from "@features/report/server/emails/report-shared-c";
 import { pickFromVariants } from "@/lib/emails/ab-variant";
 import {
   canSharePlan,
   getReportPlanByPersonalReportId,
   getShareSeatLimit,
-} from "@/lib/report/planAccess";
+} from "@features/report/server/planAccess";
 import {
   REPORT_ACCESS_TOKEN_REGEX,
   createReportShareViaRpc,
   generateShareToken,
   listActiveSharesForReport,
   resolveOwnerFromAccessToken,
-} from "@/lib/report/shareAccess";
+} from "@features/report/server/shareAccess";
 
 const postSchema = z.object({
   ownerToken: z.string().regex(REPORT_ACCESS_TOKEN_REGEX),

@@ -7,7 +7,7 @@ import {
   REPORT_ACCESS_TOKEN_REGEX,
   resolveOwnerFromAccessToken,
   revokeReportShare,
-} from "@/lib/report/shareAccess";
+} from "@features/report/server/shareAccess";
 
 const bodySchema = z.object({
   ownerToken: z.string().regex(REPORT_ACCESS_TOKEN_REGEX),

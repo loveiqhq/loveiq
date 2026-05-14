@@ -62,7 +62,7 @@ vi.mock("@features/survey/server/server", () => ({
   submitSurveyOnce: (...args: unknown[]) => mockSubmitSurveyOnce(...args),
 }));
 
-vi.mock("@/lib/report/personalReport", () => ({
+vi.mock("@features/report/server/personalReport", () => ({
   ensurePersonalReportForSubmission: (...args: unknown[]) =>
     mockEnsurePersonalReportForSubmission(...args),
 }));

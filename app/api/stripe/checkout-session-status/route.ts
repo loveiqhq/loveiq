@@ -14,7 +14,7 @@ import { processStripeWebhookEvent } from "@features/checkout/server/fulfillment
 import {
   getReportAccessPlanForSubmission,
   resolveSubmissionAccessContext,
-} from "@/lib/report/personalReport";
+} from "@features/report/server/personalReport";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
 import logger from "@/lib/logger";
 

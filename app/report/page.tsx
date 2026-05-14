@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
-import ReportPage from "@/components/report/ReportPage";
+import ReportPage from "@features/report/ui/ReportPage";
 
 export const metadata: Metadata = {
   title: "Your Report | LoveIQ",

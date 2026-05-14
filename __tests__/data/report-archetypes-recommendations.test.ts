@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { archetypeContent } from "@/data/report-archetypes";
-import { hasMeaningfulReportHtml } from "@/components/report/reportContent";
+import { hasMeaningfulReportHtml } from "@features/report/ui/reportContent";
 
 describe("report recommendations data", () => {
   it("contains meaningful recommendations html for every archetype", () => {

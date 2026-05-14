@@ -30,7 +30,7 @@ vi.mock("@/lib/circuit-breaker", () => ({
   CircuitOpenError: class CircuitOpenError extends Error {},
 }));
 
-vi.mock("@/lib/report/personalReport", () => ({
+vi.mock("@features/report/server/personalReport", () => ({
   ensurePersonalReportForSubmission: vi.fn().mockResolvedValue({ id: 10 }),
 }));
 

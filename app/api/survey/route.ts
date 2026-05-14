@@ -11,7 +11,7 @@ import { surveyCompleteEmail } from "@/lib/emails/survey-complete";
 import { surveyCompleteBEmail } from "@/lib/emails/survey-complete-b";
 import { buildUnsubscribeUrl } from "@/lib/emails/unsubscribe-token";
 import { pickEmailVariant } from "@/lib/emails/ab-variant";
-import { ensurePersonalReportForSubmission } from "@/lib/report/personalReport";
+import { ensurePersonalReportForSubmission } from "@features/report/server/personalReport";
 import type { SurveyAnswers } from "@features/survey/server/types";
 import {
   computeSurveyScoring,

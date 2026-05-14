@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { reportSharedEmail } from "@/lib/emails/report-shared";
+import { reportSharedEmail } from "@features/report/server/emails/report-shared";
 
 describe("reportSharedEmail", () => {
   const baseParams = {

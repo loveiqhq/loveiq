@@ -3,11 +3,11 @@ import { Resend } from "resend";
 import { getBreaker } from "@/lib/circuit-breaker";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import logger from "@/lib/logger";
-import { reportAllEmail } from "@/lib/emails/report-all";
-import { reportAllBEmail } from "@/lib/emails/report-all-b";
-import { reportEssentialsEmail } from "@/lib/emails/report-essentials";
-import { reportFullEmail } from "@/lib/emails/report-full";
-import { reportFullBEmail } from "@/lib/emails/report-full-b";
+import { reportAllEmail } from "@features/report/server/emails/report-all";
+import { reportAllBEmail } from "@features/report/server/emails/report-all-b";
+import { reportEssentialsEmail } from "@features/report/server/emails/report-essentials";
+import { reportFullEmail } from "@features/report/server/emails/report-full";
+import { reportFullBEmail } from "@features/report/server/emails/report-full-b";
 import { pickEmailVariant } from "@/lib/emails/ab-variant";
 import {
   getReportPurchasePlan,
@@ -241,8 +241,8 @@ import {
   resolveSubmissionAccessContext,
   unlockAllArchetypesForPersonalReport,
   upsertArchetypeTierForPersonalReport,
-} from "@/lib/report/personalReport";
-import { isArchetypeName } from "@/lib/report/archetypeSlug";
+} from "@features/report/server/personalReport";
+import { isArchetypeName } from "@features/report/server/archetypeSlug";
 import { markReportPriceQuotePurchased } from "@features/pricing/logic/reportPricing";
 
 const SUPABASE_TIMEOUT_MS = 8_000;

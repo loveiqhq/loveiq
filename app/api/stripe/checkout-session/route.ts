@@ -5,7 +5,7 @@ import {
   REPORT_PURCHASE_PLAN_IDS,
   type ReportPurchasePlanId,
 } from "@features/checkout/server/reportPurchase";
-import { KNOWN_ARCHETYPES, toArchetypeSlug } from "@/lib/report/archetypeSlug";
+import { KNOWN_ARCHETYPES, toArchetypeSlug } from "@features/report/server/archetypeSlug";
 import {
   STRIPE_CHECKOUT_DISABLED_MESSAGE,
   getStripeCheckoutCustomerEmail,
@@ -19,8 +19,8 @@ import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
 import {
   getReportAccessPlanForSubmission,
   resolveSubmissionAccessContext,
-} from "@/lib/report/personalReport";
-import { isPlanOwnedForArchetype } from "@/lib/report/access";
+} from "@features/report/server/personalReport";
+import { isPlanOwnedForArchetype } from "@features/report/server/access";
 import logger from "@/lib/logger";
 import {
   getReportPriceQuoteForContext,

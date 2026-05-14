@@ -1,5 +1,5 @@
 import Stripe from "stripe";
-import type { ReportAccessPlan } from "@/lib/report/access";
+import type { ReportAccessPlan } from "@features/report/server/access";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import logger from "@/lib/logger";
 

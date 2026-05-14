@@ -16,11 +16,11 @@ import { Resend } from "resend";
 import { getBreaker } from "@/lib/circuit-breaker";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import logger from "@/lib/logger";
-import { reportDiscountEmail } from "@/lib/emails/report-discount";
+import { reportDiscountEmail } from "@features/report/server/emails/report-discount";
 import { buildUnsubscribeUrl } from "@/lib/emails/unsubscribe-token";
 import { isEmailSuppressed } from "@/lib/emails/suppression";
 import { getReportPriceQuotesForContext } from "@features/pricing/logic/reportPricing";
-import { getReportPlanByPersonalReportId } from "@/lib/report/planAccess";
+import { getReportPlanByPersonalReportId } from "@features/report/server/planAccess";
 import type { ReportPurchasePlanId } from "@features/checkout/server/reportPurchase";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 

@@ -6,7 +6,7 @@ import {
   isReportAccessToken,
   isReportPurchasePlanId,
 } from "@features/checkout/server/reportPurchase";
-import { fromArchetypeSlug } from "@/lib/report/archetypeSlug";
+import { fromArchetypeSlug } from "@features/report/server/archetypeSlug";
 
 export const metadata: Metadata = {
   title: "Complete Your Order | LoveIQ",

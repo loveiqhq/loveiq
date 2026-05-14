@@ -27,7 +27,7 @@ import { timingSafeEqual } from "crypto";
 import { NextResponse } from "next/server";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { getBreaker } from "@/lib/circuit-breaker";
-import { KNOWN_ARCHETYPES, isArchetypeName } from "@/lib/report/archetypeSlug";
+import { KNOWN_ARCHETYPES, isArchetypeName } from "@features/report/server/archetypeSlug";
 import logger from "@/lib/logger";
 
 export const runtime = "nodejs";
