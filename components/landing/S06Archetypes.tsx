@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useEffect, useCallback, useId, type FC } from "react";
+import { useRef, useState, useEffect, useCallback, type FC } from "react";
 import Link from "next/link";
 import { trackStartSurvey } from "@/lib/analytics";
 

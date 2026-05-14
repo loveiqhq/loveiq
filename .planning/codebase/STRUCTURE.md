@@ -62,14 +62,12 @@ loveiq-web/
 │   │   ├── S01Hero.tsx         # Hero section
 │   │   ├── S02HowItWorks.tsx   # How it works
 │   │   ├── S03PerfectFor.tsx   # Perfect for
-│   │   ├── S04TrustedBy.tsx    # Trusted by
 │   │   ├── S05ValueFeatures.tsx # Value features
 │   │   ├── S06Archetypes.tsx   # Archetypes
 │   │   ├── S07SampleProfile.tsx # Sample profile
 │   │   ├── S08AcademicBoard.tsx # Academic board
 │   │   ├── S09Report.tsx       # Report
 │   │   ├── S10Pillars.tsx      # Pillars
-│   │   ├── S11Testimonials.tsx # Testimonials
 │   │   ├── S12WhyWeCreated.tsx # Why we created
 │   │   ├── S13FAQ.tsx          # FAQ
 │   │   ├── S14CTA.tsx          # Final CTA
