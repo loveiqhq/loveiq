@@ -12,13 +12,13 @@ import { surveyCompleteBEmail } from "@/lib/emails/survey-complete-b";
 import { buildUnsubscribeUrl } from "@/lib/emails/unsubscribe-token";
 import { pickEmailVariant } from "@/lib/emails/ab-variant";
 import { ensurePersonalReportForSubmission } from "@/lib/report/personalReport";
-import type { SurveyAnswers } from "@/lib/survey/types";
+import type { SurveyAnswers } from "@features/survey/server/types";
 import {
   computeSurveyScoring,
   ensureSubmissionScored,
   setSubmissionHotjarUserId,
   submitSurveyOnce,
-} from "@/lib/survey/server";
+} from "@features/survey/server/server";
 
 let _resend: Resend | null = null;
 function getResend(): Resend | null {

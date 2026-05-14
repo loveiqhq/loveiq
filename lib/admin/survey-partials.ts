@@ -1,5 +1,5 @@
 import { surveyQuestions } from "@/data/survey-data";
-import type { SurveyAnswers, SurveyAnswerValue } from "@/lib/survey/types";
+import type { SurveyAnswers, SurveyAnswerValue } from "@features/survey/server/types";
 import {
   SURVEY_TOTAL_QUESTIONS,
   countSurveyAnswers,
@@ -7,7 +7,7 @@ import {
   isCompletionReady,
   mergeSavedAnswerValue,
   parseUtmSource,
-} from "@/lib/survey/utils";
+} from "@features/survey/server/utils";
 
 export interface SurveyPartialRow {
   id: number;

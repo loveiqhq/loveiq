@@ -18,7 +18,7 @@ import { hasRole } from "@/lib/admin/roles";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
 import { supabaseFetch } from "@/lib/admin/supabase";
 import { maskEmail } from "@/lib/admin/format";
-import { SURVEY_TOTAL_QUESTIONS, parseUtmSource } from "@/lib/survey/utils";
+import { SURVEY_TOTAL_QUESTIONS, parseUtmSource } from "@features/survey/server/utils";
 import logger from "@/lib/logger";
 
 interface ShareEntry {

@@ -31,7 +31,7 @@ import SharedViewerBanner from "./SharedViewerBanner";
 import {
   getReportSessionId,
   setReportPricingSessionId,
-} from "@/components/survey/hooks/surveySession";
+} from "@features/survey/ui/hooks/surveySession";
 import { useReportData, type ReportRequestError } from "./hooks/useReportData";
 import { useSectionFeedback, type FeedbackPayload } from "./hooks/useSectionFeedback";
 import { resolveReportSections } from "./reportTitles";

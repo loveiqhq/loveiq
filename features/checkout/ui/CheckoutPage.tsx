@@ -5,7 +5,7 @@ import { useEffect, useState, useSyncExternalStore, type FC } from "react";
 import {
   getReportPricingSessionId,
   getReportSessionId,
-} from "@/components/survey/hooks/surveySession";
+} from "@features/survey/ui/hooks/surveySession";
 import { getCsrfToken } from "@/lib/csrf-client";
 import {
   formatReportPurchasePrice,

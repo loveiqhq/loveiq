@@ -5,7 +5,7 @@ import { getCsrfToken } from "@/lib/csrf-client";
 import {
   finalizeReportSession,
   getReportPricingSessionId,
-} from "@/components/survey/hooks/surveySession";
+} from "@features/survey/ui/hooks/surveySession";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import type { ReportPurchasePlanId } from "@features/checkout/server/reportPurchase";
 

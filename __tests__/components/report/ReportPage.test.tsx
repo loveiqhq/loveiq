@@ -14,7 +14,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 const mockGetReportSessionId = vi.fn();
-vi.mock("@/components/survey/hooks/surveySession", () => ({
+vi.mock("@features/survey/ui/hooks/surveySession", () => ({
   getReportSessionId: () => mockGetReportSessionId(),
 }));
 

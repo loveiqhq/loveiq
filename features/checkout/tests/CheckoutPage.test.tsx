@@ -46,7 +46,7 @@ function createJsonResponse(body: unknown, ok = true) {
   } as Response;
 }
 
-vi.mock("@/components/survey/hooks/surveySession", () => ({
+vi.mock("@features/survey/ui/hooks/surveySession", () => ({
   getReportPricingSessionId: () => mockGetReportPricingSessionId(),
   getReportSessionId: () => mockGetReportSessionId(),
 }));

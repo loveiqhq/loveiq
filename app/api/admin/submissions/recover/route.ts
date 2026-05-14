@@ -8,13 +8,13 @@ import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
 import { supabaseFetch } from "@/lib/admin/supabase";
 import logger from "@/lib/logger";
 import { buildPartialSubmissionRecord, type SurveyPartialRow } from "@/lib/admin/survey-partials";
-import type { SurveyAnswers } from "@/lib/survey/types";
-import { getSurveyContactInfo } from "@/lib/survey/utils";
+import type { SurveyAnswers } from "@features/survey/server/types";
+import { getSurveyContactInfo } from "@features/survey/server/utils";
 import {
   computeSurveyScoring,
   ensureSubmissionScored,
   submitSurveyOnce,
-} from "@/lib/survey/server";
+} from "@features/survey/server/server";
 
 const recoverSchema = z.object({
   sessionId: z.string().uuid(),

@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 import { useReportData } from "@/components/report/hooks/useReportData";
-import { REPORT_SESSION_KEY, SURVEY_SESSION_KEY } from "@/components/survey/hooks/surveySession";
+import { REPORT_SESSION_KEY, SURVEY_SESSION_KEY } from "@features/survey/ui/hooks/surveySession";
 
 describe("useReportData", () => {
   let originalFetch: typeof globalThis.fetch;

@@ -25,8 +25,8 @@ import { surveyPausedBEmail } from "@/lib/emails/survey-paused-b";
 import { pickEmailVariant } from "@/lib/emails/ab-variant";
 import { buildUnsubscribeUrl } from "@/lib/emails/unsubscribe-token";
 import { isEmailSuppressed } from "@/lib/emails/suppression";
-import { getSurveyContactInfo } from "@/lib/survey/utils";
-import type { SurveyAnswers } from "@/lib/survey/types";
+import { getSurveyContactInfo } from "@features/survey/server/utils";
+import type { SurveyAnswers } from "@features/survey/server/types";
 
 function safeCompare(a: string, b: string): boolean {
   const aBuf = Buffer.from(a);

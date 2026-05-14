@@ -9,7 +9,7 @@ import {
   resolveSubmissionAccessContext,
   ensurePersonalReportForSubmission,
 } from "@/lib/report/personalReport";
-import { parseUtmSource } from "@/lib/survey/utils";
+import { parseUtmSource } from "@features/survey/server/utils";
 
 const SUPABASE_TIMEOUT_MS = 8_000;
 const QUOTE_VALIDITY_MS = 21 * 24 * 60 * 60 * 1_000;
