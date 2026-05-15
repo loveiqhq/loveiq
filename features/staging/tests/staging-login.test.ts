@@ -13,7 +13,7 @@ vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
-import { POST } from "../../app/api/staging-login/route";
+import { POST } from "@/app/api/staging-login/route";
 import { verifyCsrfToken } from "@shared/http/csrf";
 import { checkRateLimit } from "@shared/http/ratelimit";
 
