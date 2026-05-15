@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { verifyAdminSession } from "@/lib/admin/auth";
-import { hasRole } from "@/lib/admin/roles";
+import { verifyAdminSession } from "@features/admin/server/auth";
+import { hasRole } from "@features/admin/server/roles";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
-import { supabaseFetch } from "@/lib/admin/supabase";
-import { maskEmail } from "@/lib/admin/format";
+import { supabaseFetch } from "@features/admin/server/supabase";
+import { maskEmail } from "@features/admin/server/format";
 import logger from "@/lib/logger";
 
 interface InviteEvent {

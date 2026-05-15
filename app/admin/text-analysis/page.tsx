@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import TextAnalysisDashboard from "@/components/admin/TextAnalysisDashboard";
+import TextAnalysisDashboard from "@features/admin/ui/TextAnalysisDashboard";
 
 export const metadata: Metadata = {
   title: "Text Analysis | LoveIQ Admin",

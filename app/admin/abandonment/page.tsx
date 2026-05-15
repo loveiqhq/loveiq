@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import AbandonmentDashboard from "@/components/admin/AbandonmentDashboard";
+import AbandonmentDashboard from "@features/admin/ui/AbandonmentDashboard";
 
 export const metadata: Metadata = {
   title: "Abandonment Recovery | LoveIQ Admin",

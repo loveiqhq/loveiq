@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { verifyAdminSession } from "@/lib/admin/auth";
-import { buildLeadCockpitSnapshot } from "@/lib/admin/os";
-import type { LeadCockpitRole } from "@/lib/admin/os-types";
-import { hasRole } from "@/lib/admin/roles";
+import { verifyAdminSession } from "@features/admin/server/auth";
+import { buildLeadCockpitSnapshot } from "@features/admin/server/os";
+import type { LeadCockpitRole } from "@features/admin/server/os-types";
+import { hasRole } from "@features/admin/server/roles";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
 import logger from "@/lib/logger";
 

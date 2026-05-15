@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { verifyAdminSession } from "@/lib/admin/auth";
-import { buildGrowthOpportunitySnapshot } from "@/lib/admin/growth-opportunities";
-import { hasRole } from "@/lib/admin/roles";
+import { verifyAdminSession } from "@features/admin/server/auth";
+import { buildGrowthOpportunitySnapshot } from "@features/admin/server/growth-opportunities";
+import { hasRole } from "@features/admin/server/roles";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
 import logger from "@/lib/logger";
 

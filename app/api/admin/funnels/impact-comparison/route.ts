@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { verifyAdminSession } from "@/lib/admin/auth";
-import { buildCohortComparisonSnapshot } from "@/lib/admin/cohort-comparison";
-import { hasRole } from "@/lib/admin/roles";
+import { verifyAdminSession } from "@features/admin/server/auth";
+import { buildCohortComparisonSnapshot } from "@features/admin/server/cohort-comparison";
+import { hasRole } from "@features/admin/server/roles";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
 import logger from "@/lib/logger";
 

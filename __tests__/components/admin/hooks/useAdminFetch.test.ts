@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { renderHook, waitFor, act } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { useAdminFetch } from "@/components/admin/hooks/useAdminFetch";
+import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
 
 let mockFetch: ReturnType<typeof vi.fn>;
 

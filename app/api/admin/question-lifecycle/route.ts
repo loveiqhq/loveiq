@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { verifyAdminSession } from "@/lib/admin/auth";
-import { buildQuestionLifecycleSnapshot } from "@/lib/admin/question-effectiveness";
-import { hasRole } from "@/lib/admin/roles";
+import { verifyAdminSession } from "@features/admin/server/auth";
+import { buildQuestionLifecycleSnapshot } from "@features/admin/server/question-effectiveness";
+import { hasRole } from "@features/admin/server/roles";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
 import logger from "@/lib/logger";
 

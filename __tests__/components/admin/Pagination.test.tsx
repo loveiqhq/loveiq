@@ -2,7 +2,7 @@
 import { render, screen, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, afterEach } from "vitest";
-import Pagination from "@/components/admin/Pagination";
+import Pagination from "@features/admin/ui/Pagination";
 
 afterEach(cleanup);
 

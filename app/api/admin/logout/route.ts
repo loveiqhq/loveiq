@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { verifyCsrfToken } from "@/lib/csrf";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
-import { createSupabaseServer } from "@/lib/admin/supabase-server";
+import { createSupabaseServer } from "@features/admin/server/supabase-server";
 
 export async function POST(request: Request) {
   if (!(await verifyCsrfToken(request))) {

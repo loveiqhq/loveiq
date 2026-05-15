@@ -2,7 +2,7 @@
 import { render, screen, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, afterEach } from "vitest";
-import ConfirmDialog from "@/components/admin/ConfirmDialog";
+import ConfirmDialog from "@features/admin/ui/ConfirmDialog";
 
 afterEach(cleanup);
 

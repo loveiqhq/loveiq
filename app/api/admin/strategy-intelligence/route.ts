@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { verifyAdminSession } from "@/lib/admin/auth";
-import { buildStrategyIntelligenceSnapshot } from "@/lib/admin/strategy-intelligence";
-import { hasRole } from "@/lib/admin/roles";
+import { verifyAdminSession } from "@features/admin/server/auth";
+import { buildStrategyIntelligenceSnapshot } from "@features/admin/server/strategy-intelligence";
+import { hasRole } from "@features/admin/server/roles";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
 import logger from "@/lib/logger";
 

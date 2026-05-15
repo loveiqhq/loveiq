@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import AdminLoginForm from "@/components/admin/AdminLoginForm";
+import AdminLoginForm from "@features/admin/ui/AdminLoginForm";
 
 export const metadata: Metadata = {
   title: "Admin Login | LoveIQ",

@@ -6,21 +6,21 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 const mockRefetch = vi.fn();
 const mockUseAdminFetch = vi.fn();
 
-vi.mock("@/components/admin/hooks/useAdminFetch", () => ({
+vi.mock("@features/admin/ui/hooks/useAdminFetch", () => ({
   useAdminFetch: (...args: unknown[]) => mockUseAdminFetch(...args),
 }));
 
-vi.mock("@/components/admin/AnswerDisplay", () => ({
+vi.mock("@features/admin/ui/AnswerDisplay", () => ({
   default: (props: { answer: { q_id: string } }) => (
     <div data-testid={`answer-${props.answer.q_id}`}>Answer</div>
   ),
 }));
 
-vi.mock("@/components/admin/BarChart", () => ({
+vi.mock("@features/admin/ui/BarChart", () => ({
   default: () => <div data-testid="bar-chart" />,
 }));
 
-vi.mock("@/components/admin/ConfirmDialog", () => ({
+vi.mock("@features/admin/ui/ConfirmDialog", () => ({
   default: (props: { open: boolean; onConfirm: () => void; onCancel: () => void }) =>
     props.open ? (
       <div data-testid="confirm-dialog">
@@ -30,7 +30,7 @@ vi.mock("@/components/admin/ConfirmDialog", () => ({
     ) : null,
 }));
 
-import SubmissionDetail from "@/components/admin/SubmissionDetail";
+import SubmissionDetail from "@features/admin/ui/SubmissionDetail";
 
 let mockFetch: ReturnType<typeof vi.fn>;
 

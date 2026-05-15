@@ -22,7 +22,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { verifyCsrfToken, verifyCsrfTokenFromBody } from "@/lib/csrf";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
-import { supabaseFetch } from "@/lib/admin/supabase";
+import { supabaseFetch } from "@features/admin/server/supabase";
 import logger from "@/lib/logger";
 
 const ALLOWED_EVENTS = [

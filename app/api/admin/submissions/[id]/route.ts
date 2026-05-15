@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { verifyAdminSession } from "@/lib/admin/auth";
-import { hasRole } from "@/lib/admin/roles";
-import { logAdminAction } from "@/lib/admin/audit";
-import { deleteSubmissionCascade } from "@/lib/admin/delete-submission";
-import { supabaseFetch } from "@/lib/admin/supabase";
+import { verifyAdminSession } from "@features/admin/server/auth";
+import { hasRole } from "@features/admin/server/roles";
+import { logAdminAction } from "@features/admin/server/audit";
+import { deleteSubmissionCascade } from "@features/admin/server/delete-submission";
+import { supabaseFetch } from "@features/admin/server/supabase";
 import { verifyCsrfToken } from "@/lib/csrf";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
 import logger from "@/lib/logger";

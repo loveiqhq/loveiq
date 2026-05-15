@@ -6,11 +6,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 const mockRefetch = vi.fn();
 const mockUseAdminFetch = vi.fn();
 
-vi.mock("@/components/admin/hooks/useAdminFetch", () => ({
+vi.mock("@features/admin/ui/hooks/useAdminFetch", () => ({
   useAdminFetch: (...args: unknown[]) => mockUseAdminFetch(...args),
 }));
 
-vi.mock("@/components/admin/ConfirmDialog", () => ({
+vi.mock("@features/admin/ui/ConfirmDialog", () => ({
   default: (props: {
     open: boolean;
     title: string;
@@ -27,7 +27,7 @@ vi.mock("@/components/admin/ConfirmDialog", () => ({
     ) : null,
 }));
 
-import SurveyStatus from "@/components/admin/SurveyStatus";
+import SurveyStatus from "@features/admin/ui/SurveyStatus";
 
 beforeEach(() => {
   globalThis.fetch = vi.fn();

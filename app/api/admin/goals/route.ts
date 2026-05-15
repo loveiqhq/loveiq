@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { verifyAdminSession } from "@/lib/admin/auth";
-import { hasRole } from "@/lib/admin/roles";
+import { verifyAdminSession } from "@features/admin/server/auth";
+import { hasRole } from "@features/admin/server/roles";
 import { verifyCsrfToken } from "@/lib/csrf";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
-import { supabaseFetch } from "@/lib/admin/supabase";
-import { logAdminAction } from "@/lib/admin/audit";
-import { fetchMetricValue } from "@/lib/admin/metric-library";
+import { supabaseFetch } from "@features/admin/server/supabase";
+import { logAdminAction } from "@features/admin/server/audit";
+import { fetchMetricValue } from "@features/admin/server/metric-library";
 import logger from "@/lib/logger";
 import { z } from "zod";
 

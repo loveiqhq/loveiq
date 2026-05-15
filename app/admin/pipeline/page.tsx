@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import ConversionPipeline from "@/components/admin/ConversionPipeline";
+import ConversionPipeline from "@features/admin/ui/ConversionPipeline";
 
 export const metadata: Metadata = {
   title: "Conversion Pipeline | LoveIQ Admin",

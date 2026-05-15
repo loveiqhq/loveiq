@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import ProfilesDashboard from "@/components/admin/ProfilesDashboard";
+import ProfilesDashboard from "@features/admin/ui/ProfilesDashboard";
 
 export const metadata: Metadata = {
   title: "User Profiles | LoveIQ Admin",

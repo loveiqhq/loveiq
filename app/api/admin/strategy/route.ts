@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { verifyAdminSession } from "@/lib/admin/auth";
-import { hasRole } from "@/lib/admin/roles";
+import { verifyAdminSession } from "@features/admin/server/auth";
+import { hasRole } from "@features/admin/server/roles";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
-import { buildStrategySnapshot } from "@/lib/admin/strategy";
+import { buildStrategySnapshot } from "@features/admin/server/strategy";
 import logger from "@/lib/logger";
 
 export async function GET(request: Request) {

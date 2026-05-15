@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import { verifyCsrfToken } from "@/lib/csrf";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
-import { supabaseFetch } from "@/lib/admin/supabase";
-import { adminMagicLinkEmail } from "@/lib/emails/admin-magic-link";
+import { supabaseFetch } from "@features/admin/server/supabase";
+import { adminMagicLinkEmail } from "@features/admin/server/emails/admin-magic-link";
 import logger from "@/lib/logger";
 import { z } from "zod";
 

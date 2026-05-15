@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import PredictiveInsights from "@/components/admin/PredictiveInsights";
+import PredictiveInsights from "@features/admin/ui/PredictiveInsights";
 
 export const metadata: Metadata = {
   title: "Predictions | LoveIQ Admin",

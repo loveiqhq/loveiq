@@ -4,7 +4,7 @@ import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
 
 const mockRefetch = vi.fn();
 
-vi.mock("@/components/admin/hooks/useAdminFetch", () => ({
+vi.mock("@features/admin/ui/hooks/useAdminFetch", () => ({
   useAdminFetch: vi.fn(() => ({
     data: {
       submissions: [
@@ -43,20 +43,20 @@ vi.mock("@/components/admin/hooks/useAdminFetch", () => ({
   })),
 }));
 
-vi.mock("@/components/admin/FilterBar", () => ({
+vi.mock("@features/admin/ui/FilterBar", () => ({
   default: () => <div data-testid="filter-bar" />,
 }));
 
-vi.mock("@/components/admin/SubmissionTable", () => ({
+vi.mock("@features/admin/ui/SubmissionTable", () => ({
   default: () => <div data-testid="submission-table" />,
 }));
 
-vi.mock("@/components/admin/Pagination", () => ({
+vi.mock("@features/admin/ui/Pagination", () => ({
   default: () => <div data-testid="pagination" />,
 }));
 
-import { useAdminFetch } from "@/components/admin/hooks/useAdminFetch";
-import SubmissionBrowser from "@/components/admin/SubmissionBrowser";
+import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
+import SubmissionBrowser from "@features/admin/ui/SubmissionBrowser";
 
 beforeEach(() => {
   mockRefetch.mockClear();

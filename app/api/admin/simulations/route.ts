@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
-import { verifyAdminSession } from "@/lib/admin/auth";
-import { buildAdminSimulationSnapshot, parseAdminSimulationSurface } from "@/lib/admin/simulations";
-import { hasRole } from "@/lib/admin/roles";
+import { verifyAdminSession } from "@features/admin/server/auth";
+import {
+  buildAdminSimulationSnapshot,
+  parseAdminSimulationSurface,
+} from "@features/admin/server/simulations";
+import { hasRole } from "@features/admin/server/roles";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
 import logger from "@/lib/logger";
 

@@ -4,13 +4,13 @@ import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 
 const mockUseAdminFetch = vi.fn();
 
-vi.mock("@/components/admin/hooks/useAdminFetch", () => ({
+vi.mock("@features/admin/ui/hooks/useAdminFetch", () => ({
   useAdminFetch: (...args: unknown[]) => mockUseAdminFetch(...args),
 }));
 
-import ConversionFunnelTab from "@/components/admin/funnel-tabs/ConversionFunnelTab";
-import CohortAnalysisTab from "@/components/admin/funnel-tabs/CohortAnalysisTab";
-import ImpactComparisonTab from "@/components/admin/funnel-tabs/ImpactComparisonTab";
+import ConversionFunnelTab from "@features/admin/ui/funnel-tabs/ConversionFunnelTab";
+import CohortAnalysisTab from "@features/admin/ui/funnel-tabs/CohortAnalysisTab";
+import ImpactComparisonTab from "@features/admin/ui/funnel-tabs/ImpactComparisonTab";
 
 beforeEach(() => {
   mockUseAdminFetch.mockReset();

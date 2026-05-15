@@ -20,8 +20,9 @@ const ENV_ALLOWLIST = new Set(["NODE_ENV"]);
 const REQUIRED_DOC_PATHS = [
   "app/admin/AGENT_README.md",
   "app/api/admin/AGENT_README.md",
-  "components/admin/AGENT_README.md",
-  "lib/admin/AGENT_README.md",
+  "features/admin/AGENT_README.md",
+  "features/admin/ui/AGENT_README.md",
+  "features/admin/server/AGENT_README.md",
   "docs/admin/AGENT_README.md",
   "docs/admin/domains/AGENT_README.md",
   "docs/admin/domains/command-center.md",

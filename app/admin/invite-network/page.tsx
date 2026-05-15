@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import InviteNetworkDashboard from "@/components/admin/InviteNetworkDashboard";
+import InviteNetworkDashboard from "@features/admin/ui/InviteNetworkDashboard";
 
 export const metadata: Metadata = {
   title: "Invite Network | LoveIQ Admin",

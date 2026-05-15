@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import ResearchIntelligenceDashboard from "@/components/admin/ResearchIntelligenceDashboard";
+import ResearchIntelligenceDashboard from "@features/admin/ui/ResearchIntelligenceDashboard";
 
 export const metadata: Metadata = {
   title: "Research Intelligence | LoveIQ Admin",

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import GrowthDashboard from "@/components/admin/GrowthDashboard";
+import GrowthDashboard from "@features/admin/ui/GrowthDashboard";
 
 export const metadata: Metadata = {
   title: "Growth | LoveIQ Admin",

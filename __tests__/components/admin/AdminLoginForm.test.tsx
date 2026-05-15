@@ -11,7 +11,7 @@ vi.mock("@/lib/csrf-client", () => ({
   getCsrfToken: () => "test-csrf-token",
 }));
 
-import AdminLoginForm from "@/components/admin/AdminLoginForm";
+import AdminLoginForm from "@features/admin/ui/AdminLoginForm";
 
 let mockFetch: ReturnType<typeof vi.fn>;
 

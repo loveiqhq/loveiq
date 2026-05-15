@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { verifyAdminSession } from "@/lib/admin/auth";
-import { logAdminAction } from "@/lib/admin/audit";
-import { buildResearchRepositorySnapshot } from "@/lib/admin/research-repository";
-import { hasRole } from "@/lib/admin/roles";
-import { supabaseFetch } from "@/lib/admin/supabase";
+import { verifyAdminSession } from "@features/admin/server/auth";
+import { logAdminAction } from "@features/admin/server/audit";
+import { buildResearchRepositorySnapshot } from "@features/admin/server/research-repository";
+import { hasRole } from "@features/admin/server/roles";
+import { supabaseFetch } from "@features/admin/server/supabase";
 import { verifyCsrfToken } from "@/lib/csrf";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
 import logger from "@/lib/logger";

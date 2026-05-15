@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { verifyAdminSession } from "@/lib/admin/auth";
-import { logAdminAction } from "@/lib/admin/audit";
+import { verifyAdminSession } from "@features/admin/server/auth";
+import { logAdminAction } from "@features/admin/server/audit";
 import {
   ADMIN_METRIC_OPTIONS,
   fetchMetricValue,
   loadBenchmarkDefinitions,
-} from "@/lib/admin/metric-library";
-import { hasRole } from "@/lib/admin/roles";
-import { supabaseFetch } from "@/lib/admin/supabase";
+} from "@features/admin/server/metric-library";
+import { hasRole } from "@features/admin/server/roles";
+import { supabaseFetch } from "@features/admin/server/supabase";
 import { verifyCsrfToken } from "@/lib/csrf";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
 import logger from "@/lib/logger";

@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { verifyAdminSession } from "@/lib/admin/auth";
-import { hasRole } from "@/lib/admin/roles";
+import { verifyAdminSession } from "@features/admin/server/auth";
+import { hasRole } from "@features/admin/server/roles";
 import { verifyCsrfToken } from "@/lib/csrf";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
-import { supabaseFetch } from "@/lib/admin/supabase";
-import { logAdminAction } from "@/lib/admin/audit";
+import { supabaseFetch } from "@features/admin/server/supabase";
+import { logAdminAction } from "@features/admin/server/audit";
 import logger from "@/lib/logger";
 
 const editSchema = z.object({

@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { verifyAdminSession } from "@/lib/admin/auth";
+import { verifyAdminSession } from "@features/admin/server/auth";
 import {
   buildDecisionIntelligenceSnapshot,
   parseDecisionIntelligenceSurface,
-} from "@/lib/admin/decision-intelligence";
-import { hasRole } from "@/lib/admin/roles";
+} from "@features/admin/server/decision-intelligence";
+import { hasRole } from "@features/admin/server/roles";
 import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
 import logger from "@/lib/logger";
 

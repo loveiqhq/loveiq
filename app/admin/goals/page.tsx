@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import GoalTracker from "@/components/admin/GoalTracker";
+import GoalTracker from "@features/admin/ui/GoalTracker";
 
 export const metadata: Metadata = {
   title: "Goals | LoveIQ Admin",

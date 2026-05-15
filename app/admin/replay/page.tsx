@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import ReplayDashboard from "@/components/admin/ReplayDashboard";
+import ReplayDashboard from "@features/admin/ui/ReplayDashboard";
 
 export const metadata: Metadata = {
   title: "Session Replay | LoveIQ Admin",

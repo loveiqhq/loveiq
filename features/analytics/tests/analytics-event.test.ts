@@ -11,7 +11,7 @@ vi.mock("@/lib/ratelimit", () => ({
 }));
 
 const mockSupabaseFetch = vi.fn();
-vi.mock("@/lib/admin/supabase", () => ({
+vi.mock("@features/admin/server/supabase", () => ({
   supabaseFetch: (...args: unknown[]) => mockSupabaseFetch(...args),
 }));
 

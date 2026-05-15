@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import RetentionDashboard from "@/components/admin/RetentionDashboard";
+import RetentionDashboard from "@features/admin/ui/RetentionDashboard";
 
 export const metadata: Metadata = {
   title: "Retention | LoveIQ Admin",

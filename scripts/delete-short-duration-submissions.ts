@@ -51,9 +51,9 @@ try {
   );
 }
 
-import { deleteSubmissionCascade } from "../lib/admin/delete-submission";
-import { logAdminAction } from "../lib/admin/audit";
-import { maskEmail } from "../lib/admin/format";
+import { deleteSubmissionCascade } from "../features/admin/server/delete-submission";
+import { logAdminAction } from "../features/admin/server/audit";
+import { maskEmail } from "../features/admin/server/format";
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;

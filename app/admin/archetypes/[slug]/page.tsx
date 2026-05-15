@@ -1,4 +1,4 @@
-import ArchetypeProfile from "@/components/admin/ArchetypeProfile";
+import ArchetypeProfile from "@features/admin/ui/ArchetypeProfile";
 
 export default async function ArchetypeDetailPage({
   params,

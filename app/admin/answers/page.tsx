@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import AnswerExplorer from "@/components/admin/AnswerExplorer";
+import AnswerExplorer from "@features/admin/ui/AnswerExplorer";
 
 export const metadata: Metadata = {
   title: "Answer Explorer | LoveIQ Admin",

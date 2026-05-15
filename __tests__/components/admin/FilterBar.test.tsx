@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { render, screen, cleanup, fireEvent, act, waitFor } from "@testing-library/react";
 import { vi, describe, it, expect, afterEach } from "vitest";
-import FilterBar from "@/components/admin/FilterBar";
+import FilterBar from "@features/admin/ui/FilterBar";
 
 afterEach(() => {
   cleanup();

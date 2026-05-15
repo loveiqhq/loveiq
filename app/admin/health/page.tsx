@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import HealthDashboard from "@/components/admin/HealthDashboard";
+import HealthDashboard from "@features/admin/ui/HealthDashboard";
 
 export const metadata: Metadata = {
   title: "Data Health | LoveIQ Admin",

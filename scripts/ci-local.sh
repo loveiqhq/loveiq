@@ -192,9 +192,9 @@ skip_with_reason "codeql.yml › CodeQL Analysis" "GitHub-only — runs on Tuesd
 
 # ─── security.yml › nextjs-security ────────────────────────────────────────
 step "security.yml › dangerouslySetInnerHTML scan"
-if grep -r "dangerouslySetInnerHTML" app/ components/ --include="*.tsx" --include="*.jsx" \
+if grep -r "dangerouslySetInnerHTML" app/ components/ features/ --include="*.tsx" --include="*.jsx" \
     | grep -v "JSON\.stringify" \
-    | grep -vE "components/report/(sections/|ReportPage\.tsx)"; then
+    | grep -vE "(components|features/report/ui)/(sections/|ReportPage\.tsx)"; then
   echo "❌ Unauthorized dangerouslySetInnerHTML usage"
   FAIL_COUNT=$((FAIL_COUNT+1))
   FAIL_STEPS+=("security.yml › dangerouslySetInnerHTML")
@@ -205,7 +205,7 @@ echo "✅ Clean"
 PASS_COUNT=$((PASS_COUNT+1))
 
 step "security.yml › eval() scan"
-if grep -r "\beval\(" app/ lib/ components/ --include="*.ts" --include="*.tsx" --include="*.js" --include="*.jsx" 2>/dev/null; then
+if grep -r "\beval\(" app/ lib/ components/ features/ shared/ --include="*.ts" --include="*.tsx" --include="*.js" --include="*.jsx" 2>/dev/null; then
   echo "❌ eval() usage detected"
   FAIL_COUNT=$((FAIL_COUNT+1))
   FAIL_STEPS+=("security.yml › eval()")
@@ -216,7 +216,7 @@ echo "✅ Clean"
 PASS_COUNT=$((PASS_COUNT+1))
 
 step "security.yml › hardcoded secret pattern scan"
-if grep -rE "(api[_-]?key|api[_-]?secret|password|secret[_-]?key|private[_-]?key|token)\s*=\s*['\"][^'\"]{20,}" app/ lib/ --include="*.ts" --include="*.tsx" --include="*.js" 2>/dev/null; then
+if grep -rE "(api[_-]?key|api[_-]?secret|password|secret[_-]?key|private[_-]?key|token)\s*=\s*['\"][^'\"]{20,}" app/ lib/ features/ shared/ --include="*.ts" --include="*.tsx" --include="*.js" 2>/dev/null; then
   echo "❌ Possible hardcoded secret"
   FAIL_COUNT=$((FAIL_COUNT+1))
   FAIL_STEPS+=("security.yml › hardcoded secret")
@@ -304,7 +304,7 @@ echo "✅ All POST/PUT routes validate with Zod"
 PASS_COUNT=$((PASS_COUNT+1))
 
 step "security.yml › process.env in client components"
-if grep -r "process\.env\." app/ components/ --include="*.tsx" --include="*.jsx" | grep -v "NEXT_PUBLIC_" | grep -v "^Binary"; then
+if grep -r "process\.env\." app/ components/ features/ --include="*.tsx" --include="*.jsx" | grep -v "NEXT_PUBLIC_" | grep -v "^Binary"; then
   echo "⚠  Direct process.env in client components (non-NEXT_PUBLIC) — review above"
   # Workflow only warns, doesn't fail. Mirror that.
   SKIP_COUNT=$((SKIP_COUNT+1))
