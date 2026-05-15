@@ -5,7 +5,7 @@ vi.mock("@upstash/redis", () => ({
   Redis: class MockRedis {},
 }));
 
-import { getClientIp } from "../../lib/ratelimit";
+import { getClientIp } from "@shared/http/ratelimit";
 
 function makeRequest(headers: Record<string, string> = {}): Request {
   return new Request("http://localhost/api/test", {

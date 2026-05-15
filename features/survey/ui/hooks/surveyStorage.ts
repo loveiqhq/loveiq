@@ -1,6 +1,6 @@
 "use client";
 
-import { GLOBAL_UTM_KEY } from "@/lib/utm";
+import { GLOBAL_UTM_KEY } from "@shared/url/utm";
 import { SURVEY_SESSION_KEY } from "./surveySession";
 import type { SurveyAnswers } from "@features/survey/server/types";
 import { UTM_STORAGE_KEY } from "./useUtmCapture";

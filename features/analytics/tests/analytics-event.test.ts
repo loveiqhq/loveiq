@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("@/lib/csrf", () => ({
+vi.mock("@shared/http/csrf", () => ({
   verifyCsrfToken: vi.fn().mockResolvedValue(true),
   verifyCsrfTokenFromBody: vi.fn().mockResolvedValue(true),
 }));
 
-vi.mock("@/lib/ratelimit", () => ({
+vi.mock("@shared/http/ratelimit", () => ({
   checkRateLimit: vi.fn().mockResolvedValue({ allowed: true, remaining: 59, resetAt: new Date() }),
   getClientIp: vi.fn().mockReturnValue("127.0.0.1"),
 }));
@@ -15,7 +15,7 @@ vi.mock("@features/admin/server/supabase", () => ({
   supabaseFetch: (...args: unknown[]) => mockSupabaseFetch(...args),
 }));
 
-vi.mock("@/lib/logger", () => ({
+vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 

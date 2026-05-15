@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import TimeRangeSelector from "./TimeRangeSelector";
-import { getCsrfToken } from "@/lib/csrf-client";
+import { getCsrfToken } from "@shared/http/csrf-client";
 
 interface ReportData {
   generatedAt: string;

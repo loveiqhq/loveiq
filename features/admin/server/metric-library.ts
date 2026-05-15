@@ -1,7 +1,7 @@
 import { ADMIN_BENCHMARKS, type AdminBenchmarkDefinition } from "@/data/admin-benchmarks";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { WORKFLOW_TAGS } from "@features/admin/server/workflow-tags";
-import logger from "@/lib/logger";
+import logger from "@shared/observability/logger";
 
 export { ADMIN_BENCHMARKS };
 

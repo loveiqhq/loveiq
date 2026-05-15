@@ -1,12 +1,12 @@
 // MSW node server for Vitest. Configured in `../setup.ts` with
 // `onUnhandledRequest: "error"` so accidental real-network calls fail loudly.
-// Legacy `vi.mock("@/lib/fetch-with-timeout")` still works alongside MSW —
+// Legacy `vi.mock("@shared/http/fetch-with-timeout")` still works alongside MSW —
 // the mock replaces fetchWithTimeout before it can call `fetch`, so MSW
 // never sees those requests. New tests should register handlers via
 // `server.use(http.get(…))` inside their own setup.
 //
 // ─────────────────────────────────────────────────────────────────────────
-// MIGRATION PATTERN — convert `vi.mock("@/lib/fetch-with-timeout", …)` →
+// MIGRATION PATTERN — convert `vi.mock("@shared/http/fetch-with-timeout", …)` →
 // MSW handlers. See `__tests__/api/health.test.ts` for a fully migrated
 // reference.
 //

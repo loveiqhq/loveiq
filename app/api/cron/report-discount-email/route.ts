@@ -13,12 +13,12 @@
 import { timingSafeEqual, randomUUID } from "crypto";
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
-import { getBreaker } from "@/lib/circuit-breaker";
-import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
-import logger from "@/lib/logger";
+import { getBreaker } from "@shared/http/circuit-breaker";
+import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
+import logger from "@shared/observability/logger";
 import { reportDiscountEmail } from "@features/report/server/emails/report-discount";
-import { buildUnsubscribeUrl } from "@/lib/emails/unsubscribe-token";
-import { isEmailSuppressed } from "@/lib/emails/suppression";
+import { buildUnsubscribeUrl } from "@shared/emails/unsubscribe-token";
+import { isEmailSuppressed } from "@shared/emails/suppression";
 import { getReportPriceQuotesForContext } from "@features/pricing/logic/reportPricing";
 import { getReportPlanByPersonalReportId } from "@features/report/server/planAccess";
 import type { ReportPurchasePlanId } from "@features/checkout/server/reportPurchase";

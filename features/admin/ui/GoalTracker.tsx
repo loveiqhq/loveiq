@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useAdminFetch } from "./hooks/useAdminFetch";
 import { useAdminQueryState } from "./hooks/useAdminQueryState";
 import { buildMetricDrilldownHref } from "@features/admin/server/drilldowns";
-import { getCsrfToken } from "@/lib/csrf-client";
+import { getCsrfToken } from "@shared/http/csrf-client";
 
 interface Goal {
   id: number;

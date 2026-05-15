@@ -2,9 +2,9 @@ import { NextResponse } from "next/server";
 import { verifyAdminSession } from "@features/admin/server/auth";
 import { hasRole } from "@features/admin/server/roles";
 import { supabaseFetch } from "@features/admin/server/supabase";
-import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
+import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import { surveyQuestions } from "@/data/survey-data";
-import logger from "@/lib/logger";
+import logger from "@shared/observability/logger";
 
 type Severity = "critical" | "warning" | "positive" | "info" | "neutral";
 type Confidence = "high" | "medium" | "low";

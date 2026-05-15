@@ -1,5 +1,5 @@
 import { after } from "next/server";
-import logger from "@/lib/logger";
+import logger from "@shared/observability/logger";
 
 export function scheduleAfterResponse(taskName: string, fn: () => Promise<void>): void {
   const run = async () => {

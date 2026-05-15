@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from "vitest";
-import { GLOBAL_UTM_KEY } from "@/lib/utm";
+import { GLOBAL_UTM_KEY } from "@shared/url/utm";
 import { UTM_STORAGE_KEY } from "@features/survey/ui/hooks/useUtmCapture";
 import {
   PENDING_COMPLETION_KEY,

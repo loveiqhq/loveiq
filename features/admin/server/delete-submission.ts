@@ -17,7 +17,7 @@
  */
 
 import { supabaseFetch } from "@features/admin/server/supabase";
-import logger from "@/lib/logger";
+import logger from "@shared/observability/logger";
 
 export type DeleteSubmissionResult =
   | { ok: true }

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useCallback } from "react";
 import type { SurveyQuestion } from "@/data/survey-data";
-import { getCsrfToken } from "@/lib/csrf-client";
+import { getCsrfToken } from "@shared/http/csrf-client";
 import { getSessionId } from "./surveySession";
 
 interface TrackingEvent {

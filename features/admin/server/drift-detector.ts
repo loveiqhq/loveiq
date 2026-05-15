@@ -7,7 +7,7 @@ import { buildResearchIntelligenceSnapshot } from "@features/admin/server/resear
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { WORKFLOW_TAGS } from "@features/admin/server/workflow-tags";
 import { getScoringConfig } from "@features/scoring/logic/config";
-import logger from "@/lib/logger";
+import logger from "@shared/observability/logger";
 
 export type DriftCategoryKey =
   | "taxonomy"

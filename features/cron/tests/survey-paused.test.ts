@@ -5,24 +5,24 @@ const mockCheckCooldown = vi.fn();
 const mockIsEmailSuppressed = vi.fn();
 const mockResendSend = vi.fn();
 
-vi.mock("@/lib/fetch-with-timeout", () => ({
+vi.mock("@shared/http/fetch-with-timeout", () => ({
   fetchWithTimeout: (...args: Parameters<typeof mockFetchWithTimeout>) =>
     mockFetchWithTimeout(...args),
 }));
 
-vi.mock("@/lib/circuit-breaker", () => ({
+vi.mock("@shared/http/circuit-breaker", () => ({
   getBreaker: () => ({ fire: (fn: () => Promise<unknown>) => fn() }),
 }));
 
-vi.mock("@/lib/ratelimit", () => ({
+vi.mock("@shared/http/ratelimit", () => ({
   checkCooldown: (...args: unknown[]) => mockCheckCooldown(...args),
 }));
 
-vi.mock("@/lib/emails/suppression", () => ({
+vi.mock("@shared/emails/suppression", () => ({
   isEmailSuppressed: (...args: unknown[]) => mockIsEmailSuppressed(...args),
 }));
 
-vi.mock("@/lib/logger", () => ({
+vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 

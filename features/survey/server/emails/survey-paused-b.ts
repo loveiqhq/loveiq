@@ -1,4 +1,4 @@
-import { EMAIL_FONT, escapeHtml, renderCtaButton, wrapEmailShell } from "@/lib/emails/shared";
+import { EMAIL_FONT, escapeHtml, renderCtaButton, wrapEmailShell } from "@shared/emails/shared";
 
 /**
  * Survey-paused reminder — Variant B (Figma node 5086-354).

@@ -18,7 +18,7 @@ import {
   type StatisticalSignificance,
 } from "@features/admin/server/statistics";
 import { supabaseFetch } from "@features/admin/server/supabase";
-import logger from "@/lib/logger";
+import logger from "@shared/observability/logger";
 
 export type ExperimentStatus = "draft" | "active" | "paused" | "completed" | "archived";
 export type ExperimentConfidence = "high" | "medium" | "low";

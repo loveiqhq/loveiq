@@ -13,11 +13,11 @@ vi.mock("next/server", () => ({
   after: (...args: unknown[]) => mockAfter(...args),
 }));
 
-vi.mock("../../lib/logger", () => ({
+vi.mock("@shared/observability/logger", () => ({
   default: mockLogger,
 }));
 
-import { scheduleAfterResponse } from "../../lib/after-response";
+import { scheduleAfterResponse } from "@shared/http/after-response";
 
 describe("scheduleAfterResponse", () => {
   beforeEach(() => {

@@ -1,4 +1,4 @@
-import { EMAIL_FONT, escapeHtml, renderCtaButton, wrapEmailShell } from "@/lib/emails/shared";
+import { EMAIL_FONT, escapeHtml, renderCtaButton, wrapEmailShell } from "@shared/emails/shared";
 
 /**
  * Post-survey "your report is ready" — Variant B (Figma node 5086-101).

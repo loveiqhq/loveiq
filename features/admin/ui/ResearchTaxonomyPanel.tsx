@@ -8,7 +8,7 @@ import type {
   ResearchTaxonomyStatus,
   ResearchTaxonomyType,
 } from "@features/admin/server/research-taxonomy";
-import { getCsrfToken } from "@/lib/csrf-client";
+import { getCsrfToken } from "@shared/http/csrf-client";
 
 type ThemeInput = {
   theme: string;

@@ -1,17 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/lib/logger", () => ({
+vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
 const mockVerifyCsrf = vi.fn<() => Promise<boolean>>();
-vi.mock("@/lib/csrf", () => ({
+vi.mock("@shared/http/csrf", () => ({
   verifyCsrfToken: (...args: unknown[]) => mockVerifyCsrf(...(args as [])),
 }));
 
 const mockCheckRateLimit = vi.fn();
 const mockGetClientIp = vi.fn();
-vi.mock("@/lib/ratelimit", () => ({
+vi.mock("@shared/http/ratelimit", () => ({
   checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
   getClientIp: (...args: unknown[]) => mockGetClientIp(...args),
 }));
@@ -22,9 +22,10 @@ vi.mock("@features/report/server/personalReport", () => ({
 }));
 
 const mockBreakerFire = vi.fn();
-vi.mock("@/lib/circuit-breaker", async () => {
-  const actual =
-    await vi.importActual<typeof import("@/lib/circuit-breaker")>("@/lib/circuit-breaker");
+vi.mock("@shared/http/circuit-breaker", async () => {
+  const actual = await vi.importActual<typeof import("@shared/http/circuit-breaker")>(
+    "@shared/http/circuit-breaker"
+  );
   return {
     ...actual,
     getBreaker: () => ({ fire: (fn: () => Promise<unknown>) => mockBreakerFire(fn) }),
@@ -32,7 +33,7 @@ vi.mock("@/lib/circuit-breaker", async () => {
 });
 
 const mockFetchWithTimeout = vi.fn();
-vi.mock("@/lib/fetch-with-timeout", () => ({
+vi.mock("@shared/http/fetch-with-timeout", () => ({
   fetchWithTimeout: (...args: unknown[]) => mockFetchWithTimeout(...args),
 }));
 

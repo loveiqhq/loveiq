@@ -38,21 +38,21 @@ vi.mock("next/server", async () => {
   };
 });
 
-vi.mock("@/lib/logger", () => ({
+vi.mock("@shared/observability/logger", () => ({
   default: mockLogger,
 }));
 
-vi.mock("@/lib/csrf", () => ({
+vi.mock("@shared/http/csrf", () => ({
   verifyCsrfToken: (...args: unknown[]) => mockVerifyCsrf(...(args as [])),
 }));
 
-vi.mock("@/lib/ratelimit", () => ({
+vi.mock("@shared/http/ratelimit", () => ({
   checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
   checkCooldown: (...args: unknown[]) => mockCheckCooldown(...args),
   getClientIp: (...args: unknown[]) => mockGetClientIp(...args),
 }));
 
-vi.mock("@/lib/fetch-with-timeout", () => ({
+vi.mock("@shared/http/fetch-with-timeout", () => ({
   fetchWithTimeout: (...args: unknown[]) => mockFetchWithTimeout(...args),
 }));
 

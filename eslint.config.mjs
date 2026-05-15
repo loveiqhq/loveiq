@@ -23,7 +23,6 @@ const eslintConfig = [
     // API routes (e.g., logger.error not awaited inside a handler).
     files: [
       "app/api/**/*.ts",
-      "lib/**/*.ts",
       "features/**/server/**/*.ts",
       "features/**/logic/**/*.ts",
       "shared/**/*.ts",
@@ -45,7 +44,6 @@ const eslintConfig = [
     // eslint-plugin-security: detect unsafe patterns in server-side code
     files: [
       "app/api/**/*.ts",
-      "lib/**/*.ts",
       "features/**/server/**/*.ts",
       "features/**/logic/**/*.ts",
       "shared/**/*.ts",
@@ -58,7 +56,6 @@ const eslintConfig = [
     // eslint-plugin-no-secrets: detect hardcoded credentials in server-side code
     files: [
       "app/api/**/*.ts",
-      "lib/**/*.ts",
       "features/**/server/**/*.ts",
       "features/**/logic/**/*.ts",
       "shared/**/*.ts",
@@ -71,7 +68,6 @@ const eslintConfig = [
     // Security-focused rules for API routes and sensitive code
     files: [
       "app/api/**/*.ts",
-      "lib/**/*.ts",
       "features/**/server/**/*.ts",
       "features/**/logic/**/*.ts",
       "shared/**/*.ts",
@@ -109,12 +105,7 @@ const eslintConfig = [
   },
   {
     // Client-side security rules
-    files: [
-      "components/**/*.{ts,tsx}",
-      "features/**/ui/**/*.{ts,tsx}",
-      "app/**/page.tsx",
-      "app/**/layout.tsx",
-    ],
+    files: ["features/**/ui/**/*.{ts,tsx}", "app/**/page.tsx", "app/**/layout.tsx"],
     rules: {
       // Warn about direct process.env access in client components
       "no-restricted-syntax": [

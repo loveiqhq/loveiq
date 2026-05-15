@@ -15,8 +15,8 @@ import {
   getReportAccessPlanForSubmission,
   resolveSubmissionAccessContext,
 } from "@features/report/server/personalReport";
-import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
-import logger from "@/lib/logger";
+import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
+import logger from "@shared/observability/logger";
 
 export const runtime = "nodejs";
 

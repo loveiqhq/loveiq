@@ -3,7 +3,7 @@
 import { useState } from "react";
 import AdminCommentsThread from "@features/admin/ui/AdminCommentsThread";
 import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
-import { getCsrfToken } from "@/lib/csrf-client";
+import { getCsrfToken } from "@shared/http/csrf-client";
 import type {
   AdminAlertComparator,
   AdminAlertRule,

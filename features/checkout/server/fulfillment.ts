@@ -1,14 +1,14 @@
 import Stripe from "stripe";
 import { Resend } from "resend";
-import { getBreaker } from "@/lib/circuit-breaker";
-import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
-import logger from "@/lib/logger";
+import { getBreaker } from "@shared/http/circuit-breaker";
+import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
+import logger from "@shared/observability/logger";
 import { reportAllEmail } from "@features/report/server/emails/report-all";
 import { reportAllBEmail } from "@features/report/server/emails/report-all-b";
 import { reportEssentialsEmail } from "@features/report/server/emails/report-essentials";
 import { reportFullEmail } from "@features/report/server/emails/report-full";
 import { reportFullBEmail } from "@features/report/server/emails/report-full-b";
-import { pickEmailVariant } from "@/lib/emails/ab-variant";
+import { pickEmailVariant } from "@shared/emails/ab-variant";
 import {
   getReportPurchasePlan,
   isReportPurchasePlanId,

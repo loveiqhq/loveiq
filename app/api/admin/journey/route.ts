@@ -8,9 +8,9 @@ import {
   parseUtmCampaign,
   sourceLabel,
 } from "@features/admin/server/next-level";
-import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
+import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import { supabaseFetch } from "@features/admin/server/supabase";
-import logger from "@/lib/logger";
+import logger from "@shared/observability/logger";
 
 export async function GET(request: Request) {
   const admin = await verifyAdminSession();

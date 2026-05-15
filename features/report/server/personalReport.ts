@@ -1,6 +1,6 @@
-import { getBreaker } from "@/lib/circuit-breaker";
-import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
-import logger from "@/lib/logger";
+import { getBreaker } from "@shared/http/circuit-breaker";
+import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
+import logger from "@shared/observability/logger";
 import {
   getStrongestReportAccessPlan,
   isReportPurchasePlan,

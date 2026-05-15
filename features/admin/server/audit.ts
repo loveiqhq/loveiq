@@ -1,5 +1,5 @@
 import { supabaseFetch } from "@features/admin/server/supabase";
-import logger from "@/lib/logger";
+import logger from "@shared/observability/logger";
 
 interface AuditEntry {
   admin_email: string;

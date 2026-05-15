@@ -1,5 +1,5 @@
-import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
-import logger from "@/lib/logger";
+import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
+import logger from "@shared/observability/logger";
 
 export async function isEmailSuppressed(email: string): Promise<boolean> {
   const supabaseUrl = process.env.SUPABASE_URL;

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
-import { getCsrfToken } from "@/lib/csrf-client";
+import { getCsrfToken } from "@shared/http/csrf-client";
 import InvestigationCasesPanel from "@features/admin/ui/InvestigationCasesPanel";
 
 interface Tag {

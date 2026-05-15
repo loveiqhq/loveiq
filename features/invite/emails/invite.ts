@@ -1,5 +1,5 @@
-import { EMAIL_FONT, escapeHtml, renderCtaButton, wrapEmailShell } from "@/lib/emails/shared";
-import { SHARE_MESSAGE_BODY } from "@/lib/share-message";
+import { EMAIL_FONT, escapeHtml, renderCtaButton, wrapEmailShell } from "@shared/emails/shared";
+import { SHARE_MESSAGE_BODY } from "@shared/url/share-message";
 
 export interface InviteEmailParams {
   ctaUrl: string;

@@ -7,7 +7,7 @@ import {
   type StatisticalSignificance,
 } from "@features/admin/server/statistics";
 import { supabaseFetch } from "@features/admin/server/supabase";
-import logger from "@/lib/logger";
+import logger from "@shared/observability/logger";
 
 interface ReleaseRow {
   id: number;

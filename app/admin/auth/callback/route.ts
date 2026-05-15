@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { logAdminAction } from "@features/admin/server/audit";
-import { getClientIp } from "@/lib/ratelimit";
-import logger from "@/lib/logger";
+import { getClientIp } from "@shared/http/ratelimit";
+import logger from "@shared/observability/logger";
 
 /**
  * Creates a Supabase client that reads cookies from the request and writes

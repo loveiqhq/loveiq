@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import { z } from "zod";
-import { verifyCsrfToken } from "@/lib/csrf";
-import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
-import { scheduleAfterResponse } from "@/lib/after-response";
-import logger from "@/lib/logger";
+import { verifyCsrfToken } from "@shared/http/csrf";
+import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
+import { scheduleAfterResponse } from "@shared/http/after-response";
+import logger from "@shared/observability/logger";
 import { reportSharedEmail } from "@features/report/server/emails/report-shared";
 import { reportSharedBEmail } from "@features/report/server/emails/report-shared-b";
 import { reportSharedCEmail } from "@features/report/server/emails/report-shared-c";
-import { pickFromVariants } from "@/lib/emails/ab-variant";
+import { pickFromVariants } from "@shared/emails/ab-variant";
 import {
   canSharePlan,
   getReportPlanByPersonalReportId,

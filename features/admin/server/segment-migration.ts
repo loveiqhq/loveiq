@@ -10,7 +10,7 @@ import {
   type SegmentRules,
 } from "@features/admin/server/segment-evaluator";
 import { supabaseFetch } from "@features/admin/server/supabase";
-import logger from "@/lib/logger";
+import logger from "@shared/observability/logger";
 
 interface SubmissionRow {
   id: number;

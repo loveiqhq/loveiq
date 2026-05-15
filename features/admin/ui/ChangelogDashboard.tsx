@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import AdminCommentsThread from "@features/admin/ui/AdminCommentsThread";
 import ReleaseImpactCenterTab from "@features/admin/ui/ReleaseImpactCenterTab";
 import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
-import { getCsrfToken } from "@/lib/csrf-client";
+import { getCsrfToken } from "@shared/http/csrf-client";
 
 interface ChangelogEntry {
   id: number;

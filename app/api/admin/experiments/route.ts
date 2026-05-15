@@ -11,9 +11,9 @@ import {
 } from "@features/admin/server/experiment-registry";
 import { hasRole } from "@features/admin/server/roles";
 import { supabaseFetch } from "@features/admin/server/supabase";
-import { verifyCsrfToken } from "@/lib/csrf";
-import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
-import logger from "@/lib/logger";
+import { verifyCsrfToken } from "@shared/http/csrf";
+import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
+import logger from "@shared/observability/logger";
 
 const experimentStatusSchema = z.enum(["draft", "active", "paused", "completed", "archived"]);
 const experimentReadoutMethodSchema = z.enum(["conversion-rate", "count-delta", "average-value"]);

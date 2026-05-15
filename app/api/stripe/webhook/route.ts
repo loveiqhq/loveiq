@@ -4,7 +4,7 @@ import {
   getStripeServerClient,
   isStripeCheckoutEnabled,
 } from "@features/checkout/server/stripeCheckout";
-import logger from "@/lib/logger";
+import logger from "@shared/observability/logger";
 
 export const runtime = "nodejs";
 

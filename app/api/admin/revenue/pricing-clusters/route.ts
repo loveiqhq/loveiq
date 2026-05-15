@@ -7,8 +7,8 @@ import {
   REPORT_PURCHASE_PLAN_IDS,
   type ReportPurchasePlanId,
 } from "@features/checkout/server/reportPurchase";
-import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
-import logger from "@/lib/logger";
+import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
+import logger from "@shared/observability/logger";
 
 const querySchema = z.object({
   days: z.coerce.number().int().min(0).max(365).optional(),

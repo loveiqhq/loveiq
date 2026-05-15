@@ -1,15 +1,15 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { isEmailSuppressed, addToSuppression } from "../../../lib/emails/suppression";
+import { isEmailSuppressed, addToSuppression } from "@shared/emails/suppression";
 
-vi.mock("../../../lib/fetch-with-timeout", () => ({
+vi.mock("@shared/http/fetch-with-timeout", () => ({
   fetchWithTimeout: vi.fn(),
 }));
 
-vi.mock("../../../lib/logger", () => ({
+vi.mock("@shared/observability/logger", () => ({
   default: { warn: vi.fn(), error: vi.fn(), info: vi.fn() },
 }));
 
-import { fetchWithTimeout } from "../../../lib/fetch-with-timeout";
+import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 
 const mockFetch = vi.mocked(fetchWithTimeout);
 

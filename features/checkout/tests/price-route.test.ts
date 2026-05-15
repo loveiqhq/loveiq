@@ -1,15 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/lib/csrf", () => ({
+vi.mock("@shared/http/csrf", () => ({
   verifyCsrfToken: vi.fn().mockResolvedValue(true),
 }));
 
-vi.mock("@/lib/ratelimit", () => ({
+vi.mock("@shared/http/ratelimit", () => ({
   checkRateLimit: vi.fn().mockResolvedValue({ allowed: true, remaining: 59, resetAt: new Date() }),
   getClientIp: vi.fn().mockReturnValue("127.0.0.1"),
 }));
 
-vi.mock("@/lib/logger", () => ({
+vi.mock("@shared/observability/logger", () => ({
   default: { error: vi.fn(), warn: vi.fn(), info: vi.fn() },
 }));
 
@@ -19,8 +19,8 @@ vi.mock("@features/pricing/logic/reportPricing", () => ({
 }));
 
 import { GET } from "@/app/api/price/route";
-import { verifyCsrfToken } from "@/lib/csrf";
-import { checkRateLimit } from "@/lib/ratelimit";
+import { verifyCsrfToken } from "@shared/http/csrf";
+import { checkRateLimit } from "@shared/http/ratelimit";
 import {
   getReportPriceQuoteForContext,
   getReportPriceQuotesForContext,

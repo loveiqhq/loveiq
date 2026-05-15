@@ -1,4 +1,4 @@
-import { EMAIL_FONT, escapeHtml, renderCtaButton, wrapEmailShell } from "@/lib/emails/shared";
+import { EMAIL_FONT, escapeHtml, renderCtaButton, wrapEmailShell } from "@shared/emails/shared";
 
 export interface ReportSharedEmailParams {
   ownerFirstName?: string | null;

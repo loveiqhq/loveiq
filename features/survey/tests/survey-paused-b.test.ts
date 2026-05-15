@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { surveyPausedBEmail } from "../../../lib/emails/survey-paused-b";
+import { surveyPausedBEmail } from "@features/survey/server/emails/survey-paused-b";
 
 const SITE_URL = "https://loveiq.org";
 const RESUME_URL = "https://loveiq.org/survey?session=abc";

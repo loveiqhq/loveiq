@@ -9,7 +9,7 @@ import ConfirmDialog from "./ConfirmDialog";
 import JourneyTimeline from "./JourneyTimeline";
 import NotesSection from "./NotesSection";
 import UserFunnelCard from "./UserFunnelCard";
-import { getCsrfToken } from "@/lib/csrf-client";
+import { getCsrfToken } from "@shared/http/csrf-client";
 import { maskEmail } from "@features/admin/server/format";
 
 /**

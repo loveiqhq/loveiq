@@ -1,10 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
 
-vi.mock("../../lib/logger", () => ({
+vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
-import { getBreaker, CircuitOpenError } from "../../lib/circuit-breaker";
+import { getBreaker, CircuitOpenError } from "@shared/http/circuit-breaker";
 
 // Each test uses a unique breaker name to get a fresh instance from the module singleton.
 

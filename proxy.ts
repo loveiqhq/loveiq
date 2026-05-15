@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { createSupabaseMiddleware } from "./lib/supabase-middleware";
-import logger from "./lib/logger";
+import { createSupabaseMiddleware } from "@shared/auth/supabase-middleware";
+import logger from "@shared/observability/logger";
 
 const isProduction = process.env.NODE_ENV === "production";
 const CSRF_COOKIE_NAME = isProduction ? "__Host-csrf" : "__csrf";

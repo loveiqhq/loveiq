@@ -3,7 +3,7 @@
 import { useEffect, useRef, useCallback } from "react";
 import type { AnswerValue } from "./useSurveyState";
 import { getSessionId } from "./surveySession";
-import { getCsrfToken } from "@/lib/csrf-client";
+import { getCsrfToken } from "@shared/http/csrf-client";
 
 export function usePartialSave(
   answers: Record<string, AnswerValue>,

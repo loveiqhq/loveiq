@@ -5,7 +5,7 @@ vi.mock("next/headers", () => ({
   cookies: vi.fn(),
 }));
 
-import { verifyCsrfToken } from "../../lib/csrf";
+import { verifyCsrfToken } from "@shared/http/csrf";
 import { cookies } from "next/headers";
 
 const mockedCookies = vi.mocked(cookies);

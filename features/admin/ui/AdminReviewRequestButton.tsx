@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { AdminReviewResourceType } from "@features/admin/server/reviews";
-import { getCsrfToken } from "@/lib/csrf-client";
+import { getCsrfToken } from "@shared/http/csrf-client";
 
 type ImpactLevel = "low" | "medium" | "high" | "critical";
 

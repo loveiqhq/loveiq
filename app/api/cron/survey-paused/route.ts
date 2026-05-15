@@ -16,15 +16,15 @@
 import { timingSafeEqual } from "crypto";
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
-import { checkCooldown } from "@/lib/ratelimit";
-import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
-import { getBreaker } from "@/lib/circuit-breaker";
-import logger from "@/lib/logger";
-import { surveyPausedEmail } from "@/lib/emails/survey-paused";
-import { surveyPausedBEmail } from "@/lib/emails/survey-paused-b";
-import { pickEmailVariant } from "@/lib/emails/ab-variant";
-import { buildUnsubscribeUrl } from "@/lib/emails/unsubscribe-token";
-import { isEmailSuppressed } from "@/lib/emails/suppression";
+import { checkCooldown } from "@shared/http/ratelimit";
+import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
+import { getBreaker } from "@shared/http/circuit-breaker";
+import logger from "@shared/observability/logger";
+import { surveyPausedEmail } from "@features/survey/server/emails/survey-paused";
+import { surveyPausedBEmail } from "@features/survey/server/emails/survey-paused-b";
+import { pickEmailVariant } from "@shared/emails/ab-variant";
+import { buildUnsubscribeUrl } from "@shared/emails/unsubscribe-token";
+import { isEmailSuppressed } from "@shared/emails/suppression";
 import { getSurveyContactInfo } from "@features/survey/server/utils";
 import type { SurveyAnswers } from "@features/survey/server/types";
 

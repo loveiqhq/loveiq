@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
-import { getCsrfToken } from "@/lib/csrf-client";
+import { getCsrfToken } from "@shared/http/csrf-client";
 
 type AudienceRole = "leadership" | "strategy" | "product" | "growth" | "tech" | "ops" | "research";
 type Cadence = "daily" | "weekly" | "monthly";

@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import AdminCommentsThread from "@features/admin/ui/AdminCommentsThread";
 import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
-import { getCsrfToken } from "@/lib/csrf-client";
-import { safeHref } from "@/lib/safe-href";
+import { getCsrfToken } from "@shared/http/csrf-client";
+import { safeHref } from "@shared/url/safe-href";
 
 export type ResearchRepositoryDraftInput = {
   title: string;

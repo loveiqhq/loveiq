@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { getCsrfToken } from "@/lib/csrf-client";
+import { getCsrfToken } from "@shared/http/csrf-client";
 import EmbeddedIntelligencePanel from "@features/admin/ui/EmbeddedIntelligencePanel";
 import AdminKnowledgePanel from "@features/admin/ui/AdminKnowledgePanel";
 import AdminSignalGraphPanel from "@features/admin/ui/AdminSignalGraphPanel";

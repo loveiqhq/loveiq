@@ -6,7 +6,7 @@ import EmbeddedIntelligencePanel from "@features/admin/ui/EmbeddedIntelligencePa
 import AdminSimulationPanel from "@features/admin/ui/AdminSimulationPanel";
 import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
 import KpiDataTable, { type Column } from "@features/admin/ui/kpi-tabs/KpiDataTable";
-import { getCsrfToken } from "@/lib/csrf-client";
+import { getCsrfToken } from "@shared/http/csrf-client";
 
 type ExperimentStatus = "draft" | "active" | "paused" | "completed" | "archived";
 type ExperimentConfidence = "high" | "medium" | "low";

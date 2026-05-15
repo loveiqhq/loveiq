@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pickEmailVariant, pickFromVariants } from "../../../lib/emails/ab-variant";
+import { pickEmailVariant, pickFromVariants } from "@shared/emails/ab-variant";
 
 describe("pickEmailVariant", () => {
   it("returns the same variant for the same key + experiment", () => {

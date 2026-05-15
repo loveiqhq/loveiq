@@ -1,4 +1,4 @@
-import { getCsrfToken } from "@/lib/csrf-client";
+import { getCsrfToken } from "@shared/http/csrf-client";
 
 type GTag = (command: "event", eventName: string, params?: Record<string, unknown>) => void;
 type ConsentCategory = "analytics" | "advertisement";

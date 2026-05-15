@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { getCsrfToken } from "@/lib/csrf-client";
+import { getCsrfToken } from "@shared/http/csrf-client";
 import { LoveIQMark, LoveIQWordmark } from "@/components/branding/LoveIQBrand";
 
 type Status = "idle" | "sending" | "sent" | "error";

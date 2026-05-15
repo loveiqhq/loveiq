@@ -11,7 +11,7 @@ import {
 } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { reportSections } from "@/data/report-general";
-import { escapeHtml } from "@/lib/html-escape";
+import { escapeHtml } from "@shared/format/html-escape";
 import { cacheReportCheckoutQuote } from "@features/checkout/server/reportCheckoutQuoteCache";
 import {
   buildReportCheckoutHref,

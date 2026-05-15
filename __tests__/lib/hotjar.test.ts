@@ -22,7 +22,7 @@ afterEach(() => {
 });
 
 async function loadModule() {
-  return await import("@/lib/hotjar");
+  return await import("@shared/observability/hotjar");
 }
 
 describe("readHotjarUserId", () => {

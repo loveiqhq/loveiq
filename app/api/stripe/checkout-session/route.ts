@@ -14,14 +14,14 @@ import {
   type StripeCheckoutSessionResponse,
 } from "@features/checkout/server/stripeCheckout";
 import { getReportPurchasePlan } from "@features/checkout/server/reportPurchase";
-import { verifyCsrfToken } from "@/lib/csrf";
-import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
+import { verifyCsrfToken } from "@shared/http/csrf";
+import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import {
   getReportAccessPlanForSubmission,
   resolveSubmissionAccessContext,
 } from "@features/report/server/personalReport";
 import { isPlanOwnedForArchetype } from "@features/report/server/access";
-import logger from "@/lib/logger";
+import logger from "@shared/observability/logger";
 import {
   getReportPriceQuoteForContext,
   markReportPriceQuoteCheckoutStarted,

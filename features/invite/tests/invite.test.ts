@@ -1,17 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockCheckRateLimit = vi.fn();
-vi.mock("@/lib/ratelimit", () => ({
+vi.mock("@shared/http/ratelimit", () => ({
   checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
   getClientIp: vi.fn().mockReturnValue("127.0.0.1"),
 }));
 
 const mockVerifyCsrfToken = vi.fn();
-vi.mock("@/lib/csrf", () => ({
+vi.mock("@shared/http/csrf", () => ({
   verifyCsrfToken: (...args: unknown[]) => mockVerifyCsrfToken(...(args as [])),
 }));
 
-vi.mock("@/lib/after-response", () => ({
+vi.mock("@shared/http/after-response", () => ({
   scheduleAfterResponse: vi.fn(),
 }));
 
@@ -29,28 +29,29 @@ vi.mock("@features/invite/emails/invite-b", () => ({
   inviteBEmail: vi.fn().mockReturnValue({ subject: "s", html: "<p>h</p>", text: "t" }),
 }));
 
-vi.mock("@/lib/emails/unsubscribe-token", () => ({
+vi.mock("@shared/emails/unsubscribe-token", () => ({
   buildUnsubscribeUrl: vi.fn().mockReturnValue("https://example.test/unsub"),
 }));
 
-vi.mock("@/lib/emails/ab-variant", () => ({
+vi.mock("@shared/emails/ab-variant", () => ({
   pickEmailVariant: vi.fn().mockReturnValue("a"),
 }));
 
-vi.mock("@/lib/fetch-with-timeout", () => ({
+vi.mock("@shared/http/fetch-with-timeout", () => ({
   fetchWithTimeout: vi.fn().mockResolvedValue({ ok: true, status: 201 }),
 }));
 
-vi.mock("@/lib/circuit-breaker", async () => {
-  const actual =
-    await vi.importActual<typeof import("@/lib/circuit-breaker")>("@/lib/circuit-breaker");
+vi.mock("@shared/http/circuit-breaker", async () => {
+  const actual = await vi.importActual<typeof import("@shared/http/circuit-breaker")>(
+    "@shared/http/circuit-breaker"
+  );
   return {
     ...actual,
     getBreaker: () => ({ fire: (fn: () => Promise<unknown>) => fn() }),
   };
 });
 
-vi.mock("@/lib/logger", () => ({
+vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 

@@ -1,7 +1,7 @@
 import Stripe from "stripe";
 import type { ReportAccessPlan } from "@features/report/server/access";
-import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
-import logger from "@/lib/logger";
+import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
+import logger from "@shared/observability/logger";
 
 // Pinning the API version makes Stripe API changes deterministic — they cannot
 // silently shift behavior on us between SDK upgrades.

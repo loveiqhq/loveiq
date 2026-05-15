@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { fetchWithTimeout } from "../../lib/fetch-with-timeout";
+import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 
 describe("fetchWithTimeout", () => {
   const originalFetch = globalThis.fetch;

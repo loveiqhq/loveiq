@@ -6,7 +6,7 @@ import {
   type QuestionEffectivenessQuestion,
 } from "@features/admin/server/question-effectiveness";
 import { supabaseFetch } from "@features/admin/server/supabase";
-import logger from "@/lib/logger";
+import logger from "@shared/observability/logger";
 
 const NEGATIVE_TERMS = [
   "pain",

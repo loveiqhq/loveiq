@@ -10,7 +10,7 @@ import {
 import { clampDays } from "@features/admin/server/next-level";
 import { buildStrategySnapshot } from "@features/admin/server/strategy";
 import { supabaseFetch } from "@features/admin/server/supabase";
-import logger from "@/lib/logger";
+import logger from "@shared/observability/logger";
 
 export type MetricStatusState = "on-track" | "watch" | "off-track" | "critical";
 

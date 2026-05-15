@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { captureUtmFromUrl, getStoredUtm, GLOBAL_UTM_KEY, LEGACY_UTM_KEY } from "../../lib/utm";
+import { captureUtmFromUrl, getStoredUtm, GLOBAL_UTM_KEY, LEGACY_UTM_KEY } from "@shared/url/utm";
 
 describe("lib/utm", () => {
   let store: Record<string, string>;

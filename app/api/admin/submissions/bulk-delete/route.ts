@@ -19,9 +19,9 @@ import { logAdminAction } from "@features/admin/server/audit";
 import { deleteSubmissionCascade } from "@features/admin/server/delete-submission";
 import { evaluateTestSubmission } from "@features/admin/server/test-submission";
 import { supabaseFetch } from "@features/admin/server/supabase";
-import { verifyCsrfToken } from "@/lib/csrf";
-import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
-import logger from "@/lib/logger";
+import { verifyCsrfToken } from "@shared/http/csrf";
+import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
+import logger from "@shared/observability/logger";
 
 const bodySchema = z.object({
   ids: z.array(z.number().int().positive()).min(1).max(100),

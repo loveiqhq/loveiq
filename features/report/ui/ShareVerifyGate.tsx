@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FC, type FormEvent } from "react";
-import { getCsrfToken } from "@/lib/csrf-client";
+import { getCsrfToken } from "@shared/http/csrf-client";
 
 interface Props {
   shareToken: string;

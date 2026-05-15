@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { captureUtmFromUrl } from "@/lib/utm";
+import { captureUtmFromUrl } from "@shared/url/utm";
 
 /**
  * Invisible client component that captures UTM parameters from the URL

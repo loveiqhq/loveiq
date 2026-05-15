@@ -6,7 +6,7 @@ import {
   sourceLabel,
 } from "@features/admin/server/next-level";
 import { supabaseFetch } from "@features/admin/server/supabase";
-import logger from "@/lib/logger";
+import logger from "@shared/observability/logger";
 
 interface SubmissionRow {
   id: number;

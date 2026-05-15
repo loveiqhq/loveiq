@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
-import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
-import { getBreaker, CircuitOpenError } from "@/lib/circuit-breaker";
-import { verifyCsrfToken, verifyCsrfTokenFromBody } from "@/lib/csrf";
-import logger from "@/lib/logger";
+import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
+import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
+import { getBreaker, CircuitOpenError } from "@shared/http/circuit-breaker";
+import { verifyCsrfToken, verifyCsrfTokenFromBody } from "@shared/http/csrf";
+import logger from "@shared/observability/logger";
 
 const eventSchema = z.object({
   sessionId: z.string().uuid(),

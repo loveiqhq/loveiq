@@ -21,14 +21,14 @@
 import { timingSafeEqual } from "crypto";
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
-import { checkCooldown } from "@/lib/ratelimit";
-import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
-import { getBreaker } from "@/lib/circuit-breaker";
-import logger from "@/lib/logger";
+import { checkCooldown } from "@shared/http/ratelimit";
+import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
+import { getBreaker } from "@shared/http/circuit-breaker";
+import logger from "@shared/observability/logger";
 import { inviteReminder1Email } from "@features/invite/emails/invite-reminder-1";
 import { inviteReminder2Email } from "@features/invite/emails/invite-reminder-2";
-import { buildUnsubscribeUrl } from "@/lib/emails/unsubscribe-token";
-import { isEmailSuppressed } from "@/lib/emails/suppression";
+import { buildUnsubscribeUrl } from "@shared/emails/unsubscribe-token";
+import { isEmailSuppressed } from "@shared/emails/suppression";
 
 function safeCompare(a: string, b: string): boolean {
   const aBuf = Buffer.from(a);

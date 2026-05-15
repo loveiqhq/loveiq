@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { surveyCompleteBEmail } from "../../../lib/emails/survey-complete-b";
+import { surveyCompleteBEmail } from "@features/survey/server/emails/survey-complete-b";
 
 const SITE_URL = "https://loveiq.org";
 const REPORT_URL = "https://loveiq.org/report/abc";

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useAdminFetch } from "./hooks/useAdminFetch";
-import { getCsrfToken } from "@/lib/csrf-client";
+import { getCsrfToken } from "@shared/http/csrf-client";
 import { maskEmail } from "@features/admin/server/format";
 
 interface Note {

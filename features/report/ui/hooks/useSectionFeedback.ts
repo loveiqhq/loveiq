@@ -1,7 +1,7 @@
 "use client";
 
 import { startTransition, useCallback, useState } from "react";
-import { getCsrfToken } from "@/lib/csrf-client";
+import { getCsrfToken } from "@shared/http/csrf-client";
 
 type FeedbackValue = "up" | "down" | null;
 

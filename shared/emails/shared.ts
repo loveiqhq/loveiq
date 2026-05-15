@@ -8,9 +8,9 @@ export function buildArchetypeReportUrl(reportUrl: string, archetypeSlug: string
 }
 
 // Re-export from the shared util so existing email-template imports keep
-// working. Use `@/lib/html-escape` for new call sites — emails should not be
+// working. Use `@shared/format/html-escape` for new call sites — emails should not be
 // the canonical location for a generic HTML helper.
-import { escapeHtml } from "@/lib/html-escape";
+import { escapeHtml } from "@shared/format/html-escape";
 export { escapeHtml };
 
 export function renderBrandHeader(siteUrl: string): string {

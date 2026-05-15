@@ -1,6 +1,6 @@
 import { ADMIN_METRIC_OPTIONS } from "@features/admin/server/metric-library";
 import { supabaseFetch } from "@features/admin/server/supabase";
-import logger from "@/lib/logger";
+import logger from "@shared/observability/logger";
 
 export type InitiativeStatus = "planned" | "active" | "watch" | "blocked" | "completed";
 export type InitiativePriority = "low" | "medium" | "high";

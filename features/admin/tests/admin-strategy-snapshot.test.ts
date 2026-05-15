@@ -17,7 +17,7 @@ vi.mock("@features/admin/server/forecasting", () => ({
   buildForecastSnapshot: (...args: unknown[]) => mockBuildForecastSnapshot(...args),
 }));
 
-vi.mock("@/lib/logger", () => ({
+vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 

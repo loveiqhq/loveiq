@@ -7,8 +7,8 @@ import {
   SCORING_PENDING_REASON,
 } from "@features/admin/server/submission-scoring";
 import { supabaseFetch } from "@features/admin/server/supabase";
-import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
-import logger from "@/lib/logger";
+import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
+import logger from "@shared/observability/logger";
 import {
   buildPartialSubmissionRecord,
   type SurveyPartialRow,

@@ -4,7 +4,7 @@ import { useState } from "react";
 import AdminCommentsThread from "@features/admin/ui/AdminCommentsThread";
 import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
 import type { AdminReviewResourceType } from "@features/admin/server/reviews";
-import { getCsrfToken } from "@/lib/csrf-client";
+import { getCsrfToken } from "@shared/http/csrf-client";
 
 type ReviewStatus = "requested" | "in-review" | "approved" | "changes-requested" | "rejected";
 type ImpactLevel = "low" | "medium" | "high" | "critical";

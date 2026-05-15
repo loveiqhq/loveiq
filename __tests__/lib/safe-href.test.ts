@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { safeHref } from "@/lib/safe-href";
+import { safeHref } from "@shared/url/safe-href";
 
 // React does not block `javascript:` URLs in href — `safeHref` is the
 // gate that prevents admin-vs-admin XSS via stored URL fields. Every

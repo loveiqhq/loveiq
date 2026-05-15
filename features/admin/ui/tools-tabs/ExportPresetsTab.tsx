@@ -1,7 +1,7 @@
 "use client";
 
 import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
-import { getCsrfToken } from "@/lib/csrf-client";
+import { getCsrfToken } from "@shared/http/csrf-client";
 import { maskEmail } from "@features/admin/server/format";
 
 interface ExportPreset {

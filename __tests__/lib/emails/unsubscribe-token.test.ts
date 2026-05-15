@@ -3,7 +3,7 @@ import {
   buildUnsubscribeUrl,
   generateUnsubscribeToken,
   verifyUnsubscribeToken,
-} from "../../../lib/emails/unsubscribe-token";
+} from "@shared/emails/unsubscribe-token";
 
 describe("unsubscribe token", () => {
   const secret = "test-secret-32-bytes-long-enough!";

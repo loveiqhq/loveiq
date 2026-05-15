@@ -5,7 +5,7 @@ import AdminCommentsThread from "@features/admin/ui/AdminCommentsThread";
 import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
 import StatCard from "@features/admin/ui/StatCard";
 import type { AdminReviewResourceType } from "@features/admin/server/reviews";
-import { getCsrfToken } from "@/lib/csrf-client";
+import { getCsrfToken } from "@shared/http/csrf-client";
 import type {
   BetConfidence,
   BetStatus,

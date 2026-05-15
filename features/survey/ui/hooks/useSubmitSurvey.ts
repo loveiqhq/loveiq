@@ -2,12 +2,12 @@
 
 import { useState, useCallback } from "react";
 import { surveyQuestions } from "@/data/survey-data";
-import { getCsrfToken } from "@/lib/csrf-client";
+import { getCsrfToken } from "@shared/http/csrf-client";
 import type { SurveyAnswers } from "@features/survey/server/types";
 import { getSurveyContactInfo } from "@features/survey/server/utils";
 import type { AnswerValue } from "./useSurveyState";
 import { getSessionId, setReportSessionId } from "./surveySession";
-import { readHotjarUserId } from "@/lib/hotjar";
+import { readHotjarUserId } from "@shared/observability/hotjar";
 import {
   clearPendingCompletion,
   loadPendingCompletion,

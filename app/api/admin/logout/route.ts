@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { verifyCsrfToken } from "@/lib/csrf";
-import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
+import { verifyCsrfToken } from "@shared/http/csrf";
+import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import { createSupabaseServer } from "@features/admin/server/supabase-server";
 
 export async function POST(request: Request) {

@@ -8,7 +8,7 @@ import {
 import { fetchMetricValue, loadBenchmarkDefinitions } from "@features/admin/server/metric-library";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { WORKFLOW_TAGS, isWorkflowTagName } from "@features/admin/server/workflow-tags";
-import logger from "@/lib/logger";
+import logger from "@shared/observability/logger";
 import {
   LEAKAGE_HINTS,
   PREDICTION_LABELS,

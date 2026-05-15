@@ -12,7 +12,7 @@ import type {
   RecoveryPlaybookSnapshot,
   RecoverySource,
 } from "@features/admin/server/recovery-playbook";
-import { getCsrfToken } from "@/lib/csrf-client";
+import { getCsrfToken } from "@shared/http/csrf-client";
 
 const cohortColumns: Column<RecoveryCohortRow>[] = [
   { key: "week", label: "First-Touch Week" },

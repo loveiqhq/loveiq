@@ -6,7 +6,7 @@ vi.mock("@features/admin/server/auth", () => ({
 }));
 
 const mockCheckRateLimit = vi.fn();
-vi.mock("@/lib/ratelimit", () => ({
+vi.mock("@shared/http/ratelimit", () => ({
   checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
   getClientIp: vi.fn().mockReturnValue("127.0.0.1"),
 }));
@@ -23,7 +23,7 @@ vi.mock("@features/admin/server/resilience-intelligence", async () => {
   };
 });
 
-vi.mock("@/lib/logger", () => ({
+vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 

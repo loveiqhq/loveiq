@@ -1,6 +1,6 @@
 import { parseUtmSource } from "@features/admin/server/metric-library";
 import { supabaseFetch } from "@features/admin/server/supabase";
-import logger from "@/lib/logger";
+import logger from "@shared/observability/logger";
 
 type Confidence = "high" | "medium" | "low";
 type Trend = "up" | "down" | "stable";

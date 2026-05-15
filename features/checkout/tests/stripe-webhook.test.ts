@@ -5,7 +5,7 @@ const mockConstructEvent = vi.fn();
 const mockIsStripeCheckoutEnabled = vi.fn();
 const mockGetStripeServerClient = vi.fn();
 
-vi.mock("@/lib/logger", () => ({
+vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), error: vi.fn() },
 }));
 

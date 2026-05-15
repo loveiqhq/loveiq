@@ -2,7 +2,7 @@ import { clampDays } from "@features/admin/server/next-level";
 import { buildStrategySnapshot } from "@features/admin/server/strategy";
 import { buildHealthStatusSnapshot } from "@features/admin/server/health";
 import { supabaseFetch } from "@features/admin/server/supabase";
-import logger from "@/lib/logger";
+import logger from "@shared/observability/logger";
 import type {
   AdminAlertRule,
   AdminAnomalyItem,

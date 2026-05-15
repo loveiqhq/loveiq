@@ -4,7 +4,7 @@ import {
   fetchMetricValue,
 } from "@features/admin/server/metric-library";
 import { supabaseFetch } from "@features/admin/server/supabase";
-import logger from "@/lib/logger";
+import logger from "@shared/observability/logger";
 
 export type MetricStewardshipRole = "strategy" | "product" | "growth" | "tech" | "ops";
 export type MetricRegistryStatus = "draft" | "active" | "watch" | "deprecated";

@@ -3,7 +3,7 @@ import { ADMIN_METRIC_OPTIONS } from "@features/admin/server/metric-library";
 import { buildMetricStatusSnapshot } from "@features/admin/server/metric-status";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { buildStrategySnapshot } from "@features/admin/server/strategy";
-import logger from "@/lib/logger";
+import logger from "@shared/observability/logger";
 import type {
   AdminActionItem,
   AdminActionPriority,

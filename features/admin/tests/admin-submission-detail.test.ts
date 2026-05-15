@@ -17,17 +17,17 @@ vi.mock("@features/admin/server/supabase", () => ({
 }));
 
 const mockVerifyCsrf = vi.fn<() => Promise<boolean>>();
-vi.mock("@/lib/csrf", () => ({
+vi.mock("@shared/http/csrf", () => ({
   verifyCsrfToken: (...args: unknown[]) => mockVerifyCsrf(...(args as [])),
 }));
 
 const mockCheckRateLimit = vi.fn();
-vi.mock("@/lib/ratelimit", () => ({
+vi.mock("@shared/http/ratelimit", () => ({
   checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
   getClientIp: vi.fn().mockReturnValue("127.0.0.1"),
 }));
 
-vi.mock("@/lib/logger", () => ({
+vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 

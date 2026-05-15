@@ -2,12 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockFetchWithTimeout = vi.fn();
 
-vi.mock("@/lib/fetch-with-timeout", () => ({
+vi.mock("@shared/http/fetch-with-timeout", () => ({
   fetchWithTimeout: (...args: Parameters<typeof mockFetchWithTimeout>) =>
     mockFetchWithTimeout(...args),
 }));
 
-vi.mock("@/lib/circuit-breaker", () => ({
+vi.mock("@shared/http/circuit-breaker", () => ({
   getBreaker: () => ({ fire: (fn: () => Promise<unknown>) => fn() }),
 }));
 

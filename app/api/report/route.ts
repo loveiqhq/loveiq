@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { scheduleAfterResponse } from "@/lib/after-response";
-import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
-import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
-import { getBreaker, CircuitOpenError } from "@/lib/circuit-breaker";
-import { verifyCsrfToken } from "@/lib/csrf";
+import { scheduleAfterResponse } from "@shared/http/after-response";
+import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
+import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
+import { getBreaker, CircuitOpenError } from "@shared/http/circuit-breaker";
+import { verifyCsrfToken } from "@shared/http/csrf";
 import {
   ensurePersonalReportForSubmission,
   getReportAccessPlanForSubmission,
@@ -17,7 +17,7 @@ import {
   buildArchetypeContentForUser,
   buildPracticeTendenciesForUser,
 } from "@features/report/server/contentGating";
-import logger from "@/lib/logger";
+import logger from "@shared/observability/logger";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import type { ReportPurchasePlanId } from "@features/checkout/server/reportPurchase";
 import {

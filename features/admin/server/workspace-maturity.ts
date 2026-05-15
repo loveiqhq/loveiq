@@ -4,7 +4,7 @@ import {
 } from "@features/admin/server/dashboard-subscriptions";
 import { fetchMetricRegistryEntries } from "@features/admin/server/metric-registry";
 import { supabaseFetch } from "@features/admin/server/supabase";
-import logger from "@/lib/logger";
+import logger from "@shared/observability/logger";
 
 type MaturityBand = "foundational" | "developing" | "advanced" | "elite";
 type DimensionTone = "weak" | "medium" | "strong";

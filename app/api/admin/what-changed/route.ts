@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { verifyAdminSession } from "@features/admin/server/auth";
 import { buildWhatChangedSnapshot } from "@features/admin/server/release-impact";
 import { hasRole } from "@features/admin/server/roles";
-import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
-import logger from "@/lib/logger";
+import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
+import logger from "@shared/observability/logger";
 
 export async function GET(request: Request) {
   const admin = await verifyAdminSession();

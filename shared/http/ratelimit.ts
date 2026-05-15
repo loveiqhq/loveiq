@@ -9,7 +9,7 @@
  */
 
 import { Redis } from "@upstash/redis";
-import logger from "./logger";
+import logger from "@shared/observability/logger";
 
 // Initialize Redis client from Vercel KV env vars
 let redis: Redis | null = null;

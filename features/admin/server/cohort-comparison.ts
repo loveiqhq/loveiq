@@ -3,7 +3,7 @@ import { clampDays, round1 } from "@features/admin/server/next-level";
 import { buildReleaseImpactSnapshot } from "@features/admin/server/release-impact";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import type { StatisticalSignificance } from "@features/admin/server/statistics";
-import logger from "@/lib/logger";
+import logger from "@shared/observability/logger";
 
 type ComparisonTone = "good" | "watch" | "risk" | "neutral";
 

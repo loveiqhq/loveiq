@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import { z } from "zod";
-import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
-import { scheduleAfterResponse } from "@/lib/after-response";
-import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
-import { getBreaker, CircuitOpenError } from "@/lib/circuit-breaker";
-import { verifyCsrfToken } from "@/lib/csrf";
-import logger from "@/lib/logger";
+import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
+import { scheduleAfterResponse } from "@shared/http/after-response";
+import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
+import { getBreaker, CircuitOpenError } from "@shared/http/circuit-breaker";
+import { verifyCsrfToken } from "@shared/http/csrf";
+import logger from "@shared/observability/logger";
 
 const RESEND_TIMEOUT_MS = 5_000;
 

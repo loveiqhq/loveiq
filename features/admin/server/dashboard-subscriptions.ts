@@ -1,5 +1,5 @@
 import { supabaseFetch } from "@features/admin/server/supabase";
-import logger from "@/lib/logger";
+import logger from "@shared/observability/logger";
 
 export type DashboardSubscriptionCadence = "daily" | "weekly" | "monthly";
 export type DashboardSubscriptionAudience =

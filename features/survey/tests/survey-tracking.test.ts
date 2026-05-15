@@ -2,32 +2,32 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // Mock dependencies
 const mockFetchWithTimeout = vi.fn();
-vi.mock("@/lib/fetch-with-timeout", () => ({
+vi.mock("@shared/http/fetch-with-timeout", () => ({
   fetchWithTimeout: (...args: unknown[]) => mockFetchWithTimeout(...args),
 }));
 
-vi.mock("@/lib/circuit-breaker", () => ({
+vi.mock("@shared/http/circuit-breaker", () => ({
   getBreaker: () => ({ fire: (fn: () => Promise<unknown>) => fn() }),
   CircuitOpenError: class CircuitOpenError extends Error {},
 }));
 
-vi.mock("@/lib/csrf", () => ({
+vi.mock("@shared/http/csrf", () => ({
   verifyCsrfToken: vi.fn().mockResolvedValue(true),
   verifyCsrfTokenFromBody: vi.fn().mockResolvedValue(true),
 }));
 
-vi.mock("@/lib/ratelimit", () => ({
+vi.mock("@shared/http/ratelimit", () => ({
   checkRateLimit: vi.fn().mockResolvedValue({ allowed: true, remaining: 29, resetAt: new Date() }),
   getClientIp: vi.fn().mockReturnValue("127.0.0.1"),
 }));
 
-vi.mock("@/lib/logger", () => ({
+vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
 import { POST } from "@/app/api/survey-tracking/route";
-import { verifyCsrfToken } from "@/lib/csrf";
-import { checkRateLimit } from "@/lib/ratelimit";
+import { verifyCsrfToken } from "@shared/http/csrf";
+import { checkRateLimit } from "@shared/http/ratelimit";
 
 function makeRequest(body: unknown, csrfHeader = "valid-token") {
   return new Request("http://localhost/api/survey-tracking", {
@@ -76,7 +76,7 @@ describe("POST /api/survey-tracking", () => {
 
   it("returns 403 when CSRF fails", async () => {
     vi.mocked(verifyCsrfToken).mockResolvedValue(false);
-    const { verifyCsrfTokenFromBody } = await import("@/lib/csrf");
+    const { verifyCsrfTokenFromBody } = await import("@shared/http/csrf");
     vi.mocked(verifyCsrfTokenFromBody).mockResolvedValue(false);
 
     const res = await POST(makeRequest({ events: [validEvent()] }));

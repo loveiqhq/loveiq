@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockCheckRateLimit = vi.fn();
-vi.mock("@/lib/ratelimit", () => ({
+vi.mock("@shared/http/ratelimit", () => ({
   checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
   getClientIp: vi.fn().mockReturnValue("127.0.0.1"),
 }));
 
 const mockVerifyCsrfToken = vi.fn();
-vi.mock("@/lib/csrf", () => ({
+vi.mock("@shared/http/csrf", () => ({
   verifyCsrfToken: (...args: unknown[]) => mockVerifyCsrfToken(...(args as [])),
 }));
 

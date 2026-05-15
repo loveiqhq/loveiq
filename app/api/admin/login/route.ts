@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
-import { verifyCsrfToken } from "@/lib/csrf";
-import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
+import { verifyCsrfToken } from "@shared/http/csrf";
+import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { adminMagicLinkEmail } from "@features/admin/server/emails/admin-magic-link";
-import logger from "@/lib/logger";
+import logger from "@shared/observability/logger";
 import { z } from "zod";
 
 let _resend: Resend | null = null;

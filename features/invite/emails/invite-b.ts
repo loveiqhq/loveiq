@@ -1,4 +1,4 @@
-import { EMAIL_FONT, escapeHtml, renderCtaButton, wrapEmailShell } from "@/lib/emails/shared";
+import { EMAIL_FONT, escapeHtml, renderCtaButton, wrapEmailShell } from "@shared/emails/shared";
 
 /**
  * Friend referral / invite — Variant B (Figma node 5319-1846).

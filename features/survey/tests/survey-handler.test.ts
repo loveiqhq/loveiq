@@ -2,30 +2,30 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // --- Mocks (must be before imports) ---
 
-vi.mock("@/lib/logger", () => ({
+vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
 const mockVerifyCsrf = vi.fn<() => Promise<boolean>>();
-vi.mock("@/lib/csrf", () => ({
+vi.mock("@shared/http/csrf", () => ({
   verifyCsrfToken: (...args: unknown[]) => mockVerifyCsrf(...(args as [])),
 }));
 
 const mockCheckRateLimit = vi.fn();
 const mockCheckCooldown = vi.fn();
 const mockGetClientIp = vi.fn();
-vi.mock("@/lib/ratelimit", () => ({
+vi.mock("@shared/http/ratelimit", () => ({
   checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
   checkCooldown: (...args: unknown[]) => mockCheckCooldown(...args),
   getClientIp: (...args: unknown[]) => mockGetClientIp(...args),
 }));
 
 const mockFetchWithTimeout = vi.fn();
-vi.mock("@/lib/fetch-with-timeout", () => ({
+vi.mock("@shared/http/fetch-with-timeout", () => ({
   fetchWithTimeout: (...args: unknown[]) => mockFetchWithTimeout(...args),
 }));
 
-vi.mock("@/lib/circuit-breaker", () => ({
+vi.mock("@shared/http/circuit-breaker", () => ({
   getBreaker: () => ({ fire: (fn: () => Promise<unknown>) => fn() }),
   CircuitOpenError: class CircuitOpenError extends Error {},
 }));

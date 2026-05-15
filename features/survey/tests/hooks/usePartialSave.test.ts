@@ -9,7 +9,7 @@ vi.mock("@features/survey/ui/hooks/surveySession", () => ({
 }));
 
 // Mock csrf-client
-vi.mock("../../../../lib/csrf-client", () => ({
+vi.mock("@shared/http/csrf-client", () => ({
   getCsrfToken: vi.fn(() => "mock-csrf-token"),
 }));
 

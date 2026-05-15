@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { Webhook } from "svix";
-import { addToSuppression } from "@/lib/emails/suppression";
-import logger from "@/lib/logger";
+import { addToSuppression } from "@shared/emails/suppression";
+import logger from "@shared/observability/logger";
 
 export const runtime = "nodejs";
 

@@ -13,7 +13,7 @@ vi.stubGlobal("crypto", {
 });
 
 // Mock pino logger (path relative to THIS test file)
-vi.mock("../lib/logger", () => ({
+vi.mock("@shared/observability/logger", () => ({
   default: {
     info: vi.fn(),
     warn: vi.fn(),
@@ -46,7 +46,7 @@ vi.mock("next/server", () => {
 });
 
 import { proxy } from "../proxy";
-import logger from "../lib/logger";
+import logger from "@shared/observability/logger";
 
 function makeNextRequest(url = "http://localhost:3000/", cookieValue?: string) {
   // Use a real Headers object so `new Headers(request.headers)` works

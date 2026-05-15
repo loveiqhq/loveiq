@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback, type FC } from "react";
-import { getCsrfToken } from "@/lib/csrf-client";
+import { getCsrfToken } from "@shared/http/csrf-client";
 import { trackSurveyInvite } from "@features/analytics/client";
-import { SHARE_MESSAGE_BODY, buildShareMessage } from "@/lib/share-message";
+import { SHARE_MESSAGE_BODY, buildShareMessage } from "@shared/url/share-message";
 
 const EASING = "cubic-bezier(0.16, 1, 0.3, 1)";
 type ShareMethod =

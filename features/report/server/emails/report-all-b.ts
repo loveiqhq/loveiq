@@ -1,4 +1,4 @@
-import { EMAIL_FONT, escapeHtml, wrapEmailShell } from "@/lib/emails/shared";
+import { EMAIL_FONT, escapeHtml, wrapEmailShell } from "@shared/emails/shared";
 import {
   KNOWN_ARCHETYPES,
   toArchetypeSlug,

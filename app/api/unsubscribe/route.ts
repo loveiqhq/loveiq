@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { verifyUnsubscribeToken } from "@/lib/emails/unsubscribe-token";
-import { addToSuppression } from "@/lib/emails/suppression";
-import logger from "@/lib/logger";
+import { verifyUnsubscribeToken } from "@shared/emails/unsubscribe-token";
+import { addToSuppression } from "@shared/emails/suppression";
+import logger from "@shared/observability/logger";
 
 // CSRF-exempt by design. The HMAC-signed `token` URL param IS the auth.
 // Email clients (Gmail, Outlook, Apple Mail) call the RFC 8058 one-click

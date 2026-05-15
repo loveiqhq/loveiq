@@ -5,8 +5,8 @@ import { buildAllAdminKnowledgeArtifacts } from "@features/admin/server/knowledg
 import { hasRole } from "@features/admin/server/roles";
 import { excerpt, semanticScore } from "@features/admin/server/next-level";
 import { supabaseFetch } from "@features/admin/server/supabase";
-import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
-import logger from "@/lib/logger";
+import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
+import logger from "@shared/observability/logger";
 
 const PAGE_INDEX = [
   { title: "Submissions", href: "/admin/submissions", keywords: ["responses", "review"] },

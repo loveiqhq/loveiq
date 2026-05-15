@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { useAdminFetch } from "./hooks/useAdminFetch";
-import { getCsrfToken } from "@/lib/csrf-client";
+import { getCsrfToken } from "@shared/http/csrf-client";
 
 interface Annotation {
   id: number;

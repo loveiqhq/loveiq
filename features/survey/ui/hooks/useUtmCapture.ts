@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { getStoredUtm, LEGACY_UTM_KEY } from "@/lib/utm";
+import { getStoredUtm, LEGACY_UTM_KEY } from "@shared/url/utm";
 
 /**
  * Legacy storage key — kept for backward compatibility.

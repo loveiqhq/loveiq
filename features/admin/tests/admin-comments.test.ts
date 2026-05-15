@@ -6,13 +6,13 @@ vi.mock("@features/admin/server/auth", () => ({
 }));
 
 const mockCheckRateLimit = vi.fn();
-vi.mock("@/lib/ratelimit", () => ({
+vi.mock("@shared/http/ratelimit", () => ({
   checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
   getClientIp: vi.fn().mockReturnValue("127.0.0.1"),
 }));
 
 const mockVerifyCsrfToken = vi.fn();
-vi.mock("@/lib/csrf", () => ({
+vi.mock("@shared/http/csrf", () => ({
   verifyCsrfToken: (...args: unknown[]) => mockVerifyCsrfToken(...(args as [])),
 }));
 
@@ -25,7 +25,7 @@ vi.mock("@features/admin/server/audit", () => ({
   logAdminAction: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock("@/lib/logger", () => ({
+vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 

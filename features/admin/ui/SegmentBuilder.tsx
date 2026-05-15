@@ -1,7 +1,7 @@
 "use client";
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useAdminFetch } from "./hooks/useAdminFetch";
-import { getCsrfToken } from "@/lib/csrf-client";
+import { getCsrfToken } from "@shared/http/csrf-client";
 import { hasSegmentConditionValue } from "@features/admin/server/segment-preview";
 import SegmentDeltaMonitor from "./SegmentDeltaMonitor";
 

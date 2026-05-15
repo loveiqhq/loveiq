@@ -6,7 +6,7 @@ import MetricLineageTab from "@features/admin/ui/MetricLineageTab";
 import MetricRegistryTab from "@features/admin/ui/MetricRegistryTab";
 import MetricStatusBoardTab from "@features/admin/ui/MetricStatusBoardTab";
 import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
-import { getCsrfToken } from "@/lib/csrf-client";
+import { getCsrfToken } from "@shared/http/csrf-client";
 
 interface MetricOption {
   key: string;

@@ -4,9 +4,9 @@ import { hasRole } from "@features/admin/server/roles";
 import { logAdminAction } from "@features/admin/server/audit";
 import { deleteSubmissionCascade } from "@features/admin/server/delete-submission";
 import { supabaseFetch } from "@features/admin/server/supabase";
-import { verifyCsrfToken } from "@/lib/csrf";
-import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
-import logger from "@/lib/logger";
+import { verifyCsrfToken } from "@shared/http/csrf";
+import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
+import logger from "@shared/observability/logger";
 
 /** Extract utm_source from a JSON utm_tracker string, falling back to the raw value. */
 function parseUtmSource(tracker: string | null): string | null {

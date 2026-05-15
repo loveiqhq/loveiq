@@ -4,7 +4,7 @@ import {
   escapeHtml,
   renderCtaButton,
   wrapEmailShell,
-} from "@/lib/emails/shared";
+} from "@shared/emails/shared";
 import { toArchetypeSlug } from "@features/report/server/archetypeSlug";
 
 export interface ReportEssentialsEmailParams {

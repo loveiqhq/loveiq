@@ -1,5 +1,5 @@
-import { getBreaker } from "@/lib/circuit-breaker";
-import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
+import { getBreaker } from "@shared/http/circuit-breaker";
+import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import {
   DEFAULT_REPORT_PURCHASE_PLAN_ID,
   REPORT_PURCHASE_PLAN_IDS,

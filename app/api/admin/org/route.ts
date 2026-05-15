@@ -3,8 +3,8 @@ import { verifyAdminSession } from "@features/admin/server/auth";
 import { hasRole } from "@features/admin/server/roles";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { buildTrustDescriptor, hoursSince } from "@features/admin/server/next-level";
-import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
-import logger from "@/lib/logger";
+import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
+import logger from "@shared/observability/logger";
 
 type AssetStatus = "healthy" | "watch" | "risk";
 

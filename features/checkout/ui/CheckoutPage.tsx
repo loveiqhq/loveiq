@@ -6,7 +6,7 @@ import {
   getReportPricingSessionId,
   getReportSessionId,
 } from "@features/survey/ui/hooks/surveySession";
-import { getCsrfToken } from "@/lib/csrf-client";
+import { getCsrfToken } from "@shared/http/csrf-client";
 import {
   formatReportPurchasePrice,
   getReportPurchaseBadgeFromPrice,

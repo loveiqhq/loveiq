@@ -11,7 +11,7 @@
  *   half-open → one probe request allowed; success closes, failure re-opens
  */
 
-import logger from "./logger";
+import logger from "@shared/observability/logger";
 
 export class CircuitOpenError extends Error {
   constructor(service: string) {

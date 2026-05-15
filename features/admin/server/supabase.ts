@@ -1,5 +1,5 @@
-import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
-import { getBreaker } from "@/lib/circuit-breaker";
+import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
+import { getBreaker } from "@shared/http/circuit-breaker";
 
 const TIMEOUT_MS = 8000;
 

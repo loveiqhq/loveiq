@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // Mock logger before importing ratelimit
-vi.mock("../../lib/logger", () => ({
+vi.mock("@shared/observability/logger", () => ({
   default: {
     info: vi.fn(),
     warn: vi.fn(),
@@ -31,7 +31,7 @@ process.env.KV_REST_API_URL = "https://test-redis.upstash.io";
 process.env.KV_REST_API_TOKEN = "test-token";
 
 // Import after mocks are set up
-const { checkRateLimit, checkCooldown } = await import("../../lib/ratelimit");
+const { checkRateLimit, checkCooldown } = await import("@shared/http/ratelimit");
 
 describe("checkRateLimit (Redis)", () => {
   beforeEach(() => {
