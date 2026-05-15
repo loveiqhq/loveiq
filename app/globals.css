@@ -2738,6 +2738,10 @@ input.autofill-dark:-internal-autofill-previewed {
   padding-inline: 0;
 }
 
+.report-content > footer {
+  background: #160c22;
+}
+
 .report-page__shell-wrap {
   position: relative;
   z-index: 1;
