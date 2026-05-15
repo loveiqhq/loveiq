@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import type { FC } from "react";
 import Link from "next/link";
 import { trackStartSurvey } from "@features/analytics/client";
-import { LoveIQMark, LoveIQWordmark } from "@/components/branding/LoveIQBrand";
+import { LoveIQMark, LoveIQWordmark } from "@shared/ui/branding/LoveIQBrand";
 
 const navLinks = [
   { label: "Home", href: "/" },

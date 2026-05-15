@@ -177,7 +177,7 @@ _None currently open — CSP nonce implementation still recommended for defense-
 - **Status:** RESOLVED (2026-03)
 - **Location:** `lib/ratelimit.ts`
 - **Fix:** `getClientIp()` trusts only `x-real-ip`, which Vercel sets to the actual client IP and strips any client-provided value. `X-Forwarded-For` is intentionally ignored (attacker-controlled).
-- **Verification:** Unit tests in `__tests__/lib/ratelimit.test.ts` confirm header trust behavior.
+- **Verification:** Unit tests in `__tests../shared/http/ratelimit.test.ts` confirm header trust behavior.
 
 #### RISK-H3: npm Dependency Vulnerability — RESOLVED ✅
 

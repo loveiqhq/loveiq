@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getCsrfToken } from "@shared/http/csrf-client";
-import { LoveIQMark, LoveIQWordmark } from "@/components/branding/LoveIQBrand";
+import { LoveIQMark, LoveIQWordmark } from "@shared/ui/branding/LoveIQBrand";
 
 function getSafeNextPath(value: string | null) {
   if (!value || !value.startsWith("/") || value.startsWith("//")) {

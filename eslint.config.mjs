@@ -28,6 +28,7 @@ const eslintConfig = [
       "shared/**/*.ts",
       "proxy.ts",
     ],
+    ignores: ["features/**/tests/**", "shared/**/tests/**"],
     languageOptions: {
       parser: tsparser,
       parserOptions: {
@@ -49,6 +50,7 @@ const eslintConfig = [
       "shared/**/*.ts",
       "proxy.ts",
     ],
+    ignores: ["features/**/tests/**", "shared/**/tests/**"],
     plugins: { security: securityPlugin },
     rules: securityPlugin.configs.recommended.rules,
   },
@@ -61,6 +63,7 @@ const eslintConfig = [
       "shared/**/*.ts",
       "proxy.ts",
     ],
+    ignores: ["features/**/tests/**", "shared/**/tests/**"],
     plugins: { "no-secrets": noSecretsPlugin },
     rules: { "no-secrets/no-secrets": "error" },
   },
@@ -73,6 +76,7 @@ const eslintConfig = [
       "shared/**/*.ts",
       "proxy.ts",
     ],
+    ignores: ["features/**/tests/**", "shared/**/tests/**"],
     rules: {
       // Prevent eval and related dangerous functions
       "no-eval": "error",

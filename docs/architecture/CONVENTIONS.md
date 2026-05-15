@@ -52,7 +52,7 @@
 
 1. React/Next.js imports (`next/script`, `next/font/google`)
 2. External packages (`resend`, `zod`)
-3. Internal modules (`@/lib/csrf`, `@/lib/ratelimit`)
+3. Internal modules (../shared/http/csrf`, ../shared/http/ratelimit`)
 4. Relative imports (`./S01Hero`)
 5. Type imports (`type { Metadata }`)
 

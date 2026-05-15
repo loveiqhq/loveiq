@@ -59,7 +59,7 @@ __tests__/
 
 **Patterns:**
 
-- Test file mirrors source file path (`lib/csrf.ts` -> `__tests__/lib/csrf.test.ts`)
+- Test file mirrors source file path (`lib/csrf.ts` -> `__tests../shared/http/csrf.test.ts`)
 - Edge cases and error paths are tested explicitly
 - Security-relevant tests (XSS, injection) are included
 

@@ -45,7 +45,7 @@ vi.mock("next/server", () => {
   };
 });
 
-import { proxy } from "../proxy";
+import { proxy } from "@/proxy";
 import logger from "@shared/observability/logger";
 
 function makeNextRequest(url = "http://localhost:3000/", cookieValue?: string) {

@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import Link from "next/link";
-import { LoveIQMark, LoveIQWordmark } from "@/components/branding/LoveIQBrand";
+import { LoveIQMark, LoveIQWordmark } from "@shared/ui/branding/LoveIQBrand";
 
 interface ErrorPageProps {
   error: Error & { digest?: string };

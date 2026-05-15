@@ -81,9 +81,9 @@ For admin work, start with [docs/admin/AGENT_README.md](docs/admin/AGENT_README.
 
 ## Canonical Docs
 
-- [DEVELOPMENT.md](DEVELOPMENT.md) - local setup, env vars, and troubleshooting
+- [DEVELOPMENT.md](docs/runbooks/DEVELOPMENT.md) - local setup, env vars, and troubleshooting
 - [CONTRIBUTING.md](CONTRIBUTING.md) - branch, testing, and PR expectations
-- [SECURITY.md](SECURITY.md) - secrets, rotation, scanning, and response guidance
+- [SECURITY.md](docs/runbooks/SECURITY.md) - secrets, rotation, scanning, and response guidance
 - [docs/api.md](docs/api.md) - public API reference
 - [docs/survey.md](docs/survey.md) - survey runtime, persistence, and recovery flow
 - [docs/admin-api.md](docs/admin-api.md) - admin API route catalog
@@ -92,14 +92,14 @@ For admin work, start with [docs/admin/AGENT_README.md](docs/admin/AGENT_README.
 - [docs/versions.md](docs/versions.md) - single source of truth for pinned versions
 - [docs/doc-inventory.md](docs/doc-inventory.md) - project documentation inventory
 - [docs/knowledge-ledger.md](docs/knowledge-ledger.md) - verified documentation updates and why they matter
-- [.planning/codebase/ARCHITECTURE.md](.planning/codebase/ARCHITECTURE.md) - codebase architecture reference
-- [.planning/codebase/CONVENTIONS.md](.planning/codebase/CONVENTIONS.md) - implementation conventions
+- [.planning/codebase/ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md) - codebase architecture reference
+- [.planning/codebase/CONVENTIONS.md](docs/architecture/CONVENTIONS.md) - implementation conventions
 
 ## Environment Variables
 
 Copy `.env.example` to `.env.local` only if you need local integrations. The UI renders without env vars, but form submissions, admin auth, and health checks degrade when required services are unconfigured.
 
-Environment variable details live in [DEVELOPMENT.md](DEVELOPMENT.md). Secret handling and rotation policy live in [SECURITY.md](SECURITY.md).
+Environment variable details live in [DEVELOPMENT.md](docs/runbooks/DEVELOPMENT.md). Secret handling and rotation policy live in [SECURITY.md](docs/runbooks/SECURITY.md).
 
 ## License
 

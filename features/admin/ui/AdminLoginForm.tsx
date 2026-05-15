@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { getCsrfToken } from "@shared/http/csrf-client";
-import { LoveIQMark, LoveIQWordmark } from "@/components/branding/LoveIQBrand";
+import { LoveIQMark, LoveIQWordmark } from "@shared/ui/branding/LoveIQBrand";
 
 type Status = "idle" | "sending" | "sent" | "error";
 

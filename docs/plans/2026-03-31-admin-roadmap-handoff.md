@@ -157,20 +157,20 @@ If another Codex account continues this work, this is the recommended sequence.
 
 These are key places already built and should be extended, not replaced.
 
-- [CommandCenterDashboard.tsx](C:/Users/Hamza%20Korkutovic/loveiq-web/components/admin/CommandCenterDashboard.tsx)
-- [RoleCockpitDashboard.tsx](C:/Users/Hamza%20Korkutovic/loveiq-web/components/admin/RoleCockpitDashboard.tsx)
-- [GrowthDashboard.tsx](C:/Users/Hamza%20Korkutovic/loveiq-web/components/admin/GrowthDashboard.tsx)
-- [StrategyHubDashboard.tsx](C:/Users/Hamza%20Korkutovic/loveiq-web/components/admin/StrategyHubDashboard.tsx)
-- [ProductKpiDashboard.tsx](C:/Users/Hamza%20Korkutovic/loveiq-web/components/admin/ProductKpiDashboard.tsx)
-- [ImpactComparisonTab.tsx](C:/Users/Hamza%20Korkutovic/loveiq-web/components/admin/funnel-tabs/ImpactComparisonTab.tsx)
-- [HealthDashboard.tsx](C:/Users/Hamza%20Korkutovic/loveiq-web/components/admin/HealthDashboard.tsx)
-- [ResearchIntelligenceDashboard.tsx](C:/Users/Hamza%20Korkutovic/loveiq-web/components/admin/ResearchIntelligenceDashboard.tsx)
-- [ResearchRepositoryPanel.tsx](C:/Users/Hamza%20Korkutovic/loveiq-web/components/admin/ResearchRepositoryPanel.tsx)
-- [ExperimentRegistry.tsx](C:/Users/Hamza%20Korkutovic/loveiq-web/components/admin/ExperimentRegistry.tsx)
-- [MetricRegistryTab.tsx](C:/Users/Hamza%20Korkutovic/loveiq-web/components/admin/MetricRegistryTab.tsx)
-- [MetricImpactTab.tsx](C:/Users/Hamza%20Korkutovic/loveiq-web/components/admin/MetricImpactTab.tsx)
-- [ReviewQueueTab.tsx](C:/Users/Hamza%20Korkutovic/loveiq-web/components/admin/tools-tabs/ReviewQueueTab.tsx)
-- [AccessRiskTab.tsx](C:/Users/Hamza%20Korkutovic/loveiq-web/components/admin/tools-tabs/AccessRiskTab.tsx)
+- [CommandCenterDashboard.tsx](C:/Users/Hamza%20Korkutovic/loveiq-w../features/admin/ui/CommandCenterDashboard.tsx)
+- [RoleCockpitDashboard.tsx](C:/Users/Hamza%20Korkutovic/loveiq-w../features/admin/ui/RoleCockpitDashboard.tsx)
+- [GrowthDashboard.tsx](C:/Users/Hamza%20Korkutovic/loveiq-w../features/admin/ui/GrowthDashboard.tsx)
+- [StrategyHubDashboard.tsx](C:/Users/Hamza%20Korkutovic/loveiq-w../features/admin/ui/StrategyHubDashboard.tsx)
+- [ProductKpiDashboard.tsx](C:/Users/Hamza%20Korkutovic/loveiq-w../features/admin/ui/ProductKpiDashboard.tsx)
+- [ImpactComparisonTab.tsx](C:/Users/Hamza%20Korkutovic/loveiq-w../features/admin/ui/funnel-tabs/ImpactComparisonTab.tsx)
+- [HealthDashboard.tsx](C:/Users/Hamza%20Korkutovic/loveiq-w../features/admin/ui/HealthDashboard.tsx)
+- [ResearchIntelligenceDashboard.tsx](C:/Users/Hamza%20Korkutovic/loveiq-w../features/admin/ui/ResearchIntelligenceDashboard.tsx)
+- [ResearchRepositoryPanel.tsx](C:/Users/Hamza%20Korkutovic/loveiq-w../features/admin/ui/ResearchRepositoryPanel.tsx)
+- [ExperimentRegistry.tsx](C:/Users/Hamza%20Korkutovic/loveiq-w../features/admin/ui/ExperimentRegistry.tsx)
+- [MetricRegistryTab.tsx](C:/Users/Hamza%20Korkutovic/loveiq-w../features/admin/ui/MetricRegistryTab.tsx)
+- [MetricImpactTab.tsx](C:/Users/Hamza%20Korkutovic/loveiq-w../features/admin/ui/MetricImpactTab.tsx)
+- [ReviewQueueTab.tsx](C:/Users/Hamza%20Korkutovic/loveiq-w../features/admin/ui/tools-tabs/ReviewQueueTab.tsx)
+- [AccessRiskTab.tsx](C:/Users/Hamza%20Korkutovic/loveiq-w../features/admin/ui/tools-tabs/AccessRiskTab.tsx)
 
 ## Existing Admin OS Pieces Already In Place
 

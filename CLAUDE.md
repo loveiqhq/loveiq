@@ -68,64 +68,32 @@ loveiq-web/
 │   ├── global-error.tsx         # Root error boundary
 │   ├── robots.ts               # robots.txt generation
 │   └── sitemap.ts              # sitemap.xml generation
-├── components/
-│   ├── landing/                # Landing page sections (S01-S14 + Nav/Footer)
-│   │   ├── LandingPage.tsx     # Main composition component
-│   │   ├── NavSection.tsx      # Navigation
-│   │   ├── S01Hero.tsx → S14CTA.tsx  # Numbered sections
-│   │   ├── FooterSection.tsx
-│   │   └── ScrollAnimator.tsx  # Scroll animation orchestrator
-│   ├── about/                  # About page sections
-│   ├── glossary/               # Glossary components
-│   ├── legal/                  # Legal page nav component
-│   ├── survey/                 # Survey / intro wizard + pre-report wizard components
-│   │   ├── SurveyPage.tsx      # Orchestrator (intro → wizard → consent → engine)
-│   │   ├── SurveyEngine.tsx    # Question loop + completion phases
-│   │   ├── PreReportWizard.tsx  # 5-slide post-submission wizard
-│   │   ├── SurveyConfirmation.tsx # Processing/success/error screens
-│   │   ├── questions/          # Question type components (SingleChoice, Scale, etc.)
-│   │   └── hooks/              # Survey state, submission, and tracking hooks
-│   ├── admin/                  # Admin panel components
-│   │   ├── AdminLoginForm.tsx  # Admin login form
-│   │   ├── AdminSidebar.tsx    # Sidebar navigation
-│   │   ├── AdminHeader.tsx     # Mobile header with hamburger
-│   │   ├── AdminStatsDashboard.tsx  # Standalone stats dashboard component
-│   │   ├── SubmissionBrowser.tsx # Filterable submission list
-│   │   ├── SubmissionDetail.tsx # Single submission view + actions
-│   │   ├── SurveyStatus.tsx    # Survey active/closed toggle
-│   │   ├── ProductKpiDashboard.tsx # Product KPIs dashboard + CSV download
-│   │   ├── kpi-tabs/           # KPI tab components
-│   │   │   ├── KpiDataTable.tsx    # Generic sortable table
-│   │   │   ├── ReportSectionsTab.tsx # Report sections tab
-│   │   │   ├── QuestionsTab.tsx     # Survey questions tab
-│   │   │   └── ChaptersTab.tsx      # Survey chapters tab
-│   │   └── hooks/useAdminFetch.ts # Generic data fetching hook
-│   ├── staging/                # Staging login form
-│   ├── not-found/              # 404 page component
-│   ├── trust-zone/             # Trust zone page component
-│   ├── NonceProvider.tsx       # CSP nonce context provider
-│   ├── HydrationMarker.tsx     # Client hydration marker
-│   └── SmoothScroll.tsx        # Lenis smooth scroll wrapper
-├── lib/
-│   ├── analytics.ts            # GA4 event tracking helpers
-│   ├── csrf.ts                 # CSRF token verification (server-side)
-│   ├── csrf-client.ts          # CSRF token reader (client-side)
-│   ├── ratelimit.ts            # IP-based rate limiting (Supabase-backed)
-│   ├── circuit-breaker.ts      # Circuit breaker pattern for external calls
-│   ├── logger.ts               # pino structured logging
-│   ├── fetch-with-timeout.ts   # Fetch wrapper with timeout
-│   ├── utm.ts                  # UTM parameter handling
-│   ├── supabase-middleware.ts  # Supabase Auth client for middleware (proxy.ts)
-│   ├── admin/
-│   │   ├── auth.ts             # Admin session verification
-│   │   ├── audit.ts            # Admin action audit logging
-│   │   ├── format.ts           # Display formatting (maskEmail)
-│   │   ├── roles.ts            # Role management
-│   │   ├── supabase.ts         # Supabase fetch helper for admin routes
-│   │   └── supabase-server.ts  # Server-side Supabase client
-│   └── emails/
-│       ├── admin-magic-link.ts # Admin magic link email template
-│       └── invite.ts           # Invite email template
+├── features/                   # Domain-first feature folders (each: ui/, server/ or logic/, tests/, AGENT_README.md)
+│   ├── landing/ui/             # S01-S15 landing sections + NavSection + FooterSection + ScrollAnimator
+│   ├── about/ui/               # About page sections (Hero, Team, Publications, etc.)
+│   ├── glossary/ui/            # /glossary index + term page
+│   ├── legal/ui/               # Shared chrome for legal pages
+│   ├── trust-zone/ui/          # /trust-zone
+│   ├── not-found/ui/           # 404 page
+│   ├── staging/                # Staging password gate (ui/ + tests/)
+│   ├── survey/                 # ui/, server/, tests/, server/emails/ — assessment funnel
+│   ├── report/                 # ui/, server/, tests/, server/emails/ — /report paywalled
+│   ├── checkout/               # ui/, server/, tests/ — Stripe checkout
+│   ├── pricing/                # logic/ — report pricing math
+│   ├── scoring/                # logic/, tests/ — V4+V5 archetype engine
+│   ├── invite/                 # ui/, emails/, tests/ — partner invite consolidation
+│   ├── contact/tests/          # Contact form pipeline tests (route stays in app/api/contact/)
+│   ├── cron/tests/             # Scheduled job tests (routes stay in app/api/cron/)
+│   ├── analytics/              # client.ts (GA4 helpers) + tests/
+│   └── admin/                  # ui/ (22 internal subdomains), server/, server/emails/, tests/ — 280+ files preserving internal structure
+├── shared/                     # Cross-cutting infrastructure (renamed from lib/)
+│   ├── http/                   # csrf, csrf-client, ratelimit, fetch-with-timeout, circuit-breaker, after-response
+│   ├── observability/          # logger (pino), hotjar
+│   ├── auth/                   # supabase-middleware (admin sessions only)
+│   ├── url/                    # utm, safe-href, share-message
+│   ├── format/                 # html-escape
+│   ├── emails/                 # ab-variant, shared HTML shell, suppression, unsubscribe-token
+│   └── ui/                     # branding/, GtmScript, HydrationMarker, NonceProvider, SmoothScroll, UtmCapture, WebVitals
 ├── data/
 │   ├── glossary-data.ts        # Auto-generated glossary terms (688KB, from CSV)
 │   ├── glossary-source.csv     # Source CSV; regenerate via `node scripts/update-glossary.js`

@@ -17,5 +17,5 @@ Use this directory when the task is described in product language and you need t
 
 - Route wrappers: [`../../../app/admin/AGENT_README.md`](../../../app/admin/AGENT_README.md)
 - API handlers: [`../../../app/api/admin/AGENT_README.md`](../../../app/api/admin/AGENT_README.md)
-- UI surfaces: [`../../../components/admin/AGENT_README.md`](../../../components/admin/AGENT_README.md)
-- Server logic: [`../../../lib/admin/AGENT_README.md`](../../../lib/admin/AGENT_README.md)
+- UI surfaces: [`../../../features/admin/ui/AGENT_README.md`](../../../features/admin/ui/AGENT_README.md)
+- Server logic: [`../../../features/admin/server/AGENT_README.md`](../../../features/admin/server/AGENT_README.md)

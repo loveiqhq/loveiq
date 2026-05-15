@@ -30,7 +30,7 @@
 
 **Deep relative imports:** RESOLVED (2026-01)
 
-- Was: Import paths like `../../../lib/emails/invite` hard to maintain
+- Was: Import paths like `../../../features/invite/emails/invite` hard to maintain
 - Fix: `@/*` path alias configured in `tsconfig.json`
 - Evidence: All cross-directory imports use `@/lib/*`, `@/components/*`
 

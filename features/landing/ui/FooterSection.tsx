@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { FC } from "react";
-import { LoveIQMark, LoveIQWordmark } from "@/components/branding/LoveIQBrand";
+import { LoveIQMark, LoveIQWordmark } from "@shared/ui/branding/LoveIQBrand";
 
 const FooterSection: FC = () => {
   return (

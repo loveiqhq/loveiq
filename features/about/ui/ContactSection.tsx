@@ -3,7 +3,7 @@
 import type { ChangeEvent, FC, FormEvent } from "react";
 import { useEffect, useRef, useState } from "react";
 import Script from "next/script";
-import { useNonce } from "@/components/NonceProvider";
+import { useNonce } from "@shared/ui/NonceProvider";
 
 type FormFieldProps = {
   id: string;

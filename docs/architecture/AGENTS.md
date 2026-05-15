@@ -123,7 +123,7 @@ OPERATING RULES:
 - HTML in email templates must be escaped (see lib/emails/invite.ts for pattern).
 - If a new environment variable is needed: add to .env.example with description, document server-only vs NEXT_PUBLIC_.
 - Never weaken existing rate limits or CSRF checks.
-- Never use console.log or console.error — use the pino `logger` from `@/lib/logger` for all logging.
+- Never use console.log or console.error — use the pino `logger` from ../shared/observability/logger` for all logging.
 - Never expose SUPABASE_SERVICE_ROLE_KEY or any server secret to client.
 
 PROXY.TS / MIDDLEWARE RULES:

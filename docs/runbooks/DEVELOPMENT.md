@@ -6,7 +6,7 @@
 
 ## Prerequisites
 
-- Node.js `20` as used in CI. See [docs/versions.md](docs/versions.md) for the pinned toolchain list.
+- Node.js `20` as used in CI. See [docs/versions.md](../versions.md) for the pinned toolchain list.
 - npm from the bundled Node.js installation.
 - Optional service credentials only when you need live integrations.
 
@@ -126,9 +126,9 @@ It also checks live Supabase reachability, so invalid credentials or a down Supa
 
 ## Related Docs
 
-- [README.md](README.md)
-- [CONTRIBUTING.md](CONTRIBUTING.md)
+- [README.md](../../README.md)
+- [CONTRIBUTING.md](../../CONTRIBUTING.md)
 - [SECURITY.md](SECURITY.md)
-- [docs/api.md](docs/api.md)
-- [docs/admin-api.md](docs/admin-api.md)
-- [.planning/codebase/TESTING.md](.planning/codebase/TESTING.md)
+- [docs/api.md](../api.md)
+- [docs/admin-api.md](../admin-api.md)
+- [.planning/codebase/TESTING.md](../architecture/TESTING.md)

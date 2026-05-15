@@ -11,7 +11,7 @@ npm run setup
 npm run dev
 ```
 
-See [DEVELOPMENT.md](DEVELOPMENT.md) for env vars, troubleshooting, and local validation details.
+See [DEVELOPMENT.md](docs/runbooks/DEVELOPMENT.md) for env vars, troubleshooting, and local validation details.
 
 ## Branch and Review Workflow
 
@@ -66,8 +66,8 @@ Update markdown in the same PR when you change:
 Canonical documentation targets:
 
 - [README.md](README.md)
-- [DEVELOPMENT.md](DEVELOPMENT.md)
-- [SECURITY.md](SECURITY.md)
+- [DEVELOPMENT.md](docs/runbooks/DEVELOPMENT.md)
+- [SECURITY.md](docs/runbooks/SECURITY.md)
 - [docs/api.md](docs/api.md)
 - [docs/admin-api.md](docs/admin-api.md)
 - [docs/versions.md](docs/versions.md)
@@ -80,4 +80,4 @@ Canonical documentation targets:
 - Error messages stay generic unless the route intentionally exposes user-safe detail.
 - If you touch `proxy.ts`, validate both development and production behavior.
 
-See [SECURITY.md](SECURITY.md) and [.github/SECURITY_CHECKLIST.md](.github/SECURITY_CHECKLIST.md).
+See [SECURITY.md](docs/runbooks/SECURITY.md) and [.github/SECURITY_CHECKLIST.md](.github/SECURITY_CHECKLIST.md).
