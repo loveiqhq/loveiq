@@ -223,7 +223,6 @@ export async function POST(request: Request) {
       try {
         nurturePromoMatch = await resolveNurturePromo({
           reportToken: parsed.data.reportToken ?? null,
-          pricingSessionId: parsed.data.pricingSessionId ?? null,
           userCode: parsed.data.promo,
         });
       } catch (err) {

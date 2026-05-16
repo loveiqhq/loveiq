@@ -30,6 +30,7 @@ import { isEmailSuppressed } from "@shared/emails/suppression";
 import { getReportPlanByPersonalReportId } from "@features/report/server/planAccess";
 import { getStripeServerClient } from "@features/checkout/server/stripeCheckout";
 import { getCouponIdForStage } from "@features/checkout/server/promoCodes";
+import { getReportPriceQuoteForContext } from "@features/pricing/logic/reportPricing";
 import { nurture6hNoViewEmail } from "@features/report/server/emails/nurture/nurture-6h-no-view";
 import { nurture6hNoUnlockEmail } from "@features/report/server/emails/nurture/nurture-6h-no-unlock";
 import { nurture30hNoUnlockEmail } from "@features/report/server/emails/nurture/nurture-30h-no-unlock";
@@ -160,6 +161,32 @@ async function fetchAccessToken(submissionId: number): Promise<string | null> {
   if (!r.ok) return null;
   const rows = (await r.json()) as Array<{ token: string | null }>;
   return rows[0]?.token ?? null;
+}
+
+/**
+ * Bootstrap a `full_report` quote row if none exists for the submission yet.
+ * Quotes are normally created lazily on /report page-load; users who finish
+ * the survey but never open the report have no quote, which would defeat the
+ * 6h_no_view stage (whose whole purpose is to nudge those exact users). The
+ * shared pricing helper is idempotent on `(personal_report_id, plan)` so this
+ * is safe to call even if another tick raced and created the row first.
+ */
+async function bootstrapFullReportQuote(
+  submissionId: number,
+  reportToken: string
+): Promise<FullReportQuote | null> {
+  try {
+    await getReportPriceQuoteForContext({
+      plan: "full_report",
+      submissionId,
+      reportToken,
+      userAgent: null,
+    });
+  } catch (err) {
+    logger.warn({ err, submissionId }, "nurture-sequence: bootstrap quote failed");
+    return null;
+  }
+  return fetchFullReportQuote(submissionId);
 }
 
 async function hasReportViewedEvent(personalReportId: number): Promise<boolean> {
@@ -460,11 +487,25 @@ async function processCandidate(
       return;
     }
 
-    // Cheap checks first — avoid touching Stripe before we know we'll send.
-    const quote = await fetchFullReportQuote(candidate.survey_submission_id);
-    if (!quote) {
-      summary.skippedNoQuote++;
+    // Token resolves first because (a) it's needed for the CTA URL and (b) the
+    // quote bootstrap below requires it to attach the quote to the right
+    // personal_report.
+    const reportToken = await fetchAccessToken(candidate.survey_submission_id);
+    if (!reportToken) {
+      summary.skippedNoToken++;
       return;
+    }
+
+    // Quote is the idempotency carrier. If absent, bootstrap it now — users who
+    // never opened /report have no quote yet, and skipping them would gut the
+    // 6h_no_view stage.
+    let quote = await fetchFullReportQuote(candidate.survey_submission_id);
+    if (!quote) {
+      quote = await bootstrapFullReportQuote(candidate.survey_submission_id, reportToken);
+      if (!quote) {
+        summary.skippedNoQuote++;
+        return;
+      }
     }
     if (getNurtureEmailsSent(quote.metadata).includes(stage)) {
       summary.skippedAlreadySent++;
@@ -486,12 +527,6 @@ async function processCandidate(
 
     if (await isEmailSuppressed(email)) {
       summary.skippedSuppressed++;
-      return;
-    }
-
-    const reportToken = await fetchAccessToken(candidate.survey_submission_id);
-    if (!reportToken) {
-      summary.skippedNoToken++;
       return;
     }
 

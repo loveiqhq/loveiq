@@ -48,11 +48,9 @@ function getSupabaseHeaders() {
 
 async function resolveSubmissionId({
   reportToken,
-  pricingSessionId,
   submissionId,
 }: {
   reportToken?: string | null;
-  pricingSessionId?: string | null;
   submissionId?: number | null;
 }): Promise<number | null> {
   if (typeof submissionId === "number" && submissionId > 0) return submissionId;
@@ -70,16 +68,10 @@ async function resolveSubmissionId({
     return rows[0]?.survey_submission_id ?? null;
   }
 
-  if (pricingSessionId) {
-    const r = await fetchWithTimeout(
-      `${cfg.url}/rest/v1/report_price_quote?pricing_session_id=eq.${encodeURIComponent(pricingSessionId)}&select=survey_submission_id&limit=1`,
-      { cache: "no-store", headers: cfg.headers, timeoutMs: SUPABASE_TIMEOUT_MS }
-    );
-    if (!r.ok) return null;
-    const rows = (await r.json()) as Array<{ survey_submission_id: number }>;
-    return rows[0]?.survey_submission_id ?? null;
-  }
-
+  // No reportSessionId / pricingSessionId path: those are client-side concepts
+  // (sessionStorage / cookie tokens) — the only durable identifier available
+  // server-side at checkout time is the `reportToken`. Users without a token
+  // (rare — every personal_report has one) fall through to the no-promo flow.
   return null;
 }
 
@@ -89,23 +81,21 @@ async function resolveSubmissionId({
  * owner, expired) — never throws. Callers fall through to the no-promo flow.
  *
  * Scoping by submission ensures a leaked code can only be redeemed by the
- * user it was issued to (Stripe also enforces this via `customer_email`, but
- * we double-check at the app layer to avoid wasting a Stripe API call).
+ * user it was issued to. Stripe-side `max_redemptions: 1` + 24h expiry are
+ * the second line of defence; this app-layer check is the primary guard.
  */
 export async function resolveNurturePromo({
   reportToken,
-  pricingSessionId,
   submissionId,
   userCode,
 }: {
   reportToken?: string | null;
-  pricingSessionId?: string | null;
   submissionId?: number | null;
   userCode: string;
 }): Promise<NurturePromoMatch | null> {
   if (!NURTURE_PROMO_CODE_REGEX.test(userCode)) return null;
 
-  const resolved = await resolveSubmissionId({ reportToken, pricingSessionId, submissionId });
+  const resolved = await resolveSubmissionId({ reportToken, submissionId });
   if (!resolved) return null;
 
   const cfg = getSupabaseHeaders();
