@@ -28,12 +28,12 @@ function renderTestimonialCard(siteUrl: string): string {
                 </td>
               </tr>
               <tr>
-                <td style="padding:2px 0 6px;">
+                <td colspan="2" style="padding:6px 0 6px;">
                   <span style="display:inline-block; font-size:14px; color:#F26D4F; letter-spacing:2px; line-height:1;">&#9733;&#9733;&#9733;&#9733;&#9733;</span>
                 </td>
               </tr>
               <tr>
-                <td style="padding-top:6px; font-family:Georgia,'Times New Roman',serif; font-size:15px; font-style:italic; line-height:1.55; color:#d1d5db;">
+                <td colspan="2" style="padding-top:6px; font-family:Georgia,'Times New Roman',serif; font-size:15px; font-style:italic; line-height:1.55; color:#d1d5db;">
                   &ldquo;${escapeHtml(t.quoteLeading)} <strong style="font-weight:700; font-style:italic; color:#ffffff;">${escapeHtml(t.quoteBold)}</strong>${t.quoteTrailing ? ` ${escapeHtml(t.quoteTrailing)}` : ""}&rdquo;
                 </td>
               </tr>

@@ -34,15 +34,6 @@ export interface NurtureBodyParams {
   closingNote?: string;
 }
 
-function renderStarRow(): string {
-  return `
-    <tr>
-      <td style="padding:2px 0 6px;">
-        <span style="display:inline-block; font-size:14px; color:#F26D4F; letter-spacing:2px; line-height:1;">&#9733;&#9733;&#9733;&#9733;&#9733;</span>
-      </td>
-    </tr>`;
-}
-
 function renderTestimonialCard(t: NurtureTestimonial, siteUrl: string): string {
   const absPhoto = t.photoUrl.startsWith("http") ? t.photoUrl : `${siteUrl}${t.photoUrl}`;
   const trailing = t.quoteTrailing ? escapeHtml(t.quoteTrailing) : "";
@@ -62,9 +53,13 @@ function renderTestimonialCard(t: NurtureTestimonial, siteUrl: string): string {
                   <p style="margin:0; font-family:${EMAIL_FONT}; font-size:11px; line-height:16px; color:#d1d5db;">${escapeHtml(t.role)}</p>
                 </td>
               </tr>
-              ${renderStarRow()}
               <tr>
-                <td style="padding-top:6px; font-family:Georgia,'Times New Roman',serif; font-size:15px; font-style:italic; line-height:1.55; color:#d1d5db;">
+                <td colspan="2" style="padding:6px 0 6px;">
+                  <span style="display:inline-block; font-size:14px; color:#F26D4F; letter-spacing:2px; line-height:1;">&#9733;&#9733;&#9733;&#9733;&#9733;</span>
+                </td>
+              </tr>
+              <tr>
+                <td colspan="2" style="padding-top:6px; font-family:Georgia,'Times New Roman',serif; font-size:15px; font-style:italic; line-height:1.55; color:#d1d5db;">
                   &ldquo;${escapeHtml(t.quoteLeading)} <strong style="font-weight:700; font-style:italic; color:#ffffff;">${escapeHtml(t.quoteBold)}</strong>${trailing ? ` ${trailing}` : ""}&rdquo;
                 </td>
               </tr>
