@@ -14,7 +14,9 @@ describe("surveyCompleteBEmail", () => {
     expect(result.subject).toContain("This might surprise you");
     expect(result.html).toContain("This might change how you see yourself");
     expect(result.html).toContain("Something interesting showed up in your results");
-    expect(result.html).toContain("See what we found");
+    expect(result.html).toContain("View your report now");
+    // Refreshed alongside variant A — testimonial card matches Figma 6978:153.
+    expect(result.html).toContain("Dr. Dijana Galija");
   });
 
   it("uses generic greeting when firstName missing", () => {
