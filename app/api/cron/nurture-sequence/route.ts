@@ -123,7 +123,7 @@ async function fetchCandidatesByAge(window: AgeWindow): Promise<CandidateRow[]> 
     `?created_date_time=gte.${encodeURIComponent(newerThan)}` +
     `&created_date_time=lte.${encodeURIComponent(olderThan)}` +
     `&select=id,survey_submission_id,created_date_time,` +
-    `survey_submission!fk_personal_report_survey_submission(app_user!fk_survey_submission_user(email,first_name))` +
+    `survey_submission!fk_personal_report_submission(app_user!fk_survey_submission_user(email,first_name))` +
     `&order=created_date_time.desc` +
     `&limit=${CANDIDATE_LIMIT_PER_STAGE}`;
   const r = await supabaseFetch(path);
