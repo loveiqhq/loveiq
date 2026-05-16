@@ -9,6 +9,8 @@ import { reportSharedEmail } from "@features/report/server/emails/report-shared"
 import { reportSharedBEmail } from "@features/report/server/emails/report-shared-b";
 import { reportSharedCEmail } from "@features/report/server/emails/report-shared-c";
 import { pickFromVariants } from "@shared/emails/ab-variant";
+import { buildUnsubscribeUrl } from "@shared/emails/unsubscribe-token";
+import { isEmailSuppressed } from "@shared/emails/suppression";
 import {
   canSharePlan,
   getReportPlanByPersonalReportId,
@@ -153,6 +155,18 @@ export async function POST(request: Request) {
     // copy and dashboards stay coherent.
     const variant = pickFromVariants(recipientEmail, "report-share", ["a", "b", "c"] as const);
     scheduleAfterResponse("report-share-email", async () => {
+      // A shared-report invite is a user-initiated outreach to a third party,
+      // not a transactional receipt — respect the recipient's prior unsubscribe.
+      if (await isEmailSuppressed(recipientEmail)) {
+        logger.info({ shareId: row.id, recipientEmail }, "report-share: skip suppressed recipient");
+        return;
+      }
+
+      const unsubSecret = process.env.UNSUBSCRIBE_SECRET;
+      const unsubscribeUrl = unsubSecret
+        ? buildUnsubscribeUrl(recipientEmail, siteUrl, unsubSecret)
+        : undefined;
+
       try {
         const tpl =
           variant === "b"
@@ -161,6 +175,7 @@ export async function POST(request: Request) {
                 shareUrl,
                 siteUrl,
                 personalMessage,
+                unsubscribeUrl,
               })
             : variant === "c"
               ? reportSharedCEmail({
@@ -168,12 +183,14 @@ export async function POST(request: Request) {
                   shareUrl,
                   siteUrl,
                   personalMessage,
+                  unsubscribeUrl,
                 })
               : reportSharedEmail({
                   ownerFirstName: owner.ownerFirstName,
                   shareUrl,
                   siteUrl,
                   personalMessage,
+                  unsubscribeUrl,
                 });
         const { error } = await Promise.race([
           resend.emails.send({
@@ -183,7 +200,13 @@ export async function POST(request: Request) {
             subject: tpl.subject,
             html: tpl.html,
             text: tpl.text,
-            headers: { "X-LoveIQ-Variant": variant },
+            headers: {
+              "X-LoveIQ-Variant": variant,
+              ...(unsubscribeUrl && {
+                "List-Unsubscribe": `<${unsubscribeUrl}>`,
+                "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+              }),
+            },
           }),
           new Promise<never>((_, reject) =>
             setTimeout(() => reject(new Error("Resend timeout")), 8_000)

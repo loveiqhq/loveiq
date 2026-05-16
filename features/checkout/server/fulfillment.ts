@@ -9,6 +9,7 @@ import { reportEssentialsEmail } from "@features/report/server/emails/report-ess
 import { reportFullEmail } from "@features/report/server/emails/report-full";
 import { reportFullBEmail } from "@features/report/server/emails/report-full-b";
 import { pickEmailVariant } from "@shared/emails/ab-variant";
+import { buildUnsubscribeUrl } from "@shared/emails/unsubscribe-token";
 import {
   getReportPurchasePlan,
   isReportPurchasePlanId,
@@ -176,6 +177,15 @@ async function sendPurchaseEmail({
     ? `${siteUrl}/report/${encodeURIComponent(reportToken)}`
     : `${siteUrl}/report`;
 
+  // Purchase confirmations are transactional — they ship regardless of
+  // marketing preferences. The unsubscribe link still flows through for
+  // CAN-SPAM / RFC 8058 compliance; future marketing emails honor the
+  // suppression list elsewhere.
+  const unsubSecret = process.env.UNSUBSCRIBE_SECRET;
+  const unsubscribeUrl = unsubSecret
+    ? buildUnsubscribeUrl(recipient.email, siteUrl, unsubSecret)
+    : undefined;
+
   // Essentials has a single template; full_report and all_reports run an A/B
   // copy test. Variant is deterministic per recipient (hashed email) so retries
   // and dashboards stay consistent.
@@ -185,14 +195,15 @@ async function sendPurchaseEmail({
   const tpl =
     plan === "all_reports"
       ? variant === "b"
-        ? reportAllBEmail({ firstName: recipient.firstName, reportUrl, siteUrl })
-        : reportAllEmail({ firstName: recipient.firstName, reportUrl, siteUrl })
+        ? reportAllBEmail({ firstName: recipient.firstName, reportUrl, siteUrl, unsubscribeUrl })
+        : reportAllEmail({ firstName: recipient.firstName, reportUrl, siteUrl, unsubscribeUrl })
       : plan === "essentials"
         ? reportEssentialsEmail({
             firstName: recipient.firstName,
             reportUrl,
             siteUrl,
             unlockedArchetype: unlockedArchetype ?? null,
+            unsubscribeUrl,
           })
         : variant === "b"
           ? reportFullBEmail({
@@ -200,12 +211,14 @@ async function sendPurchaseEmail({
               reportUrl,
               siteUrl,
               unlockedArchetype: unlockedArchetype ?? null,
+              unsubscribeUrl,
             })
           : reportFullEmail({
               firstName: recipient.firstName,
               reportUrl,
               siteUrl,
               unlockedArchetype: unlockedArchetype ?? null,
+              unsubscribeUrl,
             });
 
   try {
@@ -217,7 +230,13 @@ async function sendPurchaseEmail({
         subject: tpl.subject,
         html: tpl.html,
         text: tpl.text,
-        headers: { "X-LoveIQ-Variant": variant },
+        headers: {
+          "X-LoveIQ-Variant": variant,
+          ...(unsubscribeUrl && {
+            "List-Unsubscribe": `<${unsubscribeUrl}>`,
+            "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+          }),
+        },
       }),
       new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error("Resend timeout")), 8_000)

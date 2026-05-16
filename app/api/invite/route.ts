@@ -3,6 +3,7 @@ import { Resend } from "resend";
 import { inviteEmail } from "@features/invite/emails/invite";
 import { inviteBEmail } from "@features/invite/emails/invite-b";
 import { buildUnsubscribeUrl } from "@shared/emails/unsubscribe-token";
+import { isEmailSuppressed } from "@shared/emails/suppression";
 import { pickEmailVariant } from "@shared/emails/ab-variant";
 import { z } from "zod";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
@@ -88,33 +89,43 @@ export async function POST(request: Request) {
   }
 
   scheduleAfterResponse("invite-email-and-tracking", async () => {
-    // Send email
-    try {
-      const { error } = await Promise.race([
-        getResend().emails.send({
-          from: process.env.RESEND_FROM || "LoveIQ <hello@loveiq.org>",
-          to: normalizedRecipient,
-          replyTo: process.env.RESEND_REPLY_TO || "hello@loveiq.org",
-          subject: tpl.subject,
-          html: tpl.html,
-          text: tpl.text,
-          headers: {
-            "X-LoveIQ-Variant": variant,
-            ...(unsubscribeUrl && {
-              "List-Unsubscribe": `<${unsubscribeUrl}>`,
-              "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
-            }),
-          },
-        }),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("Resend timeout")), 8_000)
-        ),
-      ]);
-      if (error) {
-        logger.error({ error, variant }, "Invite email send failed");
+    // Invite emails are user-initiated outreach to a third party. Respect any
+    // prior unsubscribe from the recipient — and continue tracking (the
+    // invite_event row records the attempt so the referrer's stats stay
+    // accurate, just without the actual send).
+    const suppressed = await isEmailSuppressed(normalizedRecipient);
+
+    // Send email — skip when recipient previously unsubscribed.
+    if (suppressed) {
+      logger.info({ recipient: normalizedRecipient }, "invite: skip suppressed recipient");
+    } else {
+      try {
+        const { error } = await Promise.race([
+          getResend().emails.send({
+            from: process.env.RESEND_FROM || "LoveIQ <hello@loveiq.org>",
+            to: normalizedRecipient,
+            replyTo: process.env.RESEND_REPLY_TO || "hello@loveiq.org",
+            subject: tpl.subject,
+            html: tpl.html,
+            text: tpl.text,
+            headers: {
+              "X-LoveIQ-Variant": variant,
+              ...(unsubscribeUrl && {
+                "List-Unsubscribe": `<${unsubscribeUrl}>`,
+                "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+              }),
+            },
+          }),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("Resend timeout")), 8_000)
+          ),
+        ]);
+        if (error) {
+          logger.error({ error, variant }, "Invite email send failed");
+        }
+      } catch (err) {
+        logger.error({ err, variant }, "Invite email error");
       }
-    } catch (err) {
-      logger.error({ err, variant }, "Invite email error");
     }
 
     // Track in Supabase

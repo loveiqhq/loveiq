@@ -32,6 +32,11 @@ vi.mock("resend", () => ({
   },
 }));
 
+const mockIsEmailSuppressed = vi.fn().mockResolvedValue(false);
+vi.mock("@shared/emails/suppression", () => ({
+  isEmailSuppressed: (...args: unknown[]) => mockIsEmailSuppressed(...args),
+}));
+
 const mockResolveOwner = vi.fn();
 const mockCreateShare = vi.fn();
 const mockRevoke = vi.fn();
@@ -123,6 +128,9 @@ describe("POST /api/report/share", () => {
       void fn();
     });
     mockGenerateToken.mockReturnValue(VALID_SHARE_TOKEN);
+    mockResendSend.mockResolvedValue({ error: null });
+    mockIsEmailSuppressed.mockResolvedValue(false);
+    process.env.UNSUBSCRIBE_SECRET = "test-unsubscribe-secret";
   });
 
   it("returns 403 on CSRF failure", async () => {
@@ -372,6 +380,74 @@ describe("POST /api/report/share", () => {
     expect(mockCreateShare).toHaveBeenCalledWith(
       expect.objectContaining({ recipientEmail: "mixed@example.io" })
     );
+  });
+
+  it("skips the email send when recipient is on the suppression list", async () => {
+    allowCsrf();
+    allowRateLimit();
+    defaultOwner();
+    mockGetPlan.mockResolvedValue("full_report");
+    mockListActive.mockResolvedValue([]);
+    mockCreateShare.mockResolvedValue({
+      ok: true,
+      row: {
+        id: 555,
+        personal_report_id: 99,
+        recipient_email: "unsub@example.io",
+        share_token: VALID_SHARE_TOKEN,
+        shared_by_user_id: 7,
+        plan_at_share: "full_report",
+        last_viewed_at: null,
+        view_count: 0,
+        revoked_at: null,
+        created_at: "2026-05-16T00:00:00Z",
+      },
+    });
+    mockIsEmailSuppressed.mockResolvedValueOnce(true);
+
+    const res = await POST(
+      postRequest({ ownerToken: VALID_OWNER_TOKEN, recipientEmail: "unsub@example.io" })
+    );
+
+    // Share row still created — only the email send is skipped.
+    expect(res.status).toBe(200);
+    expect(mockCreateShare).toHaveBeenCalled();
+    expect(mockIsEmailSuppressed).toHaveBeenCalledWith("unsub@example.io");
+    expect(mockResendSend).not.toHaveBeenCalled();
+  });
+
+  it("attaches List-Unsubscribe headers + unsubscribeUrl on a normal send", async () => {
+    allowCsrf();
+    allowRateLimit();
+    defaultOwner();
+    mockGetPlan.mockResolvedValue("full_report");
+    mockListActive.mockResolvedValue([]);
+    mockCreateShare.mockResolvedValue({
+      ok: true,
+      row: {
+        id: 556,
+        personal_report_id: 99,
+        recipient_email: "friend@example.io",
+        share_token: VALID_SHARE_TOKEN,
+        shared_by_user_id: 7,
+        plan_at_share: "full_report",
+        last_viewed_at: null,
+        view_count: 0,
+        revoked_at: null,
+        created_at: "2026-05-16T00:00:00Z",
+      },
+    });
+
+    await POST(postRequest({ ownerToken: VALID_OWNER_TOKEN, recipientEmail: "friend@example.io" }));
+
+    expect(mockResendSend).toHaveBeenCalledTimes(1);
+    const sent = mockResendSend.mock.calls[0][0];
+    expect(sent.headers["List-Unsubscribe"]).toMatch(
+      /^<https:\/\/loveiq\.org\/api\/unsubscribe\?token=/
+    );
+    expect(sent.headers["List-Unsubscribe-Post"]).toBe("List-Unsubscribe=One-Click");
+    // The footer link is inlined by wrapEmailShell → renderBrandFooter.
+    expect(sent.html).toContain("Unsubscribe from these emails");
   });
 });
 

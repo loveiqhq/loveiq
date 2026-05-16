@@ -38,8 +38,8 @@ export function renderBrandFooter(unsubscribeUrl?: string): string {
   const unsubscribeRow = unsubscribeUrl
     ? `
         <tr>
-          <td align="center" style="padding-top:10px; font-family:${EMAIL_FONT}; font-size:12px; color:#999999;">
-            <a href="${escapeHtml(unsubscribeUrl)}" style="color:#999999; text-decoration:underline;">Unsubscribe</a>
+          <td align="center" style="padding-top:16px; font-family:${EMAIL_FONT}; font-size:13px; color:#666666;">
+            <a href="${escapeHtml(unsubscribeUrl)}" style="color:#666666; text-decoration:underline;">Unsubscribe from these emails</a>
           </td>
         </tr>`
     : "";

@@ -10,6 +10,7 @@ import logger from "@shared/observability/logger";
 import { surveyCompleteEmail } from "@features/survey/server/emails/survey-complete";
 import { surveyCompleteBEmail } from "@features/survey/server/emails/survey-complete-b";
 import { buildUnsubscribeUrl } from "@shared/emails/unsubscribe-token";
+import { isEmailSuppressed } from "@shared/emails/suppression";
 import { pickEmailVariant } from "@shared/emails/ab-variant";
 import { ensurePersonalReportForSubmission } from "@features/report/server/personalReport";
 import type { SurveyAnswers } from "@features/survey/server/types";
@@ -316,6 +317,11 @@ export async function POST(request: Request) {
       const resend = getResend();
       if (!resend) {
         logger.warn({ submissionId }, "RESEND_API_KEY missing — skipping survey completion email");
+        return;
+      }
+
+      if (await isEmailSuppressed(normalizedEmail)) {
+        logger.info({ submissionId }, "survey-complete: skip suppressed recipient");
         return;
       }
 
