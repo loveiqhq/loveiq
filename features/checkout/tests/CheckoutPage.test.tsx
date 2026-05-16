@@ -49,6 +49,8 @@ function createJsonResponse(body: unknown, ok = true) {
 vi.mock("@features/survey/ui/hooks/surveySession", () => ({
   getReportPricingSessionId: () => mockGetReportPricingSessionId(),
   getReportSessionId: () => mockGetReportSessionId(),
+  // No nurture promo stashed in CheckoutPage tests — the POST body just omits `promo`.
+  getReportNurturePromo: () => null,
 }));
 
 vi.mock("@features/checkout/server/reportCheckoutQuoteCache", () => ({

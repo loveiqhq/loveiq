@@ -1,6 +1,7 @@
 export const SURVEY_SESSION_KEY = "loveiq-survey-session";
 export const REPORT_SESSION_KEY = "loveiq-report-session";
 export const REPORT_PRICING_SESSION_PREFIX = "loveiq-report-pricing-session";
+export const REPORT_NURTURE_PROMO_PREFIX = "loveiq-report-nurture-promo";
 
 function canUseStorage() {
   return typeof window !== "undefined";
@@ -138,5 +139,59 @@ export function setReportPricingSessionId({
     sessionStorage.setItem(storageKey, pricingSessionId);
   } catch {
     /* storage unavailable */
+  }
+}
+
+function getNurturePromoStorageKey({
+  sessionId,
+  token,
+}: {
+  sessionId?: string | null;
+  token?: string | null;
+}): string | null {
+  if (token) return `${REPORT_NURTURE_PROMO_PREFIX}:token:${token}`;
+  if (sessionId) return `${REPORT_NURTURE_PROMO_PREFIX}:session:${sessionId}`;
+  return null;
+}
+
+/**
+ * Stash a nurture promo code (e.g. "LIQ-50-Ab7K9xQ2") so the downstream
+ * checkout-session POST can pick it up. The code lives in sessionStorage
+ * because it's per-tab and shouldn't survive the user closing the browser —
+ * the email link is the canonical entry point.
+ */
+export function setReportNurturePromo({
+  promoCode,
+  sessionId,
+  token,
+}: {
+  promoCode: string;
+  sessionId?: string | null;
+  token?: string | null;
+}): void {
+  if (!canUseStorage()) return;
+  const storageKey = getNurturePromoStorageKey({ sessionId, token });
+  if (!storageKey) return;
+  try {
+    sessionStorage.setItem(storageKey, promoCode);
+  } catch {
+    /* storage unavailable */
+  }
+}
+
+export function getReportNurturePromo({
+  sessionId,
+  token,
+}: {
+  sessionId?: string | null;
+  token?: string | null;
+}): string | null {
+  if (!canUseStorage()) return null;
+  const storageKey = getNurturePromoStorageKey({ sessionId, token });
+  if (!storageKey) return null;
+  try {
+    return sessionStorage.getItem(storageKey);
+  } catch {
+    return null;
   }
 }

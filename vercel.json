@@ -6,8 +6,8 @@
       "schedule": "0 * * * *"
     },
     {
-      "path": "/api/cron/report-discount-email",
-      "schedule": "0 9 * * *"
+      "path": "/api/cron/nurture-sequence",
+      "schedule": "0 * * * *"
     },
     {
       "path": "/api/cron/invite-reminders",
@@ -25,7 +25,7 @@
     "app/api/cron/survey-paused/route.ts": {
       "maxDuration": 60
     },
-    "app/api/cron/report-discount-email/route.ts": {
+    "app/api/cron/nurture-sequence/route.ts": {
       "maxDuration": 60
     },
     "app/api/cron/invite-reminders/route.ts": {

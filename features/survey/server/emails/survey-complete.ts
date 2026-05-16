@@ -1,10 +1,48 @@
 import { EMAIL_FONT, escapeHtml, renderCtaButton, wrapEmailShell } from "@shared/emails/shared";
+import { TESTIMONIAL_DIJANA } from "@features/report/server/emails/nurture/shared";
 
 export interface SurveyCompleteEmailParams {
   firstName?: string | null;
   reportUrl: string;
   siteUrl: string;
   unsubscribeUrl?: string;
+}
+
+function renderTestimonialCard(siteUrl: string): string {
+  const t = TESTIMONIAL_DIJANA;
+  const absPhoto = t.photoUrl.startsWith("http") ? t.photoUrl : `${siteUrl}${t.photoUrl}`;
+  return `
+  <tr>
+    <td style="padding:8px 32px 16px;">
+      <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background-color:#150A22; border-radius:18px;">
+        <tr>
+          <td style="padding:16px 18px 18px;">
+            <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
+              <tr>
+                <td style="width:64px; vertical-align:middle;">
+                  <img src="${escapeHtml(absPhoto)}" alt="${escapeHtml(t.name)}" width="56" height="56" style="display:block; width:56px; height:56px; border-radius:9999px; background-color:#2A1839; object-fit:cover;" />
+                </td>
+                <td style="padding-left:12px; vertical-align:middle;">
+                  <p style="margin:0; font-family:${EMAIL_FONT}; font-size:14px; font-weight:700; line-height:20px; color:#ffffff;">${escapeHtml(t.name)}</p>
+                  <p style="margin:0; font-family:${EMAIL_FONT}; font-size:11px; line-height:16px; color:#d1d5db;">${escapeHtml(t.role)}</p>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:2px 0 6px;">
+                  <span style="display:inline-block; font-size:14px; color:#F26D4F; letter-spacing:2px; line-height:1;">&#9733;&#9733;&#9733;&#9733;&#9733;</span>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding-top:6px; font-family:Georgia,'Times New Roman',serif; font-size:15px; font-style:italic; line-height:1.55; color:#d1d5db;">
+                  &ldquo;${escapeHtml(t.quoteLeading)} <strong style="font-weight:700; font-style:italic; color:#ffffff;">${escapeHtml(t.quoteBold)}</strong>${t.quoteTrailing ? ` ${escapeHtml(t.quoteTrailing)}` : ""}&rdquo;
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>`;
 }
 
 export function surveyCompleteEmail({
@@ -42,10 +80,11 @@ export function surveyCompleteEmail({
     </td>
   </tr>
   <tr>
-    <td align="center" style="padding:8px 32px 24px;">
+    <td align="center" style="padding:8px 32px 16px;">
       ${renderCtaButton({ href: reportUrl, label: "View your report now" })}
     </td>
   </tr>
+  ${renderTestimonialCard(siteUrl)}
   <tr>
     <td style="padding:8px 32px 8px;">
       <p style="margin:0 0 12px 0; font-family:${EMAIL_FONT}; font-size:17px; line-height:1.55; color:#000000; font-weight:700;">
@@ -96,6 +135,9 @@ export function surveyCompleteEmail({
     "Inside, you'll discover your archetype — a clear, data-informed lens on how you experience desire, connection, and attraction. No labels. Just language that helps you understand yourself (and others) better.",
     "",
     `View your report now: ${reportUrl}`,
+    "",
+    `"${TESTIMONIAL_DIJANA.quoteLeading} ${TESTIMONIAL_DIJANA.quoteBold}${TESTIMONIAL_DIJANA.quoteTrailing ? ` ${TESTIMONIAL_DIJANA.quoteTrailing}` : ""}"`,
+    `— ${TESTIMONIAL_DIJANA.name}, ${TESTIMONIAL_DIJANA.role}`,
     "",
     "Why it's worth a look:",
     "- Built on psychology + real response patterns",

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState, useSyncExternalStore, type FC } from "react";
 import {
+  getReportNurturePromo,
   getReportPricingSessionId,
   getReportSessionId,
 } from "@features/survey/ui/hooks/surveySession";
@@ -349,6 +350,14 @@ const CheckoutPage: FC<Props> = ({ archetype = null, planId, token = null }) => 
 
     setSessionState({ status: "redirecting" });
 
+    // Pull any stashed nurture promo (set by /report/[token]?promo=...).
+    // Forward it raw; the server validates ownership and expiry. Falsy / shape
+    // miss is fine — the server treats unparseable values as absent.
+    const stashedPromo = getReportNurturePromo({
+      sessionId: token ? null : reportSessionId,
+      token,
+    });
+
     try {
       const response = await fetch("/api/stripe/checkout-session", {
         method: "POST",
@@ -360,6 +369,7 @@ const CheckoutPage: FC<Props> = ({ archetype = null, planId, token = null }) => 
           archetype: archetype ?? undefined,
           plan: planId,
           pricingSessionId,
+          promo: stashedPromo ?? undefined,
           quoteId: activeQuote.id,
           reportSessionId: token ? null : reportSessionId,
           reportToken: token,

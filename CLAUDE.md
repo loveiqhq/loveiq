@@ -141,6 +141,7 @@ loveiq-web/
 7. **Invite Send:** Form → CSRF check → Rate limit → Zod validation → Resend email (after response) → Supabase invite_event insert (after response)
 8. **Invite Tracking:** Share button click → CSRF check → Rate limit → Zod validation → Supabase invite_event insert
 9. **Survey Partial Save:** Auto-save on question transition → CSRF check (header or body for sendBeacon) → Rate limit → Zod validation → Supabase upsert (survey_partial_save)
+10. **Nurture Email Sequence:** `/api/cron/nurture-sequence` (hourly) reads `personal_report.created_date_time`, fans out to 4 stages (`6h_no_view`, `6h_no_unlock`, `30h_no_unlock`, `54h_no_unlock`). At 30h/54h, mints a per-user Stripe Promotion Code (24h expiry, customer-restricted) → Resend send → idempotency write to `report_price_quote.metadata.nurtureEmailsSent[]` + `nurturePromoCodes[stage]`. Email CTA links carry `?promo=<code>&offer=1&pricingSessionId=…&utm_campaign=<stage>`. The `/report/[token]` page stashes `?promo=` in sessionStorage; checkout-session POST forwards it, server validates ownership via `resolveNurturePromo()`, pre-applies as `discounts:[]` on the Stripe session, and stamps `metadata.promoCode`/`metadata.promoStage` for attribution.
 
 ### Key Boundaries
 
@@ -177,6 +178,8 @@ Copy `.env.example` to `.env.local` and fill values:
 | `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`       | For checkout | Browser-safe Stripe publishable key (`pk_test_...` sandbox or `pk_live_...` prod)                                                |
 | `STRIPE_SECRET_KEY`                        | For checkout | Server-only Stripe secret (`sk_test_...` sandbox or `sk_live_...` prod)                                                          |
 | `STRIPE_WEBHOOK_SECRET`                    | For checkout | Webhook signing secret (`whsec_...`) per Stripe dashboard endpoint                                                               |
+| `STRIPE_COUPON_50`                         | For nurture  | Stripe Coupon ID for 50%-off (e.g. `nurture_50`). Used by `/api/cron/nurture-sequence` to mint per-user 24h promotion codes      |
+| `STRIPE_COUPON_75`                         | For nurture  | Stripe Coupon ID for 75%-off (e.g. `nurture_75`). Same purpose, last-chance reminder                                             |
 | `STRIPE_CHECKOUT_ENABLED`                  | For checkout | `true` to create real Stripe sessions; default `false`                                                                           |
 | `NEXT_PUBLIC_STRIPE_CHECKOUT_PREVIEW_MODE` | No           | `false` for normal flow; `true` adds a "preview" banner only                                                                     |
 | `KV_REST_API_URL`                          | For prod     | Upstash Redis REST URL — backs the rate limiter; falls back to in-memory if unset                                                |

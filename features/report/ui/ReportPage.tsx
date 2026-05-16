@@ -30,6 +30,7 @@ import ShareVerifyGate from "./ShareVerifyGate";
 import SharedViewerBanner from "./SharedViewerBanner";
 import {
   getReportSessionId,
+  setReportNurturePromo,
   setReportPricingSessionId,
 } from "@features/survey/ui/hooks/surveySession";
 import { useReportData, type ReportRequestError } from "./hooks/useReportData";
@@ -792,6 +793,9 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   // Honour the discount-email CTA deep-link: /report/[token]?offer=1&pricingSessionId=<uuid>
   const isOfferLink = searchParams.get("offer") === "1";
   const pricingSessionIdFromUrl = searchParams.get("pricingSessionId");
+  // Nurture-email per-user promo code, format /^LIQ-(50|75)-[A-Za-z0-9]{8}$/.
+  // Validated server-side at checkout — we only stash it raw here.
+  const promoFromUrl = searchParams.get("promo");
 
   // Persist the URL-provided pricingSessionId into sessionStorage so every
   // downstream surface (report data, /api/price, checkout, Stripe session)
@@ -806,6 +810,19 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       token,
     });
   }, [pricingSessionIdFromUrl, sessionId, token]);
+
+  // Stash the nurture promo code so the downstream checkout-session POST can
+  // forward it. Server validates ownership + expiry; an invalid code silently
+  // falls through to the no-promo flow.
+  useEffect(() => {
+    if (!promoFromUrl) return;
+    if (!token && !sessionId) return;
+    setReportNurturePromo({
+      promoCode: promoFromUrl,
+      sessionId: token ? null : sessionId,
+      token,
+    });
+  }, [promoFromUrl, sessionId, token]);
 
   const { data, status, error, challenge, retry } = useReportData({
     token,
