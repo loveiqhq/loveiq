@@ -269,9 +269,7 @@ export const TESTIMONIAL_DIJANA: NurtureTestimonial = {
 export const TESTIMONIAL_GEBHARDT: NurtureTestimonial = {
   name: "Dr. Philip Gebhardt, 40",
   role: "Dentist and orthodontist",
-  // TODO(content): drop public/academic/gebhardt.jpg before launch. Alt-text +
-  // dark background fallback degrades gracefully if the file is missing.
-  photoUrl: "/academic/gebhardt.jpg",
+  photoUrl: "/academic/gebhardt.png",
   quoteLeading: "I almost didn't start, assumed it'd be generic. It wasn't.",
   quoteBold:
     "It felt almost uncomfortably precise and gave me insight I'll probably use for years.",
