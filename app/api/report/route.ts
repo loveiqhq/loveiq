@@ -18,6 +18,7 @@ import {
   buildPracticeTendenciesForUser,
 } from "@features/report/server/contentGating";
 import logger from "@shared/observability/logger";
+import { notifySlack, escapeSlack } from "@shared/observability/slack";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import type { ReportPurchasePlanId } from "@features/checkout/server/reportPurchase";
 import {
@@ -154,6 +155,12 @@ export async function GET(request: Request) {
 
     let isShareAccess = false;
     let shareId: number | null = null;
+    // Captured for the first-view Slack ping below — the share row + owner
+    // email are loaded inside the share-token branch but the ping fires
+    // later, outside that scope.
+    let shareIsFirstView = false;
+    let shareRecipientEmailForPing: string | null = null;
+    let shareOwnerEmailForPing: string | null = null;
 
     if (tokenParsed?.success) {
       const token = tokenParsed.data.token;
@@ -182,6 +189,9 @@ export async function GET(request: Request) {
         isShareAccess = true;
         shareId = shareContext.share.id;
         submissionId = shareContext.submissionId;
+        shareIsFirstView = shareContext.share.last_viewed_at === null;
+        shareRecipientEmailForPing = shareContext.share.recipient_email;
+        shareOwnerEmailForPing = shareContext.ownerEmail;
       } else {
         // Owner — look up report_access_token → submission_id.
         const tokenRes = await getBreaker("supabase").fire(() =>
@@ -405,7 +415,24 @@ export async function GET(request: Request) {
 
     if (isShareAccess && shareId !== null) {
       const viewedShareId = shareId;
-      scheduleAfterResponse("report-share-view", () => markShareViewed(viewedShareId));
+      const wasFirstView = shareIsFirstView;
+      const recipientEmailForPing = shareRecipientEmailForPing;
+      const ownerEmailForPing = shareOwnerEmailForPing;
+      scheduleAfterResponse("report-share-view", async () => {
+        await markShareViewed(viewedShareId);
+        if (wasFirstView) {
+          const ownerLabel = ownerEmailForPing ? maskEmail(ownerEmailForPing) : "owner";
+          const recipientLabel = recipientEmailForPing
+            ? maskEmail(recipientEmailForPing)
+            : "recipient";
+          void notifySlack({
+            channel: "ops",
+            kind: "share_first_view",
+            text: `:eyes: Shared report opened — ${escapeSlack(ownerLabel)} → ${escapeSlack(recipientLabel)} (share #${viewedShareId})`,
+            username: "ops_alerts",
+          });
+        }
+      });
     }
 
     // Owner token lookup — needed so the share modal can authenticate POST

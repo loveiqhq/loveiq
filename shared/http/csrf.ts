@@ -14,6 +14,7 @@
  */
 
 import { cookies } from "next/headers";
+import logger from "@shared/observability/logger";
 
 const isProduction = process.env.NODE_ENV === "production";
 const CSRF_COOKIE_NAME = isProduction ? "__Host-csrf" : "__csrf";
@@ -30,11 +31,13 @@ export async function verifyCsrfToken(request: Request): Promise<boolean> {
 
   // Both must exist and match
   if (!cookieToken || !headerToken) {
+    logCsrfFail(request, "missing_token");
     return false;
   }
 
   // Constant-time comparison to prevent timing attacks
   if (cookieToken.length !== headerToken.length) {
+    logCsrfFail(request, "length_mismatch");
     return false;
   }
 
@@ -43,7 +46,25 @@ export async function verifyCsrfToken(request: Request): Promise<boolean> {
     result |= cookieToken.charCodeAt(i) ^ headerToken.charCodeAt(i);
   }
 
-  return result === 0;
+  if (result !== 0) {
+    logCsrfFail(request, "value_mismatch");
+    return false;
+  }
+  return true;
+}
+
+// Structured warn log on every CSRF failure. The storm-detector cron reads
+// these from Vercel runtime logs (filtered by csrf_fail:true) to surface
+// abuse patterns. Kept at warn-level so the pino → Slack hook (which fires
+// on .error) doesn't ping for every legitimate CSRF expiry.
+function logCsrfFail(request: Request, reason: string) {
+  let path = "(unknown)";
+  try {
+    path = new URL(request.url).pathname;
+  } catch {
+    // Malformed URL — ignore
+  }
+  logger.warn({ csrf_fail: true, reason, path }, "CSRF token check failed");
 }
 
 /**

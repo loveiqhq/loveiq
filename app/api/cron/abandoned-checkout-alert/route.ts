@@ -1,0 +1,113 @@
+/**
+ * GET /api/cron/abandoned-checkout-alert
+ *
+ * Every 30 minutes: find sessions that fired `begin_checkout` more than
+ * 30 minutes ago but never resulted in a succeeded payment, and emit one
+ * Slack ping per (submission_id) to the ops channel.
+ *
+ * Dedup via slack_alert_sent so the same abandoned checkout pings once.
+ * Idempotent + cron-safe.
+ *
+ * Protected by `Authorization: Bearer ${CRON_SECRET}`.
+ */
+
+import { NextResponse } from "next/server";
+import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
+import { getBreaker } from "@shared/http/circuit-breaker";
+import logger from "@shared/observability/logger";
+import { notifySlack } from "@shared/observability/slack";
+import { tryClaimSlackAlert, verifyCronAuth } from "@shared/observability/slack-alert-dedup";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const maxDuration = 50;
+
+const SCAN_LIMIT = 100;
+const ABANDONED_AFTER_MS = 30 * 60_000;
+
+async function supabaseFetch(path: string, init?: RequestInit) {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) throw new Error("supabase_not_configured");
+  return getBreaker("supabase").fire(() =>
+    fetchWithTimeout(`${url}${path}`, {
+      ...init,
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+        ...(init?.headers ?? {}),
+      },
+      timeoutMs: 8000,
+    })
+  );
+}
+
+export async function GET(request: Request) {
+  if (!verifyCronAuth(request)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const cutoff = new Date(Date.now() - ABANDONED_AFTER_MS).toISOString();
+    // Pull recent begin_checkout events older than the abandon threshold.
+    const beginRes = await supabaseFetch(
+      `/rest/v1/analytics_event?event_type=eq.begin_checkout&event_time=lt.${encodeURIComponent(cutoff)}&select=survey_submission_id,event_time&order=event_time.desc&limit=${SCAN_LIMIT}`
+    );
+    if (!beginRes.ok) {
+      throw new Error(`begin_checkout_scan_failed:${beginRes.status}`);
+    }
+    const beginRows = (await beginRes.json()) as Array<{
+      survey_submission_id: number | null;
+      event_time: string;
+    }>;
+    const submissionIds = Array.from(
+      new Set(beginRows.map((r) => r.survey_submission_id).filter((id): id is number => !!id))
+    );
+
+    if (submissionIds.length === 0) {
+      return NextResponse.json({ scanned: 0, pinged: 0 });
+    }
+
+    // Find which of those submissions have a succeeded payment.
+    const paidRes = await supabaseFetch(
+      `/rest/v1/payment?survey_submission_id=in.(${submissionIds.join(",")})&status=eq.succeeded&select=survey_submission_id`
+    );
+    if (!paidRes.ok) {
+      throw new Error(`payment_lookup_failed:${paidRes.status}`);
+    }
+    const paid = new Set(
+      ((await paidRes.json()) as Array<{ survey_submission_id: number }>).map(
+        (r) => r.survey_submission_id
+      )
+    );
+
+    const abandoned = submissionIds.filter((id) => !paid.has(id));
+    let pinged = 0;
+
+    for (const submissionId of abandoned) {
+      const claimed = await tryClaimSlackAlert(
+        "abandoned_checkout",
+        "survey_submission",
+        String(submissionId)
+      );
+      if (!claimed) continue;
+      void notifySlack({
+        channel: "ops",
+        kind: "abandoned_checkout",
+        text: `:hourglass: Abandoned checkout — submission #${submissionId} hit begin_checkout 30m+ ago, no purchase`,
+        username: "ops_alerts",
+      });
+      pinged += 1;
+    }
+
+    return NextResponse.json({
+      scanned: submissionIds.length,
+      abandoned: abandoned.length,
+      pinged,
+    });
+  } catch (err) {
+    logger.error({ err }, "abandoned-checkout-alert cron failed");
+    return NextResponse.json({ error: "Internal" }, { status: 500 });
+  }
+}

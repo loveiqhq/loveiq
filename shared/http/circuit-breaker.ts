@@ -12,6 +12,7 @@
  */
 
 import logger from "@shared/observability/logger";
+import { notifySlack } from "@shared/observability/slack";
 
 export class CircuitOpenError extends Error {
   constructor(service: string) {
@@ -69,6 +70,12 @@ class CircuitBreaker {
       this.state = "closed";
       this.failures = 0;
       logger.info({ service: this.name }, "[circuit-breaker] Closed: service recovered");
+      void notifySlack({
+        channel: "ops",
+        kind: "circuit_recovered",
+        text: `:white_check_mark: Circuit recovered — *${this.name}* is back to healthy.`,
+        username: "ops_alerts",
+      });
     } else {
       this.failures = 0;
     }
@@ -77,12 +84,24 @@ class CircuitBreaker {
   private onFailure() {
     this.failures++;
     if (this.state === "half-open" || this.failures >= this.config.failureThreshold) {
+      const wasOpen = this.state === "open";
       this.state = "open";
       this.openedAt = Date.now();
+      // logger.error already mirrors to Slack via the pino hook (as api_5xx).
+      // The circuit_open kind below is more specific — keep both with slack:false
+      // on the logger.error so the pino hook doesn't double-fire.
       logger.error(
-        { service: this.name, failures: this.failures },
+        { service: this.name, failures: this.failures, slack: false },
         "[circuit-breaker] Opened: too many consecutive failures"
       );
+      if (!wasOpen) {
+        void notifySlack({
+          channel: "ops",
+          kind: "circuit_open",
+          text: `:rotating_light: Circuit *${this.name}* opened after ${this.failures} consecutive failures.`,
+          username: "ops_alerts",
+        });
+      }
     }
   }
 }

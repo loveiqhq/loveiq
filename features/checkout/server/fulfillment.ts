@@ -3,6 +3,7 @@ import { Resend } from "resend";
 import { getBreaker } from "@shared/http/circuit-breaker";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import logger from "@shared/observability/logger";
+import { notifySlack, maskEmail, escapeSlack } from "@shared/observability/slack";
 import { reportAllEmail } from "@features/report/server/emails/report-all";
 import { reportAllBEmail } from "@features/report/server/emails/report-all-b";
 import { reportEssentialsEmail } from "@features/report/server/emails/report-essentials";
@@ -969,7 +970,38 @@ async function syncCheckoutSessionPayment({
         plan,
         submissionId: context.submissionId,
       });
+
+      // Promo-code redemption ping to the ops channel — only when a coupon
+      // actually applied to this checkout. Keeps the payments channel
+      // focused on raw $$$; promo attribution lands in ops alongside the
+      // other operational signals.
+      if (promotionSummary?.promotionCode) {
+        const discountSummary =
+          typeof promotionSummary.couponPercentOff === "number"
+            ? `${promotionSummary.couponPercentOff}% off`
+            : typeof promotionSummary.couponAmountOff === "number"
+              ? `${(promotionSummary.couponAmountOff / 100).toFixed(2)} off`
+              : "promo applied";
+        const stage = settledSession.metadata?.promoStage;
+        const stageSuffix = stage ? ` — stage *${escapeSlack(stage)}*` : "";
+        void notifySlack({
+          channel: "ops",
+          kind: "promo_redeemed",
+          text: `:tag: Promo *${escapeSlack(promotionSummary.promotionCode)}* redeemed (${discountSummary})${stageSuffix} — payment #${paymentId}`,
+          username: "ops_alerts",
+        });
+      }
     }
+  } else if (eventStatus === "failed") {
+    const recipient = await lookupRecipientForSubmission(context.submissionId);
+    const masked = recipient.email ? maskEmail(recipient.email) : "no-email";
+    const reason = chargeDetails.failureMessage ?? chargeDetails.failureCode ?? "unknown";
+    void notifySlack({
+      channel: "ops",
+      kind: "stripe_payment_failed",
+      text: `:credit_card: Payment failed — ${escapeSlack(masked)} — ${escapeSlack(reason)} — payment #${paymentId}`,
+      username: "ops_alerts",
+    });
   }
 
   await upsertWebhookEventRecord({
@@ -1034,6 +1066,15 @@ async function syncRefundEvent({ charge, event }: { charge: Stripe.Charge; event
     processingError: null,
     stripePaymentIntentId:
       typeof charge.payment_intent === "string" ? charge.payment_intent : charge.payment_intent?.id,
+  });
+
+  const refundAmount = toAmount(charge.amount_refunded);
+  const refundCurrency = (charge.currency ?? "eur").toUpperCase();
+  void notifySlack({
+    channel: "ops",
+    kind: "stripe_refund",
+    text: `:money_with_wings: Refund issued — payment #${existingPayment.id} ${refundCurrency} ${refundAmount?.toFixed(2) ?? "?"} (charge ${escapeSlack(charge.id)})`,
+    username: "ops_alerts",
   });
 }
 
@@ -1109,6 +1150,25 @@ async function syncDisputeEvent({
     processingError: null,
     stripePaymentIntentId: paymentIntentId,
   });
+
+  const disputeAmount = toAmount(dispute.amount);
+  const disputeCurrency = (dispute.currency ?? "eur").toUpperCase();
+  if (outcome === "opened") {
+    void notifySlack({
+      channel: "ops",
+      kind: "stripe_dispute_opened",
+      text: `:rotating_light: Dispute opened — payment #${existingPayment.id} ${disputeCurrency} ${disputeAmount?.toFixed(2) ?? "?"} — reason: ${escapeSlack(dispute.reason ?? "unknown")}`,
+      username: "ops_alerts",
+    });
+  } else {
+    const verdict = dispute.status === "won" ? ":trophy: WON" : `:no_entry: ${dispute.status}`;
+    void notifySlack({
+      channel: "ops",
+      kind: "stripe_dispute_resolved",
+      text: `Dispute resolved (${verdict}) — payment #${existingPayment.id} ${disputeCurrency} ${disputeAmount?.toFixed(2) ?? "?"} — access ${restoreToSucceeded ? "restored" : "stays locked"}`,
+      username: "ops_alerts",
+    });
+  }
 }
 
 export async function processStripeWebhookEvent({

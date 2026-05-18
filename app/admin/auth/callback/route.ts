@@ -4,6 +4,7 @@ import { supabaseFetch } from "@features/admin/server/supabase";
 import { logAdminAction } from "@features/admin/server/audit";
 import { getClientIp } from "@shared/http/ratelimit";
 import logger from "@shared/observability/logger";
+import { notifySlack, maskEmail, escapeSlack } from "@shared/observability/slack";
 
 /**
  * Creates a Supabase client that reads cookies from the request and writes
@@ -86,6 +87,12 @@ export async function GET(request: NextRequest) {
       { email: user.email, ip: getClientIp(request) },
       "Admin login denied: not in allowlist"
     );
+    void notifySlack({
+      channel: "ops",
+      kind: "admin_login_denied",
+      text: `:warning: Admin login *denied* — ${escapeSlack(maskEmail(user.email))} not in allowlist`,
+      username: "ops_alerts",
+    });
     return loginRedirect;
   }
 
@@ -95,6 +102,12 @@ export async function GET(request: NextRequest) {
     admin_email: user.email,
     action: "login",
     ip,
+  });
+  void notifySlack({
+    channel: "ops",
+    kind: "admin_login",
+    text: `:lock: Admin login — *${escapeSlack(user.email)}*`,
+    username: "ops_alerts",
   });
 
   return redirectToAdmin;

@@ -16,6 +16,22 @@
     {
       "path": "/api/cron/payment-fulfillment-sweep",
       "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/abandoned-checkout-alert",
+      "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/deep-engagement-alert",
+      "schedule": "0 */4 * * *"
+    },
+    {
+      "path": "/api/cron/security-storm-detector",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/funnel-digest",
+      "schedule": "0 9 * * *"
     }
   ],
   "functions": {
@@ -32,6 +48,18 @@
       "maxDuration": 60
     },
     "app/api/cron/payment-fulfillment-sweep/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/cron/abandoned-checkout-alert/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/cron/deep-engagement-alert/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/cron/security-storm-detector/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/cron/funnel-digest/route.ts": {
       "maxDuration": 60
     }
   }

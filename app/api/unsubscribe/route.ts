@@ -2,6 +2,16 @@ import { NextResponse } from "next/server";
 import { verifyUnsubscribeToken } from "@shared/emails/unsubscribe-token";
 import { addToSuppression } from "@shared/emails/suppression";
 import logger from "@shared/observability/logger";
+import { notifySlack, maskEmail, escapeSlack } from "@shared/observability/slack";
+
+function pingUnsubscribe(email: string, mode: "footer" | "one-click") {
+  void notifySlack({
+    channel: "ops",
+    kind: "unsubscribe",
+    text: `:no_bell: Unsubscribe (${mode}) — ${escapeSlack(maskEmail(email))}`,
+    username: "ops_alerts",
+  });
+}
 
 // CSRF-exempt by design. The HMAC-signed `token` URL param IS the auth.
 // Email clients (Gmail, Outlook, Apple Mail) call the RFC 8058 one-click
@@ -30,6 +40,7 @@ export async function GET(request: Request) {
 
   await addToSuppression(email, "unsubscribed");
   logger.info({ email }, "Email unsubscribed via GET");
+  pingUnsubscribe(email, "footer");
 
   const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://loveiq.org").replace(/\/$/, "");
   // eslint-disable-next-line no-secrets/no-secrets
@@ -51,5 +62,6 @@ export async function POST(request: Request) {
 
   await addToSuppression(email, "unsubscribed");
   logger.info({ email }, "Email unsubscribed via one-click POST");
+  pingUnsubscribe(email, "one-click");
   return NextResponse.json({ ok: true });
 }

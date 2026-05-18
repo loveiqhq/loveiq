@@ -1,4 +1,9 @@
-import pino from "pino";
+import pino, { type LogFn } from "pino";
+import { notifySlack } from "@shared/observability/slack";
+
+// Pre-resolved at module load for cheap branch in the hook hot path.
+const SLACK_MIRROR_ENABLED =
+  process.env.NODE_ENV === "production" && Boolean(process.env.SLACK_OPS_WEBHOOK_URL);
 
 const logger = pino({
   level: process.env.LOG_LEVEL || "info",
@@ -28,6 +33,11 @@ const logger = pino({
       "*.shareToken",
       "csrfToken",
       "*.csrfToken",
+      // Webhook URLs carry shared secrets in their path.
+      "webhookUrl",
+      "*.webhookUrl",
+      "slackWebhookUrl",
+      "*.slackWebhookUrl",
     ],
     censor: "[REDACTED]",
   },
@@ -37,6 +47,38 @@ const logger = pino({
     },
   },
   timestamp: pino.stdTimeFunctions.isoTime,
+  hooks: {
+    logMethod(this, args, method, level) {
+      // Mirror error/fatal logs to the ops Slack channel so silent prod
+      // failures get caught. Skipped when the log entry carries
+      // `slack: false` (slack.ts uses this to break the recursion loop
+      // when notifySlack itself fails).
+      if (SLACK_MIRROR_ENABLED && (level === 50 || level === 60)) {
+        const first = args[0];
+        const ctx =
+          first && typeof first === "object" && !Array.isArray(first)
+            ? (first as Record<string, unknown>)
+            : null;
+        const optedOut = ctx && ctx.slack === false;
+
+        if (!optedOut) {
+          const msg = typeof first === "string" ? first : String(args[1] ?? "(no message)");
+          const kind = level === 60 ? "fatal" : "api_5xx";
+          // setImmediate so the logger never awaits the webhook.
+          setImmediate(() => {
+            void notifySlack({
+              channel: "ops",
+              kind,
+              text: `:rotating_light: *${kind}* — ${msg}`,
+              username: "ops_alerts",
+            });
+          });
+        }
+      }
+
+      return (method as LogFn).apply(this, args);
+    },
+  },
 });
 
 export default logger;

@@ -10,6 +10,7 @@ import { resolveReportNavTitle } from "@features/report/sectionTitles";
 import { resolveSubmissionAccessContext } from "@features/report/server/personalReport";
 import { REPORT_ACCESS_TOKEN_REGEX } from "@features/checkout/server/reportPurchase";
 import logger from "@shared/observability/logger";
+import { notifySlack } from "@shared/observability/slack";
 
 // Whitelist sectionId against the canonical section list. Without this
 // allowlist, an attacker can pollute the feedback table with fictional
@@ -158,6 +159,20 @@ async function notifySlackReportFeedback(input: {
     }
   } catch (err) {
     logger.error({ err, submissionId: input.submissionId }, "Slack report-feedback webhook error");
+  }
+
+  // Second ping: route every 👎 (and any feedback that carries an issue
+  // category or written comment) into the ops channel for product triage.
+  // The survey-channel ping above is the audit trail; this one is the
+  // "needs attention" signal.
+  const opsWorthy = input.feedback === "down" || Boolean(input.issue) || Boolean(input.comment);
+  if (opsWorthy) {
+    void notifySlack({
+      channel: "ops",
+      kind: "report_feedback_negative",
+      text: lines.join("\n"),
+      username: "ops_alerts",
+    });
   }
 }
 

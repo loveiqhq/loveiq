@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { Webhook } from "svix";
 import { addToSuppression } from "@shared/emails/suppression";
 import logger from "@shared/observability/logger";
+import { notifySlack, maskEmail, escapeSlack } from "@shared/observability/slack";
 
 export const runtime = "nodejs";
 
@@ -36,9 +37,21 @@ export async function POST(request: Request) {
   if (payload.type === "email.bounced") {
     logger.info({ email }, "Hard bounce — suppressing email address");
     await addToSuppression(email, "hard_bounce");
+    void notifySlack({
+      channel: "ops",
+      kind: "email_bounce",
+      text: `:envelope_with_arrow: Hard bounce — ${escapeSlack(maskEmail(email))} suppressed`,
+      username: "ops_alerts",
+    });
   } else if (payload.type === "email.complained") {
     logger.info({ email }, "Spam complaint — suppressing email address");
     await addToSuppression(email, "complaint");
+    void notifySlack({
+      channel: "ops",
+      kind: "email_complaint",
+      text: `:rotating_light: Spam complaint — ${escapeSlack(maskEmail(email))} suppressed. Review template + sender reputation.`,
+      username: "ops_alerts",
+    });
   } else {
     logger.info({ email, type: payload.type }, "Resend webhook received");
   }

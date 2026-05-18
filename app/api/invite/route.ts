@@ -12,6 +12,7 @@ import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { getBreaker, CircuitOpenError } from "@shared/http/circuit-breaker";
 import { verifyCsrfToken } from "@shared/http/csrf";
 import logger from "@shared/observability/logger";
+import { notifySlack, maskEmail, escapeSlack } from "@shared/observability/slack";
 
 const schema = z.object({
   recipientEmail: z.string().email().max(320),
@@ -157,6 +158,17 @@ export async function POST(request: Request) {
         }
       }
     }
+
+    const from = referrerEmail
+      ? escapeSlack(maskEmail(referrerEmail.toLowerCase().trim()))
+      : "anonymous";
+    const to = escapeSlack(maskEmail(normalizedRecipient));
+    void notifySlack({
+      channel: "ops",
+      kind: "invite_sent",
+      text: `:incoming_envelope: Invite sent — ${from} → ${to}${suppressed ? " (recipient suppressed; tracking only)" : ""}`,
+      username: "ops_alerts",
+    });
   });
 
   return NextResponse.json({ success: true });

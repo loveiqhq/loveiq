@@ -21,6 +21,7 @@ import { evaluateTestSubmission } from "@features/admin/server/test-submission";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { verifyCsrfToken } from "@shared/http/csrf";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
+import { notifySlack, escapeSlack } from "@shared/observability/slack";
 import logger from "@shared/observability/logger";
 
 const bodySchema = z.object({
@@ -118,5 +119,17 @@ export async function POST(request: Request) {
   }
 
   logger.info({ adminEmail: admin.email, deleted, skipped: skipped.length, ip }, "Bulk delete");
+
+  if (deleted > 0) {
+    const sample = ids.slice(0, 5).join(", ");
+    const more = ids.length > 5 ? ` (+${ids.length - 5} more)` : "";
+    void notifySlack({
+      channel: "ops",
+      kind: "admin_bulk_delete",
+      text: `:wastebasket: *${escapeSlack(admin.email)}* bulk-deleted ${deleted} submission(s) (skipped ${skipped.length}). IDs: ${sample}${more}`,
+      username: "ops_alerts",
+    });
+  }
+
   return NextResponse.json({ deleted, skipped });
 }
