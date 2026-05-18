@@ -10,6 +10,7 @@
 
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { parseUtmSource } from "@features/admin/server/metric-library";
+import logger from "@shared/observability/logger";
 
 export { parseUtmSource };
 
@@ -116,7 +117,12 @@ function dateRange(column: string, sinceIso: string, untilIso: string): string {
   return `${column}=gte.${encodeURIComponent(sinceIso)}&${column}=lt.${encodeURIComponent(untilIso)}`;
 }
 
-/** Distinct count via small page + Set (PostgREST has no DISTINCT op). Capped at limit. */
+/**
+ * Distinct count via small page + Set (PostgREST has no DISTINCT op).
+ * Capped at `limit`. When the result hits the cap, emits a structured
+ * warn log (NOT an error — no ops Slack alert, just a Vercel log entry)
+ * so we know the digest number is a floor, not the truth.
+ */
 async function fetchDistinct<T extends string | number>(
   path: string,
   field: string,
@@ -125,6 +131,12 @@ async function fetchDistinct<T extends string | number>(
   const res = await supabaseFetch(path, { headers: { Range: `0-${limit - 1}` } });
   if (!res.ok) return 0;
   const rows = (await res.json()) as Array<Record<string, T | null>>;
+  if (rows.length >= limit) {
+    logger.warn(
+      { path, field, limit, returned: rows.length },
+      "fetchDistinct: page cap hit — distinct count is a floor, true number may be higher"
+    );
+  }
   const set = new Set<T>();
   for (const r of rows) {
     const v = r[field];

@@ -285,7 +285,14 @@ async function createPromoCode({
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       if (attempt === 0 && /already exists/i.test(message)) continue;
-      logger.error({ err, stage }, "nurture-sequence: stripe promo create failed");
+      // `slack: false` keeps the ops channel quiet — the caller already
+      // handles the null return (bumps skippedNoPromo, no email sent).
+      // The full error is still captured in Vercel runtime logs with
+      // pino's `err` serializer (message + stack).
+      logger.error(
+        { err, stage, errorMessage: message, slack: false },
+        "nurture-sequence: stripe promo create failed"
+      );
       return null;
     }
   }

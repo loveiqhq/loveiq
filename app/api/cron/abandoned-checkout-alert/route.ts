@@ -69,18 +69,25 @@ export async function GET(request: Request) {
       return NextResponse.json({ scanned: 0, pinged: 0 });
     }
 
-    // Find which of those submissions have a succeeded payment.
+    // The payment table has no survey_submission_id column. The relationship
+    // is: payment.personal_report_id → personal_report.id, and
+    // personal_report.survey_submission_id → survey_submission.id.
+    // Use PostgREST embedded resource filtering: pull payments whose related
+    // personal_report belongs to one of our candidate submissions.
     const paidRes = await supabaseFetch(
-      `/rest/v1/payment?survey_submission_id=in.(${submissionIds.join(",")})&status=eq.succeeded&select=survey_submission_id`
+      `/rest/v1/payment?select=personal_report!inner(survey_submission_id)&status=eq.succeeded&personal_report.survey_submission_id=in.(${submissionIds.join(",")})`
     );
     if (!paidRes.ok) {
       throw new Error(`payment_lookup_failed:${paidRes.status}`);
     }
-    const paid = new Set(
-      ((await paidRes.json()) as Array<{ survey_submission_id: number }>).map(
-        (r) => r.survey_submission_id
-      )
-    );
+    const paidRows = (await paidRes.json()) as Array<{
+      personal_report: { survey_submission_id: number } | null;
+    }>;
+    const paid = new Set<number>();
+    for (const r of paidRows) {
+      const id = r.personal_report?.survey_submission_id;
+      if (id != null) paid.add(id);
+    }
 
     const abandoned = submissionIds.filter((id) => !paid.has(id));
     const pendingPings: Promise<void>[] = [];
