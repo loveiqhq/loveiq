@@ -1,106 +1,237 @@
 /**
  * GET /api/cron/funnel-digest
  *
- * Daily ops digest. Runs at 09:00 UTC every day and surfaces yesterday's
- * topline numbers; on Mondays also surfaces the top-3 highest drop-off
- * questions across the previous 7 days of survey behavior.
+ * Daily ops digest at 09:00 UTC. Covers yesterday's metrics across
+ * acquisition / activation / revenue / engagement / email health,
+ * plus top-3 archetypes and UTM sources. Every metric carries a
+ * day-over-day delta.
  *
- * Numbers come from analytics_event + survey_submission + payment via
- * lightweight REST + count queries — no RPC needed.
+ * On Mondays a SECOND Slack message follows the daily — a comprehensive
+ * 7-day weekly digest with WoW deltas, 5-stage conversion funnel,
+ * worst-rated chapters, top issue categories, and survey drop-off
+ * questions.
  *
- * Protected by `Authorization: Bearer ${CRON_SECRET}`.
+ * All metric fetchers live in features/admin/server/digest-metrics.ts
+ * so this cron and the on-demand /api/admin/digest route share one
+ * query path.
+ *
+ * Protected by `Authorization: Bearer ${CRON_SECRET}`. Idempotent via
+ * slack_alert_sent: daily keyed by UTC day, weekly keyed by ISO week.
  */
 
 import { NextResponse } from "next/server";
-import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
-import { getBreaker } from "@shared/http/circuit-breaker";
 import logger from "@shared/observability/logger";
 import { notifySlack } from "@shared/observability/slack";
 import { tryClaimSlackAlert, verifyCronAuth } from "@shared/observability/slack-alert-dedup";
+import {
+  type DailyMetrics,
+  type WeeklyMetrics,
+  delta,
+  dayString,
+  fetchDailyMetrics,
+  fetchWeeklyMetrics,
+  isoWeekString,
+} from "@features/admin/server/digest-metrics";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 50;
+export const maxDuration = 60;
 
-async function supabaseFetch(path: string, init?: RequestInit) {
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) throw new Error("supabase_not_configured");
-  return getBreaker("supabase").fire(() =>
-    fetchWithTimeout(`${url}${path}`, {
-      ...init,
-      headers: {
-        apikey: key,
-        Authorization: `Bearer ${key}`,
-        "Content-Type": "application/json",
-        Prefer: "count=exact",
-        ...(init?.headers ?? {}),
-      },
-      timeoutMs: 8000,
-    })
+// -----------------------------------------------------------------------------
+// Formatters
+// -----------------------------------------------------------------------------
+
+const PLAN_ORDER: Array<keyof DailyMetrics["revenue"]["planMix"]> = [
+  "essentials",
+  "full_report",
+  "all_reports",
+];
+
+function formatCurrency(byCurrency: Record<string, number>): string {
+  const entries = Object.entries(byCurrency);
+  if (entries.length === 0) return "—";
+  return entries.map(([cur, amount]) => `${cur} ${amount.toFixed(2)}`).join(" + ");
+}
+
+function formatPlanMix(planMix: DailyMetrics["revenue"]["planMix"]): string {
+  return PLAN_ORDER.map((p) => `${p} ${planMix[p]}`).join(" / ");
+}
+
+function formatTopList(list: Array<[string, number]>, fallback = "—"): string {
+  if (list.length === 0) return fallback;
+  return list.map(([name, n]) => `${name} (${n})`).join(", ");
+}
+
+function metricWithDelta(label: string, curr: number, prev: number, unit = ""): string {
+  return `• ${label}: ${curr}${unit} (DoD: ${delta(curr, prev)})`;
+}
+
+// -----------------------------------------------------------------------------
+// Daily message
+// -----------------------------------------------------------------------------
+
+function formatDaily(dayKey: string, curr: DailyMetrics, prev: DailyMetrics): string {
+  const lines = [`:bar_chart: *Daily digest — ${dayKey} UTC*`, ""];
+
+  lines.push("*Acquisition*");
+  lines.push(metricWithDelta("Survey starts", curr.surveyStarts, prev.surveyStarts));
+  lines.push(
+    `• Completions: ${curr.completions} (${curr.completionRate}% rate, DoD: ${delta(curr.completionRate, prev.completionRate)})`
   );
-}
+  lines.push(metricWithDelta("Waitlist", curr.waitlist, prev.waitlist));
+  lines.push("");
 
-// Returns the `count` from the PostgREST Content-Range header.
-function readCount(res: Response): number {
-  const cr = res.headers.get("content-range");
-  if (!cr) return 0;
-  const m = cr.match(/\/(\d+)$/);
-  return m ? Number(m[1]!) : 0;
-}
+  lines.push("*Activation*");
+  lines.push(metricWithDelta("Report viewers", curr.reportViewers, prev.reportViewers));
+  lines.push(metricWithDelta("Deep engagement (10m+)", curr.deepEngagement, prev.deepEngagement));
+  lines.push(metricWithDelta("Paywall views", curr.paywallViews, prev.paywallViews));
+  lines.push(metricWithDelta("Begin checkouts", curr.beginCheckouts, prev.beginCheckouts));
+  lines.push("");
 
-async function countWhere(table: string, filters: string): Promise<number> {
-  const res = await supabaseFetch(`/rest/v1/${table}?${filters}&select=id`, {
-    headers: { Range: "0-0" },
-  });
-  return res.ok ? readCount(res) : 0;
-}
-
-interface DigestNumbers {
-  submissions: number;
-  reportViews: number;
-  unlocks: number;
-  payments: number;
-  bounces: number;
-  unsubscribes: number;
-}
-
-async function fetchDigestNumbers(sinceIso: string, untilIso: string): Promise<DigestNumbers> {
-  const range = (col: string) =>
-    `${col}=gte.${encodeURIComponent(sinceIso)}&${col}=lt.${encodeURIComponent(untilIso)}`;
-  const [submissions, reportViews, unlocks, payments, bounces, unsubscribes] = await Promise.all([
-    countWhere("survey_submission", range("created_date_time")),
-    countWhere("analytics_event", `event_type=eq.report_viewed&${range("event_time")}`),
-    countWhere("analytics_event", `event_type=eq.paywall_unlocked&${range("event_time")}`),
-    countWhere("payment", `status=eq.succeeded&${range("created_date_time")}`),
-    countWhere("email_suppression", `reason=eq.hard_bounce&${range("created_at")}`),
-    countWhere("email_suppression", `reason=eq.unsubscribed&${range("created_at")}`),
-  ]);
-  return { submissions, reportViews, unlocks, payments, bounces, unsubscribes };
-}
-
-interface WorstQuestion {
-  questionIndex: number;
-  abandonCount: number;
-}
-
-async function fetchWeeklyDropOff(sinceIso: string): Promise<WorstQuestion[]> {
-  // Pull up to N abandon events from the past week.
-  const res = await supabaseFetch(
-    `/rest/v1/survey_behavior_event?direction=eq.abandon&event_time=gte.${encodeURIComponent(sinceIso)}&select=question_index&limit=5000`
+  lines.push("*Revenue*");
+  lines.push(
+    `• Purchases: ${curr.revenue.count} — ${formatCurrency(curr.revenue.byCurrency)} (DoD: ${delta(curr.revenue.count, prev.revenue.count)})`
   );
-  if (!res.ok) return [];
-  const rows = (await res.json()) as Array<{ question_index: number | null }>;
-  const counts = new Map<number, number>();
-  for (const r of rows) {
-    if (r.question_index == null) continue;
-    counts.set(r.question_index, (counts.get(r.question_index) ?? 0) + 1);
+  lines.push(`• Plan mix: ${formatPlanMix(curr.revenue.planMix)}`);
+  lines.push(
+    `• Refunds: ${curr.refunds} (${curr.refundAmount.toFixed(2)}) | Failed: ${curr.failedPayments} | Disputes: ${curr.disputes}`
+  );
+  lines.push(
+    metricWithDelta(
+      "Promo redemptions",
+      curr.revenue.promoRedemptions,
+      prev.revenue.promoRedemptions
+    )
+  );
+  lines.push("");
+
+  lines.push("*Engagement*");
+  lines.push(`• Invites sent: ${curr.invites} | Shares: ${curr.shares}`);
+  lines.push(`• Chapter feedback: ${curr.thumbsUp} :thumbsup: / ${curr.thumbsDown} :thumbsdown:`);
+  lines.push("");
+
+  lines.push("*Email health*");
+  lines.push(
+    `• Bounces: ${curr.bounces} | Complaints: ${curr.complaints} | Unsubscribes: ${curr.unsubscribes}`
+  );
+  lines.push("");
+
+  lines.push("*Top breakdowns*");
+  lines.push(`• Archetypes: ${formatTopList(curr.topArchetypes)}`);
+  lines.push(`• Sources: ${formatTopList(curr.topUtmSources)}`);
+
+  return lines.join("\n");
+}
+
+// -----------------------------------------------------------------------------
+// Weekly message
+// -----------------------------------------------------------------------------
+
+function metricWithWow(label: string, curr: number, prev: number, unit = ""): string {
+  return `• ${label}: ${curr}${unit} (WoW: ${delta(curr, prev)})`;
+}
+
+function formatWeekly(
+  weekKey: string,
+  weekRangeLabel: string,
+  curr: WeeklyMetrics,
+  prev: WeeklyMetrics
+): string {
+  const lines = [`:chart_with_upwards_trend: *Weekly digest — ${weekKey} (${weekRangeLabel})*`, ""];
+
+  lines.push("*Acquisition*");
+  lines.push(metricWithWow("Survey starts", curr.surveyStarts, prev.surveyStarts));
+  lines.push(
+    `• Completions: ${curr.completions} (${curr.completionRate}% rate, WoW: ${delta(curr.completionRate, prev.completionRate)})`
+  );
+  lines.push(`• Avg completion time: ${curr.avgCompletionSec}s`);
+  lines.push(metricWithWow("Waitlist", curr.waitlist, prev.waitlist));
+  lines.push("");
+
+  lines.push("*Activation*");
+  lines.push(metricWithWow("Report viewers", curr.reportViewers, prev.reportViewers));
+  lines.push(metricWithWow("Deep engagement (10m+)", curr.deepEngagement, prev.deepEngagement));
+  lines.push(metricWithWow("Paywall views", curr.paywallViews, prev.paywallViews));
+  lines.push(metricWithWow("Begin checkouts", curr.beginCheckouts, prev.beginCheckouts));
+  lines.push("");
+
+  lines.push("*Revenue*");
+  lines.push(
+    `• Purchases: ${curr.revenue.count} — ${formatCurrency(curr.revenue.byCurrency)} (WoW: ${delta(curr.revenue.count, prev.revenue.count)})`
+  );
+  lines.push(`• Plan mix: ${formatPlanMix(curr.revenue.planMix)}`);
+  lines.push(
+    `• Refunds: ${curr.refunds} (${curr.refundAmount.toFixed(2)}) | Failed: ${curr.failedPayments} | Disputes: ${curr.disputes}`
+  );
+  lines.push(
+    metricWithWow("Promo redemptions", curr.revenue.promoRedemptions, prev.revenue.promoRedemptions)
+  );
+  lines.push("");
+
+  lines.push("*Engagement*");
+  lines.push(metricWithWow("Invites sent", curr.invites, prev.invites));
+  lines.push(metricWithWow("Shares created", curr.shares, prev.shares));
+  lines.push(`• Chapter feedback: ${curr.thumbsUp} :thumbsup: / ${curr.thumbsDown} :thumbsdown:`);
+  lines.push("");
+
+  lines.push("*Email health*");
+  lines.push(
+    `• Bounces: ${curr.bounces} | Complaints: ${curr.complaints} | Unsubscribes: ${curr.unsubscribes}`
+  );
+  lines.push("");
+
+  // Conversion funnel
+  const f = curr.funnel;
+  const stageKept = (curr: number, prev: number): string =>
+    prev > 0 ? `${Math.round((curr / prev) * 100)}% kept` : "—";
+  lines.push("*Conversion funnel*");
+  lines.push(`• Survey starts: ${f.starts}`);
+  lines.push(`• Completions: ${f.completions} (${stageKept(f.completions, f.starts)})`);
+  lines.push(`• Report viewed: ${f.reportViewed} (${stageKept(f.reportViewed, f.completions)})`);
+  lines.push(
+    `• Paywall viewed: ${f.paywallViewed} (${stageKept(f.paywallViewed, f.reportViewed)})`
+  );
+  lines.push(`• Purchased: ${f.purchased} (${stageKept(f.purchased, f.paywallViewed)})`);
+  const overallPct = f.starts > 0 ? `${((f.purchased / f.starts) * 100).toFixed(2)}%` : "—";
+  lines.push(`• Overall conversion: ${overallPct} (starts → purchased)`);
+  lines.push("");
+
+  lines.push("*Top breakdowns*");
+  lines.push(`• Archetypes: ${formatTopList(curr.topArchetypes)}`);
+  lines.push(`• Sources: ${formatTopList(curr.topUtmSources)}`);
+  lines.push("");
+
+  // Quality signals
+  if (curr.dropOff.length || curr.worstChapters.length || curr.topIssues.length) {
+    lines.push("*Quality signals*");
+    if (curr.dropOff.length) {
+      const dropList = curr.dropOff
+        .map((d) => `Q${d.questionIndex} (${d.abandonCount})`)
+        .join(", ");
+      lines.push(`• Top survey drop-offs: ${dropList}`);
+    }
+    if (curr.worstChapters.length) {
+      const chList = curr.worstChapters
+        .map((c) => `${c.sectionId} (${c.downs} :thumbsdown:)`)
+        .join(", ");
+      lines.push(`• Worst-rated chapters: ${chList}`);
+    }
+    if (curr.topIssues.length) {
+      const issueList = curr.topIssues.map((i) => `${i.issue} (${i.count})`).join(", ");
+      lines.push(`• Top feedback issues: ${issueList}`);
+    }
   }
-  return Array.from(counts.entries())
-    .map(([questionIndex, abandonCount]) => ({ questionIndex, abandonCount }))
-    .sort((a, b) => b.abandonCount - a.abandonCount)
-    .slice(0, 3);
+
+  return lines.join("\n");
 }
+
+function shortDate(d: Date): string {
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+}
+
+// -----------------------------------------------------------------------------
+// Handler
+// -----------------------------------------------------------------------------
 
 export async function GET(request: Request) {
   if (!verifyCronAuth(request)) {
@@ -111,47 +242,56 @@ export async function GET(request: Request) {
     const now = new Date();
     const dayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
     const yesterdayStart = new Date(dayStart.getTime() - 86_400_000);
-    const dayKey = yesterdayStart.toISOString().slice(0, 10);
+    const dayBeforeStart = new Date(yesterdayStart.getTime() - 86_400_000);
+    const dayKey = dayString(yesterdayStart);
 
-    // Once-per-day claim so a duplicate cron fire (Vercel retry) never
-    // double-sends the digest.
-    const claimed = await tryClaimSlackAlert("daily_digest", "day", dayKey);
-    if (!claimed) {
-      return NextResponse.json({ skipped: "already_sent_for_day", day: dayKey });
+    let dailySent = false;
+    let weeklySent = false;
+
+    // ---- Daily ----
+    const dailyClaimed = await tryClaimSlackAlert("daily_digest", "day", dayKey);
+    if (dailyClaimed) {
+      const [curr, prev] = await Promise.all([
+        fetchDailyMetrics(yesterdayStart.toISOString(), dayStart.toISOString()),
+        fetchDailyMetrics(dayBeforeStart.toISOString(), yesterdayStart.toISOString()),
+      ]);
+      await notifySlack({
+        channel: "ops",
+        kind: "daily_digest",
+        text: formatDaily(dayKey, curr, prev),
+        username: "ops_alerts",
+      });
+      dailySent = true;
     }
 
-    const numbers = await fetchDigestNumbers(yesterdayStart.toISOString(), dayStart.toISOString());
-
-    const lines = [
-      `:bar_chart: *Daily digest — ${dayKey}*`,
-      `• Submissions: ${numbers.submissions}`,
-      `• Report views: ${numbers.reportViews}`,
-      `• Paywall unlocks: ${numbers.unlocks}`,
-      `• Successful payments: ${numbers.payments}`,
-      `• Hard bounces: ${numbers.bounces}`,
-      `• Unsubscribes: ${numbers.unsubscribes}`,
-    ];
-
-    // Mondays (UTC): append last-week funnel drop-off summary.
+    // ---- Weekly (Mondays UTC, after the daily) ----
     if (now.getUTCDay() === 1) {
-      const weekAgo = new Date(now.getTime() - 7 * 86_400_000);
-      const worst = await fetchWeeklyDropOff(weekAgo.toISOString());
-      if (worst.length > 0) {
-        lines.push("", "*Top survey drop-offs (last 7 days):*");
-        for (const w of worst) {
-          lines.push(`• Q${w.questionIndex}: ${w.abandonCount} abandons`);
-        }
+      const weekKey = isoWeekString(yesterdayStart);
+      const weeklyClaimed = await tryClaimSlackAlert("weekly_digest", "week", weekKey);
+      if (weeklyClaimed) {
+        const weekStart = new Date(dayStart.getTime() - 7 * 86_400_000);
+        const prevWeekStart = new Date(weekStart.getTime() - 7 * 86_400_000);
+        const [currW, prevW] = await Promise.all([
+          fetchWeeklyMetrics(weekStart.toISOString(), dayStart.toISOString()),
+          fetchWeeklyMetrics(prevWeekStart.toISOString(), weekStart.toISOString()),
+        ]);
+        const rangeLabel = `${shortDate(weekStart)} → ${shortDate(new Date(dayStart.getTime() - 1))} UTC`;
+        await notifySlack({
+          channel: "ops",
+          kind: "weekly_digest",
+          text: formatWeekly(weekKey, rangeLabel, currW, prevW),
+          username: "ops_alerts",
+        });
+        weeklySent = true;
       }
     }
 
-    await notifySlack({
-      channel: "ops",
-      kind: "daily_digest",
-      text: lines.join("\n"),
-      username: "ops_alerts",
+    return NextResponse.json({
+      ok: true,
+      day: dayKey,
+      dailySent,
+      weeklySent,
     });
-
-    return NextResponse.json({ ok: true, day: dayKey, numbers });
   } catch (err) {
     logger.error({ err }, "funnel-digest cron failed");
     return NextResponse.json({ error: "Internal" }, { status: 500 });
