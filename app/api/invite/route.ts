@@ -163,7 +163,7 @@ export async function POST(request: Request) {
       ? escapeSlack(maskEmail(referrerEmail.toLowerCase().trim()))
       : "anonymous";
     const to = escapeSlack(maskEmail(normalizedRecipient));
-    void notifySlack({
+    await notifySlack({
       channel: "ops",
       kind: "invite_sent",
       text: `:incoming_envelope: Invite sent — ${from} → ${to}${suppressed ? " (recipient suppressed; tracking only)" : ""}`,

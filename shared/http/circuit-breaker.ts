@@ -14,6 +14,11 @@
 import logger from "@shared/observability/logger";
 import { notifySlack } from "@shared/observability/slack";
 
+// Best-effort fire-and-forget for circuit-state pings. We deliberately
+// don't pull `after-response.ts` here because circuit-breaker is
+// reachable from client-bundled paths (planAccess → ReportPage) and
+// `next/server`'s `after()` is invalid in those bundles.
+
 export class CircuitOpenError extends Error {
   constructor(service: string) {
     super(`Circuit open: ${service} is currently unavailable`);
@@ -75,7 +80,7 @@ class CircuitBreaker {
         kind: "circuit_recovered",
         text: `:white_check_mark: Circuit recovered — *${this.name}* is back to healthy.`,
         username: "ops_alerts",
-      });
+      }).catch(() => {});
     } else {
       this.failures = 0;
     }
@@ -100,7 +105,7 @@ class CircuitBreaker {
           kind: "circuit_open",
           text: `:rotating_light: Circuit *${this.name}* opened after ${this.failures} consecutive failures.`,
           username: "ops_alerts",
-        });
+        }).catch(() => {});
       }
     }
   }

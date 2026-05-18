@@ -87,7 +87,7 @@ export async function GET(request: NextRequest) {
       { email: user.email, ip: getClientIp(request) },
       "Admin login denied: not in allowlist"
     );
-    void notifySlack({
+    await notifySlack({
       channel: "ops",
       kind: "admin_login_denied",
       text: `:warning: Admin login *denied* — ${escapeSlack(maskEmail(user.email))} not in allowlist`,
@@ -103,7 +103,7 @@ export async function GET(request: NextRequest) {
     action: "login",
     ip,
   });
-  void notifySlack({
+  await notifySlack({
     channel: "ops",
     kind: "admin_login",
     text: `:lock: Admin login — *${escapeSlack(user.email)}*`,

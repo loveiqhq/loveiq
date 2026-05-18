@@ -37,7 +37,7 @@ export async function POST(request: Request) {
   if (payload.type === "email.bounced") {
     logger.info({ email }, "Hard bounce — suppressing email address");
     await addToSuppression(email, "hard_bounce");
-    void notifySlack({
+    await notifySlack({
       channel: "ops",
       kind: "email_bounce",
       text: `:envelope_with_arrow: Hard bounce — ${escapeSlack(maskEmail(email))} suppressed`,
@@ -46,7 +46,7 @@ export async function POST(request: Request) {
   } else if (payload.type === "email.complained") {
     logger.info({ email }, "Spam complaint — suppressing email address");
     await addToSuppression(email, "complaint");
-    void notifySlack({
+    await notifySlack({
       channel: "ops",
       kind: "email_complaint",
       text: `:rotating_light: Spam complaint — ${escapeSlack(maskEmail(email))} suppressed. Review template + sender reputation.`,

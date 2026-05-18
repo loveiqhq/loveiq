@@ -425,7 +425,7 @@ export async function GET(request: Request) {
           const recipientLabel = recipientEmailForPing
             ? maskEmail(recipientEmailForPing)
             : "recipient";
-          void notifySlack({
+          await notifySlack({
             channel: "ops",
             kind: "share_first_view",
             text: `:eyes: Shared report opened — ${escapeSlack(ownerLabel)} → ${escapeSlack(recipientLabel)} (share #${viewedShareId})`,

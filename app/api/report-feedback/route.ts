@@ -164,10 +164,11 @@ async function notifySlackReportFeedback(input: {
   // Second ping: route every 👎 (and any feedback that carries an issue
   // category or written comment) into the ops channel for product triage.
   // The survey-channel ping above is the audit trail; this one is the
-  // "needs attention" signal.
+  // "needs attention" signal. Must be awaited so scheduleAfterResponse
+  // keeps the sandbox alive until the POST completes.
   const opsWorthy = input.feedback === "down" || Boolean(input.issue) || Boolean(input.comment);
   if (opsWorthy) {
-    void notifySlack({
+    await notifySlack({
       channel: "ops",
       kind: "report_feedback_negative",
       text: lines.join("\n"),

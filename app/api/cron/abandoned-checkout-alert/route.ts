@@ -83,7 +83,7 @@ export async function GET(request: Request) {
     );
 
     const abandoned = submissionIds.filter((id) => !paid.has(id));
-    let pinged = 0;
+    const pendingPings: Promise<void>[] = [];
 
     for (const submissionId of abandoned) {
       const claimed = await tryClaimSlackAlert(
@@ -92,19 +92,24 @@ export async function GET(request: Request) {
         String(submissionId)
       );
       if (!claimed) continue;
-      void notifySlack({
-        channel: "ops",
-        kind: "abandoned_checkout",
-        text: `:hourglass: Abandoned checkout — submission #${submissionId} hit begin_checkout 30m+ ago, no purchase`,
-        username: "ops_alerts",
-      });
-      pinged += 1;
+      pendingPings.push(
+        notifySlack({
+          channel: "ops",
+          kind: "abandoned_checkout",
+          text: `:hourglass: Abandoned checkout — submission #${submissionId} hit begin_checkout 30m+ ago, no purchase`,
+          username: "ops_alerts",
+        })
+      );
     }
+
+    // Await all webhook POSTs before responding — Vercel freezes the sandbox
+    // the moment a Response is returned, so unawaited fetches get dropped.
+    await Promise.allSettled(pendingPings);
 
     return NextResponse.json({
       scanned: submissionIds.length,
       abandoned: abandoned.length,
-      pinged,
+      pinged: pendingPings.length,
     });
   } catch (err) {
     logger.error({ err }, "abandoned-checkout-alert cron failed");

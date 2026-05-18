@@ -30,13 +30,22 @@ function shouldSuppress(key: string): boolean {
   const last = recentSends.get(key);
   if (last !== undefined && now - last < DEDUP_WINDOW_MS) return true;
 
-  if (recentSends.size >= DEDUP_MAX_ENTRIES) {
-    // Prune expired entries before inserting a new one.
+  recentSends.set(key, now);
+
+  // Bound the map: prune expired entries, then if still over the cap, drop
+  // the oldest by insertion order (Map preserves insertion order). This
+  // guarantees size <= DEDUP_MAX_ENTRIES even under a true storm where
+  // every entry is still inside the dedup window.
+  if (recentSends.size > DEDUP_MAX_ENTRIES) {
     for (const [k, t] of recentSends) {
       if (now - t >= DEDUP_WINDOW_MS) recentSends.delete(k);
     }
+    while (recentSends.size > DEDUP_MAX_ENTRIES) {
+      const first = recentSends.keys().next().value;
+      if (first === undefined) break;
+      recentSends.delete(first);
+    }
   }
-  recentSends.set(key, now);
   return false;
 }
 

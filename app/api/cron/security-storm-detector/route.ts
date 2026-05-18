@@ -74,6 +74,7 @@ export async function GET(request: Request) {
       }
     } while (cursor !== "0" && scanned < SCAN_COUNT * 10);
 
+    const pendingPings: Promise<void>[] = [];
     for (const { key, count } of flagged) {
       // Key format: rl:<bucket>:<ip>
       const parts = key.split(":");
@@ -82,14 +83,18 @@ export async function GET(request: Request) {
 
       const claimed = await tryClaimSlackAlert("rate_limit_storm", "ip", `${bucket}:${ip}`);
       if (!claimed) continue;
-      void notifySlack({
-        channel: "ops",
-        kind: "rate_limit_storm",
-        text: `:warning: Rate-limit storm — bucket *${escapeSlack(bucket)}* hit by IP \`${escapeSlack(ip)}\` ${count} times in the current window`,
-        username: "ops_alerts",
-      });
-      pinged += 1;
+      pendingPings.push(
+        notifySlack({
+          channel: "ops",
+          kind: "rate_limit_storm",
+          text: `:warning: Rate-limit storm — bucket *${escapeSlack(bucket)}* hit by IP \`${escapeSlack(ip)}\` ${count} times in the current window`,
+          username: "ops_alerts",
+        })
+      );
     }
+
+    await Promise.allSettled(pendingPings);
+    pinged = pendingPings.length;
 
     return NextResponse.json({ scanned, flagged: flagged.length, pinged });
   } catch (err) {

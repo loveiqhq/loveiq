@@ -75,7 +75,7 @@ async function scanDeepEngagementNoConvert(): Promise<number> {
     )
   );
 
-  let pinged = 0;
+  const pendingPings: Promise<void>[] = [];
   for (const submissionId of submissionIds) {
     if (unlocked.has(submissionId)) continue;
     const claimed = await tryClaimSlackAlert(
@@ -84,15 +84,17 @@ async function scanDeepEngagementNoConvert(): Promise<number> {
       String(submissionId)
     );
     if (!claimed) continue;
-    void notifySlack({
-      channel: "ops",
-      kind: "deep_engagement_no_convert",
-      text: `:warning: Deep engagement, no purchase — submission #${submissionId} crossed 10min on /report but didn't unlock`,
-      username: "ops_alerts",
-    });
-    pinged += 1;
+    pendingPings.push(
+      notifySlack({
+        channel: "ops",
+        kind: "deep_engagement_no_convert",
+        text: `:warning: Deep engagement, no purchase — submission #${submissionId} crossed 10min on /report but didn't unlock`,
+        username: "ops_alerts",
+      })
+    );
   }
-  return pinged;
+  await Promise.allSettled(pendingPings);
+  return pendingPings.length;
 }
 
 async function scanPaywallViewBursts(): Promise<number> {
@@ -128,7 +130,7 @@ async function scanPaywallViewBursts(): Promise<number> {
       )
     : new Set<number>();
 
-  let pinged = 0;
+  const pendingPings: Promise<void>[] = [];
   for (const { submissionId, views } of burstCandidates) {
     if (unlocked.has(submissionId)) continue;
     const claimed = await tryClaimSlackAlert(
@@ -137,15 +139,17 @@ async function scanPaywallViewBursts(): Promise<number> {
       String(submissionId)
     );
     if (!claimed) continue;
-    void notifySlack({
-      channel: "ops",
-      kind: "paywall_view_burst",
-      text: `:vertical_traffic_light: Paywall view burst — submission #${submissionId} hit the paywall ${views}× in the last hour, no purchase`,
-      username: "ops_alerts",
-    });
-    pinged += 1;
+    pendingPings.push(
+      notifySlack({
+        channel: "ops",
+        kind: "paywall_view_burst",
+        text: `:vertical_traffic_light: Paywall view burst — submission #${submissionId} hit the paywall ${views}× in the last hour, no purchase`,
+        username: "ops_alerts",
+      })
+    );
   }
-  return pinged;
+  await Promise.allSettled(pendingPings);
+  return pendingPings.length;
 }
 
 export async function GET(request: Request) {

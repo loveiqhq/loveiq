@@ -4,8 +4,8 @@ import { addToSuppression } from "@shared/emails/suppression";
 import logger from "@shared/observability/logger";
 import { notifySlack, maskEmail, escapeSlack } from "@shared/observability/slack";
 
-function pingUnsubscribe(email: string, mode: "footer" | "one-click") {
-  void notifySlack({
+async function pingUnsubscribe(email: string, mode: "footer" | "one-click") {
+  await notifySlack({
     channel: "ops",
     kind: "unsubscribe",
     text: `:no_bell: Unsubscribe (${mode}) — ${escapeSlack(maskEmail(email))}`,
@@ -40,7 +40,7 @@ export async function GET(request: Request) {
 
   await addToSuppression(email, "unsubscribed");
   logger.info({ email }, "Email unsubscribed via GET");
-  pingUnsubscribe(email, "footer");
+  await pingUnsubscribe(email, "footer");
 
   const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://loveiq.org").replace(/\/$/, "");
   // eslint-disable-next-line no-secrets/no-secrets
@@ -62,6 +62,6 @@ export async function POST(request: Request) {
 
   await addToSuppression(email, "unsubscribed");
   logger.info({ email }, "Email unsubscribed via one-click POST");
-  pingUnsubscribe(email, "one-click");
+  await pingUnsubscribe(email, "one-click");
   return NextResponse.json({ ok: true });
 }

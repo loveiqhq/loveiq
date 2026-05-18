@@ -123,7 +123,7 @@ export async function POST(request: Request) {
   if (deleted > 0) {
     const sample = ids.slice(0, 5).join(", ");
     const more = ids.length > 5 ? ` (+${ids.length - 5} more)` : "";
-    void notifySlack({
+    await notifySlack({
       channel: "ops",
       kind: "admin_bulk_delete",
       text: `:wastebasket: *${escapeSlack(admin.email)}* bulk-deleted ${deleted} submission(s) (skipped ${skipped.length}). IDs: ${sample}${more}`,

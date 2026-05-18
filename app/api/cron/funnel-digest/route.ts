@@ -144,7 +144,7 @@ export async function GET(request: Request) {
       }
     }
 
-    void notifySlack({
+    await notifySlack({
       channel: "ops",
       kind: "daily_digest",
       text: lines.join("\n"),

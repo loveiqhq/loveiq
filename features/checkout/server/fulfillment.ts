@@ -984,7 +984,7 @@ async function syncCheckoutSessionPayment({
               : "promo applied";
         const stage = settledSession.metadata?.promoStage;
         const stageSuffix = stage ? ` — stage *${escapeSlack(stage)}*` : "";
-        void notifySlack({
+        await notifySlack({
           channel: "ops",
           kind: "promo_redeemed",
           text: `:tag: Promo *${escapeSlack(promotionSummary.promotionCode)}* redeemed (${discountSummary})${stageSuffix} — payment #${paymentId}`,
@@ -996,7 +996,7 @@ async function syncCheckoutSessionPayment({
     const recipient = await lookupRecipientForSubmission(context.submissionId);
     const masked = recipient.email ? maskEmail(recipient.email) : "no-email";
     const reason = chargeDetails.failureMessage ?? chargeDetails.failureCode ?? "unknown";
-    void notifySlack({
+    await notifySlack({
       channel: "ops",
       kind: "stripe_payment_failed",
       text: `:credit_card: Payment failed — ${escapeSlack(masked)} — ${escapeSlack(reason)} — payment #${paymentId}`,
@@ -1070,7 +1070,7 @@ async function syncRefundEvent({ charge, event }: { charge: Stripe.Charge; event
 
   const refundAmount = toAmount(charge.amount_refunded);
   const refundCurrency = (charge.currency ?? "eur").toUpperCase();
-  void notifySlack({
+  await notifySlack({
     channel: "ops",
     kind: "stripe_refund",
     text: `:money_with_wings: Refund issued — payment #${existingPayment.id} ${refundCurrency} ${refundAmount?.toFixed(2) ?? "?"} (charge ${escapeSlack(charge.id)})`,
@@ -1154,7 +1154,7 @@ async function syncDisputeEvent({
   const disputeAmount = toAmount(dispute.amount);
   const disputeCurrency = (dispute.currency ?? "eur").toUpperCase();
   if (outcome === "opened") {
-    void notifySlack({
+    await notifySlack({
       channel: "ops",
       kind: "stripe_dispute_opened",
       text: `:rotating_light: Dispute opened — payment #${existingPayment.id} ${disputeCurrency} ${disputeAmount?.toFixed(2) ?? "?"} — reason: ${escapeSlack(dispute.reason ?? "unknown")}`,
@@ -1162,7 +1162,7 @@ async function syncDisputeEvent({
     });
   } else {
     const verdict = dispute.status === "won" ? ":trophy: WON" : `:no_entry: ${dispute.status}`;
-    void notifySlack({
+    await notifySlack({
       channel: "ops",
       kind: "stripe_dispute_resolved",
       text: `Dispute resolved (${verdict}) — payment #${existingPayment.id} ${disputeCurrency} ${disputeAmount?.toFixed(2) ?? "?"} — access ${restoreToSucceeded ? "restored" : "stays locked"}`,
