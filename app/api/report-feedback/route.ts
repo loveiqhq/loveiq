@@ -2,9 +2,11 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
+import { scheduleAfterResponse } from "@shared/http/after-response";
 import { getBreaker, CircuitOpenError } from "@shared/http/circuit-breaker";
 import { verifyCsrfToken } from "@shared/http/csrf";
 import { reportSections } from "@/data/report-general";
+import { resolveReportNavTitle } from "@features/report/sectionTitles";
 import { resolveSubmissionAccessContext } from "@features/report/server/personalReport";
 import { REPORT_ACCESS_TOKEN_REGEX } from "@features/checkout/server/reportPurchase";
 import logger from "@shared/observability/logger";
@@ -40,6 +42,124 @@ const RATE_LIMIT_CONFIG = {
   limit: 60,
   windowMs: 60_000,
 };
+
+const SECTION_BY_ID = new Map(reportSections.map((section) => [section.id, section]));
+
+function maskEmail(email: string): string {
+  return email.replace(/^(.).+(@.+)$/, "$1***$2");
+}
+
+// Slack treats `&<>*_~``` as formatting characters. Escape so user-supplied
+// strings render literally and can't break the message layout.
+function escapeSlack(value: string): string {
+  return value.replace(/[&<>*_~`]/g, (c) => `\\${c}`);
+}
+
+async function lookupFeedbackRecipient(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  submissionId: number
+): Promise<{ email: string | null; archetype: string | null }> {
+  const headers = { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` };
+
+  const [submissionRes, scoringRes] = await Promise.all([
+    fetchWithTimeout(
+      `${supabaseUrl}/rest/v1/survey_submission?id=eq.${submissionId}&select=app_user!fk_survey_submission_user(email)&limit=1`,
+      { headers, timeoutMs: 3000 }
+    ).catch(() => null),
+    fetchWithTimeout(
+      `${supabaseUrl}/rest/v1/scoring_result?survey_submission_id=eq.${submissionId}&select=primary_archetype,v5_primary_archetype&limit=1`,
+      { headers, timeoutMs: 3000 }
+    ).catch(() => null),
+  ]);
+
+  let email: string | null = null;
+  if (submissionRes && submissionRes.ok) {
+    const rows = (await submissionRes.json().catch(() => [])) as Array<{
+      app_user?: { email?: string | null } | null;
+    }>;
+    email = rows[0]?.app_user?.email ?? null;
+  }
+
+  // Prefer V5 — it's the archetype the user actually sees on /report/[token].
+  // V4 (`primary_archetype`) is kept as fallback for older submissions only.
+  let archetype: string | null = null;
+  if (scoringRes && scoringRes.ok) {
+    const rows = (await scoringRes.json().catch(() => [])) as Array<{
+      primary_archetype?: string | null;
+      v5_primary_archetype?: string | null;
+    }>;
+    archetype = rows[0]?.v5_primary_archetype ?? rows[0]?.primary_archetype ?? null;
+  }
+
+  return { email, archetype };
+}
+
+async function notifySlackReportFeedback(input: {
+  supabaseUrl: string;
+  serviceRoleKey: string;
+  submissionId: number;
+  sectionId: string;
+  feedback: "up" | "down";
+  comment: string | null;
+  issue: string | null;
+}): Promise<void> {
+  const webhookUrl = process.env.SLACK_SURVEY_WEBHOOK_URL;
+  if (!webhookUrl) {
+    logger.warn(
+      { submissionId: input.submissionId, sectionId: input.sectionId },
+      "Slack webhook missing: set SLACK_SURVEY_WEBHOOK_URL to enable report-feedback alerts."
+    );
+    return;
+  }
+
+  const { email, archetype } = await lookupFeedbackRecipient(
+    input.supabaseUrl,
+    input.serviceRoleKey,
+    input.submissionId
+  );
+
+  const section = SECTION_BY_ID.get(input.sectionId);
+  const chapterName = section
+    ? resolveReportNavTitle(section, archetype ?? "your archetype")
+    : input.sectionId;
+
+  const emoji = input.feedback === "up" ? ":thumbsup:" : ":thumbsdown:";
+  // Domain part of the email is interpolated verbatim — escape so a value like
+  // `j***@a&b.com` can't inject Slack formatting.
+  const maskedEmail = email ? escapeSlack(maskEmail(email)) : "no-email";
+  const archetypeSuffix = archetype ? ` (${escapeSlack(archetype)})` : "";
+
+  const lines = [
+    `:book: Report feedback — ${emoji} *${escapeSlack(chapterName)}*`,
+    `• From: ${maskedEmail}${archetypeSuffix}`,
+  ];
+  if (input.issue) {
+    lines.push(`• Issue: ${escapeSlack(input.issue)}`);
+  }
+  if (input.comment) {
+    const trimmed = input.comment.length > 200 ? `${input.comment.slice(0, 200)}…` : input.comment;
+    lines.push(`• Comment: "${escapeSlack(trimmed)}"`);
+  }
+
+  try {
+    const res = await fetchWithTimeout(webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: lines.join("\n"), username: "report_feedback" }),
+      timeoutMs: 5000,
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      logger.error(
+        { status: res.status, body, submissionId: input.submissionId },
+        "Slack report-feedback webhook failed"
+      );
+    }
+  } catch (err) {
+    logger.error({ err, submissionId: input.submissionId }, "Slack report-feedback webhook error");
+  }
+}
 
 export async function POST(request: Request) {
   if (!(await verifyCsrfToken(request))) {
@@ -94,10 +214,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unknown report context." }, { status: 400 });
   }
 
+  // Pin the narrowed value into a const so the after-response closure can't
+  // see a future re-assignment of the outer `let` binding.
+  const resolvedSubmissionId: number = submissionId;
+
   const row: Record<string, string | number | null> = {
     section_id: parsed.data.sectionId,
     feedback: parsed.data.feedback,
-    survey_submission_id: submissionId,
+    survey_submission_id: resolvedSubmissionId,
     user_id: userId,
     session_id: parsed.data.sessionId ?? null,
   };
@@ -136,6 +260,18 @@ export async function POST(request: Request) {
     }
     return NextResponse.json({ error: "Service temporarily unavailable." }, { status: 503 });
   }
+
+  scheduleAfterResponse("report-feedback-slack-notification", () =>
+    notifySlackReportFeedback({
+      supabaseUrl: url,
+      serviceRoleKey,
+      submissionId: resolvedSubmissionId,
+      sectionId: parsed.data.sectionId,
+      feedback: parsed.data.feedback,
+      comment: parsed.data.comment ?? null,
+      issue: parsed.data.issue ?? null,
+    })
+  );
 
   return NextResponse.json({ success: true });
 }

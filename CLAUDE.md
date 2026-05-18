@@ -166,7 +166,7 @@ Copy `.env.example` to `.env.local` and fill values:
 | `NEXT_PUBLIC_RECAPTCHA_SITE_KEY`           | For contact  | reCAPTCHA client key                                                                                                             |
 | `RECAPTCHA_SECRET_KEY`                     | For contact  | reCAPTCHA server key                                                                                                             |
 | `SLACK_CONTACT_WEBHOOK_URL`                | No           | Slack notifications for contact form                                                                                             |
-| `SLACK_SURVEY_WEBHOOK_URL`                 | No           | Slack notifications for survey submissions                                                                                       |
+| `SLACK_SURVEY_WEBHOOK_URL`                 | No           | Slack notifications for survey submissions + report chapter feedback (👍/👎 with optional comment/issue)                         |
 | `SLACK_PAYMENTS_WEBHOOK_URL`               | No           | Slack notifications for report purchases                                                                                         |
 | `STAGING_PASSWORD`                         | For staging  | Password gate for staging deployment                                                                                             |
 | `NEXT_PUBLIC_SUPABASE_URL`                 | For admin    | Supabase project URL (browser-safe, for admin auth SDK)                                                                          |

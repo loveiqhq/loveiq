@@ -69,6 +69,9 @@ describe("POST /api/report-feedback", () => {
     mockGetClientIp.mockReturnValue("1.2.3.4");
     process.env.SUPABASE_URL = "https://test.supabase.co";
     process.env.SUPABASE_SERVICE_ROLE_KEY = "service-role-test-key";
+    // Keep the post-response Slack notifier inert in tests — its only side
+    // effects are the env-gated webhook POST + two Supabase reads.
+    delete process.env.SLACK_SURVEY_WEBHOOK_URL;
     mockBreakerFire.mockImplementation((fn) => fn());
     mockFetchWithTimeout.mockResolvedValue({ ok: true, status: 201 });
   });
