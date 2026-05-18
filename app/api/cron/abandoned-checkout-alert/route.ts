@@ -69,24 +69,53 @@ export async function GET(request: Request) {
       return NextResponse.json({ scanned: 0, pinged: 0 });
     }
 
-    // The payment table has no survey_submission_id column. The relationship
-    // is: payment.personal_report_id → personal_report.id, and
-    // personal_report.survey_submission_id → survey_submission.id.
-    // Use PostgREST embedded resource filtering: pull payments whose related
-    // personal_report belongs to one of our candidate submissions.
-    const paidRes = await supabaseFetch(
-      `/rest/v1/payment?select=personal_report!inner(survey_submission_id)&status=eq.succeeded&personal_report.survey_submission_id=in.(${submissionIds.join(",")})`
+    // Two-step lookup. The payment table has no survey_submission_id column —
+    // the relationship is payment.personal_report_id → personal_report.id →
+    // personal_report.survey_submission_id. PostgREST embed-with-filter via
+    // `personal_report!inner.survey_submission_id=in.(...)` returned 400 in
+    // prod (see commit a48a217); fall back to the unambiguous 2-step path.
+    //
+    // Step 1: map candidate submissions to their personal_report ids.
+    const prRes = await supabaseFetch(
+      `/rest/v1/personal_report?survey_submission_id=in.(${submissionIds.join(",")})&select=id,survey_submission_id`
     );
-    if (!paidRes.ok) {
-      throw new Error(`payment_lookup_failed:${paidRes.status}`);
+    if (!prRes.ok) {
+      const body = await prRes.text().catch(() => "");
+      // slack:false — the top-level catch fires the Slack alert; this log
+      // only carries detail (response body) for Vercel runtime logs.
+      logger.error(
+        { status: prRes.status, body, slack: false },
+        "abandoned-checkout-alert: personal_report lookup failed"
+      );
+      throw new Error(`personal_report_lookup_failed:${prRes.status}`);
     }
-    const paidRows = (await paidRes.json()) as Array<{
-      personal_report: { survey_submission_id: number } | null;
+    const prRows = (await prRes.json()) as Array<{
+      id: number;
+      survey_submission_id: number;
     }>;
+    const subByPersonalReport = new Map<number, number>(); // personal_report_id → submission_id
+    for (const r of prRows) subByPersonalReport.set(r.id, r.survey_submission_id);
+
+    // Step 2: find which of those personal_reports have a succeeded payment.
     const paid = new Set<number>();
-    for (const r of paidRows) {
-      const id = r.personal_report?.survey_submission_id;
-      if (id != null) paid.add(id);
+    if (subByPersonalReport.size > 0) {
+      const prIds = [...subByPersonalReport.keys()];
+      const paidRes = await supabaseFetch(
+        `/rest/v1/payment?personal_report_id=in.(${prIds.join(",")})&status=eq.succeeded&select=personal_report_id`
+      );
+      if (!paidRes.ok) {
+        const body = await paidRes.text().catch(() => "");
+        logger.error(
+          { status: paidRes.status, body, slack: false },
+          "abandoned-checkout-alert: payment lookup failed"
+        );
+        throw new Error(`payment_lookup_failed:${paidRes.status}`);
+      }
+      const paidRows = (await paidRes.json()) as Array<{ personal_report_id: number }>;
+      for (const r of paidRows) {
+        const subId = subByPersonalReport.get(r.personal_report_id);
+        if (subId != null) paid.add(subId);
+      }
     }
 
     const abandoned = submissionIds.filter((id) => !paid.has(id));
