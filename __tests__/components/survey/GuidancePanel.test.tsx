@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 import { render, screen, cleanup } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { describe, it, expect, afterEach } from "vitest";
 import GuidancePanel from "@/components/survey/GuidancePanel";
 import { makeOpenQuestion } from "@/__tests__/__fixtures__/survey";
@@ -10,84 +9,68 @@ afterEach(cleanup);
 const baseQuestion = makeOpenQuestion({ qId: "q1", question: "Test question?" });
 
 describe("GuidancePanel", () => {
-  it("returns null when no supportAndGuidance, comment, or answerOptionsExplained", () => {
+  it("returns null when neither supportAndGuidance nor howAnswerIsUsed is present", () => {
     const { container } = render(<GuidancePanel question={baseQuestion} />);
     expect(container.innerHTML).toBe("");
   });
 
-  it("renders always-visible support section when question has supportAndGuidance", () => {
+  it("renders the Info and guidance section when supportAndGuidance is set", () => {
     const q = { ...baseQuestion, supportAndGuidance: "This is guidance text" };
     render(<GuidancePanel question={q} />);
-    expect(screen.getByText("Support and guidance")).toBeInTheDocument();
+    expect(screen.getByText("Info and guidance")).toBeInTheDocument();
     expect(screen.getByText("This is guidance text")).toBeInTheDocument();
   });
 
-  it("renders Learn more button when question has comment", () => {
-    const q = { ...baseQuestion, comment: "How this is used" };
+  it("renders the How this answer will be used section when howAnswerIsUsed is set", () => {
+    const q = { ...baseQuestion, howAnswerIsUsed: "Drives scoring for X" };
     render(<GuidancePanel question={q} />);
-    expect(
-      screen.getByRole("button", { name: /learn more about this question/i })
-    ).toBeInTheDocument();
+    expect(screen.getByText("How this answer will be used")).toBeInTheDocument();
+    expect(screen.getByText("Drives scoring for X")).toBeInTheDocument();
   });
 
-  it("shows helper text below Learn more button", () => {
-    const q = { ...baseQuestion, comment: "How this is used" };
-    render(<GuidancePanel question={q} />);
-    expect(screen.getByText(/tap to explore context/i)).toBeInTheDocument();
-  });
-
-  it("shows insight content when Learn more is clicked", async () => {
-    const user = userEvent.setup();
+  it("renders both sections side-by-side when both fields are set", () => {
     const q = {
       ...baseQuestion,
       supportAndGuidance: "Important guidance",
-      comment: "Used for scoring",
+      howAnswerIsUsed: "Used for scoring",
     };
     render(<GuidancePanel question={q} />);
-
-    // Support section is always visible
+    expect(screen.getByText("Info and guidance")).toBeInTheDocument();
     expect(screen.getByText("Important guidance")).toBeInTheDocument();
-
-    // Click Learn more to expand insight panel
-    await user.click(screen.getByRole("button", { name: /learn more about this question/i }));
-
-    expect(screen.getByText("Used for scoring")).toBeInTheDocument();
     expect(screen.getByText("How this answer will be used")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /hide details/i })).toBeInTheDocument();
+    expect(screen.getByText("Used for scoring")).toBeInTheDocument();
   });
 
-  it("hides insight content when toggled closed", async () => {
-    const user = userEvent.setup();
-    const q = { ...baseQuestion, comment: "Scoring info" };
+  it("falls back to the legacy comment field when howAnswerIsUsed is missing", () => {
+    const q = { ...baseQuestion, comment: "Legacy comment text" };
     render(<GuidancePanel question={q} />);
-
-    // Open
-    await user.click(screen.getByRole("button", { name: /learn more about this question/i }));
-    // Close
-    await user.click(screen.getByRole("button", { name: /hide details/i }));
-
-    expect(
-      screen.getByRole("button", { name: /learn more about this question/i })
-    ).toBeInTheDocument();
+    expect(screen.getByText("How this answer will be used")).toBeInTheDocument();
+    expect(screen.getByText("Legacy comment text")).toBeInTheDocument();
   });
 
-  it("shows answer options explained cards", async () => {
-    const user = userEvent.setup();
+  it("never renders the legacy 'Answer option(s) explained' block, even when answerOptionsExplained is populated", () => {
     const q = {
       ...baseQuestion,
+      supportAndGuidance: "Guidance",
       answerOptionsExplained: [
         { option: "Option A", explanation: "Explanation for A" },
         { option: "Option B", explanation: "Explanation for B" },
       ],
     };
     render(<GuidancePanel question={q} />);
+    expect(screen.queryByText("Answer option(s) explained")).not.toBeInTheDocument();
+    expect(screen.queryByText("Option A")).not.toBeInTheDocument();
+    expect(screen.queryByText("Explanation for A")).not.toBeInTheDocument();
+  });
 
-    await user.click(screen.getByRole("button", { name: /learn more about this question/i }));
-
-    expect(screen.getByText("Answer option(s) explained")).toBeInTheDocument();
-    expect(screen.getByText("Option A")).toBeInTheDocument();
-    expect(screen.getByText("Explanation for A")).toBeInTheDocument();
-    expect(screen.getByText("Option B")).toBeInTheDocument();
-    expect(screen.getByText("Explanation for B")).toBeInTheDocument();
+  it("never renders an accordion 'Learn more' control", () => {
+    const q = {
+      ...baseQuestion,
+      supportAndGuidance: "Guidance",
+      howAnswerIsUsed: "Scoring info",
+    };
+    render(<GuidancePanel question={q} />);
+    expect(screen.queryByRole("button", { name: /learn more about this question/i })).toBeNull();
+    expect(screen.queryByText(/tap to explore context/i)).toBeNull();
   });
 });
