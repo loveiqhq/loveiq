@@ -31,10 +31,11 @@ export interface DailyMetrics {
   surveyStarts: number;
   completions: number;
   completionRate: number; // 0-100
-  waitlist: number;
   // Activation
   reportViewers: number;
-  deepEngagement: number;
+  engagement1min: number;
+  engagement5min: number;
+  engagement10min: number;
   paywallViews: number;
   beginCheckouts: number;
   // Revenue
@@ -164,12 +165,6 @@ async function fetchSurveyStarts(sinceIso: string, untilIso: string): Promise<nu
 async function fetchCompletions(sinceIso: string, untilIso: string): Promise<number> {
   return fetchExactCount(
     `/rest/v1/survey_submission?select=id&status=eq.completed&${dateRange("created_date_time", sinceIso, untilIso)}`
-  );
-}
-
-async function fetchWaitlist(sinceIso: string, untilIso: string): Promise<number> {
-  return fetchExactCount(
-    `/rest/v1/waitlist_user?select=id&${dateRange("created_date_time", sinceIso, untilIso)}`
   );
 }
 
@@ -502,9 +497,10 @@ export async function fetchDailyMetrics(sinceIso: string, untilIso: string): Pro
   const [
     surveyStarts,
     completions,
-    waitlist,
     reportViewers,
-    deepEngagement,
+    engagement1min,
+    engagement5min,
+    engagement10min,
     paywallViews,
     beginCheckouts,
     revenue,
@@ -523,8 +519,9 @@ export async function fetchDailyMetrics(sinceIso: string, untilIso: string): Pro
   ] = await Promise.all([
     fetchSurveyStarts(sinceIso, untilIso),
     fetchCompletions(sinceIso, untilIso),
-    fetchWaitlist(sinceIso, untilIso),
     fetchDistinctReportViewers(sinceIso, untilIso),
+    fetchAnalyticsEventCount("report_engagement_1min", sinceIso, untilIso),
+    fetchAnalyticsEventCount("report_engagement_5min", sinceIso, untilIso),
     fetchAnalyticsEventCount("report_engagement_10min", sinceIso, untilIso),
     fetchAnalyticsEventCount("paywall_view", sinceIso, untilIso),
     fetchAnalyticsEventCount("begin_checkout", sinceIso, untilIso),
@@ -549,9 +546,10 @@ export async function fetchDailyMetrics(sinceIso: string, untilIso: string): Pro
     surveyStarts,
     completions,
     completionRate,
-    waitlist,
     reportViewers,
-    deepEngagement,
+    engagement1min,
+    engagement5min,
+    engagement10min,
     paywallViews,
     beginCheckouts,
     revenue,

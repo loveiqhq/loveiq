@@ -23,7 +23,6 @@ async function fetchPeriodStats(since: string, until: string) {
     completed: w.completions,
     completionRate: w.completionRate,
     avgDurationSec: w.avgCompletionSec,
-    waitlistCount: w.waitlist,
     scoredCount: w.topArchetypes.reduce((sum, [, n]) => sum + n, 0),
     topArchetypes: w.topArchetypes,
     topUtm: w.topUtmSources,
@@ -87,11 +86,6 @@ export async function GET(request: Request) {
       <p style="color:#9ca3af;font-size:12px;margin:0 0 4px;">Completion Rate</p>
       <p style="font-size:24px;font-weight:700;color:#e8e0f0;margin:0;">${current.completionRate}%</p>
       <p style="${deltaColor(current.completionRate, previous.completionRate)};font-size:12px;margin:4px 0 0;">${delta(current.completionRate, previous.completionRate)} vs prev week</p>
-    </div>
-    <div style="background:#0f0a18;border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:16px;">
-      <p style="color:#9ca3af;font-size:12px;margin:0 0 4px;">Waitlist Signups</p>
-      <p style="font-size:24px;font-weight:700;color:#e8e0f0;margin:0;">${current.waitlistCount}</p>
-      <p style="${deltaColor(current.waitlistCount, previous.waitlistCount)};font-size:12px;margin:4px 0 0;">${delta(current.waitlistCount, previous.waitlistCount)} vs prev week</p>
     </div>
     <div style="background:#0f0a18;border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:16px;">
       <p style="color:#9ca3af;font-size:12px;margin:0 0 4px;">Scored</p>

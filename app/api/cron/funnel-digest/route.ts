@@ -82,12 +82,13 @@ function formatDaily(dayKey: string, curr: DailyMetrics, prev: DailyMetrics): st
   lines.push(
     `• Completions: ${curr.completions} (${curr.completionRate}% rate, DoD: ${delta(curr.completionRate, prev.completionRate)})`
   );
-  lines.push(metricWithDelta("Waitlist", curr.waitlist, prev.waitlist));
   lines.push("");
 
   lines.push("*Activation*");
   lines.push(metricWithDelta("Report viewers", curr.reportViewers, prev.reportViewers));
-  lines.push(metricWithDelta("Deep engagement (10m+)", curr.deepEngagement, prev.deepEngagement));
+  lines.push(metricWithDelta("Engagement 1m+", curr.engagement1min, prev.engagement1min));
+  lines.push(metricWithDelta("Engagement 5m+", curr.engagement5min, prev.engagement5min));
+  lines.push(metricWithDelta("Engagement 10m+", curr.engagement10min, prev.engagement10min));
   lines.push(metricWithDelta("Paywall views", curr.paywallViews, prev.paywallViews));
   lines.push(metricWithDelta("Begin checkouts", curr.beginCheckouts, prev.beginCheckouts));
   lines.push("");
@@ -152,12 +153,13 @@ function formatWeekly(
     `• Completions: ${curr.completions} (${curr.completionRate}% rate, WoW: ${delta(curr.completionRate, prev.completionRate)})`
   );
   lines.push(`• Avg completion time: ${curr.avgCompletionSec}s`);
-  lines.push(metricWithWow("Waitlist", curr.waitlist, prev.waitlist));
   lines.push("");
 
   lines.push("*Activation*");
   lines.push(metricWithWow("Report viewers", curr.reportViewers, prev.reportViewers));
-  lines.push(metricWithWow("Deep engagement (10m+)", curr.deepEngagement, prev.deepEngagement));
+  lines.push(metricWithWow("Engagement 1m+", curr.engagement1min, prev.engagement1min));
+  lines.push(metricWithWow("Engagement 5m+", curr.engagement5min, prev.engagement5min));
+  lines.push(metricWithWow("Engagement 10m+", curr.engagement10min, prev.engagement10min));
   lines.push(metricWithWow("Paywall views", curr.paywallViews, prev.paywallViews));
   lines.push(metricWithWow("Begin checkouts", curr.beginCheckouts, prev.beginCheckouts));
   lines.push("");
