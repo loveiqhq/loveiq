@@ -235,16 +235,16 @@ function main() {
     const defaultInput = cleanText(row["Default input / placeholder"] || "");
     // V2 "Hover states" had SHORT labels ("1 = Not true at all · 2 = ..."); the
     // V3 CSV moved those short labels into "Answer options" and introduced a
-    // separate "1-7 Explanations" column with LONG per-step descriptions. Keep
-    // the two roles distinct so scale-slider endpoints (low/high) don't get
-    // populated with sentence-length explanations.
+    // separate "1-7 Explanations" column with LONG per-step descriptions.
+    //
+    // ScaleQuestion.tsx renders BOTH hoverStates (above) AND answerOptionsExplained
+    // (below). In V2 those rendered short-label-then-long-explanation cleanly; in
+    // V3 there is only one long-explanation source, so we feed it to hoverStates
+    // ONLY and leave answerOptionsExplained empty. Reading the same column into
+    // both fields would render the same sentence twice under the slider.
     const shortScaleLabelsRaw = cleanText(row["Hover states"] || "");
-    const answerOptionsExplainedRaw = cleanText(
-      row["Answer option(s) explained"] || row["1-7 Explanations"] || ""
-    );
-    const hoverStatesRaw = cleanText(
-      row["Hover states"] || row["1-7 Explanations"] || row["Answer option(s) explained"] || ""
-    );
+    const answerOptionsExplainedRaw = cleanText(row["Answer option(s) explained"] || "");
+    const hoverStatesRaw = cleanText(row["Hover states"] || row["1-7 Explanations"] || "");
     const backgroundInfo = cleanText(row["Background info"] || "");
 
     if (isNaN(cId)) continue;

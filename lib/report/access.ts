@@ -6,7 +6,7 @@ export const ESSENTIALS_SECTION_IDS = [
   "attachment_style",
   "core_insecurities",
   "confidence_level",
-   
+
   "typical_beliefs",
 ] as const;
 
