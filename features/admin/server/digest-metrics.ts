@@ -8,6 +8,7 @@
  * with all queries running in Promise.all.
  */
 
+import { Redis } from "@upstash/redis";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { parseUtmSource } from "@features/admin/server/metric-library";
 import logger from "@shared/observability/logger";
@@ -51,6 +52,9 @@ export interface DailyMetrics {
   bounces: number;
   complaints: number;
   unsubscribes: number;
+  // Email engagement (aggregate counters from KV, populated by Resend webhook)
+  emailOpened: number;
+  emailClicked: number;
   // Top breakdowns
   topArchetypes: Array<[string, number]>;
   topUtmSources: Array<[string, number]>;
@@ -340,6 +344,46 @@ async function fetchTopUtmSources(
   return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, limit);
 }
 
+/**
+ * Email engagement counters live in Upstash KV (populated by the Resend
+ * webhook on `email.opened` / `email.clicked`). One key per kind per UTC
+ * day with 8-day TTL.
+ *
+ * The Redis client is a module-level singleton — every call to
+ * fetchDailyMetrics / fetchWeeklyMetrics would otherwise build a fresh
+ * Upstash HTTP client, and the weekly digest runs `fetchDailyMetrics`
+ * twice in a single tick (current + prior window).
+ */
+let _engagementRedis: Redis | null | undefined;
+function getEngagementRedis(): Redis | null {
+  if (_engagementRedis !== undefined) return _engagementRedis;
+  const url = process.env.KV_REST_API_URL;
+  const token = process.env.KV_REST_API_TOKEN;
+  _engagementRedis = url && token ? new Redis({ url, token }) : null;
+  return _engagementRedis;
+}
+
+async function fetchEmailEngagement(sinceIso: string): Promise<{
+  opened: number;
+  clicked: number;
+}> {
+  const redis = getEngagementRedis();
+  if (!redis) return { opened: 0, clicked: 0 };
+  // Use the UTC day from `sinceIso` (the start of the digest window).
+  const day = sinceIso.slice(0, 10);
+  try {
+    const [openedRaw, clickedRaw] = await redis.mget(
+      `email_engage:opened:${day}`,
+      `email_engage:clicked:${day}`
+    );
+    const toNum = (v: unknown): number =>
+      typeof v === "number" ? v : v == null ? 0 : Number(v) || 0;
+    return { opened: toNum(openedRaw), clicked: toNum(clickedRaw) };
+  } catch {
+    return { opened: 0, clicked: 0 };
+  }
+}
+
 async function fetchAvgCompletionMs(sinceIso: string, untilIso: string): Promise<number> {
   const res = await supabaseFetch(
     `/rest/v1/survey_submission?select=duration_ms&status=eq.completed&${dateRange("created_date_time", sinceIso, untilIso)}`,
@@ -473,6 +517,7 @@ export async function fetchDailyMetrics(sinceIso: string, untilIso: string): Pro
     bounces,
     complaints,
     unsubscribes,
+    emailEngagement,
     topArchetypes,
     topUtmSources,
   ] = await Promise.all([
@@ -493,6 +538,7 @@ export async function fetchDailyMetrics(sinceIso: string, untilIso: string): Pro
     fetchSuppressionByReason("hard_bounce", sinceIso, untilIso),
     fetchSuppressionByReason("complaint", sinceIso, untilIso),
     fetchSuppressionByReason("unsubscribed", sinceIso, untilIso),
+    fetchEmailEngagement(sinceIso),
     fetchTopArchetypes(sinceIso, untilIso, 3),
     fetchTopUtmSources(sinceIso, untilIso, 3),
   ]);
@@ -520,6 +566,8 @@ export async function fetchDailyMetrics(sinceIso: string, untilIso: string): Pro
     bounces,
     complaints,
     unsubscribes,
+    emailOpened: emailEngagement.opened,
+    emailClicked: emailEngagement.clicked,
     topArchetypes,
     topUtmSources,
   };

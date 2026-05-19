@@ -23,6 +23,7 @@ import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import { checkCooldown } from "@shared/http/ratelimit";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
+import { startCronTimer } from "@shared/observability/slack-alert-dedup";
 import { getBreaker } from "@shared/http/circuit-breaker";
 import logger from "@shared/observability/logger";
 import { inviteReminder1Email } from "@features/invite/emails/invite-reminder-1";
@@ -142,6 +143,8 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Service unavailable." }, { status: 503 });
   }
 
+  const trackDuration = startCronTimer("invite-reminders", 50);
+
   const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://loveiq.org").replace(/\/$/, "");
   // Deep-link into the Refer-a-Friend modal on the report page.
   const inviteCtaUrl = `${siteUrl}/report?invite=1`;
@@ -252,5 +255,7 @@ export async function GET(request: Request) {
   } catch (err) {
     logger.error({ err }, "Invite-reminders cron failed");
     return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
+  } finally {
+    await trackDuration();
   }
 }

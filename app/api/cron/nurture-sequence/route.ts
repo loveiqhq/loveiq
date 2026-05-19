@@ -25,6 +25,7 @@ import { Resend } from "resend";
 import { getBreaker } from "@shared/http/circuit-breaker";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import logger from "@shared/observability/logger";
+import { startCronTimer } from "@shared/observability/slack-alert-dedup";
 import { buildUnsubscribeUrl } from "@shared/emails/unsubscribe-token";
 import { isEmailSuppressed } from "@shared/emails/suppression";
 import { getReportPlanByPersonalReportId } from "@features/report/server/planAccess";
@@ -630,6 +631,8 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Service unavailable." }, { status: 503 });
   }
 
+  const trackDuration = startCronTimer("nurture-sequence", 50);
+
   const ctx: RouteContext = {
     resend,
     siteUrl: (process.env.NEXT_PUBLIC_SITE_URL || "https://loveiq.org").replace(/\/$/, ""),
@@ -659,5 +662,7 @@ export async function GET(request: Request) {
   } catch (err) {
     logger.error({ err }, "nurture-sequence cron failed");
     return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
+  } finally {
+    await trackDuration();
   }
 }

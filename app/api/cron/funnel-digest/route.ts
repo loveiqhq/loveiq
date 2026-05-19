@@ -22,7 +22,11 @@
 import { NextResponse } from "next/server";
 import logger from "@shared/observability/logger";
 import { notifySlack } from "@shared/observability/slack";
-import { tryClaimSlackAlert, verifyCronAuth } from "@shared/observability/slack-alert-dedup";
+import {
+  startCronTimer,
+  tryClaimSlackAlert,
+  verifyCronAuth,
+} from "@shared/observability/slack-alert-dedup";
 import {
   type DailyMetrics,
   type WeeklyMetrics,
@@ -114,6 +118,9 @@ function formatDaily(dayKey: string, curr: DailyMetrics, prev: DailyMetrics): st
   lines.push(
     `• Bounces: ${curr.bounces} | Complaints: ${curr.complaints} | Unsubscribes: ${curr.unsubscribes}`
   );
+  lines.push(
+    `• Opens: ${curr.emailOpened} (DoD: ${delta(curr.emailOpened, prev.emailOpened)}) | Clicks: ${curr.emailClicked} (DoD: ${delta(curr.emailClicked, prev.emailClicked)})`
+  );
   lines.push("");
 
   lines.push("*Top breakdowns*");
@@ -178,6 +185,9 @@ function formatWeekly(
   lines.push(
     `• Bounces: ${curr.bounces} | Complaints: ${curr.complaints} | Unsubscribes: ${curr.unsubscribes}`
   );
+  lines.push(
+    `• Opens: ${curr.emailOpened} (WoW: ${delta(curr.emailOpened, prev.emailOpened)}) | Clicks: ${curr.emailClicked} (WoW: ${delta(curr.emailClicked, prev.emailClicked)})`
+  );
   lines.push("");
 
   // Conversion funnel
@@ -238,6 +248,8 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const trackDuration = startCronTimer("funnel-digest", 60);
+
   try {
     const now = new Date();
     const dayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
@@ -295,5 +307,7 @@ export async function GET(request: Request) {
   } catch (err) {
     logger.error({ err }, "funnel-digest cron failed");
     return NextResponse.json({ error: "Internal" }, { status: 500 });
+  } finally {
+    await trackDuration();
   }
 }

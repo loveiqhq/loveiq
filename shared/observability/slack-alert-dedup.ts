@@ -1,5 +1,6 @@
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import logger from "@shared/observability/logger";
+import { notifySlack } from "@shared/observability/slack";
 
 /**
  * Atomically claim a Slack alert slot for (kind, entityType, entityId). Used
@@ -53,6 +54,41 @@ export async function tryClaimSlackAlert(
     logger.warn({ err, kind, entityType, entityId }, "tryClaimSlackAlert: error");
     return false;
   }
+}
+
+/**
+ * Lightweight cron-duration tracker. Call at the start with the cron name +
+ * maxDurationSec, await the returned function before returning the response.
+ * If the elapsed wall-time exceeds 80% of the budget, fires a single ops
+ * Slack ping so a creeping cron slowdown surfaces before it becomes a
+ * Vercel timeout 500.
+ *
+ *   const trackDuration = startCronTimer("nurture-sequence", 60);
+ *   // ... do work ...
+ *   await trackDuration();
+ *   return NextResponse.json({ ok: true });
+ *
+ * Deduped per (cron, UTC hour) so a sustained slow window doesn't ping every
+ * 30 minutes — once an hour is plenty.
+ */
+export function startCronTimer(cronName: string, maxDurationSec: number): () => Promise<void> {
+  const startMs = Date.now();
+  const budgetMs = maxDurationSec * 1000;
+  const threshold = budgetMs * 0.8;
+  return async () => {
+    const elapsedMs = Date.now() - startMs;
+    if (elapsedMs < threshold) return;
+    const hourKey = `${cronName}:${new Date(startMs).toISOString().slice(0, 13)}`;
+    const claimed = await tryClaimSlackAlert("cron_slow", "cron_hour", hourKey);
+    if (!claimed) return;
+    const pct = Math.round((elapsedMs / budgetMs) * 100);
+    await notifySlack({
+      channel: "ops",
+      kind: "cron_slow",
+      text: `:warning: Cron *${cronName}* used ${pct}% of its ${maxDurationSec}s budget (${Math.round(elapsedMs / 1000)}s). Approaching timeout — investigate slowness.`,
+      username: "ops_alerts",
+    });
+  };
 }
 
 /**

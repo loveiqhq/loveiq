@@ -16,7 +16,11 @@ import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { getBreaker } from "@shared/http/circuit-breaker";
 import logger from "@shared/observability/logger";
 import { notifySlack } from "@shared/observability/slack";
-import { tryClaimSlackAlert, verifyCronAuth } from "@shared/observability/slack-alert-dedup";
+import {
+  startCronTimer,
+  tryClaimSlackAlert,
+  verifyCronAuth,
+} from "@shared/observability/slack-alert-dedup";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -48,6 +52,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const trackDuration = startCronTimer("abandoned-checkout-alert", 50);
   try {
     const cutoff = new Date(Date.now() - ABANDONED_AFTER_MS).toISOString();
     // Pull recent begin_checkout events older than the abandon threshold.
@@ -150,5 +155,9 @@ export async function GET(request: Request) {
   } catch (err) {
     logger.error({ err }, "abandoned-checkout-alert cron failed");
     return NextResponse.json({ error: "Internal" }, { status: 500 });
+  } finally {
+    // Fires the cron-slow Slack alert if elapsed > 80% of maxDuration.
+    // Runs on both happy path AND catch so a hanging cron still gets noticed.
+    await trackDuration();
   }
 }

@@ -20,6 +20,7 @@ import { checkCooldown } from "@shared/http/ratelimit";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { getBreaker } from "@shared/http/circuit-breaker";
 import logger from "@shared/observability/logger";
+import { startCronTimer } from "@shared/observability/slack-alert-dedup";
 import { surveyPausedEmail } from "@features/survey/server/emails/survey-paused";
 import { surveyPausedBEmail } from "@features/survey/server/emails/survey-paused-b";
 import { pickEmailVariant } from "@shared/emails/ab-variant";
@@ -115,6 +116,8 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Service unavailable." }, { status: 503 });
   }
 
+  const trackDuration = startCronTimer("survey-paused", 50);
+
   const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://loveiq.org").replace(/\/$/, "");
   const resumeUrl = `${siteUrl}/survey`;
 
@@ -201,5 +204,7 @@ export async function GET(request: Request) {
   } catch (err) {
     logger.error({ err }, "Survey-paused cron failed");
     return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
+  } finally {
+    await trackDuration();
   }
 }

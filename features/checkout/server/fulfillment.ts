@@ -1244,6 +1244,16 @@ export async function processStripeWebhookEvent({
           processingError: null,
           stripePaymentIntentId: null,
         });
+        // Surface previously-unhandled Stripe event types so we catch new
+        // behaviors before they become invisible regressions. Marked
+        // processed=true above so the dead-letter logic doesn't retry.
+        logger.info({ eventId: event.id, type: event.type }, "Stripe webhook: unknown event type");
+        await notifySlack({
+          channel: "ops",
+          kind: "stripe_unknown_event",
+          text: `:question: Stripe webhook saw an unhandled event type — *${escapeSlack(event.type)}* (event ${escapeSlack(event.id)}). Consider adding a handler or explicit ignore.`,
+          username: "ops_alerts",
+        });
     }
   } catch (error) {
     logger.error(

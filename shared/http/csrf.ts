@@ -14,7 +14,22 @@
  */
 
 import { cookies } from "next/headers";
+import { Redis } from "@upstash/redis";
 import logger from "@shared/observability/logger";
+import { getClientIp } from "@shared/http/ratelimit";
+
+// Per-IP CSRF-fail counter (15-min bucket, 30-min TTL). The
+// security-storm-detector cron scans `csrf:*` keys and pings ops when any
+// IP exceeds the threshold. Stored as a process-level singleton so the
+// instance is reused across requests on a warm Vercel function.
+let _csrfRedis: Redis | null | undefined;
+function getCsrfRedis(): Redis | null {
+  if (_csrfRedis !== undefined) return _csrfRedis;
+  const url = process.env.KV_REST_API_URL;
+  const token = process.env.KV_REST_API_TOKEN;
+  _csrfRedis = url && token ? new Redis({ url, token }) : null;
+  return _csrfRedis;
+}
 
 const isProduction = process.env.NODE_ENV === "production";
 const CSRF_COOKIE_NAME = isProduction ? "__Host-csrf" : "__csrf";
@@ -53,10 +68,11 @@ export async function verifyCsrfToken(request: Request): Promise<boolean> {
   return true;
 }
 
-// Structured warn log on every CSRF failure. The storm-detector cron reads
-// these from Vercel runtime logs (filtered by csrf_fail:true) to surface
-// abuse patterns. Kept at warn-level so the pino → Slack hook (which fires
-// on .error) doesn't ping for every legitimate CSRF expiry.
+// Structured warn log on every CSRF failure. Increments a per-IP counter
+// in Upstash KV that the security-storm-detector cron scans on a 15-min
+// cadence. Warn-level so the pino → Slack hook (which fires on .error)
+// doesn't ping for every legitimate CSRF cookie expiry; the cron is the
+// signal that batches and alerts on storms.
 function logCsrfFail(request: Request, reason: string) {
   let path = "(unknown)";
   try {
@@ -64,7 +80,20 @@ function logCsrfFail(request: Request, reason: string) {
   } catch {
     // Malformed URL — ignore
   }
-  logger.warn({ csrf_fail: true, reason, path }, "CSRF token check failed");
+  const ip = getClientIp(request);
+  logger.warn({ csrf_fail: true, reason, path, ip }, "CSRF token check failed");
+
+  // Fire-and-forget KV bump. Bucket is 15-min wide; TTL 30 min so the
+  // current + previous window are queryable. Errors swallowed — we never
+  // want logging-of-CSRF-fail to disrupt the request hot path.
+  const redis = getCsrfRedis();
+  if (!redis) return;
+  const bucketMin = Math.floor(Date.now() / 900_000) * 15;
+  const key = `csrf:${ip}:${bucketMin}`;
+  void redis
+    .incr(key)
+    .then((n) => (n === 1 ? redis.expire(key, 1800) : null))
+    .catch(() => {});
 }
 
 /**
