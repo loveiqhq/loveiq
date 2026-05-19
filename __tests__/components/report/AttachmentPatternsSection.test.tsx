@@ -5,16 +5,14 @@ import AttachmentPatternsSection from "@/components/report/sections/AttachmentPa
 import { reportSections } from "@/data/report-general";
 
 const attachmentGeneralHtml =
-  reportSections.find(
-    (section) => section.id === "attachment_style_how_safety_closeness_and_distance_shape_desire"
-  )?.generalContent ?? "";
+  reportSections.find((section) => section.id === "attachment_style")?.generalContent ?? "";
 const resolvedAttachmentGeneralHtml = attachmentGeneralHtml.replace(
   /\{\{CORE_ARCHETYPE\}\}/g,
   '<span class="report-archetype-name">Spark Seeker</span>'
 );
 
 describe("AttachmentPatternsSection", () => {
-  it("renders the common attachment pattern block separately from the premium archetype content", () => {
+  it("renders the intro + premium archetype content; the 'Common Attachment Style Patterns' grid is no longer in the V3 template", () => {
     const { container } = render(
       <AttachmentPatternsSection
         archetype="Spark Seeker"
@@ -25,17 +23,13 @@ describe("AttachmentPatternsSection", () => {
       />
     );
 
-    expect(container.querySelector(".report-attachment-patterns")).toBeInTheDocument();
-    expect(
-      screen.getByRole("heading", { name: "Common Attachment Style Patterns Across Archetypes" })
-    ).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Secure attachment" })).toBeInTheDocument();
-    expect(screen.getByText(/Sensual Connector/i)).toBeInTheDocument();
-    expect(screen.getByText(/Relational Nurturer/i)).toBeInTheDocument();
-    // Locked premium HTML renders inside `.report-themed-block__blurred` so
-    // the client can blur it visually behind the overlay (visual tease, not
-    // byte-level paywall — see plan "whimsical-greeting-popcorn"). The
-    // overlay sits absolutely on top.
+    // V3 template dropped the "Common Attachment Style Patterns Across Archetypes"
+    // subsection entirely. Component gracefully renders no patterns container.
+    expect(container.querySelector(".report-attachment-patterns")).not.toBeInTheDocument();
+    expect(container.querySelector(".report-attachment-patterns__grid")).not.toBeInTheDocument();
+
+    // Locked premium HTML still renders inside `.report-themed-block__blurred` so
+    // the client can blur it visually behind the overlay.
     const blurred = container.querySelector(".report-themed-block__blurred");
     expect(blurred).toBeInTheDocument();
     expect(blurred?.getAttribute("aria-hidden")).toBe("true");
@@ -43,9 +37,6 @@ describe("AttachmentPatternsSection", () => {
     expect(container.querySelector(".report-premium-overlay")).toBeInTheDocument();
     expect(container.querySelector(".report-rich-heading")).toHaveTextContent(
       "Attachment Style of the Spark Seeker"
-    );
-    expect(container.querySelector(".report-attachment-patterns__outro")).toHaveTextContent(
-      "Attachment style is not static"
     );
   });
 });

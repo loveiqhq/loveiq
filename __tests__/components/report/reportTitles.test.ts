@@ -48,10 +48,7 @@ describe("reportTitles", () => {
 
   it("treats Love Language as a full_report section in the resolved access tiers", () => {
     const [section] = resolveReportSections(
-      reportSections.filter(
-        (entry) =>
-          entry.id === "love_language_how_affection_meaning_and_erotic_safety_are_communicated"
-      ),
+      reportSections.filter((entry) => entry.id === "love_language"),
       "Spark Seeker"
     );
 

@@ -61,10 +61,10 @@ describe("PracticeTendenciesSection", () => {
 
     const intro = container.querySelector(".report-practice-panel__intro");
 
-    expect(intro?.textContent).toContain("These scores do not define you as an individual");
-    expect(
-      screen.getByText(/probability-based estimates derived from aggregated research/i)
-    ).toBeInTheDocument();
+    // V3 template rewrote the section 27 intro from the probability disclaimer to
+    // a "recurring sexual scripts" framing about fantasy vs lived experience.
+    expect(intro?.textContent).toContain("recurring sexual scripts");
+    expect(screen.getByText(/arousal non-concordance/i)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Core Relational & Embodied" })).toBeInTheDocument();
     expect(screen.getByText("Romantic lovemaking")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Technology & Distance" })).toBeInTheDocument();

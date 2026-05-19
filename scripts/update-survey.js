@@ -210,8 +210,8 @@ function main() {
   const questions = [];
 
   for (const row of records) {
-    const qId = (row["Q_ID"] || "").trim();
-    const cId = parseInt(row["C_ID"], 10);
+    const qId = (row["Q_ID"] || row["QID"] || "").trim();
+    const cId = parseInt(row["C_ID"] || row["CID"], 10);
     const chapter = (row["Category & chapter"] || "").trim();
     const question = (row["Question"] || row["Question "] || "")
       .trim()
@@ -223,13 +223,28 @@ function main() {
     // Convention: "Marketing opt-in" in the "How this answer will be used" column flips required→false.
     const required = !/marketing opt-in/i.test(howAnswerIsUsed);
     const supportAndGuidance = cleanText(
-      row["Support and guidance"] || row["Guide (display)"] || ""
+      row["Support and guidance"] || row["Guide (display)"] || row["Info and guidance"] || ""
     );
     const formatGuidance = cleanText(row["Answer format guidance"] || "");
-    const maxSelections = parseMaxSelections(row["Max selections"] || "");
+    // V3 CSV drops the explicit "Max selections" column; for multi-choice rows the cap
+    // is now embedded inline in the question text as "(Pick up to N.)".
+    const inlineMaxMatch = question.match(/\(\s*Pick up to (\d+)\.?\s*\)/i);
+    const maxSelections =
+      parseMaxSelections(row["Max selections"] || "") ??
+      (inlineMaxMatch ? parseInt(inlineMaxMatch[1], 10) : null);
     const defaultInput = cleanText(row["Default input / placeholder"] || "");
-    const answerOptionsExplainedRaw = cleanText(row["Answer option(s) explained"] || "");
-    const hoverStatesRaw = cleanText(row["Hover states"] || "");
+    // V2 "Hover states" had SHORT labels ("1 = Not true at all · 2 = ..."); the
+    // V3 CSV moved those short labels into "Answer options" and introduced a
+    // separate "1-7 Explanations" column with LONG per-step descriptions. Keep
+    // the two roles distinct so scale-slider endpoints (low/high) don't get
+    // populated with sentence-length explanations.
+    const shortScaleLabelsRaw = cleanText(row["Hover states"] || "");
+    const answerOptionsExplainedRaw = cleanText(
+      row["Answer option(s) explained"] || row["1-7 Explanations"] || ""
+    );
+    const hoverStatesRaw = cleanText(
+      row["Hover states"] || row["1-7 Explanations"] || row["Answer option(s) explained"] || ""
+    );
     const backgroundInfo = cleanText(row["Background info"] || "");
 
     if (isNaN(cId)) continue;
@@ -256,15 +271,23 @@ function main() {
       supportAndGuidance,
     };
 
-    // Scale labels — prefer hover states, fallback to answer options pattern
+    // Scale labels (slider endpoints): SHORT labels only.
+    // Source order: V2 "Hover states" → V3 "Answer options" (newline N = label) → "1=X → 7=Y" pattern.
+    // NEVER pull from "1-7 Explanations" (those are long per-step explanations,
+    // not slider endpoint labels).
     if (answerType === "scale") {
-      const labelsFromHover = parseScaleLabelsFromHoverStates(hoverStatesRaw);
+      const labelsFromHover = parseScaleLabelsFromHoverStates(shortScaleLabelsRaw);
       if (labelsFromHover) {
         q.scaleLabels = labelsFromHover;
       } else {
-        const labels = parseScaleLabels(answerOptions);
-        if (labels) {
-          q.scaleLabels = labels;
+        const labelsFromOptions = parseScaleLabelsFromHoverStates(answerOptions);
+        if (labelsFromOptions) {
+          q.scaleLabels = labelsFromOptions;
+        } else {
+          const labels = parseScaleLabels(answerOptions);
+          if (labels) {
+            q.scaleLabels = labels;
+          }
         }
       }
     }

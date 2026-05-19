@@ -71,7 +71,7 @@ describe("DimensionSection", () => {
           "<p>Core Insecurities of the Spark Seeker</p>",
         ].join("")}
         isPremium={true}
-        sectionId="core_insecurities_the_hidden_fears_that_shape_desire_protection_and_erotic_expression"
+        sectionId="core_insecurities"
         sectionTitle="Core Insecurities"
       />
     );
@@ -99,7 +99,7 @@ describe("DimensionSection", () => {
           "<p>Attachment Style of the Spark Seeker</p>",
         ].join("")}
         isPremium={true}
-        sectionId="attachment_style_how_safety_closeness_and_distance_shape_desire"
+        sectionId="attachment_style"
         sectionTitle="Attachment Style"
       />
     );

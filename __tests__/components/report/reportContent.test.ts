@@ -98,33 +98,18 @@ describe("reportContent normalization", () => {
     expect(groups.some((group) => group.title === "Technology & Distance")).toBe(true);
   });
 
-  it("extracts attachment intro prose, common patterns, and the archetype heading separately", () => {
+  it("extracts attachment intro prose and the archetype heading; V3 template no longer ships a common-patterns subsection", () => {
     const attachmentHtml =
-      reportSections.find(
-        (section) =>
-          section.id === "attachment_style_how_safety_closeness_and_distance_shape_desire"
-      )?.generalContent ?? "";
+      reportSections.find((section) => section.id === "attachment_style")?.generalContent ?? "";
 
     const content = extractAttachmentSectionContent(attachmentHtml);
 
     expect(content.introHtml).toContain("Attachment style describes how a person relates");
-    expect(content.commonHeading).toBe("Common Attachment Style Patterns Across Archetypes");
-    expect(content.patterns).toHaveLength(5);
-    expect(content.patterns[0]).toMatchObject({
-      title: "Secure attachment",
-      examples: [
-        "Sensual Connector",
-        "Relational Nurturer",
-        "Loyal Ritualist",
-        "Spiritual Lover",
-        "Curious Apprentice",
-      ],
-    });
-    expect(content.patterns[1]).toMatchObject({
-      title: "Anxious attachment",
-      examples: ["Tender Devotee"],
-    });
-    expect(content.outroHtml).toContain("Attachment style is <strong>not static</strong>");
+    // V3 template dropped the "Common Attachment Style Patterns Across Archetypes" block.
+    // Parser correctly returns null / empty when that heading is absent.
+    expect(content.commonHeading).toBeNull();
+    expect(content.patterns).toHaveLength(0);
+    expect(content.outroHtml).toBe("");
     expect(content.headingBlock).toContain("Attachment Style of the {{CORE_ARCHETYPE}}");
   });
 });

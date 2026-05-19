@@ -132,7 +132,9 @@ export function hasMeaningfulReportHtml(html: string | null | undefined) {
 }
 
 function isStandaloneHeadingBlock(block: string) {
-  if (!/^\s*<p\b/i.test(block)) return false;
+  // V2 templates styled "Foo of the {{CORE_ARCHETYPE}}" as a <p>; V3 templates emit
+  // it as a real <h2>/<h3>. Accept both shapes.
+  if (!/^\s*<(?:p|h[1-6])\b/i.test(block)) return false;
 
   const text = getReportBlockText(block);
   if (!text) return false;

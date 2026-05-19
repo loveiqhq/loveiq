@@ -12,7 +12,7 @@ describe("ReportNavigation", () => {
         [
           "core_motivation",
           "typical_challenges_to_enjoy_sex_for_the_core_archetype",
-          "libido_challenges_in_relationships_when_desire_becomes_conditional",
+          "libido_challenges_in_relationships",
         ].includes(section.id)
       ),
       "Spark Seeker"

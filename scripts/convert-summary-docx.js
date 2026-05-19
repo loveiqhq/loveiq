@@ -12,23 +12,24 @@ import { dirname } from "path";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const SOURCE_DIR = "/home/ferhad/Downloads/Summaries 2-Page";
+const SOURCE_DIR = join(__dirname, "../.source-artifacts/report-content-v3/by-archetype");
 const OUT_FILE = join(__dirname, "../data/report-summary.ts");
 
-// Maps DOCX filename stem → archetype name used throughout the codebase
+// Maps DOCX filename stem → archetype name used throughout the codebase.
+// V9 renames are reflected in both filename stems and display names.
 const FILENAME_TO_ARCHETYPE = {
   "01_Sensual_Connector": "Sensual Connector",
   "02_Spark_Seeker": "Spark Seeker",
   "03_Relational_Nurturer": "Relational Nurturer",
-  "04_Exhibitionist_Performer": "Radiant Performer",
+  "04_Radiant_Performer": "Radiant Performer",
   "05_Explorer_of_Edges": "Explorer of Edges",
   "06_Curious_Apprentice": "Curious Apprentice",
   "07_Spiritual_Lover": "Spiritual Lover",
   "08_Minimalist_Companion": "Minimalist Companion",
   "09_Emotional_Voyeur": "Emotional Voyeur",
-  "10_Power_Orchestrator": "Authority Conductor",
+  "10_Authority_Conductor": "Authority Conductor",
   "11_Loyal_Ritualist": "Loyal Ritualist",
-  "12_Approval_Seeker": "Tender Devotee",
+  "12_Tender_Devotee": "Tender Devotee",
   "13_Analytical_Sexualist": "Analytical Sexualist",
   "14_Quiet_Withdrawer": "Quiet Withdrawer",
 };

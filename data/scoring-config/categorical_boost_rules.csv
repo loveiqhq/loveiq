@@ -251,43 +251,43 @@ rule_id,question_id,answer_code,answer_label,archetype_name,score_add
 250.0,14020,validation,Feeling desired,Radiant Performer,0.765
 251.0,14020,validation,Feeling desired,Authority Conductor,0.315
 252.0,14020,validation,Feeling desired,Tender Devotee,0.72
-253.0,16005,awakening,Waking up — getting curious about what I like and want again,Spark Seeker,0.3
-254.0,16005,awakening,Waking up — getting curious about what I like and want again,Curious Apprentice,0.6
-255.0,16005,evolving,"Going deeper — sex feels tied to growth, meaning, or spirituality",Sensual Connector,0.2
-256.0,16005,evolving,"Going deeper — sex feels tied to growth, meaning, or spirituality",Spiritual Lover,0.9
-257.0,16005,expanding,"Stretching — ready for more play, novelty, confidence, or range",Spark Seeker,0.6
-258.0,16005,expanding,"Stretching — ready for more play, novelty, confidence, or range",Radiant Performer,0.4
-259.0,16005,expanding,"Stretching — ready for more play, novelty, confidence, or range",Explorer of Edges,0.5
-260.0,16005,expanding,"Stretching — ready for more play, novelty, confidence, or range",Authority Conductor,0.4
-261.0,16005,expanding,"Stretching — ready for more play, novelty, confidence, or range",Analytical Sexualist,0.35
-262.0,16005,grounded,"Steady — sex feels like a natural, settled part of my life",Analytical Sexualist,0.4
-263.0,16005,grounded,"Steady — sex feels like a natural, settled part of my life",Sensual Connector,0.3
-264.0,16005,grounded,"Steady — sex feels like a natural, settled part of my life",Loyal Ritualist,0.6
-265.0,16005,recharging,"Quiet phase — I want rest, space, and less pressure around sex",Minimalist Companion,0.4
-266.0,16005,recharging,"Quiet phase — I want rest, space, and less pressure around sex",Quiet Withdrawer,0.5
-267.0,16005,recharging,"Quiet phase — I want rest, space, and less pressure around sex",Emotional Voyeur,0.3
-268.0,16005,repairing,"Repair phase — rebuilding trust, safety, or closeness after something hard",Sensual Connector,0.4
-269.0,16005,repairing,"Repair phase — rebuilding trust, safety, or closeness after something hard",Relational Nurturer,0.5
-270.0,16005,repairing,"Repair phase — rebuilding trust, safety, or closeness after something hard",Tender Devotee,0.3
-271.0,16006,awakening,"Feeling more curious, alive, and in touch with what I want",Spark Seeker,0.2
-272.0,16006,awakening,"Feeling more curious, alive, and in touch with what I want",Curious Apprentice,0.4
-273.0,16006,evolving,"Going deeper — more meaning, intimacy, or spiritual connection",Sensual Connector,0.2
-274.0,16006,evolving,"Going deeper — more meaning, intimacy, or spiritual connection",Spiritual Lover,0.6
-275.0,16006,expanding,"More play, novelty, confidence, and range",Spark Seeker,0.4
-276.0,16006,expanding,"More play, novelty, confidence, and range",Radiant Performer,0.2
-277.0,16006,expanding,"More play, novelty, confidence, and range",Explorer of Edges,0.3
-278.0,16006,expanding,"More play, novelty, confidence, and range",Analytical Sexualist,0.3
-279.0,16006,grounded,Feeling steady and natural about sex in my daily life,Analytical Sexualist,0.35
-280.0,16006,grounded,Feeling steady and natural about sex in my daily life,Sensual Connector,0.2
-281.0,16006,grounded,Feeling steady and natural about sex in my daily life,Loyal Ritualist,0.5
-282.0,16006,recharging,"A quieter phase, with rest and less pressure",Minimalist Companion,0.2
-283.0,16006,recharging,"A quieter phase, with rest and less pressure",Quiet Withdrawer,0.3
-284.0,16006,repairing,"Rebuilding trust, safety, or closeness",Sensual Connector,0.2
-285.0,16006,repairing,"Rebuilding trust, safety, or closeness",Tender Devotee,0.3
-286.0,16006,repairing,"Rebuilding trust, safety, or closeness",Relational Nurturer,0.3
-287.0,16005,recharging,"Quiet phase — I want rest, space, and less pressure around sex",Quiet Withdrawer,0.4
-288.0,16005,recharging,"Quiet phase — I want rest, space, and less pressure around sex",Minimalist Companion,0.2
-289.0,16005,recharging,"Quiet phase — I want rest, space, and less pressure around sex",Tender Devotee,0.2
-290.0,16005,awakening,Waking up — getting curious about what I like and want again,Curious Apprentice,0.4
-291.0,16005,awakening,Waking up — getting curious about what I like and want again,Spark Seeker,0.2
-292.0,16005,awakening,Waking up — getting curious about what I like and want again,Explorer of Edges,0.2
+253.0,16005,waking_up,Waking up — I'm figuring out what I actually enjoy,Spark Seeker,0.3
+254.0,16005,waking_up,Waking up — I'm figuring out what I actually enjoy,Curious Apprentice,0.6
+255.0,16005,transcending,Transcending — Sex feels connected to something bigger than just pleasure,Sensual Connector,0.2
+256.0,16005,transcending,Transcending — Sex feels connected to something bigger than just pleasure,Spiritual Lover,0.9
+257.0,16005,experimenting,Experimenting — I'm ready to try new things and have more fun,Spark Seeker,0.6
+258.0,16005,experimenting,Experimenting — I'm ready to try new things and have more fun,Radiant Performer,0.4
+259.0,16005,experimenting,Experimenting — I'm ready to try new things and have more fun,Explorer of Edges,0.5
+260.0,16005,experimenting,Experimenting — I'm ready to try new things and have more fun,Authority Conductor,0.4
+261.0,16005,experimenting,Experimenting — I'm ready to try new things and have more fun,Analytical Sexualist,0.35
+262.0,16005,steady,Steady — Sex feels normal and good in my life,Analytical Sexualist,0.4
+263.0,16005,steady,Steady — Sex feels normal and good in my life,Sensual Connector,0.3
+264.0,16005,steady,Steady — Sex feels normal and good in my life,Loyal Ritualist,0.6
+265.0,16005,pausing,Pausing — I need a break from sex right now,Minimalist Companion,0.4
+266.0,16005,pausing,Pausing — I need a break from sex right now,Quiet Withdrawer,0.5
+267.0,16005,pausing,Pausing — I need a break from sex right now,Emotional Voyeur,0.3
+268.0,16005,repairing,Repairing — I'm working to feel safe and close again after something hurt,Sensual Connector,0.4
+269.0,16005,repairing,Repairing — I'm working to feel safe and close again after something hurt,Relational Nurturer,0.5
+270.0,16005,repairing,Repairing — I'm working to feel safe and close again after something hurt,Tender Devotee,0.3
+271.0,16005,pausing,Pausing — I need a break from sex right now,Quiet Withdrawer,0.4
+272.0,16005,pausing,Pausing — I need a break from sex right now,Minimalist Companion,0.2
+273.0,16005,pausing,Pausing — I need a break from sex right now,Tender Devotee,0.2
+274.0,16005,waking_up,Waking up — I'm figuring out what I actually enjoy,Curious Apprentice,0.4
+275.0,16005,waking_up,Waking up — I'm figuring out what I actually enjoy,Spark Seeker,0.2
+276.0,16005,waking_up,Waking up — I'm figuring out what I actually enjoy,Explorer of Edges,0.2
+277.0,16006,waking_up,Rediscover what turns me on and what I enjoy,Spark Seeker,0.2
+278.0,16006,waking_up,Rediscover what turns me on and what I enjoy,Curious Apprentice,0.4
+279.0,16006,transcending,I want sex to feel spiritually meaningful and deeply connected,Sensual Connector,0.2
+280.0,16006,transcending,I want sex to feel spiritually meaningful and deeply connected,Spiritual Lover,0.6
+281.0,16006,experimenting,"Explore more, try new things, and feel more confident",Spark Seeker,0.4
+282.0,16006,experimenting,"Explore more, try new things, and feel more confident",Radiant Performer,0.2
+283.0,16006,experimenting,"Explore more, try new things, and feel more confident",Explorer of Edges,0.3
+284.0,16006,experimenting,"Explore more, try new things, and feel more confident",Analytical Sexualist,0.3
+285.0,16006,steady,I want sex to feel natural and integrated into my everyday life,Analytical Sexualist,0.35
+286.0,16006,steady,I want sex to feel natural and integrated into my everyday life,Sensual Connector,0.2
+287.0,16006,steady,I want sex to feel natural and integrated into my everyday life,Loyal Ritualist,0.5
+288.0,16006,pausing,More rest and space from sex right now,Minimalist Companion,0.2
+289.0,16006,pausing,More rest and space from sex right now,Quiet Withdrawer,0.3
+290.0,16006,repairing,Rebuilding trust and safety in my sexuality,Sensual Connector,0.2
+291.0,16006,repairing,Rebuilding trust and safety in my sexuality,Tender Devotee,0.3
+292.0,16006,repairing,Rebuilding trust and safety in my sexuality,Relational Nurturer,0.3
