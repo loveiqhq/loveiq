@@ -70,32 +70,78 @@ function metricWithDelta(label: string, curr: number, prev: number, unit = ""): 
   return `• ${label}: ${curr}${unit} (DoD: ${delta(curr, prev)})`;
 }
 
+/**
+ * Same as metricWithDelta but appends "X.XX% of starts" — the share of the
+ * day's survey starts this metric represents. Used for funnel-stage metrics
+ * (activation, purchases) so a reader can see at a glance how much of the
+ * starting cohort reached each step. Skipped automatically when starts = 0.
+ */
+function metricWithDeltaAndStartsPct(
+  label: string,
+  curr: number,
+  prev: number,
+  surveyStarts: number,
+  unit = ""
+): string {
+  if (surveyStarts <= 0) {
+    return metricWithDelta(label, curr, prev, unit);
+  }
+  const pct = ((curr / surveyStarts) * 100).toFixed(2);
+  return `• ${label}: ${curr}${unit} (DoD: ${delta(curr, prev)}, ${pct}% of starts)`;
+}
+
 // -----------------------------------------------------------------------------
 // Daily message
 // -----------------------------------------------------------------------------
 
-function formatDaily(dayKey: string, curr: DailyMetrics, prev: DailyMetrics): string {
+// Exported (in addition to GET below) so unit tests can lock the message
+// format without having to mock the full Supabase + Slack pipeline.
+export function formatDaily(dayKey: string, curr: DailyMetrics, prev: DailyMetrics): string {
   const lines = [`:bar_chart: *Daily digest — ${dayKey} UTC*`, ""];
 
+  const starts = curr.surveyStarts;
+
+  // Survey starts is the funnel baseline (the denominator for "% of starts"),
+  // so we don't annotate it with its own percentage — every other funnel-stage
+  // metric shows its share of this number instead.
   lines.push("*Acquisition*");
-  lines.push(metricWithDelta("Survey starts", curr.surveyStarts, prev.surveyStarts));
+  lines.push(metricWithDelta("Survey starts", starts, prev.surveyStarts));
   lines.push(
     `• Completions: ${curr.completions} (${curr.completionRate}% rate, DoD: ${delta(curr.completionRate, prev.completionRate)})`
   );
   lines.push("");
 
   lines.push("*Activation*");
-  lines.push(metricWithDelta("Report viewers", curr.reportViewers, prev.reportViewers));
-  lines.push(metricWithDelta("Engagement 1m+", curr.engagement1min, prev.engagement1min));
-  lines.push(metricWithDelta("Engagement 5m+", curr.engagement5min, prev.engagement5min));
-  lines.push(metricWithDelta("Engagement 10m+", curr.engagement10min, prev.engagement10min));
-  lines.push(metricWithDelta("Paywall views", curr.paywallViews, prev.paywallViews));
-  lines.push(metricWithDelta("Begin checkouts", curr.beginCheckouts, prev.beginCheckouts));
+  lines.push(
+    metricWithDeltaAndStartsPct("Report viewers", curr.reportViewers, prev.reportViewers, starts)
+  );
+  lines.push(
+    metricWithDeltaAndStartsPct("Engagement 1m+", curr.engagement1min, prev.engagement1min, starts)
+  );
+  lines.push(
+    metricWithDeltaAndStartsPct("Engagement 5m+", curr.engagement5min, prev.engagement5min, starts)
+  );
+  lines.push(
+    metricWithDeltaAndStartsPct(
+      "Engagement 10m+",
+      curr.engagement10min,
+      prev.engagement10min,
+      starts
+    )
+  );
+  lines.push(
+    metricWithDeltaAndStartsPct("Paywall views", curr.paywallViews, prev.paywallViews, starts)
+  );
+  lines.push(
+    metricWithDeltaAndStartsPct("Begin checkouts", curr.beginCheckouts, prev.beginCheckouts, starts)
+  );
   lines.push("");
 
   lines.push("*Revenue*");
+  const purchasesPct =
+    starts > 0 ? `, ${((curr.revenue.count / starts) * 100).toFixed(2)}% of starts` : "";
   lines.push(
-    `• Purchases: ${curr.revenue.count} — ${formatCurrency(curr.revenue.byCurrency)} (DoD: ${delta(curr.revenue.count, prev.revenue.count)})`
+    `• Purchases: ${curr.revenue.count} — ${formatCurrency(curr.revenue.byCurrency)} (DoD: ${delta(curr.revenue.count, prev.revenue.count)}${purchasesPct})`
   );
   lines.push(`• Plan mix: ${formatPlanMix(curr.revenue.planMix)}`);
   lines.push(
@@ -139,7 +185,22 @@ function metricWithWow(label: string, curr: number, prev: number, unit = ""): st
   return `• ${label}: ${curr}${unit} (WoW: ${delta(curr, prev)})`;
 }
 
-function formatWeekly(
+/** Same as metricWithWow but appends "X.XX% of starts" for funnel-stage metrics. */
+function metricWithWowAndStartsPct(
+  label: string,
+  curr: number,
+  prev: number,
+  surveyStarts: number,
+  unit = ""
+): string {
+  if (surveyStarts <= 0) {
+    return metricWithWow(label, curr, prev, unit);
+  }
+  const pct = ((curr / surveyStarts) * 100).toFixed(2);
+  return `• ${label}: ${curr}${unit} (WoW: ${delta(curr, prev)}, ${pct}% of starts)`;
+}
+
+export function formatWeekly(
   weekKey: string,
   weekRangeLabel: string,
   curr: WeeklyMetrics,
@@ -147,8 +208,11 @@ function formatWeekly(
 ): string {
   const lines = [`:chart_with_upwards_trend: *Weekly digest — ${weekKey} (${weekRangeLabel})*`, ""];
 
+  const wStarts = curr.surveyStarts;
+
+  // Survey starts is the funnel baseline — same convention as the daily.
   lines.push("*Acquisition*");
-  lines.push(metricWithWow("Survey starts", curr.surveyStarts, prev.surveyStarts));
+  lines.push(metricWithWow("Survey starts", wStarts, prev.surveyStarts));
   lines.push(
     `• Completions: ${curr.completions} (${curr.completionRate}% rate, WoW: ${delta(curr.completionRate, prev.completionRate)})`
   );
@@ -156,17 +220,36 @@ function formatWeekly(
   lines.push("");
 
   lines.push("*Activation*");
-  lines.push(metricWithWow("Report viewers", curr.reportViewers, prev.reportViewers));
-  lines.push(metricWithWow("Engagement 1m+", curr.engagement1min, prev.engagement1min));
-  lines.push(metricWithWow("Engagement 5m+", curr.engagement5min, prev.engagement5min));
-  lines.push(metricWithWow("Engagement 10m+", curr.engagement10min, prev.engagement10min));
-  lines.push(metricWithWow("Paywall views", curr.paywallViews, prev.paywallViews));
-  lines.push(metricWithWow("Begin checkouts", curr.beginCheckouts, prev.beginCheckouts));
+  lines.push(
+    metricWithWowAndStartsPct("Report viewers", curr.reportViewers, prev.reportViewers, wStarts)
+  );
+  lines.push(
+    metricWithWowAndStartsPct("Engagement 1m+", curr.engagement1min, prev.engagement1min, wStarts)
+  );
+  lines.push(
+    metricWithWowAndStartsPct("Engagement 5m+", curr.engagement5min, prev.engagement5min, wStarts)
+  );
+  lines.push(
+    metricWithWowAndStartsPct(
+      "Engagement 10m+",
+      curr.engagement10min,
+      prev.engagement10min,
+      wStarts
+    )
+  );
+  lines.push(
+    metricWithWowAndStartsPct("Paywall views", curr.paywallViews, prev.paywallViews, wStarts)
+  );
+  lines.push(
+    metricWithWowAndStartsPct("Begin checkouts", curr.beginCheckouts, prev.beginCheckouts, wStarts)
+  );
   lines.push("");
 
   lines.push("*Revenue*");
+  const wPurchasesPct =
+    wStarts > 0 ? `, ${((curr.revenue.count / wStarts) * 100).toFixed(2)}% of starts` : "";
   lines.push(
-    `• Purchases: ${curr.revenue.count} — ${formatCurrency(curr.revenue.byCurrency)} (WoW: ${delta(curr.revenue.count, prev.revenue.count)})`
+    `• Purchases: ${curr.revenue.count} — ${formatCurrency(curr.revenue.byCurrency)} (WoW: ${delta(curr.revenue.count, prev.revenue.count)}${wPurchasesPct})`
   );
   lines.push(`• Plan mix: ${formatPlanMix(curr.revenue.planMix)}`);
   lines.push(
@@ -192,18 +275,28 @@ function formatWeekly(
   );
   lines.push("");
 
-  // Conversion funnel
+  // Conversion funnel — each line shows % kept from the previous stage AND
+  // % of Survey starts (the funnel baseline) so it's clear at a glance what
+  // share of the original cohort reached each step.
   const f = curr.funnel;
   const stageKept = (curr: number, prev: number): string =>
     prev > 0 ? `${Math.round((curr / prev) * 100)}% kept` : "—";
+  const ofStarts = (curr: number): string =>
+    f.starts > 0 ? `${((curr / f.starts) * 100).toFixed(2)}% of starts` : "—";
   lines.push("*Conversion funnel*");
   lines.push(`• Survey starts: ${f.starts}`);
-  lines.push(`• Completions: ${f.completions} (${stageKept(f.completions, f.starts)})`);
-  lines.push(`• Report viewed: ${f.reportViewed} (${stageKept(f.reportViewed, f.completions)})`);
   lines.push(
-    `• Paywall viewed: ${f.paywallViewed} (${stageKept(f.paywallViewed, f.reportViewed)})`
+    `• Completions: ${f.completions} (${stageKept(f.completions, f.starts)}, ${ofStarts(f.completions)})`
   );
-  lines.push(`• Purchased: ${f.purchased} (${stageKept(f.purchased, f.paywallViewed)})`);
+  lines.push(
+    `• Report viewed: ${f.reportViewed} (${stageKept(f.reportViewed, f.completions)}, ${ofStarts(f.reportViewed)})`
+  );
+  lines.push(
+    `• Paywall viewed: ${f.paywallViewed} (${stageKept(f.paywallViewed, f.reportViewed)}, ${ofStarts(f.paywallViewed)})`
+  );
+  lines.push(
+    `• Purchased: ${f.purchased} (${stageKept(f.purchased, f.paywallViewed)}, ${ofStarts(f.purchased)})`
+  );
   const overallPct = f.starts > 0 ? `${((f.purchased / f.starts) * 100).toFixed(2)}%` : "—";
   lines.push(`• Overall conversion: ${overallPct} (starts → purchased)`);
   lines.push("");
