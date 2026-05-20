@@ -256,8 +256,9 @@ const S03PerfectFor: FC = () => {
             </span>
           </h2>
           <p className="max-w-2xl text-base leading-relaxed text-text-secondary sm:text-lg sm:leading-relaxed">
-            We built this for anyone ready to grow, discover themselves, and actively enhance their
-            sexual life. And honestly, we built it for ourselves too (and yes, we use it).
+            This is for people who are ready to explore who they are, grow with more awareness, and
+            bring more intention into their sexual lives. We built it for you, and we built it for
+            ourselves too.
           </p>
         </div>
       </div>

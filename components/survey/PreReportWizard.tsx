@@ -238,6 +238,43 @@ const Slide4Icon: FC = () => (
   </IconGlow>
 );
 
+/* Slide 6 — file with heart */
+const Slide6Icon: FC = () => (
+  <IconGlow>
+    <svg
+      aria-hidden
+      className="relative opacity-90"
+      width="80"
+      height="80"
+      viewBox="0 0 80 80"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d="M43.3333 73.3334H59.9999C61.768 73.3334 63.4637 72.6311 64.714 71.3808C65.9642 70.1306 66.6666 68.4349 66.6666 66.6668V26.6668C66.6692 25.6105 66.4625 24.5641 66.0586 23.5881C65.6547 22.6121 65.0615 21.7257 64.3133 20.9801L52.3533 9.02011C51.6077 8.27184 50.7213 7.67863 49.7453 7.27472C48.7692 6.87081 47.7229 6.66418 46.6666 6.66677H19.9999C18.2318 6.66677 16.5361 7.36915 15.2859 8.61939C14.0356 9.86964 13.3333 11.5653 13.3333 13.3334V36.6668"
+        stroke="white"
+        strokeWidth="4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M46.6667 6.66675V23.3334C46.6667 24.2175 47.0179 25.0653 47.6431 25.6904C48.2682 26.3156 49.116 26.6667 50.0001 26.6667H66.6667"
+        stroke="white"
+        strokeWidth="4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M12.0668 62.6667C11.3655 61.9355 10.8196 61.0699 10.4621 60.122C10.1046 59.1741 9.94276 58.1636 9.98648 57.1515C10.0302 56.1393 10.2785 55.1465 10.7165 54.233C11.1544 53.3194 11.7729 52.5041 12.5346 51.8361C13.2963 51.1682 14.1854 50.6615 15.1483 50.3466C16.1112 50.0317 17.1279 49.9152 18.1371 50.004C19.1463 50.0928 20.127 50.3852 21.0201 50.8634C21.9132 51.3417 22.7001 51.9959 23.3334 52.7867C23.9698 52.0042 24.7574 51.3581 25.6492 50.887C26.541 50.416 27.5187 50.1296 28.5237 50.0451C29.5288 49.9606 30.5405 50.0797 31.4985 50.3952C32.4564 50.7107 33.3409 51.2162 34.099 51.8814C34.8571 52.5467 35.4732 53.358 35.9105 54.2668C36.3478 55.1756 36.5973 56.1633 36.6441 57.1708C36.6909 58.1783 36.534 59.1849 36.1828 60.1304C35.8316 61.0758 35.2933 61.9407 34.6001 62.6733L25.8468 72.1933C25.5339 72.5519 25.1479 72.8394 24.7146 73.0363C24.2814 73.2333 23.811 73.3352 23.3351 73.3352C22.8592 73.3352 22.3888 73.2333 21.9556 73.0363C21.5224 72.8394 21.1363 72.5519 20.8234 72.1933L12.0668 62.6667Z"
+        stroke="white"
+        strokeWidth="4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  </IconGlow>
+);
+
 /* Slide 5 — user with plus */
 const Slide5Icon: FC = () => (
   <IconGlow>
@@ -285,12 +322,13 @@ const Slide5Icon: FC = () => (
 /* ------------------------------------------------------------------ */
 /*  Slide data                                                         */
 /* ------------------------------------------------------------------ */
-const TOTAL_SLIDES = 5;
+const TOTAL_SLIDES = 6;
 
 interface Slide {
   icon: FC;
   heading: string;
   body: ReactNode;
+  bodyClassName?: string;
 }
 
 const slides: Slide[] = [
@@ -348,6 +386,20 @@ const slides: Slide[] = [
       <>
         Many people discover new insights when exploring these topics together. Invite friends to
         take this survey as well and to explore their own report.
+      </>
+    ),
+  },
+  {
+    icon: Slide6Icon,
+    heading: "Lets now view your free results and unlock deeper insights.",
+    body: (
+      <>
+        <strong>Much of your report is free to explore.</strong> The deeper, archetype-specific
+        insights are unlocked in the full version.{" "}
+        <strong>
+          And if it doesn&rsquo;t feel valuable, you get a 14-day money-back guarantee — no
+          discussions.
+        </strong>
       </>
     ),
   },
@@ -533,7 +585,10 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete }) => {
             </h2>
 
             <p
-              className="mt-6 max-w-[798px] lg:max-w-[880px] font-sans not-italic text-[18px] font-light leading-[29.25px] text-white/80 [&_strong]:font-bold [&_strong]:text-white"
+              className={
+                slide.bodyClassName ??
+                "mt-6 max-w-[798px] lg:max-w-[880px] font-sans not-italic text-[18px] font-light leading-[29.25px] text-white/80 [&_strong]:font-bold [&_strong]:text-white"
+              }
               style={{
                 fontVariationSettings: '"wght" 300',
                 opacity: 0,

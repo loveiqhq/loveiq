@@ -53,7 +53,7 @@ describe("PreReportWizard", () => {
     expect(screen.getByText("Take only what resonates.")).toBeInTheDocument();
   });
 
-  it("shows correct heading for each of the 5 slides", () => {
+  it("shows correct heading for each of the 6 slides", () => {
     render(<PreReportWizard onComplete={vi.fn()} />);
 
     const headings = [
@@ -62,6 +62,7 @@ describe("PreReportWizard", () => {
       "Rate each report section.",
       "Share your report with someone you care about.",
       "Invite your friends to grow.",
+      "Lets now view your free results and unlock deeper insights.",
     ];
 
     expect(screen.getByText(headings[0])).toBeInTheDocument();
@@ -88,12 +89,14 @@ describe("PreReportWizard", () => {
     const onComplete = vi.fn();
     render(<PreReportWizard onComplete={onComplete} />);
 
-    // Navigate to last slide (index 4)
-    for (let i = 0; i < 4; i++) {
+    // Navigate to last slide (index 5)
+    for (let i = 0; i < 5; i++) {
       clickAndFlush(screen.getByRole("button", { name: /continue/i }));
     }
 
-    expect(screen.getByText("Invite your friends to grow.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Lets now view your free results and unlock deeper insights.")
+    ).toBeInTheDocument();
 
     // Click continue on last slide — 250ms leave animation + 600ms exit fade
     clickAndFlush(screen.getByRole("button", { name: /view your report/i }));
@@ -106,11 +109,11 @@ describe("PreReportWizard", () => {
   it("progress bar shows correct step count", () => {
     render(<PreReportWizard onComplete={vi.fn()} />);
 
-    expect(screen.getByText("1 / 5")).toBeInTheDocument();
+    expect(screen.getByText("1 / 6")).toBeInTheDocument();
 
     clickAndFlush(screen.getByRole("button", { name: /continue/i }));
 
-    expect(screen.getByText("2 / 5")).toBeInTheDocument();
+    expect(screen.getByText("2 / 6")).toBeInTheDocument();
   });
 
   it("back button becomes visible after advancing past first slide", () => {
