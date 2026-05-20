@@ -191,7 +191,7 @@ export async function GET(request: Request) {
           summary.errors++;
           // Per-message Resend failure inside a batch cron — captured in
           // `summary.errors` and visible in structured logs. Not Slack-worthy
-          // for a single send; the outer try/catch at line 204 still escalates
+          // for a single send; the outer cron-level try/catch still escalates
           // a whole-cron failure as api_5xx.
           logger.warn({ error, sessionId: row.session_id, variant }, "Paused email send failed");
         } else {
@@ -199,9 +199,8 @@ export async function GET(request: Request) {
         }
       } catch (err) {
         summary.errors++;
-        // Same rationale as above: one timed-out send (Resend 8s race on
-        // line 187) shouldn't ping ops. Whole-cron failures still alert via
-        // the outer catch.
+        // Same rationale: one timed-out send shouldn't ping ops. Whole-cron
+        // failures still alert via the outer cron-level catch.
         logger.warn({ err, sessionId: row.session_id, variant }, "Paused email error");
       }
     }
