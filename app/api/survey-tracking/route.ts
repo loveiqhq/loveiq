@@ -105,7 +105,12 @@ export async function POST(request: Request) {
     if (err instanceof CircuitOpenError) {
       logger.warn("Supabase-tracking circuit open");
     } else {
-      logger.error({ err }, "Supabase error on survey tracking");
+      // Individual fetch failures (timeouts, network blips) are expected
+      // tail-end noise. Logged at warn — still searchable in structured logs,
+      // but no Slack alert per-request. A genuine Supabase outage will trip
+      // the supabase-tracking circuit breaker, which fires a one-shot
+      // `circuit_open` Slack alert in `shared/http/circuit-breaker.ts`.
+      logger.warn({ err }, "Supabase error on survey tracking");
     }
     return NextResponse.json({ error: "Service temporarily unavailable." }, { status: 503 });
   }
