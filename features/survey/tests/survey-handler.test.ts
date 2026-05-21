@@ -34,9 +34,28 @@ vi.mock("@features/report/server/personalReport", () => ({
   ensurePersonalReportForSubmission: vi.fn().mockResolvedValue({ id: 10 }),
 }));
 
+// Resend SDK — mock with a class so `new Resend(key)` works correctly
+// (vi.fn(() => instance) does not always honour the return-an-object rule
+// when invoked via `new`).
+const { mockResendContactsCreate, mockResendEmailsSend } = vi.hoisted(() => ({
+  mockResendContactsCreate: vi.fn(),
+  mockResendEmailsSend: vi.fn(),
+}));
+vi.mock("resend", () => ({
+  Resend: class MockResend {
+    contacts = { create: mockResendContactsCreate };
+    emails = { send: mockResendEmailsSend };
+    constructor(_key: string) {
+      // no-op
+    }
+  },
+}));
+
 // Set env vars before importing the handler
 process.env.SUPABASE_URL = "https://test.supabase.co";
 process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-key";
+process.env.RESEND_API_KEY = "re_test_key";
+process.env.RESEND_AUDIENCE_ID = "aud_test_id";
 
 import { POST } from "@/app/api/survey/route";
 
@@ -90,11 +109,16 @@ describe("POST /api/survey", () => {
     vi.resetAllMocks();
     process.env.SUPABASE_URL = "https://test.supabase.co";
     process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-key";
+    process.env.RESEND_API_KEY = "re_test_key";
+    process.env.RESEND_AUDIENCE_ID = "aud_test_id";
     mockGetClientIp.mockReturnValue("1.2.3.4");
     mockFetchWithTimeout.mockResolvedValue({
       ok: true,
       json: async () => [],
     });
+    // Re-arm Resend mocks after resetAllMocks() clears them.
+    mockResendContactsCreate.mockResolvedValue({ data: { id: "c1" } });
+    mockResendEmailsSend.mockResolvedValue({ data: { id: "e1" } });
   });
 
   it("returns 403 when CSRF token is invalid", async () => {
@@ -414,5 +438,91 @@ describe("POST /api/survey", () => {
     const tokenBody = JSON.parse(tokenPost!.body!);
     expect(tokenBody.survey_submission_id).toBe(SUBMISSION_ID);
     expect(tokenBody.token).toMatch(/^rpt_/);
+  });
+
+  // ────────────────────────────────────────────────────────────────────────
+  // Q16015 marketing opt-in
+  // ────────────────────────────────────────────────────────────────────────
+
+  it("Q16015 = Yes → sends marketingOptIn:true to RPC and pushes to Resend Audience", async () => {
+    allowCsrf();
+    allowRateLimit();
+    allowCooldown();
+    mockSupabaseRpcOk();
+
+    await POST(
+      makeRequest({
+        ...validBody(),
+        answers: {
+          ...validBody().answers,
+          "16015": "Yes, I want to keep learning about myself.",
+        },
+      })
+    );
+
+    // Marketing flag forwarded to the RPC
+    const rpcCall = mockFetchWithTimeout.mock.calls.find((c) =>
+      (c[0] as string).includes("/rpc/submit_survey")
+    );
+    expect(rpcCall, "expected RPC call to submit_survey").toBeDefined();
+    const rpcBody = JSON.parse((rpcCall![1] as { body: string }).body);
+    expect(rpcBody.p_marketing_opt_in).toBe(true);
+
+    // scheduleAfterResponse falls back to `void run()` outside Next runtime —
+    // the callback is fire-and-forget so we drain microtasks before asserting.
+    await vi.waitFor(() => expect(mockResendContactsCreate).toHaveBeenCalledTimes(1));
+    expect(mockResendContactsCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        email: "alice@example.com",
+        firstName: "Alice",
+        audienceId: "aud_test_id",
+        unsubscribed: false,
+      })
+    );
+  });
+
+  it("Q16015 = No → sends marketingOptIn:false to RPC and skips Resend Audience push", async () => {
+    allowCsrf();
+    allowRateLimit();
+    allowCooldown();
+    mockSupabaseRpcOk();
+
+    await POST(
+      makeRequest({
+        ...validBody(),
+        answers: {
+          ...validBody().answers,
+          "16015": "No, I am not interested in this growth opportunity.",
+        },
+      })
+    );
+
+    const rpcCall = mockFetchWithTimeout.mock.calls.find((c) =>
+      (c[0] as string).includes("/rpc/submit_survey")
+    );
+    const rpcBody = JSON.parse((rpcCall![1] as { body: string }).body);
+    expect(rpcBody.p_marketing_opt_in).toBe(false);
+
+    // Drain any post-response microtasks so we'd catch a spurious push.
+    await new Promise((r) => setTimeout(r, 10));
+    expect(mockResendContactsCreate).not.toHaveBeenCalled();
+  });
+
+  it("Q16015 absent → sends marketingOptIn:null and skips Resend Audience push", async () => {
+    allowCsrf();
+    allowRateLimit();
+    allowCooldown();
+    mockSupabaseRpcOk();
+
+    await POST(makeRequest());
+
+    const rpcCall = mockFetchWithTimeout.mock.calls.find((c) =>
+      (c[0] as string).includes("/rpc/submit_survey")
+    );
+    const rpcBody = JSON.parse((rpcCall![1] as { body: string }).body);
+    expect(rpcBody.p_marketing_opt_in).toBeNull();
+
+    await new Promise((r) => setTimeout(r, 10));
+    expect(mockResendContactsCreate).not.toHaveBeenCalled();
   });
 });

@@ -14,6 +14,13 @@ export interface SurveySubmissionPayload {
   durationMs: number;
   utmTracker?: string | null;
   sessionId?: string | null;
+  /**
+   * Marketing-opt-in answer (Q16015). `true` = user picked "Yes", `false` =
+   * "No", `null` (or absent) = unknown / question not answered. Stored on
+   * `survey_submission.marketing_opt_in`; when true, the row also gets a
+   * `marketing_opt_in_at = now()` timestamp set inside the RPC.
+   */
+  marketingOptIn?: boolean | null;
 }
 
 export interface SurveyScoringSummary {
@@ -109,6 +116,7 @@ async function runSubmitSurveyRpc(payload: SurveySubmissionPayload) {
       p_duration_ms: payload.durationMs,
       p_utm_tracker: payload.utmTracker || null,
       p_session_id: payload.sessionId || null,
+      p_marketing_opt_in: payload.marketingOptIn ?? null,
     }),
   });
 

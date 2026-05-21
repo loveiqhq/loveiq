@@ -163,6 +163,7 @@ Copy `.env.example` to `.env.local` and fill values:
 | `RESEND_API_KEY`                           | For forms    | Email sending                                                                                                                    |
 | `RESEND_FROM`                              | No           | From address (default: `LoveIQ <hello@send.loveiq.org>`)                                                                         |
 | `RESEND_REPLY_TO`                          | No           | Reply-to address                                                                                                                 |
+| `RESEND_AUDIENCE_ID`                       | No           | Resend Audience UUID. Opted-in marketing recipients (Q16015 = "Yes") are pushed here. When unset, the audience push is skipped.  |
 | `NEXT_PUBLIC_RECAPTCHA_SITE_KEY`           | For contact  | reCAPTCHA client key                                                                                                             |
 | `RECAPTCHA_SECRET_KEY`                     | For contact  | reCAPTCHA server key                                                                                                             |
 | `SLACK_CONTACT_WEBHOOK_URL`                | No           | Slack notifications for contact form                                                                                             |

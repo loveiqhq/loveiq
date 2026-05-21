@@ -197,6 +197,14 @@ export async function POST(request: Request) {
   const questionCount = Object.keys(answers).filter((key) => !key.endsWith("_other")).length;
   const scoringResult = computeSurveyScoring(answers as SurveyAnswers);
 
+  // Q16015 ("Would you like to receive free LoveIQ hints and insights?") —
+  // marketing opt-in. "Yes, I want to keep learning about myself." → true,
+  // "No, I am not interested in this growth opportunity." → false, anything
+  // else (older clients, skipped question) → null.
+  const q16015Answer = answers["16015"];
+  const marketingOptIn: boolean | null =
+    typeof q16015Answer === "string" ? q16015Answer.trim().toLowerCase().startsWith("yes") : null;
+
   try {
     const { submissionId, isExisting } = await submitSurveyOnce({
       email: normalizedEmail,
@@ -206,8 +214,43 @@ export async function POST(request: Request) {
       durationMs,
       utmTracker,
       sessionId,
+      marketingOptIn,
     });
     const tSubmit = performance.now();
+
+    // Marketing opt-in → push to the Resend Audience so the cohort exists for
+    // future campaigns. Fire-and-forget — the 200 response must not block on
+    // this. "No" answers do nothing here (option a): nurture emails about the
+    // user's own report stay enabled; standard unsubscribe link still applies.
+    if (marketingOptIn === true && !isExisting) {
+      const audienceId = process.env.RESEND_AUDIENCE_ID;
+      const resendClient = getResend();
+      if (audienceId && resendClient) {
+        scheduleAfterResponse("resend-audience-subscribe", async () => {
+          try {
+            await resendClient.contacts.create({
+              email: normalizedEmail,
+              firstName: normalizedFirstName,
+              audienceId,
+              unsubscribed: false,
+            });
+          } catch (err) {
+            // Resend returns 422 for duplicate email — that's the common
+            // case (re-submission with the same email) and is fine. Log
+            // anything else for visibility; never escalates to the user.
+            logger.warn(
+              { err, submissionId },
+              "marketing-opt-in: Resend contact create non-fatal failure"
+            );
+          }
+        });
+      } else if (!audienceId) {
+        logger.warn(
+          { submissionId },
+          "marketing-opt-in: RESEND_AUDIENCE_ID is not set; skipping audience push"
+        );
+      }
+    }
 
     // Bot signal: a real human cannot complete the assessment in under
     // 15 seconds. Fire a quiet ops ping for visibility — we don't block
