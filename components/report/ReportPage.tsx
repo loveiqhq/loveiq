@@ -20,6 +20,7 @@ import InviteModal from "@/components/survey/InviteModal";
 import FooterSection from "@/components/landing/FooterSection";
 import ReportNavigation from "./ReportNavigation";
 import ReportPricingModal from "./ReportPricingModal";
+import ReportStickyUnlockBar from "./ReportStickyUnlockBar";
 import ScrollPricingModal from "./ScrollPricingModal";
 import ReportSection from "./ReportSection";
 import SectionFeedback from "./SectionFeedback";
@@ -284,6 +285,7 @@ interface ReportExperienceProps {
   devParam: string | null;
   feedbacks: Record<string, "up" | "down" | null>;
   isPricingModalOpen: boolean;
+  isScrollTeaserOpen: boolean;
   isShareModalOpen: boolean;
   matchScore: number;
   onBeginCheckout: (plan: ReportPurchasePlanId, archetype?: string | null) => void;
@@ -332,6 +334,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   devParam,
   feedbacks,
   isPricingModalOpen,
+  isScrollTeaserOpen,
   isShareModalOpen,
   matchScore,
   onBeginCheckout,
@@ -454,7 +457,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
       id="main-content"
       ref={mainContentRef}
       tabIndex={-1}
-      className="report-page"
+      className={`report-page${accessPlan === "full_report" || accessPlan === "all_reports" ? "" : " report-experience--sticky-pad"}`}
       style={getReportThemeStyle(theme)}
       onCopy={(e) => e.preventDefault()}
       onContextMenu={(e) => e.preventDefault()}
@@ -483,12 +486,16 @@ const ReportExperience: FC<ReportExperienceProps> = ({
       <div
         className={[
           "report-page__shell-wrap",
-          isPricingModalOpen || isShareModalOpen ? "report-page__shell-wrap--obscured" : "",
+          isPricingModalOpen || isShareModalOpen
+            ? "report-page__shell-wrap--obscured"
+            : isScrollTeaserOpen
+              ? "report-page__shell-wrap--obscured-soft"
+              : "",
         ]
           .filter(Boolean)
           .join(" ")}
-        aria-hidden={isPricingModalOpen || isShareModalOpen}
-        inert={isPricingModalOpen || isShareModalOpen}
+        aria-hidden={isPricingModalOpen || isShareModalOpen || isScrollTeaserOpen}
+        inert={isPricingModalOpen || isShareModalOpen || isScrollTeaserOpen}
       >
         <div className="report-shell">
           <ReportNavigation
@@ -1130,6 +1137,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
         archetypeTiers={data.archetypeTiers ?? {}}
         feedbacks={feedbacks}
         isPricingModalOpen={isPricingModalOpen}
+        isScrollTeaserOpen={isScrollTeaserOpen}
         isShareModalOpen={isShareModalOpen}
         matchScore={matchScore}
         onBeginCheckout={beginCheckout}
@@ -1171,6 +1179,13 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
         matchScore={matchScore}
         quote={data.pricingQuotes?.full_report ?? null}
       />
+      {data.accessPlan !== "full_report" && data.accessPlan !== "all_reports" && (
+        <ReportStickyUnlockBar
+          quote={data.pricingQuotes?.full_report ?? null}
+          onCheckout={() => beginCheckout("full_report", effectiveViewArchetype)}
+          hidden={isPricingModalOpen || isShareModalOpen || isScrollTeaserOpen}
+        />
+      )}
     </>
   );
 };

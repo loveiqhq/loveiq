@@ -31,9 +31,21 @@ const testimonials: Testimonial[] = [
     ),
   },
   {
+    name: "Philipp Leonhard, 42",
+    role: "Product Owner IT",
+    photo: "/testimonials/philipp.jpg",
+    quote: (
+      <>
+        I&rsquo;d never really explored my sexuality or the patterns behind it before. I already
+        learned a lot just from taking the test, but the{" "}
+        <em>insights in the full report were truly eye-opening. Absolutely worth it.</em>
+      </>
+    ),
+  },
+  {
     name: "Marija Mustapić, 41",
     role: "IT Infrastructure",
-    photo: "/testimonials/marija.webp",
+    photo: "/testimonials/marija.jpg",
     quote: (
       <>
         Unlocking my report was <em>one of the best investments made for my sexuality.</em> It is
@@ -42,14 +54,13 @@ const testimonials: Testimonial[] = [
     ),
   },
   {
-    name: "Philipp Leonhard, 42",
-    role: "Product Owner IT",
-    photo: "/testimonials/philipp.webp",
+    name: "Richard Petrich, 34",
+    role: "Entrepreneur",
+    photo: "/testimonials/richard.jpg",
     quote: (
       <>
-        I&rsquo;d never really explored my sexuality or the patterns behind it before. I already
-        learned a lot just from taking the test, but the{" "}
-        <em>insights in the full report were truly eye-opening. Absolutely worth it.</em>
+        The results were <em>more insightful than I expected.</em> It connected dots between
+        emotional triggers and communication styles I hadn&rsquo;t noticed before. Solid UX, too.
       </>
     ),
   },
@@ -94,7 +105,6 @@ const PricingTestimonialsCarousel: FC = () => {
   const trackRef = useRef<HTMLDivElement>(null);
   const [cardWidth, setCardWidth] = useState(360);
   const [activeIndex, setActiveIndex] = useState(0);
-  const isPausedRef = useRef(false);
   const isDraggingRef = useRef(false);
   const startXRef = useRef(0);
   const startYRef = useRef(0);
@@ -104,7 +114,6 @@ const PricingTestimonialsCarousel: FC = () => {
   const animationRef = useRef<number | null>(null);
   const lastTimeRef = useRef<number>(0);
   const animateFnRef = useRef<((timestamp: number) => void) | null>(null);
-  const reducedMotionRef = useRef(false);
 
   const slideWidth = cardWidth + SLIDE_GAP;
   const totalWidth = slideWidth * testimonials.length;
@@ -114,7 +123,14 @@ const PricingTestimonialsCarousel: FC = () => {
     if (!viewport) return;
     const available = viewport.clientWidth;
     if (available <= 0) return;
-    const next = Math.max(240, Math.min(available - SLIDE_GAP, 560));
+    const isMobile = available < 768;
+    // Mobile: ~70% of viewport so side cards clearly peek (Figma look).
+    // Desktop: ~78% with a generous cap.
+    const ratio = isMobile ? 0.7 : 0.78;
+    const minW = isMobile ? 220 : 240;
+    const maxW = isMobile ? 320 : 560;
+    const target = available * ratio;
+    const next = Math.max(minW, Math.min(target, maxW));
     setCardWidth(Math.round(next));
   }, []);
 
@@ -129,17 +145,6 @@ const PricingTestimonialsCarousel: FC = () => {
     return () => window.removeEventListener("resize", handleResize);
   }, [measure]);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    reducedMotionRef.current = mq.matches;
-    const handler = (e: MediaQueryListEvent) => {
-      reducedMotionRef.current = e.matches;
-    };
-    mq.addEventListener("change", handler);
-    return () => mq.removeEventListener("change", handler);
-  }, []);
-
   const updateActiveIndex = useCallback(() => {
     if (slideWidth <= 0) return;
     const position = Math.abs(currentTranslateRef.current);
@@ -153,12 +158,7 @@ const PricingTestimonialsCarousel: FC = () => {
       const delta = timestamp - lastTimeRef.current;
       lastTimeRef.current = timestamp;
 
-      if (
-        !reducedMotionRef.current &&
-        !isPausedRef.current &&
-        !isDraggingRef.current &&
-        totalWidth > 0
-      ) {
+      if (!isDraggingRef.current && totalWidth > 0) {
         currentTranslateRef.current -= delta * AUTOPLAY_PX_PER_MS;
 
         if (Math.abs(currentTranslateRef.current) >= totalWidth) {
@@ -288,51 +288,41 @@ const PricingTestimonialsCarousel: FC = () => {
           }}
           onMouseMove={(e) => handleDragMove(e.clientX)}
           onMouseUp={handleDragEnd}
-          onMouseEnter={() => {
-            isPausedRef.current = true;
-          }}
-          onMouseLeave={() => {
-            handleDragEnd();
-            isPausedRef.current = false;
-          }}
+          onMouseLeave={handleDragEnd}
           onTouchStart={(e) => {
-            isPausedRef.current = true;
             handleDragStart(e.touches[0]!.clientX, e.touches[0]!.clientY);
           }}
           onTouchMove={(e) => handleDragMove(e.touches[0]!.clientX, e.touches[0]!.clientY, e)}
-          onTouchEnd={() => {
-            handleDragEnd();
-            isPausedRef.current = false;
-          }}
-          onTouchCancel={() => {
-            handleDragEnd();
-            isPausedRef.current = false;
-          }}
+          onTouchEnd={handleDragEnd}
+          onTouchCancel={handleDragEnd}
           style={{ gap: `${SLIDE_GAP}px` }}
         >
-          {[...testimonials, ...testimonials, ...testimonials].map((item, idx) => (
-            <article
-              key={`${item.name}-${idx}`}
-              className="report-pricing-modal__testimonial-card"
-              style={{ width: `${cardWidth}px` }}
-              aria-roledescription="testimonial"
-            >
-              <header className="report-pricing-modal__testimonial-head">
-                <div className="report-pricing-modal__testimonial-avatar">
-                  <Image
-                    src={item.photo}
-                    alt=""
-                    width={82}
-                    height={82}
-                    sizes="(max-width: 767px) 56px, 82px"
-                    quality={92}
-                    draggable={false}
-                  />
-                </div>
-                <div className="report-pricing-modal__testimonial-id">
-                  <p className="report-pricing-modal__testimonial-name">{item.name}</p>
-                  <p className="report-pricing-modal__testimonial-role">{item.role}</p>
-                </div>
+          {[...testimonials, ...testimonials, ...testimonials].map((item, idx) => {
+            const isActive = idx % testimonials.length === activeIndex;
+            return (
+              <article
+                key={`${item.name}-${idx}`}
+                className={`report-pricing-modal__testimonial-card${isActive ? " is-active" : ""}`}
+                style={{ width: `${cardWidth}px` }}
+                aria-roledescription="testimonial"
+              >
+                <header className="report-pricing-modal__testimonial-head">
+                  <div className="report-pricing-modal__testimonial-avatar">
+                    <Image
+                      src={item.photo}
+                      alt=""
+                      width={188}
+                      height={188}
+                      sizes="(max-width: 640px) 94px, 64px"
+                      quality={95}
+                      draggable={false}
+                    />
+                  </div>
+                  <div className="report-pricing-modal__testimonial-id">
+                    <p className="report-pricing-modal__testimonial-name">{item.name}</p>
+                    <p className="report-pricing-modal__testimonial-role">{item.role}</p>
+                  </div>
+                </header>
                 <div
                   className="report-pricing-modal__testimonial-stars"
                   role="img"
@@ -342,12 +332,12 @@ const PricingTestimonialsCarousel: FC = () => {
                     <StarIcon key={i} />
                   ))}
                 </div>
-              </header>
-              <blockquote className="report-pricing-modal__testimonial-quote">
-                &ldquo;{item.quote}&rdquo;
-              </blockquote>
-            </article>
-          ))}
+                <blockquote className="report-pricing-modal__testimonial-quote">
+                  &ldquo;{item.quote}&rdquo;
+                </blockquote>
+              </article>
+            );
+          })}
         </div>
       </div>
 

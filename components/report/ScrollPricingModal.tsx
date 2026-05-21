@@ -2,7 +2,8 @@
 
 import Image from "next/image";
 import { useEffect, useRef, useState, type FC, type TouchEvent as ReactTouchEvent } from "react";
-import type { ReportTheme } from "./reportTheme";
+import { createPortal } from "react-dom";
+import { TraitIcons, type ReportTheme } from "./reportTheme";
 import type { ReportPriceQuoteSnapshot } from "@/lib/pricing/reportPricing";
 import {
   formatReportPurchasePrice,
@@ -49,11 +50,13 @@ function CheckIcon({ size = 16 }: { size?: number }) {
       aria-hidden="true"
       style={{ flexShrink: 0 }}
     >
-      <circle cx="8" cy="8" r="7" stroke="#ff6a3d" strokeWidth="1.5" />
       <path
-        d="M5 8l2.5 2.5L11 5.5"
-        stroke="#ff6a3d"
-        strokeWidth="1.5"
+        d="M0.5 8C0.5 12.1394 3.86064 15.5 8 15.5C12.1394 15.5 15.5 12.1394 15.5 8C15.5 3.86064 12.1394 0.5 8 0.5C3.86064 0.5 0.5 3.86064 0.5 8Z"
+        stroke="#00C950"
+      />
+      <path
+        d="M4.41 8L6.46 10.05L11.59 4.93"
+        stroke="#00C950"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
@@ -89,28 +92,48 @@ function SegmentBar({
   segments,
   value,
   label,
+  color,
 }: {
   segments: 1 | 2 | 3;
   value: string;
   label: string;
+  color: string;
 }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <span style={{ fontSize: "14px", color: "#fff", fontFamily: "var(--font-sans)" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+        <span
+          style={{
+            fontFamily: "var(--font-sans)",
+            fontSize: "var(--rpm-bar-label)",
+            fontWeight: 400,
+            color: "#fff",
+            lineHeight: 1,
+          }}
+        >
           {label}
         </span>
-        <span style={{ fontSize: "13px", color: "rgba(255,255,255,0.6)" }}>{value}</span>
+        <span
+          style={{
+            fontFamily: "var(--font-serif)",
+            fontSize: "var(--rpm-bar-label)",
+            fontWeight: 500,
+            color: "#fff",
+            lineHeight: 1,
+          }}
+        >
+          {value}
+        </span>
       </div>
-      <div style={{ display: "flex", gap: "3px" }}>
+      <div style={{ display: "flex", gap: "4px" }}>
         {([1, 2, 3] as const).map((n) => (
           <div
             key={n}
             style={{
               flex: 1,
-              height: "5px",
+              height: "6px",
               borderRadius: "9999px",
-              background: n <= segments ? "#ff6a3d" : "rgba(255,255,255,0.12)",
+              background: n <= segments ? color : "rgba(255,255,255,0.12)",
             }}
           />
         ))}
@@ -255,6 +278,12 @@ const ScrollPricingModal: FC<Props> = ({
   const didOpenRef = useRef(false);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
   const [focusMode, setFocusMode] = useState<"keyboard" | "pointer">("pointer");
+  const [portalMounted, setPortalMounted] = useState(false);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- post-mount flip to enable client-only portal
+    setPortalMounted(true);
+  }, []);
   const paywallViewFiredRef = useRef(false);
   const priceShownFiredRef = useRef(false);
 
@@ -411,12 +440,27 @@ const ScrollPricingModal: FC<Props> = ({
 
   const displayName = userName ?? "Friend";
   const matchPct = Math.min(100, Math.round(matchScore));
+  const ArchetypeIcon = theme.Icon;
 
   const handleCtaClick = () => {
     if (quote) {
       trackBeginCheckout("full_report", quote.currentPriceCents / 100, quote.currency);
     }
     onCheckout();
+  };
+
+  // ── Why-unlock mobile carousel ─────────────────────────────────────────────
+  const whyTrackRef = useRef<HTMLDivElement>(null);
+  const [whyPage, setWhyPage] = useState(0);
+  const WHY_PAGES = 4; // 4 cards, 1 per screen on mobile
+
+  const scrollWhyToPage = (page: number) => {
+    const track = whyTrackRef.current;
+    if (!track) return;
+    const card = track.children[page] as HTMLElement | undefined;
+    if (!card) return;
+    track.scrollTo({ left: card.offsetLeft - 16, behavior: "smooth" });
+    setWhyPage(page);
   };
 
   // ── Chapter carousel ────────────────────────────────────────────────────────
@@ -476,7 +520,9 @@ const ScrollPricingModal: FC<Props> = ({
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
-  return (
+  if (!portalMounted) return null;
+
+  return createPortal(
     <div
       className={`report-pricing-modal ${open ? "is-visible" : "is-hidden"}`}
       data-state={open ? "open" : "closed"}
@@ -496,13 +542,15 @@ const ScrollPricingModal: FC<Props> = ({
         >
           <button
             type="button"
-            className="report-pricing-modal__close"
-            aria-label="Close"
+            className="report-pricing-modal__close report-pricing-modal__close--labeled"
             onClick={onClose}
           >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
-              <path d="m6 6 12 12M18 6 6 18" strokeLinecap="round" />
-            </svg>
+            <span className="report-pricing-modal__close-label">Close to view report</span>
+            <span className="report-pricing-modal__close-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5">
+                <path d="m6 6 12 12M18 6 6 18" strokeLinecap="round" />
+              </svg>
+            </span>
           </button>
 
           <div
@@ -514,31 +562,38 @@ const ScrollPricingModal: FC<Props> = ({
             onTouchMove={handleTouchMove}
             onTouchStart={handleTouchStart}
           >
-            <div className="report-pricing-modal__inner" style={{ padding: "40px 32px 64px" }}>
-              {/* ── Badge ───────────────────────────────────────────────── */}
+            <div className="report-pricing-modal__inner rpm-modal-inner">
+              {/* ── Badge (Figma 7128:19051) ────────────────────────────── */}
               <div style={{ display: "flex", justifyContent: "center", marginBottom: "32px" }}>
                 <div
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
                     gap: "8px",
-                    padding: "10px 18px",
+                    padding: "var(--rpm-pill-pad)",
                     borderRadius: "9999px",
                     border: "1px solid rgba(58,37,89,0.6)",
                     background: "rgba(21,10,34,0.6)",
                     boxShadow: "0 0 20px 0 rgba(167,139,250,0.1)",
                     color: "#a78bfa",
-                    fontSize: "13px",
+                    fontFamily: "var(--font-sans)",
+                    fontSize: "var(--rpm-pill-text)",
                     fontWeight: 500,
+                    lineHeight: 1,
                     letterSpacing: "1.2px",
                     textTransform: "uppercase",
                   }}
                 >
                   <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                     <path
-                      d="M13.5 4.5L6.5 11.5L3 8"
-                      stroke="currentColor"
-                      strokeWidth="2"
+                      d="M0.5 8C0.5 12.1394 3.86064 15.5 8 15.5C12.1394 15.5 15.5 12.1394 15.5 8C15.5 3.86064 12.1394 0.5 8 0.5C3.86064 0.5 0.5 3.86064 0.5 8Z"
+                      stroke="#00C950"
+                      strokeWidth="1"
+                    />
+                    <path
+                      d="M4.41 8L6.46 10.05L11.59 4.93"
+                      stroke="#00C950"
+                      strokeWidth="1"
                       strokeLinecap="round"
                       strokeLinejoin="round"
                     />
@@ -547,27 +602,30 @@ const ScrollPricingModal: FC<Props> = ({
                 </div>
               </div>
 
-              {/* ── Heading ─────────────────────────────────────────────── */}
+              {/* ── Heading (Figma 7128:18573) ──────────────────────────── */}
               <h2
                 id="scroll-teaser-title"
                 style={{
                   fontFamily: "var(--font-serif)",
-                  fontSize: "clamp(24px, 3.5vw, 48px)",
+                  fontSize: "var(--rpm-h1)",
                   fontWeight: 400,
-                  lineHeight: 1.1,
-                  letterSpacing: "-0.025em",
+                  lineHeight: "var(--rpm-h1-line)",
+                  letterSpacing: "-1.2px",
                   textAlign: "center",
                   marginBottom: "40px",
                   color: "#fff",
                 }}
               >
-                <span style={{ color: "#a78bfa" }}>{displayName}</span>
-                {", you score highest with the following Archetype:"}
+                <span style={{ color: "#a78bfa" }}>{displayName},</span>
+                {" you score highest with the following Archetype:"}
               </h2>
 
               {/* ── Two-column: Archetype card + Pricing card ────────────── */}
               <div
+                className="rpm-hero-grid"
                 style={{
+                  position: "relative",
+                  isolation: "isolate",
                   display: "flex",
                   gap: "clamp(16px, 3vw, 40px)",
                   marginBottom: "40px",
@@ -575,33 +633,59 @@ const ScrollPricingModal: FC<Props> = ({
                   flexWrap: "wrap",
                 }}
               >
-                {/* LEFT: Core Archetype Card */}
+                <span aria-hidden="true" className="rpm-orb rpm-orb--hero-tl" />
+                <span aria-hidden="true" className="rpm-orb rpm-orb--hero-br" />
+                {/* LEFT: Core Archetype Card — Figma 7128:18577 */}
                 <div
                   style={{
                     flex: "1 1 280px",
                     position: "relative",
-                    border: "1px solid #fe6839",
+                    border: `1px solid ${theme.accent}`,
                     background: "#130b17",
                     borderRadius: "18px",
-                    padding: "28px",
-                    overflow: "hidden",
+                    padding: "var(--rpm-card-pad)",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "26px",
                   }}
                 >
-                  {/* Decorative blur */}
+                  {/* Inner clip — keeps the two decorative accent orbs bounded
+                      by the card's rounded shape (Figma ellipses 7128:18586/18587). */}
                   <div
                     aria-hidden="true"
                     style={{
                       position: "absolute",
-                      top: "-80px",
-                      right: "-60px",
-                      width: "240px",
-                      height: "240px",
-                      borderRadius: "50%",
-                      background: "rgba(167,139,250,0.12)",
-                      filter: "blur(40px)",
+                      inset: 0,
+                      borderRadius: "18px",
+                      overflow: "hidden",
                       pointerEvents: "none",
                     }}
-                  />
+                  >
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: "-80px",
+                        right: "-60px",
+                        width: "240px",
+                        height: "240px",
+                        borderRadius: "50%",
+                        background: `rgba(${theme.accentRgb} / 0.28)`,
+                        filter: "blur(50px)",
+                      }}
+                    />
+                    <div
+                      style={{
+                        position: "absolute",
+                        bottom: "-80px",
+                        left: "-60px",
+                        width: "240px",
+                        height: "240px",
+                        borderRadius: "50%",
+                        background: `rgba(${theme.accentRgb} / 0.28)`,
+                        filter: "blur(50px)",
+                      }}
+                    />
+                  </div>
 
                   {/* Header row: tag left, match strength right */}
                   <div
@@ -609,50 +693,62 @@ const ScrollPricingModal: FC<Props> = ({
                       display: "flex",
                       justifyContent: "space-between",
                       alignItems: "flex-start",
-                      gap: "12px",
-                      marginBottom: "16px",
+                      gap: "20px",
                       flexWrap: "wrap",
+                      position: "relative",
                     }}
                   >
                     <div
                       style={{
                         display: "inline-flex",
                         alignItems: "center",
-                        padding: "6px 14px",
+                        padding: "9px 17px",
                         borderRadius: "9999px",
-                        border: "0.75px solid rgba(255,106,61,0.2)",
-                        background: "rgba(255,106,61,0.1)",
-                        color: "#ff6a3d",
-                        fontSize: "13px",
+                        border: `0.75px solid rgba(${theme.accentRgb} / 0.2)`,
+                        background: `rgba(${theme.accentRgb} / 0.1)`,
+                        color: theme.accent,
+                        fontFamily: "var(--font-sans)",
+                        fontSize: "var(--rpm-card-tag)",
                         fontWeight: 500,
+                        lineHeight: 1,
+                        whiteSpace: "nowrap",
                       }}
                     >
                       Your Core Archetype
                     </div>
 
                     {/* Match Strength (top-right of card) */}
-                    <div style={{ textAlign: "right", minWidth: "120px" }}>
-                      <div
-                        style={{
-                          fontSize: "13px",
-                          color: "rgba(255,255,255,0.5)",
-                          marginBottom: "4px",
-                          fontWeight: 500,
-                        }}
-                      >
-                        Match Strength
-                      </div>
-                      <div
-                        style={{
-                          fontFamily: "var(--font-serif)",
-                          fontSize: "clamp(22px, 3vw, 32px)",
-                          fontWeight: 700,
-                          color: "#fff",
-                          lineHeight: 1,
-                          marginBottom: "6px",
-                        }}
-                      >
-                        {matchPct}%
+                    <div
+                      className="rpm-match-strength"
+                      style={{ textAlign: "right", minWidth: "140px", flex: "0 1 auto" }}
+                    >
+                      <div className="rpm-match-strength__head">
+                        <div
+                          className="rpm-match-strength__label"
+                          style={{
+                            fontFamily: "var(--font-sans)",
+                            fontSize: "var(--rpm-match-label)",
+                            color: "rgba(255,255,255,0.5)",
+                            marginBottom: "6px",
+                            fontWeight: 500,
+                            lineHeight: 1,
+                          }}
+                        >
+                          Match Strength
+                        </div>
+                        <div
+                          className="rpm-match-strength__value"
+                          style={{
+                            fontFamily: "var(--font-serif)",
+                            fontSize: "var(--rpm-match-value)",
+                            fontWeight: 500,
+                            color: "#fff",
+                            lineHeight: 1,
+                            marginBottom: "8px",
+                          }}
+                        >
+                          {matchPct}%
+                        </div>
                       </div>
                       <div
                         style={{
@@ -668,377 +764,563 @@ const ScrollPricingModal: FC<Props> = ({
                             height: "100%",
                             width: `${matchPct}%`,
                             borderRadius: "9999px",
-                            background: "linear-gradient(to right, #fe6839, #a78bfa, #e9d5ff)",
+                            background:
+                              "linear-gradient(to right, #fe6839 6.83%, #a78bfa 37.63%, #e9d5ff 100%)",
                           }}
                         />
                       </div>
                     </div>
                   </div>
 
-                  {/* Archetype name */}
+                  {/* Archetype identity row — icon + (name + motto) */}
                   <div
                     style={{
-                      fontFamily: "var(--font-serif)",
-                      fontSize: "clamp(28px, 4vw, 44px)",
-                      fontWeight: 500,
-                      color: "#fff",
-                      lineHeight: 1.05,
-                      marginBottom: "8px",
+                      display: "flex",
+                      gap: "16px",
+                      alignItems: "flex-start",
                     }}
                   >
-                    {archetype}
-                  </div>
-
-                  {/* Motto */}
-                  <div
-                    style={{
-                      fontSize: "14px",
-                      color: "#d1d5db",
-                      lineHeight: 1.5,
-                      marginBottom: "20px",
-                    }}
-                  >
-                    {theme.motto}
-                  </div>
-
-                  {/* Behavioral tendencies (bordered container) */}
-                  <div
-                    style={{
-                      border: "0.75px solid rgba(255,106,61,0.4)",
-                      borderRadius: "12px",
-                      padding: "16px",
-                      marginBottom: "20px",
-                    }}
-                  >
-                    {/* Core motivation */}
-                    <div style={{ marginBottom: "14px" }}>
-                      <div
-                        style={{
-                          fontSize: "11px",
-                          color: "rgba(255,255,255,0.4)",
-                          letterSpacing: "0.08em",
-                          textTransform: "uppercase",
-                          marginBottom: "6px",
-                        }}
-                      >
-                        Core motivation
-                      </div>
-                      <div
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: "6px",
-                          padding: "5px 12px",
-                          borderRadius: "9999px",
-                          border: "1px solid rgba(255,106,61,0.25)",
-                          background: "rgba(255,106,61,0.08)",
-                        }}
-                      >
-                        <span
-                          style={{
-                            width: "6px",
-                            height: "6px",
-                            borderRadius: "50%",
-                            background: "#ff6a3d",
-                            display: "inline-block",
-                            flexShrink: 0,
-                          }}
-                        />
-                        <span
-                          style={{
-                            fontFamily: "var(--font-serif)",
-                            fontSize: "15px",
-                            color: "#fff",
-                          }}
-                        >
-                          {theme.motivation}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* 2×2 traits grid */}
+                    {/* Archetype icon (Figma 7022:23082 — 48×48 box on mobile) */}
                     <div
+                      aria-hidden="true"
                       style={{
-                        display: "grid",
-                        gridTemplateColumns: "1fr 1fr",
-                        gap: "12px 16px",
+                        flexShrink: 0,
+                        width: "var(--rpm-archetype-icon, 64px)",
+                        height: "var(--rpm-archetype-icon, 64px)",
+                        padding: "calc(var(--rpm-archetype-icon, 64px) * 0.2)",
+                        borderRadius: "16px",
+                        background: theme.iconBackground,
+                        color: "#fff",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        boxSizing: "border-box",
                       }}
                     >
-                      {(
-                        [
-                          { label: "Communication", value: theme.communication },
-                          { label: "Initiation", value: theme.initiation },
-                          { label: "Attachment", value: theme.attachment },
-                          { label: "Power orientation", value: theme.powerOrientation },
-                        ] as const
-                      ).map(({ label, value }) => (
-                        <div key={label}>
-                          <div
+                      <ArchetypeIcon
+                        width="100%"
+                        height="100%"
+                        style={{ display: "block", color: "#fff" }}
+                      />
+                    </div>
+
+                    <div
+                      style={{
+                        flex: "1 1 auto",
+                        minWidth: 0,
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "8px",
+                      }}
+                    >
+                      {/* Archetype name */}
+                      <div
+                        style={{
+                          fontFamily: "var(--font-serif)",
+                          fontSize: "var(--rpm-archetype)",
+                          fontWeight: 500,
+                          color: "#fff",
+                          lineHeight: "var(--rpm-archetype-line)",
+                          letterSpacing: "-1px",
+                        }}
+                      >
+                        {archetype}
+                      </div>
+
+                      {/* Motto */}
+                      <div
+                        style={{
+                          fontFamily: "var(--font-sans)",
+                          fontSize: "var(--rpm-motto)",
+                          lineHeight: 1.35,
+                          color: "#fff",
+                        }}
+                      >
+                        <span style={{ fontWeight: 300, color: "#d1d5db" }}>Motto: </span>
+                        <span style={{ fontWeight: 400 }}>{theme.motto}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Behavioral tendencies label */}
+                  <div
+                    style={{
+                      fontFamily: "var(--font-sans)",
+                      fontSize: "var(--rpm-behavioral-label)",
+                      fontWeight: 400,
+                      color: "#fff",
+                      lineHeight: 1,
+                    }}
+                  >
+                    Behavioral tendencies:
+                  </div>
+
+                  {/* Core motivation — large boxed pill (Figma 7128:18590) */}
+                  <div
+                    style={{
+                      border: `0.75px solid ${theme.accent}`,
+                      borderRadius: "12px",
+                      padding: "18px",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "16px",
+                    }}
+                  >
+                    {/* Concentric ring icon */}
+                    <span
+                      aria-hidden="true"
+                      style={{
+                        flexShrink: 0,
+                        width: "42px",
+                        height: "42px",
+                        borderRadius: "50%",
+                        border: `0.75px solid ${theme.accent}`,
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <span
+                        style={{
+                          width: "22px",
+                          height: "22px",
+                          borderRadius: "50%",
+                          border: `0.75px solid ${theme.accent}`,
+                          display: "inline-flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        <span
+                          style={{
+                            width: "10px",
+                            height: "10px",
+                            borderRadius: "50%",
+                            background: theme.accent,
+                          }}
+                        />
+                      </span>
+                    </span>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                      <span
+                        style={{
+                          fontFamily: "var(--font-sans)",
+                          fontSize: "var(--rpm-core-mot-label)",
+                          fontWeight: 400,
+                          color: theme.accent,
+                          lineHeight: 1,
+                        }}
+                      >
+                        Core motivation:
+                      </span>
+                      <span
+                        style={{
+                          fontFamily: "var(--font-serif)",
+                          fontSize: "var(--rpm-core-mot-value)",
+                          fontWeight: 500,
+                          color: "#fff",
+                          lineHeight: 1.1,
+                        }}
+                      >
+                        {theme.motivation}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 2×2 traits grid */}
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      columnGap: "32px",
+                      rowGap: "32px",
+                    }}
+                  >
+                    {(
+                      [
+                        {
+                          label: "Communication",
+                          value: theme.communication,
+                          Icon: TraitIcons.communication,
+                        },
+                        {
+                          label: "Initiation",
+                          value: theme.initiation,
+                          Icon: TraitIcons.initiation,
+                        },
+                        {
+                          label: "Attachment",
+                          value: theme.attachment,
+                          Icon: TraitIcons.attachment,
+                        },
+                        {
+                          label: "Power orientation",
+                          value: theme.powerOrientation,
+                          Icon: TraitIcons.powerOrientation,
+                        },
+                      ] as const
+                    ).map(({ label, value, Icon }) => (
+                      <div
+                        key={label}
+                        style={{ display: "flex", flexDirection: "column", gap: "10px" }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          <span
+                            aria-hidden="true"
                             style={{
-                              fontSize: "12px",
-                              color: "rgba(255,255,255,0.45)",
-                              marginBottom: "2px",
+                              width: "18px",
+                              height: "18px",
+                              color: theme.accent,
+                              display: "inline-flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              flexShrink: 0,
+                            }}
+                          >
+                            <Icon width={18} height={18} />
+                          </span>
+                          <span
+                            style={{
+                              fontFamily: "var(--font-sans)",
+                              fontSize: "var(--rpm-trait-label)",
+                              fontWeight: 400,
+                              color: "#fff",
+                              lineHeight: 1,
                             }}
                           >
                             {label}
-                          </div>
-                          <div
-                            style={{
-                              fontFamily: "var(--font-serif)",
-                              fontSize: "clamp(14px, 2vw, 18px)",
-                              fontWeight: 500,
-                              color: "#fff",
-                            }}
-                          >
-                            {value}
-                          </div>
+                          </span>
                         </div>
-                      ))}
-                    </div>
+                        <div
+                          style={{
+                            fontFamily: "var(--font-serif)",
+                            fontSize: "var(--rpm-trait-value)",
+                            fontWeight: 500,
+                            color: "#fff",
+                            lineHeight: 1.2,
+                          }}
+                        >
+                          {value}
+                        </div>
+                      </div>
+                    ))}
                   </div>
 
                   {/* Risk + confidence bars */}
-                  <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
                     <SegmentBar
                       label="Risk orientation"
                       segments={theme.riskSegments}
                       value={theme.riskOrientation}
+                      color={theme.accent}
                     />
                     <SegmentBar
                       label="Typical confidence"
                       segments={theme.confidenceSegments}
                       value={theme.confidence}
+                      color={theme.accent}
                     />
                   </div>
                 </div>
 
-                {/* RIGHT: Pricing CTA Card */}
+                {/* RIGHT: Pricing CTA Card — Figma 7128:18653 */}
                 <div
+                  className="rpm-pricing-card"
                   style={{
                     flex: "1 1 280px",
                     position: "relative",
                     border: "1px solid rgba(85,101,247,0.68)",
-                    background: "rgba(85,101,247,0.1)",
+                    background: "rgba(85,101,247,0.15)",
                     backdropFilter: "blur(12px)",
-                    borderRadius: "18px",
-                    padding: "40px 28px 28px",
-                    overflow: "hidden",
+                    WebkitBackdropFilter: "blur(12px)",
+                    borderRadius: "16px",
+                    padding: "49px 33px 41px",
+                    boxShadow: "0px 0px 30px 0px rgba(168,85,247,0.1)",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "40px",
                   }}
                 >
-                  {/* Decorative blur */}
+                  {/* Inner clip — keeps decorative blur inside the rounded card
+                      but lets floating badges overflow above the top edge. */}
                   <div
                     aria-hidden="true"
                     style={{
                       position: "absolute",
-                      top: "-60px",
-                      left: "-60px",
-                      width: "250px",
-                      height: "250px",
-                      borderRadius: "50%",
-                      background: "rgba(167,139,250,0.1)",
-                      filter: "blur(50px)",
+                      inset: 0,
+                      borderRadius: "16px",
+                      overflow: "hidden",
                       pointerEvents: "none",
                     }}
-                  />
-
-                  {/* Floating badges */}
-                  {badge && (
+                  >
                     <div
                       style={{
                         position: "absolute",
-                        top: "-16px",
+                        top: "-60px",
+                        left: "-60px",
+                        width: "250px",
+                        height: "250px",
+                        borderRadius: "50%",
+                        background: "rgba(167,139,250,0.1)",
+                        filter: "blur(50px)",
+                      }}
+                    />
+                  </div>
+
+                  {/* Floating badges (Figma 7128:18711 + 7128:18713) */}
+                  {badge && (
+                    <div
+                      className="rpm-pricing-badge--discount"
+                      style={{
+                        position: "absolute",
+                        top: "-21px",
                         left: "24px",
-                        padding: "5px 14px",
+                        padding: "10px 18px",
                         borderRadius: "9999px",
-                        background: "rgba(0,201,80,0.15)",
-                        border: "1px solid rgba(0,201,80,0.35)",
+                        background: "rgba(0,201,80,0.2)",
+                        border: "1px solid rgba(0,201,80,0.3)",
+                        backdropFilter: "blur(6px)",
+                        WebkitBackdropFilter: "blur(6px)",
                         color: "#00c950",
-                        fontSize: "13px",
+                        fontFamily: "var(--font-sans)",
+                        fontSize: "var(--rpm-badge)",
                         fontWeight: 500,
+                        letterSpacing: "0.3px",
+                        lineHeight: 1,
                       }}
                     >
                       {badge}
                     </div>
                   )}
                   <div
+                    className="rpm-pricing-badge--popular"
                     style={{
                       position: "absolute",
-                      top: "-16px",
+                      top: "-21px",
                       right: "24px",
-                      padding: "5px 14px",
+                      padding: "10px 18px",
                       borderRadius: "9999px",
                       background: "#fe6839",
                       color: "#fff",
-                      fontSize: "13px",
+                      fontFamily: "var(--font-sans)",
+                      fontSize: "var(--rpm-badge)",
                       fontWeight: 500,
+                      letterSpacing: "0.3px",
+                      lineHeight: 1,
                     }}
                   >
                     Most popular
                   </div>
 
-                  {/* Headline */}
-                  <h3
-                    style={{
-                      fontFamily: "var(--font-serif)",
-                      fontSize: "clamp(20px, 2.8vw, 36px)",
-                      fontWeight: 700,
-                      color: "#fff",
-                      lineHeight: 1.2,
-                      marginBottom: "20px",
-                    }}
-                  >
-                    Unlock your <span style={{ color: "#fe6839" }}>FULL</span> personal report now
-                  </h3>
-
-                  {/* Pricing */}
-                  {strikePriceLabel && (
-                    <div
-                      style={{
-                        fontSize: "clamp(16px, 2vw, 22px)",
-                        color: "#6b7280",
-                        textDecoration: "line-through",
-                        marginBottom: "4px",
-                      }}
-                    >
-                      {strikePriceLabel} one off
-                    </div>
-                  )}
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "baseline",
-                      gap: "8px",
-                      marginBottom: "20px",
-                      flexWrap: "wrap",
-                    }}
-                  >
-                    <span
+                  {/* Heading + Price block */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+                    {/* Headline (Figma 7128:18656) */}
+                    <h3
                       style={{
                         fontFamily: "var(--font-sans)",
-                        fontSize: "clamp(36px, 5vw, 64px)",
-                        fontWeight: 700,
+                        fontSize: "var(--rpm-pricing-h)",
+                        fontWeight: 600,
                         color: "#fff",
+                        lineHeight: "var(--rpm-pricing-h-line)",
+                        margin: 0,
+                      }}
+                    >
+                      Unlock your <span style={{ color: "#fe6839", fontWeight: 700 }}>FULL</span>{" "}
+                      personal report now
+                    </h3>
+
+                    {/* Pricing */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                      {strikePriceLabel && (
+                        <div
+                          style={{
+                            fontFamily: "var(--font-sans)",
+                            fontSize: "var(--rpm-price-strike)",
+                            fontWeight: 300,
+                            color: "#6b7280",
+                            textDecoration: "line-through",
+                            lineHeight: 1.2,
+                          }}
+                        >
+                          {strikePriceLabel} one off
+                        </div>
+                      )}
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "baseline",
+                          gap: "4px",
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        <span
+                          style={{
+                            fontFamily: "var(--font-sans)",
+                            fontSize: "var(--rpm-price)",
+                            fontWeight: 500,
+                            color: "#fff",
+                            lineHeight: 1,
+                            letterSpacing: "-0.9px",
+                          }}
+                        >
+                          {priceLabel}
+                        </span>
+                        <span
+                          style={{
+                            fontFamily: "var(--font-sans)",
+                            fontSize: "var(--rpm-price-period)",
+                            fontWeight: 300,
+                            color: "#fff",
+                            lineHeight: 1.2,
+                          }}
+                        >
+                          / one time payment
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Features block */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+                    {/* 14-day guarantee row — no container (Figma 7128:18674) */}
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: "16px" }}>
+                      <svg
+                        width="27"
+                        height="27"
+                        viewBox="0 0 20 20"
+                        fill="none"
+                        aria-hidden="true"
+                        style={{ flexShrink: 0, marginTop: "2px" }}
+                      >
+                        <circle cx="10" cy="10" r="9" stroke="#ff6a3d" strokeWidth="1.5" />
+                        <path
+                          d="M6.5 10l2.5 2.5 5-5"
+                          stroke="#ff6a3d"
+                          strokeWidth="1.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                        <span
+                          style={{
+                            fontFamily: "var(--font-sans)",
+                            fontSize: "var(--rpm-14day-headline)",
+                            fontWeight: 600,
+                            color: "#ff6a3d",
+                            lineHeight: 1.1,
+                          }}
+                        >
+                          14-day money-back guarantee
+                        </span>
+                        <span
+                          style={{
+                            fontFamily: "var(--font-sans)",
+                            fontSize: "var(--rpm-14day-tail)",
+                            fontWeight: 600,
+                            color: "#fff",
+                            lineHeight: 1.2,
+                          }}
+                        >
+                          - no discussions
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Features list */}
+                    <ul
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "16px",
+                        listStyle: "none",
+                        margin: 0,
+                        padding: 0,
+                      }}
+                    >
+                      {(
+                        [
+                          { lead: "+50 pages", tail: " of deep insights into your sexuality" },
+                          { lead: "Results based on +100 science papers", tail: "" },
+                          {
+                            lead: "30+ chapters",
+                            tail: " on your sexual phantasies, arousal & desire patterns",
+                          },
+                          {
+                            lead: "Personalized growth paths",
+                            tail: " & suggestions to improve your sexlife",
+                          },
+                          { lead: "Share your report", tail: " with up to 2 extra e-mails" },
+                        ] as const
+                      ).map(({ lead, tail }) => (
+                        <li
+                          key={lead}
+                          style={{ display: "flex", alignItems: "flex-start", gap: "12px" }}
+                        >
+                          <CheckIcon size={16} />
+                          <span
+                            style={{
+                              fontFamily: "var(--font-sans)",
+                              fontSize: "var(--rpm-feature)",
+                              color: "#fff",
+                              lineHeight: 1.4,
+                            }}
+                          >
+                            <span style={{ fontWeight: 700 }}>{lead}</span>
+                            <span style={{ fontWeight: 300 }}>{tail}</span>
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  {/* CTA button — solid #ff6a3d pill (Figma 7128:18666) */}
+                  <div style={{ display: "flex", justifyContent: "center" }}>
+                    <button
+                      type="button"
+                      className="rpm-cta"
+                      onClick={handleCtaClick}
+                      style={{
+                        width: "100%",
+                        maxWidth: "460px",
+                        padding: "20px 24px",
+                        borderRadius: "9999px",
+                        background: "#ff6a3d",
+                        border: "1px solid rgba(255,255,255,0.4)",
+                        color: "#fff",
+                        fontFamily: "var(--font-sans)",
+                        fontSize: "var(--rpm-cta-label)",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "16px",
+                        filter: "drop-shadow(0px 3px 12.65px #ff6a3d)",
                         lineHeight: 1,
                       }}
                     >
-                      {priceLabel}
-                    </span>
-                    <span style={{ fontSize: "clamp(14px, 1.8vw, 20px)", color: "#d1d5db" }}>
-                      / one time payment
-                    </span>
-                  </div>
-
-                  {/* 14-day guarantee row */}
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "flex-start",
-                      gap: "10px",
-                      marginBottom: "16px",
-                      padding: "12px 14px",
-                      borderRadius: "10px",
-                      background: "rgba(255,106,61,0.07)",
-                      border: "1px solid rgba(255,106,61,0.15)",
-                    }}
-                  >
-                    <svg
-                      width="20"
-                      height="20"
-                      viewBox="0 0 20 20"
-                      fill="none"
-                      aria-hidden="true"
-                      style={{ flexShrink: 0, marginTop: "1px" }}
-                    >
-                      <circle cx="10" cy="10" r="9" stroke="#ff6a3d" strokeWidth="1.5" />
-                      <path
-                        d="M6.5 10l2.5 2.5 5-5"
-                        stroke="#ff6a3d"
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                    <span
-                      style={{ fontSize: "14px", color: "#fff", lineHeight: 1.5, fontWeight: 500 }}
-                    >
-                      14-day money-back guarantee — no discussions
-                    </span>
-                  </div>
-
-                  {/* Features list */}
-                  <ul
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "10px",
-                      listStyle: "none",
-                      margin: "0 0 24px",
-                      padding: 0,
-                    }}
-                  >
-                    {[
-                      "+50 pages of deep insights into your sexuality",
-                      "Results based on +100 science papers",
-                      "30+ chapters on your sexual phantasies, arousal & desire patterns",
-                      "Personalized growth paths & suggestions to improve your sexlife",
-                      "Share your report with up to 2 extra e-mails",
-                    ].map((feat) => (
-                      <li
-                        key={feat}
-                        style={{ display: "flex", alignItems: "flex-start", gap: "10px" }}
+                      <span className="rpm-cta__wash" aria-hidden="true" />
+                      <span className="rpm-cta__reveal" aria-hidden="true" />
+                      <span className="rpm-cta__label">Unlock full report</span>
+                      <svg
+                        className="rpm-cta__arrow"
+                        width="25"
+                        height="25"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        aria-hidden="true"
                       >
-                        <CheckIcon size={16} />
-                        <span
-                          style={{
-                            fontSize: "clamp(13px, 1.5vw, 16px)",
-                            color: "#d1d5db",
-                            lineHeight: 1.5,
-                          }}
-                        >
-                          {feat}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-
-                  {/* CTA button — orange → purple gradient, radius 24px */}
-                  <button
-                    type="button"
-                    onClick={handleCtaClick}
-                    style={{
-                      width: "100%",
-                      padding: "18px 24px",
-                      borderRadius: "24px",
-                      background: "linear-gradient(to right, #fe6839, #a78bfa)",
-                      border: "none",
-                      color: "#fff",
-                      fontSize: "clamp(15px, 1.8vw, 18px)",
-                      fontWeight: 600,
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: "10px",
-                      boxShadow: "0px 4px 20px rgba(254,104,57,0.4)",
-                    }}
-                  >
-                    Unlock full report
-                    <svg
-                      width="20"
-                      height="20"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      aria-hidden="true"
-                    >
-                      <path
-                        d="M5 12h14M13 6l6 6-6 6"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  </button>
+                        <path
+                          d="M5 12h14M13 6l6 6-6 6"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -1052,10 +1334,13 @@ const ScrollPricingModal: FC<Props> = ({
               >
                 <p
                   style={{
-                    fontSize: "14px",
-                    color: "#fff",
-                    marginBottom: "16px",
+                    fontFamily: "var(--font-sans)",
+                    fontSize: "16px",
                     fontWeight: 400,
+                    lineHeight: "normal",
+                    textAlign: "center",
+                    color: "#fff",
+                    marginBottom: "24px",
                   }}
                 >
                   Our payment methods
@@ -1065,7 +1350,9 @@ const ScrollPricingModal: FC<Props> = ({
                     display: "flex",
                     flexWrap: "wrap",
                     justifyContent: "center",
-                    gap: "8px",
+                    alignItems: "center",
+                    columnGap: "28px",
+                    rowGap: "16px",
                   }}
                 >
                   <PaymentLogo logo="apple-pay" label="Apple Pay" />
@@ -1081,9 +1368,7 @@ const ScrollPricingModal: FC<Props> = ({
               {/* ── Testimonials / social proof ──────────────────────────── */}
               <div
                 style={{
-                  background: "#150a22",
-                  borderRadius: "24px",
-                  padding: "40px 24px 48px",
+                  padding: "40px 0 48px",
                   marginBottom: "40px",
                   textAlign: "center",
                 }}
@@ -1091,16 +1376,35 @@ const ScrollPricingModal: FC<Props> = ({
                 <h3
                   style={{
                     fontFamily: "var(--font-serif)",
-                    fontSize: "clamp(24px, 4vw, 50px)",
+                    fontSize: "50px",
                     fontWeight: 700,
                     color: "#fff",
-                    lineHeight: 1.2,
-                    marginBottom: "20px",
+                    lineHeight: "normal",
+                    textAlign: "center",
+                    marginBottom: "32px",
                   }}
                 >
-                  Real <em style={{ color: "#a78bfa", fontStyle: "italic" }}>people</em>. Real{" "}
-                  <em style={{ color: "#a78bfa", fontStyle: "italic" }}>insights</em>. Real{" "}
-                  <em style={{ color: "#a78bfa", fontStyle: "italic" }}>results</em>.
+                  <span className="rpm-real-line">
+                    Real{" "}
+                    <em style={{ color: "#a78bfa", fontStyle: "italic", fontWeight: 700 }}>
+                      people
+                    </em>
+                    .
+                  </span>{" "}
+                  <span className="rpm-real-line">
+                    Real{" "}
+                    <em style={{ color: "#a78bfa", fontStyle: "italic", fontWeight: 700 }}>
+                      insights
+                    </em>
+                    .
+                  </span>{" "}
+                  <span className="rpm-real-line">
+                    Real{" "}
+                    <em style={{ color: "#a78bfa", fontStyle: "italic", fontWeight: 700 }}>
+                      results
+                    </em>
+                    .
+                  </span>
                 </h3>
 
                 {/* Avatar stack + rating */}
@@ -1115,24 +1419,34 @@ const ScrollPricingModal: FC<Props> = ({
                 >
                   <div style={{ display: "flex", alignItems: "center" }}>
                     {[
-                      "/testimonials/dijana.webp",
-                      "/testimonials/marija.webp",
-                      "/testimonials/philipp.webp",
+                      "/testimonials/rating-1.jpg",
+                      "/testimonials/rating-2.jpg",
+                      "/testimonials/rating-3.jpg",
                     ].map((src, i) => (
-                      <Image
+                      <span
                         key={src}
-                        src={src}
-                        alt=""
-                        aria-hidden="true"
-                        width={40}
-                        height={40}
                         style={{
-                          borderRadius: "50%",
+                          position: "relative",
+                          display: "inline-block",
+                          flexShrink: 0,
+                          width: "40px",
+                          height: "40px",
+                          borderRadius: "9999px",
                           border: "2px solid #0a0510",
-                          objectFit: "cover",
+                          overflow: "hidden",
                           marginLeft: i === 0 ? 0 : "-12px",
+                          boxSizing: "border-box",
                         }}
-                      />
+                      >
+                        <Image
+                          src={src}
+                          alt=""
+                          aria-hidden="true"
+                          fill
+                          sizes="40px"
+                          style={{ objectFit: "cover" }}
+                        />
+                      </span>
                     ))}
                   </div>
                   <span style={{ fontSize: "16px", color: "#fff", fontWeight: 400 }}>
@@ -1144,28 +1458,44 @@ const ScrollPricingModal: FC<Props> = ({
               </div>
 
               {/* ── Why unlock section (2×2 grid) ────────────────────── */}
-              <div style={{ marginBottom: "56px" }}>
+              <div
+                style={{
+                  position: "relative",
+                  isolation: "isolate",
+                  marginBottom: "56px",
+                }}
+              >
+                <span aria-hidden="true" className="rpm-orb rpm-orb--why-tl" />
+                <span aria-hidden="true" className="rpm-orb rpm-orb--why-mr" />
                 <h3
                   style={{
                     fontFamily: "var(--font-serif)",
-                    fontSize: "clamp(26px, 4vw, 50px)",
+                    fontSize: "var(--rpm-section-h)",
                     fontWeight: 700,
                     color: "#fff",
                     textAlign: "center",
-                    lineHeight: 1.15,
+                    lineHeight: "normal",
                     marginBottom: "40px",
                   }}
                 >
-                  Why unlock the{" "}
-                  <em style={{ color: "#a78bfa", fontStyle: "italic" }}>Full Report</em> ?
+                  Why unlock the <span className="rpm-why-mobile-br" aria-hidden="true" />
+                  <em style={{ color: "#a78bfa", fontStyle: "italic", fontWeight: 700 }}>
+                    Full Report
+                  </em>
+                  <span className="rpm-why-desktop-space"> </span>?
                 </h3>
 
                 <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(2, 1fr)",
-                    columnGap: "clamp(16px, 3vw, 40px)",
-                    rowGap: "clamp(16px, 3vw, 40px)",
+                  className="rpm-why-grid"
+                  ref={whyTrackRef}
+                  onScroll={() => {
+                    const track = whyTrackRef.current;
+                    if (!track) return;
+                    const first = track.children[0] as HTMLElement | undefined;
+                    if (!first) return;
+                    const cardW = first.offsetWidth + 16;
+                    const page = Math.round(track.scrollLeft / cardW);
+                    setWhyPage(Math.max(0, Math.min(page, WHY_PAGES - 1)));
                   }}
                 >
                   {WHY_CARDS.map(
@@ -1177,28 +1507,41 @@ const ScrollPricingModal: FC<Props> = ({
                           background:
                             "linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0) 100%)",
                           border: "1px solid rgba(255,255,255,0.1)",
-                          borderRadius: "clamp(20px, 3vw, 40px)",
-                          padding: "clamp(24px, 4vw, 49px)",
+                          borderRadius: "var(--rpm-why-card-radius)",
+                          padding: "var(--rpm-why-card-pad)",
                           backdropFilter: "blur(6px)",
                           WebkitBackdropFilter: "blur(6px)",
-                          overflow: "hidden",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "12px",
+                          isolation: "isolate",
                         }}
                       >
-                        {/* Accent glow orb top-right */}
+                        {/* Inner clip — keeps the accent glow bounded by the card */}
                         <div
                           aria-hidden="true"
                           style={{
                             position: "absolute",
-                            right: "-128px",
-                            top: "-128px",
-                            width: "288px",
-                            height: "288px",
-                            borderRadius: "50%",
-                            background: `rgba(${accentRgb},0.18)`,
-                            filter: "blur(40px)",
+                            inset: 0,
+                            borderRadius: "var(--rpm-why-card-radius)",
+                            overflow: "hidden",
                             pointerEvents: "none",
+                            zIndex: -1,
                           }}
-                        />
+                        >
+                          <div
+                            style={{
+                              position: "absolute",
+                              right: "-96px",
+                              top: "-96px",
+                              width: "200px",
+                              height: "200px",
+                              borderRadius: "50%",
+                              background: `rgba(${accentRgb},0.18)`,
+                              filter: "blur(36px)",
+                            }}
+                          />
+                        </div>
 
                         {/* Icon + badge row */}
                         <div
@@ -1206,17 +1549,17 @@ const ScrollPricingModal: FC<Props> = ({
                             display: "flex",
                             justifyContent: "space-between",
                             alignItems: "flex-start",
-                            marginBottom: "clamp(16px, 3vw, 32px)",
+                            marginBottom: "8px",
                           }}
                         >
                           <div
                             style={{
-                              width: "64px",
-                              height: "64px",
-                              borderRadius: "20px",
+                              width: "48px",
+                              height: "48px",
+                              borderRadius: "14px",
                               background: `linear-gradient(135deg, rgba(${accentRgb},0.2) 0%, rgba(${accentRgb},0.05) 100%)`,
                               border: `1px solid rgba(${accentRgb},0.3)`,
-                              boxShadow: `0px 0px 30px -5px rgba(${accentRgb},0.3)`,
+                              boxShadow: `0px 0px 24px -5px rgba(${accentRgb},0.3)`,
                               display: "flex",
                               alignItems: "center",
                               justifyContent: "center",
@@ -1233,11 +1576,12 @@ const ScrollPricingModal: FC<Props> = ({
                               border: `1px solid rgba(${accentRgb},0.2)`,
                               boxShadow: `0px 0px 15px -3px rgba(${accentRgb},0.2)`,
                               color: `rgb(${accentRgb})`,
-                              fontSize: "clamp(11px, 1.2vw, 15px)",
+                              fontSize: "var(--rpm-why-card-badge)",
                               fontWeight: 700,
-                              letterSpacing: "0.08em",
+                              letterSpacing: "1.2px",
                               textTransform: "uppercase",
                               whiteSpace: "nowrap",
+                              lineHeight: 1,
                             }}
                           >
                             {cardBadge}
@@ -1247,38 +1591,41 @@ const ScrollPricingModal: FC<Props> = ({
                         <div
                           style={{
                             fontFamily: "var(--font-serif)",
-                            fontSize: "clamp(18px, 2.2vw, 32px)",
+                            fontSize: "var(--rpm-why-card-title)",
                             fontWeight: 700,
                             color: "rgba(255,255,255,0.95)",
                             lineHeight: 1.15,
-                            letterSpacing: "-0.025em",
-                            marginBottom: "8px",
+                            letterSpacing: "-0.8px",
+                            margin: "0 0 8px",
+                            display: "flex",
+                            alignItems: "flex-end",
+                            minHeight: "calc(2.3 * var(--rpm-why-card-title))",
                           }}
                         >
                           {title}
                         </div>
                         <div
                           style={{
+                            alignSelf: "stretch",
                             fontFamily: "var(--font-serif)",
-                            fontSize: showPrice
-                              ? "clamp(22px, 3vw, 40px)"
-                              : "clamp(14px, 1.8vw, 24px)",
+                            fontSize: "20px",
                             fontWeight: 400,
+                            fontStyle: "normal",
                             color: `rgb(${accentRgb})`,
-                            marginBottom: "clamp(12px, 2vw, 20px)",
-                            lineHeight: 1.2,
-                            letterSpacing: "-0.02em",
+                            marginBottom: "8px",
+                            lineHeight: "24px",
+                            letterSpacing: "-0.45px",
                           }}
                         >
                           {subtitle}
                         </div>
                         {showPrice && quote && (
-                          <p style={{ margin: "0 0 8px" }}>
+                          <p style={{ margin: "auto 0 0", lineHeight: 1.4 }}>
                             <span
                               style={{
                                 fontFamily: "var(--font-sans)",
-                                fontSize: "clamp(24px, 3vw, 40px)",
-                                fontWeight: 500,
+                                fontSize: "20px",
+                                fontWeight: 600,
                                 color: `rgb(${accentRgb})`,
                               }}
                             >
@@ -1287,7 +1634,7 @@ const ScrollPricingModal: FC<Props> = ({
                             <span
                               style={{
                                 fontFamily: "var(--font-sans)",
-                                fontSize: "clamp(14px, 1.5vw, 20px)",
+                                fontSize: "13px",
                                 color: "#fff",
                                 fontWeight: 400,
                               }}
@@ -1301,10 +1648,10 @@ const ScrollPricingModal: FC<Props> = ({
                           <p
                             style={{
                               fontFamily: "var(--font-sans)",
-                              fontSize: "clamp(13px, 1.4vw, 20px)",
+                              fontSize: "13px",
                               color: "#fff",
-                              lineHeight: 1.5,
-                              margin: 0,
+                              lineHeight: 1.4,
+                              margin: "auto 0 0",
                               fontWeight: 400,
                             }}
                           >
@@ -1315,6 +1662,99 @@ const ScrollPricingModal: FC<Props> = ({
                     )
                   )}
                 </div>
+
+                {/* Mobile-only nav for the why-unlock carousel */}
+                <div
+                  className="rpm-why-nav"
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "16px",
+                    marginTop: "20px",
+                  }}
+                >
+                  <button
+                    type="button"
+                    aria-label="Previous"
+                    onClick={() => scrollWhyToPage(Math.max(0, whyPage - 1))}
+                    style={{
+                      width: "32px",
+                      height: "32px",
+                      borderRadius: "50%",
+                      background: "rgba(255,255,255,0.08)",
+                      border: "1px solid rgba(255,255,255,0.15)",
+                      color: "#fff",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      cursor: whyPage === 0 ? "default" : "pointer",
+                      opacity: whyPage === 0 ? 0.35 : 1,
+                      transition: "opacity 0.2s",
+                    }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                      <path
+                        d="M10 12L6 8L10 4"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </button>
+
+                  <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                    {Array.from({ length: WHY_PAGES }).map((_, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        aria-label={`Go to card ${i + 1}`}
+                        onClick={() => scrollWhyToPage(i)}
+                        style={{
+                          width: whyPage === i ? "20px" : "8px",
+                          height: "8px",
+                          borderRadius: "9999px",
+                          background: whyPage === i ? "#a78bfa" : "rgba(255,255,255,0.25)",
+                          border: "none",
+                          cursor: "pointer",
+                          padding: 0,
+                          transition: "width 0.25s ease, background 0.25s ease",
+                        }}
+                      />
+                    ))}
+                  </div>
+
+                  <button
+                    type="button"
+                    aria-label="Next"
+                    onClick={() => scrollWhyToPage(Math.min(WHY_PAGES - 1, whyPage + 1))}
+                    style={{
+                      width: "32px",
+                      height: "32px",
+                      borderRadius: "50%",
+                      background: "rgba(255,255,255,0.08)",
+                      border: "1px solid rgba(255,255,255,0.15)",
+                      color: "#fff",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      cursor: whyPage === WHY_PAGES - 1 ? "default" : "pointer",
+                      opacity: whyPage === WHY_PAGES - 1 ? 0.35 : 1,
+                      transition: "opacity 0.2s",
+                    }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                      <path
+                        d="M6 12L10 8L6 4"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </button>
+                </div>
               </div>
 
               {/* ── Preview of what's inside (carousel) ──────────────── */}
@@ -1322,18 +1762,24 @@ const ScrollPricingModal: FC<Props> = ({
                 <div style={{ textAlign: "center", marginBottom: "32px" }}>
                   <div
                     style={{
-                      display: "flex",
+                      display: "inline-flex",
                       alignItems: "center",
                       justifyContent: "center",
-                      gap: "6px",
+                      gap: "8px",
+                      padding: "var(--rpm-pill-pad)",
+                      borderRadius: "9999px",
+                      border: "1px solid rgba(58,37,89,0.6)",
+                      background: "rgba(21,10,34,0.6)",
+                      boxShadow: "0 0 20px 0 rgba(167,139,250,0.1)",
                       marginBottom: "16px",
                     }}
                   >
                     <span
                       aria-hidden="true"
+                      className="rpm-preview-dot"
                       style={{
-                        width: "8px",
-                        height: "8px",
+                        width: "10px",
+                        height: "10px",
                         borderRadius: "50%",
                         background: "#fe6839",
                         display: "inline-block",
@@ -1342,11 +1788,13 @@ const ScrollPricingModal: FC<Props> = ({
                     />
                     <span
                       style={{
-                        fontSize: "11px",
-                        fontWeight: 600,
-                        color: "rgba(255,255,255,0.55)",
-                        letterSpacing: "0.12em",
+                        fontFamily: "var(--font-sans)",
+                        fontSize: "var(--rpm-pill-text)",
+                        fontWeight: 500,
+                        color: "#a78bfa",
+                        letterSpacing: "1.2px",
                         textTransform: "uppercase",
+                        lineHeight: 1,
                       }}
                     >
                       A preview of what&rsquo;s inside
@@ -1421,7 +1869,7 @@ const ScrollPricingModal: FC<Props> = ({
                       key={num}
                       style={{
                         flex: "0 0 280px",
-                        height: "386px",
+                        minHeight: "386px",
                         position: "relative",
                         background: "rgba(10,5,16,0.8)",
                         backdropFilter: "blur(6px)",
@@ -1431,39 +1879,52 @@ const ScrollPricingModal: FC<Props> = ({
                         boxShadow: "0px 0px 15px 0px rgba(192,132,252,0.15)",
                         padding: "25px",
                         scrollSnapAlign: "start",
-                        overflow: "hidden",
                         display: "flex",
                         flexDirection: "column",
+                        isolation: "isolate",
+                        clipPath: "inset(0 round 24px)",
+                        WebkitClipPath: "inset(0 round 24px)",
                       }}
                     >
+                      {/* Inner clip — keeps the purple decorative orbs bounded
+                          by the card's rounded shape (backdrop-filter on parent
+                          breaks overflow:hidden masking in some browsers). */}
                       <div
                         aria-hidden="true"
                         style={{
                           position: "absolute",
-                          right: "-77px",
-                          top: "-79px",
-                          width: "192px",
-                          height: "192px",
-                          borderRadius: "50%",
-                          background: "rgba(167,139,250,0.36)",
-                          filter: "blur(50px)",
+                          inset: 0,
+                          borderRadius: "24px",
+                          overflow: "hidden",
                           pointerEvents: "none",
+                          zIndex: -1,
                         }}
-                      />
-                      <div
-                        aria-hidden="true"
-                        style={{
-                          position: "absolute",
-                          right: "172px",
-                          top: "262px",
-                          width: "192px",
-                          height: "192px",
-                          borderRadius: "50%",
-                          background: "rgba(167,139,250,0.36)",
-                          filter: "blur(50px)",
-                          pointerEvents: "none",
-                        }}
-                      />
+                      >
+                        <div
+                          style={{
+                            position: "absolute",
+                            right: "-77px",
+                            top: "-79px",
+                            width: "192px",
+                            height: "192px",
+                            borderRadius: "50%",
+                            background: "rgba(167,139,250,0.36)",
+                            filter: "blur(50px)",
+                          }}
+                        />
+                        <div
+                          style={{
+                            position: "absolute",
+                            right: "-100px",
+                            bottom: "-80px",
+                            width: "192px",
+                            height: "192px",
+                            borderRadius: "50%",
+                            background: "rgba(167,139,250,0.36)",
+                            filter: "blur(50px)",
+                          }}
+                        />
+                      </div>
 
                       <div
                         style={{
@@ -1609,7 +2070,7 @@ const ScrollPricingModal: FC<Props> = ({
                   <div
                     style={{
                       flex: "0 0 280px",
-                      height: "386px",
+                      minHeight: "386px",
                       position: "relative",
                       background: "rgba(10,5,16,0.8)",
                       backdropFilter: "blur(6px)",
@@ -1619,10 +2080,12 @@ const ScrollPricingModal: FC<Props> = ({
                       boxShadow: "0px 0px 20px 0px rgba(192,132,252,0.2)",
                       padding: "25px",
                       scrollSnapAlign: "start",
-                      overflow: "hidden",
                       display: "flex",
                       flexDirection: "column",
                       gap: "12px",
+                      isolation: "isolate",
+                      clipPath: "inset(0 round 24px)",
+                      WebkitClipPath: "inset(0 round 24px)",
                     }}
                   >
                     <svg
@@ -1678,6 +2141,7 @@ const ScrollPricingModal: FC<Props> = ({
                     </p>
                     <button
                       type="button"
+                      className="rpm-cta"
                       onClick={handleCtaClick}
                       style={{
                         width: "100%",
@@ -1697,8 +2161,11 @@ const ScrollPricingModal: FC<Props> = ({
                         gap: "6px",
                       }}
                     >
-                      Unlock full report
+                      <span className="rpm-cta__wash" aria-hidden="true" />
+                      <span className="rpm-cta__reveal" aria-hidden="true" />
+                      <span className="rpm-cta__label">Unlock full report</span>
                       <svg
+                        className="rpm-cta__arrow"
                         width="14"
                         height="14"
                         viewBox="0 0 24 24"
@@ -1812,100 +2279,38 @@ const ScrollPricingModal: FC<Props> = ({
                 </div>
               </div>
 
-              {/* ── Final CTA section ─────────────────────────────────── */}
-              <div
-                style={{
-                  background: "#150a22",
-                  borderRadius: "24px",
-                  boxShadow: "0px 4px 100px -15px #a78bfa",
-                  padding: "40px 32px 48px",
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  overflow: "hidden",
-                  gap: "12px",
-                }}
-              >
-                <h3
-                  style={{
-                    fontFamily: "var(--font-serif)",
-                    fontSize: "40px",
-                    fontWeight: 700,
-                    color: "#fff",
-                    textAlign: "center",
-                    margin: 0,
-                    lineHeight: 1.1,
-                  }}
-                >
-                  Ready to dive deep?
-                </h3>
-
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "2px",
-                    alignItems: "center",
-                    textAlign: "center",
-                  }}
-                >
-                  <p style={{ fontFamily: "var(--font-sans)", margin: 0 }}>
-                    <span style={{ fontSize: "22px", color: "#a78bfa", fontWeight: 400 }}>32</span>
-                    <span style={{ fontSize: "18px", color: "#fff", fontWeight: 400 }}>
-                      {" "}
-                      chapters.{" "}
-                    </span>
-                    <span style={{ fontSize: "22px", color: "#a78bfa", fontWeight: 400 }}>~50</span>
-                    <span style={{ fontSize: "18px", color: "#fff", fontWeight: 400 }}>
-                      {" "}
-                      pages.{" "}
-                    </span>
-                    <span style={{ fontSize: "22px", color: "#a78bfa", fontWeight: 400 }}>
-                      {quote ? formatReportPurchasePrice(quote.currentPriceCents) : "€9.99"}
-                    </span>
-                    <span style={{ fontSize: "18px", color: "#fff", fontWeight: 400 }}>
-                      {" "}
-                      once, yours forever.
-                    </span>
-                  </p>
-                  <p style={{ fontFamily: "var(--font-sans)", margin: 0 }}>
-                    <span style={{ fontSize: "22px", color: "#a78bfa", fontWeight: 400 }}>
-                      14-day money-back
-                    </span>
-                    <span style={{ fontSize: "18px", color: "#fff", fontWeight: 400 }}>
-                      {" "}
-                      if it&rsquo;s not for you.
-                    </span>
-                  </p>
-                </div>
-
-                <div style={{ marginTop: "12px", width: "100%", maxWidth: "400px" }}>
+              {/* ── Desktop-only final CTA card (Figma 7128:19040) ─────── */}
+              <section className="rpm-end-cta" aria-labelledby="rpm-end-cta-heading">
+                <div className="rpm-end-cta__inner">
+                  <h3 id="rpm-end-cta-heading" className="rpm-end-cta__heading">
+                    Ready to dive deep?
+                  </h3>
+                  <div className="rpm-end-cta__stats">
+                    <p className="rpm-end-cta__stats-line">
+                      <span className="rpm-end-cta__stats-num">32</span>
+                      <span className="rpm-end-cta__stats-text"> chapters. </span>
+                      <span className="rpm-end-cta__stats-num">~50</span>
+                      <span className="rpm-end-cta__stats-text"> pages. </span>
+                      <span className="rpm-end-cta__stats-num">
+                        {quote ? formatReportPurchasePrice(quote.currentPriceCents) : "€9.99"}
+                      </span>
+                      <span className="rpm-end-cta__stats-text"> once, yours forever.</span>
+                    </p>
+                    <p className="rpm-end-cta__stats-line">
+                      <span className="rpm-end-cta__stats-num">14-day money-back</span>
+                      <span className="rpm-end-cta__stats-text"> if it&rsquo;s not for you.</span>
+                    </p>
+                  </div>
                   <button
                     type="button"
+                    className="rpm-end-cta__button"
                     onClick={handleCtaClick}
-                    style={{
-                      width: "100%",
-                      padding: "16px 32px",
-                      borderRadius: "9999px",
-                      background: "#ff6a3d",
-                      border: "1px solid rgba(255,255,255,0.4)",
-                      color: "#fff",
-                      fontFamily: "var(--font-sans)",
-                      fontSize: "20px",
-                      fontWeight: 700,
-                      cursor: "pointer",
-                      filter: "drop-shadow(0px 3px 12.65px #ff6a3d)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: "12px",
-                    }}
+                    aria-label="Unlock full report"
                   >
-                    Unlock full report
+                    <span className="rpm-end-cta__button-label">Unlock full report</span>
                     <svg
-                      width="20"
-                      height="20"
+                      width="24"
+                      height="24"
                       viewBox="0 0 24 24"
                       fill="none"
                       stroke="currentColor"
@@ -1920,12 +2325,13 @@ const ScrollPricingModal: FC<Props> = ({
                     </svg>
                   </button>
                 </div>
-              </div>
+              </section>
             </div>
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 
