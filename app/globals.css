@@ -10770,7 +10770,6 @@ input.autofill-dark:-internal-autofill-previewed {
   bottom: 16px;
   transform: translateX(-50%);
   width: calc(100vw - 32px);
-  max-width: 1480px;
   padding: 0;
   background: transparent;
   border: 0;
