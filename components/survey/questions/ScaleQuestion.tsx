@@ -175,27 +175,27 @@ const ScaleQuestion: FC<ScaleQuestionProps> = ({ question, value, onChange }) =>
           <span className="max-w-[150px] font-sans text-[15px] font-bold leading-[20px] capitalize text-white sm:max-w-[180px] sm:text-[16px] sm:leading-[21.138px]">
             {question.scaleLabels?.low || "Strongly Disagree"}
           </span>
-          <span className="max-w-[150px] text-right font-sans text-[15px] font-bold leading-[20px] capitalize text-[#FFE390] sm:max-w-[180px] sm:text-[16px] sm:leading-[21.138px]">
+          <span className="max-w-[150px] text-right font-sans text-[15px] font-bold leading-[20px] capitalize text-[#a78bfa] sm:max-w-[180px] sm:text-[16px] sm:leading-[21.138px]">
             {question.scaleLabels?.high || "Strongly Agree"}
           </span>
         </div>
 
-        {/* Selected label + explanation — mobile (default): rendered last (below).
+        {/* Selected label + explanation — only rendered after the user picks a value,
+             so the dots sit flush under the title before any click.
+             Mobile (default): rendered last (below the dots).
              Desktop (sm+): rendered first (above the dots) via order utility. */}
-        <div className="order-last flex min-h-[80px] flex-col items-center gap-2 pt-2 text-center sm:order-first sm:min-h-[68px] sm:justify-end sm:pb-2 sm:pt-0">
-          {displayValue !== null && (
-            <>
-              <span className="font-sans text-[24px] font-bold leading-tight tracking-[0.5px] text-white/90 sm:text-[32px] sm:font-medium sm:tracking-[0.6px]">
-                {selectedLabel}
-              </span>
-              {selectedExplanation && (
-                <p className="font-sans text-[14px] leading-snug text-white/70 sm:text-[20px] sm:font-light sm:lowercase sm:text-white/80">
-                  {selectedExplanation}
-                </p>
-              )}
-            </>
-          )}
-        </div>
+        {displayValue !== null && (
+          <div className="order-last flex flex-col items-center gap-2 pt-2 text-center sm:order-first sm:justify-end sm:pb-2 sm:pt-0">
+            <span className="font-sans text-[24px] font-bold leading-tight tracking-[0.5px] text-white/90 sm:text-[32px] sm:font-medium sm:tracking-[0.6px]">
+              {selectedLabel}
+            </span>
+            {selectedExplanation && (
+              <p className="font-sans text-[14px] leading-snug text-white/70 sm:text-[20px] sm:font-light sm:lowercase sm:text-white/80">
+                {selectedExplanation}
+              </p>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

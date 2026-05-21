@@ -56,12 +56,7 @@ const MultipleChoiceQuestion: FC<MultipleChoiceQuestionProps> = ({
         <h2 className="font-serif text-[31px] font-medium leading-[1.2] text-white break-words sm:text-[39px]">
           {question.question}
         </h2>
-        <div className="flex items-center gap-3">
-          <p className="font-sans text-[13px] font-medium text-[#a78bfa]/80">{subtitle}</p>
-          <span className="shrink-0 rounded-full bg-[#8870cb] px-3 py-1 font-sans text-[12px] font-medium tracking-[0.3px] text-white">
-            Multiple choice
-          </span>
-        </div>
+        <p className="font-sans text-[15px] font-medium text-[#a78bfa]">{subtitle}</p>
       </div>
 
       {showLimitMessage && typeof maxSelections === "number" && (

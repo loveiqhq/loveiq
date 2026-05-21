@@ -133,13 +133,6 @@ describe("MultipleChoiceQuestion", () => {
     expect(onChange).toHaveBeenCalledWith(["B"]);
   });
 
-  it("shows Multiple choice badge", () => {
-    render(
-      <MultipleChoiceQuestion question={baseQuestion} value={["A", "C"]} onChange={vi.fn()} />
-    );
-    expect(screen.getByText("Multiple choice")).toBeInTheDocument();
-  });
-
   it("handles null value gracefully", () => {
     render(<MultipleChoiceQuestion question={baseQuestion} value={null} onChange={vi.fn()} />);
     expect(screen.queryByText(/selected/)).not.toBeInTheDocument();
@@ -193,15 +186,6 @@ describe("MultipleChoiceQuestion", () => {
 
     await user.type(screen.getByPlaceholderText("Please specify…"), "x");
     expect(onOtherTextChange).toHaveBeenCalledWith("x");
-  });
-
-  it("shows capped count for questions with maxSelections", () => {
-    const cappedQuestion = { ...baseQuestion, maxSelections: 3 };
-    render(
-      <MultipleChoiceQuestion question={cappedQuestion} value={["A", "C"]} onChange={vi.fn()} />
-    );
-
-    expect(screen.getByText("Multiple choice")).toBeInTheDocument();
   });
 
   it("blocks selecting more than the configured max", async () => {
