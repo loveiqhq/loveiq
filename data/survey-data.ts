@@ -274,6 +274,7 @@ export const surveyQuestions: SurveyQuestion[] = [
     howAnswerIsUsed:
       "Helps identify whether privacy, ritual, spontaneity, adventure, or edge is part of your arousal style.",
     formatGuidance: "Select up to three options.",
+    maxSelections: 3,
   },
   {
     qId: "03004",
@@ -738,6 +739,7 @@ export const surveyQuestions: SurveyQuestion[] = [
     howAnswerIsUsed:
       "This tells us whether your communication style is more quiet, embodied, concise, expressive, or emotionally transparent.",
     formatGuidance: "Select up to three options.",
+    maxSelections: 3,
   },
   {
     qId: "10003",
@@ -949,6 +951,7 @@ export const surveyQuestions: SurveyQuestion[] = [
     howAnswerIsUsed:
       "This is one of the most important direct questions in the assessment because it tells us what actually pulls desire online for you: bonding, play, novelty, power, meaning, repair, comfort, intensity, escape, or service.",
     formatGuidance: "Select up to three options.",
+    maxSelections: 3,
   },
   {
     qId: "14021",

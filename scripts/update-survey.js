@@ -226,12 +226,35 @@ function main() {
       row["Support and guidance"] || row["Guide (display)"] || row["Info and guidance"] || ""
     );
     const formatGuidance = cleanText(row["Answer format guidance"] || "");
-    // V3 CSV drops the explicit "Max selections" column; for multi-choice rows the cap
-    // is now embedded inline in the question text as "(Pick up to N.)".
+    // V3 CSV drops the explicit "Max selections" column. The cap was previously
+    // embedded as "(Pick up to N.)" in the question text — V3 (May 2026) moved
+    // that wording into the formatGuidance column as "Select up to N options." or
+    // "Select up to <word> options." (e.g. "three"). Parse either form.
     const inlineMaxMatch = question.match(/\(\s*Pick up to (\d+)\.?\s*\)/i);
+    const guidanceMaxMatch = formatGuidance.match(
+      /select up to (\d+|one|two|three|four|five|six|seven|eight|nine|ten)\b/i
+    );
+    const wordToInt = {
+      one: 1,
+      two: 2,
+      three: 3,
+      four: 4,
+      five: 5,
+      six: 6,
+      seven: 7,
+      eight: 8,
+      nine: 9,
+      ten: 10,
+    };
+    const maxFromGuidance = guidanceMaxMatch
+      ? /^\d+$/.test(guidanceMaxMatch[1])
+        ? parseInt(guidanceMaxMatch[1], 10)
+        : (wordToInt[guidanceMaxMatch[1].toLowerCase()] ?? null)
+      : null;
     const maxSelections =
       parseMaxSelections(row["Max selections"] || "") ??
-      (inlineMaxMatch ? parseInt(inlineMaxMatch[1], 10) : null);
+      (inlineMaxMatch ? parseInt(inlineMaxMatch[1], 10) : null) ??
+      maxFromGuidance;
     const defaultInput = cleanText(row["Default input / placeholder"] || "");
     // V2 "Hover states" had SHORT labels ("1 = Not true at all · 2 = ..."); the
     // V3 CSV moved those short labels into "Answer options" and introduced a
