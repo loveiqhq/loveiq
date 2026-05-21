@@ -1,7 +1,17 @@
 import { NextResponse } from "next/server";
-import { verifyUnsubscribeToken } from "@/lib/emails/unsubscribe-token";
-import { addToSuppression } from "@/lib/emails/suppression";
-import logger from "@/lib/logger";
+import { verifyUnsubscribeToken } from "@shared/emails/unsubscribe-token";
+import { addToSuppression } from "@shared/emails/suppression";
+import logger from "@shared/observability/logger";
+import { notifySlack, maskEmail, escapeSlack } from "@shared/observability/slack";
+
+async function pingUnsubscribe(email: string, mode: "footer" | "one-click") {
+  await notifySlack({
+    channel: "ops",
+    kind: "unsubscribe",
+    text: `:no_bell: Unsubscribe (${mode}) — ${escapeSlack(maskEmail(email))}`,
+    username: "ops_alerts",
+  });
+}
 
 // CSRF-exempt by design. The HMAC-signed `token` URL param IS the auth.
 // Email clients (Gmail, Outlook, Apple Mail) call the RFC 8058 one-click
@@ -30,10 +40,11 @@ export async function GET(request: Request) {
 
   await addToSuppression(email, "unsubscribed");
   logger.info({ email }, "Email unsubscribed via GET");
+  await pingUnsubscribe(email, "footer");
 
   const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://loveiq.org").replace(/\/$/, "");
   // eslint-disable-next-line no-secrets/no-secrets
-  const html = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Unsubscribed</title><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="font-family:sans-serif;max-width:480px;margin:60px auto;padding:0 24px;text-align:center"><h1 style="font-size:24px;font-weight:600">You've been unsubscribed</h1><p style="color:#555;line-height:1.6">You won't receive marketing emails from LoveIQ anymore.</p><p style="margin-top:32px"><a href="${siteUrl}" style="color:#5900AC;text-decoration:none;font-weight:600">← Back to LoveIQ</a></p></body></html>`;
+  const html = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Unsubscribed</title><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="font-family:sans-serif;max-width:480px;margin:60px auto;padding:0 24px;text-align:center"><h1 style="font-size:24px;font-weight:600">You've been unsubscribed</h1><p style="color:#555;line-height:1.6">You won't receive informational emails from LoveIQ anymore.</p><p style="margin-top:32px"><a href="${siteUrl}" style="color:#5900AC;text-decoration:none;font-weight:600">← Back to LoveIQ</a></p></body></html>`;
   return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8" } });
 }
 
@@ -51,5 +62,6 @@ export async function POST(request: Request) {
 
   await addToSuppression(email, "unsubscribed");
   logger.info({ email }, "Email unsubscribed via one-click POST");
+  await pingUnsubscribe(email, "one-click");
   return NextResponse.json({ ok: true });
 }

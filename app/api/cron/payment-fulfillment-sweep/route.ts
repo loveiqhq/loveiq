@@ -25,10 +25,11 @@
 
 import { timingSafeEqual } from "crypto";
 import { NextResponse } from "next/server";
-import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
-import { getBreaker } from "@/lib/circuit-breaker";
-import { KNOWN_ARCHETYPES, isArchetypeName } from "@/lib/report/archetypeSlug";
-import logger from "@/lib/logger";
+import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
+import { startCronTimer } from "@shared/observability/slack-alert-dedup";
+import { getBreaker } from "@shared/http/circuit-breaker";
+import { KNOWN_ARCHETYPES, isArchetypeName } from "@features/report/server/archetypeSlug";
+import logger from "@shared/observability/logger";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -159,6 +160,8 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Invalid request." }, { status: 401 });
   }
 
+  const trackDuration = startCronTimer("payment-fulfillment-sweep", 50);
+
   const summary = { scanned: 0, fixed: 0, skipped: 0, errors: 0 };
 
   try {
@@ -192,5 +195,7 @@ export async function GET(request: Request) {
   } catch (err) {
     logger.error({ err, summary }, "Sweep: top-level failure");
     return NextResponse.json({ error: "Sweep failed." }, { status: 500 });
+  } finally {
+    await trackDuration();
   }
 }

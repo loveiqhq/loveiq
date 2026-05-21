@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import CheckoutPage from "@/components/checkout/CheckoutPage";
+import CheckoutPage from "@features/checkout/ui/CheckoutPage";
 import {
   getReportReturnHref,
   isReportAccessToken,
   isReportPurchasePlanId,
-} from "@/lib/checkout/reportPurchase";
-import { fromArchetypeSlug } from "@/lib/report/archetypeSlug";
+} from "@features/checkout/server/reportPurchase";
+import { fromArchetypeSlug } from "@features/report/server/archetypeSlug";
 
 export const metadata: Metadata = {
   title: "Complete Your Order | LoveIQ",

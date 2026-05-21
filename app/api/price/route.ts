@@ -1,13 +1,16 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { verifyCsrfToken } from "@/lib/csrf";
-import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
-import logger from "@/lib/logger";
+import { verifyCsrfToken } from "@shared/http/csrf";
+import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
+import logger from "@shared/observability/logger";
 import {
   getReportPriceQuoteForContext,
   getReportPriceQuotesForContext,
-} from "@/lib/pricing/reportPricing";
-import { REPORT_ACCESS_TOKEN_REGEX, REPORT_PURCHASE_PLAN_IDS } from "@/lib/checkout/reportPurchase";
+} from "@features/pricing/logic/reportPricing";
+import {
+  REPORT_ACCESS_TOKEN_REGEX,
+  REPORT_PURCHASE_PLAN_IDS,
+} from "@features/checkout/server/reportPurchase";
 
 const querySchema = z
   .object({

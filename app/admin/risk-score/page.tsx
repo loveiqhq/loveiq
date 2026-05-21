@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import RiskScoreDashboard from "@/components/admin/RiskScoreDashboard";
+import RiskScoreDashboard from "@features/admin/ui/RiskScoreDashboard";
 
 export const metadata: Metadata = {
   title: "Predictive Risk Score | LoveIQ Admin",

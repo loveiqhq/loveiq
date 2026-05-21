@@ -6,7 +6,7 @@ on:
     paths:
       - "**/*.md"
       - "app/api/**/route.ts"
-      - "lib/admin/roles.ts"
+      - "features/admin/server/roles.ts"
       - "package.json"
       - "package-lock.json"
       - ".env.example"
@@ -20,7 +20,7 @@ on:
     paths:
       - "**/*.md"
       - "app/api/**/route.ts"
-      - "lib/admin/roles.ts"
+      - "features/admin/server/roles.ts"
       - "package.json"
       - "package-lock.json"
       - ".env.example"

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import StrategyHubDashboard from "@/components/admin/StrategyHubDashboard";
+import StrategyHubDashboard from "@features/admin/ui/StrategyHubDashboard";
 
 export const metadata: Metadata = {
   title: "Strategy Hub | LoveIQ Admin",

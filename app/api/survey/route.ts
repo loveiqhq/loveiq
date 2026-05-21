@@ -2,23 +2,25 @@ import { randomBytes } from "crypto";
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import { z } from "zod";
-import { checkRateLimit, checkCooldown, getClientIp } from "@/lib/ratelimit";
-import { scheduleAfterResponse } from "@/lib/after-response";
-import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
-import { verifyCsrfToken } from "@/lib/csrf";
-import logger from "@/lib/logger";
-import { surveyCompleteEmail } from "@/lib/emails/survey-complete";
-import { surveyCompleteBEmail } from "@/lib/emails/survey-complete-b";
-import { buildUnsubscribeUrl } from "@/lib/emails/unsubscribe-token";
-import { pickEmailVariant } from "@/lib/emails/ab-variant";
-import { ensurePersonalReportForSubmission } from "@/lib/report/personalReport";
-import type { SurveyAnswers } from "@/lib/survey/types";
+import { checkRateLimit, checkCooldown, getClientIp } from "@shared/http/ratelimit";
+import { scheduleAfterResponse } from "@shared/http/after-response";
+import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
+import { verifyCsrfToken } from "@shared/http/csrf";
+import logger from "@shared/observability/logger";
+import { notifySlack, maskEmail, escapeSlack } from "@shared/observability/slack";
+import { surveyCompleteEmail } from "@features/survey/server/emails/survey-complete";
+import { surveyCompleteBEmail } from "@features/survey/server/emails/survey-complete-b";
+import { buildUnsubscribeUrl } from "@shared/emails/unsubscribe-token";
+import { isEmailSuppressed } from "@shared/emails/suppression";
+import { pickEmailVariant } from "@shared/emails/ab-variant";
+import { ensurePersonalReportForSubmission } from "@features/report/server/personalReport";
+import type { SurveyAnswers } from "@features/survey/server/types";
 import {
   computeSurveyScoring,
   ensureSubmissionScored,
   setSubmissionHotjarUserId,
   submitSurveyOnce,
-} from "@/lib/survey/server";
+} from "@features/survey/server/server";
 
 let _resend: Resend | null = null;
 function getResend(): Resend | null {
@@ -163,6 +165,18 @@ export async function POST(request: Request) {
   const normalizedFirstName = firstName.trim();
 
   if (website) {
+    // Honeypot field was filled — almost certainly a bot. Fire-and-forget
+    // ops ping so abuse patterns become visible. The 60s dedup in
+    // notifySlack collapses bursts from the same script.
+    const ip = getClientIp(request);
+    scheduleAfterResponse("survey-honeypot-slack", () =>
+      notifySlack({
+        channel: "ops",
+        kind: "honeypot_triggered",
+        text: `:robot_face: Honeypot triggered on /api/survey — IP ${escapeSlack(ip)} — email ${escapeSlack(maskEmail(normalizedEmail))}`,
+        username: "ops_alerts",
+      })
+    );
     return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   }
 
@@ -194,6 +208,29 @@ export async function POST(request: Request) {
       sessionId,
     });
     const tSubmit = performance.now();
+
+    // Bot signal: a real human cannot complete the assessment in under
+    // 15 seconds. Fire a quiet ops ping for visibility — we don't block
+    // the submission (false positives possible with the survey's resume
+    // flow), just surface it so abuse patterns become traceable.
+    const BOT_DURATION_MS = 15_000;
+    if (
+      !isExisting &&
+      typeof durationMs === "number" &&
+      durationMs > 0 &&
+      durationMs < BOT_DURATION_MS
+    ) {
+      const ip = getClientIp(request);
+      scheduleAfterResponse("survey-fast-completion-slack", () =>
+        notifySlack({
+          channel: "ops",
+          // eslint-disable-next-line no-secrets/no-secrets -- alert kind label, not a secret
+          kind: "survey_fast_completion",
+          text: `:turtle: Survey completed in ${Math.round(durationMs / 1000)}s (likely bot) — submission #${submissionId} — IP ${escapeSlack(ip)} — ${escapeSlack(maskEmail(normalizedEmail))}`,
+          username: "ops_alerts",
+        })
+      );
+    }
 
     // Three independent post-submit writes run concurrently. Each only needs
     // submissionId (already in scope), writes a different table/column, and
@@ -316,6 +353,11 @@ export async function POST(request: Request) {
       const resend = getResend();
       if (!resend) {
         logger.warn({ submissionId }, "RESEND_API_KEY missing — skipping survey completion email");
+        return;
+      }
+
+      if (await isEmailSuppressed(normalizedEmail)) {
+        logger.info({ submissionId }, "survey-complete: skip suppressed recipient");
         return;
       }
 

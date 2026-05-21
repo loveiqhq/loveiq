@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { verifyAdminSession } from "@/lib/admin/auth";
-import { hasRole } from "@/lib/admin/roles";
-import { supabaseFetch } from "@/lib/admin/supabase";
-import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
+import { verifyAdminSession } from "@features/admin/server/auth";
+import { hasRole } from "@features/admin/server/roles";
+import { supabaseFetch } from "@features/admin/server/supabase";
+import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import { surveyQuestions } from "@/data/survey-data";
 import { reportSections } from "@/data/product-kpis";
-import logger from "@/lib/logger";
+import logger from "@shared/observability/logger";
 
 import type { QuestionKpi, ChapterKpi } from "@/data/product-kpis";
 

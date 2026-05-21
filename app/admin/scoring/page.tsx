@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import ScoringDashboard from "@/components/admin/ScoringDashboard";
+import ScoringDashboard from "@features/admin/ui/ScoringDashboard";
 
 export const metadata: Metadata = {
   title: "Scoring V4↔V5 (V6Q) | LoveIQ Admin",

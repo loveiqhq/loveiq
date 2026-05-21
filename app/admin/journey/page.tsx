@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import JourneyDashboard from "@/components/admin/JourneyDashboard";
+import JourneyDashboard from "@features/admin/ui/JourneyDashboard";
 
 export const metadata: Metadata = {
   title: "User Journey | LoveIQ Admin",

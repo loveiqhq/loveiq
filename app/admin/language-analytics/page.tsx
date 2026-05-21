@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import LanguageAnalyticsDashboard from "@/components/admin/LanguageAnalyticsDashboard";
+import LanguageAnalyticsDashboard from "@features/admin/ui/LanguageAnalyticsDashboard";
 
 export const metadata: Metadata = {
   title: "Language Analytics | LoveIQ Admin",

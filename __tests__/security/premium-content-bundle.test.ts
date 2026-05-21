@@ -56,9 +56,12 @@ function findRuntimePremiumImports(content: string): string[] {
 
 describe("premium content bundle isolation", () => {
   it("no client component imports archetype prose or practice tendency scores at runtime", () => {
-    const files = listFilesRecursively(PROJECT_ROOT, join(PROJECT_ROOT, "components")).map((p) =>
-      p.startsWith("components/") ? p : `components/${p}`
-    );
+    const featuresUiRoot = join(PROJECT_ROOT, "features");
+    const sharedUiRoot = join(PROJECT_ROOT, "shared", "ui");
+    const files = [
+      ...listFilesRecursively(PROJECT_ROOT, featuresUiRoot).filter((p) => p.includes("/ui/")),
+      ...listFilesRecursively(PROJECT_ROOT, sharedUiRoot),
+    ];
     const offenders: { file: string; violations: string[] }[] = [];
 
     for (const file of files) {

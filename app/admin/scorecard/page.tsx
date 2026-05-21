@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import ScorecardDashboard from "@/components/admin/ScorecardDashboard";
+import ScorecardDashboard from "@features/admin/ui/ScorecardDashboard";
 
 export const metadata: Metadata = {
   title: "Question Scorecard | LoveIQ Admin",

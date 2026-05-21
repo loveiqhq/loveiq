@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import RoleCockpitDashboard from "@/components/admin/RoleCockpitDashboard";
+import RoleCockpitDashboard from "@features/admin/ui/RoleCockpitDashboard";
 
 export const metadata: Metadata = {
   title: "Growth Lead | LoveIQ Admin",

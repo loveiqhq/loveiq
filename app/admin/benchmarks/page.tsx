@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import BenchmarkRegistry from "@/components/admin/BenchmarkRegistry";
+import BenchmarkRegistry from "@features/admin/ui/BenchmarkRegistry";
 
 export const metadata: Metadata = {
   title: "Metrics & Benchmarks | LoveIQ Admin",

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import TagsDashboard from "@/components/admin/TagsDashboard";
+import TagsDashboard from "@features/admin/ui/TagsDashboard";
 
 export const metadata: Metadata = {
   title: "Submission Tags | LoveIQ Admin",

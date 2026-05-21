@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { verifyCsrfToken } from "@/lib/csrf";
-import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
-import logger from "@/lib/logger";
+import { verifyCsrfToken } from "@shared/http/csrf";
+import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
+import logger from "@shared/observability/logger";
 import {
   REPORT_ACCESS_TOKEN_REGEX,
   resolveOwnerFromAccessToken,
   revokeReportShare,
-} from "@/lib/report/shareAccess";
+} from "@features/report/server/shareAccess";
 
 const bodySchema = z.object({
   ownerToken: z.string().regex(REPORT_ACCESS_TOKEN_REGEX),

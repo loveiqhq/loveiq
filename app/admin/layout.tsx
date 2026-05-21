@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 import { usePathname } from "next/navigation";
-import AdminSidebar from "@/components/admin/AdminSidebar";
-import AdminHeader from "@/components/admin/AdminHeader";
-import AdminCommandPalette from "@/components/admin/AdminCommandPalette";
-import PagePresence from "@/components/admin/PagePresence";
+import AdminSidebar from "@features/admin/ui/AdminSidebar";
+import AdminHeader from "@features/admin/ui/AdminHeader";
+import AdminCommandPalette from "@features/admin/ui/AdminCommandPalette";
+import PagePresence from "@features/admin/ui/PagePresence";
 
 const pageTitles: Record<string, string> = {
   "/admin": "Dashboard",

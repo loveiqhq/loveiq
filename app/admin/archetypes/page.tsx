@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import ArchetypeOverview from "@/components/admin/ArchetypeOverview";
+import ArchetypeOverview from "@features/admin/ui/ArchetypeOverview";
 
 export const metadata: Metadata = {
   title: "Archetypes | LoveIQ Admin",

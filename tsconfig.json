@@ -22,7 +22,9 @@
       }
     ],
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "@features/*": ["./features/*"],
+      "@shared/*": ["./shared/*"]
     }
   },
   "include": [
@@ -32,5 +34,5 @@
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],
-  "exclude": ["node_modules", "__tests__"]
+  "exclude": ["node_modules", "__tests__", "features/**/tests", "shared/**/tests"]
 }

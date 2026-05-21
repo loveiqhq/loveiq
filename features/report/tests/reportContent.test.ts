@@ -1,0 +1,115 @@
+import { describe, expect, it } from "vitest";
+import {
+  extractAttachmentSectionContent,
+  ensureSexualStageHighlight,
+  extractPracticeSectionIntroHtml,
+  normalizeReportHtml,
+  parsePracticeTendencyGroups,
+} from "@features/report/ui/reportContent";
+import { archetypeContent } from "@/data/report-archetypes";
+import { reportSections } from "@/data/report-general";
+
+describe("reportContent normalization", () => {
+  it("removes leaked Google Docs footnote links from prose", () => {
+    const normalized = normalizeReportHtml(
+      '<p><strong>Common Thought:</strong> "What do I actually like?"<a href="https://docs.google.com/document/d/example/edit">1</a></p>'
+    );
+
+    expect(normalized).toContain('"What do I actually like?"');
+    expect(normalized).not.toContain(">1</a>");
+    expect(normalized).not.toContain("docs.google.com/document");
+  });
+
+  it("preserves real resource links while removing footnote artifacts", () => {
+    const normalized = normalizeReportHtml(
+      '<p><a href="https://example.com/books">What you can read next</a></p><p>Curious, warming up, uncertain but alive<a href="https://docs.google.com/document/d/example/edit">1</a></p>'
+    );
+
+    expect(normalized).toContain('href="https://example.com/books"');
+    expect(normalized).toContain("What you can read next");
+    expect(normalized).toContain("Curious, warming up, uncertain but alive");
+    expect(normalized).not.toContain("docs.google.com/document");
+  });
+
+  it("merges split strong-only heading paragraphs with their following body paragraph", () => {
+    const normalized = normalizeReportHtml(
+      "<p><strong>Silent (Assumed) Monogamy</strong></p><p>Monogamy is expected but never explicitly discussed.</p>"
+    );
+
+    expect(normalized).toBe(
+      "<p><strong>Silent (Assumed) Monogamy<br /></strong>Monogamy is expected but never explicitly discussed.</p>"
+    );
+  });
+
+  it("merges all split heading paragraphs even when a later heading already contains a br", () => {
+    const normalized = normalizeReportHtml(
+      [
+        "<p><strong>Monogamy<br /></strong>One exclusive partner.</p>",
+        "<p><strong>Silent (Assumed) Monogamy</strong></p><p>Monogamy is expected but never explicitly discussed.</p>",
+        "<p><strong>Serial Monogamy</strong></p><p>One exclusive relationship at a time.</p>",
+      ].join("")
+    );
+
+    expect(normalized).toContain(
+      "<p><strong>Silent (Assumed) Monogamy<br /></strong>Monogamy is expected"
+    );
+    expect(normalized).toContain(
+      "<p><strong>Serial Monogamy<br /></strong>One exclusive relationship"
+    );
+    expect(normalized).toContain("<p><strong>Monogamy<br /></strong>One exclusive partner.");
+  });
+
+  it("converts the sexual stage summary into the themed highlight block", () => {
+    const normalized = ensureSexualStageHighlight(
+      "<p><strong>Your likely current sexual stage: </strong>Grounded / Integrated</p><p>(A snapshot of how your sexuality is organized right now, not a permanent identity.)</p>"
+    );
+
+    expect(normalized).toContain('class="report-stage-highlight"');
+    expect(normalized).toContain('class="report-stage-highlight__label"');
+    expect(normalized).toContain("Grounded / Integrated");
+    expect(normalized).toContain('class="report-stage-highlight__meta"');
+  });
+
+  it("removes the DOCX image heading from the practice tendencies intro flow", () => {
+    const introHtml = extractPracticeSectionIntroHtml(
+      [
+        "<p>These scores do not define you as an individual.</p>",
+        "<p>Looking at both dimensions together helps you understand how a theme tends to show up in your mind vs. in real experience.</p>",
+        '<p>Typical Sexual Fantasy &amp; Practice Tendencies of the <span class="report-archetype-name">Spark Seeker</span></p>',
+      ].join("")
+    );
+
+    expect(introHtml).toContain("These scores do not define you as an individual.");
+    expect(introHtml).toContain(
+      "Looking at both dimensions together helps you understand how a theme tends to show up in your mind vs. in real experience."
+    );
+    expect(introHtml).not.toContain("Typical Sexual Fantasy");
+  });
+
+  it("parses grouped practice tendency tables into structured row data", () => {
+    const groups = parsePracticeTendencyGroups(archetypeContent.practices["Spark Seeker"]);
+
+    expect(groups[0]?.title).toBe("Core Relational & Embodied");
+    expect(groups[0]?.rows[0]).toEqual({
+      practice: "Romantic lovemaking",
+      fantasyPull: 5,
+      actualPleasure: 7,
+    });
+    expect(groups.some((group) => group.title === "Technology & Distance")).toBe(true);
+  });
+
+  it("extracts attachment intro prose and the archetype heading; V3 template no longer ships a common-patterns subsection", () => {
+    const attachmentHtml =
+      reportSections.find((section) => section.id === "attachment_style")?.generalContent ?? "";
+
+    const content = extractAttachmentSectionContent(attachmentHtml);
+
+    expect(content.introHtml).toContain("Attachment style describes how a person relates");
+    // V3 template dropped the "Common Attachment Style Patterns Across Archetypes" block.
+    // Parser correctly returns null / empty when that heading is absent.
+    expect(content.commonHeading).toBeNull();
+    expect(content.patterns).toHaveLength(0);
+    expect(content.outroHtml).toBe("");
+    expect(content.headingBlock).toContain("Attachment Style of the {{CORE_ARCHETYPE}}");
+  });
+});

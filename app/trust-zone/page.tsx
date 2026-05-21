@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import TrustZonePage from "@/components/trust-zone/TrustZonePage";
+import TrustZonePage from "@features/trust-zone/ui/TrustZonePage";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.loveiq.org";
 

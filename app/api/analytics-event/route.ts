@@ -20,10 +20,10 @@
 
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { verifyCsrfToken, verifyCsrfTokenFromBody } from "@/lib/csrf";
-import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
-import { supabaseFetch } from "@/lib/admin/supabase";
-import logger from "@/lib/logger";
+import { verifyCsrfToken, verifyCsrfTokenFromBody } from "@shared/http/csrf";
+import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
+import { supabaseFetch } from "@features/admin/server/supabase";
+import logger from "@shared/observability/logger";
 
 const ALLOWED_EVENTS = [
   "report_viewed",

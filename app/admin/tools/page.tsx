@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import AdminToolsDashboard from "@/components/admin/AdminToolsDashboard";
+import AdminToolsDashboard from "@features/admin/ui/AdminToolsDashboard";
 
 export const metadata: Metadata = {
   title: "Admin Tools | LoveIQ Admin",

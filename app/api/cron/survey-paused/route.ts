@@ -16,17 +16,18 @@
 import { timingSafeEqual } from "crypto";
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
-import { checkCooldown } from "@/lib/ratelimit";
-import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
-import { getBreaker } from "@/lib/circuit-breaker";
-import logger from "@/lib/logger";
-import { surveyPausedEmail } from "@/lib/emails/survey-paused";
-import { surveyPausedBEmail } from "@/lib/emails/survey-paused-b";
-import { pickEmailVariant } from "@/lib/emails/ab-variant";
-import { buildUnsubscribeUrl } from "@/lib/emails/unsubscribe-token";
-import { isEmailSuppressed } from "@/lib/emails/suppression";
-import { getSurveyContactInfo } from "@/lib/survey/utils";
-import type { SurveyAnswers } from "@/lib/survey/types";
+import { checkCooldown } from "@shared/http/ratelimit";
+import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
+import { getBreaker } from "@shared/http/circuit-breaker";
+import logger from "@shared/observability/logger";
+import { startCronTimer } from "@shared/observability/slack-alert-dedup";
+import { surveyPausedEmail } from "@features/survey/server/emails/survey-paused";
+import { surveyPausedBEmail } from "@features/survey/server/emails/survey-paused-b";
+import { pickEmailVariant } from "@shared/emails/ab-variant";
+import { buildUnsubscribeUrl } from "@shared/emails/unsubscribe-token";
+import { isEmailSuppressed } from "@shared/emails/suppression";
+import { getSurveyContactInfo } from "@features/survey/server/utils";
+import type { SurveyAnswers } from "@features/survey/server/types";
 
 function safeCompare(a: string, b: string): boolean {
   const aBuf = Buffer.from(a);
@@ -115,6 +116,8 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Service unavailable." }, { status: 503 });
   }
 
+  const trackDuration = startCronTimer("survey-paused", 50);
+
   const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://loveiq.org").replace(/\/$/, "");
   const resumeUrl = `${siteUrl}/survey`;
 
@@ -186,13 +189,19 @@ export async function GET(request: Request) {
         ]);
         if (error) {
           summary.errors++;
-          logger.error({ error, sessionId: row.session_id, variant }, "Paused email send failed");
+          // Per-message Resend failure inside a batch cron — captured in
+          // `summary.errors` and visible in structured logs. Not Slack-worthy
+          // for a single send; the outer cron-level try/catch still escalates
+          // a whole-cron failure as api_5xx.
+          logger.warn({ error, sessionId: row.session_id, variant }, "Paused email send failed");
         } else {
           summary.sent++;
         }
       } catch (err) {
         summary.errors++;
-        logger.error({ err, sessionId: row.session_id, variant }, "Paused email error");
+        // Same rationale: one timed-out send shouldn't ping ops. Whole-cron
+        // failures still alert via the outer cron-level catch.
+        logger.warn({ err, sessionId: row.session_id, variant }, "Paused email error");
       }
     }
 
@@ -201,5 +210,7 @@ export async function GET(request: Request) {
   } catch (err) {
     logger.error({ err }, "Survey-paused cron failed");
     return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
+  } finally {
+    await trackDuration();
   }
 }

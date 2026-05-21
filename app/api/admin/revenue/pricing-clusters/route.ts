@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { verifyAdminSession } from "@/lib/admin/auth";
-import { hasRole } from "@/lib/admin/roles";
-import { supabaseFetch } from "@/lib/admin/supabase";
-import { REPORT_PURCHASE_PLAN_IDS, type ReportPurchasePlanId } from "@/lib/checkout/reportPurchase";
-import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
-import logger from "@/lib/logger";
+import { verifyAdminSession } from "@features/admin/server/auth";
+import { hasRole } from "@features/admin/server/roles";
+import { supabaseFetch } from "@features/admin/server/supabase";
+import {
+  REPORT_PURCHASE_PLAN_IDS,
+  type ReportPurchasePlanId,
+} from "@features/checkout/server/reportPurchase";
+import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
+import logger from "@shared/observability/logger";
 
 const querySchema = z.object({
   days: z.coerce.number().int().min(0).max(365).optional(),

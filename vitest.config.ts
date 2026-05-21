@@ -16,7 +16,14 @@ export default defineConfig({
     hookTimeout: 15_000,
     coverage: {
       provider: "v8",
-      include: ["lib/**/*.ts", "app/api/**/*.ts", "proxy.ts"],
+      include: [
+        "features/**/server/**/*.ts",
+        "features/**/logic/**/*.ts",
+        "features/**/client.ts",
+        "shared/**/*.ts",
+        "app/api/**/*.ts",
+        "proxy.ts",
+      ],
       // What we deliberately exclude from coverage gating:
       //  - admin/**       internal operator tooling (100+ analytical endpoints).
       //                   Every mutating admin route now has shallow auth-gate
@@ -38,19 +45,21 @@ export default defineConfig({
         "node_modules",
         ".next",
         "__tests__",
+        "features/**/tests/**",
         "data/glossary-data.ts",
         "app/api/admin/**",
         "app/api/cron/**",
-        "lib/admin/**",
-        "lib/scoring/index.ts",
-        "lib/scoring/types.ts",
-        "lib/emails/admin-magic-link.ts",
-        "lib/emails/invite.ts",
-        "lib/emails/report-all.ts",
-        "lib/emails/report-essentials.ts",
-        "lib/emails/report-full.ts",
-        "lib/emails/survey-complete.ts",
-        "lib/emails/survey-paused.ts",
+        "features/admin/server/**",
+        "features/cron/**",
+        "features/scoring/logic/index.ts",
+        "features/scoring/logic/types.ts",
+        "features/admin/server/emails/admin-magic-link.ts",
+        "features/invite/emails/invite.ts",
+        "features/report/server/emails/report-all.ts",
+        "features/report/server/emails/report-essentials.ts",
+        "features/report/server/emails/report-full.ts",
+        "features/survey/server/emails/survey-complete.ts",
+        "features/survey/server/emails/survey-paused.ts",
       ],
       thresholds: {
         // Reflective thresholds: matches current coverage of the customer-facing
@@ -67,6 +76,8 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "."),
+      "@features": path.resolve(__dirname, "features"),
+      "@shared": path.resolve(__dirname, "shared"),
     },
   },
 });

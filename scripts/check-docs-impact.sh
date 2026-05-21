@@ -83,7 +83,7 @@ fi
 
 check_requires_docs \
   "Admin surface" \
-  '^(lib/admin/|app/admin/|app/api/admin/|components/admin/)' \
+  '^(features/admin/|app/admin/|app/api/admin/)' \
   "Update docs/admin-api.md, README.md, DEVELOPMENT.md, or another canonical markdown file."
 
 check_requires_docs \
@@ -93,7 +93,7 @@ check_requires_docs \
 
 check_requires_docs \
   "Security and middleware surface" \
-  '^(proxy\.ts|lib/csrf\.ts|lib/ratelimit\.ts)' \
+  '^(proxy\.ts|shared/http/csrf\.ts|shared/http/ratelimit\.ts)' \
   "Update SECURITY.md, DEVELOPMENT.md, or the relevant API documentation."
 
 check_requires_docs \

@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { verifyAdminSession } from "@/lib/admin/auth";
-import { hasRole } from "@/lib/admin/roles";
-import { logAdminAction } from "@/lib/admin/audit";
-import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
-import logger from "@/lib/logger";
+import { verifyAdminSession } from "@features/admin/server/auth";
+import { hasRole } from "@features/admin/server/roles";
+import { logAdminAction } from "@features/admin/server/audit";
+import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
+import logger from "@shared/observability/logger";
 import { GET as coreKpisGet } from "../core-kpis/route";
 
 interface KpiRow {

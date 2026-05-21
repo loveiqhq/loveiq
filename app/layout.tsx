@@ -3,12 +3,12 @@ import Script from "next/script";
 import type { Metadata, Viewport } from "next";
 import { Lora, Manrope } from "next/font/google";
 import { headers } from "next/headers";
-import SmoothScroll from "@/components/SmoothScroll";
-import { NonceProvider } from "@/components/NonceProvider";
-import HydrationMarker from "@/components/HydrationMarker";
-import UtmCapture from "@/components/UtmCapture";
-import { GtmScript, GtmNoScript } from "@/components/GtmScript";
-import WebVitals from "@/components/WebVitals";
+import SmoothScroll from "@shared/ui/SmoothScroll";
+import { NonceProvider } from "@shared/ui/NonceProvider";
+import HydrationMarker from "@shared/ui/HydrationMarker";
+import UtmCapture from "@shared/ui/UtmCapture";
+import { GtmScript, GtmNoScript } from "@shared/ui/GtmScript";
+import WebVitals from "@shared/ui/WebVitals";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.loveiq.org";
 

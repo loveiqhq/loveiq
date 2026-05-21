@@ -9,14 +9,14 @@ import {
   isStripeCheckoutEnabled,
   type StripeCheckoutPurchaseAnalytics,
   type StripeCheckoutSessionStatusResponse,
-} from "@/lib/checkout/stripeCheckout";
-import { processStripeWebhookEvent } from "@/lib/checkout/fulfillment";
+} from "@features/checkout/server/stripeCheckout";
+import { processStripeWebhookEvent } from "@features/checkout/server/fulfillment";
 import {
   getReportAccessPlanForSubmission,
   resolveSubmissionAccessContext,
-} from "@/lib/report/personalReport";
-import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
-import logger from "@/lib/logger";
+} from "@features/report/server/personalReport";
+import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
+import logger from "@shared/observability/logger";
 
 export const runtime = "nodejs";
 

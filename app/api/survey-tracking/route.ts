@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
-import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
-import { getBreaker, CircuitOpenError } from "@/lib/circuit-breaker";
-import { verifyCsrfToken, verifyCsrfTokenFromBody } from "@/lib/csrf";
-import logger from "@/lib/logger";
+import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
+import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
+import { getBreaker, CircuitOpenError } from "@shared/http/circuit-breaker";
+import { verifyCsrfToken, verifyCsrfTokenFromBody } from "@shared/http/csrf";
+import logger from "@shared/observability/logger";
 
 const eventSchema = z.object({
   sessionId: z.string().uuid(),
@@ -105,7 +105,12 @@ export async function POST(request: Request) {
     if (err instanceof CircuitOpenError) {
       logger.warn("Supabase-tracking circuit open");
     } else {
-      logger.error({ err }, "Supabase error on survey tracking");
+      // Individual fetch failures (timeouts, network blips) are expected
+      // tail-end noise. Logged at warn — still searchable in structured logs,
+      // but no Slack alert per-request. A genuine Supabase outage will trip
+      // the supabase-tracking circuit breaker, which fires a one-shot
+      // `circuit_open` Slack alert in `shared/http/circuit-breaker.ts`.
+      logger.warn({ err }, "Supabase error on survey tracking");
     }
     return NextResponse.json({ error: "Service temporarily unavailable." }, { status: 503 });
   }

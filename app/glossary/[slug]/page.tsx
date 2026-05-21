@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import GlossaryTermPage from "@/components/glossary/GlossaryTermPage";
+import GlossaryTermPage from "@features/glossary/ui/GlossaryTermPage";
 import { getTermBySlug, getAllSlugs, resolveRelatedTerms } from "@/data/glossary-data";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.loveiq.org";

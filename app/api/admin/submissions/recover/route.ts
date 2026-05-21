@@ -1,20 +1,23 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { verifyAdminSession } from "@/lib/admin/auth";
-import { hasRole } from "@/lib/admin/roles";
-import { logAdminAction } from "@/lib/admin/audit";
-import { verifyCsrfToken } from "@/lib/csrf";
-import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
-import { supabaseFetch } from "@/lib/admin/supabase";
-import logger from "@/lib/logger";
-import { buildPartialSubmissionRecord, type SurveyPartialRow } from "@/lib/admin/survey-partials";
-import type { SurveyAnswers } from "@/lib/survey/types";
-import { getSurveyContactInfo } from "@/lib/survey/utils";
+import { verifyAdminSession } from "@features/admin/server/auth";
+import { hasRole } from "@features/admin/server/roles";
+import { logAdminAction } from "@features/admin/server/audit";
+import { verifyCsrfToken } from "@shared/http/csrf";
+import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
+import { supabaseFetch } from "@features/admin/server/supabase";
+import logger from "@shared/observability/logger";
+import {
+  buildPartialSubmissionRecord,
+  type SurveyPartialRow,
+} from "@features/admin/server/survey-partials";
+import type { SurveyAnswers } from "@features/survey/server/types";
+import { getSurveyContactInfo } from "@features/survey/server/utils";
 import {
   computeSurveyScoring,
   ensureSubmissionScored,
   submitSurveyOnce,
-} from "@/lib/survey/server";
+} from "@features/survey/server/server";
 
 const recoverSchema = z.object({
   sessionId: z.string().uuid(),

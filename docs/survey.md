@@ -9,23 +9,23 @@ This document covers the client-side survey experience at `/survey`: entry point
 
 ## Entry Points
 
-| Surface                    | Backing file(s)                                                               | Notes                                                                          |
-| -------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| `/survey` route            | [`app/survey/page.tsx`](../app/survey/page.tsx)                               | Exports page metadata and renders `SurveyPage`.                                |
-| Survey orchestrator        | [`components/survey/SurveyPage.tsx`](../components/survey/SurveyPage.tsx)     | Controls intro, prep slides, consent, and the handoff into `SurveyEngine`.     |
-| Question engine            | [`components/survey/SurveyEngine.tsx`](../components/survey/SurveyEngine.tsx) | Renders questions, post-submit states, and retry/start-over behavior.          |
-| Question order and content | [`data/survey-data.ts`](../data/survey-data.ts)                               | Canonical question list used for progress, question order, and chapter labels. |
+| Surface                    | Backing file(s)                                                                | Notes                                                                          |
+| -------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ |
+| `/survey` route            | [`app/survey/page.tsx`](../app/survey/page.tsx)                                | Exports page metadata and renders `SurveyPage`.                                |
+| Survey orchestrator        | [`components/survey/SurveyPage.tsx`](../features/survey/ui/SurveyPage.tsx)     | Controls intro, prep slides, consent, and the handoff into `SurveyEngine`.     |
+| Question engine            | [`components/survey/SurveyEngine.tsx`](../features/survey/ui/SurveyEngine.tsx) | Renders questions, post-submit states, and retry/start-over behavior.          |
+| Question order and content | [`data/survey-data.ts`](../data/survey-data.ts)                                | Canonical question list used for progress, question order, and chapter labels. |
 
 ## Step Model
 
 Top-level step orchestration lives in `SurveyPage`:
 
-| Step value | Screen        | Backing component                                                                                | Notes                                                     |
-| ---------- | ------------- | ------------------------------------------------------------------------------------------------ | --------------------------------------------------------- |
-| `0`        | Intro         | `IntroScreen` inside [`components/survey/SurveyPage.tsx`](../components/survey/SurveyPage.tsx)   | Default first render for a new session.                   |
-| `1` to `4` | Prep slides   | `SlideScreen` inside [`components/survey/SurveyPage.tsx`](../components/survey/SurveyPage.tsx)   | Four informational slides shown before consent.           |
-| `5`        | Consent       | `ConsentScreen` inside [`components/survey/SurveyPage.tsx`](../components/survey/SurveyPage.tsx) | Users must agree before entering the question engine.     |
-| `6`        | Survey engine | [`components/survey/SurveyEngine.tsx`](../components/survey/SurveyEngine.tsx)                    | Question loop, submission, retry, and pre-report handoff. |
+| Step value | Screen        | Backing component                                                                                 | Notes                                                     |
+| ---------- | ------------- | ------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| `0`        | Intro         | `IntroScreen` inside [`components/survey/SurveyPage.tsx`](../features/survey/ui/SurveyPage.tsx)   | Default first render for a new session.                   |
+| `1` to `4` | Prep slides   | `SlideScreen` inside [`components/survey/SurveyPage.tsx`](../features/survey/ui/SurveyPage.tsx)   | Four informational slides shown before consent.           |
+| `5`        | Consent       | `ConsentScreen` inside [`components/survey/SurveyPage.tsx`](../features/survey/ui/SurveyPage.tsx) | Users must agree before entering the question engine.     |
+| `6`        | Survey engine | [`components/survey/SurveyEngine.tsx`](../features/survey/ui/SurveyEngine.tsx)                    | Question loop, submission, retry, and pre-report handoff. |
 
 Inside `SurveyEngine`, the completion path moves through four internal phases:
 
@@ -40,34 +40,34 @@ Inside `SurveyEngine`, the completion path moves through four internal phases:
 
 `SurveyPage` restores state in this order:
 
-1. If [`loadPendingCompletion()`](../components/survey/hooks/surveyStorage.ts) returns data, the user resumes directly in the engine completion state instead of restarting the intro flow.
+1. If [`loadPendingCompletion()`](../features/survey/ui/hooks/surveyStorage.ts) returns data, the user resumes directly in the engine completion state instead of restarting the intro flow.
 2. If `sessionStorage["loveiq-survey-step"]` exists, the same browser tab restores the current top-level step.
 3. If `localStorage["loveiq-survey-answers"]` contains saved answers, the intro stack is skipped and the user returns to the engine.
 4. Otherwise the survey starts at step `0`.
 
-`SurveyEngine` itself restores question answers, `currentIndex`, and `startedAt` through [`useSurveyState`](../components/survey/hooks/useSurveyState.ts). When a pending completion snapshot exists, that snapshot wins over the normal saved survey state.
+`SurveyEngine` itself restores question answers, `currentIndex`, and `startedAt` through [`useSurveyState`](../features/survey/ui/hooks/useSurveyState.ts). When a pending completion snapshot exists, that snapshot wins over the normal saved survey state.
 
 ## Persistence Keys
 
-| Key                                | Storage          | Producer                                                                  | Purpose                                                                           |
-| ---------------------------------- | ---------------- | ------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| `loveiq-survey-answers`            | `localStorage`   | [`useSurveyState`](../components/survey/hooks/useSurveyState.ts)          | Stores `{ answers, currentIndex, startedAt }` for the in-progress survey.         |
-| `loveiq-survey-pending-completion` | `localStorage`   | [`useSubmitSurvey`](../components/survey/hooks/useSubmitSurvey.ts)        | Stores the final retryable completion snapshot before `/api/survey` succeeds.     |
-| `loveiq-survey-step`               | `sessionStorage` | [`components/survey/SurveyPage.tsx`](../components/survey/SurveyPage.tsx) | Restores intro, slide, consent, or engine step after a same-tab refresh.          |
-| `loveiq-survey-session`            | `sessionStorage` | [`getSessionId()`](../components/survey/hooks/surveySession.ts)           | Per-tab UUID reused across partial saves and behavior events.                     |
-| `loveiq-utm`                       | `localStorage`   | [`captureUtmFromUrl()`](../lib/utm.ts)                                    | Current global UTM capture used by survey submission and partial-save flows.      |
-| `loveiq-survey-utm`                | `localStorage`   | [`captureUtmFromUrl()`](../lib/utm.ts)                                    | Legacy survey UTM key kept for backward compatibility.                            |
-| `loveiq-survey-index`              | `localStorage`   | Legacy cleanup only                                                       | Cleared during reset, but not written by the current survey state implementation. |
+| Key                                | Storage          | Producer                                                                   | Purpose                                                                           |
+| ---------------------------------- | ---------------- | -------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `loveiq-survey-answers`            | `localStorage`   | [`useSurveyState`](../features/survey/ui/hooks/useSurveyState.ts)          | Stores `{ answers, currentIndex, startedAt }` for the in-progress survey.         |
+| `loveiq-survey-pending-completion` | `localStorage`   | [`useSubmitSurvey`](../features/survey/ui/hooks/useSubmitSurvey.ts)        | Stores the final retryable completion snapshot before `/api/survey` succeeds.     |
+| `loveiq-survey-step`               | `sessionStorage` | [`components/survey/SurveyPage.tsx`](../features/survey/ui/SurveyPage.tsx) | Restores intro, slide, consent, or engine step after a same-tab refresh.          |
+| `loveiq-survey-session`            | `sessionStorage` | [`getSessionId()`](../features/survey/ui/hooks/surveySession.ts)           | Per-tab UUID reused across partial saves and behavior events.                     |
+| `loveiq-utm`                       | `localStorage`   | [`captureUtmFromUrl()`](../shared/url/utm.ts)                              | Current global UTM capture used by survey submission and partial-save flows.      |
+| `loveiq-survey-utm`                | `localStorage`   | [`captureUtmFromUrl()`](../shared/url/utm.ts)                              | Legacy survey UTM key kept for backward compatibility.                            |
+| `loveiq-survey-index`              | `localStorage`   | Legacy cleanup only                                                        | Cleared during reset, but not written by the current survey state implementation. |
 
 ## Network Behavior
 
-| Behavior                           | Client source                                                          | Route                                                         | Notes                                                                                                                             |
-| ---------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| Full submit                        | [`useSubmitSurvey`](../components/survey/hooks/useSubmitSurvey.ts)     | [`POST /api/survey`](api.md#post-apisurvey)                   | Saves a retry snapshot locally, sends a best-effort completion snapshot to `/api/survey-partial`, then submits the final payload. |
-| Partial save on forward navigation | [`usePartialSave`](../components/survey/hooks/usePartialSave.ts)       | [`POST /api/survey-partial`](api.md#post-apisurvey-partial)   | Fires on question navigation while the page stays open.                                                                           |
-| Partial save on tab hide or unload | [`usePartialSave`](../components/survey/hooks/usePartialSave.ts)       | [`POST /api/survey-partial`](api.md#post-apisurvey-partial)   | Uses `navigator.sendBeacon()` with `_csrf` in the request body.                                                                   |
-| Behavior tracking                  | [`useSurveyTracking`](../components/survey/hooks/useSurveyTracking.ts) | [`POST /api/survey-tracking`](api.md#post-apisurvey-tracking) | Buffers events, flushes every 5 events or 15 seconds, and sends an `abandon` event on `visibilitychange` or `pagehide`.           |
-| UTM propagation                    | [`useUtmCapture`](../components/survey/hooks/useUtmCapture.ts)         | Survey submit and partial-save payloads                       | Reads the stored JSON tracker and forwards it with draft and final submissions.                                                   |
+| Behavior                           | Client source                                                           | Route                                                         | Notes                                                                                                                             |
+| ---------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Full submit                        | [`useSubmitSurvey`](../features/survey/ui/hooks/useSubmitSurvey.ts)     | [`POST /api/survey`](api.md#post-apisurvey)                   | Saves a retry snapshot locally, sends a best-effort completion snapshot to `/api/survey-partial`, then submits the final payload. |
+| Partial save on forward navigation | [`usePartialSave`](../features/survey/ui/hooks/usePartialSave.ts)       | [`POST /api/survey-partial`](api.md#post-apisurvey-partial)   | Fires on question navigation while the page stays open.                                                                           |
+| Partial save on tab hide or unload | [`usePartialSave`](../features/survey/ui/hooks/usePartialSave.ts)       | [`POST /api/survey-partial`](api.md#post-apisurvey-partial)   | Uses `navigator.sendBeacon()` with `_csrf` in the request body.                                                                   |
+| Behavior tracking                  | [`useSurveyTracking`](../features/survey/ui/hooks/useSurveyTracking.ts) | [`POST /api/survey-tracking`](api.md#post-apisurvey-tracking) | Buffers events, flushes every 5 events or 15 seconds, and sends an `abandon` event on `visibilitychange` or `pagehide`.           |
+| UTM propagation                    | [`useUtmCapture`](../features/survey/ui/hooks/useUtmCapture.ts)         | Survey submit and partial-save payloads                       | Reads the stored JSON tracker and forwards it with draft and final submissions.                                                   |
 
 ## Exit and Reset Behavior
 
@@ -79,8 +79,8 @@ Inside `SurveyEngine`, the completion path moves through four internal phases:
 ## Related Coverage
 
 - End-to-end flow: [`e2e/survey.spec.ts`](../e2e/survey.spec.ts)
-- Survey engine: [`__tests__/components/survey/SurveyEngine.test.tsx`](../__tests__/components/survey/SurveyEngine.test.tsx)
-- Partial save hook: [`__tests__/components/survey/hooks/usePartialSave.test.ts`](../__tests__/components/survey/hooks/usePartialSave.test.ts)
-- Submit hook: [`__tests__/components/survey/hooks/useSubmitSurvey.test.ts`](../__tests__/components/survey/hooks/useSubmitSurvey.test.ts)
-- Tracking hook: [`__tests__/components/survey/hooks/useSurveyTracking.test.ts`](../__tests__/components/survey/hooks/useSurveyTracking.test.ts)
-- Survey API routes: [`__tests__/api/survey-handler.test.ts`](../__tests__/api/survey-handler.test.ts), [`__tests__/api/survey-partial.test.ts`](../__tests__/api/survey-partial.test.ts), [`__tests__/api/survey-tracking.test.ts`](../__tests__/api/survey-tracking.test.ts)
+- Survey engine: [`__tests../features/survey/ui/SurveyEngine.test.tsx`](../features/survey/tests/SurveyEngine.test.tsx)
+- Partial save hook: [`__tests../features/survey/ui/hooks/usePartialSave.test.ts`](../features/survey/tests/hooks/usePartialSave.test.ts)
+- Submit hook: [`__tests../features/survey/ui/hooks/useSubmitSurvey.test.ts`](../features/survey/tests/hooks/useSubmitSurvey.test.ts)
+- Tracking hook: [`__tests../features/survey/ui/hooks/useSurveyTracking.test.ts`](../features/survey/tests/hooks/useSurveyTracking.test.ts)
+- Survey API routes: [`__tests__/api/survey-handler.test.ts`](../features/survey/tests/survey-handler.test.ts), [`__tests__/api/survey-partial.test.ts`](../features/survey/tests/survey-partial.test.ts), [`__tests__/api/survey-tracking.test.ts`](../features/survey/tests/survey-tracking.test.ts)

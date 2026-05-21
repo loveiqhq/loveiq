@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
-import { verifyAdminSession } from "@/lib/admin/auth";
-import { hasRole } from "@/lib/admin/roles";
-import { verifyCsrfToken } from "@/lib/csrf";
-import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
-import { supabaseFetch } from "@/lib/admin/supabase";
-import { logAdminAction } from "@/lib/admin/audit";
-import logger from "@/lib/logger";
+import { verifyAdminSession } from "@features/admin/server/auth";
+import { hasRole } from "@features/admin/server/roles";
+import { verifyCsrfToken } from "@shared/http/csrf";
+import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
+import { supabaseFetch } from "@features/admin/server/supabase";
+import { logAdminAction } from "@features/admin/server/audit";
+import logger from "@shared/observability/logger";
 import { z } from "zod";
-import { WORKFLOW_TAGS, isWorkflowTagName } from "@/lib/admin/workflow-tags";
+import { WORKFLOW_TAGS, isWorkflowTagName } from "@features/admin/server/workflow-tags";
 
 const createTagSchema = z.object({
   name: z.string().min(1).max(50),

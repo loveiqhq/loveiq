@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import OrgAdminDirectory from "@/components/admin/OrgAdminDirectory";
+import OrgAdminDirectory from "@features/admin/ui/OrgAdminDirectory";
 
 export const metadata: Metadata = {
   title: "Org Directory | LoveIQ Admin",

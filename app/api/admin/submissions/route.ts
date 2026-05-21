@@ -1,16 +1,19 @@
 import { NextResponse } from "next/server";
-import { verifyAdminSession } from "@/lib/admin/auth";
-import { hasRole } from "@/lib/admin/roles";
+import { verifyAdminSession } from "@features/admin/server/auth";
+import { hasRole } from "@features/admin/server/roles";
 import {
   isScoringPendingSubmission,
   MISSING_SCORING_REASON,
   SCORING_PENDING_REASON,
-} from "@/lib/admin/submission-scoring";
-import { supabaseFetch } from "@/lib/admin/supabase";
-import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
-import logger from "@/lib/logger";
-import { buildPartialSubmissionRecord, type SurveyPartialRow } from "@/lib/admin/survey-partials";
-import { evaluateTestSubmission } from "@/lib/admin/test-submission";
+} from "@features/admin/server/submission-scoring";
+import { supabaseFetch } from "@features/admin/server/supabase";
+import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
+import logger from "@shared/observability/logger";
+import {
+  buildPartialSubmissionRecord,
+  type SurveyPartialRow,
+} from "@features/admin/server/survey-partials";
+import { evaluateTestSubmission } from "@features/admin/server/test-submission";
 
 export const dynamic = "force-dynamic";
 

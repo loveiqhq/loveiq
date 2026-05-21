@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import FunnelsDashboard from "@/components/admin/FunnelsDashboard";
+import FunnelsDashboard from "@features/admin/ui/FunnelsDashboard";
 
 export const metadata: Metadata = {
   title: "Funnels & Cohorts | LoveIQ Admin",

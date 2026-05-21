@@ -1,31 +1,32 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { scheduleAfterResponse } from "@/lib/after-response";
-import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
-import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
-import { getBreaker, CircuitOpenError } from "@/lib/circuit-breaker";
-import { verifyCsrfToken } from "@/lib/csrf";
+import { scheduleAfterResponse } from "@shared/http/after-response";
+import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
+import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
+import { getBreaker, CircuitOpenError } from "@shared/http/circuit-breaker";
+import { verifyCsrfToken } from "@shared/http/csrf";
 import {
   ensurePersonalReportForSubmission,
   getReportAccessPlanForSubmission,
   recordReportSessionView,
   resolveUnlockedArchetypeTiers,
   resolveUnlockedArchetypes,
-} from "@/lib/report/personalReport";
-import { getReportPriceQuotesForContext } from "@/lib/pricing/reportPricing";
+} from "@features/report/server/personalReport";
+import { getReportPriceQuotesForContext } from "@features/pricing/logic/reportPricing";
 import {
   buildArchetypeContentForUser,
   buildPracticeTendenciesForUser,
-} from "@/lib/report/contentGating";
-import logger from "@/lib/logger";
-import type { ReportPriceQuoteSnapshot } from "@/lib/pricing/reportPricing";
-import type { ReportPurchasePlanId } from "@/lib/checkout/reportPurchase";
+} from "@features/report/server/contentGating";
+import logger from "@shared/observability/logger";
+import { notifySlack, escapeSlack } from "@shared/observability/slack";
+import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
+import type { ReportPurchasePlanId } from "@features/checkout/server/reportPurchase";
 import {
   REPORT_SHARE_TOKEN_REGEX,
   markShareViewed,
   resolveShareFromToken,
-} from "@/lib/report/shareAccess";
-import { maskEmail, verifyCookieForShare } from "@/lib/report/shareVerify";
+} from "@features/report/server/shareAccess";
+import { maskEmail, verifyCookieForShare } from "@features/report/server/shareVerify";
 
 const sessionIdSchema = z.object({
   pricingSessionId: z.string().uuid().optional(),
@@ -154,6 +155,12 @@ export async function GET(request: Request) {
 
     let isShareAccess = false;
     let shareId: number | null = null;
+    // Captured for the first-view Slack ping below — the share row + owner
+    // email are loaded inside the share-token branch but the ping fires
+    // later, outside that scope.
+    let shareIsFirstView = false;
+    let shareRecipientEmailForPing: string | null = null;
+    let shareOwnerEmailForPing: string | null = null;
 
     if (tokenParsed?.success) {
       const token = tokenParsed.data.token;
@@ -182,6 +189,9 @@ export async function GET(request: Request) {
         isShareAccess = true;
         shareId = shareContext.share.id;
         submissionId = shareContext.submissionId;
+        shareIsFirstView = shareContext.share.last_viewed_at === null;
+        shareRecipientEmailForPing = shareContext.share.recipient_email;
+        shareOwnerEmailForPing = shareContext.ownerEmail;
       } else {
         // Owner — look up report_access_token → submission_id.
         const tokenRes = await getBreaker("supabase").fire(() =>
@@ -405,7 +415,24 @@ export async function GET(request: Request) {
 
     if (isShareAccess && shareId !== null) {
       const viewedShareId = shareId;
-      scheduleAfterResponse("report-share-view", () => markShareViewed(viewedShareId));
+      const wasFirstView = shareIsFirstView;
+      const recipientEmailForPing = shareRecipientEmailForPing;
+      const ownerEmailForPing = shareOwnerEmailForPing;
+      scheduleAfterResponse("report-share-view", async () => {
+        await markShareViewed(viewedShareId);
+        if (wasFirstView) {
+          const ownerLabel = ownerEmailForPing ? maskEmail(ownerEmailForPing) : "owner";
+          const recipientLabel = recipientEmailForPing
+            ? maskEmail(recipientEmailForPing)
+            : "recipient";
+          await notifySlack({
+            channel: "ops",
+            kind: "share_first_view",
+            text: `:eyes: Shared report opened — ${escapeSlack(ownerLabel)} → ${escapeSlack(recipientLabel)} (share #${viewedShareId})`,
+            username: "ops_alerts",
+          });
+        }
+      });
     }
 
     // Owner token lookup — needed so the share modal can authenticate POST

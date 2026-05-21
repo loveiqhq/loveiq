@@ -1,17 +1,17 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { verifyAdminSession } from "@/lib/admin/auth";
-import { logAdminAction } from "@/lib/admin/audit";
+import { verifyAdminSession } from "@features/admin/server/auth";
+import { logAdminAction } from "@features/admin/server/audit";
 import {
   buildResearchTaxonomySnapshot,
   type ResearchTaxonomyStatus,
   type ResearchTaxonomyType,
-} from "@/lib/admin/research-taxonomy";
-import { hasRole } from "@/lib/admin/roles";
-import { supabaseFetch } from "@/lib/admin/supabase";
-import { verifyCsrfToken } from "@/lib/csrf";
-import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
-import logger from "@/lib/logger";
+} from "@features/admin/server/research-taxonomy";
+import { hasRole } from "@features/admin/server/roles";
+import { supabaseFetch } from "@features/admin/server/supabase";
+import { verifyCsrfToken } from "@shared/http/csrf";
+import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
+import logger from "@shared/observability/logger";
 
 const taxonomyTypeSchema = z.enum(["intent", "motivation", "theme"]);
 const taxonomyStatusSchema = z.enum(["draft", "active", "deprecated"]);

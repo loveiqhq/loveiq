@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { verifyAdminSession } from "@/lib/admin/auth";
-import { logAdminAction } from "@/lib/admin/audit";
-import { hasRole } from "@/lib/admin/roles";
-import { buildStrategyPlanningSnapshot } from "@/lib/admin/strategy-planning";
-import { supabaseFetch } from "@/lib/admin/supabase";
-import { verifyCsrfToken } from "@/lib/csrf";
-import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
-import logger from "@/lib/logger";
+import { verifyAdminSession } from "@features/admin/server/auth";
+import { logAdminAction } from "@features/admin/server/audit";
+import { hasRole } from "@features/admin/server/roles";
+import { buildStrategyPlanningSnapshot } from "@features/admin/server/strategy-planning";
+import { supabaseFetch } from "@features/admin/server/supabase";
+import { verifyCsrfToken } from "@shared/http/csrf";
+import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
+import logger from "@shared/observability/logger";
 
 const dateString = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const initiativeStatusSchema = z.enum(["planned", "active", "watch", "blocked", "completed"]);

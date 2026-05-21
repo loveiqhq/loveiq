@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import QuestionEffectivenessDashboard from "@/components/admin/QuestionEffectivenessDashboard";
+import QuestionEffectivenessDashboard from "@features/admin/ui/QuestionEffectivenessDashboard";
 
 export const metadata: Metadata = {
   title: "Question Effectiveness | LoveIQ Admin",

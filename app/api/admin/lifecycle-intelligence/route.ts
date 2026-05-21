@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { verifyAdminSession } from "@/lib/admin/auth";
+import { verifyAdminSession } from "@features/admin/server/auth";
 import {
   buildLifecycleIntelligenceSnapshot,
   parseLifecycleIntelligenceSurface,
-} from "@/lib/admin/lifecycle-intelligence";
-import { hasRole } from "@/lib/admin/roles";
-import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
-import logger from "@/lib/logger";
+} from "@features/admin/server/lifecycle-intelligence";
+import { hasRole } from "@features/admin/server/roles";
+import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
+import logger from "@shared/observability/logger";
 
 export async function GET(request: Request) {
   const admin = await verifyAdminSession();

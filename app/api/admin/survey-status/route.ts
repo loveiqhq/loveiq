@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { timingSafeEqual } from "crypto";
-import { verifyAdminSession } from "@/lib/admin/auth";
-import { hasRole } from "@/lib/admin/roles";
-import { logAdminAction } from "@/lib/admin/audit";
-import { supabaseFetch } from "@/lib/admin/supabase";
-import { verifyCsrfToken } from "@/lib/csrf";
-import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
-import logger from "@/lib/logger";
+import { verifyAdminSession } from "@features/admin/server/auth";
+import { hasRole } from "@features/admin/server/roles";
+import { logAdminAction } from "@features/admin/server/audit";
+import { supabaseFetch } from "@features/admin/server/supabase";
+import { verifyCsrfToken } from "@shared/http/csrf";
+import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
+import logger from "@shared/observability/logger";
 
 function verifyClosePassword(input: string): boolean {
   const expected = process.env.SURVEY_CLOSE_PASSWORD;

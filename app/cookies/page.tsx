@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import LegalNavSection from "@/components/legal/LegalNavSection";
-import FooterSection from "@/components/landing/FooterSection";
+import LegalNavSection from "@features/legal/ui/LegalNavSection";
+import FooterSection from "@features/landing/ui/FooterSection";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.loveiq.org";
 

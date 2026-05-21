@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import ChangelogDashboard from "@/components/admin/ChangelogDashboard";
+import ChangelogDashboard from "@features/admin/ui/ChangelogDashboard";
 
 export const metadata: Metadata = {
   title: "Product Changelog | LoveIQ Admin",

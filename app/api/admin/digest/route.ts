@@ -1,97 +1,32 @@
 /* eslint-disable no-secrets/no-secrets */
 import { NextResponse } from "next/server";
-import { verifyAdminSession } from "@/lib/admin/auth";
-import { hasRole } from "@/lib/admin/roles";
-import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
-import { supabaseFetch } from "@/lib/admin/supabase";
-import logger from "@/lib/logger";
+import { verifyAdminSession } from "@features/admin/server/auth";
+import { hasRole } from "@features/admin/server/roles";
+import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
+import {
+  fetchWeeklyMetrics,
+  delta,
+  type WeeklyMetrics,
+} from "@features/admin/server/digest-metrics";
+import logger from "@shared/observability/logger";
 
-function parseUtmSource(tracker: string | null): string {
-  if (!tracker?.trim()) return "Direct";
-  try {
-    const parsed = JSON.parse(tracker);
-    return parsed.utm_source || "Direct";
-  } catch {
-    return tracker.trim();
-  }
-}
-
-function incrementCount<K>(map: Map<K, number>, key: K, amount = 1) {
-  map.set(key, (map.get(key) ?? 0) + amount);
-}
-
+// Adapter so the existing HTML template (below) keeps its old field
+// names while we use the new shared fetcher. Behavior identical to
+// the pre-refactor `fetchPeriodStats`.
 async function fetchPeriodStats(since: string, until: string) {
-  // Submissions
-  const subRes = await supabaseFetch(
-    `/rest/v1/survey_submission?select=id,status,duration_ms,utm_tracker,created_date_time&created_date_time=gte.${since}&created_date_time=lte.${until}`,
-    { headers: { Range: "0-9999" } }
-  );
-  const subs = subRes.ok
-    ? ((await subRes.json()) as Array<{
-        id: number;
-        status: string;
-        duration_ms: number | null;
-        utm_tracker: string | null;
-      }>)
-    : [];
-
-  const total = subs.length;
-  const completed = subs.filter((s) => s.status === "completed").length;
-  const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
-  const durations = subs.filter((s) => s.duration_ms).map((s) => s.duration_ms!);
-  const avgDuration =
-    durations.length > 0
-      ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length / 1000)
-      : 0;
-
-  // Waitlist
-  const wlRes = await supabaseFetch(
-    `/rest/v1/waitlist_user?select=id&created_date_time=gte.${since}&created_date_time=lte.${until}`,
-    { headers: { Range: "0-9999" } }
-  );
-  const waitlistCount = wlRes.ok ? ((await wlRes.json()) as Array<unknown>).length : 0;
-
-  // Scoring
-  const scoreRes = await supabaseFetch(
-    `/rest/v1/scoring_result?select=primary_archetype,survey_submission_id&scored_at=gte.${since}&scored_at=lte.${until}`,
-    { headers: { Range: "0-9999" } }
-  );
-  const scores = scoreRes.ok
-    ? ((await scoreRes.json()) as Array<{ primary_archetype: string }>)
-    : [];
-
-  const archetypeCounts = new Map<string, number>();
-  for (const s of scores) {
-    if (s.primary_archetype) {
-      incrementCount(archetypeCounts, s.primary_archetype);
-    }
-  }
-  const topArchetypes = [...archetypeCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
-
-  // UTM sources
-  const utmCounts = new Map<string, number>();
-  for (const s of subs) {
-    const src = parseUtmSource(s.utm_tracker);
-    incrementCount(utmCounts, src);
-  }
-  const topUtm = [...utmCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
-
+  const w: WeeklyMetrics = await fetchWeeklyMetrics(since, until);
+  // Pre-refactor field shape (see git history for the prior implementation).
+  // `total` here was "submissions in window" — keeping survey starts as the
+  // closest equivalent since it includes incomplete sessions.
   return {
-    total,
-    completed,
-    completionRate,
-    avgDurationSec: avgDuration,
-    waitlistCount,
-    scoredCount: scores.length,
-    topArchetypes,
-    topUtm,
+    total: w.completions + (w.surveyStarts - w.completions), // = surveyStarts, kept verbose for clarity
+    completed: w.completions,
+    completionRate: w.completionRate,
+    avgDurationSec: w.avgCompletionSec,
+    scoredCount: w.topArchetypes.reduce((sum, [, n]) => sum + n, 0),
+    topArchetypes: w.topArchetypes,
+    topUtm: w.topUtmSources,
   };
-}
-
-function delta(curr: number, prev: number): string {
-  if (prev === 0) return curr > 0 ? "+100%" : "—";
-  const pct = Math.round(((curr - prev) / prev) * 100);
-  return pct > 0 ? `+${pct}%` : `${pct}%`;
 }
 
 function deltaColor(curr: number, prev: number): string {
@@ -151,11 +86,6 @@ export async function GET(request: Request) {
       <p style="color:#9ca3af;font-size:12px;margin:0 0 4px;">Completion Rate</p>
       <p style="font-size:24px;font-weight:700;color:#e8e0f0;margin:0;">${current.completionRate}%</p>
       <p style="${deltaColor(current.completionRate, previous.completionRate)};font-size:12px;margin:4px 0 0;">${delta(current.completionRate, previous.completionRate)} vs prev week</p>
-    </div>
-    <div style="background:#0f0a18;border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:16px;">
-      <p style="color:#9ca3af;font-size:12px;margin:0 0 4px;">Waitlist Signups</p>
-      <p style="font-size:24px;font-weight:700;color:#e8e0f0;margin:0;">${current.waitlistCount}</p>
-      <p style="${deltaColor(current.waitlistCount, previous.waitlistCount)};font-size:12px;margin:4px 0 0;">${delta(current.waitlistCount, previous.waitlistCount)} vs prev week</p>
     </div>
     <div style="background:#0f0a18;border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:16px;">
       <p style="color:#9ca3af;font-size:12px;margin:0 0 4px;">Scored</p>

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import PulseDashboard from "@/components/admin/PulseDashboard";
+import PulseDashboard from "@features/admin/ui/PulseDashboard";
 
 export const metadata: Metadata = {
   title: "Live Pulse | LoveIQ Admin",

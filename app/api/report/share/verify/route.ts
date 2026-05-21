@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { verifyCsrfToken } from "@/lib/csrf";
-import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
-import logger from "@/lib/logger";
-import { REPORT_SHARE_TOKEN_REGEX, resolveShareFromToken } from "@/lib/report/shareAccess";
-import { buildVerifyCookieHeader } from "@/lib/report/shareVerify";
+import { verifyCsrfToken } from "@shared/http/csrf";
+import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
+import logger from "@shared/observability/logger";
+import {
+  REPORT_SHARE_TOKEN_REGEX,
+  resolveShareFromToken,
+} from "@features/report/server/shareAccess";
+import { buildVerifyCookieHeader } from "@features/report/server/shareVerify";
 import { timingSafeEqual } from "crypto";
 
 const schema = z.object({

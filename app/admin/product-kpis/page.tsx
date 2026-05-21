@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import ProductKpiDashboard from "@/components/admin/ProductKpiDashboard";
+import ProductKpiDashboard from "@features/admin/ui/ProductKpiDashboard";
 
 export const metadata: Metadata = {
   title: "Product KPIs | LoveIQ Admin",

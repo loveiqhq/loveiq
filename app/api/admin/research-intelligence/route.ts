@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { verifyAdminSession } from "@/lib/admin/auth";
-import { buildResearchIntelligenceSnapshot } from "@/lib/admin/research-intelligence";
-import { hasRole } from "@/lib/admin/roles";
-import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
-import logger from "@/lib/logger";
+import { verifyAdminSession } from "@features/admin/server/auth";
+import { buildResearchIntelligenceSnapshot } from "@features/admin/server/research-intelligence";
+import { hasRole } from "@features/admin/server/roles";
+import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
+import logger from "@shared/observability/logger";
 
 export const dynamic = "force-dynamic";
 

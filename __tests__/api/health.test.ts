@@ -12,7 +12,7 @@ import { GET } from "../../app/api/health/route";
 //
 // This file is the MSW-migration reference. Pattern: register URL-scoped
 // handlers via `server.use(...)` inside each test, instead of a
-// global `vi.mock("@/lib/fetch-with-timeout")`. MSW intercepts the native
+// global `vi.mock("@shared/http/fetch-with-timeout")`. MSW intercepts the native
 // `fetch` call inside `fetchWithTimeout`, so the wrapper is exercised end-to-
 // end.
 

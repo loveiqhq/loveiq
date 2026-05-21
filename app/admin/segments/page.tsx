@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import SegmentBuilder from "@/components/admin/SegmentBuilder";
+import SegmentBuilder from "@features/admin/ui/SegmentBuilder";
 
 export const metadata: Metadata = {
   title: "Segments | LoveIQ Admin",

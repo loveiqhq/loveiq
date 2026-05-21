@@ -13,15 +13,16 @@
 
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { verifyAdminSession } from "@/lib/admin/auth";
-import { hasRole } from "@/lib/admin/roles";
-import { logAdminAction } from "@/lib/admin/audit";
-import { deleteSubmissionCascade } from "@/lib/admin/delete-submission";
-import { evaluateTestSubmission } from "@/lib/admin/test-submission";
-import { supabaseFetch } from "@/lib/admin/supabase";
-import { verifyCsrfToken } from "@/lib/csrf";
-import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
-import logger from "@/lib/logger";
+import { verifyAdminSession } from "@features/admin/server/auth";
+import { hasRole } from "@features/admin/server/roles";
+import { logAdminAction } from "@features/admin/server/audit";
+import { deleteSubmissionCascade } from "@features/admin/server/delete-submission";
+import { evaluateTestSubmission } from "@features/admin/server/test-submission";
+import { supabaseFetch } from "@features/admin/server/supabase";
+import { verifyCsrfToken } from "@shared/http/csrf";
+import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
+import { notifySlack, escapeSlack } from "@shared/observability/slack";
+import logger from "@shared/observability/logger";
 
 const bodySchema = z.object({
   ids: z.array(z.number().int().positive()).min(1).max(100),
@@ -118,5 +119,17 @@ export async function POST(request: Request) {
   }
 
   logger.info({ adminEmail: admin.email, deleted, skipped: skipped.length, ip }, "Bulk delete");
+
+  if (deleted > 0) {
+    const sample = ids.slice(0, 5).join(", ");
+    const more = ids.length > 5 ? ` (+${ids.length - 5} more)` : "";
+    await notifySlack({
+      channel: "ops",
+      kind: "admin_bulk_delete",
+      text: `:wastebasket: *${escapeSlack(admin.email)}* bulk-deleted ${deleted} submission(s) (skipped ${skipped.length}). IDs: ${sample}${more}`,
+      username: "ops_alerts",
+    });
+  }
+
   return NextResponse.json({ deleted, skipped });
 }

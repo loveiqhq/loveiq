@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import ActivityDashboard from "@/components/admin/ActivityDashboard";
+import ActivityDashboard from "@features/admin/ui/ActivityDashboard";
 
 export const metadata: Metadata = {
   title: "Admin Activity | LoveIQ Admin",

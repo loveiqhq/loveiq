@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import SubmissionComparison from "@/components/admin/SubmissionComparison";
+import SubmissionComparison from "@features/admin/ui/SubmissionComparison";
 
 export const metadata: Metadata = {
   title: "Compare Submissions | LoveIQ Admin",

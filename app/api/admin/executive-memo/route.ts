@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { verifyAdminSession } from "@/lib/admin/auth";
-import { hasRole } from "@/lib/admin/roles";
-import { supabaseFetch } from "@/lib/admin/supabase";
-import { buildTrustDescriptor, clampDays, round1 } from "@/lib/admin/next-level";
-import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
-import logger from "@/lib/logger";
+import { verifyAdminSession } from "@features/admin/server/auth";
+import { hasRole } from "@features/admin/server/roles";
+import { supabaseFetch } from "@features/admin/server/supabase";
+import { buildTrustDescriptor, clampDays, round1 } from "@features/admin/server/next-level";
+import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
+import logger from "@shared/observability/logger";
 
 interface WindowedRow {
   created_date_time?: string | null;

@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { verifyAdminSession } from "@/lib/admin/auth";
-import { hasRole } from "@/lib/admin/roles";
-import { verifyCsrfToken } from "@/lib/csrf";
-import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
-import { supabaseFetch } from "@/lib/admin/supabase";
-import { logAdminAction } from "@/lib/admin/audit";
-import { fetchMetricValue } from "@/lib/admin/metric-library";
-import logger from "@/lib/logger";
+import { verifyAdminSession } from "@features/admin/server/auth";
+import { hasRole } from "@features/admin/server/roles";
+import { verifyCsrfToken } from "@shared/http/csrf";
+import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
+import { supabaseFetch } from "@features/admin/server/supabase";
+import { logAdminAction } from "@features/admin/server/audit";
+import { fetchMetricValue } from "@features/admin/server/metric-library";
+import logger from "@shared/observability/logger";
 import { z } from "zod";
 
 const createGoalSchema = z.object({

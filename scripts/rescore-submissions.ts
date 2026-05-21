@@ -35,8 +35,8 @@ try {
   );
 }
 
-import { getScoringConfig } from "../lib/scoring/config";
-import { scoreArchetypes } from "../lib/scoring/engine";
+import { getScoringConfig } from "../features/scoring/logic/config";
+import { scoreArchetypes } from "../features/scoring/logic/engine";
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;

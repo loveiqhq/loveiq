@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
-import { processStripeWebhookEvent } from "@/lib/checkout/fulfillment";
-import { getStripeServerClient, isStripeCheckoutEnabled } from "@/lib/checkout/stripeCheckout";
-import logger from "@/lib/logger";
+import { processStripeWebhookEvent } from "@features/checkout/server/fulfillment";
+import {
+  getStripeServerClient,
+  isStripeCheckoutEnabled,
+} from "@features/checkout/server/stripeCheckout";
+import logger from "@shared/observability/logger";
 
 export const runtime = "nodejs";
 

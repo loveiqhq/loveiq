@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { verifyAdminSession } from "@/lib/admin/auth";
-import { hasRole } from "@/lib/admin/roles";
-import { logAdminAction } from "@/lib/admin/audit";
-import { supabaseFetch } from "@/lib/admin/supabase";
-import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
-import logger from "@/lib/logger";
+import { verifyAdminSession } from "@features/admin/server/auth";
+import { hasRole } from "@features/admin/server/roles";
+import { logAdminAction } from "@features/admin/server/audit";
+import { supabaseFetch } from "@features/admin/server/supabase";
+import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
+import logger from "@shared/observability/logger";
 
 /** Extract utm_source from a JSON utm_tracker string, falling back to the raw value. */
 function parseUtmSource(tracker: string | null, fallback = "Direct"): string {

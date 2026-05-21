@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import NotFoundPage from "@/components/not-found/NotFoundPage";
+import NotFoundPage from "@features/not-found/ui/NotFoundPage";
 
 export const metadata: Metadata = {
   title: "Page Not Found | LoveIQ",

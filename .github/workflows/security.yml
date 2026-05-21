@@ -202,21 +202,21 @@ jobs:
           #    (lib/report/contentGating.ts + the report data pipeline). Substitution
           #    helpers escape every variable; the HTML body comes from our own .docx
           #    pipeline, not user input. Reviewed and intentional.
-          if grep -r "dangerouslySetInnerHTML" app/ components/ --include="*.tsx" --include="*.jsx" \
+          if grep -r "dangerouslySetInnerHTML" app/ components/ features/ --include="*.tsx" --include="*.jsx" \
               | grep -v "JSON\.stringify" \
-              | grep -vE "components/report/(sections/|ReportPage\.tsx)"; then
+              | grep -vE "(components|features/report/ui)/(sections/|ReportPage\.tsx)"; then
             echo "⚠️  Found dangerouslySetInnerHTML usage - review for XSS risks"
             exit 1
           fi
 
           # Check for eval() usage
-          if grep -r "\beval\(" app/ lib/ components/ --include="*.ts" --include="*.tsx" --include="*.js" --include="*.jsx"; then
+          if grep -r "\beval\(" app/ lib/ components/ features/ shared/ --include="*.ts" --include="*.tsx" --include="*.js" --include="*.jsx"; then
             echo "⚠️  Found eval() usage - potential code injection risk"
             exit 1
           fi
 
           # Check for hardcoded secrets patterns
-          if grep -rE "(api[_-]?key|api[_-]?secret|password|secret[_-]?key|private[_-]?key|token)\s*=\s*['\"][^'\"]{20,}" app/ lib/ --include="*.ts" --include="*.tsx" --include="*.js"; then
+          if grep -rE "(api[_-]?key|api[_-]?secret|password|secret[_-]?key|private[_-]?key|token)\s*=\s*['\"][^'\"]{20,}" app/ lib/ features/ shared/ --include="*.ts" --include="*.tsx" --include="*.js"; then
             echo "⚠️  Potential hardcoded secrets found"
             exit 1
           fi
@@ -326,7 +326,7 @@ jobs:
           echo "Checking for proper environment variable handling..."
 
           # Ensure no direct access to process.env outside of config files
-          if grep -r "process\.env\." app/ components/ --include="*.tsx" --include="*.jsx" | grep -v "NEXT_PUBLIC_"; then
+          if grep -r "process\.env\." app/ components/ features/ --include="*.tsx" --include="*.jsx" | grep -v "NEXT_PUBLIC_"; then
             echo "⚠️  Found direct process.env access in client components (should use NEXT_PUBLIC_ prefix)"
           fi
 

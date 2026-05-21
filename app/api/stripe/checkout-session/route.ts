@@ -4,28 +4,32 @@ import {
   REPORT_ACCESS_TOKEN_REGEX,
   REPORT_PURCHASE_PLAN_IDS,
   type ReportPurchasePlanId,
-} from "@/lib/checkout/reportPurchase";
-import { KNOWN_ARCHETYPES, toArchetypeSlug } from "@/lib/report/archetypeSlug";
+} from "@features/checkout/server/reportPurchase";
+import { KNOWN_ARCHETYPES, toArchetypeSlug } from "@features/report/server/archetypeSlug";
 import {
   STRIPE_CHECKOUT_DISABLED_MESSAGE,
   getStripeCheckoutCustomerEmail,
   getStripeServerClient,
   isStripeCheckoutEnabled,
   type StripeCheckoutSessionResponse,
-} from "@/lib/checkout/stripeCheckout";
-import { getReportPurchasePlan } from "@/lib/checkout/reportPurchase";
-import { verifyCsrfToken } from "@/lib/csrf";
-import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
+} from "@features/checkout/server/stripeCheckout";
+import { getReportPurchasePlan } from "@features/checkout/server/reportPurchase";
+import {
+  NURTURE_PROMO_CODE_REGEX,
+  resolveNurturePromo,
+} from "@features/checkout/server/promoCodes";
+import { verifyCsrfToken } from "@shared/http/csrf";
+import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import {
   getReportAccessPlanForSubmission,
   resolveSubmissionAccessContext,
-} from "@/lib/report/personalReport";
-import { isPlanOwnedForArchetype } from "@/lib/report/access";
-import logger from "@/lib/logger";
+} from "@features/report/server/personalReport";
+import { isPlanOwnedForArchetype } from "@features/report/server/access";
+import logger from "@shared/observability/logger";
 import {
   getReportPriceQuoteForContext,
   markReportPriceQuoteCheckoutStarted,
-} from "@/lib/pricing/reportPricing";
+} from "@features/pricing/logic/reportPricing";
 
 export const runtime = "nodejs";
 
@@ -34,6 +38,7 @@ const createCheckoutSessionSchema = z
     archetype: z.enum(KNOWN_ARCHETYPES as unknown as [string, ...string[]]).optional(),
     plan: z.enum(REPORT_PURCHASE_PLAN_IDS),
     pricingSessionId: z.string().uuid().nullable().optional(),
+    promo: z.string().regex(NURTURE_PROMO_CODE_REGEX).nullable().optional(),
     quoteId: z.number().int().positive().nullable().optional(),
     reportSessionId: z.string().uuid().nullable().optional(),
     reportToken: z.string().regex(REPORT_ACCESS_TOKEN_REGEX).nullable().optional(),
@@ -209,8 +214,38 @@ export async function POST(request: Request) {
     const archetypeName = parsed.data.archetype ?? null;
     const archetypeSlug = archetypeName ? toArchetypeSlug(archetypeName) : null;
     const planTitle = archetypeName ? `${archetypeName} report` : plan.title;
+
+    // Resolve the optional nurture promo. A miss (unknown/expired/wrong-owner)
+    // silently falls through to the no-promo flow — never 400 — because the
+    // email link could be opened on a forwarded device. Logged for analytics.
+    let nurturePromoMatch: Awaited<ReturnType<typeof resolveNurturePromo>> = null;
+    if (parsed.data.promo) {
+      try {
+        nurturePromoMatch = await resolveNurturePromo({
+          reportToken: parsed.data.reportToken ?? null,
+          userCode: parsed.data.promo,
+        });
+      } catch (err) {
+        logger.warn(
+          { err, promoPrefix: parsed.data.promo.slice(0, 6) },
+          "checkout-session: nurture promo resolve threw; falling through"
+        );
+      }
+      if (!nurturePromoMatch) {
+        logger.info(
+          { promoPrefix: parsed.data.promo.slice(0, 6) },
+          "checkout-session: nurture promo miss (unknown/expired/wrong-owner)"
+        );
+      }
+    }
+
     const session = await stripe.checkout.sessions.create({
-      allow_promotion_codes: true,
+      // discounts[] and allow_promotion_codes are mutually exclusive. When we
+      // pre-apply a nurture code, skip the manual-entry UI to avoid a confusing
+      // double-stack of "code already applied" + an empty entry field.
+      ...(nurturePromoMatch
+        ? { discounts: [{ promotion_code: nurturePromoMatch.stripePromotionCodeId }] }
+        : { allow_promotion_codes: true }),
       billing_address_collection: "auto",
       customer_email: customerEmail,
       line_items: [
@@ -241,6 +276,11 @@ export async function POST(request: Request) {
         plan: parsed.data.plan,
         pricingClusterId: quote.pricingClusterId,
         pricingQuoteId: String(quote.id),
+        ...(nurturePromoMatch && {
+          promoCode: parsed.data.promo ?? "",
+          promoStage: nurturePromoMatch.stage,
+          promoPercentOff: String(nurturePromoMatch.percentOff),
+        }),
         requestIp: toStripeMetadataValue(ip),
         requestUserAgent: toStripeMetadataValue(userAgent),
         reportSessionId: parsed.data.reportSessionId ?? "",

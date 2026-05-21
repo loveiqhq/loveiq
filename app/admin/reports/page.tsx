@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import ReportsDashboard from "@/components/admin/ReportsDashboard";
+import ReportsDashboard from "@features/admin/ui/ReportsDashboard";
 
 export const metadata: Metadata = {
   title: "Report Engagement | LoveIQ Admin",

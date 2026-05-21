@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { verifyAdminSession } from "@/lib/admin/auth";
-import { hasRole } from "@/lib/admin/roles";
-import { verifyCsrfToken } from "@/lib/csrf";
-import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
-import { ADMIN_METRIC_OPTIONS } from "@/lib/admin/metric-library";
-import { supabaseFetch } from "@/lib/admin/supabase";
-import { logAdminAction } from "@/lib/admin/audit";
-import { maskEmail } from "@/lib/admin/format";
-import logger from "@/lib/logger";
+import { verifyAdminSession } from "@features/admin/server/auth";
+import { hasRole } from "@features/admin/server/roles";
+import { verifyCsrfToken } from "@shared/http/csrf";
+import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
+import { ADMIN_METRIC_OPTIONS } from "@features/admin/server/metric-library";
+import { supabaseFetch } from "@features/admin/server/supabase";
+import { logAdminAction } from "@features/admin/server/audit";
+import { maskEmail } from "@features/admin/server/format";
+import logger from "@shared/observability/logger";
 
 const changelogSchema = z.object({
   kind: z.literal("changelog").default("changelog"),

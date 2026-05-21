@@ -21,14 +21,15 @@
 import { timingSafeEqual } from "crypto";
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
-import { checkCooldown } from "@/lib/ratelimit";
-import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
-import { getBreaker } from "@/lib/circuit-breaker";
-import logger from "@/lib/logger";
-import { inviteReminder1Email } from "@/lib/emails/invite-reminder-1";
-import { inviteReminder2Email } from "@/lib/emails/invite-reminder-2";
-import { buildUnsubscribeUrl } from "@/lib/emails/unsubscribe-token";
-import { isEmailSuppressed } from "@/lib/emails/suppression";
+import { checkCooldown } from "@shared/http/ratelimit";
+import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
+import { startCronTimer } from "@shared/observability/slack-alert-dedup";
+import { getBreaker } from "@shared/http/circuit-breaker";
+import logger from "@shared/observability/logger";
+import { inviteReminder1Email } from "@features/invite/emails/invite-reminder-1";
+import { inviteReminder2Email } from "@features/invite/emails/invite-reminder-2";
+import { buildUnsubscribeUrl } from "@shared/emails/unsubscribe-token";
+import { isEmailSuppressed } from "@shared/emails/suppression";
 
 function safeCompare(a: string, b: string): boolean {
   const aBuf = Buffer.from(a);
@@ -142,6 +143,8 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Service unavailable." }, { status: 503 });
   }
 
+  const trackDuration = startCronTimer("invite-reminders", 50);
+
   const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://loveiq.org").replace(/\/$/, "");
   // Deep-link into the Refer-a-Friend modal on the report page.
   const inviteCtaUrl = `${siteUrl}/report?invite=1`;
@@ -252,5 +255,7 @@ export async function GET(request: Request) {
   } catch (err) {
     logger.error({ err }, "Invite-reminders cron failed");
     return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
+  } finally {
+    await trackDuration();
   }
 }

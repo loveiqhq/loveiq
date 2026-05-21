@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { verifyAdminSession } from "@/lib/admin/auth";
-import { buildTechIntelligenceSnapshot } from "@/lib/admin/tech-intelligence";
-import { hasRole } from "@/lib/admin/roles";
-import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
-import logger from "@/lib/logger";
+import { verifyAdminSession } from "@features/admin/server/auth";
+import { buildTechIntelligenceSnapshot } from "@features/admin/server/tech-intelligence";
+import { hasRole } from "@features/admin/server/roles";
+import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
+import logger from "@shared/observability/logger";
 
 export async function GET(request: Request) {
   const admin = await verifyAdminSession();

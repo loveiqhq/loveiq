@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import ReportBuilder from "@/components/admin/ReportBuilder";
+import ReportBuilder from "@features/admin/ui/ReportBuilder";
 
 export const metadata: Metadata = {
   title: "Report Builder | LoveIQ Admin",

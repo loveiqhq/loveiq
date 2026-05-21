@@ -30,6 +30,8 @@ on:
       - "proxy.ts"
       - "next.config.*"
       - "lib/**"
+      - "features/**"
+      - "shared/**"
       - "load-tests/**"
       - ".github/workflows/load-test.yml"
 

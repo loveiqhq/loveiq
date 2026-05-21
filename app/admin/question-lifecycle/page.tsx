@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import QuestionLifecyclePanel from "@/components/admin/QuestionLifecyclePanel";
+import QuestionLifecyclePanel from "@features/admin/ui/QuestionLifecyclePanel";
 
 export const metadata: Metadata = {
   title: "Question Lifecycle | LoveIQ Admin",

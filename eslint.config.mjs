@@ -21,7 +21,14 @@ const eslintConfig = [
     // Type-aware rules for server-side code. no-floating-promises catches async
     // calls without await/.catch — a recurring class of silent failures in
     // API routes (e.g., logger.error not awaited inside a handler).
-    files: ["app/api/**/*.ts", "lib/**/*.ts", "proxy.ts"],
+    files: [
+      "app/api/**/*.ts",
+      "features/**/server/**/*.ts",
+      "features/**/logic/**/*.ts",
+      "shared/**/*.ts",
+      "proxy.ts",
+    ],
+    ignores: ["features/**/tests/**", "shared/**/tests/**"],
     languageOptions: {
       parser: tsparser,
       parserOptions: {
@@ -36,19 +43,40 @@ const eslintConfig = [
   },
   {
     // eslint-plugin-security: detect unsafe patterns in server-side code
-    files: ["app/api/**/*.ts", "lib/**/*.ts", "proxy.ts"],
+    files: [
+      "app/api/**/*.ts",
+      "features/**/server/**/*.ts",
+      "features/**/logic/**/*.ts",
+      "shared/**/*.ts",
+      "proxy.ts",
+    ],
+    ignores: ["features/**/tests/**", "shared/**/tests/**"],
     plugins: { security: securityPlugin },
     rules: securityPlugin.configs.recommended.rules,
   },
   {
     // eslint-plugin-no-secrets: detect hardcoded credentials in server-side code
-    files: ["app/api/**/*.ts", "lib/**/*.ts", "proxy.ts"],
+    files: [
+      "app/api/**/*.ts",
+      "features/**/server/**/*.ts",
+      "features/**/logic/**/*.ts",
+      "shared/**/*.ts",
+      "proxy.ts",
+    ],
+    ignores: ["features/**/tests/**", "shared/**/tests/**"],
     plugins: { "no-secrets": noSecretsPlugin },
     rules: { "no-secrets/no-secrets": "error" },
   },
   {
     // Security-focused rules for API routes and sensitive code
-    files: ["app/api/**/*.ts", "lib/**/*.ts", "proxy.ts"],
+    files: [
+      "app/api/**/*.ts",
+      "features/**/server/**/*.ts",
+      "features/**/logic/**/*.ts",
+      "shared/**/*.ts",
+      "proxy.ts",
+    ],
+    ignores: ["features/**/tests/**", "shared/**/tests/**"],
     rules: {
       // Prevent eval and related dangerous functions
       "no-eval": "error",
@@ -81,7 +109,7 @@ const eslintConfig = [
   },
   {
     // Client-side security rules
-    files: ["components/**/*.{ts,tsx}", "app/**/page.tsx", "app/**/layout.tsx"],
+    files: ["features/**/ui/**/*.{ts,tsx}", "app/**/page.tsx", "app/**/layout.tsx"],
     rules: {
       // Warn about direct process.env access in client components
       "no-restricted-syntax": [

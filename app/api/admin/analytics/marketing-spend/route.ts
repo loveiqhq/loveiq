@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { verifyAdminSession } from "@/lib/admin/auth";
-import { hasRole } from "@/lib/admin/roles";
-import { supabaseFetch } from "@/lib/admin/supabase";
-import { verifyCsrfToken } from "@/lib/csrf";
-import { logAdminAction } from "@/lib/admin/audit";
-import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
-import logger from "@/lib/logger";
+import { verifyAdminSession } from "@features/admin/server/auth";
+import { hasRole } from "@features/admin/server/roles";
+import { supabaseFetch } from "@features/admin/server/supabase";
+import { verifyCsrfToken } from "@shared/http/csrf";
+import { logAdminAction } from "@features/admin/server/audit";
+import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
+import logger from "@shared/observability/logger";
 
 const upsertSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "date must be YYYY-MM-DD"),

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import ExperimentRegistry from "@/components/admin/ExperimentRegistry";
+import ExperimentRegistry from "@features/admin/ui/ExperimentRegistry";
 
 export const metadata: Metadata = {
   title: "Experiments | LoveIQ Admin",

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import ArchetypeComparison from "@/components/admin/ArchetypeComparison";
+import ArchetypeComparison from "@features/admin/ui/ArchetypeComparison";
 
 export const metadata: Metadata = {
   title: "Compare Archetypes | LoveIQ Admin",
