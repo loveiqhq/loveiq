@@ -2303,12 +2303,17 @@ const ScrollPricingModal: FC<Props> = ({
                   </div>
                   <button
                     type="button"
-                    className="rpm-end-cta__button"
+                    className="rpm-end-cta__button rpm-cta"
                     onClick={handleCtaClick}
                     aria-label="Unlock full report"
                   >
-                    <span className="rpm-end-cta__button-label">Unlock full report</span>
+                    <span className="rpm-cta__wash" aria-hidden="true" />
+                    <span className="rpm-cta__reveal" aria-hidden="true" />
+                    <span className="rpm-end-cta__button-label rpm-cta__label">
+                      Unlock full report
+                    </span>
                     <svg
+                      className="rpm-cta__arrow"
                       width="24"
                       height="24"
                       viewBox="0 0 24 24"
