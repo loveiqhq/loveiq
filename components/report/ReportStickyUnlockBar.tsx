@@ -14,6 +14,7 @@ interface Props {
 
 const ArrowRight: FC = () => (
   <svg
+    className="rpm-cta__arrow"
     width="24"
     height="24"
     viewBox="0 0 24 24"
@@ -47,11 +48,13 @@ const ReportStickyUnlockBar: FC<Props> = ({ quote, onCheckout, hidden = false })
         <p className="report-sticky-unlock__guarantee">14-day money-back guarantee</p>
         <button
           type="button"
-          className="report-sticky-unlock__cta"
+          className="report-sticky-unlock__cta rpm-cta"
           onClick={handleClick}
           aria-label="Unlock full report"
         >
-          <span className="report-sticky-unlock__cta-label">Unlock full report</span>
+          <span className="rpm-cta__wash" aria-hidden="true" />
+          <span className="rpm-cta__reveal" aria-hidden="true" />
+          <span className="report-sticky-unlock__cta-label rpm-cta__label">Unlock full report</span>
         </button>
         <p className="report-sticky-unlock__price">
           <span className="report-sticky-unlock__price-value">{price}</span>
@@ -83,11 +86,15 @@ const ReportStickyUnlockBar: FC<Props> = ({ quote, onCheckout, hidden = false })
           </div>
           <button
             type="button"
-            className="report-sticky-unlock__cta report-sticky-unlock__cta--desktop"
+            className="report-sticky-unlock__cta report-sticky-unlock__cta--desktop rpm-cta"
             onClick={handleClick}
             aria-label="Unlock full report"
           >
-            <span className="report-sticky-unlock__cta-label">Unlock full report</span>
+            <span className="rpm-cta__wash" aria-hidden="true" />
+            <span className="rpm-cta__reveal" aria-hidden="true" />
+            <span className="report-sticky-unlock__cta-label rpm-cta__label">
+              Unlock full report
+            </span>
             <ArrowRight />
           </button>
         </div>
