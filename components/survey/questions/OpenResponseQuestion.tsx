@@ -8,6 +8,8 @@ interface OpenResponseQuestionProps {
   value: string | null;
   onChange: (value: string) => void;
   forceValidation?: boolean;
+  confirmValue?: string;
+  onConfirmChange?: (value: string) => void;
 }
 
 const AlertCircleIcon: FC = () => (
@@ -51,12 +53,24 @@ const OpenResponseQuestion: FC<OpenResponseQuestionProps> = ({
   value,
   onChange,
   forceValidation,
+  confirmValue,
+  onConfirmChange,
 }) => {
   const [touched, setTouched] = useState(false);
+  const [confirmTouched, setConfirmTouched] = useState(false);
   const currentValue = value ?? "";
   const showError = touched || forceValidation;
   const limited = !UNLIMITED_QIDS.has(question.qId);
   const error = showError ? getValidationError(currentValue, question.inputType, limited) : null;
+
+  const isEmailField = question.inputType === "email";
+  const confirmCurrent = confirmValue ?? "";
+  const emailMismatch =
+    isEmailField &&
+    currentValue.trim().length > 0 &&
+    confirmCurrent.trim().length > 0 &&
+    currentValue.trim().toLowerCase() !== confirmCurrent.trim().toLowerCase();
+  const showConfirmError = (confirmTouched || forceValidation) && emailMismatch;
 
   // Subtitle text from formatGuidance or fallback
   const subtitle =
@@ -120,6 +134,45 @@ const OpenResponseQuestion: FC<OpenResponseQuestionProps> = ({
           )}
         </div>
       </div>
+
+      {/* Confirm email field (email-input questions only) */}
+      {isEmailField && (
+        <div className="flex flex-col gap-2">
+          <input
+            type="email"
+            name={`${question.qId}-confirm`}
+            aria-label="Confirm email address"
+            value={confirmCurrent}
+            onChange={(e) => onConfirmChange?.(e.target.value)}
+            onBlur={() => setConfirmTouched(true)}
+            placeholder="Confirm email address."
+            autoComplete="email"
+            spellCheck={false}
+            className={`autofill-dark w-full border-b-2 bg-transparent pb-3 pt-2 font-sans text-[22px] text-white placeholder:text-white/30 focus:outline-none sm:text-[24px] ${
+              showConfirmError
+                ? "border-[#ef4444]"
+                : "border-[rgba(254,104,57,0.2)] focus:border-[rgba(254,104,57,0.4)]"
+            }`}
+            style={{
+              ["--autofill-bg" as string]: "#0a0510",
+              ["--autofill-font-size" as string]: "22px",
+              ["--autofill-font-size-sm" as string]: "24px",
+            }}
+          />
+          <div className="flex items-center gap-1.5" aria-live="polite">
+            {showConfirmError && (
+              <>
+                <span className="text-[#ef4444]">
+                  <AlertCircleIcon />
+                </span>
+                <span className="font-sans text-[13px] font-medium text-[#ef4444]">
+                  Emails don&rsquo;t match. Please re-enter.
+                </span>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

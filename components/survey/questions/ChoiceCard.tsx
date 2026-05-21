@@ -8,6 +8,7 @@ interface ChoiceCardProps {
   selected: boolean;
   onClick: () => void;
   multi?: boolean;
+  dimmed?: boolean;
 }
 
 const CheckIcon: FC = () => (
@@ -31,8 +32,10 @@ const ChoiceCard: FC<ChoiceCardProps> = ({
   selected,
   onClick,
   multi = false,
+  dimmed = false,
 }) => {
   const hasDescription = Boolean(description?.trim());
+  const isDimmed = dimmed && !selected;
 
   return (
     <button
@@ -40,13 +43,13 @@ const ChoiceCard: FC<ChoiceCardProps> = ({
       role={multi ? "checkbox" : "radio"}
       aria-checked={selected}
       onClick={onClick}
-      className={`relative flex min-h-[68px] w-full gap-[28px] rounded-[16px] border px-[21px] text-left font-sans transition-[background-color,border-color,box-shadow,transform] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#fe6839]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0510] ${
+      className={`relative flex min-h-[68px] w-full gap-[28px] rounded-[16px] border px-[21px] text-left font-sans transition-[background-color,border-color,box-shadow,transform,opacity] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#fe6839]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0510] ${
         hasDescription ? "items-start py-4" : "items-center py-px"
       } ${
         selected
           ? "border-[rgba(254,104,57,0.5)] bg-[rgba(254,104,57,0.1)] shadow-[0_0_20px_rgba(254,104,57,0.15)]"
           : "border-white/10 bg-white/[0.05] hover:border-white/15 hover:bg-white/[0.07]"
-      }`}
+      } ${isDimmed ? "opacity-50" : "opacity-100"}`}
     >
       <span className="flex min-w-0 flex-1 flex-col justify-center gap-[2px] py-[4px] pr-2">
         <span

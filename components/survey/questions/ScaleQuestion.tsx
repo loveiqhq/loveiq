@@ -19,16 +19,28 @@ const FALLBACK_LABELS: Record<number, string> = {
   7: "Strongly Agree",
 };
 
+function splitHoverState(raw: string): { title: string; description: string | null } {
+  const colonIndex = raw.indexOf(":");
+  if (colonIndex === -1) return { title: raw, description: null };
+  const title = raw.slice(0, colonIndex).trim();
+  const description = raw.slice(colonIndex + 1).trim();
+  return { title, description: description.length > 0 ? description : null };
+}
+
 function getValueLabel(value: number, question: SurveyQuestion): string {
   if (question.hoverStates && question.hoverStates[value]) {
-    return question.hoverStates[value];
+    return splitHoverState(question.hoverStates[value]).title;
   }
   return FALLBACK_LABELS[value] || "";
 }
 
 function getValueExplanation(value: number, question: SurveyQuestion): string | null {
   const entry = question.answerOptionsExplained?.[value - 1];
-  return entry?.explanation ?? null;
+  if (entry?.explanation) return entry.explanation;
+  if (question.hoverStates && question.hoverStates[value]) {
+    return splitHoverState(question.hoverStates[value]).description;
+  }
+  return null;
 }
 
 const ScaleQuestion: FC<ScaleQuestionProps> = ({ question, value, onChange }) => {
@@ -50,6 +62,8 @@ const ScaleQuestion: FC<ScaleQuestionProps> = ({ question, value, onChange }) =>
     (question.scaleLabels
       ? `Rate from 1 (${question.scaleLabels.low.toLowerCase()}) to 7 (${question.scaleLabels.high.toLowerCase()})`
       : "Rate on a scale of 1 to 7");
+
+  const selectedLabel = displayValue !== null ? getValueLabel(displayValue, question) : "";
 
   return (
     <div className="flex flex-col gap-6">
@@ -166,19 +180,22 @@ const ScaleQuestion: FC<ScaleQuestionProps> = ({ question, value, onChange }) =>
           </span>
         </div>
 
-        {/* Selected label + explanation (below scale) */}
-        {displayValue !== null && (
-          <div className="flex flex-col items-center gap-1 pt-2">
-            <span className="font-sans text-[18px] font-medium text-white/70 sm:text-[20px]">
-              {getValueLabel(displayValue, question)}
-            </span>
-            {selectedExplanation && (
-              <p className="text-center font-sans text-[14px] leading-relaxed text-white/50 sm:text-[15px]">
-                {selectedExplanation}
-              </p>
-            )}
-          </div>
-        )}
+        {/* Selected label + explanation — mobile (default): rendered last (below).
+             Desktop (sm+): rendered first (above the dots) via order utility. */}
+        <div className="order-last flex min-h-[80px] flex-col items-center gap-2 pt-2 text-center sm:order-first sm:min-h-[68px] sm:justify-end sm:pb-2 sm:pt-0">
+          {displayValue !== null && (
+            <>
+              <span className="font-sans text-[24px] font-bold leading-tight tracking-[0.5px] text-white/90 sm:text-[32px] sm:font-medium sm:tracking-[0.6px]">
+                {selectedLabel}
+              </span>
+              {selectedExplanation && (
+                <p className="font-sans text-[14px] leading-snug text-white/70 sm:text-[20px] sm:font-light sm:lowercase sm:text-white/80">
+                  {selectedExplanation}
+                </p>
+              )}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

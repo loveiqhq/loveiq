@@ -27,6 +27,7 @@ const MultipleChoiceQuestion: FC<MultipleChoiceQuestionProps> = ({
   const [attemptedOverLimit, setAttemptedOverLimit] = useState(false);
   const maxSelections = question.maxSelections;
   const isOverLimit = typeof maxSelections === "number" && selected.length > maxSelections;
+  const atLimit = typeof maxSelections === "number" && selected.length >= maxSelections;
   const showLimitMessage =
     typeof maxSelections === "number" &&
     (attemptedOverLimit || isOverLimit || (forceValidation && isOverLimit));
@@ -85,6 +86,7 @@ const MultipleChoiceQuestion: FC<MultipleChoiceQuestionProps> = ({
               selected={isSelected}
               onClick={() => toggle(option)}
               multi
+              dimmed={atLimit && !isSelected}
             />
           );
         })}

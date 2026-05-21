@@ -42,6 +42,7 @@ const SingleChoiceQuestion: FC<SingleChoiceQuestionProps> = ({
             description={value === option ? getOptionExplanation(question, option) : undefined}
             selected={value === option}
             onClick={() => onChange(option)}
+            dimmed={value !== null && value !== option}
           />
         ))}
       </div>

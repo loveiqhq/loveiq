@@ -55,6 +55,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
 
   const [animKey, setAnimKey] = useState(0);
   const [showPauseModal, setShowPauseModal] = useState(false);
+  const [emailConfirmValue, setEmailConfirmValue] = useState("");
   const hasTrackedStart = useRef(false);
   const hasCompleted = useRef(false);
   const touchStartX = useRef<number | null>(null);
@@ -123,8 +124,12 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
   const isEmailValid = useMemo(() => {
     if (question?.inputType !== "email") return true;
     if (!currentAnswer || typeof currentAnswer !== "string") return true;
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(currentAnswer);
-  }, [question, currentAnswer]);
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(currentAnswer)) return false;
+    return (
+      emailConfirmValue.trim().length > 0 &&
+      emailConfirmValue.trim().toLowerCase() === currentAnswer.trim().toLowerCase()
+    );
+  }, [question, currentAnswer, emailConfirmValue]);
 
   const isSelectionCountValid = useMemo(() => {
     if (question?.answerType !== "multiple") return true;
@@ -151,6 +156,11 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
       cancelAutoAdvance();
       setAnimKey((k) => k + 1);
       setAttemptedNext(false);
+      // Clear transient email-confirm state when leaving the email question
+      const targetQuestion = surveyQuestions[index];
+      if (targetQuestion?.inputType !== "email") {
+        setEmailConfirmValue("");
+      }
       setCurrentIndex(index);
       window.scrollTo({ top: 0, behavior: "instant" });
     },
@@ -389,6 +399,8 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
                 value={currentAnswer as string | null}
                 onChange={handleChange}
                 forceValidation={attemptedNext}
+                confirmValue={emailConfirmValue}
+                onConfirmChange={setEmailConfirmValue}
               />
             )}
             {question.answerType === "scale" && (
