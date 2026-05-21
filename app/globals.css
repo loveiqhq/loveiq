@@ -3593,9 +3593,11 @@ input.autofill-dark:-internal-autofill-previewed {
   align-items: center;
   min-height: 1.62rem;
   padding: 0.28rem 0.78rem;
-  border: 1px solid #0d442c;
+  border: 1px solid rgba(0, 201, 80, 0.3);
   border-radius: 9999px;
-  background: #0f3126;
+  background: rgba(0, 201, 80, 0.2);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   color: #00c950;
   font-size: 0.68rem;
   font-weight: 600;
