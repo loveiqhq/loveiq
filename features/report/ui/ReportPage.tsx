@@ -23,6 +23,8 @@ import InviteModal from "@features/invite/ui/InviteModal";
 import FooterSection from "@features/landing/ui/FooterSection";
 import ReportNavigation from "./ReportNavigation";
 import ReportPricingModal from "./ReportPricingModal";
+import ReportStickyUnlockBar from "./ReportStickyUnlockBar";
+import ScrollPricingModal from "./ScrollPricingModal";
 import ReportSection from "./ReportSection";
 import SectionFeedback from "./SectionFeedback";
 import ShareReportModal from "./ShareReportModal";
@@ -291,6 +293,7 @@ interface ReportExperienceProps {
   devParam: string | null;
   feedbacks: Record<string, "up" | "down" | null>;
   isPricingModalOpen: boolean;
+  isScrollTeaserOpen: boolean;
   isShareModalOpen: boolean;
   matchScore: number;
   onBeginCheckout: (plan: ReportPurchasePlanId, archetype?: string | null) => void;
@@ -339,6 +342,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   devParam,
   feedbacks,
   isPricingModalOpen,
+  isScrollTeaserOpen,
   isShareModalOpen,
   matchScore,
   onBeginCheckout,
@@ -461,7 +465,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
       id="main-content"
       ref={mainContentRef}
       tabIndex={-1}
-      className="report-page"
+      className={`report-page${accessPlan === "full_report" || accessPlan === "all_reports" ? "" : " report-experience--sticky-pad"}`}
       style={getReportThemeStyle(theme)}
       onCopy={(e) => e.preventDefault()}
       onContextMenu={(e) => e.preventDefault()}
@@ -490,12 +494,16 @@ const ReportExperience: FC<ReportExperienceProps> = ({
       <div
         className={[
           "report-page__shell-wrap",
-          isPricingModalOpen || isShareModalOpen ? "report-page__shell-wrap--obscured" : "",
+          isPricingModalOpen || isShareModalOpen
+            ? "report-page__shell-wrap--obscured"
+            : isScrollTeaserOpen
+              ? "report-page__shell-wrap--obscured-soft"
+              : "",
         ]
           .filter(Boolean)
           .join(" ")}
-        aria-hidden={isPricingModalOpen || isShareModalOpen}
-        inert={isPricingModalOpen || isShareModalOpen}
+        aria-hidden={isPricingModalOpen || isShareModalOpen || isScrollTeaserOpen}
+        inert={isPricingModalOpen || isShareModalOpen || isScrollTeaserOpen}
       >
         <div className="report-shell">
           <ReportNavigation
@@ -839,6 +847,10 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   const [pricingVariant, setPricingVariant] = useState<"default" | "offer" | "share">("default");
   const autoOpenedPricingRef = useRef(false);
   const autoOpenedOfferRef = useRef(false);
+  const [isScrollTeaserOpen, setIsScrollTeaserOpen] = useState(false);
+  const scrollTeaserFiredRef = useRef(false);
+  const scrollTeaserTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isPricingModalOpenRef = useRef(false);
 
   // Offer variant (Figma 6297-1431) is gated to the 24h+ ladder step. Before
   // step 1 every manual open shows the default pricing modal (Figma 6755-1035).
@@ -886,6 +898,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     if (!hasLadderDiscount) return;
     autoOpenedPricingRef.current = true;
     // eslint-disable-next-line react-hooks/set-state-in-effect
+    setIsScrollTeaserOpen(false);
     setPricingVariant("offer");
     setIsPricingModalOpen(true);
   }, [accessPlan, data, viewMode]);
@@ -901,10 +914,43 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     // already bought one plan can still see offers for the tier above.
     // One-shot: guarded by autoOpenedOfferRef to avoid re-open cascades.
     // eslint-disable-next-line react-hooks/set-state-in-effect
+    setIsScrollTeaserOpen(false);
     setPricingTargetArchetype(null);
     setPricingVariant("offer");
     setIsPricingModalOpen(true);
   }, [data, isOfferLink, viewMode]);
+
+  useEffect(() => {
+    isPricingModalOpenRef.current = isPricingModalOpen;
+  }, [isPricingModalOpen]);
+
+  useEffect(() => {
+    if (!data) return;
+    if (accessPlan !== null) return;
+    if (viewMode === "shared") return;
+
+    function handleFirstScroll() {
+      if (scrollTeaserFiredRef.current) return;
+      scrollTeaserFiredRef.current = true;
+      window.removeEventListener("scroll", handleFirstScroll);
+      scrollTeaserTimerRef.current = setTimeout(() => {
+        if (!isPricingModalOpenRef.current) {
+          setIsScrollTeaserOpen(true);
+        }
+      }, 1000);
+    }
+
+    window.addEventListener("scroll", handleFirstScroll, { passive: true });
+
+    return () => {
+      window.removeEventListener("scroll", handleFirstScroll);
+      if (scrollTeaserTimerRef.current) {
+        clearTimeout(scrollTeaserTimerRef.current);
+        scrollTeaserTimerRef.current = null;
+      }
+      scrollTeaserFiredRef.current = false;
+    };
+  }, [accessPlan, data, viewMode]);
 
   const apiUnlocked = data?.unlockedArchetypes;
   const primaryArchetypeFromData = data?.primaryArchetype;
@@ -954,6 +1000,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
         return;
       }
 
+      setIsScrollTeaserOpen(false);
       setPricingTargetArchetype(name === primaryArchetypeFromData ? null : name);
       setPricingVariant(shouldShowOfferVariant ? "offer" : "default");
       setIsPricingModalOpen(true);
@@ -995,6 +1042,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     // Free-plan users see the pricing modal in "share" variant instead of the
     // share form — they have nothing to share until they purchase a plan.
     if (!canSharePlan(accessPlan)) {
+      setIsScrollTeaserOpen(false);
       setPricingTargetArchetype(null);
       setPricingVariant("share");
       setIsPricingModalOpen(true);
@@ -1010,6 +1058,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       // viewed (locked-section CTAs in /report?archetype=Y must upgrade Y,
       // not primary). null = primary archetype.
       const scope = archetype ?? null;
+      setIsScrollTeaserOpen(false);
       setPricingTargetArchetype(scope && scope !== primaryArchetypeFromData ? scope : null);
       setPricingVariant(shouldShowOfferVariant ? "offer" : "default");
       setIsPricingModalOpen(true);
@@ -1098,45 +1147,70 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   };
   const resolvedSections = resolveReportSections(reportSections, effectiveViewArchetype);
 
+  const handleTeaserCheckout = () => {
+    setIsScrollTeaserOpen(false);
+    beginCheckout("full_report", effectiveViewArchetype);
+  };
+
   return (
-    <ReportExperience
-      key={`${token ?? "browser"}:${sessionId ?? "anon"}`}
-      devParam={devParam}
-      accessPlan={data.accessPlan}
-      archetypeTiers={data.archetypeTiers ?? {}}
-      feedbacks={feedbacks}
-      isPricingModalOpen={isPricingModalOpen}
-      isShareModalOpen={isShareModalOpen}
-      matchScore={matchScore}
-      onBeginCheckout={beginCheckout}
-      onClosePricingModal={closePricingModal}
-      onCloseShareModal={closeShareModal}
-      onOpenShareModal={openShareModal}
-      onOpenPricingModal={openPricingModal}
-      onUnlockArchetype={handleUnlockArchetype}
-      ownerFirstName={ownerFirstName}
-      ownerToken={ownerToken}
-      percentages={percentages}
-      placeholderValues={placeholderValues}
-      primaryArchetype={primaryArchetype}
-      pricingQuotes={data.pricingQuotes}
-      archetypeContent={data.archetypeContent ?? {}}
-      practiceTendencies={data.practiceTendencies ?? {}}
-      pricingTargetArchetype={pricingTargetArchetype}
-      pricingVariant={pricingVariant}
-      ranking={ranking}
-      reportDate={reportDate}
-      resolvedSections={resolvedSections}
-      snapshot={snapshot}
-      submitFeedback={submitFeedback}
-      submitted={submitted}
-      theme={theme}
-      unlockedArchetypes={unlockedArchetypes}
-      userEmail={data.userEmail}
-      userName={data.userName}
-      viewArchetype={effectiveViewArchetype}
-      viewMode={viewMode}
-    />
+    <>
+      <ReportExperience
+        key={`${token ?? "browser"}:${sessionId ?? "anon"}`}
+        devParam={devParam}
+        accessPlan={data.accessPlan}
+        archetypeTiers={data.archetypeTiers ?? {}}
+        feedbacks={feedbacks}
+        isPricingModalOpen={isPricingModalOpen}
+        isScrollTeaserOpen={isScrollTeaserOpen}
+        isShareModalOpen={isShareModalOpen}
+        matchScore={matchScore}
+        onBeginCheckout={beginCheckout}
+        onClosePricingModal={closePricingModal}
+        onCloseShareModal={closeShareModal}
+        onOpenShareModal={openShareModal}
+        onOpenPricingModal={openPricingModal}
+        onUnlockArchetype={handleUnlockArchetype}
+        ownerFirstName={ownerFirstName}
+        ownerToken={ownerToken}
+        percentages={percentages}
+        placeholderValues={placeholderValues}
+        primaryArchetype={primaryArchetype}
+        pricingQuotes={data.pricingQuotes}
+        archetypeContent={data.archetypeContent ?? {}}
+        practiceTendencies={data.practiceTendencies ?? {}}
+        pricingTargetArchetype={pricingTargetArchetype}
+        pricingVariant={pricingVariant}
+        ranking={ranking}
+        reportDate={reportDate}
+        resolvedSections={resolvedSections}
+        snapshot={snapshot}
+        submitFeedback={submitFeedback}
+        submitted={submitted}
+        theme={theme}
+        unlockedArchetypes={unlockedArchetypes}
+        userEmail={data.userEmail}
+        userName={data.userName}
+        viewArchetype={effectiveViewArchetype}
+        viewMode={viewMode}
+      />
+      <ScrollPricingModal
+        open={isScrollTeaserOpen}
+        onClose={() => setIsScrollTeaserOpen(false)}
+        onCheckout={handleTeaserCheckout}
+        archetype={effectiveViewArchetype}
+        userName={data.userName}
+        theme={theme}
+        matchScore={matchScore}
+        quote={data.pricingQuotes?.full_report ?? null}
+      />
+      {data.accessPlan !== "full_report" && data.accessPlan !== "all_reports" && (
+        <ReportStickyUnlockBar
+          quote={data.pricingQuotes?.full_report ?? null}
+          onCheckout={() => beginCheckout("full_report", effectiveViewArchetype)}
+          hidden={isPricingModalOpen || isShareModalOpen || isScrollTeaserOpen}
+        />
+      )}
+    </>
   );
 };
 
