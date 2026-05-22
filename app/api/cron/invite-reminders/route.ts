@@ -28,6 +28,7 @@ import { getBreaker } from "@shared/http/circuit-breaker";
 import logger from "@shared/observability/logger";
 import { inviteReminder1Email } from "@features/invite/emails/invite-reminder-1";
 import { inviteReminder2Email } from "@features/invite/emails/invite-reminder-2";
+import { getEmailSiteUrl } from "@shared/emails/site-url";
 import { buildUnsubscribeUrl } from "@shared/emails/unsubscribe-token";
 import { isEmailSuppressed } from "@shared/emails/suppression";
 
@@ -145,7 +146,7 @@ export async function GET(request: Request) {
 
   const trackDuration = startCronTimer("invite-reminders", 50);
 
-  const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://loveiq.org").replace(/\/$/, "");
+  const siteUrl = getEmailSiteUrl();
   // Deep-link into the Refer-a-Friend modal on the report page.
   const inviteCtaUrl = `${siteUrl}/report?invite=1`;
 

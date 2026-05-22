@@ -23,6 +23,7 @@ import logger from "@shared/observability/logger";
 import { startCronTimer } from "@shared/observability/slack-alert-dedup";
 import { surveyPausedEmail } from "@features/survey/server/emails/survey-paused";
 import { surveyPausedBEmail } from "@features/survey/server/emails/survey-paused-b";
+import { getEmailSiteUrl } from "@shared/emails/site-url";
 import { pickEmailVariant } from "@shared/emails/ab-variant";
 import { buildUnsubscribeUrl } from "@shared/emails/unsubscribe-token";
 import { isEmailSuppressed } from "@shared/emails/suppression";
@@ -118,7 +119,7 @@ export async function GET(request: Request) {
 
   const trackDuration = startCronTimer("survey-paused", 50);
 
-  const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://loveiq.org").replace(/\/$/, "");
+  const siteUrl = getEmailSiteUrl();
   const resumeUrl = `${siteUrl}/survey`;
 
   const summary = {

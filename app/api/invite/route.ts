@@ -5,6 +5,7 @@ import { inviteBEmail } from "@features/invite/emails/invite-b";
 import { buildUnsubscribeUrl } from "@shared/emails/unsubscribe-token";
 import { isEmailSuppressed } from "@shared/emails/suppression";
 import { pickEmailVariant } from "@shared/emails/ab-variant";
+import { getEmailSiteUrl } from "@shared/emails/site-url";
 import { z } from "zod";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import { scheduleAfterResponse } from "@shared/http/after-response";
@@ -65,7 +66,7 @@ export async function POST(request: Request) {
 
   // 4. Build UTM-tagged CTA URL (deterministic A/B variant per recipient)
   const variant = pickEmailVariant(normalizedRecipient, "invite");
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://loveiq.org";
+  const siteUrl = getEmailSiteUrl();
   // eslint-disable-next-line no-secrets/no-secrets
   const ctaUrl = `${siteUrl}?utm_source=loveiq_email&utm_medium=email&utm_campaign=refer_a_friend&utm_content=version_${variant}&utm_term=report_purchaser`;
 

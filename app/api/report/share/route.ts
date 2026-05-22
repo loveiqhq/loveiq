@@ -11,6 +11,7 @@ import { reportSharedCEmail } from "@features/report/server/emails/report-shared
 import { pickFromVariants } from "@shared/emails/ab-variant";
 import { buildUnsubscribeUrl } from "@shared/emails/unsubscribe-token";
 import { isEmailSuppressed } from "@shared/emails/suppression";
+import { getEmailSiteUrl } from "@shared/emails/site-url";
 import {
   canSharePlan,
   getReportPlanByPersonalReportId,
@@ -143,7 +144,7 @@ export async function POST(request: Request) {
   const row = result.row;
 
   // Fire-and-forget email — never blocks the response or rolls back the DB row.
-  const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://loveiq.org").replace(/\/$/, "");
+  const siteUrl = getEmailSiteUrl();
   const shareUrl = `${siteUrl}/report/${row.share_token}`;
   const resend = getResend();
   if (resend) {

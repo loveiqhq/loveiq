@@ -13,6 +13,7 @@ import { surveyCompleteBEmail } from "@features/survey/server/emails/survey-comp
 import { buildUnsubscribeUrl } from "@shared/emails/unsubscribe-token";
 import { isEmailSuppressed } from "@shared/emails/suppression";
 import { pickEmailVariant } from "@shared/emails/ab-variant";
+import { getEmailSiteUrl } from "@shared/emails/site-url";
 import { ensurePersonalReportForSubmission } from "@features/report/server/personalReport";
 import type { SurveyAnswers } from "@features/survey/server/types";
 import {
@@ -404,7 +405,7 @@ export async function POST(request: Request) {
         return;
       }
 
-      const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://loveiq.org").replace(/\/$/, "");
+      const siteUrl = getEmailSiteUrl();
       const reportUrl = reportToken
         ? `${siteUrl}/report/${encodeURIComponent(reportToken)}`
         : `${siteUrl}/report`;

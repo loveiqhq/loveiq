@@ -11,6 +11,7 @@ import { reportFullEmail } from "@features/report/server/emails/report-full";
 import { reportFullBEmail } from "@features/report/server/emails/report-full-b";
 import { pickEmailVariant } from "@shared/emails/ab-variant";
 import { buildUnsubscribeUrl } from "@shared/emails/unsubscribe-token";
+import { getEmailSiteUrl } from "@shared/emails/site-url";
 import {
   getReportPurchasePlan,
   isReportPurchasePlanId,
@@ -173,7 +174,7 @@ async function sendPurchaseEmail({
   }
 
   const reportToken = reportTokenOverride || (await lookupReportTokenForSubmission(submissionId));
-  const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://loveiq.org").replace(/\/$/, "");
+  const siteUrl = getEmailSiteUrl();
   const reportUrl = reportToken
     ? `${siteUrl}/report/${encodeURIComponent(reportToken)}`
     : `${siteUrl}/report`;

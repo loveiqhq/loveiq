@@ -28,6 +28,7 @@ import logger from "@shared/observability/logger";
 import { startCronTimer } from "@shared/observability/slack-alert-dedup";
 import { buildUnsubscribeUrl } from "@shared/emails/unsubscribe-token";
 import { isEmailSuppressed } from "@shared/emails/suppression";
+import { getEmailSiteUrl } from "@shared/emails/site-url";
 import { getReportPlanByPersonalReportId } from "@features/report/server/planAccess";
 import { getStripeServerClient } from "@features/checkout/server/stripeCheckout";
 import { getCouponIdForStage } from "@features/checkout/server/promoCodes";
@@ -635,7 +636,7 @@ export async function GET(request: Request) {
 
   const ctx: RouteContext = {
     resend,
-    siteUrl: (process.env.NEXT_PUBLIC_SITE_URL || "https://loveiq.org").replace(/\/$/, ""),
+    siteUrl: getEmailSiteUrl(),
     unsubSecret: process.env.UNSUBSCRIBE_SECRET,
   };
 
