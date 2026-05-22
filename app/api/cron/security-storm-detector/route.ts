@@ -19,6 +19,7 @@ import { NextResponse } from "next/server";
 import { Redis } from "@upstash/redis";
 import logger from "@shared/observability/logger";
 import { notifySlack, escapeSlack } from "@shared/observability/slack";
+import { isProdCronHost } from "@shared/http/is-prod-cron-host";
 import {
   startCronTimer,
   tryClaimSlackAlert,
@@ -72,6 +73,11 @@ function getRedis(): Redis | null {
 export async function GET(request: Request) {
   if (!verifyCronAuth(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Skip on the staging Vercel project (shares the prod KV namespace).
+  if (!isProdCronHost()) {
+    return NextResponse.json({ skipped: true, reason: "non-prod-cron-host" });
   }
 
   const trackDuration = startCronTimer("security-storm-detector", 50);

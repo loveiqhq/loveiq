@@ -29,6 +29,7 @@ import logger from "@shared/observability/logger";
 import { inviteReminder1Email } from "@features/invite/emails/invite-reminder-1";
 import { inviteReminder2Email } from "@features/invite/emails/invite-reminder-2";
 import { getEmailSiteUrl } from "@shared/emails/site-url";
+import { isProdCronHost } from "@shared/http/is-prod-cron-host";
 import { buildUnsubscribeUrl } from "@shared/emails/unsubscribe-token";
 import { isEmailSuppressed } from "@shared/emails/suppression";
 
@@ -137,6 +138,11 @@ export async function GET(request: Request) {
   const auth = request.headers.get("authorization") || "";
   if (!safeCompare(auth, `Bearer ${expected}`)) {
     return NextResponse.json({ error: "Invalid request." }, { status: 401 });
+  }
+
+  // Skip on the staging Vercel project (shares the prod DB).
+  if (!isProdCronHost()) {
+    return NextResponse.json({ skipped: true, reason: "non-prod-cron-host" });
   }
 
   const resend = getResend();

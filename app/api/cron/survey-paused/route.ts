@@ -24,6 +24,7 @@ import { startCronTimer } from "@shared/observability/slack-alert-dedup";
 import { surveyPausedEmail } from "@features/survey/server/emails/survey-paused";
 import { surveyPausedBEmail } from "@features/survey/server/emails/survey-paused-b";
 import { getEmailSiteUrl } from "@shared/emails/site-url";
+import { isProdCronHost } from "@shared/http/is-prod-cron-host";
 import { pickEmailVariant } from "@shared/emails/ab-variant";
 import { buildUnsubscribeUrl } from "@shared/emails/unsubscribe-token";
 import { isEmailSuppressed } from "@shared/emails/suppression";
@@ -110,6 +111,11 @@ export async function GET(request: Request) {
   const auth = request.headers.get("authorization") || "";
   if (!safeCompare(auth, `Bearer ${expected}`)) {
     return NextResponse.json({ error: "Invalid request." }, { status: 401 });
+  }
+
+  // Skip on the staging Vercel project (shares the prod DB).
+  if (!isProdCronHost()) {
+    return NextResponse.json({ skipped: true, reason: "non-prod-cron-host" });
   }
 
   const resend = getResend();

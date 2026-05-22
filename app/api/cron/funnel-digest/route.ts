@@ -22,6 +22,7 @@
 import { NextResponse } from "next/server";
 import logger from "@shared/observability/logger";
 import { notifySlack } from "@shared/observability/slack";
+import { isProdCronHost } from "@shared/http/is-prod-cron-host";
 import {
   startCronTimer,
   tryClaimSlackAlert,
@@ -341,6 +342,12 @@ function shortDate(d: Date): string {
 export async function GET(request: Request) {
   if (!verifyCronAuth(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Skip on the staging Vercel project (shares the prod DB) — only one
+  // daily digest per actual prod deploy.
+  if (!isProdCronHost()) {
+    return NextResponse.json({ skipped: true, reason: "non-prod-cron-host" });
   }
 
   const trackDuration = startCronTimer("funnel-digest", 60);

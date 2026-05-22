@@ -29,6 +29,7 @@ import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { startCronTimer } from "@shared/observability/slack-alert-dedup";
 import { getBreaker } from "@shared/http/circuit-breaker";
 import { KNOWN_ARCHETYPES, isArchetypeName } from "@features/report/server/archetypeSlug";
+import { isProdCronHost } from "@shared/http/is-prod-cron-host";
 import logger from "@shared/observability/logger";
 
 export const runtime = "nodejs";
@@ -158,6 +159,12 @@ export async function GET(request: Request) {
   const auth = request.headers.get("authorization") || "";
   if (!safeCompare(auth, `Bearer ${expected}`)) {
     return NextResponse.json({ error: "Invalid request." }, { status: 401 });
+  }
+
+  // Skip on the staging Vercel project (shares the prod DB). Critical:
+  // this cron mutates real prod payment + report state.
+  if (!isProdCronHost()) {
+    return NextResponse.json({ skipped: true, reason: "non-prod-cron-host" });
   }
 
   const trackDuration = startCronTimer("payment-fulfillment-sweep", 50);

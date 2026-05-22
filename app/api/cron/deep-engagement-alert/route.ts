@@ -22,6 +22,7 @@ import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { getBreaker } from "@shared/http/circuit-breaker";
 import logger from "@shared/observability/logger";
 import { notifySlack } from "@shared/observability/slack";
+import { isProdCronHost } from "@shared/http/is-prod-cron-host";
 import {
   startCronTimer,
   tryClaimSlackAlert,
@@ -316,6 +317,10 @@ async function scanSameIpFlood(): Promise<number> {
 export async function GET(request: Request) {
   if (!verifyCronAuth(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  // Skip on the staging Vercel project (shares the prod DB).
+  if (!isProdCronHost()) {
+    return NextResponse.json({ skipped: true, reason: "non-prod-cron-host" });
   }
   const trackDuration = startCronTimer("deep-engagement-alert", 50);
   try {

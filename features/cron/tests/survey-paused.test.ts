@@ -33,6 +33,11 @@ vi.mock("resend", () => ({
   },
 }));
 
+// Bypass the prod-cron-host gate in unit tests.
+vi.mock("@shared/http/is-prod-cron-host", () => ({
+  isProdCronHost: () => true,
+}));
+
 import { GET } from "@/app/api/cron/survey-paused/route";
 
 const ORIGINAL_ENV = { ...process.env };

@@ -29,6 +29,7 @@ import { startCronTimer } from "@shared/observability/slack-alert-dedup";
 import { buildUnsubscribeUrl } from "@shared/emails/unsubscribe-token";
 import { isEmailSuppressed } from "@shared/emails/suppression";
 import { getEmailSiteUrl } from "@shared/emails/site-url";
+import { isProdCronHost } from "@shared/http/is-prod-cron-host";
 import { getReportPlanByPersonalReportId } from "@features/report/server/planAccess";
 import { getStripeServerClient } from "@features/checkout/server/stripeCheckout";
 import { getCouponIdForStage } from "@features/checkout/server/promoCodes";
@@ -625,6 +626,13 @@ export async function GET(request: Request) {
   const auth = request.headers.get("authorization") || "";
   if (!safeCompare(auth, `Bearer ${expected}`)) {
     return NextResponse.json({ error: "Invalid request." }, { status: 401 });
+  }
+
+  // Skip on the staging Vercel project (shares the prod DB). Without this
+  // gate, staging's nurture cron sends emails — containing staging URLs —
+  // to real prod users.
+  if (!isProdCronHost()) {
+    return NextResponse.json({ skipped: true, reason: "non-prod-cron-host" });
   }
 
   const resend = getResend();

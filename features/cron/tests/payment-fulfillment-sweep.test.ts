@@ -22,6 +22,11 @@ vi.mock("@features/report/server/personalReport", () => ({
   upsertArchetypeTierForPersonalReport: vi.fn(),
 }));
 
+// Bypass the prod-cron-host gate in unit tests.
+vi.mock("@shared/http/is-prod-cron-host", () => ({
+  isProdCronHost: () => true,
+}));
+
 import { GET } from "@/app/api/cron/payment-fulfillment-sweep/route";
 
 const ORIGINAL_ENV = { ...process.env };
