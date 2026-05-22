@@ -16,6 +16,9 @@ import type {
 import type { ReportAccessPlan } from "@features/report/server/access";
 import {
   setReportSubmissionContext,
+  trackCheckoutAbandonedReturn,
+  trackCheckoutRetryClicked,
+  trackCheckoutReturnViewed,
   trackPaywallUnlocked,
   trackReportPurchase,
 } from "@features/analytics/client";
@@ -178,6 +181,24 @@ const CheckoutReturnPage: FC<Props> = ({
     state.status === "ready" && isPaidAndComplete && state.accessPlan !== null;
   const isRedirecting = canReturnToUnlockedReport;
 
+  // Fire `checkout_return_viewed` exactly once per (sessionId, terminal state)
+  // pair so a 30s polling loop doesn't double-count. Bind the submission
+  // context first so persistence doesn't silently drop on null context.
+  const returnViewedFiredRef = useRef(false);
+  useEffect(() => {
+    if (returnViewedFiredRef.current) return;
+    if (state.status === "loading") return;
+    let status: "success" | "failed" | "pending" = "failed";
+    if (state.status === "ready") {
+      if (state.surveySubmissionId) {
+        setReportSubmissionContext(state.surveySubmissionId);
+      }
+      status = isPaidAndComplete ? "success" : "pending";
+    }
+    returnViewedFiredRef.current = true;
+    trackCheckoutReturnViewed({ status, plan: planId });
+  }, [isPaidAndComplete, planId, state]);
+
   useEffect(() => {
     if (
       state.status !== "ready" ||
@@ -276,13 +297,37 @@ const CheckoutReturnPage: FC<Props> = ({
           )}
 
           <div className="checkout-return__actions">
-            <Link href={backHref} className="checkout-submit checkout-submit--secondary">
+            <Link
+              href={backHref}
+              className="checkout-submit checkout-submit--secondary"
+              onClick={() => {
+                // Only count as abandonment if the user did NOT complete
+                // payment. Successful unlocks shouldn't pollute the
+                // abandonment metric.
+                if (!isPaidAndComplete) {
+                  trackCheckoutAbandonedReturn({
+                    failure_reason:
+                      state.status === "ready"
+                        ? `payment_${state.paymentStatus ?? "unknown"}`
+                        : state.status,
+                  });
+                }
+              }}
+            >
               {canReturnToUnlockedReport ? "Go to unlocked report" : "Return to report"}
             </Link>
             {!isPaidAndComplete ? (
               <Link
                 href={buildReportCheckoutHref({ archetype: archetypeSlug, plan: planId, token })}
                 className="checkout-return__link"
+                onClick={() =>
+                  trackCheckoutRetryClicked({
+                    failure_reason:
+                      state.status === "ready"
+                        ? `payment_${state.paymentStatus ?? "unknown"}`
+                        : state.status,
+                  })
+                }
               >
                 Start checkout again
               </Link>

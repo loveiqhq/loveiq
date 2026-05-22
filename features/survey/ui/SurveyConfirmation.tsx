@@ -1,6 +1,7 @@
 "use client";
 
 import type { FC } from "react";
+import { trackSurveyConfirmationCtaClicked } from "@features/analytics/client";
 
 type SubmitStatus = "idle" | "submitting" | "success" | "error";
 
@@ -262,7 +263,10 @@ const SurveyConfirmation: FC<SurveyConfirmationProps> = ({
           <div {...fadeUp(1900)}>
             <button
               type="button"
-              onClick={onExit}
+              onClick={() => {
+                trackSurveyConfirmationCtaClicked({ cta: "view_report" });
+                onExit();
+              }}
               className="rounded-full bg-gradient-brand px-8 py-3.5 font-sans text-[14px] font-bold text-white shadow-[0_4px_20px_rgba(254,104,57,0.3)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_6px_24px_rgba(254,104,57,0.4)] focus-visible-ring"
             >
               Return to LoveIQ

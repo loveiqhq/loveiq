@@ -38,7 +38,7 @@ import {
 } from "@features/survey/ui/hooks/surveySession";
 import { useReportData, type ReportRequestError } from "./hooks/useReportData";
 import { useSectionFeedback, type FeedbackPayload } from "./hooks/useSectionFeedback";
-import { resolveReportSections } from "./reportTitles";
+import { resolveReportSections, type DisplayReportSection } from "./reportTitles";
 import { getReportTheme, getReportThemeStyle } from "./reportTheme";
 import ArchetypeProbabilitySection from "./sections/ArchetypeProbabilitySection";
 import AttachmentPatternsSection from "./sections/AttachmentPatternsSection";
@@ -61,7 +61,13 @@ import {
   isArchetypeName,
   toArchetypeSlug,
 } from "@features/report/server/archetypeSlug";
-import { setReportSubmissionContext, trackReportViewed } from "@features/analytics/client";
+import {
+  setReportSubmissionContext,
+  trackLockIconClicked,
+  trackReferFriendOpened,
+  trackReportShareOpened,
+  trackReportViewed,
+} from "@features/analytics/client";
 import { useReportEngagementTimers } from "./hooks/useReportEngagementTimers";
 
 interface SnapshotContent {
@@ -397,7 +403,20 @@ const ReportExperience: FC<ReportExperienceProps> = ({
     setActiveSectionId(sectionId);
   };
 
-  const unlockSection = (_sectionId: string) => {
+  const unlockSection = (section: DisplayReportSection) => {
+    // Lock-icon click intent — fired BEFORE the modal opens so funnel can
+    // measure pre-paywall intent vs modal-view conversion. `plan_needed`
+    // mirrors the locked section's accessTier (free tier is always unlocked
+    // so it shouldn't reach this handler).
+    const planNeeded: "essentials" | "full_report" | "all_reports" =
+      section.accessTier === "essentials" || section.accessTier === "full_report"
+        ? section.accessTier
+        : "full_report";
+    trackLockIconClicked({
+      section_id: section.id,
+      archetype: viewArchetype || null,
+      plan_needed: planNeeded,
+    });
     // Scope the upgrade modal to the archetype the user is currently viewing,
     // not the primary. Otherwise a buyer who already owns essentials/full on
     // primary X would see the modal flag both cards as "Your current plan"
@@ -506,12 +525,25 @@ const ReportExperience: FC<ReportExperienceProps> = ({
       >
         <ReportMobileNav
           activeSectionId={activeSectionId}
-          onReferFriend={() => setShowInvite(true)}
+          onReferFriend={() => {
+            trackReferFriendOpened({ source: "drawer" });
+            setShowInvite(true);
+          }}
           onSectionClick={handleSectionClick}
-          onShareClick={viewMode === "owner" && ownerToken ? onOpenShareModal : undefined}
+          onShareClick={
+            viewMode === "owner" && ownerToken
+              ? () => {
+                  trackReportShareOpened({ source: "drawer" });
+                  onOpenShareModal();
+                }
+              : undefined
+          }
           sections={resolvedSections}
         />
-        <ReportSummaryBanner onSummaryClick={() => handleSectionClick("summary")} />
+        <ReportSummaryBanner
+          onSummaryClick={() => handleSectionClick("summary")}
+          archetype={viewArchetype || null}
+        />
         <div
           className={[
             "report-page__shell-wrap",
@@ -527,9 +559,19 @@ const ReportExperience: FC<ReportExperienceProps> = ({
           <div className="report-shell">
             <ReportDesktopSidebar
               activeSectionId={activeSectionId}
-              onReferFriend={() => setShowInvite(true)}
+              onReferFriend={() => {
+                trackReferFriendOpened({ source: "sidebar" });
+                setShowInvite(true);
+              }}
               onSectionClick={handleSectionClick}
-              onShareClick={viewMode === "owner" && ownerToken ? onOpenShareModal : undefined}
+              onShareClick={
+                viewMode === "owner" && ownerToken
+                  ? () => {
+                      trackReportShareOpened({ source: "sidebar" });
+                      onOpenShareModal();
+                    }
+                  : undefined
+              }
               sections={resolvedSections}
             />
 
@@ -588,7 +630,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                         generalHtml=""
                         isPremium={section.isPremium}
                         isUnlocked={isSummaryUnlocked}
-                        onUnlock={() => unlockSection(section.id)}
+                        onUnlock={() => unlockSection(section)}
                         sectionId={section.id}
                         sectionTitle={title}
                         tier="essentials"
@@ -694,7 +736,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                         generalHtml={generalHtml}
                         isPremium={section.isPremium}
                         isUnlocked={isBackendUnlocked}
-                        onUnlock={() => unlockSection(section.id)}
+                        onUnlock={() => unlockSection(section)}
                         sectionTitle={title}
                         tier={
                           isSectionIncludedInEssentials(section.id) ? "essentials" : "full_report"
@@ -728,7 +770,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                         generalHtml={generalHtml}
                         isPremium={section.isPremium}
                         isUnlocked={isBackendUnlocked}
-                        onUnlock={() => unlockSection(section.id)}
+                        onUnlock={() => unlockSection(section)}
                         sectionTitle={practiceSectionTitle}
                         tier={
                           isSectionIncludedInEssentials(section.id) ? "essentials" : "full_report"
@@ -761,7 +803,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                       isPremium={section.isPremium}
                       isStageValueLocked={isStageValueLocked}
                       isUnlocked={isBackendUnlocked}
-                      onUnlock={() => unlockSection(section.id)}
+                      onUnlock={() => unlockSection(section)}
                       sectionId={section.id}
                       sectionTitle={title}
                       tier={
@@ -1232,6 +1274,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
           quote={data.pricingQuotes?.full_report ?? null}
           onCheckout={() => beginCheckout("full_report", effectiveViewArchetype)}
           hidden={isPricingModalOpen || isShareModalOpen || isScrollTeaserOpen}
+          archetype={effectiveViewArchetype}
         />
       )}
     </>

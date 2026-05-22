@@ -1,14 +1,17 @@
 "use client";
 
 import { useEffect, useState, type FC } from "react";
+import { trackReportSummaryJumped } from "@features/analytics/client";
 
 interface Props {
   onSummaryClick?: () => void;
+  /** Owner's archetype name, for analytics attribution. */
+  archetype?: string | null;
 }
 
 const SCROLL_THRESHOLD = 15;
 
-const ReportSummaryBanner: FC<Props> = ({ onSummaryClick }) => {
+const ReportSummaryBanner: FC<Props> = ({ onSummaryClick, archetype }) => {
   const [hidden, setHidden] = useState(false);
 
   useEffect(() => {
@@ -57,7 +60,14 @@ const ReportSummaryBanner: FC<Props> = ({ onSummaryClick }) => {
 
   return (
     <div className={`report-summary-banner${hidden ? " report-summary-banner--hidden" : ""}`}>
-      <a href="#summary" className="report-summary-banner__btn" onClick={onSummaryClick}>
+      <a
+        href="#summary"
+        className="report-summary-banner__btn"
+        onClick={() => {
+          trackReportSummaryJumped({ source: "banner", archetype });
+          onSummaryClick?.();
+        }}
+      >
         <span className="report-summary-banner__label-primary">Want it shorter?</span>
         <span className="report-summary-banner__label-secondary">Jump to the report summary</span>
       </a>

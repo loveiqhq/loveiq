@@ -26,6 +26,7 @@ import { supabaseFetch } from "@features/admin/server/supabase";
 import logger from "@shared/observability/logger";
 
 const ALLOWED_EVENTS = [
+  // Original 8 — funnel + engagement timers
   "report_viewed",
   "paywall_view",
   "price_shown",
@@ -34,6 +35,31 @@ const ALLOWED_EVENTS = [
   "report_engagement_1min",
   "report_engagement_5min",
   "report_engagement_10min",
+  // Report-page intent + dismiss events (Phase B.1)
+  "report_summary_jumped",
+  "paywall_dismissed",
+  "scroll_paywall_dismissed",
+  "lock_icon_clicked",
+  "sticky_unlock_clicked",
+  "report_share_opened",
+  "refer_friend_opened",
+  "chapter_feedback_submitted",
+  // Survey + wizard funnel slot (Phase B.2)
+  "wizard_slide_advanced",
+  // eslint-disable-next-line no-secrets/no-secrets -- not a secret, analytics event name
+  "survey_confirmation_cta_clicked",
+  // Invite (Phase B.4)
+  "invite_modal_dismissed",
+  // Checkout return (Phase B.5)
+  "checkout_return_viewed",
+  "checkout_retry_clicked",
+  "checkout_abandoned_return",
+  // UX quality signals (Phase D)
+  "scroll_depth_25",
+  "scroll_depth_50",
+  "scroll_depth_75",
+  "scroll_depth_100",
+  "rage_click",
 ] as const;
 
 type AllowedEvent = (typeof ALLOWED_EVENTS)[number];
@@ -44,13 +70,36 @@ function entityTypeFor(event: AllowedEvent): string {
     case "report_engagement_1min":
     case "report_engagement_5min":
     case "report_engagement_10min":
+    case "report_summary_jumped":
+    case "report_share_opened":
+    case "refer_friend_opened":
+    case "chapter_feedback_submitted":
       return "report";
     case "paywall_view":
     case "price_shown":
+    case "paywall_dismissed":
+    case "scroll_paywall_dismissed":
+    case "lock_icon_clicked":
       return "paywall";
     case "begin_checkout":
     case "paywall_unlocked":
+    case "sticky_unlock_clicked":
+    case "checkout_return_viewed":
+    case "checkout_retry_clicked":
+    case "checkout_abandoned_return":
       return "checkout";
+    case "wizard_slide_advanced":
+    // eslint-disable-next-line no-secrets/no-secrets -- not a secret, analytics event name
+    case "survey_confirmation_cta_clicked":
+      return "survey";
+    case "invite_modal_dismissed":
+      return "invite";
+    case "scroll_depth_25":
+    case "scroll_depth_50":
+    case "scroll_depth_75":
+    case "scroll_depth_100":
+    case "rage_click":
+      return "ux";
   }
 }
 

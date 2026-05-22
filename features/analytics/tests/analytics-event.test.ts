@@ -47,6 +47,60 @@ function mockSubmissionLookup(submissionId: number) {
   });
 }
 
+describe("PERSISTED_EVENTS ↔ ALLOWED_EVENTS parity", () => {
+  it("client allowlist and route allowlist contain the same event_types", async () => {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const { fileURLToPath } = await import("node:url");
+    // Resolve from this test file's location. `fileURLToPath` handles
+    // percent-decoding on Windows where the path contains spaces.
+    const here = path.dirname(fileURLToPath(import.meta.url));
+    const clientPath = path.join(here, "..", "client.ts");
+    const routePath = path.join(
+      here,
+      "..",
+      "..",
+      "..",
+      "app",
+      "api",
+      "analytics-event",
+      "route.ts"
+    );
+
+    const extractList = (source: string, header: RegExp, label: string): Set<string> => {
+      const match = source.match(header);
+      if (!match || !match[1]) throw new Error(`Could not locate ${label}`);
+      return new Set(
+        match[1]
+          .split(/[,\n]/)
+          .map((s) => s.trim())
+          .filter((s) => s.length > 0 && !s.startsWith("//"))
+          .map((s) => s.replace(/^["'`]/, "").replace(/["'`].*$/, ""))
+          .filter((s) => /^[a-z][a-z0-9_]+$/.test(s))
+      );
+    };
+
+    const clientSource = fs.readFileSync(clientPath, "utf8");
+    const routeSource = fs.readFileSync(routePath, "utf8");
+    const persisted = extractList(
+      clientSource,
+      /PERSISTED_EVENTS\s*=\s*new\s+Set\(\[([\s\S]*?)\]\)/,
+      "PERSISTED_EVENTS"
+    );
+    const allowed = extractList(
+      routeSource,
+      /ALLOWED_EVENTS\s*=\s*\[([\s\S]*?)\]\s*as\s+const/,
+      "ALLOWED_EVENTS"
+    );
+
+    const missingInRoute = [...persisted].filter((e) => !allowed.has(e));
+    const missingInClient = [...allowed].filter((e) => !persisted.has(e));
+    expect(missingInRoute, "events in PERSISTED_EVENTS but not in ALLOWED_EVENTS").toEqual([]);
+    expect(missingInClient, "events in ALLOWED_EVENTS but not in PERSISTED_EVENTS").toEqual([]);
+    expect(persisted.size).toBeGreaterThan(0);
+  });
+});
+
 describe("POST /api/analytics-event — allowlist", () => {
   beforeEach(() => {
     vi.clearAllMocks();

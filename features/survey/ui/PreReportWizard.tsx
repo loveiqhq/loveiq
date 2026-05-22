@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef, type FC, type ReactNode } from "react";
 import Image from "next/image";
+import { trackWizardSlideAdvanced } from "@features/analytics/client";
 
 /* ------------------------------------------------------------------ */
 /*  Arrow icons                                                        */
@@ -439,6 +440,12 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete }) => {
         setIsExiting(true);
         setTimeout(onComplete, 600);
       } else {
+        // Track BEFORE advancing so from/to are accurate.
+        trackWizardSlideAdvanced({
+          from_slide: slideIndex,
+          to_slide: slideIndex + 1,
+          direction: "next",
+        });
         setSlideIndex((i) => i + 1);
       }
     }, 250);
@@ -449,6 +456,11 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete }) => {
     setIsLeaving(true);
     setTimeout(() => {
       setIsLeaving(false);
+      trackWizardSlideAdvanced({
+        from_slide: slideIndex,
+        to_slide: slideIndex - 1,
+        direction: "previous",
+      });
       setSlideIndex((i) => i - 1);
     }, 250);
   }, [slideIndex, isLeaving]);

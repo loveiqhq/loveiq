@@ -16,10 +16,13 @@ declare global {
     __loveiqGoogleAdsEnabled?: boolean;
     __loveiqGtagBootstrapped?: boolean;
     __loveiqReportSubmissionId?: number | null;
+    /** Dev-only: tracks event_types we've already warned about for missing context. */
+    __loveiqPersistSkipWarned?: Set<string>;
   }
 }
 
 const PERSISTED_EVENTS = new Set([
+  // Original 8 — funnel + engagement timers
   "report_viewed",
   "paywall_view",
   "price_shown",
@@ -28,6 +31,30 @@ const PERSISTED_EVENTS = new Set([
   "report_engagement_1min",
   "report_engagement_5min",
   "report_engagement_10min",
+  // Report-page intent + dismiss events (Phase B.1)
+  "report_summary_jumped",
+  "paywall_dismissed",
+  "scroll_paywall_dismissed",
+  "lock_icon_clicked",
+  "sticky_unlock_clicked",
+  "report_share_opened",
+  "refer_friend_opened",
+  "chapter_feedback_submitted",
+  // Survey + wizard funnel slot (Phase B.2)
+  "wizard_slide_advanced",
+  "survey_confirmation_cta_clicked",
+  // Invite (Phase B.4)
+  "invite_modal_dismissed",
+  // Checkout return (Phase B.5)
+  "checkout_return_viewed",
+  "checkout_retry_clicked",
+  "checkout_abandoned_return",
+  // UX quality signals (Phase D)
+  "scroll_depth_25",
+  "scroll_depth_50",
+  "scroll_depth_75",
+  "scroll_depth_100",
+  "rage_click",
 ]);
 
 /**
@@ -51,8 +78,22 @@ const persistAnalyticsEvent = (
   const submissionId = window.__loveiqReportSubmissionId ?? null;
   // No submission context = nothing to persist (the timeline keys off
   // submission_id). The event still went to GA4; only durable storage is
-  // skipped.
-  if (!submissionId) return;
+  // skipped. In dev, emit a console.warn ONCE per event_type so missing
+  // wiring is visible during QA without spamming the console (UX-signal
+  // events on /landing legitimately have no context).
+  if (!submissionId) {
+    if (process.env.NODE_ENV === "development") {
+      const warned = (window.__loveiqPersistSkipWarned ??= new Set<string>());
+      if (!warned.has(eventType)) {
+        warned.add(eventType);
+        console.warn(
+          `[analytics] Skipped persistence for "${eventType}" — no submission context. ` +
+            `Call setReportSubmissionContext() before firing persisted events.`
+        );
+      }
+    }
+    return;
+  }
 
   const csrf = getCsrfToken();
   if (!csrf) return;
@@ -96,7 +137,7 @@ const getCookieValue = (name: string) => {
   return decodeURIComponent(cookie.slice(cookie.indexOf("=") + 1));
 };
 
-const hasCookieYesConsent = (category: ConsentCategory) => {
+export const hasCookieYesConsent = (category: ConsentCategory) => {
   const consentValue = getCookieValue(COOKIEYES_CONSENT_COOKIE);
   if (!consentValue) return false;
 
@@ -363,3 +404,247 @@ export const trackGoogleAdsPurchaseConversion = (params: ReportPurchaseParams) =
     transaction_id: params.transaction_id || "",
   });
 };
+
+/* ============================================================ */
+/*  Phase B.1 — Report-page funnel events                       */
+/* ============================================================ */
+
+export const trackReportSummaryJumped = (params: {
+  archetype?: string | null;
+  source?: "banner" | "nav" | string;
+}) => {
+  const payload = {
+    source: params.source ?? "banner",
+    ...(params.archetype ? { archetype: params.archetype } : {}),
+  };
+  track("report_summary_jumped", payload);
+  persistAnalyticsEvent("report_summary_jumped", payload);
+};
+
+export type PaywallDismissSource = "backdrop" | "close_button" | "escape" | "browser_back";
+
+export const trackPaywallDismissed = (params: {
+  source: PaywallDismissSource;
+  view_duration_ms: number;
+  archetype?: string | null;
+}) => {
+  const payload = {
+    source: params.source,
+    view_duration_ms: Math.max(0, Math.round(params.view_duration_ms)),
+    ...(params.archetype ? { archetype: params.archetype } : {}),
+  };
+  track("paywall_dismissed", payload);
+  persistAnalyticsEvent("paywall_dismissed", payload, payload.view_duration_ms);
+};
+
+export const trackScrollPaywallDismissed = (params: {
+  source: PaywallDismissSource | "scroll_modal_close";
+  view_duration_ms: number;
+  scroll_depth_pct?: number;
+}) => {
+  const payload = {
+    source: params.source,
+    view_duration_ms: Math.max(0, Math.round(params.view_duration_ms)),
+    ...(typeof params.scroll_depth_pct === "number"
+      ? { scroll_depth_pct: params.scroll_depth_pct }
+      : {}),
+  };
+  track("scroll_paywall_dismissed", payload);
+  persistAnalyticsEvent("scroll_paywall_dismissed", payload, payload.view_duration_ms);
+};
+
+export const trackLockIconClicked = (params: {
+  section_id: string;
+  archetype?: string | null;
+  plan_needed: "essentials" | "full_report" | "all_reports";
+}) => {
+  const payload = {
+    section_id: params.section_id,
+    plan_needed: params.plan_needed,
+    ...(params.archetype ? { archetype: params.archetype } : {}),
+  };
+  track("lock_icon_clicked", payload);
+  persistAnalyticsEvent("lock_icon_clicked", payload);
+};
+
+export const trackStickyUnlockClicked = (params: {
+  variant: "mobile" | "desktop";
+  archetype?: string | null;
+}) => {
+  const payload = {
+    variant: params.variant,
+    ...(params.archetype ? { archetype: params.archetype } : {}),
+  };
+  track("sticky_unlock_clicked", payload);
+  persistAnalyticsEvent("sticky_unlock_clicked", payload);
+};
+
+export const trackReportShareOpened = (params: { source: "sidebar" | "drawer" | "modal" }) => {
+  const payload = { source: params.source };
+  track("report_share_opened", payload);
+  persistAnalyticsEvent("report_share_opened", payload);
+};
+
+export const trackReferFriendOpened = (params: { source: "sidebar" | "drawer" | "modal" }) => {
+  const payload = { source: params.source };
+  track("refer_friend_opened", payload);
+  persistAnalyticsEvent("refer_friend_opened", payload);
+};
+
+export const trackSectionNavigated = (params: {
+  section_id: string;
+  source: "desktop_sidebar" | "mobile_drawer";
+}) => {
+  // GA4-only — would 50× the analytics_event row count if persisted.
+  track("section_navigated", params);
+};
+
+export const trackChapterFeedbackSubmitted = (params: {
+  section_id: string;
+  feedback: "up" | "down";
+  issue?: string;
+  has_comment: boolean;
+}) => {
+  const payload = {
+    section_id: params.section_id,
+    feedback: params.feedback,
+    has_comment: params.has_comment,
+    ...(params.issue ? { issue: params.issue } : {}),
+  };
+  track("chapter_feedback_submitted", payload);
+  persistAnalyticsEvent("chapter_feedback_submitted", payload);
+};
+
+/* ============================================================ */
+/*  Phase B.2 — Survey funnel events (GA4-only + persisted)     */
+/* ============================================================ */
+
+export const trackSurveyPauseModalOpened = (params: {
+  question_id: string;
+  progress_pct: number;
+}) => track("survey_pause_modal_opened", params);
+
+export const trackSurveyAutoAdvanceToggled = (params: { enabled: boolean; question_id?: string }) =>
+  track("survey_auto_advance_toggled", params);
+
+export const trackSurveyGuidanceExpanded = (params: { question_id: string; expanded: boolean }) =>
+  track("survey_guidance_expanded", params);
+
+export const trackSurveyFormError = (params: {
+  question_id: string;
+  error_kind: "required" | "too_short" | "invalid_email" | "out_of_range" | string;
+}) => track("survey_form_error", params);
+
+export const trackWizardSlideAdvanced = (params: {
+  from_slide: number;
+  to_slide: number;
+  direction: "next" | "previous";
+}) => {
+  track("wizard_slide_advanced", params);
+  persistAnalyticsEvent("wizard_slide_advanced", params);
+};
+
+export const trackSurveyConfirmationCtaClicked = (params: {
+  cta: "view_report" | "back" | string;
+}) => {
+  track("survey_confirmation_cta_clicked", params);
+  persistAnalyticsEvent("survey_confirmation_cta_clicked", params);
+};
+
+/* ============================================================ */
+/*  Phase B.3 — Landing page events (GA4-only)                  */
+/* ============================================================ */
+
+export const trackFaqExpanded = (params: { question_index: number; question_text_hash: string }) =>
+  track("faq_expanded", params);
+
+export const trackHeroVideoPaused = (params: { current_time_sec: number }) =>
+  track("hero_video_paused", params);
+
+export const trackHeroVideoResumed = (params: { current_time_sec: number }) =>
+  track("hero_video_resumed", params);
+
+export const trackTestimonialAdvanced = (params: {
+  from_index: number;
+  to_index: number;
+  direction: "next" | "previous";
+}) => track("testimonial_advanced", params);
+
+export const trackLandingSectionViewed = (params: { section_id: string }) =>
+  track("landing_section_viewed", params);
+
+export const trackFooterLinkClicked = (params: { href: string; label: string }) =>
+  track("footer_link_clicked", params);
+
+/* ============================================================ */
+/*  Phase B.4 — Invite / share events                           */
+/* ============================================================ */
+
+export const trackInviteModalDismissed = (params: {
+  shared_methods: string[];
+  view_duration_ms: number;
+}) => {
+  const payload = {
+    shared_methods: params.shared_methods,
+    view_duration_ms: Math.max(0, Math.round(params.view_duration_ms)),
+  };
+  track("invite_modal_dismissed", payload);
+  persistAnalyticsEvent("invite_modal_dismissed", payload, payload.view_duration_ms);
+};
+
+export const trackInviteLinkCopied = (params: { source: "social" | "card" | string }) =>
+  track("invite_link_copied", params);
+
+/* ============================================================ */
+/*  Phase B.5 — Checkout return events                          */
+/* ============================================================ */
+
+export const trackCheckoutReturnViewed = (params: {
+  status: "success" | "failed" | "pending";
+  plan?: string;
+}) => {
+  track("checkout_return_viewed", params);
+  persistAnalyticsEvent("checkout_return_viewed", params);
+};
+
+export const trackCheckoutRetryClicked = (params: { failure_reason?: string }) => {
+  track("checkout_retry_clicked", params);
+  persistAnalyticsEvent("checkout_retry_clicked", params);
+};
+
+export const trackCheckoutAbandonedReturn = (params: { failure_reason?: string }) => {
+  track("checkout_abandoned_return", params);
+  persistAnalyticsEvent("checkout_abandoned_return", params);
+};
+
+/* ============================================================ */
+/*  Phase D — UX quality signals (used by uxSignals.ts)         */
+/* ============================================================ */
+
+export const trackScrollDepth = (
+  bucket: 25 | 50 | 75 | 100,
+  params: { pathname: string; max_scroll_pct: number }
+) => {
+  const eventName = `scroll_depth_${bucket}` as const;
+  track(eventName, params);
+  persistAnalyticsEvent(eventName, params);
+};
+
+export const trackRageClick = (params: {
+  pathname: string;
+  target_selector: string;
+  click_count: number;
+  window_ms: number;
+}) => {
+  track("rage_click", params);
+  persistAnalyticsEvent("rage_click", params);
+};
+
+export const trackDeadClick = (params: { pathname: string; target_selector: string }) =>
+  track("dead_click", params);
+
+export const trackTabHidden = (params: { pathname: string; visible_ms: number }) =>
+  track("tab_hidden", params);
+
+export const trackTabVisible = (params: { pathname: string; hidden_ms: number }) =>
+  track("tab_visible", params);

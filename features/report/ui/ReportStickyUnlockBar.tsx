@@ -2,7 +2,7 @@
 
 import type { FC } from "react";
 
-import { trackBeginCheckout } from "@features/analytics/client";
+import { trackBeginCheckout, trackStickyUnlockClicked } from "@features/analytics/client";
 import { formatReportPurchasePrice } from "@features/checkout/server/reportPurchase";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 
@@ -10,6 +10,7 @@ interface Props {
   quote: ReportPriceQuoteSnapshot | null;
   onCheckout: () => void;
   hidden?: boolean;
+  archetype?: string | null;
 }
 
 const ArrowRight: FC = () => (
@@ -27,8 +28,9 @@ const ArrowRight: FC = () => (
   </svg>
 );
 
-const ReportStickyUnlockBar: FC<Props> = ({ quote, onCheckout, hidden = false }) => {
-  const handleClick = () => {
+const ReportStickyUnlockBar: FC<Props> = ({ quote, onCheckout, hidden = false, archetype }) => {
+  const handleClick = (variant: "mobile" | "desktop") => () => {
+    trackStickyUnlockClicked({ variant, archetype });
     if (quote) {
       trackBeginCheckout("full_report", quote.currentPriceCents / 100, quote.currency);
     }
@@ -49,7 +51,7 @@ const ReportStickyUnlockBar: FC<Props> = ({ quote, onCheckout, hidden = false })
         <button
           type="button"
           className="report-sticky-unlock__cta rpm-cta"
-          onClick={handleClick}
+          onClick={handleClick("mobile")}
           aria-label="Unlock full report"
         >
           <span className="rpm-cta__wash" aria-hidden="true" />
@@ -87,7 +89,7 @@ const ReportStickyUnlockBar: FC<Props> = ({ quote, onCheckout, hidden = false })
           <button
             type="button"
             className="report-sticky-unlock__cta report-sticky-unlock__cta--desktop rpm-cta"
-            onClick={handleClick}
+            onClick={handleClick("desktop")}
             aria-label="Unlock full report"
           >
             <span className="rpm-cta__wash" aria-hidden="true" />

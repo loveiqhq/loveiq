@@ -1,6 +1,7 @@
 "use client";
 
 import { startTransition, useCallback, useState } from "react";
+import { trackChapterFeedbackSubmitted } from "@features/analytics/client";
 import { getCsrfToken } from "@shared/http/csrf-client";
 
 type FeedbackValue = "up" | "down" | null;
@@ -26,6 +27,16 @@ export function useSectionFeedback(sessionId: string | null, token?: string | nu
       startTransition(() => {
         setFeedbacks((current) => ({ ...current, [sectionId]: payload.feedback }));
         setSubmitted((current) => ({ ...current, [sectionId]: true }));
+      });
+
+      // Fire analytics (non-PII: feedback + issue + has_comment boolean, never
+      // the comment text itself) BEFORE the fetch so we still get the signal
+      // even if the network call fails.
+      trackChapterFeedbackSubmitted({
+        section_id: sectionId,
+        feedback: payload.feedback,
+        issue: payload.issue,
+        has_comment: Boolean(payload.comment && payload.comment.trim().length > 0),
       });
 
       try {

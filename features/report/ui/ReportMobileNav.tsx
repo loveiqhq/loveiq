@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useRef, useState, type FC } from "react";
+import { trackSectionNavigated } from "@features/analytics/client";
 import { ReferFriendIcon, ShareReportIcon } from "./ReportActionIcons";
 import type { AccessTier, DisplayReportSection } from "./reportTitles";
 
@@ -259,6 +260,10 @@ const ReportMobileNav: FC<Props> = ({
                       .filter(Boolean)
                       .join(" ")}
                     onClick={() => {
+                      trackSectionNavigated({
+                        section_id: section.id,
+                        source: "mobile_drawer",
+                      });
                       onSectionClick?.(section.id);
                       setDrawerOpen(false);
                     }}

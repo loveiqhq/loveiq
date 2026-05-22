@@ -22,8 +22,10 @@ import { getReportTheme, getReportThemeStyle } from "./reportTheme";
 import { isPlanOwnedForArchetype, type ReportAccessPlan } from "@features/report/server/access";
 import {
   trackBeginCheckout,
+  trackPaywallDismissed,
   trackPaywallView,
   trackPriceShown,
+  type PaywallDismissSource,
   type PaywallPlanItem,
 } from "@features/analytics/client";
 
@@ -180,14 +182,36 @@ const ReportPricingModal: FC<Props> = ({
   const themeArchetype = targetArchetype ?? archetype;
   const themeStyle = getReportThemeStyle(getReportTheme(themeArchetype));
 
+  // Paywall view + dismiss tracking. openedAtRef captures when the modal
+  // became visible; dismissReasonRef is set by the 3 dismiss code paths
+  // (escape / backdrop / close button) so we can attribute the dismiss to
+  // the user's actual interaction. checkoutInitiatedRef short-circuits the
+  // dismiss event when the user clicked an Unlock CTA — we don't want to
+  // double-count conversions as dismissals.
   const paywallViewFiredRef = useRef(false);
+  const openedAtRef = useRef(0);
+  const dismissReasonRef = useRef<PaywallDismissSource | null>(null);
+  const checkoutInitiatedRef = useRef(false);
   useEffect(() => {
     if (!open) {
       paywallViewFiredRef.current = false;
+      if (openedAtRef.current > 0) {
+        if (!checkoutInitiatedRef.current) {
+          trackPaywallDismissed({
+            source: dismissReasonRef.current ?? "browser_back",
+            view_duration_ms: performance.now() - openedAtRef.current,
+            archetype: scopeArchetype ?? null,
+          });
+        }
+        openedAtRef.current = 0;
+        dismissReasonRef.current = null;
+        checkoutInitiatedRef.current = false;
+      }
       return;
     }
     if (paywallViewFiredRef.current) return;
     if (!quotes) return;
+    openedAtRef.current = performance.now();
     const items: PaywallPlanItem[] = REPORT_PURCHASE_PLANS.reduce<PaywallPlanItem[]>((acc, p) => {
       const quote = quotes[p.plan];
       if (quote) {
@@ -202,6 +226,10 @@ const ReportPricingModal: FC<Props> = ({
     if (items.length === 0) return;
     paywallViewFiredRef.current = true;
     trackPaywallView(items);
+    // scopeArchetype changes infrequently and would otherwise re-trigger this
+    // effect on every prop change; reading via a ref keeps deps minimal while
+    // still attributing the dismiss to the current archetype.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, quotes]);
 
   // Per-plan `price_shown` emit. Deduped by (plan, pricingClusterId, discountStep)
@@ -284,6 +312,7 @@ const ReportPricingModal: FC<Props> = ({
 
       if (event.key === "Escape") {
         event.preventDefault();
+        dismissReasonRef.current = "escape";
         onClose();
         return;
       }
@@ -368,7 +397,14 @@ const ReportPricingModal: FC<Props> = ({
       aria-hidden={!open}
       style={themeStyle}
     >
-      <div className="report-pricing-modal__backdrop" aria-hidden="true" onClick={onClose} />
+      <div
+        className="report-pricing-modal__backdrop"
+        aria-hidden="true"
+        onClick={() => {
+          dismissReasonRef.current = "backdrop";
+          onClose();
+        }}
+      />
 
       <div className="report-pricing-modal__viewport">
         <div
@@ -385,7 +421,10 @@ const ReportPricingModal: FC<Props> = ({
             type="button"
             className="report-pricing-modal__close"
             aria-label="Close pricing modal"
-            onClick={onClose}
+            onClick={() => {
+              dismissReasonRef.current = "close_button";
+              onClose();
+            }}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
               <path d="m6 6 12 12M18 6 6 18" strokeLinecap="round" />
@@ -557,6 +596,10 @@ const ReportPricingModal: FC<Props> = ({
                           isOwned
                             ? undefined
                             : () => {
+                                // Mark conversion intent so the open→close
+                                // effect doesn't double-count this as a
+                                // dismissal.
+                                checkoutInitiatedRef.current = true;
                                 const quote = quotes?.[card.plan];
                                 if (quote) {
                                   trackBeginCheckout(

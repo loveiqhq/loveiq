@@ -1,6 +1,15 @@
 "use client";
 
 import { useState, useRef, useLayoutEffect, type FC } from "react";
+import { trackFaqExpanded } from "@features/analytics/client";
+
+// Stable, anonymized question identifier — non-cryptographic hash so we can
+// surface a question_text_hash in analytics without shipping the literal copy.
+function hashQuestion(s: string): string {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return Math.abs(h).toString(36);
+}
 
 const faqs = [
   {
@@ -63,9 +72,10 @@ const faqs = [
 interface FAQItemProps {
   question: string;
   answer: string;
+  index: number;
 }
 
-const FAQItem: FC<FAQItemProps> = ({ question, answer }) => {
+const FAQItem: FC<FAQItemProps> = ({ question, answer, index }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [contentHeight, setContentHeight] = useState(0);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -87,7 +97,17 @@ const FAQItem: FC<FAQItemProps> = ({ question, answer }) => {
       {/* Question Bar */}
       <button
         type="button"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => {
+          if (!isOpen) {
+            // Fire only on closed→open transition. Collapse is not tracked
+            // (signal is engagement, not toggling).
+            trackFaqExpanded({
+              question_index: index,
+              question_text_hash: hashQuestion(question),
+            });
+          }
+          setIsOpen(!isOpen);
+        }}
         className="flex w-full cursor-pointer select-none items-center justify-between gap-3 rounded-xl border border-white/5 bg-[#120b1c] px-4 py-3.5 text-left transition-colors duration-300 hover:border-white/10 sm:gap-4 sm:px-6 sm:py-4 disabled:opacity-100 disabled:cursor-pointer"
         aria-expanded={isOpen}
       >
@@ -185,8 +205,13 @@ const S13FAQ: FC = () => {
         </div>
 
         <div className="animate-on-scroll stagger-2 flex w-full flex-col gap-3 sm:gap-4">
-          {faqs.map((item) => (
-            <FAQItem key={item.question} question={item.question} answer={item.answer} />
+          {faqs.map((item, idx) => (
+            <FAQItem
+              key={item.question}
+              index={idx}
+              question={item.question}
+              answer={item.answer}
+            />
           ))}
         </div>
       </div>

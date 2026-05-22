@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useCallback } from "react";
 import type { SurveyQuestion } from "@/data/survey-data";
+import { hasCookieYesConsent } from "@features/analytics/client";
 import { getCsrfToken } from "@shared/http/csrf-client";
 import { getSessionId } from "./surveySession";
 
@@ -66,6 +67,12 @@ export function useSurveyTracking(
       if (document.visibilityState === "hidden") {
         const q = currentQuestionRef.current;
         if (!q) return;
+        // Consent gate: survey_behavior_event is durable analytics; without
+        // analytics consent we must drop it (incl. the pending buffer).
+        if (!hasCookieYesConsent("analytics")) {
+          buffer.current = [];
+          return;
+        }
         const timeSpentMs = Math.round(performance.now() - questionEnteredAt.current);
         const event: TrackingEvent = {
           sessionId: sessionId.current,
@@ -126,6 +133,8 @@ export function useSurveyTracking(
 
 function flushEvents(events: TrackingEvent[]) {
   if (events.length === 0) return;
+  // Consent gate: skip the durable write if analytics consent isn't granted.
+  if (!hasCookieYesConsent("analytics")) return;
 
   fetch("/api/survey-tracking", {
     method: "POST",

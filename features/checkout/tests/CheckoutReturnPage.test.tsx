@@ -12,6 +12,12 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@features/analytics/client", () => ({
   trackReportPurchase: (...args: unknown[]) => mockTrackReportPurchase(...args),
+  setReportSubmissionContext: vi.fn(),
+  trackPaywallUnlocked: vi.fn(),
+  trackCheckoutReturnViewed: vi.fn(),
+  trackCheckoutRetryClicked: vi.fn(),
+  trackCheckoutAbandonedReturn: vi.fn(),
+  hasCookieYesConsent: () => true,
 }));
 
 describe("CheckoutReturnPage", () => {

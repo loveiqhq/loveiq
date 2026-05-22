@@ -3,6 +3,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act, cleanup } from "@testing-library/react";
 import { makeSurveyQuestion } from "@/__tests__/__fixtures__/survey";
 
+// Stub the analytics client so the consent gate inside useSurveyTracking
+// returns true. The real gate reads document.cookie which is empty under
+// jsdom; mocking keeps these unit tests focused on flush behavior.
+vi.mock("@features/analytics/client", () => ({
+  hasCookieYesConsent: () => true,
+}));
+
 import { useSurveyTracking } from "@features/survey/ui/hooks/useSurveyTracking";
 
 // --- Helpers ---

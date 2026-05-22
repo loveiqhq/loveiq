@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useRef, type FC } from "react";
+import { trackSectionNavigated } from "@features/analytics/client";
 import { ReferFriendIcon, ShareReportIcon } from "./ReportActionIcons";
 import type { AccessTier, DisplayReportSection } from "./reportTitles";
 
@@ -125,7 +126,13 @@ const ReportDesktopSidebar: FC<Props> = ({
                     href={`#${section.id}`}
                     aria-current={isActive ? "location" : undefined}
                     title={section.displayTitle}
-                    onClick={() => onSectionClick?.(section.id)}
+                    onClick={() => {
+                      trackSectionNavigated({
+                        section_id: section.id,
+                        source: "desktop_sidebar",
+                      });
+                      onSectionClick?.(section.id);
+                    }}
                     className={[
                       "report-sidebar__item",
                       isActive && "is-active",

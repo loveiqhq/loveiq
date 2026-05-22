@@ -45,6 +45,17 @@ vi.mock("@features/analytics/client", () => ({
   trackBeginCheckout: (...args: unknown[]) => mockTrackBeginCheckout(...args),
   trackPriceShown: (...args: unknown[]) => mockTrackPriceShown(...args),
   setReportSubmissionContext: vi.fn(),
+  // New track functions exercised by ReportPage interactions.
+  trackLockIconClicked: vi.fn(),
+  trackReferFriendOpened: vi.fn(),
+  trackReportShareOpened: vi.fn(),
+  trackPaywallDismissed: vi.fn(),
+  trackScrollPaywallDismissed: vi.fn(),
+  trackStickyUnlockClicked: vi.fn(),
+  trackReportSummaryJumped: vi.fn(),
+  trackSectionNavigated: vi.fn(),
+  trackChapterFeedbackSubmitted: vi.fn(),
+  hasCookieYesConsent: () => true,
 }));
 
 import ReportPage from "@features/report/ui/ReportPage";

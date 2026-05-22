@@ -2,7 +2,12 @@
 
 import { useState, useEffect, useRef, useCallback, type FC } from "react";
 import { getCsrfToken } from "@shared/http/csrf-client";
-import { trackSurveyInvite } from "@features/analytics/client";
+import {
+  hasCookieYesConsent,
+  trackInviteLinkCopied,
+  trackInviteModalDismissed,
+  trackSurveyInvite,
+} from "@features/analytics/client";
 import { SHARE_MESSAGE_BODY, buildShareMessage } from "@shared/url/share-message";
 
 const EASING = "cubic-bezier(0.16, 1, 0.3, 1)";
@@ -35,8 +40,13 @@ function buildShareUrl(referrerEmail: string, medium: ShareMethod): string {
 /* ------------------------------------------------------------------ */
 /*  Tracking helper (fire-and-forget)                                  */
 /* ------------------------------------------------------------------ */
-function trackShare(method: ShareMethod, referrerEmail: string) {
+function trackShare(method: ShareMethod, referrerEmail: string, onShared?: (m: string) => void) {
   trackSurveyInvite(method);
+  onShared?.(method);
+  // Consent gate: trackSurveyInvite() already checks CookieYes inside track(),
+  // but the direct fetch to /api/invite-tracking would otherwise write to
+  // invite_event regardless of consent. Skip when consent is missing.
+  if (!hasCookieYesConsent("analytics")) return;
   fetch("/api/invite-tracking", {
     method: "POST",
     headers: {
@@ -255,9 +265,16 @@ interface MoreDropdownProps {
   onClose: () => void;
   referrerEmail: string;
   onShareClick?: () => void;
+  onShared?: (method: string) => void;
 }
 
-const MoreDropdown: FC<MoreDropdownProps> = ({ isOpen, onClose, referrerEmail, onShareClick }) => {
+const MoreDropdown: FC<MoreDropdownProps> = ({
+  isOpen,
+  onClose,
+  referrerEmail,
+  onShareClick,
+  onShared,
+}) => {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -321,7 +338,7 @@ const MoreDropdown: FC<MoreDropdownProps> = ({ isOpen, onClose, referrerEmail, o
             type="button"
             onClick={() => {
               onShareClick?.();
-              trackShare(item.method, referrerEmail);
+              trackShare(item.method, referrerEmail, onShared);
               item.action();
               onClose();
             }}
@@ -345,6 +362,7 @@ interface SocialButtonsProps {
   onEmailClick: () => void;
   emailActive: boolean;
   onShareClick?: () => void;
+  onShared?: (method: string) => void;
 }
 
 const SocialButtons: FC<SocialButtonsProps> = ({
@@ -353,6 +371,7 @@ const SocialButtons: FC<SocialButtonsProps> = ({
   onEmailClick,
   emailActive,
   onShareClick,
+  onShared,
 }) => {
   const [copiedBtn, setCopiedBtn] = useState<"copy" | "instagram" | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -364,7 +383,8 @@ const SocialButtons: FC<SocialButtonsProps> = ({
       try {
         await navigator.clipboard.writeText(url);
         setCopiedBtn(method === "copy_link" ? "copy" : "instagram");
-        trackShare(method, referrerEmail);
+        trackShare(method, referrerEmail, onShared);
+        if (method === "copy_link") trackInviteLinkCopied({ source: "social" });
         onCopied();
         setTimeout(() => setCopiedBtn(null), 2000);
         return true;
@@ -372,30 +392,30 @@ const SocialButtons: FC<SocialButtonsProps> = ({
         return false;
       }
     },
-    [referrerEmail, onCopied, onShareClick]
+    [referrerEmail, onCopied, onShareClick, onShared]
   );
 
   const handleWhatsApp = useCallback(() => {
     onShareClick?.();
     const url = buildShareUrl(referrerEmail, "whatsapp");
-    trackShare("whatsapp", referrerEmail);
+    trackShare("whatsapp", referrerEmail, onShared);
     window.open(
       `https://wa.me/?text=${encodeURIComponent(buildShareMessage(url))}`,
       "_blank",
       "noopener,noreferrer"
     );
-  }, [referrerEmail, onShareClick]);
+  }, [referrerEmail, onShareClick, onShared]);
 
   const handleX = useCallback(() => {
     onShareClick?.();
     const url = buildShareUrl(referrerEmail, "twitter");
-    trackShare("twitter", referrerEmail);
+    trackShare("twitter", referrerEmail, onShared);
     window.open(
       `https://twitter.com/intent/tweet?text=${encodeURIComponent(SHARE_MESSAGE_BODY)}&url=${encodeURIComponent(url)}`,
       "_blank",
       "noopener,noreferrer"
     );
-  }, [referrerEmail, onShareClick]);
+  }, [referrerEmail, onShareClick, onShared]);
 
   // Instagram has no public web-share intent. Pre-copy link so the user can
   // paste in DMs, then on mobile attempt the instagram:// deep link with a
@@ -419,13 +439,13 @@ const SocialButtons: FC<SocialButtonsProps> = ({
   const handleMessenger = useCallback(() => {
     onShareClick?.();
     const url = buildShareUrl(referrerEmail, "facebook");
-    trackShare("facebook", referrerEmail);
+    trackShare("facebook", referrerEmail, onShared);
     window.open(
       `https://m.me/share?link=${encodeURIComponent(url)}`,
       "_blank",
       "noopener,noreferrer"
     );
-  }, [referrerEmail, onShareClick]);
+  }, [referrerEmail, onShareClick, onShared]);
 
   const btnBase =
     "relative flex h-11 w-11 sm:h-14 sm:w-14 shrink-0 items-center justify-center rounded-full border border-white/10 bg-[rgba(168,85,247,0.5)] shadow-[0_1px_2px_rgba(0,0,0,0.05)] transition-all duration-200 hover:scale-105 active:scale-95";
@@ -543,6 +563,7 @@ const SocialButtons: FC<SocialButtonsProps> = ({
             onClose={() => setMoreOpen(false)}
             referrerEmail={referrerEmail}
             onShareClick={onShareClick}
+            onShared={onShared}
           />
         </div>
         <span className="font-sans text-[12px] sm:text-[13px] font-medium text-white">More</span>
@@ -565,6 +586,7 @@ const ReferralLinkCard: FC<ReferralLinkCardProps> = ({ referrerEmail }) => {
   const handleCopyAgain = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(url);
+      trackInviteLinkCopied({ source: "card" });
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
@@ -628,6 +650,9 @@ const InviteModal: FC<InviteModalProps> = ({ open, onClose, referrerEmail, refer
   const [methodSelected, setMethodSelected] = useState<"email" | null>(null);
   const [emailTouched, setEmailTouched] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Track open-time + methods shared during this session for the dismiss event.
+  const openedAtRef = useRef<number>(0);
+  const sharedMethodsRef = useRef<Set<string>>(new Set());
 
   const trimmedEmail = email.trim();
   const isEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail);
@@ -635,7 +660,10 @@ const InviteModal: FC<InviteModalProps> = ({ open, onClose, referrerEmail, refer
   const showValidEmail = emailTouched && isEmailValid;
   const hasError = !!errorMsg || showInvalidEmail;
 
-  // Reset on open/close
+  // Reset on open/close. Split intentionally: the form-reset effect can
+  // re-run on referrerName change while open=true, but the open→close
+  // tracking must only react to actual open transitions so a mid-open
+  // referrerName change doesn't clobber openedAtRef or sharedMethodsRef.
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (open) {
@@ -653,6 +681,23 @@ const InviteModal: FC<InviteModalProps> = ({ open, onClose, referrerEmail, refer
     }
   }, [open, referrerName]);
   /* eslint-enable react-hooks/set-state-in-effect */
+
+  // Tracking effect — fires on the actual transition only (open ↔ close).
+  // Depends solely on `open`, so mid-open prop changes don't reset state.
+  useEffect(() => {
+    if (open) {
+      openedAtRef.current = performance.now();
+      sharedMethodsRef.current = new Set();
+      return;
+    }
+    if (openedAtRef.current > 0) {
+      trackInviteModalDismissed({
+        shared_methods: Array.from(sharedMethodsRef.current),
+        view_duration_ms: performance.now() - openedAtRef.current,
+      });
+      openedAtRef.current = 0;
+    }
+  }, [open]);
 
   // Focus email input when the email form expands
   useEffect(() => {
@@ -714,6 +759,7 @@ const InviteModal: FC<InviteModalProps> = ({ open, onClose, referrerEmail, refer
           return;
         }
 
+        sharedMethodsRef.current.add("email");
         setState("success");
       } catch {
         setErrorMsg("Unable to send. Please check your connection.");
@@ -899,6 +945,7 @@ const InviteModal: FC<InviteModalProps> = ({ open, onClose, referrerEmail, refer
                   onEmailClick={toggleEmailForm}
                   emailActive={methodSelected === "email"}
                   onShareClick={() => setMethodSelected(null)}
+                  onShared={(m) => sharedMethodsRef.current.add(m)}
                 />
 
                 {/* Email form — expands when methodSelected === "email" */}

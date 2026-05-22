@@ -8,6 +8,11 @@ const trackSurveyInvite = vi.fn();
 vi.mock("@shared/http/csrf-client", () => ({ getCsrfToken: () => "test-token" }));
 vi.mock("@features/analytics/client", () => ({
   trackSurveyInvite: (...args: unknown[]) => trackSurveyInvite(...args),
+  trackInviteLinkCopied: vi.fn(),
+  trackInviteModalDismissed: vi.fn(),
+  // Tests assume analytics-consent is granted so the /api/invite-tracking
+  // fetch fires; in real prod the gate is honoured.
+  hasCookieYesConsent: () => true,
 }));
 
 describe("InviteModal", () => {

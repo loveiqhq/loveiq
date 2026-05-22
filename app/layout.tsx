@@ -8,6 +8,7 @@ import { NonceProvider } from "@shared/ui/NonceProvider";
 import HydrationMarker from "@shared/ui/HydrationMarker";
 import UtmCapture from "@shared/ui/UtmCapture";
 import { GtmScript, GtmNoScript } from "@shared/ui/GtmScript";
+import UxSignals from "@shared/ui/UxSignals";
 import WebVitals from "@shared/ui/WebVitals";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.loveiq.org";
@@ -358,6 +359,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <HydrationMarker />
         <UtmCapture />
         <WebVitals />
+        <UxSignals />
         <NonceProvider nonce={nonce}>
           <SmoothScroll>{children}</SmoothScroll>
         </NonceProvider>

@@ -10,7 +10,13 @@ import {
   getReportPurchaseBadgeFromPrice,
   getReportPurchaseStrikePrice,
 } from "@features/checkout/server/reportPurchase";
-import { trackBeginCheckout, trackPaywallView, trackPriceShown } from "@features/analytics/client";
+import {
+  trackBeginCheckout,
+  trackPaywallView,
+  trackPriceShown,
+  trackScrollPaywallDismissed,
+  type PaywallDismissSource,
+} from "@features/analytics/client";
 import PricingTestimonialsCarousel from "./PricingTestimonialsCarousel";
 
 interface Props {
@@ -310,14 +316,33 @@ const ScrollPricingModal: FC<Props> = ({
 
   // ── Analytics ──────────────────────────────────────────────────────────────
 
+  // Scroll-paywall dismiss tracking (mirrors ReportPricingModal pattern).
+  // openedAtRef captures when the teaser became visible. dismissReasonRef is
+  // set by escape/backdrop/close-button paths. checkoutInitiatedRef
+  // short-circuits the dismiss event when the user clicked "Unlock".
+  const openedAtRef = useRef(0);
+  const dismissReasonRef = useRef<PaywallDismissSource | null>(null);
+  const checkoutInitiatedRef = useRef(false);
   useEffect(() => {
     if (!open) {
       paywallViewFiredRef.current = false;
       priceShownFiredRef.current = false;
+      if (openedAtRef.current > 0) {
+        if (!checkoutInitiatedRef.current) {
+          trackScrollPaywallDismissed({
+            source: dismissReasonRef.current ?? "browser_back",
+            view_duration_ms: performance.now() - openedAtRef.current,
+          });
+        }
+        openedAtRef.current = 0;
+        dismissReasonRef.current = null;
+        checkoutInitiatedRef.current = false;
+      }
       return;
     }
     if (paywallViewFiredRef.current || !quote) return;
     paywallViewFiredRef.current = true;
+    openedAtRef.current = performance.now();
     trackPaywallView([
       { plan: "full_report", price: quote.currentPriceCents / 100, currency: quote.currency },
     ]);
@@ -384,6 +409,7 @@ const ScrollPricingModal: FC<Props> = ({
       if (e.key === "Tab") setFocusMode("keyboard");
       if (e.key === "Escape") {
         e.preventDefault();
+        dismissReasonRef.current = "escape";
         onClose();
         return;
       }
@@ -464,6 +490,7 @@ const ScrollPricingModal: FC<Props> = ({
   const ArchetypeIcon = theme.Icon;
 
   const handleCtaClick = () => {
+    checkoutInitiatedRef.current = true;
     if (quote) {
       trackBeginCheckout("full_report", quote.currentPriceCents / 100, quote.currency);
     }
@@ -550,7 +577,14 @@ const ScrollPricingModal: FC<Props> = ({
       data-focus-mode={focusMode}
       aria-hidden={!open}
     >
-      <div className="report-pricing-modal__backdrop" aria-hidden="true" onClick={onClose} />
+      <div
+        className="report-pricing-modal__backdrop"
+        aria-hidden="true"
+        onClick={() => {
+          dismissReasonRef.current = "backdrop";
+          onClose();
+        }}
+      />
       <div className="report-pricing-modal__viewport">
         <div
           ref={dialogRef}
@@ -564,7 +598,10 @@ const ScrollPricingModal: FC<Props> = ({
           <button
             type="button"
             className="report-pricing-modal__close report-pricing-modal__close--labeled"
-            onClick={onClose}
+            onClick={() => {
+              dismissReasonRef.current = "close_button";
+              onClose();
+            }}
           >
             <span className="report-pricing-modal__close-label">Close to view report</span>
             <span className="report-pricing-modal__close-icon" aria-hidden="true">
