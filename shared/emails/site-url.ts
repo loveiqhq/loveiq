@@ -24,7 +24,7 @@ const STAGING_PATTERNS: RegExp[] = [
  * canonical URLs) should keep reading the env var directly so previews /
  * staging deployments can self-identify under their actual hostname.
  */
- 
+
 export function getEmailSiteUrl(): string {
   const raw = process.env.NEXT_PUBLIC_SITE_URL?.trim();
   if (!raw) return PROD_SITE_URL;
