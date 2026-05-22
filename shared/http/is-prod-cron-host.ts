@@ -1,4 +1,7 @@
-const PROD_SITE_URL = "https://www.loveiq.org";
+// https or http (we never expect http in prod but accept it as a no-op
+// match for completeness); apex OR www subdomain of loveiq.org; nothing else.
+// Apex prod env still passes — Vercel's apex→www 308 doesn't affect this check.
+const PROD_HOST_PATTERN = /^https?:\/\/(www\.)?loveiq\.org$/i;
 
 /**
  * Returns true iff this code is running on the PRODUCTION Vercel project's
@@ -6,7 +9,7 @@ const PROD_SITE_URL = "https://www.loveiq.org";
  * and local dev.
  *
  * Why this matters: the Vercel account has two projects sharing one Supabase
- * DB — `loveiq-web` (main branch → www.loveiq.org) and `loveiq-staging`
+ * DB — loveiq-web (main branch → www.loveiq.org) and loveiq-staging
  * (staging branch → staging.loveiq.org). Vercel runs cron jobs on each
  * project's production deployment. Without this gate, the staging project's
  * crons fan out across real prod users in the shared DB: nurture/invite
@@ -16,10 +19,13 @@ const PROD_SITE_URL = "https://www.loveiq.org";
  * if it's false, so Vercel doesn't retry.
  *
  * The discriminator is NEXT_PUBLIC_SITE_URL (already configured per project).
- * Coercion-equivalent to the canonical prod URL is required; any other value
- * — including a misconfigured Production env — disables the cron's prod work.
+ * Accepts the canonical prod URL with or without the www subdomain, so the
+ * Production env can legitimately be `https://loveiq.org` OR
+ * `https://www.loveiq.org` and both work. Anything else — staging subdomain,
+ * vercel.app preview alias, localhost, blank — disables the cron's prod work.
  */
 export function isProdCronHost(): boolean {
   const site = process.env.NEXT_PUBLIC_SITE_URL?.trim().replace(/\/$/, "");
-  return site === PROD_SITE_URL;
+  if (!site) return false;
+  return PROD_HOST_PATTERN.test(site);
 }

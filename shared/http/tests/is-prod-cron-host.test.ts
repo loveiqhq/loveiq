@@ -42,8 +42,18 @@ describe("isProdCronHost", () => {
     expect(isProdCronHost()).toBe(false);
   });
 
-  it("returns false on apex (without www) — must be canonical", () => {
+  it("returns true on apex prod URL (without www) — Vercel apex→www redirect is transparent", () => {
     process.env.NEXT_PUBLIC_SITE_URL = "https://loveiq.org";
+    expect(isProdCronHost()).toBe(true);
+  });
+
+  it("returns true on apex prod URL with trailing slash", () => {
+    process.env.NEXT_PUBLIC_SITE_URL = "https://loveiq.org/";
+    expect(isProdCronHost()).toBe(true);
+  });
+
+  it("returns false on a loveiq.org subpath (not exact host match)", () => {
+    process.env.NEXT_PUBLIC_SITE_URL = "https://loveiq.org/admin";
     expect(isProdCronHost()).toBe(false);
   });
 
