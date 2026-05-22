@@ -1077,7 +1077,11 @@ const ScrollPricingModal: FC<Props> = ({
                         left: "24px",
                         padding: "10px 18px",
                         borderRadius: "9999px",
-                        background: "rgba(0,201,80,0.2)",
+                        // Translucent green on top of a solid dark base so the
+                        // card's top border (which the pill straddles at
+                        // top: -21px) is masked under the label.
+                        background:
+                          "linear-gradient(rgba(0,201,80,0.2),rgba(0,201,80,0.2)), #150a22",
                         border: "1px solid rgba(0,201,80,0.3)",
                         backdropFilter: "blur(6px)",
                         WebkitBackdropFilter: "blur(6px)",

@@ -27,7 +27,10 @@
 html {
   scroll-behavior: smooth;
   min-height: 100%;
-  overflow-x: hidden;
+  /* `clip` (Safari 16+) avoids the WebKit side effect of overflow:hidden on
+     the root element, where fixed-position descendants could be stranded
+     mid-page when a sibling has filter/transform. Body already uses clip. */
+  overflow-x: clip;
   /* Consistent font rendering across WebKit/Blink and Gecko */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -2745,9 +2748,11 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-page__shell-wrap {
   position: relative;
   z-index: 1;
+  /* No `transform` in the transition: applying it (even at scale(1))
+     creates a containing block for `position: fixed` descendants on Safari,
+     stranding them mid-page. Blur + opacity already deliver the dim. */
   transition:
     filter 220ms ease,
-    transform 220ms ease,
     opacity 220ms ease;
 }
 
@@ -2755,8 +2760,6 @@ input.autofill-dark:-internal-autofill-previewed {
   filter: blur(18px) saturate(0.78) brightness(0.42);
   opacity: 0.86;
   pointer-events: none;
-  transform: scale(0.985);
-  transform-origin: center top;
   user-select: none;
 }
 
@@ -3144,6 +3147,37 @@ input.autofill-dark:-internal-autofill-previewed {
   .rpm-why-grid > * {
     flex: 0 0 280px;
     scroll-snap-align: start;
+  }
+}
+
+/* Desktop only — scale the archetype + pricing cards down proportionally
+ * so they don't dominate the modal on wide viewports. Cap the hero grid
+ * width AND shrink the design tokens that drive its typography, icons,
+ * and padding by ~20 % so everything stays visually balanced (text,
+ * icons, gauges, CTA shrink together, not just the box). Mobile/tablet
+ * keep their existing token values defined above. */
+@media (min-width: 1025px) {
+  .rpm-hero-grid {
+    max-width: 820px;
+    margin-inline: auto;
+  }
+  .report-pricing-modal__dialog {
+    --rpm-card-pad: 26px;
+    --rpm-archetype: 38px;
+    --rpm-archetype-line: 30px;
+    --rpm-archetype-icon: 50px;
+    --rpm-motto: 19px;
+    --rpm-behavioral-label: 16px;
+    --rpm-core-mot-value: 20px;
+    --rpm-trait-value: 20px;
+    --rpm-bar-label: 16px;
+    --rpm-match-value: 26px;
+    --rpm-pricing-h: 24px;
+    --rpm-pricing-h-line: 28px;
+    --rpm-price: 38px;
+    --rpm-cta-label: 16px;
+    --rpm-feature: 14px;
+    --rpm-badge: 12px;
   }
 }
 
@@ -3595,7 +3629,10 @@ input.autofill-dark:-internal-autofill-previewed {
   padding: 0.28rem 0.78rem;
   border: 1px solid rgba(0, 201, 80, 0.3);
   border-radius: 9999px;
-  background: rgba(0, 201, 80, 0.2);
+  /* Translucent 20 % green on top of a solid dark base so the card's
+     top border (which the pill sits across at top: -21px) cannot
+     show through the middle of the label as a visible line. */
+  background: linear-gradient(rgba(0, 201, 80, 0.2), rgba(0, 201, 80, 0.2)), #150a22;
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   color: #00c950;
@@ -4411,8 +4448,8 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 .report-mobile-topbar__logo {
-  width: 36px;
-  height: 32px;
+  width: 27px;
+  height: 24px;
   flex-shrink: 0;
 }
 
@@ -4529,8 +4566,8 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 .report-chapter-panel__logo {
-  width: 45px;
-  height: 40px;
+  width: 36px;
+  height: 32px;
   flex-shrink: 0;
 }
 
@@ -4633,9 +4670,13 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-sidebar__inner {
   display: flex;
   flex-direction: column;
-  gap: 40px;
+  /* Tightened from 40 px so the LoveIQ Report mark, the two action
+   * buttons, and the Chapters list sit closer together — gives the
+   * chapter nav more above-the-fold room without changing the buttons
+   * themselves. */
+  gap: 20px;
   height: 100%;
-  padding: 32px 21px 32px 20px;
+  padding: 24px 21px 32px 20px;
 }
 
 /* Brand / Logo */
@@ -4648,8 +4689,10 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 .report-sidebar__logo {
-  width: 45px;
-  height: 40px;
+  /* Shrunk from 45×40 so the LoveIQ Report wordmark can grow without
+   * making the brand row taller. */
+  width: 34px;
+  height: 30px;
   flex-shrink: 0;
 }
 
@@ -4657,8 +4700,10 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #fff;
   font-family: var(--font-serif);
   font-weight: 700;
-  font-size: 24px;
-  line-height: 32px;
+  /* Bumped from 24/32 to 28/36 — bigger wordmark with a matching
+   * line-height so the brand row's total height stays ~40 px. */
+  font-size: 28px;
+  line-height: 36px;
   letter-spacing: -0.6px;
   white-space: nowrap;
 }
@@ -4683,8 +4728,11 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-sidebar__actions {
   display: flex;
   flex-direction: column;
-  gap: 30px;
-  padding: 16px 0;
+  /* Condense: was 30 px gap + 16 px vertical padding (~62 px of
+   * whitespace around the two buttons). Tighter spacing here pushes
+   * Chapters higher on desktop without shrinking the buttons. */
+  gap: 10px;
+  padding: 4px 0 0;
   flex-shrink: 0;
 }
 
@@ -6959,7 +7007,6 @@ input.autofill-dark:-internal-autofill-previewed {
 @media (max-width: 767px) {
   .report-page__shell-wrap--obscured {
     filter: blur(12px) saturate(0.75) brightness(0.42);
-    transform: scale(0.992);
   }
 
   .report-pricing-modal__viewport {
@@ -10695,8 +10742,8 @@ input.autofill-dark:-internal-autofill-previewed {
   bottom: 0;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
-  padding: 10px 16px max(14px, env(safe-area-inset-bottom));
+  gap: 4px;
+  padding: 6px 16px max(8px, env(safe-area-inset-bottom));
   background: #150a22;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 0 -10px 24px rgba(0, 0, 0, 0.35);
@@ -10717,7 +10764,7 @@ input.autofill-dark:-internal-autofill-previewed {
   position: relative;
   width: 246px;
   max-width: 100%;
-  height: 44px;
+  height: 34px;
   padding: 0 24px;
   border-radius: 9999px;
   border: 1px solid rgba(255, 255, 255, 0.4);
@@ -10952,7 +10999,7 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 .report-experience--sticky-pad {
-  padding-bottom: 168px;
+  padding-bottom: 140px;
 }
 
 @media (max-width: 640px) {
@@ -10967,6 +11014,57 @@ input.autofill-dark:-internal-autofill-previewed {
   }
   .report-experience--sticky-pad {
     padding-bottom: 220px;
+  }
+}
+
+/* Desktop only — collapse the sticky unlock bar into a single thin row
+ * so it doesn't eat the above-the-fold report viewport. Heading + stats
+ * sit horizontally next to a compact CTA pill; both stats lines share
+ * one column with a small font so the whole bar is ~60 px tall instead
+ * of ~200 px. Tablet (641–1024 px) keeps the taller stacked layout. */
+@media (min-width: 1025px) {
+  .report-sticky-unlock--desktop {
+    bottom: 12px;
+  }
+  .report-sticky-unlock__desktop-inner {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 14px 24px 16px;
+    border-radius: 16px;
+  }
+  .report-sticky-unlock__heading {
+    font-size: 20px;
+    line-height: 1.15;
+    text-align: center;
+  }
+  .report-sticky-unlock__stats {
+    align-items: center;
+    text-align: center;
+    gap: 0;
+  }
+  .report-sticky-unlock__stats-num,
+  .report-sticky-unlock__stats-text {
+    font-size: 14px;
+  }
+  .report-sticky-unlock__cta--desktop {
+    width: auto;
+    min-width: 220px;
+    height: 44px;
+    padding: 0 24px;
+    font-size: 15px;
+    gap: 10px;
+    margin-top: 2px;
+  }
+  .report-sticky-unlock__cta--desktop .rpm-cta__arrow {
+    width: 20px;
+    height: 20px;
+  }
+  /* Stacked layout: heading + 2 stat lines + CTA = ~150 px tall on
+   * desktop. Trim sticky-pad accordingly (was 220 px). */
+  .report-experience--sticky-pad {
+    padding-bottom: 180px;
   }
 }
 

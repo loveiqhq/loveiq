@@ -2,10 +2,11 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { reportSections } from "@/data/report-general";
-import ReportNavigation from "@features/report/ui/ReportNavigation";
+import ReportDesktopSidebar from "@features/report/ui/ReportDesktopSidebar";
+import ReportMobileNav from "@features/report/ui/ReportMobileNav";
 import { resolveReportSections } from "@features/report/ui/reportTitles";
 
-describe("ReportNavigation", () => {
+describe("ReportDesktopSidebar", () => {
   it("renders the chapter rail with branding, utility actions, and resolved chapter labels", () => {
     const sections = resolveReportSections(
       reportSections.filter((section) =>
@@ -18,7 +19,13 @@ describe("ReportNavigation", () => {
       "Spark Seeker"
     );
 
-    render(<ReportNavigation activeSectionId="core_motivation" sections={sections} />);
+    render(
+      <ReportDesktopSidebar
+        activeSectionId="core_motivation"
+        sections={sections}
+        onShareClick={() => {}}
+      />
+    );
 
     expect(screen.getAllByLabelText(/loveiq report/i).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: /share report/i })[0]).toBeInTheDocument();
@@ -31,5 +38,19 @@ describe("ReportNavigation", () => {
       .getAllByRole("link")
       .filter((link) => link.getAttribute("aria-current") === "location");
     expect(activeLinks.some((link) => link.getAttribute("href") === "#core_motivation")).toBe(true);
+  });
+});
+
+describe("ReportMobileNav", () => {
+  it("renders the mobile topbar with branding and a menu button", () => {
+    const sections = resolveReportSections(
+      reportSections.filter((section) => section.id === "core_motivation"),
+      "Spark Seeker"
+    );
+
+    render(<ReportMobileNav activeSectionId="core_motivation" sections={sections} />);
+
+    expect(screen.getAllByLabelText(/loveiq report/i).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: /open chapters menu/i })).toBeInTheDocument();
   });
 });
