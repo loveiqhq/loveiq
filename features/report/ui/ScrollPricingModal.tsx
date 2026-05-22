@@ -175,8 +175,20 @@ const WHY_CARDS = [
     badge: "DEEP CLARITY",
     icon: (
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <circle cx="12" cy="12" r="9" stroke="#a78bfa" strokeWidth="1.5" />
-        <path d="M12 8v4M12 16h.01" stroke="#a78bfa" strokeWidth="1.5" strokeLinecap="round" />
+        <path
+          d="M2 12C2 17.5192 6.48085 22 12 22C17.5192 22 22 17.5192 22 12C22 6.48085 17.5192 2 12 2C6.48085 2 2 6.48085 2 12V12"
+          stroke="#A78BFA"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M16.24 7.75977L14.436 13.1708C14.2369 13.768 13.7683 14.2367 13.171 14.4358L7.76001 16.2398L9.56401 10.8288C9.76307 10.2315 10.2317 9.76283 10.829 9.56377L16.24 7.75977"
+          stroke="#A78BFA"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
       </svg>
     ),
     title: "Understand one of life’s most important areas:",
@@ -189,10 +201,15 @@ const WHY_CARDS = [
     badge: "BREAK PATTERNS",
     icon: (
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <rect x="3" y="3" width="7" height="7" rx="1" stroke="#fe6839" strokeWidth="1.5" />
-        <rect x="14" y="3" width="7" height="7" rx="1" stroke="#fe6839" strokeWidth="1.5" />
-        <rect x="3" y="14" width="7" height="7" rx="1" stroke="#fe6839" strokeWidth="1.5" />
-        <rect x="14" y="14" width="7" height="7" rx="1" stroke="#fe6839" strokeWidth="1.5" />
+        <path d="M12 3V21" stroke="#FE6839" strokeLinecap="round" strokeLinejoin="round" />
+        <path
+          d="M19 3H5C3.89543 3 3 3.89543 3 5V19C3 20.1046 3.89543 21 5 21H19C20.1046 21 21 20.1046 21 19V5C21 3.89543 20.1046 3 19 3Z"
+          stroke="#FE6839"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <path d="M3 9H21" stroke="#FE6839" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M3 15H21" stroke="#FE6839" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     ),
     title: "Stop repeating old patterns",
@@ -206,14 +223,18 @@ const WHY_CARDS = [
     icon: (
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <path
-          d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Z"
-          stroke="#2dd4bf"
-          strokeWidth="1.5"
+          d="M15.8279 14.8291C15.0778 15.579 14.0605 16.0003 12.9999 16.0003C11.9392 16.0003 10.922 15.579 10.1719 14.8291C9.80043 14.4577 9.50578 14.0167 9.30475 13.5314C9.10371 13.0461 9.00024 12.5259 9.00024 12.0006C9.00024 11.4753 9.10371 10.9552 9.30475 10.4698C9.50578 9.98453 9.80043 9.54356 10.1719 9.17212C10.922 8.42224 11.9392 8.00098 12.9999 8.00098C14.0605 8.00098 15.0778 8.42224 15.8279 9.17212"
+          stroke="#34D399"
           strokeLinecap="round"
           strokeLinejoin="round"
         />
-        <path d="M14 2v6h6" stroke="#2dd4bf" strokeWidth="1.5" strokeLinecap="round" />
-        <path d="M9 13h6M9 17h4" stroke="#2dd4bf" strokeWidth="1.5" strokeLinecap="round" />
+        <path
+          d="M4 3.00016C4 2.73494 4.10536 2.48059 4.29289 2.29305C4.48043 2.10552 4.73478 2.00016 5 2.00016C5.24762 1.9988 5.49048 2.06819 5.7 2.20016L6.633 2.80016C6.84204 2.93374 7.08493 3.00472 7.333 3.00472C7.58107 3.00472 7.82396 2.93374 8.033 2.80016L8.967 2.20016C9.17604 2.06658 9.41893 1.99561 9.667 1.99561C9.91507 1.99561 10.158 2.06658 10.367 2.20016L11.3 2.80016C11.509 2.93374 11.7519 3.00472 12 3.00472C12.2481 3.00472 12.491 2.93374 12.7 2.80016L13.633 2.20016C13.842 2.06658 14.0849 1.99561 14.333 1.99561C14.5811 1.99561 14.824 2.06658 15.033 2.20016L15.967 2.80016C16.176 2.93374 16.4189 3.00472 16.667 3.00472C16.9151 3.00472 17.158 2.93374 17.367 2.80016L18.3 2.20016C18.5095 2.06819 18.7524 1.9988 19 2.00016C19.2652 2.00016 19.5196 2.10552 19.7071 2.29305C19.8946 2.48059 20 2.73494 20 3.00016V21.0002C20 21.2654 19.8946 21.5197 19.7071 21.7073C19.5196 21.8948 19.2652 22.0002 19 22.0002C18.7524 22.0015 18.5095 21.9321 18.3 21.8002L17.367 21.2002C17.158 21.0666 16.9151 20.9956 16.667 20.9956C16.4189 20.9956 16.176 21.0666 15.967 21.2002L15.033 21.8002C14.824 21.9337 14.5811 22.0047 14.333 22.0047C14.0849 22.0047 13.842 21.9337 13.633 21.8002L12.7 21.2002C12.491 21.0666 12.2481 20.9956 12 20.9956C11.7519 20.9956 11.509 21.0666 11.3 21.2002L10.367 21.8002C10.158 21.9337 9.91507 22.0047 9.667 22.0047C9.41893 22.0047 9.17604 21.9337 8.967 21.8002L8.033 21.2002C7.82396 21.0666 7.58107 20.9956 7.333 20.9956C7.08493 20.9956 6.84204 21.0666 6.633 21.2002L5.7 21.8002C5.49048 21.9321 5.24762 22.0015 5 22.0002C4.73478 22.0002 4.48043 21.8948 4.29289 21.7073C4.10536 21.5197 4 21.2654 4 21.0002V3.00016Z"
+          stroke="#34D399"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <path d="M8 12H13" stroke="#34D399" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     ),
     title: "For the price of a cocktail or movie ticket,",
