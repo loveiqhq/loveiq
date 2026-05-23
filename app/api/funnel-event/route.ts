@@ -77,12 +77,24 @@ export async function POST(request: Request) {
     });
 
     if (!insertRes.ok) {
-      logger.error({ status: insertRes.status, event }, "funnel_event insert failed");
+      // Best-effort tracking route — log at WARN, not ERROR. The pino->Slack
+      // hook only mirrors error/fatal, so warn keeps the signal in Vercel logs
+      // for diagnosis without paging ops on every transient Supabase blip /
+      // tracking-event-related condition. Capture response body so root cause
+      // is visible (PostgREST returns JSON with code+message+details on 4xx).
+      const respBody = await insertRes
+        .clone()
+        .text()
+        .catch(() => "");
+      logger.warn(
+        { status: insertRes.status, event, respBody: respBody.slice(0, 500) },
+        "funnel_event insert non-2xx"
+      );
     }
   } catch (err) {
-    // Network / fetch error — log but don't surface the failure to the client.
-    // Tracking pings are best-effort; failing 500 here would just create noise.
-    logger.error({ err, event }, "funnel_event insert threw");
+    // Network / fetch error — same posture: warn, not error. The route already
+    // returns 204 to the client so this never bubbles up as user-visible.
+    logger.warn({ err, event }, "funnel_event insert threw");
   }
 
   return new NextResponse(null, { status: 204 });
