@@ -18,6 +18,7 @@ import logger from "@shared/observability/logger";
 import { notifySlack } from "@shared/observability/slack";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
 import {
+  recordCronRun,
   startCronTimer,
   tryClaimSlackAlert,
   verifyCronAuth,
@@ -59,6 +60,8 @@ export async function GET(request: Request) {
   }
 
   const trackDuration = startCronTimer("abandoned-checkout-alert", 50);
+  const startMs = Date.now();
+  let cronError: string | undefined;
   try {
     const cutoff = new Date(Date.now() - ABANDONED_AFTER_MS).toISOString();
     // Pull recent begin_checkout events older than the abandon threshold.
@@ -160,10 +163,17 @@ export async function GET(request: Request) {
     });
   } catch (err) {
     logger.error({ err }, "abandoned-checkout-alert cron failed");
+    cronError = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: "Internal" }, { status: 500 });
   } finally {
     // Fires the cron-slow Slack alert if elapsed > 80% of maxDuration.
     // Runs on both happy path AND catch so a hanging cron still gets noticed.
     await trackDuration();
+    await recordCronRun(
+      "abandoned-checkout-alert",
+      startMs,
+      cronError ? "error" : "success",
+      cronError
+    );
   }
 }

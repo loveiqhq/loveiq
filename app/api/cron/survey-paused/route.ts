@@ -20,7 +20,7 @@ import { checkCooldown } from "@shared/http/ratelimit";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { getBreaker } from "@shared/http/circuit-breaker";
 import logger from "@shared/observability/logger";
-import { startCronTimer } from "@shared/observability/slack-alert-dedup";
+import { recordCronRun, startCronTimer } from "@shared/observability/slack-alert-dedup";
 import { surveyPausedEmail } from "@features/survey/server/emails/survey-paused";
 import { surveyPausedBEmail } from "@features/survey/server/emails/survey-paused-b";
 import { getEmailSiteUrl } from "@shared/emails/site-url";
@@ -124,6 +124,8 @@ export async function GET(request: Request) {
   }
 
   const trackDuration = startCronTimer("survey-paused", 50);
+  const startMs = Date.now();
+  let cronError: string | undefined;
 
   const siteUrl = getEmailSiteUrl();
   const resumeUrl = `${siteUrl}/survey`;
@@ -216,8 +218,10 @@ export async function GET(request: Request) {
     return NextResponse.json({ success: true, ...summary });
   } catch (err) {
     logger.error({ err }, "Survey-paused cron failed");
+    cronError = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
   } finally {
     await trackDuration();
+    await recordCronRun("survey-paused", startMs, cronError ? "error" : "success", cronError);
   }
 }

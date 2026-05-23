@@ -10,6 +10,7 @@ import UtmCapture from "@shared/ui/UtmCapture";
 import { GtmScript, GtmNoScript } from "@shared/ui/GtmScript";
 import UxSignals from "@shared/ui/UxSignals";
 import WebVitals from "@shared/ui/WebVitals";
+import VisitorPinger from "@shared/observability/VisitorPinger";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.loveiq.org";
 
@@ -360,6 +361,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <UtmCapture />
         <WebVitals />
         <UxSignals />
+        <VisitorPinger />
         <NonceProvider nonce={nonce}>
           <SmoothScroll>{children}</SmoothScroll>
         </NonceProvider>

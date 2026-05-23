@@ -21,6 +21,7 @@ import logger from "@shared/observability/logger";
 import { notifySlack, escapeSlack } from "@shared/observability/slack";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
 import {
+  recordCronRun,
   startCronTimer,
   tryClaimSlackAlert,
   verifyCronAuth,
@@ -81,6 +82,8 @@ export async function GET(request: Request) {
   }
 
   const trackDuration = startCronTimer("security-storm-detector", 50);
+  const startMs = Date.now();
+  let cronError: string | undefined;
 
   const redis = getRedis();
   if (!redis) {
@@ -142,8 +145,15 @@ export async function GET(request: Request) {
     });
   } catch (err) {
     logger.error({ err }, "security-storm-detector cron failed");
+    cronError = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: "Internal" }, { status: 500 });
   } finally {
     await trackDuration();
+    await recordCronRun(
+      "security-storm-detector",
+      startMs,
+      cronError ? "error" : "success",
+      cronError
+    );
   }
 }

@@ -25,7 +25,7 @@ import { Resend } from "resend";
 import { getBreaker } from "@shared/http/circuit-breaker";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import logger from "@shared/observability/logger";
-import { startCronTimer } from "@shared/observability/slack-alert-dedup";
+import { recordCronRun, startCronTimer } from "@shared/observability/slack-alert-dedup";
 import { buildUnsubscribeUrl } from "@shared/emails/unsubscribe-token";
 import { isEmailSuppressed } from "@shared/emails/suppression";
 import { getEmailSiteUrl } from "@shared/emails/site-url";
@@ -641,6 +641,8 @@ export async function GET(request: Request) {
   }
 
   const trackDuration = startCronTimer("nurture-sequence", 50);
+  const startMs = Date.now();
+  let cronError: string | undefined;
 
   const ctx: RouteContext = {
     resend,
@@ -670,8 +672,10 @@ export async function GET(request: Request) {
     return NextResponse.json({ success: true, summaries });
   } catch (err) {
     logger.error({ err }, "nurture-sequence cron failed");
+    cronError = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
   } finally {
     await trackDuration();
+    await recordCronRun("nurture-sequence", startMs, cronError ? "error" : "success", cronError);
   }
 }

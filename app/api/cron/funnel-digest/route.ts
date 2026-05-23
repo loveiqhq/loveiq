@@ -21,9 +21,10 @@
 
 import { NextResponse } from "next/server";
 import logger from "@shared/observability/logger";
-import { notifySlack } from "@shared/observability/slack";
+import { notifySlack, escapeSlack } from "@shared/observability/slack";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
 import {
+  recordCronRun,
   startCronTimer,
   tryClaimSlackAlert,
   verifyCronAuth,
@@ -95,22 +96,215 @@ function metricWithDeltaAndStartsPct(
 // Daily message
 // -----------------------------------------------------------------------------
 
+// -----------------------------------------------------------------------------
+// Strategy-lead helpers
+// -----------------------------------------------------------------------------
+
+/**
+ * Slack text blocks hard-cap at 3000 chars. Existing digest is ~1500; the
+ * strategy-lead sections add another ~800–1500. To avoid a silent truncation
+ * by Slack, guard at 2800 chars and append a fallback pointer. Pure
+ * formatting — never throws.
+ */
+const SLACK_TEXT_SOFT_CAP = 2800;
+
+export function clampToSlackLimit(text: string): string {
+  if (text.length <= SLACK_TEXT_SOFT_CAP) return text;
+  const tail = "\n…_(see /admin for full details — digest truncated)_";
+  const cut = SLACK_TEXT_SOFT_CAP - tail.length;
+  return text.slice(0, cut) + tail;
+}
+
+/**
+ * Picks the metric with the largest absolute DoD% change as the "today's story"
+ * headline. Filters out low-base movers (prev < 5) so the prelaunch digest
+ * doesn't lead with "+∞%" or "(low base)" noise. Returns null when nothing
+ * qualifies — the renderer then omits the headline line entirely.
+ */
+const HEADLINE_THRESHOLD_PCT = 25;
+const HEADLINE_MIN_PREV = 5;
+
+interface HeadlineCandidate {
+  label: string;
+  curr: number;
+  prev: number;
+}
+
+export function pickHeadline(curr: DailyMetrics, prev: DailyMetrics): string | null {
+  const candidates: HeadlineCandidate[] = [
+    { label: "Unique visitors", curr: curr.uniqueVisitors, prev: prev.uniqueVisitors },
+    { label: "Saw Q1", curr: curr.surveyEngineMounts, prev: prev.surveyEngineMounts },
+    { label: "Survey starts", curr: curr.surveyStarts, prev: prev.surveyStarts },
+    { label: "Completions", curr: curr.completions, prev: prev.completions },
+    { label: "Completion rate", curr: curr.completionRate, prev: prev.completionRate },
+    { label: "Begin checkouts", curr: curr.beginCheckouts, prev: prev.beginCheckouts },
+    { label: "Purchases", curr: curr.revenue.count, prev: prev.revenue.count },
+  ];
+  let winner: { candidate: HeadlineCandidate; pct: number } | null = null;
+  for (const c of candidates) {
+    if (c.prev < HEADLINE_MIN_PREV) continue;
+    const pct = Math.round(((c.curr - c.prev) / c.prev) * 100);
+    if (Math.abs(pct) < HEADLINE_THRESHOLD_PCT) continue;
+    if (!winner || Math.abs(pct) > Math.abs(winner.pct)) {
+      winner = { candidate: c, pct };
+    }
+  }
+  if (!winner) return null;
+  const arrow = winner.pct > 0 ? "▲" : "▼";
+  const sign = winner.pct > 0 ? "+" : "";
+  return `:fire: *Today's story:* ${winner.candidate.label} ${arrow} ${sign}${winner.pct}% (${winner.candidate.curr} vs ${winner.candidate.prev})`;
+}
+
+/**
+ * Renders the top-5 UTM sources as a per-source funnel. Cap depth: 5 rows.
+ * Returns an empty array when the snapshot is null/empty so the renderer
+ * can skip the whole section header.
+ */
+export function formatChannelLines(curr: DailyMetrics): string[] {
+  const snap = curr.channels;
+  if (!snap || snap.channels.length === 0) return [];
+  const rows = snap.channels.slice(0, 5);
+  const lines: string[] = ["*Channels (top 5)*"];
+  for (const ch of rows) {
+    const revenueStr = ch.revenueTotal > 0 ? ` | revenue ${ch.revenueTotal.toFixed(2)}` : "";
+    // escapeSlack on `source` — UTM source values are user-controllable via
+    // ?utm_source=... and could otherwise break mrkdwn formatting.
+    lines.push(
+      `• ${escapeSlack(ch.source)}: ${ch.starts} starts → ${ch.completionRate.toFixed(0)}% complete → ${ch.paidRate.toFixed(1)}% paid${revenueStr} (${ch.action}, ${ch.confidence} conf)`
+    );
+  }
+  if (snap.summary.bestSource) {
+    lines.push(`• :star: best: ${escapeSlack(snap.summary.bestSource)}`);
+  }
+  return lines;
+}
+
+/**
+ * One-block "biggest leak today" callout. Uses the highest-priority leak from
+ * `priorities`, falling back to the dimension snapshot's strongest leak.
+ */
+export function formatLeakLines(curr: DailyMetrics): string[] {
+  const snap = curr.leak;
+  if (!snap || snap.priorities.length === 0) return [];
+  const top = snap.priorities[0]!;
+  const extras = snap.priorities.slice(1, 3);
+  const lines: string[] = ["*Today's biggest leak*"];
+  // escapeSlack on `label` / `explanation` — labels are derived from UTM
+  // values and free-text explanations, both attacker-controllable.
+  lines.push(
+    `• ${escapeSlack(top.label)}: ${escapeSlack(top.leakStageLabel)} — ${top.leakCount} dropped (${top.leakRate.toFixed(1)}% rate, ${top.confidence} conf)`
+  );
+  if (top.explanation) lines.push(`  ${escapeSlack(top.explanation)}`);
+  for (const item of extras) {
+    lines.push(
+      `• also: ${escapeSlack(item.label)} ${escapeSlack(item.leakStageLabel)} — ${item.leakCount} dropped (${item.leakRate.toFixed(1)}%)`
+    );
+  }
+  return lines;
+}
+
+/**
+ * "*Alerts*" section: risk + watch findings from the anomaly snapshot. Capped
+ * at 5 to avoid bloating the Slack message. Skipped entirely when no breaches.
+ */
+export function formatAlertLines(curr: DailyMetrics): string[] {
+  const snap = curr.anomalies;
+  if (!snap || snap.items.length === 0) return [];
+  const breaches = snap.items.filter((i) => i.severity === "risk" || i.severity === "watch");
+  if (breaches.length === 0) return [];
+  const lines: string[] = ["*Alerts*"];
+  for (const item of breaches.slice(0, 5)) {
+    const emoji = item.severity === "risk" ? ":rotating_light:" : ":warning:";
+    // escapeSlack on title/detail — admin-set labels can contain mrkdwn chars
+    // and a few items derive from UTM-source values.
+    lines.push(`${emoji} ${escapeSlack(item.title)}: ${escapeSlack(item.detail)}`);
+  }
+  if (breaches.length > 5) {
+    lines.push(`• …and ${breaches.length - 5} more (see /admin/anomalies)`);
+  }
+  return lines;
+}
+
+/**
+ * Per-archetype revenue + paywall→purchase velocity. Top 3 archetypes by
+ * revenue. Median time-to-purchase comes from a separate fetcher.
+ */
+export function formatMonetizationLines(curr: DailyMetrics): string[] {
+  const snap = curr.monetization;
+  if (!snap || snap.archetypes.length === 0) return [];
+  const ranked = [...snap.archetypes]
+    .sort((a, b) => b.revenueTotal - a.revenueTotal)
+    .slice(0, 3)
+    .filter((a) => a.starts > 0);
+  if (ranked.length === 0) return [];
+  const lines: string[] = ["*Segment monetization*"];
+  for (const a of ranked) {
+    // Archetype names come from scoring config (admin-controlled, not user
+    // input) but escape defensively in case a name ever contains mrkdwn chars.
+    lines.push(
+      `• ${escapeSlack(a.archetype)}: ${a.starts} starts | revenue ${a.revenueTotal.toFixed(2)} (per-start ${a.revenuePerStart.toFixed(2)}) | monetize ${a.monetizationRate.toFixed(1)}%`
+    );
+  }
+  if (curr.medianTimeToPurchaseHours != null) {
+    lines.push(`• Median paywall → purchase: ${curr.medianTimeToPurchaseHours}h`);
+  }
+  return lines;
+}
+
+// -----------------------------------------------------------------------------
+
 // Exported (in addition to GET below) so unit tests can lock the message
 // format without having to mock the full Supabase + Slack pipeline.
 export function formatDaily(dayKey: string, curr: DailyMetrics, prev: DailyMetrics): string {
   const lines = [`:bar_chart: *Daily digest — ${dayKey} UTC*`, ""];
+
+  // Headline of the day — prepended after the title when a metric crosses the
+  // delta threshold. Skipped when nothing qualifies (prelaunch low-base case).
+  const headline = pickHeadline(curr, prev);
+  if (headline) {
+    lines.push(headline);
+    lines.push("");
+  }
 
   const starts = curr.surveyStarts;
 
   // Survey starts is the funnel baseline (the denominator for "% of starts"),
   // so we don't annotate it with its own percentage — every other funnel-stage
   // metric shows its share of this number instead.
+  //
+  // Unique visitors + "Saw Q1" sit above Survey starts because they're earlier
+  // funnel stages. "Saw Q1" is annotated with its share of UNIQUE VISITORS
+  // (not of survey starts) — visitor → Q1 is the top-of-funnel conversion.
   lines.push("*Acquisition*");
+  lines.push(metricWithDelta("Unique visitors", curr.uniqueVisitors, prev.uniqueVisitors));
+  // New-vs-returning split. Returning % is over today's total visitors so it's
+  // a single shared denominator; omitted when total is 0.
+  if (curr.uniqueVisitors > 0) {
+    const returningPct = ((curr.returningVisitors / curr.uniqueVisitors) * 100).toFixed(1);
+    lines.push(
+      `• New: ${curr.newVisitors} (DoD: ${delta(curr.newVisitors, prev.newVisitors)}) | Returning: ${curr.returningVisitors} (${returningPct}% of visitors)`
+    );
+  }
+  const sawQ1Pct =
+    curr.uniqueVisitors > 0
+      ? `, ${((curr.surveyEngineMounts / curr.uniqueVisitors) * 100).toFixed(2)}% of visitors`
+      : "";
+  lines.push(
+    `• Saw Q1: ${curr.surveyEngineMounts} (DoD: ${delta(curr.surveyEngineMounts, prev.surveyEngineMounts)}${sawQ1Pct})`
+  );
   lines.push(metricWithDelta("Survey starts", starts, prev.surveyStarts));
   lines.push(
     `• Completions: ${curr.completions} (${curr.completionRate}% rate, DoD: ${delta(curr.completionRate, prev.completionRate)})`
   );
   lines.push("");
+
+  // Channels — top-5 UTM sources with per-source funnel. Section is OMITTED
+  // entirely when the snapshot is null (builder failed) or empty.
+  const channelLines = formatChannelLines(curr);
+  if (channelLines.length > 0) {
+    lines.push(...channelLines);
+    lines.push("");
+  }
 
   lines.push("*Activation*");
   lines.push(
@@ -138,6 +332,13 @@ export function formatDaily(dayKey: string, curr: DailyMetrics, prev: DailyMetri
   );
   lines.push("");
 
+  // Today's biggest leak — drop-off analysis. Skipped when snapshot is null.
+  const leakLines = formatLeakLines(curr);
+  if (leakLines.length > 0) {
+    lines.push(...leakLines);
+    lines.push("");
+  }
+
   lines.push("*Revenue*");
   const purchasesPct =
     starts > 0 ? `, ${((curr.revenue.count / starts) * 100).toFixed(2)}% of starts` : "";
@@ -157,6 +358,20 @@ export function formatDaily(dayKey: string, curr: DailyMetrics, prev: DailyMetri
   );
   lines.push("");
 
+  // Segment monetization — per-archetype revenue + paywall→purchase velocity.
+  const monetizationLines = formatMonetizationLines(curr);
+  if (monetizationLines.length > 0) {
+    lines.push(...monetizationLines);
+    lines.push("");
+  }
+
+  // Alerts — risk/watch findings from anomaly snapshot. Omitted when no breaches.
+  const alertLines = formatAlertLines(curr);
+  if (alertLines.length > 0) {
+    lines.push(...alertLines);
+    lines.push("");
+  }
+
   lines.push("*Engagement*");
   lines.push(`• Invites sent: ${curr.invites} | Shares: ${curr.shares}`);
   lines.push(`• Chapter feedback: ${curr.thumbsUp} :thumbsup: / ${curr.thumbsDown} :thumbsdown:`);
@@ -174,8 +389,14 @@ export function formatDaily(dayKey: string, curr: DailyMetrics, prev: DailyMetri
   lines.push("*Top breakdowns*");
   lines.push(`• Archetypes: ${formatTopList(curr.topArchetypes)}`);
   lines.push(`• Sources: ${formatTopList(curr.topUtmSources)}`);
+  if (curr.topCompletionHours.length > 0) {
+    const hoursStr = curr.topCompletionHours
+      .map((h) => `${String(h.hour).padStart(2, "0")}:00 (${h.count})`)
+      .join(", ");
+    lines.push(`• Top hours (UTC): ${hoursStr}`);
+  }
 
-  return lines.join("\n");
+  return clampToSlackLimit(lines.join("\n"));
 }
 
 // -----------------------------------------------------------------------------
@@ -209,16 +430,46 @@ export function formatWeekly(
 ): string {
   const lines = [`:chart_with_upwards_trend: *Weekly digest — ${weekKey} (${weekRangeLabel})*`, ""];
 
+  // Headline reuses the daily picker — WoW deltas are still meaningful when
+  // a single metric moves > 25% week-over-week.
+  const headline = pickHeadline(curr, prev);
+  if (headline) {
+    lines.push(headline);
+    lines.push("");
+  }
+
   const wStarts = curr.surveyStarts;
 
   // Survey starts is the funnel baseline — same convention as the daily.
+  // Unique visitors + Saw Q1 lead the section (top-of-funnel stages).
   lines.push("*Acquisition*");
+  lines.push(metricWithWow("Unique visitors", curr.uniqueVisitors, prev.uniqueVisitors));
+  if (curr.uniqueVisitors > 0) {
+    const returningPct = ((curr.returningVisitors / curr.uniqueVisitors) * 100).toFixed(1);
+    lines.push(
+      `• New: ${curr.newVisitors} (WoW: ${delta(curr.newVisitors, prev.newVisitors)}) | Returning: ${curr.returningVisitors} (${returningPct}% of visitors)`
+    );
+  }
+  const wSawQ1Pct =
+    curr.uniqueVisitors > 0
+      ? `, ${((curr.surveyEngineMounts / curr.uniqueVisitors) * 100).toFixed(2)}% of visitors`
+      : "";
+  lines.push(
+    `• Saw Q1: ${curr.surveyEngineMounts} (WoW: ${delta(curr.surveyEngineMounts, prev.surveyEngineMounts)}${wSawQ1Pct})`
+  );
   lines.push(metricWithWow("Survey starts", wStarts, prev.surveyStarts));
   lines.push(
     `• Completions: ${curr.completions} (${curr.completionRate}% rate, WoW: ${delta(curr.completionRate, prev.completionRate)})`
   );
   lines.push(`• Avg completion time: ${curr.avgCompletionSec}s`);
   lines.push("");
+
+  // Channels — same shape as daily; window is the 7-day weekly span.
+  const channelLines = formatChannelLines(curr);
+  if (channelLines.length > 0) {
+    lines.push(...channelLines);
+    lines.push("");
+  }
 
   lines.push("*Activation*");
   lines.push(
@@ -246,6 +497,13 @@ export function formatWeekly(
   );
   lines.push("");
 
+  // Weekly biggest leak — same renderer as daily.
+  const leakLines = formatLeakLines(curr);
+  if (leakLines.length > 0) {
+    lines.push(...leakLines);
+    lines.push("");
+  }
+
   lines.push("*Revenue*");
   const wPurchasesPct =
     wStarts > 0 ? `, ${((curr.revenue.count / wStarts) * 100).toFixed(2)}% of starts` : "";
@@ -260,6 +518,20 @@ export function formatWeekly(
     metricWithWow("Promo redemptions", curr.revenue.promoRedemptions, prev.revenue.promoRedemptions)
   );
   lines.push("");
+
+  // Segment monetization — per-archetype revenue + paywall→purchase velocity.
+  const monetizationLines = formatMonetizationLines(curr);
+  if (monetizationLines.length > 0) {
+    lines.push(...monetizationLines);
+    lines.push("");
+  }
+
+  // Alerts — risk/watch breaches over the week.
+  const alertLines = formatAlertLines(curr);
+  if (alertLines.length > 0) {
+    lines.push(...alertLines);
+    lines.push("");
+  }
 
   lines.push("*Engagement*");
   lines.push(metricWithWow("Invites sent", curr.invites, prev.invites));
@@ -278,14 +550,21 @@ export function formatWeekly(
 
   // Conversion funnel — each line shows % kept from the previous stage AND
   // % of Survey starts (the funnel baseline) so it's clear at a glance what
-  // share of the original cohort reached each step.
+  // share of the original cohort reached each step. Unique visitors + Saw Q1
+  // lead the funnel; "Survey starts" remains the baseline for "% of starts".
   const f = curr.funnel;
   const stageKept = (curr: number, prev: number): string =>
     prev > 0 ? `${Math.round((curr / prev) * 100)}% kept` : "—";
   const ofStarts = (curr: number): string =>
     f.starts > 0 ? `${((curr / f.starts) * 100).toFixed(2)}% of starts` : "—";
   lines.push("*Conversion funnel*");
-  lines.push(`• Survey starts: ${f.starts}`);
+  lines.push(`• Unique visitors: ${f.uniqueVisitors}`);
+  lines.push(
+    `• Saw Q1: ${f.engineMounts} (${stageKept(f.engineMounts, f.uniqueVisitors)}, ${ofStarts(f.engineMounts)})`
+  );
+  lines.push(
+    `• Survey starts: ${f.starts} (${stageKept(f.starts, f.engineMounts)}, ${ofStarts(f.starts)})`
+  );
   lines.push(
     `• Completions: ${f.completions} (${stageKept(f.completions, f.starts)}, ${ofStarts(f.completions)})`
   );
@@ -298,13 +577,20 @@ export function formatWeekly(
   lines.push(
     `• Purchased: ${f.purchased} (${stageKept(f.purchased, f.paywallViewed)}, ${ofStarts(f.purchased)})`
   );
-  const overallPct = f.starts > 0 ? `${((f.purchased / f.starts) * 100).toFixed(2)}%` : "—";
-  lines.push(`• Overall conversion: ${overallPct} (starts → purchased)`);
+  const overallPct =
+    f.uniqueVisitors > 0 ? `${((f.purchased / f.uniqueVisitors) * 100).toFixed(2)}%` : "—";
+  lines.push(`• Overall conversion: ${overallPct} (visitors → purchased)`);
   lines.push("");
 
   lines.push("*Top breakdowns*");
   lines.push(`• Archetypes: ${formatTopList(curr.topArchetypes)}`);
   lines.push(`• Sources: ${formatTopList(curr.topUtmSources)}`);
+  if (curr.topCompletionHours.length > 0) {
+    const hoursStr = curr.topCompletionHours
+      .map((h) => `${String(h.hour).padStart(2, "0")}:00 (${h.count})`)
+      .join(", ");
+    lines.push(`• Top hours (UTC): ${hoursStr}`);
+  }
   lines.push("");
 
   // Quality signals
@@ -328,7 +614,7 @@ export function formatWeekly(
     }
   }
 
-  return lines.join("\n");
+  return clampToSlackLimit(lines.join("\n"));
 }
 
 function shortDate(d: Date): string {
@@ -351,6 +637,8 @@ export async function GET(request: Request) {
   }
 
   const trackDuration = startCronTimer("funnel-digest", 60);
+  const startMs = Date.now();
+  let cronError: string | undefined;
 
   try {
     const now = new Date();
@@ -408,8 +696,10 @@ export async function GET(request: Request) {
     });
   } catch (err) {
     logger.error({ err }, "funnel-digest cron failed");
+    cronError = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: "Internal" }, { status: 500 });
   } finally {
     await trackDuration();
+    await recordCronRun("funnel-digest", startMs, cronError ? "error" : "success", cronError);
   }
 }

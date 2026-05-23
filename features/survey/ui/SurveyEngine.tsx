@@ -25,6 +25,8 @@ import { usePartialSave } from "./hooks/usePartialSave";
 import { useAutoAdvance } from "./hooks/useAutoAdvance";
 import { clearPersistedSurveyState } from "./hooks/surveyStorage";
 import { copySurveySessionToReportSession } from "./hooks/surveySession";
+import { getCsrfToken } from "@shared/http/csrf-client";
+import { readCookie } from "@shared/observability/cookie";
 import SurveyConfirmation from "./SurveyConfirmation";
 import PreReportWizard from "./PreReportWizard";
 import ProcessingSequence from "./ProcessingSequence";
@@ -76,6 +78,27 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
     if (!hasTrackedStart.current) {
       hasTrackedStart.current = true;
       trackSurveyStart();
+
+      // Server-side engine-mount ping for the daily Slack digest. The
+      // funnel_event PK dedupes per (visitor_id, day) so a re-mount in the
+      // same day is a no-op server-side.
+      const visitorId = readCookie("__Host-liq_vid") || readCookie("__liq_vid");
+      if (visitorId) {
+        fetch("/api/funnel-event", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-csrf-token": getCsrfToken(),
+          },
+          body: JSON.stringify({
+            event: "survey_engine_mount",
+            visitor_id: visitorId,
+          }),
+          keepalive: true,
+        }).catch(() => {
+          // Best-effort — failure just means the day's count is short by one.
+        });
+      }
     }
   }, []);
 

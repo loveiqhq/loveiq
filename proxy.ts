@@ -7,6 +7,15 @@ const isProduction = process.env.NODE_ENV === "production";
 const CSRF_COOKIE_NAME = isProduction ? "__Host-csrf" : "__csrf";
 const CSRF_TOKEN_LENGTH = 32;
 
+// Visitor id cookie for top-of-funnel attribution. Stable per-browser UUID
+// (1yr) minted server-side so it survives JS being disabled / blocked. The
+// companion `liq_vday` cookie is client-owned (set by VisitorPinger after
+// the daily ping fires) — middleware must NOT touch it, otherwise the
+// "first request of the day" signal disappears before the client can read it.
+// SameSite=Lax so cross-site nav from ads/social keeps the cookie.
+const VISITOR_ID_COOKIE = isProduction ? "__Host-liq_vid" : "__liq_vid";
+const VISITOR_ID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
 function generateCsrfToken(): string {
   const array = new Uint8Array(CSRF_TOKEN_LENGTH);
   crypto.getRandomValues(array);
@@ -171,6 +180,19 @@ export async function proxy(request: NextRequest) {
       sameSite: "strict",
       path: "/",
       maxAge: 60 * 60 * 24, // 24 hours
+    });
+  }
+
+  // Visitor id cookie: mint if missing/malformed. The day-stamp companion is
+  // managed entirely by the client (see shared/observability/VisitorPinger).
+  const existingVid = request.cookies.get(VISITOR_ID_COOKIE)?.value;
+  if (!existingVid || !VISITOR_ID_REGEX.test(existingVid)) {
+    response.cookies.set(VISITOR_ID_COOKIE, crypto.randomUUID(), {
+      httpOnly: false,
+      secure: isProduction,
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 365, // 1 year
     });
   }
 

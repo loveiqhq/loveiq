@@ -26,7 +26,7 @@
 import { timingSafeEqual } from "crypto";
 import { NextResponse } from "next/server";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
-import { startCronTimer } from "@shared/observability/slack-alert-dedup";
+import { recordCronRun, startCronTimer } from "@shared/observability/slack-alert-dedup";
 import { getBreaker } from "@shared/http/circuit-breaker";
 import { KNOWN_ARCHETYPES, isArchetypeName } from "@features/report/server/archetypeSlug";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
@@ -168,6 +168,8 @@ export async function GET(request: Request) {
   }
 
   const trackDuration = startCronTimer("payment-fulfillment-sweep", 50);
+  const startMs = Date.now();
+  let cronError: string | undefined;
 
   const summary = { scanned: 0, fixed: 0, skipped: 0, errors: 0 };
 
@@ -201,8 +203,15 @@ export async function GET(request: Request) {
     return NextResponse.json({ success: true, ...summary });
   } catch (err) {
     logger.error({ err, summary }, "Sweep: top-level failure");
+    cronError = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: "Sweep failed." }, { status: 500 });
   } finally {
     await trackDuration();
+    await recordCronRun(
+      "payment-fulfillment-sweep",
+      startMs,
+      cronError ? "error" : "success",
+      cronError
+    );
   }
 }

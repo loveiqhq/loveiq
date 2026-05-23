@@ -48,7 +48,11 @@ vi.mock("next/server", () => {
 import { proxy } from "@/proxy";
 import logger from "@shared/observability/logger";
 
-function makeNextRequest(url = "http://localhost:3000/", cookieValue?: string) {
+function makeNextRequest(
+  url = "http://localhost:3000/",
+  cookieValue?: string,
+  visitorIdCookie?: string
+) {
   // Use a real Headers object so `new Headers(request.headers)` works
   const headers = new Headers();
   headers.set("user-agent", "TestAgent/1.0");
@@ -64,6 +68,8 @@ function makeNextRequest(url = "http://localhost:3000/", cookieValue?: string) {
         if (name === "__csrf" && cookieValue) return { value: cookieValue };
         if (name === "__Host-csrf" && cookieValue) return { value: cookieValue };
         if (name === "staging_session" && cookieValue) return { value: cookieValue };
+        if (name === "__liq_vid" && visitorIdCookie) return { value: visitorIdCookie };
+        if (name === "__Host-liq_vid" && visitorIdCookie) return { value: visitorIdCookie };
         return undefined;
       },
     },
@@ -143,8 +149,49 @@ describe("proxy middleware", () => {
   });
 
   it("does not set CSRF cookie when already present", () => {
-    proxy(makeNextRequest("http://localhost:3000/", "existing-token"));
-    expect(mockCookiesSet).not.toHaveBeenCalled();
+    proxy(
+      makeNextRequest(
+        "http://localhost:3000/",
+        "existing-token",
+        "550e8400-e29b-41d4-a716-446655440000"
+      )
+    );
+    const csrfCall = mockCookiesSet.mock.calls.find(
+      (call) => call[0] === "__csrf" || call[0] === "__Host-csrf"
+    );
+    expect(csrfCall).toBeUndefined();
+  });
+
+  it("mints __liq_vid visitor cookie when not present", () => {
+    proxy(makeNextRequest());
+    expect(mockCookiesSet).toHaveBeenCalledWith(
+      "__liq_vid",
+      "test-uuid-1234-5678-9abc-def012345678",
+      expect.objectContaining({
+        httpOnly: false,
+        sameSite: "lax",
+        path: "/",
+        maxAge: 60 * 60 * 24 * 365,
+      })
+    );
+  });
+
+  it("does not re-mint __liq_vid when a valid UUID cookie is already present", () => {
+    proxy(
+      makeNextRequest("http://localhost:3000/", undefined, "550e8400-e29b-41d4-a716-446655440000")
+    );
+    const visitorCall = mockCookiesSet.mock.calls.find(
+      (call) => call[0] === "__liq_vid" || call[0] === "__Host-liq_vid"
+    );
+    expect(visitorCall).toBeUndefined();
+  });
+
+  it("re-mints __liq_vid when the existing value is malformed", () => {
+    proxy(makeNextRequest("http://localhost:3000/", undefined, "not-a-uuid"));
+    const visitorCall = mockCookiesSet.mock.calls.find(
+      (call) => call[0] === "__liq_vid" || call[0] === "__Host-liq_vid"
+    );
+    expect(visitorCall).toBeDefined();
   });
 
   it("logs API requests via logger", () => {

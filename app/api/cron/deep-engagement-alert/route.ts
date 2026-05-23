@@ -24,6 +24,7 @@ import logger from "@shared/observability/logger";
 import { notifySlack } from "@shared/observability/slack";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
 import {
+  recordCronRun,
   startCronTimer,
   tryClaimSlackAlert,
   verifyCronAuth,
@@ -323,6 +324,8 @@ export async function GET(request: Request) {
     return NextResponse.json({ skipped: true, reason: "non-prod-cron-host" });
   }
   const trackDuration = startCronTimer("deep-engagement-alert", 50);
+  const startMs = Date.now();
+  let cronError: string | undefined;
   try {
     const [deepPings, burstPings, dropoffPings, viralPings, floodPings] = await Promise.all([
       scanDeepEngagementNoConvert(),
@@ -340,8 +343,15 @@ export async function GET(request: Request) {
     });
   } catch (err) {
     logger.error({ err }, "deep-engagement-alert cron failed");
+    cronError = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: "Internal" }, { status: 500 });
   } finally {
     await trackDuration();
+    await recordCronRun(
+      "deep-engagement-alert",
+      startMs,
+      cronError ? "error" : "success",
+      cronError
+    );
   }
 }

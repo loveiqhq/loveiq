@@ -92,6 +92,61 @@ export function startCronTimer(cronName: string, maxDurationSec: number): () => 
 }
 
 /**
+ * Records one row in the `cron_run` history table. Called from every cron's
+ * finally block so tech-digest can compute real success-rate + p95-duration
+ * metrics. Best-effort: a Supabase outage logs a warn but never throws so
+ * the cron itself completes normally.
+ *
+ *   const startMs = Date.now();
+ *   try { ... } catch (err) { error = err; throw; }
+ *   finally { await recordCronRun("nurture-sequence", startMs, error ? "error" : "success", errMsg); }
+ */
+export async function recordCronRun(
+  cronName: string,
+  startedAtMs: number,
+  status: "success" | "error" | "timeout",
+  errorMessage?: string
+): Promise<void> {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) {
+    logger.warn({ cronName }, "recordCronRun: supabase not configured");
+    return;
+  }
+  const durationMs = Date.now() - startedAtMs;
+  const startedAt = new Date(startedAtMs).toISOString();
+  const completedAt = new Date().toISOString();
+  try {
+    const response = await fetchWithTimeout(`${url}/rest/v1/cron_run`, {
+      method: "POST",
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+        Prefer: "return=minimal",
+      },
+      body: JSON.stringify({
+        cron_name: cronName,
+        started_at: startedAt,
+        completed_at: completedAt,
+        duration_ms: durationMs,
+        status,
+        ...(errorMessage ? { error_message: errorMessage.slice(0, 1000) } : {}),
+      }),
+      timeoutMs: 5000,
+    });
+    if (!response.ok) {
+      logger.warn(
+        { cronName, status, durationMs, httpStatus: response.status },
+        "recordCronRun: insert failed"
+      );
+    }
+  } catch (err) {
+    logger.warn({ err, cronName, status, durationMs }, "recordCronRun: error");
+  }
+}
+
+/**
  * Constant-time bearer-token check for cron routes. All four detector crons
  * share this so the auth pattern stays uniform.
  */

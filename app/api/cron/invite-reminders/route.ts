@@ -23,7 +23,7 @@ import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import { checkCooldown } from "@shared/http/ratelimit";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
-import { startCronTimer } from "@shared/observability/slack-alert-dedup";
+import { recordCronRun, startCronTimer } from "@shared/observability/slack-alert-dedup";
 import { getBreaker } from "@shared/http/circuit-breaker";
 import logger from "@shared/observability/logger";
 import { inviteReminder1Email } from "@features/invite/emails/invite-reminder-1";
@@ -151,6 +151,8 @@ export async function GET(request: Request) {
   }
 
   const trackDuration = startCronTimer("invite-reminders", 50);
+  const startMs = Date.now();
+  let cronError: string | undefined;
 
   const siteUrl = getEmailSiteUrl();
   // Deep-link into the Refer-a-Friend modal on the report page.
@@ -261,8 +263,10 @@ export async function GET(request: Request) {
     return NextResponse.json({ success: true, ...summary });
   } catch (err) {
     logger.error({ err }, "Invite-reminders cron failed");
+    cronError = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
   } finally {
     await trackDuration();
+    await recordCronRun("invite-reminders", startMs, cronError ? "error" : "success", cronError);
   }
 }

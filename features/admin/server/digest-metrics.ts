@@ -12,6 +12,20 @@ import { Redis } from "@upstash/redis";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { parseUtmSource } from "@features/admin/server/metric-library";
 import logger from "@shared/observability/logger";
+import {
+  buildChannelEfficiencySnapshot,
+  type ChannelEfficiencySnapshot,
+} from "@features/admin/server/channel-efficiency";
+import {
+  buildConversionLeakDebuggerSnapshot,
+  type ConversionLeakDebuggerSnapshot,
+} from "@features/admin/server/conversion-leak-debugger";
+import { buildAnomalySnapshot } from "@features/admin/server/alerts";
+import type { AdminAnomalySnapshot } from "@features/admin/server/os-types";
+import {
+  buildValueRealizationSnapshot,
+  type ValueRealizationSnapshot,
+} from "@features/admin/server/value-realization";
 
 export { parseUtmSource };
 
@@ -28,9 +42,15 @@ export interface RevenueBreakdown {
 
 export interface DailyMetrics {
   // Acquisition
+  uniqueVisitors: number;
+  newVisitors: number;
+  returningVisitors: number;
+  surveyEngineMounts: number;
   surveyStarts: number;
   completions: number;
   completionRate: number; // 0-100
+  // Hour-of-day distribution of completed submissions in the window (top 3).
+  topCompletionHours: Array<{ hour: number; count: number }>;
   // Activation
   reportViewers: number;
   engagement1min: number;
@@ -59,9 +79,20 @@ export interface DailyMetrics {
   // Top breakdowns
   topArchetypes: Array<[string, number]>;
   topUtmSources: Array<[string, number]>;
+  // Strategy-lead snapshots (nullable: a failure in any one snapshot must not
+  // break the whole digest — each renderer treats null as "skip section").
+  channels: ChannelEfficiencySnapshot | null;
+  leak: ConversionLeakDebuggerSnapshot | null;
+  anomalies: AdminAnomalySnapshot | null;
+  monetization: ValueRealizationSnapshot | null;
+  // Median paywall-view → purchase time in hours (computed in-line because
+  // value-realization snapshot doesn't expose this directly).
+  medianTimeToPurchaseHours: number | null;
 }
 
 export interface FunnelStages {
+  uniqueVisitors: number;
+  engineMounts: number;
   starts: number;
   completions: number;
   reportViewed: number;
@@ -176,6 +207,94 @@ async function fetchAnalyticsEventCount(
   return fetchExactCount(
     `/rest/v1/analytics_event?select=id&event_type=eq.${eventType}&${dateRange("event_time", sinceIso, untilIso)}`
   );
+}
+
+/**
+ * Counts rows in `funnel_event` for a given event_type in the window.
+ *
+ * funnel_event.day is a DATE column (UTC day-stamp), not a timestamp, so we
+ * slice the ISO timestamps to YYYY-MM-DD. The window is half-open
+ * [sinceDay, untilDay) which matches every other fetcher's convention.
+ */
+async function fetchFunnelEventCount(
+  eventType: "unique_visitor" | "survey_engine_mount",
+  sinceIso: string,
+  untilIso: string
+): Promise<number> {
+  const sinceDay = sinceIso.slice(0, 10);
+  const untilDay = untilIso.slice(0, 10);
+  return fetchExactCount(
+    `/rest/v1/funnel_event?select=visitor_id&event_type=eq.${eventType}&day=gte.${sinceDay}&day=lt.${untilDay}`
+  );
+}
+
+/**
+ * Splits today's unique visitors into NEW (first-ever seen) vs RETURNING
+ * (seen on any prior day). Uses the funnel_event table where one row per
+ * (visitor_id, day, event_type='unique_visitor') is written by the
+ * VisitorPinger client.
+ *
+ * Both queries are capped to keep page-cap behavior predictable; at prelaunch
+ * volume neither approaches the limit.
+ */
+export async function fetchNewVsReturning(
+  sinceIso: string,
+  untilIso: string
+): Promise<{ newVisitors: number; returningVisitors: number }> {
+  const sinceDay = sinceIso.slice(0, 10);
+  const untilDay = untilIso.slice(0, 10);
+  const [todayRes, priorRes] = await Promise.all([
+    supabaseFetch(
+      `/rest/v1/funnel_event?select=visitor_id&event_type=eq.unique_visitor&day=gte.${sinceDay}&day=lt.${untilDay}`,
+      { headers: { Range: "0-9999" } }
+    ),
+    supabaseFetch(
+      `/rest/v1/funnel_event?select=visitor_id&event_type=eq.unique_visitor&day=lt.${sinceDay}`,
+      { headers: { Range: "0-99999" } }
+    ),
+  ]);
+
+  if (!todayRes.ok) return { newVisitors: 0, returningVisitors: 0 };
+  const todayRows = (await todayRes.json()) as Array<{ visitor_id: string }>;
+  const todaySet = new Set<string>();
+  for (const r of todayRows) if (r.visitor_id) todaySet.add(r.visitor_id);
+
+  let priorSet = new Set<string>();
+  if (priorRes.ok) {
+    const priorRows = (await priorRes.json()) as Array<{ visitor_id: string }>;
+    priorSet = new Set(priorRows.map((r) => r.visitor_id).filter((v): v is string => !!v));
+  }
+
+  let returning = 0;
+  for (const id of todaySet) if (priorSet.has(id)) returning += 1;
+  return { newVisitors: todaySet.size - returning, returningVisitors: returning };
+}
+
+/**
+ * Top 3 UTC hours that produced the most completed submissions in the window.
+ * Helps the strategy lead see when conversions land for ad-scheduling.
+ */
+export async function fetchHourlyCompletions(
+  sinceIso: string,
+  untilIso: string,
+  limit = 3
+): Promise<Array<{ hour: number; count: number }>> {
+  const res = await supabaseFetch(
+    `/rest/v1/survey_submission?select=created_date_time&status=eq.completed&${dateRange("created_date_time", sinceIso, untilIso)}`,
+    { headers: { Range: "0-9999" } }
+  );
+  if (!res.ok) return [];
+  const rows = (await res.json()) as Array<{ created_date_time: string | null }>;
+  const buckets = new Map<number, number>();
+  for (const r of rows) {
+    if (!r.created_date_time) continue;
+    const hour = new Date(r.created_date_time).getUTCHours();
+    buckets.set(hour, (buckets.get(hour) ?? 0) + 1);
+  }
+  return [...buckets.entries()]
+    .map(([hour, count]) => ({ hour, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, limit);
 }
 
 async function fetchDistinctReportViewers(sinceIso: string, untilIso: string): Promise<number> {
@@ -379,6 +498,88 @@ async function fetchEmailEngagement(sinceIso: string): Promise<{
   }
 }
 
+/**
+ * Median time-to-purchase in hours: for every successful payment in the window
+ * with a corresponding `paywall_view` event, compute the gap. Median over the
+ * collected gaps. Returns null when the sample is empty (no paywall view OR
+ * no purchases in the window).
+ *
+ * Limited to 1000 payments per window — pre-launch volume is nowhere near.
+ */
+async function fetchMedianTimeToPurchaseHours(
+  sinceIso: string,
+  untilIso: string
+): Promise<number | null> {
+  const paymentsRes = await supabaseFetch(
+    `/rest/v1/payment?select=survey_submission_id,created_date_time&status=eq.succeeded&${dateRange("created_date_time", sinceIso, untilIso)}`,
+    { headers: { Range: "0-999" } }
+  );
+  if (!paymentsRes.ok) return null;
+  const payments = (await paymentsRes.json()) as Array<{
+    survey_submission_id: number | null;
+    created_date_time: string;
+  }>;
+  if (payments.length === 0) return null;
+
+  const submissionIds = [
+    ...new Set(payments.map((p) => p.survey_submission_id).filter((v): v is number => v != null)),
+  ];
+  if (submissionIds.length === 0) return null;
+
+  // Pull the FIRST paywall_view per submission in the window.
+  const idList = submissionIds.join(",");
+  const paywallRes = await supabaseFetch(
+    `/rest/v1/analytics_event?select=survey_submission_id,event_time&event_type=eq.paywall_view&survey_submission_id=in.(${idList})&order=event_time.asc`,
+    { headers: { Range: "0-4999" } }
+  );
+  if (!paywallRes.ok) return null;
+  const paywallRows = (await paywallRes.json()) as Array<{
+    survey_submission_id: number;
+    event_time: string;
+  }>;
+  const firstPaywallBySubmission = new Map<number, string>();
+  for (const row of paywallRows) {
+    if (!firstPaywallBySubmission.has(row.survey_submission_id)) {
+      firstPaywallBySubmission.set(row.survey_submission_id, row.event_time);
+    }
+  }
+
+  const gaps: number[] = [];
+  for (const payment of payments) {
+    if (payment.survey_submission_id == null) continue;
+    const paywallTime = firstPaywallBySubmission.get(payment.survey_submission_id);
+    if (!paywallTime) continue;
+    const gapMs = new Date(payment.created_date_time).getTime() - new Date(paywallTime).getTime();
+    if (gapMs > 0) gaps.push(gapMs);
+  }
+  if (gaps.length === 0) return null;
+  gaps.sort((a, b) => a - b);
+  const midIndex = Math.floor(gaps.length / 2);
+  // gaps.length > 0 verified above; midIndex is bounded by gaps.length so the
+  // non-null assertions are sound. Eslint disable is for the array-index sink.
+  const medianMs =
+    gaps.length % 2 === 1
+      ? // eslint-disable-next-line security/detect-object-injection -- midIndex bounded
+        gaps[midIndex]!
+      : // eslint-disable-next-line security/detect-object-injection -- midIndex bounded
+        (gaps[midIndex - 1]! + gaps[midIndex]!) / 2;
+  return Math.round((medianMs / 3_600_000) * 10) / 10; // 1-decimal hours
+}
+
+/**
+ * Wraps a snapshot builder so a single failure (timeout, transient supabase
+ * error) doesn't take down the whole digest. Caller gets null and the section
+ * renderer treats null as "skip section."
+ */
+async function safeSnapshot<T>(label: string, builder: () => Promise<T>): Promise<T | null> {
+  try {
+    return await builder();
+  } catch (err) {
+    logger.warn({ err, label }, "digest snapshot failed; skipping section");
+    return null;
+  }
+}
+
 async function fetchAvgCompletionMs(sinceIso: string, untilIso: string): Promise<number> {
   const res = await supabaseFetch(
     `/rest/v1/survey_submission?select=duration_ms&status=eq.completed&${dateRange("created_date_time", sinceIso, untilIso)}`,
@@ -396,7 +597,17 @@ async function fetchAvgCompletionMs(sinceIso: string, untilIso: string): Promise
 // -----------------------------------------------------------------------------
 
 export async function fetchFunnelStages(sinceIso: string, untilIso: string): Promise<FunnelStages> {
-  const [starts, completions, reportViewed, paywallViewed, purchasedRows] = await Promise.all([
+  const [
+    uniqueVisitors,
+    engineMounts,
+    starts,
+    completions,
+    reportViewed,
+    paywallViewed,
+    purchasedRows,
+  ] = await Promise.all([
+    fetchFunnelEventCount("unique_visitor", sinceIso, untilIso),
+    fetchFunnelEventCount("survey_engine_mount", sinceIso, untilIso),
     fetchSurveyStarts(sinceIso, untilIso),
     fetchCompletions(sinceIso, untilIso),
     fetchDistinctReportViewers(sinceIso, untilIso),
@@ -420,7 +631,15 @@ export async function fetchFunnelStages(sinceIso: string, untilIso: string): Pro
     purchased = seen.size;
   }
 
-  return { starts, completions, reportViewed, paywallViewed, purchased };
+  return {
+    uniqueVisitors,
+    engineMounts,
+    starts,
+    completions,
+    reportViewed,
+    paywallViewed,
+    purchased,
+  };
 }
 
 export async function fetchDropOffQuestions(
@@ -494,7 +713,18 @@ export async function fetchTopIssueCategories(
 // -----------------------------------------------------------------------------
 
 export async function fetchDailyMetrics(sinceIso: string, untilIso: string): Promise<DailyMetrics> {
+  // Day-count of the digest window — used to size each snapshot builder so we
+  // don't over-fetch 30 days of data when the daily digest only needs 1 day.
+  const windowDays = Math.max(
+    1,
+    Math.round((new Date(untilIso).getTime() - new Date(sinceIso).getTime()) / 86_400_000)
+  );
+
   const [
+    uniqueVisitors,
+    visitorSplit,
+    topCompletionHours,
+    surveyEngineMounts,
     surveyStarts,
     completions,
     reportViewers,
@@ -516,7 +746,16 @@ export async function fetchDailyMetrics(sinceIso: string, untilIso: string): Pro
     emailEngagement,
     topArchetypes,
     topUtmSources,
+    channels,
+    leak,
+    anomalies,
+    monetization,
+    medianTimeToPurchaseHours,
   ] = await Promise.all([
+    fetchFunnelEventCount("unique_visitor", sinceIso, untilIso),
+    fetchNewVsReturning(sinceIso, untilIso),
+    fetchHourlyCompletions(sinceIso, untilIso, 3),
+    fetchFunnelEventCount("survey_engine_mount", sinceIso, untilIso),
     fetchSurveyStarts(sinceIso, untilIso),
     fetchCompletions(sinceIso, untilIso),
     fetchDistinctReportViewers(sinceIso, untilIso),
@@ -538,14 +777,34 @@ export async function fetchDailyMetrics(sinceIso: string, untilIso: string): Pro
     fetchEmailEngagement(sinceIso),
     fetchTopArchetypes(sinceIso, untilIso, 3),
     fetchTopUtmSources(sinceIso, untilIso, 3),
+    // Strategy-lead snapshots — each wrapped in safeSnapshot so one failure
+    // doesn't break the digest. windowDays sizes each builder to match the
+    // digest window (1 for daily, 7 for weekly).
+    safeSnapshot("channelEfficiency", () =>
+      buildChannelEfficiencySnapshot(Math.max(windowDays, 7))
+    ),
+    safeSnapshot("conversionLeak", () =>
+      // adminEmail is only used to filter `admin_segment` rows; cron context
+      // has no admin so passing empty string returns shared segments only —
+      // which is what the digest wants.
+      buildConversionLeakDebuggerSnapshot(Math.max(windowDays, 7), "")
+    ),
+    safeSnapshot("anomalies", () => buildAnomalySnapshot(Math.max(windowDays, 7))),
+    safeSnapshot("valueRealization", () => buildValueRealizationSnapshot(Math.max(windowDays, 7))),
+    fetchMedianTimeToPurchaseHours(sinceIso, untilIso),
   ]);
 
   const completionRate = surveyStarts > 0 ? Math.round((completions / surveyStarts) * 100) : 0;
 
   return {
+    uniqueVisitors,
+    newVisitors: visitorSplit.newVisitors,
+    returningVisitors: visitorSplit.returningVisitors,
+    surveyEngineMounts,
     surveyStarts,
     completions,
     completionRate,
+    topCompletionHours,
     reportViewers,
     engagement1min,
     engagement5min,
@@ -568,6 +827,11 @@ export async function fetchDailyMetrics(sinceIso: string, untilIso: string): Pro
     emailClicked: emailEngagement.clicked,
     topArchetypes,
     topUtmSources,
+    channels,
+    leak,
+    anomalies,
+    monetization,
+    medianTimeToPurchaseHours,
   };
 }
 
