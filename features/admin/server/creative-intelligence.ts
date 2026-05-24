@@ -462,7 +462,9 @@ export async function buildCreativeIntelligenceSnapshot(inputDays: number) {
       }),
     };
   } catch (err) {
-    logger.error({ err }, "Creative intelligence build error");
+    // warn-not-error: caller decides Slack-worthiness. See
+    // channel-efficiency.ts for full rationale.
+    logger.warn({ err }, "Creative intelligence build error");
     throw err;
   }
 }

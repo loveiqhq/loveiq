@@ -403,7 +403,13 @@ export async function buildChannelEfficiencySnapshot(
       },
     };
   } catch (err) {
-    logger.error({ err }, "Channel efficiency build error");
+    // warn-not-error: the caller decides Slack-worthiness. Admin route paths
+    // catch + log their own error (which pages); digest-metrics wraps in
+    // safeSnapshot (which logs warn + returns null). Without this downgrade,
+    // a single transient Supabase outage double-pages: once here, once at the
+    // caller — and during the digest cron that means N×snapshot-builders
+    // each fire their own api_5xx alongside the cron's own failure log.
+    logger.warn({ err }, "Channel efficiency build error");
     throw err;
   }
 }

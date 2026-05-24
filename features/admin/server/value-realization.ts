@@ -564,7 +564,9 @@ export async function buildValueRealizationSnapshot(
       },
     };
   } catch (err) {
-    logger.error({ err }, "Value-realization build error");
+    // warn-not-error: caller (admin route or safeSnapshot in digest-metrics)
+    // decides Slack-worthiness. See channel-efficiency.ts for full rationale.
+    logger.warn({ err }, "Value-realization build error");
     throw err;
   }
 }

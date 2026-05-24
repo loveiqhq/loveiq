@@ -562,7 +562,9 @@ export async function buildGeoLanguageExpansionSnapshot(
       },
     };
   } catch (err) {
-    logger.error({ err }, "Geo/language expansion build error");
+    // warn-not-error: caller decides Slack-worthiness. See
+    // channel-efficiency.ts for full rationale.
+    logger.warn({ err }, "Geo/language expansion build error");
     throw err;
   }
 }

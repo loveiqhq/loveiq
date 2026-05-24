@@ -826,7 +826,10 @@ export async function buildConversionLeakDebuggerSnapshot(
       },
     };
   } catch (err) {
-    logger.error({ err }, "Conversion leak debugger build error");
+    // warn-not-error: caller (admin route or safeSnapshot in digest-metrics)
+    // decides Slack-worthiness. Avoids double-paging on transient Supabase
+    // outages. See channel-efficiency.ts for the full rationale.
+    logger.warn({ err }, "Conversion leak debugger build error");
     throw err;
   }
 }

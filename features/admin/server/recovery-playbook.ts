@@ -576,7 +576,9 @@ export async function buildRecoveryPlaybookSnapshot(
       },
     };
   } catch (err) {
-    logger.error({ err }, "Recovery playbook build error");
+    // warn-not-error: caller decides Slack-worthiness. See
+    // channel-efficiency.ts for full rationale.
+    logger.warn({ err }, "Recovery playbook build error");
     throw err;
   }
 }

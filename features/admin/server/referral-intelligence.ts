@@ -762,7 +762,9 @@ export async function buildReferralIntelligenceSnapshot(
       },
     };
   } catch (err) {
-    logger.error({ err }, "Referral intelligence build error");
+    // warn-not-error: caller decides Slack-worthiness. See
+    // channel-efficiency.ts for full rationale.
+    logger.warn({ err }, "Referral intelligence build error");
     throw err;
   }
 }

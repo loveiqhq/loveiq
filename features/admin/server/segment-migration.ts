@@ -783,7 +783,9 @@ export async function buildSegmentMigrationSnapshot(
       },
     };
   } catch (err) {
-    logger.error({ err }, "Segment migration build error");
+    // warn-not-error: caller decides Slack-worthiness. See
+    // channel-efficiency.ts for full rationale.
+    logger.warn({ err }, "Segment migration build error");
     throw err;
   }
 }

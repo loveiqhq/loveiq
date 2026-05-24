@@ -1400,7 +1400,9 @@ export async function buildResearchIntelligenceSnapshot(
       unknownUnknowns,
     };
   } catch (err) {
-    logger.error({ err }, "Research intelligence build error");
+    // warn-not-error: caller decides Slack-worthiness. See
+    // channel-efficiency.ts for full rationale.
+    logger.warn({ err }, "Research intelligence build error");
     throw err;
   }
 }
