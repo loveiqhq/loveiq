@@ -36,6 +36,7 @@ import {
   delta,
   dayString,
   fetchDailyMetrics,
+  fetchFunnelCaptureStart,
   fetchWeeklyMetrics,
   isoWeekString,
 } from "@features/admin/server/digest-metrics";
@@ -131,10 +132,42 @@ interface HeadlineCandidate {
   prev: number;
 }
 
-export function pickHeadline(curr: DailyMetrics, prev: DailyMetrics): string | null {
+/**
+ * When `funnel_event` capture started after the digest window opened, the
+ * visitor + Saw-Q1 numbers for that window are partial-day and should not
+ * drive the digest narrative. This signal flows through formatDaily/formatWeekly
+ * so renderers can footnote them and `pickHeadline` can skip them as
+ * candidates.
+ */
+export interface PartialCapture {
+  capturedFromIso: string;
+  windowStartIso: string;
+}
+
+function partialCaptureNote(p: PartialCapture): string {
+  // Format the capture-start as HH:MM UTC on its own day. The window start is
+  // already in the digest title so we only show the time delta here.
+  const t = new Date(p.capturedFromIso);
+  const hh = String(t.getUTCHours()).padStart(2, "0");
+  const mm = String(t.getUTCMinutes()).padStart(2, "0");
+  const day = p.capturedFromIso.slice(0, 10);
+  return `:warning: _Visitor capture started ${day} ${hh}:${mm} UTC — Unique visitors / Saw Q1 below reflect a partial window. Full-day metric resumes in the next digest._`;
+}
+
+export function pickHeadline(
+  curr: DailyMetrics,
+  prev: DailyMetrics,
+  partial?: PartialCapture | null
+): string | null {
   const candidates: HeadlineCandidate[] = [
-    { label: "Unique visitors", curr: curr.uniqueVisitors, prev: prev.uniqueVisitors },
-    { label: "Saw Q1", curr: curr.surveyEngineMounts, prev: prev.surveyEngineMounts },
+    // Visitor + engine_mount counts are funnel_event-derived. When capture is
+    // partial-day they would understate truth and headline-by-them would mislead.
+    ...(partial
+      ? []
+      : ([
+          { label: "Unique visitors", curr: curr.uniqueVisitors, prev: prev.uniqueVisitors },
+          { label: "Saw Q1", curr: curr.surveyEngineMounts, prev: prev.surveyEngineMounts },
+        ] as HeadlineCandidate[])),
     { label: "Survey starts", curr: curr.surveyStarts, prev: prev.surveyStarts },
     { label: "Completions", curr: curr.completions, prev: prev.completions },
     { label: "Completion rate", curr: curr.completionRate, prev: prev.completionRate },
@@ -256,12 +289,25 @@ export function formatMonetizationLines(curr: DailyMetrics): string[] {
 
 // Exported (in addition to GET below) so unit tests can lock the message
 // format without having to mock the full Supabase + Slack pipeline.
-export function formatDaily(dayKey: string, curr: DailyMetrics, prev: DailyMetrics): string {
+export function formatDaily(
+  dayKey: string,
+  curr: DailyMetrics,
+  prev: DailyMetrics,
+  partial?: PartialCapture | null
+): string {
   const lines = [`:bar_chart: *Daily digest — ${dayKey} UTC*`, ""];
+
+  // Partial-day-capture warning sits at the top so the reader sees the caveat
+  // before any visitor-derived number. Only emitted when funnel_event began
+  // capturing AFTER this window opened (typically the day a new metric ships).
+  if (partial) {
+    lines.push(partialCaptureNote(partial));
+    lines.push("");
+  }
 
   // Headline of the day — prepended after the title when a metric crosses the
   // delta threshold. Skipped when nothing qualifies (prelaunch low-base case).
-  const headline = pickHeadline(curr, prev);
+  const headline = pickHeadline(curr, prev, partial);
   if (headline) {
     lines.push(headline);
     lines.push("");
@@ -427,13 +473,21 @@ export function formatWeekly(
   weekKey: string,
   weekRangeLabel: string,
   curr: WeeklyMetrics,
-  prev: WeeklyMetrics
+  prev: WeeklyMetrics,
+  partial?: PartialCapture | null
 ): string {
   const lines = [`:chart_with_upwards_trend: *Weekly digest — ${weekKey} (${weekRangeLabel})*`, ""];
 
+  // Same partial-capture warning as the daily — applies when funnel_event
+  // capture started during this week's window.
+  if (partial) {
+    lines.push(partialCaptureNote(partial));
+    lines.push("");
+  }
+
   // Headline reuses the daily picker — WoW deltas are still meaningful when
   // a single metric moves > 25% week-over-week.
-  const headline = pickHeadline(curr, prev);
+  const headline = pickHeadline(curr, prev, partial);
   if (headline) {
     lines.push(headline);
     lines.push("");
@@ -654,14 +708,24 @@ export async function GET(request: Request) {
     // ---- Daily ----
     const dailyClaimed = await tryClaimSlackAlert("daily_digest", "day", dayKey);
     if (dailyClaimed) {
-      const [curr, prev] = await Promise.all([
-        fetchDailyMetrics(yesterdayStart.toISOString(), dayStart.toISOString()),
-        fetchDailyMetrics(dayBeforeStart.toISOString(), yesterdayStart.toISOString()),
+      const yesterdayIso = yesterdayStart.toISOString();
+      // Parallel: metrics + the earliest-funnel_event probe. The probe tells
+      // us whether visitor capture began before today's window — when it
+      // didn't (e.g. funnel_event just shipped mid-day) the formatter adds a
+      // partial-window caveat to the visitor + Saw-Q1 lines.
+      const [curr, prev, captureStart] = await Promise.all([
+        fetchDailyMetrics(yesterdayIso, dayStart.toISOString()),
+        fetchDailyMetrics(dayBeforeStart.toISOString(), yesterdayIso),
+        fetchFunnelCaptureStart(),
       ]);
+      const dailyPartial =
+        captureStart && captureStart > yesterdayIso
+          ? { capturedFromIso: captureStart, windowStartIso: yesterdayIso }
+          : null;
       await notifySlack({
         channel: "ops",
         kind: "daily_digest",
-        text: formatDaily(dayKey, curr, prev),
+        text: formatDaily(dayKey, curr, prev, dailyPartial),
         username: "ops_alerts",
       });
       // Mark delivered AFTER notify succeeds — if notify throws, the claim
@@ -677,15 +741,21 @@ export async function GET(request: Request) {
       if (weeklyClaimed) {
         const weekStart = new Date(dayStart.getTime() - 7 * 86_400_000);
         const prevWeekStart = new Date(weekStart.getTime() - 7 * 86_400_000);
-        const [currW, prevW] = await Promise.all([
-          fetchWeeklyMetrics(weekStart.toISOString(), dayStart.toISOString()),
-          fetchWeeklyMetrics(prevWeekStart.toISOString(), weekStart.toISOString()),
+        const weekStartIso = weekStart.toISOString();
+        const [currW, prevW, weeklyCaptureStart] = await Promise.all([
+          fetchWeeklyMetrics(weekStartIso, dayStart.toISOString()),
+          fetchWeeklyMetrics(prevWeekStart.toISOString(), weekStartIso),
+          fetchFunnelCaptureStart(),
         ]);
         const rangeLabel = `${shortDate(weekStart)} → ${shortDate(new Date(dayStart.getTime() - 1))} UTC`;
+        const weeklyPartial =
+          weeklyCaptureStart && weeklyCaptureStart > weekStartIso
+            ? { capturedFromIso: weeklyCaptureStart, windowStartIso: weekStartIso }
+            : null;
         await notifySlack({
           channel: "ops",
           kind: "weekly_digest",
-          text: formatWeekly(weekKey, rangeLabel, currW, prevW),
+          text: formatWeekly(weekKey, rangeLabel, currW, prevW, weeklyPartial),
           username: "ops_alerts",
         });
         await markSlackAlertDelivered("weekly_digest", "week", weekKey);

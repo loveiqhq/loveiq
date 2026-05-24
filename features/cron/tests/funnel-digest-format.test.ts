@@ -534,3 +534,77 @@ describe("formatDaily — top hours", () => {
     expect(msg).not.toMatch(/Top hours/);
   });
 });
+
+describe("formatDaily — partial-day funnel_event capture", () => {
+  const windowStartIso = "2026-05-23T00:00:00.000Z";
+  // Capture started ~45 minutes before midnight UTC on the day the digest
+  // covers — modelled on the real 2026-05-23 incident where funnel_event was
+  // applied at 23:15:21 UTC and the day-after digest compared a 45-minute
+  // visitor window to a 24-hour survey_starts window.
+  const captureStartIso = "2026-05-23T23:15:21.000Z";
+
+  it("prepends a partial-capture warning line when partial is set", () => {
+    const msg = formatDaily("2026-05-23", baseDaily, baseDaily, {
+      capturedFromIso: captureStartIso,
+      windowStartIso,
+    });
+    expect(msg).toContain("Visitor capture started 2026-05-23 23:15 UTC");
+    expect(msg).toContain("partial window");
+  });
+
+  it("does NOT add the warning when partial is null (steady-state digest)", () => {
+    const msg = formatDaily("2026-05-23", baseDaily, baseDaily);
+    expect(msg).not.toContain("Visitor capture started");
+    expect(msg).not.toContain("partial window");
+  });
+
+  it("excludes Unique visitors + Saw Q1 from headline candidates under partial capture", () => {
+    // Build a curr that would otherwise produce a "Unique visitors ▲ +900%"
+    // headline. With partial=true, the picker should ignore those candidates.
+    const curr: DailyMetrics = { ...baseDaily, uniqueVisitors: 50000, surveyEngineMounts: 30000 };
+    const msg = formatDaily("2026-05-23", curr, baseDaily, {
+      capturedFromIso: captureStartIso,
+      windowStartIso,
+    });
+    expect(msg).not.toMatch(/Today's story:\* Unique visitors/);
+    expect(msg).not.toMatch(/Today's story:\* Saw Q1/);
+  });
+
+  it("still allows non-visitor headlines (e.g. Survey starts) under partial capture", () => {
+    // Move only Survey starts so it's the strongest mover, but keep visitor
+    // counts boring. Partial should NOT block the survey-starts headline.
+    const curr: DailyMetrics = { ...baseDaily, surveyStarts: 5000 };
+    const msg = formatDaily("2026-05-23", curr, baseDaily, {
+      capturedFromIso: captureStartIso,
+      windowStartIso,
+    });
+    expect(msg).toContain("Today's story:* Survey starts");
+  });
+});
+
+describe("formatWeekly — partial-day funnel_event capture", () => {
+  const baseWeeklyForPartial = baseWeekly;
+  it("prepends the warning line when partial is set", () => {
+    const msg = formatWeekly(
+      "2026-W20",
+      "May 13 → May 19 UTC",
+      baseWeeklyForPartial,
+      baseWeeklyForPartial,
+      {
+        capturedFromIso: "2026-05-17T08:00:00.000Z",
+        windowStartIso: "2026-05-13T00:00:00.000Z",
+      }
+    );
+    expect(msg).toContain("Visitor capture started 2026-05-17 08:00 UTC");
+  });
+
+  it("does NOT add the warning when partial is null", () => {
+    const msg = formatWeekly(
+      "2026-W20",
+      "May 13 → May 19 UTC",
+      baseWeeklyForPartial,
+      baseWeeklyForPartial
+    );
+    expect(msg).not.toContain("Visitor capture started");
+  });
+});

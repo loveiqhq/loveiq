@@ -229,6 +229,34 @@ async function fetchFunnelEventCount(
 }
 
 /**
+ * Returns the earliest `first_seen` timestamp from `funnel_event`, or null when
+ * the table is empty or the query fails. Used by the digest renderer to detect
+ * partial-day capture windows: if capture began AFTER `sinceIso`, any
+ * funnel_event-derived metric in that window is undercounting and the digest
+ * must either footnote it or suppress the line.
+ *
+ * Concretely: when the funnel_event migration ships mid-day, the table only
+ * starts collecting from migration-apply time. The first digest run after the
+ * migration would compare an inflated 24h survey_starts count against a
+ * partial-window unique_visitor count, making visitor < starts (which is
+ * logically impossible). This probe lets us recognize that situation.
+ *
+ * Cheap: PostgREST `order=first_seen.asc&limit=1`, single row scan.
+ */
+export async function fetchFunnelCaptureStart(): Promise<string | null> {
+  try {
+    const res = await supabaseFetch(
+      `/rest/v1/funnel_event?select=first_seen&order=first_seen.asc&limit=1`
+    );
+    if (!res.ok) return null;
+    const rows = (await res.json()) as Array<{ first_seen: string | null }>;
+    return rows[0]?.first_seen ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Splits today's unique visitors into NEW (first-ever seen) vs RETURNING
  * (seen on any prior day). Uses the funnel_event table where one row per
  * (visitor_id, day, event_type='unique_visitor') is written by the
