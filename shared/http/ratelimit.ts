@@ -151,7 +151,12 @@ export async function checkRateLimit(
       resetAt,
     };
   } catch (err) {
-    logger.error({ err }, "[ratelimit] Redis error, allowing request (fail-open)");
+    // warn-not-error: route fails OPEN here (allows request through). A Redis
+    // blip should not fire api_5xx Slack page on every single API request —
+    // that's a noise amplifier. Sustained Redis outage will surface via the
+    // circuit-breaker pattern on routes that wrap Supabase/Resend, and via
+    // the daily tech-digest service-health section.
+    logger.warn({ err }, "[ratelimit] Redis error, allowing request (fail-open)");
     return { allowed: true, remaining: config.limit, resetAt };
   }
 }
@@ -190,7 +195,8 @@ export async function checkCooldown(
 
     return { allowed: true, retryAfterMs: 0 };
   } catch (err) {
-    logger.error({ err }, "[ratelimit] Redis cooldown error, allowing request (fail-open)");
+    // warn-not-error: same fail-open posture as checkRateLimit above.
+    logger.warn({ err }, "[ratelimit] Redis cooldown error, allowing request (fail-open)");
     return { allowed: true, retryAfterMs: 0 };
   }
 }

@@ -42,6 +42,10 @@ export async function addToSuppression(
       timeoutMs: 5_000,
     });
   } catch (err) {
-    logger.error({ err, email, reason }, "Failed to add email to suppression list");
+    // warn-not-error: the Resend webhook retries on non-2xx (Svix-signed), so
+    // a transient suppression insert failure is recoverable. Sustained outage
+    // surfaces via the daily tech-digest service-health section. Avoids
+    // amplifying every bounce-processing blip into an api_5xx Slack page.
+    logger.warn({ err, email, reason }, "Failed to add email to suppression list");
   }
 }
