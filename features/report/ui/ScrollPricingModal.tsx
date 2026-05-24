@@ -12,7 +12,6 @@ import {
 } from "@features/checkout/server/reportPurchase";
 import {
   trackBeginCheckout,
-  trackPaywallView,
   trackPriceShown,
   trackScrollPaywallDismissed,
   type PaywallDismissSource,
@@ -311,7 +310,6 @@ const ScrollPricingModal: FC<Props> = ({
     // eslint-disable-next-line react-hooks/set-state-in-effect -- post-mount flip to enable client-only portal
     setPortalMounted(true);
   }, []);
-  const paywallViewFiredRef = useRef(false);
   const priceShownFiredRef = useRef(false);
 
   // ── Analytics ──────────────────────────────────────────────────────────────
@@ -320,12 +318,17 @@ const ScrollPricingModal: FC<Props> = ({
   // openedAtRef captures when the teaser became visible. dismissReasonRef is
   // set by escape/backdrop/close-button paths. checkoutInitiatedRef
   // short-circuits the dismiss event when the user clicked "Unlock".
+  //
+  // No paywall_view fire here — the scroll teaser auto-opens after a 1s
+  // delay on first scroll, which is the founder's "forced" surface. Only
+  // user-initiated clicks (lock_click, archetype_unlock, offer_link) count
+  // toward paywall_initiated. price_shown still fires because it's a
+  // per-quote impression for elasticity analysis, not an intent signal.
   const openedAtRef = useRef(0);
   const dismissReasonRef = useRef<PaywallDismissSource | null>(null);
   const checkoutInitiatedRef = useRef(false);
   useEffect(() => {
     if (!open) {
-      paywallViewFiredRef.current = false;
       priceShownFiredRef.current = false;
       if (openedAtRef.current > 0) {
         if (!checkoutInitiatedRef.current) {
@@ -340,12 +343,10 @@ const ScrollPricingModal: FC<Props> = ({
       }
       return;
     }
-    if (paywallViewFiredRef.current || !quote) return;
-    paywallViewFiredRef.current = true;
-    openedAtRef.current = performance.now();
-    trackPaywallView([
-      { plan: "full_report", price: quote.currentPriceCents / 100, currency: quote.currency },
-    ]);
+    if (!quote) return;
+    if (openedAtRef.current === 0) {
+      openedAtRef.current = performance.now();
+    }
   }, [open, quote]);
 
   useEffect(() => {

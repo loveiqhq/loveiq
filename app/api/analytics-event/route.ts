@@ -29,6 +29,7 @@ const ALLOWED_EVENTS = [
   // Original 8 — funnel + engagement timers
   "report_viewed",
   "paywall_view",
+  "paywall_initiated",
   "price_shown",
   "begin_checkout",
   "paywall_unlocked",
@@ -76,6 +77,7 @@ function entityTypeFor(event: AllowedEvent): string {
     case "chapter_feedback_submitted":
       return "report";
     case "paywall_view":
+    case "paywall_initiated":
     case "price_shown":
     case "paywall_dismissed":
     case "scroll_paywall_dismissed":

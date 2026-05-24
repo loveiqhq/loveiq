@@ -25,7 +25,7 @@ interface FunnelData {
     engagement_1min_at: string | null;
     engagement_5min_at: string | null;
     engagement_10min_at: string | null;
-    paywall_view_at: string | null;
+    paywall_initiated_at: string | null;
     paywall_unlocked_at: string | null;
   };
   pricing: {
@@ -59,7 +59,7 @@ const COLUMNS: Array<{ key: keyof FunnelData["funnel"]; label: string }> = [
   { key: "engagement_1min_at", label: "1 min" },
   { key: "engagement_5min_at", label: "5 min" },
   { key: "engagement_10min_at", label: "10 min" },
-  { key: "paywall_view_at", label: "Paywall" },
+  { key: "paywall_initiated_at", label: "Paywall" },
 ];
 
 const BUCKET_BADGE: Record<string, string> = {
@@ -165,7 +165,7 @@ export default function UserFunnelCard({ id }: { id: string }) {
     engagement_1min_at: Boolean(f.engagement_1min_at),
     engagement_5min_at: Boolean(f.engagement_5min_at),
     engagement_10min_at: Boolean(f.engagement_10min_at),
-    paywall_view_at: Boolean(f.paywall_view_at),
+    paywall_initiated_at: Boolean(f.paywall_initiated_at),
     paywall_unlocked_at: Boolean(f.paywall_unlocked_at),
   };
 

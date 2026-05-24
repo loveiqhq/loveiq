@@ -40,7 +40,7 @@ const baseDaily: DailyMetrics = {
   engagement1min: 400,
   engagement5min: 300,
   engagement10min: 200,
-  paywallViews: 250,
+  paywallInitiated: 250,
   beginCheckouts: 100,
   revenue: {
     count: 25,
@@ -80,7 +80,7 @@ function withZeroStarts(metrics: DailyMetrics): DailyMetrics {
     engagement1min: 0,
     engagement5min: 0,
     engagement10min: 0,
-    paywallViews: 0,
+    paywallInitiated: 0,
     beginCheckouts: 0,
   };
 }
@@ -95,7 +95,7 @@ describe("formatDaily — % of starts annotation", () => {
     expect(msg).toContain("40.00% of starts");
     expect(msg).toContain("Engagement 10m+: 200");
     expect(msg).toContain("20.00% of starts");
-    expect(msg).toContain("Paywall views: 250");
+    expect(msg).toContain("Paywall initiated (user-click): 250");
     expect(msg).toContain("25.00% of starts");
     expect(msg).toContain("Begin checkouts: 100");
     expect(msg).toContain("10.00% of starts");
@@ -138,7 +138,7 @@ const baseWeekly: WeeklyMetrics = {
     starts: 1000,
     completions: 600,
     reportViewed: 500,
-    paywallViewed: 250,
+    paywallInitiated: 250,
     purchased: 25,
   },
   worstChapters: [],
@@ -151,7 +151,7 @@ describe("formatWeekly — % of starts annotation", () => {
     const msg = formatWeekly("2026-W20", "May 13 → May 19 UTC", baseWeekly, baseWeekly);
     expect(msg).toContain("Report viewers: 500");
     expect(msg).toContain("50.00% of starts");
-    expect(msg).toContain("Paywall views: 250");
+    expect(msg).toContain("Paywall initiated (user-click): 250");
     expect(msg).toContain("25.00% of starts");
     expect(msg).toContain("Purchases: 25");
     expect(msg).toContain("2.50% of starts");
@@ -163,8 +163,8 @@ describe("formatWeekly — % of starts annotation", () => {
     expect(msg).toMatch(/Completions: 600 \(60% kept, 60\.00% of starts\)/);
     // Report viewed: 500/600 = 83% kept; 500/1000 = 50.00% of starts
     expect(msg).toMatch(/Report viewed: 500 \(83% kept, 50\.00% of starts\)/);
-    // Paywall viewed: 250/500 = 50% kept; 250/1000 = 25.00% of starts
-    expect(msg).toMatch(/Paywall viewed: 250 \(50% kept, 25\.00% of starts\)/);
+    // Paywall initiated: 250/500 = 50% kept; 250/1000 = 25.00% of starts
+    expect(msg).toMatch(/Paywall initiated: 250 \(50% kept, 25\.00% of starts\)/);
     // Purchased: 25/250 = 10% kept; 25/1000 = 2.50% of starts
     expect(msg).toMatch(/Purchased: 25 \(10% kept, 2\.50% of starts\)/);
   });
@@ -193,7 +193,7 @@ describe("formatWeekly — % of starts annotation", () => {
         starts: 0,
         completions: 0,
         reportViewed: 0,
-        paywallViewed: 0,
+        paywallInitiated: 0,
         purchased: 0,
       },
       worstChapters: [],

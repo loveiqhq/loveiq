@@ -372,7 +372,12 @@ export function formatDaily(
     )
   );
   lines.push(
-    metricWithDeltaAndStartsPct("Paywall views", curr.paywallViews, prev.paywallViews, starts)
+    metricWithDeltaAndStartsPct(
+      "Paywall initiated (user-click)",
+      curr.paywallInitiated,
+      prev.paywallInitiated,
+      starts
+    )
   );
   lines.push(
     metricWithDeltaAndStartsPct("Begin checkouts", curr.beginCheckouts, prev.beginCheckouts, starts)
@@ -545,7 +550,12 @@ export function formatWeekly(
     )
   );
   lines.push(
-    metricWithWowAndStartsPct("Paywall views", curr.paywallViews, prev.paywallViews, wStarts)
+    metricWithWowAndStartsPct(
+      "Paywall initiated (user-click)",
+      curr.paywallInitiated,
+      prev.paywallInitiated,
+      wStarts
+    )
   );
   lines.push(
     metricWithWowAndStartsPct("Begin checkouts", curr.beginCheckouts, prev.beginCheckouts, wStarts)
@@ -627,10 +637,10 @@ export function formatWeekly(
     `• Report viewed: ${f.reportViewed} (${stageKept(f.reportViewed, f.completions)}, ${ofStarts(f.reportViewed)})`
   );
   lines.push(
-    `• Paywall viewed: ${f.paywallViewed} (${stageKept(f.paywallViewed, f.reportViewed)}, ${ofStarts(f.paywallViewed)})`
+    `• Paywall initiated: ${f.paywallInitiated} (${stageKept(f.paywallInitiated, f.reportViewed)}, ${ofStarts(f.paywallInitiated)})`
   );
   lines.push(
-    `• Purchased: ${f.purchased} (${stageKept(f.purchased, f.paywallViewed)}, ${ofStarts(f.purchased)})`
+    `• Purchased: ${f.purchased} (${stageKept(f.purchased, f.paywallInitiated)}, ${ofStarts(f.purchased)})`
   );
   const overallPct =
     f.uniqueVisitors > 0 ? `${((f.purchased / f.uniqueVisitors) * 100).toFixed(2)}%` : "—";

@@ -91,7 +91,7 @@
   - Custom events via `lib/analytics.ts`:
     - `cta_click` - CTA button tracking
     - `survey_started` / `survey_progress` / `survey_complete` - Funnel tracking
-    - `report_viewed` / `paywall_view` / `begin_checkout` - Report engagement
+    - `report_viewed` / `paywall_initiated` / `begin_checkout` - Report engagement (note: `paywall_view` retained for back-compat but no longer fired; user-initiated clicks emit `paywall_initiated`)
 
 **Error Tracking:**
 

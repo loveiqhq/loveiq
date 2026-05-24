@@ -7,9 +7,11 @@
  *      report_engagement_10min but never paywall_unlocked. The warmest
  *      non-buyers; surface them so we can study what blocks conversion.
  *
- *   2. **paywall_view_burst** — submissions that opened the paywall modal
- *      5+ times in the last hour without purchasing. Strong price-objection
- *      signal.
+ *   2. **paywall_view_burst** — submissions that initiated the paywall
+ *      (user click) 5+ times in the last hour without purchasing. Strong
+ *      price-objection signal. (Source switched from paywall_view to
+ *      paywall_initiated on 2026-05-24; alert kind name kept for dedup
+ *      back-compat.)
  *
  * Both branches dedup via slack_alert_sent so each submission pings only
  * once per signal-type.
@@ -108,11 +110,17 @@ async function scanDeepEngagementNoConvert(): Promise<number> {
 }
 
 async function scanPaywallViewBursts(): Promise<number> {
+  // Detects 5+ user-initiated paywall surfaces from the same submission in
+  // an hour without a purchase — strong price-objection signal. Source
+  // switched from `paywall_view` to `paywall_initiated` on 2026-05-24 when
+  // the founder reframed the metric around user-clicked intent (auto-mount
+  // surfaces no longer fire paywall_view). Dedup `kind` kept as
+  // `paywall_view_burst` so historical slack_alert_sent rows still dedupe.
   const since = new Date(Date.now() - 60 * 60_000).toISOString();
   const res = await supabaseFetch(
-    `/rest/v1/analytics_event?event_type=eq.paywall_view&event_time=gte.${encodeURIComponent(since)}&select=survey_submission_id&limit=${SCAN_LIMIT * 5}`
+    `/rest/v1/analytics_event?event_type=eq.paywall_initiated&event_time=gte.${encodeURIComponent(since)}&select=survey_submission_id&limit=${SCAN_LIMIT * 5}`
   );
-  if (!res.ok) throw new Error(`scan_paywall_views_failed:${res.status}`);
+  if (!res.ok) throw new Error(`scan_paywall_initiated_failed:${res.status}`);
   const rows = (await res.json()) as Array<{ survey_submission_id: number | null }>;
   const counts = new Map<number, number>();
   for (const r of rows) {
@@ -122,7 +130,7 @@ async function scanPaywallViewBursts(): Promise<number> {
 
   const burstCandidates = Array.from(counts.entries())
     .filter(([, n]) => n >= PAYWALL_BURST_THRESHOLD)
-    .map(([id, n]) => ({ submissionId: id, views: n }));
+    .map(([id, n]) => ({ submissionId: id, clicks: n }));
 
   if (burstCandidates.length === 0) return 0;
 
@@ -141,7 +149,7 @@ async function scanPaywallViewBursts(): Promise<number> {
     : new Set<number>();
 
   const pendingPings: Promise<void>[] = [];
-  for (const { submissionId, views } of burstCandidates) {
+  for (const { submissionId, clicks } of burstCandidates) {
     if (unlocked.has(submissionId)) continue;
     const entityId = String(submissionId);
     const claimed = await tryClaimSlackAlert("paywall_view_burst", "survey_submission", entityId);
@@ -150,7 +158,7 @@ async function scanPaywallViewBursts(): Promise<number> {
       notifySlack({
         channel: "ops",
         kind: "paywall_view_burst",
-        text: `:vertical_traffic_light: Paywall view burst — submission #${submissionId} hit the paywall ${views}× in the last hour, no purchase`,
+        text: `:vertical_traffic_light: Paywall click burst — submission #${submissionId} initiated the paywall ${clicks}× in the last hour, no purchase`,
         username: "ops_alerts",
       }).then(() => markSlackAlertDelivered("paywall_view_burst", "survey_submission", entityId))
     );

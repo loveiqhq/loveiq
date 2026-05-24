@@ -25,6 +25,7 @@ const PERSISTED_EVENTS = new Set([
   // Original 8 — funnel + engagement timers
   "report_viewed",
   "paywall_view",
+  "paywall_initiated",
   "price_shown",
   "begin_checkout",
   "paywall_unlocked",
@@ -226,6 +227,48 @@ export const trackPaywallView = (items: PaywallPlanItem[]) => {
   const params = { currency: items[0]!.currency, items };
   track("paywall_view", params);
   persistAnalyticsEvent("paywall_view", params);
+};
+
+/**
+ * Source of a user-initiated paywall surface — what the user clicked to land
+ * on the pricing screen. Kept narrow on purpose; expand only when the report
+ * grows new CTAs that route to checkout. Forced/auto-mount paths (scroll
+ * trigger, 24h ladder auto-open) MUST NOT call trackPaywallInitiated — that's
+ * the founder's "forced" vs "initiated" distinction.
+ */
+export type PaywallInitiatedSource = "lock_click" | "archetype_unlock" | "offer_link";
+
+export interface PaywallInitiatedParams {
+  source: PaywallInitiatedSource;
+  /** Optional: which section the user clicked (lock_click source only). */
+  section_id?: string;
+  /** Optional: which archetype is being upgraded. */
+  archetype?: string | null;
+  /** Optional: required plan tier for the locked section. */
+  plan_needed?: "essentials" | "full_report" | "all_reports";
+}
+
+/**
+ * Fires when a user takes a deliberate action that surfaces the paywall:
+ * clicking a locked section, clicking the unlock CTA in PremiumOverlay, or
+ * opening the report via an `?offer=1` email link. Replaces `paywall_view`
+ * as the digest's "did the user actually want the paywall?" signal.
+ *
+ * Why not just keep paywall_view: that event also fires on auto-mount paths
+ * (ScrollPricingModal scroll-trigger, ReportPricingModal 24h+ ladder auto-open),
+ * so the count conflates intent with passive exposure. Founder confirmed the
+ * digest should track INITIATED intent only.
+ *
+ * No items[] payload here — we want a clean count of intent moments, not
+ * per-plan attribution. Per-plan breakdown lives in the price_shown event.
+ */
+export const trackPaywallInitiated = (params: PaywallInitiatedParams) => {
+  // Spread into a plain record so the type lines up with track()'s
+  // Record<string, unknown> signature without forcing every other callsite
+  // to widen its argument types.
+  const payload: Record<string, unknown> = { ...params };
+  track("paywall_initiated", payload);
+  persistAnalyticsEvent("paywall_initiated", payload);
 };
 
 export interface PriceShownParams {

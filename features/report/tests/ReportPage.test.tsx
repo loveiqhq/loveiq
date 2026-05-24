@@ -37,11 +37,13 @@ vi.mock("@features/checkout/server/reportCheckoutQuoteCache", () => ({
 
 const mockTrackReportViewed = vi.fn();
 const mockTrackPaywallView = vi.fn();
+const mockTrackPaywallInitiated = vi.fn();
 const mockTrackBeginCheckout = vi.fn();
 const mockTrackPriceShown = vi.fn();
 vi.mock("@features/analytics/client", () => ({
   trackReportViewed: (...args: unknown[]) => mockTrackReportViewed(...args),
   trackPaywallView: (...args: unknown[]) => mockTrackPaywallView(...args),
+  trackPaywallInitiated: (...args: unknown[]) => mockTrackPaywallInitiated(...args),
   trackBeginCheckout: (...args: unknown[]) => mockTrackBeginCheckout(...args),
   trackPriceShown: (...args: unknown[]) => mockTrackPriceShown(...args),
   setReportSubmissionContext: vi.fn(),
@@ -381,12 +383,11 @@ describe("ReportPage", () => {
       expect(screen.getByRole("heading", { name: /unlock your full report/i })).toBeInTheDocument();
       expect(container.querySelector(".report-pricing-modal__scroll-region")).toBeInTheDocument();
 
-      await waitFor(() => expect(mockTrackPaywallView).toHaveBeenCalledTimes(1));
-      expect(mockTrackPaywallView).toHaveBeenCalledWith([
-        expect.objectContaining({ plan: "essentials", currency: "EUR" }),
-        expect.objectContaining({ plan: "full_report", currency: "EUR" }),
-        expect.objectContaining({ plan: "all_reports", currency: "EUR" }),
-      ]);
+      // Auto-mount paywalls no longer fire paywall_view (founder's "forced"
+      // vs "initiated" distinction, 2026-05-24). Modal still renders; only
+      // user-initiated clicks fire trackPaywallInitiated.
+      expect(mockTrackPaywallView).not.toHaveBeenCalled();
+      expect(mockTrackPaywallInitiated).not.toHaveBeenCalled();
 
       await user.click(screen.getByRole("button", { name: /close pricing modal/i }));
 

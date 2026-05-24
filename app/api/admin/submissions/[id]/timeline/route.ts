@@ -243,7 +243,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
     // 12. Report-engagement events (persisted by /api/analytics-event)
     const analyticsRes = await supabaseFetch(
-      `/rest/v1/analytics_event?survey_submission_id=eq.${submissionId}&event_type=in.(report_viewed,paywall_view,begin_checkout,paywall_unlocked,report_engagement_1min,report_engagement_5min,report_engagement_10min)&select=event_type,event_time,metadata,duration_ms&order=event_time.asc`
+      `/rest/v1/analytics_event?survey_submission_id=eq.${submissionId}&event_type=in.(report_viewed,paywall_view,paywall_initiated,begin_checkout,paywall_unlocked,report_engagement_1min,report_engagement_5min,report_engagement_10min)&select=event_type,event_time,metadata,duration_ms&order=event_time.asc`
     );
     if (analyticsRes.ok) {
       const rows = (await analyticsRes.json()) as Array<{
@@ -274,7 +274,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
 const ANALYTICS_LABELS: Record<string, string> = {
   report_viewed: "Report viewed",
-  paywall_view: "Paywall opened",
+  paywall_view: "Paywall opened (auto)",
+  paywall_initiated: "Paywall initiated (click)",
   begin_checkout: "Began checkout",
   paywall_unlocked: "Paywall unlocked",
   report_engagement_1min: "1 min on report",
@@ -298,6 +299,12 @@ function buildAnalyticsDetail(
     case "paywall_view": {
       const items = Array.isArray(m.items) ? m.items.length : null;
       return items ? `${items} plan${items === 1 ? "" : "s"}` : undefined;
+    }
+    case "paywall_initiated": {
+      const source = typeof m.source === "string" ? m.source : null;
+      const archetype = typeof m.archetype === "string" ? m.archetype : null;
+      const section = typeof m.section_id === "string" ? m.section_id : null;
+      return [source, section, archetype].filter(Boolean).join(" · ") || undefined;
     }
     case "begin_checkout":
     case "paywall_unlocked": {

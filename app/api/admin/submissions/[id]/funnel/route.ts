@@ -44,7 +44,12 @@ interface FunnelResponse {
     engagement_1min_at: string | null;
     engagement_5min_at: string | null;
     engagement_10min_at: string | null;
-    paywall_view_at: string | null;
+    /**
+     * First user-initiated paywall surface (click on a locked section, archetype
+     * tile, or email deep-link). Replaces the prior paywall_view_at (auto-mount
+     * exposure) on 2026-05-24 — see PR notes for paywall_initiated rollout.
+     */
+    paywall_initiated_at: string | null;
     paywall_unlocked_at: string | null;
   };
   pricing: {
@@ -156,7 +161,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     }
 
     const analyticsRes = await supabaseFetch(
-      `/rest/v1/analytics_event?survey_submission_id=eq.${submissionId}&event_type=in.(report_viewed,paywall_view,paywall_unlocked,report_engagement_1min,report_engagement_5min,report_engagement_10min)&select=event_type,event_time,metadata&order=event_time.asc`
+      `/rest/v1/analytics_event?survey_submission_id=eq.${submissionId}&event_type=in.(report_viewed,paywall_view,paywall_initiated,paywall_unlocked,report_engagement_1min,report_engagement_5min,report_engagement_10min)&select=event_type,event_time,metadata&order=event_time.asc`
     );
     const firstByType = new Map<
       string,
@@ -321,7 +326,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         engagement_1min_at: firstByType.get("report_engagement_1min")?.event_time ?? null,
         engagement_5min_at: firstByType.get("report_engagement_5min")?.event_time ?? null,
         engagement_10min_at: firstByType.get("report_engagement_10min")?.event_time ?? null,
-        paywall_view_at: firstByType.get("paywall_view")?.event_time ?? null,
+        // Prefer the new user-initiated event; fall back to legacy paywall_view
+        // rows so historical submissions (pre-2026-05-24) still surface a value.
+        paywall_initiated_at:
+          firstByType.get("paywall_initiated")?.event_time ??
+          firstByType.get("paywall_view")?.event_time ??
+          null,
         paywall_unlocked_at: unlockedAt,
       },
       pricing: {

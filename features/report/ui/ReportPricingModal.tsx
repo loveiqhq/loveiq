@@ -23,10 +23,8 @@ import { isPlanOwnedForArchetype, type ReportAccessPlan } from "@features/report
 import {
   trackBeginCheckout,
   trackPaywallDismissed,
-  trackPaywallView,
   trackPriceShown,
   type PaywallDismissSource,
-  type PaywallPlanItem,
 } from "@features/analytics/client";
 
 interface Props {
@@ -182,19 +180,22 @@ const ReportPricingModal: FC<Props> = ({
   const themeArchetype = targetArchetype ?? archetype;
   const themeStyle = getReportThemeStyle(getReportTheme(themeArchetype));
 
-  // Paywall view + dismiss tracking. openedAtRef captures when the modal
-  // became visible; dismissReasonRef is set by the 3 dismiss code paths
-  // (escape / backdrop / close button) so we can attribute the dismiss to
-  // the user's actual interaction. checkoutInitiatedRef short-circuits the
-  // dismiss event when the user clicked an Unlock CTA — we don't want to
-  // double-count conversions as dismissals.
-  const paywallViewFiredRef = useRef(false);
+  // Dismiss tracking — openedAtRef captures when the modal became visible;
+  // dismissReasonRef is set by the 3 dismiss code paths (escape / backdrop /
+  // close button) so we can attribute the dismiss to the user's actual
+  // interaction. checkoutInitiatedRef short-circuits the dismiss event when
+  // the user clicked an Unlock CTA — we don't want to double-count
+  // conversions as dismissals.
+  //
+  // We do NOT fire paywall_view here. Founder's call (2026-05-24): auto-mount
+  // surfaces are "forced" exposure; only user-initiated clicks (lock_click,
+  // archetype_unlock, offer_link) should count toward intent. Those fire
+  // trackPaywallInitiated from ReportPage at the click handler.
   const openedAtRef = useRef(0);
   const dismissReasonRef = useRef<PaywallDismissSource | null>(null);
   const checkoutInitiatedRef = useRef(false);
   useEffect(() => {
     if (!open) {
-      paywallViewFiredRef.current = false;
       if (openedAtRef.current > 0) {
         if (!checkoutInitiatedRef.current) {
           trackPaywallDismissed({
@@ -209,28 +210,15 @@ const ReportPricingModal: FC<Props> = ({
       }
       return;
     }
-    if (paywallViewFiredRef.current) return;
-    if (!quotes) return;
-    openedAtRef.current = performance.now();
-    const items: PaywallPlanItem[] = REPORT_PURCHASE_PLANS.reduce<PaywallPlanItem[]>((acc, p) => {
-      const quote = quotes[p.plan];
-      if (quote) {
-        acc.push({
-          plan: p.plan,
-          price: quote.currentPriceCents / 100,
-          currency: quote.currency,
-        });
-      }
-      return acc;
-    }, []);
-    if (items.length === 0) return;
-    paywallViewFiredRef.current = true;
-    trackPaywallView(items);
+    // First-open: stamp the open timestamp. Re-renders while already open are
+    // no-ops because openedAtRef stays non-zero until the next close.
+    if (openedAtRef.current === 0) {
+      openedAtRef.current = performance.now();
+    }
     // scopeArchetype changes infrequently and would otherwise re-trigger this
-    // effect on every prop change; reading via a ref keeps deps minimal while
-    // still attributing the dismiss to the current archetype.
+    // effect on every prop change; reading via a ref keeps deps minimal.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, quotes]);
+  }, [open]);
 
   // Per-plan `price_shown` emit. Deduped by (plan, pricingClusterId, discountStep)
   // so re-opening the modal or the ladder advancing emits a new event without

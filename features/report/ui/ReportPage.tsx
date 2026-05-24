@@ -64,6 +64,7 @@ import {
 import {
   setReportSubmissionContext,
   trackLockIconClicked,
+  trackPaywallInitiated,
   trackReferFriendOpened,
   trackReportShareOpened,
   trackReportViewed,
@@ -413,6 +414,14 @@ const ReportExperience: FC<ReportExperienceProps> = ({
         ? section.accessTier
         : "full_report";
     trackLockIconClicked({
+      section_id: section.id,
+      archetype: viewArchetype || null,
+      plan_needed: planNeeded,
+    });
+    // Intent signal — user explicitly clicked a locked section. The digest
+    // counts this (not auto-mount paywall_view) as "user-initiated paywall".
+    trackPaywallInitiated({
+      source: "lock_click",
       section_id: section.id,
       archetype: viewArchetype || null,
       plan_needed: planNeeded,
@@ -975,6 +984,9 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     if (!data) return;
     if (viewMode === "shared") return;
     autoOpenedOfferRef.current = true;
+    // Intent signal — user clicked an email-deep-link to land here. Counts
+    // as user-initiated paywall surface (clicked the link in an email).
+    trackPaywallInitiated({ source: "offer_link", archetype: null });
     // Discount email deep-link — open the pricing modal in offer variant
     // once quotes have resolved. Fires regardless of accessPlan so users who
     // already bought one plan can still see offers for the tier above.
@@ -1066,6 +1078,8 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
         return;
       }
 
+      // Intent signal — user clicked "Unlock" on an archetype probability tile.
+      trackPaywallInitiated({ source: "archetype_unlock", archetype: name });
       setIsScrollTeaserOpen(false);
       setPricingTargetArchetype(name === primaryArchetypeFromData ? null : name);
       setPricingVariant(shouldShowOfferVariant ? "offer" : "default");

@@ -56,7 +56,15 @@ export interface DailyMetrics {
   engagement1min: number;
   engagement5min: number;
   engagement10min: number;
-  paywallViews: number;
+  /**
+   * User-initiated paywall surface count. Sources: lock_click (clicked a
+   * locked section), archetype_unlock (clicked Unlock on an archetype tile),
+   * offer_link (followed an `?offer=1` email deep-link). Auto-mounted
+   * surfaces (scroll teaser, 24h+ ladder auto-open) deliberately don't fire
+   * this — they count as "forced exposure" per the founder's 2026-05-24
+   * direction.
+   */
+  paywallInitiated: number;
   beginCheckouts: number;
   // Revenue
   revenue: RevenueBreakdown;
@@ -96,7 +104,12 @@ export interface FunnelStages {
   starts: number;
   completions: number;
   reportViewed: number;
-  paywallViewed: number;
+  /**
+   * Distinct submissions that initiated the paywall (user-click). Replaces
+   * the prior `paywallViewed` metric on 2026-05-24 — see `paywallInitiated`
+   * docstring in DailyMetrics.
+   */
+  paywallInitiated: number;
   purchased: number;
 }
 
@@ -528,9 +541,15 @@ async function fetchEmailEngagement(sinceIso: string): Promise<{
 
 /**
  * Median time-to-purchase in hours: for every successful payment in the window
- * with a corresponding `paywall_view` event, compute the gap. Median over the
- * collected gaps. Returns null when the sample is empty (no paywall view OR
- * no purchases in the window).
+ * with a corresponding `paywall_initiated` event, compute the gap. Median over
+ * the collected gaps. Returns null when the sample is empty (no paywall
+ * intent click OR no purchases in the window).
+ *
+ * Source event swapped from paywall_view to paywall_initiated on 2026-05-24
+ * after the founder reframed the metric around user-initiated intent. The
+ * label "paywall → purchase" stays — the meaning is now "from first intent
+ * click to purchase" instead of "from first modal-shown to purchase", which
+ * is the more useful product question.
  *
  * Limited to 1000 payments per window — pre-launch volume is nowhere near.
  */
@@ -554,10 +573,12 @@ async function fetchMedianTimeToPurchaseHours(
   ];
   if (submissionIds.length === 0) return null;
 
-  // Pull the FIRST paywall_view per submission in the window.
+  // Pull the FIRST paywall_initiated per submission in the window — see
+  // function-level docstring above for why we use the user-initiated event
+  // instead of the historical paywall_view auto-mount signal.
   const idList = submissionIds.join(",");
   const paywallRes = await supabaseFetch(
-    `/rest/v1/analytics_event?select=survey_submission_id,event_time&event_type=eq.paywall_view&survey_submission_id=in.(${idList})&order=event_time.asc`,
+    `/rest/v1/analytics_event?select=survey_submission_id,event_time&event_type=eq.paywall_initiated&survey_submission_id=in.(${idList})&order=event_time.asc`,
     { headers: { Range: "0-4999" } }
   );
   if (!paywallRes.ok) return null;
@@ -631,7 +652,7 @@ export async function fetchFunnelStages(sinceIso: string, untilIso: string): Pro
     starts,
     completions,
     reportViewed,
-    paywallViewed,
+    paywallInitiated,
     purchasedRows,
   ] = await Promise.all([
     fetchFunnelEventCount("unique_visitor", sinceIso, untilIso),
@@ -640,7 +661,7 @@ export async function fetchFunnelStages(sinceIso: string, untilIso: string): Pro
     fetchCompletions(sinceIso, untilIso),
     fetchDistinctReportViewers(sinceIso, untilIso),
     fetchDistinct(
-      `/rest/v1/analytics_event?select=survey_submission_id&event_type=eq.paywall_view&${dateRange("event_time", sinceIso, untilIso)}`,
+      `/rest/v1/analytics_event?select=survey_submission_id&event_type=eq.paywall_initiated&${dateRange("event_time", sinceIso, untilIso)}`,
       "survey_submission_id"
     ),
     supabaseFetch(
@@ -665,7 +686,7 @@ export async function fetchFunnelStages(sinceIso: string, untilIso: string): Pro
     starts,
     completions,
     reportViewed,
-    paywallViewed,
+    paywallInitiated,
     purchased,
   };
 }
@@ -759,7 +780,7 @@ export async function fetchDailyMetrics(sinceIso: string, untilIso: string): Pro
     engagement1min,
     engagement5min,
     engagement10min,
-    paywallViews,
+    paywallInitiated,
     beginCheckouts,
     revenue,
     refunds,
@@ -790,7 +811,7 @@ export async function fetchDailyMetrics(sinceIso: string, untilIso: string): Pro
     fetchAnalyticsEventCount("report_engagement_1min", sinceIso, untilIso),
     fetchAnalyticsEventCount("report_engagement_5min", sinceIso, untilIso),
     fetchAnalyticsEventCount("report_engagement_10min", sinceIso, untilIso),
-    fetchAnalyticsEventCount("paywall_view", sinceIso, untilIso),
+    fetchAnalyticsEventCount("paywall_initiated", sinceIso, untilIso),
     fetchAnalyticsEventCount("begin_checkout", sinceIso, untilIso),
     fetchRevenue(sinceIso, untilIso),
     fetchRefunds(sinceIso, untilIso),
@@ -837,7 +858,7 @@ export async function fetchDailyMetrics(sinceIso: string, untilIso: string): Pro
     engagement1min,
     engagement5min,
     engagement10min,
-    paywallViews,
+    paywallInitiated,
     beginCheckouts,
     revenue,
     refunds: refunds.count,

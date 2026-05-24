@@ -30,6 +30,7 @@ let trackSurveyProgress: typeof import("@features/analytics/client").trackSurvey
 let trackSurveyComplete: typeof import("@features/analytics/client").trackSurveyComplete;
 let trackReportViewed: typeof import("@features/analytics/client").trackReportViewed;
 let trackPaywallView: typeof import("@features/analytics/client").trackPaywallView;
+let trackPaywallInitiated: typeof import("@features/analytics/client").trackPaywallInitiated;
 let trackBeginCheckout: typeof import("@features/analytics/client").trackBeginCheckout;
 let trackReportEngagement: typeof import("@features/analytics/client").trackReportEngagement;
 let trackReportPurchase: typeof import("@features/analytics/client").trackReportPurchase;
@@ -52,6 +53,7 @@ describe("analytics", () => {
     trackSurveyComplete = mod.trackSurveyComplete;
     trackReportViewed = mod.trackReportViewed;
     trackPaywallView = mod.trackPaywallView;
+    trackPaywallInitiated = mod.trackPaywallInitiated;
     trackBeginCheckout = mod.trackBeginCheckout;
     trackReportEngagement = mod.trackReportEngagement;
     trackReportPurchase = mod.trackReportPurchase;
@@ -380,6 +382,48 @@ describe("analytics", () => {
       trackPaywallView([]);
 
       expect(mockGtag).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("trackPaywallInitiated", () => {
+    it("emits paywall_initiated with the source + optional context fields", () => {
+      const mockGtag = vi.fn();
+      setConsentCookie({ analytics: true });
+      globalThis.window = {
+        ...globalThis.window,
+        gtag: mockGtag,
+        __loveiqAnalyticsEnabled: true,
+      } as typeof globalThis.window;
+
+      trackPaywallInitiated({
+        source: "lock_click",
+        section_id: "chapter_3",
+        archetype: "Sensual Connector",
+        plan_needed: "full_report",
+      });
+
+      expect(mockGtag).toHaveBeenCalledWith("event", "paywall_initiated", {
+        source: "lock_click",
+        section_id: "chapter_3",
+        archetype: "Sensual Connector",
+        plan_needed: "full_report",
+      });
+    });
+
+    it("emits with only the source field when no context is supplied", () => {
+      const mockGtag = vi.fn();
+      setConsentCookie({ analytics: true });
+      globalThis.window = {
+        ...globalThis.window,
+        gtag: mockGtag,
+        __loveiqAnalyticsEnabled: true,
+      } as typeof globalThis.window;
+
+      trackPaywallInitiated({ source: "offer_link" });
+
+      expect(mockGtag).toHaveBeenCalledWith("event", "paywall_initiated", {
+        source: "offer_link",
+      });
     });
   });
 
