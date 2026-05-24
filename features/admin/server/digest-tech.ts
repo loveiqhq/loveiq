@@ -284,9 +284,13 @@ export async function fetchSecuritySignals(
   sinceIso: string,
   untilIso: string
 ): Promise<SecuritySignalsSnapshot> {
+  // delivered=eq.true skips in-flight or crashed-before-delivery claims (2-phase
+  // commit, see slack_alert_two_phase_commit migration). Without this filter,
+  // a Supabase outage that prevents notify completion would inflate tech-digest
+  // security counts.
   const countKind = async (kind: string): Promise<number> =>
     fetchExactCount(
-      `/rest/v1/slack_alert_sent?select=id&kind=eq.${kind}&${dateRange("sent_at", sinceIso, untilIso)}`
+      `/rest/v1/slack_alert_sent?select=id&kind=eq.${kind}&delivered=eq.true&${dateRange("sent_at", sinceIso, untilIso)}`
     );
 
   const [csrfStorms, rateLimitStorms, circuitOpens, circuitRecovered] = await Promise.all([

@@ -18,6 +18,7 @@ import logger from "@shared/observability/logger";
 import { notifySlack } from "@shared/observability/slack";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
 import {
+  markSlackAlertDelivered,
   recordCronRun,
   startCronTimer,
   tryClaimSlackAlert,
@@ -136,11 +137,8 @@ export async function GET(request: Request) {
     const pendingPings: Promise<void>[] = [];
 
     for (const submissionId of abandoned) {
-      const claimed = await tryClaimSlackAlert(
-        "abandoned_checkout",
-        "survey_submission",
-        String(submissionId)
-      );
+      const entityId = String(submissionId);
+      const claimed = await tryClaimSlackAlert("abandoned_checkout", "survey_submission", entityId);
       if (!claimed) continue;
       pendingPings.push(
         notifySlack({
@@ -148,7 +146,7 @@ export async function GET(request: Request) {
           kind: "abandoned_checkout",
           text: `:hourglass: Abandoned checkout — submission #${submissionId} hit begin_checkout 30m+ ago, no purchase`,
           username: "ops_alerts",
-        })
+        }).then(() => markSlackAlertDelivered("abandoned_checkout", "survey_submission", entityId))
       );
     }
 

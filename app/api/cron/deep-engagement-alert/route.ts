@@ -24,6 +24,7 @@ import logger from "@shared/observability/logger";
 import { notifySlack } from "@shared/observability/slack";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
 import {
+  markSlackAlertDelivered,
   recordCronRun,
   startCronTimer,
   tryClaimSlackAlert,
@@ -84,10 +85,11 @@ async function scanDeepEngagementNoConvert(): Promise<number> {
   const pendingPings: Promise<void>[] = [];
   for (const submissionId of submissionIds) {
     if (unlocked.has(submissionId)) continue;
+    const entityId = String(submissionId);
     const claimed = await tryClaimSlackAlert(
       "deep_engagement_no_convert",
       "survey_submission",
-      String(submissionId)
+      entityId
     );
     if (!claimed) continue;
     pendingPings.push(
@@ -96,7 +98,9 @@ async function scanDeepEngagementNoConvert(): Promise<number> {
         kind: "deep_engagement_no_convert",
         text: `:warning: Deep engagement, no purchase — submission #${submissionId} crossed 10min on /report but didn't unlock`,
         username: "ops_alerts",
-      })
+      }).then(() =>
+        markSlackAlertDelivered("deep_engagement_no_convert", "survey_submission", entityId)
+      )
     );
   }
   await Promise.allSettled(pendingPings);
@@ -139,11 +143,8 @@ async function scanPaywallViewBursts(): Promise<number> {
   const pendingPings: Promise<void>[] = [];
   for (const { submissionId, views } of burstCandidates) {
     if (unlocked.has(submissionId)) continue;
-    const claimed = await tryClaimSlackAlert(
-      "paywall_view_burst",
-      "survey_submission",
-      String(submissionId)
-    );
+    const entityId = String(submissionId);
+    const claimed = await tryClaimSlackAlert("paywall_view_burst", "survey_submission", entityId);
     if (!claimed) continue;
     pendingPings.push(
       notifySlack({
@@ -151,7 +152,7 @@ async function scanPaywallViewBursts(): Promise<number> {
         kind: "paywall_view_burst",
         text: `:vertical_traffic_light: Paywall view burst — submission #${submissionId} hit the paywall ${views}× in the last hour, no purchase`,
         username: "ops_alerts",
-      })
+      }).then(() => markSlackAlertDelivered("paywall_view_burst", "survey_submission", entityId))
     );
   }
   await Promise.allSettled(pendingPings);
@@ -184,11 +185,8 @@ async function scanSurveyDropOffSpikes(): Promise<number> {
   const hourKey = new Date().toISOString().slice(0, 13);
   const pendingPings: Promise<void>[] = [];
   for (const [questionIndex, n] of spikes) {
-    const claimed = await tryClaimSlackAlert(
-      "survey_dropoff_spike",
-      "question_hour",
-      `${questionIndex}:${hourKey}`
-    );
+    const entityId = `${questionIndex}:${hourKey}`;
+    const claimed = await tryClaimSlackAlert("survey_dropoff_spike", "question_hour", entityId);
     if (!claimed) continue;
     pendingPings.push(
       notifySlack({
@@ -196,7 +194,7 @@ async function scanSurveyDropOffSpikes(): Promise<number> {
         kind: "survey_dropoff_spike",
         text: `:fast_forward: Survey drop-off spike — Q${questionIndex} had ${n} abandons in the last hour. Investigate the question content or a regression.`,
         username: "ops_alerts",
-      })
+      }).then(() => markSlackAlertDelivered("survey_dropoff_spike", "question_hour", entityId))
     );
   }
   await Promise.allSettled(pendingPings);
@@ -258,7 +256,8 @@ async function scanViralReports(): Promise<number> {
 
   const pendingPings: Promise<void>[] = [];
   for (const [reportId, { shares, views }] of viral) {
-    const claimed = await tryClaimSlackAlert("viral_report", "personal_report", String(reportId));
+    const entityId = String(reportId);
+    const claimed = await tryClaimSlackAlert("viral_report", "personal_report", entityId);
     if (!claimed) continue;
     pendingPings.push(
       notifySlack({
@@ -266,7 +265,7 @@ async function scanViralReports(): Promise<number> {
         kind: "viral_report",
         text: `:fire: Viral report — personal_report #${reportId} has *${shares} active shares* and *${views} total views* in the last 24h.`,
         username: "ops_alerts",
-      })
+      }).then(() => markSlackAlertDelivered("viral_report", "personal_report", entityId))
     );
   }
   await Promise.allSettled(pendingPings);
@@ -300,7 +299,8 @@ async function scanSameIpFlood(): Promise<number> {
   const hourKey = new Date().toISOString().slice(0, 13);
   const pendingPings: Promise<void>[] = [];
   for (const [ip, n] of floods) {
-    const claimed = await tryClaimSlackAlert("same_ip_flood", "ip_hour", `${ip}:${hourKey}`);
+    const entityId = `${ip}:${hourKey}`;
+    const claimed = await tryClaimSlackAlert("same_ip_flood", "ip_hour", entityId);
     if (!claimed) continue;
     pendingPings.push(
       notifySlack({
@@ -308,7 +308,7 @@ async function scanSameIpFlood(): Promise<number> {
         kind: "same_ip_flood",
         text: `:rotating_light: Same-IP flood — IP \`${ip}\` has ${n} active survey sessions in the last hour. Likely abuse.`,
         username: "ops_alerts",
-      })
+      }).then(() => markSlackAlertDelivered("same_ip_flood", "ip_hour", entityId))
     );
   }
   await Promise.allSettled(pendingPings);

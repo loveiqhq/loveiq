@@ -17,6 +17,7 @@ import logger from "@shared/observability/logger";
 import { notifySlack, escapeSlack } from "@shared/observability/slack";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
 import {
+  markSlackAlertDelivered,
   recordCronRun,
   startCronTimer,
   tryClaimSlackAlert,
@@ -74,6 +75,7 @@ export async function GET(request: Request) {
         text: `:rotating_light: *Anomaly — ${escapeSlack(item.title)}*\n${escapeSlack(item.detail)}${ruleSuffix}\nValue: ${item.value} | Owner: ${item.ownerEmail ?? "unassigned"}`,
         context: { targetKey: item.targetKey, severity: item.severity },
       });
+      await markSlackAlertDelivered(`anomaly_realtime:${item.targetKey}`, "day", dayKey);
       fired += 1;
     }
 

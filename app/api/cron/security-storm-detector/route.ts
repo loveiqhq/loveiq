@@ -21,6 +21,7 @@ import logger from "@shared/observability/logger";
 import { notifySlack, escapeSlack } from "@shared/observability/slack";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
 import {
+  markSlackAlertDelivered,
   recordCronRun,
   startCronTimer,
   tryClaimSlackAlert,
@@ -105,7 +106,8 @@ export async function GET(request: Request) {
       const bucket = parts[1] ?? "unknown";
       const ip = parts.slice(2).join(":") || "unknown";
 
-      const claimed = await tryClaimSlackAlert("rate_limit_storm", "ip", `${bucket}:${ip}`);
+      const entityId = `${bucket}:${ip}`;
+      const claimed = await tryClaimSlackAlert("rate_limit_storm", "ip", entityId);
       if (!claimed) continue;
       pendingPings.push(
         notifySlack({
@@ -113,7 +115,7 @@ export async function GET(request: Request) {
           kind: "rate_limit_storm",
           text: `:warning: Rate-limit storm — bucket *${escapeSlack(bucket)}* hit by IP \`${escapeSlack(ip)}\` ${count} times in the current window`,
           username: "ops_alerts",
-        })
+        }).then(() => markSlackAlertDelivered("rate_limit_storm", "ip", entityId))
       );
     }
 
@@ -123,7 +125,8 @@ export async function GET(request: Request) {
       const ip = parts[1] ?? "unknown";
       const bucket = parts[2] ?? "unknown";
 
-      const claimed = await tryClaimSlackAlert("csrf_storm", "ip", `${ip}:${bucket}`);
+      const entityId = `${ip}:${bucket}`;
+      const claimed = await tryClaimSlackAlert("csrf_storm", "ip", entityId);
       if (!claimed) continue;
       pendingPings.push(
         notifySlack({
@@ -131,7 +134,7 @@ export async function GET(request: Request) {
           kind: "csrf_storm",
           text: `:shield: CSRF storm — IP \`${escapeSlack(ip)}\` failed CSRF verification ${count} times in 15 min. Likely abuse / scanner.`,
           username: "ops_alerts",
-        })
+        }).then(() => markSlackAlertDelivered("csrf_storm", "ip", entityId))
       );
     }
 

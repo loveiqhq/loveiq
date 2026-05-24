@@ -18,6 +18,7 @@ import logger from "@shared/observability/logger";
 import { notifySlack, escapeSlack } from "@shared/observability/slack";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
 import {
+  markSlackAlertDelivered,
   recordCronRun,
   startCronTimer,
   tryClaimSlackAlert,
@@ -214,6 +215,7 @@ export async function GET(request: Request) {
       text: formatTechDigest(dayKey, metrics),
       username: "ops_alerts",
     });
+    await markSlackAlertDelivered("tech_digest", "day", dayKey);
 
     return NextResponse.json({ ok: true, day: dayKey, sent: true });
   } catch (err) {

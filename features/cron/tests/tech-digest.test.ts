@@ -17,6 +17,7 @@ vi.mock("@shared/observability/slack-alert-dedup", () => ({
   tryClaimSlackAlert: (...args: unknown[]) => mockTryClaim(...args),
   verifyCronAuth: (...args: unknown[]) => mockVerifyAuth(...args),
   recordCronRun: vi.fn().mockResolvedValue(undefined),
+  markSlackAlertDelivered: vi.fn().mockResolvedValue(undefined),
 }));
 
 const mockIsProdCronHost = vi.fn();

@@ -24,6 +24,7 @@ import logger from "@shared/observability/logger";
 import { notifySlack, escapeSlack } from "@shared/observability/slack";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
 import {
+  markSlackAlertDelivered,
   recordCronRun,
   startCronTimer,
   tryClaimSlackAlert,
@@ -663,6 +664,9 @@ export async function GET(request: Request) {
         text: formatDaily(dayKey, curr, prev),
         username: "ops_alerts",
       });
+      // Mark delivered AFTER notify succeeds — if notify throws, the claim
+      // stays delivered=false and the next eligible run (10+ min) re-claims.
+      await markSlackAlertDelivered("daily_digest", "day", dayKey);
       dailySent = true;
     }
 
@@ -684,6 +688,7 @@ export async function GET(request: Request) {
           text: formatWeekly(weekKey, rangeLabel, currW, prevW),
           username: "ops_alerts",
         });
+        await markSlackAlertDelivered("weekly_digest", "week", weekKey);
         weeklySent = true;
       }
     }

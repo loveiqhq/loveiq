@@ -3,11 +3,21 @@ import logger from "@shared/observability/logger";
 import { notifySlack } from "@shared/observability/slack";
 
 /**
- * Atomically claim a Slack alert slot for (kind, entityType, entityId). Used
- * by the detector crons to ensure the same (e.g.) abandoned-checkout fires
- * only one Slack ping across all serverless instances. Returns true on first
- * claim, false on subsequent calls — including across deploys, since the
- * source of truth is the `slack_alert_sent` table.
+ * Atomically claim a Slack alert slot for (kind, entityType, entityId).
+ *
+ * Two-phase commit pattern (migrated 2026-05-24):
+ *   1. tryClaimSlackAlert  → INSERT with delivered=false, or UPDATE-reclaim
+ *      a stale undelivered row (>10 min old). Returns true iff this caller
+ *      has the claim.
+ *   2. (caller does the work: fetch metrics, format, send notifySlack)
+ *   3. markSlackAlertDelivered  → flip delivered=true so the slot is locked.
+ *
+ * Crash-safety: if step 2 throws (e.g. Supabase timeout, see 2026-05-24
+ * 09:00 UTC funnel-digest failure), the claim row stays delivered=false.
+ * The next cron invocation 10+ min later can re-claim and retry the send.
+ *
+ * Concurrent live invocations are still blocked because the WHERE on
+ * UPDATE only matches stale rows.
  */
 export async function tryClaimSlackAlert(
   kind: string,
@@ -22,37 +32,80 @@ export async function tryClaimSlackAlert(
   }
 
   try {
-    const response = await fetchWithTimeout(
-      `${url}/rest/v1/slack_alert_sent?on_conflict=kind,entity_type,entity_id`,
-      {
-        method: "POST",
-        headers: {
-          apikey: key,
-          Authorization: `Bearer ${key}`,
-          "Content-Type": "application/json",
-          // ignore-duplicates so an existing row doesn't return 409; we then
-          // detect a duplicate via the empty response body.
-          Prefer: "resolution=ignore-duplicates,return=representation",
-        },
-        body: JSON.stringify({ kind, entity_type: entityType, entity_id: entityId }),
-        timeoutMs: 5000,
-      }
-    );
+    const response = await fetchWithTimeout(`${url}/rest/v1/rpc/claim_slack_alert`, {
+      method: "POST",
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        p_kind: kind,
+        p_entity_type: entityType,
+        p_entity_id: entityId,
+      }),
+      timeoutMs: 5000,
+    });
 
     if (!response.ok) {
       logger.warn(
         { kind, entityType, entityId, status: response.status },
-        "tryClaimSlackAlert: insert failed"
+        "tryClaimSlackAlert: RPC non-2xx"
       );
       return false;
     }
 
-    const rows = (await response.json().catch(() => [])) as Array<{ id: number }>;
-    // No row returned = ON CONFLICT was hit = someone else already claimed.
-    return rows.length > 0;
+    // claim_slack_alert returns a single BOOLEAN.
+    const body = await response.json().catch(() => false);
+    return body === true;
   } catch (err) {
     logger.warn({ err, kind, entityType, entityId }, "tryClaimSlackAlert: error");
     return false;
+  }
+}
+
+/**
+ * Mark a previously-claimed Slack alert slot as delivered=true. Call this
+ * AFTER `notifySlack` succeeds so a crash between claim and delivery doesn't
+ * leave the slot permanently locked.
+ *
+ * Best-effort: a failure here just means the row stays delivered=false. The
+ * next eligible invocation (10+ min later) will see a stale row and re-claim,
+ * potentially causing a duplicate Slack post — acceptable trade-off vs.
+ * permanently silenced alerts. Returns void.
+ */
+export async function markSlackAlertDelivered(
+  kind: string,
+  entityType: string,
+  entityId: string
+): Promise<void> {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return;
+
+  try {
+    const response = await fetchWithTimeout(`${url}/rest/v1/rpc/mark_slack_alert_delivered`, {
+      method: "POST",
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        p_kind: kind,
+        p_entity_type: entityType,
+        p_entity_id: entityId,
+      }),
+      timeoutMs: 5000,
+    });
+    if (!response.ok) {
+      logger.warn(
+        { kind, entityType, entityId, status: response.status },
+        "markSlackAlertDelivered: RPC non-2xx"
+      );
+    }
+  } catch (err) {
+    logger.warn({ err, kind, entityType, entityId }, "markSlackAlertDelivered: error");
   }
 }
 
@@ -88,6 +141,7 @@ export function startCronTimer(cronName: string, maxDurationSec: number): () => 
       text: `:warning: Cron *${cronName}* used ${pct}% of its ${maxDurationSec}s budget (${Math.round(elapsedMs / 1000)}s). Approaching timeout — investigate slowness.`,
       username: "ops_alerts",
     });
+    await markSlackAlertDelivered("cron_slow", "cron_hour", hourKey);
   };
 }
 
