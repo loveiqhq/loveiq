@@ -123,10 +123,13 @@ export async function POST(request: Request) {
           ),
         ]);
         if (error) {
-          logger.error({ error, variant }, "Invite email send failed");
+          // warn-not-error: invite email is best-effort post-response. Resend
+          // outage already fires its own ops alert; per-email failures here
+          // are recoverable (user can re-send) and don't warrant a page.
+          logger.warn({ error, variant }, "Invite email send failed");
         }
       } catch (err) {
-        logger.error({ err, variant }, "Invite email error");
+        logger.warn({ err, variant }, "Invite email error");
       }
     }
 
@@ -155,7 +158,9 @@ export async function POST(request: Request) {
         if (err instanceof CircuitOpenError) {
           logger.warn("Supabase-tracking circuit open (invite)");
         } else {
-          logger.error({ err }, "Invite tracking insert failed");
+          // warn-not-error: best-effort tracking insert. Breaker fires
+          // `circuit_open` separately on sustained failure.
+          logger.warn({ err }, "Invite tracking insert failed");
         }
       }
     }

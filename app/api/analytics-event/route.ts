@@ -173,7 +173,23 @@ export async function POST(request: Request) {
   });
 
   if (!insertRes.ok) {
-    logger.error({ status: insertRes.status, event_type }, "analytics_event insert failed");
+    // warn-not-error: best-effort event capture, route already returns 204
+    // regardless. Capture response body for diagnosis (PostgREST surfaces
+    // code/message/details on 4xx).
+    let respBody = "";
+    try {
+      if (typeof insertRes.clone === "function") {
+        respBody = await insertRes.clone().text();
+      } else if (typeof insertRes.text === "function") {
+        respBody = await insertRes.text();
+      }
+    } catch {
+      // Best-effort capture only.
+    }
+    logger.warn(
+      { status: insertRes.status, event_type, respBody: respBody.slice(0, 500) },
+      "analytics_event insert non-2xx"
+    );
     // Don't leak details — return 204 so the client doesn't retry endlessly.
     return new NextResponse(null, { status: 204 });
   }

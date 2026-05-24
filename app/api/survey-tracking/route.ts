@@ -98,7 +98,24 @@ export async function POST(request: Request) {
     );
 
     if (!response.ok) {
-      logger.error({ status: response.status }, "Supabase survey tracking insert failed");
+      // Same posture as the catch block below — warn-not-error so Pino's
+      // Slack hook doesn't page on transient Supabase blips. The circuit
+      // breaker still trips and fires `circuit_open` on sustained failure.
+      // Capture response body opportunistically for diagnosis when it happens.
+      let respBody = "";
+      try {
+        if (typeof response.clone === "function") {
+          respBody = await response.clone().text();
+        } else if (typeof response.text === "function") {
+          respBody = await response.text();
+        }
+      } catch {
+        // Best-effort capture only.
+      }
+      logger.warn(
+        { status: response.status, respBody: respBody.slice(0, 500) },
+        "Supabase survey tracking insert non-2xx"
+      );
       return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
     }
   } catch (err) {

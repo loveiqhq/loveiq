@@ -84,14 +84,28 @@ export async function POST(request: Request) {
     );
 
     if (!response.ok) {
-      logger.error({ status: response.status }, "Supabase invite tracking insert failed");
+      // warn-not-error: best-effort tracking, breaker handles sustained failures.
+      let respBody = "";
+      try {
+        if (typeof response.clone === "function") {
+          respBody = await response.clone().text();
+        } else if (typeof response.text === "function") {
+          respBody = await response.text();
+        }
+      } catch {
+        // Best-effort capture only.
+      }
+      logger.warn(
+        { status: response.status, respBody: respBody.slice(0, 500) },
+        "Supabase invite tracking insert non-2xx"
+      );
       return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
     }
   } catch (err) {
     if (err instanceof CircuitOpenError) {
       logger.warn("Supabase-tracking circuit open (invite)");
     } else {
-      logger.error({ err }, "Supabase error on invite tracking");
+      logger.warn({ err }, "Supabase error on invite tracking");
     }
     return NextResponse.json({ error: "Service temporarily unavailable." }, { status: 503 });
   }

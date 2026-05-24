@@ -306,12 +306,15 @@ export async function POST(request: Request) {
           })
             .then((res) => {
               if (!res.ok) {
-                logger.error({ status: res.status }, "Failed to create report access token");
+                // warn-not-error: best-effort token creation, route degrades
+                // gracefully by setting reportToken = undefined. The user
+                // still gets their submission saved; share URL just unset.
+                logger.warn({ status: res.status }, "Failed to create report access token");
                 reportToken = undefined;
               }
             })
             .catch((err) => {
-              logger.error({ err }, "Error creating report access token");
+              logger.warn({ err }, "Error creating report access token");
               reportToken = undefined;
             })
         : Promise.resolve();
@@ -453,12 +456,16 @@ export async function POST(request: Request) {
           ),
         ]);
         if (error) {
-          logger.error({ error, submissionId, variant }, "Survey complete email send failed");
+          // warn-not-error: best-effort post-response email. Submission is
+          // already persisted; nurture-sequence cron picks up unviewed
+          // reports anyway. Resend-side outages are caught by their own
+          // alerting; per-recipient failures here don't warrant a page.
+          logger.warn({ error, submissionId, variant }, "Survey complete email send failed");
         } else {
           logger.info({ submissionId, variant }, "Survey complete email sent");
         }
       } catch (err) {
-        logger.error({ err, submissionId, variant }, "Survey complete email error");
+        logger.warn({ err, submissionId, variant }, "Survey complete email error");
       }
     });
 
