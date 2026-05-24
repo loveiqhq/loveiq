@@ -96,14 +96,36 @@ export async function POST(request: Request) {
     );
 
     if (!response.ok) {
-      logger.error({ status: response.status }, "Supabase survey partial upsert failed");
+      // Downgrade to WARN: the circuit-breaker absorbs sustained failures
+      // and fires `circuit_open` separately, the client still gets a 5xx
+      // so it surfaces in normal Vercel monitoring, and the pino->Slack
+      // hook only mirrors error+fatal — keeps transient Supabase blips
+      // out of #ops while preserving the page-worthy "breaker is open"
+      // signal. Capture body opportunistically so root cause is visible
+      // when it happens (response.clone/text may not exist on every
+      // implementation, so guard defensively).
+      let respBody = "";
+      try {
+        if (typeof response.clone === "function") {
+          respBody = await response.clone().text();
+        } else if (typeof response.text === "function") {
+          respBody = await response.text();
+        }
+      } catch {
+        // Best-effort capture only.
+      }
+      logger.warn(
+        { status: response.status, respBody: respBody.slice(0, 500) },
+        "Supabase survey partial upsert non-2xx"
+      );
       return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
     }
   } catch (err) {
     if (err instanceof CircuitOpenError) {
       logger.warn("Supabase-partial circuit open");
     } else {
-      logger.error({ err }, "Supabase error on survey partial save");
+      // Same posture as the non-2xx branch above — warn, not error.
+      logger.warn({ err }, "Supabase error on survey partial save");
     }
     return NextResponse.json({ error: "Service temporarily unavailable." }, { status: 503 });
   }
