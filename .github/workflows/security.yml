@@ -270,7 +270,10 @@ jobs:
               -not -path "*/unsubscribe/*" \
               2>/dev/null); do
             if [ -f "$file" ] && grep -q "export.*POST\|export.*PUT\|export.*DELETE\|export.*PATCH" "$file"; then
-              if ! grep -q "verifyCsrfToken" "$file"; then
+              # Accept any CSRF verifier helper from shared/http/csrf.ts:
+              #   - verifyCsrfToken / verifyCsrfTokenFromBody — header-only or body-only paths
+              #   - verifyCsrfHeaderOrBody — beacon-friendly helper that prefers header, falls back to body
+              if ! grep -qE "verifyCsrf(Token|HeaderOrBody)" "$file"; then
                 echo "⚠️  $file: POST/PUT/DELETE/PATCH route missing CSRF verification"
                 exit 1
               fi
