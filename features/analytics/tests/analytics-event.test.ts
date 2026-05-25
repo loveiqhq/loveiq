@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("@shared/http/csrf", () => ({
   verifyCsrfToken: vi.fn().mockResolvedValue(true),
   verifyCsrfTokenFromBody: vi.fn().mockResolvedValue(true),
+  verifyCsrfHeaderOrBody: vi.fn().mockResolvedValue(true),
 }));
 
 vi.mock("@shared/http/ratelimit", () => ({

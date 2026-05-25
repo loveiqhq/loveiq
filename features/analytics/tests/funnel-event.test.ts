@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("@shared/http/csrf", () => ({
   verifyCsrfToken: vi.fn().mockResolvedValue(true),
   verifyCsrfTokenFromBody: vi.fn().mockResolvedValue(true),
+  verifyCsrfHeaderOrBody: vi.fn().mockResolvedValue(true),
 }));
 
 vi.mock("@shared/http/ratelimit", () => ({
@@ -39,8 +40,7 @@ function makeRequest(body: unknown) {
 describe("POST /api/funnel-event", () => {
   beforeEach(() => {
     mockSupabaseFetch.mockReset();
-    vi.mocked(csrf.verifyCsrfToken).mockResolvedValue(true);
-    vi.mocked(csrf.verifyCsrfTokenFromBody).mockResolvedValue(true);
+    vi.mocked(csrf.verifyCsrfHeaderOrBody).mockResolvedValue(true);
     vi.mocked(ratelimit.checkRateLimit).mockResolvedValue({
       allowed: true,
       remaining: 29,
@@ -60,9 +60,8 @@ describe("POST /api/funnel-event", () => {
     expect(mockSupabaseFetch).not.toHaveBeenCalled();
   });
 
-  it("returns 403 when both CSRF paths fail", async () => {
-    vi.mocked(csrf.verifyCsrfToken).mockResolvedValue(false);
-    vi.mocked(csrf.verifyCsrfTokenFromBody).mockResolvedValue(false);
+  it("returns 403 when CSRF check fails", async () => {
+    vi.mocked(csrf.verifyCsrfHeaderOrBody).mockResolvedValue(false);
     const res = await POST(makeRequest({ event: "unique_visitor", visitor_id: VALID_UUID }));
     expect(res.status).toBe(403);
     expect(mockSupabaseFetch).not.toHaveBeenCalled();

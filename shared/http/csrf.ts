@@ -97,6 +97,23 @@ function logCsrfFail(request: Request, reason: string) {
 }
 
 /**
+ * Verify CSRF token, accepting either the header (preferred) or a body field
+ * (sendBeacon fallback). Use this in beacon-friendly endpoints where the body
+ * fallback is a legitimate path — a missing header is NOT logged or counted
+ * against the per-IP storm threshold. If the header IS present, the full
+ * `verifyCsrfToken` log+count behavior applies on mismatch (real attack signal).
+ */
+export async function verifyCsrfHeaderOrBody(
+  request: Request,
+  bodyToken: string | undefined
+): Promise<boolean> {
+  if (request.headers.get(CSRF_HEADER_NAME)) {
+    return verifyCsrfToken(request);
+  }
+  return verifyCsrfTokenFromBody(bodyToken);
+}
+
+/**
  * Verify CSRF token from a body field (for sendBeacon which cannot set headers).
  * Compares the provided token against the cookie value using constant-time comparison.
  */

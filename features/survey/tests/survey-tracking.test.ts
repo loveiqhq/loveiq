@@ -14,6 +14,7 @@ vi.mock("@shared/http/circuit-breaker", () => ({
 vi.mock("@shared/http/csrf", () => ({
   verifyCsrfToken: vi.fn().mockResolvedValue(true),
   verifyCsrfTokenFromBody: vi.fn().mockResolvedValue(true),
+  verifyCsrfHeaderOrBody: vi.fn().mockResolvedValue(true),
 }));
 
 vi.mock("@shared/http/ratelimit", () => ({
@@ -26,7 +27,7 @@ vi.mock("@shared/observability/logger", () => ({
 }));
 
 import { POST } from "@/app/api/survey-tracking/route";
-import { verifyCsrfToken } from "@shared/http/csrf";
+import { verifyCsrfHeaderOrBody } from "@shared/http/csrf";
 import { checkRateLimit } from "@shared/http/ratelimit";
 
 function makeRequest(body: unknown, csrfHeader = "valid-token") {
@@ -58,7 +59,7 @@ describe("POST /api/survey-tracking", () => {
     vi.clearAllMocks();
     process.env.SUPABASE_URL = "https://test.supabase.co";
     process.env.SUPABASE_SERVICE_ROLE_KEY = "test-key";
-    vi.mocked(verifyCsrfToken).mockResolvedValue(true);
+    vi.mocked(verifyCsrfHeaderOrBody).mockResolvedValue(true);
     vi.mocked(checkRateLimit).mockResolvedValue({
       allowed: true,
       remaining: 29,
@@ -75,10 +76,7 @@ describe("POST /api/survey-tracking", () => {
   });
 
   it("returns 403 when CSRF fails", async () => {
-    vi.mocked(verifyCsrfToken).mockResolvedValue(false);
-    const { verifyCsrfTokenFromBody } = await import("@shared/http/csrf");
-    vi.mocked(verifyCsrfTokenFromBody).mockResolvedValue(false);
-
+    vi.mocked(verifyCsrfHeaderOrBody).mockResolvedValue(false);
     const res = await POST(makeRequest({ events: [validEvent()] }));
     expect(res.status).toBe(403);
   });

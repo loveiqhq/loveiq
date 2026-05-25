@@ -3,7 +3,7 @@ import { z } from "zod";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { getBreaker, CircuitOpenError } from "@shared/http/circuit-breaker";
-import { verifyCsrfToken, verifyCsrfTokenFromBody } from "@shared/http/csrf";
+import { verifyCsrfHeaderOrBody } from "@shared/http/csrf";
 import logger from "@shared/observability/logger";
 
 const eventSchema = z.object({
@@ -32,13 +32,11 @@ export async function POST(request: Request) {
   // Parse body once — avoids double-read when sendBeacon falls back to body CSRF
   const body = await request.json().catch(() => ({}));
 
-  // 1. CSRF verification — header first, then body field (for sendBeacon)
-  const csrfValid = await verifyCsrfToken(request);
-  if (!csrfValid) {
-    const bodyValid = await verifyCsrfTokenFromBody(body?._csrf);
-    if (!bodyValid) {
-      return NextResponse.json({ error: "Invalid request." }, { status: 403 });
-    }
+  // 1. CSRF verification — header preferred, body field fallback for sendBeacon.
+  // verifyCsrfHeaderOrBody skips the per-IP storm counter when the header is
+  // absent (legitimate beacon path) so genuine attacks remain the only signal.
+  if (!(await verifyCsrfHeaderOrBody(request, body?._csrf))) {
+    return NextResponse.json({ error: "Invalid request." }, { status: 403 });
   }
 
   // 2. Rate limiting

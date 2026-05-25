@@ -20,7 +20,7 @@
 
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { verifyCsrfToken, verifyCsrfTokenFromBody } from "@shared/http/csrf";
+import { verifyCsrfHeaderOrBody } from "@shared/http/csrf";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import logger from "@shared/observability/logger";
@@ -125,9 +125,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid input." }, { status: 400 });
   }
 
-  const headerCsrfValid = await verifyCsrfToken(request);
-  const bodyCsrfValid = !headerCsrfValid && (await verifyCsrfTokenFromBody(parsed.data._csrf));
-  if (!headerCsrfValid && !bodyCsrfValid) {
+  if (!(await verifyCsrfHeaderOrBody(request, parsed.data._csrf))) {
     return NextResponse.json({ error: "Invalid request." }, { status: 403 });
   }
 
