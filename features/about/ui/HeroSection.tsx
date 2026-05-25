@@ -69,9 +69,8 @@ const HeroSection: FC = () => {
           <strong className="font-bold text-white">
             science-led psychometric research and insights platform
           </strong>{" "}
-          dedicated to reducing
-          <br className="hidden md:inline" />
-          human suffering and supporting lasting happiness. We combine established scientific
+          dedicated to reducing <br className="hidden md:inline" />
+          human suffering and supporting lasting happiness. We combine established scientific{" "}
           <br className="hidden md:inline" />
           disciplines, practical wisdom, and modern technology to provide tools for{" "}
           <strong className="font-bold text-white">transforming</strong>

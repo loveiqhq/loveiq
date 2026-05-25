@@ -114,7 +114,7 @@ const ChallengeVisionSection: FC = () => {
               <h3 className="font-serif text-[32px] font-normal leading-[1] text-white">
                 Our Mission
               </h3>
-              <p className="text-base leading-[1.4] text-[#9CA3AF]">
+              <p className="text-base leading-[1.8] text-[#9CA3AF]">
                 We exist to{" "}
                 <span className="text-white">
                   help people understand their emotional patterns and grow
@@ -143,7 +143,7 @@ const ChallengeVisionSection: FC = () => {
               <h3 className="font-serif text-[32px] font-medium leading-[1] text-white">
                 Our Vision
               </h3>
-              <p className="max-w-[540px] text-base leading-[1.625] text-[#9CA3AF]">
+              <p className="max-w-[540px] text-base leading-[1.8] text-[#9CA3AF]">
                 <span className="text-white">
                   Our vision is to become the world&apos;s most trusted platform for human
                   self-understanding &amp; personal growth.

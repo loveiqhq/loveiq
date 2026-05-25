@@ -641,7 +641,7 @@ const TeaserCard: FC = () => (
         <span className="h-1 w-1 rounded-full bg-[#130b17]" aria-hidden />
         <span className="h-1 w-1 rounded-full bg-white/40" aria-hidden />
         <span className="font-serif text-[13px] sm:text-[18px] lg:text-[21px] leading-[22px] sm:leading-[24px] text-white/40">
-          Relational Healer
+          Relational Nurturer
         </span>
       </div>
       <div className="flex items-center gap-2 sm:gap-3 rounded-xl border border-white/10 bg-white/5 px-3 sm:px-6 py-1.5 sm:py-3 shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-4px_rgba(0,0,0,0.1)] backdrop-blur-sm">
@@ -669,7 +669,7 @@ const TeaserCard: FC = () => (
     {/* Bottom section */}
     <div className="relative flex flex-col items-center">
       <p className="font-sans text-[11px] sm:text-[14px] lg:text-[16px] font-medium leading-[15px] sm:leading-[19.5px] text-center text-[#D1D5DB] max-w-[240px] sm:max-w-[444px] mb-3 sm:mb-5">
-        To explore all 14 archetypes, start our survey and discover which ones fit you best.
+        To explore all 14 archetypes, start our test and discover which ones fit you best.
       </p>
 
       <Link
@@ -701,7 +701,7 @@ const TeaserCard: FC = () => (
       </Link>
 
       <p className="mt-1.5 sm:mt-3 font-sans text-[9px] sm:text-[10px] font-bold leading-[18px] sm:leading-[20px] tracking-[1.4px] uppercase text-white/40 text-center">
-        {"\u2022"}Takes 10 minutes {"\u2022"} No account required
+        {"\u2022"}Takes 15 minutes {"\u2022"} No account required
       </p>
     </div>
   </div>

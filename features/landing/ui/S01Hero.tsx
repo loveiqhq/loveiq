@@ -166,7 +166,7 @@ const S01Hero: FC = () => {
           </div>
         </div>
 
-        <div className="animate-on-scroll mt-4 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/75 sm:text-xs">
+        <div className="animate-on-scroll mt-4 flex items-center justify-center gap-x-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/75 sm:text-xs">
           <svg
             aria-hidden
             className="h-4 w-4"
@@ -180,9 +180,9 @@ const S01Hero: FC = () => {
             <circle cx="12" cy="12" r="10" />
             <path d="M12 6v6l4 2" />
           </svg>
-          <span>Takes 15 minutes</span>
-          <span className="h-1.5 w-1.5 rounded-full bg-white/60" aria-hidden />
-          <span>No account required</span>
+          <span className="whitespace-nowrap">Takes 15 minutes</span>
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-white/60" aria-hidden />
+          <span className="whitespace-nowrap">No account required</span>
         </div>
 
         <p className="animate-on-scroll mt-12 text-center text-base leading-7 text-white">
