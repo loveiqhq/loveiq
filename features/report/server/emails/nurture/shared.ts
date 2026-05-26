@@ -160,10 +160,18 @@ export function renderNurtureEmail({
     </td>
   </tr>`;
 
+  // Email-bug-2026-05-26: convert `\n` separators to <br /> tags before
+  // embedding the intro. iOS Mail does not reliably honour
+  // `white-space: pre-line` — it strips the rule and renders the raw
+  // newlines as ordinary whitespace, collapsing every paragraph into one
+  // block. <br /> tags are universally supported across mail clients.
+  // The intro is documented (NurtureBodyParams docstring) to accept
+  // trusted server-authored HTML, so this string replace is safe — none
+  // of the `\n`s are inside HTML attribute values.
   const introRow = `
   <tr>
     <td style="padding:16px 32px 0;">
-      <p style="margin:0; font-family:${EMAIL_FONT}; font-size:17px; line-height:1.55; color:#000000; white-space:pre-line;">${body.intro}</p>
+      <p style="margin:0; font-family:${EMAIL_FONT}; font-size:17px; line-height:1.55; color:#000000;">${body.intro.replace(/\n/g, "<br />")}</p>
     </td>
   </tr>`;
 

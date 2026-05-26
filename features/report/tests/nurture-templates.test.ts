@@ -110,4 +110,30 @@ describe("nurture email templates", () => {
     );
     expect(out.text).toContain(ctaWithQuery);
   });
+
+  // Email-bug-2026-05-26: intro paragraph must use <br /> separators, not
+  // raw \n. iOS Mail does not honour `white-space: pre-line`, so a
+  // regression that re-introduced raw newlines would show as one long
+  // paragraph on iOS (the bug the user screenshotted).
+  it("nurture intro uses <br /> separators, not raw newlines, in the HTML", () => {
+    const out = nurture54hNoUnlockEmail({
+      firstName: "Marcus",
+      ctaUrl: CTA,
+      promoCode: "LIQ-75-Test01x9",
+      siteUrl: SITE,
+    });
+    // The intro has 3 blank-line breaks between paragraphs — render them
+    // as 6 <br /> tags (each blank line is 2 <br />s from join("\n")).
+    expect(out.html).toContain("<br />");
+    // Must NOT carry a `white-space: pre-line` or `pre-wrap` rule on the
+    // intro paragraph — that's the iOS-incompatible mechanism we replaced.
+    expect(out.html).not.toMatch(/white-space:\s*pre-line/);
+    expect(out.html).not.toMatch(/white-space:\s*pre-wrap/);
+    // Must not embed raw \n inside the intro <p>. The simplest assertion
+    // is: extract the intro's surrounding paragraph and ensure no literal
+    // newline characters are between the salutation and the next sentence.
+    const introMatch = out.html.match(/Hi Marcus,([\s\S]*?)<\/p>/);
+    expect(introMatch).toBeTruthy();
+    expect(introMatch![1]).not.toContain("\n");
+  });
 });

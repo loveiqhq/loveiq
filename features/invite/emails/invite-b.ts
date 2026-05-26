@@ -41,7 +41,7 @@ export function inviteBEmail({
     ? `
   <tr>
     <td style="padding:0 32px 8px;">
-      <p style="margin:0; font-family:${EMAIL_FONT}; font-size:17px; line-height:1.55; color:#000000; white-space:pre-wrap;">${escapeHtml(userMessage).replace(/\n/g, "<br />")}</p>
+      <p style="margin:0; font-family:${EMAIL_FONT}; font-size:17px; line-height:1.55; color:#000000;">${escapeHtml(userMessage).replace(/\n/g, "<br />")}</p>
     </td>
   </tr>`
     : `

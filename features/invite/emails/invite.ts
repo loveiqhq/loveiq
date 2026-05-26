@@ -39,7 +39,7 @@ export function inviteEmail({
   </tr>
   <tr>
     <td style="padding:16px 32px 8px;">
-      <p style="margin:0; font-family:${EMAIL_FONT}; font-size:17px; line-height:1.55; color:#000000; white-space:pre-wrap;">${safeBodyMessage}</p>
+      <p style="margin:0; font-family:${EMAIL_FONT}; font-size:17px; line-height:1.55; color:#000000;">${safeBodyMessage}</p>
     </td>
   </tr>
   <tr>
