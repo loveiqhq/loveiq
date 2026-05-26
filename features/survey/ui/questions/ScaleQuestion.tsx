@@ -182,10 +182,9 @@ const ScaleQuestion: FC<ScaleQuestionProps> = ({ question, value, onChange }) =>
 
         {/* Selected label + explanation — only rendered after the user picks a value,
              so the dots sit flush under the title before any click.
-             Mobile (default): rendered last (below the dots).
-             Desktop (sm+): rendered first (above the dots) via order utility. */}
+             Rendered last (below the dots) on both mobile and desktop. */}
         {displayValue !== null && (
-          <div className="order-last flex flex-col items-center gap-2 pt-2 text-center sm:order-first sm:justify-end sm:pb-2 sm:pt-0">
+          <div className="flex flex-col items-center gap-2 pt-2 text-center">
             <span className="font-sans text-[24px] font-bold leading-tight tracking-[0.5px] text-white/90 sm:text-[32px] sm:font-medium sm:tracking-[0.6px]">
               {selectedLabel}
             </span>

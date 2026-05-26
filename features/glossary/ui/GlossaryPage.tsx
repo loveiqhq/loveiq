@@ -201,7 +201,8 @@ const GlossaryPage: FC = () => {
           <div className="mx-auto max-w-[768px]">
             {/* Search Input */}
             <div className="relative reveal-on-scroll stagger-2">
-              <div className="absolute left-5 top-1/2 -translate-y-1/2">
+              {/* Icon — top-aligned on mobile (first text line), centered on desktop */}
+              <div className="absolute left-5 top-[25px] sm:top-1/2 sm:-translate-y-1/2">
                 <svg
                   className="h-[18px] w-[18px] text-white/30"
                   viewBox="0 0 24 24"
@@ -215,12 +216,26 @@ const GlossaryPage: FC = () => {
                   <path d="m21 21-4.3-4.3" />
                 </svg>
               </div>
+
+              {/* Mobile: textarea so placeholder wraps to 2 lines */}
+              <textarea
+                rows={2}
+                placeholder="Search a term or concept (e.g. 'Arousal', 'Boundaries')"
+                value={searchQuery}
+                onChange={(e) => handleSearchChange(e.target.value.replace(/\n/g, ""))}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") e.preventDefault();
+                }}
+                className="sm:hidden w-full resize-none rounded-full border border-white/10 bg-white/[0.03] py-[22px] pl-[50px] pr-[25px] text-base text-white placeholder:text-white/30 hover:bg-white/[0.05] hover:border-white/50 focus:border-2 focus:border-[rgba(254,104,57,0.6)] focus:bg-white/[0.03] focus:outline-none focus:ring-0 transition"
+              />
+
+              {/* Desktop: single-line input */}
               <input
                 type="text"
                 placeholder="Search a term or concept (e.g. 'Arousal', 'Boundaries')"
                 value={searchQuery}
                 onChange={(e) => handleSearchChange(e.target.value)}
-                className="w-full rounded-full border border-white/10 bg-white/[0.03] py-5 pl-[49px] pr-6 text-base text-white placeholder:text-white/30 hover:bg-white/[0.05] hover:border-white/50 focus:border-2 focus:border-[rgba(254,104,57,0.6)] focus:bg-white/[0.03] focus:outline-none focus:ring-0 transition"
+                className="hidden sm:block w-full rounded-full border border-white/10 bg-white/[0.03] pt-[20px] pb-[19px] pl-[49px] pr-[25px] text-base text-white placeholder:text-white/30 hover:bg-white/[0.05] hover:border-white/50 focus:border-2 focus:border-[rgba(254,104,57,0.6)] focus:bg-white/[0.03] focus:outline-none focus:ring-0 transition"
               />
             </div>
 
@@ -251,7 +266,7 @@ const GlossaryPage: FC = () => {
       <section className="relative py-4 sm:py-8">
         <div className="content-shell">
           <div className="px-0 sm:px-12 reveal-on-scroll stagger-4">
-            <div className="flex items-center justify-center gap-1 rounded-full border border-white/5 bg-[rgba(10,5,16,0.6)] p-2 shadow-[0_8px_32px_rgba(0,0,0,0.36)] backdrop-blur-[20px] overflow-x-auto scrollbar-hide">
+            <div className="flex items-center gap-1 rounded-full border border-white/5 bg-[rgba(10,5,16,0.6)] p-2 shadow-[0_8px_32px_rgba(0,0,0,0.36)] backdrop-blur-[20px] overflow-x-auto scrollbar-hide sm:justify-center">
               {alphabet.map((letter) => (
                 <button
                   key={letter}
