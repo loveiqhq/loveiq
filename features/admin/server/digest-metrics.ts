@@ -26,6 +26,16 @@ import {
   buildValueRealizationSnapshot,
   type ValueRealizationSnapshot,
 } from "@features/admin/server/value-realization";
+// Pure derived-field builders. These modules use `import type` from this file
+// so static imports do NOT create a runtime circular dep (the type imports
+// are erased by TypeScript).
+import { scoreFunnelLeaks } from "@features/admin/server/digest-leak-scoring";
+import { buildRecommendations } from "@features/admin/server/digest-recommendations";
+import { fetchRecommendationHistory } from "@features/admin/server/digest-recommendation-history";
+import {
+  classifyRevisited,
+  type RevisitedEntry,
+} from "@features/admin/server/digest-recommendation-compare";
 
 export { parseUtmSource };
 
@@ -96,6 +106,19 @@ export interface DailyMetrics {
   // Median paywall-view → purchase time in hours (computed in-line because
   // value-realization snapshot doesn't expose this directly).
   medianTimeToPurchaseHours: number | null;
+  /**
+   * PreReportWizard slide-by-slide retention. Nullable per the safeSnapshot
+   * convention: a single fetcher failure is logged + the section skipped, but
+   * the rest of the digest still ships.
+   */
+  wizardFunnel: WizardSlideRetentionSnapshot | null;
+  /**
+   * 30-day daily-bucketed top-line metrics for inline Unicode sparklines on
+   * the daily digest. Always covers the trailing 30 UTC days regardless of
+   * the digest window itself (one digest sentence, "trend over 30 days"). Null
+   * when the fetcher fails.
+   */
+  sparklines: SparklineSnapshot | null;
 }
 
 export interface FunnelStages {
@@ -113,12 +136,117 @@ export interface FunnelStages {
   purchased: number;
 }
 
+/**
+ * PreReportWizard slide-by-slide retention. `slide1..slide5` = distinct
+ * submissions that reached that slide via `wizard_slide_advanced`. `reportViewed`
+ * = subset that ALSO opened the report inside the same window. Renderer
+ * computes "% kept" from the previous slide inline.
+ */
+export interface WizardSlideRetentionSnapshot {
+  slide1: number;
+  slide2: number;
+  slide3: number;
+  slide4: number;
+  slide5: number;
+  reportViewed: number;
+}
+
+/**
+ * One row per UTC day in the digest window. Renderer maps each metric column
+ * across days to a Unicode-block sparkline string for the daily Slack message.
+ */
+export interface SparklineDay {
+  day: string; // YYYY-MM-DD
+  visitors: number;
+  starts: number;
+  completions: number;
+  report_views: number;
+  paywall_init: number;
+  purchases: number;
+}
+
+export interface SparklineSnapshot {
+  days: SparklineDay[];
+}
+
+/**
+ * Ordered array of funnel-edge counts (landing → purchase). The renderer walks
+ * the array once, prints stage-kept % vs the previous stage, and flags the
+ * single biggest absolute drop with an arrow tag.
+ */
+export interface DropoffStage {
+  name: string;
+  count: number;
+}
+
+export interface DropoffEverywhereSnapshot {
+  stages: DropoffStage[];
+}
+
+/**
+ * Top 5 (question, answer-option) cohorts whose purchase rate diverges most
+ * from the baseline (window-wide completed-survey purchase rate). Sample-size
+ * floor (`min_n`, default 10) is enforced in the RPC.
+ */
+export interface AnswerLiftPair {
+  q_id: string;
+  q_text: string;
+  answer: string;
+  n: number;
+  paid_n: number;
+  rate_pct: number;
+  lift_pct: number;
+}
+
+export interface AnswerLiftSnapshot {
+  baseline_pct: number;
+  baseline_n: number;
+  baseline_paid: number;
+  pairs: AnswerLiftPair[];
+}
+
+/**
+ * Engagement-bucket purchase rate. Buckets: 0-1m (viewed but no engagement
+ * timer fired), 1-5m, 5-10m, 10m+. Only submissions that opened the report
+ * are counted — pre-report bounces would dilute the signal.
+ */
+export interface EngagementBucket {
+  bucket: "0-1m" | "1-5m" | "5-10m" | "10m+";
+  n: number;
+  paid: number;
+}
+
+export interface EngagementLiftSnapshot {
+  buckets: EngagementBucket[];
+}
+
 export interface WeeklyMetrics extends DailyMetrics {
   avgCompletionSec: number;
   funnel: FunnelStages;
   worstChapters: Array<{ sectionId: string; downs: number }>;
   topIssues: Array<{ issue: string; count: number }>;
   dropOff: Array<{ questionIndex: number; abandonCount: number }>;
+  /**
+   * Strategy-lead weekly-only snapshots. Each is nullable — a single failure
+   * is logged + the corresponding section skipped, but the rest of the digest
+   * still ships.
+   */
+  dropoffEverywhere: DropoffEverywhereSnapshot | null;
+  answerLift: AnswerLiftSnapshot | null;
+  engagementLift: EngagementLiftSnapshot | null;
+  /**
+   * Pure derivations from the snapshots above. Always present (not nullable)
+   * because they're computed in-process after the RPCs resolve — no I/O can
+   * fail. Empty arrays when nothing useful to surface (no leaks, no recs).
+   */
+  leakSeverity: import("@features/admin/server/digest-leak-scoring").LeakSeverity[];
+  recommendations: import("@features/admin/server/digest-recommendations").Recommendation[];
+  /**
+   * Phase 3 loop-closure: classifies last week's recommendations against the
+   * current snapshot. Empty array when no history exists (first week of
+   * operation) — the Slack section is then omitted.
+   */
+  revisited: RevisitedEntry[];
 }
 
 // -----------------------------------------------------------------------------
@@ -642,6 +770,183 @@ async function fetchAvgCompletionMs(sinceIso: string, untilIso: string): Promise
 }
 
 // -----------------------------------------------------------------------------
+// Strategy-lead RPC fetchers (wizard funnel, drop-off map, answer lift,
+// engagement lift, sparklines). Each wraps a single Postgres function call
+// from the strategy-funnel-rpcs migration. All five share the same
+// null-on-failure contract so the renderer can skip any section without
+// crashing the rest of the digest.
+// -----------------------------------------------------------------------------
+
+/** POST a single Postgres RPC and parse JSON. Returns null on any failure. */
+async function callRpc<T>(name: string, body: Record<string, unknown>): Promise<T | null> {
+  try {
+    const res = await supabaseFetch(`/rest/v1/rpc/${name}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      logger.warn({ rpc: name, status: res.status }, "digest RPC non-2xx; skipping section");
+      return null;
+    }
+    return (await res.json()) as T;
+  } catch (err) {
+    logger.warn({ err, rpc: name }, "digest RPC threw; skipping section");
+    return null;
+  }
+}
+
+export async function fetchWizardSlideRetention(
+  sinceIso: string,
+  untilIso: string
+): Promise<WizardSlideRetentionSnapshot | null> {
+  const raw = await callRpc<Partial<WizardSlideRetentionSnapshot>>("get_wizard_funnel", {
+    since_ts: sinceIso,
+    until_ts: untilIso,
+  });
+  if (!raw) return null;
+  // Normalize: coerce every slot to a finite non-negative int so the renderer
+  // can do arithmetic without re-validating.
+  const num = (v: unknown): number => {
+    const n = typeof v === "number" ? v : Number(v);
+    return Number.isFinite(n) && n >= 0 ? Math.trunc(n) : 0;
+  };
+  return {
+    slide1: num(raw.slide1),
+    slide2: num(raw.slide2),
+    slide3: num(raw.slide3),
+    slide4: num(raw.slide4),
+    slide5: num(raw.slide5),
+    reportViewed: num(raw.reportViewed),
+  };
+}
+
+export async function fetchSparklines(
+  sinceIso: string,
+  untilIso: string
+): Promise<SparklineSnapshot | null> {
+  const raw = await callRpc<{ days?: unknown }>("get_funnel_sparklines", {
+    since_ts: sinceIso,
+    until_ts: untilIso,
+  });
+  if (!raw || !Array.isArray(raw.days)) return null;
+  const num = (v: unknown): number => {
+    const n = typeof v === "number" ? v : Number(v);
+    return Number.isFinite(n) && n >= 0 ? Math.trunc(n) : 0;
+  };
+  const days: SparklineDay[] = [];
+  for (const row of raw.days) {
+    if (!row || typeof row !== "object") continue;
+    const r = row as Record<string, unknown>;
+    const day = typeof r.day === "string" ? r.day : "";
+    if (!day) continue;
+    days.push({
+      day,
+      visitors: num(r.visitors),
+      starts: num(r.starts),
+      completions: num(r.completions),
+      report_views: num(r.report_views),
+      paywall_init: num(r.paywall_init),
+      purchases: num(r.purchases),
+    });
+  }
+  return { days };
+}
+
+export async function fetchDropoffEverywhere(
+  sinceIso: string,
+  untilIso: string
+): Promise<DropoffEverywhereSnapshot | null> {
+  const raw = await callRpc<{ stages?: unknown }>("get_dropoff_everywhere", {
+    since_ts: sinceIso,
+    until_ts: untilIso,
+  });
+  if (!raw || !Array.isArray(raw.stages)) return null;
+  const stages: DropoffStage[] = [];
+  for (const item of raw.stages) {
+    if (!item || typeof item !== "object") continue;
+    const r = item as Record<string, unknown>;
+    const name = typeof r.name === "string" ? r.name : "";
+    const countNum = Number(r.count);
+    if (!name || !Number.isFinite(countNum)) continue;
+    stages.push({ name, count: Math.max(0, Math.trunc(countNum)) });
+  }
+  return { stages };
+}
+
+export async function fetchAnswerLift(
+  sinceIso: string,
+  untilIso: string,
+  minN = 10
+): Promise<AnswerLiftSnapshot | null> {
+  const raw = await callRpc<Record<string, unknown>>("get_answer_conversion_lift", {
+    since_ts: sinceIso,
+    until_ts: untilIso,
+    min_n: minN,
+  });
+  if (!raw) return null;
+  const num = (v: unknown): number => {
+    const n = typeof v === "number" ? v : Number(v);
+    return Number.isFinite(n) ? n : 0;
+  };
+  const pairs: AnswerLiftPair[] = [];
+  if (Array.isArray(raw.pairs)) {
+    for (const item of raw.pairs) {
+      if (!item || typeof item !== "object") continue;
+      const r = item as Record<string, unknown>;
+      const q_id = typeof r.q_id === "string" ? r.q_id : "";
+      const q_text = typeof r.q_text === "string" ? r.q_text : "";
+      const answer = typeof r.answer === "string" ? r.answer : "";
+      if (!q_id || !answer) continue;
+      pairs.push({
+        q_id,
+        q_text,
+        answer,
+        n: Math.max(0, Math.trunc(num(r.n))),
+        paid_n: Math.max(0, Math.trunc(num(r.paid_n))),
+        rate_pct: num(r.rate_pct),
+        lift_pct: Math.trunc(num(r.lift_pct)),
+      });
+    }
+  }
+  return {
+    baseline_pct: num(raw.baseline_pct),
+    baseline_n: Math.max(0, Math.trunc(num(raw.baseline_n))),
+    baseline_paid: Math.max(0, Math.trunc(num(raw.baseline_paid))),
+    pairs,
+  };
+}
+
+export async function fetchEngagementLift(
+  sinceIso: string,
+  untilIso: string
+): Promise<EngagementLiftSnapshot | null> {
+  const raw = await callRpc<{ buckets?: unknown }>("get_engagement_purchase_lift", {
+    since_ts: sinceIso,
+    until_ts: untilIso,
+  });
+  if (!raw || !Array.isArray(raw.buckets)) return null;
+  const num = (v: unknown): number => {
+    const n = typeof v === "number" ? v : Number(v);
+    return Number.isFinite(n) && n >= 0 ? Math.trunc(n) : 0;
+  };
+  const buckets: EngagementBucket[] = [];
+  const valid = new Set(["0-1m", "1-5m", "5-10m", "10m+"]);
+  for (const item of raw.buckets) {
+    if (!item || typeof item !== "object") continue;
+    const r = item as Record<string, unknown>;
+    const bucket = typeof r.bucket === "string" && valid.has(r.bucket) ? r.bucket : null;
+    if (!bucket) continue;
+    buckets.push({
+      bucket: bucket as EngagementBucket["bucket"],
+      n: num(r.n),
+      paid: num(r.paid),
+    });
+  }
+  return { buckets };
+}
+
+// -----------------------------------------------------------------------------
 // Funnel + quality fetchers (weekly only)
 // -----------------------------------------------------------------------------
 
@@ -800,6 +1105,8 @@ export async function fetchDailyMetrics(sinceIso: string, untilIso: string): Pro
     anomalies,
     monetization,
     medianTimeToPurchaseHours,
+    wizardFunnel,
+    sparklines,
   ] = await Promise.all([
     fetchFunnelEventCount("unique_visitor", sinceIso, untilIso),
     fetchNewVsReturning(sinceIso, untilIso),
@@ -841,6 +1148,14 @@ export async function fetchDailyMetrics(sinceIso: string, untilIso: string): Pro
     safeSnapshot("anomalies", () => buildAnomalySnapshot(Math.max(windowDays, 7))),
     safeSnapshot("valueRealization", () => buildValueRealizationSnapshot(Math.max(windowDays, 7))),
     fetchMedianTimeToPurchaseHours(sinceIso, untilIso),
+    fetchWizardSlideRetention(sinceIso, untilIso),
+    // Sparklines always cover the trailing 30 UTC days ending at the digest
+    // window's `untilIso` — so the daily digest gets a 30-day trend regardless
+    // of the digest's own 24h or 7d window.
+    fetchSparklines(
+      new Date(new Date(untilIso).getTime() - 30 * 86_400_000).toISOString(),
+      untilIso
+    ),
   ]);
 
   const completionRate = surveyStarts > 0 ? Math.round((completions / surveyStarts) * 100) : 0;
@@ -881,6 +1196,8 @@ export async function fetchDailyMetrics(sinceIso: string, untilIso: string): Pro
     anomalies,
     monetization,
     medianTimeToPurchaseHours,
+    wizardFunnel,
+    sparklines,
   };
 }
 
@@ -888,13 +1205,26 @@ export async function fetchWeeklyMetrics(
   sinceIso: string,
   untilIso: string
 ): Promise<WeeklyMetrics> {
-  const [daily, avgCompletionMs, funnel, worstChapters, topIssues, dropOff] = await Promise.all([
+  const [
+    daily,
+    avgCompletionMs,
+    funnel,
+    worstChapters,
+    topIssues,
+    dropOff,
+    dropoffEverywhere,
+    answerLift,
+    engagementLift,
+  ] = await Promise.all([
     fetchDailyMetrics(sinceIso, untilIso),
     fetchAvgCompletionMs(sinceIso, untilIso),
     fetchFunnelStages(sinceIso, untilIso),
     fetchWorstRatedChapters(sinceIso, untilIso, 3),
     fetchTopIssueCategories(sinceIso, untilIso, 3),
     fetchDropOffQuestions(sinceIso, untilIso, 3),
+    fetchDropoffEverywhere(sinceIso, untilIso),
+    fetchAnswerLift(sinceIso, untilIso),
+    fetchEngagementLift(sinceIso, untilIso),
   ]);
 
   // For the weekly view we want top-5 (not top-3) of archetypes + UTM.
@@ -903,7 +1233,9 @@ export async function fetchWeeklyMetrics(
     fetchTopUtmSources(sinceIso, untilIso, 5),
   ]);
 
-  return {
+  // Build the assembled snapshot up-front (leakSeverity needs it; recs need
+  // leakSeverity to fire the dropoff_revenue_loss rule).
+  const assembled: WeeklyMetrics = {
     ...daily,
     topArchetypes: topArchetypesFive,
     topUtmSources: topUtmSourcesFive,
@@ -912,5 +1244,22 @@ export async function fetchWeeklyMetrics(
     worstChapters,
     topIssues,
     dropOff,
+    dropoffEverywhere,
+    answerLift,
+    engagementLift,
+    leakSeverity: [],
+    recommendations: [],
+    revisited: [],
   };
+  assembled.leakSeverity = scoreFunnelLeaks(dropoffEverywhere, daily.revenue);
+  assembled.recommendations = buildRecommendations(assembled);
+  // Loop-closure: pull last 4 weeks of persisted recs and compare against
+  // this week's. Fail-soft — fetcher returns [] on any error, classify
+  // handles empty history gracefully. currentWeekKey lets classifyRevisited
+  // drop any same-week history rows (left over from a same-Monday cron retry)
+  // so we never self-compare current recs against their own persistence.
+  const history = await fetchRecommendationHistory(4);
+  const currentWeekKey = isoWeekString(new Date(sinceIso));
+  assembled.revisited = classifyRevisited(history, assembled.recommendations, currentWeekKey);
+  return assembled;
 }

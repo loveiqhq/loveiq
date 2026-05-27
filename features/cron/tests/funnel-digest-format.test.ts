@@ -608,3 +608,761 @@ describe("formatWeekly — partial-day funnel_event capture", () => {
     expect(msg).not.toContain("Visitor capture started");
   });
 });
+
+// -----------------------------------------------------------------------------
+// Strategy-lead funnel intelligence — new sections (2026-05-27)
+// -----------------------------------------------------------------------------
+
+import {
+  formatWizardFunnel,
+  formatDropoffEverywhere,
+  formatAnswerLift,
+  formatEngagementLift,
+  formatSparklines,
+  formatWeeklyStrategySupplement,
+  buildSparkline,
+} from "@/app/api/cron/funnel-digest/route";
+import type {
+  WizardSlideRetentionSnapshot,
+  DropoffEverywhereSnapshot,
+  AnswerLiftSnapshot,
+  EngagementLiftSnapshot,
+  SparklineSnapshot,
+} from "@features/admin/server/digest-metrics";
+
+describe("formatWizardFunnel", () => {
+  it("returns [] when snapshot is null", () => {
+    expect(formatWizardFunnel(null)).toEqual([]);
+  });
+
+  it("returns [] when slide1 < 3 (sample too small)", () => {
+    const snap: WizardSlideRetentionSnapshot = {
+      slide1: 2,
+      slide2: 2,
+      slide3: 1,
+      slide4: 1,
+      slide5: 1,
+      reportViewed: 1,
+    };
+    expect(formatWizardFunnel(snap)).toEqual([]);
+  });
+
+  it("renders the slide-by-slide retention with % kept", () => {
+    const snap: WizardSlideRetentionSnapshot = {
+      slide1: 100,
+      slide2: 80,
+      slide3: 70,
+      slide4: 60,
+      slide5: 50,
+      reportViewed: 40,
+    };
+    const lines = formatWizardFunnel(snap);
+    expect(lines[0]).toBe("*Wizard funnel*");
+    expect(lines.some((l) => l.includes("Slide 1 entered: 100"))).toBe(true);
+    expect(lines.some((l) => l.includes("Slide 2:") && l.includes("80%"))).toBe(true);
+    expect(lines.some((l) => l.includes("Report viewed:") && l.includes("40"))).toBe(true);
+  });
+
+  it("renders — for divide-by-zero when prev slide is 0", () => {
+    const snap: WizardSlideRetentionSnapshot = {
+      slide1: 10,
+      slide2: 0,
+      slide3: 0,
+      slide4: 0,
+      slide5: 0,
+      reportViewed: 0,
+    };
+    const lines = formatWizardFunnel(snap);
+    // Slide 3 has prev (slide 2) = 0, should print —
+    const slide3Line = lines.find((l) => l.startsWith("• Slide 3:"));
+    expect(slide3Line).toContain("—");
+  });
+});
+
+describe("buildSparkline", () => {
+  it("returns empty line for empty input", () => {
+    expect(buildSparkline([])).toEqual({ line: "", max: 0 });
+  });
+
+  it("maps all-zero series to all-▁ chars", () => {
+    const out = buildSparkline([0, 0, 0, 0, 0]);
+    expect(out.line).toBe("▁▁▁▁▁");
+    expect(out.max).toBe(0);
+  });
+
+  it("maps max value to █ and 0 to ▁", () => {
+    const out = buildSparkline([0, 10]);
+    expect(out.line.startsWith("▁")).toBe(true);
+    expect(out.line.endsWith("█")).toBe(true);
+    expect(out.max).toBe(10);
+  });
+
+  it("preserves length = input length", () => {
+    const out = buildSparkline([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    expect(out.line.length).toBe(10);
+  });
+});
+
+describe("formatSparklines", () => {
+  it("returns [] when snapshot is null", () => {
+    expect(formatSparklines(null)).toEqual([]);
+  });
+
+  it("returns [] when every day has zero across every metric", () => {
+    const snap: SparklineSnapshot = {
+      days: [
+        {
+          day: "2026-05-01",
+          visitors: 0,
+          starts: 0,
+          completions: 0,
+          report_views: 0,
+          paywall_init: 0,
+          purchases: 0,
+        },
+        {
+          day: "2026-05-02",
+          visitors: 0,
+          starts: 0,
+          completions: 0,
+          report_views: 0,
+          paywall_init: 0,
+          purchases: 0,
+        },
+      ],
+    };
+    expect(formatSparklines(snap)).toEqual([]);
+  });
+
+  it("renders 6 metric rows with header line", () => {
+    const days = Array.from({ length: 5 }, (_, i) => ({
+      day: `2026-05-${String(i + 1).padStart(2, "0")}`,
+      visitors: (i + 1) * 10,
+      starts: i + 1,
+      completions: 0,
+      report_views: 0,
+      paywall_init: 0,
+      purchases: 0,
+    }));
+    const lines = formatSparklines({ days });
+    expect(lines[0]).toMatch(/5-day trends/);
+    expect(lines.some((l) => l.includes("Visitors"))).toBe(true);
+    expect(lines.some((l) => l.includes("Survey starts"))).toBe(true);
+    expect(lines.some((l) => l.includes("peak 50"))).toBe(true);
+  });
+});
+
+describe("formatDropoffEverywhere", () => {
+  it("returns [] when snapshot is null", () => {
+    expect(formatDropoffEverywhere(null)).toEqual([]);
+  });
+
+  it("returns [] when first stage is zero (no funnel to show)", () => {
+    const snap: DropoffEverywhereSnapshot = {
+      stages: [{ name: "unique_visitors", count: 0 }],
+    };
+    expect(formatDropoffEverywhere(snap)).toEqual([]);
+  });
+
+  it("renders one line per stage with drop count, rate, and biggest-leak tag", () => {
+    const snap: DropoffEverywhereSnapshot = {
+      stages: [
+        { name: "unique_visitors", count: 100 },
+        { name: "saw_q1", count: 80 },
+        { name: "survey_started", count: 30 }, // biggest absolute drop = 50
+        { name: "purchased", count: 5 },
+      ],
+    };
+    const lines = formatDropoffEverywhere(snap);
+    expect(lines[0]).toBe("*Drop-off everywhere (weekly)*");
+    expect(lines.some((l) => l.includes("Unique visitors: 100"))).toBe(true);
+    expect(lines.some((l) => l.includes("Saw Q1") && l.includes("20 dropped"))).toBe(true);
+    expect(lines.some((l) => l.includes("Survey started") && l.includes("biggest leak"))).toBe(
+      true
+    );
+  });
+
+  it("handles unknown stage names by falling back to the raw name", () => {
+    const snap: DropoffEverywhereSnapshot = {
+      stages: [
+        { name: "unique_visitors", count: 10 },
+        { name: "some_new_stage_we_added", count: 5 },
+      ],
+    };
+    const lines = formatDropoffEverywhere(snap);
+    expect(lines.some((l) => l.includes("some_new_stage_we_added"))).toBe(true);
+  });
+});
+
+describe("formatAnswerLift", () => {
+  it("returns [] when snapshot is null OR pairs is empty", () => {
+    expect(formatAnswerLift(null)).toEqual([]);
+    expect(
+      formatAnswerLift({ baseline_pct: 3, baseline_n: 100, baseline_paid: 3, pairs: [] })
+    ).toEqual([]);
+  });
+
+  it("returns [] when baseline_paid is 0 (no purchases to compare against)", () => {
+    expect(
+      formatAnswerLift({
+        baseline_pct: 0,
+        baseline_n: 100,
+        baseline_paid: 0,
+        pairs: [
+          { q_id: "Q1", q_text: "?", answer: "Yes", n: 50, paid_n: 0, rate_pct: 0, lift_pct: 0 },
+        ],
+      })
+    ).toEqual([]);
+  });
+
+  it("emits the baseline header + one bullet per pair, anti-signal tag for negative lift", () => {
+    const snap: AnswerLiftSnapshot = {
+      baseline_pct: 3.6,
+      baseline_n: 100,
+      baseline_paid: 3,
+      pairs: [
+        {
+          q_id: "Q12013",
+          q_text: "How often do you feel emotionally exhausted?",
+          answer: "Often",
+          n: 24,
+          paid_n: 2,
+          rate_pct: 8.3,
+          lift_pct: 127,
+        },
+        {
+          q_id: "Q03004",
+          q_text: "Age range",
+          answer: "18-24",
+          n: 46,
+          paid_n: 0,
+          rate_pct: 1.1,
+          lift_pct: -69,
+        },
+      ],
+    };
+    const lines = formatAnswerLift(snap);
+    expect(lines[0]).toContain("baseline = 3.6%");
+    expect(lines[0]).toContain("n=100");
+    expect(lines.some((l) => l.includes("Q12013") && l.includes("+127%"))).toBe(true);
+    expect(lines.some((l) => l.includes("anti-signal"))).toBe(true);
+  });
+
+  it("truncates long question text", () => {
+    const longText = "a".repeat(200);
+    const snap: AnswerLiftSnapshot = {
+      baseline_pct: 5,
+      baseline_n: 100,
+      baseline_paid: 5,
+      pairs: [
+        {
+          q_id: "Q1",
+          q_text: longText,
+          answer: "Yes",
+          n: 20,
+          paid_n: 4,
+          rate_pct: 20,
+          lift_pct: 300,
+        },
+      ],
+    };
+    const lines = formatAnswerLift(snap);
+    const pairLine = lines.find((l) => l.includes("Q1"));
+    expect(pairLine).toBeDefined();
+    expect(pairLine!.length).toBeLessThan(longText.length); // truncation happened
+    expect(pairLine).toContain("…");
+  });
+});
+
+describe("formatEngagementLift", () => {
+  it("returns [] when snapshot is null OR buckets is empty", () => {
+    expect(formatEngagementLift(null)).toEqual([]);
+    expect(formatEngagementLift({ buckets: [] })).toEqual([]);
+  });
+
+  it("returns [] when total n across all buckets is 0", () => {
+    expect(
+      formatEngagementLift({
+        buckets: [
+          { bucket: "0-1m", n: 0, paid: 0 },
+          { bucket: "10m+", n: 0, paid: 0 },
+        ],
+      })
+    ).toEqual([]);
+  });
+
+  it("renders buckets in fixed order 0-1m → 10m+", () => {
+    const snap: EngagementLiftSnapshot = {
+      buckets: [
+        { bucket: "10m+", n: 12, paid: 5 },
+        { bucket: "0-1m", n: 14, paid: 0 },
+        { bucket: "1-5m", n: 22, paid: 1 },
+        { bucket: "5-10m", n: 18, paid: 3 },
+      ],
+    };
+    const lines = formatEngagementLift(snap);
+    const order = lines
+      .filter((l) => l.startsWith("• "))
+      .map((l) => l.match(/^• ([0-9-]+m\+?)/)?.[1]);
+    expect(order).toEqual(["0-1m", "1-5m", "5-10m", "10m+"]);
+  });
+
+  it("tags the top-rate bucket with N× baseline when at least 2× lift", () => {
+    const snap: EngagementLiftSnapshot = {
+      buckets: [
+        { bucket: "0-1m", n: 10, paid: 0 },
+        { bucket: "10m+", n: 10, paid: 5 }, // 50% vs ~25% aggregate baseline
+      ],
+    };
+    const lines = formatEngagementLift(snap);
+    const top = lines.find((l) => l.includes("10m+"));
+    expect(top).toContain("× baseline");
+  });
+
+  it("handles divide-by-zero on bucket-level rate", () => {
+    const snap: EngagementLiftSnapshot = {
+      buckets: [
+        { bucket: "0-1m", n: 0, paid: 0 },
+        { bucket: "10m+", n: 5, paid: 2 },
+      ],
+    };
+    const lines = formatEngagementLift(snap);
+    // Should not throw, and 0-1m line shows 0.0%
+    expect(lines.some((l) => l.includes("0-1m dwell: n=0, paid 0.0%"))).toBe(true);
+  });
+});
+
+describe("formatWeeklyStrategySupplement", () => {
+  function buildBaseline(): WeeklyMetrics {
+    return {
+      ...baseWeekly,
+      dropoffEverywhere: null,
+      answerLift: null,
+      engagementLift: null,
+    } as WeeklyMetrics;
+  }
+
+  it("returns null when every section is empty", () => {
+    const out = formatWeeklyStrategySupplement("2026-W22", "May 25 → May 31 UTC", buildBaseline());
+    expect(out).toBeNull();
+  });
+
+  it("emits a single composed message when at least one section has data", () => {
+    const w: WeeklyMetrics = {
+      ...buildBaseline(),
+      wizardFunnel: {
+        slide1: 50,
+        slide2: 40,
+        slide3: 35,
+        slide4: 30,
+        slide5: 25,
+        reportViewed: 20,
+      },
+    };
+    const out = formatWeeklyStrategySupplement("2026-W22", "May 25 → May 31 UTC", w);
+    expect(out).not.toBeNull();
+    expect(out!).toContain("Weekly funnel intelligence");
+    expect(out!).toContain("Wizard funnel");
+  });
+
+  it("composes multiple sections separated by blank lines", () => {
+    const w: WeeklyMetrics = {
+      ...buildBaseline(),
+      wizardFunnel: {
+        slide1: 50,
+        slide2: 40,
+        slide3: 35,
+        slide4: 30,
+        slide5: 25,
+        reportViewed: 20,
+      },
+      dropoffEverywhere: {
+        stages: [
+          { name: "unique_visitors", count: 100 },
+          { name: "purchased", count: 5 },
+        ],
+      },
+    };
+    const out = formatWeeklyStrategySupplement("2026-W22", "May 25 → May 31 UTC", w);
+    expect(out!).toContain("Wizard funnel");
+    expect(out!).toContain("Drop-off everywhere");
+  });
+
+  it("respects Slack 2800-char soft cap (clamp returns truncated message)", () => {
+    // Stuff a huge answer-lift pair list to force clamp behaviour.
+    const longPairs = Array.from({ length: 100 }, (_, i) => ({
+      q_id: `Q${i}`,
+      q_text: "a".repeat(40),
+      answer: "b".repeat(20),
+      n: 50,
+      paid_n: 25,
+      rate_pct: 50,
+      lift_pct: 1000 + i,
+    }));
+    const w: WeeklyMetrics = {
+      ...buildBaseline(),
+      answerLift: { baseline_pct: 3, baseline_n: 1000, baseline_paid: 30, pairs: longPairs },
+    };
+    const out = formatWeeklyStrategySupplement("2026-W22", "May 25 → May 31 UTC", w);
+    expect(out!.length).toBeLessThanOrEqual(2800);
+  });
+});
+
+describe("pickHeadline — no regression from new wizard/sparkline fields", () => {
+  it("does NOT consider wizard or sparkline values as headline candidates", () => {
+    // pickHeadline only takes DailyMetrics top-level numbers (visitors, starts,
+    // completions, etc). Setting wizardFunnel to a wildly large value should
+    // never become "Today's story". This catches anyone wiring the new fields
+    // into the headline picker accidentally.
+    const prev: DailyMetrics = { ...baseDaily };
+    const curr: DailyMetrics = {
+      ...baseDaily,
+      wizardFunnel: {
+        slide1: 99999,
+        slide2: 99999,
+        slide3: 99999,
+        slide4: 99999,
+        slide5: 99999,
+        reportViewed: 99999,
+      },
+    } as DailyMetrics;
+    expect(pickHeadline(curr, prev)).toBeNull();
+  });
+});
+
+// -----------------------------------------------------------------------------
+// Phase 2 — recommendations + leak severity formatters + Block Kit builders
+// -----------------------------------------------------------------------------
+
+import {
+  formatRecommendationsLines,
+  formatLeakSeverityLines,
+  buildDailyBlocks,
+  buildWeeklyStrategyBlocks,
+} from "@/app/api/cron/funnel-digest/route";
+import type { Recommendation } from "@features/admin/server/digest-recommendations";
+import type { LeakSeverity } from "@features/admin/server/digest-leak-scoring";
+
+describe("formatRecommendationsLines", () => {
+  it("returns [] when empty", () => {
+    expect(formatRecommendationsLines([])).toEqual([]);
+  });
+
+  it("renders header + one line per rec with severity-coded emoji", () => {
+    const recs: Recommendation[] = [
+      { severity: "high", rule: "x1", message: "Fix the leak", evidence: "n=10" },
+      { severity: "med", rule: "x2", message: "Audit channel X", evidence: "starts=200" },
+      { severity: "low", rule: "x3", message: "Cohort check", evidence: "lift=-60%" },
+    ];
+    const lines = formatRecommendationsLines(recs);
+    expect(lines[0]).toBe("*Recommendations*");
+    expect(lines.some((l) => l.includes(":rotating_light:") && l.includes("HIGH"))).toBe(true);
+    expect(lines.some((l) => l.includes(":warning:") && l.includes("MED"))).toBe(true);
+    expect(lines.some((l) => l.includes("Fix the leak"))).toBe(true);
+  });
+});
+
+describe("formatLeakSeverityLines", () => {
+  it("returns [] when empty", () => {
+    expect(formatLeakSeverityLines([])).toEqual([]);
+  });
+
+  it("renders ranked rows with currency-formatted lost revenue", () => {
+    const leaks: LeakSeverity[] = [
+      {
+        fromStage: "report_viewed",
+        toStage: "begin_checkout",
+        dropCount: 50,
+        dropRate: 60,
+        downstreamPaidRate: 0.25,
+        revenuePerPaid: 30,
+        estLostRevenue: 375.5,
+        currency: "EUR",
+      },
+    ];
+    const lines = formatLeakSeverityLines(leaks);
+    expect(lines[0]).toBe("*Top funnel leaks by est. revenue impact*");
+    expect(lines[1]).toContain("1. report_viewed → begin_checkout");
+    expect(lines[1]).toContain("50 dropped");
+    expect(lines[1]).toContain("EUR 376"); // Math.round(375.5) = 376
+  });
+});
+
+describe("buildDailyBlocks", () => {
+  it("returns blocks containing a section + image when sparklines exist + site URL set", async () => {
+    process.env.NEXT_PUBLIC_SITE_URL = "https://example.test";
+    process.env.STRATEGY_DIGEST_SIGNING_SECRET = "test-secret-long-enough-for-validation-abc";
+    const daily: DailyMetrics = {
+      ...baseDaily,
+      sparklines: {
+        days: [
+          {
+            day: "2026-05-01",
+            visitors: 10,
+            starts: 5,
+            completions: 3,
+            report_views: 2,
+            paywall_init: 1,
+            purchases: 1,
+          },
+        ],
+      },
+    } as DailyMetrics;
+    const out = await buildDailyBlocks("2026-05-02", daily, baseDaily);
+    expect(out.text).toContain("Daily digest");
+    expect(out.blocks.length).toBeGreaterThanOrEqual(1);
+    expect(out.blocks[0]!.type).toBe("section");
+    const imageBlock = out.blocks.find((b) => b.type === "image");
+    expect(imageBlock).toBeDefined();
+    expect(imageBlock!.image_url).toMatch(
+      /^https:\/\/example\.test\/api\/admin\/digest-image\/sparklines/
+    );
+  });
+
+  it("omits the image block when sparklines is null", async () => {
+    process.env.NEXT_PUBLIC_SITE_URL = "https://example.test";
+    const out = await buildDailyBlocks("2026-05-02", baseDaily, baseDaily);
+    const imageBlock = out.blocks.find((b) => b.type === "image");
+    expect(imageBlock).toBeUndefined();
+  });
+
+  it("omits the image block when NEXT_PUBLIC_SITE_URL is unset", async () => {
+    delete process.env.NEXT_PUBLIC_SITE_URL;
+    const daily: DailyMetrics = {
+      ...baseDaily,
+      sparklines: {
+        days: [
+          {
+            day: "2026-05-01",
+            visitors: 10,
+            starts: 5,
+            completions: 3,
+            report_views: 2,
+            paywall_init: 1,
+            purchases: 1,
+          },
+        ],
+      },
+    } as DailyMetrics;
+    const out = await buildDailyBlocks("2026-05-02", daily, baseDaily);
+    expect(out.blocks.find((b) => b.type === "image")).toBeUndefined();
+  });
+});
+
+describe("buildWeeklyStrategyBlocks", () => {
+  function buildSupplementWeekly(overrides: Partial<WeeklyMetrics> = {}): WeeklyMetrics {
+    return {
+      ...baseWeekly,
+      wizardFunnel: null,
+      sparklines: null,
+      dropoffEverywhere: null,
+      answerLift: null,
+      engagementLift: null,
+      leakSeverity: [],
+      recommendations: [],
+      ...overrides,
+    } as WeeklyMetrics;
+  }
+
+  it("returns null when every section is empty", async () => {
+    process.env.NEXT_PUBLIC_SITE_URL = "https://example.test";
+    process.env.STRATEGY_DIGEST_SIGNING_SECRET = "test-secret-long-enough-for-validation-abc";
+    const out = await buildWeeklyStrategyBlocks(
+      "2026-W22",
+      "May 25 → May 31 UTC",
+      buildSupplementWeekly()
+    );
+    expect(out).toBeNull();
+  });
+
+  it("composes header + image + sections + image when data is present", async () => {
+    process.env.NEXT_PUBLIC_SITE_URL = "https://example.test";
+    process.env.STRATEGY_DIGEST_SIGNING_SECRET = "test-secret-long-enough-for-validation-abc";
+    const w = buildSupplementWeekly({
+      wizardFunnel: {
+        slide1: 50,
+        slide2: 40,
+        slide3: 35,
+        slide4: 30,
+        slide5: 25,
+        reportViewed: 20,
+      },
+      dropoffEverywhere: {
+        stages: [
+          { name: "unique_visitors", count: 100 },
+          { name: "purchased", count: 5 },
+        ],
+      },
+      recommendations: [{ severity: "high", rule: "x", message: "Fix it", evidence: "n=10" }],
+      leakSeverity: [
+        {
+          fromStage: "a",
+          toStage: "b",
+          dropCount: 30,
+          dropRate: 30,
+          downstreamPaidRate: 0.1,
+          revenuePerPaid: 50,
+          estLostRevenue: 150,
+          currency: "EUR",
+        },
+      ],
+    });
+    const out = await buildWeeklyStrategyBlocks("2026-W22", "May 25 → May 31 UTC", w);
+    expect(out).not.toBeNull();
+    expect(out!.blocks[0]!.type).toBe("header");
+    const sections = out!.blocks.filter((b) => b.type === "section");
+    expect(sections.length).toBeGreaterThanOrEqual(2);
+    const images = out!.blocks.filter((b) => b.type === "image");
+    expect(images.length).toBeGreaterThanOrEqual(1);
+    // image URLs should be HTTPS + signed
+    for (const img of images) {
+      expect(img.image_url).toMatch(/^https:\/\/example\.test\//);
+      expect(img.image_url).toMatch(/[?&]d=/);
+      expect(img.image_url).toMatch(/[?&]s=/);
+    }
+  });
+
+  it("text fallback is the all-text supplement", async () => {
+    process.env.NEXT_PUBLIC_SITE_URL = "https://example.test";
+    process.env.STRATEGY_DIGEST_SIGNING_SECRET = "test-secret-long-enough-for-validation-abc";
+    const w = buildSupplementWeekly({
+      wizardFunnel: {
+        slide1: 50,
+        slide2: 40,
+        slide3: 35,
+        slide4: 30,
+        slide5: 25,
+        reportViewed: 20,
+      },
+    });
+    const out = await buildWeeklyStrategyBlocks("2026-W22", "May 25 → May 31 UTC", w);
+    expect(out!.text).toContain("Weekly funnel intelligence");
+    expect(out!.text).toContain("Wizard funnel");
+  });
+});
+
+// -----------------------------------------------------------------------------
+// Phase 3 — Revisited from last week (loop-closure)
+// -----------------------------------------------------------------------------
+
+import { formatRevisitedLines } from "@/app/api/cron/funnel-digest/route";
+import type { RevisitedEntry } from "@features/admin/server/digest-recommendation-compare";
+
+describe("formatRevisitedLines", () => {
+  it("returns [] when empty", () => {
+    expect(formatRevisitedLines([])).toEqual([]);
+  });
+
+  it("groups by status with worsened first, then resolved, then ongoing", () => {
+    const entries: RevisitedEntry[] = [
+      {
+        rule: "a",
+        severity: "high",
+        lastWeekMessage: "A flag",
+        status: "worsened",
+        currentMessage: "A worse now",
+        deltaSummary: "65% → 50% (-15pp)",
+      },
+      { rule: "b", severity: "med", lastWeekMessage: "B flag", status: "resolved" },
+      {
+        rule: "c",
+        severity: "med",
+        lastWeekMessage: "C flag",
+        status: "ongoing",
+        currentMessage: "C current",
+        deltaSummary: "60% → 62% (+2pp)",
+      },
+    ];
+    const lines = formatRevisitedLines(entries);
+    expect(lines[0]).toBe("*Revisited from last week*");
+    const text = lines.join("\n");
+    const worsenedIdx = text.indexOf("Worsened");
+    const resolvedIdx = text.indexOf("Resolved");
+    const ongoingIdx = text.indexOf("Still flagged");
+    expect(worsenedIdx).toBeGreaterThan(-1);
+    expect(resolvedIdx).toBeGreaterThan(-1);
+    expect(ongoingIdx).toBeGreaterThan(-1);
+    expect(worsenedIdx).toBeLessThan(resolvedIdx);
+    expect(resolvedIdx).toBeLessThan(ongoingIdx);
+  });
+
+  it("renders delta summary for worsened/ongoing entries", () => {
+    const entries: RevisitedEntry[] = [
+      {
+        rule: "wizard_slide_drop_4_5",
+        severity: "high",
+        lastWeekMessage: "Wizard 4→5 retention 78%",
+        currentMessage: "Wizard 4→5 retention 62%",
+        deltaSummary: "78% → 62% (-16pp)",
+        status: "worsened",
+      },
+    ];
+    const lines = formatRevisitedLines(entries);
+    expect(lines.join("\n")).toContain("-16pp");
+  });
+
+  it("does NOT render delta summary for resolved entries (no current data needed)", () => {
+    const entries: RevisitedEntry[] = [
+      {
+        rule: "wizard_slide_drop_4_5",
+        severity: "med",
+        // deliberately avoiding the → arrow in the message so the assertion
+        // below only tests that no DELTA suffix (e.g. "— 65% → 80%") was
+        // appended.
+        lastWeekMessage: "Wizard slide retention 65 pct",
+        status: "resolved",
+      },
+    ];
+    const lines = formatRevisitedLines(entries);
+    const text = lines.join("\n");
+    expect(text).toContain("Wizard slide retention 65 pct");
+    // The formatter prepends " — " before deltaSummary. Resolved entries have
+    // no delta, so the em-dash separator must not appear.
+    expect(text).not.toContain(" — ");
+  });
+
+  it("shows consecutive-week tag when count >= 3 for ongoing entries", () => {
+    const entries: RevisitedEntry[] = [
+      {
+        rule: "channel_efficiency_low_google",
+        severity: "med",
+        lastWeekMessage: "google 0% paid",
+        currentMessage: "google 0% paid",
+        status: "ongoing",
+        consecutiveWeeks: 4,
+      },
+    ];
+    const lines = formatRevisitedLines(entries);
+    expect(lines.join("\n")).toContain("4th consecutive week");
+  });
+
+  it("does NOT show consecutive-week tag when count < 3", () => {
+    const entries: RevisitedEntry[] = [
+      {
+        rule: "wizard_slide_drop_4_5",
+        severity: "med",
+        lastWeekMessage: "msg",
+        currentMessage: "msg",
+        status: "ongoing",
+        consecutiveWeeks: 2,
+      },
+    ];
+    const lines = formatRevisitedLines(entries);
+    expect(lines.join("\n")).not.toContain("consecutive");
+  });
+
+  it("escapes mrkdwn characters in messages (defense vs answer-option labels)", () => {
+    const entries: RevisitedEntry[] = [
+      {
+        rule: "answer_lift_positive",
+        severity: "med",
+        lastWeekMessage: 'Q12 answer "*bold*_under_" predicts 10%',
+        status: "resolved",
+      },
+    ];
+    const lines = formatRevisitedLines(entries);
+    // escapeSlack escapes * and _; in test slack mock it's identity, so this
+    // just ensures the formatter completes without crashing on edge chars.
+    expect(lines.join("\n")).toContain("Q12 answer");
+  });
+});

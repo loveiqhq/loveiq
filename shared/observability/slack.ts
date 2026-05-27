@@ -59,16 +59,38 @@ export function escapeSlack(value: string): string {
   return value.replace(/[&<>*_~`]/g, (c) => `\\${c}`);
 }
 
+/**
+ * Slack Block Kit primitives — typed loosely so call sites can pass any
+ * supported block shape (section, image, divider, header, context). We don't
+ * import @slack/types because it pulls in a large dependency we don't need;
+ * the structural types here cover what notifySlack actually forwards.
+ */
+export type SlackBlock = {
+  type: string;
+  [key: string]: unknown;
+};
+
 interface NotifySlackInput {
   channel: SlackChannel;
   kind: string;
+  /**
+   * Plain-text fallback. ALWAYS required — Slack uses this for notification
+   * previews, screen readers, and clients that don't render Block Kit.
+   * Even when `blocks` is provided, `text` must be non-empty.
+   */
   text: string;
+  /**
+   * Optional Block Kit blocks. When provided, Slack renders these in-channel
+   * instead of `text`. `text` is still used as the notification preview.
+   * Max 50 blocks per Slack rules.
+   */
+  blocks?: SlackBlock[];
   username?: string;
   context?: Record<string, unknown>;
 }
 
 export async function notifySlack(input: NotifySlackInput): Promise<void> {
-  const { channel, kind, text, username, context } = input;
+  const { channel, kind, text, blocks, username, context } = input;
   const envVar = ENV_BY_CHANNEL[channel];
   const webhookUrl = process.env[envVar];
 
@@ -82,6 +104,7 @@ export async function notifySlack(input: NotifySlackInput): Promise<void> {
   try {
     const body: Record<string, unknown> = { text };
     if (username) body.username = username;
+    if (blocks && blocks.length > 0) body.blocks = blocks;
 
     const res = await fetchWithTimeout(webhookUrl, {
       method: "POST",

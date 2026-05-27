@@ -21,8 +21,13 @@
 
 import { NextResponse } from "next/server";
 import logger from "@shared/observability/logger";
-import { notifySlack, escapeSlack } from "@shared/observability/slack";
+import { notifySlack, escapeSlack, type SlackBlock } from "@shared/observability/slack";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
+import { signImagePayload } from "@shared/url/signed-image-url";
+import type { LeakSeverity } from "@features/admin/server/digest-leak-scoring";
+import type { Recommendation } from "@features/admin/server/digest-recommendations";
+import type { RevisitedEntry } from "@features/admin/server/digest-recommendation-compare";
+import { persistRecommendations } from "@features/admin/server/digest-recommendation-history";
 import {
   markSlackAlertDelivered,
   recordCronRun,
@@ -31,8 +36,13 @@ import {
   verifyCronAuth,
 } from "@shared/observability/slack-alert-dedup";
 import {
+  type AnswerLiftSnapshot,
   type DailyMetrics,
+  type DropoffEverywhereSnapshot,
+  type EngagementLiftSnapshot,
+  type SparklineSnapshot,
   type WeeklyMetrics,
+  type WizardSlideRetentionSnapshot,
   delta,
   dayString,
   fetchDailyMetrics,
@@ -285,6 +295,214 @@ export function formatMonetizationLines(curr: DailyMetrics): string[] {
   return lines;
 }
 
+/**
+ * PreReportWizard slide-by-slide retention. Each line shows the absolute
+ * count + share of the previous slide. Skipped when fewer than ~3 submissions
+ * reached slide 1 — the funnel is too small to tell a story.
+ */
+export function formatWizardFunnel(snap: WizardSlideRetentionSnapshot | null): string[] {
+  if (!snap) return [];
+  if (snap.slide1 < 3) return [];
+  const lines: string[] = ["*Wizard funnel*"];
+  const kept = (curr: number, prev: number): string =>
+    prev > 0 ? `${Math.round((curr / prev) * 100)}% kept` : "—";
+  lines.push(`• Slide 1 entered: ${snap.slide1}`);
+  lines.push(`• Slide 2:        ${snap.slide2} (${kept(snap.slide2, snap.slide1)})`);
+  lines.push(`• Slide 3:        ${snap.slide3} (${kept(snap.slide3, snap.slide2)})`);
+  lines.push(`• Slide 4:        ${snap.slide4} (${kept(snap.slide4, snap.slide3)})`);
+  lines.push(`• Slide 5:        ${snap.slide5} (${kept(snap.slide5, snap.slide4)})`);
+  lines.push(`• Report viewed:  ${snap.reportViewed} (${kept(snap.reportViewed, snap.slide5)})`);
+  return lines;
+}
+
+/**
+ * Compact 30-day trends as Unicode block sparklines. One char per UTC day,
+ * scaled so the max value in the window maps to `█` and zero maps to `▁`.
+ * Returns empty array when the snapshot is null OR every metric is zero
+ * across the entire window (no story to tell).
+ */
+const SPARKLINE_CHARS = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"];
+
+export function buildSparkline(values: number[]): { line: string; max: number } {
+  if (values.length === 0) return { line: "", max: 0 };
+  const max = values.reduce((a, b) => Math.max(a, b), 0);
+  if (max <= 0) return { line: SPARKLINE_CHARS[0]!.repeat(values.length), max: 0 };
+  const last = SPARKLINE_CHARS.length - 1;
+  const chars = values.map((v) => {
+    const ratio = Math.max(0, Math.min(1, v / max));
+    const idx = Math.min(last, Math.max(0, Math.round(ratio * last)));
+    return SPARKLINE_CHARS[idx]!;
+  });
+  return { line: chars.join(""), max };
+}
+
+export function formatSparklines(snap: SparklineSnapshot | null): string[] {
+  if (!snap || snap.days.length === 0) return [];
+  const cols = [
+    { label: "Visitors     ", key: "visitors" as const },
+    { label: "Survey starts", key: "starts" as const },
+    { label: "Completions  ", key: "completions" as const },
+    { label: "Report views ", key: "report_views" as const },
+    { label: "Paywall init ", key: "paywall_init" as const },
+    { label: "Purchases    ", key: "purchases" as const },
+  ];
+  // Suppress section entirely if EVERY metric is zero across EVERY day —
+  // common in cold-start staging.
+  const anyNonZero = cols.some((c) => snap.days.some((d) => d[c.key] > 0));
+  if (!anyNonZero) return [];
+  const lines: string[] = [`*${snap.days.length}-day trends* (oldest → newest)`];
+  for (const col of cols) {
+    const series = snap.days.map((d) => d[col.key]);
+    const { line, max } = buildSparkline(series);
+    lines.push(`• ${col.label} \`${line}\` (peak ${max})`);
+  }
+  return lines;
+}
+
+/**
+ * Comprehensive funnel drop-off — every edge from unique visitors to purchase.
+ * Walks the ordered stage list once, prints stage-kept % vs the previous stage,
+ * tags the single largest absolute drop with `← biggest leak`.
+ */
+const STAGE_LABELS: Record<string, string> = {
+  unique_visitors: "Unique visitors",
+  saw_q1: "Saw Q1",
+  survey_started: "Survey started",
+  q1_answered: "Q1 answered",
+  completed_all_questions: "Last question answered",
+  survey_submitted: "Survey submitted",
+  wizard_slide_1: "Wizard slide 1",
+  wizard_slide_5: "Wizard slide 5",
+  report_viewed: "Report viewed",
+  engagement_1min: "Engagement 1m+",
+  engagement_5min: "Engagement 5m+",
+  engagement_10min: "Engagement 10m+",
+  paywall_initiated: "Paywall initiated",
+  begin_checkout: "Begin checkout",
+  purchased: "Purchased",
+};
+
+export function formatDropoffEverywhere(snap: DropoffEverywhereSnapshot | null): string[] {
+  if (!snap || snap.stages.length === 0) return [];
+  if (snap.stages[0]!.count === 0) return [];
+  // Compute per-stage drop = max(0, prev - curr). The first stage has no drop.
+  const rows: Array<{ label: string; count: number; drop: number; rate: number }> = [];
+  let prevCount = snap.stages[0]!.count;
+  rows.push({
+    label: STAGE_LABELS[snap.stages[0]!.name] ?? snap.stages[0]!.name,
+    count: prevCount,
+    drop: 0,
+    rate: 0,
+  });
+  for (let i = 1; i < snap.stages.length; i += 1) {
+    const stage = snap.stages[i]!;
+    const drop = Math.max(0, prevCount - stage.count);
+    const rate = prevCount > 0 ? (drop / prevCount) * 100 : 0;
+    rows.push({
+      label: STAGE_LABELS[stage.name] ?? stage.name,
+      count: stage.count,
+      drop,
+      rate,
+    });
+    prevCount = stage.count;
+  }
+  // Identify biggest leak by absolute drop count among non-first rows.
+  let leakIdx = -1;
+  let leakDrop = 0;
+  for (let i = 1; i < rows.length; i += 1) {
+    const r = rows[i]!;
+    if (r.drop > leakDrop) {
+      leakDrop = r.drop;
+      leakIdx = i;
+    }
+  }
+  const lines: string[] = ["*Drop-off everywhere (weekly)*"];
+  for (let i = 0; i < rows.length; i += 1) {
+    const r = rows[i]!;
+    const arrow = i === 0 ? " " : "→";
+    const dropSuffix = i === 0 ? "" : ` — ${r.drop} dropped (${r.rate.toFixed(0)}%)`;
+    const leakTag = i === leakIdx && leakDrop > 0 ? " ← biggest leak" : "";
+    lines.push(`• ${arrow} ${r.label}: ${r.count}${dropSuffix}${leakTag}`);
+  }
+  return lines;
+}
+
+/**
+ * Top 5 (question, answer-option) cohorts whose purchase rate diverges most
+ * from the survey-wide baseline. Each line is a single sentence so the strategy
+ * lead can scan it in 5 seconds. Question + answer text run through escapeSlack
+ * because both are admin-controlled strings (CSV-sourced) that could contain
+ * Slack mrkdwn characters.
+ */
+const ANSWER_LIFT_QTEXT_MAX = 60;
+const ANSWER_LIFT_ANSWER_MAX = 40;
+
+function truncate(s: string, max: number): string {
+  return s.length > max ? `${s.slice(0, max - 1)}…` : s;
+}
+
+export function formatAnswerLift(snap: AnswerLiftSnapshot | null): string[] {
+  if (!snap || snap.pairs.length === 0) return [];
+  if (snap.baseline_n === 0 || snap.baseline_paid === 0) return [];
+  const lines: string[] = [
+    `*Answer → conversion lift (weekly, baseline = ${snap.baseline_pct.toFixed(1)}%, n=${snap.baseline_n})*`,
+  ];
+  for (const p of snap.pairs) {
+    const qText = truncate(p.q_text || p.q_id, ANSWER_LIFT_QTEXT_MAX);
+    const answer = truncate(p.answer, ANSWER_LIFT_ANSWER_MAX);
+    const sign = p.lift_pct > 0 ? "+" : "";
+    const antiTag = p.lift_pct < 0 ? " ← anti-signal" : "";
+    lines.push(
+      `• ${escapeSlack(p.q_id)} "${escapeSlack(qText)}" = "${escapeSlack(answer)}" → ${p.rate_pct.toFixed(1)}% paid (n=${p.n}, ${sign}${p.lift_pct}%)${antiTag}`
+    );
+  }
+  return lines;
+}
+
+/**
+ * Engagement-bucket purchase rate. Always orders 0-1m → 10m+ so the trend is
+ * visually obvious. Tags the highest-paid-rate bucket with a multiple-of-baseline
+ * suffix when it's at least 2× the lowest non-zero bucket — that's where the
+ * strategy lead sees the revenue lever.
+ */
+const BUCKET_ORDER: Array<EngagementLiftSnapshot["buckets"][number]["bucket"]> = [
+  "0-1m",
+  "1-5m",
+  "5-10m",
+  "10m+",
+];
+
+export function formatEngagementLift(snap: EngagementLiftSnapshot | null): string[] {
+  if (!snap || snap.buckets.length === 0) return [];
+  const byBucket = new Map(snap.buckets.map((b) => [b.bucket, b]));
+  const totalN = snap.buckets.reduce((a, b) => a + b.n, 0);
+  if (totalN === 0) return [];
+  // Find baseline-ish reference rate = aggregate-paid / aggregate-n
+  const totalPaid = snap.buckets.reduce((a, b) => a + b.paid, 0);
+  const baselineRate = totalN > 0 ? totalPaid / totalN : 0;
+  // Highest-rate bucket — for the "Nx baseline" tag.
+  let topBucket: EngagementLiftSnapshot["buckets"][number] | null = null;
+  for (const b of snap.buckets) {
+    const rate = b.n > 0 ? b.paid / b.n : 0;
+    const topRate = topBucket && topBucket.n > 0 ? topBucket.paid / topBucket.n : 0;
+    if (!topBucket || rate > topRate) topBucket = b;
+  }
+  const lines: string[] = ["*Engagement → purchase (weekly)*"];
+  for (const key of BUCKET_ORDER) {
+    const b = byBucket.get(key);
+    if (!b) continue;
+    const rate = b.n > 0 ? (b.paid / b.n) * 100 : 0;
+    const isTop = topBucket && topBucket.bucket === b.bucket && b.n > 0;
+    let tag = "";
+    if (isTop && baselineRate > 0) {
+      const mult = baselineRate > 0 ? rate / 100 / baselineRate : 0;
+      if (mult >= 2) tag = ` ← ${mult.toFixed(1)}× baseline`;
+    }
+    lines.push(`• ${b.bucket} dwell: n=${b.n}, paid ${rate.toFixed(1)}% (${b.paid})${tag}`);
+  }
+  return lines;
+}
+
 // -----------------------------------------------------------------------------
 
 // Exported (in addition to GET below) so unit tests can lock the message
@@ -384,6 +602,16 @@ export function formatDaily(
   );
   lines.push("");
 
+  // Wizard funnel — slide-by-slide retention through PreReportWizard.
+  // Sits between Activation and the leak callout because it IS the activation
+  // bridge from survey-completed to report-viewed. Omitted when the snapshot
+  // is null (RPC failed) or when slide 1 saw fewer than 3 entries.
+  const wizardLines = formatWizardFunnel(curr.wizardFunnel);
+  if (wizardLines.length > 0) {
+    lines.push(...wizardLines);
+    lines.push("");
+  }
+
   // Today's biggest leak — drop-off analysis. Skipped when snapshot is null.
   const leakLines = formatLeakLines(curr);
   if (leakLines.length > 0) {
@@ -446,6 +674,14 @@ export function formatDaily(
       .map((h) => `${String(h.hour).padStart(2, "0")}:00 (${h.count})`)
       .join(", ");
     lines.push(`• Top hours (UTC): ${hoursStr}`);
+  }
+
+  // 30-day longitudinal sparklines — text-only Unicode block-char trend lines.
+  // Always last so they don't push the funnel-stage numbers below the fold.
+  const sparkLines = formatSparklines(curr.sparklines);
+  if (sparkLines.length > 0) {
+    lines.push("");
+    lines.push(...sparkLines);
   }
 
   return clampToSlackLimit(lines.join("\n"));
@@ -682,6 +918,390 @@ export function formatWeekly(
   return clampToSlackLimit(lines.join("\n"));
 }
 
+// -----------------------------------------------------------------------------
+// Block Kit — signed image URLs + visual message builders (Phase 2)
+// -----------------------------------------------------------------------------
+
+/**
+ * Build an absolute, HMAC-signed image URL that the Slack image proxy can
+ * fetch. The base URL must be set via NEXT_PUBLIC_SITE_URL in production —
+ * Slack's bot cannot reach localhost or relative paths.
+ *
+ * Returns null when:
+ *  - NEXT_PUBLIC_SITE_URL is unset (logs warn — the digest still ships
+ *    with text only, no images)
+ *  - signing throws (e.g. signing secret missing)
+ */
+async function buildSignedImageUrl(
+  kind: "funnel" | "wizard" | "sparklines" | "engagement" | "leaks",
+  payload: Record<string, unknown>
+): Promise<string | null> {
+  const base = process.env.NEXT_PUBLIC_SITE_URL;
+  if (!base) {
+    logger.warn({ kind }, "digest-image: NEXT_PUBLIC_SITE_URL unset; skipping image block");
+    return null;
+  }
+  try {
+    const { d, s } = await signImagePayload({ kind, ...payload });
+    const u = new URL(`/api/admin/digest-image/${kind}`, base);
+    u.searchParams.set("d", d);
+    u.searchParams.set("s", s);
+    return u.toString();
+  } catch (err) {
+    logger.warn({ err, kind }, "digest-image: sign failed; skipping image block");
+    return null;
+  }
+}
+
+const SEVERITY_EMOJI: Record<Recommendation["severity"], string> = {
+  high: ":rotating_light:",
+  med: ":warning:",
+  low: ":information_source:",
+};
+
+export function formatRecommendationsLines(recs: Recommendation[]): string[] {
+  if (!recs || recs.length === 0) return [];
+  const lines: string[] = ["*Recommendations*"];
+  for (const r of recs) {
+    lines.push(
+      `${SEVERITY_EMOJI[r.severity] ?? ":small_blue_diamond:"} *${r.severity.toUpperCase()}* ${escapeSlack(r.message)} _(${escapeSlack(r.evidence)})_`
+    );
+  }
+  return lines;
+}
+
+const REVISITED_STATUS_EMOJI: Record<RevisitedEntry["status"], string> = {
+  resolved: ":white_check_mark:",
+  ongoing: ":arrows_counterclockwise:",
+  worsened: ":warning:",
+};
+
+const REVISITED_STATUS_LABEL: Record<RevisitedEntry["status"], string> = {
+  resolved: "Resolved",
+  ongoing: "Still flagged",
+  worsened: "Worsened",
+};
+
+/** English ordinal — handles 1st/2nd/3rd/4th-13th teens/everything else. */
+function ordinal(n: number): string {
+  const abs = Math.abs(Math.trunc(n));
+  const lastTwo = abs % 100;
+  if (lastTwo >= 11 && lastTwo <= 13) return `${n}th`;
+  switch (abs % 10) {
+    case 1:
+      return `${n}st`;
+    case 2:
+      return `${n}nd`;
+    case 3:
+      return `${n}rd`;
+    default:
+      return `${n}th`;
+  }
+}
+
+/**
+ * Loop-closure section: compares last week's recommendations to this week's
+ * snapshot. Grouped by status (worsened > resolved > still-flagged). Returns
+ * [] when no history exists (first week) so the section is omitted entirely.
+ */
+export function formatRevisitedLines(entries: RevisitedEntry[]): string[] {
+  if (!entries || entries.length === 0) return [];
+  const grouped: Record<RevisitedEntry["status"], RevisitedEntry[]> = {
+    worsened: [],
+    resolved: [],
+    ongoing: [],
+  };
+  for (const e of entries) grouped[e.status].push(e);
+
+  const lines: string[] = ["*Revisited from last week*"];
+  // Render order: worsened first (most actionable), then resolved, then
+  // ongoing.
+  const order: Array<RevisitedEntry["status"]> = ["worsened", "resolved", "ongoing"];
+  for (const status of order) {
+    const items = grouped[status];
+    if (items.length === 0) continue;
+    lines.push(
+      `${REVISITED_STATUS_EMOJI[status]} *${REVISITED_STATUS_LABEL[status]}* (${items.length})`
+    );
+    for (const e of items) {
+      const consecutiveTag =
+        status === "ongoing" && e.consecutiveWeeks && e.consecutiveWeeks >= 3
+          ? ` _(${ordinal(e.consecutiveWeeks)} consecutive week)_`
+          : "";
+      const headlineMessage =
+        status === "resolved" ? e.lastWeekMessage : (e.currentMessage ?? e.lastWeekMessage);
+      const delta = e.deltaSummary ? ` — ${e.deltaSummary}` : "";
+      lines.push(`• ${escapeSlack(headlineMessage)}${delta}${consecutiveTag}`);
+    }
+  }
+  return lines;
+}
+
+export function formatLeakSeverityLines(leaks: LeakSeverity[]): string[] {
+  if (!leaks || leaks.length === 0) return [];
+  const lines: string[] = ["*Top funnel leaks by est. revenue impact*"];
+  leaks.forEach((l, i) => {
+    lines.push(
+      `${i + 1}. ${escapeSlack(l.fromStage)} → ${escapeSlack(l.toStage)}: ${l.dropCount} dropped, ~${l.currency} ${Math.round(l.estLostRevenue).toLocaleString()} lost`
+    );
+  });
+  return lines;
+}
+
+/**
+ * Compose the daily digest as Block Kit. Returns blocks + fallback text. The
+ * sparkline image is appended as the final block; when the snapshot is null
+ * or the URL builder fails, the block is silently omitted (text fallback
+ * still includes the section).
+ */
+export async function buildDailyBlocks(
+  dayKey: string,
+  curr: DailyMetrics,
+  prev: DailyMetrics,
+  partial?: PartialCapture | null
+): Promise<{ blocks: SlackBlock[]; text: string }> {
+  // `text` is the accessibility / notification-preview fallback — keeps the
+  // Unicode sparkline section so plain-text consumers still see the trend.
+  const text = formatDaily(dayKey, curr, prev, partial);
+
+  // Try to build the PNG sparkline image FIRST. Only if it succeeds do we
+  // strip the duplicate Unicode-char section from the in-channel block (so a
+  // PNG failure still leaves users with the text version of the trend).
+  let sparklineImageBlock: SlackBlock | null = null;
+  if (curr.sparklines && curr.sparklines.days.length > 0) {
+    const days = curr.sparklines.days;
+    const url = await buildSignedImageUrl("sparklines", {
+      windowLabel: `30 days ending ${dayKey} UTC`,
+      // Compact parallel-array payload so the signed URL stays under Slack's
+      // 3000-char image_url cap even at 30+ days.
+      series: [
+        days.map((d) => d.visitors),
+        days.map((d) => d.starts),
+        days.map((d) => d.completions),
+        days.map((d) => d.report_views),
+        days.map((d) => d.paywall_init),
+        days.map((d) => d.purchases),
+      ],
+    });
+    if (url) {
+      sparklineImageBlock = {
+        type: "image",
+        image_url: url,
+        alt_text: "30-day trend sparklines",
+      };
+    }
+  }
+
+  // If we have the PNG, strip the Unicode-char sparkline section from the
+  // Block Kit section text (no in-channel duplication). Otherwise keep it so
+  // users still see SOMETHING about the trend.
+  let sectionText = text;
+  if (sparklineImageBlock) {
+    const idx = text.indexOf("*30-day trends*");
+    if (idx >= 0) sectionText = text.slice(0, idx).trimEnd();
+  }
+
+  const blocks: SlackBlock[] = [
+    {
+      type: "section",
+      text: { type: "mrkdwn", text: sectionText },
+    },
+  ];
+  if (sparklineImageBlock) blocks.push(sparklineImageBlock);
+  return { blocks, text };
+}
+
+/**
+ * Compose the weekly strategy supplement as Block Kit, interleaving PNG
+ * images with mrkdwn sections. The composed message uses 4 image blocks +
+ * leak text + recommendations text + answer-lift text.
+ *
+ * Returns null when every section is empty — the cron then skips the send.
+ */
+export async function buildWeeklyStrategyBlocks(
+  weekKey: string,
+  weekRangeLabel: string,
+  curr: WeeklyMetrics
+): Promise<{ blocks: SlackBlock[]; text: string } | null> {
+  // Text fallback: reuse the existing all-text builder so a Slack client that
+  // can't render Block Kit (or accessibility tools) still sees every section.
+  const textFallback = formatWeeklyStrategySupplement(weekKey, weekRangeLabel, curr);
+  if (!textFallback) return null;
+
+  const blocks: SlackBlock[] = [
+    {
+      type: "header",
+      text: {
+        type: "plain_text",
+        text: `🎯 Weekly funnel intelligence — ${weekKey}`,
+        emoji: true,
+      },
+    },
+    {
+      type: "context",
+      elements: [{ type: "mrkdwn", text: weekRangeLabel }],
+    },
+  ];
+
+  // 1. Drop-off funnel chart
+  if (curr.dropoffEverywhere && curr.dropoffEverywhere.stages.length > 1) {
+    const url = await buildSignedImageUrl("funnel", {
+      weekLabel: weekRangeLabel,
+      stages: curr.dropoffEverywhere.stages,
+    });
+    if (url) {
+      blocks.push({
+        type: "image",
+        image_url: url,
+        alt_text: "Drop-off funnel — all stages",
+      });
+    }
+  }
+
+  // 2. Top funnel leaks by revenue (text)
+  const leakLines = formatLeakSeverityLines(curr.leakSeverity);
+  if (leakLines.length > 0) {
+    blocks.push({
+      type: "section",
+      text: { type: "mrkdwn", text: leakLines.join("\n") },
+    });
+  }
+
+  // 3. Wizard funnel chart
+  if (curr.wizardFunnel && curr.wizardFunnel.slide1 >= 3) {
+    const url = await buildSignedImageUrl("wizard", {
+      weekLabel: weekRangeLabel,
+      slide1: curr.wizardFunnel.slide1,
+      slide2: curr.wizardFunnel.slide2,
+      slide3: curr.wizardFunnel.slide3,
+      slide4: curr.wizardFunnel.slide4,
+      slide5: curr.wizardFunnel.slide5,
+      reportViewed: curr.wizardFunnel.reportViewed,
+    });
+    if (url) {
+      blocks.push({
+        type: "image",
+        image_url: url,
+        alt_text: "PreReportWizard slide-by-slide retention",
+      });
+    }
+  }
+
+  // 4. Recommendations (text)
+  const recLines = formatRecommendationsLines(curr.recommendations);
+  if (recLines.length > 0) {
+    blocks.push({
+      type: "section",
+      text: { type: "mrkdwn", text: recLines.join("\n") },
+    });
+  }
+
+  // 5. Engagement → purchase chart
+  if (curr.engagementLift && curr.engagementLift.buckets.length > 0) {
+    const url = await buildSignedImageUrl("engagement", {
+      weekLabel: weekRangeLabel,
+      buckets: curr.engagementLift.buckets,
+    });
+    if (url) {
+      blocks.push({
+        type: "image",
+        image_url: url,
+        alt_text: "Engagement-bucket purchase rate",
+      });
+    }
+  }
+
+  // 6. Top leaks chart (replaces some of the leak text with a chart)
+  if (curr.leakSeverity.length > 0) {
+    const url = await buildSignedImageUrl("leaks", {
+      weekLabel: weekRangeLabel,
+      currency: curr.leakSeverity[0]!.currency,
+      leaks: curr.leakSeverity.map((l) => ({
+        fromStage: l.fromStage,
+        toStage: l.toStage,
+        dropCount: l.dropCount,
+        estLostRevenue: l.estLostRevenue,
+      })),
+    });
+    if (url) {
+      blocks.push({
+        type: "image",
+        image_url: url,
+        alt_text: "Top funnel leaks ranked by revenue impact",
+      });
+    }
+  }
+
+  // 7. Answer → conversion lift (text — labels are too long for a chart)
+  const answerLines = formatAnswerLift(curr.answerLift);
+  if (answerLines.length > 0) {
+    blocks.push({
+      type: "section",
+      text: { type: "mrkdwn", text: answerLines.join("\n") },
+    });
+  }
+
+  // 8. Phase 3: loop-closure — "Revisited from last week".
+  const revisitedLines = formatRevisitedLines(curr.revisited);
+  if (revisitedLines.length > 0) {
+    blocks.push({
+      type: "section",
+      text: { type: "mrkdwn", text: revisitedLines.join("\n") },
+    });
+  }
+
+  // If we only have the header + context (everything else null), bail.
+  if (blocks.length <= 2) return null;
+
+  return { blocks, text: textFallback };
+}
+
+/**
+ * Strategy-lead weekly supplement — a SECOND Slack message sent after the main
+ * weekly digest on Mondays. Holds the four new sections (wizard funnel,
+ * drop-off everywhere, answer→conversion lift, engagement→purchase lift).
+ *
+ * Sent separately rather than appended to formatWeekly because the combined
+ * payload would routinely exceed Slack's 3000-char text-block cap and lose the
+ * final sections to silent truncation. Splitting also gives the supplement its
+ * own idempotency key so a partial Slack outage can deliver one half without
+ * blocking the other.
+ *
+ * Returns null when every section is empty — the cron then skips the send so
+ * the strategy lead doesn't get a useless "weekly strategy: (nothing)" ping.
+ */
+export function formatWeeklyStrategySupplement(
+  weekKey: string,
+  weekRangeLabel: string,
+  curr: WeeklyMetrics
+): string | null {
+  const sections: string[][] = [];
+  const wizard = formatWizardFunnel(curr.wizardFunnel);
+  if (wizard.length > 0) sections.push(wizard);
+  const dropoff = formatDropoffEverywhere(curr.dropoffEverywhere);
+  if (dropoff.length > 0) sections.push(dropoff);
+  const answer = formatAnswerLift(curr.answerLift);
+  if (answer.length > 0) sections.push(answer);
+  const engagement = formatEngagementLift(curr.engagementLift);
+  if (engagement.length > 0) sections.push(engagement);
+  // Phase 3 — loop-closure section in the text fallback so Block-Kit-less
+  // clients still see the revisited classification.
+  const revisited = formatRevisitedLines(curr.revisited);
+  if (revisited.length > 0) sections.push(revisited);
+
+  if (sections.length === 0) return null;
+
+  const lines: string[] = [
+    `:dart: *Weekly funnel intelligence — ${weekKey} (${weekRangeLabel})*`,
+    "",
+  ];
+  for (let i = 0; i < sections.length; i += 1) {
+    lines.push(...sections[i]!);
+    if (i < sections.length - 1) lines.push("");
+  }
+  return clampToSlackLimit(lines.join("\n"));
+}
+
 function shortDate(d: Date): string {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 }
@@ -714,6 +1334,7 @@ export async function GET(request: Request) {
 
     let dailySent = false;
     let weeklySent = false;
+    let weeklyStrategySent = false;
 
     // ---- Daily ----
     const dailyClaimed = await tryClaimSlackAlert("daily_digest", "day", dayKey);
@@ -732,10 +1353,12 @@ export async function GET(request: Request) {
         captureStart && captureStart > yesterdayIso
           ? { capturedFromIso: captureStart, windowStartIso: yesterdayIso }
           : null;
+      const dailyComposed = await buildDailyBlocks(dayKey, curr, prev, dailyPartial);
       await notifySlack({
         channel: "ops",
         kind: "daily_digest",
-        text: formatDaily(dayKey, curr, prev, dailyPartial),
+        text: dailyComposed.text,
+        blocks: dailyComposed.blocks,
         username: "ops_alerts",
       });
       // Mark delivered AFTER notify succeeds — if notify throws, the claim
@@ -770,6 +1393,58 @@ export async function GET(request: Request) {
         });
         await markSlackAlertDelivered("weekly_digest", "week", weekKey);
         weeklySent = true;
+
+        // ---- Weekly strategy supplement (second Slack message) ----
+        // Independent idempotency key so a one-off Slack outage that delivers
+        // the main weekly but not the supplement (or vice versa) can be
+        // re-attempted by the next cron tick without double-sending the half
+        // that already landed.
+        const supplementClaimed = await tryClaimSlackAlert(
+          "weekly_strategy_supplement",
+          "week",
+          weekKey
+        );
+        if (supplementClaimed) {
+          // Prefer the visual Block Kit composition; falls back to text-only
+          // when the image URL builder fails or no sections have data.
+          const supplementBlocks = await buildWeeklyStrategyBlocks(weekKey, rangeLabel, currW);
+          if (supplementBlocks) {
+            await notifySlack({
+              channel: "ops",
+              kind: "weekly_strategy_supplement",
+              text: supplementBlocks.text,
+              blocks: supplementBlocks.blocks,
+              username: "ops_alerts",
+            });
+            await markSlackAlertDelivered("weekly_strategy_supplement", "week", weekKey);
+            weeklyStrategySent = true;
+          } else {
+            const supplementText = formatWeeklyStrategySupplement(weekKey, rangeLabel, currW);
+            if (supplementText) {
+              await notifySlack({
+                channel: "ops",
+                kind: "weekly_strategy_supplement",
+                text: supplementText,
+                username: "ops_alerts",
+              });
+              await markSlackAlertDelivered("weekly_strategy_supplement", "week", weekKey);
+              weeklyStrategySent = true;
+            } else {
+              // Nothing to say this week (every section empty / null
+              // snapshots). Still mark delivered so we don't re-attempt every
+              // 10 minutes for the rest of Monday.
+              await markSlackAlertDelivered("weekly_strategy_supplement", "week", weekKey);
+            }
+          }
+
+          // Phase 3 — persist this week's recommendations AFTER notifySlack
+          // succeeds so a DB outage cannot block (or partially block) the
+          // digest. persistRecommendations is best-effort: any failure is
+          // logged with logger.warn and we continue.
+          if (weeklyStrategySent && currW.recommendations.length > 0) {
+            await persistRecommendations(weekKey, currW.recommendations);
+          }
+        }
       }
     }
 
@@ -778,6 +1453,7 @@ export async function GET(request: Request) {
       day: dayKey,
       dailySent,
       weeklySent,
+      weeklyStrategySent,
     });
   } catch (err) {
     logger.error({ err }, "funnel-digest cron failed");
