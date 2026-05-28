@@ -12,6 +12,8 @@ interface Props {
   ranking: string[];
   unlockedArchetypes: Set<string>;
   accessPlan: "essentials" | "full_report" | "all_reports" | null;
+  diagnostics?: { uDimensions?: Record<string, number> } | null;
+  submissionSeed?: string | number | null;
 }
 
 const ArchetypeProbabilitySection: FC<Props> = ({
@@ -23,6 +25,8 @@ const ArchetypeProbabilitySection: FC<Props> = ({
   ranking,
   unlockedArchetypes,
   accessPlan,
+  diagnostics,
+  submissionSeed,
 }) => {
   // generalHtml is server-authored report prose returned by /api/report — never
   // user input. Sanitization lives upstream in features/report/server/contentGating.
@@ -40,6 +44,8 @@ const ArchetypeProbabilitySection: FC<Props> = ({
         accessPlan={accessPlan}
         onUnlock={onUnlock}
         onPurchaseFullReport={onPurchaseFullReport}
+        diagnostics={diagnostics}
+        submissionSeed={submissionSeed}
       />
     </div>
   );

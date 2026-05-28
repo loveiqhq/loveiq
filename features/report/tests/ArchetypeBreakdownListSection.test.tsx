@@ -1,7 +1,10 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import ArchetypeBreakdownListSection from "@features/report/ui/sections/ArchetypeBreakdownListSection";
+import ArchetypeBreakdownListSection, {
+  computeReferenceSample,
+  countDrivingDimensions,
+} from "@features/report/ui/sections/ArchetypeBreakdownListSection";
 
 function stubObservers(options: { reducedMotion?: boolean } = {}) {
   // IntersectionObserver mock fires `isIntersecting: true` immediately so the
@@ -344,5 +347,86 @@ describe("ArchetypeBreakdownListSection", () => {
     expect(readout!.textContent).toBe("44.0%");
 
     vi.useRealTimers();
+  });
+});
+
+describe("computeReferenceSample", () => {
+  const BASE = 124_638;
+  const RANGE = 600;
+
+  it("is deterministic for the same seed", () => {
+    expect(computeReferenceSample("submission-42")).toBe(computeReferenceSample("submission-42"));
+    expect(computeReferenceSample(42)).toBe(computeReferenceSample(42));
+  });
+
+  it("returns different values for different seeds", () => {
+    const a = computeReferenceSample("alpha");
+    const b = computeReferenceSample("bravo");
+    const c = computeReferenceSample("charlie");
+    // At least two of three must differ — collisions are theoretically
+    // possible but vanishingly rare for short seeds with FNV-1a.
+    expect(new Set([a, b, c]).size).toBeGreaterThanOrEqual(2);
+  });
+
+  it("stays inside the [BASE - RANGE, BASE + RANGE] window", () => {
+    const seeds: Array<string | number> = ["a", "z", 0, 1, 999, "submission-42", "rpt_abc123xyz"];
+    for (const s of seeds) {
+      const n = computeReferenceSample(s);
+      expect(n).toBeGreaterThanOrEqual(BASE - RANGE);
+      expect(n).toBeLessThanOrEqual(BASE + RANGE);
+    }
+  });
+
+  it("falls back to the base when seed is null / undefined / empty string", () => {
+    expect(computeReferenceSample(null)).toBe(BASE);
+    expect(computeReferenceSample(undefined)).toBe(BASE);
+    expect(computeReferenceSample("")).toBe(BASE);
+  });
+
+  it("treats numeric and stringified-numeric seeds as equivalent", () => {
+    expect(computeReferenceSample(123)).toBe(computeReferenceSample("123"));
+  });
+});
+
+describe("countDrivingDimensions", () => {
+  it("counts dimensions with |value - 0.5| >= 0.15", () => {
+    const u = {
+      DIM_A: 0.5, // exactly neutral → excluded
+      DIM_B: 0.6, // delta 0.10 → excluded
+      DIM_C: 0.65, // delta 0.15 → included (>=)
+      DIM_D: 0.9, // delta 0.40 → included
+      DIM_E: 0.2, // delta 0.30 → included
+      DIM_F: 0.49, // delta 0.01 → excluded
+      DIM_G: 0.0, // delta 0.50 → included
+    };
+    const result = countDrivingDimensions(u);
+    expect(result).not.toBeNull();
+    expect(result!.count).toBe(4);
+    expect(result!.total).toBe(7);
+  });
+
+  it("returns null for missing / empty diagnostics", () => {
+    expect(countDrivingDimensions(undefined)).toBeNull();
+    expect(countDrivingDimensions(null)).toBeNull();
+    expect(countDrivingDimensions({})).toBeNull();
+  });
+
+  it("ignores NaN and non-numeric values without crashing", () => {
+    const u = {
+      DIM_A: Number.NaN,
+      DIM_B: 0.8, // included
+      DIM_C: 0.5, // excluded
+    } as Record<string, number>;
+    const result = countDrivingDimensions(u);
+    expect(result).not.toBeNull();
+    expect(result!.count).toBe(1);
+    expect(result!.total).toBe(3);
+  });
+
+  it("returns 0 count when every value sits at neutral", () => {
+    const u = { DIM_A: 0.5, DIM_B: 0.5, DIM_C: 0.5 };
+    const result = countDrivingDimensions(u);
+    expect(result!.count).toBe(0);
+    expect(result!.total).toBe(3);
   });
 });

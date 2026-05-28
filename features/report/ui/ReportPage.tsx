@@ -299,6 +299,8 @@ interface ReportExperienceProps {
   accessPlan: ReportAccessPlan;
   archetypeTiers: Record<string, "essentials" | "full_report">;
   devParam: string | null;
+  diagnostics: Record<string, unknown> | null;
+  submissionSeed: string | number | null;
   feedbacks: Record<string, "up" | "down" | null>;
   isPricingModalOpen: boolean;
   isScrollTeaserOpen: boolean;
@@ -349,6 +351,8 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   accessPlan,
   archetypeTiers,
   devParam,
+  diagnostics,
+  submissionSeed,
   feedbacks,
   isPricingModalOpen,
   isScrollTeaserOpen,
@@ -688,6 +692,8 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                         ranking={ranking}
                         unlockedArchetypes={unlockedArchetypes}
                         accessPlan={accessPlan}
+                        diagnostics={diagnostics as { uDimensions?: Record<string, number> } | null}
+                        submissionSeed={submissionSeed}
                       />
                     </ReportSection>
                   );
@@ -1261,6 +1267,8 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
         devParam={devParam}
         accessPlan={data.accessPlan}
         archetypeTiers={data.archetypeTiers ?? {}}
+        diagnostics={diagnostics}
+        submissionSeed={data.submissionId ?? token ?? null}
         feedbacks={feedbacks}
         isPricingModalOpen={isPricingModalOpen}
         isScrollTeaserOpen={isScrollTeaserOpen}

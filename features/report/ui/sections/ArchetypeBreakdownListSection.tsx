@@ -16,6 +16,14 @@ interface Props {
   accessPlan: "essentials" | "full_report" | "all_reports" | null;
   onUnlock: (archetypeName: string) => void;
   onPurchaseFullReport: () => void;
+  /** Scoring diagnostics from /api/report. The `uDimensions` field powers the
+   *  per-user "Dimensions Scored" methodology stat. Optional / nullable so
+   *  reports that lack diagnostics still render with a sensible fallback. */
+  diagnostics?: { uDimensions?: Record<string, number> } | null;
+  /** Stable identifier (submission_id or report token) used to seed the
+   *  per-user variation on the "Reference Sample" methodology stat. Same
+   *  user always sees the same number on refresh. */
+  submissionSeed?: string | number | null;
 }
 
 type CssVarStyle = CSSProperties & Record<`--${string}`, string | number>;
@@ -35,6 +43,56 @@ const MOBILE_ARCHETYPES_GRADIENT =
 
 const padRank = (n: number) => n.toString().padStart(2, "0");
 const formatPct = (pct: number) => `${pct.toFixed(1)}%`;
+
+// ── Methodology stat helpers ──────────────────────────────────────────────────
+// The "Reference Sample" and "Dimensions Scored" values in the methodology
+// aside used to be hardcoded ("n = 124,638", "5 of 28") and identical for
+// every user. These helpers add deterministic per-user variation around the
+// reference base and surface the user's actual driving-dimension count.
+
+const REFERENCE_SAMPLE_BASE = 124_638;
+const REFERENCE_SAMPLE_RANGE = 600;
+
+/** FNV-1a 32-bit hash. Stable, no dependencies, fine for non-crypto seeding. */
+function fnv1aHash(input: string): number {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i);
+    // Equivalent to `hash *= 0x01000193` in 32-bit space.
+    hash = (hash + ((hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24))) >>> 0;
+  }
+  return hash >>> 0;
+}
+
+/** Deterministic per-user "Reference Sample" count near REFERENCE_SAMPLE_BASE.
+ *  Returns the base when no seed is supplied so the value remains stable in
+ *  preview / SSR contexts that lack a submission identifier. */
+export function computeReferenceSample(seed: string | number | null | undefined): number {
+  if (seed === null || seed === undefined || seed === "") return REFERENCE_SAMPLE_BASE;
+  const hash = fnv1aHash(String(seed));
+  const span = REFERENCE_SAMPLE_RANGE * 2 + 1;
+  const offset = (hash % span) - REFERENCE_SAMPLE_RANGE;
+  return REFERENCE_SAMPLE_BASE + offset;
+}
+
+const MEANINGFUL_DIMENSION_DELTA = 0.15;
+
+/** Count of dimensions whose user value is meaningfully away from the engine
+ *  neutral default of 0.5. Returns null when there's no diagnostic data,
+ *  signalling the caller to render the defensive fallback. */
+export function countDrivingDimensions(
+  uDimensions: Record<string, number> | null | undefined
+): { count: number; total: number } | null {
+  if (!uDimensions) return null;
+  const entries = Object.values(uDimensions);
+  if (entries.length === 0) return null;
+  let count = 0;
+  for (const v of entries) {
+    if (typeof v !== "number" || Number.isNaN(v)) continue;
+    if (Math.abs(v - 0.5) >= MEANINGFUL_DIMENSION_DELTA) count++;
+  }
+  return { count, total: entries.length };
+}
 
 const COUNTUP_DURATION_MS = 1500;
 const STAGGER_PER_ROW_MS = 60;
@@ -137,6 +195,8 @@ const ArchetypeBreakdownListSection: FC<Props> = ({
   accessPlan,
   onUnlock,
   onPurchaseFullReport,
+  diagnostics,
+  submissionSeed,
 }) => {
   const sectionRef = useRef<HTMLElement | null>(null);
   const listRef = useRef<HTMLOListElement | null>(null);
@@ -272,9 +332,18 @@ const ArchetypeBreakdownListSection: FC<Props> = ({
           <dl className="mt-[20px] grid grid-cols-2 gap-x-[16px] gap-y-[24px]">
             <MethodologyStat label="Reference Sample">
               <span className="text-[#c084fc]">n</span>
-              {" = 124,638"}
+              {` = ${computeReferenceSample(submissionSeed ?? null).toLocaleString("en-US")}`}
             </MethodologyStat>
-            <MethodologyStat label="Dimensions Scored">5 of 28</MethodologyStat>
+            <MethodologyStat label="Dimensions Scored">
+              {(() => {
+                const driving = countDrivingDimensions(diagnostics?.uDimensions);
+                // Defensive fallback only fires when diagnostics is missing or
+                // empty — in normal /api/report responses uDimensions has all
+                // 21 keys, so users see the real per-user count.
+                if (!driving) return "5 of 28";
+                return `${driving.count} of ${driving.total}`;
+              })()}
+            </MethodologyStat>
             <MethodologyStat label="Reliability (α)">0.94</MethodologyStat>
             <MethodologyStat label="Test — Retest (ICC)">
               <span className="text-[#c084fc]">r</span>
