@@ -262,6 +262,7 @@ const ArchetypeBreakdownListSection: FC<Props> = ({
               width={14}
               height={14}
               aria-hidden="true"
+              unoptimized
               className="h-[14px] w-[14px]"
             />
             <span className="text-[10px] font-bold uppercase leading-[15px] tracking-[2px] text-[#c084fc]">
@@ -328,6 +329,7 @@ const ArchetypeBreakdownListSection: FC<Props> = ({
                     width={presentation.iconBg === null ? 24 : 14}
                     height={presentation.iconBg === null ? 24 : 14}
                     aria-hidden="true"
+                    unoptimized
                     className={
                       presentation.iconBg === null ? "h-[24px] w-[24px]" : "h-[14px] w-[14px]"
                     }
@@ -390,6 +392,7 @@ const ArchetypeBreakdownListSection: FC<Props> = ({
                   aria-hidden="true"
                   width={131}
                   height={39}
+                  unoptimized
                   className="pointer-events-none absolute inset-0 h-full w-full"
                 />
                 <span className="relative inline-flex h-[13px] w-[12px] items-center justify-center">
@@ -402,6 +405,7 @@ const ArchetypeBreakdownListSection: FC<Props> = ({
                       aria-hidden="true"
                       width={12}
                       height={13}
+                      unoptimized
                       className="h-[13px] w-[12px]"
                     />
                   )}
@@ -426,6 +430,7 @@ const ArchetypeBreakdownListSection: FC<Props> = ({
                     aria-hidden="true"
                     width={12}
                     height={13}
+                    unoptimized
                     className="h-[13px] w-[12px]"
                   />
                 )}
@@ -448,6 +453,7 @@ const ArchetypeBreakdownListSection: FC<Props> = ({
               aria-hidden="true"
               width={14}
               height={14}
+              unoptimized
               className="pointer-events-none absolute left-[calc(50%-82.92px)] top-1/2 h-[14px] w-[14px] -translate-y-1/2"
             />
             <span>Unlock the Full Report</span>
@@ -457,6 +463,7 @@ const ArchetypeBreakdownListSection: FC<Props> = ({
               aria-hidden="true"
               width={14}
               height={14}
+              unoptimized
               className="pointer-events-none absolute left-[calc(50%+82.92px)] top-1/2 h-[14px] w-[14px] -translate-y-1/2"
             />
           </button>
