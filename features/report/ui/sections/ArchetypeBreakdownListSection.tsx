@@ -320,7 +320,13 @@ const ArchetypeBreakdownListSection: FC<Props> = ({
                   gridArea: "icon",
                   backgroundColor: presentation?.iconBg ?? undefined,
                 }}
-                className="flex h-[24px] w-[24px] shrink-0 items-center justify-center rounded-[4px] p-[4px]"
+                // When the SVG includes its own background (iconBg === null),
+                // the icon must fill the full 24×24 box — padding would clamp
+                // the image via next/image's `max-width: 100%` and make it look
+                // smaller than its sibling rows.
+                className={`flex h-[24px] w-[24px] shrink-0 items-center justify-center overflow-hidden rounded-[4px] ${
+                  presentation && presentation.iconBg === null ? "p-0" : "p-[4px]"
+                }`}
               >
                 {presentation ? (
                   <Image
