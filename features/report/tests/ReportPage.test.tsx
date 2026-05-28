@@ -54,7 +54,7 @@ vi.mock("@features/analytics/client", () => ({
   trackPaywallDismissed: vi.fn(),
   trackScrollPaywallDismissed: vi.fn(),
   trackStickyUnlockClicked: vi.fn(),
-  trackReportSummaryJumped: vi.fn(),
+  trackReportChapterMenuOpened: vi.fn(),
   trackSectionNavigated: vi.fn(),
   trackChapterFeedbackSubmitted: vi.fn(),
   hasCookieYesConsent: () => true,

@@ -42,7 +42,7 @@ describe("ReportDesktopSidebar", () => {
 });
 
 describe("ReportMobileNav", () => {
-  it("renders the mobile topbar with branding and a menu button", () => {
+  it("renders the mobile topbar with branding and a chapter pill trigger", () => {
     const sections = resolveReportSections(
       reportSections.filter((section) => section.id === "core_motivation"),
       "Spark Seeker"
@@ -51,6 +51,9 @@ describe("ReportMobileNav", () => {
     render(<ReportMobileNav activeSectionId="core_motivation" sections={sections} />);
 
     expect(screen.getAllByLabelText(/loveiq report/i).length).toBeGreaterThan(0);
-    expect(screen.getByRole("button", { name: /open chapters menu/i })).toBeInTheDocument();
+    const pill = screen.getByRole("button", { name: /chapter:/i });
+    expect(pill).toBeInTheDocument();
+    expect(pill).toHaveAttribute("aria-haspopup", "dialog");
+    expect(pill).toHaveAttribute("aria-expanded", "false");
   });
 });

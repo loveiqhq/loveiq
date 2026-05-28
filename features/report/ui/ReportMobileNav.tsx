@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useRef, useState, type FC } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FC } from "react";
 import { trackSectionNavigated } from "@features/analytics/client";
 import { ReferFriendIcon, ShareReportIcon } from "./ReportActionIcons";
 import type { AccessTier, DisplayReportSection } from "./reportTitles";
@@ -11,26 +11,57 @@ interface Props {
   onReferFriend?: () => void;
   onSectionClick?: (sectionId: string) => void;
   onShareClick?: () => void;
+  /** Fired each time the chapter drawer opens (for analytics). */
+  onDrawerOpened?: () => void;
   sections: DisplayReportSection[];
 }
 
-const TOPBAR_SCROLL_THRESHOLD = 15;
-const TOPBAR_HIDE_BREAKPOINT = 1280;
+const PILL_SCROLL_THRESHOLD = 15;
+const PILL_HIDE_BREAKPOINT = 1280;
+const DRAWER_CLOSE_DURATION_MS = 220;
+
+type DrawerPhase = "closed" | "open" | "closing";
+
+const ChevronDownIcon: FC = () => (
+  <svg viewBox="0 0 14 8" fill="none" aria-hidden="true">
+    <path
+      d="M1 1l6 6 6-6"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
 
 const ReportMobileNav: FC<Props> = ({
   activeSectionId,
   onReferFriend,
   onSectionClick,
   onShareClick,
+  onDrawerOpened,
   sections,
 }) => {
-  const browseButtonRef = useRef<HTMLButtonElement>(null);
-  const closeButtonRef = useRef<HTMLButtonElement>(null);
-  const drawerRef = useRef<HTMLDivElement>(null);
+  const pillButtonRef = useRef<HTMLButtonElement>(null);
+  const panelPillButtonRef = useRef<HTMLButtonElement>(null);
+  const wasDrawerOpenRef = useRef(false);
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [topbarHidden, setTopbarHidden] = useState(false);
+  const [phase, setPhase] = useState<DrawerPhase>("closed");
+  const [pillHidden, setPillHidden] = useState(false);
 
+  const drawerMounted = phase !== "closed";
+  const drawerOpen = phase === "open";
+  const drawerClosing = phase === "closing";
+
+  const activeChapter = useMemo(() => {
+    const match = sections.find((section) => section.id === activeSectionId);
+    return match?.navTitle ?? sections[0]?.navTitle ?? "Welcome";
+  }, [activeSectionId, sections]);
+
+  // Pill scroll-hide. Intentionally no `drawerOpen` dep — guards the same
+  // race-condition class we hit on the landing NavSection where including a
+  // click-driven state in a scroll listener could re-trigger and close itself.
   useEffect(() => {
     const lastScrollY = { current: window.scrollY };
     const lastDirection: { current: "up" | "down" | null } = { current: null };
@@ -38,28 +69,28 @@ const ReportMobileNav: FC<Props> = ({
 
     const update = () => {
       const scrollY = window.scrollY || document.documentElement.scrollTop;
-      const belowXl = window.innerWidth < TOPBAR_HIDE_BREAKPOINT;
+      const belowXl = window.innerWidth < PILL_HIDE_BREAKPOINT;
 
       if (!belowXl) {
-        setTopbarHidden(false);
+        setPillHidden(false);
         lastScrollY.current = scrollY;
         ticking = false;
         return;
       }
 
       if (scrollY <= 0) {
-        setTopbarHidden(false);
+        setPillHidden(false);
         lastScrollY.current = scrollY;
         ticking = false;
         return;
       }
 
       const diff = scrollY - lastScrollY.current;
-      if (Math.abs(diff) >= TOPBAR_SCROLL_THRESHOLD) {
+      if (Math.abs(diff) >= PILL_SCROLL_THRESHOLD) {
         const direction = diff > 0 ? "down" : "up";
         if (direction !== lastDirection.current) {
           lastDirection.current = direction;
-          setTopbarHidden(direction === "down");
+          setPillHidden(direction === "down");
         }
         lastScrollY.current = scrollY;
       }
@@ -74,7 +105,7 @@ const ReportMobileNav: FC<Props> = ({
     };
 
     const onResize = () => {
-      if (window.innerWidth >= TOPBAR_HIDE_BREAKPOINT) setTopbarHidden(false);
+      if (window.innerWidth >= PILL_HIDE_BREAKPOINT) setPillHidden(false);
     };
 
     window.addEventListener("scroll", onScroll, { passive: true });
@@ -85,36 +116,74 @@ const ReportMobileNav: FC<Props> = ({
     };
   }, []);
 
+  const openDrawer = useCallback(() => {
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+    // Reset scroll-hide so focus returning to the pill on close lands on
+    // something the user can actually see.
+    setPillHidden(false);
+    setPhase("open");
+    onDrawerOpened?.();
+  }, [onDrawerOpened]);
+
+  const closeDrawer = useCallback(() => {
+    if (closeTimerRef.current) return; // already closing
+    setPhase("closing");
+    closeTimerRef.current = setTimeout(() => {
+      closeTimerRef.current = null;
+      setPhase("closed");
+    }, DRAWER_CLOSE_DURATION_MS);
+  }, []);
+
+  // Body-scroll lock active for the full mount lifetime (open + closing) so
+  // the page doesn't jump during the exit animation.
   useEffect(() => {
-    if (!drawerOpen) return;
+    if (!drawerMounted) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = prev;
     };
-  }, [drawerOpen]);
+  }, [drawerMounted]);
 
   useEffect(() => {
     if (!drawerOpen) return;
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setDrawerOpen(false);
+      if (e.key === "Escape") closeDrawer();
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [drawerOpen]);
+  }, [drawerOpen, closeDrawer]);
 
+  // Clear any pending close timer on unmount to avoid a setState-after-unmount.
+  useEffect(() => {
+    return () => {
+      if (closeTimerRef.current) {
+        clearTimeout(closeTimerRef.current);
+        closeTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  // Focus moves to the in-panel pill on open, and back to the floating pill
+  // ONLY on a true open→close transition. Skipping the initial mount avoids
+  // stealing focus to the pill on every page load.
   useEffect(() => {
     if (drawerOpen) {
-      closeButtonRef.current?.focus();
-    } else {
-      browseButtonRef.current?.focus();
+      wasDrawerOpenRef.current = true;
+      panelPillButtonRef.current?.focus();
+    } else if (phase === "closed" && wasDrawerOpenRef.current) {
+      wasDrawerOpenRef.current = false;
+      pillButtonRef.current?.focus();
     }
-  }, [drawerOpen]);
+  }, [drawerOpen, phase]);
 
   return (
     <div className="xl:hidden">
       <header
-        className={`report-mobile-topbar${topbarHidden ? " report-mobile-topbar--hidden" : ""}`}
+        className={`report-mobile-topbar${pillHidden ? " report-mobile-topbar--hidden" : ""}`}
       >
         <div className="report-mobile-topbar__brand">
           <Image
@@ -136,116 +205,112 @@ const ReportMobileNav: FC<Props> = ({
             <span aria-hidden="true">&nbsp;Report</span>
           </span>
         </div>
-        <button
-          ref={browseButtonRef}
-          type="button"
-          className="report-mobile-topbar__menu-btn"
-          aria-label="Open chapters menu"
-          aria-expanded={drawerOpen}
-          aria-controls="report-chapter-drawer"
-          onClick={() => setDrawerOpen(true)}
-        >
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            aria-hidden="true"
-          >
-            <path d="M4 6h16M4 12h16M4 18h16" />
-          </svg>
-        </button>
       </header>
 
-      {drawerOpen && (
+      <div
+        className={[
+          "report-chapter-pill",
+          pillHidden && "report-chapter-pill--hidden",
+          // Only hide while phase === 'open' so the floating pill fades back
+          // IN during the closing animation — its return crossfades with the
+          // panel pill fading OUT, avoiding any blank-frame between them.
+          drawerOpen && "report-chapter-pill--drawer-open",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        // `inert` covers both phases — focus / clicks stay redirected to the
+        // panel pill until the panel fully unmounts.
+        inert={drawerMounted}
+      >
+        <button
+          ref={pillButtonRef}
+          type="button"
+          className="report-chapter-pill__btn"
+          aria-haspopup="dialog"
+          aria-expanded={drawerOpen}
+          aria-controls="report-chapter-drawer"
+          onClick={openDrawer}
+        >
+          <span className="report-chapter-pill__label">
+            Chapter:<span className="report-chapter-pill__chapter">{activeChapter}</span>
+          </span>
+          <span className="report-chapter-pill__chevron">
+            <ChevronDownIcon />
+          </span>
+        </button>
+      </div>
+
+      {drawerMounted && (
         <div className="report-chapter-drawer-root">
           <div
-            className="report-chapter-backdrop"
+            className={`report-chapter-backdrop is-open${drawerClosing ? " is-closing" : ""}`}
             aria-hidden="true"
-            onClick={() => setDrawerOpen(false)}
+            onClick={closeDrawer}
           />
           <div
-            ref={drawerRef}
             id="report-chapter-drawer"
             role="dialog"
             aria-modal="true"
             aria-label="Report chapters"
-            className="report-chapter-panel"
+            className={`report-chapter-panel${drawerClosing ? " report-chapter-panel--closing" : ""}`}
           >
-            <div className="report-chapter-panel__header">
-              <div className="report-chapter-panel__brand">
-                <Image
-                  alt=""
-                  aria-hidden="true"
-                  className="report-chapter-panel__logo"
-                  height={32}
-                  src="/images/loveiq-mark.svg"
-                  width={36}
-                />
-                <span className="report-chapter-panel__brand-text" aria-label="LoveIQ Report">
-                  <span aria-hidden="true" className="report-chapter-panel__love">
-                    Love
-                  </span>
-                  <span aria-hidden="true" className="report-chapter-panel__iq">
-                    IQ
-                  </span>
-                  <span aria-hidden="true">&nbsp;Report</span>
-                </span>
-              </div>
+            <div className="report-chapter-panel__pill">
               <button
-                ref={closeButtonRef}
+                ref={panelPillButtonRef}
                 type="button"
-                className="report-chapter-panel__close"
-                aria-label="Close chapter list"
-                onClick={() => setDrawerOpen(false)}
+                className="report-chapter-pill__btn"
+                aria-label="Close chapter menu"
+                onClick={closeDrawer}
               >
-                <svg
-                  viewBox="0 0 16 16"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  aria-hidden="true"
-                >
-                  <path d="M3 3l10 10M13 3L3 13" strokeLinecap="round" />
-                </svg>
+                <span className="report-chapter-pill__label">
+                  Chapter:<span className="report-chapter-pill__chapter">{activeChapter}</span>
+                </span>
+                <span className="report-chapter-pill__chevron report-chapter-pill__chevron--up">
+                  <ChevronDownIcon />
+                </span>
               </button>
             </div>
 
             <div className="report-chapter-panel__actions">
-              <button
-                className="report-sidebar__btn"
-                type="button"
-                onClick={() => {
-                  setDrawerOpen(false);
-                  onShareClick?.();
-                }}
-                disabled={!onShareClick}
-              >
-                <ShareReportIcon />
-                <span>Share Report</span>
-              </button>
+              {onShareClick && (
+                <button
+                  className="report-sidebar__btn"
+                  type="button"
+                  onClick={() => {
+                    closeDrawer();
+                    onShareClick();
+                  }}
+                >
+                  <ShareReportIcon />
+                  <span>Share report</span>
+                </button>
+              )}
               {onReferFriend && (
                 <button
                   className="report-sidebar__btn"
                   type="button"
                   onClick={() => {
-                    setDrawerOpen(false);
+                    closeDrawer();
                     onReferFriend();
                   }}
                 >
                   <ReferFriendIcon />
-                  <span>Refer a Friend</span>
+                  <span>Refer a friend</span>
                 </button>
               )}
             </div>
 
-            <p className="report-chapter-panel__label">Chapters</p>
-
-            <nav aria-label="Report sections" className="report-chapter-panel__nav">
-              {sections.map((section) => {
+            <nav
+              aria-label="Report sections"
+              className="report-chapter-panel__nav"
+              data-lenis-prevent
+            >
+              {sections.map((section, idx) => {
                 const isActive = activeSectionId === section.id;
                 const isSubheading = section.navType === "subheading";
+                // Cap stagger delay so the last items don't lag noticeably on
+                // a long chapter list. 8 × 24ms = 192ms total stagger window.
+                const delayIdx = Math.min(idx, 8);
                 return (
                   <a
                     key={section.id}
@@ -254,18 +319,20 @@ const ReportMobileNav: FC<Props> = ({
                     title={section.displayTitle}
                     className={[
                       "report-mobile-nav__link",
+                      "report-chapter-panel__item",
                       isActive && "is-active",
                       isSubheading && "is-subheading",
                     ]
                       .filter(Boolean)
                       .join(" ")}
+                    style={{ animationDelay: `${delayIdx * 24}ms` }}
                     onClick={() => {
                       trackSectionNavigated({
                         section_id: section.id,
                         source: "mobile_drawer",
                       });
                       onSectionClick?.(section.id);
-                      setDrawerOpen(false);
+                      closeDrawer();
                     }}
                   >
                     <span className="report-mobile-nav__label">{section.navTitle}</span>

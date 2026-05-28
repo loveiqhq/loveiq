@@ -37,7 +37,7 @@ const ALLOWED_EVENTS = [
   "report_engagement_5min",
   "report_engagement_10min",
   // Report-page intent + dismiss events (Phase B.1)
-  "report_summary_jumped",
+  "report_chapter_menu_opened",
   "paywall_dismissed",
   "scroll_paywall_dismissed",
   "lock_icon_clicked",
@@ -71,7 +71,7 @@ function entityTypeFor(event: AllowedEvent): string {
     case "report_engagement_1min":
     case "report_engagement_5min":
     case "report_engagement_10min":
-    case "report_summary_jumped":
+    case "report_chapter_menu_opened":
     case "report_share_opened":
     case "refer_friend_opened":
     case "chapter_feedback_submitted":
@@ -140,6 +140,19 @@ export async function POST(request: Request) {
   }
 
   const { event_type, submission_id, metadata, duration_ms } = parsed.data;
+
+  // R-18: per-submission cap. The IP-level limit alone lets one IP spam
+  // events for a SINGLE known submission_id at 60/min. Add a tighter
+  // bucket keyed by (ip, submission_id) at 20/min — enough headroom for
+  // legit per-page activity but stops single-target floods.
+  const perSubmissionLimit = await checkRateLimit(`${ip}:${submission_id}`, {
+    bucket: "analytics-event-per-submission",
+    limit: 20,
+    windowMs: 60_000,
+  });
+  if (!perSubmissionLimit.allowed) {
+    return NextResponse.json({ error: "Rate limited." }, { status: 429 });
+  }
   void parsed.data._csrf;
 
   // FK guard: ensure the submission exists. analytics_event has a real FK to

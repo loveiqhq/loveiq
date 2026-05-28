@@ -978,7 +978,9 @@ input.autofill-dark:-internal-autofill-previewed {
   padding-inline: clamp(0.6rem, 3vw, 2rem);
 }
 
-.report-summary-banner {
+/* ── Chapter pill (mobile floating trigger) ── */
+
+.report-chapter-pill {
   position: fixed;
   /* sit just below the pill topbar: safe-area + 8px offset + ~56px topbar + 8px gap */
   top: calc(env(safe-area-inset-top, 0px) + 72px);
@@ -988,43 +990,108 @@ input.autofill-dark:-internal-autofill-previewed {
   justify-content: center;
   z-index: 39;
   pointer-events: none;
-  will-change: transform;
-  transition: transform 420ms cubic-bezier(0.22, 1, 0.36, 1);
+  padding-inline: 16px;
+  will-change: transform, opacity;
+  transition:
+    transform 420ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 220ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.report-summary-banner--hidden {
+.report-chapter-pill--hidden {
   transform: translate3d(0, calc(-100% - 80px), 0);
+  opacity: 0;
 }
 
-.report-summary-banner__btn {
+.report-chapter-pill--drawer-open {
+  /* Floating pill is hidden under the drawer pill — keep the same DOM, just
+   * fade it out so we don't render two pills at the same coordinates. */
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Block clicks on the button itself when the pill is hidden or the drawer
+ * is open. `pointer-events` does NOT inherit, so we have to scope it to the
+ * button — setting it on the container alone leaves the button clickable
+ * even when it's offscreen / fully transparent. */
+.report-chapter-pill--hidden .report-chapter-pill__btn,
+.report-chapter-pill--drawer-open .report-chapter-pill__btn {
+  pointer-events: none;
+}
+
+.report-chapter-pill__btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 13px 17px;
+  justify-content: space-between;
+  gap: 8px;
+  width: min(100%, 291px);
+  padding: 17px 17px;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(167, 139, 250, 0.57);
   border-radius: 12px;
   font-family: var(--font-sans);
   font-size: 0.875rem;
   font-weight: 500;
-  line-height: 1.43;
+  line-height: 20px;
   cursor: pointer;
-  white-space: nowrap;
-  text-decoration: none;
   pointer-events: auto;
-  transition: background 0.15s ease;
+  text-align: center;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    transform 180ms ease;
 }
 
-.report-summary-banner__btn:hover {
+.report-chapter-pill__btn:hover {
   background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(167, 139, 250, 0.78);
 }
 
-.report-summary-banner__label-primary {
-  color: #a78bfa;
+.report-chapter-pill__btn:focus {
+  outline: none;
 }
 
-.report-summary-banner__label-secondary {
+.report-chapter-pill__btn:focus-visible {
+  outline: 2px solid rgba(167, 139, 250, 0.8);
+  outline-offset: 2px;
+}
+
+.report-chapter-pill__btn:active {
+  transform: scale(0.99);
+}
+
+.report-chapter-pill__label {
+  flex: 1;
+  min-width: 0;
   color: #d1d5db;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.report-chapter-pill__chapter {
+  color: #a78bfa;
+  margin-left: 0.25em;
+}
+
+.report-chapter-pill__chevron {
+  display: inline-grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: #d1d5db;
+  transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.report-chapter-pill__chevron svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.report-chapter-pill__chevron--up {
+  transform: rotate(180deg);
 }
 
 .report-status-screen {
@@ -2662,7 +2729,11 @@ input.autofill-dark:-internal-autofill-previewed {
   .report-mobile-nav__link,
   .report-fb__thumb,
   .report-mobile-topbar,
+  .report-chapter-pill,
+  .report-chapter-pill__btn,
+  .report-chapter-pill__chevron,
   .report-chapter-panel,
+  .report-chapter-panel__item,
   .report-chapter-backdrop,
   .report-pricing-modal__backdrop,
   .report-pricing-modal__dialog,
@@ -4463,44 +4534,6 @@ input.autofill-dark:-internal-autofill-previewed {
   white-space: nowrap;
 }
 
-.report-mobile-topbar__menu-btn {
-  display: grid;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  padding: 0;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 9999px;
-  background: rgba(255, 255, 255, 0.05);
-  color: #fff;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition:
-    background-color 180ms ease,
-    border-color 180ms ease,
-    transform 180ms ease;
-}
-
-.report-mobile-topbar__menu-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.18);
-  transform: translateY(-1px);
-}
-
-.report-mobile-topbar__menu-btn:focus {
-  outline: none;
-}
-
-.report-mobile-topbar__menu-btn:focus-visible {
-  outline: 2px solid rgba(255, 255, 255, 0.35);
-  outline-offset: 2px;
-}
-
-.report-mobile-topbar__menu-btn svg {
-  width: 20px;
-  height: 20px;
-}
-
 /* ── Chapter drawer ── */
 
 .report-chapter-drawer-root {
@@ -4512,13 +4545,24 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-chapter-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(11, 6, 19, 0.72);
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
-  animation: backdrop-fade-in 320ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  background: rgba(11, 6, 19, 0.78);
+  opacity: 0;
+  animation: report-backdrop-fade-in 240ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
-@keyframes backdrop-fade-in {
+.report-chapter-backdrop.is-open {
+  /* Backdrop blur only applies when the drawer is open — guards against the
+   * iOS Safari hit-test issue where -webkit-backdrop-filter on a hidden
+   * compositing layer steals touch events from elements below it. */
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.report-chapter-backdrop.is-closing {
+  animation: report-backdrop-fade-out 200ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes report-backdrop-fade-in {
   from {
     opacity: 0;
   }
@@ -4527,120 +4571,100 @@ input.autofill-dark:-internal-autofill-previewed {
   }
 }
 
-.report-chapter-panel {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  border: 0;
-  border-radius: 0;
-  background: #0f0a16;
-  animation: drawer-slide-in 420ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
-  padding-top: env(safe-area-inset-top, 0);
-  will-change: transform;
-}
-
-@keyframes drawer-slide-in {
+@keyframes report-backdrop-fade-out {
   from {
-    transform: translateX(100%);
+    opacity: 1;
   }
   to {
-    transform: translateX(0);
+    opacity: 0;
   }
 }
 
-.report-chapter-panel__header {
+.report-chapter-panel {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 72px);
+  left: 50%;
+  transform: translate3d(-50%, 0, 0);
+  width: min(calc(100% - 32px), 323px);
+  max-height: calc(100vh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 88px);
+  max-height: calc(
+    100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 88px
+  );
   display: flex;
+  flex-direction: column;
+  padding: 0 16px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
+  background: #160c22;
+  box-shadow:
+    0 4px 2px rgba(0, 0, 0, 0.25),
+    0 30px 90px rgba(0, 0, 0, 0.55);
+  opacity: 0;
+  transform-origin: top center;
+  animation: report-panel-expand 320ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity;
+}
+
+@keyframes report-panel-expand {
+  from {
+    opacity: 0;
+    transform: translate3d(-50%, -8px, 0) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(-50%, 0, 0) scale(1);
+  }
+}
+
+.report-chapter-panel--closing {
+  animation: report-panel-collapse 220ms cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+@keyframes report-panel-collapse {
+  from {
+    opacity: 1;
+    transform: translate3d(-50%, 0, 0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(-50%, -6px, 0) scale(0.99);
+  }
+}
+
+.report-chapter-panel__pill {
   flex-shrink: 0;
-  align-items: center;
-  justify-content: space-between;
-  padding: 20px 16px 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  padding-top: 16px;
+  padding-bottom: 8px;
 }
 
-.report-chapter-panel__brand {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-}
-
-.report-chapter-panel__logo {
-  width: 36px;
-  height: 32px;
-  flex-shrink: 0;
-}
-
-.report-chapter-panel__brand-text {
-  color: #fff;
-  font-family: var(--font-serif);
-  font-weight: 700;
-  font-size: 24px;
-  line-height: 32px;
-  letter-spacing: -0.6px;
-  white-space: nowrap;
-}
-
-.report-chapter-panel__close {
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--report-copy);
-  cursor: pointer;
-  transition: background-color 180ms ease;
-}
-
-.report-chapter-panel__close:hover {
-  background: rgba(255, 255, 255, 0.09);
-}
-
-.report-chapter-panel__close svg {
-  width: 14px;
-  height: 14px;
+.report-chapter-panel__pill .report-chapter-pill__btn {
+  width: 100%;
 }
 
 .report-chapter-panel__actions {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
   flex-shrink: 0;
-  padding: 16px 20px 0;
+  padding: 10px 6px 0;
 }
 
 .report-chapter-panel__actions .report-sidebar__btn {
   width: 100%;
-}
-
-.report-chapter-panel__summary-btn-wrap {
-  padding: 0 20px 8px;
-  flex-shrink: 0;
-}
-
-.report-chapter-panel__summary-btn-wrap .report-sidebar__btn {
-  width: 100%;
-}
-
-.report-chapter-panel__label {
-  margin: 0;
-  padding: 24px 20px 16px;
-  flex-shrink: 0;
-  color: #d1d5db;
-  font-family: var(--font-sans);
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: 0.6px;
-  text-transform: uppercase;
+  height: auto;
+  padding: 13px 17px;
+  box-shadow:
+    0 10px 15px -3px rgba(0, 0, 0, 0.2),
+    0 4px 6px -4px rgba(0, 0, 0, 0.2);
 }
 
 .report-chapter-panel__nav {
   flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 0 12px max(2rem, env(safe-area-inset-bottom));
+  gap: 4px;
+  padding: 18px 6px 4px;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
@@ -4655,6 +4679,22 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-chapter-panel__nav::-webkit-scrollbar-thumb {
   border-radius: 999px;
   background: rgba(192, 132, 252, 0.25);
+}
+
+.report-chapter-panel__item {
+  opacity: 0;
+  animation: report-chapter-item-fade-up 260ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes report-chapter-item-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* ── Desktop sidebar (xl+) ── */
@@ -4709,13 +4749,11 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 .report-mobile-topbar__love,
-.report-chapter-panel__love,
 .report-sidebar__love {
   color: #fff;
 }
 
 .report-mobile-topbar__iq,
-.report-chapter-panel__iq,
 .report-sidebar__iq {
   background: linear-gradient(105deg, #d05976 20.51%, #c167cf 48.14%, #8887f6 79.16%);
   -webkit-background-clip: text;
@@ -6986,13 +7024,9 @@ input.autofill-dark:-internal-autofill-previewed {
     padding-top: 2rem;
   }
 
-  /* Desktop: banner fixed near viewport top, offset right of sidebar */
-  .report-summary-banner {
-    top: 1.5rem;
-    left: 288px; /* approximate sidebar width — centers button in content column */
-  }
-
-  /* Desktop: banner is ~24px+46px = ~70px from top; 5rem (80px) clears it with buffer */
+  /* The mobile chapter pill is xl:hidden, so no desktop override is needed
+   * for it. Keep the section scroll-margin so anchored jumps clear the
+   * sticky desktop sidebar header area. */
   .report-section {
     scroll-margin-top: 5rem;
   }
@@ -11114,5 +11148,90 @@ input.autofill-dark:-internal-autofill-previewed {
 @media (max-width: 640px) {
   .rpm-orb {
     display: none;
+  }
+}
+
+/* Archetype Breakdown List section (features/report/ui/sections/ArchetypeBreakdownListSection.tsx)
+   In-view-driven cascade. Section root carries data-in-view="true" once
+   the rows list crosses the IntersectionObserver threshold; child rows
+   animate via per-row --stagger-index, and progress bars/glow dots
+   interpolate from 0 → --fill-fraction (0..1). Bar uses GPU-accelerated
+   transform: scaleX. Dot uses `left:` (not translateX) so the position
+   works on both the fixed 160px desktop track and the flex-grown mobile
+   track — without needing a hardcoded width var. */
+
+.archetype-breakdown__row {
+  display: grid;
+  grid-template-columns: 24px 24px minmax(0, 1fr) 38.94px 28px;
+  grid-template-rows: auto auto;
+  grid-template-areas:
+    "rank icon nametag nametag nametag"
+    "rank icon bar    pct     pill";
+  column-gap: 12px;
+  row-gap: 12px;
+  align-items: center;
+  opacity: 0;
+  transform: translateY(8px);
+  transition:
+    opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.6s cubic-bezier(0.16, 1, 0.3, 1),
+    background-color 0.2s ease;
+  transition-delay: calc(var(--stagger-index, 0) * 60ms);
+}
+
+/* Desktop: collapse to a single row with the original column widths.
+   `grid-template-areas` swaps to a single horizontal layout so the same
+   children land in the right slots without re-rendering. */
+@media (min-width: 1024px) {
+  .archetype-breakdown__row {
+    grid-template-columns: 24px 24px minmax(0, 1fr) 160px 48px 130px;
+    grid-template-rows: auto;
+    grid-template-areas: "rank icon nametag bar pct pill";
+    column-gap: 16px;
+    row-gap: 0;
+  }
+}
+
+.archetype-breakdown[data-in-view="true"] .archetype-breakdown__row {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.archetype-breakdown__row-bar {
+  transform-origin: left center;
+  transform: scaleX(0);
+  transition: transform 1.5s cubic-bezier(0.25, 1, 0.5, 1);
+  transition-delay: calc(var(--stagger-index, 0) * 60ms + 200ms);
+}
+.archetype-breakdown[data-in-view="true"] .archetype-breakdown__row-bar {
+  transform: scaleX(var(--fill-fraction, 0));
+}
+
+.archetype-breakdown__row-dot {
+  /* `left:` is responsive to the parent's actual width — works on both
+     the 160px desktop track and the flex-grown mobile track. The 8x8 dot
+     causing a 1.5s layout reflow is negligible cost vs the responsiveness
+     gain. -4px margin-left centers the 8px dot on its anchor position. */
+  left: 0;
+  opacity: 0;
+  transition:
+    left 1.5s cubic-bezier(0.25, 1, 0.5, 1),
+    opacity 0.4s ease;
+  transition-delay: calc(var(--stagger-index, 0) * 60ms + 200ms);
+}
+.archetype-breakdown[data-in-view="true"] .archetype-breakdown__row-dot {
+  left: calc(var(--fill-fraction, 0) * 100%);
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .archetype-breakdown__row,
+  .archetype-breakdown__row-bar,
+  .archetype-breakdown__row-dot,
+  .archetype-breakdown__cta {
+    transition: none !important;
+  }
+  .archetype-breakdown__cta:hover {
+    transform: none !important;
   }
 }

@@ -33,7 +33,7 @@ const PERSISTED_EVENTS = new Set([
   "report_engagement_5min",
   "report_engagement_10min",
   // Report-page intent + dismiss events (Phase B.1)
-  "report_summary_jumped",
+  "report_chapter_menu_opened",
   "paywall_dismissed",
   "scroll_paywall_dismissed",
   "lock_icon_clicked",
@@ -236,7 +236,11 @@ export const trackPaywallView = (items: PaywallPlanItem[]) => {
  * trigger, 24h ladder auto-open) MUST NOT call trackPaywallInitiated — that's
  * the founder's "forced" vs "initiated" distinction.
  */
-export type PaywallInitiatedSource = "lock_click" | "archetype_unlock" | "offer_link";
+export type PaywallInitiatedSource =
+  | "lock_click"
+  | "archetype_unlock"
+  | "offer_link"
+  | "archetype_breakdown_footer";
 
 export interface PaywallInitiatedParams {
   source: PaywallInitiatedSource;
@@ -452,16 +456,16 @@ export const trackGoogleAdsPurchaseConversion = (params: ReportPurchaseParams) =
 /*  Phase B.1 — Report-page funnel events                       */
 /* ============================================================ */
 
-export const trackReportSummaryJumped = (params: {
+export const trackReportChapterMenuOpened = (params: {
   archetype?: string | null;
-  source?: "banner" | "nav" | string;
+  active_section_id?: string | null;
 }) => {
   const payload = {
-    source: params.source ?? "banner",
+    ...(params.active_section_id ? { active_section_id: params.active_section_id } : {}),
     ...(params.archetype ? { archetype: params.archetype } : {}),
   };
-  track("report_summary_jumped", payload);
-  persistAnalyticsEvent("report_summary_jumped", payload);
+  track("report_chapter_menu_opened", payload);
+  persistAnalyticsEvent("report_chapter_menu_opened", payload);
 };
 
 export type PaywallDismissSource = "backdrop" | "close_button" | "escape" | "browser_back";

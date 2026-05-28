@@ -48,7 +48,6 @@ import ImportanceOfSexualitySection from "./sections/ImportanceOfSexualitySectio
 import PracticeTendenciesSection from "./sections/PracticeTendenciesSection";
 import SexualStageSection from "./sections/SexualStageSection";
 import WelcomeSection from "./sections/WelcomeSection";
-import ReportSummaryBanner from "./ReportSummaryBanner";
 import { summaryArchetypeContent } from "@/data/report-summary";
 import { normalizeReportHtml } from "./reportContent";
 import {
@@ -66,6 +65,7 @@ import {
   trackLockIconClicked,
   trackPaywallInitiated,
   trackReferFriendOpened,
+  trackReportChapterMenuOpened,
   trackReportShareOpened,
   trackReportViewed,
 } from "@features/analytics/client";
@@ -310,6 +310,7 @@ interface ReportExperienceProps {
   onOpenShareModal: () => void;
   onOpenPricingModal: (archetype?: string | null) => void;
   onUnlockArchetype: (archetypeName: string) => void;
+  onPurchaseFullReport: () => void;
   ownerFirstName: string | null;
   ownerToken: string | null;
   percentages: Record<string, number>;
@@ -359,6 +360,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   onOpenShareModal,
   onOpenPricingModal,
   onUnlockArchetype,
+  onPurchaseFullReport,
   ownerFirstName,
   ownerToken,
   percentages,
@@ -534,6 +536,12 @@ const ReportExperience: FC<ReportExperienceProps> = ({
       >
         <ReportMobileNav
           activeSectionId={activeSectionId}
+          onDrawerOpened={() => {
+            trackReportChapterMenuOpened({
+              archetype: viewArchetype || null,
+              active_section_id: activeSectionId,
+            });
+          }}
           onReferFriend={() => {
             trackReferFriendOpened({ source: "drawer" });
             setShowInvite(true);
@@ -548,10 +556,6 @@ const ReportExperience: FC<ReportExperienceProps> = ({
               : undefined
           }
           sections={resolvedSections}
-        />
-        <ReportSummaryBanner
-          onSummaryClick={() => handleSectionClick("summary")}
-          archetype={viewArchetype || null}
         />
         <div
           className={[
@@ -678,11 +682,12 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                       <ArchetypeProbabilitySection
                         generalHtml={generalHtml}
                         onUnlock={onUnlockArchetype}
+                        onPurchaseFullReport={onPurchaseFullReport}
                         percentages={percentages}
                         primaryArchetype={primaryArchetype}
                         ranking={ranking}
                         unlockedArchetypes={unlockedArchetypes}
-                        viewArchetype={viewArchetype}
+                        accessPlan={accessPlan}
                       />
                     </ReportSection>
                   );
@@ -1112,6 +1117,23 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     router.push(buildReportCheckoutHref({ archetype: archetypeForCheckout, plan, token }));
   };
 
+  // Footer "Unlock the Full Report" CTA on the archetype breakdown section —
+  // skips the pricing modal and routes straight to Stripe checkout for the
+  // full_report plan, attributed to the user's primary archetype. Kept as a
+  // plain function (not useCallback) because beginCheckout is also a plain
+  // function ref that changes every render — wrapping this in useCallback
+  // with beginCheckout in deps would defeat memoization. The button fires
+  // once on click; child re-renders triggered by a new callback identity are
+  // cheap (no memoized children below this in the tree).
+  const handlePurchaseFullReport = () => {
+    trackPaywallInitiated({
+      source: "archetype_breakdown_footer",
+      archetype: primaryArchetype,
+      plan_needed: "full_report",
+    });
+    beginCheckout("full_report", primaryArchetype);
+  };
+
   const closePricingModal = useCallback(() => {
     setIsPricingModalOpen(false);
     setPricingTargetArchetype(null);
@@ -1250,6 +1272,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
         onOpenShareModal={openShareModal}
         onOpenPricingModal={openPricingModal}
         onUnlockArchetype={handleUnlockArchetype}
+        onPurchaseFullReport={handlePurchaseFullReport}
         ownerFirstName={ownerFirstName}
         ownerToken={ownerToken}
         percentages={percentages}
