@@ -10,10 +10,10 @@ interface GuidancePanelProps {
 const BookIcon: FC = () => (
   <svg
     aria-hidden
-    className="h-4 w-4 shrink-0 text-white/90"
+    className="h-4 w-4 shrink-0"
     viewBox="0 0 24 24"
     fill="none"
-    stroke="currentColor"
+    stroke="#A78BFA"
     strokeWidth="2"
     strokeLinecap="round"
     strokeLinejoin="round"
