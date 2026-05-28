@@ -47,34 +47,28 @@ describe("ScaleQuestion", () => {
     }
   });
 
-  it("shows 'Strongly Agree' label when value is 7 (agree scale)", () => {
-    render(<ScaleQuestion question={QUESTION} value={7} onChange={vi.fn()} />);
-    expect(screen.getByText("Strongly Agree")).toBeInTheDocument();
+  it("shows hover-state title as the selected-value label when present", () => {
+    const q = {
+      ...QUESTION,
+      hoverStates: {
+        1: "Not at all: lowest possible intensity",
+        7: "Completely: peak intensity",
+      } as Record<number, string>,
+    };
+    render(<ScaleQuestion question={q} value={7} onChange={vi.fn()} />);
+    expect(screen.getByText("Completely")).toBeInTheDocument();
+    cleanup();
+    render(<ScaleQuestion question={q} value={1} onChange={vi.fn()} />);
+    expect(screen.getByText("Not at all")).toBeInTheDocument();
   });
 
-  it("shows 'Strongly Disagree' label when value is 1 (agree scale)", () => {
+  it("renders no value label when hover state is absent and value is selected", () => {
+    // Without hoverStates the component intentionally shows no value label —
+    // the previous JS fallbacks ("Strongly Disagree"/"Strongly Agree") were
+    // removed because they aren't in the canonical xlsx source.
     render(<ScaleQuestion question={QUESTION} value={1} onChange={vi.fn()} />);
-    expect(screen.getByText("Strongly Disagree")).toBeInTheDocument();
-  });
-
-  it("uses intensity labels when scaleLabels.low contains 'not at all'", () => {
-    const intensityQuestion = {
-      ...QUESTION,
-      scaleLabels: { low: "Not at all", high: "Extremely" },
-    };
-    render(<ScaleQuestion question={intensityQuestion} value={7} onChange={vi.fn()} />);
-    // "Extremely" appears as both value label and scale end label
-    expect(screen.getAllByText("Extremely").length).toBeGreaterThanOrEqual(1);
-  });
-
-  it("shows 'Not at all' intensity label for value 1 when low is 'Not at all'", () => {
-    const intensityQuestion = {
-      ...QUESTION,
-      scaleLabels: { low: "Not at all", high: "Extremely" },
-    };
-    render(<ScaleQuestion question={intensityQuestion} value={1} onChange={vi.fn()} />);
-    // "Not at all" appears as both value label and scale end label
-    expect(screen.getAllByText("Not at all").length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText("Strongly Agree")).not.toBeInTheDocument();
+    expect(screen.queryByText("Strongly Disagree")).not.toBeInTheDocument();
   });
 
   it("shows no value label when value is null", () => {

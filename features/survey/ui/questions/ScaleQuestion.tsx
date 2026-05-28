@@ -9,16 +9,6 @@ interface ScaleQuestionProps {
   onChange: (value: number) => void;
 }
 
-const FALLBACK_LABELS: Record<number, string> = {
-  1: "Strongly Disagree",
-  2: "Disagree",
-  3: "Somewhat Disagree",
-  4: "Neutral / Mixed",
-  5: "Somewhat Agree",
-  6: "Agree",
-  7: "Strongly Agree",
-};
-
 function splitHoverState(raw: string): { title: string; description: string | null } {
   const colonIndex = raw.indexOf(":");
   if (colonIndex === -1) return { title: raw, description: null };
@@ -31,7 +21,7 @@ function getValueLabel(value: number, question: SurveyQuestion): string {
   if (question.hoverStates && question.hoverStates[value]) {
     return splitHoverState(question.hoverStates[value]).title;
   }
-  return FALLBACK_LABELS[value] || "";
+  return "";
 }
 
 function getValueExplanation(value: number, question: SurveyQuestion): string | null {
@@ -56,12 +46,11 @@ const ScaleQuestion: FC<ScaleQuestionProps> = ({ question, value, onChange }) =>
   const displayValue = value;
   const selectedExplanation = displayValue ? getValueExplanation(displayValue, question) : null;
 
-  // Subtitle from formatGuidance or construct from scale labels
-  const subtitle =
-    question.formatGuidance ||
-    (question.scaleLabels
-      ? `Rate from 1 (${question.scaleLabels.low.toLowerCase()}) to 7 (${question.scaleLabels.high.toLowerCase()})`
-      : "Rate on a scale of 1 to 7");
+  // Subtitle is rendered ONLY when the canonical source-of-truth (xlsx
+  // `Answer format guidance` column → `question.formatGuidance`) supplies
+  // one. The previous JS fallback ("Rate from 1 (...) to 7 (...)") rendered
+  // copy that did not exist in the canonical data, so it was removed.
+  const subtitle = question.formatGuidance ?? "";
 
   const selectedLabel = displayValue !== null ? getValueLabel(displayValue, question) : "";
 
@@ -72,7 +61,7 @@ const ScaleQuestion: FC<ScaleQuestionProps> = ({ question, value, onChange }) =>
         <h2 className="font-serif text-[31px] font-medium leading-[1.2] text-white break-words sm:text-[39px]">
           {question.question}
         </h2>
-        <p className="font-sans text-[15px] font-medium text-[#a78bfa]">{subtitle}</p>
+        {subtitle && <p className="font-sans text-[15px] font-medium text-[#a78bfa]">{subtitle}</p>}
       </div>
 
       {/* Dot scale */}
@@ -170,15 +159,19 @@ const ScaleQuestion: FC<ScaleQuestionProps> = ({ question, value, onChange }) =>
           })}
         </div>
 
-        {/* Scale labels */}
-        <div className="flex justify-between gap-4 px-1">
-          <span className="max-w-[150px] font-sans text-[15px] font-bold leading-[20px] capitalize text-white sm:max-w-[180px] sm:text-[16px] sm:leading-[21.138px]">
-            {question.scaleLabels?.low || "Strongly Disagree"}
-          </span>
-          <span className="max-w-[150px] text-right font-sans text-[15px] font-bold leading-[20px] capitalize text-[#a78bfa] sm:max-w-[180px] sm:text-[16px] sm:leading-[21.138px]">
-            {question.scaleLabels?.high || "Strongly Agree"}
-          </span>
-        </div>
+        {/* Scale endpoint labels — only rendered when the canonical data
+            (xlsx `1-7 Explanations` levels 1 and 7) supplies them. No
+            hardcoded fallback so we never show copy that isn't in the data. */}
+        {(question.scaleLabels?.low || question.scaleLabels?.high) && (
+          <div className="flex justify-between gap-4 px-1">
+            <span className="max-w-[150px] font-sans text-[15px] font-bold leading-[20px] capitalize text-white sm:max-w-[180px] sm:text-[16px] sm:leading-[21.138px]">
+              {question.scaleLabels?.low ?? ""}
+            </span>
+            <span className="max-w-[150px] text-right font-sans text-[15px] font-bold leading-[20px] capitalize text-[#a78bfa] sm:max-w-[180px] sm:text-[16px] sm:leading-[21.138px]">
+              {question.scaleLabels?.high ?? ""}
+            </span>
+          </div>
+        )}
 
         {/* Selected label + explanation — only rendered after the user picks a value,
              so the dots sit flush under the title before any click.

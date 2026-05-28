@@ -64,10 +64,22 @@ describe("MultipleChoiceQuestion", () => {
     expect(screen.getByTestId("choice-Other")).toBeInTheDocument();
   });
 
-  it("renders question text and subtitle", () => {
+  it("renders question text and renders formatGuidance subtitle when supplied", () => {
     render(<MultipleChoiceQuestion question={baseQuestion} value={null} onChange={vi.fn()} />);
     expect(screen.getByText("Pick your favorites")).toBeInTheDocument();
-    expect(screen.getByText(/select all that apply/i)).toBeInTheDocument();
+    // The previous "Select all that apply" JS fallback was removed; subtitle
+    // now renders only from question.formatGuidance.
+    expect(screen.queryByText(/select all that apply/i)).not.toBeInTheDocument();
+
+    cleanup();
+    render(
+      <MultipleChoiceQuestion
+        question={{ ...baseQuestion, formatGuidance: "Select all that apply." }}
+        value={null}
+        onChange={vi.fn()}
+      />
+    );
+    expect(screen.getByText("Select all that apply.")).toBeInTheDocument();
   });
 
   it("does not render descriptions for unselected explained options", () => {

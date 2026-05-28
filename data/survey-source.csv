@@ -246,7 +246,7 @@ QID,CID,Category & chapter,Question,Answer format,Answer format guidance,Info an
 4 = Mixed / depends
 5 = Slightly true
 6 = Mostly true
-7 = Completely true","1 = Not true at all: A partnerâs increased emotional dependence does not usually reduce your attraction or desire.
+7 = Completely true","1 = Not true at all: A partner’s increased emotional dependence does not usually reduce your attraction or desire.
 2 = Mostly not true: Emotional dependence may feel challenging sometimes, but it does not usually cool your erotic interest.
 3 = Slightly not true: Too much dependence can affect attraction occasionally, though it is not a strong pattern for you.
 4 = Mixed / depends: In some situations, too much dependence can cool desire, but not consistently.
@@ -286,19 +286,19 @@ QID,CID,Category & chapter,Question,Answer format,Answer format guidance,Info an
 5 = Slightly true: You can often communicate what turns you on, even if some inhibition or self-consciousness remains.
 6 = Mostly true: You are usually able to name, signal, or communicate what turns you on with relatively little hesitation.
 7 = Completely true: You can usually name, signal, or communicate what turns you on with relative ease and low shame.","This shows how easily you can name and voice what turns you on, which changes the communication style we recommend."
-10004,10,Communication Style,"I'm comfortable saying what I don't want — slowing things down, stopping, or naming a limit.",1-7 scale,,"Think about in-the-moment situations. How easily can you slow, stop, redirect, or say no when something feels off?","1 = Not true at all
-2 = Mostly not true
-3 = Slightly not true
+10004,10,Communication Style,"I'm comfortable saying what I don't want — slowing things down, stopping, or naming a limit.",1-7 scale,,"Think about in-the-moment situations. How easily can you slow, stop, redirect, or say no when something feels off?","1 = Not comfortable at all
+2 = Mostly not comfortable
+3 = Slightly not comfortable
 4 = Mixed / depends
-5 = Slightly true
-6 = Mostly true
-7 = Completely true","1 = Not comfortable at all: Expressing limits or saying no feels very difficult, especially in the moment.
-2 = Mostly not true: You may know your limits internally, but voicing them clearly often feels hard, risky, or guilt-provoking.
-3 = Slightly not true: You can sometimes name boundaries, though it still takes effort or comes with noticeable hesitation.
+5 = Slightly comfortable
+6 = Mostly comfortable
+7 = Completely comfortable","1 = Not comfortable at all: Expressing limits or saying no feels very difficult, especially in the moment.
+2 = Mostly not comfortable: You may know your limits internally, but voicing them clearly often feels hard, risky, or guilt-provoking.
+3 = Slightly not comfortable: You can sometimes name boundaries, though it still takes effort or comes with noticeable hesitation.
 4 = Mixed / depends: You can express limits in some situations, but not always clearly, easily, or consistently.
-5 = Slightly true: You can often communicate what you do not want, even if some discomfort or self-consciousness remains.
-6 = Mostly true: You are usually able to name limits and protect your boundaries with relatively little hesitation.
-7 = Completely true: You can usually express what you do not want clearly and protect your boundaries without major shutdown or guilt.","This shows how easily you can protect your boundaries in sexual moments, which helps us avoid advice that assumes over-accommodating is fine."
+5 = Slightly comfortable: You can often communicate what you do not want, even if some discomfort or self-consciousness remains.
+6 = Mostly comfortable: You are usually able to name limits and protect your boundaries with relatively little hesitation.
+7 = Completely comfortable: You can usually express what you do not want clearly and protect your boundaries without major shutdown or guilt.","This shows how easily you can protect your boundaries in sexual moments, which helps us avoid advice that assumes over-accommodating is fine."
 10005,10,Communication Style,"If the other person is quiet or hard to read during sex, I lose arousal.",1-7 scale,,"Does low feedback from them make you lose momentum, confidence, or interest in continuing?","1 = Not true at all
 2 = Mostly not true
 3 = Slightly not true
@@ -336,13 +336,13 @@ QID,CID,Category & chapter,Question,Answer format,Answer format guidance,Info an
 4 = Mixed / depends
 5 = Slightly true
 6 = Mostly true
-7 = Completely true","1 = Not true at all: My attention is usually much more on my own experience than the other personâs.
-2 = Mostly not true: My attention tends to stay more on my own experience than the other personâs.
-3 = Slightly not true: My attention is somewhat more on my own experience than the other personâs.
+7 = Completely true","1 = Not true at all: My attention is usually much more on my own experience than the other person’s.
+2 = Mostly not true: My attention tends to stay more on my own experience than the other person’s.
+3 = Slightly not true: My attention is somewhat more on my own experience than the other person’s.
 4 = Mixed / depends: My attention feels fairly balanced, or it depends on the context or who I'm with.
-5 = Slightly true: My attention tends to go somewhat more toward the other personâs experience than toward my own.
-6 = Mostly true: My attention usually goes more toward the other personâs experience than toward my own.
-7 = Completely true: My attention strongly and naturally goes more toward the other personâs experience than toward my own.","This helps us distinguish giving-focused, balanced, and receiving-or-guided dynamics in the way you naturally relate during sex."
+5 = Slightly true: My attention tends to go somewhat more toward the other person’s experience than toward my own.
+6 = Mostly true: My attention usually goes more toward the other person’s experience than toward my own.
+7 = Completely true: My attention strongly and naturally goes more toward the other person’s experience than toward my own.","This helps us distinguish giving-focused, balanced, and receiving-or-guided dynamics in the way you naturally relate during sex."
 11004,11,Partner-Related Needs,"Taking care of someone — being attentive, soothing, healing — turns me on.",1-7 scale,,Rate how much giving care fuels your desire.,"1 = Not true at all
 2 = Mostly not true
 3 = Slightly not true

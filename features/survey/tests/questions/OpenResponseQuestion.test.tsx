@@ -52,10 +52,13 @@ describe("OpenResponseQuestion", () => {
     expect(screen.getByText("5 / 500")).toBeInTheDocument();
   });
 
-  it("shows purple subtitle for email input type", () => {
+  it("renders no subtitle when formatGuidance is absent", () => {
+    // The previous "Please enter your email address" JS fallback was removed
+    // because the canonical xlsx source supplies the subtitle via the
+    // Answer-format-guidance column, not via JS defaults.
     const q = { ...baseQuestion, inputType: "email" } as SurveyQuestion;
     render(<OpenResponseQuestion question={q} value={null} onChange={vi.fn()} />);
-    expect(screen.getByText("Please enter your email address")).toBeInTheDocument();
+    expect(screen.queryByText("Please enter your email address")).not.toBeInTheDocument();
   });
 
   it("shows formatGuidance as subtitle when provided", () => {

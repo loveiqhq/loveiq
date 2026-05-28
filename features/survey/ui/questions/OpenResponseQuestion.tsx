@@ -72,10 +72,9 @@ const OpenResponseQuestion: FC<OpenResponseQuestionProps> = ({
     currentValue.trim().toLowerCase() !== confirmCurrent.trim().toLowerCase();
   const showConfirmError = (confirmTouched || forceValidation) && emailMismatch;
 
-  // Subtitle text from formatGuidance or fallback
-  const subtitle =
-    question.formatGuidance ||
-    (question.inputType === "email" ? "Please enter your email address" : null);
+  // Subtitle renders only when the canonical data (xlsx `Answer format
+  // guidance` column → `question.formatGuidance`) supplies one.
+  const subtitle = question.formatGuidance ?? null;
 
   return (
     <div className="flex flex-col gap-5">

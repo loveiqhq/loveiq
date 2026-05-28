@@ -20,8 +20,9 @@ const SingleChoiceQuestion: FC<SingleChoiceQuestionProps> = ({
   otherText,
   onOtherTextChange,
 }) => {
-  // Subtitle from formatGuidance or default
-  const subtitle = question.formatGuidance || "Select one option";
+  // Subtitle renders only when the canonical data (xlsx `Answer format
+  // guidance` column → `question.formatGuidance`) supplies one.
+  const subtitle = question.formatGuidance ?? "";
 
   return (
     <div className="flex flex-col gap-5">
@@ -30,7 +31,7 @@ const SingleChoiceQuestion: FC<SingleChoiceQuestionProps> = ({
         <h2 className="font-serif text-[31px] font-medium leading-[1.2] text-white break-words sm:text-[39px]">
           {question.question}
         </h2>
-        <p className="font-sans text-[15px] font-medium text-[#a78bfa]">{subtitle}</p>
+        {subtitle && <p className="font-sans text-[15px] font-medium text-[#a78bfa]">{subtitle}</p>}
       </div>
 
       {/* Options — single column */}
