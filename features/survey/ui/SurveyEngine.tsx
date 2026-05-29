@@ -17,6 +17,7 @@ import {
   trackSurveyProgress,
   trackSurveyComplete,
   trackSurveyPause,
+  setReportSubmissionContext,
 } from "@features/analytics/client";
 import { useSubmitSurvey } from "./hooks/useSubmitSurvey";
 import { useSurveyTracking } from "./hooks/useSurveyTracking";
@@ -48,8 +49,20 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
     retryPending,
     hasPendingCompletion,
     reportToken,
+    submissionId,
     status: submitStatus,
   } = useSubmitSurvey();
+
+  // PreReportWizard fires wizard_slide_advanced via persistAnalyticsEvent, which
+  // requires window.__loveiqReportSubmissionId to write durable rows. Set it as
+  // soon as the submission lands so the wizard's first slide-advance ping
+  // already has context. /report's own setReportSubmissionContext call will
+  // re-set the same value once the user lands there.
+  useEffect(() => {
+    if (submissionId != null) {
+      setReportSubmissionContext(submissionId);
+    }
+  }, [submissionId]);
   const utmTracker = useUtmCapture();
   const { savePartial } = usePartialSave(answers, currentIndex, startedAt, utmTracker);
 

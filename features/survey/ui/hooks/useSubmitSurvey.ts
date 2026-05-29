@@ -20,6 +20,11 @@ type SubmitStatus = "idle" | "submitting" | "success" | "error";
 export function useSubmitSurvey() {
   const [status, setStatus] = useState<SubmitStatus>("idle");
   const [reportToken, setReportTokenState] = useState<string | null>(null);
+  // Captured from the /api/survey response so SurveyEngine can pre-set the
+  // analytics submission context (window.__loveiqReportSubmissionId) BEFORE
+  // PreReportWizard mounts. Without this, wizard_slide_advanced events silently
+  // skip durable persistence — see persistAnalyticsEvent in features/analytics/client.ts.
+  const [submissionId, setSubmissionId] = useState<number | null>(null);
   const [pendingCompletion, setPendingCompletion] = useState<PendingSurveyCompletion | null>(() =>
     loadPendingCompletion()
   );
@@ -82,9 +87,17 @@ export function useSubmitSurvey() {
         if (res.ok) {
           setReportSessionId(payload.sessionId);
           try {
-            const json = (await res.json()) as { reportToken?: string };
+            const json = (await res.json()) as {
+              reportToken?: string;
+              submissionId?: number;
+            };
             if (json.reportToken) {
               setReportTokenState(json.reportToken);
+            }
+            // submissionId is required for wizard-slide analytics persistence;
+            // type-guard against legacy / unexpected response shapes.
+            if (typeof json.submissionId === "number" && json.submissionId > 0) {
+              setSubmissionId(json.submissionId);
             }
           } catch {
             /* token extraction is best-effort */
@@ -152,6 +165,7 @@ export function useSubmitSurvey() {
     clearPendingCompletion: () => syncPendingCompletion(null),
     hasPendingCompletion: !!pendingCompletion,
     reportToken,
+    submissionId,
     status,
   };
 }

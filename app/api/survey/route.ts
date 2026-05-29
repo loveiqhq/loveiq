@@ -19,9 +19,11 @@ import type { SurveyAnswers } from "@features/survey/server/types";
 import {
   computeSurveyScoring,
   ensureSubmissionScored,
+  isSurveyClosed,
   setSubmissionHotjarUserId,
   submitSurveyOnce,
 } from "@features/survey/server/server";
+import { isFeatureEnabled } from "@shared/flags/system-flags";
 
 let _resend: Resend | null = null;
 function getResend(): Resend | null {
@@ -146,6 +148,17 @@ export async function POST(request: Request) {
     );
   }
 
+  // Survey-closed gate (F-04). Cached 30s. Fails open on Supabase trouble.
+  if (await isSurveyClosed()) {
+    return NextResponse.json({ error: "The survey is currently paused." }, { status: 409 });
+  }
+
+  // Kill switch (F-12). Admin flips `survey_submissions=false` for incident
+  // containment without a redeploy.
+  if (!(await isFeatureEnabled("survey_submissions"))) {
+    return NextResponse.json({ error: "Service temporarily unavailable." }, { status: 503 });
+  }
+
   const parsed = surveySchema.safeParse(await request.json().catch(() => ({})));
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid input" }, { status: 400 });
@@ -165,16 +178,21 @@ export async function POST(request: Request) {
   const normalizedEmail = email.trim().toLowerCase();
   const normalizedFirstName = firstName.trim();
 
-  if (website) {
-    // Honeypot field was filled — almost certainly a bot. Fire-and-forget
-    // ops ping so abuse patterns become visible. The 60s dedup in
-    // notifySlack collapses bursts from the same script.
+  // R-09: stack two bot signals so a bot that scrubs the honeypot field
+  // (after one reconnaissance request) is still caught by the duration
+  // heuristic. A human cannot complete the 59-question survey in <10s.
+  const MIN_HUMAN_DURATION_MS = 10_000;
+  const failsHoneypot = Boolean(website);
+  const failsDuration = durationMs < MIN_HUMAN_DURATION_MS;
+
+  if (failsHoneypot || failsDuration) {
+    const reason = failsHoneypot ? "honeypot_field" : "too_fast";
     const ip = getClientIp(request);
     scheduleAfterResponse("survey-honeypot-slack", () =>
       notifySlack({
         channel: "ops",
         kind: "honeypot_triggered",
-        text: `:robot_face: Honeypot triggered on /api/survey — IP ${escapeSlack(ip)} — email ${escapeSlack(maskEmail(normalizedEmail))}`,
+        text: `:robot_face: Bot signal on /api/survey (${reason}) — IP ${escapeSlack(ip)} — email ${escapeSlack(maskEmail(normalizedEmail))} — duration ${durationMs}ms`,
         username: "ops_alerts",
       })
     );
@@ -482,6 +500,13 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         success: true,
+        // submissionId lets the client pre-set the analytics_event submission
+        // context (window.__loveiqReportSubmissionId) BEFORE PreReportWizard
+        // mounts. Without it, wizard_slide_advanced events skip durable
+        // persistence (silent — see persistAnalyticsEvent in features/analytics/client.ts).
+        // The id is an internal auto-increment int; access to /report/* is still
+        // gated by report_token, so exposing this int is not a security risk.
+        submissionId,
         ...(reportToken ? { reportToken } : {}),
         ...(scoringSummary
           ? {
