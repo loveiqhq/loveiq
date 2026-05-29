@@ -574,6 +574,24 @@ function longitudinalHeight(rowCount: number): number {
   return Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, bodyNeeded + BODY_OVERHEAD + BUFFER));
 }
 
+/**
+ * Build an SVG `points="x1,y1 x2,y2 ..."` string mapping values to a chart
+ * area. Y axis is inverted (SVG 0 = top) so higher values draw higher.
+ * `extraStart`/`extraEnd` close a polygon to baseline when set.
+ */
+function svgPoints(values: number[], peak: number, width: number, chartH: number): string {
+  if (values.length === 0 || peak <= 0) return "";
+  const step = values.length > 1 ? width / (values.length - 1) : 0;
+  const pts: string[] = [];
+  for (let i = 0; i < values.length; i += 1) {
+    const x = Math.round(i * step);
+    const v = values[i] ?? 0;
+    const y = Math.round(chartH - (v / peak) * chartH);
+    pts.push(`${x},${y}`);
+  }
+  return pts.join(" ");
+}
+
 function renderLongitudinal(p: LongitudinalPayload): {
   element: React.ReactElement;
   height: number;
@@ -582,36 +600,63 @@ function renderLongitudinal(p: LongitudinalPayload): {
   const series = Array.isArray(p.series) ? p.series : [];
   // Defensive: pair up labels with series of equal length. Mismatch = skip
   // that row rather than throw.
-  const rows: Array<{ label: string; values: number[] }> = [];
+  const allRows: Array<{ label: string; values: number[]; peak: number }> = [];
   for (let i = 0; i < labels.length; i += 1) {
     const lbl = labels[i];
     const ser = series[i];
     if (typeof lbl !== "string" || !Array.isArray(ser)) continue;
-    rows.push({ label: lbl, values: ser.map((v) => Math.max(0, Number(v) || 0)) });
+    const values = ser.map((v) => Math.max(0, Number(v) || 0));
+    const peak = values.reduce((a, b) => Math.max(a, b), 0);
+    allRows.push({ label: lbl, values, peak });
   }
+  // Hide rows where every day is zero — they previously rendered as ugly
+  // broken dashed lines. Keep them visible in the row-count header below
+  // so the viewer still knows the stage exists (Awaiting data).
+  const liveRows = allRows.filter((r) => r.peak > 0);
+  const emptyCount = allRows.length - liveRows.length;
   const title = LONG_TITLES[p.kind] ?? "Longitudinal trend";
-  if (rows.length === 0) {
-    return { element: chartShell(title, p.windowLabel ?? "", <div>No data</div>), height: HEIGHT };
+
+  if (liveRows.length === 0) {
+    return {
+      element: chartShell(
+        title,
+        p.windowLabel ?? "",
+        <div
+          style={{
+            display: "flex",
+            color: COLORS.textMuted,
+            fontSize: 18,
+            padding: 24,
+          }}
+        >
+          Awaiting data — no traffic on any tracked stage yet.
+        </div>
+      ),
+      height: HEIGHT,
+    };
   }
-  // Grow image height with row count so every row renders at the fixed
-  // TARGET_ROW_H. longitudinalHeight already builds in a BUFFER beyond the
-  // strict content sum so Satori's subpixel rounding can't clip the bottom row.
-  const height = longitudinalHeight(rows.length);
+
+  // Grow image height with the LIVE row count + reserve a row for the
+  // "Awaiting data" footnote when some stages are hidden.
+  const rowCount = liveRows.length + (emptyCount > 0 ? 1 : 0);
+  const height = longitudinalHeight(rowCount);
   const rowH = TARGET_ROW_H;
-  // Bar height stops 10px short of row height so each row reads as a clear
-  // band with breathing room.
-  const barH = Math.max(2, rowH - 10);
-  // Day-count drives bar width. Reserve 130px label + 70px peak readout. Body
-  // width = 800 - 56 (chart padding) - 130 - 70 = 544px.
-  const dayCount = rows[0]!.values.length || 1;
-  const barW = Math.max(2, Math.floor((544 - (dayCount - 1) * 2) / dayCount));
+  // Chart band height stops 14px short of the row so labels + sparkline don't
+  // visually collide with the rows above/below.
+  const chartH = Math.max(4, rowH - 14);
+  // Body width budget: 800 - 56 (chart padding) - 130 (label) - 80 (peak readout)
+  //                  = 534. Leave 10px gutter on each side of chart.
+  const chartW = 514;
   const element = chartShell(
     title,
     p.windowLabel ?? "",
     <div style={{ display: "flex", flexDirection: "column", gap: ROW_GAP }}>
-      {rows.map((row, rIdx) => {
-        const peak = row.values.reduce((a, b) => Math.max(a, b), 0);
+      {liveRows.map((row, rIdx) => {
         const color = rIdx % 2 === 0 ? COLORS.accentPurple : COLORS.accentOrange;
+        const linePts = svgPoints(row.values, row.peak, chartW, chartH);
+        // Build a closed polygon for the area fill: line points then bottom-right
+        // and bottom-left corners back to (0, chartH).
+        const areaPts = linePts ? `0,${chartH} ${linePts} ${chartW},${chartH}` : "";
         return (
           <div
             key={`${row.label}-${rIdx}`}
@@ -631,41 +676,55 @@ function renderLongitudinal(p: LongitudinalPayload): {
             <div
               style={{
                 display: "flex",
-                flex: 1,
-                alignItems: "flex-end",
+                width: chartW + 20,
+                paddingLeft: 10,
+                paddingRight: 10,
+                alignItems: "center",
                 height: rowH,
-                gap: 2,
               }}
             >
-              {row.values.map((v, dIdx) => {
-                const h = peak > 0 ? Math.max(1, Math.round((v / peak) * barH)) : 1;
-                return (
-                  <div
-                    key={dIdx}
-                    style={{
-                      width: barW,
-                      height: h,
-                      background: color,
-                      borderRadius: 1,
-                    }}
+              <svg width={chartW} height={chartH}>
+                {areaPts && <polygon points={areaPts} fill={color} fillOpacity="0.22" />}
+                {linePts && (
+                  <polyline
+                    points={linePts}
+                    fill="none"
+                    stroke={color}
+                    strokeWidth="2"
+                    strokeLinejoin="round"
+                    strokeLinecap="round"
                   />
-                );
-              })}
+                )}
+              </svg>
             </div>
             <div
               style={{
                 display: "flex",
-                width: 70,
+                width: 80,
                 fontSize: 13,
                 color: COLORS.text,
                 justifyContent: "flex-end",
               }}
             >
-              {`peak ${peak.toLocaleString()}`}
+              {`peak ${row.peak.toLocaleString()}`}
             </div>
           </div>
         );
       })}
+      {emptyCount > 0 && (
+        <div
+          style={{
+            display: "flex",
+            height: rowH,
+            alignItems: "center",
+            color: COLORS.textMuted,
+            fontSize: 12,
+            fontStyle: "italic",
+          }}
+        >
+          {`+ ${emptyCount} ${emptyCount === 1 ? "stage" : "stages"} awaiting first data`}
+        </div>
+      )}
     </div>,
     height
   );
