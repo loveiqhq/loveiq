@@ -25,7 +25,18 @@ import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import logger from "@shared/observability/logger";
 
-const ALLOWED_EVENTS = ["unique_visitor", "survey_engine_mount"] as const;
+// Two existing top-of-funnel signals + four pre-survey intro slide signals
+// (added 2026-05-29 for the longitudinal Slack digest). All six predate
+// survey_submission so analytics_event can't host them — see funnel_event
+// migrations for the table-level CHECK constraint.
+const ALLOWED_EVENTS = [
+  "unique_visitor",
+  "survey_engine_mount",
+  "intro_slide_1",
+  "intro_slide_2",
+  "intro_slide_3",
+  "intro_slide_4",
+] as const;
 
 const schema = z.object({
   event: z.enum(ALLOWED_EVENTS),

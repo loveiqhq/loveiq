@@ -47,7 +47,19 @@ const COLORS = {
   good: "#4ade80",
 };
 
-const VALID_KINDS = new Set(["funnel", "wizard", "sparklines", "engagement", "leaks"]);
+const VALID_KINDS = new Set([
+  "funnel",
+  "wizard",
+  "sparklines",
+  "engagement",
+  "leaks",
+  // Longitudinal phase-bucketed sparklines (added 2026-05-29 for strategy-lead
+  // chart-dominant Slack digest). Each renders N labeled rows × M-day bars.
+  "sparklines-intro",
+  "sparklines-survey",
+  "sparklines-wizard",
+  "sparklines-monetize",
+]);
 
 interface WizardPayload {
   kind: "wizard";
@@ -106,12 +118,32 @@ interface LeaksPayload {
   }>;
 }
 
+/**
+ * Generic longitudinal sparkline payload — parallel `labels[]` + `series[][]`.
+ * Each labels[i] pairs with series[i]: a per-day count array (typically 30
+ * entries). Compact array shape keeps the signed-URL payload under Slack's
+ * ~3000-char image_url cap even at 15 lines × 30 days (~survey chapters).
+ *
+ * Four kinds share this shape (intro, survey, wizard, monetize) — the kind
+ * picks the title + color scheme inside `renderLongitudinal`. Keeping ONE
+ * payload type vs four separate interfaces lets the verifier do a single
+ * cheap shape check after `verifyImagePayload` rather than four branches.
+ */
+interface LongitudinalPayload {
+  kind: "sparklines-intro" | "sparklines-survey" | "sparklines-wizard" | "sparklines-monetize";
+  windowLabel?: string;
+  labels: string[];
+  // One row per label. Each inner array MUST be the same length.
+  series: number[][];
+}
+
 type AnyPayload =
   | WizardPayload
   | SparklinesPayload
   | FunnelPayload
   | EngagementPayload
-  | LeaksPayload;
+  | LeaksPayload
+  | LongitudinalPayload;
 
 /** Stage label lookup mirrored from the route formatter so the PNG reads identically. */
 const STAGE_LABELS: Record<string, string> = {
@@ -489,6 +521,115 @@ function renderLeaks(p: LeaksPayload) {
   );
 }
 
+/**
+ * Generic longitudinal renderer for the four phase-bucketed sparkline kinds.
+ * Sizes per-row height to fit the row count: 4 lines (intro) get fat rows,
+ * 15 lines (survey chapters) get thin rows. Each row mirrors the existing
+ * `renderSparklines` row layout — label | per-day bars | peak count — so the
+ * Slack-side visual style stays consistent.
+ *
+ * Color cycle: alternates between accent purple and accent orange so adjacent
+ * rows stay distinguishable without needing a 15-color palette. For the survey
+ * chart that's 15 rows, the alternation reads as a chapter-by-chapter gradient.
+ */
+const LONG_TITLES: Record<LongitudinalPayload["kind"], string> = {
+  "sparklines-intro": "Pre-survey intro retention",
+  "sparklines-survey": "Survey chapter completion",
+  "sparklines-wizard": "Pre-report wizard retention",
+  "sparklines-monetize": "Monetization ladder",
+};
+
+function renderLongitudinal(p: LongitudinalPayload): React.ReactElement {
+  const labels = Array.isArray(p.labels) ? p.labels : [];
+  const series = Array.isArray(p.series) ? p.series : [];
+  // Defensive: pair up labels with series of equal length. Mismatch = skip
+  // that row rather than throw.
+  const rows: Array<{ label: string; values: number[] }> = [];
+  for (let i = 0; i < labels.length; i += 1) {
+    const lbl = labels[i];
+    const ser = series[i];
+    if (typeof lbl !== "string" || !Array.isArray(ser)) continue;
+    rows.push({ label: lbl, values: ser.map((v) => Math.max(0, Number(v) || 0)) });
+  }
+  const title = LONG_TITLES[p.kind] ?? "Longitudinal trend";
+  if (rows.length === 0) {
+    return chartShell(title, p.windowLabel ?? "", <div>No data</div>);
+  }
+  // Fit row count to the 440-ish px body height. Leave 4px gap between rows.
+  const BODY_H = 440;
+  const gap = 4;
+  const rowH = Math.max(14, Math.floor((BODY_H - (rows.length - 1) * gap) / rows.length));
+  // Bar height stops 6px short of row height so each row reads as a band.
+  const barH = Math.max(2, rowH - 6);
+  // Day-count drives bar width. Reserve 130px label + 70px peak readout. Body
+  // width = 800 - 56 (chart padding) - 130 - 70 = 544px.
+  const dayCount = rows[0]!.values.length || 1;
+  const barW = Math.max(2, Math.floor((544 - (dayCount - 1) * 2) / dayCount));
+  return chartShell(
+    title,
+    p.windowLabel ?? "",
+    <div style={{ display: "flex", flexDirection: "column", gap }}>
+      {rows.map((row, rIdx) => {
+        const peak = row.values.reduce((a, b) => Math.max(a, b), 0);
+        const color = rIdx % 2 === 0 ? COLORS.accentPurple : COLORS.accentOrange;
+        return (
+          <div
+            key={`${row.label}-${rIdx}`}
+            style={{ display: "flex", alignItems: "center", height: rowH }}
+          >
+            <div
+              style={{
+                width: 130,
+                fontSize: 12,
+                color: COLORS.textMuted,
+                overflow: "hidden",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {row.label}
+            </div>
+            <div
+              style={{
+                display: "flex",
+                flex: 1,
+                alignItems: "flex-end",
+                height: rowH,
+                gap: 2,
+              }}
+            >
+              {row.values.map((v, dIdx) => {
+                const h = peak > 0 ? Math.max(1, Math.round((v / peak) * barH)) : 1;
+                return (
+                  <div
+                    key={dIdx}
+                    style={{
+                      width: barW,
+                      height: h,
+                      background: color,
+                      borderRadius: 1,
+                    }}
+                  />
+                );
+              })}
+            </div>
+            <div
+              style={{
+                display: "flex",
+                width: 70,
+                fontSize: 12,
+                color: COLORS.text,
+                justifyContent: "flex-end",
+              }}
+            >
+              {`peak ${peak.toLocaleString()}`}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function renderForKind(kind: string, payload: AnyPayload): React.ReactElement {
   switch (kind) {
     case "wizard":
@@ -501,6 +642,11 @@ function renderForKind(kind: string, payload: AnyPayload): React.ReactElement {
       return renderEngagement(payload as EngagementPayload);
     case "leaks":
       return renderLeaks(payload as LeaksPayload);
+    case "sparklines-intro":
+    case "sparklines-survey":
+    case "sparklines-wizard":
+    case "sparklines-monetize":
+      return renderLongitudinal(payload as LongitudinalPayload);
     default:
       return chartShell("Unknown chart kind", kind, <div>—</div>);
   }

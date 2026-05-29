@@ -40,6 +40,7 @@ import {
   type DailyMetrics,
   type DropoffEverywhereSnapshot,
   type EngagementLiftSnapshot,
+  type ExtendedSparklineSnapshot,
   type SparklineSnapshot,
   type WeeklyMetrics,
   type WizardSlideRetentionSnapshot,
@@ -932,8 +933,20 @@ export function formatWeekly(
  *    with text only, no images)
  *  - signing throws (e.g. signing secret missing)
  */
+type DigestImageKind =
+  | "funnel"
+  | "wizard"
+  | "sparklines"
+  | "engagement"
+  | "leaks"
+  // Longitudinal phase-bucketed sparklines for the chart-dominant digest.
+  | "sparklines-intro"
+  | "sparklines-survey"
+  | "sparklines-wizard"
+  | "sparklines-monetize";
+
 async function buildSignedImageUrl(
-  kind: "funnel" | "wizard" | "sparklines" | "engagement" | "leaks",
+  kind: DigestImageKind,
   payload: Record<string, unknown>
 ): Promise<string | null> {
   const base = process.env.NEXT_PUBLIC_SITE_URL;
@@ -951,6 +964,153 @@ async function buildSignedImageUrl(
     logger.warn({ err, kind }, "digest-image: sign failed; skipping image block");
     return null;
   }
+}
+
+/**
+ * Build the four longitudinal sparkline image blocks (intro / survey-by-chapter
+ * / wizard / monetize) from a `get_funnel_sparklines_v2` snapshot. Each kind is
+ * gated independently: if the snapshot covers the section AND signing succeeds,
+ * the block is appended. Snapshot null OR section empty = silently omit (text
+ * digest doesn't carry these — they only live in the chart-image rail).
+ *
+ * Survey chart is capped to the last 14 UTC days specifically because it has
+ * up to 16 chapter rows × N days of int data, and a 30-day window risks bumping
+ * the signed-URL payload over Slack's ~3000-char image_url cap. The other three
+ * kinds use the full 30-day window.
+ */
+const SURVEY_CHART_WINDOW_DAYS = 14;
+
+export async function buildLongitudinalImageBlocks(
+  snap: ExtendedSparklineSnapshot | null,
+  windowLabel: string
+): Promise<SlackBlock[]> {
+  if (!snap || snap.days.length === 0) return [];
+  const out: SlackBlock[] = [];
+  const days = snap.days;
+
+  // 1. Intro retention (4 slides)
+  // Skip the image entirely when every cell is zero — saves URL budget + Slack
+  // doesn't render a useless flat-zero chart.
+  const introHasData = days.some((d) => d.intro.s1 + d.intro.s2 + d.intro.s3 + d.intro.s4 > 0);
+  if (introHasData) {
+    const url = await buildSignedImageUrl("sparklines-intro", {
+      windowLabel,
+      labels: ["Slide 1 reached", "Slide 2 reached", "Slide 3 reached", "Slide 4 reached"],
+      series: [
+        days.map((d) => d.intro.s1),
+        days.map((d) => d.intro.s2),
+        days.map((d) => d.intro.s3),
+        days.map((d) => d.intro.s4),
+      ],
+    });
+    if (url) {
+      out.push({
+        type: "image",
+        image_url: url,
+        alt_text: "Pre-survey intro retention (4 slides)",
+      });
+    }
+  }
+
+  // 2. Survey completion per chapter. Discover active chapters across the
+  // window (skips ones with zero traffic). Capped to last 14 days to keep the
+  // signed-URL under Slack's image_url length cap.
+  const surveyDays = days.slice(-SURVEY_CHART_WINDOW_DAYS);
+  const chapterSet = new Set<string>();
+  for (const d of surveyDays) {
+    for (const [ch, n] of Object.entries(d.survey)) {
+      if (n > 0) chapterSet.add(ch);
+    }
+  }
+  if (chapterSet.size > 0) {
+    const sortedChapters = [...chapterSet].sort();
+    const url = await buildSignedImageUrl("sparklines-survey", {
+      windowLabel: `${SURVEY_CHART_WINDOW_DAYS}d — ${windowLabel}`,
+      labels: sortedChapters.map((ch) => `Ch ${ch} answered`),
+      series: sortedChapters.map((ch) => surveyDays.map((d) => d.survey[ch] ?? 0)),
+    });
+    if (url) {
+      out.push({
+        type: "image",
+        image_url: url,
+        alt_text: `Survey chapter completion (${sortedChapters.length} chapters)`,
+      });
+    }
+  }
+
+  // 3. Wizard slides (6 + report view)
+  const wizHasData = days.some(
+    (d) =>
+      d.wizard.s1 +
+        d.wizard.s2 +
+        d.wizard.s3 +
+        d.wizard.s4 +
+        d.wizard.s5 +
+        d.wizard.s6 +
+        d.wizard.report_viewed >
+      0
+  );
+  if (wizHasData) {
+    const url = await buildSignedImageUrl("sparklines-wizard", {
+      windowLabel,
+      labels: ["Slide 1", "Slide 2", "Slide 3", "Slide 4", "Slide 5", "Slide 6", "Report viewed"],
+      series: [
+        days.map((d) => d.wizard.s1),
+        days.map((d) => d.wizard.s2),
+        days.map((d) => d.wizard.s3),
+        days.map((d) => d.wizard.s4),
+        days.map((d) => d.wizard.s5),
+        days.map((d) => d.wizard.s6),
+        days.map((d) => d.wizard.report_viewed),
+      ],
+    });
+    if (url) {
+      out.push({
+        type: "image",
+        image_url: url,
+        alt_text: "Pre-report wizard retention (6 slides + report view)",
+      });
+    }
+  }
+
+  // 4. Monetize ladder
+  const monHasData = days.some(
+    (d) =>
+      d.monetize.report_viewed +
+        d.monetize.engagement_5min +
+        d.monetize.paywall_init +
+        d.monetize.begin_checkout +
+        d.monetize.purchased >
+      0
+  );
+  if (monHasData) {
+    const url = await buildSignedImageUrl("sparklines-monetize", {
+      windowLabel,
+      labels: [
+        "Report viewed",
+        "Engagement 5m+",
+        "Paywall initiated",
+        "Begin checkout",
+        "Purchased",
+      ],
+      series: [
+        days.map((d) => d.monetize.report_viewed),
+        days.map((d) => d.monetize.engagement_5min),
+        days.map((d) => d.monetize.paywall_init),
+        days.map((d) => d.monetize.begin_checkout),
+        days.map((d) => d.monetize.purchased),
+      ],
+    });
+    if (url) {
+      out.push({
+        type: "image",
+        image_url: url,
+        alt_text: "Monetization ladder (5 stages)",
+      });
+    }
+  }
+
+  return out;
 }
 
 const SEVERITY_EMOJI: Record<Recommendation["severity"], string> = {
@@ -1108,6 +1268,28 @@ export async function buildDailyBlocks(
     },
   ];
   if (sparklineImageBlock) blocks.push(sparklineImageBlock);
+
+  // Phase-bucketed longitudinal charts (intro / survey / wizard / monetize) —
+  // chart-dominant strategy-lead view. Each kind is independently gated inside
+  // buildLongitudinalImageBlocks; a missing snapshot or empty section means
+  // the corresponding image is silently omitted.
+  const longitudinalBlocks = await buildLongitudinalImageBlocks(
+    curr.extendedSparklines,
+    `30 days ending ${dayKey} UTC`
+  );
+  if (longitudinalBlocks.length > 0) {
+    blocks.push({
+      type: "context",
+      elements: [
+        {
+          type: "mrkdwn",
+          text: ":mag_right: _Where users drop off — 30-day longitudinal_",
+        },
+      ],
+    });
+    for (const b of longitudinalBlocks) blocks.push(b);
+  }
+
   return { blocks, text };
 }
 
@@ -1126,7 +1308,12 @@ export async function buildWeeklyStrategyBlocks(
   // Text fallback: reuse the existing all-text builder so a Slack client that
   // can't render Block Kit (or accessibility tools) still sees every section.
   const textFallback = formatWeeklyStrategySupplement(weekKey, weekRangeLabel, curr);
-  if (!textFallback) return null;
+  // Even when every text-side snapshot is null, the new longitudinal chart
+  // pack may still have data to ship. Only bail when BOTH text AND chart
+  // sources are empty — otherwise we'd suppress the strategy-lead view that
+  // does exist.
+  const hasLongitudinal = !!curr.extendedSparklines && curr.extendedSparklines.days.length > 0;
+  if (!textFallback && !hasLongitudinal) return null;
 
   const blocks: SlackBlock[] = [
     {
@@ -1156,6 +1343,29 @@ export async function buildWeeklyStrategyBlocks(
         alt_text: "Drop-off funnel — all stages",
       });
     }
+  }
+
+  // 1b. Phase-bucketed longitudinal charts — same four images appended to the
+  // daily digest. Strategy lead asked for these to lead the weekly view as
+  // well so the chart-density is consistent across cadences. Each kind is
+  // independently gated; misses are silently skipped.
+  // weekRangeLabel like "May 19 → May 25 UTC" reads better than the bare
+  // ISO week key for the per-image subtitle.
+  const longitudinalBlocks = await buildLongitudinalImageBlocks(
+    curr.extendedSparklines,
+    `30 days through ${weekRangeLabel}`
+  );
+  if (longitudinalBlocks.length > 0) {
+    blocks.push({
+      type: "context",
+      elements: [
+        {
+          type: "mrkdwn",
+          text: ":mag_right: _Where users drop off — 30-day longitudinal_",
+        },
+      ],
+    });
+    for (const b of longitudinalBlocks) blocks.push(b);
   }
 
   // 2. Top funnel leaks by revenue (text)
@@ -1253,7 +1463,11 @@ export async function buildWeeklyStrategyBlocks(
   // If we only have the header + context (everything else null), bail.
   if (blocks.length <= 2) return null;
 
-  return { blocks, text: textFallback };
+  // Fallback text is required by notifySlack for accessibility / preview. When
+  // every text-side section was empty but charts exist, ship a minimal one-line
+  // label so the notification preview reads coherently.
+  const text = textFallback ?? `:dart: Weekly funnel intelligence — ${weekKey} (${weekRangeLabel})`;
+  return { blocks, text };
 }
 
 /**

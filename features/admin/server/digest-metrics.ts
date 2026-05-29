@@ -119,6 +119,13 @@ export interface DailyMetrics {
    * when the fetcher fails.
    */
   sparklines: SparklineSnapshot | null;
+  /**
+   * 30-day phase-bucketed sparklines — intro / per-chapter survey / wizard /
+   * monetize. Renders four longitudinal chart images in the chart-dominant
+   * Slack digest. Same trailing-30d window as `sparklines`. Null on RPC
+   * failure → renderer omits all four image blocks (text section unaffected).
+   */
+  extendedSparklines: ExtendedSparklineSnapshot | null;
 }
 
 export interface FunnelStages {
@@ -167,6 +174,61 @@ export interface SparklineDay {
 
 export interface SparklineSnapshot {
   days: SparklineDay[];
+}
+
+/**
+ * Phase-bucketed extended sparkline — one row per UTC day with per-stage
+ * counts across the whole drop-off funnel. Powers the four NEW longitudinal
+ * chart images in the daily + weekly Slack digest (intro / survey-by-chapter /
+ * wizard / monetize). Adjacent to the existing top-line `sparklines` so a
+ * digest run can pull both in parallel.
+ *
+ * Zero-traffic days still emit rows (server-side `days` generate_series spine
+ * in get_funnel_sparklines_v2) so the renderer always sees a fixed-width N.
+ */
+export interface IntroSparklineBuckets {
+  s1: number;
+  s2: number;
+  s3: number;
+  s4: number;
+}
+
+export interface WizardSparklineBuckets {
+  s1: number;
+  s2: number;
+  s3: number;
+  s4: number;
+  s5: number;
+  s6: number;
+  report_viewed: number;
+}
+
+export interface MonetizeSparklineBuckets {
+  report_viewed: number;
+  engagement_5min: number;
+  paywall_init: number;
+  begin_checkout: number;
+  purchased: number;
+}
+
+/**
+ * Per-chapter daily counts. Keyed by zero-padded chapter prefix derived from
+ * the survey-question 5-digit `CCQQQ` code (e.g. `"00"`, `"01"`, …, `"16"`).
+ * Missing chapters mean zero on that UTC day. Renderer iterates a fixed
+ * 0..16 range so chart axis width is stable across the window.
+ */
+export type SurveyChapterCounts = Record<string, number>;
+
+export interface ExtendedSparklineDay {
+  day: string; // YYYY-MM-DD
+  intro: IntroSparklineBuckets;
+  survey: SurveyChapterCounts;
+  wizard: WizardSparklineBuckets;
+  monetize: MonetizeSparklineBuckets;
+}
+
+export interface ExtendedSparklineSnapshot {
+  days: ExtendedSparklineDay[];
 }
 
 /**
@@ -853,6 +915,77 @@ export async function fetchSparklines(
   return { days };
 }
 
+/**
+ * Phase-bucketed extended sparklines from `get_funnel_sparklines_v2`. Each row
+ * is one UTC day with intro / survey-by-chapter / wizard / monetize buckets.
+ * Same null-on-failure contract as the other RPC fetchers — the digest sends
+ * fine without it. Defensive: every per-bucket value is coerced to a finite
+ * non-negative int so downstream chart code can do arithmetic without
+ * re-validating.
+ */
+export async function fetchExtendedSparklines(
+  sinceIso: string,
+  untilIso: string
+): Promise<ExtendedSparklineSnapshot | null> {
+  const raw = await callRpc<{ days?: unknown }>("get_funnel_sparklines_v2", {
+    since_ts: sinceIso,
+    until_ts: untilIso,
+  });
+  if (!raw || !Array.isArray(raw.days)) return null;
+  const num = (v: unknown): number => {
+    const n = typeof v === "number" ? v : Number(v);
+    return Number.isFinite(n) && n >= 0 ? Math.trunc(n) : 0;
+  };
+  const obj = (v: unknown): Record<string, unknown> =>
+    v && typeof v === "object" ? (v as Record<string, unknown>) : {};
+
+  const days: ExtendedSparklineDay[] = [];
+  for (const row of raw.days) {
+    if (!row || typeof row !== "object") continue;
+    const r = row as Record<string, unknown>;
+    const day = typeof r.day === "string" ? r.day : "";
+    if (!day) continue;
+    const intro = obj(r.intro);
+    const wizard = obj(r.wizard);
+    const monetize = obj(r.monetize);
+    const survey = obj(r.survey);
+    const surveyCounts: SurveyChapterCounts = {};
+    for (const [key, val] of Object.entries(survey)) {
+      // Chapters arrive as zero-padded 2-digit strings from json_object_agg
+      // (LEFT(q_id, 2)). Anything else is silently dropped — guards against
+      // an upstream schema drift sneaking malformed keys into the digest.
+      if (/^[0-9]{2}$/.test(key)) surveyCounts[key] = num(val);
+    }
+    days.push({
+      day,
+      intro: {
+        s1: num(intro.s1),
+        s2: num(intro.s2),
+        s3: num(intro.s3),
+        s4: num(intro.s4),
+      },
+      survey: surveyCounts,
+      wizard: {
+        s1: num(wizard.s1),
+        s2: num(wizard.s2),
+        s3: num(wizard.s3),
+        s4: num(wizard.s4),
+        s5: num(wizard.s5),
+        s6: num(wizard.s6),
+        report_viewed: num(wizard.report_viewed),
+      },
+      monetize: {
+        report_viewed: num(monetize.report_viewed),
+        engagement_5min: num(monetize.engagement_5min),
+        paywall_init: num(monetize.paywall_init),
+        begin_checkout: num(monetize.begin_checkout),
+        purchased: num(monetize.purchased),
+      },
+    });
+  }
+  return { days };
+}
+
 export async function fetchDropoffEverywhere(
   sinceIso: string,
   untilIso: string
@@ -1107,6 +1240,7 @@ export async function fetchDailyMetrics(sinceIso: string, untilIso: string): Pro
     medianTimeToPurchaseHours,
     wizardFunnel,
     sparklines,
+    extendedSparklines,
   ] = await Promise.all([
     fetchFunnelEventCount("unique_visitor", sinceIso, untilIso),
     fetchNewVsReturning(sinceIso, untilIso),
@@ -1156,6 +1290,13 @@ export async function fetchDailyMetrics(sinceIso: string, untilIso: string): Pro
       new Date(new Date(untilIso).getTime() - 30 * 86_400_000).toISOString(),
       untilIso
     ),
+    // Phase-bucketed sparklines (same trailing-30d window) for the four new
+    // longitudinal chart images. fetchExtendedSparklines already returns null
+    // on RPC failure — renderer treats null as "skip the four image blocks".
+    fetchExtendedSparklines(
+      new Date(new Date(untilIso).getTime() - 30 * 86_400_000).toISOString(),
+      untilIso
+    ),
   ]);
 
   const completionRate = surveyStarts > 0 ? Math.round((completions / surveyStarts) * 100) : 0;
@@ -1198,6 +1339,7 @@ export async function fetchDailyMetrics(sinceIso: string, untilIso: string): Pro
     medianTimeToPurchaseHours,
     wizardFunnel,
     sparklines,
+    extendedSparklines,
   };
 }
 

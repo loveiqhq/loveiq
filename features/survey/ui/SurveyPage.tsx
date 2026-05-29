@@ -11,6 +11,38 @@ import {
   loadPendingCompletion,
 } from "./hooks/surveyStorage";
 import { copySurveySessionToReportSession } from "./hooks/surveySession";
+import { getCsrfToken } from "@shared/http/csrf-client";
+import { readCookie } from "@shared/observability/cookie";
+
+/**
+ * One-shot per-visitor-day ping that lands a `intro_slide_<N>` row in
+ * `funnel_event`. Powers the longitudinal pre-survey intro retention chart in
+ * the daily Slack digest. Mirrors the survey_engine_mount pattern in
+ * SurveyEngine.tsx — funnel_event PK (visitor_id, day, event_type) makes
+ * duplicate POSTs a server-side no-op so we can fire on every slide mount
+ * without rate-limiting concerns. Best-effort; failures silently drop.
+ */
+function pingIntroSlide(slideIndex: number) {
+  if (typeof window === "undefined") return;
+  if (slideIndex < 0 || slideIndex > 3) return;
+  const visitorId = readCookie("__Host-liq_vid") || readCookie("__liq_vid");
+  if (!visitorId) return;
+  const csrf = getCsrfToken();
+  if (!csrf) return;
+  // Slides are 1-indexed in the funnel-event allowlist (intro_slide_1..4).
+  const event = `intro_slide_${slideIndex + 1}` as const;
+  fetch("/api/funnel-event", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-csrf-token": csrf,
+    },
+    body: JSON.stringify({ event, visitor_id: visitorId }),
+    keepalive: true,
+  }).catch(() => {
+    /* best-effort — at worst today's count is short by one for this visitor */
+  });
+}
 
 /* ------------------------------------------------------------------ */
 /*  Shared icons                                                       */
@@ -626,6 +658,11 @@ const SlideScreen: FC<{
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleNext, handlePrev, slideIndex, isLeaving]);
+
+  // Pre-survey intro slide reach signal. Fires once per (visitor, day, slide).
+  useEffect(() => {
+    pingIntroSlide(slideIndex);
+  }, [slideIndex]);
 
   // Swipe gesture support for mobile
   const touchStartX = useRef<number | null>(null);
