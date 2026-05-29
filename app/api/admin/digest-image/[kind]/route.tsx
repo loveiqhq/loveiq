@@ -31,6 +31,10 @@ export const dynamic = "force-dynamic";
 
 const WIDTH = 800;
 const HEIGHT = 500;
+// Tighter body-height estimate: chartShell uses padding=28 (top + bottom = 56),
+// header row ~36px (title 28px font), marginTop: 18 between header and body.
+// Net body = HEIGHT - 56 - 36 - 18 = HEIGHT - 110.
+const BODY_OVERHEAD = 110;
 
 // Brand palette mirrored from app/globals.css. Hex literals only because
 // `next/og` (Satori) doesn't read the global CSS — colors must be inline.
@@ -168,14 +172,19 @@ function labelFor(name: string): string {
   return STAGE_LABELS[name] ?? name;
 }
 
-function chartShell(title: string, subtitle: string, body: React.ReactNode): React.ReactElement {
+function chartShell(
+  title: string,
+  subtitle: string,
+  body: React.ReactNode,
+  height: number = HEIGHT
+): React.ReactElement {
   return (
     <div
       style={{
         display: "flex",
         flexDirection: "column",
         width: WIDTH,
-        height: HEIGHT,
+        height,
         background: COLORS.bg,
         color: COLORS.text,
         fontFamily:
@@ -539,7 +548,25 @@ const LONG_TITLES: Record<LongitudinalPayload["kind"], string> = {
   "sparklines-monetize": "Monetization ladder",
 };
 
-function renderLongitudinal(p: LongitudinalPayload): React.ReactElement {
+/**
+ * Per-row pixel target. Picked so labels (12px font) + ~40-50px chart band sit
+ * comfortably without cramping. The image height grows with row count instead
+ * of compressing rows when N is large (e.g. 16+ survey chapters).
+ */
+const TARGET_ROW_H = 42;
+const ROW_GAP = 6;
+const MIN_HEIGHT = 420;
+const MAX_HEIGHT = 1100;
+
+function longitudinalHeight(rowCount: number): number {
+  const bodyNeeded = rowCount * TARGET_ROW_H + (rowCount - 1) * ROW_GAP;
+  return Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, bodyNeeded + BODY_OVERHEAD));
+}
+
+function renderLongitudinal(p: LongitudinalPayload): {
+  element: React.ReactElement;
+  height: number;
+} {
   const labels = Array.isArray(p.labels) ? p.labels : [];
   const series = Array.isArray(p.series) ? p.series : [];
   // Defensive: pair up labels with series of equal length. Mismatch = skip
@@ -553,22 +580,24 @@ function renderLongitudinal(p: LongitudinalPayload): React.ReactElement {
   }
   const title = LONG_TITLES[p.kind] ?? "Longitudinal trend";
   if (rows.length === 0) {
-    return chartShell(title, p.windowLabel ?? "", <div>No data</div>);
+    return { element: chartShell(title, p.windowLabel ?? "", <div>No data</div>), height: HEIGHT };
   }
-  // Fit row count to the 440-ish px body height. Leave 4px gap between rows.
-  const BODY_H = 440;
-  const gap = 4;
-  const rowH = Math.max(14, Math.floor((BODY_H - (rows.length - 1) * gap) / rows.length));
-  // Bar height stops 6px short of row height so each row reads as a band.
-  const barH = Math.max(2, rowH - 6);
+  // Grow image height with row count so rows always render at TARGET_ROW_H.
+  // Each row gets a fixed 42px height; rendered image height matches.
+  const height = longitudinalHeight(rows.length);
+  const bodyH = height - BODY_OVERHEAD;
+  const rowH = Math.max(14, Math.floor((bodyH - (rows.length - 1) * ROW_GAP) / rows.length));
+  // Bar height stops 8px short of row height so each row reads as a band with
+  // a bit of bottom-padding breathing room.
+  const barH = Math.max(2, rowH - 8);
   // Day-count drives bar width. Reserve 130px label + 70px peak readout. Body
   // width = 800 - 56 (chart padding) - 130 - 70 = 544px.
   const dayCount = rows[0]!.values.length || 1;
   const barW = Math.max(2, Math.floor((544 - (dayCount - 1) * 2) / dayCount));
-  return chartShell(
+  const element = chartShell(
     title,
     p.windowLabel ?? "",
-    <div style={{ display: "flex", flexDirection: "column", gap }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: ROW_GAP }}>
       {rows.map((row, rIdx) => {
         const peak = row.values.reduce((a, b) => Math.max(a, b), 0);
         const color = rIdx % 2 === 0 ? COLORS.accentPurple : COLORS.accentOrange;
@@ -580,7 +609,7 @@ function renderLongitudinal(p: LongitudinalPayload): React.ReactElement {
             <div
               style={{
                 width: 130,
-                fontSize: 12,
+                fontSize: 13,
                 color: COLORS.textMuted,
                 overflow: "hidden",
                 whiteSpace: "nowrap",
@@ -616,7 +645,7 @@ function renderLongitudinal(p: LongitudinalPayload): React.ReactElement {
               style={{
                 display: "flex",
                 width: 70,
-                fontSize: 12,
+                fontSize: 13,
                 color: COLORS.text,
                 justifyContent: "flex-end",
               }}
@@ -626,29 +655,42 @@ function renderLongitudinal(p: LongitudinalPayload): React.ReactElement {
           </div>
         );
       })}
-    </div>
+    </div>,
+    height
   );
+  return { element, height };
 }
 
-function renderForKind(kind: string, payload: AnyPayload): React.ReactElement {
+/**
+ * Single dispatch for all chart kinds. Returns both the rendered element AND
+ * the image height — fixed at HEIGHT for non-longitudinal kinds, grown to fit
+ * row count for the longitudinal ones.
+ */
+function renderForKind(
+  kind: string,
+  payload: AnyPayload
+): { element: React.ReactElement; height: number } {
   switch (kind) {
     case "wizard":
-      return renderWizard(payload as WizardPayload);
+      return { element: renderWizard(payload as WizardPayload), height: HEIGHT };
     case "funnel":
-      return renderFunnel(payload as FunnelPayload);
+      return { element: renderFunnel(payload as FunnelPayload), height: HEIGHT };
     case "sparklines":
-      return renderSparklines(payload as SparklinesPayload);
+      return { element: renderSparklines(payload as SparklinesPayload), height: HEIGHT };
     case "engagement":
-      return renderEngagement(payload as EngagementPayload);
+      return { element: renderEngagement(payload as EngagementPayload), height: HEIGHT };
     case "leaks":
-      return renderLeaks(payload as LeaksPayload);
+      return { element: renderLeaks(payload as LeaksPayload), height: HEIGHT };
     case "sparklines-intro":
     case "sparklines-survey":
     case "sparklines-wizard":
     case "sparklines-monetize":
       return renderLongitudinal(payload as LongitudinalPayload);
     default:
-      return chartShell("Unknown chart kind", kind, <div>—</div>);
+      return {
+        element: chartShell("Unknown chart kind", kind, <div>—</div>),
+        height: HEIGHT,
+      };
   }
 }
 
@@ -685,9 +727,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ kind
   // image icon. Catching here lets us return a 500 with a short body so an
   // operator can grep the logs for the kind and diagnose.
   try {
-    return new ImageResponse(renderForKind(kind, payload), {
+    const { element, height } = renderForKind(kind, payload);
+    return new ImageResponse(element, {
       width: WIDTH,
-      height: HEIGHT,
+      height,
       // Slack image proxy caches aggressively; URL acts as the cache key so
       // a long max-age is safe and reduces re-render load.
       headers: {
