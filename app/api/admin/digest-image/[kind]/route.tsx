@@ -192,14 +192,20 @@ function chartShell(
         padding: 28,
       }}
     >
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "baseline",
+          flexShrink: 0,
+        }}
+      >
         <div style={{ fontSize: 28, fontWeight: 700, color: COLORS.text }}>{title}</div>
         <div style={{ fontSize: 14, color: COLORS.textMuted }}>{subtitle}</div>
       </div>
       <div
         style={{
           marginTop: 18,
-          flex: 1,
           display: "flex",
           flexDirection: "column",
         }}
@@ -549,18 +555,23 @@ const LONG_TITLES: Record<LongitudinalPayload["kind"], string> = {
 };
 
 /**
- * Per-row pixel target. Picked so labels (12px font) + ~40-50px chart band sit
+ * Per-row pixel target. Picked so labels (13px font) + ~40-50px chart band sit
  * comfortably without cramping. The image height grows with row count instead
  * of compressing rows when N is large (e.g. 16+ survey chapters).
+ *
+ * BUFFER pads the total beyond the strict content sum to absorb Satori subpixel
+ * rounding + give visible bottom margin. Without it, 11+ row charts clip the
+ * last row inside Slack.
  */
-const TARGET_ROW_H = 42;
-const ROW_GAP = 6;
-const MIN_HEIGHT = 420;
-const MAX_HEIGHT = 1100;
+const TARGET_ROW_H = 48;
+const ROW_GAP = 8;
+const BUFFER = 40;
+const MIN_HEIGHT = 480;
+const MAX_HEIGHT = 1200;
 
 function longitudinalHeight(rowCount: number): number {
   const bodyNeeded = rowCount * TARGET_ROW_H + (rowCount - 1) * ROW_GAP;
-  return Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, bodyNeeded + BODY_OVERHEAD));
+  return Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, bodyNeeded + BODY_OVERHEAD + BUFFER));
 }
 
 function renderLongitudinal(p: LongitudinalPayload): {
@@ -582,14 +593,14 @@ function renderLongitudinal(p: LongitudinalPayload): {
   if (rows.length === 0) {
     return { element: chartShell(title, p.windowLabel ?? "", <div>No data</div>), height: HEIGHT };
   }
-  // Grow image height with row count so rows always render at TARGET_ROW_H.
-  // Each row gets a fixed 42px height; rendered image height matches.
+  // Grow image height with row count so every row renders at the fixed
+  // TARGET_ROW_H. longitudinalHeight already builds in a BUFFER beyond the
+  // strict content sum so Satori's subpixel rounding can't clip the bottom row.
   const height = longitudinalHeight(rows.length);
-  const bodyH = height - BODY_OVERHEAD;
-  const rowH = Math.max(14, Math.floor((bodyH - (rows.length - 1) * ROW_GAP) / rows.length));
-  // Bar height stops 8px short of row height so each row reads as a band with
-  // a bit of bottom-padding breathing room.
-  const barH = Math.max(2, rowH - 8);
+  const rowH = TARGET_ROW_H;
+  // Bar height stops 10px short of row height so each row reads as a clear
+  // band with breathing room.
+  const barH = Math.max(2, rowH - 10);
   // Day-count drives bar width. Reserve 130px label + 70px peak readout. Body
   // width = 800 - 56 (chart padding) - 130 - 70 = 544px.
   const dayCount = rows[0]!.values.length || 1;
