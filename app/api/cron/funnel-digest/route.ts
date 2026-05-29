@@ -37,13 +37,19 @@ import {
 } from "@shared/observability/slack-alert-dedup";
 import {
   type AnswerLiftSnapshot,
+  type ArchetypeSparklineSnapshot,
+  type ChannelSparklineSnapshot,
   type DailyMetrics,
   type DropoffEverywhereSnapshot,
   type EngagementLiftSnapshot,
   type ExtendedSparklineSnapshot,
+  type ExtendedSparklineV3Snapshot,
+  type QuestionAbandonmentSnapshot,
   type SparklineSnapshot,
+  type VelocitySnapshot,
   type WeeklyMetrics,
   type WizardSlideRetentionSnapshot,
+  fetchQuestionAbandonmentTopN,
   delta,
   dayString,
   fetchDailyMetrics,
@@ -939,11 +945,20 @@ type DigestImageKind =
   | "sparklines"
   | "engagement"
   | "leaks"
-  // Longitudinal phase-bucketed sparklines for the chart-dominant digest.
+  // Phase 1 longitudinal kinds.
   | "sparklines-intro"
   | "sparklines-survey"
   | "sparklines-wizard"
-  | "sparklines-monetize";
+  | "sparklines-monetize"
+  // Phase 2 longitudinal kinds.
+  | "sparklines-channels"
+  | "sparklines-archetypes"
+  | "sparklines-pricing"
+  | "sparklines-velocity"
+  | "sparklines-ux"
+  | "sparklines-payment"
+  | "sparklines-invite"
+  | "sparklines-questions";
 
 /**
  * Deploy stamp embedded in every signed image URL. Without it, the URL is
@@ -999,9 +1014,24 @@ async function buildSignedImageUrl(
  */
 const SURVEY_CHART_WINDOW_DAYS = 14;
 
+/**
+ * Which v2 longitudinal kinds to emit. Defaults to all four (intro / survey /
+ * wizard / monetize) for back-compat. The Phase 2 message split passes
+ * subsets so msg1 gets only top-funnel charts and msg2 gets only
+ * monetization-stage charts.
+ */
+export type LongitudinalCategory = "intro" | "survey" | "wizard" | "monetize";
+const ALL_LONGITUDINAL_CATEGORIES: ReadonlySet<LongitudinalCategory> = new Set([
+  "intro",
+  "survey",
+  "wizard",
+  "monetize",
+]);
+
 export async function buildLongitudinalImageBlocks(
   snap: ExtendedSparklineSnapshot | null,
-  windowLabel: string
+  windowLabel: string,
+  filter: ReadonlySet<LongitudinalCategory> = ALL_LONGITUDINAL_CATEGORIES
 ): Promise<SlackBlock[]> {
   if (!snap || snap.days.length === 0) return [];
   const out: SlackBlock[] = [];
@@ -1011,7 +1041,7 @@ export async function buildLongitudinalImageBlocks(
   // Skip the image entirely when every cell is zero — saves URL budget + Slack
   // doesn't render a useless flat-zero chart.
   const introHasData = days.some((d) => d.intro.s1 + d.intro.s2 + d.intro.s3 + d.intro.s4 > 0);
-  if (introHasData) {
+  if (filter.has("intro") && introHasData) {
     const url = await buildSignedImageUrl("sparklines-intro", {
       windowLabel,
       labels: ["Slide 1 reached", "Slide 2 reached", "Slide 3 reached", "Slide 4 reached"],
@@ -1041,7 +1071,7 @@ export async function buildLongitudinalImageBlocks(
       if (n > 0) chapterSet.add(ch);
     }
   }
-  if (chapterSet.size > 0) {
+  if (filter.has("survey") && chapterSet.size > 0) {
     const sortedChapters = [...chapterSet].sort();
     const url = await buildSignedImageUrl("sparklines-survey", {
       windowLabel: `${SURVEY_CHART_WINDOW_DAYS}d — ${windowLabel}`,
@@ -1069,7 +1099,7 @@ export async function buildLongitudinalImageBlocks(
         d.wizard.report_viewed >
       0
   );
-  if (wizHasData) {
+  if (filter.has("wizard") && wizHasData) {
     const url = await buildSignedImageUrl("sparklines-wizard", {
       windowLabel,
       labels: ["Slide 1", "Slide 2", "Slide 3", "Slide 4", "Slide 5", "Slide 6", "Report viewed"],
@@ -1102,7 +1132,7 @@ export async function buildLongitudinalImageBlocks(
         d.monetize.purchased >
       0
   );
-  if (monHasData) {
+  if (filter.has("monetize") && monHasData) {
     const url = await buildSignedImageUrl("sparklines-monetize", {
       windowLabel,
       labels: [
@@ -1130,6 +1160,284 @@ export async function buildLongitudinalImageBlocks(
   }
 
   return out;
+}
+
+// -----------------------------------------------------------------------------
+// Phase 2 — additional longitudinal chart blocks (pricing / velocity / ux /
+// payment / invite from v3 RPC, plus channels + archetypes from specialized
+// RPCs, plus weekly-only questions). Each chart is independently gated; an
+// empty snapshot or empty-data state skips that single image.
+// -----------------------------------------------------------------------------
+
+const PHASE2_TOP_N_CHANNELS = 5;
+const PHASE2_TOP_N_ARCHETYPES = 5;
+
+/* eslint-disable-next-line no-secrets/no-secrets -- camelCase function name in docstring, not a secret */
+/**
+ * Build the 5 fixed-key longitudinal image blocks fed by the v3 superset
+ * snapshot: pricing, velocity (sourced separately), ux, payment, invite.
+ * Channels + archetypes have their own dynamic-key snapshots and live in
+ * buildChannelImageBlock / buildArchetypeImageBlock.
+ */
+export async function buildPhase2FixedImageBlocks(
+  snap: ExtendedSparklineV3Snapshot | null,
+  velocity: VelocitySnapshot | null,
+  windowLabel: string
+): Promise<SlackBlock[]> {
+  if (!snap || snap.days.length === 0) return [];
+  const out: SlackBlock[] = [];
+  const days = snap.days;
+
+  // 1. Pricing-modal funnel — 4 stages.
+  const hasPricing = days.some(
+    (d) =>
+      d.pricing.paywall_initiated +
+        d.pricing.price_shown +
+        d.pricing.begin_checkout +
+        d.pricing.purchased >
+      0
+  );
+  if (hasPricing) {
+    const url = await buildSignedImageUrl("sparklines-pricing", {
+      windowLabel,
+      labels: ["Paywall initiated", "Price shown", "Begin checkout", "Purchased"],
+      series: [
+        days.map((d) => d.pricing.paywall_initiated),
+        days.map((d) => d.pricing.price_shown),
+        days.map((d) => d.pricing.begin_checkout),
+        days.map((d) => d.pricing.purchased),
+      ],
+    });
+    if (url) {
+      out.push({
+        type: "image",
+        image_url: url,
+        alt_text: "Pricing-modal funnel (4 stages)",
+      });
+    }
+  }
+
+  // 2. Velocity — p50/p75/p90 hours-to-purchase.
+  if (velocity && velocity.days.length > 0) {
+    const hasVelocity = velocity.days.some((d) => d.n > 0);
+    if (hasVelocity) {
+      const url = await buildSignedImageUrl("sparklines-velocity", {
+        windowLabel,
+        labels: ["p50 hours", "p75 hours", "p90 hours"],
+        series: [
+          velocity.days.map((d) => d.p50),
+          velocity.days.map((d) => d.p75),
+          velocity.days.map((d) => d.p90),
+        ],
+      });
+      if (url) {
+        out.push({
+          type: "image",
+          image_url: url,
+          alt_text: "Paywall → purchase decision time percentiles",
+        });
+      }
+    }
+  }
+
+  // 3. UX friction.
+  const hasUx = days.some(
+    (d) => d.ux.rage_click + d.ux.scroll_depth_50 + d.ux.scroll_depth_100 > 0
+  );
+  if (hasUx) {
+    const url = await buildSignedImageUrl("sparklines-ux", {
+      windowLabel,
+      labels: ["Rage clicks", "Scroll depth 50%", "Scroll depth 100%"],
+      series: [
+        days.map((d) => d.ux.rage_click),
+        days.map((d) => d.ux.scroll_depth_50),
+        days.map((d) => d.ux.scroll_depth_100),
+      ],
+    });
+    if (url) {
+      out.push({
+        type: "image",
+        image_url: url,
+        alt_text: "UX friction signals (rage + scroll)",
+      });
+    }
+  }
+
+  // 4. Payment health.
+  const hasPayment = days.some(
+    (d) =>
+      d.payment_health.refunds +
+        d.payment_health.disputes +
+        d.payment_health.failed +
+        d.payment_health.promo_redemptions >
+      0
+  );
+  if (hasPayment) {
+    const url = await buildSignedImageUrl("sparklines-payment", {
+      windowLabel,
+      labels: ["Refunds", "Disputes", "Failed payments", "Promo redemptions"],
+      series: [
+        days.map((d) => d.payment_health.refunds),
+        days.map((d) => d.payment_health.disputes),
+        days.map((d) => d.payment_health.failed),
+        days.map((d) => d.payment_health.promo_redemptions),
+      ],
+    });
+    if (url) {
+      out.push({
+        type: "image",
+        image_url: url,
+        alt_text: "Payment health (refunds, disputes, failed, promos)",
+      });
+    }
+  }
+
+  // 5. Viral loop (email-match attribution).
+  const hasInvite = days.some(
+    (d) => d.invite.sent + d.invite.partner_completed + d.invite.partner_purchased > 0
+  );
+  if (hasInvite) {
+    const url = await buildSignedImageUrl("sparklines-invite", {
+      windowLabel,
+      labels: ["Invites sent", "Partner completed", "Partner purchased"],
+      series: [
+        days.map((d) => d.invite.sent),
+        days.map((d) => d.invite.partner_completed),
+        days.map((d) => d.invite.partner_purchased),
+      ],
+    });
+    if (url) {
+      out.push({
+        type: "image",
+        image_url: url,
+        alt_text: "Viral loop (email-match attribution — lower-bound estimate)",
+      });
+    }
+  }
+
+  return out;
+}
+
+/**
+ * Build the channels image. Discovers top-N sources by total volume across
+ * the window (starts + completions + purchases) so the line set is stable
+ * across re-runs of the same window. Each source contributes 2 lines (starts
+ * and purchases) — completions are dropped from the chart to keep line count
+ * manageable; they're still in the underlying snapshot.
+ */
+export async function buildChannelImageBlock(
+  snap: ChannelSparklineSnapshot | null,
+  windowLabel: string
+): Promise<SlackBlock | null> {
+  if (!snap || snap.days.length === 0) return null;
+  // Aggregate per-source totals across the window.
+  const totals = new Map<string, number>();
+  for (const d of snap.days) {
+    for (const [src, counts] of Object.entries(d.sources)) {
+      const t = (totals.get(src) ?? 0) + counts.starts + counts.completions + counts.purchases;
+      totals.set(src, t);
+    }
+  }
+  if (totals.size === 0) return null;
+  // Skip sources with zero total volume — they'd render as a flat-zero line
+  // and add no signal. `totals.entries()` keeps them in the map (a key was
+  // present in at least one day's `sources` even with all-zero values).
+  const topSources = [...totals.entries()]
+    .filter(([, total]) => total > 0)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, PHASE2_TOP_N_CHANNELS)
+    .map(([src]) => src);
+  if (topSources.length === 0) return null;
+
+  const labels: string[] = [];
+  const series: number[][] = [];
+  for (const src of topSources) {
+    labels.push(`${src} — starts`);
+    labels.push(`${src} — purchases`);
+    series.push(snap.days.map((d) => d.sources[src]?.starts ?? 0));
+    series.push(snap.days.map((d) => d.sources[src]?.purchases ?? 0));
+  }
+  const url = await buildSignedImageUrl("sparklines-channels", {
+    windowLabel,
+    labels,
+    series,
+  });
+  if (!url) return null;
+  return {
+    type: "image",
+    image_url: url,
+    alt_text: `Top ${topSources.length} acquisition channels — starts vs purchases per day`,
+  };
+}
+
+/**
+ * Per-archetype completions + purchases. Top-N archetypes by total volume.
+ */
+export async function buildArchetypeImageBlock(
+  snap: ArchetypeSparklineSnapshot | null,
+  windowLabel: string
+): Promise<SlackBlock | null> {
+  if (!snap || snap.days.length === 0) return null;
+  const totals = new Map<string, number>();
+  for (const d of snap.days) {
+    for (const [name, counts] of Object.entries(d.archetypes)) {
+      const t = (totals.get(name) ?? 0) + counts.completions + counts.purchases;
+      totals.set(name, t);
+    }
+  }
+  if (totals.size === 0) return null;
+  const topArchetypes = [...totals.entries()]
+    .filter(([, total]) => total > 0)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, PHASE2_TOP_N_ARCHETYPES)
+    .map(([name]) => name);
+  if (topArchetypes.length === 0) return null;
+
+  const labels: string[] = [];
+  const series: number[][] = [];
+  for (const name of topArchetypes) {
+    labels.push(`${name} — completed`);
+    labels.push(`${name} — purchased`);
+    series.push(snap.days.map((d) => d.archetypes[name]?.completions ?? 0));
+    series.push(snap.days.map((d) => d.archetypes[name]?.purchases ?? 0));
+  }
+  const url = await buildSignedImageUrl("sparklines-archetypes", {
+    windowLabel,
+    labels,
+    series,
+  });
+  if (!url) return null;
+  return {
+    type: "image",
+    image_url: url,
+    alt_text: `Top ${topArchetypes.length} archetypes — completion vs purchase per day`,
+  };
+}
+
+/**
+ * Weekly-only — top-10 abandoned questions over the window with per-day
+ * trends. Returns null when no row has any abandonment data.
+ */
+export async function buildQuestionsImageBlock(
+  snap: QuestionAbandonmentSnapshot | null,
+  windowLabel: string
+): Promise<SlackBlock | null> {
+  if (!snap || snap.top_questions.length === 0) return null;
+  const liveRows = snap.top_questions.filter((q) => q.total > 0);
+  if (liveRows.length === 0) return null;
+  const labels = liveRows.map((q) => `Q${q.q_id} (${q.total})`);
+  const series = liveRows.map((q) => q.days.map((d) => d.n));
+  const url = await buildSignedImageUrl("sparklines-questions", {
+    windowLabel,
+    labels,
+    series,
+  });
+  if (!url) return null;
+  return {
+    type: "image",
+    image_url: url,
+    alt_text: `Top ${liveRows.length} abandoned survey questions over the window`,
+  };
 }
 
 const SEVERITY_EMOJI: Record<Recommendation["severity"], string> = {
@@ -1233,6 +1541,106 @@ export function formatLeakSeverityLines(leaks: LeakSeverity[]): string[] {
  * or the URL builder fails, the block is silently omitted (text fallback
  * still includes the section).
  */
+export interface DailyMessages {
+  msg1: { blocks: SlackBlock[]; text: string };
+  // msg2 is null when every monetization chart is empty (cold start) — cron
+  // then skips the second notifySlack so we don't ship a useless empty post.
+  msg2: { blocks: SlackBlock[]; text: string } | null;
+}
+
+/**
+ * Phase 2 — split the daily digest into TWO Slack messages:
+ *
+ * - msg1 ("Acquisition + Activation"): full text section + top-line sparklines
+ *   + intro retention + survey-by-chapter + channels + archetypes
+ * - msg2 ("Monetization + Quality"): wizard + monetize + pricing + velocity
+ *   + ux + payment + invite
+ *
+ * Splitting keeps each post scrollable in Slack and lets us claim each
+ * idempotency key (`daily_digest_msg1` / `_msg2`) separately so a Slack
+ * outage on one doesn't block the other.
+ */
+export async function buildDailyMessages(
+  dayKey: string,
+  curr: DailyMetrics,
+  prev: DailyMetrics,
+  partial?: PartialCapture | null
+): Promise<DailyMessages> {
+  const windowLabel = `30 days ending ${dayKey} UTC`;
+  const msg1Base = await buildDailyBlocks(dayKey, curr, prev, partial);
+
+  // The legacy buildDailyBlocks already appends ALL four longitudinal kinds.
+  // Re-build it with msg1's subset only (intro + survey) so we can place
+  // wizard + monetize into msg2 instead. Rebuild from the same text/sparkline
+  // section but with a filtered longitudinal block set.
+  const msg1Blocks: SlackBlock[] = [];
+  // Carry over the text+sparkline section and the longitudinal context line
+  // (which still applies — msg1 is the "where users drop off" lead-in).
+  for (const b of msg1Base.blocks) {
+    // Drop wizard + monetize image blocks; identify them by alt_text.
+    if (b.type === "image") {
+      const alt = (b as unknown as { alt_text?: unknown }).alt_text;
+      if (
+        typeof alt === "string" &&
+        (alt.startsWith("Pre-report wizard") || alt.startsWith("Monetization ladder"))
+      ) {
+        continue;
+      }
+    }
+    msg1Blocks.push(b);
+  }
+
+  // Append Phase 2 acquisition charts (channels + archetypes) to msg1.
+  const channelBlock = await buildChannelImageBlock(curr.channelSparklines, windowLabel);
+  if (channelBlock) msg1Blocks.push(channelBlock);
+  const archetypeBlock = await buildArchetypeImageBlock(curr.archetypeSparklines, windowLabel);
+  if (archetypeBlock) msg1Blocks.push(archetypeBlock);
+
+  // Build msg2 = monetization + quality. Start with wizard + monetize from the
+  // v2 snapshot, then append all Phase 2 fixed-key charts from v3.
+  const msg2Blocks: SlackBlock[] = [
+    {
+      type: "header",
+      text: {
+        type: "plain_text",
+        text: `💸 Monetization + Quality — ${dayKey}`,
+        emoji: true,
+      },
+    },
+    {
+      type: "context",
+      elements: [{ type: "mrkdwn", text: `30 days ending ${dayKey} UTC` }],
+    },
+  ];
+
+  const monetizationLong = await buildLongitudinalImageBlocks(
+    curr.extendedSparklines,
+    windowLabel,
+    new Set(["wizard", "monetize"])
+  );
+  for (const b of monetizationLong) msg2Blocks.push(b);
+
+  const phase2Fixed = await buildPhase2FixedImageBlocks(
+    curr.extendedSparklinesV3,
+    curr.velocitySparklines,
+    windowLabel
+  );
+  for (const b of phase2Fixed) msg2Blocks.push(b);
+
+  // Bail if msg2 has only the header + context (nothing to say).
+  const msg2HasContent = msg2Blocks.length > 2;
+  return {
+    msg1: { blocks: msg1Blocks, text: msg1Base.text },
+    msg2: msg2HasContent
+      ? {
+          blocks: msg2Blocks,
+          // Plain-text fallback for accessibility / notification preview.
+          text: `💸 Monetization + Quality digest — ${dayKey} UTC`,
+        }
+      : null,
+  };
+}
+
 export async function buildDailyBlocks(
   dayKey: string,
   curr: DailyMetrics,
@@ -1570,13 +1978,16 @@ export async function GET(request: Request) {
     let weeklyStrategySent = false;
 
     // ---- Daily ----
-    const dailyClaimed = await tryClaimSlackAlert("daily_digest", "day", dayKey);
-    if (dailyClaimed) {
+    // ---- Daily — split into 2 Slack messages (Phase 2) ----
+    // msg1 ("Acquisition + Activation") and msg2 ("Monetization + Quality")
+    // each claim their own slack_alert_sent row so a partial Slack outage that
+    // delivers one but not the other can be re-attempted by the next cron tick.
+    const msg1Claimed = await tryClaimSlackAlert("daily_digest_msg1", "day", dayKey);
+    const msg2Claimed = await tryClaimSlackAlert("daily_digest_msg2", "day", dayKey);
+
+    if (msg1Claimed || msg2Claimed) {
       const yesterdayIso = yesterdayStart.toISOString();
-      // Parallel: metrics + the earliest-funnel_event probe. The probe tells
-      // us whether visitor capture began before today's window — when it
-      // didn't (e.g. funnel_event just shipped mid-day) the formatter adds a
-      // partial-window caveat to the visitor + Saw-Q1 lines.
+      // Single metrics fetch shared across both message builders.
       const [curr, prev, captureStart] = await Promise.all([
         fetchDailyMetrics(yesterdayIso, dayStart.toISOString()),
         fetchDailyMetrics(dayBeforeStart.toISOString(), yesterdayIso),
@@ -1586,18 +1997,34 @@ export async function GET(request: Request) {
         captureStart && captureStart > yesterdayIso
           ? { capturedFromIso: captureStart, windowStartIso: yesterdayIso }
           : null;
-      const dailyComposed = await buildDailyBlocks(dayKey, curr, prev, dailyPartial);
-      await notifySlack({
-        channel: "ops",
-        kind: "daily_digest",
-        text: dailyComposed.text,
-        blocks: dailyComposed.blocks,
-        username: "ops_alerts",
-      });
-      // Mark delivered AFTER notify succeeds — if notify throws, the claim
-      // stays delivered=false and the next eligible run (10+ min) re-claims.
-      await markSlackAlertDelivered("daily_digest", "day", dayKey);
-      dailySent = true;
+      const dailyMessages = await buildDailyMessages(dayKey, curr, prev, dailyPartial);
+
+      if (msg1Claimed) {
+        await notifySlack({
+          channel: "ops",
+          kind: "daily_digest_msg1",
+          text: dailyMessages.msg1.text,
+          blocks: dailyMessages.msg1.blocks,
+          username: "ops_alerts",
+        });
+        await markSlackAlertDelivered("daily_digest_msg1", "day", dayKey);
+        dailySent = true;
+      }
+
+      if (msg2Claimed) {
+        if (dailyMessages.msg2) {
+          await notifySlack({
+            channel: "ops",
+            kind: "daily_digest_msg2",
+            text: dailyMessages.msg2.text,
+            blocks: dailyMessages.msg2.blocks,
+            username: "ops_alerts",
+          });
+        }
+        // Mark delivered regardless of whether msg2 was sent so cold-start
+        // (no monetization data) doesn't keep the claim un-delivered all day.
+        await markSlackAlertDelivered("daily_digest_msg2", "day", dayKey);
+      }
     }
 
     // ---- Weekly (Mondays UTC, after the daily) ----
@@ -1677,6 +2104,55 @@ export async function GET(request: Request) {
           if (weeklyStrategySent && currW.recommendations.length > 0) {
             await persistRecommendations(weekKey, currW.recommendations);
           }
+        }
+
+        // ---- Weekly questions chart (Phase 2) ----
+        // Top-10 abandoned questions over the 14-day window — weekly only
+        // because per-question signal needs ~2 weeks of data to be useful.
+        // Independent claim so a chart-only outage doesn't block the rest.
+        const questionsClaimed = await tryClaimSlackAlert("weekly_questions", "week", weekKey);
+        if (questionsClaimed) {
+          const fourteenDayStart = new Date(dayStart.getTime() - 14 * 86_400_000).toISOString();
+          const questionsSnap = await fetchQuestionAbandonmentTopN(
+            fourteenDayStart,
+            dayStart.toISOString(),
+            10
+          );
+          const questionsBlock = await buildQuestionsImageBlock(
+            questionsSnap,
+            `14 days ending ${dayKey} UTC`
+          );
+          if (questionsBlock) {
+            await notifySlack({
+              channel: "ops",
+              kind: "weekly_questions",
+              text: `Top abandoned survey questions — ${weekKey}`,
+              blocks: [
+                {
+                  type: "header",
+                  text: {
+                    type: "plain_text",
+                    text: `❓ Top abandoned questions — ${weekKey}`,
+                    emoji: true,
+                  },
+                },
+                {
+                  type: "context",
+                  elements: [
+                    {
+                      type: "mrkdwn",
+                      text: `14 days ending ${dayKey} UTC`,
+                    },
+                  ],
+                },
+                questionsBlock,
+              ],
+              username: "ops_alerts",
+            });
+          }
+          // Mark delivered regardless of whether the chart shipped — empty
+          // weeks shouldn't trigger 10-minute retry loops.
+          await markSlackAlertDelivered("weekly_questions", "week", weekKey);
         }
       }
     }

@@ -57,12 +57,20 @@ const VALID_KINDS = new Set([
   "sparklines",
   "engagement",
   "leaks",
-  // Longitudinal phase-bucketed sparklines (added 2026-05-29 for strategy-lead
-  // chart-dominant Slack digest). Each renders N labeled rows × M-day bars.
+  // Phase 1 longitudinal kinds (2026-05-29).
   "sparklines-intro",
   "sparklines-survey",
   "sparklines-wizard",
   "sparklines-monetize",
+  // Phase 2 longitudinal kinds (2026-05-29 — perfecting the funnel).
+  "sparklines-channels",
+  "sparklines-archetypes",
+  "sparklines-pricing",
+  "sparklines-velocity",
+  "sparklines-ux",
+  "sparklines-payment",
+  "sparklines-invite",
+  "sparklines-questions",
 ]);
 
 interface WizardPayload {
@@ -134,7 +142,22 @@ interface LeaksPayload {
  * cheap shape check after `verifyImagePayload` rather than four branches.
  */
 interface LongitudinalPayload {
-  kind: "sparklines-intro" | "sparklines-survey" | "sparklines-wizard" | "sparklines-monetize";
+  kind:
+    | "sparklines-intro"
+    | "sparklines-survey"
+    | "sparklines-wizard"
+    | "sparklines-monetize"
+    // Phase 2 — all share the same labels[]/series[][] shape so renderLongitudinal
+    // handles them uniformly. The kind only drives the chart title via
+    // LONG_TITLES below.
+    | "sparklines-channels"
+    | "sparklines-archetypes"
+    | "sparklines-pricing"
+    | "sparklines-velocity"
+    | "sparklines-ux"
+    | "sparklines-payment"
+    | "sparklines-invite"
+    | "sparklines-questions";
   windowLabel?: string;
   labels: string[];
   // One row per label. Each inner array MUST be the same length.
@@ -552,6 +575,15 @@ const LONG_TITLES: Record<LongitudinalPayload["kind"], string> = {
   "sparklines-survey": "Survey chapter completion",
   "sparklines-wizard": "Pre-report wizard retention",
   "sparklines-monetize": "Monetization ladder",
+  // Phase 2 titles.
+  "sparklines-channels": "Acquisition channels",
+  "sparklines-archetypes": "Per-archetype conversion",
+  "sparklines-pricing": "Pricing-modal funnel",
+  "sparklines-velocity": "Paywall → purchase velocity (hours)",
+  "sparklines-ux": "UX friction signals",
+  "sparklines-payment": "Payment health",
+  "sparklines-invite": "Viral loop (email-match)",
+  "sparklines-questions": "Top abandoned questions",
 };
 
 /**
@@ -755,6 +787,14 @@ function renderForKind(
     case "sparklines-survey":
     case "sparklines-wizard":
     case "sparklines-monetize":
+    case "sparklines-channels":
+    case "sparklines-archetypes":
+    case "sparklines-pricing":
+    case "sparklines-velocity":
+    case "sparklines-ux":
+    case "sparklines-payment":
+    case "sparklines-invite":
+    case "sparklines-questions":
       return renderLongitudinal(payload as LongitudinalPayload);
     default:
       return {

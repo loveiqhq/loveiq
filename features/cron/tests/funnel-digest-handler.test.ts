@@ -52,6 +52,8 @@ vi.mock("@features/admin/server/digest-recommendation-history", () => ({
   persistRecommendations: (...args: unknown[]) => mockPersistRecommendations(...args),
 }));
 
+const mockFetchQuestionAbandonmentTopN = vi.fn();
+
 vi.mock("@features/admin/server/digest-metrics", async () => {
   const actual = await vi.importActual<typeof import("@features/admin/server/digest-metrics")>(
     "@features/admin/server/digest-metrics"
@@ -61,6 +63,7 @@ vi.mock("@features/admin/server/digest-metrics", async () => {
     fetchDailyMetrics: (...args: unknown[]) => mockFetchDailyMetrics(...args),
     fetchWeeklyMetrics: (...args: unknown[]) => mockFetchWeeklyMetrics(...args),
     fetchFunnelCaptureStart: (...args: unknown[]) => mockFetchFunnelCaptureStart(...args),
+    fetchQuestionAbandonmentTopN: (...args: unknown[]) => mockFetchQuestionAbandonmentTopN(...args),
   };
 });
 
@@ -204,6 +207,9 @@ beforeEach(() => {
   mockFetchFunnelCaptureStart.mockResolvedValue(null);
   mockFetchDailyMetrics.mockResolvedValue(baseDaily);
   mockFetchWeeklyMetrics.mockResolvedValue(buildWeekly());
+  // Phase 2 — questions fetcher; null = chart skipped (no per-question data
+  // in the fixture). Tests that exercise the questions branch should override.
+  mockFetchQuestionAbandonmentTopN.mockResolvedValue(null);
 });
 
 function newRequest() {
@@ -233,9 +239,12 @@ describe("funnel-digest cron handler — wiring", () => {
     vi.setSystemTime(new Date("2026-05-26T09:00:00Z")); // 2026-05-26 = Tuesday
     try {
       await GET(newRequest());
+      // Phase 2 — daily now splits into msg1 + msg2. The fixture has no v3
+      // / channel / archetype / velocity snapshots, so msg2 is null and only
+      // msg1 ships. Confirm the single call is the new msg1 kind.
       expect(mockNotifySlack).toHaveBeenCalledOnce();
       const call = mockNotifySlack.mock.calls[0][0];
-      expect(call.kind).toBe("daily_digest");
+      expect(call.kind).toBe("daily_digest_msg1");
       expect(call.channel).toBe("ops");
       expect(call.text).toContain("Daily digest");
       expect(Array.isArray(call.blocks)).toBe(true);
@@ -250,14 +259,17 @@ describe("funnel-digest cron handler — wiring", () => {
     }
   });
 
-  it("monday path sends THREE Slack messages: daily + weekly + strategy supplement", async () => {
-    // 2026-05-25 is a Monday (UTC).
+  it("monday path sends THREE Slack messages: daily msg1 + weekly + strategy supplement", async () => {
+    // 2026-05-25 is a Monday (UTC). Phase 2 — daily msg2 ships only when v3
+    // monetization data is present; the fixture has none so msg2 is suppressed.
+    // The questions chart also skips because mockFetchQuestionAbandonmentTopN
+    // returns null. Net = 3 sends as before.
     vi.setSystemTime(new Date("2026-05-25T09:00:00Z"));
     try {
       await GET(newRequest());
       expect(mockNotifySlack).toHaveBeenCalledTimes(3);
       const kinds = mockNotifySlack.mock.calls.map((c) => c[0].kind);
-      expect(kinds).toEqual(["daily_digest", "weekly_digest", "weekly_strategy_supplement"]);
+      expect(kinds).toEqual(["daily_digest_msg1", "weekly_digest", "weekly_strategy_supplement"]);
     } finally {
       vi.useRealTimers();
     }

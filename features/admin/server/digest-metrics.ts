@@ -126,6 +126,25 @@ export interface DailyMetrics {
    * failure → renderer omits all four image blocks (text section unaffected).
    */
   extendedSparklines: ExtendedSparklineSnapshot | null;
+  /**
+   * Phase 2 superset of extendedSparklines — same per-day rows PLUS 4 new
+   * fixed-key buckets (pricing, ux, payment_health, invite). Wraps the v3
+   * RPC. Null on RPC failure; renderer omits all v3-only image blocks but
+   * the existing v2-derived charts still ship via `extendedSparklines`.
+   */
+  extendedSparklinesV3: ExtendedSparklineV3Snapshot | null;
+  /**
+   * Per-source per-day funnel counts (starts / completions / purchases).
+   * Top-5 sources by total volume drive the chart; the snapshot itself keeps
+   * ALL sources so Node-side ranking is stable across re-runs.
+   * Renamed from `channels` to avoid collision with existing
+   * `channels: ChannelEfficiencySnapshot` (different domain, same noun).
+   */
+  channelSparklines: ChannelSparklineSnapshot | null;
+  /** Per-archetype per-day completions + purchases. Top-N filtered Node-side. */
+  archetypeSparklines: ArchetypeSparklineSnapshot | null;
+  /** Daily p50/p75/p90 paywall→purchase hours. */
+  velocitySparklines: VelocitySnapshot | null;
 }
 
 export interface FunnelStages {
@@ -229,6 +248,126 @@ export interface ExtendedSparklineDay {
 
 export interface ExtendedSparklineSnapshot {
   days: ExtendedSparklineDay[];
+}
+
+// -----------------------------------------------------------------------------
+// Phase 2 — extra fixed-key buckets layered on top of ExtendedSparklineDay
+// -----------------------------------------------------------------------------
+
+export interface PricingSparklineBuckets {
+  paywall_initiated: number;
+  price_shown: number;
+  begin_checkout: number;
+  purchased: number;
+}
+
+export interface UxSparklineBuckets {
+  rage_click: number;
+  scroll_depth_50: number;
+  scroll_depth_100: number;
+}
+
+export interface PaymentHealthSparklineBuckets {
+  refunds: number;
+  disputes: number;
+  failed: number;
+  promo_redemptions: number;
+}
+
+/**
+ * Viral loop email-match attribution. `partner_completed` and
+ * `partner_purchased` are bucketed on the INVITE day so the chart reads
+ * "of invites sent today, how many led to partner completions/purchases by
+ * the end of the window". Underestimates by definition — only counts when
+ * the invitee signs up with the same email they were invited at.
+ */
+export interface InviteSparklineBuckets {
+  sent: number;
+  partner_completed: number;
+  partner_purchased: number;
+}
+
+export interface ExtendedSparklineV3Day extends ExtendedSparklineDay {
+  pricing: PricingSparklineBuckets;
+  ux: UxSparklineBuckets;
+  payment_health: PaymentHealthSparklineBuckets;
+  invite: InviteSparklineBuckets;
+}
+
+export interface ExtendedSparklineV3Snapshot {
+  days: ExtendedSparklineV3Day[];
+}
+
+/**
+ * Per-source per-day funnel triple. Sources are dynamic (any UTM source
+ * value); Node side ranks top-N.
+ */
+export interface ChannelDayCounts {
+  starts: number;
+  completions: number;
+  purchases: number;
+}
+
+export interface ChannelSparklineDay {
+  day: string;
+  sources: Record<string, ChannelDayCounts>;
+}
+
+export interface ChannelSparklineSnapshot {
+  days: ChannelSparklineDay[];
+}
+
+/**
+ * Per-archetype per-day completion + purchase counts. Archetype names follow
+ * the V5 scoring engine; falls back to V4 `primary_archetype` when V5 is null.
+ */
+export interface ArchetypeDayCounts {
+  completions: number;
+  purchases: number;
+}
+
+export interface ArchetypeSparklineDay {
+  day: string;
+  archetypes: Record<string, ArchetypeDayCounts>;
+}
+
+export interface ArchetypeSparklineSnapshot {
+  days: ArchetypeSparklineDay[];
+}
+
+/**
+ * Daily decision-time percentiles (paywall_initiated → succeeded payment).
+ * Includes `n` so the renderer can dim or hide low-sample days.
+ */
+export interface VelocityDay {
+  day: string;
+  n: number;
+  p50: number;
+  p75: number;
+  p90: number;
+}
+
+export interface VelocitySnapshot {
+  days: VelocityDay[];
+}
+
+/**
+ * Top-N abandonment by q_id over the window with a per-day series for each.
+ * Returned by the weekly-only `get_question_abandonment_top_n` RPC.
+ */
+export interface QuestionAbandonmentDay {
+  day: string;
+  n: number;
+}
+
+export interface QuestionAbandonmentRow {
+  q_id: string;
+  total: number;
+  days: QuestionAbandonmentDay[];
+}
+
+export interface QuestionAbandonmentSnapshot {
+  top_questions: QuestionAbandonmentRow[];
 }
 
 /**
@@ -986,6 +1125,232 @@ export async function fetchExtendedSparklines(
   return { days };
 }
 
+// -----------------------------------------------------------------------------
+// Phase 2 fetchers — superset RPC + 3 specialized RPCs (channels / archetypes /
+// velocity / question abandonment). All share the null-on-failure +
+// num-coerce-everything contract from the v2 fetcher above.
+// -----------------------------------------------------------------------------
+
+/** Coerce any field to a finite non-negative int. Shared by all fetchers. */
+function coerceNonNegInt(v: unknown): number {
+  const n = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(n) && n >= 0 ? Math.trunc(n) : 0;
+}
+
+/** Coerce to finite non-negative float (for percentile hours). */
+function coerceNonNegFloat(v: unknown): number {
+  const n = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(n) && n >= 0 ? n : 0;
+}
+
+function objOrEmpty(v: unknown): Record<string, unknown> {
+  return v && typeof v === "object" ? (v as Record<string, unknown>) : {};
+}
+
+export async function fetchExtendedSparklinesV3(
+  sinceIso: string,
+  untilIso: string
+): Promise<ExtendedSparklineV3Snapshot | null> {
+  const raw = await callRpc<{ days?: unknown }>("get_funnel_sparklines_v3", {
+    since_ts: sinceIso,
+    until_ts: untilIso,
+  });
+  if (!raw || !Array.isArray(raw.days)) return null;
+  const days: ExtendedSparklineV3Day[] = [];
+  for (const row of raw.days) {
+    if (!row || typeof row !== "object") continue;
+    const r = row as Record<string, unknown>;
+    const day = typeof r.day === "string" ? r.day : "";
+    if (!day) continue;
+    const intro = objOrEmpty(r.intro);
+    const wizard = objOrEmpty(r.wizard);
+    const monetize = objOrEmpty(r.monetize);
+    const survey = objOrEmpty(r.survey);
+    const pricing = objOrEmpty(r.pricing);
+    const ux = objOrEmpty(r.ux);
+    const paymentHealth = objOrEmpty(r.payment_health);
+    const invite = objOrEmpty(r.invite);
+    const surveyCounts: SurveyChapterCounts = {};
+    for (const [key, val] of Object.entries(survey)) {
+      if (/^[0-9]{2}$/.test(key)) surveyCounts[key] = coerceNonNegInt(val);
+    }
+    days.push({
+      day,
+      intro: {
+        s1: coerceNonNegInt(intro.s1),
+        s2: coerceNonNegInt(intro.s2),
+        s3: coerceNonNegInt(intro.s3),
+        s4: coerceNonNegInt(intro.s4),
+      },
+      survey: surveyCounts,
+      wizard: {
+        s1: coerceNonNegInt(wizard.s1),
+        s2: coerceNonNegInt(wizard.s2),
+        s3: coerceNonNegInt(wizard.s3),
+        s4: coerceNonNegInt(wizard.s4),
+        s5: coerceNonNegInt(wizard.s5),
+        s6: coerceNonNegInt(wizard.s6),
+        report_viewed: coerceNonNegInt(wizard.report_viewed),
+      },
+      monetize: {
+        report_viewed: coerceNonNegInt(monetize.report_viewed),
+        engagement_5min: coerceNonNegInt(monetize.engagement_5min),
+        paywall_init: coerceNonNegInt(monetize.paywall_init),
+        begin_checkout: coerceNonNegInt(monetize.begin_checkout),
+        purchased: coerceNonNegInt(monetize.purchased),
+      },
+      pricing: {
+        paywall_initiated: coerceNonNegInt(pricing.paywall_initiated),
+        price_shown: coerceNonNegInt(pricing.price_shown),
+        begin_checkout: coerceNonNegInt(pricing.begin_checkout),
+        purchased: coerceNonNegInt(pricing.purchased),
+      },
+      ux: {
+        rage_click: coerceNonNegInt(ux.rage_click),
+        scroll_depth_50: coerceNonNegInt(ux.scroll_depth_50),
+        scroll_depth_100: coerceNonNegInt(ux.scroll_depth_100),
+      },
+      payment_health: {
+        refunds: coerceNonNegInt(paymentHealth.refunds),
+        disputes: coerceNonNegInt(paymentHealth.disputes),
+        failed: coerceNonNegInt(paymentHealth.failed),
+        promo_redemptions: coerceNonNegInt(paymentHealth.promo_redemptions),
+      },
+      invite: {
+        sent: coerceNonNegInt(invite.sent),
+        partner_completed: coerceNonNegInt(invite.partner_completed),
+        partner_purchased: coerceNonNegInt(invite.partner_purchased),
+      },
+    });
+  }
+  return { days };
+}
+
+export async function fetchChannelSparklines(
+  sinceIso: string,
+  untilIso: string
+): Promise<ChannelSparklineSnapshot | null> {
+  const raw = await callRpc<{ days?: unknown }>("get_channel_sparklines", {
+    since_ts: sinceIso,
+    until_ts: untilIso,
+  });
+  if (!raw || !Array.isArray(raw.days)) return null;
+  const days: ChannelSparklineDay[] = [];
+  for (const row of raw.days) {
+    if (!row || typeof row !== "object") continue;
+    const r = row as Record<string, unknown>;
+    const day = typeof r.day === "string" ? r.day : "";
+    if (!day) continue;
+    const sources: Record<string, ChannelDayCounts> = {};
+    const rawSources = objOrEmpty(r.sources);
+    for (const [name, val] of Object.entries(rawSources)) {
+      // Source names come from a LOWER+TRIM in SQL; still reject empties.
+      if (!name || typeof name !== "string") continue;
+      const counts = objOrEmpty(val);
+      sources[name] = {
+        starts: coerceNonNegInt(counts.starts),
+        completions: coerceNonNegInt(counts.completions),
+        purchases: coerceNonNegInt(counts.purchases),
+      };
+    }
+    days.push({ day, sources });
+  }
+  return { days };
+}
+
+export async function fetchArchetypeSparklines(
+  sinceIso: string,
+  untilIso: string
+): Promise<ArchetypeSparklineSnapshot | null> {
+  const raw = await callRpc<{ days?: unknown }>("get_archetype_sparklines", {
+    since_ts: sinceIso,
+    until_ts: untilIso,
+  });
+  if (!raw || !Array.isArray(raw.days)) return null;
+  const days: ArchetypeSparklineDay[] = [];
+  for (const row of raw.days) {
+    if (!row || typeof row !== "object") continue;
+    const r = row as Record<string, unknown>;
+    const day = typeof r.day === "string" ? r.day : "";
+    if (!day) continue;
+    const archetypes: Record<string, ArchetypeDayCounts> = {};
+    const rawArchetypes = objOrEmpty(r.archetypes);
+    for (const [name, val] of Object.entries(rawArchetypes)) {
+      if (!name || typeof name !== "string") continue;
+      const counts = objOrEmpty(val);
+      archetypes[name] = {
+        completions: coerceNonNegInt(counts.completions),
+        purchases: coerceNonNegInt(counts.purchases),
+      };
+    }
+    days.push({ day, archetypes });
+  }
+  return { days };
+}
+
+export async function fetchVelocityPercentiles(
+  sinceIso: string,
+  untilIso: string
+): Promise<VelocitySnapshot | null> {
+  const raw = await callRpc<{ days?: unknown }>("get_velocity_percentiles", {
+    since_ts: sinceIso,
+    until_ts: untilIso,
+  });
+  if (!raw || !Array.isArray(raw.days)) return null;
+  const days: VelocityDay[] = [];
+  for (const row of raw.days) {
+    if (!row || typeof row !== "object") continue;
+    const r = row as Record<string, unknown>;
+    const day = typeof r.day === "string" ? r.day : "";
+    if (!day) continue;
+    days.push({
+      day,
+      n: coerceNonNegInt(r.n),
+      p50: coerceNonNegFloat(r.p50),
+      p75: coerceNonNegFloat(r.p75),
+      p90: coerceNonNegFloat(r.p90),
+    });
+  }
+  return { days };
+}
+
+/**
+ * Weekly-only — top-N abandoned questions in the window with per-day series.
+ * Used by the weekly digest to chart "which screens kill the survey over time".
+ */
+export async function fetchQuestionAbandonmentTopN(
+  sinceIso: string,
+  untilIso: string,
+  topN = 10
+): Promise<QuestionAbandonmentSnapshot | null> {
+  const raw = await callRpc<{ top_questions?: unknown }>("get_question_abandonment_top_n", {
+    since_ts: sinceIso,
+    until_ts: untilIso,
+    top_n: topN,
+  });
+  if (!raw || !Array.isArray(raw.top_questions)) return null;
+  const out: QuestionAbandonmentRow[] = [];
+  for (const item of raw.top_questions) {
+    if (!item || typeof item !== "object") continue;
+    const r = item as Record<string, unknown>;
+    const q_id = typeof r.q_id === "string" ? r.q_id : "";
+    if (!q_id) continue;
+    const total = coerceNonNegInt(r.total);
+    const days: QuestionAbandonmentDay[] = [];
+    if (Array.isArray(r.days)) {
+      for (const d of r.days) {
+        if (!d || typeof d !== "object") continue;
+        const dr = d as Record<string, unknown>;
+        const day = typeof dr.day === "string" ? dr.day : "";
+        if (!day) continue;
+        days.push({ day, n: coerceNonNegInt(dr.n) });
+      }
+    }
+    out.push({ q_id, total, days });
+  }
+  return { top_questions: out };
+}
+
 export async function fetchDropoffEverywhere(
   sinceIso: string,
   untilIso: string
@@ -1241,6 +1606,10 @@ export async function fetchDailyMetrics(sinceIso: string, untilIso: string): Pro
     wizardFunnel,
     sparklines,
     extendedSparklines,
+    extendedSparklinesV3,
+    channels30d,
+    archetypes30d,
+    velocity30d,
   ] = await Promise.all([
     fetchFunnelEventCount("unique_visitor", sinceIso, untilIso),
     fetchNewVsReturning(sinceIso, untilIso),
@@ -1297,6 +1666,25 @@ export async function fetchDailyMetrics(sinceIso: string, untilIso: string): Pro
       new Date(new Date(untilIso).getTime() - 30 * 86_400_000).toISOString(),
       untilIso
     ),
+    // Phase 2 — v3 superset (adds pricing/ux/payment_health/invite) plus 3
+    // specialized RPCs (channels, archetypes, velocity). Each is null-safe
+    // and feeds an independent chart block downstream.
+    fetchExtendedSparklinesV3(
+      new Date(new Date(untilIso).getTime() - 30 * 86_400_000).toISOString(),
+      untilIso
+    ),
+    fetchChannelSparklines(
+      new Date(new Date(untilIso).getTime() - 30 * 86_400_000).toISOString(),
+      untilIso
+    ),
+    fetchArchetypeSparklines(
+      new Date(new Date(untilIso).getTime() - 30 * 86_400_000).toISOString(),
+      untilIso
+    ),
+    fetchVelocityPercentiles(
+      new Date(new Date(untilIso).getTime() - 30 * 86_400_000).toISOString(),
+      untilIso
+    ),
   ]);
 
   const completionRate = surveyStarts > 0 ? Math.round((completions / surveyStarts) * 100) : 0;
@@ -1340,6 +1728,10 @@ export async function fetchDailyMetrics(sinceIso: string, untilIso: string): Pro
     wizardFunnel,
     sparklines,
     extendedSparklines,
+    extendedSparklinesV3,
+    channelSparklines: channels30d,
+    archetypeSparklines: archetypes30d,
+    velocitySparklines: velocity30d,
   };
 }
 
