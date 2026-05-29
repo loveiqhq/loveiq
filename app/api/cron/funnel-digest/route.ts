@@ -945,6 +945,22 @@ type DigestImageKind =
   | "sparklines-wizard"
   | "sparklines-monetize";
 
+/**
+ * Deploy stamp embedded in every signed image URL. Without it, the URL is
+ * deterministic from the data payload — and since digest data doesn't change
+ * minute-to-minute, a re-run after a code-only deploy would produce IDENTICAL
+ * URLs, hit Slack's 24h image-proxy cache, and serve the OLD rendered PNG
+ * even though the edge renderer has new code.
+ *
+ * Vercel injects VERCEL_GIT_COMMIT_SHA at build time. Fallback to a hostname-
+ * stamped placeholder in dev so local re-runs still bust correctly.
+ */
+function deployStamp(): string {
+  const sha = process.env.VERCEL_GIT_COMMIT_SHA;
+  if (sha && sha.length >= 7) return sha.slice(0, 7);
+  return `dev-${process.env.HOSTNAME ?? "local"}`;
+}
+
 async function buildSignedImageUrl(
   kind: DigestImageKind,
   payload: Record<string, unknown>
@@ -955,7 +971,10 @@ async function buildSignedImageUrl(
     return null;
   }
   try {
-    const { d, s } = await signImagePayload({ kind, ...payload });
+    // `v` rides inside the signed payload so the URL changes on every deploy.
+    // The edge route ignores unknown payload fields, so no consumer-side
+    // change is needed.
+    const { d, s } = await signImagePayload({ kind, v: deployStamp(), ...payload });
     const u = new URL(`/api/admin/digest-image/${kind}`, base);
     u.searchParams.set("d", d);
     u.searchParams.set("s", s);

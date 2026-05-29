@@ -801,10 +801,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ kind
     return new ImageResponse(element, {
       width: WIDTH,
       height,
-      // Slack image proxy caches aggressively; URL acts as the cache key so
-      // a long max-age is safe and reduces re-render load.
+      // Short cache window (1h instead of 24h) so a fix-the-visual iteration
+      // doesn't get stuck behind Slack's image proxy cache. The signed URL
+      // already includes a deploy-stamp `v` field so each deploy busts the
+      // cache regardless; this is belt-and-suspenders.
       headers: {
-        "Cache-Control": "public, max-age=86400, immutable",
+        "Cache-Control": "public, max-age=3600",
       },
     });
   } catch {
