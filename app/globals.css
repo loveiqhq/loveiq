@@ -3235,10 +3235,15 @@ input.autofill-dark:-internal-autofill-previewed {
   max-width: 460px;
   margin: 0 auto 40px;
   perspective: 1800px;
+  /* Let a vertical swipe scroll the modal instead of being captured by the 3D
+     card (iOS Safari otherwise garbles pan gestures over a preserve-3d layer).
+     A tap (no pan) still fires onClick -> flipCard, so tap-to-flip is intact. */
+  touch-action: pan-y;
 }
 .rpm-flip__inner {
   display: grid;
   transform-style: preserve-3d;
+  touch-action: pan-y;
   transition:
     transform 600ms cubic-bezier(0.16, 1, 0.3, 1),
     height 600ms cubic-bezier(0.16, 1, 0.3, 1);
@@ -3269,6 +3274,7 @@ input.autofill-dark:-internal-autofill-previewed {
   flex-direction: column;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
+  touch-action: pan-y;
 }
 .rpm-flip__face > .rpm-pricing-card,
 .rpm-flip__face > div:first-child {
@@ -3315,6 +3321,13 @@ input.autofill-dark:-internal-autofill-previewed {
 .rpm-flip__hint svg {
   width: 15px;
   height: 15px;
+}
+/* The hint is conditionally unrendered once flipped (it belongs to the front
+   face). This guards the sub-frame before React removes it: visibility:hidden
+   (not opacity) drops it from Safari's backface compositing, so it can never
+   bleed through mirrored onto the pricing face. */
+.rpm-flip__inner.is-flipped .rpm-flip__hint {
+  visibility: hidden;
 }
 /* Back "view archetype" control — centered pill below the pricing card. */
 .rpm-flip__back {

@@ -141,6 +141,16 @@ describe("ScrollPricingModal — flip deck (treatment)", () => {
     expect(screen.getByRole("button", { name: /view your archetype/i })).toBeInTheDocument();
   });
 
+  it("removes the front 'tap to flip' hint once flipped (no Safari backface bleed)", () => {
+    renderModal({ flipDeck: true });
+    // Hint is present while front-facing…
+    expect(screen.getByText("Tap to see your offer")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /reveal your offer/i }));
+    // …and gone from the DOM once flipped, so it can't render mirrored behind
+    // the pricing face on iOS Safari.
+    expect(screen.queryByText("Tap to see your offer")).not.toBeInTheDocument();
+  });
+
   it("flips back to the archetype when the back card surface is tapped", () => {
     renderModal({ flipDeck: true });
     fireEvent.click(screen.getByRole("button", { name: /reveal your offer/i }));

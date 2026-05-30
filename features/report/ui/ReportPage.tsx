@@ -1206,12 +1206,20 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   // once on click; child re-renders triggered by a new callback identity are
   // cheap (no memoized children below this in the tree).
   const handlePurchaseFullReport = () => {
+    // Footer CTA on the "Other Archetypes" breakdown. For a user who already
+    // owns full_report (their PRIMARY archetype), "the full report" is theirs —
+    // the only thing still locked in this section is the OTHER archetypes, which
+    // all_reports unlocks. So route full_report owners to all_reports; everyone
+    // else (no plan / essentials) buys full_report. all_reports is a global
+    // unlock, so it carries no archetype (beginCheckout nulls it too).
+    const plan: ReportPurchasePlanId = accessPlan === "full_report" ? "all_reports" : "full_report";
+    const archetype = plan === "all_reports" ? null : primaryArchetype;
     trackPaywallInitiated({
       source: "archetype_breakdown_footer",
-      archetype: primaryArchetype,
-      plan_needed: "full_report",
+      archetype,
+      plan_needed: plan,
     });
-    beginCheckout("full_report", primaryArchetype);
+    beginCheckout(plan, archetype);
   };
 
   const closePricingModal = useCallback(() => {

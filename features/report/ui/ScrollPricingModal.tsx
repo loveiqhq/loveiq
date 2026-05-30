@@ -1254,7 +1254,7 @@ const ScrollPricingModal: FC<Props> = ({
                         />
                       </div>
                     </div>
-                    {flipDeck && (
+                    {flipDeck && !flipped && (
                       <div className="rpm-flip__hint" aria-hidden="true">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                           <path

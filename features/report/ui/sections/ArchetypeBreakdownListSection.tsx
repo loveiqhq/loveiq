@@ -238,6 +238,13 @@ const ArchetypeBreakdownListSection: FC<Props> = ({
 
   const showFooterButton = accessPlan !== "all_reports";
   const allUnlocked = accessPlan === "all_reports";
+  // full_report owners already have "the full report" for their primary
+  // archetype — the only thing still locked here is the OTHER archetypes, which
+  // all_reports unlocks. So relabel the footer CTA accordingly (the parent's
+  // handler routes full_report owners to the all_reports plan). null / essentials
+  // owners still see "Unlock the Full Report".
+  const footerCtaLabel =
+    accessPlan === "full_report" ? "Unlock All Reports" : "Unlock the Full Report";
 
   return (
     <section
@@ -531,7 +538,7 @@ const ArchetypeBreakdownListSection: FC<Props> = ({
               unoptimized
               className="pointer-events-none absolute left-[calc(50%-82.92px)] top-1/2 h-[14px] w-[14px] -translate-y-1/2"
             />
-            <span>Unlock the Full Report</span>
+            <span>{footerCtaLabel}</span>
             <Image
               src={archetypeBreakdownStaticAssets.ctaIconRight}
               alt=""

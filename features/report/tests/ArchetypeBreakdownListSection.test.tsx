@@ -255,6 +255,30 @@ describe("ArchetypeBreakdownListSection", () => {
     expect(onUnlock).not.toHaveBeenCalled();
   });
 
+  it("relabels the footer CTA to 'Unlock All Reports' once full_report is owned", () => {
+    const onPurchaseFullReport = vi.fn();
+    render(
+      <ArchetypeBreakdownListSection
+        percentages={basePercentages}
+        primaryArchetype="Authority Conductor"
+        ranking={baseRanking}
+        unlockedArchetypes={new Set(["Authority Conductor"])}
+        accessPlan="full_report"
+        onUnlock={vi.fn()}
+        onPurchaseFullReport={onPurchaseFullReport}
+      />
+    );
+
+    // The owner already has the full report for their primary archetype, so the
+    // footer upsells the OTHER archetypes (all_reports) instead of re-selling a
+    // plan they own. The old label must be gone.
+    expect(screen.queryByRole("button", { name: /unlock the full report/i })).toBeNull();
+    const cta = screen.getByRole("button", { name: /unlock all reports/i });
+    fireEvent.click(cta);
+    // The parent handler (ReportPage) routes full_report owners to all_reports.
+    expect(onPurchaseFullReport).toHaveBeenCalledTimes(1);
+  });
+
   it("renders nothing when ranking is empty", () => {
     const { container } = render(
       <ArchetypeBreakdownListSection
