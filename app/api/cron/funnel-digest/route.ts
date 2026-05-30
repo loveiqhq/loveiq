@@ -143,11 +143,35 @@ async function lineChartBlock(
     labels: string[];
     series: number[][];
     rate?: boolean;
+    xAxis?: string[];
   }
 ): Promise<SlackBlock | null> {
   const url = await buildSignedImageUrl(kind, payload);
   if (!url) return null;
   return { type: "image", image_url: url, alt_text: altText };
+}
+
+// Pure YYYY-MM-DD -> "MMM D" (no Date/locale -> no tz drift). Used for the
+// time-series x-axis tick labels. Exported for unit testing.
+const MONTH_ABBR = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
+export function shortDate(isoDay: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoDay);
+  if (!m) return isoDay;
+  const month = MONTH_ABBR[Number(m[2]) - 1] ?? m[2];
+  return `${month} ${Number(m[3])}`;
 }
 
 // -----------------------------------------------------------------------------
@@ -166,6 +190,9 @@ async function buildCvrChartBlocks(
   if (!snap || snap.days.length === 0) return [];
   const days = snap.days;
   const out: SlackBlock[] = [];
+  // Shared x-axis: one date label per day (e.g. "May 12"). Renderer samples
+  // ~5 evenly-spaced ticks from it.
+  const xAxis = days.map((d) => shortDate(d.day));
 
   const single = async (
     kind: DigestImageKind,
@@ -186,6 +213,7 @@ async function buildCvrChartBlocks(
       labels: [label],
       series: [series],
       rate: true,
+      xAxis,
     });
     if (block) out.push(block);
   };
@@ -206,10 +234,11 @@ async function buildCvrChartBlocks(
   );
 
   // Chart 3 — completion -> report-view at 1m / 5m / 10m (3 lines, one chart).
-  const eng1 = days.map((d) => computeRate(d.eng_1m, d.completions));
-  const eng5 = days.map((d) => computeRate(d.eng_5m, d.completions));
-  const eng10 = days.map((d) => computeRate(d.eng_10m, d.completions));
-  if (![eng1, eng5, eng10].every((s) => s.every((v) => v === 0))) {
+  // Gate on the denominator (completions), so a real 0% engagement still shows.
+  if (days.some((d) => d.completions > 0)) {
+    const eng1 = days.map((d) => computeRate(d.eng_1m, d.completions));
+    const eng5 = days.map((d) => computeRate(d.eng_5m, d.completions));
+    const eng10 = days.map((d) => computeRate(d.eng_10m, d.completions));
     const block = await lineChartBlock(
       "cvr-completion-engagement",
       "Completion to report-view conversion (1m / 5m / 10m) over time",
@@ -218,6 +247,7 @@ async function buildCvrChartBlocks(
         labels: ["1 min", "5 min", "10 min"],
         series: [eng1, eng5, eng10],
         rate: true,
+        xAxis,
       }
     );
     if (block) out.push(block);
@@ -300,30 +330,69 @@ async function buildBucketChartBlock(
     labels,
     series,
     rate: true,
+    xAxis: days.map((d) => shortDate(d.day)),
   });
 }
 
 /**
- * Chart 7: survey drop-out retention curve. x = question order, y = % of the
- * first-question cohort still present. The descending curve's cliffs show
- * where users quit. Window snapshot (not per-day).
+ * Chart 7: survey drop-out by question. One bar per question; height = the
+ * drop-off RATE at that question = (reached_i - reached_{i+1}) / reached_i.
+ * Tall bar = a question where users quit. Renderer highlights the worst few.
+ *
+ * Reach floor (>=5 distinct sessions) drops tiny-sample late questions whose
+ * 1-of-1 bail would otherwise show a misleading 100% bar. The last question
+ * has no successor, so it has no drop-off bar (loop stops at length-1).
  */
+const DROPOUT_REACH_FLOOR = 5;
+
+export interface DropoutBar {
+  label: string;
+  dropPct: number;
+  reached: number;
+}
+
+/**
+ * Per-question drop-off bars from an ordered reach array. dropPct at question i
+ * = (reached_i - reached_{i+1}) / reached_i. The last question has no successor
+ * so it produces no bar. Questions reached by fewer than `floor` distinct
+ * sessions are skipped (tiny-sample noise). Exported for unit testing.
+ */
+export function computeDropoutBars(
+  questions: Array<{ question_index: number; sessions: number }>,
+  floor = DROPOUT_REACH_FLOOR
+): DropoutBar[] {
+  const bars: DropoutBar[] = [];
+  for (let i = 0; i < questions.length - 1; i += 1) {
+    const reached = questions[i]!.sessions;
+    const next = questions[i + 1]!.sessions;
+    if (reached < floor) continue;
+    const dropped = Math.max(0, reached - next);
+    bars.push({
+      label: `Q${questions[i]!.question_index + 1}`,
+      dropPct: computeRate(dropped, reached),
+      reached,
+    });
+  }
+  return bars;
+}
+
 async function buildDropoutChartBlock(
   snap: DropoutFunnelSnapshot | null,
   windowLabel: string
 ): Promise<SlackBlock | null> {
-  if (!snap || snap.questions.length === 0) return null;
-  const base = snap.questions[0]!.sessions;
-  if (base <= 0) return null;
-  // Retention% relative to the first question's reach.
-  const retention = snap.questions.map((q) => computeRate(q.sessions, base));
-  if (retention.every((v) => v === 0)) return null;
-  return lineChartBlock("dropout-funnel", "Survey drop-out retention curve by question", {
-    windowLabel: `${windowLabel} · x = question order (Q1 → Q${snap.questions.length})`,
-    labels: ["Retention"],
-    series: [retention],
-    rate: true,
-  });
+  if (!snap || snap.questions.length < 2) return null;
+  const bars = computeDropoutBars(snap.questions);
+  if (bars.length === 0) return null;
+  // Compact payload (label + integer %) so ~59 bars stay under Slack's
+  // ~3000-char image_url cap. `reached` is dropped (renderer doesn't use it).
+  const compact = bars.map((b) => ({ label: b.label, dropPct: Math.round(b.dropPct) }));
+  const url = await buildSignedImageUrl("dropout-funnel", { windowLabel, bars: compact });
+  if (!url) return null;
+  return {
+    type: "image",
+    image_url: url,
+    alt_text: "Survey drop-off rate per question — where users quit",
+  };
 }
 
 /**

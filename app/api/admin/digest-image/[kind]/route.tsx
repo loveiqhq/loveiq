@@ -76,14 +76,16 @@ interface LongitudinalPayload {
     | "cvr-completion-engagement"
     | "cvr-completion-paygate"
     | "cvr-paygate-purchase"
-    | "bucket-performance"
-    | "dropout-funnel";
+    | "bucket-performance";
   windowLabel?: string;
   labels: string[];
   series: number[][];
-  // When true, values are percentages -> readout shows "max X%" and the empty
-  // state copy differs. All Phase-3 line charts set this.
+  // When true, values are percentages -> readout shows "now X% · max Y%" and
+  // the empty-state copy differs. All Phase-3 line charts set this.
   rate?: boolean;
+  // Optional x-axis category labels (one per series point — dates for the
+  // time-series charts). Sampled to ~5 evenly-spaced ticks under the plot.
+  xAxis?: string[];
 }
 
 /**
@@ -96,7 +98,22 @@ interface StageConversionPayload {
   stages: Array<{ label: string; sent: number; purchased: number }>;
 }
 
-type AnyPayload = LongitudinalPayload | StageConversionPayload;
+/**
+ * Drop-out-by-question histogram: one bar per survey question, height = the
+ * drop-off RATE at that question (% of people who saw it and did NOT advance).
+ * Tall bar = a question where users quit. `worstLabels` flags the steepest few
+ * for red highlight + annotation.
+ */
+interface DropoutPayload {
+  kind: "dropout-funnel";
+  windowLabel?: string;
+  // Compact on purpose: ~59 questions, so only the fields the renderer draws
+  // (label + drop-off %) ride in the signed URL to stay under Slack's
+  // ~3000-char image_url cap. `reached` is intentionally omitted.
+  bars: Array<{ label: string; dropPct: number }>;
+}
+
+type AnyPayload = LongitudinalPayload | StageConversionPayload | DropoutPayload;
 
 const LONG_TITLES: Record<LongitudinalPayload["kind"], string> = {
   "cvr-visitor-start": "Visitor → Survey-start CVR",
@@ -105,7 +122,6 @@ const LONG_TITLES: Record<LongitudinalPayload["kind"], string> = {
   "cvr-completion-paygate": "Completion → Paygate CVR",
   "cvr-paygate-purchase": "Paygate → Purchase CVR",
   "bucket-performance": "Price-bucket conversion rate",
-  "dropout-funnel": "Survey drop-out — retention by question",
 };
 
 function chartShell(
@@ -158,6 +174,22 @@ const ROW_GAP = 8;
 const BUFFER = 40;
 const MIN_HEIGHT = 220;
 const MAX_HEIGHT = 1200;
+// Extra height reserved for the shared x-axis tick row when xAxis is present.
+const X_AXIS_H = 28;
+// Layout columns shared by every line row (and the x-axis tick row, so the
+// ticks sit exactly under the plot). label | plot(+gutters) | readout.
+const LABEL_W = 150;
+const READOUT_W = 120;
+const PLOT_W = 450; // svgPoints width == <svg> width == area-close x (clip-safe)
+
+/** Up to 5 evenly-spaced ticks from an x-axis label array (all if <=5). */
+function sampleTicks(xAxis: string[]): string[] {
+  const n = xAxis.length;
+  if (n === 0) return [];
+  if (n <= 5) return xAxis.slice();
+  const idxs = [0, Math.round(n / 4), Math.round(n / 2), Math.round((3 * n) / 4), n - 1];
+  return idxs.map((i) => xAxis[Math.min(i, n - 1)] ?? "");
+}
 
 function rowHeightFor(rowCount: number): number {
   return rowCount <= FEW_ROW_THRESHOLD ? TALL_ROW_H : COMPACT_ROW_H;
@@ -230,15 +262,17 @@ function renderLongitudinal(p: LongitudinalPayload): {
 
   const rowCount = liveRows.length + (emptyCount > 0 ? 1 : 0);
   const rowH = rowHeightFor(rowCount);
-  const height = longitudinalHeight(rowCount, rowH);
+  const xTicks = Array.isArray(p.xAxis) ? sampleTicks(p.xAxis) : [];
+  const hasXAxis = xTicks.length > 0;
+  const height = longitudinalHeight(rowCount, rowH) + (hasXAxis ? X_AXIS_H : 0);
   const chartH = Math.max(4, rowH - 14);
-  // Plot width budget: 800 - 56 (shell padding) - 150 (label) - 96 (readout)
-  // = 498; reserve 10px gutter each side -> 470px. This SAME value drives
-  // svgPoints, the area-close point, AND the <svg> width so the line never
-  // clips (a prior bug used 514 for points but 474 for the svg element).
-  const chartW = 470;
-  const readout = (peak: number): string =>
-    isRate ? `max ${Math.round(peak)}%` : `peak ${peak.toLocaleString()}`;
+  const chartW = PLOT_W;
+  // Readout shows TODAY's value + the window peak, so the reader sees the
+  // current rate not just the high-water mark.
+  const readout = (peak: number, last: number): string =>
+    isRate
+      ? `now ${Math.round(last)}% · max ${Math.round(peak)}%`
+      : `peak ${peak.toLocaleString()}`;
 
   const element = chartShell(
     title,
@@ -248,6 +282,7 @@ function renderLongitudinal(p: LongitudinalPayload): {
         const color = rIdx % 2 === 0 ? COLORS.accentPurple : COLORS.accentOrange;
         const linePts = svgPoints(row.values, row.peak, chartW, chartH);
         const areaPts = linePts ? `0,${chartH} ${linePts} ${chartW},${chartH}` : "";
+        const last = row.values.length > 0 ? row.values[row.values.length - 1]! : 0;
         return (
           <div
             key={`${row.label}-${rIdx}`}
@@ -255,7 +290,7 @@ function renderLongitudinal(p: LongitudinalPayload): {
           >
             <div
               style={{
-                width: 150,
+                width: LABEL_W,
                 fontSize: 13,
                 color: COLORS.textMuted,
                 overflow: "hidden",
@@ -275,6 +310,14 @@ function renderLongitudinal(p: LongitudinalPayload): {
               }}
             >
               <svg width={chartW} height={chartH}>
+                {/* faint 0% baseline (polyline — the proven Satori primitive in
+                    this file — instead of <line>) so the floor is visible */}
+                <polyline
+                  points={`0,${chartH - 1} ${chartW},${chartH - 1}`}
+                  fill="none"
+                  stroke={COLORS.barTrack}
+                  strokeWidth="1"
+                />
                 {areaPts && <polygon points={areaPts} fill={color} fillOpacity="0.22" />}
                 {linePts && (
                   <polyline
@@ -291,17 +334,42 @@ function renderLongitudinal(p: LongitudinalPayload): {
             <div
               style={{
                 display: "flex",
-                width: 96,
-                fontSize: 13,
+                width: READOUT_W,
+                fontSize: 12,
                 color: COLORS.text,
                 justifyContent: "flex-end",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
               }}
             >
-              {readout(row.peak)}
+              {readout(row.peak, last)}
             </div>
           </div>
         );
       })}
+      {hasXAxis && (
+        <div style={{ display: "flex", alignItems: "center", height: X_AXIS_H }}>
+          <div style={{ width: LABEL_W }} />
+          <div
+            style={{
+              display: "flex",
+              width: chartW + 20,
+              paddingLeft: 10,
+              paddingRight: 10,
+              justifyContent: "space-between",
+              fontSize: 11,
+              color: COLORS.textMuted,
+            }}
+          >
+            {xTicks.map((t, i) => (
+              <div key={`${t}-${i}`} style={{ display: "flex" }}>
+                {t}
+              </div>
+            ))}
+          </div>
+          <div style={{ width: READOUT_W }} />
+        </div>
+      )}
       {emptyCount > 0 && (
         <div
           style={{
@@ -403,6 +471,131 @@ function renderStageConversion(p: StageConversionPayload): {
   };
 }
 
+// -----------------------------------------------------------------------------
+// Drop-out-by-question histogram (where users quit the survey)
+// -----------------------------------------------------------------------------
+
+const DROPOUT_PLOT_H = 320;
+const DROPOUT_WORST_N = 3;
+
+function renderDropoutBars(p: DropoutPayload): {
+  element: React.ReactElement;
+  height: number;
+} {
+  const bars = (Array.isArray(p.bars) ? p.bars : [])
+    .filter((b) => b && typeof b.label === "string")
+    .map((b) => ({
+      label: b.label,
+      dropPct: Math.max(0, Number(b.dropPct) || 0),
+    }));
+  const title = "Where users quit — drop-off % by question";
+  if (bars.length === 0) {
+    return {
+      element: chartShell(
+        title,
+        p.windowLabel ?? "",
+        <div style={{ display: "flex", color: COLORS.textMuted, fontSize: 18, padding: 24 }}>
+          Awaiting data — not enough survey traffic in this window yet.
+        </div>
+      ),
+      height: HEIGHT,
+    };
+  }
+
+  // Worst-N questions by drop-off rate drive the red highlight + the summary
+  // line. Derived here so coloring + summary can never disagree.
+  const worstIdx = new Set(
+    bars
+      .map((b, i) => ({ i, pct: b.dropPct }))
+      .sort((a, b) => b.pct - a.pct)
+      .slice(0, DROPOUT_WORST_N)
+      .filter((x) => x.pct > 0)
+      .map((x) => x.i)
+  );
+  const maxPct = bars.reduce((m, b) => Math.max(m, b.dropPct), 0) || 1;
+
+  // Sparse x-axis ticks: first, last, and a few evenly spaced between.
+  const tickEvery = Math.max(1, Math.ceil(bars.length / 8));
+  const ticks: Array<{ label: string; flex: number }> = bars.map((b, i) => ({
+    label: i === 0 || i === bars.length - 1 || i % tickEvery === 0 ? b.label : "",
+    flex: 1,
+  }));
+
+  const worstSummary = [...worstIdx]
+    .sort((a, b) => bars[b]!.dropPct - bars[a]!.dropPct)
+    .map((i) => `${bars[i]!.label} ${Math.round(bars[i]!.dropPct)}%`)
+    .join("  ·  ");
+
+  return {
+    element: chartShell(
+      title,
+      p.windowLabel ?? "",
+      <div style={{ display: "flex", flexDirection: "column" }}>
+        {/* Bar row */}
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "row",
+            alignItems: "flex-end",
+            height: DROPOUT_PLOT_H,
+            gap: 1,
+          }}
+        >
+          {bars.map((b, i) => {
+            const h = Math.max(2, Math.round((b.dropPct / maxPct) * (DROPOUT_PLOT_H - 4)));
+            const isWorst = worstIdx.has(i);
+            return (
+              <div
+                key={`${b.label}-${i}`}
+                style={{
+                  display: "flex",
+                  flex: 1,
+                  height: h,
+                  background: isWorst ? COLORS.danger : COLORS.accentOrange,
+                  opacity: isWorst ? 1 : 0.55,
+                  borderRadius: 1,
+                }}
+              />
+            );
+          })}
+        </div>
+        {/* X-axis question ticks */}
+        <div style={{ display: "flex", flexDirection: "row", gap: 1, marginTop: 6 }}>
+          {ticks.map((t, i) => (
+            <div
+              key={`tick-${i}`}
+              style={{
+                display: "flex",
+                flex: t.flex,
+                fontSize: 10,
+                color: COLORS.textMuted,
+                justifyContent: "center",
+                overflow: "hidden",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {t.label}
+            </div>
+          ))}
+        </div>
+        {/* Worst-offenders summary */}
+        <div
+          style={{
+            display: "flex",
+            marginTop: 16,
+            fontSize: 15,
+            color: COLORS.danger,
+            fontWeight: 700,
+          }}
+        >
+          {worstSummary ? `Steepest drop-offs:  ${worstSummary}` : "No notable drop-off spikes"}
+        </div>
+      </div>
+    ),
+    height: HEIGHT,
+  };
+}
+
 function renderForKind(
   kind: string,
   payload: AnyPayload
@@ -414,8 +607,9 @@ function renderForKind(
     case "cvr-completion-paygate":
     case "cvr-paygate-purchase":
     case "bucket-performance":
-    case "dropout-funnel":
       return renderLongitudinal(payload as LongitudinalPayload);
+    case "dropout-funnel":
+      return renderDropoutBars(payload as DropoutPayload);
     case "reactivation-email":
       return renderStageConversion(payload as StageConversionPayload);
     default:

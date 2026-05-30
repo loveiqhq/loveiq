@@ -9,11 +9,63 @@
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { computeRate, type DailyMetrics } from "@features/admin/server/digest-metrics";
-import { buildFunnelDigestBlocks } from "@/app/api/cron/funnel-digest/route";
+import {
+  buildFunnelDigestBlocks,
+  shortDate,
+  computeDropoutBars,
+} from "@/app/api/cron/funnel-digest/route";
 
 beforeAll(() => {
   process.env.NEXT_PUBLIC_SITE_URL = "https://example.test";
   process.env.STRATEGY_DIGEST_SIGNING_SECRET = "cvr-test-secret-1234567890";
+});
+
+describe("shortDate", () => {
+  it("formats YYYY-MM-DD as 'MMM D' with no leading zero on the day", () => {
+    expect(shortDate("2026-05-01")).toBe("May 1");
+    expect(shortDate("2026-12-25")).toBe("Dec 25");
+    expect(shortDate("2026-01-09")).toBe("Jan 9");
+  });
+  it("returns the input unchanged when it is not a YYYY-MM-DD string", () => {
+    expect(shortDate("not-a-date")).toBe("not-a-date");
+  });
+});
+
+describe("computeDropoutBars", () => {
+  it("computes per-question drop-off rate from consecutive reach", () => {
+    // 100 -> 80 = 20% quit at Q1; 80 -> 60 = 25% quit at Q2. Last question
+    // (index 2) has no successor → no bar.
+    const bars = computeDropoutBars([
+      { question_index: 0, sessions: 100 },
+      { question_index: 1, sessions: 80 },
+      { question_index: 2, sessions: 60 },
+    ]);
+    expect(bars).toHaveLength(2);
+    expect(bars[0]).toEqual({ label: "Q1", dropPct: 20, reached: 100 });
+    expect(bars[1]).toEqual({ label: "Q2", dropPct: 25, reached: 80 });
+  });
+  it("skips questions below the reach floor (tiny-sample noise)", () => {
+    // Q3 reached by only 3 (< floor 5) → no bar for it, even though 3 -> 0.
+    const bars = computeDropoutBars(
+      [
+        { question_index: 0, sessions: 50 },
+        { question_index: 1, sessions: 3 },
+        { question_index: 2, sessions: 0 },
+      ],
+      5
+    );
+    expect(bars.map((b) => b.label)).toEqual(["Q1"]); // only index-0 (reach 50) qualifies
+  });
+  it("clamps negative drops to 0 (reach can't legitimately grow)", () => {
+    const bars = computeDropoutBars([
+      { question_index: 0, sessions: 50 },
+      { question_index: 1, sessions: 60 },
+    ]);
+    expect(bars[0]!.dropPct).toBe(0);
+  });
+  it("returns [] for fewer than 2 questions", () => {
+    expect(computeDropoutBars([{ question_index: 0, sessions: 100 }])).toEqual([]);
+  });
 });
 
 describe("computeRate", () => {
