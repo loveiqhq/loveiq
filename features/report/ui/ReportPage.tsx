@@ -61,7 +61,9 @@ import {
   toArchetypeSlug,
 } from "@features/report/server/archetypeSlug";
 import {
+  setForcedPaywallArm,
   setReportSubmissionContext,
+  trackExperimentExposure,
   trackLockIconClicked,
   trackPaywallInitiated,
   trackReferFriendOpened,
@@ -69,6 +71,11 @@ import {
   trackReportShareOpened,
   trackReportViewed,
 } from "@features/analytics/client";
+import {
+  FORCED_PAYWALL_EXPERIMENT,
+  getForcedPaywallCohort,
+  resolveDevCohortOverride,
+} from "@shared/experiments/forcedPaywall";
 import { useReportEngagementTimers } from "./hooks/useReportEngagementTimers";
 
 interface SnapshotContent {
@@ -956,14 +963,42 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
 
   const accessPlan = data?.accessPlan ?? null;
 
+  // Coupled paywall experiment arm for this report. Keyed on the resolved
+  // report token — URL token first, else the server-resolved owner token — so
+  // session-based (/report?sessionId / dev_session) viewers land in their true
+  // deterministic arm instead of silently defaulting to control. This is the
+  // SAME token the pre-report wizard and the server-side checkout attribution
+  // key on, so the arm is identical across wizard, report, and purchase.
+  // Treatment ⇒ the scroll-triggered pricing modal is non-closable (must pay).
+  // `?arm=` is a dev-only preview override (null in production).
+  const devArm = useMemo(() => resolveDevCohortOverride(searchParams.get("arm")), [searchParams]);
+  const resolvedReportToken = token ?? data?.ownerToken ?? null;
+  const forcedPaywallCohort = useMemo(
+    () => devArm ?? getForcedPaywallCohort(resolvedReportToken),
+    [devArm, resolvedReportToken]
+  );
+
+  // Single guarded closer for the scroll teaser. For the forced (treatment)
+  // arm the teaser must only be exitable via checkout, so every other close
+  // path routes through here and becomes a no-op. Checkout closes it directly.
+  // (The page behind the open teaser is also `inert`, so these alternate
+  // surfaces are unreachable while it's open — this enforces the contract even
+  // if that guard is ever changed.)
+  const dismissScrollTeaser = useCallback(() => {
+    if (forcedPaywallCohort !== "treatment") setIsScrollTeaserOpen(false);
+  }, [forcedPaywallCohort]);
+
   const reportViewedFiredRef = useRef(false);
   useEffect(() => {
     if (reportViewedFiredRef.current) return;
     if (!data) return;
     reportViewedFiredRef.current = true;
     setReportSubmissionContext(data.submissionId ?? null);
+    // Stamp the arm BEFORE the first persisted event so every report-page
+    // analytics row self-identifies its forced-paywall arm.
+    setForcedPaywallArm(forcedPaywallCohort);
     trackReportViewed(accessPlan ?? "locked", data.primaryArchetype ?? null);
-  }, [data, accessPlan]);
+  }, [data, accessPlan, forcedPaywallCohort]);
 
   useReportEngagementTimers({
     reportType: data ? (accessPlan ?? "locked") : null,
@@ -975,6 +1010,13 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     if (!data) return;
     if (viewMode === "shared") return;
     if (accessPlan !== null) return;
+    // Treatment (forced) arm shows the non-closable teaser immediately instead
+    // of this closable discount-offer modal — don't let it preempt the paywall.
+    // Consume the one-shot ref so a later cohort flip can't double-open it.
+    if (forcedPaywallCohort === "treatment") {
+      autoOpenedPricingRef.current = true;
+      return;
+    }
     // Only auto-open when the discount ladder has progressed (24h+ since
     // survey). At step 0 (just finished the report) the modal stays closed —
     // user opens it explicitly via locked-section CTAs or archetype tiles.
@@ -987,13 +1029,20 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     setIsScrollTeaserOpen(false);
     setPricingVariant("offer");
     setIsPricingModalOpen(true);
-  }, [accessPlan, data, viewMode]);
+  }, [accessPlan, data, viewMode, forcedPaywallCohort]);
 
   useEffect(() => {
     if (!isOfferLink) return;
     if (autoOpenedOfferRef.current) return;
     if (!data) return;
     if (viewMode === "shared") return;
+    // Treatment (forced) arm: the non-closable teaser takes precedence over the
+    // closable offer modal, even for an email deep-link. Consume the one-shot
+    // ref so a later cohort flip can't double-open it.
+    if (forcedPaywallCohort === "treatment") {
+      autoOpenedOfferRef.current = true;
+      return;
+    }
     autoOpenedOfferRef.current = true;
     // Intent signal — user clicked an email-deep-link to land here. Counts
     // as user-initiated paywall surface (clicked the link in an email).
@@ -1007,7 +1056,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     setPricingTargetArchetype(null);
     setPricingVariant("offer");
     setIsPricingModalOpen(true);
-  }, [data, isOfferLink, viewMode]);
+  }, [data, isOfferLink, viewMode, forcedPaywallCohort]);
 
   useEffect(() => {
     isPricingModalOpenRef.current = isPricingModalOpen;
@@ -1017,6 +1066,14 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     if (!data) return;
     if (accessPlan !== null) return;
     if (viewMode === "shared") return;
+
+    // Treatment (forced) arm: open the paywall immediately on load — no scroll
+    // wait — and skip the scroll listener entirely.
+    if (forcedPaywallCohort === "treatment") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setIsScrollTeaserOpen(true);
+      return;
+    }
 
     function handleFirstScroll() {
       if (scrollTeaserFiredRef.current) return;
@@ -1039,7 +1096,23 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       }
       scrollTeaserFiredRef.current = false;
     };
-  }, [accessPlan, data, viewMode]);
+  }, [accessPlan, data, viewMode, forcedPaywallCohort]);
+
+  // Experiment exposure — fire once when this report is eligible for the
+  // forced-paywall test (locked + owner view). Both arms, for arm analysis.
+  const paywallExposureFiredRef = useRef(false);
+  useEffect(() => {
+    if (paywallExposureFiredRef.current) return;
+    if (!data) return;
+    if (accessPlan !== null) return;
+    if (viewMode === "shared") return;
+    paywallExposureFiredRef.current = true;
+    trackExperimentExposure({
+      experiment: FORCED_PAYWALL_EXPERIMENT,
+      variant: forcedPaywallCohort,
+      surface: "report_scroll_paywall",
+    });
+  }, [accessPlan, data, viewMode, forcedPaywallCohort]);
 
   const apiUnlocked = data?.unlockedArchetypes;
   const primaryArchetypeFromData = data?.primaryArchetype;
@@ -1091,13 +1164,14 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
 
       // Intent signal — user clicked "Unlock" on an archetype probability tile.
       trackPaywallInitiated({ source: "archetype_unlock", archetype: name });
-      setIsScrollTeaserOpen(false);
+      dismissScrollTeaser();
       setPricingTargetArchetype(name === primaryArchetypeFromData ? null : name);
       setPricingVariant(shouldShowOfferVariant ? "offer" : "default");
       setIsPricingModalOpen(true);
     },
     [
       devParam,
+      dismissScrollTeaser,
       pathname,
       primaryArchetypeFromData,
       returnToPrimaryHref,
@@ -1150,14 +1224,14 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     // Free-plan users see the pricing modal in "share" variant instead of the
     // share form — they have nothing to share until they purchase a plan.
     if (!canSharePlan(accessPlan)) {
-      setIsScrollTeaserOpen(false);
+      dismissScrollTeaser();
       setPricingTargetArchetype(null);
       setPricingVariant("share");
       setIsPricingModalOpen(true);
       return;
     }
     setIsShareModalOpen(true);
-  }, [accessPlan]);
+  }, [accessPlan, dismissScrollTeaser]);
   const closeShareModal = useCallback(() => setIsShareModalOpen(false), []);
   const openPricingModal = useCallback(
     (archetype?: string | null) => {
@@ -1166,12 +1240,12 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       // viewed (locked-section CTAs in /report?archetype=Y must upgrade Y,
       // not primary). null = primary archetype.
       const scope = archetype ?? null;
-      setIsScrollTeaserOpen(false);
+      dismissScrollTeaser();
       setPricingTargetArchetype(scope && scope !== primaryArchetypeFromData ? scope : null);
       setPricingVariant(shouldShowOfferVariant ? "offer" : "default");
       setIsPricingModalOpen(true);
     },
-    [primaryArchetypeFromData, shouldShowOfferVariant]
+    [dismissScrollTeaser, primaryArchetypeFromData, shouldShowOfferVariant]
   );
 
   if (status === "loading") {
@@ -1306,13 +1380,15 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       />
       <ScrollPricingModal
         open={isScrollTeaserOpen}
-        onClose={() => setIsScrollTeaserOpen(false)}
+        onClose={dismissScrollTeaser}
         onCheckout={handleTeaserCheckout}
         archetype={effectiveViewArchetype}
         userName={data.userName}
         theme={theme}
         matchScore={matchScore}
         quote={data.pricingQuotes?.full_report ?? null}
+        dismissible={forcedPaywallCohort !== "treatment"}
+        flipDeck={forcedPaywallCohort === "treatment"}
       />
       {data.accessPlan !== "full_report" && data.accessPlan !== "all_reports" && (
         <ReportStickyUnlockBar

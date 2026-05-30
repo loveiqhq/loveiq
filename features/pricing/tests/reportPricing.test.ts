@@ -14,6 +14,7 @@ vi.mock("@shared/http/circuit-breaker", () => ({
 vi.mock("@features/report/server/personalReport", () => ({
   ensurePersonalReportForSubmission: vi.fn(),
   resolveSubmissionAccessContext: vi.fn(),
+  lookupReportTokenBySubmissionId: vi.fn().mockResolvedValue(null),
 }));
 
 import {
@@ -25,7 +26,9 @@ import {
 import {
   ensurePersonalReportForSubmission,
   resolveSubmissionAccessContext,
+  lookupReportTokenBySubmissionId,
 } from "@features/report/server/personalReport";
+import { getForcedPaywallCohort } from "@shared/experiments/forcedPaywall";
 
 function createJsonResponse(body: unknown, ok = true) {
   return {
@@ -176,6 +179,7 @@ describe("reportPricing", () => {
       plan: "full_report",
       currency: "EUR",
       experiment_group: "B",
+      forced_paywall_arm: "treatment",
       base_price_bucket: "full_center",
       base_price: 29.99,
       msrp: null,
@@ -288,6 +292,9 @@ describe("reportPricing", () => {
         current_price: 26.99,
         discount_multiplier: 0.9,
         discount_step: 1,
+        // Stable: the arm already stamped on the row is preserved on re-quote,
+        // never recomputed (even though a token is present this round).
+        forced_paywall_arm: "treatment",
       })
     );
     expect(patchedPayload?.metadata).toEqual(
@@ -483,7 +490,71 @@ describe("reportPricing", () => {
         base_price_bucket: quote.basePriceBucket,
         msrp: quote.msrpCents / 100,
         starting_price: quote.startingPriceCents / 100,
+        // No URL token + submission-token lookup mocked to null → control.
+        forced_paywall_arm: "control",
       })
     );
+  });
+
+  it("stamps the forced-paywall arm from the report token on a fresh quote", async () => {
+    const reportToken = "rpt_SkDN8YcTxXRivawCVtY6";
+    const expectedArm = getForcedPaywallCohort(reportToken);
+    let createdPayload: Record<string, unknown> | null = null;
+
+    mockFetchWithTimeout.mockImplementation(
+      async (url: string, options?: { body?: string; method?: string }) => {
+        if (url.includes("/rest/v1/survey_submission?id=eq.42")) {
+          return createJsonResponse([
+            {
+              id: 42,
+              user_id: 7,
+              utm_tracker: "utm_source=google",
+              duration_ms: 600000,
+              app_user: {
+                id: 7,
+                email: "user@example.com",
+                utm_tracker: null,
+                user_profile: { location_primary: "Germany" },
+              },
+            },
+          ]);
+        }
+        if (url.includes("/rest/v1/survey_submission_answer?survey_submission_id=eq.42")) {
+          return createJsonResponse([]);
+        }
+        if (url.includes("/rest/v1/report_session?personal_report_id=eq.9")) {
+          return createJsonResponse([]);
+        }
+        if (
+          url.includes("/rest/v1/report_price_quote?personal_report_id=eq.9&plan=eq.full_report")
+        ) {
+          return createJsonResponse([]);
+        }
+        if (options?.method === "POST" && url.includes("/rest/v1/report_price_quote")) {
+          createdPayload = JSON.parse(options.body ?? "{}") as Record<string, unknown>;
+          return createJsonResponse([
+            {
+              id: 92,
+              personal_report_id: 9,
+              survey_submission_id: 42,
+              user_id: 7,
+              ...createdPayload,
+            },
+          ]);
+        }
+        throw new Error(`Unexpected fetch call: ${options?.method ?? "GET"} ${url}`);
+      }
+    );
+
+    await getReportPriceQuoteForContext({
+      plan: "full_report",
+      pricingSessionId: "550e8400-e29b-41d4-a716-446655440111",
+      reportToken,
+    });
+
+    expect(expectedArm).toMatch(/^(treatment|control)$/);
+    expect(createdPayload).toEqual(expect.objectContaining({ forced_paywall_arm: expectedArm }));
+    // Token was present → never falls back to the submission-token lookup.
+    expect(lookupReportTokenBySubmissionId).not.toHaveBeenCalled();
   });
 });

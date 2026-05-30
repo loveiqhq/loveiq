@@ -163,6 +163,7 @@ describe("checkout fulfillment", () => {
               pricingClusterId:
                 "A-full_report-full_low_2-tier_2-desktop-direct-consistent-engaged-d0",
               experimentGroup: "A",
+              forcedPaywallArm: "treatment",
               basePriceBucket: "full_low_2",
               discountStep: "0",
               currentPrice: "24.49",
@@ -225,6 +226,10 @@ describe("checkout fulfillment", () => {
         couponName: "LOVEIQ 100% Off",
         couponPercentOff: 100,
         discountAmount: 24.49,
+        experimentGroup: "A",
+        // Forced-paywall arm carried from session metadata → durable payment row
+        // for consent-independent conversion/revenue-by-arm analysis.
+        forcedPaywallArm: "treatment",
         requestIp: "127.0.0.1",
         requestUserAgent: "Mozilla/5.0 (Vitest)",
         stripePaymentStatus: "no_payment_required",
@@ -715,6 +720,10 @@ describe("checkout fulfillment", () => {
         paymentIntents: {
           retrieve: vi.fn().mockResolvedValue({
             id: paymentIntent ?? "pi_test_slack_001",
+            // T-04: status field is now required to pass the
+            // paymentIntent-vs-event-status re-check in fulfillment.ts.
+            // "succeeded" matches the event type and lets fulfillment proceed.
+            status: "succeeded",
             latest_charge: "ch_test_slack_001",
           }),
         },

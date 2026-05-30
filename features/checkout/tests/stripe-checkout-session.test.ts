@@ -26,6 +26,17 @@ vi.mock("@features/pricing/logic/reportPricing", () => ({
   markReportPriceQuoteCheckoutStarted: vi.fn().mockResolvedValue(undefined),
 }));
 
+// Deterministic arm resolution: mirror the real helper (token → itself, no
+// token → null) WITHOUT any Supabase round-trip, so the arm assertions don't
+// depend on whether a test DB is configured.
+vi.mock("@features/report/server/personalReport", () => ({
+  resolveReportAccessToken: vi.fn(
+    async ({ reportToken }: { reportToken?: string | null }) => reportToken ?? null
+  ),
+  resolveSubmissionAccessContext: vi.fn().mockResolvedValue(null),
+  getReportAccessPlanForSubmission: vi.fn(),
+}));
+
 import { POST } from "@/app/api/stripe/checkout-session/route";
 import { verifyCsrfToken } from "@shared/http/csrf";
 import { checkRateLimit } from "@shared/http/ratelimit";
@@ -38,6 +49,7 @@ import {
   getReportPriceQuoteForContext,
   markReportPriceQuoteCheckoutStarted,
 } from "@features/pricing/logic/reportPricing";
+import { getForcedPaywallCohort } from "@shared/experiments/forcedPaywall";
 
 function makeRequest(body: unknown) {
   return new Request("http://localhost/api/stripe/checkout-session", {
@@ -187,9 +199,78 @@ describe("POST /api/stripe/checkout-session", () => {
         }),
         success_url:
           "http://localhost/checkout/return?plan=full_report&session_id={CHECKOUT_SESSION_ID}&archetype=spark-seeker",
+      }),
+      // P-03: second arg carries Stripe RequestOptions including the
+      // idempotency key. Shape — not value — is what we pin; the key is a
+      // time-bucketed sha256, so we only assert it's a hex string.
+      expect.objectContaining({
+        idempotencyKey: expect.stringMatching(/^[0-9a-f]{64}$/),
       })
     );
     expect(markReportPriceQuoteCheckoutStarted).toHaveBeenCalledWith({ quoteId: 22 });
+  });
+
+  it("stamps the forced-paywall arm (recomputed server-side from the report token) into session metadata", async () => {
+    const createSession = vi.fn().mockResolvedValue({
+      id: "cs_test_arm_789",
+      url: "https://checkout.stripe.com/c/pay/cs_test_arm_789",
+    });
+
+    vi.mocked(isStripeCheckoutEnabled).mockReturnValue(true);
+    vi.mocked(getStripeCheckoutCustomerEmail).mockResolvedValue("test@example.com");
+    vi.mocked(getStripeServerClient).mockReturnValue({
+      checkout: { sessions: { create: createSession } },
+    } as never);
+
+    const reportToken = "rpt_SkDN8YcTxXRivawCVtY6";
+    const expectedArm = getForcedPaywallCohort(reportToken);
+
+    const res = await POST(
+      makeRequest({
+        archetype: "Spark Seeker",
+        plan: "full_report",
+        reportSessionId: "02d88f31-eceb-4402-940d-c8cd98d01848",
+        reportToken,
+      })
+    );
+
+    expect(res.status).toBe(200);
+    expect(expectedArm).toMatch(/^(treatment|control)$/);
+    expect(createSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({ forcedPaywallArm: expectedArm }),
+      }),
+      expect.anything()
+    );
+  });
+
+  it("defaults the forced-paywall arm to control when no report token is present", async () => {
+    const createSession = vi.fn().mockResolvedValue({
+      id: "cs_test_arm_none",
+      url: "https://checkout.stripe.com/c/pay/cs_test_arm_none",
+    });
+
+    vi.mocked(isStripeCheckoutEnabled).mockReturnValue(true);
+    vi.mocked(getStripeCheckoutCustomerEmail).mockResolvedValue("test@example.com");
+    vi.mocked(getStripeServerClient).mockReturnValue({
+      checkout: { sessions: { create: createSession } },
+    } as never);
+
+    const res = await POST(
+      makeRequest({
+        archetype: "Spark Seeker",
+        plan: "full_report",
+        reportSessionId: "02d88f31-eceb-4402-940d-c8cd98d01848",
+      })
+    );
+
+    expect(res.status).toBe(200);
+    expect(createSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({ forcedPaywallArm: "control" }),
+      }),
+      expect.anything()
+    );
   });
 
   it("rejects archetype when plan is all_reports (global unlock has no archetype scope)", async () => {
@@ -252,6 +333,9 @@ describe("POST /api/stripe/checkout-session", () => {
         success_url:
           "http://localhost/checkout/return?plan=full_report&session_id={CHECKOUT_SESSION_ID}&archetype=spark-seeker",
         cancel_url: "http://localhost/checkout?plan=full_report&archetype=spark-seeker",
+      }),
+      expect.objectContaining({
+        idempotencyKey: expect.stringMatching(/^[0-9a-f]{64}$/),
       })
     );
   });

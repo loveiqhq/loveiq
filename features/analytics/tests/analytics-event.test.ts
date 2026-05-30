@@ -160,3 +160,59 @@ describe("POST /api/analytics-event — allowlist", () => {
     expect(mockSupabaseFetch).not.toHaveBeenCalled();
   });
 });
+
+describe("POST /api/analytics-event — forced-paywall experiment events (Phase E)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockSubmissionLookup(42);
+  });
+
+  const cases: Array<{ event_type: string; entity_type: string; metadata: object }> = [
+    {
+      event_type: "experiment_exposure",
+      entity_type: "experiment",
+      metadata: {
+        experiment: "report-forced-paywall",
+        variant: "treatment",
+        surface: "report_scroll_paywall",
+        forced_paywall_arm: "treatment",
+      },
+    },
+    {
+      event_type: "scroll_paywall_shown",
+      entity_type: "paywall",
+      metadata: { surface: "report_scroll_paywall", forced_paywall_arm: "control" },
+    },
+    {
+      event_type: "experiment_card_flipped",
+      entity_type: "experiment",
+      metadata: { to: "pricing", forced_paywall_arm: "treatment" },
+    },
+  ];
+
+  it.each(cases)(
+    "accepts $event_type and stamps entity_type=$entity_type + forwards metadata",
+    async ({ event_type, entity_type, metadata }) => {
+      const res = await POST(makeRequest({ event_type, submission_id: 42, metadata }));
+      expect(res.status).toBe(204);
+      expect(mockSupabaseFetch).toHaveBeenCalledWith(
+        "/rest/v1/analytics_event",
+        expect.objectContaining({
+          method: "POST",
+          body: expect.stringContaining(`"event_type":"${event_type}"`),
+        })
+      );
+      const insertCall = mockSupabaseFetch.mock.calls.find(
+        (c) => c[0] === "/rest/v1/analytics_event"
+      );
+      expect(insertCall).toBeDefined();
+      const sentBody = JSON.parse((insertCall![1] as { body: string }).body);
+      expect(sentBody.entity_type).toBe(entity_type);
+      expect(sentBody.survey_submission_id).toBe(42);
+      // The arm stamp the client merges must survive the route untouched.
+      expect(sentBody.metadata.forced_paywall_arm).toBe(
+        (metadata as { forced_paywall_arm: string }).forced_paywall_arm
+      );
+    }
+  );
+});

@@ -13,12 +13,19 @@ vi.mock("next/navigation", () => ({
 vi.mock("@features/analytics/client", () => ({
   trackReportPurchase: (...args: unknown[]) => mockTrackReportPurchase(...args),
   setReportSubmissionContext: vi.fn(),
+  setForcedPaywallArm: vi.fn(),
   trackPaywallUnlocked: vi.fn(),
   trackCheckoutReturnViewed: vi.fn(),
   trackCheckoutRetryClicked: vi.fn(),
   trackCheckoutAbandonedReturn: vi.fn(),
   hasCookieYesConsent: () => true,
 }));
+
+import {
+  setForcedPaywallArm,
+  trackCheckoutReturnViewed,
+  trackPaywallUnlocked,
+} from "@features/analytics/client";
 
 describe("CheckoutReturnPage", () => {
   let originalFetch: typeof globalThis.fetch;
@@ -27,6 +34,9 @@ describe("CheckoutReturnPage", () => {
     originalFetch = globalThis.fetch;
     mockRouterReplace.mockReset();
     mockTrackReportPurchase.mockReset();
+    vi.mocked(setForcedPaywallArm).mockClear();
+    vi.mocked(trackPaywallUnlocked).mockClear();
+    vi.mocked(trackCheckoutReturnViewed).mockClear();
   });
 
   afterEach(() => {
@@ -234,4 +244,41 @@ describe("CheckoutReturnPage", () => {
       { timeout: 3000 }
     );
   }, 15000);
+
+  it("re-binds the server-echoed forced-paywall arm before the conversion events fire", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        accessPlan: "full_report",
+        enabled: true,
+        paymentStatus: "paid",
+        purchaseAnalytics: {
+          value: 27.49,
+          currency: "EUR",
+          transaction_id: "cs_test_arm",
+        },
+        sessionStatus: "complete",
+        surveySubmissionId: 4242,
+        forcedPaywallArm: "treatment",
+      }),
+    } as Response);
+
+    render(
+      <CheckoutReturnPage
+        planId="full_report"
+        sessionId="cs_test_arm"
+        token="rpt_ABCDEFGHIJKLMNOPQRST"
+      />
+    );
+
+    // paywall_unlocked is the conversion event; it must carry the arm. The arm
+    // is bound from the server-echoed session value (== payment row), not the
+    // /report page (a different route), so the durable row self-tags the arm.
+    await waitFor(() => expect(trackPaywallUnlocked).toHaveBeenCalled());
+    expect(setForcedPaywallArm).toHaveBeenCalledWith("treatment");
+    expect(trackCheckoutReturnViewed).toHaveBeenCalledWith({
+      status: "success",
+      plan: "full_report",
+    });
+  }, 10000);
 });

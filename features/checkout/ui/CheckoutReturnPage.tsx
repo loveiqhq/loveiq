@@ -15,6 +15,7 @@ import type {
 } from "@features/checkout/server/stripeCheckout";
 import type { ReportAccessPlan } from "@features/report/server/access";
 import {
+  setForcedPaywallArm,
   setReportSubmissionContext,
   trackCheckoutAbandonedReturn,
   trackCheckoutRetryClicked,
@@ -22,6 +23,7 @@ import {
   trackPaywallUnlocked,
   trackReportPurchase,
 } from "@features/analytics/client";
+import { getForcedPaywallCohort } from "@shared/experiments/forcedPaywall";
 import { toArchetypeSlug } from "@features/report/server/archetypeSlug";
 
 type ReturnState =
@@ -40,6 +42,7 @@ type ReturnState =
       sessionStatus: string | null;
       status: "ready";
       surveySubmissionId: number | null;
+      forcedPaywallArm: "treatment" | "control" | null;
     };
 
 interface Props {
@@ -152,6 +155,7 @@ const CheckoutReturnPage: FC<Props> = ({
           sessionStatus,
           status: "ready",
           surveySubmissionId: json.surveySubmissionId ?? null,
+          forcedPaywallArm: json.forcedPaywallArm ?? null,
         });
       } catch {
         if (!cancelled) {
@@ -188,6 +192,14 @@ const CheckoutReturnPage: FC<Props> = ({
   useEffect(() => {
     if (returnViewedFiredRef.current) return;
     if (state.status === "loading") return;
+    // Re-bind the arm BEFORE the (persisted) event — /checkout/return is a
+    // separate route, so the arm stamped on /report is gone. Server-echoed
+    // session arm wins (== payment row); fall back to the token hash. Done
+    // unconditionally (not gated on surveySubmissionId) so checkout_return_viewed
+    // self-tags the arm even when the submission lookup hasn't resolved yet.
+    setForcedPaywallArm(
+      (state.status === "ready" ? state.forcedPaywallArm : null) ?? getForcedPaywallCohort(token)
+    );
     let status: "success" | "failed" | "pending" = "failed";
     if (state.status === "ready") {
       if (state.surveySubmissionId) {
@@ -197,7 +209,7 @@ const CheckoutReturnPage: FC<Props> = ({
     }
     returnViewedFiredRef.current = true;
     trackCheckoutReturnViewed({ status, plan: planId });
-  }, [isPaidAndComplete, planId, state]);
+  }, [isPaidAndComplete, planId, state, token]);
 
   useEffect(() => {
     if (
@@ -223,6 +235,9 @@ const CheckoutReturnPage: FC<Props> = ({
     // /checkout/return is a separate route, so re-bind it here.
     if (state.surveySubmissionId) {
       setReportSubmissionContext(state.surveySubmissionId);
+      // Tag the conversion with the SAME arm the payment row carries (server-
+      // echoed), falling back to the token hash for pre-change sessions.
+      setForcedPaywallArm(state.forcedPaywallArm ?? getForcedPaywallCohort(token));
       trackPaywallUnlocked(
         planId,
         state.purchaseAnalytics.value,
@@ -230,7 +245,7 @@ const CheckoutReturnPage: FC<Props> = ({
         state.purchaseAnalytics.transaction_id
       );
     }
-  }, [isPaidAndComplete, state, plan.title, planId]);
+  }, [isPaidAndComplete, state, plan.title, planId, token]);
 
   useEffect(() => {
     if (!canReturnToUnlockedReport) {

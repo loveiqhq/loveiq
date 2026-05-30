@@ -35,6 +35,20 @@ vi.mock("@features/checkout/server/reportCheckoutQuoteCache", () => ({
   cacheReportCheckoutQuote: (...args: unknown[]) => mockCacheReportCheckoutQuote(...args),
 }));
 
+// Stub the scroll teaser so we can assert the cohort → `dismissible` wiring
+// without simulating the scroll/timer. The real component is exercised in
+// features/report/tests/ScrollPricingModal.test.tsx.
+vi.mock("@features/report/ui/ScrollPricingModal", () => ({
+  default: (props: { dismissible?: boolean; open?: boolean; flipDeck?: boolean }) => (
+    <div
+      data-testid="scroll-teaser"
+      data-dismissible={String(props.dismissible)}
+      data-open={String(props.open)}
+      data-flipdeck={String(props.flipDeck)}
+    />
+  ),
+}));
+
 const mockTrackReportViewed = vi.fn();
 const mockTrackPaywallView = vi.fn();
 const mockTrackPaywallInitiated = vi.fn();
@@ -47,6 +61,8 @@ vi.mock("@features/analytics/client", () => ({
   trackBeginCheckout: (...args: unknown[]) => mockTrackBeginCheckout(...args),
   trackPriceShown: (...args: unknown[]) => mockTrackPriceShown(...args),
   setReportSubmissionContext: vi.fn(),
+  setForcedPaywallArm: vi.fn(),
+  trackExperimentExposure: vi.fn(),
   // New track functions exercised by ReportPage interactions.
   trackLockIconClicked: vi.fn(),
   trackReferFriendOpened: vi.fn(),
@@ -64,6 +80,18 @@ import ReportPage from "@features/report/ui/ReportPage";
 import { archetypeContent } from "@/data/report-archetypes";
 import { reportPracticeTendencies } from "@/data/report-practice-tendencies";
 import type { ReportPracticeTendencyContentForUser } from "@features/report/ui/hooks/useReportData";
+import { getForcedPaywallCohort } from "@shared/experiments/forcedPaywall";
+
+/** Find a report token that buckets into the given coupled-paywall arm. */
+function findCohortToken(cohort: "treatment" | "control"): string {
+  for (let i = 0; i < 10000; i++) {
+    const token = `rpt_report_test_${i}`;
+    if (getForcedPaywallCohort(token) === cohort) return token;
+  }
+  throw new Error(`no token found for cohort ${cohort}`);
+}
+const TREATMENT_TOKEN = findCohortToken("treatment");
+const CONTROL_TOKEN = findCohortToken("control");
 
 const REPORT_MODAL_TEST_TIMEOUT_MS = 60_000;
 const mockScrollTo = vi.fn();
@@ -611,5 +639,37 @@ describe("ReportPage", () => {
     expect(
       screen.queryByRole("heading", { name: /unlock your full report/i })
     ).not.toBeInTheDocument();
+  });
+
+  it("makes the scroll teaser non-dismissible + flip-deck for the forced-paywall treatment cohort", () => {
+    mockUseReportData.mockReturnValue(buildSuccessResponse());
+    render(<ReportPage token={TREATMENT_TOKEN} />);
+    const teaser = screen.getByTestId("scroll-teaser");
+    expect(teaser).toHaveAttribute("data-dismissible", "false");
+    expect(teaser).toHaveAttribute("data-flipdeck", "true");
+  });
+
+  it("keeps the scroll teaser dismissible + non-flip for the control cohort", () => {
+    mockUseReportData.mockReturnValue(buildSuccessResponse());
+    render(<ReportPage token={CONTROL_TOKEN} />);
+    const teaser = screen.getByTestId("scroll-teaser");
+    expect(teaser).toHaveAttribute("data-dismissible", "true");
+    expect(teaser).toHaveAttribute("data-flipdeck", "false");
+  });
+
+  it("opens the forced paywall immediately on load for the treatment cohort", () => {
+    mockUseReportData.mockReturnValue(buildSuccessResponse());
+    render(<ReportPage token={TREATMENT_TOKEN} />);
+    // No scroll simulated — treatment must already be open on mount.
+    expect(screen.getByTestId("scroll-teaser")).toHaveAttribute("data-open", "true");
+    // …and the closable discount-offer modal must NOT preempt it, even though
+    // the fixture is at discountStep 1 (which would auto-open it for control).
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("does NOT open the teaser on load for the control cohort (waits for scroll)", () => {
+    mockUseReportData.mockReturnValue(buildSuccessResponse());
+    render(<ReportPage token={CONTROL_TOKEN} />);
+    expect(screen.getByTestId("scroll-teaser")).toHaveAttribute("data-open", "false");
   });
 });

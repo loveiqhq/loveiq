@@ -201,6 +201,60 @@ export async function resolveSubmissionAccessContext({
   return lookupSubmissionAccessContext(resolvedSubmissionId);
 }
 
+/**
+ * Look up the report access token a submission's report page actually serves —
+ * the latest token by `created_at`, REVOCATION-AGNOSTIC, mirroring the owner
+ * token query in `app/api/report/route.ts` (which has no `revoked_at` filter).
+ * Matching that query EXACTLY matters: the forced-paywall A/B arm derives from
+ * this token, so the arm attributed here (quote / checkout) must equal the arm
+ * the user experienced on `/report`. Best-effort: any failure returns null
+ * (caller defaults the arm to control).
+ */
+export async function lookupReportTokenBySubmissionId(
+  submissionId: number
+): Promise<string | null> {
+  try {
+    const response = await supabaseServiceFetch(
+      `/rest/v1/report_access_token?survey_submission_id=eq.${submissionId}&select=token&order=created_at.desc&limit=1`
+    );
+    if (!response.ok) return null;
+    const rows = (await response.json()) as Array<{ token?: string | null }>;
+    return rows[0]?.token ?? null;
+  } catch (err) {
+    logger.warn({ err, submissionId }, "report-access-token lookup by submission failed");
+    return null;
+  }
+}
+
+/**
+ * Resolve the canonical report access token used as the forced-paywall A/B
+ * key. Token-driven checkouts already carry it (returned as-is). Session-driven
+ * checkouts (no URL token) resolve it from the submission so the SERVER computes
+ * the SAME arm the user experienced on the report page — which keys on
+ * `token ?? data.ownerToken`. The submission fallback mirrors the report page's
+ * owner-token query exactly (latest by created_at, revocation-agnostic) so the
+ * arm never diverges. Best-effort: any failure returns null and the caller
+ * defaults to control; this never throws into the checkout path.
+ */
+export async function resolveReportAccessToken({
+  reportSessionId,
+  reportToken,
+}: {
+  reportSessionId?: string | null;
+  reportToken?: string | null;
+}): Promise<string | null> {
+  if (reportToken) return reportToken;
+  if (!reportSessionId) return null;
+  try {
+    const submissionId = await lookupSubmissionIdBySessionId(reportSessionId);
+    if (!submissionId) return null;
+    return await lookupReportTokenBySubmissionId(submissionId);
+  } catch (err) {
+    logger.warn({ err }, "resolveReportAccessToken failed; forced-paywall arm defaults to control");
+    return null;
+  }
+}
+
 async function fetchPersonalReportForSubmission(submissionId: number) {
   const response = await supabaseServiceFetch(
     `/rest/v1/personal_report?survey_submission_id=eq.${submissionId}&select=id,payment_id,payment_status,url,unlocked_archetypes,archetype_tiers&limit=1`

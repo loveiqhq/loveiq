@@ -64,6 +64,10 @@ export type StripeCheckoutSessionStatusResponse =
       purchaseAnalytics: StripeCheckoutPurchaseAnalytics | null;
       sessionStatus: string | null;
       surveySubmissionId: number | null;
+      // Forced-paywall A/B arm stamped on the Stripe session at creation. Echoed
+      // back so /checkout/return can tag its conversion events (paywall_unlocked,
+      // checkout_return_viewed) with the SAME arm as the payment row.
+      forcedPaywallArm: "treatment" | "control" | null;
     };
 
 let stripeClient: Stripe | null = null;
@@ -234,9 +238,10 @@ export async function getStripeCheckoutCustomerEmail({
 
   if (reportToken) {
     const tokenResponse = await fetchWithTimeout(
-      // Reject revoked tokens here too — a leaked token shouldn't be able
-      // to initiate a Stripe session that would later unlock the report.
-      `${supabaseUrl}/rest/v1/report_access_token?token=eq.${encodeURIComponent(reportToken)}&revoked_at=is.null&select=survey_submission_id&limit=1`,
+      // Reject revoked or expired tokens here too — a leaked token shouldn't
+      // be able to initiate a Stripe session that would later unlock the
+      // report. expires_at IS NULL means permanent (the default per F-17).
+      `${supabaseUrl}/rest/v1/report_access_token?token=eq.${encodeURIComponent(reportToken)}&revoked_at=is.null&or=(expires_at.is.null,expires_at.gt.${encodeURIComponent(new Date().toISOString())})&select=survey_submission_id&limit=1`,
       {
         cache: "no-store",
         headers,

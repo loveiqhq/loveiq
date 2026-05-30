@@ -368,6 +368,13 @@ function getChargeDetails(charge: Stripe.Charge | null) {
       failureMessage: null,
       paymentMethodType: null,
       receiptUrl: null,
+      // R-04: Stripe Radar fields. risk_level is the bucketed assessment
+      // (normal | elevated | highest), risk_score is the underlying 0-100.
+      // We persist both onto metadata so post-hoc analysis is possible even
+      // for charges that fulfilled normally, and we Slack-alert at write
+      // time when risk_level is elevated/highest.
+      riskLevel: null as string | null,
+      riskScore: null as number | null,
     };
   }
 
@@ -383,6 +390,8 @@ function getChargeDetails(charge: Stripe.Charge | null) {
     failureMessage: charge.failure_message ?? null,
     paymentMethodType: paymentMethodDetails?.type ?? null,
     receiptUrl: charge.receipt_url ?? null,
+    riskLevel: charge.outcome?.risk_level ?? null,
+    riskScore: charge.outcome?.risk_score ?? null,
   };
 }
 
@@ -619,6 +628,33 @@ async function upsertPaymentRecord({
   });
 
   if (!response.ok) {
+    // T-05: handle the race where a parallel path inserted first. After the
+    // new partial UNIQUE indexes on (stripe_payment_intent_id) and
+    // (stripe_charge_id), Postgres returns 409 if a row with the same
+    // non-null Stripe ID already exists. Re-fetch and UPDATE in that case
+    // so the caller still gets a payment id back. Other failures still
+    // throw.
+    if (response.status === 409 && (stripePaymentIntentId || stripeChargeId)) {
+      const existing = await fetchExistingPayment({
+        stripeChargeId,
+        stripePaymentIntentId,
+      });
+      if (existing?.id) {
+        logger.info(
+          { existingId: existing.id, stripePaymentIntentId, stripeChargeId },
+          "T-05: payment INSERT lost race to parallel path; falling back to UPDATE"
+        );
+        const updateResponse = await supabaseServiceFetch(`/rest/v1/payment?id=eq.${existing.id}`, {
+          body: JSON.stringify(payload),
+          headers: { Prefer: "return=representation" },
+          method: "PATCH",
+        });
+        if (!updateResponse.ok) {
+          throw new Error("payment_create_failed");
+        }
+        return existing.id;
+      }
+    }
     throw new Error("payment_create_failed");
   }
 
@@ -774,10 +810,37 @@ async function syncCheckoutSessionPayment({
       : (settledSession.customer?.id ?? null);
   let paymentDateTime = new Date().toISOString();
 
+  // T-04: when the event TYPE says "succeeded" (checkout.session.completed
+  // or checkout.session.async_payment_succeeded) but Stripe's authoritative
+  // PaymentIntent.status disagrees, defer to Stripe. Affects only the async/
+  // 3DS code path: a card requiring SCA can have the session complete then
+  // the PaymentIntent get voided seconds later by Stripe Radar. Without this
+  // re-check we'd grant access on an event whose underlying intent is not
+  // actually succeeded. Demote `succeeded` → `failed` for the rest of the
+  // function (skips tier write + sends a Slack alert via the failure path).
+  let effectiveStatus: PaymentStatus = eventStatus;
+
   if (paymentIntentId) {
     const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId, {
       expand: ["latest_charge"],
     });
+
+    if (
+      effectiveStatus === "succeeded" &&
+      paymentIntent.status !== "succeeded" &&
+      paymentIntent.status !== "processing"
+    ) {
+      logger.warn(
+        {
+          eventId: event.id,
+          eventType: event.type,
+          paymentIntentId,
+          paymentIntentStatus: paymentIntent.status,
+        },
+        "T-04: PaymentIntent status disagrees with success event — demoting to failed"
+      );
+      effectiveStatus = "failed";
+    }
 
     const latestCharge = paymentIntent.latest_charge;
     charge =
@@ -830,6 +893,10 @@ async function syncCheckoutSessionPayment({
     pricingQuoteId,
     pricingClusterId: settledSession.metadata?.pricingClusterId ?? null,
     experimentGroup: settledSession.metadata?.experimentGroup ?? null,
+    // Forced-paywall A/B arm ("treatment" | "control"), stamped server-side at
+    // checkout-session creation. Query via payment.metadata->>'forcedPaywallArm'
+    // for consent-independent conversion + revenue by arm.
+    forcedPaywallArm: settledSession.metadata?.forcedPaywallArm ?? null,
     basePriceBucket: settledSession.metadata?.basePriceBucket ?? null,
     discountStep: settledSession.metadata?.discountStep ?? null,
     currentPrice: settledSession.metadata?.currentPrice ?? null,
@@ -855,6 +922,11 @@ async function syncCheckoutSessionPayment({
         ? promotionSummary.couponAmountOff / 100
         : null,
     discountAmount: promotionSummary?.discountAmount ?? null,
+    // R-04: persist Stripe Radar outcome on every payment row so admin
+    // queries can filter and analytics can correlate risk with refund/
+    // dispute outcomes.
+    riskLevel: chargeDetails.riskLevel,
+    riskScore: chargeDetails.riskScore,
   };
 
   const paymentId = await upsertPaymentRecord({
@@ -876,7 +948,7 @@ async function syncCheckoutSessionPayment({
     personalReportId: personalReport.id,
     pricingQuoteId,
     receiptUrl: chargeDetails.receiptUrl,
-    status: eventStatus,
+    status: effectiveStatus,
     stripeChargeId: charge?.id ?? null,
     stripeCustomerId,
     stripePaymentIntentId: paymentIntentId,
@@ -888,7 +960,7 @@ async function syncCheckoutSessionPayment({
     throw new Error("stripe_checkout_payment_persist_failed");
   }
 
-  if (eventStatus === "succeeded") {
+  if (effectiveStatus === "succeeded") {
     await ensurePaymentItem({ amount, paymentId, plan });
     if (pricingQuoteId) {
       await markReportPriceQuotePurchased({ paymentId, quoteId: pricingQuoteId });
@@ -899,10 +971,10 @@ async function syncCheckoutSessionPayment({
     amount,
     paymentId,
     personalReportId: personalReport.id,
-    status: eventStatus,
+    status: effectiveStatus,
   });
 
-  if (eventStatus === "succeeded" && (plan === "essentials" || plan === "full_report")) {
+  if (effectiveStatus === "succeeded" && (plan === "essentials" || plan === "full_report")) {
     // If the checkout session lacked a valid archetype metadata field,
     // resolve the buyer's primary archetype from scoring_result. This
     // prevents silent fulfillment loss when an older client (or a flow
@@ -928,7 +1000,7 @@ async function syncCheckoutSessionPayment({
         "No archetype available for tier persistence — purchase recorded but tier write skipped"
       );
     }
-  } else if (eventStatus === "succeeded" && plan === "all_reports") {
+  } else if (effectiveStatus === "succeeded" && plan === "all_reports") {
     // The all-reports plan unlocks every archetype at full_report tier.
     // Resolver code synthesizes this at read time, but persisting the tiers
     // here keeps admin queries / CSV exports / reporting in sync with the
@@ -944,7 +1016,7 @@ async function syncCheckoutSessionPayment({
     }
   }
 
-  if (eventStatus === "succeeded") {
+  if (effectiveStatus === "succeeded") {
     await sendPurchaseEmail({
       plan,
       reportTokenOverride:
@@ -972,6 +1044,20 @@ async function syncCheckoutSessionPayment({
         submissionId: context.submissionId,
       });
 
+      // R-04: Stripe Radar elevated/highest risk alert. We still fulfill —
+      // a hard block would slow legit buyers — but ops gets a heads-up so
+      // they can pre-empt a dispute or refund. `highest` is the urgent
+      // category that Stripe flags as likely fraud.
+      if (chargeDetails.riskLevel === "elevated" || chargeDetails.riskLevel === "highest") {
+        const urgentIcon = chargeDetails.riskLevel === "highest" ? ":rotating_light:" : ":warning:";
+        await notifySlack({
+          channel: "ops",
+          kind: `stripe_risk_${chargeDetails.riskLevel}`,
+          text: `${urgentIcon} Stripe Radar *${chargeDetails.riskLevel}* risk on payment #${paymentId} (score ${chargeDetails.riskScore ?? "?"}). Fulfilled; review for proactive refund / contact.`,
+          username: "ops_alerts",
+        });
+      }
+
       // Promo-code redemption ping to the ops channel — only when a coupon
       // actually applied to this checkout. Keeps the payments channel
       // focused on raw $$$; promo attribution lands in ops alongside the
@@ -993,7 +1079,7 @@ async function syncCheckoutSessionPayment({
         });
       }
     }
-  } else if (eventStatus === "failed") {
+  } else if (effectiveStatus === "failed") {
     const recipient = await lookupRecipientForSubmission(context.submissionId);
     const masked = recipient.email ? maskEmail(recipient.email) : "no-email";
     const reason = chargeDetails.failureMessage ?? chargeDetails.failureCode ?? "unknown";
@@ -1033,13 +1119,22 @@ async function syncRefundEvent({ charge, event }: { charge: Stripe.Charge; event
     return;
   }
 
+  // F-07: partial vs full refund detection. Stripe sets `amount_refunded`
+  // cumulatively, so multiple partial refunds add up. We compare against the
+  // captured amount (fall back to gross amount when capture details aren't
+  // present, e.g. uncaptured authorisations being refunded).
+  const captured = charge.amount_captured ?? charge.amount ?? 0;
+  const refunded = charge.amount_refunded ?? 0;
+  const isPartialRefund = refunded > 0 && refunded < captured;
+  const paymentStatus = isPartialRefund ? "succeeded" : "refunded";
+
   const updateResponse = await supabaseServiceFetch(
     `/rest/v1/payment?id=eq.${existingPayment.id}`,
     {
       body: JSON.stringify({
-        refund_amount: toAmount(charge.amount_refunded),
+        refund_amount: toAmount(refunded),
         refunded_at: new Date().toISOString(),
-        status: "refunded",
+        status: paymentStatus,
         updated_date_time: new Date().toISOString(),
       }),
       headers: { Prefer: "return=minimal" },
@@ -1051,9 +1146,13 @@ async function syncRefundEvent({ charge, event }: { charge: Stripe.Charge; event
     throw new Error("payment_refund_update_failed");
   }
 
-  if (existingPayment.personal_report_id) {
+  // Only re-lock the report on a FULL refund. A partial (goodwill / partial
+  // dispute settlement) keeps the user's access — they paid for the report
+  // and only some money came back; revoking access would be hostile UX and
+  // the most common support-ticket source on a refund flow.
+  if (!isPartialRefund && existingPayment.personal_report_id) {
     await updatePersonalReportPayment({
-      amount: toAmount(charge.amount_captured ?? charge.amount),
+      amount: toAmount(captured),
       paymentId: existingPayment.id,
       personalReportId: existingPayment.personal_report_id,
       status: "refunded",
@@ -1069,12 +1168,13 @@ async function syncRefundEvent({ charge, event }: { charge: Stripe.Charge; event
       typeof charge.payment_intent === "string" ? charge.payment_intent : charge.payment_intent?.id,
   });
 
-  const refundAmount = toAmount(charge.amount_refunded);
+  const refundAmount = toAmount(refunded);
   const refundCurrency = (charge.currency ?? "eur").toUpperCase();
+  const refundLabel = isPartialRefund ? "Partial refund" : "Refund";
   await notifySlack({
     channel: "ops",
     kind: "stripe_refund",
-    text: `:money_with_wings: Refund issued — payment #${existingPayment.id} ${refundCurrency} ${refundAmount?.toFixed(2) ?? "?"} (charge ${escapeSlack(charge.id)})`,
+    text: `:money_with_wings: ${refundLabel} — payment #${existingPayment.id} ${refundCurrency} ${refundAmount?.toFixed(2) ?? "?"} (charge ${escapeSlack(charge.id)})${isPartialRefund ? " — access preserved" : ""}`,
     username: "ops_alerts",
   });
 }

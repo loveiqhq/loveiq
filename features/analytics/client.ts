@@ -1,6 +1,11 @@
 import { getCsrfToken } from "@shared/http/csrf-client";
 
-type GTag = (command: "event", eventName: string, params?: Record<string, unknown>) => void;
+type GTag = {
+  (command: "event", eventName: string, params?: Record<string, unknown>): void;
+  // `set user_properties` registers a user-scoped property so every subsequent
+  // GA4 event is segmentable by it in Explorations (e.g. the forced-paywall arm).
+  (command: "set", target: "user_properties", params: Record<string, unknown>): void;
+};
 type ConsentCategory = "analytics" | "advertisement";
 
 const GOOGLE_ADS_TAG_ID = "AW-18068690553";
@@ -16,6 +21,8 @@ declare global {
     __loveiqGoogleAdsEnabled?: boolean;
     __loveiqGtagBootstrapped?: boolean;
     __loveiqReportSubmissionId?: number | null;
+    /** Coupled forced-paywall A/B arm for the current report/wizard session. */
+    __loveiqForcedPaywallArm?: "treatment" | "control" | null;
     /** Dev-only: tracks event_types we've already warned about for missing context. */
     __loveiqPersistSkipWarned?: Set<string>;
   }
@@ -56,6 +63,10 @@ const PERSISTED_EVENTS = new Set([
   "scroll_depth_75",
   "scroll_depth_100",
   "rage_click",
+  // Forced-paywall A/B experiment (Phase E)
+  "experiment_exposure",
+  "scroll_paywall_shown",
+  "experiment_card_flipped",
 ]);
 
 /**
@@ -65,6 +76,25 @@ const PERSISTED_EVENTS = new Set([
 export const setReportSubmissionContext = (submissionId: number | null | undefined) => {
   if (typeof window === "undefined") return;
   window.__loveiqReportSubmissionId = submissionId ?? null;
+};
+
+/**
+ * Set on the report + wizard once the forced-paywall arm is known. Every
+ * persisted analytics event then auto-carries `forced_paywall_arm` in its
+ * metadata, so the whole funnel is arm-attributable with a single GROUP BY
+ * (no per-call wiring, nothing missed).
+ */
+export const setForcedPaywallArm = (arm: "treatment" | "control" | null) => {
+  if (typeof window === "undefined") return;
+  window.__loveiqForcedPaywallArm = arm;
+  // Mirror the arm into GA4 as a user-scoped property so EVERY GA4 event (not
+  // just experiment_exposure) is segmentable by arm in GA4 Explorations — no
+  // per-event wiring. Consent-gated like all GA4 traffic. NOTE: to surface in
+  // GA4 reports, register a custom dimension "forced_paywall_arm" (user-scoped)
+  // in GA4 Admin → Custom definitions (one-time config, not code).
+  if (arm && window.__loveiqAnalyticsEnabled && hasCookieYesConsent("analytics")) {
+    window.gtag?.("set", "user_properties", { forced_paywall_arm: arm });
+  }
 };
 
 const persistAnalyticsEvent = (
@@ -99,11 +129,16 @@ const persistAnalyticsEvent = (
   const csrf = getCsrfToken();
   if (!csrf) return;
 
+  // Auto-stamp the forced-paywall arm onto every persisted event so the whole
+  // funnel is arm-attributable without per-call wiring. Caller keys win.
+  const arm = window.__loveiqForcedPaywallArm ?? null;
+  const mergedMetadata = arm ? { forced_paywall_arm: arm, ...metadata } : metadata;
+
   const url = "/api/analytics-event";
   const headerBody = {
     event_type: eventType,
     submission_id: submissionId,
-    metadata,
+    metadata: mergedMetadata,
     duration_ms: durationMs,
   };
 
@@ -498,6 +533,47 @@ export const trackScrollPaywallDismissed = (params: {
   };
   track("scroll_paywall_dismissed", payload);
   persistAnalyticsEvent("scroll_paywall_dismissed", payload, payload.view_duration_ms);
+};
+
+/**
+ * A/B experiment exposure — fired once per surface when a user is bucketed into
+ * an arm. The canonical "entered arm X on surface Y" record (the per-arm
+ * denominator). Persisted to `analytics_event` so the experiment is analyzable
+ * in the DB, not just GA4.
+ */
+export const trackExperimentExposure = (params: {
+  experiment: string;
+  variant: string;
+  surface?: string;
+}) => {
+  const payload = {
+    experiment: params.experiment,
+    variant: params.variant,
+    ...(params.surface ? { surface: params.surface } : {}),
+  };
+  track("experiment_exposure", payload);
+  persistAnalyticsEvent("experiment_exposure", payload);
+};
+
+/**
+ * The scroll/forced pricing modal became visible. Captures modal impressions
+ * per arm (treatment ≈ immediate; control = scroll-gated). `forced_paywall_arm`
+ * is auto-stamped by persistAnalyticsEvent.
+ */
+export const trackScrollPaywallShown = (params: { surface?: string } = {}) => {
+  const payload = params.surface ? { surface: params.surface } : {};
+  track("scroll_paywall_shown", payload);
+  persistAnalyticsEvent("scroll_paywall_shown", payload);
+};
+
+/**
+ * The treatment flip card was flipped. `to` = which face is now showing.
+ * Captures flip engagement; `forced_paywall_arm` is auto-stamped.
+ */
+export const trackExperimentCardFlipped = (params: { to: "pricing" | "archetype" }) => {
+  const payload = { to: params.to };
+  track("experiment_card_flipped", payload);
+  persistAnalyticsEvent("experiment_card_flipped", payload);
 };
 
 export const trackLockIconClicked = (params: {

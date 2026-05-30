@@ -1,3 +1,4 @@
+import { createHash } from "crypto";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import {
@@ -22,9 +23,11 @@ import { verifyCsrfToken } from "@shared/http/csrf";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import {
   getReportAccessPlanForSubmission,
+  resolveReportAccessToken,
   resolveSubmissionAccessContext,
 } from "@features/report/server/personalReport";
 import { isPlanOwnedForArchetype } from "@features/report/server/access";
+import { getForcedPaywallCohort } from "@shared/experiments/forcedPaywall";
 import logger from "@shared/observability/logger";
 import {
   getReportPriceQuoteForContext,
@@ -215,6 +218,18 @@ export async function POST(request: Request) {
     const archetypeSlug = archetypeName ? toArchetypeSlug(archetypeName) : null;
     const planTitle = archetypeName ? `${archetypeName} report` : plan.title;
 
+    // Forced-paywall A/B arm, recomputed server-side from the canonical report
+    // token. Token checkouts carry it directly; session-only checkouts resolve
+    // it from the submission so the attribution arm matches the arm the user
+    // EXPERIENCED on the report (which keys on token ?? data.ownerToken). Never
+    // throws — a resolution miss defaults to control.
+    const forcedPaywallArm = getForcedPaywallCohort(
+      await resolveReportAccessToken({
+        reportSessionId: parsed.data.reportSessionId ?? null,
+        reportToken: parsed.data.reportToken ?? null,
+      })
+    );
+
     // Resolve the optional nurture promo. A miss (unknown/expired/wrong-owner)
     // silently falls through to the no-promo flow — never 400 — because the
     // email link could be opened on a forwarded device. Logged for analytics.
@@ -239,71 +254,99 @@ export async function POST(request: Request) {
       }
     }
 
-    const session = await stripe.checkout.sessions.create({
-      // discounts[] and allow_promotion_codes are mutually exclusive. When we
-      // pre-apply a nurture code, skip the manual-entry UI to avoid a confusing
-      // double-stack of "code already applied" + an empty entry field.
-      ...(nurturePromoMatch
-        ? { discounts: [{ promotion_code: nurturePromoMatch.stripePromotionCodeId }] }
-        : { allow_promotion_codes: true }),
-      billing_address_collection: "auto",
-      customer_email: customerEmail,
-      line_items: [
-        {
-          price_data: {
-            currency: quote.currency.toLowerCase(),
-            product_data: {
-              description: plan.description,
-              name: `LoveIQ ${planTitle}`,
+    // P-03: idempotency key dedupes double-clicks within the same minute.
+    // Stripe matches on (key + endpoint + params); identical (submission, plan,
+    // archetype, promo, minute) bucket returns the previously-created session
+    // instead of creating a second one. Promo is included so a freshly-resolved
+    // promo doesn't reuse a no-promo session from the same minute. The minute
+    // bucket is intentional — it keeps the key stable across rapid retries but
+    // lets the user create a fresh session a minute later (e.g. after Stripe's
+    // 24h hold on the prior one).
+    const idempotencyKey = createHash("sha256")
+      .update(
+        [
+          parsed.data.reportToken ?? parsed.data.reportSessionId ?? "",
+          parsed.data.plan,
+          parsed.data.archetype ?? "",
+          nurturePromoMatch?.stripePromotionCodeId ?? "",
+          String(Math.floor(Date.now() / 60_000)),
+        ].join("|")
+      )
+      .digest("hex");
+
+    const session = await stripe.checkout.sessions.create(
+      {
+        // discounts[] and allow_promotion_codes are mutually exclusive. When we
+        // pre-apply a nurture code, skip the manual-entry UI to avoid a confusing
+        // double-stack of "code already applied" + an empty entry field.
+        ...(nurturePromoMatch
+          ? { discounts: [{ promotion_code: nurturePromoMatch.stripePromotionCodeId }] }
+          : { allow_promotion_codes: true }),
+        billing_address_collection: "auto",
+        customer_email: customerEmail,
+        line_items: [
+          {
+            price_data: {
+              currency: quote.currency.toLowerCase(),
+              product_data: {
+                description: plan.description,
+                name: `LoveIQ ${planTitle}`,
+              },
+              unit_amount: quote.currentPriceCents,
             },
-            unit_amount: quote.currentPriceCents,
+            quantity: 1,
           },
-          quantity: 1,
+        ],
+        metadata: {
+          archetype: archetypeName ?? "",
+          basePriceBucket: quote.basePriceBucket,
+          behavioralBucket: quote.behavioralBucket,
+          countryTier: quote.countryTier,
+          currentPrice: String((quote.currentPriceCents / 100).toFixed(2)),
+          deviceType: quote.deviceType,
+          discountStep: String(quote.discountStep),
+          engagementScore: String(quote.engagementScore),
+          experimentGroup: quote.experimentGroup,
+          // Forced-paywall A/B arm (computed above from the canonical report
+          // token, consent-independent). Mirrors experimentGroup → flows
+          // webhook → fulfillment → payment.metadata for conversion attribution
+          // that survives analytics-consent declines.
+          forcedPaywallArm,
+          initialPrice: String((quote.initialPriceCents / 100).toFixed(2)),
+          msrp: String((quote.msrpCents / 100).toFixed(2)),
+          plan: parsed.data.plan,
+          pricingClusterId: quote.pricingClusterId,
+          pricingQuoteId: String(quote.id),
+          ...(nurturePromoMatch && {
+            promoCode: parsed.data.promo ?? "",
+            promoStage: nurturePromoMatch.stage,
+            promoPercentOff: String(nurturePromoMatch.percentOff),
+          }),
+          requestIp: toStripeMetadataValue(ip),
+          requestUserAgent: toStripeMetadataValue(userAgent),
+          reportSessionId: parsed.data.reportSessionId ?? "",
+          reportToken: parsed.data.reportToken ?? "",
+          startingPrice: String((quote.startingPriceCents / 100).toFixed(2)),
+          trafficSource: quote.trafficSource,
         },
-      ],
-      metadata: {
-        archetype: archetypeName ?? "",
-        basePriceBucket: quote.basePriceBucket,
-        behavioralBucket: quote.behavioralBucket,
-        countryTier: quote.countryTier,
-        currentPrice: String((quote.currentPriceCents / 100).toFixed(2)),
-        deviceType: quote.deviceType,
-        discountStep: String(quote.discountStep),
-        engagementScore: String(quote.engagementScore),
-        experimentGroup: quote.experimentGroup,
-        initialPrice: String((quote.initialPriceCents / 100).toFixed(2)),
-        msrp: String((quote.msrpCents / 100).toFixed(2)),
-        plan: parsed.data.plan,
-        pricingClusterId: quote.pricingClusterId,
-        pricingQuoteId: String(quote.id),
-        ...(nurturePromoMatch && {
-          promoCode: parsed.data.promo ?? "",
-          promoStage: nurturePromoMatch.stage,
-          promoPercentOff: String(nurturePromoMatch.percentOff),
+        mode: "payment",
+        invoice_creation: { enabled: true },
+        payment_intent_data: { receipt_email: customerEmail },
+        success_url: buildSuccessUrl({
+          archetypeSlug,
+          origin: siteUrl,
+          plan: parsed.data.plan,
+          reportToken: parsed.data.reportToken ?? null,
         }),
-        requestIp: toStripeMetadataValue(ip),
-        requestUserAgent: toStripeMetadataValue(userAgent),
-        reportSessionId: parsed.data.reportSessionId ?? "",
-        reportToken: parsed.data.reportToken ?? "",
-        startingPrice: String((quote.startingPriceCents / 100).toFixed(2)),
-        trafficSource: quote.trafficSource,
+        cancel_url: buildCancelUrl({
+          archetypeSlug,
+          origin: siteUrl,
+          plan: parsed.data.plan,
+          reportToken: parsed.data.reportToken ?? null,
+        }),
       },
-      mode: "payment",
-      invoice_creation: { enabled: true },
-      payment_intent_data: { receipt_email: customerEmail },
-      success_url: buildSuccessUrl({
-        archetypeSlug,
-        origin: siteUrl,
-        plan: parsed.data.plan,
-        reportToken: parsed.data.reportToken ?? null,
-      }),
-      cancel_url: buildCancelUrl({
-        archetypeSlug,
-        origin: siteUrl,
-        plan: parsed.data.plan,
-        reportToken: parsed.data.reportToken ?? null,
-      }),
-    });
+      { idempotencyKey }
+    );
 
     await markReportPriceQuoteCheckoutStarted({ quoteId: quote.id });
 

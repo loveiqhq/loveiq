@@ -1,8 +1,23 @@
 import { describe, expect, it } from "vitest";
 import {
+  resolveReportAccessToken,
   resolveUnlockedArchetypeTiers,
   resolveUnlockedArchetypes,
 } from "@features/report/server/personalReport";
+
+describe("resolveReportAccessToken", () => {
+  it("returns the URL token verbatim without a DB round-trip", async () => {
+    await expect(
+      resolveReportAccessToken({ reportToken: "rpt_ABCDEFGHIJKLMNOPQRST", reportSessionId: null })
+    ).resolves.toBe("rpt_ABCDEFGHIJKLMNOPQRST");
+  });
+
+  it("returns null when neither a token nor a session id is provided", async () => {
+    await expect(
+      resolveReportAccessToken({ reportToken: null, reportSessionId: null })
+    ).resolves.toBeNull();
+  });
+});
 
 describe("resolveUnlockedArchetypeTiers", () => {
   it("returns archetype_tiers as-is when DB column is populated", () => {

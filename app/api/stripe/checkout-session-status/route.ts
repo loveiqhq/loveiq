@@ -254,6 +254,9 @@ export async function GET(request: Request) {
       }
     }
 
+    const rawArm = session.metadata?.forcedPaywallArm;
+    const forcedPaywallArm = rawArm === "treatment" || rawArm === "control" ? rawArm : null;
+
     const successResponse: StripeCheckoutSessionStatusResponse = {
       enabled: true,
       accessPlan,
@@ -261,6 +264,7 @@ export async function GET(request: Request) {
       purchaseAnalytics: getPurchaseAnalytics(session),
       sessionStatus: session.status ?? null,
       surveySubmissionId,
+      forcedPaywallArm,
     };
 
     // Status-poll endpoint exposes payment + access plan — must always come

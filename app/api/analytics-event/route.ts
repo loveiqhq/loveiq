@@ -61,6 +61,10 @@ const ALLOWED_EVENTS = [
   "scroll_depth_75",
   "scroll_depth_100",
   "rage_click",
+  // Forced-paywall A/B experiment (Phase E)
+  "experiment_exposure",
+  "scroll_paywall_shown",
+  "experiment_card_flipped",
 ] as const;
 
 type AllowedEvent = (typeof ALLOWED_EVENTS)[number];
@@ -102,6 +106,11 @@ function entityTypeFor(event: AllowedEvent): string {
     case "scroll_depth_100":
     case "rage_click":
       return "ux";
+    case "scroll_paywall_shown":
+      return "paywall";
+    case "experiment_exposure":
+    case "experiment_card_flipped":
+      return "experiment";
   }
 }
 

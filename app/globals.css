@@ -3221,6 +3221,141 @@ input.autofill-dark:-internal-autofill-previewed {
   }
 }
 
+/* ── Forced-paywall flip card (treatment arm) ─────────────────────────────
+   The two hero cards collapse into one centered card: archetype on the front,
+   pricing on the back. Control keeps the side-by-side grid — its inner/face
+   wrappers are `display: contents` no-ops, so its layout is unchanged. */
+.rpm-hero-contents {
+  display: contents;
+}
+.rpm-flip {
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  max-width: 460px;
+  margin: 0 auto 40px;
+  perspective: 1800px;
+}
+.rpm-flip__inner {
+  display: grid;
+  transform-style: preserve-3d;
+  transition:
+    transform 600ms cubic-bezier(0.16, 1, 0.3, 1),
+    height 600ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.rpm-flip__inner.is-flipped {
+  transform: rotateY(180deg);
+}
+.rpm-flip__inner.is-nudging:not(.is-flipped) {
+  animation: rpm-flip-nudge 850ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes rpm-flip-nudge {
+  0%,
+  100% {
+    transform: rotateY(0deg);
+  }
+  38% {
+    transform: rotateY(-28deg);
+  }
+  72% {
+    transform: rotateY(9deg);
+  }
+}
+.rpm-flip__face {
+  grid-area: 1 / 1;
+  align-self: start;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.rpm-flip__face > .rpm-pricing-card,
+.rpm-flip__face > div:first-child {
+  flex: 1 1 auto;
+}
+.rpm-flip__face--front {
+  cursor: pointer;
+}
+.rpm-flip__face--front:focus-visible {
+  outline: 2px solid var(--accent-purple, #a78bfa);
+  outline-offset: 4px;
+  border-radius: 20px;
+}
+.rpm-flip__face--back {
+  transform: rotateY(180deg);
+  cursor: pointer;
+}
+/* (The flipped pricing face drops backdrop-filter via an inline style in
+   ScrollPricingModal — inline beats a class rule, so it can't live here.) */
+/* Front "tap to flip" hint — straddles the bottom edge, non-interactive so
+   clicks fall through to the face and flip it. */
+.rpm-flip__hint {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translate(-50%, 50%);
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 15px;
+  border-radius: 9999px;
+  background: rgba(19, 11, 23, 0.92);
+  border: 1px solid var(--accent-orange, #fe6839);
+  color: #fff;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+}
+.rpm-flip__hint svg {
+  width: 15px;
+  height: 15px;
+}
+/* Back "view archetype" control — centered pill below the pricing card. */
+.rpm-flip__back {
+  align-self: center;
+  margin-top: 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 18px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.86);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 200ms ease,
+    border-color 200ms ease;
+}
+.rpm-flip__back:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.34);
+}
+.rpm-flip__back svg {
+  width: 16px;
+  height: 16px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rpm-flip__inner {
+    transition: none;
+  }
+  .rpm-flip__inner.is-nudging:not(.is-flipped) {
+    animation: none;
+  }
+  .rpm-flip__back {
+    transition: none;
+  }
+}
+
 /* Desktop only — scale the archetype + pricing cards down proportionally
  * so they don't dominate the modal on wide viewports. Cap the hero grid
  * width AND shrink the design tokens that drive its typography, icons,
@@ -3276,6 +3411,12 @@ input.autofill-dark:-internal-autofill-previewed {
     left: 14px !important;
   }
   .rpm-pricing-card .rpm-pricing-badge--popular {
+    right: 14px !important;
+  }
+  /* Flip card shows only the discount badge, anchored top-right (overrides the
+     control's top-left placement above). */
+  .rpm-flip .rpm-pricing-card .rpm-pricing-badge--discount {
+    left: unset !important;
     right: 14px !important;
   }
   /* Pricing-card CTA — slim down on mobile so it doesn't dominate. */

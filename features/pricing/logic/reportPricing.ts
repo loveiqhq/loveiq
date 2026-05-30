@@ -8,8 +8,13 @@ import {
 import {
   resolveSubmissionAccessContext,
   ensurePersonalReportForSubmission,
+  lookupReportTokenBySubmissionId,
 } from "@features/report/server/personalReport";
 import { parseUtmSource } from "@features/survey/server/utils";
+import {
+  getForcedPaywallCohort,
+  type ForcedPaywallCohort,
+} from "@shared/experiments/forcedPaywall";
 
 const SUPABASE_TIMEOUT_MS = 8_000;
 const QUOTE_VALIDITY_MS = 21 * 24 * 60 * 60 * 1_000;
@@ -272,6 +277,13 @@ interface ReportPriceQuoteRow {
   plan: ReportPurchasePlanId;
   currency: string;
   experiment_group: PricingExperimentGroup;
+  /**
+   * Forced-paywall A/B arm for this report ("treatment" | "control"), stamped
+   * once at first quote persist. Consent-independent denominator for the
+   * experiment (see get_forced_paywall_ab RPC). Nullable for rows written
+   * before the 2026-05 column migration.
+   */
+  forced_paywall_arm?: ForcedPaywallCohort | null;
   base_price_bucket: string;
   base_price: number;
   /** MSRP anchor in EUR (numeric). Nullable for rows written before the 2026-04 pricing migration. */
@@ -1266,8 +1278,20 @@ async function persistQuote({
     plan,
     pricingSessionId,
   });
+
+  // Stamp the forced-paywall A/B arm ONCE (stable across re-quotes / per-plan
+  // rows, like experiment_group). Keyed on the SAME canonical report token the
+  // experience uses (token ?? data.ownerToken) so session-only users aren't
+  // mis-stamped as control. Consent-independent denominator for the experiment.
+  const forcedPaywallArm: ForcedPaywallCohort =
+    existingQuote?.forced_paywall_arm ??
+    getForcedPaywallCohort(
+      context.reportToken ?? (await lookupReportTokenBySubmissionId(context.submissionId))
+    );
+
   const payload = {
     ...builtQuote.payload,
+    forced_paywall_arm: forcedPaywallArm,
     created_date_time: existingQuote?.id ? undefined : now.toISOString(),
     personal_report_id: context.personalReportId,
     survey_submission_id: context.submissionId,

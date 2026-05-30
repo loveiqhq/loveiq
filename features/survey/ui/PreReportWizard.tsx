@@ -1,8 +1,13 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef, type FC, type ReactNode } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef, type FC, type ReactNode } from "react";
 import Image from "next/image";
-import { trackWizardSlideAdvanced } from "@features/analytics/client";
+import { trackExperimentExposure, trackWizardSlideAdvanced } from "@features/analytics/client";
+import {
+  FORCED_PAYWALL_EXPERIMENT,
+  getForcedPaywallCohort,
+  resolveDevCohortOverride,
+} from "@shared/experiments/forcedPaywall";
 
 /* ------------------------------------------------------------------ */
 /*  Arrow icons                                                        */
@@ -323,8 +328,6 @@ const Slide5Icon: FC = () => (
 /* ------------------------------------------------------------------ */
 /*  Slide data                                                         */
 /* ------------------------------------------------------------------ */
-const TOTAL_SLIDES = 6;
-
 interface Slide {
   icon: FC;
   heading: string;
@@ -406,14 +409,45 @@ const slides: Slide[] = [
   },
 ];
 
+/**
+ * Final slide for the "treatment" arm of the coupled report-paywall experiment
+ * (see `getForcedPaywallCohort`). It REPLACES the control "Lets now view your
+ * free results…" slide (Figma 6968-8644) — same slide count, swapped ending —
+ * so the treatment journey closes on the must-pay framing (Figma 7552-7703).
+ * Copy + emphasis match that design; it renders inside the existing wizard
+ * chrome so it inherits the same responsive layout as every other slide.
+ */
+const reportWaitingSlide: Slide = {
+  icon: Slide6Icon,
+  heading: "Your personalised report is waiting for you.",
+  body: (
+    <>
+      Your full archetype report is unlocked with <strong>a one-time purchase.</strong> Inside you
+      will find your <strong>Sexual Archetype profile</strong>, compatibility insights, and a
+      personalised breakdown of your patterns and desires —{" "}
+      <strong>built from your responses.</strong>
+      <br />
+      <strong>
+        And if it doesn&rsquo;t feel valuable, you get a 14-day money-back guarantee — no
+        discussions.
+      </strong>
+    </>
+  ),
+};
+
 /* ------------------------------------------------------------------ */
 /*  PreReportWizard                                                    */
 /* ------------------------------------------------------------------ */
 interface PreReportWizardProps {
   onComplete: () => void;
+  /**
+   * Report token, used to bucket the user into the coupled paywall experiment.
+   * Treatment arm gets one extra final slide. Missing token → control.
+   */
+  reportToken?: string | null;
 }
 
-const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete }) => {
+const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete, reportToken }) => {
   const [slideIndex, setSlideIndex] = useState(0);
   const [isLeaving, setIsLeaving] = useState(false);
   const [hasEntered, setHasEntered] = useState(false);
@@ -421,14 +455,50 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete }) => {
   const touchStartX = useRef<number | null>(null);
   const touchStartY = useRef<number | null>(null);
 
+  // Coupled paywall experiment: treatment users get a different FINAL slide
+  // (same slide count as control — the last slide swaps, it is not appended).
+  // `?arm=` is a dev-only preview override (null in production).
+  const devArm = useMemo(
+    () =>
+      resolveDevCohortOverride(
+        typeof window === "undefined"
+          ? null
+          : new URLSearchParams(window.location.search).get("arm")
+      ),
+    []
+  );
+  const cohort = useMemo(
+    () => devArm ?? getForcedPaywallCohort(reportToken ?? null),
+    [devArm, reportToken]
+  );
+  const activeSlides = useMemo(
+    () => (cohort === "treatment" ? [...slides.slice(0, -1), reportWaitingSlide] : slides),
+    [cohort]
+  );
+
   // Entrance fade-in
   useEffect(() => {
     const raf = requestAnimationFrame(() => setHasEntered(true));
     return () => cancelAnimationFrame(raf);
   }, []);
 
-  // slideIndex is bounded to [0, slides.length-1] by the navigation handlers below.
-  const slide = slides[slideIndex]!;
+  // Fire experiment exposure once, after the report token resolves (both arms,
+  // for arm analysis). Gating on the token means we log the arm the user is
+  // actually bucketed into — never a transient null-token "control" reading.
+  const exposureFiredRef = useRef(false);
+  useEffect(() => {
+    if (exposureFiredRef.current) return;
+    if (!reportToken) return;
+    exposureFiredRef.current = true;
+    trackExperimentExposure({
+      experiment: FORCED_PAYWALL_EXPERIMENT,
+      variant: cohort,
+      surface: "pre_report_wizard",
+    });
+  }, [cohort, reportToken]);
+
+  // slideIndex is bounded to [0, activeSlides.length-1] by the navigation handlers below.
+  const slide = activeSlides[slideIndex]!;
   const Icon = slide.icon;
 
   const handleNext = useCallback(() => {
@@ -436,7 +506,7 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete }) => {
     setIsLeaving(true);
     setTimeout(() => {
       setIsLeaving(false);
-      if (slideIndex >= TOTAL_SLIDES - 1) {
+      if (slideIndex >= activeSlides.length - 1) {
         setIsExiting(true);
         setTimeout(onComplete, 600);
       } else {
@@ -449,7 +519,7 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete }) => {
         setSlideIndex((i) => i + 1);
       }
     }, 250);
-  }, [slideIndex, onComplete, isLeaving]);
+  }, [slideIndex, onComplete, isLeaving, activeSlides.length]);
 
   const handlePrev = useCallback(() => {
     if (isLeaving || slideIndex === 0) return;
@@ -602,7 +672,12 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete }) => {
                 "mt-6 max-w-[798px] lg:max-w-[880px] font-sans not-italic text-[18px] font-light leading-[29.25px] text-white/80 [&_strong]:font-bold [&_strong]:text-white"
               }
               style={{
-                fontVariationSettings: '"wght" 300',
+                // Base weight comes from the `font-light` class (300). We must
+                // NOT pin `font-variation-settings: "wght" 300` here: it is
+                // inherited by <strong> and, on the variable Manrope axis,
+                // overrides `[&_strong]:font-bold` — making bold words render at
+                // 300. Leaving it off lets font-weight (300 base / 700 strong)
+                // drive the axis correctly.
                 opacity: 0,
                 animation: "survey-fade-up 700ms cubic-bezier(0.16,1,0.3,1) 300ms both",
               }}
@@ -620,7 +695,7 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete }) => {
           {/* Step progress bar */}
           <div className="space-y-2">
             <div className="flex h-1 w-full max-w-[448px] gap-3">
-              {Array.from({ length: TOTAL_SLIDES }).map((_, i) => (
+              {Array.from({ length: activeSlides.length }).map((_, i) => (
                 <div
                   key={i}
                   className="relative h-1 flex-1 overflow-hidden rounded-full"
@@ -639,7 +714,7 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete }) => {
               ))}
             </div>
             <span className="text-[12px] font-medium tracking-[0.5px] text-white/30">
-              {slideIndex + 1} / {TOTAL_SLIDES}
+              {slideIndex + 1} / {activeSlides.length}
             </span>
           </div>
 
@@ -663,11 +738,13 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete }) => {
               type="button"
               onClick={handleNext}
               aria-label={
-                slideIndex >= TOTAL_SLIDES - 1 ? "View your report" : "Continue to next slide"
+                slideIndex >= activeSlides.length - 1
+                  ? "View your report"
+                  : "Continue to next slide"
               }
               className="inline-flex h-[48px] items-center gap-3 rounded-full bg-[#FE6839] px-7 text-[14px] font-bold uppercase leading-[20px] tracking-[1.4px] text-white shadow-[0_10px_15px_-3px_rgba(254,104,57,0.2),0_4px_6px_-4px_rgba(254,104,57,0.2)] transition hover:-translate-y-[1px] hover:shadow-[0_14px_20px_-3px_rgba(254,104,57,0.28)] focus-visible-ring sm:px-8"
             >
-              {slideIndex >= TOTAL_SLIDES - 1 ? "View Report" : "Continue"}
+              {slideIndex >= activeSlides.length - 1 ? "View Report" : "Continue"}
               <ArrowRight className="h-[18px] w-[18px]" />
             </button>
           </div>

@@ -18,7 +18,9 @@ import {
   trackSurveyComplete,
   trackSurveyPause,
   setReportSubmissionContext,
+  setForcedPaywallArm,
 } from "@features/analytics/client";
+import { getForcedPaywallCohort } from "@shared/experiments/forcedPaywall";
 import { useSubmitSurvey } from "./hooks/useSubmitSurvey";
 import { useSurveyTracking } from "./hooks/useSurveyTracking";
 import { useUtmCapture } from "./hooks/useUtmCapture";
@@ -61,8 +63,12 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
   useEffect(() => {
     if (submissionId != null) {
       setReportSubmissionContext(submissionId);
+      // Stamp the forced-paywall arm so wizard analytics rows (and the wizard
+      // exposure) self-identify the arm. Keyed on the same report token the
+      // /report page uses, so both surfaces agree.
+      setForcedPaywallArm(getForcedPaywallCohort(reportToken));
     }
-  }, [submissionId]);
+  }, [submissionId, reportToken]);
   const utmTracker = useUtmCapture();
   const { savePartial } = usePartialSave(answers, currentIndex, startedAt, utmTracker);
 
@@ -380,7 +386,9 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
 
     // Pre-report wizard phase
     if (completionPhase === "wizard") {
-      return <PreReportWizard onComplete={() => onComplete(reportToken)} />;
+      return (
+        <PreReportWizard reportToken={reportToken} onComplete={() => onComplete(reportToken)} />
+      );
     }
 
     // Error confirmation only

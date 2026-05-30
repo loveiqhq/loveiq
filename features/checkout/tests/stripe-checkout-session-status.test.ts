@@ -135,6 +135,7 @@ describe("GET /api/stripe/checkout-session-status", () => {
               discountStep: "1",
               engagementScore: "40",
               experimentGroup: "B",
+              forcedPaywallArm: "treatment",
               initialPrice: "29.99",
               pricingClusterId: "cluster",
               reportSessionId: "02d88f31-eceb-4402-940d-c8cd98d01848",
@@ -184,6 +185,7 @@ describe("GET /api/stripe/checkout-session-status", () => {
       },
       sessionStatus: "complete",
       surveySubmissionId: 63,
+      forcedPaywallArm: "treatment",
     });
     expect(resolveSubmissionAccessContext).toHaveBeenCalledWith({
       reportSessionId: "02d88f31-eceb-4402-940d-c8cd98d01848",

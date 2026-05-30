@@ -14,6 +14,18 @@ vi.mock("next/image", () => ({
 }));
 
 import PreReportWizard from "@features/survey/ui/PreReportWizard";
+import { getForcedPaywallCohort } from "@shared/experiments/forcedPaywall";
+
+/** Find a report token that buckets into the given coupled-paywall arm. */
+function findToken(cohort: "treatment" | "control"): string {
+  for (let i = 0; i < 10000; i++) {
+    const token = `rpt_wizard_test_${i}`;
+    if (getForcedPaywallCohort(token) === cohort) return token;
+  }
+  throw new Error(`no token found for cohort ${cohort}`);
+}
+const TREATMENT_TOKEN = findToken("treatment");
+const CONTROL_TOKEN = findToken("control");
 
 /** Click a button and flush the 200ms leave-animation timer. */
 function clickAndFlush(button: HTMLElement) {
@@ -124,5 +136,65 @@ describe("PreReportWizard", () => {
     const backButton = screen.getByRole("button", { name: /previous slide/i });
     expect(backButton.parentElement).not.toHaveClass("pointer-events-none");
     expect(backButton.parentElement).toHaveClass("opacity-100");
+  });
+});
+
+describe("PreReportWizard — coupled paywall experiment", () => {
+  it("control cohort keeps the original 6 slides", () => {
+    render(<PreReportWizard reportToken={CONTROL_TOKEN} onComplete={vi.fn()} />);
+    expect(screen.getByText("1 / 6")).toBeInTheDocument();
+  });
+
+  it("missing token falls back to control (6 slides)", () => {
+    render(<PreReportWizard onComplete={vi.fn()} />);
+    expect(screen.getByText("1 / 6")).toBeInTheDocument();
+  });
+
+  it("treatment cohort swaps the final slide (still 6 slides, not appended)", () => {
+    render(<PreReportWizard reportToken={TREATMENT_TOKEN} onComplete={vi.fn()} />);
+    expect(screen.getByText("1 / 6")).toBeInTheDocument();
+  });
+
+  it("treatment final slide replaces the free-results slide with the report-waiting slide", () => {
+    const onComplete = vi.fn();
+    render(<PreReportWizard reportToken={TREATMENT_TOKEN} onComplete={onComplete} />);
+
+    // Advance to slide index 4 (5th of 6) — the swapped slide must NOT appear yet
+    // (guards against an off-by-one in slides.slice(0, -1)).
+    for (let i = 0; i < 4; i++) {
+      clickAndFlush(screen.getByRole("button", { name: /continue/i }));
+    }
+    expect(
+      screen.queryByText("Your personalised report is waiting for you.")
+    ).not.toBeInTheDocument();
+
+    // One more advance → final slide (index 5) is the swapped report-waiting slide.
+    clickAndFlush(screen.getByRole("button", { name: /continue/i }));
+    expect(screen.getByText("Your personalised report is waiting for you.")).toBeInTheDocument();
+    // The control "free results" slide is replaced (gone) in treatment.
+    expect(
+      screen.queryByText("Lets now view your free results and unlock deeper insights.")
+    ).not.toBeInTheDocument();
+
+    clickAndFlush(screen.getByRole("button", { name: /view your report/i }));
+    act(() => {
+      vi.advanceTimersByTime(650);
+    });
+    expect(onComplete).toHaveBeenCalledTimes(1);
+  });
+
+  it("control final slide stays the free-results slide", () => {
+    render(<PreReportWizard reportToken={CONTROL_TOKEN} onComplete={vi.fn()} />);
+
+    for (let i = 0; i < 5; i++) {
+      clickAndFlush(screen.getByRole("button", { name: /continue/i }));
+    }
+
+    expect(
+      screen.getByText("Lets now view your free results and unlock deeper insights.")
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Your personalised report is waiting for you.")
+    ).not.toBeInTheDocument();
   });
 });
