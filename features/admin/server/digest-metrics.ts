@@ -1054,6 +1054,207 @@ export async function fetchSparklines(
   return { days };
 }
 
+// =============================================================================
+// Phase 3 — CVR-over-time + price-bucket + drop-out funnel + reactivation email
+// =============================================================================
+
+/**
+ * Single source of truth for funnel conversion-rate math. Guards every
+ * degenerate input (denominator 0, NaN, Infinity, negatives) to a clean 0 so
+ * no chart ever renders NaN%/Infinity%. Result is clamped to [0,100] and
+ * rounded to one decimal. Unit-tested in digest-cvr-rates.test.ts.
+ */
+export function computeRate(numerator: number, denominator: number): number {
+  if (!Number.isFinite(numerator) || !Number.isFinite(denominator)) return 0;
+  if (denominator <= 0 || numerator < 0) return 0;
+  const pct = (numerator / denominator) * 100;
+  if (!Number.isFinite(pct)) return 0;
+  return Math.max(0, Math.min(100, Math.round(pct * 10) / 10));
+}
+
+/** One UTC day of raw funnel-stage counts. Rates are computed Node-side. */
+export interface FunnelCvrDay {
+  day: string;
+  visitors: number;
+  starts: number;
+  completions: number;
+  eng_1m: number;
+  eng_5m: number;
+  eng_10m: number;
+  paygate: number;
+  purchased: number;
+}
+
+export interface FunnelCvrSnapshot {
+  days: FunnelCvrDay[];
+}
+
+/** Per-bucket counts for one UTC day. CVR + revenue ranking computed Node-side. */
+export interface BucketDayCounts {
+  shown: number;
+  purchases: number;
+  revenue: number;
+}
+
+export interface BucketPerfDay {
+  day: string;
+  buckets: Record<string, BucketDayCounts>;
+}
+
+export interface BucketPerfSnapshot {
+  days: BucketPerfDay[];
+}
+
+/** One question's reach count (window snapshot). Retention computed Node-side. */
+export interface DropoutQuestion {
+  question_index: number;
+  q_id: string;
+  sessions: number;
+}
+
+export interface DropoutFunnelSnapshot {
+  questions: DropoutQuestion[];
+}
+
+/** One reactivation-email stage's window totals. CVR computed Node-side. */
+export interface NurtureStage {
+  stage: string;
+  sent: number;
+  purchased: number;
+}
+
+export interface NurturePerfSnapshot {
+  stages: NurtureStage[];
+}
+
+/**
+ * Charts 1-5 source. Per UTC day: every funnel-stage numerator + denominator
+ * so the cron builds 5 CVR series via computeRate. Null on RPC failure.
+ */
+export async function fetchFunnelCvrSparklines(
+  sinceIso: string,
+  untilIso: string
+): Promise<FunnelCvrSnapshot | null> {
+  const raw = await callRpc<{ days?: unknown }>("get_funnel_cvr_sparklines", {
+    since_ts: sinceIso,
+    until_ts: untilIso,
+  });
+  if (!raw || !Array.isArray(raw.days)) return null;
+  const days: FunnelCvrDay[] = [];
+  for (const row of raw.days) {
+    if (!row || typeof row !== "object") continue;
+    const r = row as Record<string, unknown>;
+    const day = typeof r.day === "string" ? r.day : "";
+    if (!day) continue;
+    days.push({
+      day,
+      visitors: coerceNonNegInt(r.visitors),
+      starts: coerceNonNegInt(r.starts),
+      completions: coerceNonNegInt(r.completions),
+      eng_1m: coerceNonNegInt(r.eng_1m),
+      eng_5m: coerceNonNegInt(r.eng_5m),
+      eng_10m: coerceNonNegInt(r.eng_10m),
+      paygate: coerceNonNegInt(r.paygate),
+      purchased: coerceNonNegInt(r.purchased),
+    });
+  }
+  return { days };
+}
+
+/**
+ * Chart 6 source. Per UTC day, a map of bucket -> {shown, purchases, revenue}.
+ * Bucket keys arrive lowercased+trimmed from SQL. Null on RPC failure.
+ */
+export async function fetchBucketPerformance(
+  sinceIso: string,
+  untilIso: string
+): Promise<BucketPerfSnapshot | null> {
+  const raw = await callRpc<{ days?: unknown }>("get_bucket_performance", {
+    since_ts: sinceIso,
+    until_ts: untilIso,
+  });
+  if (!raw || !Array.isArray(raw.days)) return null;
+  const days: BucketPerfDay[] = [];
+  for (const row of raw.days) {
+    if (!row || typeof row !== "object") continue;
+    const r = row as Record<string, unknown>;
+    const day = typeof r.day === "string" ? r.day : "";
+    if (!day) continue;
+    const buckets: Record<string, BucketDayCounts> = {};
+    const rawBuckets = objOrEmpty(r.buckets);
+    for (const [name, val] of Object.entries(rawBuckets)) {
+      if (!name || typeof name !== "string") continue;
+      const c = objOrEmpty(val);
+      buckets[name] = {
+        shown: coerceNonNegInt(c.shown),
+        purchases: coerceNonNegInt(c.purchases),
+        revenue: coerceNonNegFloat(c.revenue),
+      };
+    }
+    days.push({ day, buckets });
+  }
+  return { days };
+}
+
+/**
+ * Chart 7 source. Window-snapshot per-question reach counts, ordered by
+ * question_index. Null on RPC failure.
+ */
+export async function fetchDropoutFunnel(
+  sinceIso: string,
+  untilIso: string
+): Promise<DropoutFunnelSnapshot | null> {
+  const raw = await callRpc<{ questions?: unknown }>("get_dropout_funnel", {
+    since_ts: sinceIso,
+    until_ts: untilIso,
+  });
+  if (!raw || !Array.isArray(raw.questions)) return null;
+  const questions: DropoutQuestion[] = [];
+  for (const item of raw.questions) {
+    if (!item || typeof item !== "object") continue;
+    const r = item as Record<string, unknown>;
+    const idxNum = Number(r.question_index);
+    if (!Number.isFinite(idxNum)) continue;
+    questions.push({
+      question_index: Math.trunc(idxNum),
+      q_id: typeof r.q_id === "string" ? r.q_id : "",
+      sessions: coerceNonNegInt(r.sessions),
+    });
+  }
+  // RPC already orders, but re-sort defensively in case of transport reorder.
+  questions.sort((a, b) => a.question_index - b.question_index);
+  return { questions };
+}
+
+/**
+ * Chart 8 source. Per reactivation-email stage: sent + purchased window totals.
+ * Null on RPC failure. purchased may be 0 until checkout stamps
+ * payment.metadata.promoStage (documented gap).
+ */
+export async function fetchNurturePerformance(
+  sinceIso: string,
+  untilIso: string
+): Promise<NurturePerfSnapshot | null> {
+  const raw = await callRpc<{ stages?: unknown }>("get_nurture_performance", {
+    since_ts: sinceIso,
+    until_ts: untilIso,
+  });
+  if (!raw || !Array.isArray(raw.stages)) return null;
+  const stages: NurtureStage[] = [];
+  for (const item of raw.stages) {
+    if (!item || typeof item !== "object") continue;
+    const r = item as Record<string, unknown>;
+    const stage = typeof r.stage === "string" ? r.stage : "";
+    if (!stage) continue;
+    stages.push({
+      stage,
+      sent: coerceNonNegInt(r.sent),
+      purchased: coerceNonNegInt(r.purchased),
+    });
+  }
+  return { stages };
+}
+
 /**
  * Phase-bucketed extended sparklines from `get_funnel_sparklines_v2`. Each row
  * is one UTC day with intro / survey-by-chapter / wizard / monetize buckets.

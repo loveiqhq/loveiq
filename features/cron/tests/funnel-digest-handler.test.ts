@@ -1,31 +1,34 @@
 /**
- * End-to-end integration test for the funnel-digest cron handler.
+ * End-to-end integration test for the Phase-3 funnel-digest cron handler.
  *
- * Mocks every external boundary (Slack, Supabase, dedup table, env probes,
- * cron auth) so the test exercises the FULL GET-handler code path:
- *  - daily Block Kit composition + notifySlack call
- *  - Monday weekly main digest + supplement composition
- *  - persistRecommendations is called AFTER notifySlack succeeds, with the
- *    correct week_key
- *
- * Catches wiring regressions the per-module tests can't (e.g. swapped order
- * of notifySlack / markSlackAlertDelivered / persistRecommendations).
+ * Mocks every external boundary (Slack, dedup table, env probes, cron auth,
+ * metric + chart fetchers) so the test exercises the full GET-handler path:
+ *  - single daily_digest message (chart rail + Revenue/Alerts footer)
+ *  - Monday weekly_digest recap
+ *  - image blocks point at the new /api/admin/digest-image/<kind> URLs
  */
 
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type { DailyMetrics, WeeklyMetrics } from "@features/admin/server/digest-metrics";
-
-// ---- Boundary mocks ---------------------------------------------------------
+import type {
+  DailyMetrics,
+  WeeklyMetrics,
+  FunnelCvrSnapshot,
+  BucketPerfSnapshot,
+  DropoutFunnelSnapshot,
+  NurturePerfSnapshot,
+} from "@features/admin/server/digest-metrics";
 
 const mockNotifySlack = vi.fn();
 const mockTryClaimSlackAlert = vi.fn();
 const mockMarkSlackAlertDelivered = vi.fn();
 const mockVerifyCronAuth = vi.fn();
 const mockIsProdCronHost = vi.fn();
-const mockPersistRecommendations = vi.fn();
 const mockFetchDailyMetrics = vi.fn();
 const mockFetchWeeklyMetrics = vi.fn();
-const mockFetchFunnelCaptureStart = vi.fn();
+const mockFetchCvr = vi.fn();
+const mockFetchBucket = vi.fn();
+const mockFetchDropout = vi.fn();
+const mockFetchNurture = vi.fn();
 
 vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
@@ -48,12 +51,6 @@ vi.mock("@shared/http/is-prod-cron-host", () => ({
   isProdCronHost: (...args: unknown[]) => mockIsProdCronHost(...args),
 }));
 
-vi.mock("@features/admin/server/digest-recommendation-history", () => ({
-  persistRecommendations: (...args: unknown[]) => mockPersistRecommendations(...args),
-}));
-
-const mockFetchQuestionAbandonmentTopN = vi.fn();
-
 vi.mock("@features/admin/server/digest-metrics", async () => {
   const actual = await vi.importActual<typeof import("@features/admin/server/digest-metrics")>(
     "@features/admin/server/digest-metrics"
@@ -62,8 +59,10 @@ vi.mock("@features/admin/server/digest-metrics", async () => {
     ...actual,
     fetchDailyMetrics: (...args: unknown[]) => mockFetchDailyMetrics(...args),
     fetchWeeklyMetrics: (...args: unknown[]) => mockFetchWeeklyMetrics(...args),
-    fetchFunnelCaptureStart: (...args: unknown[]) => mockFetchFunnelCaptureStart(...args),
-    fetchQuestionAbandonmentTopN: (...args: unknown[]) => mockFetchQuestionAbandonmentTopN(...args),
+    fetchFunnelCvrSparklines: (...args: unknown[]) => mockFetchCvr(...args),
+    fetchBucketPerformance: (...args: unknown[]) => mockFetchBucket(...args),
+    fetchDropoutFunnel: (...args: unknown[]) => mockFetchDropout(...args),
+    fetchNurturePerformance: (...args: unknown[]) => mockFetchNurture(...args),
   };
 });
 
@@ -150,45 +149,41 @@ function buildWeekly(): WeeklyMetrics {
     worstChapters: [],
     topIssues: [],
     dropOff: [],
-    dropoffEverywhere: {
-      stages: [
-        { name: "unique_visitors", count: 100 },
-        { name: "purchased", count: 2 },
-      ],
-    },
+    dropoffEverywhere: { stages: [] },
     answerLift: null,
-    engagementLift: {
-      buckets: [
-        { bucket: "0-1m", n: 10, paid: 0 },
-        { bucket: "10m+", n: 5, paid: 2 },
-      ],
-    },
-    leakSeverity: [
-      {
-        fromStage: "unique_visitors",
-        toStage: "purchased",
-        dropCount: 98,
-        dropRate: 98,
-        downstreamPaidRate: 1,
-        revenuePerPaid: 30,
-        estLostRevenue: 2940,
-        currency: "EUR",
-      },
-    ],
-    recommendations: [
-      {
-        severity: "high",
-        rule: "dropoff_revenue_loss",
-        message: "Big leak",
-        evidence: "drop=98",
-        fingerprint: { drop_count: 98, est_lost_revenue: 2940 },
-      },
-    ],
+    engagementLift: null,
+    leakSeverity: [],
+    recommendations: [],
     revisited: [],
   };
 }
 
-// ---- Suite ------------------------------------------------------------------
+const cvrSnap: FunnelCvrSnapshot = {
+  days: Array.from({ length: 3 }, (_, i) => ({
+    day: `2026-05-2${i + 5}`,
+    visitors: 100,
+    starts: 40,
+    completions: 25,
+    eng_1m: 15,
+    eng_5m: 10,
+    eng_10m: 5,
+    paygate: 8,
+    purchased: 2,
+  })),
+};
+const bucketSnap: BucketPerfSnapshot = {
+  days: [{ day: "2026-05-27", buckets: { a: { shown: 10, purchases: 2, revenue: 60 } } }],
+};
+const dropoutSnap: DropoutFunnelSnapshot = {
+  questions: [
+    { question_index: 0, q_id: "00000", sessions: 100 },
+    { question_index: 1, q_id: "00001", sessions: 80 },
+    { question_index: 2, q_id: "01002", sessions: 60 },
+  ],
+};
+const nurtureSnap: NurturePerfSnapshot = {
+  stages: [{ stage: "6h_no_view", sent: 50, purchased: 3 }],
+};
 
 beforeAll(() => {
   process.env.CRON_SECRET = "test-cron-secret";
@@ -203,13 +198,12 @@ beforeEach(() => {
   mockTryClaimSlackAlert.mockResolvedValue(true);
   mockMarkSlackAlertDelivered.mockResolvedValue(undefined);
   mockNotifySlack.mockResolvedValue(undefined);
-  mockPersistRecommendations.mockResolvedValue(undefined);
-  mockFetchFunnelCaptureStart.mockResolvedValue(null);
   mockFetchDailyMetrics.mockResolvedValue(baseDaily);
   mockFetchWeeklyMetrics.mockResolvedValue(buildWeekly());
-  // Phase 2 — questions fetcher; null = chart skipped (no per-question data
-  // in the fixture). Tests that exercise the questions branch should override.
-  mockFetchQuestionAbandonmentTopN.mockResolvedValue(null);
+  mockFetchCvr.mockResolvedValue(cvrSnap);
+  mockFetchBucket.mockResolvedValue(bucketSnap);
+  mockFetchDropout.mockResolvedValue(dropoutSnap);
+  mockFetchNurture.mockResolvedValue(nurtureSnap);
 });
 
 function newRequest() {
@@ -218,7 +212,7 @@ function newRequest() {
   });
 }
 
-describe("funnel-digest cron handler — wiring", () => {
+describe("funnel-digest cron handler — Phase 3 wiring", () => {
   it("returns 401 when verifyCronAuth fails", async () => {
     mockVerifyCronAuth.mockReturnValueOnce(false);
     const res = await GET(newRequest());
@@ -234,122 +228,77 @@ describe("funnel-digest cron handler — wiring", () => {
     expect(mockNotifySlack).not.toHaveBeenCalled();
   });
 
-  it("daily path sends Block Kit message with text fallback + sparkline image block", async () => {
-    // Pick a Tuesday so the weekly path does NOT fire (only daily branch).
-    vi.setSystemTime(new Date("2026-05-26T09:00:00Z")); // 2026-05-26 = Tuesday
+  it("daily path sends ONE daily_digest message with chart images + Revenue footer", async () => {
+    vi.setSystemTime(new Date("2026-05-26T09:00:00Z")); // Tuesday → no weekly
     try {
       await GET(newRequest());
-      // Phase 2 — daily now splits into msg1 + msg2. The fixture has no v3
-      // / channel / archetype / velocity snapshots, so msg2 is null and only
-      // msg1 ships. Confirm the single call is the new msg1 kind.
       expect(mockNotifySlack).toHaveBeenCalledOnce();
       const call = mockNotifySlack.mock.calls[0][0];
-      expect(call.kind).toBe("daily_digest_msg1");
+      expect(call.kind).toBe("daily_digest");
       expect(call.channel).toBe("ops");
-      expect(call.text).toContain("Daily digest");
-      expect(Array.isArray(call.blocks)).toBe(true);
-      expect(call.blocks.length).toBeGreaterThan(0);
-      const imageBlock = call.blocks.find((b: { type: string }) => b.type === "image");
-      expect(imageBlock).toBeDefined();
-      expect(imageBlock.image_url).toMatch(
-        /^https:\/\/example\.test\/api\/admin\/digest-image\/sparklines\?d=[^&]+&s=/
-      );
-    } finally {
-      vi.useRealTimers();
-    }
-  });
 
-  it("monday path sends THREE Slack messages: daily msg1 + weekly + strategy supplement", async () => {
-    // 2026-05-25 is a Monday (UTC). Phase 2 — daily msg2 ships only when v3
-    // monetization data is present; the fixture has none so msg2 is suppressed.
-    // The questions chart also skips because mockFetchQuestionAbandonmentTopN
-    // returns null. Net = 3 sends as before.
-    vi.setSystemTime(new Date("2026-05-25T09:00:00Z"));
-    try {
-      await GET(newRequest());
-      expect(mockNotifySlack).toHaveBeenCalledTimes(3);
-      const kinds = mockNotifySlack.mock.calls.map((c) => c[0].kind);
-      expect(kinds).toEqual(["daily_digest_msg1", "weekly_digest", "weekly_strategy_supplement"]);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("monday path persists recommendations AFTER the supplement send succeeds", async () => {
-    vi.setSystemTime(new Date("2026-05-25T09:00:00Z"));
-    try {
-      await GET(newRequest());
-      // 3 Slack sends + 1 persist call
-      expect(mockPersistRecommendations).toHaveBeenCalledOnce();
-      const [weekKey, recs] = mockPersistRecommendations.mock.calls[0];
-      expect(weekKey).toMatch(/^\d{4}-W\d{2}$/);
-      expect(Array.isArray(recs)).toBe(true);
-      expect(recs.length).toBeGreaterThan(0);
-      // Verify ORDERING: supplement notifySlack was called before persist.
-      const supplementCallIdx = mockNotifySlack.mock.invocationCallOrder[2];
-      const persistCallIdx = mockPersistRecommendations.mock.invocationCallOrder[0];
-      expect(supplementCallIdx).toBeLessThan(persistCallIdx);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("does NOT persist when supplement is empty (every section null)", async () => {
-    vi.setSystemTime(new Date("2026-05-25T09:00:00Z"));
-    try {
-      mockFetchWeeklyMetrics.mockResolvedValue({
-        ...buildWeekly(),
-        wizardFunnel: null,
-        dropoffEverywhere: null,
-        answerLift: null,
-        engagementLift: null,
-        leakSeverity: [],
-        recommendations: [], // ← empty recs → no persist
-        revisited: [],
-      });
-      await GET(newRequest());
-      expect(mockPersistRecommendations).not.toHaveBeenCalled();
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("does NOT persist when Slack supplement notifySlack throws", async () => {
-    vi.setSystemTime(new Date("2026-05-25T09:00:00Z"));
-    try {
-      // Daily + main weekly succeed; supplement (3rd call) throws.
-      mockNotifySlack
-        .mockResolvedValueOnce(undefined)
-        .mockResolvedValueOnce(undefined)
-        .mockRejectedValueOnce(new Error("slack 502"));
-      const res = await GET(newRequest());
-      // Outer try/catch returns 500 for cron-handler failure
-      expect(res.status).toBe(500);
-      // Persist NOT called because weeklyStrategySent never flipped to true
-      expect(mockPersistRecommendations).not.toHaveBeenCalled();
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("supplement Block Kit contains image blocks pointing at signed digest-image URLs", async () => {
-    vi.setSystemTime(new Date("2026-05-25T09:00:00Z"));
-    try {
-      await GET(newRequest());
-      const supplementCall = mockNotifySlack.mock.calls.find(
-        (c) => c[0].kind === "weekly_strategy_supplement"
-      );
-      expect(supplementCall).toBeDefined();
-      const blocks = supplementCall![0].blocks;
-      const imageBlocks = blocks.filter((b: { type: string }) => b.type === "image");
-      // Engagement chart is built from the fixture; dropoffEverywhere is too;
-      // wizard requires slide1>=3 (fixture has 30) → 3 images expected.
-      expect(imageBlocks.length).toBeGreaterThanOrEqual(2);
+      const imageBlocks = call.blocks.filter((b: { type: string }) => b.type === "image");
+      expect(imageBlocks.length).toBeGreaterThanOrEqual(5);
       for (const img of imageBlocks) {
         expect(img.image_url).toMatch(
-          /^https:\/\/example\.test\/api\/admin\/digest-image\/(funnel|wizard|sparklines|engagement|leaks)\?d=[^&]+&s=/
+          /^https:\/\/example\.test\/api\/admin\/digest-image\/(cvr-visitor-start|cvr-start-completion|cvr-completion-engagement|cvr-completion-paygate|cvr-paygate-purchase|bucket-performance|dropout-funnel|reactivation-email)\?d=[^&]+&s=/
         );
       }
+      // Revenue footer section present.
+      const hasRevenue = call.blocks.some(
+        (b: { type: string; text?: { text?: string } }) =>
+          b.type === "section" && (b.text?.text ?? "").includes("*Revenue*")
+      );
+      expect(hasRevenue).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("monday path sends TWO messages: daily_digest + weekly_digest", async () => {
+    vi.setSystemTime(new Date("2026-05-25T09:00:00Z")); // Monday
+    try {
+      await GET(newRequest());
+      expect(mockNotifySlack).toHaveBeenCalledTimes(2);
+      const kinds = mockNotifySlack.mock.calls.map((c) => c[0].kind);
+      expect(kinds).toEqual(["daily_digest", "weekly_digest"]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("emits the cvr-paygate-purchase chart even though paygate→purchase is low", async () => {
+    vi.setSystemTime(new Date("2026-05-26T09:00:00Z"));
+    try {
+      await GET(newRequest());
+      const call = mockNotifySlack.mock.calls[0][0];
+      const urls = call.blocks
+        .filter((b: { type: string }) => b.type === "image")
+        .map((b: { image_url: string }) => b.image_url);
+      expect(urls.some((u: string) => u.includes("/cvr-paygate-purchase"))).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("still sends (revenue footer only) when every chart snapshot is null", async () => {
+    vi.setSystemTime(new Date("2026-05-26T09:00:00Z"));
+    try {
+      mockFetchCvr.mockResolvedValue(null);
+      mockFetchBucket.mockResolvedValue(null);
+      mockFetchDropout.mockResolvedValue(null);
+      mockFetchNurture.mockResolvedValue(null);
+      await GET(newRequest());
+      expect(mockNotifySlack).toHaveBeenCalledOnce();
+      const call = mockNotifySlack.mock.calls[0][0];
+      const imageBlocks = call.blocks.filter((b: { type: string }) => b.type === "image");
+      expect(imageBlocks.length).toBe(0);
+      // Revenue footer still present.
+      const hasRevenue = call.blocks.some(
+        (b: { type: string; text?: { text?: string } }) =>
+          b.type === "section" && (b.text?.text ?? "").includes("*Revenue*")
+      );
+      expect(hasRevenue).toBe(true);
     } finally {
       vi.useRealTimers();
     }
