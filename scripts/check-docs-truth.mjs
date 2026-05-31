@@ -5,6 +5,10 @@ import path from "node:path";
 import { execSync } from "node:child_process";
 
 const EXCLUDED_DOC_PREFIXES = [".agents/", ".claude/", ".codeium/"];
+// Historical planning snapshots: their prose intentionally references the repo state
+// at creation time, so they are exempt from the dead-tree / display-text checks below.
+// Their links are still validated for existence.
+const HISTORICAL_DOC_PREFIXES = ["docs/plans/"];
 const ENV_DOC_FILES = [
   "README.md",
   "DEVELOPMENT.md",
@@ -33,6 +37,17 @@ const REQUIRED_DOC_PATHS = [
   "docs/admin/domains/health.md",
 ];
 
+// Directory trees removed by the lib/->shared and components/->features refactor.
+// Any committed doc (outside historical snapshots) that still references them in a
+// code span is stale and must be updated.
+const DEAD_TREE_SPAN = /`((?:lib|components|\.planning)\/[A-Za-z0-9_./*-]+)`/g;
+const DEAD_IMPORT_ALIAS = /@\/(lib|components)\//g;
+const DISPLAY_TOPDIR =
+  /^(app|features|shared|data|docs|scripts|supabase|public|e2e|load-tests|__tests__)\//;
+const DISPLAY_EXT = /\.(ts|tsx|js|mjs|cjs|sql|md|css|json|png|svg|webp|ico)$/;
+// Per-line escape hatch for the rare intentional dead-path mention.
+const ALLOW_MARKER = "docs-truth-allow";
+
 const errors = [];
 const warnings = [];
 
@@ -50,6 +65,10 @@ function readFile(filePath) {
 
 function normalizeRepoPath(filePath) {
   return filePath.replace(/\\/g, "/");
+}
+
+function isHistoricalDoc(filePath) {
+  return HISTORICAL_DOC_PREFIXES.some((prefix) => filePath.startsWith(prefix));
 }
 
 function stripVersionPrefix(version) {
@@ -71,11 +90,11 @@ function getTrackedMarkdownFiles() {
 function resolveRelativeTarget(markdownFile, linkTarget) {
   const withoutAnchor = linkTarget.split("#")[0]?.split("?")[0] ?? "";
   if (!withoutAnchor) return null;
-  if (
-    /^(https?:|mailto:|#|\/|\{|\.\.\/\.\.|app:\/\/|plugin:\/\/|vscode:\/\/|[A-Za-z]:[\\/])/i.test(
-      withoutAnchor
-    )
-  ) {
+  // Skip protocol URLs, anchors, template tokens, and site-absolute ("/...") URLs.
+  // Deliberately do NOT skip "../../" or "C:/"-style targets: they were skipped
+  // historically, which let broken deep-relative links and corrupted absolute
+  // filesystem paths pass CI. Those now fall through to the existence check and fail.
+  if (/^(https?:|mailto:|#|\/|\{|app:\/\/|plugin:\/\/|vscode:\/\/)/i.test(withoutAnchor)) {
     return null;
   }
 
@@ -121,6 +140,68 @@ function checkMarkdownLinks(markdownFiles) {
 
       if (!pathExists(absoluteResolved)) {
         addError(`${markdownFile}: broken relative link "${link}"`);
+      }
+    }
+  }
+}
+
+// Flags references to directory trees removed by the refactor, plus the dead
+// "@/lib" / "@/components" import aliases. This is the check that would have caught
+// the stale link display-text and prose that slipped past target-only validation.
+function checkDeadTreeReferences(markdownFiles) {
+  for (const markdownFile of markdownFiles) {
+    if (isHistoricalDoc(markdownFile)) continue;
+    const lines = readFile(markdownFile).split(/\r?\n/);
+    lines.forEach((line, index) => {
+      if (line.includes(ALLOW_MARKER)) return;
+      for (const match of line.matchAll(DEAD_TREE_SPAN)) {
+        addError(
+          `${markdownFile}:${index + 1}: references removed path \`${match[1]}\` ` +
+            `(lib/ -> shared/*, components/ -> features/*/ui, .planning/ -> docs/architecture/*)`
+        );
+      }
+      for (const match of line.matchAll(DEAD_IMPORT_ALIAS)) {
+        addError(
+          `${markdownFile}:${index + 1}: uses removed import alias "@/${match[1]}/" ` +
+            `(use @shared/* or @features/*)`
+        );
+      }
+    });
+  }
+}
+
+// Flags inline links whose code-span display text is a repo file path that no longer
+// matches its (valid) target — e.g. [`components/admin/X.tsx`](../features/admin/ui/X.tsx).
+function checkLinkDisplayText(markdownFiles) {
+  const inlineLinkPattern = /\[([^\]]*)]\(([^)]+)\)/g;
+  for (const markdownFile of markdownFiles) {
+    if (isHistoricalDoc(markdownFile)) continue;
+    const content = readFile(markdownFile);
+    for (const match of content.matchAll(inlineLinkPattern)) {
+      const display = match[1];
+      const target = match[2];
+      const hadBackticks = display.startsWith("`") && display.endsWith("`");
+      const inner = hadBackticks ? display.slice(1, -1) : display;
+      // Only consider path-like, file-extension display text (avoids prose/dir links).
+      if (!inner.includes("/") || !DISPLAY_TOPDIR.test(inner) || !DISPLAY_EXT.test(inner)) {
+        continue;
+      }
+      const resolved = resolveRelativeTarget(markdownFile, target);
+      if (!resolved) continue;
+      const absoluteResolved = path.isAbsolute(resolved)
+        ? resolved
+        : path.join(process.cwd(), resolved);
+      const real = fs.existsSync(absoluteResolved)
+        ? absoluteResolved
+        : fs.existsSync(`${absoluteResolved}.md`)
+          ? `${absoluteResolved}.md`
+          : null;
+      if (!real) continue; // broken link is reported by checkMarkdownLinks
+      const repoRel = normalizeRepoPath(path.relative(process.cwd(), real));
+      if (inner !== repoRel) {
+        addError(
+          `${markdownFile}: link display text "${inner}" does not match its target "${repoRel}"`
+        );
       }
     }
   }
@@ -348,6 +429,8 @@ function main() {
   const markdownFiles = getTrackedMarkdownFiles();
   checkRequiredDocs();
   checkMarkdownLinks(markdownFiles);
+  checkDeadTreeReferences(markdownFiles);
+  checkLinkDisplayText(markdownFiles);
   checkDocumentedScripts(markdownFiles);
   checkEnvironmentVariables();
   checkVersions();

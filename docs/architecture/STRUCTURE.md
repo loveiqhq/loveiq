@@ -1,345 +1,201 @@
 # Codebase Structure
 
-> **Last verified:** 2026-03-27 | **Verified against:** full directory listing of app/, components/, lib/, data/, scripts/
-
-**Analysis Date:** 2025-01-14
+> **Last verified:** 2026-05-31 | **Verified against:** full directory listing of `app/`, `features/`, `shared/`, `data/`, `scripts/`, `supabase/`, `docs/`
 
 ## Directory Layout
 
-```
+```text
 loveiq-web/
-├── app/                        # Next.js App Router pages and API routes
-│   ├── api/                    # API route handlers
+├── app/                        # Next.js App Router: pages + API routes (thin wrappers)
+│   ├── api/                    # API route handlers (route.ts per endpoint)
 │   │   ├── contact/route.ts    # Contact form endpoint
 │   │   ├── survey/route.ts     # Survey submission endpoint
-│   │   ├── health/route.ts     # Health check endpoint
-│   │   ├── staging-login/route.ts   # Staging auth (staging only)
-│   │   ├── staging-logout/route.ts  # Staging auth (staging only)
-│   │   ├── survey-tracking/route.ts # Survey behavior tracking
-│   │   ├── invite/route.ts         # Invite email sending
-│   │   ├── invite-tracking/route.ts # Invite share method tracking
-│   │   ├── survey-partial/route.ts  # Partial survey save (draft)
-│   │   └── admin/                   # Admin panel API routes
-│   │       ├── login/route.ts       # Admin magic link login trigger
-│   │       ├── logout/route.ts      # Admin logout
-│   │       ├── stats/route.ts       # Dashboard analytics
-│   │       ├── submissions/route.ts # Submission list (paginated)
-│   │       ├── submissions/[id]/route.ts # Submission CRUD
-│   │       ├── export/route.ts      # CSV export
-│   │       ├── survey-status/route.ts # Survey active/closed toggle
-│   │       └── product-kpis/route.ts  # Product KPI data (static)
+│   │   ├── survey-partial/route.ts   # Partial survey save (draft)
+│   │   ├── survey-tracking/route.ts  # Survey behavior tracking
+│   │   ├── invite/route.ts           # Invite email sending
+│   │   ├── invite-tracking/route.ts  # Invite share method tracking
+│   │   ├── analytics-event/route.ts  # Report-engagement events
+│   │   ├── health/route.ts           # Health check endpoint
+│   │   ├── staging-login/route.ts    # Staging auth
+│   │   ├── stripe/webhook/route.ts   # Stripe webhook fulfillment
+│   │   ├── resend/webhook/route.ts   # Resend (email) webhook
+│   │   ├── cron/                      # Scheduled jobs (Bearer CRON_SECRET)
+│   │   └── admin/                     # Admin panel API routes
 │   ├── admin/                  # Admin panel pages (Supabase Auth protected)
-│   │   ├── layout.tsx           # Admin shell (sidebar + header)
-│   │   ├── login/page.tsx       # Admin magic link login page
-│   │   ├── page.tsx             # Dashboard
-│   │   ├── submissions/page.tsx # Submission browser
-│   │   ├── submissions/[id]/page.tsx # Submission detail
-│   │   ├── survey-status/page.tsx   # Survey status toggle
-│   │   ├── product-kpis/page.tsx   # Product KPIs dashboard
-│   │   └── auth/
-│   │       └── callback/route.ts    # Supabase Auth magic link callback
-│   ├── about/                  # About page
-│   ├── survey/                 # Survey / intro wizard page
-│   ├── glossary/               # Glossary pages (index + [slug])
-│   ├── trust-zone/             # Trust zone page
-│   ├── login/                  # Staging login page
-│   ├── privacy-policy/         # Legal: Privacy policy
-│   ├── terms-of-use/           # Legal: Terms of use
-│   ├── terms-and-conditions/   # Legal: Terms and conditions
-│   ├── medical-disclaimer/     # Legal: Medical disclaimer
-│   ├── digital-content-terms/  # Legal: Digital content terms
-│   ├── cookies/                # Legal: Cookies policy
-│   ├── imprint/                # Legal: Imprint
-│   ├── globals.css             # Global styles, CSS variables, animations
-│   ├── layout.tsx              # Root layout (fonts, scripts, metadata)
-│   ├── page.tsx                # Landing page (home)
-│   ├── robots.ts               # robots.txt generation
-│   └── sitemap.ts              # sitemap.xml generation
-├── components/                 # React components organized by page
-│   ├── landing/                # Landing page sections
-│   │   ├── LandingPage.tsx     # Main composition component
-│   │   ├── NavSection.tsx      # Navigation
-│   │   ├── S01Hero.tsx         # Hero section
-│   │   ├── S02HowItWorks.tsx   # How it works
-│   │   ├── S03PerfectFor.tsx   # Perfect for
-│   │   ├── S05ValueFeatures.tsx # Value features
-│   │   ├── S06Archetypes.tsx   # Archetypes
-│   │   ├── S07SampleProfile.tsx # Sample profile
-│   │   ├── S08AcademicBoard.tsx # Academic board
-│   │   ├── S09Report.tsx       # Report
-│   │   ├── S10Pillars.tsx      # Pillars
-│   │   ├── S12WhyWeCreated.tsx # Why we created
-│   │   ├── S13FAQ.tsx          # FAQ
-│   │   ├── S14CTA.tsx          # Final CTA
-│   │   ├── FooterSection.tsx   # Footer
-│   │   └── ScrollAnimator.tsx  # Scroll animation orchestrator
-│   ├── about/                  # About page sections
-│   ├── glossary/               # Glossary components
-│   ├── legal/                  # Legal page nav component
-│   ├── survey/                 # Survey / intro wizard + pre-report wizard components
-│   ├── admin/                  # Admin panel components
-│   │   ├── AdminLoginForm.tsx  # Admin magic link login form
-│   │   ├── AdminSidebar.tsx    # Sidebar navigation
-│   │   ├── AdminHeader.tsx     # Mobile header with hamburger
-│   │   ├── AdminDashboard.tsx  # Dashboard with stats + charts
-│   │   ├── SubmissionBrowser.tsx # Filterable submission list
-│   │   ├── SubmissionDetail.tsx # Single submission view + actions
-│   │   ├── SurveyStatus.tsx    # Survey active/closed toggle
-│   │   ├── ProductKpiDashboard.tsx # Product KPIs dashboard + CSV download
-│   │   ├── kpi-tabs/           # KPI tab components (sortable table, 3 tabs)
-│   │   └── hooks/useAdminFetch.ts # Generic data fetching hook
-│   └── SmoothScroll.tsx        # Lenis smooth scroll wrapper
-├── lib/                        # Utilities and helpers
-│   ├── analytics.ts            # GA4 event tracking helpers
-│   ├── csrf.ts                 # CSRF token verification (double-submit cookie)
-│   ├── ratelimit.ts            # IP-based rate limiting (Supabase-backed)
-│   ├── circuit-breaker.ts      # Circuit breaker pattern
-│   ├── logger.ts               # pino structured logging
-│   ├── fetch-with-timeout.ts   # Fetch wrapper with timeout
-│   ├── utm.ts                  # UTM parameter handling
-│   ├── supabase-middleware.ts  # Supabase Auth client for middleware (proxy.ts)
-│   ├── csrf-client.ts          # Client-side CSRF token reader
-│   ├── admin/                  # Admin panel utilities
-│   │   ├── auth.ts             # Admin session verification
-│   │   ├── audit.ts            # Admin action audit logging
-│   │   ├── format.ts           # Display formatting (maskEmail)
-│   │   ├── roles.ts            # Role-based access control
-│   │   ├── supabase.ts         # Supabase fetch helper for admin routes
-│   │   └── supabase-server.ts  # Server-side Supabase client (RSC/API routes)
-│   ├── scoring/                # Archetype scoring engine
-│   │   ├── engine.ts           # Core scoring algorithm
-│   │   ├── types.ts            # Scoring type definitions
-│   │   ├── config.ts           # Config loader
-│   │   └── index.ts            # Public API
-│   └── emails/                 # Email templates
-│       ├── admin-magic-link.ts # Admin magic link email
-│       └── invite.ts           # Invite email template
-├── data/                       # Static data files
-│   ├── glossary-data.ts        # Auto-generated glossary terms (from CSV)
-│   ├── glossary-source.csv     # Source CSV for glossary
-│   ├── survey-data.ts          # Survey questions and structure
-│   ├── survey-source.csv       # Source CSV for survey questions
-│   ├── countries.ts            # Country list for survey forms
-│   ├── scoring-config.ts       # Auto-generated scoring config (from CSVs)
-│   ├── scoring-config/         # Source CSVs for archetype scoring (12 files)
-│   ├── product-kpis.ts         # Auto-generated product KPI data (from CSVs)
-│   └── product-kpis/           # Source CSVs for product KPIs (3 files)
-├── __tests__/                  # Unit tests (Vitest)
+│   ├── report/                 # Paywalled personalized report (/report/[token])
+│   ├── about/ survey/ glossary/ trust-zone/ login/   # Public pages
+│   ├── [legal pages]/          # privacy-policy, terms-*, cookies, imprint, etc.
+│   ├── globals.css layout.tsx page.tsx robots.ts sitemap.ts error.tsx global-error.tsx
+├── features/                   # Domain-first feature folders (ui/, server/ or logic/, tests/, AGENT_README.md)
+│   ├── about/ landing/ glossary/ legal/ trust-zone/ not-found/   # ui/-only marketing surfaces
+│   ├── survey/                 # ui/ (engine, hooks, questions), server/ (handler, emails), tests/
+│   ├── report/                 # ui/, server/ (access, gating, emails/nurture), tests/
+│   ├── checkout/               # ui/, server/ (stripeCheckout, fulfillment, promoCodes)
+│   ├── pricing/                # logic/ (reportPricing) only
+│   ├── scoring/                # logic/ (engine, config, types, index), tests/
+│   ├── invite/                 # ui/, emails/, tests/
+│   ├── contact/                # tests/ (route stays in app/api/contact/)
+│   ├── cron/                   # tests/ (routes stay in app/api/cron/)
+│   ├── analytics/              # client.ts (GA4 helpers) + tests/
+│   └── admin/                  # ui/ (dashboards), server/ (data assembly + emails), tests/
+├── shared/                     # Cross-cutting infrastructure
+│   ├── http/                   # csrf, csrf-client, ratelimit, fetch-with-timeout, circuit-breaker, after-response
+│   ├── observability/          # logger (pino), hotjar, slack, uxSignals
+│   ├── auth/                   # supabase-middleware (admin sessions only)
+│   ├── url/                    # utm, safe-href, share-message, signed-image-url
+│   ├── format/                 # html-escape
+│   ├── emails/                 # ab-variant, shared HTML shell, suppression, unsubscribe-token, site-url
+│   ├── experiments/            # client A/B buckets (forced paywall)
+│   ├── flags/                  # system feature flags
+│   └── ui/                     # branding/, GtmScript, HydrationMarker, NonceProvider, SmoothScroll, UtmCapture, WebVitals
+├── data/                       # Static + generated data
+│   ├── glossary-data.ts / glossary-source.csv
+│   ├── survey-data.ts / survey-source.csv
+│   ├── scoring-config.ts / scoring-config/ (source CSVs)
+│   ├── report-*.ts             # Generated report content
+│   ├── countries.ts product-kpis.ts product-kpis/
+├── docs/                       # Engineering documentation
+│   ├── architecture/           # ARCHITECTURE, STRUCTURE, STACK, CONVENTIONS, INTEGRATIONS, TESTING, CONCERNS, AGENTS
+│   ├── runbooks/               # DEVELOPMENT, SECURITY, SECURITY_AUDIT, DISASTER_RECOVERY, MIGRATION_ROLLBACK
+│   ├── compliance/             # DPIA, LAWFUL_BASIS, ROPA
+│   ├── admin/                  # admin lookup router + domains/*.md
+│   ├── adr/                    # Architecture Decision Records
+│   ├── plans/                  # Historical implementation handoffs
+│   ├── api.md admin-api.md admin-dashboard.md survey.md versions.md
+│   └── doc-inventory.md knowledge-ledger.md
+├── __tests__/                  # Cross-cutting unit/contract/integration tests (Vitest)
 ├── e2e/                        # End-to-end tests (Playwright)
-├── scripts/                    # Utility scripts
-├── supabase/                   # Supabase migrations and config
-├── docs/                       # Additional documentation
-│   └── api.md                  # API endpoint documentation
-├── load-tests/                 # Load testing files
+├── load-tests/                 # k6 load tests
+├── scripts/                    # Build/data/maintenance scripts
+├── supabase/                   # migrations/, config, ROLLBACK.md
 ├── public/                     # Static assets (images, icons, videos)
-├── .github/workflows/          # CI/CD workflows
-│   ├── ci.yml                  # Build + lint + test
-│   ├── security.yml            # Security scanning (secrets, SAST, deps, SBOM)
-│   ├── codeql.yml              # Advanced CodeQL analysis
-│   ├── docs-truth.yml          # Documentation truth validation
-│   ├── release.yml             # Release workflow
-│   ├── health-monitor.yml      # Health monitoring
-│   ├── lighthouse.yml          # Lighthouse CI
-│   ├── load-test.yml           # Load testing
-│   └── visual-regression.yml   # Visual regression testing
-├── .planning/                  # Architecture and planning docs
-│   └── codebase/               # Codebase analysis files
+├── .github/workflows/          # CI/CD: ci, security, codeql, docs-truth, release, health-monitor, lighthouse, load-test, slack-commits, visual-regression
 ├── proxy.ts                    # Middleware: CSP headers, CSRF cookies, security logging
-├── package.json                # Project manifest
-├── package-lock.json           # Dependency lockfile
-├── tsconfig.json               # TypeScript configuration (includes @/* path alias)
-├── tailwind.config.js          # Tailwind CSS configuration
-├── postcss.config.js           # PostCSS configuration
-├── eslint.config.mjs           # ESLint flat config
-├── vitest.config.ts            # Vitest test configuration
-├── playwright.config.ts        # Playwright E2E test configuration
-├── next.config.js              # Next.js configuration
-├── .env.example                # Environment variable template
-├── .gitignore                  # Git ignore rules
-├── CLAUDE.md                   # Claude Code instructions
-├── SECURITY.md                 # Security documentation
-├── DEVELOPMENT.md              # Development setup guide
-├── CONTRIBUTING.md             # Contributing guidelines
-├── README.md                   # Project README
-└── LICENSE                     # License file
+├── package.json tsconfig.json tailwind.config.js postcss.config.js eslint.config.mjs
+├── vitest.config.ts vitest.integration.config.ts playwright.config.ts next.config.js
+├── .env.example CLAUDE.md CONTRIBUTING.md README.md FILE_INDEX.md
 ```
 
 ## Directory Purposes
 
 **app/**
 
-- Purpose: Next.js App Router - pages and API routes
-- Contains: Page components (`.tsx`), API handlers (`route.ts`), metadata
+- Purpose: Next.js App Router — pages and API routes
+- Contains: thin page wrappers (`.tsx`) that import UI from `features/*/ui/`, API handlers (`route.ts`), metadata
 - Key files: `layout.tsx` (root layout), `page.tsx` (home), `globals.css`
-- Subdirectories: `api/` (endpoints), page directories for each route
 
-**app/api/**
+**features/**
 
-- Purpose: Server-side API endpoints
-- Contains: Route handlers for form submissions and utilities
-- Key files: `contact/route.ts`, `survey/route.ts`, `invite/route.ts`, `health/route.ts`
-- Pattern: Each endpoint in its own directory with `route.ts`
+- Purpose: domain-first feature folders. Each owns its UI, server/logic, tests, and an `AGENT_README.md`
+- Layout: `features/<feature>/ui/` (React components), `features/<feature>/server/` or `logic/` (server-only code), `features/<feature>/tests/`
+- Example: `features/survey/ui/SurveyEngine.tsx`, `features/survey/server/server.ts`, `features/scoring/logic/engine.ts`
 
-**components/**
+**shared/**
 
-- Purpose: Reusable UI components organized by page context
-- Contains: React components (`.tsx`)
-- Subdirectories: `landing/` (14 numbered sections + nav/footer), `about/`, `glossary/`, `legal/`, `survey/`, `admin/`
-
-**components/landing/**
-
-- Purpose: Landing page section components
-- Contains: `S01Hero` through `S14CTA`, `NavSection`, `FooterSection`
-- Key files: `LandingPage.tsx` (main composition), `ScrollAnimator.tsx`
-- Pattern: `S##Name.tsx` — numbered sections with descriptive names
-
-**lib/**
-
-- Purpose: Shared utilities and non-component code
-- Contains: Helper functions, email templates, security utilities
-- Key files: `analytics.ts`, `csrf.ts`, `ratelimit.ts`, `logger.ts`, `circuit-breaker.ts`, `fetch-with-timeout.ts`
-- Subdirectories: `emails/` (email templates), `admin/` (auth, roles, audit, Supabase client helpers)
+- Purpose: cross-cutting infrastructure imported via the `@shared/*` alias
+- Subdirectories: `http/`, `observability/`, `auth/`, `url/`, `format/`, `emails/`, `experiments/`, `flags/`, `ui/`
+- Key files: `shared/http/csrf.ts`, `shared/http/ratelimit.ts`, `shared/observability/logger.ts`
 
 **data/**
 
-- Purpose: Static data files for glossary, survey, scoring, and product KPIs
-- Contains: Auto-generated glossary terms, survey questions, country list, scoring config, product KPIs, source CSVs
+- Purpose: static + generated data (glossary, survey, scoring config, report content, product KPIs)
+- Generated files (`*-data.ts`, `scoring-config.ts`, `report-*.ts`) are produced by `scripts/` — do not hand-edit
 
-**\_\_tests\_\_/**
+**`__tests__/`**
 
-- Purpose: Unit tests (Vitest)
-- Structure: Mirrors source directory layout
+- Purpose: cross-cutting unit/contract/integration tests. Feature/module tests are colocated under `features/*/tests/` and `shared/*/tests/`
 
 **e2e/**
 
-- Purpose: End-to-end tests (Playwright)
-- Contains: Browser-based test specs for 5 browser projects
+- Purpose: end-to-end tests (Playwright), 5 browser projects
 
 **public/**
 
-- Purpose: Static assets served at root URL
-- Contains: Images, icons, favicons, videos
-- Note: Directly accessible at `/images/...`
+- Purpose: static assets served at root URL (`/images/...`)
 
 ## Key File Locations
 
 **Entry Points:**
 
-- `app/layout.tsx` - Root layout with fonts, scripts, metadata
-- `app/page.tsx` - Landing page entry (renders `LandingPage`)
-- `app/about/page.tsx` - About page entry
+- `app/layout.tsx` — root layout with fonts, scripts, metadata
+- `app/page.tsx` — landing page entry (renders `features/landing/ui/LandingPage.tsx`)
 
 **Configuration:**
 
-- `tsconfig.json` - TypeScript compiler options (includes `@/*` path alias)
-- `next.config.js` - Next.js config
-- `tailwind.config.js` - Tailwind with custom design tokens
-- `postcss.config.js` - PostCSS plugins
-- `eslint.config.mjs` - ESLint flat config
-- `vitest.config.ts` - Vitest test configuration
-- `playwright.config.ts` - Playwright E2E test configuration
-- `.env.local` - Environment variables (gitignored)
+- `tsconfig.json` — TypeScript compiler options (path aliases: `@/*`, `@shared/*`, `@features/*`)
+- `next.config.js`, `tailwind.config.js`, `postcss.config.js`, `eslint.config.mjs`
+- `vitest.config.ts`, `playwright.config.ts`
 
 **Core Logic:**
 
-- `app/api/contact/route.ts` - Contact form handler
-- `app/api/survey/route.ts` - Survey submission handler
-- `lib/analytics.ts` - Analytics event tracking
-- `lib/csrf.ts` - CSRF token verification
-- `lib/ratelimit.ts` - Supabase-backed rate limiting
-- `lib/emails/invite.ts` - Email template
-- `proxy.ts` - Middleware (CSP, CSRF cookies, security logging)
-
-**Styling:**
-
-- `app/globals.css` - CSS custom properties and utility classes
-- `tailwind.config.js` - Design system tokens
+- `app/api/contact/route.ts`, `app/api/survey/route.ts` — form handlers
+- `features/analytics/client.ts` — analytics event tracking
+- `shared/http/csrf.ts` — CSRF token verification
+- `shared/http/ratelimit.ts` — Supabase-backed rate limiting
+- `features/invite/emails/invite.ts` — email template
+- `proxy.ts` — middleware (CSP, CSRF cookies, security logging)
 
 **Documentation:**
 
-- `CLAUDE.md` - Claude Code instructions
-- `SECURITY.md` - Security guidelines and secrets rotation
-- `DEVELOPMENT.md` - Development setup guide
-- `CONTRIBUTING.md` - Contributing guidelines
-- `docs/api.md` - API endpoint documentation
+- `CLAUDE.md` — Claude Code instructions
+- `docs/runbooks/SECURITY.md` — security guidelines and secrets rotation
+- `docs/runbooks/DEVELOPMENT.md` — development setup guide
+- `CONTRIBUTING.md` — contributing guidelines
+- `docs/api.md` — API endpoint documentation
 
 ## Naming Conventions
 
 **Files:**
 
-- `PascalCase.tsx` - React components (e.g., `S01Hero.tsx`, `LandingPage.tsx`)
-- `camelCase.ts` - Utility/library files (e.g., `analytics.ts`, `ratelimit.ts`)
-- `kebab-case` - Directories (e.g., `app/api/contact/`)
-- `route.ts` - Next.js API route handlers
+- `PascalCase.tsx` — React components (e.g., `S01Hero.tsx`, `LandingPage.tsx`)
+- `camelCase.ts` — utility/library files (e.g., `client.ts`, `ratelimit.ts`)
+- `kebab-case` — directories (e.g., `app/api/contact/`)
+- `route.ts` — Next.js API route handlers
 
 **Directories:**
 
 - Lowercase/kebab-case for all directories
-- Page directories match URL path (e.g., `about/` -> `/about`)
-- Component directories named after page context (`landing/`, `about/`, `glossary/`)
+- Page directories match URL path (e.g., `about/` → `/about`)
+- Feature directories named by domain (`survey/`, `report/`, `admin/`) with `ui/` + `server/`/`logic/`
 
 **Special Patterns:**
 
-- `page.tsx` - Next.js page component (required for routes)
-- `layout.tsx` - Next.js layout component
-- `route.ts` - Next.js API route handler
-- `S##Name.tsx` - Numbered landing sections (e.g., `S01Hero.tsx` through `S14CTA.tsx`)
+- `page.tsx` — Next.js page component (required for routes)
+- `layout.tsx` — Next.js layout component
+- `route.ts` — Next.js API route handler
+- `S##Name.tsx` — numbered landing sections (e.g., `S01Hero.tsx` through `S15Testimonials.tsx`)
 
 ## Where to Add New Code
 
 **New Page:**
 
 - Create `app/{page-name}/page.tsx`
-- Add page component to `components/{page-name}/`
-- Create `{PageName}Page.tsx` as main composition
+- Add page UI under `features/{feature}/ui/` and create `{PageName}Page.tsx` as main composition
 
 **New Landing Section:**
 
-- Add component to `components/landing/`
+- Add component to `features/landing/ui/`
 - Follow naming: `S##Name.tsx`
-- Import and add to `LandingPage.tsx`
+- Import and add to `features/landing/ui/LandingPage.tsx`
 
 **New API Endpoint:**
 
 - Create `app/api/{endpoint}/route.ts`
 - Export `POST`, `GET`, etc. functions
-- Include CSRF verification (`verifyCsrfToken`)
-- Include rate limiting (`checkRateLimit`)
-- Add Zod schema for validation
+- Include CSRF verification (`verifyCsrfToken`) and rate limiting (`checkRateLimit`)
+- Add a Zod schema for validation
 
-**New Utility:**
+**New Cross-Cutting Utility:**
 
-- Add to `lib/` directory
-- Use camelCase naming
-- Export typed functions
+- Add to the relevant `shared/<area>/` directory and import via `@shared/...`
+- Feature-specific server code goes in `features/<feature>/server/`
 
 **New Email Template:**
 
-- Add to `lib/emails/`
-- Export object with `subject`, `html`, `text`
-
-## Special Directories
-
-**.next/**
-
-- Purpose: Next.js build output and cache
-- Source: Generated by `npm run build` / `npm run dev`
-- Committed: No (in `.gitignore`)
-
-**.planning/**
-
-- Purpose: Architecture and planning documentation
-- Source: Codebase analysis files
-- Committed: Yes (documentation)
-
-**node_modules/**
-
-- Purpose: npm dependencies
-- Source: Installed by `npm install`
-- Committed: No (in `.gitignore`)
+- Feature-owned templates go in `features/<feature>/server/emails/` (or `features/invite/emails/`)
+- Shared helpers (shell, A/B, suppression) live in `shared/emails/`
 
 ---
 
-_Structure analysis: 2025-01-14_
-_Last updated: 2026-03-27_
+_Last updated: 2026-05-31_
 _Update when directory structure changes_

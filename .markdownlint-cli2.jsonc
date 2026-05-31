@@ -1,0 +1,37 @@
+// Project-appropriate markdownlint config.
+// Prettier owns whitespace/wrapping/list/emphasis style (see `npm run docs:check`),
+// so those rules are disabled to avoid conflicting with the formatter. What remains
+// are correctness-oriented rules that the formatter does NOT cover.
+{
+  "config": {
+    "default": true,
+
+    // --- Disabled: owned by Prettier or intentional project style ---
+    "MD013": false, // line-length: Prettier does not wrap prose
+    "MD033": false, // inline HTML: used intentionally (tables, <br>, comments)
+    "MD024": false, // duplicate headings: section names (Purpose/Entry/...) repeat across docs
+    "MD041": false, // first-line-heading: some docs lead with a blockquote metadata banner
+    "MD036": false, // emphasis-as-heading: used for sub-labels in reference cards
+    "MD026": false, // trailing punctuation in headings
+    "MD014": false, // dollar signs before commands without output
+    "MD004": false, // unordered list style (Prettier)
+    "MD007": false, // unordered list indentation (Prettier)
+    "MD029": false, // ordered list item prefix
+    "MD030": false, // spaces after list markers (Prettier)
+    "MD049": false, // emphasis style (Prettier)
+    "MD050": false, // strong style (Prettier)
+    "MD060": false, // table column style: Prettier owns table pipe spacing
+    "MD046": false, // code block style
+  },
+  "globs": ["**/*.md"],
+  "ignores": [
+    "**/node_modules",
+    ".next",
+    ".agents",
+    ".claude",
+    ".codeium",
+    "coverage",
+    "playwright-report",
+    "test-results",
+  ],
+}

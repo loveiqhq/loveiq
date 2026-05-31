@@ -9,13 +9,13 @@ Authenticated admin API route handlers.
 
 ## What does not belong here
 
-- Shared auth and data helpers: use [`../../../lib/admin/AGENT_README.md`](../../../lib/admin/AGENT_README.md)
-- Admin UI components: use [`../../../components/admin/AGENT_README.md`](../../../components/admin/AGENT_README.md)
-- High-level route inventory prose: use [`../../../docs/admin-api.md`](../../../docs/admin-api.md)
+- Shared auth and data helpers: use [`features/admin/server/AGENT_README.md`](../../../features/admin/server/AGENT_README.md)
+- Admin UI components: use [`features/admin/ui/AGENT_README.md`](../../../features/admin/ui/AGENT_README.md)
+- High-level route inventory prose: use [`docs/admin-api.md`](../../../docs/admin-api.md)
 
 ## How to navigate
 
-Use the domain docs in [`../../../docs/admin/domains/AGENT_README.md`](../../../docs/admin/domains/AGENT_README.md) when you know the task but not the route family.
+Use the domain docs in [`docs/admin/domains/AGENT_README.md`](../../../docs/admin/domains/AGENT_README.md) when you know the task but not the route family.
 
 | Domain                                | Route families to start with                                                                                                                                                                                                                                                                                                  | Canonical lookup doc                                                                    |
 | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |

@@ -1,8 +1,8 @@
 # Admin Dashboard and Shell
 
 > Owner: CODEOWNERS default
-> Last verified: 2026-04-05
-> Verified against: `app/admin/**`, `components/admin/**`, `app/api/admin/os/route.ts`, `app/api/admin/stats/route.ts`, `app/api/admin/actions/route.ts`, `app/api/admin/actions/[id]/route.ts`, `lib/admin/auth.ts`, `lib/admin/roles.ts`
+> Last verified: 2026-05-31
+> Verified against: `app/admin/**`, `features/admin/ui/**`, `app/api/admin/os/route.ts`, `app/api/admin/stats/route.ts`, `app/api/admin/actions/route.ts`, `app/api/admin/actions/[id]/route.ts`, `features/admin/server/auth.ts`, `features/admin/server/roles.ts`
 > Canonical source: Product-surface reference for the `/admin` shell and dashboard composition; route contracts live in [admin-api.md](admin-api.md).
 
 This document covers the authenticated admin UI: shell layout, access model, sidebar structure, the current `/admin` landing page, and the distinction between the command-center surface and the stats dashboard component.
@@ -13,32 +13,32 @@ For fastest cross-root lookup, start with [docs/admin/AGENT_README.md](admin/AGE
 
 - Admin authentication is magic-link based. The public login request starts at [`POST /api/admin/login`](admin-api.md#access-and-admin-shell).
 - API routes and supporting server utilities verify the current Supabase Auth user through [`verifyAdminSession()`](../features/admin/server/auth.ts), then map the email into `admin_users`.
-- Canonical role hierarchy lives in [`lib/admin/roles.ts`](../features/admin/server/roles.ts): `viewer`, `editor`, `admin`.
+- Canonical role hierarchy lives in [`features/admin/server/roles.ts`](../features/admin/server/roles.ts): `viewer`, `editor`, `admin`.
 - `/admin/login` renders without the admin shell. All other `/admin/*` routes render through [`app/admin/layout.tsx`](../app/admin/layout.tsx).
 - Sidebar logout posts to [`/api/admin/logout`](../app/api/admin/logout/route.ts) with a CSRF token, then redirects back to `/admin/login`.
 
 ## Shell Composition
 
-| Surface                 | Backing file(s)                                                                            | Notes                                                                                                  |
-| ----------------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
-| Route shell             | [`app/admin/layout.tsx`](../app/admin/layout.tsx)                                          | Wraps the authenticated admin area with sidebar, header, command palette, and page-presence indicator. |
-| Sidebar navigation      | [`components/admin/AdminSidebar.tsx`](../features/admin/ui/AdminSidebar.tsx)               | Owns route grouping, active-link logic, and logout.                                                    |
-| Header                  | [`components/admin/AdminHeader.tsx`](../features/admin/ui/AdminHeader.tsx)                 | Receives the title and mobile-menu callback from the layout.                                           |
-| Command palette         | [`components/admin/AdminCommandPalette.tsx`](../features/admin/ui/AdminCommandPalette.tsx) | Mounted globally inside the shell for authenticated pages.                                             |
-| Page presence indicator | [`components/admin/PagePresence.tsx`](../features/admin/ui/PagePresence.tsx)               | Rendered in the upper-right utility area of the shell.                                                 |
+| Surface                 | Backing file(s)                                                                             | Notes                                                                                                  |
+| ----------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Route shell             | [`app/admin/layout.tsx`](../app/admin/layout.tsx)                                           | Wraps the authenticated admin area with sidebar, header, command palette, and page-presence indicator. |
+| Sidebar navigation      | [`features/admin/ui/AdminSidebar.tsx`](../features/admin/ui/AdminSidebar.tsx)               | Owns route grouping, active-link logic, and logout.                                                    |
+| Header                  | [`features/admin/ui/AdminHeader.tsx`](../features/admin/ui/AdminHeader.tsx)                 | Receives the title and mobile-menu callback from the layout.                                           |
+| Command palette         | [`features/admin/ui/AdminCommandPalette.tsx`](../features/admin/ui/AdminCommandPalette.tsx) | Mounted globally inside the shell for authenticated pages.                                             |
+| Page presence indicator | [`features/admin/ui/PagePresence.tsx`](../features/admin/ui/PagePresence.tsx)               | Rendered in the upper-right utility area of the shell.                                                 |
 
 `app/admin/layout.tsx` derives the displayed header title and description from `usePathname()`. For `/admin`, the shell title is currently `Dashboard`, while the page metadata and page body identify the surface as `Command Center`.
 
 ## Landing Surfaces
 
-| Surface                   | Route                          | Backing file(s)                                                                                                                                 | Primary data source                                                                                                                                                                                | Notes                                                                                                              |
-| ------------------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Command Center            | `/admin`                       | [`app/admin/page.tsx`](../app/admin/page.tsx), [`components/admin/CommandCenterDashboard.tsx`](../features/admin/ui/CommandCenterDashboard.tsx) | [`GET /api/admin/os`](../app/api/admin/os/route.ts), [`GET/POST /api/admin/actions`](../app/api/admin/actions/route.ts), [`PATCH /api/admin/actions/[id]`](../app/api/admin/actions/[id]/route.ts) | This is the current landing page rendered by the route tree.                                                       |
-| Stats dashboard component | Not the current `/admin` route | [`components/admin/AdminStatsDashboard.tsx`](../features/admin/ui/AdminStatsDashboard.tsx)                                                      | [`GET /api/admin/stats`](../app/api/admin/stats/route.ts)                                                                                                                                          | Rich analytics component that still exists in the codebase, but `app/admin/page.tsx` does not currently render it. |
+| Surface                   | Route                          | Backing file(s)                                                                                                                                  | Primary data source                                                                                                                                                                                | Notes                                                                                                              |
+| ------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Command Center            | `/admin`                       | [`app/admin/page.tsx`](../app/admin/page.tsx), [`features/admin/ui/CommandCenterDashboard.tsx`](../features/admin/ui/CommandCenterDashboard.tsx) | [`GET /api/admin/os`](../app/api/admin/os/route.ts), [`GET/POST /api/admin/actions`](../app/api/admin/actions/route.ts), [`PATCH /api/admin/actions/[id]`](../app/api/admin/actions/[id]/route.ts) | This is the current landing page rendered by the route tree.                                                       |
+| Stats dashboard component | Not the current `/admin` route | [`features/admin/ui/AdminStatsDashboard.tsx`](../features/admin/ui/AdminStatsDashboard.tsx)                                                      | [`GET /api/admin/stats`](../app/api/admin/stats/route.ts)                                                                                                                                          | Rich analytics component that still exists in the codebase, but `app/admin/page.tsx` does not currently render it. |
 
 ## Sidebar Structure
 
-Sidebar groups are defined in [`components/admin/AdminSidebar.tsx`](../features/admin/ui/AdminSidebar.tsx):
+Sidebar groups are defined in [`features/admin/ui/AdminSidebar.tsx`](../features/admin/ui/AdminSidebar.tsx):
 
 | Group                    | Representative routes                                                                                                                                                                                                                                                                           | Notes                                                                                |
 | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
@@ -82,8 +82,8 @@ The supporting stats route requires `viewer+` access, accepts a `days` query par
 
 ## Related Coverage
 
-- Admin auth utility: [`__tests../features/admin/tests/admin-auth-lib.test.ts`](../features/admin/tests/admin-auth-lib.test.ts)
-- Admin login route: [`__tests__/api/admin-login.test.ts`](../features/admin/tests/admin-login.test.ts)
-- Admin stats route: [`__tests__/api/admin-stats.test.ts`](../features/admin/tests/admin-stats.test.ts)
-- Shared admin fetch hook: [`__tests../features/admin/tests/admin-hooks/useAdminFetch.test.ts`](../features/admin/tests/admin-hooks/useAdminFetch.test.ts)
+- Admin auth utility: [`features/admin/tests/admin-auth-lib.test.ts`](../features/admin/tests/admin-auth-lib.test.ts)
+- Admin login route: [`features/admin/tests/admin-login.test.ts`](../features/admin/tests/admin-login.test.ts)
+- Admin stats route: [`features/admin/tests/admin-stats.test.ts`](../features/admin/tests/admin-stats.test.ts)
+- Shared admin fetch hook: [`features/admin/tests/admin-hooks/useAdminFetch.test.ts`](../features/admin/tests/admin-hooks/useAdminFetch.test.ts)
 - End-to-end admin flow: [`e2e/admin.spec.ts`](../e2e/admin.spec.ts)

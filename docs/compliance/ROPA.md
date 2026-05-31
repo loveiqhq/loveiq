@@ -13,7 +13,7 @@ GDPR Art. 30 requires the controller to maintain a written record of processing 
 ## 1. Controller
 
 - **Name**: LoveIQ (Eman + Ferhad)
-- **Contact**: hello@loveiq.org
+- **Contact**: <hello@loveiq.org>
 - **Data Protection Officer**: not formally appointed (under the Art. 37 threshold for mandatory DPO designation)
 
 ## 2. Processing activities

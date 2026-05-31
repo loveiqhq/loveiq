@@ -13,6 +13,9 @@ on:
       - "proxy.ts"
       - "scripts/check-docs-truth.mjs"
       - "scripts/check-docs-impact.sh"
+      - ".markdownlint-cli2.jsonc"
+      - "cspell.json"
+      - ".cspell/**"
       - ".github/pull_request_template.md"
       - ".github/workflows/docs-truth.yml"
   pull_request:
@@ -27,6 +30,9 @@ on:
       - "proxy.ts"
       - "scripts/check-docs-truth.mjs"
       - "scripts/check-docs-impact.sh"
+      - ".markdownlint-cli2.jsonc"
+      - "cspell.json"
+      - ".cspell/**"
       - ".github/pull_request_template.md"
       - ".github/workflows/docs-truth.yml"
 
@@ -52,6 +58,12 @@ jobs:
 
       - name: Run source-driven documentation checks
         run: npm run docs:truth
+
+      - name: Markdown lint
+        run: npm run docs:lint
+
+      - name: Spellcheck docs
+        run: npm run docs:spell
 
       - name: Check markdown formatting
         run: npx prettier --check "**/*.md"

@@ -9,15 +9,15 @@ Canonical admin lookup docs.
 
 ## What does not belong here
 
-- Full API contracts: use [`../admin-api.md`](../admin-api.md)
-- Product-surface narrative docs: use [`../admin-dashboard.md`](../admin-dashboard.md)
+- Full API contracts: use [`docs/admin-api.md`](../admin-api.md)
+- Product-surface narrative docs: use [`docs/admin-dashboard.md`](../admin-dashboard.md)
 - Historical plans: use [`../plans/`](../plans/)
 
 ## How to use this directory
 
-1. If you know the admin problem space but not the file, start with [`domains/AGENT_README.md`](domains/AGENT_README.md).
-2. If you already know you need the full route catalog, use [`../admin-api.md`](../admin-api.md).
-3. If you are debugging shell behavior or the `/admin` landing experience, use [`../admin-dashboard.md`](../admin-dashboard.md).
+1. If you know the admin problem space but not the file, start with [`docs/admin/domains/AGENT_README.md`](domains/AGENT_README.md).
+2. If you already know you need the full route catalog, use [`docs/admin-api.md`](../admin-api.md).
+3. If you are debugging shell behavior or the `/admin` landing experience, use [`docs/admin-dashboard.md`](../admin-dashboard.md).
 
 ## Key entry files
 

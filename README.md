@@ -66,8 +66,8 @@ After `npm run dev`, confirm:
 
 ```text
 app/                  Next.js routes, pages, and API handlers
-components/           Shared UI components, including the admin surface
-lib/                  Shared server and client utilities
+features/             Domain feature folders (ui/, server/ or logic/, tests/)
+shared/               Cross-cutting infrastructure (http, observability, auth, url, emails, ui)
 data/                 Generated and source data files
 docs/                 Canonical developer documentation
 scripts/              Repo automation and maintenance scripts
@@ -92,8 +92,8 @@ For admin work, start with [docs/admin/AGENT_README.md](docs/admin/AGENT_README.
 - [docs/versions.md](docs/versions.md) - single source of truth for pinned versions
 - [docs/doc-inventory.md](docs/doc-inventory.md) - project documentation inventory
 - [docs/knowledge-ledger.md](docs/knowledge-ledger.md) - verified documentation updates and why they matter
-- [.planning/codebase/ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md) - codebase architecture reference
-- [.planning/codebase/CONVENTIONS.md](docs/architecture/CONVENTIONS.md) - implementation conventions
+- [docs/architecture/ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md) - codebase architecture reference
+- [docs/architecture/CONVENTIONS.md](docs/architecture/CONVENTIONS.md) - implementation conventions
 
 ## Environment Variables
 

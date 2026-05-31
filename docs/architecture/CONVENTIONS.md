@@ -1,6 +1,6 @@
 # Coding Conventions
 
-> **Last verified:** 2026-03-15 | **Verified against:** ESLint config, tsconfig.json, Prettier config, component naming patterns
+> **Last verified:** 2026-05-31 | **Verified against:** ESLint config, tsconfig.json, Prettier config, component naming patterns
 
 **Analysis Date:** 2025-01-14
 
@@ -11,7 +11,7 @@
 - PascalCase for React components: `S01Hero.tsx`, `LandingPage.tsx`
 - camelCase for utilities: `analytics.ts`, `ratelimit.ts`
 - kebab-case for directories: `app/api/contact/`
-- Numbered landing sections: `S01Hero.tsx` through `S14CTA.tsx`
+- Numbered landing sections: `S01Hero.tsx` through `S15Testimonials.tsx`
 
 **Functions:**
 
@@ -52,7 +52,7 @@
 
 1. React/Next.js imports (`next/script`, `next/font/google`)
 2. External packages (`resend`, `zod`)
-3. Internal modules (../shared/http/csrf`, ../shared/http/ratelimit`)
+3. Internal modules (`@shared/http/csrf`, `@shared/http/ratelimit`)
 4. Relative imports (`./S01Hero`)
 5. Type imports (`type { Metadata }`)
 
@@ -63,8 +63,8 @@
 
 **Path Aliases:**
 
-- `@/*` alias configured in `tsconfig.json` (maps to project root)
-- Used for all cross-directory imports: `@/lib/*`, `@/components/*`, `@/app/*`
+- `@/*` (project root), `@shared/*` (→ `shared/`), and `@features/*` (→ `features/`) aliases configured in `tsconfig.json`
+- Used for all cross-directory imports: `@shared/http/csrf`, `@features/scoring/logic/engine`, `@/app/...`
 - Same-directory imports still use `./`
 
 ## Error Handling
@@ -101,7 +101,7 @@ try {
 
 **Framework:**
 
-- pino structured logging (`lib/logger.ts`)
+- pino structured logging (`shared/observability/logger.ts`)
 - @vercel/otel for OpenTelemetry integration
 
 **Patterns:**

@@ -79,16 +79,16 @@ If Q16015 copy changes, we lose proof of what each user consented to.
 
 ## 4. Data subject rights — implementation status
 
-| Right (GDPR article)              | Status                                                                                                                          | Mechanism                                           |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| Access (Art. 15)                  | ✅ DSAR export endpoint                                                                                                         | `/api/admin/data-subject` action=export (F-01)      |
-| Rectification (Art. 16)           | ✅ Admin PATCH supports first_name + email (T-08)                                                                               | `/api/admin/submissions/[id]` PATCH                 |
-| Erasure (Art. 17)                 | ✅ DSAR delete endpoint                                                                                                         | `/api/admin/data-subject` action=delete (F-01)      |
-| Restriction (Art. 18)             | ✅ `app_user.processing_restricted_at` column + nurture-cron filter (T-09); admin UI for setting it is a follow-up              |
-| Portability (Art. 20)             | ✅ DSAR export JSON                                                                                                             | F-01                                                |
-| Objection (Art. 21)               | ✅ Unsubscribe one-click + suppression list                                                                                     | `/api/unsubscribe` + Resend Audience cleanup (R-05) |
-| Automated decisions (Art. 22)     | ✅ The archetype scoring is not solely automated decision-making with legal/significant effect (it's a self-knowledge product). |
-| Withdrawal of consent (Art. 7(3)) | ✅ Unsubscribe + DSAR delete                                                                                                    |
+| Right (GDPR article)              | Status                                                                     | Mechanism                                                    |
+| --------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| Access (Art. 15)                  | ✅ DSAR export endpoint                                                    | `/api/admin/data-subject` action=export (F-01)               |
+| Rectification (Art. 16)           | ✅ Admin PATCH supports first_name + email (T-08)                          | `/api/admin/submissions/[id]` PATCH                          |
+| Erasure (Art. 17)                 | ✅ DSAR delete endpoint                                                    | `/api/admin/data-subject` action=delete (F-01)               |
+| Restriction (Art. 18)             | ✅ `app_user.processing_restricted_at` column + nurture-cron filter (T-09) | Admin UI for setting it is a follow-up                       |
+| Portability (Art. 20)             | ✅ DSAR export JSON                                                        | F-01                                                         |
+| Objection (Art. 21)               | ✅ Unsubscribe one-click + suppression list                                | `/api/unsubscribe` + Resend Audience cleanup (R-05)          |
+| Automated decisions (Art. 22)     | ✅ Not solely automated decision-making with legal/significant effect      | Self-knowledge product; no Art. 22 mechanism required        |
+| Withdrawal of consent (Art. 7(3)) | ✅ Unsubscribe + DSAR delete                                               | `/api/unsubscribe` + `/api/admin/data-subject` action=delete |
 
 ## 5. Security controls
 

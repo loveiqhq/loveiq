@@ -18,7 +18,7 @@ Example: forward `20260514120000_v9_archetype_renames.sql` → rollback
 
 ## Decision tree
 
-```
+```text
 Did the migration commit?
 ├── No → Stop the supabase CLI / abort the GitHub Action. No rollback needed.
 └── Yes

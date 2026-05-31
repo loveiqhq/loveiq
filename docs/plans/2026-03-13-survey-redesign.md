@@ -1,7 +1,7 @@
 # Survey Redesign Implementation Plan
 
 > **Status:** ON HOLD (as of 2026-03-15) — Plan created but implementation not started. Review before resuming.
-
+>
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Redesign the LoveIQ survey UI to match 12 Figma screens pixel-perfect for desktop/laptop, including new data fields from updated CSV.

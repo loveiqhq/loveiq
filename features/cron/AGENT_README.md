@@ -2,11 +2,11 @@
 
 **Purpose:** Scheduled background jobs. Run by Vercel Cron with bearer-token auth (`CRON_SECRET`).
 
-**Entry:** Routes still inline at `app/api/cron/{invite-reminders,payment-fulfillment-sweep,report-discount-email,survey-paused}/route.ts`. Tests in `tests/`.
+**Entry:** Routes inline at `app/api/cron/<job>/route.ts` (14 jobs: invite-reminders, survey-paused, nurture-sequence, chapter-nudge, payment-fulfillment-sweep, abandoned-checkout-alert, deep-engagement-alert, anomaly-watcher, security-storm-detector, funnel-digest, product-digest, tech-digest, table-size-digest, purge-old-data). Tests in `tests/`.
 
 **Belongs:** cron job handlers + their tests.
 
 **Does NOT belong:**
 
-- Email templates (invite reminders → `features/invite/emails/`; report discount → `lib/emails/report-discount.ts` → `features/report/server/emails/` after Phase 3c).
+- Email templates (invite reminders → `features/invite/emails/`; report-related → `features/report/server/emails/`).
 - Stripe webhook (that's event-driven, not cron — `features/checkout/server/`).

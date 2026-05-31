@@ -5,7 +5,7 @@
 **Subtrees:**
 
 - `ui/` — 22 internal subdomains: activity, alerts, analytics, annotations, archetypes, changelog, comments, comparisons, dashboard-subscriptions, export, funnels, growth, health, hooks, intelligence, journey, kpi-tabs, pulse, reports, revenue, scorecard, scoring, strategy.
-- `server/` — analytics/, intelligence/, strategy/, lifecycle/, metrics/, research/, etc. (77 files preserving their internal grouping).
+- `server/` — analytics/, intelligence/, strategy/, lifecycle/, metrics/, research/, etc. (~89 files preserving their internal grouping).
 - `server/emails/admin-magic-link.ts` — magic-link email template.
 - `tests/` — ~95 admin tests (API + components + lib).
 
@@ -19,7 +19,7 @@
 **Does NOT belong:**
 
 - Customer-facing UI/logic (use `features/<domain>/`).
-- Shared infrastructure like CSRF/ratelimit (use `lib/`/`shared/`).
+- Shared infrastructure like CSRF/ratelimit (use `shared/`).
 
 **Conventions:**
 
@@ -29,4 +29,4 @@
 **Related:**
 
 - `docs/admin/domains/*.md` — per-domain operator runbooks.
-- `lib/admin/AGENT_README.md` is removed; the index lives here. Required by `scripts/check-docs-truth.mjs`.
+- Admin server/UI indexes live in `features/admin/server/AGENT_README.md` and `features/admin/ui/AGENT_README.md` (both required by `scripts/check-docs-truth.mjs`).

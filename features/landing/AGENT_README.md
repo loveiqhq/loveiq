@@ -21,13 +21,13 @@
 
 - Survey UI → `features/survey/ui/`
 - Report UI → `features/report/ui/`
-- Generic React primitives or brand marks → `components/branding/` (kept central — used by both landing and other surfaces).
+- Generic React primitives or brand marks → `shared/ui/branding/` (kept central — used by both landing and other surfaces).
 - Anything fetching server data (landing is static content + analytics).
 
 **Related:**
 
-- `components/branding/LoveIQBrand` — imported by `NavSection` and `FooterSection`.
-- `lib/analytics` (→ `shared/observability` after Phase 5) — `trackStartSurvey`, `trackLandingPageView`.
+- `shared/ui/branding/LoveIQBrand` — imported by `NavSection` and `FooterSection`.
+- `features/analytics/client` — `trackStartSurvey`, `trackLandingPageView`.
 
 **Conventions:**
 

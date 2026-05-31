@@ -12,4 +12,4 @@
 **Does NOT belong:**
 
 - Product KPIs (those are admin domain).
-- Hotjar / Contentsquare scripts (`lib/hotjar.ts` + `components/GtmScript.tsx` → `shared/` in Phase 5).
+- Hotjar / Contentsquare scripts (`shared/observability/hotjar.ts` + `shared/ui/GtmScript.tsx`).

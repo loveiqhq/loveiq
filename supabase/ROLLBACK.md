@@ -23,12 +23,15 @@ Supabase Pro projects expose branches. The recovery flow:
 1. **Confirm the bad migration**: in the Supabase dashboard, identify the
    timestamped migration file that introduced the regression.
 2. **Reset the branch to before that timestamp** using the MCP:
-   ```
+
+   ```text
    mcp__plugin_supabase_supabase__reset_branch
    ```
+
    This rolls the branch back to the previous migration head and discards
    all rows written after that point. Coordinate with the team — any
    manual rows added between the bad migration and the reset are lost.
+
 3. **Re-create the migration correctly** with a new (later) timestamp.
    Never edit the file you reverted from; that breaks every developer
    who already applied it locally.
@@ -82,7 +85,7 @@ Supabase dashboard → Database → Backups.
 After any rollback action:
 
 - `npm run typecheck` — catches schema-derived type drift in
-  `lib/admin/strategy/types.ts` and similar.
+  `features/admin/server/strategy/types.ts` and similar.
 - `npm test` + `npm run test:integration` — exercises the affected
   RPC + REST paths.
 - `__tests__/contracts/supabase-contracts.test.ts` — catches response

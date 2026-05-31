@@ -1,0 +1,39 @@
+{
+  "version": "0.2",
+  "language": "en",
+  "dictionaries": [
+    "en_US",
+    "software-terms",
+    "typescript",
+    "node",
+    "npm",
+    "html",
+    "css",
+    "bash",
+    "fonts",
+    "filetypes",
+    "project-words"
+  ],
+  "dictionaryDefinitions": [
+    {
+      "name": "project-words",
+      "path": "./.cspell/project-words.txt",
+      "addWords": true
+    }
+  ],
+  "ignorePaths": [
+    "node_modules/**",
+    ".next/**",
+    ".agents/**",
+    ".claude/**",
+    ".codeium/**",
+    "coverage/**",
+    "playwright-report/**",
+    "test-results/**",
+    "data/**",
+    "**/*.csv",
+    "sbom.json",
+    "package-lock.json"
+  ],
+  "ignoreRegExpList": ["/`[^`]+`/", "/```[\\s\\S]*?```/", "HexValues", "Urls", "EmailAddresses"]
+}

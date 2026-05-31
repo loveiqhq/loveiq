@@ -15,7 +15,7 @@ Use this directory when the task is described in product language and you need t
 
 ## Root jump points
 
-- Route wrappers: [`../../../app/admin/AGENT_README.md`](../../../app/admin/AGENT_README.md)
-- API handlers: [`../../../app/api/admin/AGENT_README.md`](../../../app/api/admin/AGENT_README.md)
-- UI surfaces: [`../../../features/admin/ui/AGENT_README.md`](../../../features/admin/ui/AGENT_README.md)
-- Server logic: [`../../../features/admin/server/AGENT_README.md`](../../../features/admin/server/AGENT_README.md)
+- Route wrappers: [`app/admin/AGENT_README.md`](../../../app/admin/AGENT_README.md)
+- API handlers: [`app/api/admin/AGENT_README.md`](../../../app/api/admin/AGENT_README.md)
+- UI surfaces: [`features/admin/ui/AGENT_README.md`](../../../features/admin/ui/AGENT_README.md)
+- Server logic: [`features/admin/server/AGENT_README.md`](../../../features/admin/server/AGENT_README.md)

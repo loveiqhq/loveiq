@@ -1,6 +1,6 @@
 # Architecture
 
-> **Last verified:** 2026-03-15 | **Verified against:** app/, lib/, components/ directory structure, package.json dependencies, admin auth flow
+> **Last verified:** 2026-05-31 | **Verified against:** app/, shared/, features/ directory structure, package.json dependencies, admin auth flow
 
 **Analysis Date:** 2025-01-14
 
@@ -30,10 +30,10 @@
 
 **Component Layer:**
 
-- Purpose: Reusable UI components organized by page
+- Purpose: Reusable UI components organized by feature
 - Contains: React components (Server + Client)
-- Location: `components/` directory
-- Subdirectories: `landing/`, `about/`, `glossary/`, `legal/`, `survey/`, `trust-zone/`, `staging/`, `not-found/`, `admin/`
+- Location: `features/*/ui/` directories (one per feature)
+- Features: `landing/`, `about/`, `glossary/`, `legal/`, `survey/`, `trust-zone/`, `staging/`, `not-found/`, `admin/`, `report/`, `checkout/`, `invite/`
 - Depends on: CSS custom properties (globals.css), Tailwind CSS
 - Used by: Pages
 
@@ -48,10 +48,10 @@
 **Library Layer:**
 
 - Purpose: Shared utilities and helpers
-- Contains: Analytics, CSRF, rate limiting, circuit breaker, logging, email templates, admin auth/roles
-- Location: `lib/` directory
-- Key files: `analytics.ts`, `csrf.ts`, `ratelimit.ts`, `circuit-breaker.ts`, `logger.ts`, `fetch-with-timeout.ts`
-- Subdirectories: `admin/` (auth, roles, audit, Supabase client helpers), `emails/`
+- Contains: Analytics, CSRF, rate limiting, circuit breaker, logging, email helpers, admin auth/roles
+- Location: `shared/*` (cross-cutting) plus `features/*/server` and `features/*/logic` (feature-owned)
+- Key files: `features/analytics/client.ts`, `shared/http/csrf.ts`, `shared/http/ratelimit.ts`, `shared/http/circuit-breaker.ts`, `shared/observability/logger.ts`, `shared/http/fetch-with-timeout.ts`
+- Subtrees: `shared/http/`, `shared/observability/`, `shared/auth/`, `shared/url/`, `shared/format/`, `shared/emails/`, `shared/ui/`; `features/admin/server/` (auth, roles, audit, Supabase helpers)
 - Depends on: External APIs, Supabase
 - Used by: Components, API routes, middleware
 
@@ -68,7 +68,7 @@
 
 1. User navigates to `/`
 2. Next.js renders `app/page.tsx` (Server Component)
-3. `LandingPage` component composes all sections (S01Hero through S14CTA)
+3. `LandingPage` component composes all sections (S01Hero through S15Testimonials)
 4. Client components hydrate for interactivity
 5. Smooth scroll initialized (Lenis)
 6. Google Analytics tracks page view
@@ -116,7 +116,7 @@
 - Purpose: Self-contained page sections
 - Examples: `S01Hero`, `S06Archetypes`, `S13FAQ`, `S14CTA`
 - Pattern: Functional components with Tailwind styling
-- Location: `components/landing/*.tsx`, `components/about/*.tsx`
+- Location: `features/landing/ui/*.tsx`, `features/about/ui/*.tsx`
 
 **API Route Handlers:**
 
@@ -130,7 +130,7 @@
 - Purpose: Typed event tracking
 - Examples: `track()`, `trackStartSurvey()`, `trackSurveyComplete()`
 - Pattern: Wrapper functions around gtag
-- Location: `lib/analytics.ts`
+- Location: `features/analytics/client.ts`
 
 ## Entry Points
 
@@ -183,13 +183,13 @@
 - CSRF failure returns 403 status
 - Validation errors return 400 status
 - External service errors return 500 status
-- Structured logging via pino (`lib/logger.ts`)
+- Structured logging via pino (`shared/observability/logger.ts`)
 
 ## Cross-Cutting Concerns
 
 **Logging:**
 
-- pino structured logging (`lib/logger.ts`)
+- pino structured logging (`shared/observability/logger.ts`)
 - Slack notifications for important events (survey submissions, contact submissions, payments)
 - @vercel/otel for OpenTelemetry integration
 
@@ -200,14 +200,14 @@
 
 **Security:**
 
-- CSRF protection via double-submit cookie (`lib/csrf.ts`, `proxy.ts`)
-- Rate limiting (IP-based, Supabase-backed via `lib/ratelimit.ts`)
+- CSRF protection via double-submit cookie (`shared/http/csrf.ts`, `proxy.ts`)
+- Rate limiting (IP-based, Supabase-backed via `shared/http/ratelimit.ts`)
 - Honeypot fields for bot detection
 - reCAPTCHA for contact form
 - Strict CSP headers in `proxy.ts`
 - Input sanitization via Zod
-- Fetch timeout wrapper (`lib/fetch-with-timeout.ts`)
-- Circuit breaker pattern (`lib/circuit-breaker.ts`)
+- Fetch timeout wrapper (`shared/http/fetch-with-timeout.ts`)
+- Circuit breaker pattern (`shared/http/circuit-breaker.ts`)
 
 **SEO:**
 

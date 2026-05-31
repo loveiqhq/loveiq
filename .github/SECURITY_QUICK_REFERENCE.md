@@ -24,9 +24,9 @@ npm run build   # Must succeed
 ```typescript
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { verifyCsrfToken } from "@/lib/csrf";
-import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
-import logger from "@/lib/logger";
+import { verifyCsrfToken } from "@shared/http/csrf";
+import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
+import logger from "@shared/observability/logger";
 
 const schema = z.object({
   email: z.string().email(),
@@ -121,7 +121,7 @@ for i in {1..7}; do curl -X POST http://localhost:3000/api/test; done
 curl -X POST http://localhost:3000/api/test  # Should fail
 
 # Check for secrets
-grep -r "api[_-]key\|secret\|password" app/ lib/ --include="*.ts"
+grep -r "api[_-]key\|secret\|password" app/ shared/ features/ --include="*.ts"
 
 # Generate SBOM
 npx @cyclonedx/cyclonedx-npm --output-file sbom.json
@@ -166,12 +166,12 @@ npx @cyclonedx/cyclonedx-npm --output-file sbom.json
 
 ## 📚 Documentation Links
 
-| Need to...             | Read                    |
-| ---------------------- | ----------------------- |
-| Enable GitHub features | `.github/README.md`     |
-| Follow best practices  | `SECURITY_CHECKLIST.md` |
-| Review security policy | `SECURITY.md`           |
-| Understand codebase    | `CLAUDE.md`             |
+| Need to...             | Read                        |
+| ---------------------- | --------------------------- |
+| Enable GitHub features | `.github/README.md`         |
+| Follow best practices  | `SECURITY_CHECKLIST.md`     |
+| Review security policy | `docs/runbooks/SECURITY.md` |
+| Understand codebase    | `CLAUDE.md`                 |
 
 ---
 
@@ -235,7 +235,7 @@ Look for:
 
 **DO NOT create public GitHub issues**
 
-Email: security@loveiq.org
+Email: <security@loveiq.org>
 
 Include:
 
@@ -260,5 +260,5 @@ Include:
 
 ---
 
-**Last updated:** 2026-02-08
+**Last updated:** 2026-05-31
 **Print this and keep it visible!** 🖨️

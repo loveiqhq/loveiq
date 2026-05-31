@@ -1,0 +1,93 @@
+# Project dictionary for cspell — domain, brand, and technical vocabulary.
+# These are legitimate words (not typos). Add new terms as needed.
+
+# Brands / products / tools
+loveiq
+Supabase
+Resend
+Svix
+Semgrep
+semgrepignore
+Hotjar
+Contentsquare
+Vercel
+Upstash
+Lenis
+Manrope
+Lora
+Stripe
+Playwright
+Vitest
+gtag
+Waitlist
+
+# AI-assistant config filenames
+clinerules
+continuerules
+cursorrules
+windsurfrules
+
+# Security / compliance / infra acronyms + terms
+recaptcha
+HSTS
+WCAG
+DPIA
+DSAR
+ROPA
+PITR
+SLSA
+SBOM
+Clickjacking
+Subresource
+Subprocessors
+exfiltration
+explainability
+webshells
+creds
+livemode
+whsec
+passwordless
+kubeconfig
+apiserver
+Dockerfiles
+backout
+
+# Email auth (SPF/DKIM/DMARC)
+dmarc
+adkim
+aspf
+domainkey
+
+# Product / analytics / scoring vocabulary
+archetype
+archetypes
+softmax
+cutover
+cooldown
+dedup
+drilldowns
+drillthrough
+blindspot
+hotspot
+hotspots
+multimethod
+navigations
+paywalled
+signups
+unconfigured
+watchlist
+Virality
+XLOOKUP
+trgm
+
+# British spelling used in some docs
+behaviours
+organisational
+
+# People (git authors / team)
+Eman
+Ferhad
+
+# Misc identifiers appearing in prose
+Idxy
+JSYR

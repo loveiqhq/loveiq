@@ -22,7 +22,7 @@ See [DEVELOPMENT.md](docs/runbooks/DEVELOPMENT.md) for env vars, troubleshooting
 5. Open a PR against `main`.
 6. Complete the PR checklist truthfully. If high-risk code changed without markdown updates, check `No doc impact` explicitly.
 
-The CI docs-impact gate blocks PRs that change `app/api`, `app/admin`, `components/admin`, `lib/admin`, `proxy.ts`, package/env files, or workflow/docs scripts without either markdown changes or a checked `No doc impact` box.
+The CI docs-impact gate blocks PRs that change `app/api/admin`, `app/admin`, `features/admin`, public API routes, `proxy.ts`, `shared/http/csrf.ts`, `shared/http/ratelimit.ts`, package/env files, or workflow/docs scripts without either markdown changes or a checked `No doc impact` box.
 
 ## Commit Conventions
 
@@ -39,7 +39,7 @@ ci: tighten docs truth workflow
 ## Code Standards
 
 - TypeScript strict mode stays enabled.
-- Use the `@/` alias for cross-directory imports.
+- Use the `@/`, `@shared/`, and `@features/` aliases for cross-directory imports.
 - Keep changes aligned with existing file and component patterns.
 - Prefer `rg` for code and file search.
 - Do not introduce secrets into tracked files.
@@ -47,8 +47,7 @@ ci: tighten docs truth workflow
 ## Testing Expectations
 
 - Add or update tests when route behavior, validation, auth, or admin workflows change.
-- Write route tests under `__tests__/api/`.
-- Write shared utility tests under `__tests__/lib/`.
+- Place tests next to source under `features/<feature>/tests/` or `shared/<area>/tests/`; cross-cutting suites (API handlers, contracts, integration) go in `__tests__/`.
 - Keep `npm run build` green for PR-ready changes.
 
 ## Documentation Expectations
@@ -71,6 +70,10 @@ Canonical documentation targets:
 - [docs/api.md](docs/api.md)
 - [docs/admin-api.md](docs/admin-api.md)
 - [docs/versions.md](docs/versions.md)
+
+### Changelog / release notes
+
+User-facing behavior changes (new endpoints, pricing, survey/report flow, email behavior) must be captured in the GitHub Release notes for the release that ships them (release workflow: `.github/workflows/release.yml`). Link the relevant doc(s) in the release entry so the change and its documentation travel together.
 
 ## Security Expectations
 

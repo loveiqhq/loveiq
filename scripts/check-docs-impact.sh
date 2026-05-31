@@ -84,7 +84,7 @@ fi
 check_requires_docs \
   "Admin surface" \
   '^(features/admin/|app/admin/|app/api/admin/)' \
-  "Update docs/admin-api.md, README.md, DEVELOPMENT.md, or another canonical markdown file."
+  "Update docs/admin-api.md, README.md, docs/runbooks/DEVELOPMENT.md, or another canonical markdown file."
 
 check_requires_docs \
   "Public API surface" \
@@ -94,12 +94,12 @@ check_requires_docs \
 check_requires_docs \
   "Security and middleware surface" \
   '^(proxy\.ts|shared/http/csrf\.ts|shared/http/ratelimit\.ts)' \
-  "Update SECURITY.md, DEVELOPMENT.md, or the relevant API documentation."
+  "Update docs/runbooks/SECURITY.md, docs/runbooks/DEVELOPMENT.md, or the relevant API documentation."
 
 check_requires_docs \
   "Toolchain and environment surface" \
   '^(package\.json|package-lock\.json|\.env\.example|\.github/workflows/|scripts/check-docs-truth\.mjs|scripts/check-docs-impact\.sh)' \
-  "Update README.md, DEVELOPMENT.md, docs/versions.md, or the relevant workflow/docs references."
+  "Update README.md, docs/runbooks/DEVELOPMENT.md, docs/versions.md, or the relevant workflow/docs references."
 
 echo ""
 if [ "$FAILURES" -gt 0 ]; then

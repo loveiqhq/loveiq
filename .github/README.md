@@ -1,7 +1,7 @@
 # GitHub Configuration
 
 > Owner: CODEOWNERS default
-> Last verified: 2026-04-05
+> Last verified: 2026-05-31
 > Verified against: `.github/workflows/**`, `.github/pull_request_template.md`, `scripts/check-docs-impact.sh`, `scripts/check-docs-truth.mjs`
 
 This directory contains GitHub-specific configuration files for CI/CD, security, and automation.
@@ -16,11 +16,17 @@ GitHub Actions workflow definitions.
 
 Source-driven documentation validation.
 
-- Verifies markdown links across the canonical doc set
+- Verifies markdown links across the canonical doc set (including `../../`- and absolute-prefixed targets, which are no longer skipped)
+- Flags references to removed directory trees (`lib/`, `components/`, `.planning/`) and the dead `@/lib` / `@/components` import aliases
+- Flags inline-link display text whose path no longer matches its target
 - Verifies documented npm scripts and env vars against repo truth
 - Verifies `docs/versions.md` against `package.json` and CI
 - Verifies `docs/api.md` and `docs/admin-api.md` cover the live route inventory
+- Runs markdownlint (`markdownlint-cli2`, config `.markdownlint-cli2.jsonc`) for structural correctness (code-fence languages, table integrity, bare URLs)
+- Runs spellcheck (`cspell`, dictionary `.cspell/project-words.txt`) over documentation prose
 - Runs Prettier against markdown files
+
+> Historical snapshots under `docs/plans/` are exempt from the dead-tree/display-text checks (their prose intentionally records the repo state at creation time); their links are still validated. A single line can opt out with a `docs-truth-allow` marker.
 
 #### `security.yml`
 
@@ -103,12 +109,12 @@ Enable these in **Settings → Code security and analysis**:
 
 - Audit all security configurations
 - Update this documentation
-- Review and rotate secrets per `SECURITY.md`
+- Review and rotate secrets per `docs/runbooks/SECURITY.md`
 
 ## Documentation
 
-- `../SECURITY.md` - Main security guide and incident response
-- `../DEVELOPMENT.md` - Local setup, env vars, and validation
+- `../docs/runbooks/SECURITY.md` - Main security guide and incident response
+- `../docs/runbooks/DEVELOPMENT.md` - Local setup, env vars, and validation
 - `../docs/api.md` - Public API reference
 - `../docs/admin-api.md` - Admin API reference
 - `../docs/versions.md` - Pinned versions

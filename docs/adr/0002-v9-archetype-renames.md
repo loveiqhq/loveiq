@@ -32,7 +32,7 @@ JSONB columns (`percentages`, `raw_scores`, `diagnostics`, `v5_*`) via
 `regexp_replace` on the JSONB cast to text.
 
 Preserve backward compatibility for any existing report URLs by adding a
-legacy alias map in `lib/report/archetypeSlug.ts` so old slugs still resolve.
+legacy alias map in `features/report/server/archetypeSlug.ts` so old slugs still resolve.
 
 Provide a paired rollback file in `supabase/rollbacks/` that reverses the
 rename (kept outside `supabase/migrations/` so it is never auto-applied).

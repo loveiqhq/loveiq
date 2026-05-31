@@ -1,35 +1,44 @@
-# **tests**/
+# `__tests__/`
 
-Unit tests (Vitest) that mirror the source directory structure.
+Cross-cutting unit/contract/integration tests (Vitest). Feature- and module-specific
+tests are **colocated** with their source instead of living here.
 
 ## Key Conventions
 
 - Run with `npm test` (once), `npm run test:watch` (watch mode), or `npm run test:coverage` (with coverage).
+- Integration tests run separately via `npm run test:integration` (need `SUPABASE_TEST_*` env vars).
 - `setup.ts` contains global Vitest setup (mocks, env vars). New global mocks go there.
-- Test file paths mirror source paths (see mapping below).
+- **Colocated by default:** a module's tests live next to it under a `tests/` folder —
+  `shared/<area>/tests/*.test.ts` and `features/<feature>/tests/*.test.*`. Only cross-cutting
+  suites (API handlers, data files, app-level CSS, contracts, integration, scripts, security) live here.
 
-## Test-to-Source Mapping
+## What lives in `__tests__/`
 
-| Test File                                      | Source File                               |
-| ---------------------------------------------- | ----------------------------------------- |
-| `api/contact-validation.test.ts`               | `app/api/contact/route.ts`                |
-| `api/health.test.ts`                           | `app/api/health/route.ts`                 |
-| `api/staging-login.test.ts`                    | `app/api/staging-login/route.ts`          |
-| `api/logout.test.ts`                           | `app/api/admin/logout/route.ts`           |
-| `api/admin-submissions.test.ts`                | `app/api/admin/submissions/route.ts`      |
-| `api/admin-export.test.ts`                     | `app/api/admin/export/route.ts`           |
-| `api/admin-survey-status.test.ts`              | `app/api/admin/survey-status/route.ts`    |
-| `lib/csrf.test.ts`                             | `lib/csrf.ts`                             |
-| `lib/csrf-body.test.ts`                        | `lib/csrf.ts` (body-based CSRF)           |
-| `lib/ratelimit.test.ts`                        | `lib/ratelimit.ts`                        |
-| `lib/ratelimit-full.test.ts`                   | `lib/ratelimit.ts` (full integration)     |
-| `lib/circuit-breaker.test.ts`                  | `lib/circuit-breaker.ts`                  |
-| `lib/admin/auth.test.ts`                       | `lib/admin/auth.ts`                       |
-| `lib/scoring/engine.test.ts`                   | `lib/scoring/engine.ts`                   |
-| `lib/scoring/config.test.ts`                   | `lib/scoring/config.ts`                   |
-| `components/admin/AdminLoginForm.test.tsx`     | `components/admin/AdminLoginForm.tsx`     |
-| `components/staging/StagingLoginForm.test.tsx` | `components/staging/StagingLoginForm.tsx` |
-| `proxy.test.ts`                                | `proxy.ts`                                |
+| Path                                | Covers                                                    |
+| ----------------------------------- | --------------------------------------------------------- |
+| `api/health.test.ts`                | `app/api/health/route.ts`                                 |
+| `app/*.test.ts`                     | `app/globals.css` report theme + typography invariants    |
+| `contracts/*.ts`                    | Supabase schema/RPC contracts (`supabase/migrations/**`)  |
+| `data/*.test.ts`                    | Generated `data/report-*.ts` content integrity            |
+| `integration/*.integration.test.ts` | Payment-webhook idempotency, RLS boundary (live Supabase) |
+| `scripts/*.test.ts`                 | `scripts/convert-report-content.js`                       |
+| `security/*.test.ts`                | Premium-content bundle leakage guard                      |
+| `__fixtures__/`                     | Shared test fixtures (MSW server, survey fixtures)        |
+| `setup.ts`                          | Global Vitest setup                                       |
+
+## Colocated test examples (live next to source, not here)
+
+| Test File                                           | Source File                                |
+| --------------------------------------------------- | ------------------------------------------ |
+| `features/contact/tests/contact-validation.test.ts` | `app/api/contact/route.ts`                 |
+| `features/scoring/tests/engine.test.ts`             | `features/scoring/logic/engine.ts`         |
+| `features/admin/tests/admin-auth-lib.test.ts`       | `features/admin/server/auth.ts`            |
+| `features/admin/tests/AdminLoginForm.test.tsx`      | `features/admin/ui/AdminLoginForm.tsx`     |
+| `features/staging/tests/StagingLoginForm.test.tsx`  | `features/staging/ui/StagingLoginForm.tsx` |
+| `shared/http/tests/csrf.test.ts`                    | `shared/http/csrf.ts`                      |
+| `shared/http/tests/ratelimit.test.ts`               | `shared/http/ratelimit.ts`                 |
+| `shared/http/tests/circuit-breaker.test.ts`         | `shared/http/circuit-breaker.ts`           |
+| `shared/auth/tests/proxy.test.ts`                   | `proxy.ts`                                 |
 
 ## Regression Test Convention
 

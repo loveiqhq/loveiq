@@ -1,8 +1,8 @@
 # Security Guide
 
 > Owner: CODEOWNERS default
-> Last verified: 2026-04-05
-> Verified against: `.env.example`, `proxy.ts`, `lib/csrf.ts`, `lib/ratelimit.ts`, `.github/workflows/security.yml`
+> Last verified: 2026-05-31
+> Verified against: `.env.example`, `proxy.ts`, `shared/http/csrf.ts`, `shared/http/ratelimit.ts`, `.github/workflows/security.yml`
 
 ## Environment & secrets
 
@@ -137,7 +137,7 @@ diff against `dig` output during an incident.
 
 ### SPF (TXT record at apex of sending domain)
 
-```
+```text
 v=spf1 include:_spf.resend.com -all
 ```
 
@@ -157,7 +157,7 @@ added.
 
 To check from a shell:
 
-```
+```text
 dig TXT resend._domainkey.send.loveiq.org +short
 dig TXT resend2._domainkey.send.loveiq.org +short
 ```
@@ -168,7 +168,7 @@ Both should return CNAME chains terminating at a Resend-hosted record.
 
 Current policy:
 
-```
+```text
 v=DMARC1; p=quarantine; rua=mailto:dmarc-reports@loveiq.org; pct=100; aspf=s; adkim=s
 ```
 

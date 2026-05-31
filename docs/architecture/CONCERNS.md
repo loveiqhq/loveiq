@@ -25,20 +25,20 @@
 **In-memory rate limiting:** RESOLVED (2026-01)
 
 - Was: Rate limiting used in-memory Maps that reset across serverless instances
-- Fix: Supabase-backed persistent rate limiting in `lib/ratelimit.ts`
+- Fix: Supabase-backed persistent rate limiting in `shared/http/ratelimit.ts`
 - Evidence: `checkRateLimit()` writes to Supabase `rate_limits` table
 
 **Deep relative imports:** RESOLVED (2026-01)
 
 - Was: Import paths like `../../../features/invite/emails/invite` hard to maintain
 - Fix: `@/*` path alias configured in `tsconfig.json`
-- Evidence: All cross-directory imports use `@/lib/*`, `@/components/*`
+- Evidence: All cross-directory imports use `@/*`, `@shared/*`, `@features/*`
 
 **Generic section naming:** RESOLVED (2026-01)
 
 - Was: Components named `Section05` through `Section12` with no description
-- Fix: Renamed to descriptive names: `S01Hero.tsx` through `S14CTA.tsx`
-- Evidence: `components/landing/S01Hero.tsx` ... `S14CTA.tsx`
+- Fix: Renamed to descriptive names: `S01Hero.tsx` through `S15Testimonials.tsx`
+- Evidence: `features/landing/ui/S01Hero.tsx` ... `S15Testimonials.tsx`
 
 **Temporary files in root:** RESOLVED (2026-01)
 
@@ -48,7 +48,7 @@
 **No CSRF protection:** RESOLVED (2026-01)
 
 - Was: No CSRF token validation on API routes
-- Fix: Double-submit cookie pattern in `lib/csrf.ts`, verified in all API routes
+- Fix: Double-submit cookie pattern in `shared/http/csrf.ts`, verified in all API routes
 - Evidence: `verifyCsrfToken()` called in survey + contact + invite route handlers
 
 **No tests:** RESOLVED (2026-02)
@@ -72,7 +72,7 @@
 - Was: Cannot view survey submissions or waitlist signups without database access
 - Fix: Full admin panel at `/admin/*` with dashboard, submission browser, CSV export, and survey status toggle
 - Auth: Supabase Auth magic link emails with `admin_users` email allowlist table
-- Evidence: `app/admin/`, `app/api/admin/`, `lib/admin/`, `components/admin/`
+- Evidence: `app/admin/`, `app/api/admin/`, `features/admin/server/`, `features/admin/ui/`
 
 ## Known Bugs
 
@@ -162,7 +162,7 @@
 
 ## Documentation Gaps
 
-**None critical** — `CLAUDE.md`, `SECURITY.md`, `DEVELOPMENT.md`, `CONTRIBUTING.md`, and `docs/api.md` cover the main areas.
+**None critical** — `CLAUDE.md`, `docs/runbooks/SECURITY.md`, `docs/runbooks/DEVELOPMENT.md`, `CONTRIBUTING.md`, and `docs/api.md` cover the main areas.
 
 ---
 

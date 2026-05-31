@@ -16,12 +16,12 @@
 
 **Does NOT belong:**
 
-- Pricing math (separate domain at `lib/pricing/` → `features/pricing/` in later phase).
-- Report rendering (`features/report/` in later phase).
-- Email templates (the `report-discount` email lives in `lib/emails/` for now; will move with report phase).
+- Pricing math (separate domain at `features/pricing/logic/`).
+- Report rendering (`features/report/`).
+- Email templates (report emails live in `features/report/server/emails/`).
 
 **Related:**
 
-- `lib/pricing/reportPricing.ts` — price quote source, consumed by checkout.
+- `features/pricing/logic/reportPricing.ts` — price quote source, consumed by checkout.
 - `app/api/stripe/webhook/route.ts` — dispatches to `server/fulfillment.ts`.
 - Stripe dashboard webhook endpoint: `https://<domain>/api/stripe/webhook` — see `CLAUDE.md` for the event list.

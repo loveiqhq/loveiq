@@ -12,7 +12,7 @@ npm run lint         # Run ESLint
 npm test             # Run unit tests once (Vitest)
 npm run start        # Run production build locally
 npm run analyze      # Bundle size analysis (opens visual treemap)
-npm run docs:check   # Docs-truth + markdown prettier (mirrors docs-truth CI job)
+npm run docs:check   # Docs-truth + markdownlint + cspell + prettier (mirrors docs-truth CI job)
 npm run check        # Lint + test + docs:check + build (full CI check)
 npm run setup        # Install deps + create .env.local from .env.example
 ```
@@ -21,7 +21,7 @@ npm run setup        # Install deps + create .env.local from .env.example
 
 ## Repo Map
 
-```
+```text
 loveiq-web/
 ├── app/                        # Next.js App Router (pages + API routes)
 │   ├── api/
@@ -115,10 +115,9 @@ loveiq-web/
 │   ├── health-monitor.yml      # Health monitoring
 │   ├── lighthouse.yml          # Lighthouse CI
 │   └── load-test.yml           # Load testing
-├── .planning/                  # Architecture docs (ARCHITECTURE.md, CONVENTIONS.md, AGENTS.md, etc.)
+├── docs/architecture/          # Architecture docs (ARCHITECTURE.md, CONVENTIONS.md, AGENTS.md, etc.)
+├── docs/runbooks/              # Operational runbooks (SECURITY.md, DEVELOPMENT.md, DISASTER_RECOVERY.md, etc.)
 ├── FILE_INDEX.md               # Task-based file lookup (find any file by what you want to do)
-├── SECURITY.md                 # Security guidelines + secrets rotation
-├── DEVELOPMENT.md              # Development setup guide
 └── [config files]              # package.json, tsconfig.json, tailwind.config.js, etc.
 ```
 
@@ -214,7 +213,7 @@ Sandbox and live mode both run the real fulfillment path. To test in sandbox use
 
 Required Vercel env vars (test or production):
 
-```
+```text
 STRIPE_CHECKOUT_ENABLED=true
 NEXT_PUBLIC_STRIPE_CHECKOUT_PREVIEW_MODE=false
 NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_... | pk_live_...
@@ -272,7 +271,7 @@ The middleware (`proxy.ts`) relaxes CSP in dev mode:
 - `npm run test:e2e` — builds prod, starts server, runs all 5 browser projects
 - Browser projects: Desktop Chrome/Firefox/Safari, Mobile Chrome (Pixel 7), Mobile Safari (iPhone 15 Pro)
 - Reports saved to `playwright-report/`
-- See `.planning/codebase/TESTING.md` for full E2E reference
+- See `docs/architecture/TESTING.md` for full E2E reference
 
 ### Pre-push hook standard
 
@@ -372,9 +371,9 @@ export default SectionName;
 // app/api/example/route.ts
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { verifyCsrfToken } from "@/lib/csrf";
-import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
-import logger from "@/lib/logger";
+import { verifyCsrfToken } from "@shared/http/csrf";
+import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
+import logger from "@shared/observability/logger";
 
 const schema = z.object({
   email: z.string().email().max(320),
@@ -430,15 +429,15 @@ Always return `{ error: string }` or `{ success: true }`. Keep error messages ge
 
 #### Add a New Landing Section
 
-1. Create `components/landing/S##NewSection.tsx`
+1. Create `features/landing/ui/S##NewSection.tsx`
 2. Follow existing section patterns (see `S06Archetypes.tsx` for complex example)
-3. Import and add to `components/landing/LandingPage.tsx` in order
+3. Import and add to `features/landing/ui/LandingPage.tsx` in order
 4. Use `animate-on-scroll` class for scroll animations
 
 #### Add a New Page
 
 1. Create `app/{page-name}/page.tsx`
-2. Create `components/{page-name}/{PageName}Page.tsx` for content
+2. Create `features/{feature}/ui/{PageName}Page.tsx` for content
 3. Add to navigation if needed (`NavSection.tsx`, `FooterSection.tsx`)
 4. Add to `app/sitemap.ts` for SEO
 
@@ -449,21 +448,21 @@ Always return `{ error: string }` or `{ success: true }`. Keep error messages ge
 3. Include rate limiting (`checkRateLimit`)
 4. Add Zod schema for input validation
 5. Use generic error messages
-6. Log errors with `logger` from `@/lib/logger`
+6. Log errors with `logger` from `@shared/observability/logger`
 
 #### Add a New Environment Variable
 
 1. Add to `.env.example` with description
 2. Document in this file's Environment Variables section
 3. If client-side, prefix with `NEXT_PUBLIC_`
-4. Update `SECURITY.md` if it's a secret
+4. Update `docs/runbooks/SECURITY.md` if it's a secret
 
 #### Modify CSP / Add Third-Party Script
 
 1. Edit `proxy.ts` CSP directives
 2. Add domain to appropriate directive (`script-src`, `connect-src`, `img-src`, etc.)
 3. Test in both dev and production build
-4. Document in `SECURITY.md`
+4. Document in `docs/runbooks/SECURITY.md`
 
 ---
 
@@ -479,7 +478,7 @@ Always return `{ error: string }` or `{ success: true }`. Keep error messages ge
 
 - All API inputs validated with Zod
 - Email addresses normalized (lowercase, trimmed)
-- HTML escaped in email templates (`lib/emails/invite.ts`)
+- HTML escaped in email templates (`features/invite/emails/invite.ts`)
 - Header injection prevented in contact form
 
 ### Rate Limiting
@@ -492,9 +491,9 @@ Always return `{ error: string }` or `{ success: true }`. Keep error messages ge
 
 - Double-submit cookie pattern
 - Cookie set by middleware (`proxy.ts`)
-- Verified in API routes (`lib/csrf.ts`)
+- Verified in API routes (`shared/http/csrf.ts`)
 
-See `SECURITY.md` for rotation schedules and incident response.
+See `docs/runbooks/SECURITY.md` for rotation schedules and incident response.
 
 ---
 
@@ -503,20 +502,20 @@ See `SECURITY.md` for rotation schedules and incident response.
 When working in this codebase:
 
 1. **Search before creating** - Check if a similar component/pattern exists
-2. **Match existing patterns** - Follow conventions in `components/landing/` for sections
+2. **Match existing patterns** - Follow conventions in `features/landing/ui/` for sections
 3. **Smallest change principle** - Don't refactor unrelated code
 4. **Never commit secrets** - Use placeholders like `your-api-key-here`
 5. **Run lint before finishing** - `npm run lint` must pass
 6. **Test the build** - `npm run build` must succeed
 7. **Preserve security** - Don't weaken CSP, rate limits, or CSRF checks
 8. **Keep error messages generic** - Avoid information disclosure
-9. **Use existing utilities** - `lib/ratelimit.ts`, `lib/csrf.ts`, `lib/analytics.ts`, `lib/logger.ts`, `lib/circuit-breaker.ts`, `lib/fetch-with-timeout.ts`
+9. **Use existing utilities** - `shared/http/ratelimit.ts`, `shared/http/csrf.ts`, `features/analytics/client.ts`, `shared/observability/logger.ts`, `shared/http/circuit-breaker.ts`, `shared/http/fetch-with-timeout.ts`
 10. **Document unknowns** - If uncertain, note assumptions and which files to check
-11. **Clean up temporary files** - If you create any `.md` files for planning, implementation logs, fix summaries, or debugging notes (e.g., in `.planning/` or repo root), **delete them once the task is complete**. Only permanent documentation (like this file, `SECURITY.md`, `DEVELOPMENT.md`, `.planning/codebase/*`) should remain in the repo.
+11. **Clean up temporary files** - If you create any `.md` files for planning, implementation logs, fix summaries, or debugging notes (e.g., in `docs/plans/` or repo root), **delete them once the task is complete**. Only permanent documentation (like this file, `docs/runbooks/SECURITY.md`, `docs/runbooks/DEVELOPMENT.md`, `docs/architecture/*`) should remain in the repo.
 
 ### When Uncertain
 
-- Check `.planning/codebase/` docs for architecture decisions
+- Check `docs/architecture/` docs for architecture decisions
 - Look at similar existing code (e.g., existing API routes, existing sections)
 - Ask rather than guess on security-related changes
 
@@ -569,7 +568,7 @@ Never print secret values. Label all risky suggested commands as "requires autho
 
 ### Build fails with "Module not found"
 
-Check import paths. This repo uses the `@/` alias (maps to project root). Use `@/lib/...`, `@/components/...`, `@/app/...` for cross-directory imports. Same-directory imports still use `./`.
+Check import paths. This repo uses `@/` (project root), `@shared/*` (→ `shared/`), and `@features/*` (→ `features/`) aliases. Use `@shared/...`, `@features/...`, `@/app/...` for cross-directory imports. Same-directory imports still use `./`.
 
 ### Forms fail silently
 
@@ -602,16 +601,16 @@ Check browser DevTools Network tab for response. Common causes:
 
 > For a complete task-based file index, see [`FILE_INDEX.md`](FILE_INDEX.md).
 
-| Need to...               | Look at...                                                |
-| ------------------------ | --------------------------------------------------------- |
-| Find any file by task    | `FILE_INDEX.md`                                           |
-| Add landing section      | `components/landing/LandingPage.tsx`, existing `S##*.tsx` |
-| Modify navigation        | `components/landing/NavSection.tsx`                       |
-| Modify footer            | `components/landing/FooterSection.tsx`                    |
-| Add API endpoint         | `app/api/contact/route.ts` (reference)                    |
-| Change email template    | `lib/emails/invite.ts`                                    |
-| Add analytics event      | `lib/analytics.ts`                                        |
-| Modify design tokens     | `app/globals.css` (CSS vars), `tailwind.config.js`        |
-| Update security headers  | `proxy.ts`                                                |
-| Understand architecture  | `.planning/codebase/ARCHITECTURE.md`                      |
-| Check coding conventions | `.planning/codebase/CONVENTIONS.md`                       |
+| Need to...               | Look at...                                                 |
+| ------------------------ | ---------------------------------------------------------- |
+| Find any file by task    | `FILE_INDEX.md`                                            |
+| Add landing section      | `features/landing/ui/LandingPage.tsx`, existing `S##*.tsx` |
+| Modify navigation        | `features/landing/ui/NavSection.tsx`                       |
+| Modify footer            | `features/landing/ui/FooterSection.tsx`                    |
+| Add API endpoint         | `app/api/contact/route.ts` (reference)                     |
+| Change email template    | `features/invite/emails/invite.ts`                         |
+| Add analytics event      | `features/analytics/client.ts`                             |
+| Modify design tokens     | `app/globals.css` (CSS vars), `tailwind.config.js`         |
+| Update security headers  | `proxy.ts`                                                 |
+| Understand architecture  | `docs/architecture/ARCHITECTURE.md`                        |
+| Check coding conventions | `docs/architecture/CONVENTIONS.md`                         |

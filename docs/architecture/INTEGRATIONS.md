@@ -1,6 +1,6 @@
 # External Integrations
 
-> **Last verified:** 2026-03-15 | **Verified against:** API routes, lib/ utilities, .env.example, Supabase migrations
+> **Last verified:** 2026-05-31 | **Verified against:** API routes, shared/ utilities, .env.example, Supabase migrations
 
 **Analysis Date:** 2025-01-14
 
@@ -9,7 +9,7 @@
 **Email Service:**
 
 - Resend - Transactional emails (contact form, invite emails, admin magic links)
-  - SDK/Client: `resend` npm package v6.9.2
+  - SDK/Client: `resend` npm package (exact version in `docs/versions.md` / `package.json`)
   - Auth: API key in `RESEND_API_KEY` env var
   - From address: `RESEND_FROM` env var (default: `LoveIQ <hello@send.loveiq.org>`)
   - Reply-to: `RESEND_REPLY_TO` env var (default: `hello@loveiq.org`)
@@ -44,7 +44,7 @@
   - Connection: REST API via `SUPABASE_URL` env var
   - Auth: Service role key in `SUPABASE_SERVICE_ROLE_KEY` env var
   - Tables: `survey_submission` (survey responses), `waitlist_user` (historical waitlist signups, retired surface), `rate_limits` (rate limiting), `admin_users` (admin email allowlist), `scoring_result` (survey scoring)
-  - Used in: `app/api/survey/route.ts`, `lib/ratelimit.ts`, `lib/admin/supabase.ts`
+  - Used in: `app/api/survey/route.ts`, `shared/http/ratelimit.ts`, `features/admin/server/supabase.ts`
   - Note: Direct REST API calls, no ORM; also used via `@supabase/supabase-js` + `@supabase/ssr` for admin auth
 
 **File Storage:**
@@ -63,10 +63,10 @@
   - SDK/Client: `@supabase/supabase-js` + `@supabase/ssr`
   - Flow: Admin enters email → magic link sent → callback at `/admin/auth/callback` → session cookie set
   - Access control: `admin_users` table in Supabase acts as email allowlist
-  - Session management: Server-side via `@supabase/ssr` cookie helpers (`lib/admin/supabase-server.ts`, `lib/supabase-middleware.ts`)
-  - Role support: `lib/admin/roles.ts` (role-based access control)
-  - Audit logging: `lib/admin/audit.ts`
-  - Used in: `app/admin/`, `app/api/admin/`, `lib/admin/`
+  - Session management: Server-side via `@supabase/ssr` cookie helpers (`features/admin/server/supabase-server.ts`, `shared/auth/supabase-middleware.ts`)
+  - Role support: `features/admin/server/roles.ts` (role-based access control)
+  - Audit logging: `features/admin/server/audit.ts`
+  - Used in: `app/admin/`, `app/api/admin/`, `features/admin/server/`
 
 **End-User Auth:**
 
@@ -88,7 +88,7 @@
 - Google Analytics 4 - Page views and event tracking
   - Measurement ID: `G-QTYY69L46N` (hardcoded in `app/layout.tsx`)
   - Integration: Google Tag Manager via `next/script`
-  - Custom events via `lib/analytics.ts`:
+  - Custom events via `features/analytics/client.ts`:
     - `cta_click` - CTA button tracking
     - `survey_started` / `survey_progress` / `survey_complete` - Funnel tracking
     - `report_viewed` / `paywall_initiated` / `begin_checkout` - Report engagement (note: `paywall_view` retained for back-compat but no longer fired; user-initiated clicks emit `paywall_initiated`)
@@ -99,20 +99,23 @@
 
 **Logs:**
 
-- pino structured logging (`lib/logger.ts`)
+- pino structured logging (`shared/observability/logger.ts`)
 - @vercel/otel for OpenTelemetry integration
 - Slack notifications for important events
 
 **CI Pipeline:**
 
-- GitHub Actions - 7 workflows in `.github/workflows/`:
+- GitHub Actions - 10 workflows in `.github/workflows/`:
   - `ci.yml` - Build + lint + test
   - `security.yml` - Security scanning (secrets, SAST, dependencies, SBOM)
   - `codeql.yml` - Advanced CodeQL analysis
+  - `docs-truth.yml` - Documentation truth validation
   - `release.yml` - Release workflow
   - `health-monitor.yml` - Health monitoring
   - `lighthouse.yml` - Lighthouse CI
   - `load-test.yml` - Load testing
+  - `visual-regression.yml` - Playwright visual regression (Chromium)
+  - `slack-commits.yml` - Commit Slack notifications
 
 ## Environment Configuration
 

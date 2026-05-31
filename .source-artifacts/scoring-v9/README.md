@@ -19,7 +19,7 @@ V9 is a configuration refresh on top of the existing V4+V5 engine. No engine cod
   - `Approval Seeker` → `Tender Devotee`
   - `Power Orchestrator` → `Authority Conductor`
   - `Exhibitionist Performer` → `Radiant Performer`
-    Same bias values, prototype values, gates — display-name change only. Existing DB rows are migrated in `supabase/migrations/20260514120000_v9_archetype_renames.sql`. Old report URLs continue to resolve via the legacy slug alias in `lib/report/archetypeSlug.ts`.
+    Same bias values, prototype values, gates — display-name change only. Existing DB rows are migrated in `supabase/migrations/20260514120000_v9_archetype_renames.sql`. Old report URLs continue to resolve via the legacy slug alias in `features/report/server/archetypeSlug.ts`.
 
 Row-count deltas (V8 → V9):
 

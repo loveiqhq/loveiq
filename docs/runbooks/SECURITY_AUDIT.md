@@ -35,14 +35,14 @@
 
 ### 1.3 Entry Points
 
-| Entry Point         | Type            | Authentication                     | File Location                         |
-| ------------------- | --------------- | ---------------------------------- | ------------------------------------- |
-| `/api/survey` POST  | Form submission | CSRF + rate-limited + honeypot     | `app/api/survey/route.ts`             |
-| `/api/contact` POST | Form submission | CSRF + reCAPTCHA v2 + rate-limited | `app/api/contact/route.ts`            |
-| `/api/invite` POST  | Form submission | CSRF + rate-limited                | `app/api/invite/route.ts`             |
-| `/api/health` GET   | Health check    | None                               | `app/api/health/route.ts`             |
-| Survey wizard       | Client UI       | None                               | `app/survey/page.tsx`                 |
-| Contact form        | Client UI       | reCAPTCHA widget                   | `components/about/ContactSection.tsx` |
+| Entry Point         | Type            | Authentication                     | File Location                          |
+| ------------------- | --------------- | ---------------------------------- | -------------------------------------- |
+| `/api/survey` POST  | Form submission | CSRF + rate-limited + honeypot     | `app/api/survey/route.ts`              |
+| `/api/contact` POST | Form submission | CSRF + reCAPTCHA v2 + rate-limited | `app/api/contact/route.ts`             |
+| `/api/invite` POST  | Form submission | CSRF + rate-limited                | `app/api/invite/route.ts`              |
+| `/api/health` GET   | Health check    | None                               | `app/api/health/route.ts`              |
+| Survey wizard       | Client UI       | None                               | `app/survey/page.tsx`                  |
+| Contact form        | Client UI       | reCAPTCHA widget                   | `features/about/ui/ContactSection.tsx` |
 
 ---
 
@@ -74,28 +74,28 @@
 
 ### 3.1 Client-Side Security
 
-| Component                    | Finding             | Severity | Evidence                                         |
-| ---------------------------- | ------------------- | -------- | ------------------------------------------------ |
-| No `dangerouslySetInnerHTML` | ✅ SAFE             | N/A      | Grep search: no matches in `app/`, `components/` |
-| No `eval()` usage            | ✅ SAFE             | N/A      | Only `window.setTimeout` in `HeroSection.tsx`    |
-| No localStorage PII          | ✅ SAFE             | N/A      | No sensitive data stored                         |
-| Client-side validation       | ⚠️ DEFENSE-IN-DEPTH | LOW      | Server validates with Zod - OK                   |
+| Component                    | Finding             | Severity | Evidence                                       |
+| ---------------------------- | ------------------- | -------- | ---------------------------------------------- |
+| No `dangerouslySetInnerHTML` | ✅ SAFE             | N/A      | Grep search: no matches in `app/`, `features/` |
+| No `eval()` usage            | ✅ SAFE             | N/A      | Only `window.setTimeout` in `HeroSection.tsx`  |
+| No localStorage PII          | ✅ SAFE             | N/A      | No sensitive data stored                       |
+| Client-side validation       | ⚠️ DEFENSE-IN-DEPTH | LOW      | Server validates with Zod - OK                 |
 
 ### 3.2 Server-Side / API Routes
 
 #### `/api/survey/route.ts`
 
-| Check               | Status             | Evidence                                         |
-| ------------------- | ------------------ | ------------------------------------------------ |
-| Input validation    | ✅ Zod schema      | `z.string().email().max(320)`                    |
-| CSRF protection     | ✅ IMPLEMENTED     | `verifyCsrfToken()` from `lib/csrf.ts`           |
-| Rate limiting       | ✅ Supabase-backed | `checkRateLimit()` from `lib/ratelimit.ts`       |
-| Honeypot            | ✅ Present         | `website: z.string().max(0)`                     |
-| Email normalization | ✅                 | `email.trim().toLowerCase()`                     |
-| SQL injection       | ✅ No raw SQL      | Uses Supabase REST API with `encodeURIComponent` |
-| Email cooldown      | ✅                 | 5-minute per-email cooldown                      |
-| Error messages      | ✅ Generic         | No internal details leaked                       |
-| PII masking (Slack) | ✅                 | Email masked in notifications                    |
+| Check               | Status             | Evidence                                           |
+| ------------------- | ------------------ | -------------------------------------------------- |
+| Input validation    | ✅ Zod schema      | `z.string().email().max(320)`                      |
+| CSRF protection     | ✅ IMPLEMENTED     | `verifyCsrfToken()` from `shared/http/csrf.ts`     |
+| Rate limiting       | ✅ Supabase-backed | `checkRateLimit()` from `shared/http/ratelimit.ts` |
+| Honeypot            | ✅ Present         | `website: z.string().max(0)`                       |
+| Email normalization | ✅                 | `email.trim().toLowerCase()`                       |
+| SQL injection       | ✅ No raw SQL      | Uses Supabase REST API with `encodeURIComponent`   |
+| Email cooldown      | ✅                 | 5-minute per-email cooldown                        |
+| Error messages      | ✅ Generic         | No internal details leaked                         |
+| PII masking (Slack) | ✅                 | Email masked in notifications                      |
 
 #### `/api/contact/route.ts`
 
@@ -127,14 +127,14 @@
 
 ### 3.4 Third-Party Integrations
 
-| Service          | Security Status         | Concerns                                                  |
-| ---------------- | ----------------------- | --------------------------------------------------------- |
-| Supabase         | ✅ Secrets server-only  | RLS policy status unknown                                 |
-| Resend           | ✅ Secrets server-only  | Email templates properly escaped (`lib/emails/invite.ts`) |
-| Slack webhooks   | ✅ Secrets server-only  | PII masked in survey, contact, and payment notifications  |
-| reCAPTCHA        | ✅ Properly verified    | No score threshold (v2 checkbox)                          |
-| Google Analytics | ✅ Public ID acceptable | No PII should be sent                                     |
-| CookieYes        | ✅ External script      | Consent banner integration                                |
+| Service          | Security Status         | Concerns                                                              |
+| ---------------- | ----------------------- | --------------------------------------------------------------------- |
+| Supabase         | ✅ Secrets server-only  | RLS policy status unknown                                             |
+| Resend           | ✅ Secrets server-only  | Email templates properly escaped (`features/invite/emails/invite.ts`) |
+| Slack webhooks   | ✅ Secrets server-only  | PII masked in survey, contact, and payment notifications              |
+| reCAPTCHA        | ✅ Properly verified    | No score threshold (v2 checkbox)                                      |
+| Google Analytics | ✅ Public ID acceptable | No PII should be sent                                                 |
+| CookieYes        | ✅ External script      | Consent banner integration                                            |
 
 ### 3.5 Security Headers (`proxy.ts`)
 
@@ -169,15 +169,15 @@ _None currently open — CSP nonce implementation still recommended for defense-
 #### RISK-H1: In-Memory Rate Limiting — IMPLEMENTED ✅
 
 - **Status:** RESOLVED (2026-01)
-- **Fix:** Supabase-backed persistent rate limiting in `lib/ratelimit.ts`
+- **Fix:** Supabase-backed persistent rate limiting in `shared/http/ratelimit.ts`
 - **Verification:** Rate limits persist across server restarts/redeploys
 
 #### RISK-H2: X-Forwarded-For Header Spoofing — MITIGATED ✅
 
 - **Status:** RESOLVED (2026-03)
-- **Location:** `lib/ratelimit.ts`
+- **Location:** `shared/http/ratelimit.ts`
 - **Fix:** `getClientIp()` trusts only `x-real-ip`, which Vercel sets to the actual client IP and strips any client-provided value. `X-Forwarded-For` is intentionally ignored (attacker-controlled).
-- **Verification:** Unit tests in `__tests../shared/http/ratelimit.test.ts` confirm header trust behavior.
+- **Verification:** Unit tests in `shared/http/tests/ratelimit.test.ts` confirm header trust behavior.
 
 #### RISK-H3: npm Dependency Vulnerability — RESOLVED ✅
 
@@ -202,7 +202,7 @@ _None currently open — CSP nonce implementation still recommended for defense-
 #### RISK-M3: No CSRF Tokens on State-Changing Endpoints — IMPLEMENTED ✅
 
 - **Status:** RESOLVED (2026-01)
-- **Fix:** Double-submit cookie pattern in `lib/csrf.ts`, cookie set by `proxy.ts`
+- **Fix:** Double-submit cookie pattern in `shared/http/csrf.ts`, cookie set by `proxy.ts`
 - **Verification:** All form endpoints verify CSRF token
 
 #### RISK-M4: Build Artifact in Git (`tmp_index.js`) — IMPLEMENTED ✅
@@ -213,7 +213,7 @@ _None currently open — CSP nonce implementation still recommended for defense-
 #### RISK-M5: No Request Timeout on External Calls — IMPLEMENTED ✅
 
 - **Status:** RESOLVED (2026-01)
-- **Fix:** `lib/fetch-with-timeout.ts` provides fetch wrapper with configurable timeout
+- **Fix:** `shared/http/fetch-with-timeout.ts` provides fetch wrapper with configurable timeout
 
 ### LOW Risks
 

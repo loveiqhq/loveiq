@@ -37,7 +37,7 @@ All configuration files ensure AI assistants:
    - No `process.env.*` in client code
 
 4. **Reference documentation**
-   - `SECURITY.md` - Security policy
+   - `docs/runbooks/SECURITY.md` - Security policy
    - `.github/SECURITY_CHECKLIST.md` - Developer checklist
    - `.github/workflows/security.yml` - Security scanning workflow
    - `.github/SECURITY_QUICK_REFERENCE.md` - Quick reference
@@ -156,7 +156,7 @@ All AI assistants are configured to avoid:
 All AI assistants reference:
 
 1. **`CLAUDE.md`** - Main codebase instructions
-2. **`SECURITY.md`** - Security policy and incident response
+2. **`docs/runbooks/SECURITY.md`** - Security policy and incident response
 3. **`.github/SECURITY_CHECKLIST.md`** - Pre-commit security checklist
 4. **`.github/SECURITY_QUICK_REFERENCE.md`** - Quick reference card
 
@@ -165,7 +165,7 @@ All AI assistants reference:
 When updating security requirements:
 
 1. Update `CLAUDE.md` (primary source)
-2. Update `SECURITY.md` if policy changes
+2. Update `docs/runbooks/SECURITY.md` if policy changes
 3. Update AI assistant configs if needed:
    - `.cursorrules`
    - `.github/copilot-instructions.md`
@@ -269,6 +269,6 @@ If you're using an AI assistant not listed here:
 
 ---
 
-**Last updated:** 2026-03-15
+**Last updated:** 2026-05-31
 **Configuration files:** 7 total (including CLAUDE.md)
 **Status:** ✅ All AI assistants configured

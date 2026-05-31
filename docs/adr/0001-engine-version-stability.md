@@ -18,7 +18,7 @@ identify the engine code path. It currently stores `"v4+v5"` for every row
 since the V5 path was added. Two downstream consumers depend on this exact
 literal:
 
-- `lib/admin/metric-library.ts:86` filters rows by `engine_version='v4+v5'`
+- `features/admin/server/metric-library.ts:86` filters rows by `engine_version='v4+v5'`
 - `app/api/admin/scoring/comparison/route.ts:79` does the same
 
 If `engine_version` were bumped to `"v9"` on V9 cutover, those queries would

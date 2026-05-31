@@ -7,7 +7,7 @@ This file configures GitHub Copilot to follow the security and coding standards 
 Before suggesting code, understand:
 
 - `CLAUDE.md` - Codebase architecture and conventions
-- `SECURITY.md` - Security policy and requirements
+- `docs/runbooks/SECURITY.md` - Security policy and requirements
 - `.github/SECURITY_CHECKLIST.md` - Security checklist for all changes
 - `.github/SECURITY_QUICK_REFERENCE.md` - Quick security reference
 
@@ -27,7 +27,7 @@ All POST/PUT/DELETE/PATCH routes require:
 1. **CSRF Verification**
 
    ```typescript
-   import { verifyCsrfToken } from "@/lib/csrf";
+   import { verifyCsrfToken } from "@shared/http/csrf";
 
    if (!(await verifyCsrfToken(request))) {
      return NextResponse.json({ error: "Invalid request." }, { status: 403 });
@@ -37,7 +37,7 @@ All POST/PUT/DELETE/PATCH routes require:
 2. **Rate Limiting**
 
    ```typescript
-   import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
+   import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 
    const ip = getClientIp(request);
    const rateLimit = await checkRateLimit(ip, {
@@ -95,9 +95,9 @@ All POST/PUT/DELETE/PATCH routes require:
 ```typescript
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { verifyCsrfToken } from "@/lib/csrf";
-import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
-import logger from "@/lib/logger";
+import { verifyCsrfToken } from "@shared/http/csrf";
+import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
+import logger from "@shared/observability/logger";
 
 const schema = z.object({
   email: z.string().email().max(320),
@@ -175,11 +175,11 @@ export default ComponentName;
 
 ## 📁 File Organization
 
-- Landing sections: `components/landing/S##Name.tsx`
+- Landing sections: `features/landing/ui/S##Name.tsx`
 - API routes: `app/api/[name]/route.ts`
-- Utilities: `lib/[name].ts`
+- Cross-cutting utilities: `shared/[area]/[name].ts`
 - Pages: `app/[name]/page.tsx`
-- Components: `components/[category]/ComponentName.tsx`
+- Feature components: `features/[feature]/ui/ComponentName.tsx`
 
 **Before creating new files:** Check if similar functionality exists.
 
@@ -265,7 +265,7 @@ try {
 
 **When suggesting fetch calls:**
 
-- Use `fetchWithTimeout` from `@/lib/fetch-with-timeout`
+- Use `fetchWithTimeout` from `@shared/http/fetch-with-timeout`
 - Always include timeout (default: 10 seconds)
 - Handle errors gracefully
 - Don't expose internal errors to users
@@ -273,7 +273,7 @@ try {
 **Example:**
 
 ```typescript
-import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
+import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 
 const response = await fetchWithTimeout(url, {
   method: "POST",
@@ -287,8 +287,8 @@ const response = await fetchWithTimeout(url, {
 
 For architectural decisions, check:
 
-- `.planning/codebase/ARCHITECTURE.md`
-- `.planning/codebase/CONVENTIONS.md`
+- `docs/architecture/ARCHITECTURE.md`
+- `docs/architecture/CONVENTIONS.md`
 - Existing code in similar areas
 
 ## 🤖 AI-Specific Guidelines

@@ -21,4 +21,4 @@
 **Related:**
 
 - `app/api/cron/invite-reminders/route.ts` — uses reminder templates from `emails/`.
-- `lib/emails/` — other unrelated transactional templates (admin, report, survey-paused). To be subgrouped per-feature in a later phase.
+- Other features' transactional templates → their own `features/<name>/server/emails/` (admin, report, survey).

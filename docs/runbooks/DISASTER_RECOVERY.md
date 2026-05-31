@@ -133,7 +133,7 @@ F-19 from the audit lives here as a documented operational requirement.)
 - Supabase support: dashboard → Support (Pro plan = 1 business day SLA)
 - Vercel support: dashboard → Help (Pro plan = email, response within 24 h)
 - Stripe support: dashboard → Get help (24/7 chat for live-mode issues)
-- Resend support: status.resend.com + support@resend.com
+- Resend support: status.resend.com + <support@resend.com>
 
 ## 9. Retention policy — audit trails
 

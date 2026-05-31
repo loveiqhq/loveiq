@@ -131,4 +131,4 @@ It also checks live Supabase reachability, so invalid credentials or a down Supa
 - [SECURITY.md](SECURITY.md)
 - [docs/api.md](../api.md)
 - [docs/admin-api.md](../admin-api.md)
-- [.planning/codebase/TESTING.md](../architecture/TESTING.md)
+- [docs/architecture/TESTING.md](../architecture/TESTING.md)

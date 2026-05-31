@@ -10,13 +10,13 @@ Authenticated admin page routes.
 
 ## What does not belong here
 
-- Dashboard UI implementations: use [`components/admin/AGENT_README.md`](../../components/admin/AGENT_README.md)
-- Admin API handlers: use [`../api/admin/AGENT_README.md`](../api/admin/AGENT_README.md)
-- Server-side admin data assembly: use [`../../lib/admin/AGENT_README.md`](../../lib/admin/AGENT_README.md)
+- Dashboard UI implementations: use [`features/admin/ui/AGENT_README.md`](../../features/admin/ui/AGENT_README.md)
+- Admin API handlers: use [`app/api/admin/AGENT_README.md`](../api/admin/AGENT_README.md)
+- Server-side admin data assembly: use [`features/admin/server/AGENT_README.md`](../../features/admin/server/AGENT_README.md)
 
 ## How to navigate
 
-Start with the domain doc in [`../../docs/admin/domains/AGENT_README.md`](../../docs/admin/domains/AGENT_README.md), then jump back into this route tree only for the page wrapper you need.
+Start with the domain doc in [`docs/admin/domains/AGENT_README.md`](../../docs/admin/domains/AGENT_README.md), then jump back into this route tree only for the page wrapper you need.
 
 | Domain                                | Page routes to start with                                                                                                                                                                                                                                                                                                                                     | Canonical lookup doc                                                                 |
 | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |

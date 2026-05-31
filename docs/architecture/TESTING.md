@@ -1,6 +1,6 @@
 # Testing Patterns
 
-> **Last verified:** 2026-03-15 | **Verified against:** vitest.config.ts, playwright.config.ts, **tests**/, e2e/ spec files
+> **Last verified:** 2026-05-31 | **Verified against:** vitest.config.ts, playwright.config.ts, `__tests__/`, colocated `*/tests/`, e2e/ spec files
 
 ## Test Framework
 
@@ -17,40 +17,25 @@ npm run test:coverage # Run tests with coverage report
 
 ## Test File Organization
 
-**Location:** `__tests__/` (mirrors source structure)
+**Convention:** tests are **colocated** with their source under a `tests/` folder. Cross-cutting suites live in `__tests__/`.
 
-**Naming:** `*.test.ts`
+**Naming:** `*.test.ts` / `*.test.tsx`
 
 **Structure:**
 
-```
-__tests__/
-├── api/
-│   ├── contact-validation.test.ts     # Contact form Zod schema tests
-│   ├── admin-export.test.ts           # Admin CSV export tests
-│   ├── admin-login.test.ts            # Admin login tests
-│   ├── admin-stats.test.ts            # Admin dashboard stats tests
-│   ├── admin-submission-detail.test.ts # Admin submission detail tests
-│   ├── admin-submissions.test.ts      # Admin submission list tests
-│   ├── admin-survey-status.test.ts    # Admin survey status tests
-│   ├── admin-product-kpis.test.ts     # Admin product KPIs tests
-│   ├── health.test.ts                 # Health check tests
-│   ├── logout.test.ts                 # Logout tests
-│   └── survey-tracking.test.ts        # Survey tracking tests
-├── lib/
-│   ├── analytics.test.ts             # GA4 event tracking tests
-│   ├── csrf.test.ts                  # CSRF token verification tests
-│   ├── csrf-body.test.ts             # CSRF body verification tests
-│   ├── fetch-with-timeout.test.ts    # Fetch wrapper timeout tests
-│   ├── ratelimit.test.ts             # IP extraction + rate limit tests
-│   ├── ratelimit-full.test.ts        # Full rate limit flow tests
-│   ├── circuit-breaker.test.ts       # Circuit breaker tests
-│   ├── admin/auth.test.ts            # Admin auth tests
-│   ├── scoring/                      # Scoring engine tests (32 tests)
-│   └── emails/                       # Email template + XSS prevention tests
-├── components/survey/hooks/          # Survey hook tests
-├── proxy.test.ts                     # Middleware security header tests
-└── fixtures/                         # Shared test data
+```text
+features/<feature>/tests/      # Feature unit/component tests (survey, scoring, admin, checkout, …)
+shared/<area>/tests/           # Shared-module tests (http, observability, url, emails, auth, …)
+__tests__/                     # Cross-cutting suites
+├── api/health.test.ts         # Health endpoint
+├── app/                       # globals.css report theme + typography invariants
+├── contracts/                 # Supabase schema/RPC contracts
+├── data/                      # Generated report-*.ts integrity
+├── integration/               # Payment-webhook idempotency, RLS boundary (npm run test:integration)
+├── scripts/                   # Data-generation script tests
+├── security/                  # Premium-content bundle leakage guard
+├── __fixtures__/              # Shared test fixtures (MSW server, survey)
+└── setup.ts                   # Global Vitest setup
 ```
 
 ## Test Structure
@@ -59,7 +44,7 @@ __tests__/
 
 **Patterns:**
 
-- Test file mirrors source file path (`lib/csrf.ts` -> `__tests../shared/http/csrf.test.ts`)
+- Test file colocated with source (e.g. `shared/http/csrf.ts` → `shared/http/tests/csrf.test.ts`)
 - Edge cases and error paths are tested explicitly
 - Security-relevant tests (XSS, injection) are included
 
@@ -77,7 +62,8 @@ __tests__/
 ## Coverage
 
 **Provider:** V8
-**Thresholds:** Lines 60% (enforced in vitest.config.ts)
+**Thresholds (vitest.config.ts):** lines 60% / statements 60% / functions 65% / branches 50%
+**Scope:** `features/**/{server,logic}`, `features/**/client.ts`, `shared/**`, `app/api/**`, `proxy.ts` (admin + cron excluded)
 **Report formats:** text, lcov
 
 ## Test Types
@@ -101,23 +87,28 @@ npx playwright show-report # Open last HTML report
 ```
 
 **Browser Projects:**
-| Name | Device | Viewport |
-|------|--------|----------|
-| Desktop Chrome | Desktop Chrome | 1280×720 |
+
+| Name            | Device          | Viewport |
+| --------------- | --------------- | -------- |
+| Desktop Chrome  | Desktop Chrome  | 1280×720 |
 | Desktop Firefox | Desktop Firefox | 1280×720 |
-| Desktop Safari | Desktop Safari | 1280×720 |
-| Mobile Chrome | Pixel 7 | 412×915 |
-| Mobile Safari | iPhone 15 Pro | 393×852 |
+| Desktop Safari  | Desktop Safari  | 1280×720 |
+| Mobile Chrome   | Pixel 7         | 412×915  |
+| Mobile Safari   | iPhone 15 Pro   | 393×852  |
 
 **Test Files:**
 
-```
+```text
 e2e/
-├── smoke.spec.ts        # Landing, nav, footer, security headers, 404, API
-├── navigation.spec.ts   # Desktop nav links + mobile hamburger
-├── interactions.spec.ts # FAQ accordion, CTA hrefs, footer links
-├── pages.spec.ts        # Static routes: status 200 + title check
-└── a11y.spec.ts         # Accessibility audits via axe-core
+├── smoke.spec.ts                # Landing, nav, footer, security headers, 404, API
+├── navigation.spec.ts           # Desktop nav links + mobile hamburger
+├── interactions.spec.ts         # FAQ accordion, CTA hrefs, footer links
+├── pages.spec.ts                # Static routes: status 200 + title check
+├── a11y.spec.ts                 # Accessibility audits via axe-core
+├── admin.spec.ts                # Admin login + dashboard flows
+├── survey.spec.ts               # Survey wizard end-to-end
+├── report-pricing-modal.spec.ts # Report paywall pricing modal
+└── visual-regression.spec.ts    # Screenshot diffs (the spec CI runs)
 ```
 
 **Viewport breakpoints:**
@@ -143,13 +134,13 @@ test.beforeEach(async ({ page }) => {
 - `reuseExistingServer: !process.env.CI` — reuses running local server
 
 **Pre-push hook rule:**
-E2E tests must NOT be in pre-push hooks. Pre-push runs only `npm test` (Vitest). E2E runs in CI via the `browser-tests` job in `.github/workflows/security.yml`.
+E2E tests must NOT be in pre-push hooks. Pre-push runs only `npm test` (Vitest). The full E2E suite (`npm run test:e2e`, 5 browser projects) is run locally.
 
-**CI job:** `browser-tests` in `.github/workflows/security.yml`
+**CI job:** `.github/workflows/visual-regression.yml` ("Playwright visual regression")
 
-- Installs engines: `npx playwright install --with-deps chromium firefox webkit`
-- Uploads HTML report as artifact (14-day retention)
+- Runs `npm run test:visual` (Chromium only) against `e2e/visual-regression.spec.ts`
+- Installs Playwright Chromium and uploads the HTML report as an artifact
 
 ---
 
-_Last updated: 2026-02-18_
+_Last updated: 2026-05-31_

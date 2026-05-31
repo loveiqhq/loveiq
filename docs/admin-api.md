@@ -1,8 +1,8 @@
 # Admin API Reference
 
 > Owner: CODEOWNERS default
-> Last verified: 2026-04-05
-> Verified against: `app/api/admin/**/route.ts`, `lib/admin/roles.ts`
+> Last verified: 2026-05-31
+> Verified against: `app/api/admin/**/route.ts`, `features/admin/server/roles.ts`
 
 This document catalogs the authenticated admin API surface under `/api/admin/*`.
 
@@ -17,7 +17,7 @@ Admin lookup by product domain lives in [docs/admin/AGENT_README.md](admin/AGENT
 - Some write routes apply stricter role checks by method or action payload.
 - `/api/admin/login` is the public entrypoint for requesting an allowlisted magic link.
 
-Canonical role hierarchy from `lib/admin/roles.ts`:
+Canonical role hierarchy from [`features/admin/server/roles.ts`](../features/admin/server/roles.ts):
 
 - `viewer`
 - `editor`

@@ -1,8 +1,8 @@
 # Security Checklist for Developers
 
 > Owner: CODEOWNERS default
-> Last verified: 2026-04-05
-> Verified against: `SECURITY.md`, `proxy.ts`, `lib/csrf.ts`, `lib/ratelimit.ts`, `app/api/**`, `.env.example`
+> Last verified: 2026-05-31
+> Verified against: `docs/runbooks/SECURITY.md`, `proxy.ts`, `shared/http/csrf.ts`, `shared/http/ratelimit.ts`, `app/api/**`, `.env.example`
 
 Use this checklist when making changes to ensure security compliance.
 
@@ -63,7 +63,7 @@ export async function POST(request: Request) {
 
 ## Client Components
 
-When working with React components (`components/**`, `app/**/page.tsx`):
+When working with React components (`features/*/ui/**`, `app/**/page.tsx`):
 
 - [ ] No direct `process.env` access (only `NEXT_PUBLIC_*`)
 - [ ] No `dangerouslySetInnerHTML` (use proper escaping)
@@ -97,9 +97,9 @@ When adding or updating dependencies:
 When adding new environment variables:
 
 - [ ] Added to `.env.example` with description
-- [ ] Documented in `DEVELOPMENT.md` and `SECURITY.md` when security-sensitive
+- [ ] Documented in `docs/runbooks/DEVELOPMENT.md` and `docs/runbooks/SECURITY.md` when security-sensitive
 - [ ] Server-only secrets NOT prefixed with `NEXT_PUBLIC_`
-- [ ] Updated `SECURITY.md` if it's a secret (rotation schedule)
+- [ ] Updated `docs/runbooks/SECURITY.md` if it's a secret (rotation schedule)
 - [ ] Build succeeds without the variable (graceful degradation)
 
 ## Pull Requests
@@ -169,14 +169,14 @@ If you discover a security issue:
 
 1. **Do NOT create a public GitHub issue**
 2. Report to security team immediately
-3. Follow `SECURITY.md` incident response procedures
+3. Follow `docs/runbooks/SECURITY.md` incident response procedures
 4. Rotate affected secrets immediately
 5. Review logs for indicators of compromise
 
 ## Resources
 
-- `SECURITY.md` - Main security guide
-- `DEVELOPMENT.md` - Local setup and env var reference
+- `docs/runbooks/SECURITY.md` - Main security guide
+- `docs/runbooks/DEVELOPMENT.md` - Local setup and env var reference
 - `.github/workflows/security.yml` - CI/CD security workflow
 - `docs/api.md` and `docs/admin-api.md` - API behavior reference
 
@@ -199,5 +199,5 @@ npm audit
 npx @cyclonedx/cyclonedx-npm --output-file sbom.json
 
 # Search for potential secrets
-rg -n --glob "*.ts" "(api[_-]key|secret|password)" app lib
+rg -n --glob "*.ts" "(api[_-]key|secret|password)" app shared features
 ```
