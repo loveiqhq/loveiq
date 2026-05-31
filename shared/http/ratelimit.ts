@@ -202,15 +202,61 @@ export async function checkCooldown(
 }
 
 /**
- * Get client IP address from request headers.
+ * Collapse an IPv6 address to a stable /64-prefix bucket key.
  *
- * Trusts ONLY x-real-ip, which Vercel sets to the actual client IP
- * and strips any client-provided x-real-ip header (platform guarantee).
+ * R-08 correctness fix: a naive `addr.split(":").slice(0,4)` is WRONG for
+ * RFC-5952 canonical addresses (the form Vercel emits) because `::`
+ * zero-compression means the first four colon-separated groups are NOT the
+ * first four hextets. e.g. `2001:db8::dead:beef` and `2001:db8::cafe:1` share
+ * a /64, but the naive slice yields different keys — so the collapse silently
+ * fails and a /64 rotation still evades the limit (defeating the whole point).
+ * We expand `::` to the full 8-hextet form first, then take the first four and
+ * normalise each (strip leading zeros). IPv4-mapped forms (`::ffff:1.2.3.4`)
+ * key on the embedded dotted-quad so they don't all collapse into one bucket.
+ */
+function ipv6Slash64Key(addr: string): string {
+  const lower = addr.toLowerCase();
+  // IPv4-mapped / embedded IPv4 (e.g. ::ffff:203.0.113.5). Vercel normally
+  // sends plain IPv4 for v4 clients, so this is a safety net — bucket on the
+  // dotted-quad tail rather than collapsing every mapped client to one key.
+  if (lower.includes(".")) {
+    return lower.slice(lower.lastIndexOf(":") + 1);
+  }
+  let groups: string[];
+  if (lower.includes("::")) {
+    const [head, tail] = lower.split("::");
+    const headGroups = head ? head.split(":") : [];
+    const tailGroups = tail ? tail.split(":") : [];
+    const fill = Math.max(0, 8 - headGroups.length - tailGroups.length);
+    groups = [...headGroups, ...new Array<string>(fill).fill("0"), ...tailGroups];
+  } else {
+    groups = lower.split(":");
+  }
+  const prefix: string[] = [];
+  for (let i = 0; i < 4; i++) {
+    const n = parseInt(groups[i] ?? "0", 16);
+    prefix.push(Number.isNaN(n) ? "0" : n.toString(16));
+  }
+  return prefix.join(":") + "::/64";
+}
+
+/**
+ * Get client IP for rate-limit fingerprinting.
+ *
+ * Trusts ONLY x-real-ip, which Vercel sets to the actual client IP and
+ * strips any client-provided x-real-ip header (platform guarantee).
  * X-Forwarded-For is intentionally ignored — it is attacker-controlled
  * and would allow rate-limit key spoofing if used.
+ *
+ * R-08: IPv6 is collapsed to its /64 prefix (every consumer IPv6 allocation IS
+ * a /64, so per-/128 keying lets an attacker rotate low-order bits to evade
+ * limits). IPv4 is keyed on the full /32 (the cost boundary there).
  *
  * @see https://vercel.com/docs/edge-network/headers#x-real-ip
  */
 export function getClientIp(request: Request): string {
-  return request.headers.get("x-real-ip") ?? "unknown";
+  const raw = request.headers.get("x-real-ip");
+  if (!raw) return "unknown";
+  const addr = raw.trim();
+  return addr.includes(":") ? ipv6Slash64Key(addr) : addr;
 }

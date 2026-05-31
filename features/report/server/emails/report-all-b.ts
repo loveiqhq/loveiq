@@ -63,7 +63,7 @@ export function reportAllBEmail({
           <p style="margin:0 0 2px 0; font-family:${EMAIL_FONT}; font-size:20px; font-weight:600; line-height:1.4; color:#000000;">
             ${escapeHtml(name)}
           </p>
-          <a href="${escapeHtml(url)}" target="_blank" style="font-family:${EMAIL_FONT}; font-size:16px; line-height:1.55; color:#1a73e8; text-decoration:underline; word-break:break-all;">
+          <a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" style="font-family:${EMAIL_FONT}; font-size:16px; line-height:1.55; color:#1a73e8; text-decoration:underline; word-break:break-all;">
             ${escapeHtml(url)}
           </a>
         </td>

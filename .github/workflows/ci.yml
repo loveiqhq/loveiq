@@ -27,6 +27,16 @@ jobs:
       - run: npm run lint
       - run: npx prettier --check .
       - run: npx tsc --noEmit
+      # R-07: migration-safety lint. Catches non-CONCURRENTLY index creates,
+      # NOT-NULL adds without default, etc. on new migrations.
+      - run: npm run check:migrations
+      # R-01: dependency audit gate. High-severity CVEs in production deps
+      # block the merge. Dependabot PRs skip the gate so a bot-opened PR
+      # whose entire purpose is to fix a CVE doesn't get blocked by the
+      # very CVE it's fixing — human reviewer still sees the diff.
+      - name: npm audit (high severity blocker)
+        if: github.actor != 'dependabot[bot]'
+        run: npm audit --audit-level=high --production
 
   test:
     name: Test
@@ -119,9 +129,14 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           fetch-depth: 0
-      - run: bash scripts/check-docs-impact.sh origin/${{ github.base_ref }}
+      # Pass github.base_ref via env (not inline in the run script) so a
+      # crafted branch name can't break out of the shell context. Same for
+      # github.event.pull_request.body which is already correctly enved.
+      - name: Check docs impact
         env:
+          BASE_REF: ${{ github.base_ref }}
           PR_BODY: ${{ github.event.pull_request.body }}
+        run: bash scripts/check-docs-impact.sh "origin/${BASE_REF}"
 
   smoke-test:
     name: Smoke Test (Production)

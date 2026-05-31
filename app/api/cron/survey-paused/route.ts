@@ -49,6 +49,11 @@ const PAUSE_AGE_MAX_HOURS = 24;
 const COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000;
 const CANDIDATE_LIMIT = 100;
 
+// P-04: per-request SIGTERM flag — set by the listener installed in GET,
+// cleared in finally. Stops the candidate loop cleanly when Vercel rolls
+// the Lambda mid-cron.
+let terminated = false;
+
 let _resend: Resend | null = null;
 function getResend(): Resend | null {
   const key = process.env.RESEND_API_KEY;
@@ -127,6 +132,14 @@ export async function GET(request: Request) {
   const startMs = Date.now();
   let cronError: string | undefined;
 
+  // P-04: one-shot SIGTERM listener.
+  terminated = false;
+  const onSigterm = () => {
+    terminated = true;
+    logger.warn("survey-paused: SIGTERM received");
+  };
+  process.once("SIGTERM", onSigterm);
+
   const siteUrl = getEmailSiteUrl();
   const resumeUrl = `${siteUrl}/survey`;
 
@@ -144,6 +157,13 @@ export async function GET(request: Request) {
     summary.candidates = candidates.length;
 
     for (const row of candidates) {
+      if (terminated) {
+        logger.warn(
+          { processed: summary.sent + summary.errors, total: candidates.length },
+          "survey-paused: SIGTERM received mid-loop; exiting"
+        );
+        break;
+      }
       const answers = (row.answers ?? {}) as SurveyAnswers;
       const { email, firstName } = getSurveyContactInfo(answers);
       if (!email) continue;
@@ -186,6 +206,10 @@ export async function GET(request: Request) {
             text: tpl.text,
             headers: {
               "X-LoveIQ-Variant": variant,
+              // P-06: dedicated list identity for per-list reputation in
+              // Gmail/Outlook; Precedence:bulk suppresses auto-responders.
+              "List-ID": "LoveIQ Survey-Paused <survey-paused.send.loveiq.org>",
+              Precedence: "bulk",
               ...(unsubscribeUrl && {
                 "List-Unsubscribe": `<${unsubscribeUrl}>`,
                 "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
@@ -221,6 +245,7 @@ export async function GET(request: Request) {
     cronError = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
   } finally {
+    process.off("SIGTERM", onSigterm);
     await trackDuration();
     await recordCronRun("survey-paused", startMs, cronError ? "error" : "success", cronError);
   }

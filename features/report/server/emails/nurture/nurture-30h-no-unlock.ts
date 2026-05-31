@@ -21,7 +21,9 @@ export function nurture30hNoUnlockEmail({
 }: Nurture30hNoUnlockParams) {
   const safeFirstName = firstName?.trim() ? escapeHtml(firstName.trim()) : "there";
   const safePromoCode = escapeHtml(promoCode);
-  const subject = `Your ${percentOff}% LoveIQ unlock code expires in 24 hours`;
+  // T-07: ≤50 chars to avoid mobile truncation. Original was 47 chars —
+  // right at the iOS edge. Tighten to give Apple Mail's "expand" room.
+  const subject = `Your ${percentOff}% LoveIQ code expires in 24h`;
   const previewText = `Use code ${promoCode} to save ${percentOff}% on your full report.`;
 
   return renderNurtureEmail({

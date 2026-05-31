@@ -43,7 +43,7 @@ export function inviteReminder2Email({
       </p>
       <p style="margin:0; font-family:${EMAIL_FONT}; font-size:17px; line-height:1.55; color:#000000;">
         If there&rsquo;s someone in your life you think deserves to know &mdash; <strong style="font-weight:700;">refer a friend and let them find out for themselves.</strong>
-        &nbsp;<a href="${safeCtaUrl}" target="_blank" style="color:#1a73e8; text-decoration:underline;">${safeCtaUrl}</a>
+        &nbsp;<a href="${safeCtaUrl}" target="_blank" rel="noopener noreferrer" style="color:#1a73e8; text-decoration:underline;">${safeCtaUrl}</a>
       </p>
     </td>
   </tr>

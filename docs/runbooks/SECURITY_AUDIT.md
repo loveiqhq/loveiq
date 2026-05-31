@@ -138,15 +138,15 @@
 
 ### 3.5 Security Headers (`proxy.ts`)
 
-| Header                 | Value                                 | Status                           |
-| ---------------------- | ------------------------------------- | -------------------------------- |
-| X-Frame-Options        | `DENY`                                | ✅ Clickjacking protected        |
-| X-Content-Type-Options | `nosniff`                             | ✅ MIME-sniffing prevented       |
-| Referrer-Policy        | `strict-origin-when-cross-origin`     | ✅ Good                          |
-| HSTS                   | `max-age=15768000; includeSubDomains` | ✅ 6 months (perf-audit A18)     |
-| frame-ancestors        | `'none'`                              | ✅ Extra clickjacking protection |
-| base-uri               | `'self'`                              | ✅ Base tag injection prevented  |
-| form-action            | `'self'`                              | ✅ Form target restricted        |
+| Header                 | Value                                          | Status                           |
+| ---------------------- | ---------------------------------------------- | -------------------------------- |
+| X-Frame-Options        | `DENY`                                         | ✅ Clickjacking protected        |
+| X-Content-Type-Options | `nosniff`                                      | ✅ MIME-sniffing prevented       |
+| Referrer-Policy        | `strict-origin-when-cross-origin`              | ✅ Good                          |
+| HSTS                   | `max-age=63072000; includeSubDomains; preload` | ✅ 2 yr + preload (R-12)         |
+| frame-ancestors        | `'none'`                                       | ✅ Extra clickjacking protection |
+| base-uri               | `'self'`                                       | ✅ Base tag injection prevented  |
+| form-action            | `'self'`                                       | ✅ Form target restricted        |
 
 ### 3.6 Supply Chain / Dependencies
 

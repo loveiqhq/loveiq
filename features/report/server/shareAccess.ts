@@ -111,9 +111,10 @@ export async function resolveOwnerFromAccessToken(
   if (!REPORT_ACCESS_TOKEN_REGEX.test(token)) return null;
 
   // revoked_at=is.null filters out tokens flagged for revocation by ops
-  // (e.g. after a leak). Backed by partial index idx_report_access_token_active_token.
+  // (e.g. after a leak). expires_at filter (F-17) honors optional per-token
+  // expiry; NULL = permanent (default). Backed by idx_report_access_token_active.
   const tokenRes = await supabaseFetch(
-    `/rest/v1/report_access_token?token=eq.${encodeURIComponent(token)}&revoked_at=is.null&select=survey_submission_id&limit=1`
+    `/rest/v1/report_access_token?token=eq.${encodeURIComponent(token)}&revoked_at=is.null&or=(expires_at.is.null,expires_at.gt.${encodeURIComponent(new Date().toISOString())})&select=survey_submission_id&limit=1`
   );
   if (!tokenRes.ok) return null;
   const tokenRows = (await tokenRes.json()) as Array<{ survey_submission_id: number | null }>;

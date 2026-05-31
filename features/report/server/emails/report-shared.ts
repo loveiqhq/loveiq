@@ -72,7 +72,7 @@ export function reportSharedEmail({
   <tr>
     <td align="center" style="padding:0 32px 24px;">
       <p style="margin:0; font-family:${EMAIL_FONT}; font-size:13px; line-height:1.55; color:#1a73e8; word-break:break-all; text-align:center;">
-        <a href="${escapeHtml(shareUrl)}" target="_blank" style="color:#1a73e8; text-decoration:underline;">${escapeHtml(shareUrl)}</a>
+        <a href="${escapeHtml(shareUrl)}" target="_blank" rel="noopener noreferrer" style="color:#1a73e8; text-decoration:underline;">${escapeHtml(shareUrl)}</a>
       </p>
     </td>
   </tr>

@@ -30,6 +30,14 @@ vi.mock("@shared/http/circuit-breaker", () => ({
   CircuitOpenError: class CircuitOpenError extends Error {},
 }));
 
+// F-12 kill switch. Mocked (not the real module) so isFeatureEnabled never
+// touches the shared fetchWithTimeout mock + its own 30s cache, which would
+// make these tests order-dependent. Default ENABLED.
+const mockIsFeatureEnabled = vi.fn<() => Promise<boolean>>();
+vi.mock("@shared/flags/system-flags", () => ({
+  isFeatureEnabled: (...args: unknown[]) => mockIsFeatureEnabled(...(args as [])),
+}));
+
 vi.mock("@features/report/server/personalReport", () => ({
   ensurePersonalReportForSubmission: vi.fn().mockResolvedValue({ id: 10 }),
 }));
@@ -58,6 +66,7 @@ process.env.RESEND_API_KEY = "re_test_key";
 process.env.RESEND_AUDIENCE_ID = "aud_test_id";
 
 import { POST } from "@/app/api/survey/route";
+import { __resetSurveyStatusCacheForTests } from "@features/survey/server/server";
 
 // --- Helpers ---
 
@@ -119,6 +128,13 @@ describe("POST /api/survey", () => {
     // Re-arm Resend mocks after resetAllMocks() clears them.
     mockResendContactsCreate.mockResolvedValue({ data: { id: "c1" } });
     mockResendEmailsSend.mockResolvedValue({ data: { id: "e1" } });
+    // Pre-populate the F-04 in-process cache with closed:false so tests that
+    // do not care about the gate skip the Supabase status fetch. Tests that
+    // exercise the gate explicitly re-call this helper.
+    __resetSurveyStatusCacheForTests(false);
+    // Default: kill switch ENABLED (survey accepting). The kill-switch test
+    // flips it to false.
+    mockIsFeatureEnabled.mockResolvedValue(true);
   });
 
   it("returns 403 when CSRF token is invalid", async () => {
@@ -145,6 +161,33 @@ describe("POST /api/survey", () => {
     const json = await res.json();
     expect(json.error).toBe("Please try again later.");
     expect(res.headers.get("Retry-After")).toBeDefined();
+  });
+
+  it("F-04: returns 409 when survey is closed", async () => {
+    allowCsrf();
+    allowRateLimit();
+    // Force the gate to fetch fresh, then have Supabase report status=closed.
+    __resetSurveyStatusCacheForTests();
+    mockFetchWithTimeout.mockResolvedValueOnce({
+      ok: true,
+      json: async () => [{ status: "closed" }],
+    });
+
+    const res = await POST(makeRequest());
+    expect(res.status).toBe(409);
+
+    const json = await res.json();
+    expect(json.error).toMatch(/paused/i);
+  });
+
+  it("F-12: returns 503 when the survey_submissions kill switch is off", async () => {
+    allowCsrf();
+    allowRateLimit();
+    mockIsFeatureEnabled.mockResolvedValue(false);
+
+    const res = await POST(makeRequest());
+    expect(res.status).toBe(503);
+    expect(mockIsFeatureEnabled).toHaveBeenCalledWith("survey_submissions");
   });
 
   it("returns 400 when email is missing", async () => {

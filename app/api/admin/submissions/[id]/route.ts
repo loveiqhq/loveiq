@@ -46,9 +46,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
   try {
     const [submissionRes, answersRes, scoringRes, tokenRes] = await Promise.all([
-      // Join with app_user to get email/name
+      // Join with app_user to get email/name. updated_date_time is included
+      // so the UI can echo it back on PATCH for optimistic-lock enforcement (F-05).
       supabaseFetch(
-        `/rest/v1/survey_submission?id=eq.${numericId}&select=id,status,session_id,start_date_time,created_date_time,duration_ms,utm_tracker,hotjar_user_id,app_user!fk_survey_submission_user(email,first_name)`
+        `/rest/v1/survey_submission?id=eq.${numericId}&select=id,status,session_id,start_date_time,created_date_time,updated_date_time,duration_ms,utm_tracker,hotjar_user_id,app_user!fk_survey_submission_user(email,first_name)`
       ),
       supabaseFetch(
         `/rest/v1/survey_submission_answer?survey_submission_id=eq.${numericId}&select=id,answer_text,answer_option_id,normalized_value,answered_at,time_spent_seconds,revision_count,was_skipped,survey_question(frontend_qid,type,question),answer_option!fk_ssa_answer_option(option_text),survey_submission_answer_options(answer_option!fk_ssao_answer_option(option_text))&order=survey_question_id.asc`
@@ -92,6 +93,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       session_id: string | null;
       start_date_time: string | null;
       created_date_time: string;
+      updated_date_time: string | null;
       duration_ms: number | null;
       utm_tracker: string | null;
       hotjar_user_id: string | null;
@@ -118,6 +120,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       session_id: raw.session_id,
       started_at: raw.start_date_time || raw.created_date_time,
       completed_at: raw.created_date_time,
+      updated_at: raw.updated_date_time,
       duration_ms: raw.duration_ms,
       utm_source: parseUtmSource(raw.utm_tracker),
       report_token: reportToken,
@@ -212,34 +215,192 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "Invalid ID." }, { status: 400 });
   }
 
-  const body = (await request.json().catch(() => ({}))) as { status?: string };
+  const body = (await request.json().catch(() => ({}))) as {
+    status?: string;
+    first_name?: string;
+    email?: string;
+    expected_updated_at?: string;
+  };
+
   const validStatuses = ["completed", "flagged", "archived"];
-  if (!body.status || !validStatuses.includes(body.status)) {
+  const wantsStatusChange = body.status !== undefined;
+  const wantsFirstNameChange = typeof body.first_name === "string";
+  const wantsEmailChange = typeof body.email === "string";
+
+  // T-08: admin PATCH now supports first_name + email rectification (GDPR
+  // Art. 16 right to correction) in addition to status. At least one
+  // mutable field must be provided; status validation still applies when set.
+  if (!wantsStatusChange && !wantsFirstNameChange && !wantsEmailChange) {
+    return NextResponse.json(
+      { error: "Provide at least one of: status, first_name, email." },
+      { status: 400 }
+    );
+  }
+  if (wantsStatusChange && !validStatuses.includes(body.status!)) {
     return NextResponse.json({ error: "Invalid status." }, { status: 400 });
   }
 
+  // Email validation + normalization. Mirror normalizeEmail from F-01.
+  let normalizedEmail: string | null = null;
+  if (wantsEmailChange) {
+    const trimmed = (body.email ?? "").trim().toLowerCase();
+    const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!EMAIL_RE.test(trimmed) || trimmed.length > 320) {
+      return NextResponse.json({ error: "Invalid email." }, { status: 400 });
+    }
+    normalizedEmail = trimmed;
+  }
+
+  // first_name validation: trim, allow empty (admin may want to clear it),
+  // cap at the same 80-char limit the survey schema enforces.
+  let normalizedFirstName: string | null = null;
+  if (wantsFirstNameChange) {
+    const trimmed = (body.first_name ?? "").trim();
+    if (trimmed.length > 80) {
+      return NextResponse.json({ error: "first_name too long." }, { status: 400 });
+    }
+    normalizedFirstName = trimmed;
+  }
+
+  if (!body.expected_updated_at) {
+    // F-05: client must include the timestamp returned by GET. Forces a fresh
+    // load if another admin already changed the row.
+    return NextResponse.json(
+      { error: "expected_updated_at is required for concurrency control." },
+      { status: 400 }
+    );
+  }
+
   try {
-    const res = await supabaseFetch(`/rest/v1/survey_submission?id=eq.${numericId}`, {
-      method: "PATCH",
-      body: JSON.stringify({ status: body.status }),
-      headers: { Prefer: "return=minimal" },
-    });
+    // F-05: Optimistic lock on survey_submission. We always bump
+    // updated_date_time even when the only mutation targets app_user — the
+    // submission row IS the audit-anchor for any rectification.
+    const expected = body.expected_updated_at;
+    const submissionPatchBody: Record<string, unknown> = {
+      updated_date_time: new Date().toISOString(),
+    };
+    if (wantsStatusChange) submissionPatchBody.status = body.status;
+
+    const res = await supabaseFetch(
+      `/rest/v1/survey_submission?id=eq.${numericId}&updated_date_time=eq.${encodeURIComponent(expected)}&select=id,updated_date_time,user_id`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(submissionPatchBody),
+        headers: { Prefer: "return=representation" },
+      }
+    );
 
     if (!res.ok) {
       logger.error({ status: res.status }, "Admin submission PATCH failed");
       return NextResponse.json({ error: "Unable to update." }, { status: 500 });
     }
 
-    logger.info({ submissionId: numericId, newStatus: body.status }, "Submission status updated");
-    await logAdminAction({
-      admin_email: admin.email,
-      action: "update_status",
-      resource_type: "submission",
-      resource_id: String(numericId),
-      metadata: { new_status: body.status },
-      ip,
-    });
-    return NextResponse.json({ success: true });
+    const updatedRows = (await res.json()) as Array<{
+      id: number;
+      updated_date_time: string;
+      user_id: number | null;
+    }>;
+    if (updatedRows.length === 0) {
+      // Mismatch — fetch the current row so the client can reconcile.
+      const currentRes = await supabaseFetch(
+        `/rest/v1/survey_submission?id=eq.${numericId}&select=updated_date_time,status&limit=1`
+      );
+      const current = currentRes.ok
+        ? ((await currentRes.json()) as Array<{ updated_date_time: string; status: string }>)
+        : [];
+      return NextResponse.json(
+        {
+          error: "Submission has been modified by another admin.",
+          current: current[0] ?? null,
+        },
+        { status: 409 }
+      );
+    }
+
+    // T-08: rectification on app_user if requested. The submission row was
+    // already locked via the optimistic check above, so a parallel admin
+    // editing the same submission would have been rejected with 409. The
+    // app_user write is a separate row but logically owned by THIS
+    // submission's rectification request.
+    const userId = updatedRows[0]!.user_id;
+    if ((wantsFirstNameChange || wantsEmailChange) && userId !== null) {
+      // Email collision check: another app_user must not already hold this email.
+      if (wantsEmailChange && normalizedEmail !== null) {
+        const collisionRes = await supabaseFetch(
+          `/rest/v1/app_user?email=eq.${encodeURIComponent(normalizedEmail)}&select=id&limit=1`
+        );
+        if (collisionRes.ok) {
+          const collisions = (await collisionRes.json()) as Array<{ id: number }>;
+          const colliding = collisions[0];
+          if (colliding && colliding.id !== userId) {
+            return NextResponse.json(
+              { error: "Another user already has that email." },
+              { status: 409 }
+            );
+          }
+        }
+      }
+
+      const appUserPatchBody: Record<string, unknown> = {
+        updated_date_time: new Date().toISOString(),
+      };
+      if (wantsFirstNameChange) appUserPatchBody.first_name = normalizedFirstName;
+      if (wantsEmailChange) appUserPatchBody.email = normalizedEmail;
+
+      const userPatchRes = await supabaseFetch(`/rest/v1/app_user?id=eq.${userId}`, {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify(appUserPatchBody),
+      });
+      if (!userPatchRes.ok) {
+        logger.error(
+          { status: userPatchRes.status, userId },
+          "T-08: app_user rectification PATCH failed"
+        );
+        // The submission was already touched (status bumped) — we can't
+        // cleanly roll back, but we surface the partial-success error so
+        // ops sees what happened.
+        return NextResponse.json(
+          { error: "Submission updated but user-data rectification failed." },
+          { status: 500 }
+        );
+      }
+    }
+
+    // Audit log: one row per kind of change. Keeps the trail readable.
+    if (wantsStatusChange) {
+      await logAdminAction({
+        admin_email: admin.email,
+        action: "update_status",
+        resource_type: "submission",
+        resource_id: String(numericId),
+        metadata: { new_status: body.status },
+        ip,
+      });
+    }
+    if (wantsFirstNameChange || wantsEmailChange) {
+      await logAdminAction({
+        admin_email: admin.email,
+        action: "rectify_user_data",
+        resource_type: "submission",
+        resource_id: String(numericId),
+        metadata: {
+          first_name_changed: wantsFirstNameChange,
+          email_changed: wantsEmailChange,
+        },
+        ip,
+      });
+    }
+
+    logger.info(
+      {
+        submissionId: numericId,
+        newStatus: body.status,
+        rectified: wantsFirstNameChange || wantsEmailChange,
+      },
+      "Submission updated"
+    );
+    return NextResponse.json({ success: true, updated_at: updatedRows[0]!.updated_date_time });
   } catch (err) {
     logger.error({ err }, "Admin submission PATCH error");
     return NextResponse.json({ error: "Unable to update." }, { status: 500 });

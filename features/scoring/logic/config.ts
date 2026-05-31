@@ -211,3 +211,23 @@ export function getScoringConfig(): ScoringConfig {
   }
   return cachedConfig;
 }
+
+// F-03: SHA-256 of the compiled config. Same config in two processes =>
+// same hash. When CSVs change at deploy time, the new process gets a
+// fresh hash and every new scoring_result row records it. Historical rows
+// remain queryable by their original hash for replay.
+let cachedConfigSha: string | null = null;
+
+export function getScoringConfigSha(): string {
+  if (cachedConfigSha) return cachedConfigSha;
+  // Lazy require so a Node-only crypto import doesn't pull into edge bundles
+  // that don't call this helper.
+  const { createHash } = require("crypto") as typeof import("crypto");
+  const cfg = getScoringConfig();
+  // JSON.stringify on the cached object: deterministic per process because
+  // buildConfig produces the same object shape from the same CSV imports.
+  // We hash the entire compiled shape — gates, boosts, calibration,
+  // prototypes — so any field flip changes the hash.
+  cachedConfigSha = createHash("sha256").update(JSON.stringify(cfg)).digest("hex");
+  return cachedConfigSha;
+}

@@ -161,17 +161,74 @@ export default function PrivacyPolicyPage() {
             {/* Section 7 */}
             <section>
               <h2 className="text-white font-semibold mb-4">7. Recipients of Data</h2>
-              <p className="mb-4">Your data may be processed by:</p>
+              <p className="mb-4">
+                We disclose your personal data to the following categories of recipients
+                (processors). All recipients act as our processors under data-processing agreements
+                in accordance with Art. 28 GDPR.
+              </p>
+
+              <h3 className="text-white font-medium mb-2">7.1 Infrastructure and hosting</h3>
               <ul className="list-disc list-inside mb-4 space-y-1">
-                <li>Cloud hosting providers</li>
-                <li>AI processing providers</li>
-                <li>Payment processors</li>
-                <li>Customer support tools</li>
-                <li>Analytics and security providers</li>
+                <li>Vercel Inc. (USA / EU) - application hosting and edge delivery</li>
+                <li>
+                  Supabase Inc. (USA / EU) - managed Postgres database and authentication backend
+                </li>
+                <li>Upstash Inc. (USA / EU) - Redis-compatible key-value store (rate-limiting)</li>
               </ul>
+
+              <h3 className="text-white font-medium mb-2">7.2 Payments</h3>
+              <ul className="list-disc list-inside mb-4 space-y-1">
+                <li>
+                  Stripe Payments Europe Ltd. (IE) - payment processing, anti-fraud, invoicing
+                </li>
+              </ul>
+
+              <h3 className="text-white font-medium mb-2">7.3 Email delivery</h3>
+              <ul className="list-disc list-inside mb-4 space-y-1">
+                <li>Resend Inc. (USA) - transactional and marketing email delivery</li>
+              </ul>
+
+              <h3 className="text-white font-medium mb-2">7.4 Analytics and product insight</h3>
+              <ul className="list-disc list-inside mb-4 space-y-1">
+                <li>Google Ireland Ltd. - Google Analytics 4 (consent-gated)</li>
+                <li>Hotjar Ltd. (MT) - heatmaps and session recording (consent-gated)</li>
+                <li>
+                  Contentsquare SAS (FR) - session replay and digital experience (consent-gated)
+                </li>
+              </ul>
+
+              <h3 className="text-white font-medium mb-2">7.5 Advertising and attribution</h3>
+              <ul className="list-disc list-inside mb-4 space-y-1">
+                <li>Meta Platforms Ireland Ltd. - Facebook/Instagram pixel (consent-gated)</li>
+                <li>TikTok Technology Ltd. (IE) - TikTok pixel (consent-gated)</li>
+                <li>Google Ireland Ltd. - Google Ads conversion tracking (consent-gated)</li>
+              </ul>
+
+              <h3 className="text-white font-medium mb-2">7.6 Consent management</h3>
+              <ul className="list-disc list-inside mb-4 space-y-1">
+                <li>
+                  CookieYes Ltd. (UK) - cookie consent storage and proof-of-consent (Art. 7(1) GDPR)
+                </li>
+              </ul>
+
+              <h3 className="text-white font-medium mb-2">7.7 Internal operations</h3>
+              <ul className="list-disc list-inside mb-4 space-y-1">
+                <li>
+                  Slack Technologies Ltd. (IE) - internal incident-response notifications. Personal
+                  data is minimized (e.g. email addresses are masked) before being sent.
+                </li>
+              </ul>
+
               <p>
-                All recipients are bound by data-processing agreements in accordance with Art. 28
-                GDPR.
+                A current Record of Processing Activities (Art. 30 GDPR) and the list of standard
+                contractual clauses for non-EU processors can be requested from{" "}
+                <a
+                  href="mailto:hello@loveiq.org"
+                  className="text-gray-300 hover:text-white transition-colors"
+                >
+                  hello@loveiq.org
+                </a>
+                .
               </p>
             </section>
 

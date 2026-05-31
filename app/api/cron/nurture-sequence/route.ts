@@ -30,6 +30,7 @@ import { buildUnsubscribeUrl } from "@shared/emails/unsubscribe-token";
 import { isEmailSuppressed } from "@shared/emails/suppression";
 import { getEmailSiteUrl } from "@shared/emails/site-url";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
+import { isFeatureEnabled } from "@shared/flags/system-flags";
 import { getReportPlanByPersonalReportId } from "@features/report/server/planAccess";
 import { getStripeServerClient } from "@features/checkout/server/stripeCheckout";
 import { getCouponIdForStage } from "@features/checkout/server/promoCodes";
@@ -113,6 +114,10 @@ interface CandidateRow {
     app_user?: {
       email?: string | null;
       first_name?: string | null;
+      // T-09: GDPR Art. 18 restriction flag. When non-null, the cron skips
+      // this candidate entirely — no nurture email goes out while the user's
+      // data is frozen.
+      processing_restricted_at?: string | null;
     } | null;
   } | null;
 }
@@ -126,7 +131,7 @@ async function fetchCandidatesByAge(window: AgeWindow): Promise<CandidateRow[]> 
     `?created_date_time=gte.${encodeURIComponent(newerThan)}` +
     `&created_date_time=lte.${encodeURIComponent(olderThan)}` +
     `&select=id,survey_submission_id,created_date_time,` +
-    `survey_submission!fk_personal_report_submission(app_user!fk_survey_submission_user(email,first_name))` +
+    `survey_submission!fk_personal_report_submission(app_user!fk_survey_submission_user(email,first_name,processing_restricted_at))` +
     `&order=created_date_time.desc` +
     `&limit=${CANDIDATE_LIMIT_PER_STAGE}`;
   const r = await supabaseFetch(path);
@@ -155,10 +160,14 @@ async function fetchFullReportQuote(submissionId: number): Promise<FullReportQuo
 }
 
 async function fetchAccessToken(submissionId: number): Promise<string | null> {
+  // F-17: honor optional expires_at — a token expiring before the user can
+  // act on the nurture email is worse than no email (they'd click and 404).
+  const nowIso = encodeURIComponent(new Date().toISOString());
   const path =
     `/rest/v1/report_access_token` +
     `?survey_submission_id=eq.${submissionId}` +
     `&revoked_at=is.null&token=not.is.null` +
+    `&or=(expires_at.is.null,expires_at.gt.${nowIso})` +
     `&select=token&limit=1`;
   const r = await supabaseFetch(path);
   if (!r.ok) return null;
@@ -374,6 +383,31 @@ function renderEmail(input: Omit<SendInput, "resend">): {
   }
 }
 
+/**
+ * F-08: deactivate a previously-minted promo code so it can no longer be
+ * redeemed at checkout. Pulled from `metadata.nurturePromoCodes[stage]`.
+ * Best-effort: any failure is logged and swallowed — the caller proceeds.
+ */
+async function deactivatePriorStagePromo(
+  metadata: Record<string, unknown> | null,
+  priorStage: Stage
+): Promise<void> {
+  const codes = (metadata?.nurturePromoCodes as Record<string, unknown> | undefined) ?? {};
+  const prior = codes[priorStage] as { stripePromotionCodeId?: string } | undefined;
+  const promoId = prior?.stripePromotionCodeId;
+  if (!promoId) return;
+  const stripe = getStripeServerClient();
+  if (!stripe) return;
+  try {
+    await stripe.promotionCodes.update(promoId, { active: false });
+  } catch (err) {
+    logger.warn(
+      { err, priorStage, promoId, slack: false },
+      "nurture-sequence: deactivate prior promo failed (best-effort)"
+    );
+  }
+}
+
 async function persistStageSent({
   quoteId,
   metadata,
@@ -429,6 +463,11 @@ async function sendOne(input: SendInput): Promise<"sent" | "failed"> {
         text: tpl.text,
         headers: {
           "X-LoveIQ-Stage": input.stage,
+          // P-06: cluster nurture mail under a dedicated list identity so
+          // Gmail/Outlook apply per-list reputation; `Precedence: bulk`
+          // suppresses auto-responders (out-of-office, vacation replies).
+          "List-ID": "LoveIQ Nurture <nurture.send.loveiq.org>",
+          Precedence: "bulk",
           ...(input.unsubscribeUrl && {
             "List-Unsubscribe": `<${input.unsubscribeUrl}>`,
             "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
@@ -491,6 +530,17 @@ async function processCandidate(
   summary: StageSummary
 ): Promise<void> {
   try {
+    // T-09: GDPR Art. 18 restriction. If the user's data is frozen, no
+    // nurture email goes out for them. Counted under skippedNoEmail to
+    // avoid adding a new summary field — the visible effect to ops is
+    // "this user got skipped for reasons that aren't their fault." The
+    // dedicated `restricted_at` row in admin_action_log is the audit
+    // trail; this is just the no-op gate.
+    if (candidate.survey_submission?.app_user?.processing_restricted_at) {
+      summary.skippedNoEmail++;
+      return;
+    }
+
     const email = candidate.survey_submission?.app_user?.email?.trim() ?? "";
     if (!email) {
       summary.skippedNoEmail++;
@@ -552,6 +602,42 @@ async function processCandidate(
         summary.skippedNoPromo++;
         return;
       }
+      // F-08: when the 54h (75%-off) code mints, deactivate any still-live
+      // 30h (50%-off) code for this user so promo stacking is impossible.
+      // Best-effort: a deactivate failure just leaves the smaller code live
+      // until its 24h Stripe expiry — degraded but not catastrophic.
+      if (stage === "54h_no_unlock") {
+        await deactivatePriorStagePromo(quote.metadata, "30h_no_unlock");
+      }
+    }
+
+    // F-06: persist the idempotency marker BEFORE sending. If the marker
+    // write fails, we never send — the next cron run will retry. If the
+    // send fails after the marker is written, the marker stays and this
+    // stage will not be retried; the user simply loses this nurture email
+    // and the next stage (if any) is the only follow-up. This is the
+    // audit-accepted trade-off: prefer "missed nurture" over "double-send
+    // with two distinct promo codes 1 hour apart".
+    //
+    // Race note: two concurrent cron instances can still both read stale
+    // metadata, both write the marker, and both send. The structural fix
+    // is a unique expression index on metadata->'nurtureEmailsSent'; out
+    // of scope here. The order flip alone covers the single-instance
+    // crash-mid-run case (the primary failure mode).
+    try {
+      await persistStageSent({
+        quoteId: quote.id,
+        metadata: quote.metadata,
+        stage,
+        promo,
+      });
+    } catch (err) {
+      summary.failed++;
+      logger.error(
+        { err, quoteId: quote.id, stage },
+        "nurture-sequence: marker write failed before send; skipping"
+      );
+      return;
     }
 
     const outcome = await sendOne({
@@ -568,26 +654,39 @@ async function processCandidate(
 
     if (outcome === "sent") {
       summary.sent++;
-      try {
-        await persistStageSent({
-          quoteId: quote.id,
-          metadata: quote.metadata,
-          stage,
-          promo,
-        });
-      } catch (err) {
-        logger.error(
-          { err, quoteId: quote.id, stage },
-          "nurture-sequence: metadata write failed (email delivered)"
-        );
-      }
     } else {
       summary.failed++;
+      logger.warn(
+        { quoteId: quote.id, stage },
+        "nurture-sequence: send failed after marker persisted; not retrying"
+      );
     }
   } catch (err) {
     summary.failed++;
     logger.error({ err, personalReportId: candidate.id, stage }, "nurture-sequence: per-row error");
   }
+}
+
+/**
+ * T-20: every N candidates, re-check `nurture_sequence` kill switch.
+ * Admin can flip the flag mid-run; we should respect it without waiting
+ * for the next hourly cron. 10 is a balance: tight enough that a bad
+ * email batch is stopped before ~10 more sends, loose enough that the
+ * Supabase round-trip cost doesn't dominate the loop.
+ */
+const KILL_SWITCH_CHECK_INTERVAL = 10;
+
+/**
+ * P-04: graceful SIGTERM handling. Vercel sends SIGTERM ~100-300ms before
+ * killing a stale Lambda during a deploy. If a cron is mid-loop we want
+ * to exit cleanly with a log line, not get truncated. The `terminated`
+ * flag is per-request: installed in GET, cleared in finally so it never
+ * leaks across warm-Lambda invocations.
+ */
+let terminated = false;
+
+async function isNurtureKilled(): Promise<boolean> {
+  return !(await isFeatureEnabled("nurture_sequence"));
 }
 
 async function runSixHourStages(
@@ -596,7 +695,22 @@ async function runSixHourStages(
   noView: StageSummary,
   noUnlock: StageSummary
 ): Promise<void> {
-  for (const c of candidates) {
+  for (let i = 0; i < candidates.length; i++) {
+    if (terminated) {
+      logger.warn(
+        { processed: i, remaining: candidates.length - i, stage: "6h" },
+        "nurture-sequence: SIGTERM received mid-loop; exiting"
+      );
+      return;
+    }
+    if (i > 0 && i % KILL_SWITCH_CHECK_INTERVAL === 0 && (await isNurtureKilled())) {
+      logger.warn(
+        { processed: i, remaining: candidates.length - i, stage: "6h" },
+        "nurture-sequence: kill switch tripped mid-loop; exiting"
+      );
+      return;
+    }
+    const c = candidates[i]!;
     const viewed = await hasReportViewedEvent(c.id);
     const stage: Stage = viewed ? "6h_no_unlock" : "6h_no_view";
     const target = viewed ? noUnlock : noView;
@@ -612,8 +726,22 @@ async function runSingleStage(
   summary: StageSummary
 ): Promise<void> {
   summary.candidates = candidates.length;
-  for (const c of candidates) {
-    await processCandidate(c, stage, ctx, summary);
+  for (let i = 0; i < candidates.length; i++) {
+    if (terminated) {
+      logger.warn(
+        { processed: i, remaining: candidates.length - i, stage },
+        "nurture-sequence: SIGTERM received mid-loop; exiting"
+      );
+      return;
+    }
+    if (i > 0 && i % KILL_SWITCH_CHECK_INTERVAL === 0 && (await isNurtureKilled())) {
+      logger.warn(
+        { processed: i, remaining: candidates.length - i, stage },
+        "nurture-sequence: kill switch tripped mid-loop; exiting"
+      );
+      return;
+    }
+    await processCandidate(candidates[i]!, stage, ctx, summary);
   }
 }
 
@@ -635,6 +763,12 @@ export async function GET(request: Request) {
     return NextResponse.json({ skipped: true, reason: "non-prod-cron-host" });
   }
 
+  // Kill switch (F-12). Admin can flip `nurture_sequence=false` to stop
+  // the cron without redeploying — useful if a bad email goes out.
+  if (!(await isFeatureEnabled("nurture_sequence"))) {
+    return NextResponse.json({ skipped: true, reason: "kill_switch" });
+  }
+
   const resend = getResend();
   if (!resend) {
     return NextResponse.json({ error: "Service unavailable." }, { status: 503 });
@@ -643,6 +777,16 @@ export async function GET(request: Request) {
   const trackDuration = startCronTimer("nurture-sequence", 50);
   const startMs = Date.now();
   let cronError: string | undefined;
+
+  // P-04: install a one-shot SIGTERM listener. `process.once` rather than
+  // `process.on` so a warm-Lambda re-invocation doesn't accumulate stale
+  // handlers; the `finally` block also removes ours explicitly.
+  terminated = false;
+  const onSigterm = () => {
+    terminated = true;
+    logger.warn("nurture-sequence: SIGTERM received");
+  };
+  process.once("SIGTERM", onSigterm);
 
   const ctx: RouteContext = {
     resend,
@@ -675,6 +819,7 @@ export async function GET(request: Request) {
     cronError = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
   } finally {
+    process.off("SIGTERM", onSigterm);
     await trackDuration();
     await recordCronRun("nurture-sequence", startMs, cronError ? "error" : "success", cronError);
   }

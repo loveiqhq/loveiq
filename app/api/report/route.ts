@@ -5,6 +5,7 @@ import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { getBreaker, CircuitOpenError } from "@shared/http/circuit-breaker";
 import { verifyCsrfToken } from "@shared/http/csrf";
+import { isFeatureEnabled } from "@shared/flags/system-flags";
 import {
   ensurePersonalReportForSubmission,
   getReportAccessPlanForSubmission,
@@ -197,8 +198,10 @@ export async function GET(request: Request) {
         const tokenRes = await getBreaker("supabase").fire(() =>
           fetchWithTimeout(
             // revoked_at=is.null lets ops invalidate a leaked token without
-            // dropping the row. Backed by idx_report_access_token_active_token.
-            `${supabaseUrl}/rest/v1/report_access_token?token=eq.${encodeURIComponent(token)}&revoked_at=is.null&select=survey_submission_id&limit=1`,
+            // dropping the row. expires_at filter (F-17) honors optional
+            // per-token expiry when set; NULL means permanent (the default).
+            // Backed by idx_report_access_token_active.
+            `${supabaseUrl}/rest/v1/report_access_token?token=eq.${encodeURIComponent(token)}&revoked_at=is.null&or=(expires_at.is.null,expires_at.gt.${encodeURIComponent(new Date().toISOString())})&select=survey_submission_id&limit=1`,
             { headers, cache: "no-store", timeoutMs: SUPABASE_TIMEOUT_MS }
           )
         );
@@ -375,6 +378,20 @@ export async function GET(request: Request) {
       }
     } catch (err) {
       logger.warn({ err, submissionId: submission.id }, "Unable to sync report access state");
+    }
+
+    // F-12: emergency paywall kill switch. When an admin sets the
+    // `report_paywall_enforced` system flag to false (e.g. a Stripe outage, or
+    // a decision to comp everyone), every owner report renders as if fully
+    // purchased. Overriding the effective accessPlan here is the single
+    // chokepoint that flows to BOTH server content-gating and the client (which
+    // recomputes lock state from the accessPlan it receives) — no UI change.
+    // Fail-secure: isFeatureEnabled defaults to ENFORCED when the flag row is
+    // absent or Supabase is unreachable, so an infra blip can never give the
+    // product away. Share-link viewers keep their curated gift view; the switch
+    // only lifts the owner's paywall.
+    if (!isShareAccess && !(await isFeatureEnabled("report_paywall_enforced", true))) {
+      accessPlan = "all_reports";
     }
 
     // Fetch quotes for any user who can still upgrade (no plan, or essentials/

@@ -42,6 +42,7 @@ const submissionData = {
     status: "completed",
     started_at: "2025-01-01T10:00:00Z",
     completed_at: "2025-01-01T10:05:00Z",
+    updated_at: "2025-01-01T10:05:00Z",
     duration_ms: 300000,
   },
   answers: [{ q_id: "q1", question_text: "Q1?", answer_type: "open", answer_value: "Answer" }],
@@ -118,7 +119,10 @@ describe("SubmissionDetail", () => {
         "/api/admin/submissions/1",
         expect.objectContaining({
           method: "PATCH",
-          body: JSON.stringify({ status: "flagged" }),
+          body: JSON.stringify({
+            status: "flagged",
+            expected_updated_at: "2025-01-01T10:05:00Z",
+          }),
         })
       );
     });
@@ -136,7 +140,10 @@ describe("SubmissionDetail", () => {
         "/api/admin/submissions/1",
         expect.objectContaining({
           method: "PATCH",
-          body: JSON.stringify({ status: "archived" }),
+          body: JSON.stringify({
+            status: "archived",
+            expected_updated_at: "2025-01-01T10:05:00Z",
+          }),
         })
       );
     });

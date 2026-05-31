@@ -2,8 +2,44 @@ import { NextResponse } from "next/server";
 import { Webhook } from "svix";
 import { Redis } from "@upstash/redis";
 import { addToSuppression } from "@shared/emails/suppression";
+import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import logger from "@shared/observability/logger";
 import { notifySlack, maskEmail, escapeSlack } from "@shared/observability/slack";
+
+/**
+ * R-02: Application-level idempotency. Returns true if this svix_id is new
+ * (caller should process). Returns false if the event has already been
+ * processed (caller should return ok without side effects). Returns true on
+ * Supabase failure (fail-open: prefer occasional double-processing over
+ * silently dropping the event).
+ */
+async function claimResendEvent(svixId: string, eventType: string): Promise<boolean> {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return true;
+  try {
+    const res = await fetchWithTimeout(`${url}/rest/v1/resend_webhook_event`, {
+      method: "POST",
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+        Prefer: "return=minimal",
+      },
+      body: JSON.stringify({ svix_id: svixId, event_type: eventType }),
+      timeoutMs: 3000,
+    });
+    if (res.status === 409) return false; // unique conflict — already handled
+    if (!res.ok) {
+      logger.warn({ status: res.status, svixId }, "Resend webhook claim non-ok — failing open");
+      return true;
+    }
+    return true;
+  } catch (err) {
+    logger.warn({ err, svixId }, "Resend webhook claim threw — failing open");
+    return true;
+  }
+}
 
 // Process-scoped Upstash client used for the per-day email-engagement
 // counters consumed by the funnel-digest cron's morning summary.
@@ -64,6 +100,17 @@ export async function POST(request: Request) {
       username: "ops_alerts",
     });
     return NextResponse.json({ error: "Invalid signature." }, { status: 401 });
+  }
+
+  // R-02: claim the svix_id before side effects. Same svix_id arriving twice
+  // within Svix's 5-min tolerance window now no-ops the second handler.
+  const svixId = svixHeaders["svix-id"];
+  if (svixId) {
+    const claimed = await claimResendEvent(svixId, payload.type);
+    if (!claimed) {
+      logger.info({ svixId, type: payload.type }, "Resend webhook replay — already processed");
+      return NextResponse.json({ ok: true, deduped: true });
+    }
   }
 
   const email = payload.data?.to?.[0]?.toLowerCase().trim();

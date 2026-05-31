@@ -12,6 +12,12 @@
 -- which at ~1M analytics events would push the digest past the 60s cron cap.
 -- ═══════════════════════════════════════════════════════════════════════════
 
+-- migration-lint: ignore
+-- (Reason: already applied to prod. The non-CONCURRENTLY index build is
+--  intentional — this migration creates SECURITY DEFINER functions in the same
+--  implicit transaction, and CREATE INDEX CONCURRENTLY cannot run inside a
+--  transaction. analytics_event was small (~1k rows) at apply time, so the
+--  brief ACCESS EXCLUSIVE lock was negligible.)
 CREATE INDEX IF NOT EXISTS idx_analytics_event_type_time
   ON public.analytics_event (event_type, event_time);
 --

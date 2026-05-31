@@ -43,6 +43,11 @@ const SUPABASE_TIMEOUT_MS = 8_000;
 // backlog is ever larger than this, a follow-up run picks up the rest.
 const SWEEP_LIMIT = 50;
 
+// P-04: per-request SIGTERM flag — set by the listener installed in GET,
+// cleared in finally. Vercel sends SIGTERM ~100-300ms before killing a
+// stale Lambda; we want to stop processing rather than get truncated.
+let terminated = false;
+
 function safeCompare(a: string, b: string): boolean {
   const aBuf = Buffer.from(a);
   const bBuf = Buffer.from(b);
@@ -171,6 +176,15 @@ export async function GET(request: Request) {
   const startMs = Date.now();
   let cronError: string | undefined;
 
+  // P-04: install one-shot SIGTERM listener; the `process.off` in finally
+  // prevents stale handlers leaking across warm-Lambda re-invocations.
+  terminated = false;
+  const onSigterm = () => {
+    terminated = true;
+    logger.warn("payment-fulfillment-sweep: SIGTERM received");
+  };
+  process.once("SIGTERM", onSigterm);
+
   const summary = { scanned: 0, fixed: 0, skipped: 0, errors: 0 };
 
   try {
@@ -178,6 +192,13 @@ export async function GET(request: Request) {
     summary.scanned = stuck.length;
 
     for (const row of stuck) {
+      if (terminated) {
+        logger.warn(
+          { processed: summary.fixed + summary.skipped + summary.errors, total: stuck.length },
+          "payment-fulfillment-sweep: SIGTERM received mid-loop; exiting"
+        );
+        break;
+      }
       try {
         const result = await fulfillStuckPayment(row);
         if (result === "fixed") summary.fixed += 1;
@@ -206,6 +227,7 @@ export async function GET(request: Request) {
     cronError = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: "Sweep failed." }, { status: 500 });
   } finally {
+    process.off("SIGTERM", onSigterm);
     await trackDuration();
     await recordCronRun(
       "payment-fulfillment-sweep",

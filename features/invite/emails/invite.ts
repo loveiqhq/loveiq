@@ -45,7 +45,7 @@ export function inviteEmail({
   <tr>
     <td style="padding:8px 32px 16px;">
       <p style="margin:0; font-family:${EMAIL_FONT}; font-size:17px; line-height:1.55; color:#000000; word-break:break-all;">
-        <a href="${safeCtaUrl}" target="_blank" style="color:#1a73e8; text-decoration:underline;">${safeCtaUrl}</a>
+        <a href="${safeCtaUrl}" target="_blank" rel="noopener noreferrer" style="color:#1a73e8; text-decoration:underline;">${safeCtaUrl}</a>
       </p>
     </td>
   </tr>

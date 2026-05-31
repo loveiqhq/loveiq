@@ -77,7 +77,7 @@ export function renderCtaButton({ href, label, width }: CtaButton): string {
   <table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin:0 auto;">
     <tr>
       <td align="center" bgcolor="#5900AC" style="border-radius:9999px; ${widthStyle} box-shadow:0 0 15px rgba(254,104,57,0.2);">
-        <a href="${escapeHtml(href)}" target="_blank" style="display:inline-block; padding:13px 28px; font-family:${EMAIL_FONT}; font-size:14px; font-weight:600; color:#ffffff; text-decoration:none; letter-spacing:0.2px; line-height:20px;">
+        <a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" style="display:inline-block; padding:13px 28px; font-family:${EMAIL_FONT}; font-size:14px; font-weight:600; color:#ffffff; text-decoration:none; letter-spacing:0.2px; line-height:20px;">
           ${escapeHtml(label)}&nbsp;&rarr;
         </a>
       </td>

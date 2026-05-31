@@ -58,4 +58,36 @@ describe("getClientIp", () => {
     const req = makeRequest({ "x-forwarded-for": "999.999.999.999" });
     expect(getClientIp(req)).toBe("unknown");
   });
+
+  // R-08: IPv6 /64 collapse. The key property is that two addresses in the SAME
+  // /64 produce the SAME bucket key (so rotating low-order bits can't evade the
+  // limit), while different /64s stay distinct.
+  const ipv6Key = (ip: string) => getClientIp(makeRequest({ "x-real-ip": ip }));
+
+  it("collapses compressed IPv6 addresses in the same /64 to one key", () => {
+    // Both are 2001:db8:0:0:*  → same /64. The old slice(0,4) bug gave them
+    // different keys because `::` shifts the colon-group positions.
+    expect(ipv6Key("2001:db8::dead:beef")).toBe(ipv6Key("2001:db8::cafe:1"));
+  });
+
+  it("collapses full and compressed forms of the same /64 to the same key", () => {
+    expect(ipv6Key("2001:db8:0:0:0:0:dead:beef")).toBe(ipv6Key("2001:db8::1"));
+  });
+
+  it("keeps different /64s in different buckets", () => {
+    expect(ipv6Key("2001:db8:1::1")).not.toBe(ipv6Key("2001:db8:2::1"));
+  });
+
+  it("produces a canonical /64 key", () => {
+    expect(ipv6Key("2001:db8::dead:beef")).toBe("2001:db8:0:0::/64");
+  });
+
+  it("buckets IPv4-mapped IPv6 on the embedded dotted-quad (not all into one key)", () => {
+    expect(ipv6Key("::ffff:203.0.113.5")).toBe("203.0.113.5");
+    expect(ipv6Key("::ffff:203.0.113.5")).not.toBe(ipv6Key("::ffff:198.51.100.7"));
+  });
+
+  it("leaves IPv4 addresses keyed on the full /32", () => {
+    expect(ipv6Key("203.0.113.5")).toBe("203.0.113.5");
+  });
 });

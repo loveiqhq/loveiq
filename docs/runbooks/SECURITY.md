@@ -13,14 +13,107 @@
 
 ## Secrets rotation schedule
 
-| Secret                      | Rotation                | How to rotate                                         |
-| --------------------------- | ----------------------- | ----------------------------------------------------- |
-| `SUPABASE_SERVICE_ROLE_KEY` | Quarterly / on incident | Supabase Dashboard → Settings → API → Regenerate      |
-| `RESEND_API_KEY`            | Quarterly / on incident | Resend Dashboard → API Keys → Create new → Delete old |
-| `RECAPTCHA_SECRET_KEY`      | Annually / on incident  | Google reCAPTCHA Admin → Settings → Regenerate        |
-| `SLACK_*_WEBHOOK_URL`       | On incident only        | Slack App → Incoming Webhooks → Add new → Remove old  |
-| `STAGING_PASSWORD`          | On incident only        | Update in Vercel env vars → Redeploy                  |
-| `SURVEY_CLOSE_PASSWORD`     | On incident only        | Update in Vercel env vars → Redeploy                  |
+| Secret                           | Rotation                | How to rotate                                                                                                                                                                                                                                              |
+| -------------------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SUPABASE_SERVICE_ROLE_KEY`      | Quarterly / on incident | Supabase Dashboard → Settings → API → Regenerate                                                                                                                                                                                                           |
+| `RESEND_API_KEY`                 | Quarterly / on incident | Resend Dashboard → API Keys → Create new → Delete old                                                                                                                                                                                                      |
+| `RECAPTCHA_SECRET_KEY`           | Annually / on incident  | Google reCAPTCHA Admin → Settings → Regenerate                                                                                                                                                                                                             |
+| `SLACK_*_WEBHOOK_URL`            | On incident only        | Slack App → Incoming Webhooks → Add new → Remove old                                                                                                                                                                                                       |
+| `STAGING_PASSWORD`               | On incident only        | Update in Vercel env vars → Redeploy                                                                                                                                                                                                                       |
+| `SURVEY_CLOSE_PASSWORD`          | On incident only        | Update in Vercel env vars → Redeploy                                                                                                                                                                                                                       |
+| `STRIPE_WEBHOOK_SECRET`          | Annually / on incident  | See §Webhook secret rotation below                                                                                                                                                                                                                         |
+| `RESEND_WEBHOOK_SECRET`          | Annually / on incident  | See §Webhook secret rotation below                                                                                                                                                                                                                         |
+| `UNSUBSCRIBE_SECRET`             | Annually / on incident  | `crypto.randomBytes(32).toString('hex')` → Vercel env → redeploy. Existing unsubscribe links in already-sent emails break — accept that or schedule rotation to coincide with low-email-volume window.                                                     |
+| `SHARE_VERIFY_SECRET`            | Annually / on incident  | `crypto.randomBytes(32).toString('hex')` → Vercel env → redeploy. All existing share-recipient cookies invalidate immediately; users re-prompt at next access.                                                                                             |
+| `CRON_SECRET`                    | Annually / on incident  | `crypto.randomBytes(32).toString('hex')` → Vercel env → redeploy. The vercel.json cron entries automatically pick up the new value on next fire.                                                                                                           |
+| `STRATEGY_DIGEST_SIGNING_SECRET` | Annually / on incident  | `crypto.randomBytes(32).toString('hex')` → Vercel env → redeploy. Slack-cached PNG images signed with the old secret keep working until Slack's image-proxy TTL expires (~24h, then broken-image icon until the next Monday's digest re-signs everything). |
+
+## Webhook secret rotation (R-25)
+
+Stripe and Resend webhook secrets cannot be swapped atomically — for a brief
+window after the new key lands in Vercel env but BEFORE the dashboard is
+updated (or vice versa), incoming webhooks will fail signature verification.
+For Stripe specifically, failed webhooks retry with exponential backoff for
+3 days, so the swap is recoverable but messy. Plan a 30-second window.
+
+### Stripe `STRIPE_WEBHOOK_SECRET`
+
+1. **Add a second signing secret in Stripe dashboard.** Stripe → Developers → Webhooks → your endpoint → Signing secret → "Roll secret". Stripe accepts BOTH the old and new secret for 24 hours during the rollover window.
+2. **Update Vercel env var** `STRIPE_WEBHOOK_SECRET` to the new value. Trigger redeploy.
+3. **Verify** by triggering a test event from the Stripe dashboard (`Send test webhook` → `checkout.session.completed`). Confirm the event is processed (look in Vercel logs for `"Stripe webhook processed"`).
+4. **Disable the old secret** in the Stripe dashboard once the redeploy is stable (≥10 min). Stripe stops accepting it; in-flight retries with the old secret start failing — fine because step 3 confirmed the new secret works.
+
+### Resend `RESEND_WEBHOOK_SECRET`
+
+1. **Generate a new signing secret in Resend dashboard.** Resend → Webhooks → your endpoint → Reveal → "Generate new". Unlike Stripe, Resend does NOT support overlapping secrets — the swap is atomic and any in-flight webhook fails signature verification during the seconds-long window.
+2. **Update Vercel env var** `RESEND_WEBHOOK_SECRET` AT THE SAME TIME you click "Generate new" in the Resend dashboard. Trigger redeploy.
+3. **Verify** by waiting for the next email-engagement webhook (or sending a test email and tracking the open). Confirm Slack ops doesn't fire the `resend_webhook_signature_fail` alert.
+4. **Bound the failure window**: if step 2 takes >30s, Resend will retry the failed webhooks up to ~24h, so the bounce/complaint/click data isn't lost — it lands slightly late.
+
+### Health check during rotation
+
+Both webhook handlers post a Slack ops alert on signature failure
+(`stripe_webhook_signature_fail`, `resend_webhook_signature_fail`). During
+rotation, expect 1-5 of these immediately after the swap. If they continue
+firing >5 minutes after step 2, rollback: revert the env var and re-enable
+the old dashboard secret.
+
+## Resend domain tracking (T-13 / T-14)
+
+Resend enables open-tracking pixels and click-link wrapping by DEFAULT on
+every verified domain. With tracking on:
+
+- Every recipient's click hits `x.resend-links.com/...` before reaching
+  `loveiq.org`. Resend logs the click (IP, UA, timestamp). The user sees
+  the Resend redirect domain in their email client's hover preview.
+- A 1×1 transparent pixel embedded in every HTML email fires on first
+  render. Resend records "opened" + IP + UA.
+
+Both behaviours have three problems for us:
+
+1. **Privacy disclosure gap** — our privacy policy does not list Resend as
+   a click/open tracking processor. Disclosure work is more effort than
+   simply disabling.
+2. **Brand** — `resend-links.com` in hover-preview erodes trust on
+   transactional emails (purchase confirms, share links, magic links).
+3. **Compliance** — the open pixel is a tracking technology that requires
+   consent in some EU jurisdictions; transactional emails arguably escape
+   under legitimate interest, but marketing nurtures do not.
+
+Resend's per-message override is NOT available in SDK v6.12 (the
+`emails.send` payload accepts no `tracking` field — verified against
+`node_modules/resend/dist/index.d.mts`). Tracking is controlled at the
+DOMAIN level only.
+
+### One-time disable (operator action)
+
+1. Open Resend dashboard → Domains → `send.loveiq.org` (or whichever
+   sending domain is verified for this project).
+2. Toggle **Click tracking** OFF.
+3. Toggle **Open tracking** OFF.
+4. Save. Changes apply to ALL future sends from this domain.
+
+There is no rollback gotcha — existing in-flight emails keep whatever
+tracking config they were sent with; new sends pick up the new domain
+config.
+
+### Verification
+
+Send a test email from any of our routes (e.g., trigger an invite reminder
+manually) and inspect the raw HTML in the recipient inbox:
+
+- Hover any link — destination should be the real `loveiq.org` URL, NOT
+  `x.resend-links.com/...`.
+- Search the HTML body for `<img` — no 1×1 tracking pixel pointing at
+  Resend's domain should be present.
+
+### Re-enabling
+
+If a future product decision requires open/click metrics, the cleanest path is:
+
+1. Update the privacy policy to disclose Resend as a click/open processor.
+2. Re-enable in the Resend dashboard.
+3. Add the disclosure to the marketing-email opt-in copy at Q16015 (consent versioning via T-11 captures the new text).
 
 **Rotation checklist:**
 
@@ -34,6 +127,93 @@
 **Rotation reminders:** Set calendar reminders for:
 
 - January 1, April 1, July 1, October 1 (quarterly review)
+
+## DNS email-authentication records (P-11)
+
+Resend deliverability rests on three DNS records published on the sending
+domain (`send.loveiq.org`). All three live in the DNS zone, not in code —
+this section documents the canonical expected values so an operator can
+diff against `dig` output during an incident.
+
+### SPF (TXT record at apex of sending domain)
+
+```
+v=spf1 include:_spf.resend.com -all
+```
+
+- `-all` (hard-fail) is intentional: Gmail and Outlook treat soft-fail
+  `~all` as nearly a pass these days, so a third party that ever spoofs
+  the apex domain still wins. We control all senders via Resend.
+- If a future provider is added (e.g. a separate transactional service),
+  EXPAND the include list before flipping providers — do NOT mix `-all`
+  with a missing include or every legitimate send hard-fails.
+
+### DKIM (2 CNAME records, selectors provided by Resend)
+
+Resend issues two selectors per verified domain (`resend._domainkey` and
+`resend2._domainkey`). Both CNAMEs MUST resolve and BOTH MUST be signed
+on every outgoing message. Re-verify any time a new sending sub-domain is
+added.
+
+To check from a shell:
+
+```
+dig TXT resend._domainkey.send.loveiq.org +short
+dig TXT resend2._domainkey.send.loveiq.org +short
+```
+
+Both should return CNAME chains terminating at a Resend-hosted record.
+
+### DMARC (TXT record at `_dmarc.<sending-domain>`)
+
+Current policy:
+
+```
+v=DMARC1; p=quarantine; rua=mailto:dmarc-reports@loveiq.org; pct=100; aspf=s; adkim=s
+```
+
+- `p=quarantine` (not `p=reject`) gives us a recovery window if a Resend
+  outage briefly breaks DKIM — quarantine sends fail to the spam folder
+  instead of being rejected outright. Move to `p=reject` once we have
+  90 days of clean reports.
+- `aspf=s` and `adkim=s` are strict alignment — the From: header domain
+  must match the SPF Return-Path and DKIM-Signature `d=` exactly. Resend
+  satisfies this by default.
+
+### DKIM rotation cadence
+
+- **Annual.** Resend rotates the underlying keys on a 12-month cycle; the
+  selector CNAMEs do not change, so DNS does not need re-editing on the
+  app side. Operator action is to confirm the two selectors still resolve
+  during the annual security review.
+
+### Monitoring
+
+- `rua=mailto:dmarc-reports@loveiq.org` collects aggregate DMARC reports.
+  Inspect quarterly: a spike in "fail" sources means either a spoofing
+  attempt OR a new legitimate sender we forgot to add to SPF.
+- Resend dashboard → Deliverability → Authentication status. Should be
+  "Verified" for both DKIM selectors. A "Pending" or "Failed" line is the
+  early warning before bulk inbox rejections.
+
+## Stripe webhook IP allowlist (P-12)
+
+We currently rely on **signature verification only** (`STRIPE_WEBHOOK_SECRET`
+HMAC). Stripe publishes the list of webhook source IPs
+(<https://stripe.com/files/ips/ips_webhooks.json>) but we do not enforce it
+at the route level.
+
+This is accepted-as-documented: the signature is a cryptographically strong
+defense, and an attacker who somehow obtained the webhook secret would also
+have the keys to fake the signature regardless of source IP. The IP
+allowlist would add brittleness (Stripe updates the IP set without prior
+notice) for marginal defense-in-depth.
+
+**Operator note.** If this is ever revisited (e.g. an audit specifically
+requests IP allowlisting), do it at the Vercel WAF / edge layer, not in
+the route handler — the route runs after the Lambda spins up, so adding
+an IP check there preserves zero of the cost-avoidance the allowlist
+would otherwise provide.
 
 ## Monitoring & alerts
 

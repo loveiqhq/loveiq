@@ -55,7 +55,10 @@ describe("nurture email templates", () => {
       promoCode: "LIQ-50-Ab7K9xQ2",
       siteUrl: SITE,
     });
-    expect(out.subject).toBe("Your 50% LoveIQ unlock code expires in 24 hours");
+    // T-07: shortened from "Your 50% LoveIQ unlock code expires in 24 hours"
+    // (47 chars, at iOS truncation edge) to fit ≤50 chars comfortably.
+    expect(out.subject).toBe("Your 50% LoveIQ code expires in 24h");
+    expect(out.subject.length).toBeLessThanOrEqual(50);
     expect(out.html).toContain("LIQ-50-Ab7K9xQ2");
     expect(out.html).toContain("50% off");
     expect(out.html).toContain("14-day money-back guarantee");
@@ -69,7 +72,11 @@ describe("nurture email templates", () => {
       promoCode: "LIQ-75-Z9k2X8aB",
       siteUrl: SITE,
     });
-    expect(out.subject).toBe("Last chance to unlock your report with 75% discount within 24 hours");
+    // T-07: shortened from 67-char "Last chance to unlock your report with..." which
+    // truncated on iOS Mail mid-discount-token. New subject keeps the 75% +
+    // 24h conversion-load-bearing tokens at the start.
+    expect(out.subject).toBe("Last chance: 75% off your report (24h)");
+    expect(out.subject.length).toBeLessThanOrEqual(50);
     expect(out.html).toContain("LIQ-75-Z9k2X8aB");
     expect(out.html).toContain("75% off");
     expect(out.text).toContain("LIQ-75-Z9k2X8aB");

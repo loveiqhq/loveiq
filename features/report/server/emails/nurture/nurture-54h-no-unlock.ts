@@ -21,7 +21,10 @@ export function nurture54hNoUnlockEmail({
 }: Nurture54hNoUnlockParams) {
   const safeFirstName = firstName?.trim() ? escapeHtml(firstName.trim()) : "there";
   const safePromoCode = escapeHtml(promoCode);
-  const subject = `Last chance to unlock your report with ${percentOff}% discount within 24 hours`;
+  // T-07: keep ≤50 chars so mobile clients (iOS Mail ~38-50, Gmail ~50-60)
+  // don't truncate the discount hook. 75% off + 24h are the conversion-load-
+  // bearing tokens; keep them at the start.
+  const subject = `Last chance: ${percentOff}% off your report (24h)`;
   const previewText = `Use code ${promoCode} to save ${percentOff}% on your full report.`;
 
   return renderNurtureEmail({

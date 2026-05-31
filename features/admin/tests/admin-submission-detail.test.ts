@@ -233,18 +233,55 @@ describe("PATCH /api/admin/submissions/[id]", () => {
     expect(json.error).toBe("Invalid status.");
   });
 
-  it("returns 400 when status is missing", async () => {
+  it("returns 400 when no mutable field is provided (T-08)", async () => {
+    // T-08 extends PATCH to accept first_name + email. When NO field is
+    // provided we now emit a clearer multi-field hint instead of "Invalid
+    // status."
     const res = await PATCH(makePatchRequest("1", {}), makeParams("1"));
     expect(res.status).toBe(400);
 
     const json = await res.json();
-    expect(json.error).toBe("Invalid status.");
+    expect(json.error).toMatch(/at least one of: status, first_name, email/);
+  });
+
+  it("F-05: returns 400 when expected_updated_at is missing", async () => {
+    const res = await PATCH(makePatchRequest("1", { status: "flagged" }), makeParams("1"));
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error).toMatch(/expected_updated_at/i);
+  });
+
+  it("F-05: returns 409 when expected_updated_at does not match", async () => {
+    // First mock: PATCH returns 0 affected rows (concurrency mismatch).
+    mockSupabaseFetch.mockResolvedValueOnce({ ok: true, json: async () => [] });
+    // Second mock: the fallback "fetch current row" call.
+    mockSupabaseFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => [{ updated_date_time: "2026-05-25T00:00:00.000Z", status: "flagged" }],
+    });
+
+    const res = await PATCH(
+      makePatchRequest("1", {
+        status: "flagged",
+        expected_updated_at: "2026-05-24T00:00:00.000Z",
+      }),
+      makeParams("1")
+    );
+    expect(res.status).toBe(409);
+    const json = await res.json();
+    expect(json.error).toMatch(/modified/i);
   });
 
   it("returns 500 when Supabase PATCH fails", async () => {
     mockSupabaseFetch.mockResolvedValueOnce({ ok: false, status: 500 });
 
-    const res = await PATCH(makePatchRequest("1", { status: "flagged" }), makeParams("1"));
+    const res = await PATCH(
+      makePatchRequest("1", {
+        status: "flagged",
+        expected_updated_at: "2026-05-25T00:00:00.000Z",
+      }),
+      makeParams("1")
+    );
     expect(res.status).toBe(500);
 
     const json = await res.json();
@@ -252,9 +289,18 @@ describe("PATCH /api/admin/submissions/[id]", () => {
   });
 
   it("returns success for valid status update", async () => {
-    mockSupabaseFetch.mockResolvedValueOnce({ ok: true });
+    mockSupabaseFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => [{ updated_date_time: "2026-05-25T01:00:00.000Z" }],
+    });
 
-    const res = await PATCH(makePatchRequest("1", { status: "flagged" }), makeParams("1"));
+    const res = await PATCH(
+      makePatchRequest("1", {
+        status: "flagged",
+        expected_updated_at: "2026-05-25T00:00:00.000Z",
+      }),
+      makeParams("1")
+    );
     expect(res.status).toBe(200);
 
     const json = await res.json();
@@ -267,9 +313,18 @@ describe("PATCH /api/admin/submissions/[id]", () => {
       mockVerifyAdminSession.mockResolvedValue({ email: "admin@test.com", role: "admin" });
       mockVerifyCsrf.mockResolvedValue(true);
       mockCheckRateLimit.mockResolvedValue({ allowed: true, remaining: 29, resetAt: new Date() });
-      mockSupabaseFetch.mockResolvedValueOnce({ ok: true });
+      mockSupabaseFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => [{ updated_date_time: "2026-05-25T01:00:00.000Z" }],
+      });
 
-      const res = await PATCH(makePatchRequest("1", { status }), makeParams("1"));
+      const res = await PATCH(
+        makePatchRequest("1", {
+          status,
+          expected_updated_at: "2026-05-25T00:00:00.000Z",
+        }),
+        makeParams("1")
+      );
       expect(res.status).toBe(200);
     }
   });

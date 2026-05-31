@@ -21,6 +21,13 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
   fetchWithTimeout: (...args: unknown[]) => mockFetchWithTimeout(...args),
 }));
 
+// F-12 paywall kill switch. Default ENFORCED (true) so existing tests see
+// normal gating; the kill-switch test flips it to false.
+const mockIsFeatureEnabled = vi.fn<() => Promise<boolean>>();
+vi.mock("@shared/flags/system-flags", () => ({
+  isFeatureEnabled: (...args: unknown[]) => mockIsFeatureEnabled(...(args as [])),
+}));
+
 vi.mock("@shared/http/circuit-breaker", () => ({
   getBreaker: () => ({ fire: (fn: () => Promise<unknown>) => fn() }),
   CircuitOpenError: class CircuitOpenError extends Error {},
@@ -87,6 +94,8 @@ describe("GET /api/report", () => {
       ok: true,
       json: async () => [],
     });
+    // Default: paywall ENFORCED. Individual tests override to false.
+    mockIsFeatureEnabled.mockResolvedValue(true);
   });
 
   it("returns 403 when CSRF token is invalid", async () => {
@@ -249,6 +258,93 @@ describe("GET /api/report", () => {
         userId: 77,
       })
     );
+  });
+
+  it("F-12: unlocks the whole report (accessPlan=all_reports) when report_paywall_enforced is off", async () => {
+    allowCsrf();
+    allowRateLimit();
+    // getReportAccessPlanForSubmission resolves to a free/no-plan user...
+    vi.mocked(getReportAccessPlanForSubmission).mockResolvedValue({
+      accessPlan: null,
+      archetypeTiers: {},
+      personalReportId: 99,
+      unlockedArchetypeColumn: [],
+    });
+    // ...but the kill switch is OFF → the route overrides to all_reports.
+    mockIsFeatureEnabled.mockResolvedValue(false);
+    mockFetchWithTimeout
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          {
+            id: 55,
+            user_id: 77,
+            created_date_time: "2026-04-07T22:23:16.851299+00:00",
+            app_user: { first_name: "Eman", email: "eman@example.com" },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          {
+            primary_archetype: "Spark Seeker",
+            v5_primary_archetype: "Emotional Voyeur",
+            percentages: { "Spark Seeker": 41 },
+            v5_percentages: { "Emotional Voyeur": 63 },
+            diagnostics: null,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ ok: true, json: async () => [] });
+
+    const res = await GET(makeRequest("02d88f31-eceb-4402-940d-c8cd98d01848"));
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.accessPlan).toBe("all_reports");
+    expect(mockIsFeatureEnabled).toHaveBeenCalledWith("report_paywall_enforced", true);
+  });
+
+  it("F-12: keeps the paywall (accessPlan stays null) when the flag is enforced", async () => {
+    allowCsrf();
+    allowRateLimit();
+    vi.mocked(getReportAccessPlanForSubmission).mockResolvedValue({
+      accessPlan: null,
+      archetypeTiers: {},
+      personalReportId: 99,
+      unlockedArchetypeColumn: [],
+    });
+    mockIsFeatureEnabled.mockResolvedValue(true); // enforced (default)
+    mockFetchWithTimeout
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          {
+            id: 55,
+            user_id: 77,
+            created_date_time: "2026-04-07T22:23:16.851299+00:00",
+            app_user: { first_name: "Eman", email: "eman@example.com" },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          {
+            primary_archetype: "Spark Seeker",
+            v5_primary_archetype: "Emotional Voyeur",
+            percentages: { "Spark Seeker": 41 },
+            v5_percentages: { "Emotional Voyeur": 63 },
+            diagnostics: null,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ ok: true, json: async () => [] });
+
+    const res = await GET(makeRequest("02d88f31-eceb-4402-940d-c8cd98d01848"));
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.accessPlan).toBeNull();
   });
 
   it("returns a null satisfaction snapshot answer when question 01002 is missing", async () => {

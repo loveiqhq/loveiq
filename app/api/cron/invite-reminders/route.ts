@@ -235,6 +235,10 @@ export async function GET(request: Request) {
             text: tpl.text,
             headers: {
               "X-LoveIQ-Reminder": String(reminder),
+              // P-06: dedicated list identity for per-list reputation in
+              // Gmail/Outlook; Precedence:bulk suppresses auto-responders.
+              "List-ID": "LoveIQ Invite Reminders <invite-reminders.send.loveiq.org>",
+              Precedence: "bulk",
               ...(unsubscribeUrl && {
                 "List-Unsubscribe": `<${unsubscribeUrl}>`,
                 "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",

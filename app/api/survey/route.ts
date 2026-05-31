@@ -19,9 +19,11 @@ import type { SurveyAnswers } from "@features/survey/server/types";
 import {
   computeSurveyScoring,
   ensureSubmissionScored,
+  isSurveyClosed,
   setSubmissionHotjarUserId,
   submitSurveyOnce,
 } from "@features/survey/server/server";
+import { isFeatureEnabled } from "@shared/flags/system-flags";
 
 let _resend: Resend | null = null;
 function getResend(): Resend | null {
@@ -144,6 +146,25 @@ export async function POST(request: Request) {
         },
       }
     );
+  }
+
+  // F-04: reject new submissions while the survey is paused/closed. Admins
+  // toggle `survey.status` via /admin/survey-status; isSurveyClosed() reads it
+  // (30s in-process cache, fails OPEN on Supabase trouble so infra blips never
+  // block real users).
+  if (await isSurveyClosed()) {
+    return NextResponse.json(
+      { error: "The survey is currently paused. Please check back soon." },
+      { status: 409 }
+    );
+  }
+
+  // F-12: incident kill switch. The `survey_submissions` system flag gates BOTH
+  // /api/survey and /api/survey-partial (per its description + the DR runbook).
+  // Without this check the kill switch only stopped draft saves while real
+  // submissions kept landing — a broken halt. 503 mirrors /api/survey-partial.
+  if (!(await isFeatureEnabled("survey_submissions"))) {
+    return NextResponse.json({ error: "Service temporarily unavailable." }, { status: 503 });
   }
 
   const parsed = surveySchema.safeParse(await request.json().catch(() => ({})));

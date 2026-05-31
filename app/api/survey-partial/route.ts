@@ -5,6 +5,8 @@ import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { getBreaker, CircuitOpenError } from "@shared/http/circuit-breaker";
 import { verifyCsrfHeaderOrBody } from "@shared/http/csrf";
 import logger from "@shared/observability/logger";
+import { isSurveyClosed } from "@features/survey/server/server";
+import { isFeatureEnabled } from "@shared/flags/system-flags";
 
 const partialSchema = z.object({
   sessionId: z.string().uuid(),
@@ -60,7 +62,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   }
 
-  // 4. Supabase upsert
+  // 4. Survey-closed gate (F-04). Cached 30s. Fails open on Supabase trouble.
+  // Placed after validation so malformed bodies still 400 cheaply, but before
+  // the Supabase write so a paused survey doesn't accumulate orphan partials.
+  if (await isSurveyClosed()) {
+    return NextResponse.json({ error: "The survey is currently paused." }, { status: 409 });
+  }
+
+  // Kill switch (F-12).
+  if (!(await isFeatureEnabled("survey_submissions"))) {
+    return NextResponse.json({ error: "Service temporarily unavailable." }, { status: 503 });
+  }
+
+  // 5. Supabase upsert
   const url = process.env.SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 

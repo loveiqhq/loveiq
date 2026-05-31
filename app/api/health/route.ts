@@ -60,15 +60,42 @@ async function pingKv(): Promise<boolean | null> {
   }
 }
 
+// R-23: Stripe is OPTIONAL on this site — paywall can be toggled off via env.
+// When STRIPE_SECRET_KEY is unset, return null (not unhealthy). Probe is a
+// HEAD against a Stripe API endpoint that requires auth but does NO billing
+// operation. GET /v1/balance is the canonical "is Stripe reachable" check
+// used by other apps; it's read-only and cheap.
+async function pingStripe(): Promise<boolean | null> {
+  const key = process.env.STRIPE_SECRET_KEY;
+  if (!key) return null;
+  try {
+    const res = await fetchWithTimeout("https://api.stripe.com/v1/balance", {
+      headers: { Authorization: `Bearer ${key}` },
+      cache: "no-store",
+      timeoutMs: 2000,
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 export async function GET() {
   const missingEnv = REQUIRED_ENV_VARS.filter((envName) => !process.env[envName]);
 
-  const [supabaseOk, resendOk, kvOk] = await Promise.all([pingSupabase(), pingResend(), pingKv()]);
+  const [supabaseOk, resendOk, kvOk, stripeOk] = await Promise.all([
+    pingSupabase(),
+    pingResend(),
+    pingKv(),
+    pingStripe(),
+  ]);
 
   // KV is optional — null means "not configured, in-memory fallback active".
-  // Treat null as healthy; only `false` (configured but unreachable) fails.
+  // Stripe is optional too (paywall can be turned off). Treat null as healthy;
+  // only `false` (configured but unreachable) fails the probe.
   const kvHealthy = kvOk !== false;
-  const healthy = missingEnv.length === 0 && supabaseOk && resendOk && kvHealthy;
+  const stripeHealthy = stripeOk !== false;
+  const healthy = missingEnv.length === 0 && supabaseOk && resendOk && kvHealthy && stripeHealthy;
 
   if (!healthy) {
     // Diagnostic detail goes to the server log so operators can debug
@@ -80,6 +107,7 @@ export async function GET() {
         supabaseOk,
         resendOk,
         kvOk,
+        stripeOk,
       },
       "Health check failed"
     );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -22,6 +22,23 @@ export default function ConfirmDialog({
   onCancel,
 }: ConfirmDialogProps) {
   const [typedValue, setTypedValue] = useState("");
+  // R-16: capture the element that had focus when the dialog opened so we
+  // can return focus there on close. A keyboard user clicks a row action,
+  // opens this dialog, cancels — they should land back on the row action,
+  // not at <body>.
+  const opener = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      opener.current = (document.activeElement as HTMLElement | null) ?? null;
+    } else if (opener.current && typeof opener.current.focus === "function") {
+      // Defer to the next microtask so the dialog has fully unmounted
+      // before we move focus — otherwise React may steal focus back.
+      const target = opener.current;
+      queueMicrotask(() => target.focus({ preventScroll: true }));
+      opener.current = null;
+    }
+  }, [open]);
 
   if (!open) return null;
 

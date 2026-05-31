@@ -13,6 +13,11 @@
 -- (admin-controlled), and aggregate counts. Safe to retain indefinitely
 -- (~260 rows / year at 5 recs/week).
 
+-- migration-lint: ignore
+-- (Reason: the index below is built on digest_recommendation_history, a table
+--  CREATEd in this same migration — so it is empty at index-build time and the
+--  CONCURRENTLY requirement does not apply. Already applied to prod.)
+
 CREATE TABLE IF NOT EXISTS public.digest_recommendation_history (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   week_key TEXT NOT NULL,

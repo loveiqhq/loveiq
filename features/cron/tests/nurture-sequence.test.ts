@@ -4,6 +4,7 @@ const mockFetchWithTimeout = vi.fn();
 const mockIsEmailSuppressed = vi.fn();
 const mockResendSend = vi.fn();
 const mockStripePromoCreate = vi.fn();
+const mockStripePromoUpdate = vi.fn();
 const mockGetReportPlan = vi.fn();
 const mockGetStripeClient = vi.fn();
 const mockGetCouponIdForStage = vi.fn();
@@ -104,9 +105,13 @@ describe("GET /api/cron/nurture-sequence", () => {
       stage === "30h_no_unlock" ? "nurture_50" : stage === "54h_no_unlock" ? "nurture_75" : null
     );
     mockGetStripeClient.mockReturnValue({
-      promotionCodes: { create: (args: unknown) => mockStripePromoCreate(args) },
+      promotionCodes: {
+        create: (args: unknown) => mockStripePromoCreate(args),
+        update: (id: string, args: unknown) => mockStripePromoUpdate(id, args),
+      },
     });
     mockStripePromoCreate.mockResolvedValue({ id: "promo_xyz" });
+    mockStripePromoUpdate.mockResolvedValue({});
   });
 
   afterEach(() => {
@@ -253,5 +258,129 @@ describe("GET /api/cron/nurture-sequence", () => {
     const body = await res.json();
     expect(body.summaries["30h_no_unlock"].skippedPaid).toBe(1);
     expect(mockStripePromoCreate).not.toHaveBeenCalled();
+  });
+
+  it("F-06: persists idempotency marker BEFORE Resend send", async () => {
+    // Tracks the order of two operations: the PATCH on report_price_quote
+    // (marker write) and the Resend send. The audit fix requires the PATCH
+    // to land first so a crash mid-send does not double-deliver next hour.
+    const callOrder: string[] = [];
+    const patchSpy = vi.fn(() => {
+      callOrder.push("patch");
+      return jsonResponse({}, 204);
+    });
+    mockResendSend.mockImplementation(() => {
+      callOrder.push("send");
+      return Promise.resolve({ data: { id: "msg_1" }, error: null });
+    });
+
+    const candidate = {
+      id: 7,
+      survey_submission_id: 70,
+      created_date_time: new Date(Date.now() - 30 * 60 * 60 * 1000).toISOString(),
+      survey_submission: { app_user: { email: "order@example.com", first_name: "Or" } },
+    };
+    mockCandidateWindows({
+      sixHour: [],
+      thirtyHour: [candidate],
+      fiftyFourHour: [],
+      quoteMetadata: { nurtureEmailsSent: [] },
+      patchSpy,
+    });
+
+    const res = await GET(makeRequest("test-cron-secret"));
+    expect(res.status).toBe(200);
+    expect(callOrder).toEqual(["patch", "send"]);
+  });
+
+  it("F-06: when Resend fails, marker is still persisted so retry does not double-send", async () => {
+    // Simulates the "send fails after marker write" branch. Verifies:
+    //  (a) the PATCH did fire (marker is written)
+    //  (b) the candidate is counted in `failed`, not `sent`
+    // A second cron run would now see nurtureEmailsSent include the stage and
+    // skip it — the retry-safety guarantee F-06 was built for.
+    const patchSpy = vi.fn(() => jsonResponse({}, 204));
+    mockResendSend.mockResolvedValueOnce({
+      data: null,
+      error: { name: "ResendError", message: "boom" },
+    });
+
+    const candidate = {
+      id: 8,
+      survey_submission_id: 80,
+      created_date_time: new Date(Date.now() - 30 * 60 * 60 * 1000).toISOString(),
+      survey_submission: { app_user: { email: "boom@example.com", first_name: "Bo" } },
+    };
+    mockCandidateWindows({
+      sixHour: [],
+      thirtyHour: [candidate],
+      fiftyFourHour: [],
+      quoteMetadata: { nurtureEmailsSent: [] },
+      patchSpy,
+    });
+
+    const res = await GET(makeRequest("test-cron-secret"));
+    expect(res.status).toBe(200);
+    expect(patchSpy).toHaveBeenCalledTimes(1);
+
+    const body = await res.json();
+    expect(body.summaries["30h_no_unlock"].sent).toBe(0);
+    expect(body.summaries["30h_no_unlock"].failed).toBe(1);
+  });
+
+  it("R-06/F-08: 54h candidate deactivates the prior 30h promo code on Stripe", async () => {
+    // Pre-existing 30h promo code stored in quote metadata — the cron
+    // must deactivate it on Stripe before sending the more aggressive
+    // 54h offer so the user can't redeem the older smaller discount.
+    const priorPromoId = "promo_30h_existing";
+    const candidate = {
+      id: 9,
+      survey_submission_id: 90,
+      created_date_time: new Date(Date.now() - 54 * 60 * 60 * 1000).toISOString(),
+      survey_submission: { app_user: { email: "x@example.com", first_name: "X" } },
+    };
+
+    mockCandidateWindows({
+      sixHour: [],
+      thirtyHour: [],
+      fiftyFourHour: [candidate],
+      quoteMetadata: {
+        nurtureEmailsSent: ["30h_no_unlock"],
+        nurturePromoCodes: {
+          "30h_no_unlock": {
+            code: "LIQ-50-OLD1ABCD",
+            stripePromotionCodeId: priorPromoId,
+            percentOff: 50,
+            expiresAt: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
+          },
+        },
+      },
+    });
+
+    const res = await GET(makeRequest("test-cron-secret"));
+    expect(res.status).toBe(200);
+
+    // Verify Stripe was asked to deactivate the prior 30h code.
+    expect(mockStripePromoUpdate).toHaveBeenCalledWith(priorPromoId, { active: false });
+  });
+
+  it("R-06/F-08: 30h candidate does NOT call deactivate (no prior stage to retire)", async () => {
+    const candidate = {
+      id: 10,
+      survey_submission_id: 100,
+      created_date_time: new Date(Date.now() - 30 * 60 * 60 * 1000).toISOString(),
+      survey_submission: { app_user: { email: "y@example.com", first_name: "Y" } },
+    };
+
+    mockCandidateWindows({
+      sixHour: [],
+      thirtyHour: [candidate],
+      fiftyFourHour: [],
+      quoteMetadata: { nurtureEmailsSent: [] },
+    });
+
+    const res = await GET(makeRequest("test-cron-secret"));
+    expect(res.status).toBe(200);
+    expect(mockStripePromoUpdate).not.toHaveBeenCalled();
   });
 });

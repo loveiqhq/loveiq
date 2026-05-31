@@ -55,14 +55,25 @@ function CopyableChip({ label, value, title }: { label: string; value: string; t
   }, [value]);
 
   return (
-    <button
-      type="button"
-      onClick={handleCopy}
-      title={title}
-      className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 font-mono text-[11px] text-text-muted transition hover:bg-white/10"
-    >
-      {copied ? "✓ Copied" : `${label} ⎘`}
-    </button>
+    <>
+      <button
+        type="button"
+        onClick={handleCopy}
+        title={title}
+        aria-label={copied ? `${label} copied` : `Copy ${label}`}
+        className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 font-mono text-[11px] text-text-muted transition hover:bg-white/10"
+      >
+        {copied ? "✓ Copied" : `${label} ⎘`}
+      </button>
+      {/* R-26: live region announces "copied" to screen-reader users. The
+          button itself flips its visible label, which sighted users see —
+          this region carries the same signal for AT users. role="status"
+          (vs alert) chosen because the action was user-initiated and not
+          urgent. aria-atomic so the full message is re-read each time. */}
+      <span role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+        {copied ? `${label} copied to clipboard` : ""}
+      </span>
+    </>
   );
 }
 
@@ -78,6 +89,7 @@ interface SubmissionData {
     started_at: string;
     completed_at: string;
     saved_at?: string;
+    updated_at?: string | null;
     duration_ms: number | null;
     utm_source: string | null;
     answer_count?: number | null;
@@ -128,14 +140,26 @@ export default function SubmissionDetail({ id, mode = "submission" }: Submission
     setActionLoading(true);
     setActionError(null);
     try {
+      // F-05: include the timestamp from the last GET so the server can
+      // reject the PATCH if another admin has changed the row since then.
+      const expectedUpdatedAt = data?.submission.updated_at ?? null;
+      if (!expectedUpdatedAt) {
+        setActionError("Submission not loaded — refresh and try again.");
+        return;
+      }
       const res = await fetch(`/api/admin/submissions/${id}`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
           "x-csrf-token": getCsrfToken(),
         },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ status, expected_updated_at: expectedUpdatedAt }),
       });
+      if (res.status === 409) {
+        setActionError("Another admin changed this submission. Refreshing…");
+        refetch();
+        return;
+      }
       if (!res.ok) {
         const body = await res.json().catch(() => null);
         setActionError((body as { error?: string } | null)?.error || "Action failed.");

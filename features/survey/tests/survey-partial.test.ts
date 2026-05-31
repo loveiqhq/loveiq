@@ -26,9 +26,14 @@ vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
+vi.mock("@features/survey/server/server", () => ({
+  isSurveyClosed: vi.fn().mockResolvedValue(false),
+}));
+
 import { POST } from "@/app/api/survey-partial/route";
 import { verifyCsrfHeaderOrBody } from "@shared/http/csrf";
 import { checkRateLimit } from "@shared/http/ratelimit";
+import { isSurveyClosed } from "@features/survey/server/server";
 
 function makeRequest(body: unknown) {
   return new Request("http://localhost/api/survey-partial", {
@@ -96,6 +101,14 @@ describe("POST /api/survey-partial", () => {
     const { answers: _a, ...body } = validBody();
     const res = await POST(makeRequest(body));
     expect(res.status).toBe(400);
+  });
+
+  it("F-04: returns 409 when survey is closed", async () => {
+    vi.mocked(isSurveyClosed).mockResolvedValueOnce(true);
+    const res = await POST(makeRequest(validBody()));
+    expect(res.status).toBe(409);
+    // No Supabase upsert should have happened.
+    expect(mockFetchWithTimeout).not.toHaveBeenCalled();
   });
 
   it("returns 503 when Supabase is not configured", async () => {

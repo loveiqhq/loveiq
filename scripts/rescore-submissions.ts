@@ -165,6 +165,28 @@ async function main() {
 
   console.log(`\nDone: ${updated} re-scored, ${changed} archetype changes, ${errors} errors`);
   if (DRY_RUN) console.log("Pass --apply to write changes to DB.");
+
+  // R-21: ops Slack ping when a rescore actually writes to prod. The
+  // operator running this script knows what they did — the ping exists
+  // so the OTHER admins (and the on-call) see it on the timeline. No
+  // ping on dry runs.
+  if (!DRY_RUN && updated > 0) {
+    const slackWebhook = process.env.SLACK_OPS_WEBHOOK_URL;
+    if (slackWebhook) {
+      try {
+        await fetch(slackWebhook, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            text: `:abacus: Manual scoring rescore — ${updated} rows updated, ${changed} archetype changes, ${errors} errors. Run by: ${process.env.USER ?? "unknown"} on ${new Date().toISOString()}.`,
+            username: "ops_alerts",
+          }),
+        });
+      } catch (err) {
+        console.error("Slack ping failed:", (err as Error).message);
+      }
+    }
+  }
 }
 
 main().catch((err) => {

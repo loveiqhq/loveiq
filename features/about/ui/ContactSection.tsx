@@ -12,27 +12,50 @@ type FormFieldProps = {
   value: string;
   onChange: (e: ChangeEvent<HTMLInputElement>) => void;
   disabled?: boolean;
+  // R-15: optional inline error message. When set:
+  //   - aria-invalid="true" announces the input as in error state
+  //   - aria-describedby links the error element so screen readers narrate
+  //     the message immediately after the label
+  error?: string | null;
 };
 
-const FormField: FC<FormFieldProps> = ({ id, label, type = "text", value, onChange, disabled }) => (
-  <label htmlFor={id} className="flex flex-col gap-2">
-    <span className="text-sm font-medium text-[#9CA3AF]">{label}</span>
-    <input
-      id={id}
-      name={id}
-      type={type}
-      className="autofill-dark h-[49px] w-full border-b border-white/10 bg-transparent text-sm text-white transition focus:border-white/30 focus:outline-none focus:ring-0 disabled:opacity-60"
-      style={{
-        ["--autofill-font-size" as string]: "14px",
-        ["--autofill-font-size-sm" as string]: "14px",
-      }}
-      value={value}
-      onChange={onChange}
-      required
-      disabled={disabled}
-    />
-  </label>
-);
+const FormField: FC<FormFieldProps> = ({
+  id,
+  label,
+  type = "text",
+  value,
+  onChange,
+  disabled,
+  error,
+}) => {
+  const errorId = `${id}-error`;
+  return (
+    <label htmlFor={id} className="flex flex-col gap-2">
+      <span className="text-sm font-medium text-[#9CA3AF]">{label}</span>
+      <input
+        id={id}
+        name={id}
+        type={type}
+        className="autofill-dark h-[49px] w-full border-b border-white/10 bg-transparent text-sm text-white transition focus:border-white/30 focus:outline-none focus:ring-0 disabled:opacity-60"
+        style={{
+          ["--autofill-font-size" as string]: "14px",
+          ["--autofill-font-size-sm" as string]: "14px",
+        }}
+        value={value}
+        onChange={onChange}
+        required
+        disabled={disabled}
+        aria-invalid={error ? "true" : undefined}
+        aria-describedby={error ? errorId : undefined}
+      />
+      {error ? (
+        <span id={errorId} role="alert" className="text-xs text-red-400">
+          {error}
+        </span>
+      ) : null}
+    </label>
+  );
+};
 
 const ContactSection: FC = () => {
   const [form, setForm] = useState({

@@ -37,6 +37,12 @@ export interface NurtureBodyParams {
 function renderTestimonialCard(t: NurtureTestimonial, siteUrl: string): string {
   const absPhoto = t.photoUrl.startsWith("http") ? t.photoUrl : `${siteUrl}${t.photoUrl}`;
   const trailing = t.quoteTrailing ? escapeHtml(t.quoteTrailing) : "";
+  // T-03: Outlook desktop (2007-2019) uses the Word HTML renderer which
+  // largely ignores CSS `style` on <td>. To keep the two-column avatar+name
+  // row aligned in Outlook, the avatar <td> needs an explicit `width="64"`
+  // HTML attribute (in addition to the `style="width:64px"` modern clients
+  // use), and both <td>s need `valign="middle"` (Outlook ignores the CSS
+  // `vertical-align`). Modern clients honour either; this is purely additive.
   return `
   <tr>
     <td style="padding:16px 32px 8px;">
@@ -45,10 +51,10 @@ function renderTestimonialCard(t: NurtureTestimonial, siteUrl: string): string {
           <td style="padding:16px 18px 18px;">
             <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
               <tr>
-                <td style="width:64px; vertical-align:middle;">
+                <td width="64" valign="middle" style="width:64px; vertical-align:middle;">
                   <img src="${escapeHtml(absPhoto)}" alt="${escapeHtml(t.name)}" width="56" height="56" style="display:block; width:56px; height:56px; border-radius:9999px; background-color:#2A1839; object-fit:cover;" />
                 </td>
-                <td style="padding-left:12px; vertical-align:middle;">
+                <td valign="middle" style="padding-left:12px; vertical-align:middle;">
                   <p style="margin:0; font-family:${EMAIL_FONT}; font-size:14px; font-weight:700; line-height:20px; color:#ffffff;">${escapeHtml(t.name)}</p>
                   <p style="margin:0; font-family:${EMAIL_FONT}; font-size:11px; line-height:16px; color:#d1d5db;">${escapeHtml(t.role)}</p>
                 </td>

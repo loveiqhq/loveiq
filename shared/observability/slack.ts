@@ -1,6 +1,48 @@
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import logger from "@shared/observability/logger";
 
+/**
+ * P-09: write a failed Slack send to the dead-letter table so an operator can
+ * pull missed alerts post-incident. Best-effort — a Supabase write failure
+ * here is also logged-and-dropped (with `slack:false` so the pino transport
+ * does not recursively try to notify Slack about Slack's own DLQ failure).
+ */
+async function writeSlackDeadLetter(input: {
+  channel: SlackChannel;
+  kind: string;
+  text: string;
+  username?: string;
+  failureReason: string;
+  httpStatus?: number;
+}): Promise<void> {
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !serviceRoleKey) return;
+
+  try {
+    await fetchWithTimeout(`${supabaseUrl}/rest/v1/slack_dead_letter`, {
+      method: "POST",
+      headers: {
+        apikey: serviceRoleKey,
+        Authorization: `Bearer ${serviceRoleKey}`,
+        "Content-Type": "application/json",
+        Prefer: "return=minimal",
+      },
+      body: JSON.stringify({
+        channel: input.channel,
+        kind: input.kind,
+        text: input.text,
+        username: input.username ?? null,
+        failure_reason: input.failureReason,
+        http_status: input.httpStatus ?? null,
+      }),
+      timeoutMs: 3000,
+    });
+  } catch (err) {
+    logger.error({ err, slack: false }, "Slack dead-letter write failed");
+  }
+}
+
 export type SlackChannel = "ops" | "survey" | "contact" | "payments";
 
 /* eslint-disable no-secrets/no-secrets -- env var names, not secrets */
@@ -119,11 +161,29 @@ export async function notifySlack(input: NotifySlackInput): Promise<void> {
         { channel, kind, status: res.status, respBody, ...context, slack: false },
         "Slack webhook failed"
       );
+      // P-09: capture the missed alert so an operator can replay it.
+      await writeSlackDeadLetter({
+        channel,
+        kind,
+        text,
+        username,
+        failureReason: `HTTP ${res.status}: ${respBody.slice(0, 200)}`,
+        httpStatus: res.status,
+      });
     }
   } catch (err) {
     // slack:false here is critical — without it the pino transport hook would
     // recursively try to notify Slack about Slack's own failure.
     logger.error({ err, channel, kind, ...context, slack: false }, "Slack webhook error");
+    // P-09: network/timeout failures also DLQ. fetchWithTimeout's AbortError
+    // and DNS errors all land here.
+    await writeSlackDeadLetter({
+      channel,
+      kind,
+      text,
+      username,
+      failureReason: err instanceof Error ? err.message.slice(0, 200) : "unknown",
+    });
   }
 }
 

@@ -1,10 +1,26 @@
 import { getBreaker } from "@shared/http/circuit-breaker";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import logger from "@shared/observability/logger";
-import { getScoringConfig, scoreArchetypes, type ScoringResult } from "@features/scoring/logic";
+import {
+  getScoringConfig,
+  getScoringConfigSha,
+  scoreArchetypes,
+  type ScoringResult,
+} from "@features/scoring/logic";
 import type { SurveyAnswers } from "./types";
 
 const SUPABASE_TIMEOUT_MS = 8000;
+
+/**
+ * T-11: GDPR Art. 7(1) consent versioning. Bumped whenever the Q16015
+ * marketing-opt-in copy changes (in `data/survey-source.csv`). Stored on
+ * `survey_submission.marketing_opt_in_terms_version` so a regulator inquiry
+ * can map a user's "yes" back to the exact text they consented to.
+ *
+ * Format: ISO date of the copy change. To bump, change the constant AND
+ * update `data/survey-source.csv` in the same commit.
+ */
+export const MARKETING_OPT_IN_TERMS_VERSION = "2026-05-21";
 
 export interface SurveySubmissionPayload {
   email: string;
@@ -146,6 +162,31 @@ export async function submitSurveyOnce(
   }
 
   const submissionId = await runSubmitSurveyRpc(payload);
+
+  // T-11: stamp the consent terms version when the user opted in. Done as a
+  // follow-up PATCH instead of an RPC param so the existing submit_survey
+  // function body (with answer_options / answer_history fan-out) stays
+  // untouched. Best-effort: a failure here is logged and swallowed —
+  // the submission itself succeeded, and the audit-trail gap can be
+  // backfilled if needed.
+  if (payload.marketingOptIn === true) {
+    try {
+      await supabaseServiceFetch(`/rest/v1/survey_submission?id=eq.${submissionId}`, {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({
+          marketing_opt_in_terms_version: MARKETING_OPT_IN_TERMS_VERSION,
+        }),
+        timeoutMs: 3000,
+      });
+    } catch (err) {
+      logger.warn(
+        { err, submissionId, version: MARKETING_OPT_IN_TERMS_VERSION },
+        "T-11: failed to stamp marketing_opt_in_terms_version"
+      );
+    }
+  }
+
   return { submissionId, isExisting: false };
 }
 
@@ -216,6 +257,7 @@ async function storeScoringResult(submissionId: number, scoringResult: ScoringRe
       body: JSON.stringify({
         survey_submission_id: submissionId,
         engine_version: scoringResult.v5 ? "v4+v5" : "v4",
+        config_sha: getScoringConfigSha(),
         primary_archetype: scoringResult.primaryArchetype,
         percentages: scoringResult.percent,
         raw_scores: scoringResult.rawScore,
@@ -269,4 +311,54 @@ export async function ensureSubmissionScored(
   }
 
   return scoringSummary;
+}
+
+// Survey-closed enforcement (F-04). Reads `survey.status` and caches the
+// answer in-process for 30 s so concurrent submissions don't each hit
+// Supabase. Fails OPEN: any Supabase error returns `false` (allow the
+// submission) — never block users on infra trouble; the admin still has
+// the toggle for next time.
+const SURVEY_STATUS_CACHE_MS = 30_000;
+// Shorter TTL applied when the Supabase fetch fails. Prevents a sustained
+// outage from adding the per-request 2s timeout to every survey submission
+// while still letting the gate recover within seconds once Supabase returns.
+const SURVEY_STATUS_FAIL_OPEN_TTL_MS = 5_000;
+let surveyStatusCache: { closed: boolean; expiresAt: number } | null = null;
+
+// Test-only: clear the in-process cache between assertions. NOT for prod code.
+// Pass a boolean to pre-populate the cache with a known value (avoids hitting
+// the Supabase mock for tests that don't care about the gate). Pass nothing
+// (or undefined) to fully invalidate so the next call refetches.
+export function __resetSurveyStatusCacheForTests(closed?: boolean): void {
+  if (closed === undefined) {
+    surveyStatusCache = null;
+    return;
+  }
+  surveyStatusCache = { closed, expiresAt: Date.now() + SURVEY_STATUS_CACHE_MS };
+}
+
+export async function isSurveyClosed(): Promise<boolean> {
+  const now = Date.now();
+  if (surveyStatusCache && surveyStatusCache.expiresAt > now) {
+    return surveyStatusCache.closed;
+  }
+
+  try {
+    const res = await supabaseServiceFetch("/rest/v1/survey?select=status&limit=1&order=id.asc", {
+      timeoutMs: 2000,
+    });
+    if (!res.ok) {
+      logger.warn({ status: res.status }, "Survey status check failed - failing open");
+      surveyStatusCache = { closed: false, expiresAt: now + SURVEY_STATUS_FAIL_OPEN_TTL_MS };
+      return false;
+    }
+    const rows = (await res.json()) as Array<{ status: string }>;
+    const closed = rows.length > 0 && rows[0]!.status === "closed";
+    surveyStatusCache = { closed, expiresAt: now + SURVEY_STATUS_CACHE_MS };
+    return closed;
+  } catch (err) {
+    logger.warn({ err }, "Survey status check threw - failing open");
+    surveyStatusCache = { closed: false, expiresAt: now + SURVEY_STATUS_FAIL_OPEN_TTL_MS };
+    return false;
+  }
 }
