@@ -189,6 +189,13 @@ export async function proxy(request: NextRequest) {
       adminPath === "/admin/login" ||
       adminPath === "/api/admin/login" ||
       adminPath === "/api/admin/logout" ||
+      // Public-by-design: the digest-image edge route is fetched by Slack's
+      // anonymous image proxy (it cannot send cookies/headers). It
+      // self-authorizes via an HMAC signature in the URL (verifyImagePayload →
+      // 403 on a bad signature), reads no DB and exposes no admin data, so it
+      // MUST bypass the admin session gate — otherwise Slack gets a 401 and the
+      // funnel-digest charts render as broken images.
+      adminPath.startsWith("/api/admin/digest-image/") ||
       adminPath.startsWith("/admin/auth/"); // callback route
 
     if (!isAdminPublic) {

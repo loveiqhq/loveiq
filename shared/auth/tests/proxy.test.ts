@@ -394,4 +394,26 @@ describe("proxy middleware", () => {
       expect(mockRedirect).not.toHaveBeenCalled();
     });
   });
+
+  // The signed digest-image edge route lives under /api/admin/ but is fetched
+  // by Slack's ANONYMOUS image proxy and self-authorizes via an HMAC signature
+  // in the URL. It must bypass the admin session gate, or the funnel-digest
+  // charts render as broken images (Slack gets 401). Regression guard for the
+  // 2026-05-31 fix.
+  describe("admin gate exemption: signed digest-image route", () => {
+    it("lets the anonymous Slack proxy reach /api/admin/digest-image/* (not session-gated)", async () => {
+      // Default mockGetUser = anonymous; the route authorizes via the URL signature.
+      await proxy(
+        makeNextRequest("http://localhost:3000/api/admin/digest-image/cvr-visitor-start?d=x&s=y")
+      );
+      expect(mockJson).not.toHaveBeenCalled(); // no 401 Unauthorized
+      expect(mockRedirect).not.toHaveBeenCalled();
+      expect(mockResponseHeaders.get("X-Frame-Options")).toBe("DENY"); // passed through
+    });
+
+    it("still blocks an unauthenticated non-exempt /api/admin route with 401", async () => {
+      const res = await proxy(makeNextRequest("http://localhost:3000/api/admin/stats"));
+      expect((res as unknown as { status: number }).status).toBe(401);
+    });
+  });
 });
