@@ -238,7 +238,19 @@ export function renderNurtureEmail({
     unsubscribeUrl,
   });
 
-  const stripTags = (s: string) => s.replace(/<[^>]+>/g, "");
+  // Strip tags, then decode the safe display entities so the plain-text twin
+  // doesn't show literal `&quot;` / `&#039;` / `&amp;` that `escapeHtml`
+  // introduced for the HTML body. Angle-bracket entities are intentionally NOT
+  // decoded, so an escaped `<script>` from a hostile name can never reappear as
+  // a literal tag in the text part. `&amp;` is decoded last so a double-escaped
+  // sequence like `&amp;quot;` collapses to `&quot;`, not `"`.
+  const stripTags = (s: string) =>
+    s
+      .replace(/<[^>]+>/g, "")
+      .replace(/&quot;/g, '"')
+      .replace(/&#0?39;/g, "'")
+      .replace(/&nbsp;/g, " ")
+      .replace(/&amp;/g, "&");
   const text = [
     subject,
     "",

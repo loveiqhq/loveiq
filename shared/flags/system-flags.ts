@@ -7,10 +7,11 @@
  * for the flag): a kill switch that requires Supabase to be up isn't
  * useful when Supabase is down.
  *
- * Canonical flags (see migration 20260525120100):
+ * Canonical flags (see migrations 20260525120100, 20260531120000):
  *   survey_submissions
  *   nurture_sequence
  *   report_paywall_enforced
+ *   chapter_nudge
  *
  * Add new flags by INSERT into system_flags + listing here so callers get
  * type-checked names.
@@ -20,7 +21,11 @@ import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { getBreaker } from "@shared/http/circuit-breaker";
 import logger from "@shared/observability/logger";
 
-export type SystemFlagKey = "survey_submissions" | "nurture_sequence" | "report_paywall_enforced";
+export type SystemFlagKey =
+  | "survey_submissions"
+  | "nurture_sequence"
+  | "report_paywall_enforced"
+  | "chapter_nudge";
 
 const CACHE_TTL_MS = 30_000;
 const FAIL_OPEN_TTL_MS = 5_000;

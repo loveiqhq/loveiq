@@ -48,6 +48,10 @@
     {
       "path": "/api/cron/table-size-digest",
       "schedule": "15 9 * * *"
+    },
+    {
+      "path": "/api/cron/chapter-nudge",
+      "schedule": "0 11 * * *"
     }
   ],
   "functions": {
@@ -92,6 +96,9 @@
     },
     "app/api/cron/table-size-digest/route.ts": {
       "maxDuration": 30
+    },
+    "app/api/cron/chapter-nudge/route.ts": {
+      "maxDuration": 60
     }
   }
 }
