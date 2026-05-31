@@ -55,12 +55,21 @@ export const maxDuration = 60;
 const HOUR_MS = 60 * 60 * 1000;
 const SUPABASE_TIMEOUT_MS = 8_000;
 const RESEND_TIMEOUT_MS = 8_000;
-// Capped to stay within maxDuration: due candidates take ~6 Supabase round-
-// trips + a Resend send each (not-due ones short-circuit after 1 query via the
-// 44h gate). 200 matches the nurture cron's proven per-run sizing. Reports are
-// processed newest-first; if volume ever exceeds this per day, shard by
-// created_date_time. At pre-launch volume this is far above the active set.
-const CANDIDATE_LIMIT = 200;
+// Fetch ceiling — set above the current eligible set (~424 reports ≥72h old)
+// so the WHOLE backlog is covered, not just the newest N. Throughput is bounded
+// by maxDuration (60s) + graceful SIGTERM, NOT by this number: each run sends
+// ~70-80 (every due candidate = a few Supabase round-trips + one Resend send),
+// exits cleanly, and the next daily run continues the not-yet-sent reports. The
+// every-other-day (44h) gate makes already-sent reports skip fast (one quote
+// read). Full backlog rolls out over ~5-8 days, then steady-state every other
+// day — no single large blast.
+//
+// SCALING: when eligible reports approach this ceiling, the per-run not-due
+// skips start eating the budget. At that point move the due-filter server-side
+// (filter on report_price_quote.metadata) rather than raising this further. The
+// loop is graceful at every size — it never crashes or double-sends, it just
+// rolls out over more days.
+const CANDIDATE_LIMIT = 500;
 const MIN_AGE_MS = 72 * HOUR_MS; // start at day 3
 // 44h (not 48h) so daily-cron jitter / DST never makes a user skip a beat;
 // worst case a user is emailed ~44-48h apart — i.e. "every other day".
