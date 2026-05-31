@@ -263,11 +263,13 @@ jobs:
           #  - stripe/webhook (verified via Stripe signature header instead of CSRF)
           #  - resend/webhook (verified via Svix signature header instead of CSRF)
           #  - unsubscribe (RFC 8058 one-click; auth via HMAC-signed token in URL — email clients cannot send CSRF cookies)
+          #  - csp-report (browsers POST CSP violation reports automatically with no token/cookie; rate-limited + body-bounded instead)
           for file in $(find app/api -name 'route.ts' \
               -not -path "*/staging-*" \
               -not -path "*/stripe/webhook/*" \
               -not -path "*/resend/webhook/*" \
               -not -path "*/unsubscribe/*" \
+              -not -path "*/csp-report/*" \
               2>/dev/null); do
             if [ -f "$file" ] && grep -q "export.*POST\|export.*PUT\|export.*DELETE\|export.*PATCH" "$file"; then
               # Accept any CSRF verifier helper from shared/http/csrf.ts:
@@ -307,12 +309,14 @@ jobs:
           #  - resend/webhook (validated via Svix wh.verify signature check)
           #  - unsubscribe (auth via HMAC-signed token in URL; body is RFC 8058 fixed string)
           #  - admin/logout (no body to validate; just clears the auth session)
+          #  - csp-report (browser-sent CSP violation report JSON; parsed leniently across legacy + Reporting-API shapes, then bounded + logged — a strict schema would just drop valid reports)
           for file in $(find app/api -name 'route.ts' \
               -not -path "*/staging-*" \
               -not -path "*/stripe/webhook/*" \
               -not -path "*/resend/webhook/*" \
               -not -path "*/unsubscribe/*" \
               -not -path "*/admin/logout/*" \
+              -not -path "*/csp-report/*" \
               2>/dev/null); do
             if [ -f "$file" ] && grep -q "export.*POST\|export.*PUT" "$file"; then
               if ! grep -q "z\.object\|zod" "$file"; then
