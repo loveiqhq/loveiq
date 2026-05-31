@@ -28,7 +28,13 @@ import { Resend } from "resend";
 import { getBreaker } from "@shared/http/circuit-breaker";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import logger from "@shared/observability/logger";
-import { recordCronRun, startCronTimer } from "@shared/observability/slack-alert-dedup";
+import {
+  markSlackAlertDelivered,
+  recordCronRun,
+  startCronTimer,
+  tryClaimSlackAlert,
+} from "@shared/observability/slack-alert-dedup";
+import { notifySlack } from "@shared/observability/slack";
 import { buildUnsubscribeUrl } from "@shared/emails/unsubscribe-token";
 import { isEmailSuppressed } from "@shared/emails/suppression";
 import { getEmailSiteUrl } from "@shared/emails/site-url";
@@ -70,6 +76,9 @@ const RESEND_TIMEOUT_MS = 8_000;
 // loop is graceful at every size — it never crashes or double-sends, it just
 // rolls out over more days.
 const CANDIDATE_LIMIT = 500;
+// Ops-alert when a run fetches within 90% of the ceiling — the eligible backlog
+// is outgrowing CANDIDATE_LIMIT and the oldest reports risk being dropped.
+const CAPACITY_ALERT_THRESHOLD = Math.floor(CANDIDATE_LIMIT * 0.9);
 const MIN_AGE_MS = 72 * HOUR_MS; // start at day 3
 // 44h (not 48h) so daily-cron jitter / DST never makes a user skip a beat;
 // worst case a user is emailed ~44-48h apart — i.e. "every other day".
@@ -530,6 +539,18 @@ async function isChapterNudgeKilled(): Promise<boolean> {
   return !(await isFeatureEnabled("chapter_nudge"));
 }
 
+/**
+ * Fire a single ops Slack ping, deduped per (kind, UTC day) via the two-phase
+ * claim so a persistent condition pings at most once per day. Best-effort: a
+ * Slack or claim failure is swallowed inside the helpers and never breaks the
+ * cron (notifySlack also dead-letters on failure).
+ */
+async function pingOps(kind: string, dayKey: string, text: string): Promise<void> {
+  if (!(await tryClaimSlackAlert(kind, "cron_day", dayKey))) return;
+  await notifySlack({ channel: "ops", kind, text, username: "ops_alerts" });
+  await markSlackAlertDelivered(kind, "cron_day", dayKey);
+}
+
 export async function GET(request: Request) {
   const expected = process.env.CRON_SECRET;
   if (!expected) {
@@ -558,6 +579,8 @@ export async function GET(request: Request) {
 
   const trackDuration = startCronTimer("chapter-nudge", 60);
   const startMs = Date.now();
+  // UTC day, used to dedup ops alerts to at most one per kind per day.
+  const dayKey = new Date(startMs).toISOString().slice(0, 10);
   let cronError: string | undefined;
 
   terminated = false;
@@ -578,6 +601,17 @@ export async function GET(request: Request) {
   try {
     const candidates = await fetchCandidates();
     summary.candidates = candidates.length;
+
+    // Capacity alert (fired before the loop so a long run can't starve it): the
+    // backlog is approaching CANDIDATE_LIMIT and the oldest reports risk being
+    // dropped. Raise the limit (or move the due-filter server-side) when seen.
+    if (candidates.length >= CAPACITY_ALERT_THRESHOLD) {
+      await pingOps(
+        "chapter_nudge_capacity",
+        dayKey,
+        `:warning: chapter-nudge fetched ${candidates.length} candidates (ceiling ${CANDIDATE_LIMIT}). The eligible report backlog is approaching the cap — reports beyond it are not being dripped. Raise CANDIDATE_LIMIT or move the due-filter server-side.`
+      );
+    }
 
     let processed = 0;
     for (const candidate of candidates) {
@@ -603,11 +637,26 @@ export async function GET(request: Request) {
       processed += 1;
     }
 
+    // Email-issue alert: one or more chapter sends failed this run.
+    if (summary.failed > 0) {
+      await pingOps(
+        "chapter_nudge_failures",
+        dayKey,
+        `:rotating_light: chapter-nudge: ${summary.failed} chapter email(s) failed to send this run (sent ${summary.sent} of ${summary.candidates} candidates). Check Resend status + the cron logs.`
+      );
+    }
+
     logger.info({ summary }, "chapter-nudge cron finished");
     return NextResponse.json({ success: true, summary });
   } catch (err) {
     logger.error({ err }, "chapter-nudge cron failed");
     cronError = err instanceof Error ? err.message : String(err);
+    // Cron-level failure — no chapters went out this run. Surface in real time.
+    await pingOps(
+      "chapter_nudge_error",
+      dayKey,
+      `:rotating_light: chapter-nudge cron failed — no chapters sent this run. Error: ${cronError}`
+    );
     return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
   } finally {
     process.off("SIGTERM", onSigterm);

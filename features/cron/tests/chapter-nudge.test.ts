@@ -6,6 +6,8 @@ const mockResendSend = vi.fn();
 const mockGetReportPlan = vi.fn();
 const mockIsFeatureEnabled = vi.fn();
 const mockGetQuoteForContext = vi.fn();
+const mockNotifySlack = vi.fn();
+const mockTryClaimSlackAlert = vi.fn();
 
 vi.mock("@shared/http/fetch-with-timeout", () => ({
   fetchWithTimeout: (...args: unknown[]) => mockFetchWithTimeout(...args),
@@ -30,6 +32,12 @@ vi.mock("@shared/observability/logger", () => ({
 vi.mock("@shared/observability/slack-alert-dedup", () => ({
   startCronTimer: () => async () => {},
   recordCronRun: async () => {},
+  tryClaimSlackAlert: (...args: unknown[]) => mockTryClaimSlackAlert(...args),
+  markSlackAlertDelivered: async () => {},
+}));
+
+vi.mock("@shared/observability/slack", () => ({
+  notifySlack: (...args: unknown[]) => mockNotifySlack(...args),
 }));
 
 vi.mock("@features/report/server/planAccess", () => ({
@@ -161,6 +169,7 @@ describe("GET /api/cron/chapter-nudge", () => {
     mockIsFeatureEnabled.mockResolvedValue(true);
     mockGetQuoteForContext.mockResolvedValue({ id: 101 });
     mockResendSend.mockResolvedValue({ data: { id: "msg_1" }, error: null });
+    mockTryClaimSlackAlert.mockResolvedValue(true);
   });
 
   afterEach(() => {
@@ -377,5 +386,47 @@ describe("GET /api/cron/chapter-nudge", () => {
     expect(patch.bodies).toHaveLength(1);
     expect(body.summary.sent).toBe(0);
     expect(body.summary.failed).toBe(1);
+    // Email-issue ops alert fires on a failed send.
+    const kinds = mockNotifySlack.mock.calls.map((c) => (c[0] as { kind: string }).kind);
+    expect(kinds).toContain("chapter_nudge_failures");
+  });
+
+  it("fires a capacity ops alert when the backlog approaches CANDIDATE_LIMIT", async () => {
+    // 450 == floor(CANDIDATE_LIMIT(500) * 0.9). Use GDPR-restricted rows so the
+    // loop fast-skips them (no sends) and we isolate the pre-loop capacity check.
+    const restricted = Array.from({ length: 450 }, (_, i) => ({
+      id: i + 1,
+      survey_submission_id: i + 1,
+      created_date_time: new Date(Date.now() - 5 * DAY_MS).toISOString(),
+      survey_submission: {
+        app_user: {
+          email: `u${i}@example.com`,
+          first_name: "R",
+          processing_restricted_at: new Date().toISOString(),
+        },
+        scoring_result: [{ v5_primary_archetype: PRIMARY }],
+      },
+    }));
+    mockFetchWithTimeout.mockImplementation((url: string) => {
+      if (url.includes("/rest/v1/personal_report") && !url.includes("archetype_tiers")) {
+        return Promise.resolve(jsonResponse(restricted));
+      }
+      return Promise.resolve(jsonResponse([]));
+    });
+
+    const res = await GET(makeRequest("test-cron-secret"));
+    const body = await res.json();
+    expect(body.summary.candidates).toBe(450);
+    expect(body.summary.skippedRestricted).toBe(450);
+    expect(mockResendSend).not.toHaveBeenCalled();
+    const kinds = mockNotifySlack.mock.calls.map((c) => (c[0] as { kind: string }).kind);
+    expect(kinds).toContain("chapter_nudge_capacity");
+  });
+
+  it("does NOT fire a capacity alert at normal volume", async () => {
+    mockSingleCandidate({ candidate: makeCandidate("normal@example.com") });
+    await GET(makeRequest("test-cron-secret"));
+    const kinds = mockNotifySlack.mock.calls.map((c) => (c[0] as { kind: string }).kind);
+    expect(kinds).not.toContain("chapter_nudge_capacity");
   });
 });
