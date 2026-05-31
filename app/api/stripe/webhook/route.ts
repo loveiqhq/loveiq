@@ -59,12 +59,21 @@ export async function POST(request: Request) {
     const event = stripe.webhooks.constructEvent(payload, signature, webhookSecret);
 
     // T-01: livemode guard. Stripe sends `event.livemode=true` for live-mode
-    // events and `false` for test-mode. If our env says "live" we must
-    // refuse test events (and vice versa) so a misconfigured dashboard or
-    // a leftover dev webhook can never silently fulfill against prod data.
-    // Treat any missing/false STRIPE_LIVE_MODE env as "test" — safe default
-    // (prefers refusing live-mode in dev over accepting test-mode in prod).
-    const expectedLive = process.env.STRIPE_LIVE_MODE === "true";
+    // events and `false` for test-mode. We refuse events whose mode doesn't
+    // match OURS so a misrouted test event can never fulfill against prod data
+    // (or a live event against a sandbox).
+    //
+    // Expected mode = the Stripe SECRET KEY's mode (`sk_live_` ⇒ live — the very
+    // key that created the checkout and verified this event) OR an explicit
+    // STRIPE_LIVE_MODE=true opt-in. Critically this is OR, not an override: a
+    // live key ALWAYS expects live events, so STRIPE_LIVE_MODE can only ADD
+    // live-expectation, never downgrade a live key to test. That makes the guard
+    // footgun-proof — a `STRIPE_LIVE_MODE` that is missing OR stale-`false` on a
+    // live-mode prod can no longer silently refuse 100% of real purchases.
+    // A test/sandbox key (no opt-in) expects test events and refuses live ones.
+    const expectedLive =
+      process.env.STRIPE_LIVE_MODE === "true" ||
+      (process.env.STRIPE_SECRET_KEY ?? "").startsWith("sk_live_");
     if (event.livemode !== expectedLive) {
       logger.error(
         { eventId: event.id, type: event.type, eventLivemode: event.livemode, expectedLive },
@@ -73,7 +82,7 @@ export async function POST(request: Request) {
       void notifySlack({
         channel: "ops",
         kind: "stripe_webhook_livemode_mismatch",
-        text: `:rotating_light: Stripe webhook livemode mismatch — event \`${event.id}\` (${event.type}) livemode=${event.livemode} but env expects ${expectedLive}. Check Stripe dashboard webhook endpoints + STRIPE_LIVE_MODE env.`,
+        text: `:rotating_light: Stripe webhook livemode mismatch — event \`${event.id}\` (${event.type}) livemode=${event.livemode} but this deployment expects live=${expectedLive} (derived from STRIPE_SECRET_KEY mode + STRIPE_LIVE_MODE). A cross-mode event hit this endpoint — check the Stripe dashboard webhook endpoint is registered to the matching account/mode.`,
         username: "ops_alerts",
       });
       // 200 to stop Stripe from retrying — the mismatch is operator config,

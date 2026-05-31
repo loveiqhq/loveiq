@@ -44,6 +44,9 @@ describe("POST /api/stripe/webhook", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.STRIPE_WEBHOOK_SECRET = "whsec_test";
+    // Deterministic baseline: no live key, no override → expected mode = test.
+    delete process.env.STRIPE_SECRET_KEY;
+    delete process.env.STRIPE_LIVE_MODE;
     mockIsStripeCheckoutEnabled.mockReturnValue(true);
     mockGetStripeServerClient.mockReturnValue({
       webhooks: {
@@ -93,6 +96,75 @@ describe("POST /api/stripe/webhook", () => {
     const body = await response.json();
     expect(body.reason).toBe("livemode_mismatch");
     expect(mockProcessStripeWebhookEvent).not.toHaveBeenCalled();
+  });
+
+  it("T-01: PROCESSES a live event when the secret key is live, with NO STRIPE_LIVE_MODE set (self-config; the prod-footgun fix)", async () => {
+    process.env.STRIPE_SECRET_KEY = "sk_live_abc123"; // live key, no override
+    mockConstructEvent.mockReturnValue({
+      id: "evt_live_prod",
+      type: "checkout.session.completed",
+      livemode: true,
+      data: { object: { id: "cs_live_123" } },
+    });
+
+    const response = await POST(makeRequest('{"id":"evt_live_prod"}'));
+
+    expect(response.status).toBe(200);
+    expect(mockProcessStripeWebhookEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ event: expect.objectContaining({ id: "evt_live_prod" }) })
+    );
+  });
+
+  it("T-01: a live key still REFUSES a test event (protects prod from sandbox events)", async () => {
+    process.env.STRIPE_SECRET_KEY = "sk_live_abc123";
+    mockConstructEvent.mockReturnValue({
+      id: "evt_test_in_prod",
+      type: "checkout.session.completed",
+      livemode: false,
+      data: { object: { id: "cs_test_123" } },
+    });
+
+    const response = await POST(makeRequest('{"id":"evt_test_in_prod"}'));
+    const body = await response.json();
+    expect(body.reason).toBe("livemode_mismatch");
+    expect(mockProcessStripeWebhookEvent).not.toHaveBeenCalled();
+  });
+
+  it("T-01: a stale STRIPE_LIVE_MODE=false can NOT downgrade a live key (footgun-proof)", async () => {
+    process.env.STRIPE_SECRET_KEY = "sk_live_abc123"; // live key...
+    process.env.STRIPE_LIVE_MODE = "false"; // ...stale/wrong env — must be ignored
+    mockConstructEvent.mockReturnValue({
+      id: "evt_live_resilient",
+      type: "checkout.session.completed",
+      livemode: true,
+      data: { object: { id: "cs_live_123" } },
+    });
+
+    const response = await POST(makeRequest('{"id":"evt_live_resilient"}'));
+
+    // The live key wins: the real purchase is still processed (the exact prod
+    // bug this fix prevents — a stale env no longer refuses live webhooks).
+    expect(response.status).toBe(200);
+    expect(mockProcessStripeWebhookEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ event: expect.objectContaining({ id: "evt_live_resilient" }) })
+    );
+  });
+
+  it("T-01: STRIPE_LIVE_MODE=true opt-in expects live even with a non-live key", async () => {
+    process.env.STRIPE_SECRET_KEY = "sk_test_abc123";
+    process.env.STRIPE_LIVE_MODE = "true"; // explicit opt-in adds live-expectation
+    mockConstructEvent.mockReturnValue({
+      id: "evt_optin_live",
+      type: "checkout.session.completed",
+      livemode: true,
+      data: { object: { id: "cs_live_123" } },
+    });
+
+    const response = await POST(makeRequest('{"id":"evt_optin_live"}'));
+    expect(response.status).toBe(200);
+    expect(mockProcessStripeWebhookEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ event: expect.objectContaining({ id: "evt_optin_live" }) })
+    );
   });
 
   it("returns 400 when signature verification fails", async () => {
