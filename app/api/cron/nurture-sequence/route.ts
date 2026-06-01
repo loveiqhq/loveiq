@@ -61,11 +61,37 @@ const CANDIDATE_LIMIT_PER_STAGE = 200;
 // Wall-clock guard. The loop is fully sequential (3 stages × up to 200 rows,
 // each a few Supabase round-trips + one ≤8s Resend send), so as the audience
 // grows a run can creep toward maxDuration and hit a FUNCTION_INVOCATION_TIMEOUT
-// 5xx. We stop *starting* new candidates after 42s; the in-flight row (worst
-// case ~8s) plus the `finally` tracking writes still finish comfortably under
-// the 60s cap. Deferred rows are caught on the next hourly run — the age
+// 5xx. We stop *starting* new candidates after the budget; the in-flight row
+// (worst case ~8s) plus the `finally` tracking writes still finish comfortably
+// under the 60s cap. Deferred rows are caught on the next hourly run — the age
 // windows are 2h-wide (5–7h / 29–31h / 53–55h), so nobody is skipped for good.
-const TIME_BUDGET_MS = 42_000;
+//
+// SCALING: deferring is a safety valve, not throughput. When the per-run
+// deferred count grows (watch the "time budget reached" warns + cron_run p95),
+// the next levers — in rough order of effort — are: (1) move the
+// already-sent/paid filter server-side so the loop only fetches actionable
+// rows; (2) bounded concurrency over candidates (distinct quote rows ⇒ no
+// intra-instance double-send; cap low to stay under Resend's rate limit).
+// Both need a live Supabase/Resend integration run to validate, so they are
+// deliberately NOT bundled with this guard.
+const DEFAULT_TIME_BUDGET_MS = 42_000;
+
+/**
+ * Resolve the wall-clock budget (ms). Overridable via `NURTURE_TIME_BUDGET_MS`
+ * so ops can tune headroom without a redeploy and tests can drive the guard
+ * deterministically. Read per-request (not at module load) for that reason.
+ * Falls back to the default for unset / blank / non-finite / negative values.
+ *
+ * NOTE: `0` is accepted and means "defer every candidate" — useful for the
+ * deterministic guard test, but in prod it silently stops all sends. To PAUSE
+ * the cron, flip the `nurture_sequence` kill switch instead; never set this to 0.
+ */
+function resolveTimeBudgetMs(): number {
+  const raw = process.env.NURTURE_TIME_BUDGET_MS;
+  if (raw === undefined || raw.trim() === "") return DEFAULT_TIME_BUDGET_MS;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : DEFAULT_TIME_BUDGET_MS;
+}
 
 type Stage = "6h_no_view" | "6h_no_unlock" | "30h_no_unlock" | "54h_no_unlock";
 
@@ -855,7 +881,7 @@ export async function GET(request: Request) {
     resend,
     siteUrl: getEmailSiteUrl(),
     unsubSecret: process.env.UNSUBSCRIBE_SECRET,
-    deadlineAtMs: startMs + TIME_BUDGET_MS,
+    deadlineAtMs: startMs + resolveTimeBudgetMs(),
   };
 
   const summaries: Record<Stage, StageSummary> = {

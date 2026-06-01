@@ -53,6 +53,7 @@ vi.mock("@shared/http/is-prod-cron-host", () => ({
 }));
 
 import { GET } from "@/app/api/cron/nurture-sequence/route";
+import { __resetSystemFlagsCacheForTests } from "@shared/flags/system-flags";
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -88,6 +89,10 @@ function buildFetchHandler(calls: MockFetchCall[]) {
 describe("GET /api/cron/nurture-sequence", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Reset the system-flags in-process cache (30s TTL) so a value cached by one
+    // test can't leak into the next; seed nurture_sequence=enabled so the
+    // kill-switch gate passes without depending on a mocked fetch round-trip.
+    __resetSystemFlagsCacheForTests({ nurture_sequence: true });
     process.env = {
       ...ORIGINAL_ENV,
       CRON_SECRET: "test-cron-secret",
@@ -382,5 +387,57 @@ describe("GET /api/cron/nurture-sequence", () => {
     const res = await GET(makeRequest("test-cron-secret"));
     expect(res.status).toBe(200);
     expect(mockStripePromoUpdate).not.toHaveBeenCalled();
+  });
+
+  it("time-budget guard: defers all candidates when the wall-clock budget is exhausted", async () => {
+    // NURTURE_TIME_BUDGET_MS=0 makes the deadline equal startMs, so the first
+    // loop iteration is already past budget → no candidate is processed. Proves
+    // the guard prevents work (and the Vercel timeout 5xx) under load; deferred
+    // rows roll to the next hourly run (2h-wide age windows keep them eligible).
+    process.env.NURTURE_TIME_BUDGET_MS = "0";
+    const candidate = {
+      id: 11,
+      survey_submission_id: 110,
+      created_date_time: new Date(Date.now() - 30 * 60 * 60 * 1000).toISOString(),
+      survey_submission: { app_user: { email: "deferred@example.com", first_name: "De" } },
+    };
+    mockCandidateWindows({
+      sixHour: [],
+      thirtyHour: [candidate],
+      fiftyFourHour: [],
+      quoteMetadata: { nurtureEmailsSent: [] },
+    });
+
+    const res = await GET(makeRequest("test-cron-secret"));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    // Candidate counted (set before the loop) but never processed → no send/promo.
+    expect(body.summaries["30h_no_unlock"].candidates).toBe(1);
+    expect(body.summaries["30h_no_unlock"].sent).toBe(0);
+    expect(mockStripePromoCreate).not.toHaveBeenCalled();
+    expect(mockResendSend).not.toHaveBeenCalled();
+  });
+
+  it("time-budget guard: invalid NURTURE_TIME_BUDGET_MS falls back to default (cron still runs)", async () => {
+    // A misconfigured env must not brick the cron: a non-numeric value falls
+    // back to the 42s default, so the candidate is processed normally.
+    process.env.NURTURE_TIME_BUDGET_MS = "not-a-number";
+    const candidate = {
+      id: 12,
+      survey_submission_id: 120,
+      created_date_time: new Date(Date.now() - 30 * 60 * 60 * 1000).toISOString(),
+      survey_submission: { app_user: { email: "fallback@example.com", first_name: "Fa" } },
+    };
+    mockCandidateWindows({
+      sixHour: [],
+      thirtyHour: [candidate],
+      fiftyFourHour: [],
+      quoteMetadata: { nurtureEmailsSent: [] },
+    });
+
+    const res = await GET(makeRequest("test-cron-secret"));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.summaries["30h_no_unlock"].sent).toBe(1);
   });
 });
