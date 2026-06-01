@@ -42,12 +42,24 @@ import { nurture54hNoUnlockEmail } from "@features/report/server/emails/nurture/
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 50;
+// 60s to match the rest of the cron fleet AND the `functions` entry in
+// vercel.json. The route-segment export wins on Next.js App Router, so the
+// previous `50` silently capped this lone cron 10s below vercel.json's intent
+// (the source of the "used 50s budget" ops alert).
+export const maxDuration = 60;
 
 const HOUR_MS = 60 * 60 * 1000;
 const SUPABASE_TIMEOUT_MS = 8_000;
 const RESEND_TIMEOUT_MS = 8_000;
 const CANDIDATE_LIMIT_PER_STAGE = 200;
+// Wall-clock guard. The loop is fully sequential (3 stages × up to 200 rows,
+// each a few Supabase round-trips + one ≤8s Resend send), so as the audience
+// grows a run can creep toward maxDuration and hit a FUNCTION_INVOCATION_TIMEOUT
+// 5xx. We stop *starting* new candidates after 42s; the in-flight row (worst
+// case ~8s) plus the `finally` tracking writes still finish comfortably under
+// the 60s cap. Deferred rows are caught on the next hourly run — the age
+// windows are 2h-wide (5–7h / 29–31h / 53–55h), so nobody is skipped for good.
+const TIME_BUDGET_MS = 42_000;
 
 type Stage = "6h_no_view" | "6h_no_unlock" | "30h_no_unlock" | "54h_no_unlock";
 
@@ -521,6 +533,9 @@ interface RouteContext {
   resend: Resend;
   siteUrl: string;
   unsubSecret: string | undefined;
+  // Absolute wall-clock deadline (ms epoch). Loops stop starting new candidates
+  // once Date.now() reaches it. See TIME_BUDGET_MS.
+  deadlineAtMs: number;
 }
 
 async function processCandidate(
@@ -696,6 +711,13 @@ async function runSixHourStages(
   noUnlock: StageSummary
 ): Promise<void> {
   for (let i = 0; i < candidates.length; i++) {
+    if (Date.now() >= ctx.deadlineAtMs) {
+      logger.warn(
+        { processed: i, remaining: candidates.length - i, stage: "6h" },
+        "nurture-sequence: time budget reached; deferring remaining candidates to next run"
+      );
+      return;
+    }
     if (terminated) {
       logger.warn(
         { processed: i, remaining: candidates.length - i, stage: "6h" },
@@ -727,6 +749,13 @@ async function runSingleStage(
 ): Promise<void> {
   summary.candidates = candidates.length;
   for (let i = 0; i < candidates.length; i++) {
+    if (Date.now() >= ctx.deadlineAtMs) {
+      logger.warn(
+        { processed: i, remaining: candidates.length - i, stage },
+        "nurture-sequence: time budget reached; deferring remaining candidates to next run"
+      );
+      return;
+    }
     if (terminated) {
       logger.warn(
         { processed: i, remaining: candidates.length - i, stage },
@@ -774,7 +803,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Service unavailable." }, { status: 503 });
   }
 
-  const trackDuration = startCronTimer("nurture-sequence", 50);
+  const trackDuration = startCronTimer("nurture-sequence", 60);
   const startMs = Date.now();
   let cronError: string | undefined;
 
@@ -792,6 +821,7 @@ export async function GET(request: Request) {
     resend,
     siteUrl: getEmailSiteUrl(),
     unsubSecret: process.env.UNSUBSCRIBE_SECRET,
+    deadlineAtMs: startMs + TIME_BUDGET_MS,
   };
 
   const summaries: Record<Stage, StageSummary> = {
