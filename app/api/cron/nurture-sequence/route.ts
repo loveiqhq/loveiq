@@ -25,7 +25,13 @@ import { Resend } from "resend";
 import { getBreaker } from "@shared/http/circuit-breaker";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import logger from "@shared/observability/logger";
-import { recordCronRun, startCronTimer } from "@shared/observability/slack-alert-dedup";
+import {
+  markSlackAlertDelivered,
+  recordCronRun,
+  startCronTimer,
+  tryClaimSlackAlert,
+} from "@shared/observability/slack-alert-dedup";
+import { notifySlack } from "@shared/observability/slack";
 import { buildUnsubscribeUrl } from "@shared/emails/unsubscribe-token";
 import { isEmailSuppressed } from "@shared/emails/suppression";
 import { getEmailSiteUrl } from "@shared/emails/site-url";
@@ -491,12 +497,20 @@ async function sendOne(input: SendInput): Promise<"sent" | "failed"> {
       ),
     ]);
     if (error) {
-      logger.error({ err: error, stage: input.stage }, "nurture-sequence: send failed");
+      // slack:false — a single recoverable send failure is expected operational
+      // noise (full mailbox, transient Resend hiccup) already counted in
+      // summary.failed. Mirroring it to ops as `api_5xx` per-email spams the
+      // channel; the run-level aggregate ping (see GET) is the actionable signal.
+      // The full error stays in the Vercel logs.
+      logger.error(
+        { err: error, stage: input.stage, slack: false },
+        "nurture-sequence: send failed"
+      );
       return "failed";
     }
     return "sent";
   } catch (err) {
-    logger.error({ err, stage: input.stage }, "nurture-sequence: send error");
+    logger.error({ err, stage: input.stage, slack: false }, "nurture-sequence: send error");
     return "failed";
   }
 }
@@ -648,8 +662,10 @@ async function processCandidate(
       });
     } catch (err) {
       summary.failed++;
+      // slack:false — per-candidate failure already counted in summary.failed
+      // and surfaced by the run-level aggregate ping; don't page ops per row.
       logger.error(
-        { err, quoteId: quote.id, stage },
+        { err, quoteId: quote.id, stage, slack: false },
         "nurture-sequence: marker write failed before send; skipping"
       );
       return;
@@ -678,7 +694,10 @@ async function processCandidate(
     }
   } catch (err) {
     summary.failed++;
-    logger.error({ err, personalReportId: candidate.id, stage }, "nurture-sequence: per-row error");
+    logger.error(
+      { err, personalReportId: candidate.id, stage, slack: false },
+      "nurture-sequence: per-row error"
+    );
   }
 }
 
@@ -702,6 +721,19 @@ let terminated = false;
 
 async function isNurtureKilled(): Promise<boolean> {
   return !(await isFeatureEnabled("nurture_sequence"));
+}
+
+/**
+ * Fire a single ops Slack ping, deduped per (kind, UTC day) via the two-phase
+ * claim so a persistent condition pings at most once per day. Best-effort: a
+ * Slack or claim failure is swallowed inside the helpers and never breaks the
+ * cron. Mirrors the chapter-nudge pattern: individual send failures are logged
+ * with `slack: false`; this run-level aggregate is the single actionable alert.
+ */
+async function pingOps(kind: string, dayKey: string, text: string): Promise<void> {
+  if (!(await tryClaimSlackAlert(kind, "cron_day", dayKey))) return;
+  await notifySlack({ channel: "ops", kind, text, username: "ops_alerts" });
+  await markSlackAlertDelivered(kind, "cron_day", dayKey);
 }
 
 async function runSixHourStages(
@@ -805,6 +837,8 @@ export async function GET(request: Request) {
 
   const trackDuration = startCronTimer("nurture-sequence", 60);
   const startMs = Date.now();
+  // UTC day, used to dedup the run-level send-failure ops alert to once per day.
+  const dayKey = new Date(startMs).toISOString().slice(0, 10);
   let cronError: string | undefined;
 
   // P-04: install a one-shot SIGTERM listener. `process.once` rather than
@@ -841,6 +875,28 @@ export async function GET(request: Request) {
     await runSixHourStages(sixCandidates, ctx, summaries["6h_no_view"], summaries["6h_no_unlock"]);
     await runSingleStage(thirtyCandidates, "30h_no_unlock", ctx, summaries["30h_no_unlock"]);
     await runSingleStage(fiftyFourCandidates, "54h_no_unlock", ctx, summaries["54h_no_unlock"]);
+
+    // Run-level aggregate alert. Individual send failures are logged with
+    // `slack: false` (recoverable, expected noise); here we surface ONE deduped
+    // ops ping per day when any failed, with sent/failed counts — so a systemic
+    // problem (e.g. 0 sent / all failed) is loud while one-off bounces don't
+    // spam the channel with per-email `api_5xx` mirrors.
+    const totals = Object.values(summaries).reduce(
+      (acc, s) => {
+        acc.sent += s.sent;
+        acc.failed += s.failed;
+        return acc;
+      },
+      { sent: 0, failed: 0 }
+    );
+    if (totals.failed > 0) {
+      await pingOps(
+        "nurture_send_failures",
+        dayKey,
+        `:rotating_light: nurture-sequence: ${totals.failed} email(s) failed to send this run ` +
+          `(sent ${totals.sent}). Check Resend status + the cron logs.`
+      );
+    }
 
     logger.info({ summaries }, "nurture-sequence cron finished");
     return NextResponse.json({ success: true, summaries });
