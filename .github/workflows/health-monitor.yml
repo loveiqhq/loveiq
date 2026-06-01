@@ -8,6 +8,12 @@ on:
     - cron: "0 8 * * *"
   workflow_dispatch: # Allow manual trigger from GitHub Actions UI
 
+# Keyed on ref so main and staging health checks never cancel each other; a
+# newer push to the same target supersedes an in-flight check (it re-probes).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 

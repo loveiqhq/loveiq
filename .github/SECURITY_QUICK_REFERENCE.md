@@ -235,7 +235,7 @@ Look for:
 
 **DO NOT create public GitHub issues**
 
-Email: <security@loveiq.org>
+Email: <hello@loveiq.org>
 
 Include:
 

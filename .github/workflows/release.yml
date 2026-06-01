@@ -42,27 +42,39 @@ jobs:
           CURRENT_TAG=${GITHUB_REF#refs/tags/}
 
           if [ -z "$PREV_TAG" ] || [ "$PREV_TAG" = "$CURRENT_TAG" ]; then
-            echo "body=Initial release" >> $GITHUB_OUTPUT
+            CHANGES="Initial release"
           else
-            CHANGES=$(git log ${PREV_TAG}..${CURRENT_TAG} --pretty=format:"- %s (%h)" --no-merges)
-            # Escape for GitHub output
-            CHANGES="${CHANGES//'%'/'%25'}"
-            CHANGES="${CHANGES//$'\n'/'%0A'}"
-            CHANGES="${CHANGES//$'\r'/'%0D'}"
-            echo "body=${CHANGES}" >> $GITHUB_OUTPUT
+            CHANGES=$(git log "${PREV_TAG}..${CURRENT_TAG}" --pretty=format:"- %s (%h)" --no-merges)
           fi
+
+          # Multi-line value via a heredoc delimiter — the old %0A/%25 escaping
+          # only worked with the retired ::set-output:: command; written to the
+          # $GITHUB_OUTPUT file it stays literal. Random delimiter so a crafted
+          # commit message can't terminate the heredoc early.
+          DELIM="EOF_$(openssl rand -hex 12)"
+          {
+            echo "body<<${DELIM}"
+            echo "${CHANGES}"
+            echo "${DELIM}"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        # Pass the (untrusted) changelog + tag via env, NOT inline `${{ }}` in
+        # the script body — inline interpolation of commit-message content into
+        # JS is a script-injection sink.
+        env:
+          CHANGELOG_BODY: ${{ steps.changelog.outputs.body }}
+          RELEASE_TAG: ${{ github.ref_name }}
         with:
           script: |
-            const tag = context.ref.replace('refs/tags/', '');
+            const tag = process.env.RELEASE_TAG;
             await github.rest.repos.createRelease({
               owner: context.repo.owner,
               repo: context.repo.repo,
               tag_name: tag,
               name: tag,
-              body: `${{ steps.changelog.outputs.body }}`,
+              body: process.env.CHANGELOG_BODY || "",
               draft: false,
-              prerelease: tag.includes('-'),
+              prerelease: tag.includes("-"),
             });

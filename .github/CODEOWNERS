@@ -1,10 +1,15 @@
 # Default owners for the entire repo
 * @eman-cickusic @FerhadJukicc
 
-# Security-critical files require explicit review
+# Security-critical files require explicit review.
+# NOTE: csrf/ratelimit moved from lib/ to shared/http/ in the lib→shared
+# refactor — these globs track the real files so the explicit protection
+# isn't silently dead.
 proxy.ts @eman-cickusic @FerhadJukicc
-lib/csrf.ts @eman-cickusic @FerhadJukicc
-lib/ratelimit.ts @eman-cickusic @FerhadJukicc
+shared/http/ @eman-cickusic @FerhadJukicc
+shared/http/csrf.ts @eman-cickusic @FerhadJukicc
+shared/http/ratelimit.ts @eman-cickusic @FerhadJukicc
 app/api/ @eman-cickusic @FerhadJukicc
 SECURITY.md @eman-cickusic @FerhadJukicc
+.github/SECURITY.md @eman-cickusic @FerhadJukicc
 .github/workflows/ @eman-cickusic @FerhadJukicc

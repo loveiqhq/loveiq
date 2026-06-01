@@ -184,3 +184,27 @@ jobs:
           done
           echo "ERROR: /api/health did not return fresh 200 within ~6 minutes"
           exit 1
+
+  # Branch-protection stand-in (detective). Required status checks / rulesets are
+  # a paid feature on this plan, so a red commit CAN land on main (web merge, or
+  # `git push --no-verify` past the pre-push gate) and auto-deploy via Vercel.
+  # This job pings ops the instant the gate jobs fail on main so it can be
+  # reverted fast. Preventive layer = .husky/pre-push; see docs/runbooks/SECURITY.md.
+  notify-failure:
+    name: Alert ops if main is red
+    runs-on: ubuntu-latest
+    needs: [lint, test, integration, build]
+    if: ${{ always() && github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(needs.*.result, 'failure') }}
+    steps:
+      - name: Post failure to Slack ops
+        env:
+          SLACK_OPS_WEBHOOK_URL: ${{ secrets.SLACK_OPS_WEBHOOK_URL }}
+        run: |
+          if [ -z "${SLACK_OPS_WEBHOOK_URL}" ]; then
+            echo "SLACK_OPS_WEBHOOK_URL not configured — skipping alert (non-fatal)."
+            exit 0
+          fi
+          TEXT=":rotating_light: *CI failed on main* — a broken commit landed and may auto-deploy. Commit \`${GITHUB_SHA}\` by ${GITHUB_ACTOR}. Investigate / revert: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          payload=$(jq -n --arg t "$TEXT" '{text: $t}')
+          curl -sS -X POST -H 'Content-Type: application/json' -d "$payload" "${SLACK_OPS_WEBHOOK_URL}" \
+            || echo "Slack post failed (non-fatal)"

@@ -35,6 +35,10 @@ on:
       - "load-tests/**"
       - ".github/workflows/load-test.yml"
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 

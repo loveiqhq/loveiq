@@ -28,7 +28,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
-          fetch-depth: 10 # Last 10 commits
+          # Fast last-10-commits scan on push/PR; the weekly schedule does a
+          # FULL-history scan (depth 0) to catch older leaks. Truthy value sits
+          # on the `&&` side because 0 is falsy in GitHub expressions
+          # (`x && 0 || 10` would always yield 10).
+          fetch-depth: ${{ github.event_name != 'schedule' && 10 || 0 }}
 
       - name: TruffleHog Secret Scan
         uses: trufflesecurity/trufflehog@17456f8c7d042d8c82c9a8ca9e937231f9f42e26 # v3.95.2
@@ -48,24 +52,24 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
-      - name: Run Semgrep
-        run: semgrep scan --config auto --sarif --output=semgrep.sarif
-        env:
-          SEMGREP_RULES: >-
-            p/security-audit
-            p/owasp-top-ten
-            p/nodejs
-            p/typescript
-            p/nextjs
-
-      # SARIF upload disabled - requires GitHub Advanced Security (paid feature)
-      # Results are still available in workflow logs above
-      # - name: Upload Semgrep results to GitHub Security
-      #   uses: github/codeql-action/upload-sarif@v4
-      #   if: always()
-      #   with:
-      #     sarif_file: semgrep.sarif
-      #     category: semgrep
+      - name: Run Semgrep (rule packs + gate on error-severity)
+        # `--config auto` previously OVERRODE the SEMGREP_RULES env (semgrep gives
+        # --config precedence), so none of the intended packs actually ran and the
+        # SARIF was discarded — i.e. checkbox SAST. Pass the packs explicitly and
+        # gate: `--error --severity ERROR` fails the job ONLY on error-severity
+        # findings, so a future high-severity introduction blocks the merge while
+        # warning/info noise (37 WARNING + 1 INFO today, 0 ERROR — verified) does
+        # not break CI. The full findings (all severities) print in this step's
+        # text output. SARIF upload to the Security tab still needs GitHub Advanced
+        # Security (paid); re-add `--sarif --output` + an upload step when enabled.
+        run: |
+          semgrep scan \
+            --config p/security-audit \
+            --config p/owasp-top-ten \
+            --config p/nodejs \
+            --config p/typescript \
+            --config p/nextjs \
+            --error --severity ERROR --metrics off
 
   # CodeQL for deep code analysis
   codeql-analysis:
@@ -140,6 +144,19 @@ jobs:
           echo "${OSV_SHA256}  /tmp/osv-scanner" | sha256sum -c -
           chmod +x /tmp/osv-scanner
           /tmp/osv-scanner --config=.osv-scanner.toml --lockfile=package-lock.json
+
+      - name: License compliance (deny AGPL)
+        run: |
+          # Free license gate. AGPL's network-use copyleft is the real risk for a
+          # hosted SaaS, so deny it across production deps. 0 AGPL today (verified);
+          # this blocks a future AGPL-licensed dependency from shipping. GPL is
+          # intentionally NOT denied: server-side SaaS use does not trigger GPL's
+          # distribution copyleft, and listing "GPL-3.0" would substring-collide
+          # with our one permissive dual-licensed dep (Apache-2.0 AND
+          # LGPL-3.0-or-later). The self-package (UNLICENSED, private) is excluded.
+          npx --yes license-checker-rseidelsohn --production \
+            --excludePackages "loveiq-web@0.1.0" \
+            --failOn "AGPL-1.0;AGPL-1.0-only;AGPL-1.0-or-later;AGPL-3.0;AGPL-3.0-only;AGPL-3.0-or-later"
 
   # Enhanced linting with security rules
   security-lint:
@@ -344,7 +361,7 @@ jobs:
           echo "Verifying security headers configuration..."
 
           if [ ! -f "proxy.ts" ]; then
-            echo "⚠️  middleware.ts not found!"
+            echo "⚠️  proxy.ts not found!"
             exit 1
           fi
 

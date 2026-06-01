@@ -20,21 +20,26 @@ coverage:
         if_not_found: success
 
 # Apply same exclusions as vitest.config.ts so reports align.
+# (Paths track the lib/→shared/ + components/→features/ refactor — the old
+# lib/* entries here were dead and let those files leak into the delta gate.)
 ignore:
   - "node_modules/**"
   - ".next/**"
   - "__tests__/**"
   - "data/glossary-data.ts"
+  - "app/api/admin/**"
   - "app/api/cron/**"
-  - "lib/scoring/index.ts"
-  - "lib/scoring/types.ts"
-  - "lib/emails/admin-magic-link.ts"
-  - "lib/emails/invite.ts"
-  - "lib/emails/report-all.ts"
-  - "lib/emails/report-essentials.ts"
-  - "lib/emails/report-full.ts"
-  - "lib/emails/survey-complete.ts"
-  - "lib/emails/survey-paused.ts"
+  - "features/admin/server/**"
+  - "features/cron/**"
+  - "features/scoring/logic/index.ts"
+  - "features/scoring/logic/types.ts"
+  - "features/admin/server/emails/admin-magic-link.ts"
+  - "features/invite/emails/invite.ts"
+  - "features/report/server/emails/report-all.ts"
+  - "features/report/server/emails/report-essentials.ts"
+  - "features/report/server/emails/report-full.ts"
+  - "features/survey/server/emails/survey-complete.ts"
+  - "features/survey/server/emails/survey-paused.ts"
 
 comment:
   layout: "reach,diff,flags,tree"

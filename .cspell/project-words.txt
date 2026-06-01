@@ -37,6 +37,7 @@ ROPA
 PITR
 SLSA
 SBOM
+GHAS
 Clickjacking
 Subresource
 Subprocessors
@@ -83,6 +84,7 @@ trgm
 # British spelling used in some docs
 behaviours
 organisational
+stabilises
 
 # People (git authors / team)
 Eman

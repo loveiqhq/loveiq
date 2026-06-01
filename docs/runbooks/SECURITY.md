@@ -253,21 +253,27 @@ The repository uses multiple layers of automated security scanning:
 
 ### 1. Secret Scanning (TruffleHog)
 
-- Scans entire git history for leaked credentials
-- Runs on every push, PR, and weekly
-- Fails build if verified secrets detected
+- Runs on every push, PR, and weekly (`.github/workflows/security.yml`).
+- Scans the **last 10 commits** (`fetch-depth: 10`), `--only-verified` — recent
+  leaks are caught; older history / unverified patterns are NOT. A periodic
+  full-history scan is a known gap (see CI/CD enforcement below).
+- Fails the job if verified secrets are detected.
 
 ### 2. SAST - Static Analysis
 
-- **Semgrep**: Fast SAST for OWASP Top 10, Node.js/Next.js patterns
-- **CodeQL**: Deep semantic analysis for complex vulnerabilities
-- Results visible in GitHub Security tab
+- **Semgrep**: runs in a digest-pinned container; **note** the SARIF output is
+  not uploaded (requires GitHub Advanced Security) and the job does not yet fail
+  on findings — results are in the workflow logs only.
+- **CodeQL**: `security-extended` / `security-and-quality` queries, but
+  `upload: false` (no GHAS) — findings are computed, not surfaced in the Security
+  tab and not gated. See CI/CD enforcement below for the path to make SAST gate.
 
 ### 3. Dependency Scanning
 
-- **npm audit**: Fails on high/critical vulnerabilities
-- **SBOM generation**: CycloneDX format, stored as artifact
-- **Dependency Review**: Blocks PRs with vulnerable dependencies
+- **npm audit** (`--audit-level=high`): **blocks the merge** in `ci.yml` (Dependabot PRs exempted) and runs again in `security.yml`.
+- **OSV-Scanner**: pinned binary (sha256-verified), config in `.osv-scanner.toml`.
+- **SBOM generation**: CycloneDX format, stored as a 90-day artifact (not signed/attested).
+- **Dependency Review**: currently **disabled** (commented out in `security.yml`; requires GHAS for private repos). npm audit + OSV cover the gap.
 
 ### 4. Custom Security Rules
 
@@ -281,6 +287,73 @@ The repository uses multiple layers of automated security scanning:
 - `eslint-plugin-security` for security anti-patterns
 - `eslint-plugin-no-secrets` for secret detection
 - Custom rules in `eslint.config.mjs`
+
+## CI/CD enforcement (branch protection is unavailable on this plan)
+
+GitHub **branch protection rules and repository rulesets are a paid feature** for
+private repos (Team/Enterprise) — this repo is on the Free plan, so we **cannot**
+require status checks or reviews at the GitHub layer. A red commit can therefore
+reach `main` (a web merge, or `git push --no-verify`) and Vercel auto-deploys it.
+
+Because we can't hard-block merges, enforcement is layered (defence in depth):
+
+### Layer 1 — local pre-push gate (preventive)
+
+`.husky/pre-push` runs `lint` + `typecheck` + `test` + `docs:check` before any
+push — the same checks as the CI `lint` and `test` jobs. For our small team that
+pushes from local, this is the primary gate. It is bypassable with
+`git push --no-verify`; don't, except for a documented emergency.
+
+### Layer 2 — CI red-main alert (detective)
+
+`ci.yml` runs the full gate on every push to `main`. The `notify-failure` job
+fires a **Slack ops alert** the instant `lint`/`test`/`integration`/`build` fail
+on `main`, so a bad commit is caught in minutes and can be reverted before/just
+after it deploys. Requires the `SLACK_OPS_WEBHOOK_URL` Actions secret (the job
+no-ops safely if unset).
+
+### Layer 3 — Vercel build gate (preventive, for compile errors)
+
+Vercel will not promote a deployment whose `next build` fails, so a build-breaking
+commit cannot reach production — prod stays on the last good deploy. This does not
+catch logic/test failures that still compile (Layers 1–2 do).
+
+### Layer 4 — review convention (social)
+
+`.github/CODEOWNERS` auto-requests review from both owners on PRs and the PR
+template carries the checklist. Unenforced without branch protection, but it
+keeps the 2-reviewer norm visible.
+
+### Revert-red-main runbook
+
+On a Layer-2 alert: open the linked Actions run, confirm the failure is real
+(not flaky), then `git revert <sha> && git push` (fastest, keeps history) — or in
+Vercel, instantly **promote the previous production deployment** while the fix is
+prepared. Then fix forward.
+
+### If the plan is upgraded (Team/Enterprise)
+
+Add a ruleset on `main` (and `staging`): require status checks `Lint`, `Test`,
+`Build` (+ `Documentation Impact Check` on PRs, `docs-truth` on doc paths);
+require Code-Owner review (≥1) with stale-approval dismissal; require linear
+history; block force-push + deletion. Also enable **Require signed commits** once
+contributors have signing keys — signed tags give `release.yml` the provenance
+the pipeline otherwise lacks (no SBOM signing / SLSA today).
+
+### Other known gaps (tracked / accepted)
+
+- **SAST gating:** Semgrep now **fails the job on error-severity findings** with
+  the explicit rule packs (`security.yml`; the old `--config auto` ignored them).
+  CodeQL still runs with `upload: false` — surfacing it in the Security tab needs
+  GHAS (paid); the Semgrep error-gate is the free substitute.
+- **Secret scan depth:** TruffleHog scans only the last 10 commits; add a
+  scheduled full-history (`fetch-depth: 0`) scan to catch older leaks.
+- **Dependency Review** is GHAS-gated and disabled; `npm audit --audit-level=high`
+  (blocks merge) + OSV-Scanner cover dependency CVEs.
+- **E2E is intentionally not in CI** (deferred until the funnel stabilises) — do
+  not add it to the merge gate.
+- **Prod deploy gating** (approvals / rollback) lives in Vercel project settings,
+  not this repo — the revert runbook above is the rollback path.
 
 ## Incident response
 
