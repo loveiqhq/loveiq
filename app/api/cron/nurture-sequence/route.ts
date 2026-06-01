@@ -877,10 +877,8 @@ export async function GET(request: Request) {
     await runSingleStage(fiftyFourCandidates, "54h_no_unlock", ctx, summaries["54h_no_unlock"]);
 
     // Run-level aggregate alert. Individual send failures are logged with
-    // `slack: false` (recoverable, expected noise); here we surface ONE deduped
-    // ops ping per day when any failed, with sent/failed counts — so a systemic
-    // problem (e.g. 0 sent / all failed) is loud while one-off bounces don't
-    // spam the channel with per-email `api_5xx` mirrors.
+    // `slack: false` (recoverable, expected noise); here we surface them at the
+    // run level instead of N per-email `api_5xx` mirrors.
     const totals = Object.values(summaries).reduce(
       (acc, s) => {
         acc.sent += s.sent;
@@ -889,12 +887,26 @@ export async function GET(request: Request) {
       },
       { sent: 0, failed: 0 }
     );
-    if (totals.failed > 0) {
+    if (totals.failed > 0 && totals.sent === 0) {
+      // Systemic: every attempted send failed (likely a Resend outage, or
+      // Supabase write degradation that also fails the marker write). Page
+      // loudly via logger.error → ops `api_5xx`. This path is intentionally
+      // claim-INDEPENDENT: the same Supabase degradation that causes mass
+      // failures also fails `pingOps`'s dedup-claim, so routing the worst case
+      // through the dedup machinery could silence it entirely.
+      logger.error(
+        { totals, summaries },
+        `nurture-sequence: ALL ${totals.failed} send(s) failed this run (0 delivered) — likely a systemic Resend/Supabase issue`
+      );
+    } else if (totals.failed > 0) {
+      // Partial: some delivered, some failed (e.g. a few bounced recipients).
+      // One deduped ops ping per UTC day keeps a steady trickle of one-off
+      // failures from spamming the channel.
       await pingOps(
         "nurture_send_failures",
         dayKey,
-        `:rotating_light: nurture-sequence: ${totals.failed} email(s) failed to send this run ` +
-          `(sent ${totals.sent}). Check Resend status + the cron logs.`
+        `:warning: nurture-sequence: ${totals.failed} of ${totals.failed + totals.sent} email(s) ` +
+          `failed to send this run (sent ${totals.sent}). Check Resend status + the cron logs.`
       );
     }
 
