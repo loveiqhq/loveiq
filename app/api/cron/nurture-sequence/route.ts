@@ -58,6 +58,12 @@ const HOUR_MS = 60 * 60 * 1000;
 const SUPABASE_TIMEOUT_MS = 8_000;
 const RESEND_TIMEOUT_MS = 8_000;
 const CANDIDATE_LIMIT_PER_STAGE = 200;
+// Minimum failed sends (with ZERO delivered) before the run-level alert is
+// escalated to a loud "systemic" `api_5xx` page. Below this, a failed run is
+// treated as one-off noise (a bad recipient / transient Resend hiccup) and only
+// emits the quiet, once-per-day ops ping. Prevents "ALL 1 send failed →
+// systemic" false alarms at low volume.
+const SYSTEMIC_MIN_FAILURES = 3;
 // Wall-clock guard. The loop is fully sequential (3 stages × up to 200 rows,
 // each a few Supabase round-trips + one ≤8s Resend send), so as the audience
 // grows a run can creep toward maxDuration and hit a FUNCTION_INVOCATION_TIMEOUT
@@ -494,7 +500,7 @@ async function persistStageSent({
   });
 }
 
-async function sendOne(input: SendInput): Promise<"sent" | "failed"> {
+async function sendOne(input: SendInput): Promise<{ ok: true } | { ok: false; reason: string }> {
   const tpl = renderEmail(input);
   try {
     const { error } = await Promise.race([
@@ -523,21 +529,24 @@ async function sendOne(input: SendInput): Promise<"sent" | "failed"> {
       ),
     ]);
     if (error) {
+      const reason = `${(error as { name?: string }).name ?? "ResendError"}: ${
+        (error as { message?: string }).message ?? "unknown"
+      }`.slice(0, 200);
       // slack:false — a single recoverable send failure is expected operational
       // noise (full mailbox, transient Resend hiccup) already counted in
-      // summary.failed. Mirroring it to ops as `api_5xx` per-email spams the
-      // channel; the run-level aggregate ping (see GET) is the actionable signal.
-      // The full error stays in the Vercel logs.
+      // summary.failed and surfaced (with this reason) by the run-level
+      // aggregate. Per-email `api_5xx` mirrors would spam ops. Full error in logs.
       logger.error(
         { err: error, stage: input.stage, slack: false },
         "nurture-sequence: send failed"
       );
-      return "failed";
+      return { ok: false, reason };
     }
-    return "sent";
+    return { ok: true };
   } catch (err) {
+    const reason = (err instanceof Error ? err.message : String(err)).slice(0, 200);
     logger.error({ err, stage: input.stage, slack: false }, "nurture-sequence: send error");
-    return "failed";
+    return { ok: false, reason };
   }
 }
 
@@ -576,6 +585,9 @@ interface RouteContext {
   // Absolute wall-clock deadline (ms epoch). Loops stop starting new candidates
   // once Date.now() reaches it. See TIME_BUDGET_MS.
   deadlineAtMs: number;
+  // Run-level collector of "<stage>: <reason>" strings for failed sends/rows so
+  // the aggregate alert is self-diagnosing instead of forcing a Vercel log dive.
+  failureReasons: string[];
 }
 
 async function processCandidate(
@@ -688,6 +700,7 @@ async function processCandidate(
       });
     } catch (err) {
       summary.failed++;
+      ctx.failureReasons.push(`${stage}: marker-write-failed`);
       // slack:false — per-candidate failure already counted in summary.failed
       // and surfaced by the run-level aggregate ping; don't page ops per row.
       logger.error(
@@ -709,10 +722,11 @@ async function processCandidate(
       utmCampaign: stage,
     });
 
-    if (outcome === "sent") {
+    if (outcome.ok) {
       summary.sent++;
     } else {
       summary.failed++;
+      ctx.failureReasons.push(`${stage}: ${outcome.reason}`);
       logger.warn(
         { quoteId: quote.id, stage },
         "nurture-sequence: send failed after marker persisted; not retrying"
@@ -720,6 +734,7 @@ async function processCandidate(
     }
   } catch (err) {
     summary.failed++;
+    ctx.failureReasons.push(`${stage}: per-row-error`);
     logger.error(
       { err, personalReportId: candidate.id, stage, slack: false },
       "nurture-sequence: per-row error"
@@ -882,6 +897,7 @@ export async function GET(request: Request) {
     siteUrl: getEmailSiteUrl(),
     unsubSecret: process.env.UNSUBSCRIBE_SECRET,
     deadlineAtMs: startMs + resolveTimeBudgetMs(),
+    failureReasons: [],
   };
 
   const summaries: Record<Stage, StageSummary> = {
@@ -902,9 +918,9 @@ export async function GET(request: Request) {
     await runSingleStage(thirtyCandidates, "30h_no_unlock", ctx, summaries["30h_no_unlock"]);
     await runSingleStage(fiftyFourCandidates, "54h_no_unlock", ctx, summaries["54h_no_unlock"]);
 
-    // Run-level aggregate alert. Individual send failures are logged with
-    // `slack: false` (recoverable, expected noise); here we surface them at the
-    // run level instead of N per-email `api_5xx` mirrors.
+    // Run-level aggregate alert. Per-email failures are logged with `slack:false`
+    // (no per-email api_5xx spam); here we surface them once per run WITH the
+    // actual failure reason(s) so the alert is self-diagnosing (no log dive).
     const totals = Object.values(summaries).reduce(
       (acc, s) => {
         acc.sent += s.sent;
@@ -913,27 +929,33 @@ export async function GET(request: Request) {
       },
       { sent: 0, failed: 0 }
     );
-    if (totals.failed > 0 && totals.sent === 0) {
-      // Systemic: every attempted send failed (likely a Resend outage, or
-      // Supabase write degradation that also fails the marker write). Page
-      // loudly via logger.error → ops `api_5xx`. This path is intentionally
-      // claim-INDEPENDENT: the same Supabase degradation that causes mass
-      // failures also fails `pingOps`'s dedup-claim, so routing the worst case
-      // through the dedup machinery could silence it entirely.
-      logger.error(
-        { totals, summaries },
-        `nurture-sequence: ALL ${totals.failed} send(s) failed this run (0 delivered) — likely a systemic Resend/Supabase issue`
-      );
-    } else if (totals.failed > 0) {
-      // Partial: some delivered, some failed (e.g. a few bounced recipients).
-      // One deduped ops ping per UTC day keeps a steady trickle of one-off
-      // failures from spamming the channel.
-      await pingOps(
-        "nurture_send_failures",
-        dayKey,
-        `:warning: nurture-sequence: ${totals.failed} of ${totals.failed + totals.sent} email(s) ` +
-          `failed to send this run (sent ${totals.sent}). Check Resend status + the cron logs.`
-      );
+    if (totals.failed > 0) {
+      const byStage = Object.entries(summaries)
+        .filter(([, s]) => s.failed > 0)
+        .map(([stage, s]) => `${stage}:${s.failed}`)
+        .join(", ");
+      const reasons = [...new Set(ctx.failureReasons)].slice(0, 3).join(" | ") || "see logs";
+      if (totals.sent === 0 && totals.failed >= SYSTEMIC_MIN_FAILURES) {
+        // Genuinely systemic: enough sends failed with ZERO delivered to suggest
+        // a Resend outage / Supabase write degradation. Page loudly via
+        // logger.error → ops `api_5xx`, claim-INDEPENDENT (the same Supabase
+        // degradation that causes mass failures also fails pingOps's dedup-claim,
+        // so routing the worst case through it could silence it entirely).
+        logger.error(
+          { totals, summaries, reasons: ctx.failureReasons.slice(0, 10) },
+          `nurture-sequence: ${totals.failed} send(s) failed, 0 delivered (${byStage}) — likely systemic. Reasons: ${reasons}`
+        );
+      } else {
+        // One-off / partial failures: a bad recipient or transient hiccup, NOT an
+        // outage. One deduped ops ping per UTC day, with the reason so it's still
+        // actionable without spamming.
+        await pingOps(
+          "nurture_send_failures",
+          dayKey,
+          `:warning: nurture-sequence: ${totals.failed} of ${totals.failed + totals.sent} send(s) ` +
+            `failed this run (${byStage}). Reasons: ${reasons}`
+        );
+      }
     }
 
     logger.info({ summaries }, "nurture-sequence cron finished");
