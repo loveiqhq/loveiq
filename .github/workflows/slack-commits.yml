@@ -76,16 +76,36 @@ jobs:
 
           blocks = [{"type": "section", "text": {"type": "mrkdwn", "text": header}}]
 
+          marcus_re = re.compile(r"(?i)^\s*for\s+marcus:\s*(.*)$")
+
           for c in commits:
               sha = (c.get("id") or "")[:7]
               url = c.get("url") or ""
               author = ((c.get("author") or {}).get("name")) or "unknown"
               subject, body = clean(c.get("message") or "")
+
+              # Pull the "For Marcus:" summary out of the body so it can render
+              # BOLD and labeled on its own line. Slack code blocks (used for the
+              # technical body below) render monospace and ignore bold, so the
+              # Marcus line has to live outside the ``` block.
+              marcus = None
+              body_kept = []
+              for line in body.splitlines():
+                  m = marcus_re.match(line)
+                  if m and marcus is None:
+                      marcus = m.group(1).strip()
+                  else:
+                      body_kept.append(line)
+              body = "\n".join(body_kept).strip()
+
               link = f"<{url}|`{sha}`>" if url else f"`{sha}`"
               text = f"{link} *{subject}* — _{author}_"
               if body:
                   body_trim = body if len(body) <= 2500 else body[:2500] + "…"
                   text = f"{text}\n```\n{body_trim}\n```"
+              if marcus:
+                  safe = marcus.replace("*", "").strip()
+                  text = f"{text}\n*📣 For Marcus: {safe}*"
               blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": text}})
 
           fallback = f"{repo} {branch}: {len(commits)} commit(s)"
