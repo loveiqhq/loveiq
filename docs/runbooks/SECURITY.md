@@ -307,10 +307,11 @@ pushes from local, this is the primary gate. It is bypassable with
 ### Layer 2 — CI red-main alert (detective)
 
 `ci.yml` runs the full gate on every push to `main`. The `notify-failure` job
-fires a **Slack ops alert** the instant `lint`/`test`/`integration`/`build` fail
-on `main`, so a bad commit is caught in minutes and can be reverted before/just
-after it deploys. Requires the `SLACK_OPS_WEBHOOK_URL` Actions secret (the job
-no-ops safely if unset).
+fires a **Slack alert** the instant `lint`/`test`/`integration`/`build` fail on
+`main`, so a bad commit is caught in minutes and can be reverted before/just
+after it deploys. It reuses the existing `SLACK_COMMITS_WEBHOOK_URL` Actions
+secret (posts to the commits channel); the job no-ops safely if that secret is
+unset.
 
 ### Layer 3 — Vercel build gate (preventive, for compile errors)
 
