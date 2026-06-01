@@ -1,4 +1,5 @@
 import { EMAIL_FONT, escapeHtml, renderCtaButton, wrapEmailShell } from "@shared/emails/shared";
+import { getEmailImageBaseUrl } from "@shared/emails/site-url";
 
 export interface NurtureTestimonial {
   name: string;
@@ -35,7 +36,9 @@ export interface NurtureBodyParams {
 }
 
 function renderTestimonialCard(t: NurtureTestimonial, siteUrl: string): string {
-  const absPhoto = t.photoUrl.startsWith("http") ? t.photoUrl : `${siteUrl}${t.photoUrl}`;
+  const absPhoto = t.photoUrl.startsWith("http")
+    ? t.photoUrl
+    : `${getEmailImageBaseUrl(siteUrl)}${t.photoUrl}`;
   const trailing = t.quoteTrailing ? escapeHtml(t.quoteTrailing) : "";
   // T-03: Outlook desktop (2007-2019) uses the Word HTML renderer which
   // largely ignores CSS `style` on <td>. To keep the two-column avatar+name

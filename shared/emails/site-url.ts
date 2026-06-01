@@ -34,3 +34,32 @@ export function getEmailSiteUrl(): string {
   }
   return cleaned;
 }
+
+/**
+ * Returns the base URL that EMAIL `<img>` tags should use for their `src`.
+ *
+ * Mail clients (notably Gmail) treat remote images hosted on a domain that
+ * does not align with the authenticated sending domain as suspicious and may
+ * strip them, so the logo / testimonial photos silently fail for some
+ * recipients. Resend surfaces this as a "Host images on the sending domain"
+ * deliverability warning when images live on `www.loveiq.org` but mail is
+ * sent from `send.loveiq.org`.
+ *
+ * Set `EMAIL_IMAGE_BASE_URL` to a host aligned with the sending domain
+ * (e.g. `https://send.loveiq.org`) — but ONLY once that host actually serves
+ * the `/public` assets (add it to the Vercel project first, otherwise every
+ * email image 404s). When unset, falls back to `fallbackSiteUrl` (the link
+ * base already threaded into the template) so behaviour is unchanged and
+ * nothing can break. Staging/preview/non-localhost-http values are rejected to
+ * the safe fallback, matching {@link getEmailSiteUrl}.
+ */
+export function getEmailImageBaseUrl(fallbackSiteUrl?: string): string {
+  const fallback = fallbackSiteUrl?.trim().replace(/\/$/, "") || getEmailSiteUrl();
+  const raw = process.env.EMAIL_IMAGE_BASE_URL?.trim();
+  if (!raw) return fallback;
+  const cleaned = raw.replace(/\/$/, "");
+  if (STAGING_PATTERNS.some((p) => p.test(cleaned))) {
+    return fallback;
+  }
+  return cleaned;
+}

@@ -1,4 +1,5 @@
 import { EMAIL_FONT, escapeHtml, renderCtaButton, wrapEmailShell } from "@shared/emails/shared";
+import { getEmailImageBaseUrl } from "@shared/emails/site-url";
 import { TESTIMONIAL_DIJANA } from "@features/report/server/emails/nurture/shared";
 
 export interface SurveyCompleteEmailParams {
@@ -10,7 +11,9 @@ export interface SurveyCompleteEmailParams {
 
 function renderTestimonialCard(siteUrl: string): string {
   const t = TESTIMONIAL_DIJANA;
-  const absPhoto = t.photoUrl.startsWith("http") ? t.photoUrl : `${siteUrl}${t.photoUrl}`;
+  const absPhoto = t.photoUrl.startsWith("http")
+    ? t.photoUrl
+    : `${getEmailImageBaseUrl(siteUrl)}${t.photoUrl}`;
   return `
   <tr>
     <td style="padding:8px 32px 16px;">

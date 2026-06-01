@@ -12,9 +12,10 @@ export function buildArchetypeReportUrl(reportUrl: string, archetypeSlug: string
 // the canonical location for a generic HTML helper.
 import { escapeHtml } from "@shared/format/html-escape";
 export { escapeHtml };
+import { getEmailImageBaseUrl } from "./site-url";
 
 export function renderBrandHeader(siteUrl: string): string {
-  const logoUrl = `${siteUrl}/apple-touch-icon.png`;
+  const logoUrl = `${getEmailImageBaseUrl(siteUrl)}/apple-touch-icon.png`;
   // "IQ" gradient: clients without -webkit-text-fill-color (e.g. Outlook desktop)
   // fall back to the solid `color` value.
   return `
