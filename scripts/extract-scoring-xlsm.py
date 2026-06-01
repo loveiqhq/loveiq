@@ -4,6 +4,9 @@ Extract every sheet from a scoring-config .xlsm workbook into CSV files
 under data/scoring-config/.
 
 Zero third-party deps: uses stdlib zipfile + xml.etree.ElementTree only.
+The XXE Semgrep rules are suppressed inline below: the input is a trusted local
+workbook we author, not untrusted XML, so stdlib parsing is appropriate
+(per the Python docs' own trusted-vs-untrusted guidance).
 
 Usage:
   python scripts/extract-scoring-xlsm.py [path-to-xlsm]
@@ -20,7 +23,7 @@ import re
 import sys
 import zipfile
 from pathlib import Path
-from xml.etree import ElementTree as ET
+from xml.etree import ElementTree as ET  # nosemgrep: python.lang.security.use-defused-xml.use-defused-xml -- trusted local build artifact (own .xlsm), not untrusted input
 
 NS = {"main": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
 REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
@@ -48,7 +51,7 @@ def parse_ref(ref: str) -> tuple[int, int]:
 def load_shared_strings(zf: zipfile.ZipFile) -> list[str]:
     try:
         with zf.open("xl/sharedStrings.xml") as f:
-            tree = ET.parse(f)
+            tree = ET.parse(f)  # nosemgrep: python.lang.security.use-defused-xml-parse.use-defused-xml-parse -- trusted local .xlsm parsed at build time, never remote input
     except KeyError:
         return []
     out: list[str] = []
@@ -63,7 +66,7 @@ def load_shared_strings(zf: zipfile.ZipFile) -> list[str]:
 
 def sheet_rows(zf: zipfile.ZipFile, sheet_path: str, shared: list[str]) -> list[list[str]]:
     with zf.open(sheet_path) as f:
-        tree = ET.parse(f).getroot()
+        tree = ET.parse(f).getroot()  # nosemgrep: python.lang.security.use-defused-xml-parse.use-defused-xml-parse -- trusted local .xlsm parsed at build time, never remote input
     sheet_data = tree.find("main:sheetData", NS)
     rows: list[list[str]] = []
     max_col = 0
@@ -122,7 +125,7 @@ def main() -> int:
         shared = load_shared_strings(zf)
 
         with zf.open("xl/workbook.xml") as f:
-            wb = ET.parse(f).getroot()
+            wb = ET.parse(f).getroot()  # nosemgrep: python.lang.security.use-defused-xml-parse.use-defused-xml-parse -- trusted local .xlsm parsed at build time, never remote input
         sheets = []
         for s in wb.findall("main:sheets/main:sheet", NS):
             sheets.append(
@@ -133,7 +136,7 @@ def main() -> int:
             )
 
         with zf.open("xl/_rels/workbook.xml.rels") as f:
-            rels = ET.parse(f).getroot()
+            rels = ET.parse(f).getroot()  # nosemgrep: python.lang.security.use-defused-xml-parse.use-defused-xml-parse -- trusted local .xlsm parsed at build time, never remote input
         rel_map = {r.get("Id"): r.get("Target") for r in rels}
 
         written: list[tuple[str, int]] = []

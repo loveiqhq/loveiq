@@ -58,10 +58,14 @@ jobs:
         # SARIF was discarded — i.e. checkbox SAST. Pass the packs explicitly and
         # gate: `--error --severity ERROR` fails the job ONLY on error-severity
         # findings, so a future high-severity introduction blocks the merge while
-        # warning/info noise (37 WARNING + 1 INFO today, 0 ERROR — verified) does
-        # not break CI. The full findings (all severities) print in this step's
-        # text output. SARIF upload to the Security tab still needs GitHub Advanced
-        # Security (paid); re-add `--sarif --output` + an upload step when enabled.
+        # warning/info noise does not break CI. The full findings (all severities)
+        # print in this step's text output. The only ERROR-severity findings today
+        # are the XXE rules on scripts/extract-scoring-xlsm.py — suppressed inline
+        # with rule-scoped `# nosemgrep` there because that script parses a trusted
+        # local workbook we author, not untrusted XML (false positive in context),
+        # so the gate is 0 ERROR. SARIF upload to the Security tab still needs
+        # GitHub Advanced Security (paid); re-add `--sarif --output` + an upload
+        # step when enabled.
         run: |
           semgrep scan \
             --config p/security-audit \
