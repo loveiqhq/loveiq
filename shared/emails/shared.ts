@@ -92,6 +92,12 @@ export interface EmailShellParams {
   siteUrl: string;
   title: string;
   unsubscribeUrl?: string;
+  /**
+   * Hide the in-card LoveIQ logo/wordmark header. Defaults to `false` so every
+   * existing email keeps rendering the brand header unchanged. Opt-in for
+   * templates whose design omits the in-body logo (e.g. the 78h call-invite).
+   */
+  hideBrandHeader?: boolean;
 }
 
 export function wrapEmailShell({
@@ -100,6 +106,7 @@ export function wrapEmailShell({
   siteUrl,
   title,
   unsubscribeUrl,
+  hideBrandHeader = false,
 }: EmailShellParams): string {
   const preview = previewText
     ? `<div style="display:none; max-height:0; overflow:hidden; opacity:0; color:transparent;">${escapeHtml(previewText)}</div>`
@@ -121,7 +128,7 @@ ${preview}
   <tr>
     <td align="center" style="padding:24px 12px;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px; background-color:#ffffff; border-radius:8px; overflow:hidden;">
-        ${renderBrandHeader(siteUrl)}
+        ${hideBrandHeader ? "" : renderBrandHeader(siteUrl)}
         ${bodyHtml}
         ${renderBrandFooter(unsubscribeUrl)}
       </table>

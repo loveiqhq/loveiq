@@ -73,6 +73,7 @@ const NURTURE_STAGE_LABELS: Record<string, string> = {
   "6h_no_unlock": "6h · no unlock",
   "30h_no_unlock": "30h · 50% off",
   "54h_no_unlock": "54h · 75% off",
+  "78h_no_unlock": "78h · call invite",
 };
 
 // -----------------------------------------------------------------------------

@@ -141,6 +141,31 @@ describe("POST /api/stripe/checkout-session (promo wiring)", () => {
     );
   });
 
+  it("accepts a 100%-off post_call code and pre-applies it as discounts[]", async () => {
+    vi.mocked(resolveNurturePromo).mockResolvedValue({
+      stage: "post_call",
+      percentOff: 100,
+      stripePromotionCodeId: "promo_free",
+    });
+
+    const res = await POST(
+      makeRequest({
+        archetype: "Spark Seeker",
+        plan: "full_report",
+        promo: "LIQ-100-Ab7K9xQ2",
+        reportSessionId: "02d88f31-eceb-4402-940d-c8cd98d01848",
+      })
+    );
+
+    expect(res.status).toBe(200);
+    const args = createSession.mock.calls[0][0];
+    expect(args.discounts).toEqual([{ promotion_code: "promo_free" }]);
+    expect(args.allow_promotion_codes).toBeUndefined();
+    expect(args.metadata).toEqual(
+      expect.objectContaining({ promoStage: "post_call", promoPercentOff: "100" })
+    );
+  });
+
   it("falls through to allow_promotion_codes when promo is absent", async () => {
     vi.mocked(resolveNurturePromo).mockResolvedValue(null);
 

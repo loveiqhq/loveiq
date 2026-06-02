@@ -78,6 +78,7 @@ export async function proxy(request: NextRequest) {
       path === "/login" ||
       path === "/api/health" ||
       path === "/api/stripe/webhook" ||
+      path === "/api/calendly/webhook" ||
       path.startsWith("/api/cron/") ||
       path.startsWith("/api/staging-") ||
       path.startsWith("/admin") ||

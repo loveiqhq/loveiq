@@ -131,6 +131,12 @@ export default function SubmissionDetail({ id, mode = "submission" }: Submission
       : `/api/admin/submissions/${id}`;
   const { data, loading, error, refetch } = useAdminFetch<SubmissionData>(endpoint);
   const [showDelete, setShowDelete] = useState(false);
+  const [showGrant, setShowGrant] = useState(false);
+  const [grantInfo, setGrantInfo] = useState<{
+    code: string;
+    emailed?: boolean;
+    already?: boolean;
+  } | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -190,6 +196,39 @@ export default function SubmissionDetail({ id, mode = "submission" }: Submission
         return;
       }
       window.location.href = "/admin/submissions";
+    } catch {
+      setActionError("Network error. Please try again.");
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function handleGrantCoupon() {
+    if (mode !== "submission") return;
+
+    setShowGrant(false);
+    setActionLoading(true);
+    setActionError(null);
+    try {
+      const res = await fetch(`/api/admin/submissions/${id}/grant-call-coupon`, {
+        method: "POST",
+        headers: { "x-csrf-token": getCsrfToken() },
+      });
+      const body = (await res.json().catch(() => null)) as {
+        code?: string;
+        emailed?: boolean;
+        error?: string;
+      } | null;
+      // 409 with a code = already granted; surface the existing code.
+      if (res.status === 409 && body?.code) {
+        setGrantInfo({ code: body.code, already: true });
+        return;
+      }
+      if (!res.ok || !body?.code) {
+        setActionError(body?.error || "Grant failed.");
+        return;
+      }
+      setGrantInfo({ code: body.code, emailed: body.emailed });
     } catch {
       setActionError("Network error. Please try again.");
     } finally {
@@ -447,6 +486,18 @@ export default function SubmissionDetail({ id, mode = "submission" }: Submission
         </div>
       )}
 
+      {grantInfo && (
+        <div className="rounded-xl border border-accent-purple/20 bg-accent-purple/5 p-4 text-sm text-text-primary">
+          {grantInfo.already ? "A post-call coupon was already granted: " : "Coupon granted: "}
+          <span className="font-mono font-semibold text-accent-purple">{grantInfo.code}</span>
+          {grantInfo.already
+            ? " — resend it manually if needed."
+            : grantInfo.emailed
+              ? " — emailed to the user."
+              : " — email did not send; copy this code and send it manually."}
+        </div>
+      )}
+
       {isPartial ? (
         submission.recoverable && (
           <div className="flex flex-wrap gap-2">
@@ -487,6 +538,15 @@ export default function SubmissionDetail({ id, mode = "submission" }: Submission
             Restore
           </button>
           <button
+            onClick={() => setShowGrant(true)}
+            disabled={actionLoading}
+            aria-label="Grant post-call 100% coupon"
+            title="Mint a one-time 100%-off code that unlocks the full report and email it to the user. Use after a completed call."
+            className="rounded-lg border border-accent-purple/30 px-3 py-1.5 text-sm text-accent-purple transition hover:bg-accent-purple/10 disabled:opacity-40"
+          >
+            Grant 100% coupon
+          </button>
+          <button
             onClick={() => setShowDelete(true)}
             disabled={actionLoading}
             aria-label="Delete submission"
@@ -516,6 +576,17 @@ export default function SubmissionDetail({ id, mode = "submission" }: Submission
           confirmLabel="Delete permanently"
           onConfirm={handleDelete}
           onCancel={() => setShowDelete(false)}
+        />
+      )}
+
+      {!isPartial && (
+        <ConfirmDialog
+          open={showGrant}
+          title="Grant post-call 100% coupon"
+          message="This mints a one-time 100%-off code that unlocks the full report and emails it to the user. Use only after a completed call. It can only be granted once."
+          confirmLabel="Grant coupon"
+          onConfirm={handleGrantCoupon}
+          onCancel={() => setShowGrant(false)}
         />
       )}
     </div>

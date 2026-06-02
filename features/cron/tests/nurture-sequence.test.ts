@@ -151,6 +151,7 @@ describe("GET /api/cron/nurture-sequence", () => {
     sixHour,
     thirtyHour,
     fiftyFourHour,
+    seventyEightHour = [],
     quoteMetadata = {},
     accessToken = "rpt_AbCdEfGhIjKlMnOpQrSt",
     patchSpy,
@@ -158,6 +159,7 @@ describe("GET /api/cron/nurture-sequence", () => {
     sixHour: unknown[];
     thirtyHour: unknown[];
     fiftyFourHour: unknown[];
+    seventyEightHour?: unknown[];
     quoteMetadata?: Record<string, unknown>;
     accessToken?: string | null;
     patchSpy?: () => unknown;
@@ -169,6 +171,7 @@ describe("GET /api/cron/nurture-sequence", () => {
         if (personalReportCalls === 1) return Promise.resolve(jsonResponse(sixHour));
         if (personalReportCalls === 2) return Promise.resolve(jsonResponse(thirtyHour));
         if (personalReportCalls === 3) return Promise.resolve(jsonResponse(fiftyFourHour));
+        if (personalReportCalls === 4) return Promise.resolve(jsonResponse(seventyEightHour));
         return Promise.resolve(jsonResponse([]));
       }
       if (url.includes("/rest/v1/report_price_quote") && init?.method !== "PATCH") {
@@ -439,5 +442,72 @@ describe("GET /api/cron/nurture-sequence", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.summaries["30h_no_unlock"].sent).toBe(1);
+  });
+
+  it("78h candidate sends the Calendly call invite, mints NO promo, logs booking_event", async () => {
+    const candidate = {
+      id: 78,
+      survey_submission_id: 780,
+      created_date_time: new Date(Date.now() - 78 * 60 * 60 * 1000).toISOString(),
+      survey_submission: { app_user: { email: "call@example.com", first_name: "Cal" } },
+    };
+    mockCandidateWindows({
+      sixHour: [],
+      thirtyHour: [],
+      fiftyFourHour: [],
+      seventyEightHour: [candidate],
+      quoteMetadata: { nurtureEmailsSent: [] },
+    });
+
+    const res = await GET(makeRequest("test-cron-secret"));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.summaries["78h_no_unlock"].sent).toBe(1);
+
+    // No discount stage → no Stripe promo minted.
+    expect(mockStripePromoCreate).not.toHaveBeenCalled();
+
+    expect(mockResendSend).toHaveBeenCalledTimes(1);
+    const sent = mockResendSend.mock.calls[0][0];
+    expect(sent.to).toBe("call@example.com");
+    expect(sent.headers["X-LoveIQ-Stage"]).toBe("78h_no_unlock");
+    expect(sent.html).toContain("calendly.com/ema-djedovic-loveiq/20min");
+    expect(sent.html).toContain("utm_campaign=78h_no_unlock");
+    expect(sent.html).toContain("email=call%40example.com");
+
+    // A booking_event call_invite_sent row was written.
+    const bookingCall = mockFetchWithTimeout.mock.calls.find(
+      ([url, init]) =>
+        String(url).includes("/rest/v1/booking_event") &&
+        (init as { method?: string } | undefined)?.method === "POST"
+    );
+    expect(bookingCall).toBeTruthy();
+    const bookingBody = JSON.parse((bookingCall![1] as { body: string }).body);
+    expect(bookingBody.event_type).toBe("call_invite_sent");
+    expect(bookingBody.survey_submission_id).toBe(780);
+    expect(bookingBody.personal_report_id).toBe(78);
+  });
+
+  it("78h candidate already sent is skipped (idempotent)", async () => {
+    const candidate = {
+      id: 79,
+      survey_submission_id: 790,
+      created_date_time: new Date(Date.now() - 78 * 60 * 60 * 1000).toISOString(),
+      survey_submission: { app_user: { email: "again@example.com", first_name: "Ag" } },
+    };
+    mockCandidateWindows({
+      sixHour: [],
+      thirtyHour: [],
+      fiftyFourHour: [],
+      seventyEightHour: [candidate],
+      quoteMetadata: { nurtureEmailsSent: ["78h_no_unlock"] },
+    });
+
+    const res = await GET(makeRequest("test-cron-secret"));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.summaries["78h_no_unlock"].sent).toBe(0);
+    expect(body.summaries["78h_no_unlock"].skippedAlreadySent).toBe(1);
+    expect(mockResendSend).not.toHaveBeenCalled();
   });
 });

@@ -3,6 +3,8 @@ import { nurture6hNoViewEmail } from "@features/report/server/emails/nurture/nur
 import { nurture6hNoUnlockEmail } from "@features/report/server/emails/nurture/nurture-6h-no-unlock";
 import { nurture30hNoUnlockEmail } from "@features/report/server/emails/nurture/nurture-30h-no-unlock";
 import { nurture54hNoUnlockEmail } from "@features/report/server/emails/nurture/nurture-54h-no-unlock";
+import { nurture78hNoUnlockEmail } from "@features/report/server/emails/nurture/nurture-78h-no-unlock";
+import { postCallCouponEmail } from "@features/report/server/emails/nurture/post-call-coupon";
 import { surveyCompleteEmail } from "@features/survey/server/emails/survey-complete";
 
 const SITE = "https://loveiq.org";
@@ -142,5 +144,59 @@ describe("nurture email templates", () => {
     const introMatch = out.html.match(/Hi Marcus,([\s\S]*?)<\/p>/);
     expect(introMatch).toBeTruthy();
     expect(introMatch![1]).not.toContain("\n");
+  });
+
+  it("nurture-78h-no-unlock builds the call invite (no testimonial, no discount)", () => {
+    const calendly =
+      "https://calendly.com/ema-djedovic-loveiq/20min?utm_campaign=78h_no_unlock&email=sam%40example.com";
+    const out = nurture78hNoUnlockEmail({ firstName: "Sam", ctaUrl: calendly, siteUrl: SITE });
+    expect(out.subject).toBe("A free archetype report for you, Sam");
+    expect(out.html).toContain("Your next archetype report is on us");
+    expect(out.html).toContain("Book your 20-minute call");
+    // renderCtaButton escapes & → &amp; inside the href attribute.
+    expect(out.html).toContain(calendly.replace(/&/g, "&amp;"));
+    expect(out.html).toContain("Not up for a call? Just hit reply");
+    expect(out.html).toContain("With kindness,");
+    // No testimonial card or the shared "Questions? Reach us at" sign-off.
+    expect(out.html).not.toContain("Questions? Reach us at");
+    expect(out.html).not.toContain("Dijana");
+    expect(out.html).not.toContain("Use code:");
+    // text twin carries the RAW Calendly URL (unescaped &) + label.
+    expect(out.text).toContain(`Book your 20-minute call: ${calendly}`);
+  });
+
+  it("nurture-78h-no-unlock subject base form is <=50 chars and drops the name when absent", () => {
+    const out = nurture78hNoUnlockEmail({
+      firstName: null,
+      ctaUrl: "https://calendly.com/ema-djedovic-loveiq/20min",
+      siteUrl: SITE,
+    });
+    expect(out.subject).toBe("A free archetype report for you");
+    expect(out.subject.length).toBeLessThanOrEqual(50);
+    expect(out.html).toContain("Hi there,");
+  });
+
+  it("nurture-78h-no-unlock escapes a hostile firstName in the HTML body", () => {
+    const out = nurture78hNoUnlockEmail({
+      firstName: "<script>alert(1)</script>",
+      ctaUrl: "https://calendly.com/ema-djedovic-loveiq/20min",
+      siteUrl: SITE,
+    });
+    expect(out.html).not.toContain("<script>alert(1)</script>");
+    expect(out.html).toContain("&lt;script&gt;");
+  });
+
+  it("post-call-coupon email injects the 100% code + unlock CTA", () => {
+    const cta = "https://loveiq.org/report/rpt_abc?promo=LIQ-100-Ab7K9xQ2&offer=1";
+    const out = postCallCouponEmail({
+      firstName: "Sam",
+      ctaUrl: cta,
+      promoCode: "LIQ-100-Ab7K9xQ2",
+      siteUrl: SITE,
+    });
+    expect(out.subject.length).toBeLessThanOrEqual(50);
+    expect(out.html).toContain("LIQ-100-Ab7K9xQ2");
+    expect(out.html).toContain("Unlock your full report");
+    expect(out.text).toContain("LIQ-100-Ab7K9xQ2");
   });
 });

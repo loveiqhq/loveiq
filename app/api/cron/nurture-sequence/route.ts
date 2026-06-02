@@ -1,13 +1,15 @@
 /**
  * GET /api/cron/nurture-sequence
  *
- * Hourly nurture sequence cron that fans out across 4 timed stages keyed off
+ * Hourly nurture sequence cron that fans out across 5 timed stages keyed off
  * `personal_report.created_date_time`:
  *
  *   - `6h_no_view`     — 5–7h ago, no `analytics_event.report_viewed` row
  *   - `6h_no_unlock`   — 5–7h ago, has a viewed event but no paid plan
  *   - `30h_no_unlock`  — 29–31h ago, no paid plan; issues 50% per-user code
  *   - `54h_no_unlock`  — 53–55h ago, no paid plan; issues 75% per-user code
+ *   - `78h_no_unlock`  — 77–79h ago, no paid plan; invites a 20-min call (no
+ *                        code), CTA → Calendly; logs a `booking_event` row
  *
  * Idempotency lives in `report_price_quote.metadata.nurtureEmailsSent` (array
  * of stage strings) on the `full_report` quote row for the submission. Per-
@@ -45,6 +47,7 @@ import { nurture6hNoViewEmail } from "@features/report/server/emails/nurture/nur
 import { nurture6hNoUnlockEmail } from "@features/report/server/emails/nurture/nurture-6h-no-unlock";
 import { nurture30hNoUnlockEmail } from "@features/report/server/emails/nurture/nurture-30h-no-unlock";
 import { nurture54hNoUnlockEmail } from "@features/report/server/emails/nurture/nurture-54h-no-unlock";
+import { nurture78hNoUnlockEmail } from "@features/report/server/emails/nurture/nurture-78h-no-unlock";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -99,7 +102,11 @@ function resolveTimeBudgetMs(): number {
   return Number.isFinite(n) && n >= 0 ? n : DEFAULT_TIME_BUDGET_MS;
 }
 
-type Stage = "6h_no_view" | "6h_no_unlock" | "30h_no_unlock" | "54h_no_unlock";
+type Stage = "6h_no_view" | "6h_no_unlock" | "30h_no_unlock" | "54h_no_unlock" | "78h_no_unlock";
+
+// Final-stage CTA target. The 78h email links OUT to Calendly (a 20-min call),
+// not to /report. Fixed booking URL — UTM + invitee prefill are appended per-send.
+const CALENDLY_CALL_URL = "https://calendly.com/ema-djedovic-loveiq/20min";
 
 interface AgeWindow {
   minMs: number;
@@ -111,6 +118,7 @@ const AGE_WINDOWS = {
   six: { minMs: 5 * HOUR_MS, maxMs: 7 * HOUR_MS },
   thirty: { minMs: 29 * HOUR_MS, maxMs: 31 * HOUR_MS },
   fiftyFour: { minMs: 53 * HOUR_MS, maxMs: 55 * HOUR_MS },
+  seventyEight: { minMs: 77 * HOUR_MS, maxMs: 79 * HOUR_MS },
 } as const satisfies Record<string, AgeWindow>;
 
 function safeCompare(a: string, b: string): boolean {
@@ -366,6 +374,7 @@ interface SendInput {
   email: string;
   firstName: string | null;
   reportToken: string;
+  submissionId: number;
   siteUrl: string;
   unsubscribeUrl: string | undefined;
   resend: Resend;
@@ -392,6 +401,36 @@ function buildCtaUrl({
   });
   if (promoCode) params.set("promo", promoCode);
   return `${siteUrl}/report/${encodeURIComponent(reportToken)}?${params.toString()}`;
+}
+
+/**
+ * Build the Calendly CTA for the 78h call invite. Carries UTM attribution plus
+ * Calendly's name/email prefill so the booking is one tap. `utm_content` is the
+ * survey submission id — Calendly echoes UTM params into the `tracking` object
+ * on the booking webhook, giving an exact correlation key even if the invitee
+ * books under a different email.
+ */
+function buildCallCtaUrl({
+  stage,
+  email,
+  firstName,
+  submissionId,
+}: {
+  stage: Stage;
+  email: string;
+  firstName: string | null;
+  submissionId: number;
+}): string {
+  const params = new URLSearchParams({
+    utm_source: "email",
+    utm_medium: "nurture",
+    utm_campaign: stage,
+    utm_content: String(submissionId),
+    email,
+  });
+  const name = firstName?.trim();
+  if (name) params.set("name", name);
+  return `${CALENDLY_CALL_URL}?${params.toString()}`;
 }
 
 function renderEmail(input: Omit<SendInput, "resend">): {
@@ -429,6 +468,20 @@ function renderEmail(input: Omit<SendInput, "resend">): {
         ...common,
         promoCode: input.promo.code,
         percentOff: input.promo.percentOff,
+      });
+    case "78h_no_unlock":
+      // CTA links OUT to Calendly (a call), not /report — so it ignores the
+      // report `ctaUrl` in `common` and builds its own booking URL.
+      return nurture78hNoUnlockEmail({
+        firstName: input.firstName,
+        ctaUrl: buildCallCtaUrl({
+          stage: input.stage,
+          email: input.email,
+          firstName: input.firstName,
+          submissionId: input.submissionId,
+        }),
+        siteUrl: input.siteUrl,
+        unsubscribeUrl: input.unsubscribeUrl,
       });
   }
 }
@@ -498,6 +551,44 @@ async function persistStageSent({
     headers: { Prefer: "return=minimal" },
     method: "PATCH",
   });
+}
+
+/**
+ * Best-effort `booking_event` row for the 78h call-invite send. Gives a
+ * queryable per-user funnel row (call_invite_sent → call_booked → … filled in
+ * later by the Calendly webhook) that surfaces in the admin timeline.
+ * Non-fatal: a failed insert is logged and swallowed — the email already went
+ * out and `nurtureEmailsSent` is the send idempotency guard.
+ */
+async function recordCallInviteSent({
+  submissionId,
+  personalReportId,
+  email,
+  campaign,
+}: {
+  submissionId: number;
+  personalReportId: number;
+  email: string;
+  campaign: Stage;
+}): Promise<void> {
+  try {
+    await supabaseFetch(`/rest/v1/booking_event`, {
+      body: JSON.stringify({
+        survey_submission_id: submissionId,
+        personal_report_id: personalReportId,
+        email,
+        event_type: "call_invite_sent",
+        source_campaign: campaign,
+      }),
+      headers: { Prefer: "return=minimal" },
+      method: "POST",
+    });
+  } catch (err) {
+    logger.warn(
+      { err, submissionId, slack: false },
+      "nurture-sequence: booking_event call_invite_sent insert failed (best-effort)"
+    );
+  }
 }
 
 async function sendOne(input: SendInput): Promise<{ ok: true } | { ok: false; reason: string }> {
@@ -715,6 +806,7 @@ async function processCandidate(
       email,
       firstName,
       reportToken,
+      submissionId: candidate.survey_submission_id,
       siteUrl: ctx.siteUrl,
       unsubscribeUrl,
       resend: ctx.resend,
@@ -724,6 +816,14 @@ async function processCandidate(
 
     if (outcome.ok) {
       summary.sent++;
+      if (stage === "78h_no_unlock") {
+        await recordCallInviteSent({
+          submissionId: candidate.survey_submission_id,
+          personalReportId: candidate.id,
+          email,
+          campaign: stage,
+        });
+      }
     } else {
       summary.failed++;
       ctx.failureReasons.push(`${stage}: ${outcome.reason}`);
@@ -905,18 +1005,22 @@ export async function GET(request: Request) {
     "6h_no_unlock": newStageSummary(),
     "30h_no_unlock": newStageSummary(),
     "54h_no_unlock": newStageSummary(),
+    "78h_no_unlock": newStageSummary(),
   };
 
   try {
-    const [sixCandidates, thirtyCandidates, fiftyFourCandidates] = await Promise.all([
-      fetchCandidatesByAge(AGE_WINDOWS.six),
-      fetchCandidatesByAge(AGE_WINDOWS.thirty),
-      fetchCandidatesByAge(AGE_WINDOWS.fiftyFour),
-    ]);
+    const [sixCandidates, thirtyCandidates, fiftyFourCandidates, seventyEightCandidates] =
+      await Promise.all([
+        fetchCandidatesByAge(AGE_WINDOWS.six),
+        fetchCandidatesByAge(AGE_WINDOWS.thirty),
+        fetchCandidatesByAge(AGE_WINDOWS.fiftyFour),
+        fetchCandidatesByAge(AGE_WINDOWS.seventyEight),
+      ]);
 
     await runSixHourStages(sixCandidates, ctx, summaries["6h_no_view"], summaries["6h_no_unlock"]);
     await runSingleStage(thirtyCandidates, "30h_no_unlock", ctx, summaries["30h_no_unlock"]);
     await runSingleStage(fiftyFourCandidates, "54h_no_unlock", ctx, summaries["54h_no_unlock"]);
+    await runSingleStage(seventyEightCandidates, "78h_no_unlock", ctx, summaries["78h_no_unlock"]);
 
     // Run-level aggregate alert. Per-email failures are logged with `slack:false`
     // (no per-email api_5xx spam); here we surface them once per run WITH the

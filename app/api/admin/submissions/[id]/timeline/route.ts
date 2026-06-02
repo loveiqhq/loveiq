@@ -262,6 +262,31 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       }
     }
 
+    // 13. Call-funnel events (78h "book a call" stage): invite sent, booked,
+    // canceled, and post-call 100% coupon grant.
+    const bookingRes = await supabaseFetch(
+      `/rest/v1/booking_event?survey_submission_id=eq.${submissionId}&select=event_type,created_at,email,scheduled_at&order=created_at.asc`
+    );
+    if (bookingRes.ok) {
+      const bookings = (await bookingRes.json()) as Array<{
+        event_type: string;
+        created_at: string;
+        email: string | null;
+        scheduled_at: string | null;
+      }>;
+      for (const b of bookings) {
+        events.push({
+          type: b.event_type,
+          timestamp: b.created_at,
+          label: BOOKING_LABELS[b.event_type] ?? b.event_type,
+          detail:
+            b.event_type === "call_booked" && b.scheduled_at
+              ? `Scheduled for ${b.scheduled_at}`
+              : (b.email ?? undefined),
+        });
+      }
+    }
+
     // Sort by timestamp
     events.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
@@ -271,6 +296,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: "Unable to load timeline." }, { status: 500 });
   }
 }
+
+const BOOKING_LABELS: Record<string, string> = {
+  call_invite_sent: "Call invitation sent",
+  call_booked: "Call booked",
+  call_canceled: "Call canceled",
+  call_coupon_sent: "Post-call 100% coupon sent",
+};
 
 const ANALYTICS_LABELS: Record<string, string> = {
   report_viewed: "Report viewed",
