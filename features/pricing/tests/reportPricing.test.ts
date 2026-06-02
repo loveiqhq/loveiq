@@ -21,6 +21,7 @@ import {
   __testing__,
   getDiscountAdjustment,
   getPricingBucketsForPlan,
+  getPricingExperimentGroup,
   getReportPriceQuoteForContext,
 } from "@features/pricing/logic/reportPricing";
 import {
@@ -101,28 +102,25 @@ describe("reportPricing", () => {
     });
   });
 
-  describe("bucket catalogue (Tracking & Pricing - Prices (1).csv)", () => {
+  describe("bucket catalogue (Tracking & Pricing - Prices (2).csv)", () => {
     it("essentials buckets match csv MSRP / starting-sale pairs", () => {
       expect(getPricingBucketsForPlan("essentials")).toEqual([
-        { code: "A", weight: 20, msrpCents: 2999, startingCents: 799 },
-        { code: "B", weight: 10, msrpCents: 1999, startingCents: 699 },
-        { code: "C", weight: 70, msrpCents: 999, startingCents: 299 },
+        { code: "A", weight: 50, msrpCents: 2999, startingCents: 999 },
+        { code: "B", weight: 50, msrpCents: 1999, startingCents: 699 },
       ]);
     });
 
     it("full_report buckets match csv MSRP / starting-sale pairs", () => {
       expect(getPricingBucketsForPlan("full_report")).toEqual([
-        { code: "A", weight: 20, msrpCents: 6999, startingCents: 999 },
-        { code: "B", weight: 10, msrpCents: 5999, startingCents: 899 },
-        { code: "C", weight: 70, msrpCents: 4999, startingCents: 499 },
+        { code: "A", weight: 50, msrpCents: 4999, startingCents: 2499 },
+        { code: "B", weight: 50, msrpCents: 4999, startingCents: 1499 },
       ]);
     });
 
     it("all_reports buckets match csv MSRP / starting-sale pairs", () => {
       expect(getPricingBucketsForPlan("all_reports")).toEqual([
-        { code: "A", weight: 20, msrpCents: 35900, startingCents: 9900 },
-        { code: "B", weight: 10, msrpCents: 25900, startingCents: 8900 },
-        { code: "C", weight: 70, msrpCents: 15900, startingCents: 4999 },
+        { code: "A", weight: 50, msrpCents: 14999, startingCents: 9900 },
+        { code: "B", weight: 50, msrpCents: 14999, startingCents: 6900 },
       ]);
     });
 
@@ -136,7 +134,7 @@ describe("reportPricing", () => {
 
   describe("pickBucket invariant — one bucket per user", () => {
     // Locks the post-fix invariant: a single personalReportId hashes to the
-    // same bucket code (A/B/C) across all three plans, so the tier ladder
+    // same bucket code (A/B) across all three plans, so the tier ladder
     // stays monotonic (Full Report ≥ Essentials, All ≥ Full).
     it("returns the same bucket code across all three plans for any personalReportId", () => {
       const plans = ["essentials", "full_report", "all_reports"] as const;
@@ -149,7 +147,7 @@ describe("reportPricing", () => {
       }
     });
 
-    it("distributes buckets across the weighted A=20% / B=10% / C=70% spread", () => {
+    it("distributes buckets across the even A=50% / B=50% spread (no retired C)", () => {
       const counts: Record<"A" | "B" | "C", number> = { A: 0, B: 0, C: 0 };
       const sample = 10_000;
       for (let id = 1; id <= sample; id++) {
@@ -157,12 +155,12 @@ describe("reportPricing", () => {
         counts[code] += 1;
       }
       // Allow ±3% tolerance for hash skew on a 10k sample.
-      expect(counts.A / sample).toBeGreaterThan(0.17);
-      expect(counts.A / sample).toBeLessThan(0.23);
-      expect(counts.B / sample).toBeGreaterThan(0.07);
-      expect(counts.B / sample).toBeLessThan(0.13);
-      expect(counts.C / sample).toBeGreaterThan(0.67);
-      expect(counts.C / sample).toBeLessThan(0.73);
+      expect(counts.A / sample).toBeGreaterThan(0.47);
+      expect(counts.A / sample).toBeLessThan(0.53);
+      expect(counts.B / sample).toBeGreaterThan(0.47);
+      expect(counts.B / sample).toBeLessThan(0.53);
+      // C retired — no user should ever be assigned the removed bucket.
+      expect(counts.C).toBe(0);
     });
   });
 
@@ -556,5 +554,77 @@ describe("reportPricing", () => {
     expect(createdPayload).toEqual(expect.objectContaining({ forced_paywall_arm: expectedArm }));
     // Token was present → never falls back to the submission-token lookup.
     expect(lookupReportTokenBySubmissionId).not.toHaveBeenCalled();
+  });
+
+  it("group A all_reports shows the catalogue €99.00 / €69.00 starting verbatim (no .49 charm-snap)", async () => {
+    // Guards the fix: the CSV's only .00-ending prices (all_reports startings
+    // 9900/6900) must NOT be charm-rounded up to 9949/6949 on the flat group-A
+    // path. (Group B / ladder discounts still normalize.)
+    let groupAId = 0;
+    for (let id = 1; id <= 5_000; id++) {
+      if (getPricingExperimentGroup(id) === "A") {
+        groupAId = id;
+        break;
+      }
+    }
+    expect(groupAId).toBeGreaterThan(0);
+    const expectedStarting =
+      __testing__.pickBucket("all_reports", groupAId).code === "A" ? 9900 : 6900;
+    vi.mocked(ensurePersonalReportForSubmission).mockResolvedValue({ id: groupAId });
+
+    mockFetchWithTimeout.mockImplementation(
+      async (url: string, options?: { body?: string; method?: string }) => {
+        if (url.includes("/rest/v1/survey_submission?id=eq.42")) {
+          return createJsonResponse([
+            {
+              id: 42,
+              user_id: 7,
+              utm_tracker: null,
+              duration_ms: 0,
+              app_user: {
+                id: 7,
+                email: "user@example.com",
+                utm_tracker: null,
+                user_profile: { location_primary: "Germany" },
+              },
+            },
+          ]);
+        }
+        if (url.includes("/rest/v1/survey_submission_answer")) return createJsonResponse([]);
+        if (url.includes("/rest/v1/report_session")) return createJsonResponse([]);
+        if (
+          url.includes("/rest/v1/report_price_quote?personal_report_id=") &&
+          url.includes("plan=eq.all_reports") &&
+          options?.method !== "POST"
+        ) {
+          return createJsonResponse([]);
+        }
+        if (options?.method === "POST" && url.includes("/rest/v1/report_price_quote")) {
+          const createdPayload = JSON.parse(options.body ?? "{}") as Record<string, unknown>;
+          return createJsonResponse([
+            {
+              id: 92,
+              personal_report_id: groupAId,
+              survey_submission_id: 42,
+              user_id: 7,
+              ...createdPayload,
+            },
+          ]);
+        }
+        throw new Error(`Unexpected fetch call: ${options?.method ?? "GET"} ${url}`);
+      }
+    );
+
+    const quote = await getReportPriceQuoteForContext({
+      now: new Date("2026-06-02T10:00:00.000Z"),
+      plan: "all_reports",
+      pricingSessionId: "550e8400-e29b-41d4-a716-446655440222",
+      reportToken: "rpt_ABCDEFGHIJKLMNOPQRST",
+    });
+
+    // Fresh quote at step 0 → initial == current == the verbatim catalogue starting.
+    expect(quote.initialPriceCents).toBe(expectedStarting);
+    expect(quote.currentPriceCents).toBe(expectedStarting);
+    expect([9949, 6949]).not.toContain(quote.currentPriceCents);
   });
 });

@@ -20,7 +20,7 @@ export interface ReportPurchasePlan {
   features: ReportPurchaseFeature[];
   plan: ReportPurchasePlanId;
   /**
-   * Bucket-B MSRP per `Tracking & Pricing - Prices (1).csv` — display fallback
+   * Bucket-B MSRP per `Tracking & Pricing - Prices (2).csv` — display fallback
    * when a live quote isn't available (e.g. the marketing site before the
    * paywall, or a discount email when the cron failed to load the quote). The
    * real per-user strike + current price come from `ReportPriceQuoteSnapshot`.
@@ -65,7 +65,7 @@ export const REPORT_PURCHASE_PLANS: ReportPurchasePlan[] = [
       { label: "Share report with 2 extra emails" },
     ],
     plan: "full_report",
-    priceCents: 5999,
+    priceCents: 4999,
     priceSuffix: "one-time",
     title: "Full report",
     tone: "highlight",
@@ -80,7 +80,7 @@ export const REPORT_PURCHASE_PLANS: ReportPurchasePlan[] = [
       { label: "Decode attraction & compatibility" },
     ],
     plan: "all_reports",
-    priceCents: 25900,
+    priceCents: 14999,
     priceSuffix: "one-time",
     title: "All 14 reports",
   },

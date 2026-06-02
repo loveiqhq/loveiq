@@ -20,7 +20,7 @@ const SUPABASE_TIMEOUT_MS = 8_000;
 const QUOTE_VALIDITY_MS = 21 * 24 * 60 * 60 * 1_000;
 
 /**
- * Per-plan discount ladder — source: `Tracking & Pricing - Prices (1).csv` rows 6-9.
+ * Per-plan discount ladder — source: `Tracking & Pricing - Prices (2).csv` rows 5-8.
  * Essentials + Full Report share the same ladder that deepens to -70% at 14d.
  * All Reports caps at -30% past 72h so the premium tier never free-falls.
  * Multipliers are applied to the quote's `starting_price` (NOT to MSRP).
@@ -58,12 +58,15 @@ const PRICING_SIGNAL_SELECT = [
 ].join(",");
 
 /**
- * Pricing buckets — source: `Tracking & Pricing - Prices (1).csv` rows 2-4.
- * Each plan has 3 buckets (A / B / C) with a weighted distribution (20/10/70).
+ * Pricing buckets — source: `Tracking & Pricing - Prices (2).csv` rows 2-3.
+ * Each plan has 2 buckets (A / B) with an even 50/50 distribution.
  * MSRP is the struck-out anchor shown in the discount email and modal;
  * `startingCents` is the initial sale price before any ladder discount.
  * The ladder multipliers in `PLAN_LADDERS` are applied to `startingCents`.
  */
+// "C" retired 2026-06 (3-bucket → 2-bucket). Kept in the union so legacy quotes
+// stamped base_price_bucket="C" still rehydrate — they read msrp/starting off the
+// stored row, and bucketFromCode("C") → null is handled gracefully downstream.
 export type PricingBucketCode = "A" | "B" | "C";
 interface PricingBucket {
   code: PricingBucketCode;
@@ -73,19 +76,16 @@ interface PricingBucket {
 }
 const PLAN_BUCKETS: Record<ReportPurchasePlanId, readonly PricingBucket[]> = {
   essentials: [
-    { code: "A", weight: 20, msrpCents: 2999, startingCents: 799 },
-    { code: "B", weight: 10, msrpCents: 1999, startingCents: 699 },
-    { code: "C", weight: 70, msrpCents: 999, startingCents: 299 },
+    { code: "A", weight: 50, msrpCents: 2999, startingCents: 999 },
+    { code: "B", weight: 50, msrpCents: 1999, startingCents: 699 },
   ],
   full_report: [
-    { code: "A", weight: 20, msrpCents: 6999, startingCents: 999 },
-    { code: "B", weight: 10, msrpCents: 5999, startingCents: 899 },
-    { code: "C", weight: 70, msrpCents: 4999, startingCents: 499 },
+    { code: "A", weight: 50, msrpCents: 4999, startingCents: 2499 },
+    { code: "B", weight: 50, msrpCents: 4999, startingCents: 1499 },
   ],
   all_reports: [
-    { code: "A", weight: 20, msrpCents: 35900, startingCents: 9900 },
-    { code: "B", weight: 10, msrpCents: 25900, startingCents: 8900 },
-    { code: "C", weight: 70, msrpCents: 15900, startingCents: 4999 },
+    { code: "A", weight: 50, msrpCents: 14999, startingCents: 9900 },
+    { code: "B", weight: 50, msrpCents: 14999, startingCents: 6900 },
   ],
 };
 
@@ -587,8 +587,8 @@ export function getPricingExperimentGroup(personalReportId: number): PricingExpe
 
 /**
  * Deterministic bucket selection using the hash-of-personalReportId seeded
- * against the weighted distribution (A=20%, B=10%, C=70%). One bucket per
- * user — the same code (A/B/C) is applied across all three plans so the
+ * against the weighted distribution (A=50%, B=50%). One bucket per
+ * user — the same code (A/B) is applied across all three plans so the
  * tier ladder stays monotonic (Full Report ≥ Essentials, All ≥ Full).
  */
 function pickBucket(plan: ReportPurchasePlanId, personalReportId: number): PricingBucket {
@@ -1125,14 +1125,18 @@ function buildQuotePayload({
       ? existingQuote.initial_price_timestamp
       : now.toISOString();
 
-  // Initial price rules (Tracking & Pricing - Prices (1).csv + MVP doc):
+  // Initial price rules (Tracking & Pricing - Prices (2).csv + MVP doc):
   //   Group A  → initial = starting (no contextual adjustments).
   //   Group B  → initial = min(msrp, starting × country × device × traffic ×
   //              behavioral × engagement). The MVP doc's "Full Dynamic Pricing
   //              Engine" lives in Group B — uplift flows through to what the
   //              user is charged, not just analytics.
-  // Normalize to .49/.99 endings, then re-clamp to MSRP so All Reports' flat
-  // .00 MSRP (e.g. €259.00 / €159.00) doesn't drift above the retail anchor.
+  // Group A shows the catalogue starting verbatim — it's already a deliberate
+  // price from the pricing sheet (.99 for essentials/full, .00 for all_reports),
+  // so charm-rounding it would push e.g. €99.00 → €99.49 and contradict the
+  // sheet. Group B's contextual uplift is an arbitrary computed value, so it
+  // still gets normalized to a .49/.99 ending, then clamped to MSRP so the
+  // All Reports flat .00 MSRP doesn't drift above the retail anchor.
   const groupBInitialRaw =
     bucket.startingCents *
     countryPricing.multiplier *
@@ -1140,12 +1144,13 @@ function buildQuotePayload({
     trafficMultiplier *
     behavioralPricing.multiplier *
     engagementMultiplier;
-  const computedInitialCents = Math.min(
-    bucket.msrpCents,
-    normalizePriceEnding(
-      Math.min(bucket.msrpCents, experimentGroup === "A" ? bucket.startingCents : groupBInitialRaw)
-    )
-  );
+  const computedInitialCents =
+    experimentGroup === "A"
+      ? Math.min(bucket.msrpCents, bucket.startingCents)
+      : Math.min(
+          bucket.msrpCents,
+          normalizePriceEnding(Math.min(bucket.msrpCents, groupBInitialRaw))
+        );
   const initialPriceCents =
     !regenerateInitialPrice && existingQuote?.initial_price != null
       ? fromEuroAmount(existingQuote.initial_price)

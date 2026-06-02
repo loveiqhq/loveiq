@@ -17,22 +17,22 @@ function buildPricingQuote(
     currency: "EUR",
     experimentGroup: "B",
     basePriceBucket: "B",
-    basePriceCents: plan === "all_reports" ? 12999 : plan === "full_report" ? 2999 : 1499,
-    msrpCents: plan === "all_reports" ? 25900 : plan === "full_report" ? 5999 : 1999,
-    startingPriceCents: plan === "all_reports" ? 12950 : plan === "full_report" ? 2999 : 1499,
+    basePriceCents: plan === "all_reports" ? 6900 : plan === "full_report" ? 1499 : 699,
+    msrpCents: plan === "all_reports" ? 14999 : plan === "full_report" ? 4999 : 1999,
+    startingPriceCents: plan === "all_reports" ? 6900 : plan === "full_report" ? 1499 : 699,
     currentPriceCents:
       discountStep === 0
         ? plan === "all_reports"
-          ? 12950
+          ? 6900
           : plan === "full_report"
-            ? 2999
-            : 1499
+            ? 1499
+            : 699
         : plan === "all_reports"
-          ? 11499
+          ? 6210
           : plan === "full_report"
-            ? 2749
-            : 1349,
-    initialPriceCents: plan === "all_reports" ? 12999 : plan === "full_report" ? 2999 : 1499,
+            ? 1349
+            : 629,
+    initialPriceCents: plan === "all_reports" ? 6900 : plan === "full_report" ? 1499 : 699,
     discountMultiplier: discountStep === 0 ? 1 : 0.9,
     discountStep,
     pricingClusterId: `B-${plan}-B-tier_2-desktop-direct-zero-standard-d${discountStep}`,
