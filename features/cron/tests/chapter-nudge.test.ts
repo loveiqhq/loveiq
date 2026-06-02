@@ -392,9 +392,9 @@ describe("GET /api/cron/chapter-nudge", () => {
   });
 
   it("fires a capacity ops alert when the backlog approaches CANDIDATE_LIMIT", async () => {
-    // 450 == floor(CANDIDATE_LIMIT(500) * 0.9). Use GDPR-restricted rows so the
+    // 4500 == floor(CANDIDATE_LIMIT(5000) * 0.9). Use GDPR-restricted rows so the
     // loop fast-skips them (no sends) and we isolate the pre-loop capacity check.
-    const restricted = Array.from({ length: 450 }, (_, i) => ({
+    const restricted = Array.from({ length: 4500 }, (_, i) => ({
       id: i + 1,
       survey_submission_id: i + 1,
       created_date_time: new Date(Date.now() - 5 * DAY_MS).toISOString(),
@@ -416,8 +416,8 @@ describe("GET /api/cron/chapter-nudge", () => {
 
     const res = await GET(makeRequest("test-cron-secret"));
     const body = await res.json();
-    expect(body.summary.candidates).toBe(450);
-    expect(body.summary.skippedRestricted).toBe(450);
+    expect(body.summary.candidates).toBe(4500);
+    expect(body.summary.skippedRestricted).toBe(4500);
     expect(mockResendSend).not.toHaveBeenCalled();
     const kinds = mockNotifySlack.mock.calls.map((c) => (c[0] as { kind: string }).kind);
     expect(kinds).toContain("chapter_nudge_capacity");
