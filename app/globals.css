@@ -10923,29 +10923,38 @@ input.autofill-dark:-internal-autofill-previewed {
   pointer-events: none;
 }
 
-/* Mobile variant — edge-to-edge solid bar pinned to the bottom. */
+/* Mobile variant — edge-to-edge bar pinned to the bottom, single row
+ * (Figma 7635:13896): purple guarantee on the left, compact CTA on the right. */
 .report-sticky-unlock--mobile {
   left: 0;
   right: 0;
   bottom: 0;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: 4px;
-  padding: 6px 16px max(8px, env(safe-area-inset-bottom));
-  background: #150a22;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  justify-content: space-between;
+  gap: 8px;
+  padding: 13px 14px max(13px, env(safe-area-inset-bottom));
+  background: #1a0f26;
+  border-top: 1px solid rgba(167, 139, 250, 0.2);
   box-shadow: 0 -10px 24px rgba(0, 0, 0, 0.35);
 }
 
+/* Single line alongside the CTA. Shrinks before the button does; ellipsis is a
+ * last-resort safety on very narrow (<360px) phones rather than wrapping. */
 .report-sticky-unlock__guarantee {
   margin: 0;
+  flex: 0 1 auto;
+  min-width: 0;
   font-family: var(--font-sans);
-  font-size: 16px;
-  font-weight: 700;
-  line-height: 1.4;
-  letter-spacing: 0.2px;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.25;
+  letter-spacing: 0;
   color: #a78bfa;
-  text-align: center;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .report-sticky-unlock__cta {
@@ -10986,22 +10995,20 @@ input.autofill-dark:-internal-autofill-previewed {
   z-index: 1;
 }
 
-.report-sticky-unlock__price {
-  margin: 0;
-  font-family: var(--font-sans);
-  font-size: 14px;
-  line-height: 1.4;
-  color: rgba(255, 255, 255, 0.85);
-  text-align: center;
+/* Mobile compact pill (Figma 7635:13899) — tight padding, sits right. */
+.report-sticky-unlock__cta--mobile {
+  flex: 0 0 auto;
+  width: auto;
+  height: auto;
+  padding: 7px 12px;
+  font-size: 12px;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.report-sticky-unlock__price-value {
-  color: #a78bfa;
-  font-weight: 700;
-  font-size: 16px;
-}
-
-/* Desktop variant — centered rounded card with purple glow halo. */
+/* Desktop variant — centered rounded banner (Figma 7635:13901). */
 .report-sticky-unlock--desktop {
   left: 50%;
   bottom: 16px;
@@ -11021,46 +11028,48 @@ input.autofill-dark:-internal-autofill-previewed {
   gap: 14px;
   padding: 20px 24px 22px;
   background: #150a22;
-  border: 1px solid rgba(167, 139, 250, 0.18);
-  border-radius: 20px;
-  box-shadow:
-    0 0 40px rgba(167, 139, 250, 0.28),
-    0 16px 48px rgba(0, 0, 0, 0.45);
+  border: 2px solid rgba(167, 139, 250, 0.2);
+  border-radius: 24px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+}
+
+.report-sticky-unlock__desktop-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
 }
 
 .report-sticky-unlock__heading {
   margin: 0;
   font-family: var(--font-serif);
-  font-size: clamp(22px, 2.2vw, 28px);
+  font-size: clamp(22px, 2.6vw, 28px);
   font-weight: 700;
   line-height: 1.1;
   color: #fff;
   text-align: center;
 }
 
-.report-sticky-unlock__stats {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
+.report-sticky-unlock__guarantee-line {
+  margin: 0;
+  font-family: var(--font-sans);
+  line-height: 1.2;
   text-align: center;
 }
 
-.report-sticky-unlock__stats-line {
-  margin: 0;
-  font-family: var(--font-sans);
-}
-
-.report-sticky-unlock__stats-num {
-  font-size: 16px;
+.report-sticky-unlock__guarantee-strong {
   color: #a78bfa;
-  font-weight: 400;
+  font-weight: 800;
+  font-size: clamp(18px, 2.2vw, 24px);
 }
 
-.report-sticky-unlock__stats-text {
-  font-size: 14px;
+.report-sticky-unlock__guarantee-tail {
   color: #fff;
   font-weight: 400;
+  font-size: clamp(15px, 1.8vw, 18px);
+  /* Proportional gap after the larger purple text (a literal space inherits
+   * the small base font-size and reads as touching). */
+  margin-left: 0.3em;
 }
 
 .report-sticky-unlock__cta--desktop {
@@ -11187,7 +11196,7 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 .report-experience--sticky-pad {
-  padding-bottom: 140px;
+  padding-bottom: 120px;
 }
 
 @media (max-width: 640px) {
@@ -11201,58 +11210,70 @@ input.autofill-dark:-internal-autofill-previewed {
     display: block;
   }
   .report-experience--sticky-pad {
-    padding-bottom: 220px;
+    padding-bottom: 200px;
   }
 }
 
-/* Desktop only — collapse the sticky unlock bar into a single thin row
- * so it doesn't eat the above-the-fold report viewport. Heading + stats
- * sit horizontally next to a compact CTA pill; both stats lines share
- * one column with a small font so the whole bar is ~60 px tall instead
- * of ~200 px. Tablet (641–1024 px) keeps the taller stacked layout. */
+/* Desktop (≥1025px) — the bar becomes a single thin horizontal row
+ * (heading + guarantee + CTA side by side) per Figma 7635:13901.
+ * Tablet (641–1024px) keeps the stacked card; mobile (<641px) uses its
+ * own single-row layout. */
 @media (min-width: 1025px) {
+  /* Hug the content → a centered pill that's exactly as wide as its row, so
+   * there's no dead space at the bar ends and no cavernous middle gap. */
   .report-sticky-unlock--desktop {
     bottom: 12px;
+    width: max-content;
+    max-width: calc(100vw - 32px);
   }
   .report-sticky-unlock__desktop-inner {
-    flex-direction: column;
+    flex-direction: row;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    padding: 14px 24px 16px;
-    border-radius: 16px;
+    gap: 30px;
+    padding: 14px 28px 16px;
+    border-radius: 18px;
   }
-  .report-sticky-unlock__heading {
-    font-size: 20px;
-    line-height: 1.15;
-    text-align: center;
+  .report-sticky-unlock__desktop-copy,
+  .report-sticky-unlock__cta--desktop {
+    flex: 0 0 auto;
   }
-  .report-sticky-unlock__stats {
+  .report-sticky-unlock__desktop-copy {
+    flex-direction: row;
     align-items: center;
-    text-align: center;
-    gap: 0;
+    gap: 16px;
   }
-  .report-sticky-unlock__stats-num,
-  .report-sticky-unlock__stats-text {
-    font-size: 14px;
+  /* Compact, vw-scaled so the single row stays modest on every desktop. */
+  .report-sticky-unlock__heading {
+    font-size: clamp(19px, 1.5vw, 24px);
+    line-height: 1.1;
+    white-space: nowrap;
+  }
+  .report-sticky-unlock__guarantee-line {
+    white-space: nowrap;
+  }
+  .report-sticky-unlock__guarantee-strong {
+    font-size: clamp(15px, 1.2vw, 18px);
+  }
+  .report-sticky-unlock__guarantee-tail {
+    font-size: clamp(13px, 0.95vw, 15px);
   }
   .report-sticky-unlock__cta--desktop {
     width: auto;
-    min-width: 220px;
+    min-width: 0;
     height: 44px;
     padding: 0 24px;
-    font-size: 15px;
+    font-size: clamp(14px, 1vw, 16px);
     gap: 10px;
-    margin-top: 2px;
+    white-space: nowrap;
   }
   .report-sticky-unlock__cta--desktop .rpm-cta__arrow {
-    width: 20px;
-    height: 20px;
+    width: 19px;
+    height: 19px;
   }
-  /* Stacked layout: heading + 2 stat lines + CTA = ~150 px tall on
-   * desktop. Trim sticky-pad accordingly (was 220 px). */
+  /* Compact single row ≈ 80 px tall incl. padding. */
   .report-experience--sticky-pad {
-    padding-bottom: 180px;
+    padding-bottom: 108px;
   }
 }
 
