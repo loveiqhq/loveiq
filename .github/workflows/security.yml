@@ -283,12 +283,14 @@ jobs:
           #  - staging-* routes (dev-only endpoints that return 404 in production)
           #  - stripe/webhook (verified via Stripe signature header instead of CSRF)
           #  - resend/webhook (verified via Svix signature header instead of CSRF)
+          #  - calendly/webhook (verified via Calendly signature header instead of CSRF)
           #  - unsubscribe (RFC 8058 one-click; auth via HMAC-signed token in URL — email clients cannot send CSRF cookies)
           #  - csp-report (browsers POST CSP violation reports automatically with no token/cookie; rate-limited + body-bounded instead)
           for file in $(find app/api -name 'route.ts' \
               -not -path "*/staging-*" \
               -not -path "*/stripe/webhook/*" \
               -not -path "*/resend/webhook/*" \
+              -not -path "*/calendly/webhook/*" \
               -not -path "*/unsubscribe/*" \
               -not -path "*/csp-report/*" \
               2>/dev/null); do
@@ -308,11 +310,13 @@ jobs:
           #  - staging-* routes (dev-only endpoints that return 404 in production)
           #  - stripe/webhook (Stripe retries delivery; rate-limiting it would drop legitimate events)
           #  - resend/webhook (Resend retries delivery; rate-limiting drops legitimate events)
+          #  - calendly/webhook (Calendly retries delivery; rate-limiting drops legitimate events)
           #  - unsubscribe (RFC 8058 one-click; HMAC-signed token gates access — brute-force infeasible)
           for file in $(find app/api -name 'route.ts' \
               -not -path "*/staging-*" \
               -not -path "*/stripe/webhook/*" \
               -not -path "*/resend/webhook/*" \
+              -not -path "*/calendly/webhook/*" \
               -not -path "*/unsubscribe/*" \
               2>/dev/null); do
             if [ -f "$file" ] && grep -q "export.*POST" "$file"; then
@@ -328,15 +332,19 @@ jobs:
           #  - staging-* routes (dev-only endpoints that return 404 in production)
           #  - stripe/webhook (validated via stripe.webhooks.constructEvent signature check)
           #  - resend/webhook (validated via Svix wh.verify signature check)
+          #  - calendly/webhook (validated via Calendly signature check; body parsed after signature verify)
           #  - unsubscribe (auth via HMAC-signed token in URL; body is RFC 8058 fixed string)
           #  - admin/logout (no body to validate; just clears the auth session)
+          #  - admin grant-call-coupon (no request body; acts on the validated [id] URL param)
           #  - csp-report (browser-sent CSP violation report JSON; parsed leniently across legacy + Reporting-API shapes, then bounded + logged — a strict schema would just drop valid reports)
           for file in $(find app/api -name 'route.ts' \
               -not -path "*/staging-*" \
               -not -path "*/stripe/webhook/*" \
               -not -path "*/resend/webhook/*" \
+              -not -path "*/calendly/webhook/*" \
               -not -path "*/unsubscribe/*" \
               -not -path "*/admin/logout/*" \
+              -not -path "*/grant-call-coupon/*" \
               -not -path "*/csp-report/*" \
               2>/dev/null); do
             if [ -f "$file" ] && grep -q "export.*POST\|export.*PUT" "$file"; then
