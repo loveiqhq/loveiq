@@ -11,6 +11,7 @@ import { GtmScript, GtmNoScript } from "@shared/ui/GtmScript";
 import UxSignals from "@shared/ui/UxSignals";
 import WebVitals from "@shared/ui/WebVitals";
 import VisitorPinger from "@shared/observability/VisitorPinger";
+import { jsonLdString } from "@shared/seo/json-ld";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.loveiq.org";
 
@@ -29,12 +30,35 @@ const lora = Lora({
   display: "swap",
 });
 
+// Stable knowledge-graph id so WebSite/SoftwareApplication (here) and the
+// per-page Person nodes (homepage advisors, /about team) all reconcile to one
+// Organization entity instead of orphan snippets.
+const organizationId = `${siteUrl}/#organization`;
+
 const organizationSchema = {
   "@context": "https://schema.org",
   "@type": "Organization",
+  "@id": organizationId,
   name: "LoveIQ",
+  legalName: "Applied Psychometrics UG (haftungsbeschränkt)",
   url: siteUrl,
-  logo: `${siteUrl}/images/loveiq-mark-512.png`,
+  logo: {
+    "@type": "ImageObject",
+    url: `${siteUrl}/images/loveiq-mark-512.png`,
+    width: 512,
+    height: 512,
+  },
+  slogan: "Democratizing sexual psychology.",
+  description:
+    "LoveIQ translates complex sexual-psychology research into private, science-backed, actionable insights — mapping desire patterns, attachment style, and intimacy across psychological dimensions.",
+  email: "hello@loveiq.org",
+  knowsAbout: [
+    "Sexual psychology",
+    "Attachment theory",
+    "Relationship intimacy",
+    "Sexual communication",
+    "Psychometric assessment",
+  ],
   contactPoint: {
     "@type": "ContactPoint",
     email: "hello@loveiq.org",
@@ -42,7 +66,10 @@ const organizationSchema = {
   },
   address: {
     "@type": "PostalAddress",
+    streetAddress: "Hasenheide 62",
     addressLocality: "Berlin",
+    addressRegion: "Berlin",
+    postalCode: "10967",
     addressCountry: "DE",
   },
 };
@@ -50,8 +77,11 @@ const organizationSchema = {
 const websiteSchema = {
   "@context": "https://schema.org",
   "@type": "WebSite",
+  "@id": `${siteUrl}/#website`,
   name: "LoveIQ",
   url: siteUrl,
+  inLanguage: "en-US",
+  publisher: { "@id": organizationId },
   potentialAction: {
     "@type": "SearchAction",
     target: {
@@ -60,141 +90,6 @@ const websiteSchema = {
     },
     "query-input": "required name=search_term_string",
   },
-};
-
-const softwareApplicationSchema = {
-  "@context": "https://schema.org",
-  "@type": "SoftwareApplication",
-  name: "LoveIQ",
-  description:
-    "Science-backed sexual psychology assessment that maps your desire patterns, attachment style, and intimacy blueprint across 14 psychological dimensions.",
-  url: "https://www.loveiq.org",
-  applicationCategory: "HealthApplication",
-  operatingSystem: "Web",
-  offers: {
-    "@type": "Offer",
-    price: "0",
-    priceCurrency: "EUR",
-    description: "Free introductory assessment. Advanced reports available as one-time purchase.",
-  },
-  aggregateRating: {
-    "@type": "AggregateRating",
-    ratingValue: "4.9",
-    ratingCount: "30000",
-    bestRating: "5",
-    worstRating: "1",
-  },
-};
-
-const faqSchema = {
-  "@context": "https://schema.org",
-  "@type": "FAQPage",
-  mainEntity: [
-    {
-      "@type": "Question",
-      name: "Is this a test or an ongoing journey?",
-      acceptedAnswer: {
-        "@type": "Answer",
-        text: "LoveIQ is not a one-off quiz. It is a guided journey of self-understanding. You begin with a core assessment, and your profile can deepen over time as you explore additional topics, reflections, and optional follow-ups. Continued engagement allows your insights to become more precise and personalized.",
-      },
-    },
-    {
-      "@type": "Question",
-      name: "What exactly does this app do?",
-      acceptedAnswer: {
-        "@type": "Answer",
-        text: "LoveIQ analyzes how you think, feel, communicate, and relate. It translates your responses into a personalized archetype profile and relationship intelligence report that highlights patterns, strengths, challenges, and compatibility dynamics.",
-      },
-    },
-    {
-      "@type": "Question",
-      name: "How is my data used and protected?",
-      acceptedAnswer: {
-        "@type": "Answer",
-        text: "Your data is encrypted, private, and never sold. Responses are used only to generate your results and to improve our models in anonymized form. You can delete or export your data at any time.",
-      },
-    },
-    {
-      "@type": "Question",
-      name: "What kind of results will I receive?",
-      acceptedAnswer: {
-        "@type": "Answer",
-        text: "Depending on the product you use, your results may include: Archetype match scores; Trait patterns across psychological dimensions; Strengths, challenges, and blind spots; Practical insights for attraction, communication, intimacy, and long-term compatibility. The reports are designed to feel both emotionally resonant and scientifically grounded.",
-      },
-    },
-    {
-      "@type": "Question",
-      name: "Who is this app for?",
-      acceptedAnswer: {
-        "@type": "Answer",
-        text: "LoveIQ is for anyone seeking deeper clarity about themselves and their relationship patterns—whether single, dating, or in a long-term partnership. It is especially relevant for people who value self-awareness, emotional intelligence, and personal growth.",
-      },
-    },
-    {
-      "@type": "Question",
-      name: "Is it based on science?",
-      acceptedAnswer: {
-        "@type": "Answer",
-        text: "Yes. LoveIQ draws from relationship psychology, attachment theory, personality science, behavioral research, and large-scale pattern analysis. These foundations are combined with modern machine-learning techniques to create a rigorous and human-centered system.",
-      },
-    },
-    {
-      "@type": "Question",
-      name: "How accurate are the insights?",
-      acceptedAnswer: {
-        "@type": "Answer",
-        text: "Accuracy depends on the clarity and honesty of your inputs. The model identifies consistent patterns across multiple dimensions, going beyond a casual personality quiz. While no system can capture every nuance of a person, many users report that the insights feel precise and personally meaningful.",
-      },
-    },
-    {
-      "@type": "Question",
-      name: "Will I get recommendations or next steps?",
-      acceptedAnswer: {
-        "@type": "Answer",
-        text: "Yes. Your profile includes tailored suggestions such as communication strategies, dating insights, intimacy considerations, and long-term growth paths. Optional follow-up modules allow for deeper exploration.",
-      },
-    },
-    {
-      "@type": "Question",
-      name: "Is it anonymous?",
-      acceptedAnswer: {
-        "@type": "Answer",
-        text: "Yes. You can use LoveIQ with only an email address, and in some cases without entering your name. Your answers are private unless you choose to share your results.",
-      },
-    },
-    {
-      "@type": "Question",
-      name: "Can I talk to a professional or coach through the app?",
-      acceptedAnswer: {
-        "@type": "Answer",
-        text: "We are working with selected psychologists and relationship coaches to offer optional paid sessions. These experts will be familiar with the LoveIQ framework and able to support you based on your profile.",
-      },
-    },
-    {
-      "@type": "Question",
-      name: "Is it free?",
-      acceptedAnswer: {
-        "@type": "Answer",
-        text: "You can start with a free introductory assessment. Full reports and advanced insights are available through a one-time purchase.",
-      },
-    },
-    {
-      "@type": "Question",
-      name: "How long does the first assessment take?",
-      acceptedAnswer: {
-        "@type": "Answer",
-        text: "Most users complete the initial assessment in 7–12 minutes. It is mobile-friendly, intuitive, and can be paused and resumed at any time.",
-      },
-    },
-    {
-      "@type": "Question",
-      name: "Can I save progress, revisit results, or share with a partner?",
-      acceptedAnswer: {
-        "@type": "Answer",
-        text: "Yes. Progress is saved using a secure magic link sent to your email. You can resume, revisit results, or share them with a partner—no account required.",
-      },
-    },
-  ],
 };
 
 export const metadata: Metadata = {
@@ -216,6 +111,7 @@ export const metadata: Metadata = {
     url: siteUrl,
     siteName: "LoveIQ",
     type: "website",
+    locale: "en_US",
     images: [
       {
         url: `${siteUrl}/images/og-image.png`,
@@ -326,21 +222,16 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             {`(function(h,o,t,j,a,r){h.hj=h.hj||function(){(h.hj.q=h.hj.q||[]).push(arguments)};h._hjSettings={hjid:${hotjarSiteId},hjsv:6};a=o.getElementsByTagName('head')[0];r=o.createElement('script');r.async=1;r.src=t+h._hjSettings.hjid+j+h._hjSettings.hjsv;a.appendChild(r);})(window,document,'https://static.hotjar.com/c/hotjar-','.js?sv=');`}
           </Script>
         )}
+        {/* Organization + WebSite are global (describe the whole site). Page-specific
+            entities live on their page: SoftwareApplication + FAQPage on the homepage,
+            Person graphs on / and /about, DefinedTerm(Set) in the glossary. */}
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationSchema) }}
+          dangerouslySetInnerHTML={{ __html: jsonLdString(organizationSchema) }}
         />
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteSchema) }}
-        />
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }}
-        />
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareApplicationSchema) }}
+          dangerouslySetInnerHTML={{ __html: jsonLdString(websiteSchema) }}
         />
         {/* Contentsquare UXA tag — keep raw (not next/script) so the vendor
             verifier finds CS_CONF/_uxa globals on page load. `defer` is used
