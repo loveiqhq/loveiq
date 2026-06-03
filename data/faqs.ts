@@ -21,7 +21,7 @@ export const faqs: Faq[] = [
   {
     question: "How is my data used and protected?",
     answer:
-      "Your data is encrypted, private, and never sold. Responses are used only to generate your results and to improve our models in anonymized form. You can delete or export your data at any time.",
+      "Your data is encrypted, private, and never sold. Responses are used to generate your results and, in aggregated and anonymized form, to improve the quality of our service — never to train public or third-party AI models. You can delete or export your data at any time.",
   },
   {
     question: "What kind of results will I receive?",

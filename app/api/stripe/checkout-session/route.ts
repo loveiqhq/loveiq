@@ -188,11 +188,20 @@ export async function POST(request: Request) {
     // archetype X does NOT block buying the same tier on archetype Y.
     // Best-effort: a Supabase blip drops to a warn-log and lets checkout
     // proceed (webhook idempotency is the secondary defense).
+    // Resolve the submission once — reused by the already-owns precheck AND by
+    // per-user promo ownership below, so session-only checkouts (not just token
+    // ones) can resolve a user's own nurture code. [Audit L6]
+    let accessContext: Awaited<ReturnType<typeof resolveSubmissionAccessContext>> = null;
     try {
-      const accessContext = await resolveSubmissionAccessContext({
+      accessContext = await resolveSubmissionAccessContext({
         reportSessionId: parsed.data.reportSessionId ?? null,
         reportToken: parsed.data.reportToken ?? null,
       });
+    } catch (err) {
+      logger.warn({ err }, "checkout-session: access-context resolve failed; continuing");
+    }
+
+    try {
       if (accessContext) {
         const access = await getReportAccessPlanForSubmission(accessContext.submissionId);
         const requestedArchetype = parsed.data.archetype ?? null;
@@ -238,6 +247,7 @@ export async function POST(request: Request) {
       try {
         nurturePromoMatch = await resolveNurturePromo({
           reportToken: parsed.data.reportToken ?? null,
+          submissionId: accessContext?.submissionId ?? null,
           userCode: parsed.data.promo,
         });
       } catch (err) {
@@ -276,12 +286,15 @@ export async function POST(request: Request) {
 
     const session = await stripe.checkout.sessions.create(
       {
-        // discounts[] and allow_promotion_codes are mutually exclusive. When we
-        // pre-apply a nurture code, skip the manual-entry UI to avoid a confusing
-        // double-stack of "code already applied" + an empty entry field.
+        // Per-user nurture codes arrive only as ?promo= links and are auto-applied
+        // here after a server-side ownership check — there is NO manual promo-entry
+        // UI in the app. So we never enable Stripe's hosted manual-entry field:
+        // since minted codes are not customer-bound in Stripe, enabling it would
+        // let anyone hand-type a forwarded/foreign code. Matched owned code →
+        // pre-applied as discounts[]; otherwise no promo entry at all. [Audit L6]
         ...(nurturePromoMatch
           ? { discounts: [{ promotion_code: nurturePromoMatch.stripePromotionCodeId }] }
-          : { allow_promotion_codes: true }),
+          : { allow_promotion_codes: false }),
         billing_address_collection: "auto",
         customer_email: customerEmail,
         line_items: [

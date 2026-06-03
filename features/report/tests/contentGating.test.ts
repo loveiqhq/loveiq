@@ -1,15 +1,15 @@
 /**
  * Server-side content gating contract.
  *
- * Product decision (see plan "whimsical-greeting-popcorn"): on locked
- * premium sections, archetype prose AND practice names ship to the client
- * so the UI can render a blurred tease behind a `PremiumOverlay`. The
- * **paid value** — practice metric numbers — stays server-stripped on
- * every locked row past the free-preview row 0.
+ * [Audit M1] On locked premium sections, archetype prose ships only as a SHORT
+ * TEASER (not the full paid prose) so the client can render a blurred preview
+ * without the full analysis leaking to unpaid token holders. Practice names ship
+ * in full; practice metric numbers (the paid value) stay server-stripped on
+ * every locked row past the free-preview row 0. Unlocked sections ship in full.
  *
  * If any test here fails, either the paywall opened more than intended
- * (metrics leaked) or it closed unexpectedly (the tease regressed) —
- * investigate before merging.
+ * (full prose / metrics leaked) or it closed unexpectedly (a paid section got
+ * teaser'd / metrics nulled) — investigate before merging.
  */
 
 import { describe, expect, it } from "vitest";
@@ -26,20 +26,40 @@ const PREMIUM_BLOCK_IDS = reportSections
   .filter((s) => s.isPremium && s.archetypeBlockId)
   .map((s) => s.archetypeBlockId as string);
 
+const FREE_BLOCK_IDS = reportSections
+  .filter((s) => !s.isPremium && s.archetypeBlockId)
+  .map((s) => s.archetypeBlockId as string);
+
 const ANY_ARCHETYPE = "Sensual Connector";
 const OTHER_ARCHETYPE = "Spark Seeker";
 
-describe("buildArchetypeContentForUser — ships archetype HTML for client-side blur", () => {
-  it("free plan still ships premium HTML for the primary archetype (client renders blurred + overlay)", () => {
+describe("buildArchetypeContentForUser — gates prose by plan (teaser when locked)", () => {
+  it("free plan ships only a SHORT TEASER for premium sections, never the full paid prose [Audit M1]", () => {
     const result = buildArchetypeContentForUser(null, [ANY_ARCHETYPE]);
 
     for (const blockId of PREMIUM_BLOCK_IDS) {
       const block = archetypeContent[blockId];
-      if (!block?.[ANY_ARCHETYPE]) continue;
+      const full = block?.[ANY_ARCHETYPE];
+      if (!full) continue;
+      const shipped = result[blockId]?.[ANY_ARCHETYPE];
+      // A teaser still ships so the client can render a blurred preview...
+      expect(shipped, `premium block ${blockId} should ship a teaser`).toBeTruthy();
+      // ...but it must NOT be the full paid prose, and must be much shorter.
+      expect(shipped).not.toBe(full);
+      expect((shipped ?? "").length).toBeLessThan(full.length);
+    }
+  });
+
+  it("free plan ships free (non-premium) sections in full [Audit M1]", () => {
+    const result = buildArchetypeContentForUser(null, [ANY_ARCHETYPE]);
+    for (const blockId of FREE_BLOCK_IDS) {
+      const block = archetypeContent[blockId];
+      const full = block?.[ANY_ARCHETYPE];
+      if (!full) continue;
       expect(
         result[blockId]?.[ANY_ARCHETYPE],
-        `premium block ${blockId} should ship for the primary archetype so it can be blurred`
-      ).toBe(block[ANY_ARCHETYPE]);
+        `free section ${blockId} must ship in full for the free preview`
+      ).toBe(full);
     }
   });
 

@@ -141,6 +141,27 @@ describe("POST /api/stripe/checkout-session (promo wiring)", () => {
     );
   });
 
+  it("forwards a submissionId to resolveNurturePromo so session-only checkouts resolve ownership [Audit L6]", async () => {
+    vi.mocked(resolveNurturePromo).mockResolvedValue(null);
+
+    await POST(
+      makeRequest({
+        archetype: "Spark Seeker",
+        plan: "full_report",
+        promo: "LIQ-50-Ab7K9xQ2",
+        reportSessionId: "02d88f31-eceb-4402-940d-c8cd98d01848",
+      })
+    );
+
+    // The route must forward a submissionId (resolved from reportSessionId/token,
+    // null if unresolvable) alongside the user code — dropping it silently breaks
+    // ownership resolution for session-only checkouts.
+    expect(resolveNurturePromo).toHaveBeenCalled();
+    const arg = vi.mocked(resolveNurturePromo).mock.calls[0]![0];
+    expect(arg).toHaveProperty("submissionId");
+    expect(arg.userCode).toBe("LIQ-50-Ab7K9xQ2");
+  });
+
   it("accepts a 100%-off post_call code and pre-applies it as discounts[]", async () => {
     vi.mocked(resolveNurturePromo).mockResolvedValue({
       stage: "post_call",
@@ -166,7 +187,7 @@ describe("POST /api/stripe/checkout-session (promo wiring)", () => {
     );
   });
 
-  it("falls through to allow_promotion_codes when promo is absent", async () => {
+  it("disables manual promo entry when no promo is present (no manual-entry UI; prevents forwarded-code hand-entry) [Audit L6]", async () => {
     vi.mocked(resolveNurturePromo).mockResolvedValue(null);
 
     const res = await POST(
@@ -180,19 +201,19 @@ describe("POST /api/stripe/checkout-session (promo wiring)", () => {
     expect(res.status).toBe(200);
     expect(createSession).toHaveBeenCalledTimes(1);
     const args = createSession.mock.calls[0][0];
-    expect(args.allow_promotion_codes).toBe(true);
+    expect(args.allow_promotion_codes).toBe(false);
     expect(args.discounts).toBeUndefined();
     expect(args.metadata.promoCode).toBeUndefined();
   });
 
-  it("falls through silently when promo resolves to null (unknown/expired/wrong-owner)", async () => {
+  it("disables manual promo entry when a supplied promo resolves to null (unknown/expired/wrong-owner) — a forwarded code cannot be hand-entered [Audit L6]", async () => {
     vi.mocked(resolveNurturePromo).mockResolvedValue(null);
 
     const res = await POST(
       makeRequest({
         archetype: "Spark Seeker",
         plan: "full_report",
-        // Well-formed but won't match any user's stored code.
+        // Well-formed but won't match any user's stored code (e.g. forwarded).
         promo: "LIQ-50-ZzZzZzZz",
         reportSessionId: "02d88f31-eceb-4402-940d-c8cd98d01848",
       })
@@ -200,7 +221,7 @@ describe("POST /api/stripe/checkout-session (promo wiring)", () => {
 
     expect(res.status).toBe(200);
     const args = createSession.mock.calls[0][0];
-    expect(args.allow_promotion_codes).toBe(true);
+    expect(args.allow_promotion_codes).toBe(false);
     expect(args.discounts).toBeUndefined();
   });
 

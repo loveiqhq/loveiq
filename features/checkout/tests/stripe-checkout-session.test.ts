@@ -181,7 +181,10 @@ describe("POST /api/stripe/checkout-session", () => {
     });
     expect(createSession).toHaveBeenCalledWith(
       expect.objectContaining({
-        allow_promotion_codes: true,
+        // [Audit L6] No manual-entry UI exists; Stripe's hosted promo field stays
+        // off so a forwarded/foreign code can't be hand-typed. Owned codes apply
+        // via discounts[] (?promo= link), not manual entry.
+        allow_promotion_codes: false,
         cancel_url: "http://localhost/checkout?plan=full_report&archetype=spark-seeker",
         customer_email: "test@example.com",
         line_items: [

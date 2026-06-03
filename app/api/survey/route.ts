@@ -48,14 +48,18 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const surveySchema = z.object({
   email: z.string().email().max(320),
   firstName: z.string().max(80),
-  answers: z.record(
-    z.string(),
-    z.union([
-      z.string().max(1000),
-      z.array(z.string().max(500)).max(20),
-      z.number().int().min(1).max(7),
-    ])
-  ),
+  // Keys are question IDs (numeric, ≤~12 chars). Bound key length AND key count
+  // so an oversized junk-key body can't bloat downstream JSONB. [Audit L1]
+  answers: z
+    .record(
+      z.string().min(1).max(16),
+      z.union([
+        z.string().max(1000),
+        z.array(z.string().max(500)).max(20),
+        z.number().int().min(1).max(7),
+      ])
+    )
+    .refine((obj) => Object.keys(obj).length <= 200, { message: "Too many answers" }),
   startedAt: z.string().datetime(),
   durationMs: z.number().int().min(0).max(86_400_000),
   utmTracker: z.string().max(500).optional().nullable(),

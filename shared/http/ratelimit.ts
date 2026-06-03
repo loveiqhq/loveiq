@@ -106,10 +106,28 @@ if (typeof setInterval !== "undefined") {
 }
 
 /**
+ * Atomic fixed-window INCR that always guarantees a TTL.
+ *
+ * Previously this was two awaited calls (`incr` then a conditional `expire`).
+ * If the connection dropped between them, the key was left WITHOUT a TTL: on the
+ * next request `incr` returns 2, the `count === 1` guard never re-fires, the key
+ * never expires, and that (bucket, ip) is rate-limited forever. This Lua script
+ * runs INCR + EXPIRE as one atomic Redis operation and (re)sets the TTL whenever
+ * the key has none (`TTL < 0`), which also self-heals any previously-poisoned key.
+ */
+const INCR_WITH_TTL = `
+local count = redis.call('INCR', KEYS[1])
+if redis.call('TTL', KEYS[1]) < 0 then
+  redis.call('EXPIRE', KEYS[1], ARGV[1])
+end
+return count
+`;
+
+/**
  * Check if a request should be rate limited using Redis for persistence.
- * Uses a fixed window algorithm with Redis INCR + EXPIRE for atomic,
- * sub-10ms rate limit checks. Falls back to in-memory rate limiting
- * when Redis is not configured.
+ * Uses a fixed-window algorithm with an atomic INCR+EXPIRE Lua script for
+ * sub-10ms rate limit checks. Falls back to in-memory rate limiting when Redis
+ * is not configured.
  */
 export async function checkRateLimit(
   key: string,
@@ -129,13 +147,10 @@ export async function checkRateLimit(
   }
 
   try {
-    // Atomic INCR + EXPIRE: increment counter and set TTL if new key
-    const count = await kv.incr(compositeKey);
-
-    // Set expiry only on the first request in the window
-    if (count === 1) {
-      await kv.expire(compositeKey, windowSec);
-    }
+    // Atomic INCR + EXPIRE in a single Redis round-trip; always (re)sets the TTL
+    // when the key has none, so a mid-call failure can never poison a key into a
+    // permanent ban (see INCR_WITH_TTL above).
+    const count = Number(await kv.eval(INCR_WITH_TTL, [compositeKey], [windowSec]));
 
     if (count > config.limit) {
       return {

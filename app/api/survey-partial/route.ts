@@ -10,14 +10,19 @@ import { isFeatureEnabled } from "@shared/flags/system-flags";
 
 const partialSchema = z.object({
   sessionId: z.string().uuid(),
-  answers: z.record(
-    z.string(),
-    z.union([
-      z.string().max(1000),
-      z.array(z.string().max(500)).max(20),
-      z.number().int().min(1).max(7),
-    ])
-  ),
+  // Keys are question IDs (numeric, ≤~12 chars). Bound key length AND key count
+  // so a body of thousands of long junk keys can't bloat the survey_partial_save
+  // JSONB column (values were already bounded; keys/count were not). [Audit L1]
+  answers: z
+    .record(
+      z.string().min(1).max(16),
+      z.union([
+        z.string().max(1000),
+        z.array(z.string().max(500)).max(20),
+        z.number().int().min(1).max(7),
+      ])
+    )
+    .refine((obj) => Object.keys(obj).length <= 200, { message: "Too many answers" }),
   currentIndex: z.number().int().min(0).max(200),
   startedAt: z.string().datetime(),
   utmTracker: z.string().max(500).optional().nullable(),

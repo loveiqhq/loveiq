@@ -233,12 +233,19 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: jsonLdString(websiteSchema) }}
         />
-        {/* Contentsquare UXA tag — keep raw (not next/script) so the vendor
-            verifier finds CS_CONF/_uxa globals on page load. `defer` is used
-            instead of `async` so script execution is ordered relative to other
-            head scripts and globals are set before DOMContentLoaded. This
-            unblocks HTML parsing for users on slow networks. */}
-        <script src="https://t.contentsquare.net/uxa/f1a8d593041c0.js" defer />
+        {/* Contentsquare UXA tag — consent-gated via CookieYes. [Audit H1]
+            Marked type="text/plain" + data-cookieyes so the browser does NOT
+            execute it until the visitor grants analytics consent (CookieYes
+            rewrites the type post-consent). Previously this loaded pre-consent on
+            every page including /survey, instrumenting Article-9 special-category
+            answers before any consent. Trade-off: the Contentsquare vendor
+            verifier won't see CS_CONF/_uxa globals until after consent is given. */}
+        <script
+          type="text/plain"
+          data-cookieyes="cookieyes-analytics"
+          src="https://t.contentsquare.net/uxa/f1a8d593041c0.js"
+          defer
+        />
       </head>
       <body className="bg-white dark:bg-[#050208]">
         <GtmNoScript />

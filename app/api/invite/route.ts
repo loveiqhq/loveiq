@@ -7,7 +7,7 @@ import { isEmailSuppressed } from "@shared/emails/suppression";
 import { pickEmailVariant } from "@shared/emails/ab-variant";
 import { getEmailSiteUrl } from "@shared/emails/site-url";
 import { z } from "zod";
-import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
+import { checkRateLimit, checkCooldown, getClientIp } from "@shared/http/ratelimit";
 import { scheduleAfterResponse } from "@shared/http/after-response";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { getBreaker, CircuitOpenError } from "@shared/http/circuit-breaker";
@@ -63,6 +63,29 @@ export async function POST(request: Request) {
 
   const { recipientEmail, referrerEmail, referrerName, personalMessage } = parsed.data;
   const normalizedRecipient = recipientEmail.toLowerCase().trim();
+
+  // 3b. Per-recipient cooldown. The IP rate limit alone lets an attacker
+  // email-bomb a chosen address from rotating IPs (≥25/min) and burn the
+  // send.loveiq.org sending-domain reputation. A per-recipient cooldown caps a
+  // single victim to one invite per window regardless of source IP, while still
+  // allowing a legitimate re-invite later. Window is intentionally long
+  // (anti-harassment > same-day double-invite). [Audit M4]
+  const recipientCooldown = await checkCooldown(
+    normalizedRecipient,
+    "invite-recipient",
+    24 * 60 * 60 * 1000
+  );
+  if (!recipientCooldown.allowed) {
+    return NextResponse.json(
+      { error: "This address was recently invited. Please try again later." },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": String(Math.ceil(recipientCooldown.retryAfterMs / 1000)),
+        },
+      }
+    );
+  }
 
   // 4. Build UTM-tagged CTA URL (deterministic A/B variant per recipient)
   const variant = pickEmailVariant(normalizedRecipient, "invite");

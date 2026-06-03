@@ -407,9 +407,15 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
   const canGoNext = (hasAnswer && isEmailValid && isSelectionCountValid) || !question.required;
 
   return (
+    // [Audit L8] data-hj-suppress on the survey root keeps Hotjar session replay
+    // from capturing the intimate Q&A (question text, choice labels, selection
+    // state). Default Hotjar input masking covers form fields but not visible
+    // choice-button text / selected state, which would otherwise reconstruct
+    // Article-9 answers in recordings.
     <main
       className="relative flex min-h-screen flex-col bg-[#0a0510]"
       style={{ touchAction: "pan-y" }}
+      data-hj-suppress
     >
       {/* Background gradient blurs */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">

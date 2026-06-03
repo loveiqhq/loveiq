@@ -120,7 +120,15 @@ const schema = z.object({
   // timeline (which is the whole point of persisting them), and writing a
   // sentinel entity_id=0 would clutter analytics_event with orphan rows.
   submission_id: z.number().int().positive(),
-  metadata: z.record(z.string(), z.unknown()).optional(),
+  // Bound size, not shape: cap key count and total serialized size so an
+  // attacker can't write oversized/deeply-nested JSON into analytics_event.
+  // Any reasonable flat analytics metadata stays well under these limits. [Audit L3]
+  metadata: z
+    .record(z.string().max(128), z.unknown())
+    .refine((obj) => Object.keys(obj).length <= 50 && JSON.stringify(obj).length <= 8192, {
+      message: "metadata too large",
+    })
+    .optional(),
   duration_ms: z.number().int().min(0).max(86_400_000).optional(),
   // Beacon fallback: sendBeacon() cannot set headers, so callers may include
   // the CSRF token in the body. Header is preferred when available.

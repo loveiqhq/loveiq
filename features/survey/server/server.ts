@@ -22,6 +22,16 @@ const SUPABASE_TIMEOUT_MS = 8000;
  */
 export const MARKETING_OPT_IN_TERMS_VERSION = "2026-05-21";
 
+/**
+ * Audit M2: GDPR Art. 5(2)/9(2)(a) accountability. Version of the consent terms
+ * shown on the survey ConsentScreen (age confirmation + terms acceptance).
+ * Stored on `survey_submission.terms_version` alongside `consent_at` so a
+ * regulator inquiry can map a submission back to the exact consent text the data
+ * subject agreed to. Bump (ISO date) whenever the ConsentScreen copy / linked
+ * terms change.
+ */
+export const CONSENT_TERMS_VERSION = "2026-06-04";
+
 export interface SurveySubmissionPayload {
   email: string;
   firstName: string;
@@ -163,28 +173,35 @@ export async function submitSurveyOnce(
 
   const submissionId = await runSubmitSurveyRpc(payload);
 
-  // T-11: stamp the consent terms version when the user opted in. Done as a
-  // follow-up PATCH instead of an RPC param so the existing submit_survey
-  // function body (with answer_options / answer_history fan-out) stays
-  // untouched. Best-effort: a failure here is logged and swallowed —
-  // the submission itself succeeded, and the audit-trail gap can be
-  // backfilled if needed.
-  if (payload.marketingOptIn === true) {
-    try {
-      await supabaseServiceFetch(`/rest/v1/survey_submission?id=eq.${submissionId}`, {
-        method: "PATCH",
-        headers: { Prefer: "return=minimal" },
-        body: JSON.stringify({
-          marketing_opt_in_terms_version: MARKETING_OPT_IN_TERMS_VERSION,
-        }),
-        timeoutMs: 3000,
-      });
-    } catch (err) {
-      logger.warn(
-        { err, submissionId, version: MARKETING_OPT_IN_TERMS_VERSION },
-        "T-11: failed to stamp marketing_opt_in_terms_version"
-      );
+  // Audit M2 + T-11: stamp consent-accountability fields as a follow-up PATCH
+  // (keeps the submit_survey RPC body — with answer_options / answer_history
+  // fan-out — untouched). consent_at + terms_version are recorded on EVERY
+  // submission: the survey UI hard-gates submission behind the age + terms
+  // checkboxes, so a stored submission implies consent, and persisting an
+  // explicit timestamp + terms version closes the GDPR Art. 5(2) accountability
+  // gap (proving WHICH terms were agreed to, and when). The marketing-opt-in
+  // terms version is added only when the user opted in. Best-effort: a failure
+  // is logged and swallowed — the submission itself already succeeded and the
+  // audit-trail gap can be backfilled if needed.
+  try {
+    const consentPatch: Record<string, string> = {
+      consent_at: new Date().toISOString(),
+      terms_version: CONSENT_TERMS_VERSION,
+    };
+    if (payload.marketingOptIn === true) {
+      consentPatch.marketing_opt_in_terms_version = MARKETING_OPT_IN_TERMS_VERSION;
     }
+    await supabaseServiceFetch(`/rest/v1/survey_submission?id=eq.${submissionId}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify(consentPatch),
+      timeoutMs: 3000,
+    });
+  } catch (err) {
+    logger.warn(
+      { err, submissionId, termsVersion: CONSENT_TERMS_VERSION },
+      "Audit M2 / T-11: failed to stamp consent fields"
+    );
   }
 
   return { submissionId, isExisting: false };

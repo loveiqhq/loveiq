@@ -12,6 +12,7 @@ vi.mock("@shared/observability/logger", () => ({
 // Mock @upstash/redis
 const mockIncr = vi.fn();
 const mockExpire = vi.fn();
+const mockEval = vi.fn();
 const mockSet = vi.fn();
 const mockTtl = vi.fn();
 
@@ -20,6 +21,7 @@ vi.mock("@upstash/redis", () => {
     Redis: class MockRedis {
       incr = mockIncr;
       expire = mockExpire;
+      eval = mockEval;
       set = mockSet;
       ttl = mockTtl;
     },
@@ -39,8 +41,8 @@ describe("checkRateLimit (Redis)", () => {
   });
 
   it("allows request when under limit", async () => {
-    mockIncr.mockResolvedValue(1);
-    mockExpire.mockResolvedValue(1);
+    // [Audit L2] INCR + EXPIRE now run as one atomic Lua eval, not two calls.
+    mockEval.mockResolvedValue(1);
 
     const result = await checkRateLimit("1.2.3.4", {
       bucket: "test",
@@ -50,13 +52,14 @@ describe("checkRateLimit (Redis)", () => {
 
     expect(result.allowed).toBe(true);
     expect(result.remaining).toBe(4);
-    expect(mockIncr).toHaveBeenCalledWith("rl:test:1.2.3.4");
-    // First request sets expiry
-    expect(mockExpire).toHaveBeenCalledWith("rl:test:1.2.3.4", 60);
+    // Atomic script: (script, [key], [windowSec]). TTL is set inside the script.
+    expect(mockEval).toHaveBeenCalledWith(expect.any(String), ["rl:test:1.2.3.4"], [60]);
+    // No separate expire round-trip — the script can't leave a key TTL-less.
+    expect(mockExpire).not.toHaveBeenCalled();
   });
 
-  it("sets expiry only on first request in window", async () => {
-    mockIncr.mockResolvedValue(3);
+  it("sets/refreshes the TTL inside the atomic eval (count > 1) [Audit L2]", async () => {
+    mockEval.mockResolvedValue(3);
 
     const result = await checkRateLimit("1.2.3.4", {
       bucket: "test",
@@ -66,12 +69,13 @@ describe("checkRateLimit (Redis)", () => {
 
     expect(result.allowed).toBe(true);
     expect(result.remaining).toBe(2);
-    // count > 1, so expire should NOT be called
+    // TTL handling lives in the Lua script (TTL<0 ⇒ EXPIRE), so a poisoned,
+    // TTL-less key self-heals; there is never a separate JS expire call.
     expect(mockExpire).not.toHaveBeenCalled();
   });
 
   it("blocks request when over limit", async () => {
-    mockIncr.mockResolvedValue(6);
+    mockEval.mockResolvedValue(6);
 
     const result = await checkRateLimit("1.2.3.4", {
       bucket: "test",
@@ -84,7 +88,7 @@ describe("checkRateLimit (Redis)", () => {
   });
 
   it("fails open on Redis error", async () => {
-    mockIncr.mockRejectedValue(new Error("Redis connection failed"));
+    mockEval.mockRejectedValue(new Error("Redis connection failed"));
 
     const result = await checkRateLimit("1.2.3.4", {
       bucket: "test-error",
@@ -97,8 +101,7 @@ describe("checkRateLimit (Redis)", () => {
   });
 
   it("returns a valid resetAt date", async () => {
-    mockIncr.mockResolvedValue(1);
-    mockExpire.mockResolvedValue(1);
+    mockEval.mockResolvedValue(1);
     const before = Date.now();
 
     const result = await checkRateLimit("1.2.3.4", {

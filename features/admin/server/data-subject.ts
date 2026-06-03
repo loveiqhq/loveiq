@@ -11,9 +11,11 @@
  *   - waitlist_user            (by email)
  *   - invite_event             (by sender or recipient email)
  *   - email_suppression        (by email)
+ *   - booking_event            (by invitee email + by submission id) [Audit H2]
  *   - app_user                 (by email; the identity root)
  *     - survey_submission      (via app_user_id)
  *       - survey_submission_answer + history + options
+ *       - survey_behavior_event (by submission session_id) [Audit M3]
  *       - scoring_result
  *       - analytics_event
  *       - report_section_feedback
@@ -120,6 +122,7 @@ interface AppUserRow {
 
 interface SubmissionRow {
   id: number;
+  session_id: string | null;
 }
 
 interface PersonalReportRow {
@@ -151,6 +154,13 @@ export async function exportDataSubject(emailNorm: string): Promise<DsrResult> {
   result.exportData!.invite_event = invites;
   result.rowsAffected.invite_event = invites.length;
 
+  const bookings = await fetchRows<unknown>(
+    `/rest/v1/booking_event?email=eq.${enc(emailNorm)}&select=*`,
+    "booking"
+  );
+  result.exportData!.booking_event = bookings;
+  result.rowsAffected.booking_event = bookings.length;
+
   const users = await fetchRows<AppUserRow>(
     `/rest/v1/app_user?email=eq.${enc(emailNorm)}&select=*`,
     "user"
@@ -172,6 +182,23 @@ export async function exportDataSubject(emailNorm: string): Promise<DsrResult> {
   if (submissions.length === 0) return result;
   const subIds = submissions.map((s) => s.id);
   const subFilter = inFilter(subIds)!;
+
+  const exportSessionIds = submissions
+    .map((s) => s.session_id)
+    .filter((s): s is string => typeof s === "string" && s.length > 0);
+  if (exportSessionIds.length > 0) {
+    result.exportData!.survey_behavior_event = await fetchRows(
+      `/rest/v1/survey_behavior_event?session_id=in.(${exportSessionIds.join(",")})&select=*`,
+      "sbe"
+    );
+  }
+  // Mirror the delete path's by-submission booking_event coverage so Art. 15
+  // export discloses bookings linked to a submission even if booked under a
+  // different invitee email than the account email. [Audit H2 export symmetry]
+  result.exportData!.booking_event_by_submission = await fetchRows(
+    `/rest/v1/booking_event?survey_submission_id=${subFilter}&select=*`,
+    "be-sub"
+  );
 
   result.exportData!.survey_submission_answer = await fetchRows(
     `/rest/v1/survey_submission_answer?survey_submission_id=${subFilter}&select=*`,
@@ -247,6 +274,16 @@ export async function deleteDataSubject(emailNorm: string): Promise<DsrResult> {
     "wl",
     result
   );
+  // booking_event stores the Calendly invitee email (plain column) + name/email
+  // inside the `raw` jsonb. Its survey_submission_id/personal_report_id FKs are
+  // ON DELETE SET NULL, so the cascade below would orphan — not erase — this PII.
+  // Delete by invitee email here (Tier 1); also deleted by submission id in the
+  // cascade below to catch rows booked under a different address. [Audit H2]
+  result.rowsAffected.booking_event = await deleteWhere(
+    `/rest/v1/booking_event?email=eq.${enc(emailNorm)}`,
+    "booking",
+    result
+  );
 
   // Tier 2: app_user-rooted cascade.
   const users = await fetchRows<AppUserRow>(
@@ -281,13 +318,36 @@ export async function deleteDataSubject(emailNorm: string): Promise<DsrResult> {
   // No payments path falls through to delete app_user; payments path
   // pseudonymizes it below.
   const submissions = await fetchRows<SubmissionRow>(
-    `/rest/v1/survey_submission?app_user_id=${userIdsFilter}&select=id`,
+    `/rest/v1/survey_submission?app_user_id=${userIdsFilter}&select=id,session_id`,
     "sub-lookup"
   );
   const subIds = submissions.map((s) => s.id);
+  const sessionIds = submissions
+    .map((s) => s.session_id)
+    .filter((s): s is string => typeof s === "string" && s.length > 0);
 
   if (subIds.length > 0) {
     const subFilter = inFilter(subIds)!;
+
+    // survey_behavior_event has NO email/app_user FK and NO cascade from
+    // survey_submission — it is keyed only by session_id and stores client_ip +
+    // per-question telemetry. Erase it explicitly by the submissions' session_ids
+    // or it survives erasure indefinitely (GDPR Art. 17). [Audit M3]
+    if (sessionIds.length > 0) {
+      result.rowsAffected.survey_behavior_event = await deleteWhere(
+        `/rest/v1/survey_behavior_event?session_id=in.(${sessionIds.join(",")})`,
+        "sbe",
+        result
+      );
+    }
+    // booking_event.survey_submission_id is ON DELETE SET NULL — deleting the
+    // submission would orphan the invitee PII in `raw` rather than remove it.
+    // Delete by submission id here (complements the Tier-1 by-email delete). [Audit H2]
+    result.rowsAffected.booking_event_by_submission = await deleteWhere(
+      `/rest/v1/booking_event?survey_submission_id=${subFilter}`,
+      "be-sub",
+      result
+    );
 
     // Personal report sub-cascade (must precede survey_submission delete).
     const reports = await fetchRows<PersonalReportRow>(

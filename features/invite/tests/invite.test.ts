@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockCheckRateLimit = vi.fn();
+const mockCheckCooldown = vi.fn();
 vi.mock("@shared/http/ratelimit", () => ({
   checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
+  checkCooldown: (...args: unknown[]) => mockCheckCooldown(...args),
   getClientIp: vi.fn().mockReturnValue("127.0.0.1"),
 }));
 
@@ -79,6 +81,7 @@ describe("POST /api/invite", () => {
       remaining: 4,
       resetAt: new Date(Date.now() + 60_000),
     });
+    mockCheckCooldown.mockResolvedValue({ allowed: true, retryAfterMs: 0 });
     mockVerifyCsrfToken.mockResolvedValue(true);
     process.env.RESEND_API_KEY = "re_test";
     process.env.SUPABASE_URL = "https://test.supabase.co";
@@ -97,6 +100,13 @@ describe("POST /api/invite", () => {
       remaining: 0,
       resetAt: new Date(Date.now() + 30_000),
     });
+    const res = await POST(makeRequest(validBody));
+    expect(res.status).toBe(429);
+    expect(res.headers.get("Retry-After")).toBeTruthy();
+  });
+
+  it("returns 429 when the recipient is in cooldown [Audit M4]", async () => {
+    mockCheckCooldown.mockResolvedValue({ allowed: false, retryAfterMs: 3_600_000 });
     const res = await POST(makeRequest(validBody));
     expect(res.status).toBe(429);
     expect(res.headers.get("Retry-After")).toBeTruthy();

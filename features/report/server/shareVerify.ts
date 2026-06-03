@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "crypto";
+import logger from "@shared/observability/logger";
 
 /**
  * Stateless email-verification layer for shared reports.
@@ -18,13 +19,27 @@ export const SHARE_VERIFY_COOKIE_PREFIX = isProduction ? "__Host-rsv_" : "rsv_";
 /** Cookie lifetime: 1 year. Owner revoke is the kill switch. */
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 
+let warnedShareSecretFallback = false;
+
 function getSecret(): string {
   const dedicated = process.env.SHARE_VERIFY_SECRET;
   if (dedicated && dedicated.length >= 16) return dedicated;
   // Fallback so the feature still works before SHARE_VERIFY_SECRET is wired.
   // Service role key rotation invalidates all gates — acceptable for rare event.
+  // [Audit L4] This reuses the DB service-role key as a signing key. It is not a
+  // privilege escalation (an SRK holder can already read every report directly),
+  // but it is poor key hygiene and couples cookie validity to SRK rotation. Warn
+  // once so the dedicated secret gets set; fail-closed only if no secret exists.
   const fallback = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (fallback && fallback.length >= 16) return `share-verify:${fallback}`;
+  if (fallback && fallback.length >= 16) {
+    if (!warnedShareSecretFallback) {
+      warnedShareSecretFallback = true;
+      logger.warn(
+        "[shareVerify] SHARE_VERIFY_SECRET not set — deriving the share-cookie HMAC key from SUPABASE_SERVICE_ROLE_KEY. Set a dedicated SHARE_VERIFY_SECRET (>=16 chars) in every environment. [Audit L4]"
+      );
+    }
+    return `share-verify:${fallback}`;
+  }
   throw new Error("share_verify_secret_missing");
 }
 

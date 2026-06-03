@@ -44,7 +44,9 @@ test.describe("smoke tests", () => {
     expect(headers["strict-transport-security"]).toBeDefined();
   });
 
-  test("Contentsquare tag is present in the server-rendered head", async ({ request }) => {
+  test("Contentsquare tag is present AND consent-gated in the server-rendered head", async ({
+    request,
+  }) => {
     const res = await request.get("/");
     expect(res.status()).toBe(200);
 
@@ -53,12 +55,13 @@ test.describe("smoke tests", () => {
 
     expect(head).toBeDefined();
     expect(head).toContain('src="https://t.contentsquare.net/uxa/f1a8d593041c0.js"');
-    expect(head).not.toMatch(
-      /https:\/\/t\.contentsquare\.net\/uxa\/f1a8d593041c0\.js"[^>]*data-cookieyes=/i
-    );
-    expect(head).not.toMatch(
-      /https:\/\/t\.contentsquare\.net\/uxa\/f1a8d593041c0\.js"[^>]*type="text\/plain"/i
-    );
+
+    // [Audit H1] The Contentsquare tag must be consent-gated: CookieYes category
+    // attribute + type="text/plain" so it does NOT execute before the visitor
+    // grants analytics consent (it would otherwise record Article-9 survey data).
+    const csTag = head?.match(/<script\b[^>]*contentsquare[^>]*>/i)?.[0] ?? "";
+    expect(csTag).toContain("text/plain");
+    expect(csTag).toContain('data-cookieyes="cookieyes-analytics"');
   });
 
   test("404 page handles unknown routes", async ({ page }) => {

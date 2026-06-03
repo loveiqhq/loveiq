@@ -147,6 +147,25 @@ describe("POST /api/survey", () => {
     expect(json.error).toBe("Invalid request.");
   });
 
+  it("returns 400 when an answer key exceeds the 16-char bound [Audit L1]", async () => {
+    allowCsrf();
+    allowRateLimit();
+    allowCooldown();
+    // 17-char key > max(16) — rejected before any Supabase write.
+    const res = await POST(makeRequest({ ...validBody(), answers: { ["a".repeat(17)]: "yes" } }));
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 400 when there are more than 200 answer keys [Audit L1]", async () => {
+    allowCsrf();
+    allowRateLimit();
+    allowCooldown();
+    const many: Record<string, string> = {};
+    for (let i = 0; i < 201; i++) many[`q${i}`] = "x";
+    const res = await POST(makeRequest({ ...validBody(), answers: many }));
+    expect(res.status).toBe(400);
+  });
+
   it("returns 429 when rate limited", async () => {
     allowCsrf();
     mockCheckRateLimit.mockResolvedValue({
@@ -466,13 +485,31 @@ describe("POST /api/survey", () => {
       survey_submission_id: SUBMISSION_ID,
     });
 
-    // Hotjar PATCH: setSubmissionHotjarUserId on survey_submission row
+    // Hotjar PATCH: setSubmissionHotjarUserId on survey_submission row. Match by
+    // body (not just method) — submitSurveyOnce also PATCHes consent fields. [Audit M2]
     const hotjarPatch = calls.find(
-      (c) => c.url.includes("/rest/v1/survey_submission") && c.method === "PATCH"
+      (c) =>
+        c.url.includes("/rest/v1/survey_submission") &&
+        c.method === "PATCH" &&
+        (c.body ?? "").includes("hotjar_user_id")
     );
     expect(hotjarPatch, "expected PATCH to survey_submission").toBeDefined();
     expect(JSON.parse(hotjarPatch!.body!)).toMatchObject({
       hotjar_user_id: HOTJAR_USER_ID,
+    });
+
+    // Consent PATCH: submitSurveyOnce stamps consent_at + terms_version on every
+    // submission for GDPR Art. 5(2) accountability. [Audit M2]
+    const consentPatch = calls.find(
+      (c) =>
+        c.url.includes("/rest/v1/survey_submission") &&
+        c.method === "PATCH" &&
+        (c.body ?? "").includes("terms_version")
+    );
+    expect(consentPatch, "expected consent PATCH to survey_submission").toBeDefined();
+    expect(JSON.parse(consentPatch!.body!)).toMatchObject({
+      consent_at: expect.any(String),
+      terms_version: expect.any(String),
     });
 
     // Report token POST: creates a row in report_access_token

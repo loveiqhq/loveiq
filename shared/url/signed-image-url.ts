@@ -31,13 +31,27 @@ const textDecoder = new TextDecoder();
  * Throws when none of the three are configured — the route is unusable
  * without a secret.
  */
+let warnedDigestSecretFallback = false;
+
 export function getDigestSigningSecret(): string {
   const dedicated = process.env.STRATEGY_DIGEST_SIGNING_SECRET;
   if (dedicated && dedicated.length >= 16) return dedicated;
   const shareFallback = process.env.SHARE_VERIFY_SECRET;
   if (shareFallback && shareFallback.length >= 16) return `digest-image:${shareFallback}`;
   const srk = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (srk && srk.length >= 16) return `digest-image:${srk}`;
+  if (srk && srk.length >= 16) {
+    // [Audit L4] Reusing the DB service-role key as the HMAC signing key — poor
+    // hygiene, not an escalation (the digest route only renders aggregate funnel
+    // PNGs from the signed payload, no DB read). Edge-runtime safe (no pino).
+    // console.warn survives the production removeConsole (exclude: error,warn).
+    if (!warnedDigestSecretFallback) {
+      warnedDigestSecretFallback = true;
+      console.warn(
+        "[signed-image-url] STRATEGY_DIGEST_SIGNING_SECRET / SHARE_VERIFY_SECRET not set — deriving the digest-image HMAC key from SUPABASE_SERVICE_ROLE_KEY. Set STRATEGY_DIGEST_SIGNING_SECRET (>=16 chars). [Audit L4]"
+      );
+    }
+    return `digest-image:${srk}`;
+  }
   throw new Error("digest_signing_secret_missing");
 }
 
