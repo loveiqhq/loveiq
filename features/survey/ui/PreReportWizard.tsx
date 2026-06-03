@@ -657,7 +657,7 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete, reportToken }) 
             </div>
 
             <h2
-              className="mt-6 font-serif text-[36px] font-medium leading-[45px] text-white sm:mt-2 sm:text-[52px] sm:leading-[64px] lg:text-[72px] lg:leading-[90px]"
+              className="mt-6 font-serif text-[28px] font-medium leading-[38px] text-white sm:mt-2 sm:text-[48px] sm:leading-[66px] lg:text-[64px] lg:leading-[90px]"
               style={{
                 opacity: 0,
                 animation: "survey-fade-up 700ms cubic-bezier(0.16,1,0.3,1) 150ms both",

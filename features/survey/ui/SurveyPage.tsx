@@ -762,7 +762,7 @@ const SlideScreen: FC<{
             </div>
 
             <h2
-              className="survey-animate mt-6 sm:mt-2 font-serif text-[36px] font-medium leading-[45px] sm:text-[52px] sm:leading-[64px] lg:text-[72px] lg:leading-[90px] text-white break-words"
+              className="survey-animate mt-6 sm:mt-2 font-serif text-[28px] font-medium leading-[38px] sm:text-[48px] sm:leading-[66px] lg:text-[64px] lg:leading-[90px] text-white break-words"
               style={{
                 opacity: 0,
                 animation: "survey-fade-up 700ms cubic-bezier(0.16,1,0.3,1) 150ms both",
