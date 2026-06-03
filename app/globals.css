@@ -2295,8 +2295,8 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 .report-premium-overlay__card {
-  width: min(100%, 694px);
-  padding: 35px;
+  width: min(100%, 540px);
+  padding: 14px;
   border: 2px solid transparent;
   border-radius: 16px;
   background:
@@ -2313,37 +2313,37 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-premium-overlay__icon {
   display: grid;
   place-items: center;
-  width: 42px;
-  height: 42px;
-  margin: 0 auto 26px;
-  padding: 9px;
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 24px;
+  padding: 14px;
   border-radius: 9999px;
-  background: linear-gradient(133deg, #fe6839 2%, #a78bfa 69%, #e9d5ff 122%);
-  box-shadow: 0 4px 4px rgba(0, 0, 0, 0.25);
+  background: linear-gradient(135deg, #9168e8 0%, #a78bfa 55%, #c4a5f5 100%);
+  box-shadow: 0 4px 12px rgba(124, 92, 240, 0.35);
 }
 
 .report-premium-overlay__icon svg {
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
 }
 
 .report-premium-overlay__title {
-  margin: 0 0 26px;
+  margin: 0 0 14px;
   font-family: var(--font-serif);
-  font-size: 31px;
+  font-size: 36px;
   font-weight: 500;
-  line-height: 29.554px;
+  line-height: 1.1;
   color: #fff;
 }
 
 .report-premium-overlay__copy {
-  margin: 0 auto 26px;
-  max-width: 496px;
+  margin: 0 auto 24px;
+  max-width: 480px;
   color: #d1d5db;
   font-family: var(--font-sans);
   font-size: 16px;
   font-weight: 300;
-  line-height: 19.21px;
+  line-height: 1.5;
 }
 
 .report-premium-overlay__copy strong {
@@ -2351,12 +2351,89 @@ input.autofill-dark:-internal-autofill-previewed {
   font-weight: 600;
 }
 
+/* Trust/feature rows */
+.report-premium-overlay__features {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 100%;
+  margin: 0 0 8px;
+  text-align: left;
+}
+
+.report-premium-overlay__feature {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 9px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.report-premium-overlay__feature--green {
+  border-color: rgba(52, 211, 153, 0.28);
+  background: rgba(52, 211, 153, 0.07);
+}
+
+.report-premium-overlay__feature-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+}
+
+.report-premium-overlay__feature-icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.report-premium-overlay__feature--green .report-premium-overlay__feature-icon {
+  color: #34d399;
+  background: rgba(52, 211, 153, 0.14);
+}
+
+.report-premium-overlay__feature--purple .report-premium-overlay__feature-icon {
+  color: #c084fc;
+  background: rgba(168, 85, 247, 0.14);
+}
+
+.report-premium-overlay__feature-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.report-premium-overlay__feature-title {
+  color: #fff;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.report-premium-overlay__feature-lead {
+  color: #d1d5db;
+  font-weight: 400;
+}
+
+.report-premium-overlay__feature-sub {
+  color: #9ca3af;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 300;
+  line-height: 1.2;
+}
+
 .report-premium-overlay__badges-group {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
-  margin: 0 auto 26px;
+  gap: 6px;
+  margin: 0 auto 8px;
 }
 
 .report-premium-overlay__badges-label {
@@ -2399,9 +2476,10 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 .report-premium-overlay__cta {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   justify-content: center;
+  width: 100%;
   padding: 9px 24px;
   border: 0;
   border-radius: 9999px;
@@ -2409,14 +2487,43 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #fff;
   font-family: var(--font-sans);
   font-size: 13px;
-  font-weight: 500;
-  line-height: 17.7px;
+  font-weight: 600;
+  line-height: 1.2;
   cursor: pointer;
   transition: filter 180ms ease;
 }
 
 .report-premium-overlay__cta:hover {
   filter: brightness(1.1);
+}
+
+@media (max-width: 640px) {
+  .report-premium-overlay__card {
+    padding: 14px;
+  }
+  .report-premium-overlay__title {
+    font-size: 19px;
+  }
+  .report-premium-overlay__feature-icon {
+    width: 26px;
+    height: 26px;
+  }
+}
+
+/* Desktop-only gate refinements:
+ * 1. Inset the 3 trust boxes from the card edges (Figma "shaved" look) instead
+ *    of running them full-bleed.
+ * 2. Reserve enough height on the locked section preview so the gate card never
+ *    overflows up over the section headline (short dimension chapters like
+ *    Energy Level / Risk Orientation / Communication / Arousal Style). */
+@media (min-width: 641px) {
+  .report-premium-overlay__features {
+    max-width: 400px;
+    margin-inline: auto;
+  }
+  .report-themed-block__preview--locked:not(.report-themed-block__preview--practice) {
+    min-height: 510px;
+  }
 }
 
 /* Old footer base styles removed — replaced in responsive section */
@@ -6385,6 +6492,14 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-practice-table__locked-cover__metrics--compact .report-premium-overlay__copy {
   margin: 0;
   font-size: 13px;
+}
+
+/* The full gate's trust rows are too tall for the compact practice-table
+ * covers and the themed-block practice preview — hide them there so those
+ * small covers keep their minimal layout. */
+.report-practice-table__locked-cover__metrics .report-premium-overlay__features,
+.report-themed-block__preview--practice .report-premium-overlay__features {
+  display: none;
 }
 
 .report-practice-table__practice {

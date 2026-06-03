@@ -243,7 +243,7 @@ describe("PracticeTendenciesSection", () => {
     // Grid cover over metrics columns present
     expect(container.querySelector(".report-practice-table__locked-cover")).toBeInTheDocument();
     // One unlock button per practice group
-    const unlockButtons = screen.getAllByRole("button", { name: /unlock report/i });
+    const unlockButtons = screen.getAllByRole("button", { name: /unlock your report/i });
     expect(unlockButtons.length).toBeGreaterThanOrEqual(1);
   }, 60_000);
 

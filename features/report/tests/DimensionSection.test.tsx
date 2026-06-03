@@ -182,10 +182,10 @@ describe("DimensionSection", () => {
 
     const scoped = within(container);
 
-    await user.click(scoped.getByRole("button", { name: /unlock report/i }));
+    await user.click(scoped.getByRole("button", { name: /unlock your report/i }));
     expect(handleUnlock).toHaveBeenCalledTimes(1);
     // Section stays locked until the parent (after webhook fulfillment) flips isUnlocked.
-    expect(scoped.getByRole("button", { name: /unlock report/i })).toBeInTheDocument();
+    expect(scoped.getByRole("button", { name: /unlock your report/i })).toBeInTheDocument();
 
     rerender(
       <DimensionSection
@@ -200,7 +200,7 @@ describe("DimensionSection", () => {
       />
     );
 
-    expect(scoped.queryByRole("button", { name: /unlock report/i })).not.toBeInTheDocument();
+    expect(scoped.queryByRole("button", { name: /unlock your report/i })).not.toBeInTheDocument();
     expect(scoped.getByText(/The Deep Psychology of BDSM and Kink/i)).toBeInTheDocument();
   });
 
