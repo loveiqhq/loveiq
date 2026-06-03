@@ -235,8 +235,14 @@ jobs:
             exit 1
           fi
 
-          # Check for eval() usage
-          if grep -r "\beval\(" app/ lib/ components/ features/ shared/ --include="*.ts" --include="*.tsx" --include="*.js" --include="*.jsx"; then
+          # Check for global eval() usage (code-injection risk). The previous
+          # "\beval\(" was a malformed BRE (unclosed \( group) AND grepped
+          # now-removed lib/ + components/ dirs, so grep errored (exit 2) and the
+          # check never actually ran. This ERE matches a bare `eval(` call
+          # (start-of-line or after a non-identifier, non-dot char) but NOT a
+          # method call like the Upstash redis/kv `.eval(` Lua API. Paths limited
+          # to the dirs that exist post-refactor so grep exits 0/1, not 2.
+          if grep -rEn "(^|[^.A-Za-z0-9_])eval\(" app/ features/ shared/ --include="*.ts" --include="*.tsx" --include="*.js" --include="*.jsx"; then
             echo "⚠️  Found eval() usage - potential code injection risk"
             exit 1
           fi

@@ -1,15 +1,12 @@
 /**
  * Server-side premium-content filters.
  *
- * [Audit M1] Locked premium sections previously shipped the FULL archetype prose
- * and relied on a CSS blur (`PremiumOverlay`) to hide it — which meant any
- * unpaid token holder could read the entire paid analysis straight from the API
- * response / DOM. Now locked premium sections ship only a SHORT TEASER (first
- * sentence) so the client still renders a blurred preview, while the full paid
- * prose never leaves the server. Unlocked sections (free sections, or premium
- * sections the user's plan covers) ship in full — paying users are unaffected.
- * Practice-tendency metric values stay server-stripped on locked rows; practice
- * names ship in full so the locked rows can show what's there.
+ * Product decision (see plan "whimsical-greeting-popcorn"): on locked
+ * premium sections we ship the archetype prose so the client can render
+ * it blurred behind a `PremiumOverlay` (visual tease). Practice-tendency
+ * metric values stay server-stripped — the numbers are the paid value
+ * and must not reach the DOM. Practice names ship in full so the locked
+ * rows can show what's there.
  *
  * Inputs:
  *   - `accessPlan`: null | "essentials" | "full_report" | "all_reports"
@@ -25,34 +22,8 @@ import { archetypeContent } from "@/data/report-archetypes";
 import { reportPracticeTendencies } from "@/data/report-practice-tendencies";
 import { reportSections } from "@/data/report-general";
 import { isSectionUnlockedForPlan, type ReportAccessPlan } from "@features/report/server/access";
-import { escapeHtml } from "@shared/format/html-escape";
 
 export const PRACTICE_SECTION_ID = "typical_sexual_fantasy_amp_practice_tendencies";
-
-/** Max teaser length (plain-text chars) shipped for a locked premium section. */
-const TEASER_MAX_CHARS = 160;
-
-/**
- * Reduce full archetype prose to a short, safe teaser for a LOCKED premium
- * section: strip tags to plain text, take the first sentence (or a hard cap),
- * HTML-escape, and re-wrap in a single <p>. Keeps a blurred preview on the
- * client while the full paid prose stays server-side. [Audit M1]
- */
-function htmlToTeaser(html: string): string {
-  const text = html
-    .replace(/<[^>]*>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  if (!text) return "";
-  let teaser = text.slice(0, TEASER_MAX_CHARS);
-  const sentenceEnd = teaser.search(/[.!?]\s/);
-  if (sentenceEnd >= 40) {
-    teaser = teaser.slice(0, sentenceEnd + 1);
-  } else if (text.length > TEASER_MAX_CHARS) {
-    teaser = teaser.replace(/\s+\S*$/, "") + "…";
-  }
-  return `<p>${escapeHtml(teaser)}</p>`;
-}
 
 export interface PracticeTendencyRowForUser {
   practice: string;
@@ -87,16 +58,9 @@ export function buildArchetypeContentForUser(
     const block = archetypeContent[section.archetypeBlockId];
     if (!block) continue;
 
-    // [Audit M1] Gate prose by plan, mirroring the same check the client uses to
-    // decide the blur. Unlocked sections (free, or premium the plan covers) ship
-    // full prose; locked premium sections ship only a teaser so the full paid
-    // analysis never reaches the client.
-    const sectionUnlocked = isSectionUnlockedForPlan({
-      accessPlan,
-      isPremium: section.isPremium ?? false,
-      sectionId: section.id,
-    });
-
+    // Always ship archetype prose. The client renders it blurred behind
+    // a PremiumOverlay when `isSectionUnlockedForPlan` is false. Whether
+    // the section is locked is recomputed on the client from `accessPlan`.
     for (const archetype of unlockedSet) {
       const html = block[archetype];
       if (!html) continue;
@@ -104,7 +68,7 @@ export function buildArchetypeContentForUser(
         result[section.archetypeBlockId] = {};
       }
       // Just initialised above; the lookup is defined.
-      result[section.archetypeBlockId]![archetype] = sectionUnlocked ? html : htmlToTeaser(html);
+      result[section.archetypeBlockId]![archetype] = html;
     }
   }
   return result;
