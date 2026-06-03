@@ -218,6 +218,10 @@ jobs:
           # Check for dangerouslySetInnerHTML usage
           # Excludes:
           #  - JSON.stringify usage (safe JSON-LD structured data pattern in app/layout.tsx)
+          #  - jsonLdString(...) — hardened JSON-LD serializer (shared/seo/json-ld.ts):
+          #    JSON.stringify PLUS escaping of "<" so a value can never break out of the
+          #    <script> tag (</script>). Strictly safer than the bare JSON.stringify above;
+          #    used for the structured-data scripts in app/layout.tsx, app/page.tsx, app/about.
           #  - components/report/sections/ and components/report/ReportPage.tsx — these
           #    render escaped report-prose HTML built from sanitized server data
           #    (lib/report/contentGating.ts + the report data pipeline). Substitution
@@ -225,6 +229,7 @@ jobs:
           #    pipeline, not user input. Reviewed and intentional.
           if grep -r "dangerouslySetInnerHTML" app/ components/ features/ --include="*.tsx" --include="*.jsx" \
               | grep -v "JSON\.stringify" \
+              | grep -v "jsonLdString" \
               | grep -vE "(components|features/report/ui)/(sections/|ReportPage\.tsx)"; then
             echo "⚠️  Found dangerouslySetInnerHTML usage - review for XSS risks"
             exit 1
