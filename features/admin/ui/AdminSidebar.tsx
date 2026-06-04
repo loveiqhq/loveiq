@@ -53,6 +53,11 @@ const analyticsItems = [
     icon: "M9 19V6l7 13V6m4 13V10m-4 9V3m-8 16V13",
   },
   {
+    href: "/admin/explorer",
+    label: "Data Explorer",
+    icon: "M3 4h18M3 4v16h18V4M3 9h18M9 9v11M15 9v11",
+  },
+  {
     href: "/admin/funnels",
     label: "Funnels & Cohorts",
     icon: "M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12",

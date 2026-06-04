@@ -3,6 +3,7 @@ import { verifyAdminSession } from "@features/admin/server/auth";
 import { hasRole } from "@features/admin/server/roles";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
+import { normalizeLabel } from "@features/admin/server/explorer";
 import logger from "@shared/observability/logger";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -23,23 +24,6 @@ function percentile(nums: number[], p: number): number | null {
   const idx = Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length));
   // idx is clamped to sorted.length - 1; valid index.
   return sorted[idx]!;
-}
-
-function ageBucket(birthday: string | null | undefined): string | null {
-  if (!birthday) return null;
-  const dob = new Date(birthday);
-  if (isNaN(dob.getTime())) return null;
-  const now = new Date();
-  let age = now.getFullYear() - dob.getFullYear();
-  const m = now.getMonth() - dob.getMonth();
-  if (m < 0 || (m === 0 && now.getDate() < dob.getDate())) age--;
-  if (age < 18 || age > 100) return null;
-  if (age < 25) return "18–24";
-  if (age < 35) return "25–34";
-  if (age < 45) return "35–44";
-  if (age < 55) return "45–54";
-  if (age < 65) return "55–64";
-  return "65+";
 }
 
 function topNWithOther<T extends { count: number }>(
@@ -596,7 +580,7 @@ export async function GET(request: Request) {
             .filter((id): id is number => id != null);
           if (profileIds.length > 0) {
             const profileRes = await supabaseFetch(
-              `/rest/v1/user_profile?select=id,gender,location_primary,birthday&id=in.(${profileIds.join(",")})`,
+              `/rest/v1/user_profile?select=id,gender,location_primary&id=in.(${profileIds.join(",")})`,
               { headers: { Range: "0-49999" } }
             );
             if (profileRes.ok) {
@@ -604,7 +588,6 @@ export async function GET(request: Request) {
                 id: number;
                 gender: string | null;
                 location_primary: string | null;
-                birthday: string | null;
               }>;
               const profileById = new Map(profiles.map((p) => [p.id, p]));
               const userToProfile = new Map<number, (typeof profiles)[0]>();
@@ -613,18 +596,26 @@ export async function GET(request: Request) {
                 if (p) userToProfile.set(u.id, p);
               }
 
+              // Age comes from survey answer Q15003 (user_profile.birthday is
+              // 100% null in prod, which left this segment silently empty). Only
+              // completed submissions are scored/paid, so restrict the lookup to
+              // them — keeps the id list (and the URL) smaller.
+              const ageByUser = await fetchAgeByUser(
+                submissionRows.filter((s) => s.status === "completed")
+              );
+
               const fillSegments = (userIds: Iterable<number>) => {
                 const country = new Map<string, number>();
                 const gender = new Map<string, number>();
                 const age = new Map<string, number>();
                 for (const uid of userIds) {
+                  const a = ageByUser.get(uid);
+                  if (a) age.set(a, (age.get(a) ?? 0) + 1);
                   const p = userToProfile.get(uid);
                   if (!p) continue;
                   if (p.location_primary)
                     country.set(p.location_primary, (country.get(p.location_primary) ?? 0) + 1);
                   if (p.gender) gender.set(p.gender, (gender.get(p.gender) ?? 0) + 1);
-                  const b = ageBucket(p.birthday);
-                  if (b) age.set(b, (age.get(b) ?? 0) + 1);
                 }
                 return {
                   country: buildPctRows(country),
@@ -708,3 +699,64 @@ export async function GET(request: Request) {
 // `safeDiv` is exported so tests + future routes can share it without
 // re-implementing the divide-by-zero guard.
 export { safeDiv };
+
+/**
+ * Map user_id → age bucket from survey answer Q15003. `user_profile.birthday` is
+ * 100% null in prod, so age can only come from the answer. Best-effort: any
+ * failure returns an empty map (age segment renders empty, as before the fix).
+ */
+async function fetchAgeByUser(
+  submissionRows: Array<{ id: number; user_id: number }>
+): Promise<Map<number, string>> {
+  const ageByUser = new Map<number, string>();
+  if (submissionRows.length === 0) return ageByUser;
+  try {
+    const ageQid = "15003";
+    const aqRes = await supabaseFetch(
+      `/rest/v1/survey_question?frontend_qid=eq.${ageQid}&select=id&limit=1`
+    );
+    if (!aqRes.ok) return ageByUser;
+    const aqId = ((await aqRes.json()) as Array<{ id: number }>)[0]?.id;
+    if (aqId == null) return ageByUser;
+
+    const optRes = await supabaseFetch(
+      `/rest/v1/answer_option?survey_question_id=eq.${aqId}&select=id,option_text`,
+      { headers: { Range: "0-999" } }
+    );
+    const optMap = new Map<number, string>();
+    if (optRes.ok) {
+      for (const o of (await optRes.json()) as Array<{ id: number; option_text: string | null }>) {
+        if (o.option_text) optMap.set(o.id, o.option_text);
+      }
+    }
+
+    const userBySubmission = new Map(submissionRows.map((s) => [s.id, s.user_id]));
+    const submissionIds = submissionRows.map((s) => s.id);
+    // Batch the id list so the `in.(…)` URL stays bounded as the audience grows.
+    const IN_CHUNK = 500;
+    for (let i = 0; i < submissionIds.length; i += IN_CHUNK) {
+      const batch = submissionIds.slice(i, i + IN_CHUNK);
+      const ansRes = await supabaseFetch(
+        `/rest/v1/survey_submission_answer?survey_question_id=eq.${aqId}&survey_submission_id=in.(${batch.join(
+          ","
+        )})&select=survey_submission_id,answer_option_id,answer_text`,
+        { headers: { Range: "0-49999" } }
+      );
+      if (!ansRes.ok) continue;
+      for (const a of (await ansRes.json()) as Array<{
+        survey_submission_id: number;
+        answer_option_id: number | null;
+        answer_text: string | null;
+      }>) {
+        const label = normalizeLabel(
+          (a.answer_option_id != null ? optMap.get(a.answer_option_id) : null) ?? a.answer_text
+        );
+        const uid = userBySubmission.get(a.survey_submission_id);
+        if (label && uid != null) ageByUser.set(uid, label);
+      }
+    }
+  } catch (err) {
+    logger.warn({ err }, "core-kpis: age-by-user fetch failed (non-blocking)");
+  }
+  return ageByUser;
+}
