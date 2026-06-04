@@ -98,6 +98,11 @@ export const CHAPTER_LEARN_ONELINERS: Record<string, string> = {
 
 const DEFAULT_ONELINER = "A part of your report written specifically for your archetype.";
 
+// Tease length for the chapter-nudge email. Kept short (Figma 7725-11594 trims
+// the body so it doesn't read as a wall of text) — the 60% MAX_TEASE_FRACTION
+// cap in extractTease still guarantees paywalled prose is left behind.
+const CHAPTER_TEASE_TARGET_WORDS = 100;
+
 // A chapter must have at least this many words of prose to enter the drip, so
 // the 60%-cap tease (see extractTease) always leaves content behind the paywall
 // — a chapter is never emailed in full. The shortest real chapter is ~144
@@ -310,7 +315,7 @@ export function buildChapterContent(
   const block = archetypeContent[entry.blockId];
   // eslint-disable-next-line security/detect-object-injection -- primaryArchetype is a validated archetype name.
   const html = block?.[primaryArchetype];
-  const { text, wasTruncated } = extractTease(html);
+  const { text, wasTruncated } = extractTease(html, CHAPTER_TEASE_TARGET_WORDS);
   if (!text) return null;
 
   return {

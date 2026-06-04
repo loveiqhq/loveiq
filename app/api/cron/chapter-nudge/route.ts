@@ -486,6 +486,7 @@ async function processCandidate(
       whatYoullLearn: content.whatYoullLearn,
       teaseText: content.teaseText,
       wasTruncated: content.wasTruncated,
+      archetypeName: primaryArchetype,
     });
 
     // Write the idempotency marker BEFORE sending so a crash mid-send never

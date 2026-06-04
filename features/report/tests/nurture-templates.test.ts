@@ -5,6 +5,11 @@ import { nurture30hNoUnlockEmail } from "@features/report/server/emails/nurture/
 import { nurture54hNoUnlockEmail } from "@features/report/server/emails/nurture/nurture-54h-no-unlock";
 import { nurture78hNoUnlockEmail } from "@features/report/server/emails/nurture/nurture-78h-no-unlock";
 import { postCallCouponEmail } from "@features/report/server/emails/nurture/post-call-coupon";
+import {
+  chapterNudgeEmail,
+  pluralizeArchetype,
+} from "@features/report/server/emails/nurture/chapter-nudge";
+import { KNOWN_ARCHETYPES } from "@features/report/server/archetypeSlug";
 import { surveyCompleteEmail } from "@features/survey/server/emails/survey-complete";
 
 const SITE = "https://loveiq.org";
@@ -198,5 +203,114 @@ describe("nurture email templates", () => {
     expect(out.html).toContain("LIQ-100-Ab7K9xQ2");
     expect(out.html).toContain("Unlock your full report");
     expect(out.text).toContain("LIQ-100-Ab7K9xQ2");
+  });
+});
+
+describe("chapter-nudge email (Figma 7725-11594)", () => {
+  const baseParams = {
+    firstName: "Sam",
+    ctaUrl: "https://loveiq.org/report/rpt_abc?utm_campaign=chapter_nudge",
+    siteUrl: SITE,
+    unsubscribeUrl: "https://loveiq.org/api/unsubscribe?token=x",
+    chapterIndex: 2,
+    chapterTotal: 21,
+    chapterTitle: "Growth Potentials",
+    whatYoullLearn: "Your clearest path to a richer, more confident erotic life.",
+    teaseText: "Your sexuality isn't too idealistic — it's highly attuned.",
+    wasTruncated: true,
+    archetypeName: "Spiritual Lover",
+  };
+
+  it("renders the Figma subject, greeting, eyebrow, learn line and tease", () => {
+    const out = chapterNudgeEmail(baseParams);
+    expect(out.subject).toBe("A peek inside your report: Growth Potentials");
+    expect(out.html).toContain("Hi Sam,");
+    // Literal apostrophes/middot — these copy strings are raw template literals,
+    // not escaped (apostrophes and · are valid in HTML body text).
+    expect(out.html).toContain("here's today's chapter from your report.");
+    expect(out.html).toContain("Today · Chapter 2 of 21");
+    expect(out.html).toContain("What you'll learn:");
+    expect(out.html).toContain("highly attuned");
+    expect(out.html).toContain("Continue reading your full chapter");
+    // Truncated tease gets the muted ellipsis marker.
+    expect(out.html).toContain("…");
+  });
+
+  it("moves the archetype-named 'full chapter' nudge ABOVE the CTA", () => {
+    const out = chapterNudgeEmail(baseParams);
+    expect(out.html).toContain("goes much deeper into what this looks like for you");
+    // Pluralized archetype name interpolated.
+    expect(out.html).toContain("most Spiritual Lovers carry quietly");
+    // Nudge precedes the CTA in the rendered HTML.
+    expect(out.html.indexOf("goes much deeper")).toBeLessThan(
+      out.html.indexOf("Continue reading your full chapter")
+    );
+    // Old "below the testimonial" closing copy is gone.
+    expect(out.html).not.toContain("This is just a glimpse");
+  });
+
+  it("hides the in-card LoveIQ logo header (matches Figma)", () => {
+    const out = chapterNudgeEmail(baseParams);
+    expect(out.html).not.toContain("apple-touch-icon");
+    // The brand wordmark only renders inside the (now hidden) header.
+    expect(out.html).not.toContain(">Love</span>");
+  });
+
+  it("falls back to 'Hi there,' and a name-free nudge when data is missing", () => {
+    const out = chapterNudgeEmail({ ...baseParams, firstName: null, archetypeName: null });
+    expect(out.html).toContain("Hi there,");
+    expect(out.html).toContain("insecurities most people carry quietly");
+    expect(out.html).not.toContain("most  carry quietly"); // no empty-name artefact
+  });
+
+  it("alternates the testimonial by chapter index (Dijana even, Gebhardt odd)", () => {
+    const even = chapterNudgeEmail({ ...baseParams, chapterIndex: 2 });
+    const odd = chapterNudgeEmail({ ...baseParams, chapterIndex: 3 });
+    expect(even.html).toContain("Dijana");
+    expect(even.html).not.toContain("Gebhardt");
+    expect(odd.html).toContain("Gebhardt");
+    expect(odd.html).not.toContain("Dijana");
+  });
+
+  it("keeps the tease and nudge on separate lines in the plaintext twin", () => {
+    const out = chapterNudgeEmail(baseParams);
+    expect(out.text).toContain("highly attuned");
+    expect(out.text).toContain("Your full chapter goes much deeper");
+    expect(out.text).toContain("most Spiritual Lovers carry quietly");
+    // CTA label + URL present; tease and nudge not glued together.
+    expect(out.text).toContain(`Continue reading your full chapter: ${baseParams.ctaUrl}`);
+    expect(out.text).not.toContain("attuned.Your full chapter");
+  });
+
+  it("escapes a hostile firstName in the HTML body", () => {
+    const out = chapterNudgeEmail({ ...baseParams, firstName: "<script>alert(1)</script>" });
+    expect(out.html).not.toContain("<script>alert(1)</script>");
+    expect(out.html).toContain("&lt;script&gt;");
+  });
+
+  // The load-bearing correctness guard: every known archetype must pluralize
+  // correctly. "Explorer of Edges" is the one that breaks naive suffixing.
+  it("pluralizes every known archetype name correctly", () => {
+    const expected: Record<string, string> = {
+      "Sensual Connector": "Sensual Connectors",
+      "Spark Seeker": "Spark Seekers",
+      "Relational Nurturer": "Relational Nurturers",
+      "Radiant Performer": "Radiant Performers",
+      "Explorer of Edges": "Explorers of Edges",
+      "Curious Apprentice": "Curious Apprentices",
+      "Spiritual Lover": "Spiritual Lovers",
+      "Minimalist Companion": "Minimalist Companions",
+      "Emotional Voyeur": "Emotional Voyeurs",
+      "Authority Conductor": "Authority Conductors",
+      "Loyal Ritualist": "Loyal Ritualists",
+      "Tender Devotee": "Tender Devotees",
+      "Analytical Sexualist": "Analytical Sexualists",
+      "Quiet Withdrawer": "Quiet Withdrawers",
+    };
+    // Guard: the expected map must stay in sync with the canonical list.
+    expect(Object.keys(expected).sort()).toEqual([...KNOWN_ARCHETYPES].sort());
+    for (const name of KNOWN_ARCHETYPES) {
+      expect(pluralizeArchetype(name)).toBe(expected[name]);
+    }
   });
 });

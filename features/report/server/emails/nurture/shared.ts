@@ -16,11 +16,11 @@ export interface NurtureBullet {
 }
 
 /**
- * `intro`, `preBulletsNote`, `postBulletsNote`, `preCtaNote` accept trusted
- * server-authored HTML (e.g. <strong>, <br>). Callers MUST `escapeHtml` any
- * dynamic substitution (promo codes, recipient names) before injection.
- * `heading`, `closingNote`, bullet `text`, and the testimonial fields are
- * escaped automatically.
+ * `intro`, `preBulletsNote`, `postBulletsNote`, `preCtaNote`, `preCtaNote2`
+ * accept trusted server-authored HTML (e.g. <strong>, <br>). Callers MUST
+ * `escapeHtml` any dynamic substitution (promo codes, recipient names, archetype
+ * names) before injection. `heading`, `closingNote`, bullet `text`, and the
+ * testimonial fields are escaped automatically.
  */
 export interface NurtureBodyParams {
   heading: string;
@@ -30,6 +30,14 @@ export interface NurtureBodyParams {
   testimonial: NurtureTestimonial;
   bullets?: NurtureBullet[];
   preCtaNote?: string;
+  /**
+   * Optional second paragraph rendered between `preCtaNote` and the CTA. Same
+   * trusted-HTML contract as `preCtaNote`. Use when two distinct paragraphs must
+   * sit above the CTA (e.g. the chapter tease followed by a "read the full
+   * chapter" nudge) so the plaintext twin keeps them on separate lines instead
+   * of gluing them together (`<br>` strips to nothing in the text part).
+   */
+  preCtaNote2?: string;
   preBulletsNote?: string;
   postBulletsNote?: string;
   closingNote?: string;
@@ -153,12 +161,18 @@ export function renderNurtureEmail({
   body,
   siteUrl,
   unsubscribeUrl,
+  hideBrandHeader = false,
 }: {
   subject: string;
   previewText: string;
   body: NurtureBodyParams;
   siteUrl: string;
   unsubscribeUrl?: string;
+  /**
+   * Hide the in-card LoveIQ logo header (forwarded to `wrapEmailShell`).
+   * Defaults to `false` so existing nurture emails are unchanged.
+   */
+  hideBrandHeader?: boolean;
 }): RenderedNurture {
   const headingRow = `
   <tr>
@@ -189,6 +203,15 @@ export function renderNurtureEmail({
   <tr>
     <td style="padding:12px 32px 0;">
       <p style="margin:0; font-family:${EMAIL_FONT}; font-size:17px; line-height:1.55; color:#000000;">${body.preCtaNote}</p>
+    </td>
+  </tr>`
+    : "";
+
+  const preCtaRow2 = body.preCtaNote2
+    ? `
+  <tr>
+    <td style="padding:12px 32px 0;">
+      <p style="margin:0; font-family:${EMAIL_FONT}; font-size:17px; line-height:1.55; color:#000000;">${body.preCtaNote2}</p>
     </td>
   </tr>`
     : "";
@@ -224,6 +247,7 @@ export function renderNurtureEmail({
     headingRow,
     introRow,
     preCtaRow,
+    preCtaRow2,
     ctaRow,
     testimonialRow,
     preBulletsRow,
@@ -239,6 +263,7 @@ export function renderNurtureEmail({
     siteUrl,
     title: subject,
     unsubscribeUrl,
+    hideBrandHeader,
   });
 
   // Strip tags, then decode the safe display entities so the plain-text twin
@@ -261,6 +286,7 @@ export function renderNurtureEmail({
     "",
     stripTags(body.intro),
     ...(body.preCtaNote ? ["", stripTags(body.preCtaNote)] : []),
+    ...(body.preCtaNote2 ? ["", stripTags(body.preCtaNote2)] : []),
     "",
     `${body.ctaLabel}: ${body.ctaUrl}`,
     "",

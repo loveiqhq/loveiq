@@ -230,7 +230,7 @@ describe("GET /api/cron/chapter-nudge", () => {
     expect(mockResendSend).toHaveBeenCalledTimes(1);
     const sent = mockResendSend.mock.calls[0][0];
     expect(sent.to).toBe(email);
-    expect(sent.subject).toMatch(/Chapter \d+ of \d+:/);
+    expect(sent.subject).toMatch(/^A peek inside your report:/);
     expect(sent.html).toContain(`/report/${"rpt_AbCdEfGhIjKlMnOpQrSt"}`);
     expect(sent.html).toContain(`utm_content=${expected!.entry.sectionId}`);
     expect(sent.headers["List-ID"]).toContain("LoveIQ Nurture");
