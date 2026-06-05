@@ -641,6 +641,50 @@ describe("ReportPage", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("does NOT open the offer modal for a paid customer on an ?offer=1 email link (Marcus regression)", () => {
+    // A nurture/offer email link always carries ?offer=1. A customer who already
+    // bought must land on their report, never the payment modal.
+    const paid = buildSuccessResponse();
+    paid.data.accessPlan = "full_report";
+    mockUseReportData.mockReturnValue(paid);
+    mockSearchParams.mockReturnValueOnce(new URLSearchParams("offer=1"));
+
+    render(<ReportPage />);
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("gives a forced-arm visitor the soft control experience when arriving from an email link", () => {
+    mockUseReportData.mockReturnValue(buildSuccessResponse());
+    // Persistent (not Once): the cohort is recomputed from searchParams on every
+    // render, so the email signal must survive re-renders.
+    mockSearchParams.mockImplementation(() => new URLSearchParams("from=email"));
+    try {
+      render(<ReportPage token={TREATMENT_TOKEN} />);
+      const teaser = screen.getByTestId("scroll-teaser");
+      // Treatment-arm token, but an email return ⇒ soft control UX: dismissible,
+      // no flip deck, and NOT force-opened on load.
+      expect(teaser).toHaveAttribute("data-dismissible", "true");
+      expect(teaser).toHaveAttribute("data-flipdeck", "false");
+      expect(teaser).toHaveAttribute("data-open", "false");
+    } finally {
+      mockSearchParams.mockImplementation(() => new URLSearchParams());
+    }
+  });
+
+  it("treats utm_source=email as an email return too (covers already-sent emails)", () => {
+    mockUseReportData.mockReturnValue(buildSuccessResponse());
+    mockSearchParams.mockImplementation(() => new URLSearchParams("utm_source=email"));
+    try {
+      render(<ReportPage token={TREATMENT_TOKEN} />);
+      const teaser = screen.getByTestId("scroll-teaser");
+      expect(teaser).toHaveAttribute("data-dismissible", "true");
+      expect(teaser).toHaveAttribute("data-flipdeck", "false");
+    } finally {
+      mockSearchParams.mockImplementation(() => new URLSearchParams());
+    }
+  });
+
   it("makes the scroll teaser non-dismissible + flip-deck for the forced-paywall treatment cohort", () => {
     mockUseReportData.mockReturnValue(buildSuccessResponse());
     render(<ReportPage token={TREATMENT_TOKEN} />);

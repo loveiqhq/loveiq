@@ -291,6 +291,9 @@ async function persistChapterSent({
 
 function buildCtaUrl(siteUrl: string, reportToken: string, sectionId: string): string {
   const params = new URLSearchParams({
+    // Email returns always get the soft, dismissible blurred-preview experience
+    // even in the forced-paywall arm (see resolveReportPaywallCohort).
+    from: "email",
     utm_source: "email",
     utm_medium: "chapter_drip",
     utm_campaign: "chapter_nudge",

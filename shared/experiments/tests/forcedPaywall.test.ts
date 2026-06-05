@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   getForcedPaywallCohort,
   resolveDevCohortOverride,
+  resolveReportPaywallCohort,
 } from "@shared/experiments/forcedPaywall";
 
 describe("getForcedPaywallCohort", () => {
@@ -46,6 +47,43 @@ describe("getForcedPaywallCohort", () => {
     for (const [token, arm] of Object.entries(PINNED)) {
       expect(getForcedPaywallCohort(token)).toBe(arm);
     }
+  });
+});
+
+describe("resolveReportPaywallCohort", () => {
+  // rpt_user_123 hashes to "treatment" (pinned above) — the perfect probe for
+  // the email-return escape hatch: without it the user would hit the hard wall.
+  const FORCED_TOKEN = "rpt_user_123";
+
+  it("forces control for an email-return visit even on a treatment-arm token", () => {
+    expect(getForcedPaywallCohort(FORCED_TOKEN)).toBe("treatment");
+    expect(resolveReportPaywallCohort({ devArm: null, fromEmail: true, token: FORCED_TOKEN })).toBe(
+      "control"
+    );
+  });
+
+  it("uses the deterministic bucketing for a non-email visit", () => {
+    expect(
+      resolveReportPaywallCohort({ devArm: null, fromEmail: false, token: FORCED_TOKEN })
+    ).toBe("treatment");
+    expect(resolveReportPaywallCohort({ devArm: null, fromEmail: false, token: "rpt_aaa" })).toBe(
+      "control"
+    );
+  });
+
+  it("lets the dev override win over both email and bucketing", () => {
+    expect(
+      resolveReportPaywallCohort({ devArm: "treatment", fromEmail: true, token: "rpt_aaa" })
+    ).toBe("treatment");
+    expect(
+      resolveReportPaywallCohort({ devArm: "control", fromEmail: false, token: FORCED_TOKEN })
+    ).toBe("control");
+  });
+
+  it("falls back to control for a missing token on a non-email visit", () => {
+    expect(resolveReportPaywallCohort({ devArm: null, fromEmail: false, token: null })).toBe(
+      "control"
+    );
   });
 });
 

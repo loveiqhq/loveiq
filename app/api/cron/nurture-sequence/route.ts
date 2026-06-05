@@ -395,6 +395,11 @@ function buildCtaUrl({
 }): string {
   const params = new URLSearchParams({
     offer: "1",
+    // Soften the forced-paywall arm to the dismissible blurred-preview
+    // experience for anyone returning via an email link (see
+    // resolveReportPaywallCohort). `utm_source=email` already signals this, but
+    // `from=email` is the explicit, analytics-independent flag.
+    from: "email",
     utm_source: "email",
     utm_medium: "nurture",
     utm_campaign: stage,

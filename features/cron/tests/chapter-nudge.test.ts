@@ -233,6 +233,9 @@ describe("GET /api/cron/chapter-nudge", () => {
     expect(sent.subject).toMatch(/^A peek inside your report:/);
     expect(sent.html).toContain(`/report/${"rpt_AbCdEfGhIjKlMnOpQrSt"}`);
     expect(sent.html).toContain(`utm_content=${expected!.entry.sectionId}`);
+    // Email-return signal so a forced-paywall user gets the soft blurred-preview
+    // experience instead of the hard wall.
+    expect(sent.html).toContain("from=email");
     expect(sent.headers["List-ID"]).toContain("LoveIQ Nurture");
 
     // Write-before-send ordering + metadata contents.

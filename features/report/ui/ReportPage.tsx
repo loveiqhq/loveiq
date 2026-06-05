@@ -73,9 +73,10 @@ import {
 } from "@features/analytics/client";
 import {
   FORCED_PAYWALL_EXPERIMENT,
-  getForcedPaywallCohort,
   resolveDevCohortOverride,
+  resolveReportPaywallCohort,
 } from "@shared/experiments/forcedPaywall";
+import { shouldAutoOpenOfferModal } from "../logic/paywallModal";
 import { useReportEngagementTimers } from "./hooks/useReportEngagementTimers";
 
 interface SnapshotContent {
@@ -973,9 +974,17 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   // `?arm=` is a dev-only preview override (null in production).
   const devArm = useMemo(() => resolveDevCohortOverride(searchParams.get("arm")), [searchParams]);
   const resolvedReportToken = token ?? data?.ownerToken ?? null;
+  // A visit that arrived from one of our email links always gets the soft
+  // "control" experience (dismissible modal, blurred premium sections) instead
+  // of the forced hard wall — re-engagement should never trap a returning user
+  // behind a paywall they can't close. `utm_source=email` covers emails already
+  // sitting in inboxes (nurture + chapter-nudge carry it today); `from=email` is
+  // the explicit, analytics-independent signal added to every report link.
+  const fromEmail =
+    searchParams.get("from") === "email" || searchParams.get("utm_source") === "email";
   const forcedPaywallCohort = useMemo(
-    () => devArm ?? getForcedPaywallCohort(resolvedReportToken),
-    [devArm, resolvedReportToken]
+    () => resolveReportPaywallCohort({ devArm, fromEmail, token: resolvedReportToken }),
+    [devArm, fromEmail, resolvedReportToken]
   );
 
   // Single guarded closer for the scroll teaser. For the forced (treatment)
@@ -1035,28 +1044,33 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     if (!isOfferLink) return;
     if (autoOpenedOfferRef.current) return;
     if (!data) return;
-    if (viewMode === "shared") return;
-    // Treatment (forced) arm: the non-closable teaser takes precedence over the
-    // closable offer modal, even for an email deep-link. Consume the one-shot
-    // ref so a later cohort flip can't double-open it.
-    if (forcedPaywallCohort === "treatment") {
-      autoOpenedOfferRef.current = true;
+    // One-shot: once data has resolved for this offer-link visit, consume the
+    // ref so a later cohort/access flip can't double-open the modal.
+    autoOpenedOfferRef.current = true;
+    // Paid customers, shared (recipient) views, and the forced (treatment) hard
+    // wall must NOT get the closable offer modal auto-opened. A paying customer
+    // who clicks an old nurture link from their inbox lands on their report, not
+    // a checkout prompt; tier upgrades happen on demand via locked-section CTAs.
+    if (
+      !shouldAutoOpenOfferModal({
+        isOfferLink,
+        accessPlan,
+        viewMode,
+        cohort: forcedPaywallCohort,
+      })
+    ) {
       return;
     }
-    autoOpenedOfferRef.current = true;
     // Intent signal — user clicked an email-deep-link to land here. Counts
     // as user-initiated paywall surface (clicked the link in an email).
     trackPaywallInitiated({ source: "offer_link", archetype: null });
-    // Discount email deep-link — open the pricing modal in offer variant
-    // once quotes have resolved. Fires regardless of accessPlan so users who
-    // already bought one plan can still see offers for the tier above.
-    // One-shot: guarded by autoOpenedOfferRef to avoid re-open cascades.
+    // Discount email deep-link — open the pricing modal in offer variant.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsScrollTeaserOpen(false);
     setPricingTargetArchetype(null);
     setPricingVariant("offer");
     setIsPricingModalOpen(true);
-  }, [data, isOfferLink, viewMode, forcedPaywallCohort]);
+  }, [data, isOfferLink, viewMode, forcedPaywallCohort, accessPlan]);
 
   useEffect(() => {
     isPricingModalOpenRef.current = isPricingModalOpen;

@@ -155,8 +155,11 @@ export async function GET(request: Request) {
   let cronError: string | undefined;
 
   const siteUrl = getEmailSiteUrl();
-  // Deep-link into the Refer-a-Friend modal on the report page.
-  const inviteCtaUrl = `${siteUrl}/report?invite=1`;
+  // Deep-link into the Refer-a-Friend modal on the report page. `from=email`
+  // softens the forced-paywall arm to the dismissible experience (see
+  // resolveReportPaywallCohort) — otherwise a forced-arm owner hits a
+  // non-closable wall and can't reach the invite modal at all.
+  const inviteCtaUrl = `${siteUrl}/report?invite=1&from=email`;
 
   const summary = {
     candidates: 0,

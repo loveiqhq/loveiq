@@ -44,3 +44,33 @@ export function resolveDevCohortOverride(
   if (process.env.NODE_ENV !== "development") return null;
   return armParam === "treatment" || armParam === "control" ? armParam : null;
 }
+
+/**
+ * Resolve the effective paywall arm for a single `/report/[token]` visit,
+ * layering the email-return escape hatch on top of the deterministic bucketing.
+ *
+ * Precedence:
+ *   1. `devArm` — dev-only `?arm=` preview override (null in production).
+ *   2. `fromEmail` — a visit that arrived from one of our email links always
+ *      gets the soft "control" experience (dismissible scroll modal, blurred
+ *      premium sections, pay-if-you-want) instead of the forced hard wall.
+ *      Re-engagement emails should never slam a returning user with a paywall
+ *      they can't close. This does NOT change the user's true assigned arm —
+ *      the server still recomputes the deterministic arm from the token for
+ *      pricing + `report_price_quote.forced_paywall_arm` attribution, so A/B
+ *      analysis by assigned arm is unaffected.
+ *   3. Otherwise the normal deterministic 50/50 bucketing on the token.
+ */
+export function resolveReportPaywallCohort({
+  devArm,
+  fromEmail,
+  token,
+}: {
+  devArm: ForcedPaywallCohort | null;
+  fromEmail: boolean;
+  token: string | null | undefined;
+}): ForcedPaywallCohort {
+  if (devArm) return devArm;
+  if (fromEmail) return "control";
+  return getForcedPaywallCohort(token);
+}

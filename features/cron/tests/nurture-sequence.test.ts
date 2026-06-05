@@ -220,6 +220,9 @@ describe("GET /api/cron/nurture-sequence", () => {
     expect(sent.to).toBe("user@example.com");
     expect(sent.subject).toMatch(/50%.*expires/i);
     expect(sent.html).toContain(stripeArgs.code);
+    // The report CTA carries from=email so a forced-paywall user who clicks it
+    // gets the soft, dismissible blurred-preview experience, not the hard wall.
+    expect(sent.html).toContain("from=email");
 
     expect(patchSpy).toHaveBeenCalled();
   });

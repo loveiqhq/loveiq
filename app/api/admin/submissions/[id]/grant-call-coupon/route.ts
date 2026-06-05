@@ -189,6 +189,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const params2 = new URLSearchParams({
       promo: minted.code,
       offer: "1",
+      // Email return ⇒ soft, dismissible blurred-preview experience even in the
+      // forced-paywall arm (see resolveReportPaywallCohort).
+      from: "email",
       utm_source: "email",
       utm_medium: "nurture",
       utm_campaign: "post_call_coupon",

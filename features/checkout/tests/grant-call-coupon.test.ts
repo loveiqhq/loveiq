@@ -174,6 +174,8 @@ describe("POST /api/admin/submissions/[id]/grant-call-coupon", () => {
     const emailArgs = mockPostCallCouponEmail.mock.calls[0][0];
     expect(emailArgs.ctaUrl).toContain("promo=LIQ-100-Ab7K9xQ2");
     expect(emailArgs.ctaUrl).toContain("/report/rpt_x");
+    // Email return ⇒ soft blurred-preview experience even for a forced-arm user.
+    expect(emailArgs.ctaUrl).toContain("from=email");
   });
 
   it("409 (idempotent) when a post_call code already exists, without re-minting", async () => {

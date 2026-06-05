@@ -260,9 +260,14 @@ async function sendPurchaseEmail({
 
   const reportToken = reportTokenOverride || (await lookupReportTokenForSubmission(submissionId));
   const siteUrl = getEmailSiteUrl();
+  // `from=email` tags every report link we send so the report page can apply
+  // the email-return UX rules (see resolveReportPaywallCohort). Recipients here
+  // are already paid, so the arm is moot for them, but the tag keeps all of our
+  // report links uniform. buildArchetypeReportUrl appends `&archetype=` safely
+  // because the `?` is already present.
   const reportUrl = reportToken
-    ? `${siteUrl}/report/${encodeURIComponent(reportToken)}`
-    : `${siteUrl}/report`;
+    ? `${siteUrl}/report/${encodeURIComponent(reportToken)}?from=email`
+    : `${siteUrl}/report?from=email`;
 
   // Purchase confirmations are transactional — they ship regardless of
   // marketing preferences. The unsubscribe link still flows through for
