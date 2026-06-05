@@ -52,25 +52,88 @@ function sanitizeError(error: unknown): Record<string, string | undefined> {
 async function lookupRecipientForSubmission(submissionId: number): Promise<{
   email: string | null;
   firstName: string | null;
+  utmTracker: string | null;
 }> {
   try {
     const response = await supabaseServiceFetch(
-      `/rest/v1/survey_submission?id=eq.${submissionId}&select=app_user!fk_survey_submission_user(email,first_name)&limit=1`
+      `/rest/v1/survey_submission?id=eq.${submissionId}&select=utm_tracker,app_user!fk_survey_submission_user(email,first_name)&limit=1`
     );
-    if (!response.ok) return { email: null, firstName: null };
+    if (!response.ok) return { email: null, firstName: null, utmTracker: null };
 
     const rows = (await response.json()) as Array<{
+      utm_tracker?: string | null;
       app_user?: { email?: string | null; first_name?: string | null } | null;
     }>;
     const user = rows[0]?.app_user;
     return {
       email: user?.email?.toLowerCase().trim() || null,
       firstName: user?.first_name?.trim() || null,
+      utmTracker: rows[0]?.utm_tracker ?? null,
     };
   } catch (err) {
     logger.warn({ err, submissionId }, "lookupRecipientForSubmission failed");
-    return { email: null, firstName: null };
+    return { email: null, firstName: null, utmTracker: null };
   }
+}
+
+// Paid-traffic media identifiers (utm_medium). Anything here, or any utm_campaign
+// at all, classifies the visit as a paid acquisition.
+const PAID_UTM_MEDIA = new Set(["cpc", "ppc", "paid", "paid_social", "ads", "display"]);
+
+type TrafficInfo = {
+  bucket: "Direct" | "Referral" | "Paid" | "Organic";
+  source: string | null;
+  medium: string | null;
+  campaign: string | null;
+};
+
+// Classify the buyer's acquisition channel from the survey_submission.utm_tracker
+// JSON blob, for the purchase Slack ping. utm_* values are user-controllable (they
+// ride in on the landing URL), so callers MUST escape every string returned here
+// before it reaches Slack. We deliberately ignore utm_content: invite links base64
+// the referrer's email into it, and that must never be echoed to Slack.
+export function classifyTraffic(utmTracker: string | null): TrafficInfo {
+  // Real utm values are short; cap each one so a padded/oversized tracker can't
+  // blow past Slack's 3,000-char message limit (which would 400 the webhook).
+  const MAX_UTM_LEN = 100;
+  const str = (value: unknown): string | null => {
+    if (typeof value !== "string") return null;
+    const trimmed = value.trim();
+    return trimmed ? trimmed.slice(0, MAX_UTM_LEN) : null;
+  };
+
+  let parsed: Record<string, unknown> = {};
+  if (utmTracker?.trim()) {
+    try {
+      const json: unknown = JSON.parse(utmTracker);
+      // Arrays are typeof "object" too — exclude them so we never read utm_* off
+      // an array (which would silently mislabel as Direct).
+      if (json !== null && typeof json === "object" && !Array.isArray(json)) {
+        parsed = json as Record<string, unknown>;
+      }
+    } catch {
+      // Malformed tracker — treat the raw string as the source so we still
+      // surface something rather than silently dropping it.
+      parsed = { utm_source: utmTracker };
+    }
+  }
+
+  const source = str(parsed.utm_source);
+  const medium = str(parsed.utm_medium);
+  const campaign = str(parsed.utm_campaign);
+
+  let bucket: TrafficInfo["bucket"];
+  if (!source && !medium && !campaign) {
+    bucket = "Direct";
+  } else if (source?.toLowerCase() === "referral") {
+    bucket = "Referral";
+  } else if (campaign || (medium && PAID_UTM_MEDIA.has(medium.toLowerCase()))) {
+    bucket = "Paid";
+  } else {
+    bucket = "Organic";
+  }
+
+  return { bucket, source, medium, campaign };
 }
 
 async function notifySlackPurchase({
@@ -79,18 +142,22 @@ async function notifySlackPurchase({
   currency,
   email,
   firstName,
+  forcedPaywallArm,
   paymentId,
   plan,
   submissionId,
+  utmTracker,
 }: {
   amount: number | null;
   archetype: string | null;
   currency: string | null;
   email: string | null;
   firstName: string | null;
+  forcedPaywallArm: string | null;
   paymentId: number;
   plan: ReportPurchasePlanId;
   submissionId: number;
+  utmTracker: string | null;
 }) {
   const url = process.env.SLACK_PAYMENTS_WEBHOOK_URL;
 
@@ -112,7 +179,25 @@ async function notifySlackPurchase({
       ? `${(currency ?? "EUR").toUpperCase()} ${amount.toFixed(2)}`
       : "amount unknown";
 
-  const text = `:credit_card: New purchase: *${safeName}* (${maskedEmail}) — ${planLabel}${archetypeSuffix} — ${formattedAmount}`;
+  // Traffic source line — derived from the buyer's utm_tracker. utm_* values are
+  // user-controllable, so escape each before it reaches Slack. utm_content is
+  // intentionally excluded (invite links base64 the referrer's email into it).
+  const traffic = classifyTraffic(utmTracker);
+  const utmParts = [traffic.source, traffic.medium, traffic.campaign]
+    .map((part) => (part ? escapeSlack(part) : "—"))
+    .join(" / ");
+  const sourceLine = `:chart_with_upwards_trend: Source: ${traffic.bucket} · utm: ${utmParts}`;
+
+  // Paywall A/B arm the buyer experienced: "treatment" = forced (non-dismissible),
+  // "control" = closeable. Anything else (null/empty/unexpected) renders unknown.
+  const paywallLine =
+    forcedPaywallArm === "treatment"
+      ? ":lock: Paywall: Forced (must pay to view)"
+      : forcedPaywallArm === "control"
+        ? ":unlock: Paywall: Closeable (can dismiss & pay later)"
+        : ":lock: Paywall: unknown";
+
+  const text = `:credit_card: New purchase: *${safeName}* (${maskedEmail}) — ${planLabel}${archetypeSuffix} — ${formattedAmount}\n${sourceLine}\n${paywallLine}`;
 
   try {
     logger.info({ paymentId, plan, submissionId }, "Sending Slack purchase notification");
@@ -1039,9 +1124,11 @@ async function syncCheckoutSessionPayment({
         currency: settledSession.currency ?? null,
         email: recipient.email,
         firstName: recipient.firstName,
+        forcedPaywallArm: settledSession.metadata?.forcedPaywallArm ?? null,
         paymentId,
         plan,
         submissionId: context.submissionId,
+        utmTracker: recipient.utmTracker,
       });
 
       // R-04: Stripe Radar elevated/highest risk alert. We still fulfill —

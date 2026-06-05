@@ -26,7 +26,7 @@ vi.mock("@features/pricing/logic/reportPricing", () => ({
   markReportPriceQuotePurchased: vi.fn(),
 }));
 
-import { processStripeWebhookEvent } from "@features/checkout/server/fulfillment";
+import { classifyTraffic, processStripeWebhookEvent } from "@features/checkout/server/fulfillment";
 import {
   ensurePersonalReportForSubmission,
   resolveSubmissionAccessContext,
@@ -639,7 +639,9 @@ describe("checkout fulfillment", () => {
   describe("Slack purchase notification", () => {
     const SLACK_URL = "https://hooks.slack.com/services/TEST/PAYMENTS/secret";
 
-    function setupHappyPathMocks(opts: { existingPayment?: boolean } = {}) {
+    function setupHappyPathMocks(
+      opts: { existingPayment?: boolean; utmTracker?: string | null } = {}
+    ) {
       const slackCalls: Array<{ url: string; body: string }> = [];
 
       mockFetchWithTimeout.mockImplementation(
@@ -664,7 +666,10 @@ describe("checkout fulfillment", () => {
           // Recipient lookup for the Slack payload
           if (url.includes("/rest/v1/survey_submission?id=eq.70&select=")) {
             return createJsonResponse([
-              { app_user: { email: "Eman@LoveIQ.org", first_name: "Eman" } },
+              {
+                utm_tracker: opts.utmTracker ?? null,
+                app_user: { email: "Eman@LoveIQ.org", first_name: "Eman" },
+              },
             ]);
           }
           if (options?.method === "POST" && url.endsWith("/rest/v1/payment")) {
@@ -695,7 +700,8 @@ describe("checkout fulfillment", () => {
     function buildStripe(
       plan: "essentials" | "full_report" | "all_reports",
       archetype?: string,
-      paymentIntent: string | null = "pi_test_slack_001"
+      paymentIntent: string | null = "pi_test_slack_001",
+      forcedPaywallArm?: string
     ) {
       return {
         charges: { retrieve: vi.fn().mockResolvedValue({ id: "ch_test_slack_001" }) },
@@ -709,6 +715,7 @@ describe("checkout fulfillment", () => {
               metadata: {
                 plan,
                 ...(archetype ? { archetype } : {}),
+                ...(forcedPaywallArm ? { forcedPaywallArm } : {}),
                 reportToken: "rpt_ABCDEFGHIJKLMNOPQRST",
               },
               payment_intent: paymentIntent,
@@ -762,6 +769,90 @@ describe("checkout fulfillment", () => {
       expect(body.text).toContain("Full report");
       expect(body.text).toContain("Relational Nurturer");
       expect(body.text).toContain("EUR 19.99");
+      // No utm_tracker and no forcedPaywallArm in this fixture → Direct + unknown.
+      expect(body.text).toContain("Source: Direct");
+      expect(body.text).toContain("Paywall: unknown");
+
+      delete process.env.SLACK_PAYMENTS_WEBHOOK_URL;
+    });
+
+    it("includes referral source + forced paywall arm in the Slack ping", async () => {
+      process.env.SLACK_PAYMENTS_WEBHOOK_URL = SLACK_URL;
+      const slackCalls = setupHappyPathMocks({
+        utmTracker: JSON.stringify({
+          utm_source: "referral",
+          utm_medium: "email",
+          utm_campaign: "survey_invite",
+          // utm_content base64s the referrer email — must NOT be echoed to Slack.
+          utm_content: "cmVmZXJyZXJAZXhhbXBsZS5jb20=",
+        }),
+      });
+
+      await processStripeWebhookEvent({
+        event: {
+          id: "evt_slack_referral_treatment",
+          type: "checkout.session.completed",
+          data: {
+            object: {
+              id: "cs_test_slack_001",
+              metadata: {
+                plan: "full_report",
+                archetype: "Spark Seeker",
+                forcedPaywallArm: "treatment",
+                reportToken: "rpt_ABCDEFGHIJKLMNOPQRST",
+              },
+            },
+          },
+        } as never,
+        stripe: buildStripe(
+          "full_report",
+          "Spark Seeker",
+          "pi_test_slack_001",
+          "treatment"
+        ) as never,
+      });
+
+      expect(slackCalls).toHaveLength(1);
+      const body = JSON.parse(slackCalls[0]!.body) as { text: string };
+      expect(body.text).toContain("Source: Referral");
+      // utm values are escaped for Slack (underscore → \_ so it isn't italicised).
+      expect(body.text).toContain("referral / email / survey\\_invite");
+      expect(body.text).toContain("Paywall: Forced (must pay to view)");
+      // utm_content (base64 referrer email) must never reach Slack.
+      expect(body.text).not.toContain("cmVmZXJyZXJAZXhhbXBsZS5jb20=");
+
+      delete process.env.SLACK_PAYMENTS_WEBHOOK_URL;
+    });
+
+    it("includes organic source + closeable paywall arm in the Slack ping", async () => {
+      process.env.SLACK_PAYMENTS_WEBHOOK_URL = SLACK_URL;
+      const slackCalls = setupHappyPathMocks({
+        utmTracker: JSON.stringify({ utm_source: "google", utm_medium: "organic" }),
+      });
+
+      await processStripeWebhookEvent({
+        event: {
+          id: "evt_slack_organic_control",
+          type: "checkout.session.completed",
+          data: {
+            object: {
+              id: "cs_test_slack_001",
+              metadata: {
+                plan: "full_report",
+                archetype: "Spark Seeker",
+                forcedPaywallArm: "control",
+                reportToken: "rpt_ABCDEFGHIJKLMNOPQRST",
+              },
+            },
+          },
+        } as never,
+        stripe: buildStripe("full_report", "Spark Seeker", "pi_test_slack_001", "control") as never,
+      });
+
+      expect(slackCalls).toHaveLength(1);
+      const body = JSON.parse(slackCalls[0]!.body) as { text: string };
+      expect(body.text).toContain("Source: Organic");
+      expect(body.text).toContain("Paywall: Closeable (can dismiss & pay later)");
 
       delete process.env.SLACK_PAYMENTS_WEBHOOK_URL;
     });
@@ -846,5 +937,86 @@ describe("checkout fulfillment", () => {
 
       delete process.env.SLACK_PAYMENTS_WEBHOOK_URL;
     });
+  });
+});
+
+describe("classifyTraffic", () => {
+  it("returns Direct when the tracker is null/empty/whitespace", () => {
+    for (const input of [null, "", "   "]) {
+      expect(classifyTraffic(input)).toEqual({
+        bucket: "Direct",
+        source: null,
+        medium: null,
+        campaign: null,
+      });
+    }
+  });
+
+  it("returns Direct when JSON has no utm_source/medium/campaign", () => {
+    expect(classifyTraffic(JSON.stringify({ utm_term: "x" })).bucket).toBe("Direct");
+  });
+
+  it("classifies referral (case-insensitive) regardless of campaign", () => {
+    expect(classifyTraffic(JSON.stringify({ utm_source: "referral" })).bucket).toBe("Referral");
+    expect(classifyTraffic(JSON.stringify({ utm_source: "REFERRAL" })).bucket).toBe("Referral");
+    expect(
+      classifyTraffic(JSON.stringify({ utm_source: "Referral", utm_campaign: "x" })).bucket
+    ).toBe("Referral");
+  });
+
+  it("classifies Paid when a campaign is present or medium is a paid medium", () => {
+    expect(
+      classifyTraffic(JSON.stringify({ utm_source: "google", utm_campaign: "spring" })).bucket
+    ).toBe("Paid");
+    expect(classifyTraffic(JSON.stringify({ utm_source: "meta", utm_medium: "CPC" })).bucket).toBe(
+      "Paid"
+    );
+  });
+
+  it("classifies Organic when a source exists with no paid/referral signal", () => {
+    expect(
+      classifyTraffic(JSON.stringify({ utm_source: "google", utm_medium: "organic" })).bucket
+    ).toBe("Organic");
+  });
+
+  it("falls back to the raw string as source on malformed JSON", () => {
+    const result = classifyTraffic("not-json");
+    expect(result.source).toBe("not-json");
+    expect(result.bucket).toBe("Organic");
+  });
+
+  it("ignores non-string utm values without throwing", () => {
+    const result = classifyTraffic(JSON.stringify({ utm_source: 123, utm_campaign: true }));
+    expect(result).toEqual({ bucket: "Direct", source: null, medium: null, campaign: null });
+  });
+
+  it("treats a JSON array as having no utm fields (Direct, no crash)", () => {
+    expect(classifyTraffic(JSON.stringify(["referral", "email"]))).toEqual({
+      bucket: "Direct",
+      source: null,
+      medium: null,
+      campaign: null,
+    });
+  });
+
+  it("caps each utm value length so the Slack message can't overflow", () => {
+    const long = "x".repeat(5000);
+    const result = classifyTraffic(JSON.stringify({ utm_source: long, utm_campaign: long }));
+    expect(result.source!.length).toBeLessThanOrEqual(100);
+    expect(result.campaign!.length).toBeLessThanOrEqual(100);
+    // A campaign is present → Paid.
+    expect(result.bucket).toBe("Paid");
+  });
+
+  it("caps the raw-string fallback on malformed JSON", () => {
+    const result = classifyTraffic("y".repeat(5000));
+    expect(result.source!.length).toBeLessThanOrEqual(100);
+  });
+
+  it("never surfaces utm_content (it can hold the referrer email)", () => {
+    const result = classifyTraffic(
+      JSON.stringify({ utm_source: "referral", utm_content: "secret@example.com" })
+    );
+    expect(Object.values(result)).not.toContain("secret@example.com");
   });
 });
