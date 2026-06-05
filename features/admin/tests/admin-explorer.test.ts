@@ -25,6 +25,10 @@ vi.mock("@shared/observability/logger", () => ({
 }));
 
 import { GET } from "@/app/api/admin/explorer/route";
+import { surveyQuestions } from "@/data/survey-data";
+
+// First real 1-7 scale question — used to exercise scale group-by end to end.
+const SCALE_QID = surveyQuestions.find((q) => q.answerType === "scale")!.qId;
 
 function makeRes(body: unknown, count?: number) {
   return {
@@ -68,12 +72,21 @@ const scoring = [
     survey_submission_id: 1,
     primary_archetype: "Spark Seeker",
     v5_primary_archetype: "Spark Seeker",
+    percentages: { "Spark Seeker": 80, "Sensual Connector": 30 },
+    v5_percentages: { "Spark Seeker": 82, "Sensual Connector": 28 },
   },
   {
     survey_submission_id: 2,
     primary_archetype: "Sensual Connector",
     v5_primary_archetype: "Sensual Connector",
+    percentages: { "Spark Seeker": 20, "Sensual Connector": 75 },
+    v5_percentages: { "Spark Seeker": 25, "Sensual Connector": 78 },
   },
+];
+// 1-7 scale answers (raw value in normalized_value); sub 3 is test → excluded.
+const scaleAnswers = [
+  { survey_submission_id: 1, normalized_value: 7 },
+  { survey_submission_id: 2, normalized_value: 3 },
 ];
 const users = [
   { id: 11, email: "a@example.com", user_profile_id: 101 },
@@ -133,7 +146,10 @@ const sessions = [
 function installSupabaseMock() {
   mockSupabaseFetch.mockImplementation((path: string) => {
     if (path.includes("/rest/v1/survey_question")) return makeRes([{ id: 900 }]);
-    if (path.includes("/rest/v1/survey_submission_answer")) return makeRes(ageAnswers);
+    if (path.includes("/rest/v1/survey_submission_answer")) {
+      // Scale group-by fetches normalized_value; categorical/age fetch option/text.
+      return makeRes(path.includes("normalized_value") ? scaleAnswers : ageAnswers);
+    }
     if (path.includes("/rest/v1/survey_submission")) return makeRes(submissions, 3);
     if (path.includes("/rest/v1/scoring_result")) return makeRes(scoring);
     if (path.includes("/rest/v1/app_user")) return makeRes(users);
@@ -271,5 +287,39 @@ describe("GET /api/admin/explorer", () => {
     for (const line of text.split("\n")) {
       expect(line.startsWith("=")).toBe(false);
     }
+  });
+
+  it("returns the full archetype profile (avg match % across ALL archetypes)", async () => {
+    const body = await (await GET(req())).json();
+    const dist: Array<{ archetype: string; avgMatch: number; primaryCount: number }> =
+      body.archetypeDistribution;
+    const spark = dist.find((d) => d.archetype === "Spark Seeker");
+    const sensual = dist.find((d) => d.archetype === "Sensual Connector");
+    // v5 default: Spark (82+25)/2 = 53.5, Sensual (28+78)/2 = 53.
+    expect(spark?.avgMatch).toBe(53.5);
+    expect(sensual?.avgMatch).toBe(53);
+    expect(spark?.primaryCount).toBe(1);
+  });
+
+  it("groups by a 1-7 scale question with an ordered distribution + scaleSummary", async () => {
+    const body = await (await GET(req(`?groupBy=q:${SCALE_QID}`))).json();
+    const labels = body.breakdown.map((r: { label: string }) => r.label);
+    // Values 3 and 7 present, in ascending score order, no "Other" fold.
+    expect(labels).toEqual(["3", "7"]);
+    expect(labels).not.toContain("Other");
+    expect(body.scaleSummary).toEqual({ qid: SCALE_QID, avg: 5, n: 2 });
+  });
+
+  it("archMatch filters to people strongly matching an archetype (not just primary)", async () => {
+    const body = await (await GET(req("?archMatch=Sensual%20Connector:50"))).json();
+    // Only sub 2 has Sensual Connector ≥ 50% (v5 78); sub 1 is 28%.
+    expect(body.stats.total).toBe(1);
+    expect(body.rows[0].submissionId).toBe(2);
+  });
+
+  it("rejects an unknown q: group-by token and falls back to country", async () => {
+    const body = await (await GET(req("?groupBy=q:99999"))).json();
+    expect(body.breakdown.find((r: { label: string }) => r.label === "United States")).toBeTruthy();
+    expect(body.scaleSummary).toBeNull();
   });
 });

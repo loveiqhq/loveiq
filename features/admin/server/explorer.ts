@@ -87,6 +87,9 @@ export interface EnrichedRow {
   isTest: boolean;
   archetypeV4: string | null;
   archetypeV5: string | null;
+  /** Per-archetype match % (0-100) for ALL archetypes (not just primary). {} when unscored. */
+  percentagesV4: Record<string, number>;
+  percentagesV5: Record<string, number>;
   ageGroup: string | null;
   gender: string | null;
   country: string | null;
@@ -260,6 +263,21 @@ export function specForDimension(dim: DimensionKey, opts: AccessorOpts): ValueSp
 /** Spec for a survey-answer dimension, backed by a submissionId → label map. */
 export function specForAnswers(answerBySubmission: Map<number, string>): ValueSpec {
   return { valueOf: (row) => answerBySubmission.get(row.submissionId) ?? UNKNOWN_LABEL };
+}
+
+/** Fixed 1→7 axis for Likert/scale survey questions (ordered ⇒ never folded into Other). */
+export const SCALE_ORDER = ["1", "2", "3", "4", "5", "6", "7"] as const;
+
+/**
+ * Spec for a 1-7 scale survey question, backed by a submissionId → "1".."7" map
+ * (built from `survey_submission_answer.normalized_value`). The fixed `order`
+ * keeps the breakdown in score order and never folds low buckets into "Other".
+ */
+export function specForScale(valueBySubmission: Map<number, string>): ValueSpec {
+  return {
+    valueOf: (row) => valueBySubmission.get(row.submissionId) ?? UNKNOWN_LABEL,
+    order: SCALE_ORDER,
+  };
 }
 
 function orderIndexIn(order: readonly string[], label: string): number {
@@ -588,4 +606,116 @@ export function buildFacets(rows: EnrichedRow[], opts: AccessorOpts): Facets {
     facets[dim] = values;
   }
   return facets;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// All-archetype profile (full match-% distribution, not just the primary)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Pick the per-archetype match-% record for the active scoring version. */
+export function percentagesForVersion(
+  row: EnrichedRow,
+  version: ArchetypeVersion
+): Record<string, number> {
+  return version === "v4" ? row.percentagesV4 : row.percentagesV5;
+}
+
+export interface ScaleSummary {
+  qid: string;
+  /** Mean of the 1-7 answers over the filtered rows that answered (0 when none). */
+  avg: number;
+  /** Number of filtered rows that actually answered this scale question. */
+  n: number;
+}
+
+export interface ArchetypeStat {
+  archetype: string;
+  /** Mean match % (0-100) across filtered rows that have a score for this archetype. */
+  avgMatch: number;
+  /** Rows that had a numeric match for this archetype. */
+  scored: number;
+  /** Rows whose PRIMARY archetype is this one. */
+  primaryCount: number;
+  /** Paid rows among `primaryCount`. */
+  primaryPaid: number;
+  /** primaryPaid / primaryCount as a %, or null when no primaries. */
+  primaryPaidPct: number | null;
+}
+
+/**
+ * Build the full archetype profile across the filtered cohort: for EVERY
+ * archetype (not just each person's #1), the average match %, how many people
+ * have it as their primary, and the paid rate among those primaries. The
+ * archetype set is derived dynamically from the data (robust to renames — no
+ * hardcoded list). Sorted by avgMatch desc; the client may re-sort.
+ */
+export function buildArchetypeDistribution(
+  rows: EnrichedRow[],
+  version: ArchetypeVersion,
+  includeTest: boolean
+): ArchetypeStat[] {
+  const sum = new Map<string, number>();
+  const scored = new Map<string, number>();
+  const primaryCount = new Map<string, number>();
+  const primaryPaid = new Map<string, number>();
+
+  for (const row of rows) {
+    for (const [name, value] of Object.entries(percentagesForVersion(row, version))) {
+      if (!Number.isFinite(value)) continue;
+      sum.set(name, (sum.get(name) ?? 0) + value);
+      scored.set(name, (scored.get(name) ?? 0) + 1);
+    }
+    const primary = version === "v4" ? row.archetypeV4 : row.archetypeV5;
+    if (primary) {
+      primaryCount.set(primary, (primaryCount.get(primary) ?? 0) + 1);
+      if (isPaidRow(row, includeTest)) {
+        primaryPaid.set(primary, (primaryPaid.get(primary) ?? 0) + 1);
+      }
+    }
+  }
+
+  const names = new Set<string>([...sum.keys(), ...primaryCount.keys()]);
+  const out: ArchetypeStat[] = [];
+  for (const name of names) {
+    const n = scored.get(name) ?? 0;
+    const pc = primaryCount.get(name) ?? 0;
+    const pp = primaryPaid.get(name) ?? 0;
+    out.push({
+      archetype: name,
+      avgMatch: n > 0 ? Math.round(((sum.get(name) ?? 0) / n) * 10) / 10 : 0,
+      scored: n,
+      primaryCount: pc,
+      primaryPaid: pp,
+      primaryPaidPct: pc > 0 ? Math.round((pp / pc) * 1000) / 10 : null,
+    });
+  }
+  out.sort((a, b) => b.avgMatch - a.avgMatch || a.archetype.localeCompare(b.archetype));
+  return out;
+}
+
+export interface ArchetypeMatchClause {
+  archetype: string;
+  /** Minimum match % (0-100) required for this archetype. */
+  min: number;
+}
+
+/**
+ * Keep rows whose match % for EVERY clause's archetype is ≥ the clause minimum
+ * (AND semantics) — lets the lead filter to people who strongly match ANY
+ * archetype, not only their primary. Pure: compares against the in-memory
+ * percentages record (no DB / no dynamic SQL).
+ */
+export function archetypeMatchFilter(
+  rows: EnrichedRow[],
+  clauses: ArchetypeMatchClause[],
+  version: ArchetypeVersion
+): EnrichedRow[] {
+  if (clauses.length === 0) return rows;
+  return rows.filter((row) => {
+    const pct = percentagesForVersion(row, version);
+    return clauses.every((c) => {
+      const entry = Object.entries(pct).find(([name]) => name === c.archetype);
+      return entry != null && entry[1] >= c.min;
+    });
+  });
 }

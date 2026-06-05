@@ -9,6 +9,8 @@ import logger from "@shared/observability/logger";
 import { surveyQuestions } from "@/data/survey-data";
 import {
   applyFilters,
+  archetypeMatchFilter,
+  buildArchetypeDistribution,
   buildBreakdownBy,
   buildCrossTabBy,
   buildFacets,
@@ -20,12 +22,15 @@ import {
   normalizeLabel,
   specForAnswers,
   specForDimension,
+  specForScale,
   type AccessorOpts,
+  type ArchetypeMatchClause,
   type ArchetypeVersion,
   type DimensionKey,
   type EnrichedRow,
   type ExplorerFilters,
   type PaidStatusFilter,
+  type ScaleSummary,
   type TrendGranularity,
   type ValueSpec,
 } from "@features/admin/server/explorer";
@@ -66,7 +71,14 @@ const ANSWER_QIDS = new Set(
     )
     .map((q) => q.qId)
 );
+// 1-7 Likert questions — group-by only (their distribution IS the insight). Kept
+// separate from ANSWER_QIDS: scale answers live in `normalized_value`, not in
+// answer_option/answer_text, so they use a different fetch path.
+const SCALE_QIDS = new Set(
+  surveyQuestions.filter((q) => q.answerType === "scale").map((q) => q.qId)
+);
 const MAX_ANSWER_FILTERS = 5;
+const MAX_ARCH_MATCH = 5;
 
 const ALLOWED_STATUS = new Set([
   "completed",
@@ -96,6 +108,19 @@ function parseUtmField(
   } catch {
     return field === "utm_source" ? "Direct" : "(none)";
   }
+}
+
+/**
+ * Coerce a scoring_result percentages jsonb into a clean `{archetype: number}`.
+ * Drops non-finite / non-numeric values so cohort averages never see NaN.
+ */
+function sanitizePct(raw: Record<string, unknown> | null | undefined): Record<string, number> {
+  if (!raw || typeof raw !== "object") return {};
+  return Object.fromEntries(
+    Object.entries(raw)
+      .map(([name, value]) => [name, typeof value === "number" ? value : Number(value)] as const)
+      .filter(([, n]) => Number.isFinite(n))
+  );
 }
 
 function chunk<T>(items: T[], size: number): T[][] {
@@ -166,9 +191,34 @@ function parseGroupToken(raw: string | null): GroupToken | null {
   if (!raw) return null;
   if (raw.startsWith("q:")) {
     const qid = raw.slice(2).trim();
-    return ANSWER_QIDS.has(qid) ? { kind: "answer", qid } : null;
+    return ANSWER_QIDS.has(qid) || SCALE_QIDS.has(qid) ? { kind: "answer", qid } : null;
   }
   return isDimensionKey(raw) ? { kind: "dim", dim: raw } : null;
+}
+
+/**
+ * Parse `archMatch=<Name>:<min>;<Name2>:<min2>` into validated clauses. Names
+ * are URL-encoded archetype labels (compared in-memory to scoring jsonb keys —
+ * never reach SQL); `min` is clamped to 0-100.
+ */
+function parseArchMatch(raw: string | null): ArchetypeMatchClause[] {
+  const out: ArchetypeMatchClause[] = [];
+  if (!raw) return out;
+  for (const clause of raw.split(";").slice(0, MAX_ARCH_MATCH)) {
+    const idx = clause.indexOf(":");
+    if (idx <= 0) continue;
+    let name: string;
+    try {
+      name = decodeURIComponent(clause.slice(0, idx)).trim();
+    } catch {
+      name = clause.slice(0, idx).trim();
+    }
+    const min = Number(clause.slice(idx + 1));
+    if (name && Number.isFinite(min)) {
+      out.push({ archetype: name, min: Math.max(0, Math.min(100, min)) });
+    }
+  }
+  return out;
 }
 
 /** Parse `ans=<qid>:<v1|v2>;<qid2>:<v3>` into validated {qid → allowed values}. */
@@ -232,6 +282,7 @@ export async function GET(request: Request) {
   const accessorOpts: AccessorOpts = { archetypeVersion, includeTest };
 
   const answerFilters = parseAnswerFilters(sp.get("ans"));
+  const archMatchClauses = parseArchMatch(sp.get("archMatch"));
   const groupBy = parseGroupToken(sp.get("groupBy")) ?? {
     kind: "dim",
     dim: "country" as DimensionKey,
@@ -278,11 +329,13 @@ export async function GET(request: Request) {
         survey_submission_id: number;
         primary_archetype: string | null;
         v5_primary_archetype: string | null;
+        percentages: Record<string, unknown> | null;
+        v5_percentages: Record<string, unknown> | null;
       }>(
         "scoring_result",
         "survey_submission_id",
         submissionIds,
-        "survey_submission_id,primary_archetype,v5_primary_archetype"
+        "survey_submission_id,primary_archetype,v5_primary_archetype,percentages,v5_percentages"
       ),
       fetchByIds<{ id: number; email: string | null; user_profile_id: number | null }>(
         "app_user",
@@ -345,10 +398,15 @@ export async function GET(request: Request) {
     if (groupBy.kind === "answer") neededQids.add(groupBy.qid);
     if (groupBy2?.kind === "answer") neededQids.add(groupBy2.qid);
     const answerLabelMaps = new Map<string, Map<number, string[]>>();
+    const scaleValueMaps = new Map<string, Map<number, string>>();
     await Promise.all(
       [...neededQids].map(async (qid) => {
         const dbId = await resolveQuestionId(qid);
-        answerLabelMaps.set(qid, await fetchAnswerLabels(dbId, submissionIds));
+        if (SCALE_QIDS.has(qid)) {
+          scaleValueMaps.set(qid, await fetchScaleValues(dbId, submissionIds));
+        } else {
+          answerLabelMaps.set(qid, await fetchAnswerLabels(dbId, submissionIds));
+        }
       })
     );
 
@@ -441,6 +499,8 @@ export async function GET(request: Request) {
         }).isLikelyTest,
         archetypeV4: scoringRow?.primary_archetype ?? null,
         archetypeV5: scoringRow?.v5_primary_archetype ?? null,
+        percentagesV4: sanitizePct(scoringRow?.percentages),
+        percentagesV5: sanitizePct(scoringRow?.v5_percentages),
         ageGroup: ageBySub.get(s.id) ?? null,
         gender: normalizeLabel(profile?.gender),
         country: normalizeLabel(profile?.location_primary),
@@ -474,6 +534,9 @@ export async function GET(request: Request) {
         (labelMap?.get(row.submissionId) ?? []).some((l) => allowedSet.has(l))
       );
     }
+    // Archetype-match filter: keep people who strongly match the chosen
+    // archetype(s) even when it isn't their primary (full match-% profile).
+    filtered = archetypeMatchFilter(filtered, archMatchClauses, archetypeVersion);
 
     // ── 6. Aggregate ────────────────────────────────────────────────────────
     const facetBase = includeTest ? enriched : enriched.filter((r) => !r.isTest);
@@ -486,8 +549,11 @@ export async function GET(request: Request) {
       for (const [sid, labels] of labelMap) if (labels[0]) first.set(sid, labels[0]);
       return specForAnswers(first);
     };
-    const specFor = (t: GroupToken): ValueSpec =>
-      t.kind === "dim" ? specForDimension(t.dim, accessorOpts) : firstLabelSpec(t.qid);
+    const specFor = (t: GroupToken): ValueSpec => {
+      if (t.kind === "dim") return specForDimension(t.dim, accessorOpts);
+      if (SCALE_QIDS.has(t.qid)) return specForScale(scaleValueMaps.get(t.qid) ?? new Map());
+      return firstLabelSpec(t.qid);
+    };
     const tokenLabel = (t: GroupToken): string => (t.kind === "dim" ? t.dim : `q:${t.qid}`);
 
     const breakdown = buildBreakdownBy(filtered, specFor(groupBy), { includeTest, topN: 12 });
@@ -580,7 +646,30 @@ export async function GET(request: Request) {
       });
     }
 
-    // ── 8. Paginated row list for the table ─────────────────────────────────
+    // ── 8. All-archetype profile + scale summary (JSON response only) ───────
+    const archetypeDistribution = buildArchetypeDistribution(
+      filtered,
+      archetypeVersion,
+      includeTest
+    );
+    let scaleSummary: ScaleSummary | null = null;
+    if (groupBy.kind === "answer" && SCALE_QIDS.has(groupBy.qid)) {
+      const map = scaleValueMaps.get(groupBy.qid) ?? new Map<number, string>();
+      let sum = 0;
+      let n = 0;
+      for (const row of filtered) {
+        const raw = map.get(row.submissionId);
+        if (raw == null) continue;
+        const num = Number(raw);
+        if (Number.isFinite(num)) {
+          sum += num;
+          n += 1;
+        }
+      }
+      scaleSummary = { qid: groupBy.qid, avg: n > 0 ? Math.round((sum / n) * 10) / 10 : 0, n };
+    }
+
+    // ── 9. Paginated row list for the table ─────────────────────────────────
     const total = filtered.length;
     const startIdx = (page - 1) * limit;
     const rows = filtered.slice(startIdx, startIdx + limit).map((r) => ({
@@ -613,6 +702,8 @@ export async function GET(request: Request) {
       crossTab,
       trend,
       trendGranularity,
+      archetypeDistribution,
+      scaleSummary,
       rows,
       total,
       page,
@@ -696,6 +787,36 @@ async function fetchAnswerLabels(
     const arr = map.get(a.survey_submission_id) ?? [];
     arr.push(label);
     map.set(a.survey_submission_id, arr);
+  }
+  return map;
+}
+
+/**
+ * submissionId → "1".."7" for a 1-7 scale question. Scale answers store the raw
+ * value in `normalized_value` (the submit RPC writes `(value)::numeric`), with
+ * answer_option_id/answer_text NULL — so this reads normalized_value directly.
+ * Out-of-range / unanswered rows are dropped.
+ */
+async function fetchScaleValues(
+  questionDbId: number,
+  submissionIds: number[]
+): Promise<Map<number, string>> {
+  const map = new Map<number, string>();
+  if (questionDbId < 0 || submissionIds.length === 0) return map;
+  const rows = await fetchByIds<{
+    survey_submission_id: number;
+    normalized_value: number | string | null;
+  }>(
+    "survey_submission_answer",
+    "survey_submission_id",
+    submissionIds,
+    "survey_submission_id,normalized_value",
+    `&survey_question_id=eq.${questionDbId}`
+  );
+  for (const r of rows) {
+    if (r.normalized_value == null) continue;
+    const v = Math.round(Number(r.normalized_value));
+    if (v >= 1 && v <= 7) map.set(r.survey_submission_id, String(v));
   }
   return map;
 }

@@ -12,8 +12,15 @@ import ExplorerBreakdown, {
 import ExplorerCrossTab from "@features/admin/ui/explorer/ExplorerCrossTab";
 import TrendChart from "@features/admin/ui/explorer/TrendChart";
 import AnswerFilter from "@features/admin/ui/explorer/AnswerFilter";
+import ArchetypeDistribution from "@features/admin/ui/explorer/ArchetypeDistribution";
+import ArchetypeMatchFilter from "@features/admin/ui/explorer/ArchetypeMatchFilter";
 import CompareView from "@features/admin/ui/explorer/CompareView";
-import { decodeAnswers, encodeAnswers } from "@features/admin/ui/explorer/dimensions";
+import {
+  decodeAnswers,
+  decodeArchMatch,
+  encodeAnswers,
+  encodeArchMatch,
+} from "@features/admin/ui/explorer/dimensions";
 import type { ExplorerResponse } from "@features/admin/ui/explorer/types";
 import {
   DIMENSION_KEYS,
@@ -56,6 +63,7 @@ export default function DataExplorer() {
     return sel;
   }, [search]);
   const answers = useMemo(() => decodeAnswers(searchParams.get("ans")), [searchParams]);
+  const archMatch = useMemo(() => decodeArchMatch(searchParams.get("archMatch")), [searchParams]);
 
   // Server params for segment A = the whole URL minus client-only/B keys.
   const params = useMemo(() => {
@@ -72,6 +80,11 @@ export default function DataExplorer() {
   const stats = data?.stats;
   const facets = data?.facets ?? {};
   const breakdown = data?.breakdown ?? [];
+  const archetypeDistribution = data?.archetypeDistribution ?? [];
+  const archetypeOptions = useMemo(
+    () => (data?.archetypeDistribution ?? []).map((d) => d.archetype),
+    [data]
+  );
   const rows = data?.rows ?? [];
   const total = data?.total ?? 0;
   const limit = data?.limit ?? 25;
@@ -86,6 +99,7 @@ export default function DataExplorer() {
   const activeFilterCount =
     Object.values(selections).reduce((acc, v) => acc + (v?.length ?? 0), 0) +
     answers.length +
+    archMatch.length +
     (paidStatus !== "all" ? 1 : 0) +
     (includeTest ? 1 : 0);
 
@@ -172,11 +186,13 @@ export default function DataExplorer() {
                   paidStatus: null,
                   includeTest: null,
                   ans: null,
+                  archMatch: null,
                   page: null,
                   ...Object.fromEntries(DIMENSION_KEYS.map((d) => [d, null])),
                   // also clear the compare (B) segment so Reset resets everything
                   b_paidStatus: null,
                   b_ans: null,
+                  b_archMatch: null,
                   ...Object.fromEntries(DIMENSION_KEYS.map((d) => [`b_${d}`, null])),
                 })
               }
@@ -205,6 +221,11 @@ export default function DataExplorer() {
       <AnswerFilter
         filters={answers}
         onChange={(next) => setQueryState({ ans: encodeAnswers(next), page: null })}
+      />
+      <ArchetypeMatchFilter
+        value={archMatch}
+        options={archetypeOptions}
+        onChange={(next) => setQueryState({ archMatch: encodeArchMatch(next), page: null })}
       />
 
       {error && (
@@ -236,7 +257,14 @@ export default function DataExplorer() {
         <StatCard label="Free" value={(stats?.free ?? 0).toLocaleString()} />
       </div>
 
-      {compare && <CompareView aStats={stats ?? null} aBreakdown={breakdown} groupBy={groupBy} />}
+      {compare && (
+        <CompareView
+          aStats={stats ?? null}
+          aBreakdown={breakdown}
+          aDistribution={archetypeDistribution}
+          groupBy={groupBy}
+        />
+      )}
 
       {/* Breakdown */}
       <ExplorerBreakdown
@@ -246,7 +274,11 @@ export default function DataExplorer() {
         onMetricChange={(m) => setQueryState({ metric: m === "count" ? null : m })}
         rows={breakdown}
         overallConversion={stats?.conversionPct ?? null}
+        scaleSummary={data?.scaleSummary ?? null}
       />
+
+      {/* All-archetype profile (full match-% distribution, not just the primary) */}
+      <ArchetypeDistribution data={archetypeDistribution} />
 
       {/* Trend */}
       <TrendChart points={data?.trend ?? []} granularity={data?.trendGranularity ?? "day"} />

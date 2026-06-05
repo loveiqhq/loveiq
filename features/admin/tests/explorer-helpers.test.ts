@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   applyFilters,
+  archetypeMatchFilter,
   bucketDate,
+  buildArchetypeDistribution,
   buildBreakdown,
   buildBreakdownBy,
   buildCrossTab,
@@ -14,6 +16,7 @@ import {
   normalizeLabel,
   sessionBucketLabel,
   specForAnswers,
+  specForScale,
   type EnrichedRow,
   type ExplorerFilters,
 } from "@features/admin/server/explorer";
@@ -25,6 +28,8 @@ function row(p: Partial<EnrichedRow> = {}): EnrichedRow {
     isTest: false,
     archetypeV4: "Spark Seeker",
     archetypeV5: "Spark Seeker",
+    percentagesV4: {},
+    percentagesV5: {},
     ageGroup: "25–34",
     gender: "Woman",
     country: "United States",
@@ -325,5 +330,121 @@ describe("survey-answer grouping (buildBreakdownBy + specForAnswers)", () => {
       includeTest: false,
     });
     expect(out.find((r) => r.label === "Unknown")?.count).toBe(1);
+  });
+});
+
+describe("scale (1-7) grouping (specForScale)", () => {
+  it("keeps the 1→7 axis in fixed order and never folds into Other", () => {
+    const rows = [
+      row({ submissionId: 1 }),
+      row({ submissionId: 2 }),
+      row({ submissionId: 3 }),
+      row({ submissionId: 4 }),
+    ];
+    // Out-of-order map; one unanswered (submission 4).
+    const scaleMap = new Map<number, string>([
+      [1, "7"],
+      [2, "1"],
+      [3, "7"],
+    ]);
+    const out = buildBreakdownBy(rows, specForScale(scaleMap), { includeTest: false, topN: 1 });
+    // 1..7 order preserved, no folding to "Other"; unanswered → Unknown sorts last.
+    expect(out.map((r) => r.label)).toEqual(["1", "7", "Unknown"]);
+    expect(out.find((r) => r.label === "7")?.count).toBe(2);
+    expect(out.some((r) => r.label === "Other")).toBe(false);
+  });
+});
+
+describe("buildArchetypeDistribution", () => {
+  const rows = [
+    row({
+      submissionId: 1,
+      archetypeV5: "Relational Nurturer",
+      percentagesV5: { "Relational Nurturer": 80, "Emotional Voyeur": 40 },
+      paidAmount: 29,
+    }),
+    row({
+      submissionId: 2,
+      archetypeV5: "Relational Nurturer",
+      percentagesV5: { "Relational Nurturer": 60, "Emotional Voyeur": 50 },
+      paidAmount: 0,
+    }),
+    row({
+      submissionId: 3,
+      archetypeV5: "Emotional Voyeur",
+      percentagesV5: { "Relational Nurturer": 10, "Emotional Voyeur": 90 },
+      paidAmount: 0,
+    }),
+  ];
+
+  it("averages match % across ALL archetypes (not just the primary)", () => {
+    const dist = buildArchetypeDistribution(rows, "v5", false);
+    const nurturer = dist.find((d) => d.archetype === "Relational Nurturer")!;
+    const voyeur = dist.find((d) => d.archetype === "Emotional Voyeur")!;
+    expect(nurturer.avgMatch).toBe(50); // (80+60+10)/3
+    expect(voyeur.avgMatch).toBe(60); // (40+50+90)/3
+    expect(nurturer.scored).toBe(3);
+  });
+
+  it("counts primaries + paid rate among primaries", () => {
+    const dist = buildArchetypeDistribution(rows, "v5", false);
+    const nurturer = dist.find((d) => d.archetype === "Relational Nurturer")!;
+    expect(nurturer.primaryCount).toBe(2);
+    expect(nurturer.primaryPaid).toBe(1);
+    expect(nurturer.primaryPaidPct).toBe(50);
+    const voyeur = dist.find((d) => d.archetype === "Emotional Voyeur")!;
+    expect(voyeur.primaryCount).toBe(1);
+    expect(voyeur.primaryPaidPct).toBe(0);
+  });
+
+  it("reads the version-specific percentages", () => {
+    const r = [
+      row({
+        archetypeV4: "Old Name",
+        percentagesV4: { "Old Name": 70 },
+        percentagesV5: { "New Name": 30 },
+      }),
+    ];
+    expect(
+      buildArchetypeDistribution(r, "v4", false).find((d) => d.archetype === "Old Name")?.avgMatch
+    ).toBe(70);
+    expect(
+      buildArchetypeDistribution(r, "v5", false).find((d) => d.archetype === "New Name")?.avgMatch
+    ).toBe(30);
+  });
+
+  it("returns [] for an empty cohort", () => {
+    expect(buildArchetypeDistribution([], "v5", false)).toEqual([]);
+  });
+});
+
+describe("archetypeMatchFilter", () => {
+  const rows = [
+    row({ submissionId: 1, percentagesV5: { "Emotional Voyeur": 80, Nurturer: 20 } }),
+    row({ submissionId: 2, percentagesV5: { "Emotional Voyeur": 40, Nurturer: 70 } }),
+    row({ submissionId: 3, percentagesV5: {} }), // unscored
+  ];
+
+  it("keeps people matching an archetype ≥ threshold even if not primary", () => {
+    const out = archetypeMatchFilter(rows, [{ archetype: "Emotional Voyeur", min: 50 }], "v5");
+    expect(out.map((r) => r.submissionId)).toEqual([1]);
+  });
+
+  it("AND semantics across clauses", () => {
+    const out = archetypeMatchFilter(
+      rows,
+      [
+        { archetype: "Emotional Voyeur", min: 30 },
+        { archetype: "Nurturer", min: 60 },
+      ],
+      "v5"
+    );
+    expect(out.map((r) => r.submissionId)).toEqual([2]);
+  });
+
+  it("no clauses → passthrough; unscored rows never match", () => {
+    expect(archetypeMatchFilter(rows, [], "v5")).toHaveLength(3);
+    const out = archetypeMatchFilter(rows, [{ archetype: "Emotional Voyeur", min: 1 }], "v5");
+    expect(out.map((r) => r.submissionId)).toEqual([1, 2]); // row 3 unscored, excluded
   });
 });

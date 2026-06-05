@@ -6,10 +6,18 @@ import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
 import { useAdminQueryState } from "@features/admin/ui/hooks/useAdminQueryState";
 import ExplorerFilterPanel from "@features/admin/ui/explorer/ExplorerFilterPanel";
 import AnswerFilter from "@features/admin/ui/explorer/AnswerFilter";
-import { decodeAnswers, encodeAnswers, tokenLabel } from "@features/admin/ui/explorer/dimensions";
+import ArchetypeMatchFilter from "@features/admin/ui/explorer/ArchetypeMatchFilter";
+import {
+  decodeAnswers,
+  decodeArchMatch,
+  encodeAnswers,
+  encodeArchMatch,
+  tokenLabel,
+} from "@features/admin/ui/explorer/dimensions";
 import type { ExplorerResponse } from "@features/admin/ui/explorer/types";
 import {
   DIMENSION_KEYS,
+  type ArchetypeStat,
   type BreakdownRow,
   type DimensionKey,
   type ExplorerStats,
@@ -18,6 +26,7 @@ import {
 interface Props {
   aStats: ExplorerStats | null;
   aBreakdown: BreakdownRow[];
+  aDistribution: ArchetypeStat[];
   groupBy: string;
 }
 
@@ -70,7 +79,35 @@ function MiniBreakdown({ rows }: { rows: BreakdownRow[] }) {
   );
 }
 
-export default function CompareView({ aStats, aBreakdown, groupBy }: Props) {
+/** Top archetypes by average match % — compact, for the side-by-side compare. */
+function MiniDistribution({ data }: { data: ArchetypeStat[] }) {
+  if (data.length === 0) return null;
+  const top = [...data].sort((a, b) => b.avgMatch - a.avgMatch).slice(0, 6);
+  return (
+    <table className="mt-3 w-full text-left text-xs">
+      <thead>
+        <tr className="border-b border-white/10 text-text-muted">
+          <th className="px-1 py-1 font-medium">Archetype (avg match)</th>
+          <th className="px-1 py-1 text-right font-medium">Avg %</th>
+          <th className="px-1 py-1 text-right font-medium">Primary</th>
+        </tr>
+      </thead>
+      <tbody>
+        {top.map((s) => (
+          <tr key={s.archetype} className="border-b border-white/5">
+            <td className="px-1 py-1 text-text-primary">{s.archetype}</td>
+            <td className="px-1 py-1 text-right tabular-nums text-text-muted">
+              {s.avgMatch.toFixed(1)}%
+            </td>
+            <td className="px-1 py-1 text-right tabular-nums text-text-muted">{s.primaryCount}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+export default function CompareView({ aStats, aBreakdown, aDistribution, groupBy }: Props) {
   const { searchParams, setQueryState } = useAdminQueryState();
   const search = searchParams.toString();
 
@@ -86,6 +123,10 @@ export default function CompareView({ aStats, aBreakdown, groupBy }: Props) {
     return sel;
   }, [search]);
   const answersB = useMemo(() => decodeAnswers(searchParams.get("b_ans")), [searchParams]);
+  const archMatchB = useMemo(
+    () => decodeArchMatch(searchParams.get("b_archMatch")),
+    [searchParams]
+  );
 
   // B params = shared (days/status/includeTest/archetypeVersion/groupBy/groupBy2)
   // + B's own filters (mapped from b_ keys to the route's param names).
@@ -104,6 +145,8 @@ export default function CompareView({ aStats, aBreakdown, groupBy }: Props) {
     }
     const bans = sp.get("b_ans");
     if (bans) out.ans = bans;
+    const bArch = sp.get("b_archMatch");
+    if (bArch) out.archMatch = bArch;
     return out;
   }, [search, paidStatusB]);
 
@@ -150,6 +193,11 @@ export default function CompareView({ aStats, aBreakdown, groupBy }: Props) {
           filters={answersB}
           onChange={(next) => setQueryState({ b_ans: encodeAnswers(next) })}
         />
+        <ArchetypeMatchFilter
+          value={archMatchB}
+          options={(bData?.archetypeDistribution ?? []).map((d) => d.archetype)}
+          onChange={(next) => setQueryState({ b_archMatch: encodeArchMatch(next) })}
+        />
       </div>
 
       {/* A vs B */}
@@ -160,6 +208,7 @@ export default function CompareView({ aStats, aBreakdown, groupBy }: Props) {
           </p>
           <StatRow stats={aStats} />
           <MiniBreakdown rows={aBreakdown} />
+          <MiniDistribution data={aDistribution} />
         </div>
         <div className="rounded-lg border border-white/10 p-3">
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-accent-orange">
@@ -167,6 +216,7 @@ export default function CompareView({ aStats, aBreakdown, groupBy }: Props) {
           </p>
           <StatRow stats={bData?.stats ?? null} />
           <MiniBreakdown rows={bData?.breakdown ?? []} />
+          <MiniDistribution data={bData?.archetypeDistribution ?? []} />
         </div>
       </div>
     </div>

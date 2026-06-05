@@ -5,8 +5,11 @@ import type { BreakdownRow } from "@features/admin/server/explorer";
 import {
   ANSWER_GROUP_OPTIONS,
   DIMENSION_GROUP_OPTIONS,
+  SCALE_GROUP_OPTIONS,
+  isScaleToken,
   tokenLabel,
 } from "@features/admin/ui/explorer/dimensions";
+import type { ScaleSummary } from "@features/admin/server/explorer";
 
 export type BreakdownMetric = "count" | "paid" | "conversion" | "revenue";
 
@@ -42,6 +45,8 @@ interface Props {
   rows: BreakdownRow[];
   /** Overall conversion % across the filtered set, for the "vs avg" index. */
   overallConversion: number | null;
+  /** Set when grouping by a 1-7 scale question — drives the histogram + average. */
+  scaleSummary?: ScaleSummary | null;
 }
 
 export default function ExplorerBreakdown({
@@ -51,8 +56,13 @@ export default function ExplorerBreakdown({
   onMetricChange,
   rows,
   overallConversion,
+  scaleSummary,
 }: Props) {
-  const chartItems = rows.map((r) => ({ label: r.label, value: metricValue(r, metric) }));
+  const isScale = isScaleToken(groupBy);
+  // Scale group-bys exclude the "Unknown" (unanswered) bucket from the chart so
+  // the 1→7 distribution reads cleanly; the table below still lists every row.
+  const chartRows = isScale ? rows.filter((r) => r.label !== "Unknown") : rows;
+  const chartItems = chartRows.map((r) => ({ label: r.label, value: metricValue(r, metric) }));
   const hasSmall = rows.some((r) => r.count > 0 && r.count < SMALL_SAMPLE);
 
   return (
@@ -74,6 +84,13 @@ export default function ExplorerBreakdown({
             </optgroup>
             <optgroup label="Survey answers">
               {ANSWER_GROUP_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label="Scale questions (1–7)">
+              {SCALE_GROUP_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>
                   {o.label}
                 </option>
@@ -103,7 +120,17 @@ export default function ExplorerBreakdown({
         <p className="py-8 text-center text-sm text-text-muted">No data for these filters.</p>
       ) : (
         <>
-          <BarChart items={chartItems} direction="horizontal" />
+          {isScale && scaleSummary && (
+            <p className="mb-3 text-xs text-text-muted">
+              Average{" "}
+              <span className="font-semibold text-text-primary">{scaleSummary.avg.toFixed(1)}</span>{" "}
+              / 7<span className="mx-1.5">·</span>
+              {scaleSummary.n.toLocaleString()} answered
+              <span className="mx-1.5">·</span>1 = low, 7 = high
+              <span className="mx-1.5">·</span>flip the metric to see conversion / revenue per score
+            </p>
+          )}
+          <BarChart items={chartItems} direction={isScale ? "vertical" : "horizontal"} />
 
           <div className="mt-5 overflow-x-auto">
             <table className="w-full text-left text-sm">
