@@ -10,53 +10,17 @@ import ExplorerBreakdown, {
   type BreakdownMetric,
 } from "@features/admin/ui/explorer/ExplorerBreakdown";
 import ExplorerCrossTab from "@features/admin/ui/explorer/ExplorerCrossTab";
+import TrendChart from "@features/admin/ui/explorer/TrendChart";
+import AnswerFilter from "@features/admin/ui/explorer/AnswerFilter";
+import CompareView from "@features/admin/ui/explorer/CompareView";
+import { decodeAnswers, encodeAnswers } from "@features/admin/ui/explorer/dimensions";
+import type { ExplorerResponse } from "@features/admin/ui/explorer/types";
 import {
   DIMENSION_KEYS,
-  isDimensionKey,
   type ArchetypeVersion,
-  type BreakdownRow,
-  type CrossTab,
   type DimensionKey,
-  type ExplorerStats,
-  type Facets,
   type PaidStatusFilter,
 } from "@features/admin/server/explorer";
-
-interface RowView {
-  submissionId: number;
-  email: string | null;
-  archetype: string | null;
-  ageGroup: string | null;
-  gender: string | null;
-  country: string | null;
-  relationship: string | null;
-  plan: string | null;
-  paid: boolean;
-  paidAmount: number;
-  createdAt: string;
-}
-
-interface ExplorerResponse {
-  range: { days: number; since: string | null };
-  stats: ExplorerStats;
-  facets: Facets;
-  breakdown: BreakdownRow[];
-  crossTab: CrossTab | null;
-  rows: RowView[];
-  total: number;
-  page: number;
-  limit: number;
-  capped: boolean;
-}
-
-function parseList(value: string | null): string[] {
-  return value
-    ? value
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean)
-    : [];
-}
 
 export default function DataExplorer() {
   const { searchParams, setQueryState } = useAdminQueryState();
@@ -72,31 +36,33 @@ export default function DataExplorer() {
       : searchParams.get("paidStatus") === "free"
         ? "free"
         : "all";
-  const groupByRaw = searchParams.get("groupBy");
-  const groupBy: DimensionKey = isDimensionKey(groupByRaw) ? groupByRaw : "country";
-  const groupBy2Raw = searchParams.get("groupBy2");
-  const groupBy2: DimensionKey | null =
-    isDimensionKey(groupBy2Raw) && groupBy2Raw !== groupBy ? groupBy2Raw : null;
+  const groupBy = searchParams.get("groupBy") || "country";
+  const groupBy2 = searchParams.get("groupBy2") || null;
   const metric: BreakdownMetric =
     (["count", "paid", "conversion", "revenue"] as const).find(
       (m) => m === searchParams.get("metric")
     ) ?? "count";
   const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10) || 1);
+  const compare = searchParams.get("cmp") === "1";
 
   const selections = useMemo(() => {
     const sel: Partial<Record<DimensionKey, string[]>> = {};
     const sp = new URLSearchParams(search);
     for (const dim of DIMENSION_KEYS) {
-      const v = parseList(sp.get(dim));
-      if (v.length > 0) sel[dim] = v;
+      if (dim === "paidStatus") continue; // managed by the paid toggle, not a multi-select
+      const v = sp.get(dim);
+      if (v) sel[dim] = v.split(",").filter(Boolean);
     }
     return sel;
   }, [search]);
+  const answers = useMemo(() => decodeAnswers(searchParams.get("ans")), [searchParams]);
 
-  // Server params = the whole URL minus the client-only "metric" key.
+  // Server params for segment A = the whole URL minus client-only/B keys.
   const params = useMemo(() => {
     const sp = new URLSearchParams(search);
     sp.delete("metric");
+    sp.delete("cmp");
+    for (const k of [...sp.keys()]) if (k.startsWith("b_")) sp.delete(k);
     if (!sp.get("groupBy")) sp.set("groupBy", "country");
     return Object.fromEntries(sp.entries());
   }, [search]);
@@ -119,6 +85,7 @@ export default function DataExplorer() {
 
   const activeFilterCount =
     Object.values(selections).reduce((acc, v) => acc + (v?.length ?? 0), 0) +
+    answers.length +
     (paidStatus !== "all" ? 1 : 0) +
     (includeTest ? 1 : 0);
 
@@ -186,6 +153,17 @@ export default function DataExplorer() {
         </label>
 
         <div className="ml-auto flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setQueryState({ cmp: compare ? null : "1" })}
+            className={`rounded-lg border px-3 py-1.5 text-xs font-medium ${
+              compare
+                ? "border-accent-purple/50 bg-accent-purple/10 text-text-primary"
+                : "border-white/10 text-text-muted hover:text-text-primary"
+            }`}
+          >
+            Compare A/B
+          </button>
           {activeFilterCount > 0 && (
             <button
               type="button"
@@ -193,8 +171,13 @@ export default function DataExplorer() {
                 setQueryState({
                   paidStatus: null,
                   includeTest: null,
+                  ans: null,
                   page: null,
                   ...Object.fromEntries(DIMENSION_KEYS.map((d) => [d, null])),
+                  // also clear the compare (B) segment so Reset resets everything
+                  b_paidStatus: null,
+                  b_ans: null,
+                  ...Object.fromEntries(DIMENSION_KEYS.map((d) => [`b_${d}`, null])),
                 })
               }
               className="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-text-muted hover:text-text-primary"
@@ -211,13 +194,17 @@ export default function DataExplorer() {
         </div>
       </div>
 
-      {/* Filter panel */}
+      {/* Filters */}
       <ExplorerFilterPanel
         facets={facets}
         selections={selections}
         onChange={(dim, values) =>
           setQueryState({ [dim]: values.length > 0 ? values.join(",") : null, page: null })
         }
+      />
+      <AnswerFilter
+        filters={answers}
+        onChange={(next) => setQueryState({ ans: encodeAnswers(next), page: null })}
       />
 
       {error && (
@@ -249,20 +236,26 @@ export default function DataExplorer() {
         <StatCard label="Free" value={(stats?.free ?? 0).toLocaleString()} />
       </div>
 
+      {compare && <CompareView aStats={stats ?? null} aBreakdown={breakdown} groupBy={groupBy} />}
+
       {/* Breakdown */}
       <ExplorerBreakdown
         groupBy={groupBy}
-        onGroupByChange={(d) => setQueryState({ groupBy: d })}
+        onGroupByChange={(token) => setQueryState({ groupBy: token })}
         metric={metric}
         onMetricChange={(m) => setQueryState({ metric: m === "count" ? null : m })}
         rows={breakdown}
+        overallConversion={stats?.conversionPct ?? null}
       />
+
+      {/* Trend */}
+      <TrendChart points={data?.trend ?? []} granularity={data?.trendGranularity ?? "day"} />
 
       {/* Cross-tab */}
       <ExplorerCrossTab
-        rowDim={groupBy}
-        colDim={groupBy2}
-        onColDimChange={(d) => setQueryState({ groupBy2: d })}
+        rowToken={groupBy}
+        colToken={groupBy2}
+        onColChange={(token) => setQueryState({ groupBy2: token })}
         data={data?.crossTab ?? null}
       />
 
@@ -286,14 +279,15 @@ export default function DataExplorer() {
                 <th className="px-2 py-2 font-medium">Age</th>
                 <th className="px-2 py-2 font-medium">Gender</th>
                 <th className="px-2 py-2 font-medium">Country</th>
-                <th className="px-2 py-2 font-medium">Plan</th>
+                <th className="px-2 py-2 font-medium">Device</th>
+                <th className="px-2 py-2 font-medium">Viewed</th>
                 <th className="px-2 py-2 text-right font-medium">Paid</th>
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 && !loading ? (
                 <tr>
-                  <td colSpan={8} className="px-2 py-8 text-center text-text-muted">
+                  <td colSpan={9} className="px-2 py-8 text-center text-text-muted">
                     No submissions match these filters.
                   </td>
                 </tr>
@@ -313,7 +307,8 @@ export default function DataExplorer() {
                     <td className="px-2 py-2 text-text-muted">{r.ageGroup ?? "—"}</td>
                     <td className="px-2 py-2 text-text-muted">{r.gender ?? "—"}</td>
                     <td className="px-2 py-2 text-text-muted">{r.country ?? "—"}</td>
-                    <td className="px-2 py-2 text-text-muted">{r.plan ?? "Free"}</td>
+                    <td className="px-2 py-2 text-text-muted">{r.device ?? "—"}</td>
+                    <td className="px-2 py-2 text-text-muted">{r.reportViewed ? "Yes" : "—"}</td>
                     <td className="px-2 py-2 text-right">
                       {r.paid ? (
                         <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-400">

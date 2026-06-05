@@ -1,28 +1,26 @@
 "use client";
 
+import type { CrossTab } from "@features/admin/server/explorer";
 import {
-  DIMENSION_KEYS,
-  DIMENSION_LABELS,
-  isDimensionKey,
-  type CrossTab,
-  type DimensionKey,
-} from "@features/admin/server/explorer";
+  ANSWER_GROUP_OPTIONS,
+  DIMENSION_GROUP_OPTIONS,
+  tokenLabel,
+} from "@features/admin/ui/explorer/dimensions";
 
 interface Props {
-  rowDim: DimensionKey;
-  colDim: DimensionKey | null;
-  onColDimChange: (dim: DimensionKey | null) => void;
+  rowToken: string;
+  colToken: string | null;
+  onColChange: (token: string | null) => void;
   data: CrossTab | null;
 }
 
 function cellColor(value: number, max: number): string {
   if (value <= 0 || max <= 0) return "transparent";
   const ratio = value / max;
-  // accent-purple (#9c7dff) at scaled opacity.
-  return `rgba(156, 125, 255, ${(0.1 + 0.6 * ratio).toFixed(3)})`;
+  return `rgba(156, 125, 255, ${(0.1 + 0.6 * ratio).toFixed(3)})`; // accent-purple
 }
 
-export default function ExplorerCrossTab({ rowDim, colDim, onColDimChange, data }: Props) {
+export default function ExplorerCrossTab({ rowToken, colToken, onColChange, data }: Props) {
   const max = data
     ? Math.max(
         1,
@@ -34,23 +32,34 @@ export default function ExplorerCrossTab({ rowDim, colDim, onColDimChange, data 
     <div className="rounded-xl border border-white/10 bg-surface p-5">
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <span className="text-sm text-text-muted">Cross-tab:</span>
-        <span className="text-sm font-medium text-text-primary">{DIMENSION_LABELS[rowDim]}</span>
+        <span className="max-w-[200px] truncate text-sm font-medium text-text-primary">
+          {tokenLabel(rowToken)}
+        </span>
         <span className="text-sm text-text-muted">×</span>
         <select
-          value={colDim ?? ""}
-          onChange={(e) => onColDimChange(isDimensionKey(e.target.value) ? e.target.value : null)}
-          className="rounded-lg border border-white/10 bg-[#1a1025] px-3 py-1.5 text-sm text-text-primary outline-none"
+          value={colToken ?? ""}
+          onChange={(e) => onColChange(e.target.value || null)}
+          className="max-w-[220px] truncate rounded-lg border border-white/10 bg-[#1a1025] px-3 py-1.5 text-sm text-text-primary outline-none"
         >
           <option value="">None</option>
-          {DIMENSION_KEYS.filter((d) => d !== rowDim).map((dim) => (
-            <option key={dim} value={dim}>
-              {DIMENSION_LABELS[dim]}
-            </option>
-          ))}
+          <optgroup label="Dimensions">
+            {DIMENSION_GROUP_OPTIONS.filter((o) => o.value !== rowToken).map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </optgroup>
+          <optgroup label="Survey answers">
+            {ANSWER_GROUP_OPTIONS.filter((o) => o.value !== rowToken).map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </optgroup>
         </select>
       </div>
 
-      {!colDim || !data ? (
+      {!colToken || !data ? (
         <p className="py-6 text-center text-sm text-text-muted">
           Pick a second dimension to see a matrix (e.g. archetype × country).
         </p>
@@ -62,7 +71,7 @@ export default function ExplorerCrossTab({ rowDim, colDim, onColDimChange, data 
             <thead>
               <tr>
                 <th className="sticky left-0 bg-surface px-2 py-2 text-left text-xs font-medium uppercase tracking-wide text-text-muted">
-                  {DIMENSION_LABELS[rowDim]}
+                  {tokenLabel(rowToken)}
                 </th>
                 {data.colLabels.map((c) => (
                   <th

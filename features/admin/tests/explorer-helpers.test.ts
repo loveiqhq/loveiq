@@ -1,13 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
   applyFilters,
+  bucketDate,
   buildBreakdown,
+  buildBreakdownBy,
   buildCrossTab,
   buildFacets,
+  buildTrend,
   canonicalizeRelationship,
   computeStats,
+  dimensionValue,
   isPaidRow,
   normalizeLabel,
+  sessionBucketLabel,
+  specForAnswers,
   type EnrichedRow,
   type ExplorerFilters,
 } from "@features/admin/server/explorer";
@@ -28,6 +34,16 @@ function row(p: Partial<EnrichedRow> = {}): EnrichedRow {
     paidAmount: 0,
     hasSucceededPayment: false,
     trafficSource: "Direct",
+    utmMedium: "(none)",
+    utmCampaign: "(none)",
+    device: "desktop",
+    paywallArm: null,
+    experimentGroup: "control",
+    countryTier: "tier1",
+    priceBucket: "mid",
+    behavioralBucket: null,
+    reportViewed: false,
+    sessionCount: 0,
     durationMs: 300_000,
     createdAt: "2026-06-01T00:00:00Z",
     ...p,
@@ -216,5 +232,98 @@ describe("buildFacets", () => {
       includeTest: false,
     });
     expect(facets.country).toEqual([{ label: "Unknown", count: 1 }]);
+  });
+});
+
+describe("new dimensions", () => {
+  const opts = { archetypeVersion: "v5" as const, includeTest: false };
+
+  it("exposes pricing/experiment/device/acquisition/engagement via the accessor", () => {
+    const r = row({
+      device: "mobile",
+      paywallArm: "armB",
+      experimentGroup: "variant",
+      countryTier: "tier2",
+      priceBucket: "high",
+      behavioralBucket: "hot",
+      utmMedium: "cpc",
+      utmCampaign: "spring",
+      reportViewed: true,
+      sessionCount: 2,
+    });
+    expect(dimensionValue(r, "device", opts)).toBe("mobile");
+    expect(dimensionValue(r, "paywallArm", opts)).toBe("armB");
+    expect(dimensionValue(r, "experimentGroup", opts)).toBe("variant");
+    expect(dimensionValue(r, "utmMedium", opts)).toBe("cpc");
+    expect(dimensionValue(r, "utmCampaign", opts)).toBe("spring");
+    expect(dimensionValue(r, "reportViewed", opts)).toBe("Viewed");
+    expect(dimensionValue(r, "sessionBucket", opts)).toBe("2");
+  });
+
+  it("missing pricing/engagement reads as Unknown / Not viewed / 0", () => {
+    const r = row({ paywallArm: null, reportViewed: false, sessionCount: 0 });
+    expect(dimensionValue(r, "paywallArm", opts)).toBe("Unknown");
+    expect(dimensionValue(r, "reportViewed", opts)).toBe("Not viewed");
+    expect(dimensionValue(r, "sessionBucket", opts)).toBe("0");
+  });
+
+  it("sessionBucketLabel buckets 0/1/2/3+", () => {
+    expect(sessionBucketLabel(0)).toBe("0");
+    expect(sessionBucketLabel(1)).toBe("1");
+    expect(sessionBucketLabel(2)).toBe("2");
+    expect(sessionBucketLabel(5)).toBe("3+");
+  });
+
+  it("sessionBucket breakdown keeps fixed order and never folds to Other", () => {
+    const rows = [
+      row({ sessionCount: 5 }),
+      row({ sessionCount: 0 }),
+      row({ sessionCount: 1 }),
+      row({ sessionCount: 2 }),
+    ];
+    const out = buildBreakdown(rows, "sessionBucket", { ...opts, topN: 1 });
+    expect(out.map((r) => r.label)).toEqual(["0", "1", "2", "3+"]);
+  });
+});
+
+describe("bucketDate + buildTrend", () => {
+  it("buckets by day or ISO-week Monday", () => {
+    expect(bucketDate("2026-06-04T10:00:00Z", "day")).toBe("2026-06-04");
+    // 2026-06-04 is a Thursday → week bucket is Monday 2026-06-01.
+    expect(bucketDate("2026-06-04T10:00:00Z", "week")).toBe("2026-06-01");
+  });
+
+  it("builds an ordered daily series with paid counts", () => {
+    const rows = [
+      row({ createdAt: "2026-06-02T00:00:00Z", paidAmount: 10 }),
+      row({ createdAt: "2026-06-01T00:00:00Z" }),
+      row({ createdAt: "2026-06-01T12:00:00Z", paidAmount: 5 }),
+    ];
+    const trend = buildTrend(rows, "day", false);
+    expect(trend.map((t) => t.bucket)).toEqual(["2026-06-01", "2026-06-02"]);
+    expect(trend[0]).toEqual({ bucket: "2026-06-01", count: 2, paid: 1 });
+    expect(trend[1]).toEqual({ bucket: "2026-06-02", count: 1, paid: 1 });
+  });
+});
+
+describe("survey-answer grouping (buildBreakdownBy + specForAnswers)", () => {
+  it("groups rows by a per-submission answer map", () => {
+    const rows = [row({ submissionId: 1 }), row({ submissionId: 2 }), row({ submissionId: 3 })];
+    const answerMap = new Map<number, string>([
+      [1, "Daily"],
+      [2, "Daily"],
+      [3, "Weekly"],
+    ]);
+    const out = buildBreakdownBy(rows, specForAnswers(answerMap), { includeTest: false });
+    expect(out.find((r) => r.label === "Daily")?.count).toBe(2);
+    expect(out.find((r) => r.label === "Weekly")?.count).toBe(1);
+  });
+
+  it("rows with no answer fall into Unknown", () => {
+    const rows = [row({ submissionId: 1 }), row({ submissionId: 2 })];
+    const out = buildBreakdownBy(rows, specForAnswers(new Map([[1, "Yes"]])), {
+      includeTest: false,
+    });
+    expect(out.find((r) => r.label === "Unknown")?.count).toBe(1);
   });
 });

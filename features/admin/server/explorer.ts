@@ -3,13 +3,14 @@
  *
  * The route (`app/api/admin/explorer/route.ts`) fetches + enriches submission
  * rows into `EnrichedRow[]`; everything here is pure (no DB / env / Next imports)
- * so the filtering, breakdown, cross-tab, real-revenue and label-normalization
+ * so the filtering, breakdown, cross-tab, trend, real-revenue and normalization
  * logic is unit-testable in isolation.
  *
  * Demographic data lives in two places (verified against prod): gender / country
  * / orientation / relationship are on `user_profile`; AGE is only in the survey
- * answer Q15003 (user_profile.birthday is 100% null). The route resolves both
- * and hands clean values to the row.
+ * answer Q15003 (user_profile.birthday is 100% null). Pricing / experiment /
+ * device come from `report_price_quote`; engagement from `report_session`. The
+ * route resolves all of it and hands clean values to the row.
  */
 
 export type DimensionKey =
@@ -21,7 +22,17 @@ export type DimensionKey =
   | "relationship"
   | "plan"
   | "paidStatus"
-  | "trafficSource";
+  | "trafficSource"
+  | "utmMedium"
+  | "utmCampaign"
+  | "device"
+  | "paywallArm"
+  | "experimentGroup"
+  | "countryTier"
+  | "priceBucket"
+  | "behavioralBucket"
+  | "reportViewed"
+  | "sessionBucket";
 
 export const DIMENSION_LABELS: Record<DimensionKey, string> = {
   archetype: "Archetype",
@@ -33,6 +44,16 @@ export const DIMENSION_LABELS: Record<DimensionKey, string> = {
   plan: "Plan purchased",
   paidStatus: "Paid vs free",
   trafficSource: "Traffic source",
+  utmMedium: "UTM medium",
+  utmCampaign: "UTM campaign",
+  device: "Device",
+  paywallArm: "Paywall arm (A/B)",
+  experimentGroup: "Experiment group",
+  countryTier: "Country tier",
+  priceBucket: "Price bucket",
+  behavioralBucket: "Behavioral bucket",
+  reportViewed: "Report viewed",
+  sessionBucket: "Report opens",
 };
 
 export const DIMENSION_KEYS = Object.keys(DIMENSION_LABELS) as DimensionKey[];
@@ -46,6 +67,19 @@ export const UNKNOWN_LABEL = "Unknown";
 
 /** Stable display order for age buckets (matches survey Q15003 options). */
 export const AGE_ORDER = ["18–24", "25–34", "35–44", "45–54", "55–64", "65+"];
+
+const SESSION_ORDER = ["0", "1", "2", "3+"];
+
+/**
+ * Dimensions with a fixed display order. Presence here ALSO means "never fold
+ * into Other" (these are low-cardinality, ordered axes).
+ */
+const DIMENSION_ORDER: Partial<Record<DimensionKey, readonly string[]>> = {
+  age: AGE_ORDER,
+  sessionBucket: SESSION_ORDER,
+  reportViewed: ["Viewed", "Not viewed"],
+  paidStatus: ["Paid", "Free"],
+};
 
 export interface EnrichedRow {
   submissionId: number;
@@ -65,6 +99,18 @@ export interface EnrichedRow {
   /** Any succeeded payment row exists (including $0 coupon / admin grants). */
   hasSucceededPayment: boolean;
   trafficSource: string;
+  utmMedium: string;
+  utmCampaign: string;
+  // Pricing / experiment / device — from the submission's canonical quote.
+  device: string | null;
+  paywallArm: string | null;
+  experimentGroup: string | null;
+  countryTier: string | null;
+  priceBucket: string | null;
+  behavioralBucket: string | null;
+  // Engagement — from report_session.
+  reportViewed: boolean;
+  sessionCount: number;
   durationMs: number | null;
   createdAt: string;
 }
@@ -123,6 +169,14 @@ export function canonicalizeRelationship(raw: string | null | undefined): string
   return RELATIONSHIP_CANON[norm] ?? norm;
 }
 
+/** Map a report-session count to its display bucket. */
+export function sessionBucketLabel(count: number): string {
+  if (count <= 0) return "0";
+  if (count === 1) return "1";
+  if (count === 2) return "2";
+  return "3+";
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Paid logic
 // ─────────────────────────────────────────────────────────────────────────────
@@ -138,14 +192,15 @@ export function isPaidRow(row: EnrichedRow, includeTest: boolean): boolean {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Dimension accessor
+// Dimension accessor + value spec
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function dimensionValue(
-  row: EnrichedRow,
-  dim: DimensionKey,
-  opts: { archetypeVersion: ArchetypeVersion; includeTest: boolean }
-): string {
+export interface AccessorOpts {
+  archetypeVersion: ArchetypeVersion;
+  includeTest: boolean;
+}
+
+export function dimensionValue(row: EnrichedRow, dim: DimensionKey, opts: AccessorOpts): string {
   switch (dim) {
     case "archetype":
       return (opts.archetypeVersion === "v4" ? row.archetypeV4 : row.archetypeV5) ?? UNKNOWN_LABEL;
@@ -165,7 +220,51 @@ export function dimensionValue(
       return isPaidRow(row, opts.includeTest) ? "Paid" : "Free";
     case "trafficSource":
       return row.trafficSource || UNKNOWN_LABEL;
+    case "utmMedium":
+      return row.utmMedium || UNKNOWN_LABEL;
+    case "utmCampaign":
+      return row.utmCampaign || UNKNOWN_LABEL;
+    case "device":
+      return row.device ?? UNKNOWN_LABEL;
+    case "paywallArm":
+      return row.paywallArm ?? UNKNOWN_LABEL;
+    case "experimentGroup":
+      return row.experimentGroup ?? UNKNOWN_LABEL;
+    case "countryTier":
+      return row.countryTier ?? UNKNOWN_LABEL;
+    case "priceBucket":
+      return row.priceBucket ?? UNKNOWN_LABEL;
+    case "behavioralBucket":
+      return row.behavioralBucket ?? UNKNOWN_LABEL;
+    case "reportViewed":
+      return row.reportViewed ? "Viewed" : "Not viewed";
+    case "sessionBucket":
+      return sessionBucketLabel(row.sessionCount);
   }
+}
+
+/**
+ * A value-provider over rows. `order` (when set) gives a fixed display order AND
+ * means "never fold into Other". This abstraction lets fixed dimensions and
+ * dynamic survey-answer dimensions (`q:<qid>`) share the same aggregation code.
+ */
+export interface ValueSpec {
+  valueOf: (row: EnrichedRow) => string;
+  order?: readonly string[];
+}
+
+export function specForDimension(dim: DimensionKey, opts: AccessorOpts): ValueSpec {
+  return { valueOf: (row) => dimensionValue(row, dim, opts), order: DIMENSION_ORDER[dim] };
+}
+
+/** Spec for a survey-answer dimension, backed by a submissionId → label map. */
+export function specForAnswers(answerBySubmission: Map<number, string>): ValueSpec {
+  return { valueOf: (row) => answerBySubmission.get(row.submissionId) ?? UNKNOWN_LABEL };
+}
+
+function orderIndexIn(order: readonly string[], label: string): number {
+  const i = order.indexOf(label);
+  return i === -1 ? order.length + (label === UNKNOWN_LABEL ? 1 : 0) : i;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -173,11 +272,13 @@ export function dimensionValue(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Apply the explorer filters to enriched rows. Order: drop test rows (unless
- * includeTest) → paidStatus → every active per-dimension allow-list.
+ * Apply the fixed-dimension explorer filters to enriched rows. Order: drop test
+ * rows (unless includeTest) → paidStatus → every active per-dimension allow-list.
+ * (Survey-answer filters are applied separately by the route, which holds the
+ * answer maps.)
  */
 export function applyFilters(rows: EnrichedRow[], filters: ExplorerFilters): EnrichedRow[] {
-  const opts = {
+  const opts: AccessorOpts = {
     archetypeVersion: filters.archetypeVersion,
     includeTest: filters.includeTest,
   };
@@ -247,31 +348,15 @@ export interface BreakdownRow {
   revenue: number;
 }
 
-function sortBreakdown(rows: BreakdownRow[], dim: DimensionKey): BreakdownRow[] {
-  if (dim === "age") {
-    return [...rows].sort((a, b) => orderIndex(a.label) - orderIndex(b.label));
-  }
-  return [...rows].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
-}
-
-function orderIndex(label: string): number {
-  const i = AGE_ORDER.indexOf(label);
-  return i === -1 ? AGE_ORDER.length + (label === UNKNOWN_LABEL ? 1 : 0) : i;
-}
-
-/**
- * Group rows by one dimension. `topN` keeps the N largest groups and folds the
- * rest into "Other" (skipped for age, which is small + ordered). Always reports
- * count, paid count, paid %, and revenue per group.
- */
-export function buildBreakdown(
+/** Generic breakdown over any value provider. */
+export function buildBreakdownBy(
   rows: EnrichedRow[],
-  dim: DimensionKey,
-  opts: { archetypeVersion: ArchetypeVersion; includeTest: boolean; topN?: number }
+  spec: ValueSpec,
+  opts: { includeTest: boolean; topN?: number }
 ): BreakdownRow[] {
   const groups = new Map<string, { count: number; paid: number; revenue: number }>();
   for (const row of rows) {
-    const key = dimensionValue(row, dim, opts);
+    const key = spec.valueOf(row);
     const g = groups.get(key) ?? { count: 0, paid: 0, revenue: 0 };
     g.count += 1;
     if (isPaidRow(row, opts.includeTest)) g.paid += 1;
@@ -279,21 +364,30 @@ export function buildBreakdown(
     groups.set(key, g);
   }
 
-  let out: BreakdownRow[] = [...groups.entries()].map(([label, g]) => ({
+  const toRow = (
+    label: string,
+    g: { count: number; paid: number; revenue: number }
+  ): BreakdownRow => ({
     label,
     count: g.count,
     paid: g.paid,
     paidPct: g.count > 0 ? Math.round((g.paid / g.count) * 1000) / 10 : null,
     revenue: Math.round(g.revenue * 100) / 100,
-  }));
+  });
 
-  out = sortBreakdown(out, dim);
+  let out: BreakdownRow[] = [...groups.entries()].map(([label, g]) => toRow(label, g));
 
+  if (spec.order) {
+    const order = spec.order;
+    out.sort((a, b) => orderIndexIn(order, a.label) - orderIndexIn(order, b.label));
+    return out; // ordered dims are never folded
+  }
+
+  out.sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
   const topN = opts.topN ?? 12;
-  if (dim !== "age" && dim !== "paidStatus" && out.length > topN) {
+  if (out.length > topN) {
     const top = out.slice(0, topN);
-    const rest = out.slice(topN);
-    const other = rest.reduce(
+    const other = out.slice(topN).reduce(
       (acc, r) => {
         acc.count += r.count;
         acc.paid += r.paid;
@@ -302,16 +396,23 @@ export function buildBreakdown(
       },
       { count: 0, paid: 0, revenue: 0 }
     );
-    top.push({
-      label: "Other",
-      count: other.count,
-      paid: other.paid,
-      paidPct: other.count > 0 ? Math.round((other.paid / other.count) * 1000) / 10 : null,
-      revenue: Math.round(other.revenue * 100) / 100,
-    });
+    top.push(toRow("Other", other));
     return top;
   }
   return out;
+}
+
+/** Backwards-compatible wrapper: breakdown by a fixed dimension. */
+export function buildBreakdown(
+  rows: EnrichedRow[],
+  dim: DimensionKey,
+  opts: { archetypeVersion: ArchetypeVersion; includeTest: boolean; topN?: number }
+): BreakdownRow[] {
+  const spec = specForDimension(dim, {
+    archetypeVersion: opts.archetypeVersion,
+    includeTest: opts.includeTest,
+  });
+  return buildBreakdownBy(rows, spec, { includeTest: opts.includeTest, topN: opts.topN });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -319,48 +420,48 @@ export function buildBreakdown(
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface CrossTab {
-  rowDim: DimensionKey;
-  colDim: DimensionKey;
+  rowDim: string;
+  colDim: string;
   rowLabels: string[];
   colLabels: string[];
-  /** cells[rowLabel][colLabel] = count. Sparse-safe via 0 defaults in `cell`. */
+  /** cells[rowLabel][colLabel] = count. */
   cells: Record<string, Record<string, number>>;
   rowTotals: Record<string, number>;
   colTotals: Record<string, number>;
   grandTotal: number;
 }
 
-/** Top-N labels of a dimension by frequency (age uses fixed order, no Other). */
-function topLabels(rows: EnrichedRow[], dim: DimensionKey, opts: ExplorerFilters, topN: number) {
+/** Top-N labels for a value provider (ordered specs keep their order, no Other). */
+function topLabelsBy(rows: EnrichedRow[], spec: ValueSpec, topN: number): string[] {
   const counts = new Map<string, number>();
-  const o = { archetypeVersion: opts.archetypeVersion, includeTest: opts.includeTest };
   for (const row of rows) {
-    const key = dimensionValue(row, dim, o);
+    const key = spec.valueOf(row);
     counts.set(key, (counts.get(key) ?? 0) + 1);
   }
-  let labels = [...counts.entries()]
+  const labels = [...counts.entries()]
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
     .map(([label]) => label);
-  if (dim === "age") {
-    return labels.sort((a, b) => orderIndex(a) - orderIndex(b));
+  if (spec.order) {
+    const order = spec.order;
+    return labels.sort((a, b) => orderIndexIn(order, a) - orderIndexIn(order, b));
   }
   if (labels.length > topN) {
-    labels = labels.slice(0, topN);
-    labels.push("Other");
+    return [...labels.slice(0, topN), "Other"];
   }
   return labels;
 }
 
-export function buildCrossTab(
+/** Generic cross-tab over two value providers. */
+export function buildCrossTabBy(
   rows: EnrichedRow[],
-  rowDim: DimensionKey,
-  colDim: DimensionKey,
-  filters: ExplorerFilters,
+  rowSpec: ValueSpec,
+  colSpec: ValueSpec,
+  rowDim: string,
+  colDim: string,
   topN = 8
 ): CrossTab {
-  const o = { archetypeVersion: filters.archetypeVersion, includeTest: filters.includeTest };
-  const rowLabels = topLabels(rows, rowDim, filters, topN);
-  const colLabels = topLabels(rows, colDim, filters, topN);
+  const rowLabels = topLabelsBy(rows, rowSpec, topN);
+  const colLabels = topLabelsBy(rows, colSpec, topN);
   const rowSet = new Set(rowLabels);
   const colSet = new Set(colLabels);
 
@@ -376,12 +477,12 @@ export function buildCrossTab(
 
   let grandTotal = 0;
   for (const row of rows) {
-    const rRaw = dimensionValue(row, rowDim, o);
-    const cRaw = dimensionValue(row, colDim, o);
-    // Each label set is derived from THESE same rows, so a value is absent from a
-    // set only when it was folded into "Other" (which is then present). The null
-    // branch is therefore unreachable in practice (grandTotal === rows.length);
-    // it stays as a defensive guard. See the reconciliation test.
+    const rRaw = rowSpec.valueOf(row);
+    const cRaw = colSpec.valueOf(row);
+    // Each label set is derived from THESE same rows, so a value is absent only
+    // when folded into "Other" (which is then present). The null branch is
+    // therefore unreachable in practice (grandTotal === rows.length); it stays as
+    // a defensive guard. See the reconciliation test.
     const r = rowSet.has(rRaw) ? rRaw : rowSet.has("Other") ? "Other" : null;
     const c = colSet.has(cRaw) ? cRaw : colSet.has("Other") ? "Other" : null;
     if (r == null || c == null) continue;
@@ -392,6 +493,68 @@ export function buildCrossTab(
   }
 
   return { rowDim, colDim, rowLabels, colLabels, cells, rowTotals, colTotals, grandTotal };
+}
+
+/** Backwards-compatible wrapper: cross-tab of two fixed dimensions. */
+export function buildCrossTab(
+  rows: EnrichedRow[],
+  rowDim: DimensionKey,
+  colDim: DimensionKey,
+  filters: ExplorerFilters,
+  topN = 8
+): CrossTab {
+  const o: AccessorOpts = {
+    archetypeVersion: filters.archetypeVersion,
+    includeTest: filters.includeTest,
+  };
+  return buildCrossTabBy(
+    rows,
+    specForDimension(rowDim, o),
+    specForDimension(colDim, o),
+    rowDim,
+    colDim,
+    topN
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Trend over time
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type TrendGranularity = "day" | "week";
+
+export interface TrendPoint {
+  bucket: string;
+  count: number;
+  paid: number;
+}
+
+/** Bucket an ISO timestamp to a day (YYYY-MM-DD) or the Monday of its ISO week. */
+export function bucketDate(iso: string, granularity: TrendGranularity): string {
+  if (granularity === "day") return iso.slice(0, 10);
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso.slice(0, 10);
+  const dow = (d.getUTCDay() + 6) % 7; // Monday = 0
+  d.setUTCDate(d.getUTCDate() - dow);
+  return d.toISOString().slice(0, 10);
+}
+
+export function buildTrend(
+  rows: EnrichedRow[],
+  granularity: TrendGranularity,
+  includeTest: boolean
+): TrendPoint[] {
+  const map = new Map<string, { count: number; paid: number }>();
+  for (const row of rows) {
+    const bucket = bucketDate(row.createdAt, granularity);
+    const g = map.get(bucket) ?? { count: 0, paid: 0 };
+    g.count += 1;
+    if (isPaidRow(row, includeTest)) g.paid += 1;
+    map.set(bucket, g);
+  }
+  return [...map.entries()]
+    .map(([bucket, g]) => ({ bucket, count: g.count, paid: g.paid }))
+    .sort((a, b) => a.bucket.localeCompare(b.bucket));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -405,14 +568,11 @@ export interface FacetValue {
 export type Facets = Partial<Record<DimensionKey, FacetValue[]>>;
 
 /**
- * Distinct values + counts per dimension over the supplied rows (the route passes
- * the test-filtered, otherwise-unfiltered candidate set so options stay stable as
- * the lead toggles filters). Age keeps its fixed order; others sort by count.
+ * Distinct values + counts per fixed dimension over the supplied rows (the route
+ * passes the test-filtered, otherwise-unfiltered candidate set so options stay
+ * stable as the lead toggles filters). Ordered dims keep their order.
  */
-export function buildFacets(
-  rows: EnrichedRow[],
-  opts: { archetypeVersion: ArchetypeVersion; includeTest: boolean }
-): Facets {
+export function buildFacets(rows: EnrichedRow[], opts: AccessorOpts): Facets {
   const facets: Facets = {};
   for (const dim of DIMENSION_KEYS) {
     const counts = new Map<string, number>();
@@ -420,11 +580,11 @@ export function buildFacets(
       const key = dimensionValue(row, dim, opts);
       counts.set(key, (counts.get(key) ?? 0) + 1);
     }
+    const order = DIMENSION_ORDER[dim];
     let values: FacetValue[] = [...counts.entries()].map(([label, count]) => ({ label, count }));
-    values =
-      dim === "age"
-        ? values.sort((a, b) => orderIndex(a.label) - orderIndex(b.label))
-        : values.sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+    values = order
+      ? values.sort((a, b) => orderIndexIn(order, a.label) - orderIndexIn(order, b.label))
+      : values.sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
     facets[dim] = values;
   }
   return facets;

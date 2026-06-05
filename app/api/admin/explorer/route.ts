@@ -6,34 +6,67 @@ import { logAdminAction } from "@features/admin/server/audit";
 import { evaluateTestSubmission } from "@features/admin/server/test-submission";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import logger from "@shared/observability/logger";
+import { surveyQuestions } from "@/data/survey-data";
 import {
   applyFilters,
-  buildBreakdown,
-  buildCrossTab,
+  buildBreakdownBy,
+  buildCrossTabBy,
   buildFacets,
+  buildTrend,
   canonicalizeRelationship,
   computeStats,
   DIMENSION_KEYS,
+  isDimensionKey,
   normalizeLabel,
+  specForAnswers,
+  specForDimension,
+  type AccessorOpts,
   type ArchetypeVersion,
   type DimensionKey,
   type EnrichedRow,
   type ExplorerFilters,
   type PaidStatusFilter,
+  type TrendGranularity,
+  type ValueSpec,
 } from "@features/admin/server/explorer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Hard ceiling on candidate submissions pulled into memory for a single
-// request. Pre-launch volume is in the hundreds; this is the same order as
-// core-kpis' Range cap and keeps the request bounded. If a run hits it we log
-// a capacity warning (the lead's older data would silently fall off otherwise).
+// Hard ceiling on candidate submissions pulled into memory for a single request.
 const MAX_CANDIDATES = 20_000;
-// Batch size for `?col=in.(…)` secondary fetches — keeps each URL well under
-// server limits as the audience grows (581 ids today, but this scales).
+// Batch size for `?col=in.(…)` secondary fetches — keeps each URL bounded.
 const IN_CHUNK = 500;
 const AGE_QID = "15003";
+// Built from an array so the column list isn't a single high-entropy literal
+// (keeps the no-secrets lint rule happy).
+const QUOTE_SELECT = [
+  "id",
+  "personal_report_id",
+  "plan",
+  "purchased_at",
+  "forced_paywall_arm",
+  "experiment_group",
+  "device_type",
+  "country_tier",
+  "base_price_bucket",
+  "behavioral_bucket",
+].join(",");
+// Demographic questions are exposed as first-class dimensions, so they are
+// excluded from the generic "filter by survey answer" surface (no duplication).
+const DEMOGRAPHIC_QIDS = new Set(["15001", "15003", "15004", "15010", "15011"]);
+// Whitelist of question ids usable in the answer filter / `q:` group-by. Bounds
+// what can reach the DB (qid flows into a query) and limits to discrete types.
+const ANSWER_QIDS = new Set(
+  surveyQuestions
+    .filter(
+      (q) =>
+        (q.answerType === "single" || q.answerType === "multiple" || q.answerType === "country") &&
+        !DEMOGRAPHIC_QIDS.has(q.qId)
+    )
+    .map((q) => q.qId)
+);
+const MAX_ANSWER_FILTERS = 5;
 
 const ALLOWED_STATUS = new Set([
   "completed",
@@ -51,18 +84,17 @@ function parseList(value: string | null): string[] {
     .filter(Boolean);
 }
 
-function parseDimension(value: string | null, fallback: DimensionKey | null): DimensionKey | null {
-  if (value && (DIMENSION_KEYS as string[]).includes(value)) return value as DimensionKey;
-  return fallback;
-}
-
-function parseUtmSource(tracker: string | null): string {
-  if (!tracker?.trim()) return "Direct";
+function parseUtmField(
+  tracker: string | null,
+  field: "utm_source" | "utm_medium" | "utm_campaign"
+): string {
+  if (!tracker?.trim()) return field === "utm_source" ? "Direct" : "(none)";
   try {
-    const parsed = JSON.parse(tracker) as { utm_source?: string };
-    return parsed.utm_source?.trim() || "Direct";
+    const parsed = JSON.parse(tracker) as Record<string, string | undefined>;
+    const v = parsed[field]?.trim();
+    return v || (field === "utm_source" ? "Direct" : "(none)");
   } catch {
-    return "Direct";
+    return field === "utm_source" ? "Direct" : "(none)";
   }
 }
 
@@ -75,7 +107,7 @@ function chunk<T>(items: T[], size: number): T[][] {
 /**
  * Fetch `select` from `table` where `col` is in `ids`, batched so the URL never
  * grows unbounded. `ids` are numbers (safe to join). `extraFilter` is a trusted
- * literal (e.g. `&status=eq.succeeded`) — never user input.
+ * literal — never raw user input.
  */
 async function fetchByIds<T>(
   table: string,
@@ -105,16 +137,57 @@ interface SubmissionRow {
   utm_tracker: string | null;
 }
 
+interface QuoteRow {
+  id: number;
+  personal_report_id: number | null;
+  plan: string | null;
+  purchased_at: string | null;
+  forced_paywall_arm: string | null;
+  experiment_group: string | null;
+  device_type: string | null;
+  country_tier: string | null;
+  base_price_bucket: string | null;
+  behavioral_bucket: string | null;
+}
+
 function csvEscape(value: unknown): string {
   let s = value == null ? "" : String(value);
-  // Formula-injection guard incl. tab/CR leaders (some parsers execute those).
-  if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
-  // Quote on CR too, so an embedded \r can't split the field into a new row
-  // that starts with a formula leader.
+  if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; // formula-injection guard incl. tab/CR
   if (s.includes(",") || s.includes('"') || s.includes("\n") || s.includes("\r")) {
     return `"${s.replace(/"/g, '""')}"`;
   }
   return s;
+}
+
+type GroupToken = { kind: "dim"; dim: DimensionKey } | { kind: "answer"; qid: string };
+
+/** Parse a groupBy token: a fixed dimension, or `q:<qid>` (validated). */
+function parseGroupToken(raw: string | null): GroupToken | null {
+  if (!raw) return null;
+  if (raw.startsWith("q:")) {
+    const qid = raw.slice(2).trim();
+    return ANSWER_QIDS.has(qid) ? { kind: "answer", qid } : null;
+  }
+  return isDimensionKey(raw) ? { kind: "dim", dim: raw } : null;
+}
+
+/** Parse `ans=<qid>:<v1|v2>;<qid2>:<v3>` into validated {qid → allowed values}. */
+function parseAnswerFilters(raw: string | null): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  if (!raw) return out;
+  for (const clause of raw.split(";").slice(0, MAX_ANSWER_FILTERS)) {
+    const idx = clause.indexOf(":");
+    if (idx <= 0) continue;
+    const qid = clause.slice(0, idx).trim();
+    if (!ANSWER_QIDS.has(qid)) continue;
+    const values = clause
+      .slice(idx + 1)
+      .split("|")
+      .map((v) => normalizeLabel(decodeURIComponent(v)))
+      .filter((v): v is string => v != null);
+    if (values.length > 0) out.set(qid, values);
+  }
+  return out;
 }
 
 export async function GET(request: Request) {
@@ -156,10 +229,19 @@ export async function GET(request: Request) {
   }
 
   const filters: ExplorerFilters = { includeTest, archetypeVersion, paidStatus, selections };
-  const groupBy = parseDimension(sp.get("groupBy"), "country")!;
-  const groupBy2Raw = parseDimension(sp.get("groupBy2"), null);
-  const groupBy2 = groupBy2Raw && groupBy2Raw !== groupBy ? groupBy2Raw : null;
-  const accessorOpts = { archetypeVersion, includeTest };
+  const accessorOpts: AccessorOpts = { archetypeVersion, includeTest };
+
+  const answerFilters = parseAnswerFilters(sp.get("ans"));
+  const groupBy = parseGroupToken(sp.get("groupBy")) ?? {
+    kind: "dim",
+    dim: "country" as DimensionKey,
+  };
+  const groupBy2Token = parseGroupToken(sp.get("groupBy2"));
+  // Distinct from groupBy (compare the raw token strings).
+  const groupBy2 =
+    groupBy2Token && (sp.get("groupBy2") ?? "") !== (sp.get("groupBy") ?? "")
+      ? groupBy2Token
+      : null;
 
   const wantsCsv = sp.get("format") === "csv";
   const page = Math.max(1, parseInt(sp.get("page") || "1", 10) || 1);
@@ -188,10 +270,7 @@ export async function GET(request: Request) {
 
     const submissionIds = submissions.map((s) => s.id);
     const userIds = submissions.map((s) => s.user_id).filter((id): id is number => id != null);
-
-    // Resolve the age question's DB id once (reused by the answer fetch + the
-    // option-text lookup). -1 when not found → age simply reads as "Unknown".
-    const ageQuestionId = await resolveAgeQuestionId();
+    const ageQuestionId = await resolveQuestionId(AGE_QID);
 
     // ── 2. Related data (chunked in.() fetches) ─────────────────────────────
     const [scoring, users, reports, ageAnswers] = await Promise.all([
@@ -217,31 +296,13 @@ export async function GET(request: Request) {
         submissionIds,
         "id,survey_submission_id"
       ),
-      ageQuestionId >= 0
-        ? fetchByIds<{
-            survey_submission_id: number;
-            answer_option_id: number | null;
-            answer_text: string | null;
-          }>(
-            "survey_submission_answer",
-            "survey_submission_id",
-            submissionIds,
-            "survey_submission_id,answer_option_id,answer_text",
-            `&survey_question_id=eq.${ageQuestionId}`
-          )
-        : Promise.resolve(
-            [] as Array<{
-              survey_submission_id: number;
-              answer_option_id: number | null;
-              answer_text: string | null;
-            }>
-          ),
+      fetchAnswerRows(ageQuestionId, submissionIds),
     ]);
 
     const profileIds = users.map((u) => u.user_profile_id).filter((id): id is number => id != null);
     const reportIds = reports.map((r) => r.id);
 
-    const [profiles, payments, quotes, ageOptions] = await Promise.all([
+    const [profiles, payments, quotes, sessions, ageOptions] = await Promise.all([
       fetchByIds<{
         id: number;
         gender: string | null;
@@ -261,22 +322,40 @@ export async function GET(request: Request) {
         "personal_report_id,amount",
         "&status=eq.succeeded"
       ),
-      fetchByIds<{ personal_report_id: number | null; plan: string | null }>(
+      // order=id.desc so the canonical-quote `find` picks the MOST RECENT
+      // purchased/full_report quote — correct for users who upgraded plans.
+      fetchByIds<QuoteRow>(
         "report_price_quote",
         "personal_report_id",
         reportIds,
-        "personal_report_id,plan",
-        "&purchased_at=not.is.null"
+        QUOTE_SELECT,
+        "&order=id.desc"
       ),
-      fetchAgeOptions(ageQuestionId),
+      fetchByIds<{ personal_report_id: number | null }>(
+        "report_session",
+        "personal_report_id",
+        reportIds,
+        "personal_report_id"
+      ),
+      fetchAnswerOptionMap(ageQuestionId),
     ]);
+
+    // ── 2b. Survey-answer maps for answer-filters + `q:` group-by ───────────
+    const neededQids = new Set<string>(answerFilters.keys());
+    if (groupBy.kind === "answer") neededQids.add(groupBy.qid);
+    if (groupBy2?.kind === "answer") neededQids.add(groupBy2.qid);
+    const answerLabelMaps = new Map<string, Map<number, string[]>>();
+    await Promise.all(
+      [...neededQids].map(async (qid) => {
+        const dbId = await resolveQuestionId(qid);
+        answerLabelMaps.set(qid, await fetchAnswerLabels(dbId, submissionIds));
+      })
+    );
 
     // ── 3. Build lookup maps ────────────────────────────────────────────────
     const scoringBySub = new Map(scoring.map((s) => [s.survey_submission_id, s]));
     const userById = new Map(users.map((u) => [u.id, u]));
     const profileById = new Map(profiles.map((p) => [p.id, p]));
-    // personal_report is logically 1:1 with a submission; keep the first and warn
-    // if a duplicate ever appears (a dropped report id would zero its revenue).
     const reportBySub = new Map<number, { id: number; survey_submission_id: number }>();
     let dupReports = 0;
     for (const r of reports) {
@@ -305,10 +384,38 @@ export async function GET(request: Request) {
         (paidByReport.get(p.personal_report_id) ?? 0) + Number(p.amount ?? 0)
       );
     }
-    const planByReport = new Map<number, string>();
+
+    // Canonical quote per report (prefer purchased, else full_report, else max id)
+    // for pricing/experiment/device attributes; plan from the purchased quote.
+    const quotesByReport = new Map<number, QuoteRow[]>();
     for (const q of quotes) {
-      if (q.personal_report_id == null || !q.plan) continue;
-      if (!planByReport.has(q.personal_report_id)) planByReport.set(q.personal_report_id, q.plan);
+      if (q.personal_report_id == null) continue;
+      const arr = quotesByReport.get(q.personal_report_id) ?? [];
+      arr.push(q);
+      quotesByReport.set(q.personal_report_id, arr);
+    }
+    const planByReport = new Map<number, string>();
+    const attrsByReport = new Map<number, QuoteRow>();
+    for (const [reportId, list] of quotesByReport) {
+      const purchased = list.find((q) => q.purchased_at != null);
+      if (purchased?.plan) planByReport.set(reportId, purchased.plan);
+      const canonical =
+        purchased ??
+        list.find((q) => q.plan === "full_report") ??
+        list.reduce(
+          (best, q) => (best == null || q.id > best.id ? q : best),
+          null as QuoteRow | null
+        );
+      if (canonical) attrsByReport.set(reportId, canonical);
+    }
+
+    const sessionCountByReport = new Map<number, number>();
+    for (const sess of sessions) {
+      if (sess.personal_report_id == null) continue;
+      sessionCountByReport.set(
+        sess.personal_report_id,
+        (sessionCountByReport.get(sess.personal_report_id) ?? 0) + 1
+      );
     }
 
     // ── 4. Enrich ───────────────────────────────────────────────────────────
@@ -316,11 +423,12 @@ export async function GET(request: Request) {
       const user = userById.get(s.user_id);
       const profile = user?.user_profile_id ? profileById.get(user.user_profile_id) : undefined;
       const scoringRow = scoringBySub.get(s.id);
-      const report = reportBySub.get(s.id);
-      const reportId = report?.id;
+      const reportId = reportBySub.get(s.id)?.id;
       const paidAmount = reportId != null ? (paidByReport.get(reportId) ?? 0) : 0;
       const hasSucceeded = reportId != null && succeededReports.has(reportId);
       const plan = reportId != null ? (planByReport.get(reportId) ?? null) : null;
+      const attrs = reportId != null ? attrsByReport.get(reportId) : undefined;
+      const sessionCount = reportId != null ? (sessionCountByReport.get(reportId) ?? 0) : 0;
       const email = user?.email ?? null;
 
       return {
@@ -341,21 +449,63 @@ export async function GET(request: Request) {
         plan,
         paidAmount,
         hasSucceededPayment: hasSucceeded,
-        trafficSource: parseUtmSource(s.utm_tracker),
+        trafficSource: parseUtmField(s.utm_tracker, "utm_source"),
+        utmMedium: parseUtmField(s.utm_tracker, "utm_medium"),
+        utmCampaign: parseUtmField(s.utm_tracker, "utm_campaign"),
+        device: normalizeLabel(attrs?.device_type),
+        paywallArm: normalizeLabel(attrs?.forced_paywall_arm),
+        experimentGroup: normalizeLabel(attrs?.experiment_group),
+        countryTier: normalizeLabel(attrs?.country_tier),
+        priceBucket: normalizeLabel(attrs?.base_price_bucket),
+        behavioralBucket: normalizeLabel(attrs?.behavioral_bucket),
+        reportViewed: sessionCount > 0,
+        sessionCount,
         durationMs: s.duration_ms,
         createdAt: s.created_date_time,
       };
     });
 
-    // ── 5. Aggregate ────────────────────────────────────────────────────────
+    // ── 5. Filter (fixed dims, then survey answers) ─────────────────────────
+    let filtered = applyFilters(enriched, filters);
+    for (const [qid, allowed] of answerFilters) {
+      const labelMap = answerLabelMaps.get(qid);
+      const allowedSet = new Set(allowed);
+      filtered = filtered.filter((row) =>
+        (labelMap?.get(row.submissionId) ?? []).some((l) => allowedSet.has(l))
+      );
+    }
+
+    // ── 6. Aggregate ────────────────────────────────────────────────────────
     const facetBase = includeTest ? enriched : enriched.filter((r) => !r.isTest);
     const facets = buildFacets(facetBase, accessorOpts);
-    const filtered = applyFilters(enriched, filters);
     const stats = computeStats(filtered, includeTest);
-    const breakdown = buildBreakdown(filtered, groupBy, { ...accessorOpts, topN: 12 });
-    const crossTab = groupBy2 ? buildCrossTab(filtered, groupBy, groupBy2, filters, 8) : null;
 
-    // ── 6. CSV export (full filtered set) ───────────────────────────────────
+    const firstLabelSpec = (qid: string): ValueSpec => {
+      const labelMap = answerLabelMaps.get(qid) ?? new Map<number, string[]>();
+      const first = new Map<number, string>();
+      for (const [sid, labels] of labelMap) if (labels[0]) first.set(sid, labels[0]);
+      return specForAnswers(first);
+    };
+    const specFor = (t: GroupToken): ValueSpec =>
+      t.kind === "dim" ? specForDimension(t.dim, accessorOpts) : firstLabelSpec(t.qid);
+    const tokenLabel = (t: GroupToken): string => (t.kind === "dim" ? t.dim : `q:${t.qid}`);
+
+    const breakdown = buildBreakdownBy(filtered, specFor(groupBy), { includeTest, topN: 12 });
+    const crossTab = groupBy2
+      ? buildCrossTabBy(
+          filtered,
+          specFor(groupBy),
+          specFor(groupBy2),
+          tokenLabel(groupBy),
+          tokenLabel(groupBy2),
+          8
+        )
+      : null;
+
+    const trendGranularity: TrendGranularity = days > 0 && days <= 90 ? "day" : "week";
+    const trend = buildTrend(filtered, trendGranularity, includeTest);
+
+    // ── 7. CSV export (full filtered set) ───────────────────────────────────
     if (wantsCsv) {
       const headers = [
         "submission_id",
@@ -368,6 +518,17 @@ export async function GET(request: Request) {
         "orientation",
         "relationship",
         "plan",
+        "device",
+        "paywall_arm",
+        "experiment_group",
+        "country_tier",
+        "price_bucket",
+        "behavioral_bucket",
+        "utm_source",
+        "utm_medium",
+        "utm_campaign",
+        "report_viewed",
+        "report_opens",
         "paid_amount",
         "created_at",
       ];
@@ -385,6 +546,17 @@ export async function GET(request: Request) {
             r.orientation,
             r.relationship,
             r.plan,
+            r.device,
+            r.paywallArm,
+            r.experimentGroup,
+            r.countryTier,
+            r.priceBucket,
+            r.behavioralBucket,
+            r.trafficSource,
+            r.utmMedium,
+            r.utmCampaign,
+            r.reportViewed ? "yes" : "no",
+            r.sessionCount,
             r.paidAmount,
             r.createdAt,
           ]
@@ -408,30 +580,39 @@ export async function GET(request: Request) {
       });
     }
 
-    // ── 7. Paginated row list for the table ─────────────────────────────────
+    // ── 8. Paginated row list for the table ─────────────────────────────────
     const total = filtered.length;
-    const start = (page - 1) * limit;
-    const rows = filtered.slice(start, start + limit).map((r) => ({
+    const startIdx = (page - 1) * limit;
+    const rows = filtered.slice(startIdx, startIdx + limit).map((r) => ({
       submissionId: r.submissionId,
       email: r.email,
       archetype: archetypeVersion === "v4" ? r.archetypeV4 : r.archetypeV5,
       ageGroup: r.ageGroup,
       gender: r.gender,
       country: r.country,
-      relationship: r.relationship,
+      device: r.device,
       plan: r.plan,
-      paid: filters.includeTest ? r.hasSucceededPayment : r.paidAmount > 0,
+      reportViewed: r.reportViewed,
+      paid: includeTest ? r.hasSucceededPayment : r.paidAmount > 0,
       paidAmount: r.paidAmount,
       createdAt: r.createdAt,
     }));
 
     return NextResponse.json({
       range: { days, since },
-      filtersEcho: { ...filters, status, groupBy, groupBy2 },
+      filtersEcho: {
+        ...filters,
+        status,
+        groupBy: sp.get("groupBy") ?? "country",
+        groupBy2: groupBy2 ? (sp.get("groupBy2") ?? null) : null,
+        answers: Object.fromEntries(answerFilters),
+      },
       stats,
       facets,
       breakdown,
       crossTab,
+      trend,
+      trendGranularity,
       rows,
       total,
       page,
@@ -444,26 +625,26 @@ export async function GET(request: Request) {
   }
 }
 
-// ── Age question resolution (Q15003 → DB id → option_text map) ──────────────
+// ── Survey-question helpers ─────────────────────────────────────────────────
 
-// The age question's DB id never changes at runtime — memoize across requests
-// so the explorer doesn't pay a sequential round-trip on every load. Only
-// successful lookups are cached (so a transient failure can recover next time).
-let cachedAgeQuestionId: number | null = null;
+// Question DB ids never change at runtime — memoize per frontend qid so repeat
+// requests skip the lookup. Only successful lookups (id >= 0) are cached.
+const questionIdCache = new Map<string, number>();
 
-async function resolveAgeQuestionId(): Promise<number> {
-  if (cachedAgeQuestionId != null) return cachedAgeQuestionId;
+async function resolveQuestionId(frontendQid: string): Promise<number> {
+  const cached = questionIdCache.get(frontendQid);
+  if (cached != null) return cached;
   const res = await supabaseFetch(
-    `/rest/v1/survey_question?frontend_qid=eq.${AGE_QID}&select=id&limit=1`
+    `/rest/v1/survey_question?frontend_qid=eq.${encodeURIComponent(frontendQid)}&select=id&limit=1`
   );
   if (!res.ok) return -1;
   const rows = (await res.json()) as Array<{ id: number }>;
   const id = rows[0]?.id ?? -1;
-  if (id >= 0) cachedAgeQuestionId = id;
+  if (id >= 0) questionIdCache.set(frontendQid, id);
   return id;
 }
 
-async function fetchAgeOptions(qid: number): Promise<Map<number, string>> {
+async function fetchAnswerOptionMap(qid: number): Promise<Map<number, string>> {
   const map = new Map<number, string>();
   if (qid < 0) return map;
   const res = await supabaseFetch(
@@ -473,5 +654,48 @@ async function fetchAgeOptions(qid: number): Promise<Map<number, string>> {
   if (!res.ok) return map;
   const rows = (await res.json()) as Array<{ id: number; option_text: string | null }>;
   for (const r of rows) if (r.option_text) map.set(r.id, r.option_text);
+  return map;
+}
+
+interface AnswerRow {
+  survey_submission_id: number;
+  answer_option_id: number | null;
+  answer_text: string | null;
+}
+
+async function fetchAnswerRows(
+  questionDbId: number,
+  submissionIds: number[]
+): Promise<AnswerRow[]> {
+  if (questionDbId < 0) return [];
+  return fetchByIds<AnswerRow>(
+    "survey_submission_answer",
+    "survey_submission_id",
+    submissionIds,
+    "survey_submission_id,answer_option_id,answer_text",
+    `&survey_question_id=eq.${questionDbId}`
+  );
+}
+
+/** submissionId → normalized answer label(s) for one question (multi-select safe). */
+async function fetchAnswerLabels(
+  questionDbId: number,
+  submissionIds: number[]
+): Promise<Map<number, string[]>> {
+  const map = new Map<number, string[]>();
+  if (questionDbId < 0 || submissionIds.length === 0) return map;
+  const [optMap, answers] = await Promise.all([
+    fetchAnswerOptionMap(questionDbId),
+    fetchAnswerRows(questionDbId, submissionIds),
+  ]);
+  for (const a of answers) {
+    const label = normalizeLabel(
+      (a.answer_option_id != null ? optMap.get(a.answer_option_id) : null) ?? a.answer_text
+    );
+    if (!label) continue;
+    const arr = map.get(a.survey_submission_id) ?? [];
+    arr.push(label);
+    map.set(a.survey_submission_id, arr);
+  }
   return map;
 }

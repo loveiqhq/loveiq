@@ -109,7 +109,26 @@ const profiles = [
   },
 ];
 const payments = [{ personal_report_id: 1001, amount: 29 }];
-const quotes = [{ personal_report_id: 1001, plan: "full_report" }];
+const quotes = [
+  {
+    id: 1,
+    personal_report_id: 1001,
+    plan: "full_report",
+    purchased_at: "2026-06-01T00:00:00Z",
+    forced_paywall_arm: "armA",
+    experiment_group: "control",
+    device_type: "mobile",
+    country_tier: "tier1",
+    base_price_bucket: "mid",
+    behavioral_bucket: null,
+  },
+];
+// report 1001 (sub 1) opened twice, 1002 (sub 2) once → both "viewed".
+const sessions = [
+  { personal_report_id: 1001 },
+  { personal_report_id: 1001 },
+  { personal_report_id: 1002 },
+];
 
 function installSupabaseMock() {
   mockSupabaseFetch.mockImplementation((path: string) => {
@@ -122,6 +141,7 @@ function installSupabaseMock() {
     if (path.includes("/rest/v1/user_profile")) return makeRes(profiles);
     if (path.includes("/rest/v1/payment")) return makeRes(payments);
     if (path.includes("/rest/v1/report_price_quote")) return makeRes(quotes);
+    if (path.includes("/rest/v1/report_session")) return makeRes(sessions);
     if (path.includes("/rest/v1/answer_option")) return makeRes(ageOptions);
     return makeRes([]);
   });
@@ -197,6 +217,23 @@ describe("GET /api/admin/explorer", () => {
     expect(body.facets.country).toEqual(
       expect.arrayContaining([{ label: "United States", count: 1 }])
     );
+  });
+
+  it("enriches pricing/device from the canonical quote and engagement from sessions", async () => {
+    const body = await (await GET(req("?groupBy=device"))).json();
+    // sub 1 has a mobile quote; sub 2 has no quote → Unknown.
+    expect(body.breakdown.find((r: { label: string }) => r.label === "mobile")?.count).toBe(1);
+    expect(body.breakdown.find((r: { label: string }) => r.label === "Unknown")?.count).toBe(1);
+    // Both reports have ≥1 session → rows marked viewed.
+    expect(body.rows.every((r: { reportViewed: boolean }) => r.reportViewed)).toBe(true);
+  });
+
+  it("returns an ordered trend series for the filtered set", async () => {
+    const body = await (await GET(req())).json();
+    expect(Array.isArray(body.trend)).toBe(true);
+    expect(body.trendGranularity).toBe("week"); // days=0 (all time) → week buckets
+    const totalInTrend = body.trend.reduce((a: number, t: { count: number }) => a + t.count, 0);
+    expect(totalInTrend).toBe(body.stats.total);
   });
 
   it("format=csv returns a CSV attachment of the filtered rows", async () => {
