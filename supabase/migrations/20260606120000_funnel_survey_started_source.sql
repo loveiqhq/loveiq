@@ -14,7 +14,9 @@ CREATE OR REPLACE FUNCTION get_conversion_funnel(
   utm_filter TEXT DEFAULT NULL
 )
 RETURNS JSON
-LANGUAGE plpgsql SECURITY DEFINER AS $$
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
 DECLARE
   result JSON;
   effective_since TIMESTAMPTZ := COALESCE(since_ts, '2000-01-01'::TIMESTAMPTZ);
