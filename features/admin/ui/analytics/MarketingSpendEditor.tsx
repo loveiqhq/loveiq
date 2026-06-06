@@ -245,19 +245,30 @@ export default function MarketingSpendEditor({ days }: { days: number }) {
           <h3 className="font-serif text-base font-semibold text-text-primary">
             Marketing spend rows ({days === 0 ? "all time" : `last ${days}d`})
           </h3>
-          {data && (
-            <p className="text-xs text-text-muted">
-              Total: €
-              {data.totals.spend_eur.toLocaleString("en-US", {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })}
-              {" · "}
-              {data.totals.clicks.toLocaleString("en-US")} clicks
-              {" · "}
-              {data.totals.unique_visitors.toLocaleString("en-US")} visitors
-            </p>
-          )}
+          <div className="flex items-center gap-3">
+            {data && (
+              <p className="text-xs text-text-muted">
+                Total: €
+                {data.totals.spend_eur.toLocaleString("en-US", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+                {" · "}
+                {data.totals.clicks.toLocaleString("en-US")} clicks
+                {" · "}
+                {data.totals.unique_visitors.toLocaleString("en-US")} visitors
+              </p>
+            )}
+            {data && data.rows.length > 0 && (
+              <a
+                href={`/api/admin/analytics/marketing-spend?days=${days}&format=csv`}
+                className="shrink-0 rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-text-muted transition hover:border-white/20 hover:text-text-primary"
+                download
+              >
+                Export CSV
+              </a>
+            )}
+          </div>
         </div>
         {loading && <p className="px-5 py-4 text-sm text-text-muted">Loading…</p>}
         {error && (

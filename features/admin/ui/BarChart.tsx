@@ -1,12 +1,28 @@
 interface BarItem {
   label: string;
   value: number;
+  /** When set, rendered in place of `value` as the bar label (bar magnitude still uses `value`). */
+  display?: string;
+  /** Per-series values, required when the chart is given a `series` config (grouped mode). */
+  seriesData?: Record<string, number>;
+}
+
+/** A series in grouped multi-series mode (e.g. one per gender). */
+export interface BarSeries {
+  key: string; // matches keys in BarItem.seriesData
+  label: string; // legend + row label
+  color: string; // Tailwind bg-* class, e.g. "bg-accent-purple"
 }
 
 interface BarChartProps {
   items: BarItem[];
   direction?: "horizontal" | "vertical";
   maxHeight?: number;
+  /**
+   * When provided, renders grouped multi-series bars (one labelled bar per
+   * series within each category) plus a legend, instead of single-series.
+   */
+  series?: BarSeries[];
 }
 
 function getGridLines(maxValue: number): number[] {
@@ -23,7 +39,59 @@ export default function BarChart({
   items,
   direction = "horizontal",
   maxHeight = 200,
+  series,
 }: BarChartProps) {
+  // ── Grouped multi-series mode ──────────────────────────────────────────────
+  // Bars are scaled to the max series value across all items so series with
+  // different totals (e.g. fewer men than women) stay visually comparable when
+  // the caller passes within-series percentages.
+  if (series && series.length > 0) {
+    const maxSeriesValue = Math.max(
+      ...items.flatMap((i) => series.map((s) => i.seriesData?.[s.key] ?? 0)),
+      1
+    );
+    return (
+      <div className="space-y-4">
+        <div className="flex flex-wrap gap-3">
+          {series.map((s) => (
+            <span key={s.key} className="flex items-center gap-1.5 text-[11px] text-text-muted">
+              <span className={`inline-block h-2 w-4 rounded-sm ${s.color}`} />
+              {s.label}
+            </span>
+          ))}
+        </div>
+        {items.map((item, idx) => (
+          <div key={`${item.label}-${idx}`}>
+            <div className="mb-1 flex items-center justify-between gap-2 text-xs">
+              <span className="max-w-[70%] truncate text-text-muted">{item.label}</span>
+              {item.display && <span className="shrink-0 text-text-muted">{item.display}</span>}
+            </div>
+            <div className="space-y-1">
+              {series.map((s) => {
+                const v = item.seriesData?.[s.key] ?? 0;
+                const pct = (v / maxSeriesValue) * 100;
+                return (
+                  <div key={s.key} className="flex items-center gap-2">
+                    <span className="w-14 shrink-0 text-[10px] text-text-muted">{s.label}</span>
+                    <div className="h-1.5 flex-1 rounded-full bg-white/5">
+                      <div
+                        className={`h-1.5 rounded-full ${s.color}`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    <span className="w-12 shrink-0 text-right text-[10px] text-text-primary">
+                      {v.toFixed(1)}%
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   const maxValue = Math.max(...items.map((i) => i.value), 1);
 
   if (direction === "vertical") {
@@ -84,7 +152,7 @@ export default function BarChart({
                         className="absolute left-1/2 -translate-x-1/2 text-[10px] text-text-muted whitespace-nowrap"
                         style={{ bottom: `calc(${pct}% + 2px)` }}
                       >
-                        {item.value}
+                        {item.display ?? item.value}
                       </span>
                     )}
                   </div>
@@ -113,7 +181,7 @@ export default function BarChart({
           <div key={`${item.label}-${idx}`}>
             <div className="mb-1 flex items-center justify-between text-xs">
               <span className="text-text-muted truncate max-w-[60%]">{item.label}</span>
-              <span className="text-text-primary">{item.value}</span>
+              <span className="text-text-primary">{item.display ?? item.value}</span>
             </div>
             <div className="h-2 rounded-full bg-white/5">
               <div className="h-2 rounded-full bg-accent-orange" style={{ width: `${pct}%` }} />

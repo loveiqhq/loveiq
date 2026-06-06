@@ -29,9 +29,10 @@ describe("GET /api/admin/segments/deltas", () => {
     mockCheckRateLimit.mockResolvedValue({ allowed: true, remaining: 29, resetAt: new Date() });
   });
 
-  it("uses scored archetype buckets from embedded objects and disables caching", async () => {
+  it("resolves archetypes via a separate scoring_result query (not an embedded select)", async () => {
     const now = Date.now();
-    mockSupabaseFetch.mockResolvedValue({
+    // 1st call: survey_submission rows (NO embedded scoring_result).
+    mockSupabaseFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => [
         {
@@ -39,25 +40,34 @@ describe("GET /api/admin/segments/deltas", () => {
           status: "completed",
           utm_tracker: JSON.stringify({ utm_source: "google" }),
           created_date_time: new Date(now - 2 * 86_400_000).toISOString(),
-          scoring_result: {
-            primary_archetype: "Spark Seeker",
-          },
         },
         {
           id: 2,
           status: "completed",
           utm_tracker: JSON.stringify({ utm_source: "google" }),
           created_date_time: new Date(now - 12 * 60 * 60 * 1000).toISOString(),
-          scoring_result: {
-            primary_archetype: "Tender Devotee",
-          },
         },
+      ],
+    });
+    // 2nd call: scoring_result rows keyed by survey_submission_id.
+    mockSupabaseFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => [
+        { survey_submission_id: 1, primary_archetype: "Spark Seeker" },
+        { survey_submission_id: 2, primary_archetype: "Tender Devotee" },
       ],
     });
 
     const res = await GET(new Request("http://localhost/api/admin/segments/deltas?days=3"));
     expect(res.status).toBe(200);
     expect(res.headers.get("Cache-Control")).toBe("no-store, max-age=0");
+
+    // The submission query must NOT use the invalid embedded relationship.
+    const firstUrl = mockSupabaseFetch.mock.calls[0]?.[0] as string;
+    expect(firstUrl).not.toContain("scoring_result(");
+    // A second, separate scoring_result query must run.
+    const secondUrl = mockSupabaseFetch.mock.calls[1]?.[0] as string;
+    expect(secondUrl).toContain("/rest/v1/scoring_result");
 
     const json = await res.json();
     expect(json.watchlist).toEqual(
@@ -75,6 +85,30 @@ describe("GET /api/admin/segments/deltas", () => {
           key: "Unscored",
         }),
       ])
+    );
+  });
+
+  it("buckets submissions with no scoring_result row as Unscored", async () => {
+    const now = Date.now();
+    mockSupabaseFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => [
+        {
+          id: 10,
+          status: "completed",
+          utm_tracker: JSON.stringify({ utm_source: "google" }),
+          created_date_time: new Date(now - 12 * 60 * 60 * 1000).toISOString(),
+        },
+      ],
+    });
+    // No scoring row for id 10.
+    mockSupabaseFetch.mockResolvedValueOnce({ ok: true, json: async () => [] });
+
+    const res = await GET(new Request("http://localhost/api/admin/segments/deltas?days=3"));
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.watchlist).toEqual(
+      expect.arrayContaining([expect.objectContaining({ dimension: "archetype", key: "Unscored" })])
     );
   });
 

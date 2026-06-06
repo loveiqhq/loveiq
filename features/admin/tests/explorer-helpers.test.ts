@@ -505,3 +505,96 @@ describe("archetypeMatchFilter", () => {
     expect(out.map((r) => r.submissionId)).toEqual([1, 2]); // row 3 unscored, excluded
   });
 });
+
+describe("breakdown distribution share % (sharePct)", () => {
+  it("single-select share = count / total, sums to ~100", () => {
+    const rows = [
+      row({ submissionId: 1 }),
+      row({ submissionId: 2 }),
+      row({ submissionId: 3 }),
+      row({ submissionId: 4 }),
+    ];
+    const answers = new Map<number, string>([
+      [1, "Daily"],
+      [2, "Daily"],
+      [3, "Daily"],
+      [4, "Weekly"],
+    ]);
+    const out = buildBreakdownBy(rows, specForAnswers(answers), { includeTest: false });
+    expect(out.find((r) => r.label === "Daily")?.sharePct).toBe(75);
+    expect(out.find((r) => r.label === "Weekly")?.sharePct).toBe(25);
+    expect(out.reduce((a, r) => a + r.sharePct, 0)).toBeCloseTo(100, 5);
+  });
+
+  it("multi-select share = penetration (count / cohort size), NOT share of option-picks", () => {
+    const rows = [row({ submissionId: 1 }), row({ submissionId: 2 }), row({ submissionId: 3 })];
+    const labels = new Map<number, string[]>([
+      [1, ["A", "B"]],
+      [2, ["A"]],
+      [3, ["A"]],
+    ]);
+    const out = buildMultiLabelBreakdown(rows, labels, { includeTest: false });
+    // A picked by all 3 of 3 people → 100% (even though it's 3 of 4 option-picks).
+    expect(out.find((r) => r.label === "A")?.sharePct).toBe(100);
+    expect(out.find((r) => r.label === "B")?.sharePct).toBeCloseTo(33.3, 1);
+  });
+
+  it("the folded 'Other' row keeps a correct residual share", () => {
+    const rows = Array.from({ length: 5 }, (_, i) => row({ submissionId: i + 1 }));
+    const answers = new Map<number, string>([
+      [1, "A"],
+      [2, "A"],
+      [3, "B"],
+      [4, "C"],
+      [5, "D"],
+    ]);
+    const out = buildBreakdownBy(rows, specForAnswers(answers), { includeTest: false, topN: 1 });
+    expect(out[0]).toMatchObject({ label: "A", count: 2, sharePct: 40 });
+    expect(out.find((r) => r.label === "Other")).toMatchObject({ count: 3, sharePct: 60 });
+  });
+});
+
+describe("breakdown gender split (byGender)", () => {
+  it("tallies + normalizes gender per group (Woman→Women, Man→Men, else→Other)", () => {
+    const rows = [
+      row({ submissionId: 1, gender: "Woman" }),
+      row({ submissionId: 2, gender: "Woman" }),
+      row({ submissionId: 3, gender: "Man" }),
+      row({ submissionId: 4, gender: "Nonbinary" }),
+      row({ submissionId: 5, gender: null }),
+    ];
+    const answers = new Map<number, string>([
+      [1, "X"],
+      [2, "X"],
+      [3, "X"],
+      [4, "X"],
+      [5, "X"],
+    ]);
+    const out = buildBreakdownBy(rows, specForAnswers(answers), { includeTest: false });
+    const x = out.find((r) => r.label === "X")!;
+    expect(x.byGender.Women?.count).toBe(2);
+    expect(x.byGender.Men?.count).toBe(1);
+    expect(x.byGender.Other?.count).toBe(2); // Nonbinary + null
+  });
+
+  it("merges byGender across rows folded into 'Other'", () => {
+    const rows = [
+      // "Top" has count 2 so it's kept; the two single-count tails fold into Other.
+      row({ submissionId: 1, gender: "Woman" }),
+      row({ submissionId: 2, gender: "Woman" }),
+      row({ submissionId: 3, gender: "Man" }),
+      row({ submissionId: 4, gender: "Woman" }),
+    ];
+    const answers = new Map<number, string>([
+      [1, "Top"],
+      [2, "Top"],
+      [3, "TailM"],
+      [4, "TailW"],
+    ]);
+    const out = buildBreakdownBy(rows, specForAnswers(answers), { includeTest: false, topN: 1 });
+    const other = out.find((r) => r.label === "Other")!;
+    // TailM (Man) + TailW (Woman) merged.
+    expect(other.byGender.Men?.count).toBe(1);
+    expect(other.byGender.Women?.count).toBe(1);
+  });
+});

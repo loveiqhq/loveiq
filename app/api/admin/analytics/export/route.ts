@@ -109,19 +109,113 @@ export async function GET(request: Request) {
     efficiency: { roas: number | null };
     segmentation: {
       completion: {
-        archetype: Array<{ label: string; pct: number }>;
-        country: Array<{ label: string; pct: number }>;
-        gender: Array<{ label: string; pct: number }>;
-        age: Array<{ label: string; pct: number }>;
+        archetype: Array<{ label: string; count: number; pct: number }>;
+        country: Array<{ label: string; count: number; pct: number }>;
+        gender: Array<{ label: string; count: number; pct: number }>;
+        age: Array<{ label: string; count: number; pct: number }>;
       };
       paid: {
-        archetype: Array<{ label: string; pct: number }>;
-        country: Array<{ label: string; pct: number }>;
-        gender: Array<{ label: string; pct: number }>;
-        age: Array<{ label: string; pct: number }>;
+        archetype: Array<{ label: string; count: number; pct: number }>;
+        country: Array<{ label: string; count: number; pct: number }>;
+        gender: Array<{ label: string; count: number; pct: number }>;
+        age: Array<{ label: string; count: number; pct: number }>;
       };
     };
   };
+
+  // ── Segmentation CSV (completion → paid conversion per segment) ──────────────
+  if (new URL(request.url).searchParams.get("format") === "segmentation") {
+    const segHeader = [
+      "Dimension",
+      "Segment",
+      "Completed (n)",
+      "Completed %",
+      "Paid (n)",
+      "Paid %",
+      "Conversion",
+      "vs avg",
+    ];
+    type SegRow = { label: string; count: number; pct: number };
+    const dims: Array<{ label: string; completion: SegRow[]; paid: SegRow[] }> = [
+      {
+        label: "Primary Archetype",
+        completion: k.segmentation.completion.archetype,
+        paid: k.segmentation.paid.archetype,
+      },
+      {
+        label: "Country",
+        completion: k.segmentation.completion.country,
+        paid: k.segmentation.paid.country,
+      },
+      {
+        label: "Gender",
+        completion: k.segmentation.completion.gender,
+        paid: k.segmentation.paid.gender,
+      },
+      {
+        label: "Age bucket",
+        completion: k.segmentation.completion.age,
+        paid: k.segmentation.paid.age,
+      },
+    ];
+
+    const segLines: string[] = [];
+    for (const dim of dims) {
+      const compMap = new Map(dim.completion.map((r) => [r.label, r]));
+      const paidMap = new Map(dim.paid.map((r) => [r.label, r]));
+      const completionTotal = dim.completion.reduce((s, r) => s + r.count, 0);
+      const paidTotal = dim.paid.reduce((s, r) => s + r.count, 0);
+      const overall = completionTotal > 0 ? paidTotal / completionTotal : 0;
+      const labels = [...new Set([...compMap.keys(), ...paidMap.keys()])];
+      const built = labels
+        .map((label) => {
+          const c = compMap.get(label);
+          const p = paidMap.get(label);
+          const cCount = c?.count ?? 0;
+          const pCount = p?.count ?? 0;
+          const conv = cCount > 0 ? pCount / cCount : null;
+          const vsAvg = conv != null && overall > 0 ? conv / overall : null;
+          return {
+            row: [
+              dim.label,
+              label,
+              String(cCount),
+              `${(c?.pct ?? 0).toFixed(1)}%`,
+              String(pCount),
+              `${(p?.pct ?? 0).toFixed(1)}%`,
+              conv != null ? `${(conv * 100).toFixed(1)}%` : "—",
+              vsAvg != null ? `${vsAvg.toFixed(2)}x` : "—",
+            ],
+            cCount,
+          };
+        })
+        .sort((a, b) => b.cCount - a.cCount);
+      for (const b of built) segLines.push(b.row.map(escapeCsv).join(","));
+    }
+
+    const segCsv = [
+      `# Segmentation Export — generated ${new Date().toISOString()} for window ${k.range.days}d`,
+      segHeader.map(escapeCsv).join(","),
+      ...segLines,
+    ].join("\n");
+
+    void logAdminAction({
+      admin_email: admin.email,
+      action: "export_core_kpis_segmentation",
+      resource_type: "analytics",
+      metadata: { days: k.range.days },
+      ip,
+    });
+
+    const segFilename = `segmentation-${new Date().toISOString().slice(0, 10)}-${k.range.days}d.csv`;
+    return new NextResponse(segCsv, {
+      status: 200,
+      headers: {
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": `attachment; filename="${segFilename}"`,
+      },
+    });
+  }
 
   const channelMixDisplay = k.marketingInput.channelMix
     ? k.marketingInput.channelMix.map((c) => `${c.channel} ${c.pct.toFixed(1)}%`).join(" | ")

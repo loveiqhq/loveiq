@@ -38,6 +38,7 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url);
   const days = parseInt(url.searchParams.get("days") || "30", 10);
+  const wantsCsv = url.searchParams.get("format") === "csv";
   const sinceDate =
     days > 0 ? new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10) : "2000-01-01";
 
@@ -49,7 +50,9 @@ export async function GET(request: Request) {
     if (!res.ok) {
       // Table may not exist yet (migration unapplied) — treat as empty.
       logger.warn("marketing_spend GET non-OK; assuming empty");
-      return NextResponse.json({ rows: [], totals: emptyTotals() });
+      return wantsCsv
+        ? csvResponse([], days)
+        : NextResponse.json({ rows: [], totals: emptyTotals() });
     }
     const rows = (await res.json()) as Array<{
       id: number;
@@ -64,6 +67,7 @@ export async function GET(request: Request) {
       updated_at: string;
     }>;
     const normalized = rows.map((r) => ({ ...r, spend_eur: Number(r.spend_eur) }));
+    if (wantsCsv) return csvResponse(normalized, days);
     const totals = normalized.reduce(
       (acc, r) => ({
         spend_eur: acc.spend_eur + r.spend_eur,
@@ -82,6 +86,58 @@ export async function GET(request: Request) {
 
 function emptyTotals() {
   return { spend_eur: 0, clicks: 0, impressions: 0, unique_visitors: 0 };
+}
+
+function escapeCsv(s: string): string {
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+interface CsvSpendRow {
+  date: string;
+  channel: string;
+  spend_eur: number;
+  clicks: number;
+  impressions: number;
+  unique_visitors: number;
+  notes: string | null;
+}
+
+function csvResponse(rows: CsvSpendRow[], days: number): NextResponse {
+  const header = [
+    "date",
+    "channel",
+    "spend_eur",
+    "clicks",
+    "impressions",
+    "unique_visitors",
+    "notes",
+  ];
+  const csv = [
+    header.join(","),
+    ...rows.map((r) =>
+      [
+        r.date,
+        r.channel,
+        String(r.spend_eur),
+        String(r.clicks),
+        String(r.impressions),
+        String(r.unique_visitors),
+        r.notes ?? "",
+      ]
+        .map((v) => escapeCsv(String(v)))
+        .join(",")
+    ),
+  ].join("\n");
+  const filename = `marketing-spend-${new Date().toISOString().slice(0, 10)}-${
+    days > 0 ? `${days}d` : "all"
+  }.csv`;
+  return new NextResponse(csv, {
+    status: 200,
+    headers: {
+      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Disposition": `attachment; filename="${filename}"`,
+    },
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

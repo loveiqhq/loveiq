@@ -26,15 +26,19 @@ function percentile(nums: number[], p: number): number | null {
   return sorted[idx]!;
 }
 
-function topNWithOther<T extends { count: number }>(
+function topNWithOther<T extends { count: number; pct: number }>(
   rows: T[],
   n: number,
   labelKey: keyof T
-): Array<T | { count: number; [k: string]: string | number }> {
+): Array<T | { count: number; pct: number; [k: string]: string | number }> {
   if (rows.length <= n) return rows;
   const top = rows.slice(0, n);
-  const other = rows.slice(n).reduce((sum, r) => sum + r.count, 0);
-  return [...top, { count: other, [labelKey as string]: "Other" }];
+  const tail = rows.slice(n);
+  const otherCount = tail.reduce((sum, r) => sum + r.count, 0);
+  // The merged "Other" row MUST carry a numeric pct — SegmentationPanel.toBarItems
+  // calls r.pct.toFixed(1) and crashes the whole admin if pct is undefined.
+  const otherPct = Math.round(tail.reduce((sum, r) => sum + r.pct, 0) * 10) / 10;
+  return [...top, { count: otherCount, pct: otherPct, [labelKey as string]: "Other" }];
 }
 
 function pctChange(curr: number, prev: number): number {
@@ -280,17 +284,21 @@ export async function GET(request: Request) {
         completedIds = completed.map((s) => s.id);
         completedUserIds = completed.map((s) => s.user_id);
 
+        // survey_partial_save is upserted once per session_id, so the row count
+        // is the number of distinct started surveys. Filter on `started_at` to
+        // match the canonical definition used by the Slack digest.
         const partialRes = await supabaseFetch(
-          `/rest/v1/survey_partial_save?select=session_id,started_at&saved_at=gte.${since}`,
+          `/rest/v1/survey_partial_save?select=session_id&started_at=gte.${since}`,
           { headers: { Range: "0-49999", Prefer: "count=exact" } }
         );
         const partialCount = partialRes.ok
           ? parseInt(partialRes.headers.get("content-range")?.split("/")[1] || "0", 10)
           : 0;
-        // Attempts = distinct partial-save sessions (open/abandoned) + completed submissions.
-        // A completed session writes both rows but partial_save is keyed by session_id while
-        // submission rows are independent — we use SUM as the upper bound.
-        const attempts = partialCount + completed.length;
+        // Attempts = distinct started sessions. A completed session ALSO wrote a
+        // partial_save row, so partialCount already includes completers — summing
+        // would double-count them. Use max() as a floor for the rare case where a
+        // completed submission has no surviving partial_save row.
+        const attempts = Math.max(partialCount, completed.length);
 
         const durationsMs = completed
           .map((s) => s.duration_ms)
@@ -698,7 +706,7 @@ export async function GET(request: Request) {
 
 // `safeDiv` is exported so tests + future routes can share it without
 // re-implementing the divide-by-zero guard.
-export { safeDiv };
+export { safeDiv, topNWithOther };
 
 /**
  * Map user_id → age bucket from survey answer Q15003. `user_profile.birthday` is

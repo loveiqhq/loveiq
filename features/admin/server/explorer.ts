@@ -364,6 +364,53 @@ export interface BreakdownRow {
   paid: number;
   paidPct: number | null;
   revenue: number;
+  /**
+   * Distribution share. Single-select/scale/dimension: count / Σcount × 100
+   * (sums to ~100). Multi-select: count / cohort size × 100 (penetration —
+   * won't sum to 100). Rounded to 1 dp.
+   */
+  sharePct: number;
+  /** Per-gender tallies keyed "Women" | "Men" | "Other" (the survey's gender options collapse to these). */
+  byGender: Record<string, { count: number }>;
+}
+
+/** Internal breakdown accumulator (carries the gender split). */
+interface BreakdownAcc {
+  count: number;
+  paid: number;
+  revenue: number;
+  byGender: Map<string, number>;
+}
+
+/**
+ * Collapse the survey's gender options ("Woman" / "Man" / "Nonbinary" /
+ * "Other" / "I'd rather not label this" / null) to the three buckets the
+ * strategy lead reads: Women, Men, Other.
+ */
+function normalizeGender(raw: string | null): "Women" | "Men" | "Other" {
+  if (!raw) return "Other";
+  const s = raw.trim().toLowerCase();
+  if (s === "woman" || s === "women" || s === "female" || s === "f") return "Women";
+  if (s === "man" || s === "men" || s === "male" || s === "m") return "Men";
+  return "Other";
+}
+
+function newBreakdownAcc(): BreakdownAcc {
+  return { count: 0, paid: 0, revenue: 0, byGender: new Map() };
+}
+
+function bumpBreakdownAcc(g: BreakdownAcc, row: EnrichedRow, includeTest: boolean): void {
+  g.count += 1;
+  if (isPaidRow(row, includeTest)) g.paid += 1;
+  g.revenue += row.paidAmount;
+  const gk = normalizeGender(row.gender);
+  g.byGender.set(gk, (g.byGender.get(gk) ?? 0) + 1);
+}
+
+function genderMapToRecord(m: Map<string, number>): Record<string, { count: number }> {
+  const out: Record<string, { count: number }> = {};
+  for (const [k, v] of m) out[k] = { count: v };
+  return out;
 }
 
 /** Generic breakdown over any value provider. */
@@ -372,28 +419,29 @@ export function buildBreakdownBy(
   spec: ValueSpec,
   opts: { includeTest: boolean; topN?: number }
 ): BreakdownRow[] {
-  const groups = new Map<string, { count: number; paid: number; revenue: number }>();
+  const groups = new Map<string, BreakdownAcc>();
   for (const row of rows) {
     const key = spec.valueOf(row);
-    const g = groups.get(key) ?? { count: 0, paid: 0, revenue: 0 };
-    g.count += 1;
-    if (isPaidRow(row, opts.includeTest)) g.paid += 1;
-    g.revenue += row.paidAmount;
+    const g = groups.get(key) ?? newBreakdownAcc();
+    bumpBreakdownAcc(g, row, opts.includeTest);
     groups.set(key, g);
   }
 
-  const toRow = (
-    label: string,
-    g: { count: number; paid: number; revenue: number }
-  ): BreakdownRow => ({
+  // Total is the sum of all group counts (each row lands in exactly one group),
+  // computed before any top-N fold so the "Other" share stays a true residual.
+  const total = [...groups.values()].reduce((s, g) => s + g.count, 0);
+
+  const toRow = (label: string, g: BreakdownAcc): BreakdownRow => ({
     label,
     count: g.count,
     paid: g.paid,
     paidPct: g.count > 0 ? Math.round((g.paid / g.count) * 1000) / 10 : null,
     revenue: Math.round(g.revenue * 100) / 100,
+    sharePct: total > 0 ? Math.round((g.count / total) * 1000) / 10 : 0,
+    byGender: genderMapToRecord(g.byGender),
   });
 
-  let out: BreakdownRow[] = [...groups.entries()].map(([label, g]) => toRow(label, g));
+  const out: BreakdownRow[] = [...groups.entries()].map(([label, g]) => toRow(label, g));
 
   if (spec.order) {
     const order = spec.order;
@@ -405,15 +453,15 @@ export function buildBreakdownBy(
   const topN = opts.topN ?? 12;
   if (out.length > topN) {
     const top = out.slice(0, topN);
-    const other = out.slice(topN).reduce(
-      (acc, r) => {
-        acc.count += r.count;
-        acc.paid += r.paid;
-        acc.revenue += r.revenue;
-        return acc;
-      },
-      { count: 0, paid: 0, revenue: 0 }
-    );
+    const other = out.slice(topN).reduce<BreakdownAcc>((acc, r) => {
+      acc.count += r.count;
+      acc.paid += r.paid;
+      acc.revenue += r.revenue;
+      for (const [k, v] of Object.entries(r.byGender)) {
+        acc.byGender.set(k, (acc.byGender.get(k) ?? 0) + v.count);
+      }
+      return acc;
+    }, newBreakdownAcc());
     top.push(toRow("Other", other));
     return top;
   }
@@ -433,12 +481,10 @@ export function buildMultiLabelBreakdown(
   labelsBySubmission: Map<number, string[]>,
   opts: { includeTest: boolean; topN?: number }
 ): BreakdownRow[] {
-  const groups = new Map<string, { count: number; paid: number; revenue: number }>();
+  const groups = new Map<string, BreakdownAcc>();
   const bump = (key: string, row: EnrichedRow) => {
-    const g = groups.get(key) ?? { count: 0, paid: 0, revenue: 0 };
-    g.count += 1;
-    if (isPaidRow(row, opts.includeTest)) g.paid += 1;
-    g.revenue += row.paidAmount;
+    const g = groups.get(key) ?? newBreakdownAcc();
+    bumpBreakdownAcc(g, row, opts.includeTest);
     groups.set(key, g);
   };
 
@@ -452,15 +498,18 @@ export function buildMultiLabelBreakdown(
     for (const label of new Set(labels)) bump(label, row);
   }
 
-  const toRow = (
-    label: string,
-    g: { count: number; paid: number; revenue: number }
-  ): BreakdownRow => ({
+  // Penetration denominator: the number of people in the cohort, NOT the sum of
+  // option tallies (a person who picks 3 options counts toward 3 option rows).
+  const cohortSize = rows.length;
+
+  const toRow = (label: string, g: BreakdownAcc): BreakdownRow => ({
     label,
     count: g.count,
     paid: g.paid,
     paidPct: g.count > 0 ? Math.round((g.paid / g.count) * 1000) / 10 : null,
     revenue: Math.round(g.revenue * 100) / 100,
+    sharePct: cohortSize > 0 ? Math.round((g.count / cohortSize) * 1000) / 10 : 0,
+    byGender: genderMapToRecord(g.byGender),
   });
 
   const out = [...groups.entries()]
@@ -470,15 +519,15 @@ export function buildMultiLabelBreakdown(
   const topN = opts.topN ?? 12;
   if (out.length > topN) {
     const top = out.slice(0, topN);
-    const other = out.slice(topN).reduce(
-      (acc, r) => {
-        acc.count += r.count;
-        acc.paid += r.paid;
-        acc.revenue += r.revenue;
-        return acc;
-      },
-      { count: 0, paid: 0, revenue: 0 }
-    );
+    const other = out.slice(topN).reduce<BreakdownAcc>((acc, r) => {
+      acc.count += r.count;
+      acc.paid += r.paid;
+      acc.revenue += r.revenue;
+      for (const [k, v] of Object.entries(r.byGender)) {
+        acc.byGender.set(k, (acc.byGender.get(k) ?? 0) + v.count);
+      }
+      return acc;
+    }, newBreakdownAcc());
     top.push(toRow("Other", other));
     return top;
   }

@@ -16,8 +16,13 @@ interface SubmissionRow {
   status: string;
   utm_tracker: string | null;
   created_date_time: string;
-  scoring_result: { primary_archetype: string | null } | null;
 }
+
+// scoring_result is a reverse one-to-many relation on survey_submission, so it
+// cannot be selected inline (`scoring_result(primary_archetype)` returns an array
+// or 400s, leaving every row "Unscored"). Fetch it in a separate keyed query, the
+// same pattern core-kpis uses.
+const SCORING_IN_CHUNK = 500;
 
 function parseUtmSource(tracker: string | null): string {
   if (!tracker?.trim()) return "Direct";
@@ -82,7 +87,7 @@ export async function GET(request: Request) {
 
   try {
     const res = await supabaseFetch(
-      `/rest/v1/survey_submission?select=id,status,utm_tracker,created_date_time,scoring_result(primary_archetype)&created_date_time=gte.${previousSince.toISOString()}&order=created_date_time.desc`,
+      `/rest/v1/survey_submission?select=id,status,utm_tracker,created_date_time&created_date_time=gte.${previousSince.toISOString()}&order=created_date_time.desc`,
       { headers: { Range: "0-49999" } }
     );
 
@@ -92,6 +97,30 @@ export async function GET(request: Request) {
     }
 
     const rows = (await res.json()) as SubmissionRow[];
+
+    // Resolve primary archetype via a separate keyed query (chunked so the URL
+    // stays bounded as the audience grows). Failure degrades to "Unscored".
+    const archetypeBySubmission = new Map<number, string>();
+    const submissionIds = rows.map((r) => r.id);
+    for (let i = 0; i < submissionIds.length; i += SCORING_IN_CHUNK) {
+      const batch = submissionIds.slice(i, i + SCORING_IN_CHUNK);
+      if (batch.length === 0) continue;
+      const scoringRes = await supabaseFetch(
+        `/rest/v1/scoring_result?select=survey_submission_id,primary_archetype&survey_submission_id=in.(${batch.join(
+          ","
+        )})`,
+        { headers: { Range: "0-49999" } }
+      );
+      if (!scoringRes.ok) continue;
+      for (const s of (await scoringRes.json()) as Array<{
+        survey_submission_id: number;
+        primary_archetype: string | null;
+      }>) {
+        if (s.primary_archetype)
+          archetypeBySubmission.set(s.survey_submission_id, s.primary_archetype);
+      }
+    }
+
     const currentBuckets = createBuckets();
     const previousBuckets = createBuckets();
     let currentTotal = 0;
@@ -107,7 +136,7 @@ export async function GET(request: Request) {
       else previousTotal += 1;
 
       increment(buckets.source, parseUtmSource(row.utm_tracker));
-      increment(buckets.archetype, row.scoring_result?.primary_archetype || "Unscored");
+      increment(buckets.archetype, archetypeBySubmission.get(row.id) ?? "Unscored");
       increment(buckets.status, row.status || "unknown");
     }
 

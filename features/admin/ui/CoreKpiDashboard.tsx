@@ -1,8 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useAdminFetch } from "./hooks/useAdminFetch";
+import { useAdminQueryState } from "./hooks/useAdminQueryState";
 import TimeRangeSelector from "./TimeRangeSelector";
+import BarChart from "./BarChart";
 import KpiCard from "./analytics/KpiCard";
 import KpiLayerSection from "./analytics/KpiLayerSection";
 import MarketingSpendEditor from "./analytics/MarketingSpendEditor";
@@ -12,6 +14,11 @@ interface SegmentRow {
   label: string;
   count: number;
   pct: number;
+}
+
+interface DailyPoint {
+  date: string;
+  count: number;
 }
 
 interface CoreKpiData {
@@ -32,8 +39,14 @@ interface CoreKpiData {
     medianDurationMinutes: number | null;
     p90DurationMinutes: number | null;
     completionsPerDay: number;
+    daily: DailyPoint[];
   };
-  monetization: { paidReports: number; surveyToPaidCvr: number | null; paidPerDay: number };
+  monetization: {
+    paidReports: number;
+    surveyToPaidCvr: number | null;
+    paidPerDay: number;
+    daily: DailyPoint[];
+  };
   revenue: { arppEur: number | null; totalRevenueEur: number };
   unitEconomics: {
     cpprEur: number | null;
@@ -85,8 +98,14 @@ type Tab = "board" | "marketing" | "segmentation";
 const MARKETING_HINT = "Add a marketing-spend row to populate.";
 
 export default function CoreKpiDashboard() {
-  const [days, setDays] = useState(30);
-  const [tab, setTab] = useState<Tab>("board");
+  // Tab + time range live in the URL so views are bookmarkable / Slack-shareable
+  // (e.g. ?tab=segmentation&days=90), matching the Data Explorer.
+  const { searchParams, setQueryState } = useAdminQueryState();
+  const daysParam = searchParams.get("days");
+  const parsedDays = daysParam != null ? parseInt(daysParam, 10) : NaN;
+  const days = Number.isFinite(parsedDays) ? parsedDays : 30; // preserve days=0 (all time)
+  const tabParam = searchParams.get("tab");
+  const tab: Tab = tabParam === "marketing" || tabParam === "segmentation" ? tabParam : "board";
   const params = useMemo(() => ({ days: String(days) }), [days]);
   const { data, loading, error } = useAdminFetch<CoreKpiData>(
     "/api/admin/analytics/core-kpis",
@@ -104,14 +123,21 @@ export default function CoreKpiDashboard() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <TimeRangeSelector value={days} onChange={setDays} />
-          <a
-            href={`/api/admin/analytics/export?days=${days}`}
-            className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-text-muted transition hover:border-white/20 hover:text-text-primary"
-            download
-          >
-            Export CSV
-          </a>
+          <TimeRangeSelector
+            value={days}
+            onChange={(d) => setQueryState({ days: d === 30 ? null : d })}
+          />
+          {tab !== "marketing" && (
+            <a
+              href={`/api/admin/analytics/export?days=${days}${
+                tab === "segmentation" ? "&format=segmentation" : ""
+              }`}
+              className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-text-muted transition hover:border-white/20 hover:text-text-primary"
+              download
+            >
+              Export CSV
+            </a>
+          )}
         </div>
       </header>
 
@@ -126,7 +152,7 @@ export default function CoreKpiDashboard() {
           <button
             key={t.id}
             type="button"
-            onClick={() => setTab(t.id)}
+            onClick={() => setQueryState({ tab: t.id === "board" ? null : t.id })}
             aria-pressed={tab === t.id}
             className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
               tab === t.id
@@ -164,6 +190,20 @@ function DashboardSkeleton() {
     <div className="flex items-center justify-center py-20">
       <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-accent-purple" />
     </div>
+  );
+}
+
+function DailyTrend({ title, points }: { title: string; points: DailyPoint[] }) {
+  if (!points || points.length === 0) return null;
+  return (
+    <section className="rounded-xl border border-white/10 bg-surface p-5">
+      <h3 className="mb-4 font-serif text-base font-semibold text-text-primary">{title}</h3>
+      <BarChart
+        items={points.map((d) => ({ label: d.date.slice(5), value: d.count }))}
+        direction="vertical"
+        maxHeight={160}
+      />
+    </section>
   );
 }
 
@@ -294,6 +334,8 @@ function BoardTab({ data }: { data: CoreKpiData }) {
         />
       </KpiLayerSection>
 
+      <DailyTrend title="Daily Completions" points={data.surveyCompletion.daily} />
+
       <KpiLayerSection layer="Monetization">
         <KpiCard
           label="Paid Reports"
@@ -321,6 +363,8 @@ function BoardTab({ data }: { data: CoreKpiData }) {
           whyItMatters="Revenue velocity"
         />
       </KpiLayerSection>
+
+      <DailyTrend title="Daily Paid Reports" points={data.monetization.daily} />
 
       <KpiLayerSection layer="Revenue">
         <KpiCard
