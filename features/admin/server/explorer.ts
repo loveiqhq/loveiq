@@ -420,6 +420,71 @@ export function buildBreakdownBy(
   return out;
 }
 
+/**
+ * Breakdown for a MULTI-select survey question: a submission contributes to
+ * EVERY distinct option it selected, so per-option counts reflect option
+ * frequency and can sum to more than the number of people (e.g. "what's getting
+ * in the way" — people pick several). Submissions with no selection fall into
+ * "Unknown" (counted once). Sorted by count desc, folding beyond topN into
+ * "Other" like `buildBreakdownBy`.
+ */
+export function buildMultiLabelBreakdown(
+  rows: EnrichedRow[],
+  labelsBySubmission: Map<number, string[]>,
+  opts: { includeTest: boolean; topN?: number }
+): BreakdownRow[] {
+  const groups = new Map<string, { count: number; paid: number; revenue: number }>();
+  const bump = (key: string, row: EnrichedRow) => {
+    const g = groups.get(key) ?? { count: 0, paid: 0, revenue: 0 };
+    g.count += 1;
+    if (isPaidRow(row, opts.includeTest)) g.paid += 1;
+    g.revenue += row.paidAmount;
+    groups.set(key, g);
+  };
+
+  for (const row of rows) {
+    const labels = labelsBySubmission.get(row.submissionId);
+    if (!labels || labels.length === 0) {
+      bump(UNKNOWN_LABEL, row);
+      continue;
+    }
+    // Distinct options per submission — a repeated selection can't double-count.
+    for (const label of new Set(labels)) bump(label, row);
+  }
+
+  const toRow = (
+    label: string,
+    g: { count: number; paid: number; revenue: number }
+  ): BreakdownRow => ({
+    label,
+    count: g.count,
+    paid: g.paid,
+    paidPct: g.count > 0 ? Math.round((g.paid / g.count) * 1000) / 10 : null,
+    revenue: Math.round(g.revenue * 100) / 100,
+  });
+
+  const out = [...groups.entries()]
+    .map(([label, g]) => toRow(label, g))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+
+  const topN = opts.topN ?? 12;
+  if (out.length > topN) {
+    const top = out.slice(0, topN);
+    const other = out.slice(topN).reduce(
+      (acc, r) => {
+        acc.count += r.count;
+        acc.paid += r.paid;
+        acc.revenue += r.revenue;
+        return acc;
+      },
+      { count: 0, paid: 0, revenue: 0 }
+    );
+    top.push(toRow("Other", other));
+    return top;
+  }
+  return out;
+}
+
 /** Backwards-compatible wrapper: breakdown by a fixed dimension. */
 export function buildBreakdown(
   rows: EnrichedRow[],

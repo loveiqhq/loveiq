@@ -7,6 +7,7 @@ import {
   buildBreakdown,
   buildBreakdownBy,
   buildCrossTab,
+  buildMultiLabelBreakdown,
   buildFacets,
   buildTrend,
   canonicalizeRelationship,
@@ -352,6 +353,62 @@ describe("scale (1-7) grouping (specForScale)", () => {
     expect(out.map((r) => r.label)).toEqual(["1", "7", "Unknown"]);
     expect(out.find((r) => r.label === "7")?.count).toBe(2);
     expect(out.some((r) => r.label === "Other")).toBe(false);
+  });
+});
+
+describe("buildMultiLabelBreakdown (multi-select, count each option)", () => {
+  const rows = [
+    row({ submissionId: 1, paidAmount: 30 }),
+    row({ submissionId: 2, paidAmount: 0 }),
+    row({ submissionId: 3, paidAmount: 0 }),
+  ];
+
+  it("counts a person in EVERY option they picked (counts can exceed people)", () => {
+    const labels = new Map<number, string[]>([
+      [1, ["Time", "Shame"]],
+      [2, ["Time"]],
+      [3, ["Shame", "Pain"]],
+    ]);
+    const out = buildMultiLabelBreakdown(rows, labels, { includeTest: false });
+    expect(out.find((r) => r.label === "Time")?.count).toBe(2);
+    expect(out.find((r) => r.label === "Shame")?.count).toBe(2);
+    expect(out.find((r) => r.label === "Pain")?.count).toBe(1);
+    // 5 option-picks across 3 people → sum exceeds the row count.
+    expect(out.reduce((a, r) => a + r.count, 0)).toBe(5);
+  });
+
+  it("per-option paid/conversion reflects only that option's people", () => {
+    const labels = new Map<number, string[]>([
+      [1, ["Time"]], // paid
+      [2, ["Time"]], // free
+      [3, ["Pain"]], // free
+    ]);
+    const out = buildMultiLabelBreakdown(rows, labels, { includeTest: false });
+    const time = out.find((r) => r.label === "Time")!;
+    expect(time).toMatchObject({ count: 2, paid: 1, paidPct: 50, revenue: 30 });
+    expect(out.find((r) => r.label === "Pain")?.paidPct).toBe(0);
+  });
+
+  it("de-dupes a repeated option within one submission", () => {
+    const labels = new Map<number, string[]>([[1, ["Time", "Time"]]]);
+    const out = buildMultiLabelBreakdown([rows[0]!], labels, { includeTest: false });
+    expect(out.find((r) => r.label === "Time")?.count).toBe(1);
+  });
+
+  it("no-selection rows fall into Unknown", () => {
+    const out = buildMultiLabelBreakdown(rows, new Map([[1, ["Time"]]]), { includeTest: false });
+    expect(out.find((r) => r.label === "Unknown")?.count).toBe(2);
+  });
+
+  it("folds beyond topN into Other", () => {
+    const labels = new Map<number, string[]>([
+      [1, ["A", "B", "C"]],
+      [2, ["A", "D"]],
+      [3, ["A", "B"]],
+    ]);
+    const out = buildMultiLabelBreakdown(rows, labels, { includeTest: false, topN: 2 });
+    expect(out.map((r) => r.label).slice(0, 2)).toEqual(["A", "B"]);
+    expect(out.find((r) => r.label === "Other")).toBeTruthy();
   });
 });
 

@@ -79,6 +79,16 @@ export function isScaleToken(token: string): boolean {
   return token.startsWith("q:") && SCALE_QID_SET.has(token.slice(2));
 }
 
+/** Multiple-choice questions — people can pick several, so group-by counts each. */
+const MULTI_QID_SET = new Set(
+  surveyQuestions.filter((q) => q.answerType === "multiple").map((q) => q.qId)
+);
+
+/** True when a group-by token is a multiple-choice question (`q:<multiQid>`). */
+export function isMultiToken(token: string): boolean {
+  return token.startsWith("q:") && MULTI_QID_SET.has(token.slice(2));
+}
+
 /** Filter-panel groupings (paidStatus is a header toggle, not shown here). */
 export const DIMENSION_GROUPS: Array<{ title: string; dims: DimensionKey[] }> = [
   { title: "Who", dims: ["archetype", "age", "gender", "country", "orientation", "relationship"] },

@@ -14,6 +14,7 @@ import {
   buildBreakdownBy,
   buildCrossTabBy,
   buildFacets,
+  buildMultiLabelBreakdown,
   buildTrend,
   canonicalizeRelationship,
   computeStats,
@@ -76,6 +77,12 @@ const ANSWER_QIDS = new Set(
 // answer_option/answer_text, so they use a different fetch path.
 const SCALE_QIDS = new Set(
   surveyQuestions.filter((q) => q.answerType === "scale").map((q) => q.qId)
+);
+// Multiple-choice questions: selections live in the `survey_submission_answer_options`
+// child table (parent row's option/text are NULL). Group-by counts each picked
+// option (frequency) — a person can land in several buckets.
+const MULTI_QIDS = new Set(
+  surveyQuestions.filter((q) => q.answerType === "multiple").map((q) => q.qId)
 );
 const MAX_ANSWER_FILTERS = 5;
 const MAX_ARCH_MATCH = 5;
@@ -368,11 +375,18 @@ export async function GET(request: Request) {
         profileIds,
         "id,gender,location_primary,sexual_orientation,relationship_status"
       ),
-      fetchByIds<{ personal_report_id: number | null; amount: string | number | null }>(
+      fetchByIds<{
+        personal_report_id: number | null;
+        amount: string | number | null;
+        refund_amount: string | number | null;
+      }>(
         "payment",
         "personal_report_id",
         reportIds,
-        "personal_report_id,amount",
+        // refund_amount: partial refunds keep status=succeeded but return part of
+        // the money, so revenue must be NET of it (full refunds flip to
+        // status=refunded and are already excluded by the filter below).
+        "personal_report_id,amount,refund_amount",
         "&status=eq.succeeded"
       ),
       // order=id.desc so the canonical-quote `find` picks the MOST RECENT
@@ -437,10 +451,9 @@ export async function GET(request: Request) {
     for (const p of payments) {
       if (p.personal_report_id == null) continue;
       succeededReports.add(p.personal_report_id);
-      paidByReport.set(
-        p.personal_report_id,
-        (paidByReport.get(p.personal_report_id) ?? 0) + Number(p.amount ?? 0)
-      );
+      // Net of any partial refund (clamped ≥ 0 defensively).
+      const net = Math.max(0, Number(p.amount ?? 0) - Number(p.refund_amount ?? 0));
+      paidByReport.set(p.personal_report_id, (paidByReport.get(p.personal_report_id) ?? 0) + net);
     }
 
     // Canonical quote per report (prefer purchased, else full_report, else max id)
@@ -556,7 +569,15 @@ export async function GET(request: Request) {
     };
     const tokenLabel = (t: GroupToken): string => (t.kind === "dim" ? t.dim : `q:${t.qid}`);
 
-    const breakdown = buildBreakdownBy(filtered, specFor(groupBy), { includeTest, topN: 12 });
+    // Multiple-choice group-by counts each selected option (frequency) — a person
+    // can land in several buckets, so counts may exceed the cohort size.
+    const breakdown =
+      groupBy.kind === "answer" && MULTI_QIDS.has(groupBy.qid)
+        ? buildMultiLabelBreakdown(filtered, answerLabelMaps.get(groupBy.qid) ?? new Map(), {
+            includeTest,
+            topN: 12,
+          })
+        : buildBreakdownBy(filtered, specFor(groupBy), { includeTest, topN: 12 });
     const crossTab = groupBy2
       ? buildCrossTabBy(
           filtered,
@@ -768,24 +789,49 @@ async function fetchAnswerRows(
   );
 }
 
-/** submissionId → normalized answer label(s) for one question (multi-select safe). */
+interface AnswerLabelRow {
+  survey_submission_id: number;
+  answer_text: string | null;
+  answer_option: { option_text: string | null } | null;
+  survey_submission_answer_options: Array<{ answer_option: { option_text: string | null } | null }>;
+}
+
+/**
+ * submissionId → normalized answer label(s) for one question, handling ALL
+ * discrete answer types. Multi-select selections live in the child table
+ * `survey_submission_answer_options` (the parent row's option/text are NULL), so
+ * we pull them via an embedded join — mirroring the CSV export. Single / country /
+ * single-"other" fall back to the parent option_text → answer_text. The "Something
+ * else" elaboration (parent answer_text alongside child options) is deliberately
+ * NOT added as a bucket, to keep group-by / filter buckets bounded.
+ */
 async function fetchAnswerLabels(
   questionDbId: number,
   submissionIds: number[]
 ): Promise<Map<number, string[]>> {
   const map = new Map<number, string[]>();
   if (questionDbId < 0 || submissionIds.length === 0) return map;
-  const [optMap, answers] = await Promise.all([
-    fetchAnswerOptionMap(questionDbId),
-    fetchAnswerRows(questionDbId, submissionIds),
-  ]);
-  for (const a of answers) {
-    const label = normalizeLabel(
-      (a.answer_option_id != null ? optMap.get(a.answer_option_id) : null) ?? a.answer_text
-    );
-    if (!label) continue;
+  const rows = await fetchByIds<AnswerLabelRow>(
+    "survey_submission_answer",
+    "survey_submission_id",
+    submissionIds,
+    "survey_submission_id,answer_text,answer_option!fk_ssa_answer_option(option_text),survey_submission_answer_options(answer_option!fk_ssao_answer_option(option_text))",
+    `&survey_question_id=eq.${questionDbId}`
+  );
+  for (const a of rows) {
+    const labels: string[] = [];
+    for (const child of a.survey_submission_answer_options ?? []) {
+      const t = normalizeLabel(child.answer_option?.option_text);
+      if (t) labels.push(t);
+    }
+    if (labels.length === 0) {
+      // single / country / single-"other": parent option, else the free text.
+      const single = normalizeLabel(a.answer_option?.option_text ?? a.answer_text);
+      if (single) labels.push(single);
+    }
+    if (labels.length === 0) continue;
     const arr = map.get(a.survey_submission_id) ?? [];
-    arr.push(label);
+    arr.push(...labels);
     map.set(a.survey_submission_id, arr);
   }
   return map;

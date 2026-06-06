@@ -5,11 +5,16 @@ import {
   SCALE_QUESTIONS,
   decodeArchMatch,
   encodeArchMatch,
+  isMultiToken,
   isScaleToken,
   tokenLabel,
 } from "@features/admin/ui/explorer/dimensions";
 
 const SCALE_QID = surveyQuestions.find((q) => q.answerType === "scale")!.qId;
+const MULTI_QID = surveyQuestions.find(
+  (q) =>
+    q.answerType === "multiple" && !["15001", "15003", "15004", "15010", "15011"].includes(q.qId)
+)!.qId;
 
 describe("scale group-by options", () => {
   it("includes every 1-7 scale question as a q: token", () => {
@@ -25,6 +30,13 @@ describe("scale group-by options", () => {
     expect(isScaleToken(`q:${SCALE_QID}`)).toBe(true);
     expect(isScaleToken("q:99999")).toBe(false);
     expect(isScaleToken("country")).toBe(false);
+  });
+
+  it("isMultiToken recognizes multiple-choice tokens only", () => {
+    expect(isMultiToken(`q:${MULTI_QID}`)).toBe(true);
+    expect(isMultiToken(`q:${SCALE_QID}`)).toBe(false);
+    expect(isMultiToken("q:99999")).toBe(false);
+    expect(isMultiToken("country")).toBe(false);
   });
 
   it("tokenLabel resolves dimension, answer, and scale tokens", () => {

@@ -6,6 +6,7 @@ import {
   ANSWER_GROUP_OPTIONS,
   DIMENSION_GROUP_OPTIONS,
   SCALE_GROUP_OPTIONS,
+  isMultiToken,
   isScaleToken,
   tokenLabel,
 } from "@features/admin/ui/explorer/dimensions";
@@ -59,6 +60,7 @@ export default function ExplorerBreakdown({
   scaleSummary,
 }: Props) {
   const isScale = isScaleToken(groupBy);
+  const isMulti = isMultiToken(groupBy);
   // Scale group-bys exclude the "Unknown" (unanswered) bucket from the chart so
   // the 1→7 distribution reads cleanly; the table below still lists every row.
   const chartRows = isScale ? rows.filter((r) => r.label !== "Unknown") : rows;
@@ -120,6 +122,13 @@ export default function ExplorerBreakdown({
         <p className="py-8 text-center text-sm text-text-muted">No data for these filters.</p>
       ) : (
         <>
+          {isMulti && (
+            <p className="mb-3 text-xs text-text-muted">
+              Multiple-choice — people can pick several answers, so the counts add up to more than
+              the number of submissions. Conversion % is read per option (of people who picked it,
+              the share that paid).
+            </p>
+          )}
           {isScale && scaleSummary && (
             <p className="mb-3 text-xs text-text-muted">
               Average{" "}

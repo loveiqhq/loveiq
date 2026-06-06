@@ -29,6 +29,11 @@ import { surveyQuestions } from "@/data/survey-data";
 
 // First real 1-7 scale question — used to exercise scale group-by end to end.
 const SCALE_QID = surveyQuestions.find((q) => q.answerType === "scale")!.qId;
+const DEMOGRAPHIC_QIDS = ["15001", "15003", "15004", "15010", "15011"];
+// First real multiple-choice question (not a demographic) — exercises multi group-by.
+const MULTI_QID = surveyQuestions.find(
+  (q) => q.answerType === "multiple" && !DEMOGRAPHIC_QIDS.includes(q.qId)
+)!.qId;
 
 function makeRes(body: unknown, count?: number) {
   return {
@@ -87,6 +92,27 @@ const scoring = [
 const scaleAnswers = [
   { survey_submission_id: 1, normalized_value: 7 },
   { survey_submission_id: 2, normalized_value: 3 },
+];
+// Multi-select answers: options live in the nested survey_submission_answer_options
+// child (parent option/text are null). Sub 1 picked two; sub 2 one.
+const multiAnswers = [
+  {
+    survey_submission_id: 1,
+    answer_text: null,
+    answer_option: null,
+    survey_submission_answer_options: [
+      { answer_option: { option_text: "More pleasure or easier orgasms" } },
+      { answer_option: { option_text: "Feeling more confident in my own body" } },
+    ],
+  },
+  {
+    survey_submission_id: 2,
+    answer_text: null,
+    answer_option: null,
+    survey_submission_answer_options: [
+      { answer_option: { option_text: "More pleasure or easier orgasms" } },
+    ],
+  },
 ];
 const users = [
   { id: 11, email: "a@example.com", user_profile_id: 101 },
@@ -147,8 +173,11 @@ function installSupabaseMock() {
   mockSupabaseFetch.mockImplementation((path: string) => {
     if (path.includes("/rest/v1/survey_question")) return makeRes([{ id: 900 }]);
     if (path.includes("/rest/v1/survey_submission_answer")) {
-      // Scale group-by fetches normalized_value; categorical/age fetch option/text.
-      return makeRes(path.includes("normalized_value") ? scaleAnswers : ageAnswers);
+      // Multi group-by/filter joins the options child; scale fetches normalized_value;
+      // categorical/age fetch option/text.
+      if (path.includes("survey_submission_answer_options")) return makeRes(multiAnswers);
+      if (path.includes("normalized_value")) return makeRes(scaleAnswers);
+      return makeRes(ageAnswers);
     }
     if (path.includes("/rest/v1/survey_submission")) return makeRes(submissions, 3);
     if (path.includes("/rest/v1/scoring_result")) return makeRes(scoring);
@@ -321,5 +350,35 @@ describe("GET /api/admin/explorer", () => {
     const body = await (await GET(req("?groupBy=q:99999"))).json();
     expect(body.breakdown.find((r: { label: string }) => r.label === "United States")).toBeTruthy();
     expect(body.scaleSummary).toBeNull();
+  });
+
+  it("groups a multiple-choice question by each selected option (not 'Unknown')", async () => {
+    const body = await (await GET(req(`?groupBy=q:${MULTI_QID}`))).json();
+    const labels = body.breakdown.map((r: { label: string }) => r.label);
+    expect(labels).not.toContain("Unknown");
+    const pleasure = body.breakdown.find(
+      (r: { label: string }) => r.label === "More pleasure or easier orgasms"
+    );
+    const confident = body.breakdown.find(
+      (r: { label: string }) => r.label === "Feeling more confident in my own body"
+    );
+    expect(pleasure?.count).toBe(2); // subs 1 + 2
+    expect(confident?.count).toBe(1); // sub 1 only
+    // 3 option-picks across 2 (non-test) people → counts exceed the cohort size.
+    const sum = body.breakdown.reduce((a: number, r: { count: number }) => a + r.count, 0);
+    expect(sum).toBeGreaterThan(body.stats.total);
+  });
+
+  it("nets partial refunds out of revenue (refund_amount on a succeeded row)", async () => {
+    const prev = mockSupabaseFetch.getMockImplementation()!;
+    mockSupabaseFetch.mockImplementation((path: string) => {
+      if (path.includes("/rest/v1/payment")) {
+        return makeRes([{ personal_report_id: 1001, amount: 29, refund_amount: 10 }]);
+      }
+      return prev(path);
+    });
+    const body = await (await GET(req())).json();
+    expect(body.stats.revenue).toBe(19); // 29 gross − 10 refunded
+    expect(body.stats.paid).toBe(1); // still a paying customer (net > 0)
   });
 });
