@@ -1,5 +1,5 @@
 import { escapeHtml } from "@shared/emails/shared";
-import { renderNurtureEmail, TESTIMONIAL_GEBHARDT } from "./shared";
+import { renderNurtureEmail } from "./shared";
 
 export interface Nurture30hNoUnlockParams {
   firstName?: string | null;
@@ -44,7 +44,6 @@ export function nurture30hNoUnlockEmail({
       ].join("\n"),
       ctaLabel: "View your report now",
       ctaUrl,
-      testimonial: TESTIMONIAL_GEBHARDT,
       preBulletsNote: [
         'Unlocking your full report is <strong style="font-weight:700;">100% risk-free</strong>, as we offer a <strong style="font-weight:700;">14-day money-back guarantee.</strong>',
         "<br /><br />",

@@ -16,7 +16,7 @@ const SITE = "https://loveiq.org";
 const CTA = "https://loveiq.org/report/rpt_abc?offer=1";
 
 describe("nurture email templates", () => {
-  it("surveyCompleteEmail renders subject + CTA + testimonial card", () => {
+  it("surveyCompleteEmail renders subject + CTA + Trustpilot badge", () => {
     const out = surveyCompleteEmail({
       firstName: "Sam",
       reportUrl: CTA,
@@ -25,8 +25,8 @@ describe("nurture email templates", () => {
     expect(out.subject).toBe("Your LoveIQ report is ready");
     expect(out.html).toContain("View your report now");
     expect(out.html).toContain(CTA);
-    // Testimonial card was the new addition vs the pre-Figma template.
-    expect(out.html).toContain("Dr. Dijana Galija");
+    // Trustpilot badge replaced the curated testimonial card.
+    expect(out.html).toContain("Rated Excellent on Trustpilot");
     expect(out.text).toContain("Sam");
   });
 
@@ -39,7 +39,7 @@ describe("nurture email templates", () => {
     expect(out.subject.toLowerCase()).toContain("you didn");
     // shared/format/html-escape uses &#039; for apostrophes (numeric ref, not &#x27;).
     expect(out.html).toContain("Don&#039;t miss out");
-    expect(out.html).toContain("Gebhardt");
+    expect(out.html).toContain("Rated Excellent on Trustpilot");
     // No promo in non-discounted stages.
     expect(out.html).not.toContain("Use code:");
   });
@@ -51,7 +51,7 @@ describe("nurture email templates", () => {
       siteUrl: SITE,
     });
     expect(out.html).toContain("14-day money-back guarantee");
-    expect(out.html).toContain("Dijana");
+    expect(out.html).toContain("Rated Excellent on Trustpilot");
     expect(out.html).not.toContain("Use code:");
   });
 
@@ -263,13 +263,13 @@ describe("chapter-nudge email (Figma 7725-11594)", () => {
     expect(out.html).not.toContain("most  carry quietly"); // no empty-name artefact
   });
 
-  it("alternates the testimonial by chapter index (Dijana even, Gebhardt odd)", () => {
+  it("shows the Trustpilot badge regardless of chapter index", () => {
     const even = chapterNudgeEmail({ ...baseParams, chapterIndex: 2 });
     const odd = chapterNudgeEmail({ ...baseParams, chapterIndex: 3 });
-    expect(even.html).toContain("Dijana");
-    expect(even.html).not.toContain("Gebhardt");
-    expect(odd.html).toContain("Gebhardt");
-    expect(odd.html).not.toContain("Dijana");
+    expect(even.html).toContain("Rated Excellent on Trustpilot");
+    expect(odd.html).toContain("Rated Excellent on Trustpilot");
+    expect(even.html).not.toContain("Dijana");
+    expect(odd.html).not.toContain("Gebhardt");
   });
 
   it("keeps the tease and nudge on separate lines in the plaintext twin", () => {

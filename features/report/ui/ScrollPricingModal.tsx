@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import {
   useCallback,
   useEffect,
@@ -26,7 +25,7 @@ import {
   trackScrollPaywallShown,
   type PaywallDismissSource,
 } from "@features/analytics/client";
-import PricingTestimonialsCarousel from "./PricingTestimonialsCarousel";
+import TrustpilotReviews from "@shared/ui/trustpilot/TrustpilotReviews";
 
 interface Props {
   open: boolean;
@@ -1734,54 +1733,12 @@ const ScrollPricingModal: FC<Props> = ({
                   </span>
                 </h3>
 
-                {/* Avatar stack + rating */}
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: "12px",
-                    marginBottom: "32px",
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center" }}>
-                    {[
-                      "/testimonials/rating-1.jpg",
-                      "/testimonials/rating-2.jpg",
-                      "/testimonials/rating-3.jpg",
-                    ].map((src, i) => (
-                      <span
-                        key={src}
-                        style={{
-                          position: "relative",
-                          display: "inline-block",
-                          flexShrink: 0,
-                          width: "40px",
-                          height: "40px",
-                          borderRadius: "9999px",
-                          border: "2px solid #0a0510",
-                          overflow: "hidden",
-                          marginLeft: i === 0 ? 0 : "-12px",
-                          boxSizing: "border-box",
-                        }}
-                      >
-                        <Image
-                          src={src}
-                          alt=""
-                          aria-hidden="true"
-                          fill
-                          sizes="40px"
-                          style={{ objectFit: "cover" }}
-                        />
-                      </span>
-                    ))}
-                  </div>
-                  <span style={{ fontSize: "16px", color: "#fff", fontWeight: 400 }}>
-                    4.9/5 Rating
-                  </span>
+                {/* Trustpilot rating (replaces the former avatar stack + "4.9/5 Rating") */}
+                <div style={{ marginBottom: "32px" }}>
+                  <TrustpilotReviews variant="compact" showProfileLink={false} />
                 </div>
 
-                <PricingTestimonialsCarousel />
+                <TrustpilotReviews variant="carousel" />
               </div>
 
               {/* ── Why unlock section (2×2 grid) ────────────────────── */}

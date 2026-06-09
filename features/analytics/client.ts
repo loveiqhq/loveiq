@@ -6,7 +6,7 @@ type GTag = {
   // GA4 event is segmentable by it in Explorations (e.g. the forced-paywall arm).
   (command: "set", target: "user_properties", params: Record<string, unknown>): void;
 };
-type ConsentCategory = "analytics" | "advertisement";
+type ConsentCategory = "analytics" | "advertisement" | "functional";
 
 const GOOGLE_ADS_TAG_ID = "AW-18068690553";
 const GOOGLE_ADS_PURCHASE_LABEL = ["guQ3CPHxh5cc", "EPms6adD"].join("");

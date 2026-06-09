@@ -10,6 +10,9 @@ Semgrep
 semgrepignore
 Hotjar
 Contentsquare
+Trustpilot
+TrustBox
+cookieyes
 Vercel
 Upstash
 Lenis

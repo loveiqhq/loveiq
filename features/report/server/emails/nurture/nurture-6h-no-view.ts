@@ -1,5 +1,5 @@
 import { escapeHtml } from "@shared/emails/shared";
-import { renderNurtureEmail, TESTIMONIAL_GEBHARDT } from "./shared";
+import { renderNurtureEmail } from "./shared";
 
 export interface Nurture6hNoViewParams {
   firstName?: string | null;
@@ -34,7 +34,6 @@ export function nurture6hNoViewEmail({
       ].join("\n"),
       ctaLabel: "View your report now",
       ctaUrl,
-      testimonial: TESTIMONIAL_GEBHARDT,
       bullets: [
         { text: "+50 pages of insights into your sexuality" },
         { text: "Results based on 100+ science papers" },

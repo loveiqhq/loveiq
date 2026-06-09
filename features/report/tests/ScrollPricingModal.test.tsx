@@ -14,10 +14,10 @@ vi.mock("next/image", () => ({
   ),
 }));
 
-// The testimonials carousel pulls in its own assets/animation; stub it so these
-// tests stay focused on dismiss behaviour.
-vi.mock("@features/report/ui/PricingTestimonialsCarousel", () => ({
-  default: () => <div data-testid="testimonials" />,
+// The Trustpilot widget pulls in env config + consent/bootstrap logic; stub it so
+// these tests stay focused on dismiss behaviour.
+vi.mock("@shared/ui/trustpilot/TrustpilotReviews", () => ({
+  default: () => <div data-testid="trustpilot" />,
 }));
 
 // Spy on the analytics helpers so we can assert the experiment events fire.

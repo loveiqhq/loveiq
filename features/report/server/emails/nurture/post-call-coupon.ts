@@ -1,5 +1,5 @@
 import { escapeHtml } from "@shared/emails/shared";
-import { renderNurtureEmail, TESTIMONIAL_DIJANA } from "./shared";
+import { renderNurtureEmail } from "./shared";
 
 export interface PostCallCouponParams {
   firstName?: string | null;
@@ -48,7 +48,6 @@ export function postCallCouponEmail({
       ].join("\n"),
       ctaLabel: "Unlock your full report",
       ctaUrl,
-      testimonial: TESTIMONIAL_DIJANA,
       closingNote: "This code is just for you and works once.",
     },
   });

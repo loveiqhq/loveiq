@@ -219,6 +219,14 @@ export default function PrivacyPolicyPage() {
                 </li>
               </ul>
 
+              <h3 className="text-white font-medium mb-2">7.8 Reviews and social proof</h3>
+              <ul className="list-disc list-inside mb-4 space-y-1">
+                <li>
+                  Trustpilot A/S (DK) - collection, verification, and display of customer reviews
+                  (consent-gated)
+                </li>
+              </ul>
+
               <p>
                 A current Record of Processing Activities (Art. 30 GDPR) and the list of standard
                 contractual clauses for non-EU processors can be requested from{" "}

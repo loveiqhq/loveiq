@@ -15,8 +15,8 @@ describe("surveyCompleteBEmail", () => {
     expect(result.html).toContain("This might change how you see yourself");
     expect(result.html).toContain("Something interesting showed up in your results");
     expect(result.html).toContain("View your report now");
-    // Refreshed alongside variant A — testimonial card matches Figma 6978:153.
-    expect(result.html).toContain("Dr. Dijana Galija");
+    // Trustpilot badge replaced the curated testimonial card.
+    expect(result.html).toContain("Rated Excellent on Trustpilot");
   });
 
   it("uses generic greeting when firstName missing", () => {

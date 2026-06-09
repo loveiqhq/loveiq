@@ -25,10 +25,11 @@ const softwareApplicationSchema = {
     priceCurrency: "EUR",
     description: "Free introductory assessment. Advanced reports available as one-time purchase.",
   },
-  // NOTE: aggregateRating intentionally omitted. The visible "30,000+" figure is a
-  // participation/assessment-completion count, not a count of submitted ratings, so emitting
-  // it as schema.org `ratingCount` would misrepresent the data and risks a Google
-  // rich-result penalty. Re-add only when sourced from a genuine ratings corpus + count.
+  // NOTE: aggregateRating intentionally omitted. We do not self-assert a rating in
+  // our schema — on-page review social proof now comes from the Trustpilot widget,
+  // which carries its own review structured data. Re-add an aggregateRating here only
+  // when sourced from a genuine, owned ratings corpus (value + count); emitting an
+  // unbacked figure misrepresents the data and risks a Google rich-result penalty.
 };
 
 // Built from the same `faqs` array that S13FAQ renders, so the FAQPage markup is

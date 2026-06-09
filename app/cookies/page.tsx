@@ -151,6 +151,7 @@ export default function CookiesPage() {
                 <li>hosting/CDN</li>
                 <li>email services</li>
                 <li>analytics tools</li>
+                <li>customer reviews (e.g., Trustpilot) &mdash; loaded only after consent</li>
               </ul>
               <p>
                 These providers may set their own cookies. We conclude data-processing agreements

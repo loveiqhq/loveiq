@@ -17,7 +17,7 @@ import {
   type ReportPurchasePlanId,
 } from "@features/checkout/server/reportPurchase";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
-import PricingTestimonialsCarousel from "./PricingTestimonialsCarousel";
+import TrustpilotReviews from "@shared/ui/trustpilot/TrustpilotReviews";
 import { getReportTheme, getReportThemeStyle } from "./reportTheme";
 import { isPlanOwnedForArchetype, type ReportAccessPlan } from "@features/report/server/access";
 import {
@@ -667,7 +667,7 @@ const ReportPricingModal: FC<Props> = ({
                 <PricingMethodMark logo="amex" label="American Express" />
               </div>
 
-              <PricingTestimonialsCarousel />
+              <TrustpilotReviews variant="carousel" />
             </div>
           </div>
         </div>

@@ -1,8 +1,6 @@
 import { escapeHtml } from "@shared/emails/shared";
 import {
   renderNurtureEmail,
-  TESTIMONIAL_DIJANA,
-  TESTIMONIAL_GEBHARDT,
   type RenderedNurture,
 } from "@features/report/server/emails/nurture/shared";
 
@@ -104,8 +102,6 @@ export function chapterNudgeEmail(params: ChapterNudgeEmailParams): RenderedNurt
     ? `<strong>Your full chapter goes much deeper into what this looks like for you</strong> — including the <strong>insecurities that most ${archetypePlural} carry quietly</strong>, and how they tend to show up in the way you access desire and speak your needs.`
     : `<strong>Your full chapter goes much deeper into what this looks like for you</strong> — including the <strong>insecurities most people carry quietly</strong>, and how they tend to show up in the way you access desire and speak your needs.`;
 
-  const testimonial = params.chapterIndex % 2 === 0 ? TESTIMONIAL_DIJANA : TESTIMONIAL_GEBHARDT;
-
   return renderNurtureEmail({
     subject: `A peek inside your report: ${params.chapterTitle}`,
     previewText: params.whatYoullLearn,
@@ -119,7 +115,6 @@ export function chapterNudgeEmail(params: ChapterNudgeEmailParams): RenderedNurt
       preCtaNote2: fullChapterNudge,
       ctaLabel: "Continue reading your full chapter",
       ctaUrl: params.ctaUrl,
-      testimonial,
     },
   });
 }

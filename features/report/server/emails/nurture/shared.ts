@@ -1,14 +1,5 @@
 import { EMAIL_FONT, escapeHtml, renderCtaButton, wrapEmailShell } from "@shared/emails/shared";
-import { getEmailImageBaseUrl } from "@shared/emails/site-url";
-
-export interface NurtureTestimonial {
-  name: string;
-  role: string;
-  photoUrl: string;
-  quoteLeading: string;
-  quoteBold: string;
-  quoteTrailing?: string;
-}
+import { getTrustpilotConfig, TRUSTPILOT_FALLBACK_URL } from "@shared/ui/trustpilot/config";
 
 export interface NurtureBullet {
   text: string;
@@ -19,15 +10,14 @@ export interface NurtureBullet {
  * `intro`, `preBulletsNote`, `postBulletsNote`, `preCtaNote`, `preCtaNote2`
  * accept trusted server-authored HTML (e.g. <strong>, <br>). Callers MUST
  * `escapeHtml` any dynamic substitution (promo codes, recipient names, archetype
- * names) before injection. `heading`, `closingNote`, bullet `text`, and the
- * testimonial fields are escaped automatically.
+ * names) before injection. `heading`, `closingNote`, and bullet `text` are
+ * escaped automatically.
  */
 export interface NurtureBodyParams {
   heading: string;
   intro: string;
   ctaLabel: string;
   ctaUrl: string;
-  testimonial: NurtureTestimonial;
   bullets?: NurtureBullet[];
   preCtaNote?: string;
   /**
@@ -43,49 +33,38 @@ export interface NurtureBodyParams {
   closingNote?: string;
 }
 
-function renderTestimonialCard(t: NurtureTestimonial, siteUrl: string): string {
-  const absPhoto = t.photoUrl.startsWith("http")
-    ? t.photoUrl
-    : `${getEmailImageBaseUrl(siteUrl)}${t.photoUrl}`;
-  const trailing = t.quoteTrailing ? escapeHtml(t.quoteTrailing) : "";
-  // T-03: Outlook desktop (2007-2019) uses the Word HTML renderer which
-  // largely ignores CSS `style` on <td>. To keep the two-column avatar+name
-  // row aligned in Outlook, the avatar <td> needs an explicit `width="64"`
-  // HTML attribute (in addition to the `style="width:64px"` modern clients
-  // use), and both <td>s need `valign="middle"` (Outlook ignores the CSS
-  // `vertical-align`). Modern clients honour either; this is purely additive.
+/** Resolve the public Trustpilot profile URL (or a safe fallback). */
+function trustpilotProfileUrl(): string {
+  return getTrustpilotConfig().profileUrl ?? TRUSTPILOT_FALLBACK_URL;
+}
+
+/**
+ * Cookieless Trustpilot badge used in place of the former curated testimonial
+ * card. Emails are static HTML and cannot host Trustpilot's live widget, so this
+ * is a self-contained rating block (no external script, no cookies) linking to
+ * the public profile. Green Unicode stars avoid Gmail's remote-image stripping.
+ */
+export function renderTrustpilotBadge(): string {
+  const href = trustpilotProfileUrl();
   return `
   <tr>
     <td style="padding:16px 32px 8px;">
       <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background-color:#150A22; border-radius:18px;">
         <tr>
-          <td style="padding:16px 18px 18px;">
-            <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
-              <tr>
-                <td width="64" valign="middle" style="width:64px; vertical-align:middle;">
-                  <img src="${escapeHtml(absPhoto)}" alt="${escapeHtml(t.name)}" width="56" height="56" style="display:block; width:56px; height:56px; border-radius:9999px; background-color:#2A1839; object-fit:cover;" />
-                </td>
-                <td valign="middle" style="padding-left:12px; vertical-align:middle;">
-                  <p style="margin:0; font-family:${EMAIL_FONT}; font-size:14px; font-weight:700; line-height:20px; color:#ffffff;">${escapeHtml(t.name)}</p>
-                  <p style="margin:0; font-family:${EMAIL_FONT}; font-size:11px; line-height:16px; color:#d1d5db;">${escapeHtml(t.role)}</p>
-                </td>
-              </tr>
-              <tr>
-                <td colspan="2" style="padding:6px 0 6px;">
-                  <span style="display:inline-block; font-size:14px; color:#F26D4F; letter-spacing:2px; line-height:1;">&#9733;&#9733;&#9733;&#9733;&#9733;</span>
-                </td>
-              </tr>
-              <tr>
-                <td colspan="2" style="padding-top:6px; font-family:Georgia,'Times New Roman',serif; font-size:15px; font-style:italic; line-height:1.55; color:#d1d5db;">
-                  &ldquo;${escapeHtml(t.quoteLeading)} <strong style="font-weight:700; font-style:italic; color:#ffffff;">${escapeHtml(t.quoteBold)}</strong>${trailing ? ` ${trailing}` : ""}&rdquo;
-                </td>
-              </tr>
-            </table>
+          <td align="center" style="padding:20px 18px;">
+            <p style="margin:0 0 8px 0; font-family:${EMAIL_FONT}; font-size:14px; font-weight:700; line-height:20px; color:#ffffff;">Rated Excellent on Trustpilot</p>
+            <p style="margin:0 0 10px 0;"><span style="display:inline-block; font-size:20px; color:#00b67a; letter-spacing:2px; line-height:1;">&#9733;&#9733;&#9733;&#9733;&#9733;</span></p>
+            <a href="${escapeHtml(href)}" style="font-family:${EMAIL_FONT}; font-size:13px; font-weight:600; color:#34c79a; text-decoration:underline;">See our reviews on Trustpilot</a>
           </td>
         </tr>
       </table>
     </td>
   </tr>`;
+}
+
+/** Plain-text twin of the Trustpilot badge. */
+export function renderTrustpilotBadgeText(): string {
+  return `Rated Excellent on Trustpilot ★★★★★ — ${trustpilotProfileUrl()}`;
 }
 
 function renderBulletsHtml(bullets: NurtureBullet[] | undefined): string {
@@ -223,7 +202,7 @@ export function renderNurtureEmail({
     </td>
   </tr>`;
 
-  const testimonialRow = renderTestimonialCard(body.testimonial, siteUrl);
+  const testimonialRow = renderTrustpilotBadge();
 
   const preBulletsRow = body.preBulletsNote
     ? `
@@ -290,8 +269,7 @@ export function renderNurtureEmail({
     "",
     `${body.ctaLabel}: ${body.ctaUrl}`,
     "",
-    `"${body.testimonial.quoteLeading} ${body.testimonial.quoteBold}${body.testimonial.quoteTrailing ? ` ${body.testimonial.quoteTrailing}` : ""}"`,
-    `— ${body.testimonial.name}, ${body.testimonial.role}`,
+    renderTrustpilotBadgeText(),
     ...(body.preBulletsNote ? ["", stripTags(body.preBulletsNote)] : []),
     renderBulletsText(body.bullets),
     ...(body.postBulletsNote ? [stripTags(body.postBulletsNote), ""] : []),
@@ -306,21 +284,3 @@ export function renderNurtureEmail({
 
   return { subject, html, text };
 }
-
-export const TESTIMONIAL_DIJANA: NurtureTestimonial = {
-  name: "Dr. Dijana Galijašević, 36",
-  role: "Business founder & CEO",
-  photoUrl: "/academic/dijana.jpg",
-  quoteLeading: "I hesitated at first, but getting the",
-  quoteBold: "full report turned out to be one of the best decisions",
-  quoteTrailing: "I made. Completely worth it.",
-};
-
-export const TESTIMONIAL_GEBHARDT: NurtureTestimonial = {
-  name: "Dr. Philip Gebhardt, 40",
-  role: "Dentist and orthodontist",
-  photoUrl: "/academic/gebhardt.png",
-  quoteLeading: "I almost didn't start, assumed it'd be generic. It wasn't.",
-  quoteBold:
-    "It felt almost uncomfortably precise and gave me insight I'll probably use for years.",
-};

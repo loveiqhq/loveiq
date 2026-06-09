@@ -1,5 +1,5 @@
 import { escapeHtml } from "@shared/emails/shared";
-import { renderNurtureEmail, TESTIMONIAL_DIJANA } from "./shared";
+import { renderNurtureEmail } from "./shared";
 
 export interface Nurture6hNoUnlockParams {
   firstName?: string | null;
@@ -35,7 +35,6 @@ export function nurture6hNoUnlockEmail({
       ].join("\n"),
       ctaLabel: "View your report now",
       ctaUrl,
-      testimonial: TESTIMONIAL_DIJANA,
       bullets: [
         { text: "+60 pages of insights into your sexuality" },
         { text: "Results based on 100+ science papers" },

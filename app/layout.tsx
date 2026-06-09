@@ -142,6 +142,13 @@ const HOTJAR_SITE_ID_RAW = process.env.NEXT_PUBLIC_HOTJAR_SITE_ID;
 const hotjarSiteId =
   HOTJAR_SITE_ID_RAW && /^\d+$/.test(HOTJAR_SITE_ID_RAW) ? HOTJAR_SITE_ID_RAW : null;
 
+// Trustpilot review widget. The bootstrap is loaded only when a Business Unit ID
+// is configured, and only after the visitor grants the CookieYes `functional`
+// category (it sets Trustpilot's third-party cookies). The cookieless static
+// rating block in TrustpilotReviews renders regardless.
+const trustpilotBusinessUnitId =
+  (process.env.NEXT_PUBLIC_TRUSTPILOT_BUSINESS_UNIT_ID || "").trim() || null;
+
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const headersList = await headers();
   const nonce = headersList.get("x-nonce") || "";
@@ -221,6 +228,15 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           >
             {`(function(h,o,t,j,a,r){h.hj=h.hj||function(){(h.hj.q=h.hj.q||[]).push(arguments)};h._hjSettings={hjid:${hotjarSiteId},hjsv:6};a=o.getElementsByTagName('head')[0];r=o.createElement('script');r.async=1;r.src=t+h._hjSettings.hjid+j+h._hjSettings.hjsv;a.appendChild(r);})(window,document,'https://static.hotjar.com/c/hotjar-','.js?sv=');`}
           </Script>
+        )}
+        {trustpilotBusinessUnitId && (
+          <Script
+            id="trustpilot-bootstrap"
+            src="https://widget.trustpilot.com/bootstrap/v5/tp.widget.bootstrap.js"
+            strategy="lazyOnload"
+            nonce={nonce}
+            data-cookieyes="cookieyes-functional"
+          />
         )}
         {/* Organization + WebSite are global (describe the whole site). Page-specific
             entities live on their page: SoftwareApplication + FAQPage on the homepage,
