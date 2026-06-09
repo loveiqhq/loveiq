@@ -135,14 +135,6 @@ vi.mock("@features/survey/ui/ProcessingSequence", () => ({
   ),
 }));
 
-vi.mock("@features/survey/ui/ReportReady", () => ({
-  default: ({ onContinue }: { onContinue: () => void; name: string; email: string }) => (
-    <div data-testid="report-ready">
-      <button onClick={onContinue}>View your free report</button>
-    </div>
-  ),
-}));
-
 import SurveyEngine from "@features/survey/ui/SurveyEngine";
 
 beforeEach(() => {
@@ -185,7 +177,7 @@ describe("SurveyEngine", () => {
     expect(screen.getByText("Extracting your answers...")).toBeInTheDocument();
   });
 
-  it("calls onComplete when wizard completes after report ready screen", () => {
+  it("calls onComplete when wizard completes", () => {
     mockCurrentIndex = 4;
     mockProgress = 100;
 
@@ -194,9 +186,6 @@ describe("SurveyEngine", () => {
     render(<SurveyEngine onExit={vi.fn()} onComplete={onComplete} />);
 
     fireEvent.click(screen.getByRole("button", { name: /finish processing/i }));
-    expect(screen.getByTestId("report-ready")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: /view your free report/i }));
     expect(screen.getByTestId("pre-report-wizard")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /complete wizard/i }));
@@ -282,7 +271,7 @@ describe("SurveyEngine", () => {
 });
 
 describe("SurveyEngine completion phases", () => {
-  it("transitions from processing to report ready screen on success", () => {
+  it("transitions from processing to the pre-report wizard on success", () => {
     mockCurrentIndex = 4;
     mockProgress = 100;
     mockSubmitStatus = "success";
@@ -290,15 +279,15 @@ describe("SurveyEngine completion phases", () => {
     render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
 
     expect(screen.getByTestId("processing-sequence")).toBeInTheDocument();
-    expect(screen.queryByTestId("report-ready")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("pre-report-wizard")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /finish processing/i }));
 
-    expect(screen.getByTestId("report-ready")).toBeInTheDocument();
+    expect(screen.getByTestId("pre-report-wizard")).toBeInTheDocument();
     expect(screen.queryByTestId("processing-sequence")).not.toBeInTheDocument();
   });
 
-  it("transitions through full success flow: processing -> ready -> wizard -> complete", () => {
+  it("transitions through full success flow: processing -> wizard -> complete", () => {
     mockCurrentIndex = 4;
     mockProgress = 100;
     mockSubmitStatus = "success";
@@ -307,11 +296,7 @@ describe("SurveyEngine completion phases", () => {
     render(<SurveyEngine onExit={vi.fn()} onComplete={onComplete} />);
 
     fireEvent.click(screen.getByRole("button", { name: /finish processing/i }));
-    expect(screen.getByTestId("report-ready")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: /view your free report/i }));
     expect(screen.getByTestId("pre-report-wizard")).toBeInTheDocument();
-    expect(screen.queryByTestId("report-ready")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /complete wizard/i }));
     expect(onComplete).toHaveBeenCalledTimes(1);

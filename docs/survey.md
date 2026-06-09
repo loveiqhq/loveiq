@@ -27,12 +27,11 @@ Top-level step orchestration lives in `SurveyPage`:
 | `5`        | Consent       | `ConsentScreen` inside [`features/survey/ui/SurveyPage.tsx`](../features/survey/ui/SurveyPage.tsx) | Users must agree before entering the question engine.     |
 | `6`        | Survey engine | [`features/survey/ui/SurveyEngine.tsx`](../features/survey/ui/SurveyEngine.tsx)                    | Question loop, submission, retry, and pre-report handoff. |
 
-Inside `SurveyEngine`, the completion path moves through four internal phases:
+Inside `SurveyEngine`, the completion path moves through three internal phases:
 
 | Completion phase | Purpose                                                                     | Backing component    |
 | ---------------- | --------------------------------------------------------------------------- | -------------------- |
 | `processing`     | Animated handoff while submission state resolves.                           | `ProcessingSequence` |
-| `ready`          | Report-ready interstitial after processing.                                 | `ReportReady`        |
 | `wizard`         | Post-submit pre-report step.                                                | `PreReportWizard`    |
 | `done`           | Final confirmation or retry state when submission failed or needs recovery. | `SurveyConfirmation` |
 

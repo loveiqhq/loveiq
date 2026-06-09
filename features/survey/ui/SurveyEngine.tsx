@@ -33,10 +33,9 @@ import { readCookie } from "@shared/observability/cookie";
 import SurveyConfirmation from "./SurveyConfirmation";
 import PreReportWizard from "./PreReportWizard";
 import ProcessingSequence from "./ProcessingSequence";
-import ReportReady from "./ReportReady";
 import SurveyPauseModal from "./SurveyPauseModal";
 
-type CompletionPhase = "processing" | "ready" | "wizard" | "done";
+type CompletionPhase = "processing" | "wizard" | "done";
 
 interface SurveyEngineProps {
   onExit: () => void;
@@ -366,20 +365,9 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
             if (submitStatus === "error") {
               setCompletionPhase("done");
             } else {
-              setCompletionPhase("ready");
+              setCompletionPhase("wizard");
             }
           }}
-        />
-      );
-    }
-
-    // Report ready screen (after processing, before wizard)
-    if (completionPhase === "ready") {
-      return (
-        <ReportReady
-          name={(answers["00001"] as string) || ""}
-          email={(answers["00000"] as string) || ""}
-          onContinue={() => setCompletionPhase("wizard")}
         />
       );
     }
