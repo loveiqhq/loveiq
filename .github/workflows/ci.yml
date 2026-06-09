@@ -60,9 +60,13 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage/lcov.info
-          # CODECOV_TOKEN confirmed present (2026-03-20). Upload failures now block merges.
-          # codecov.yml defines project (auto, 1% drop allowed) + patch (80%) gates.
-          fail_ci_if_error: true
+          # codecov.yml defines project (auto, 1% drop allowed) + patch (80%) gates,
+          # enforced as Codecov commit statuses that are independent of this flag.
+          # Kept false: Codecov's CLI GPG self-verification has transient vendor-side
+          # outages that fail the upload even when tests pass and the token is present
+          # (2026-06-09), which would otherwise block main on a third-party glitch.
+          # The test run above is the real gate.
+          fail_ci_if_error: false
 
   integration:
     name: Integration (real DB)
