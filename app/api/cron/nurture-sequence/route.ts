@@ -332,8 +332,10 @@ async function createPromoCode({
   // `resolveNurturePromo` (scoped to the issuing submission). The Stripe-side
   // `customer` restriction is not used because that would require a separate
   // Stripe Customer lookup/create per recipient — `max_redemptions: 1` plus
-  // 24h expiry covers the blast radius. `allow_promotion_codes: false` on the
-  // checkout session prevents manual code-entry from a forwarded email.
+  // 24h expiry covers the blast radius. Note: manual promo entry on the hosted
+  // checkout is ON (product decision 2026-06-10), so a forwarded single-use code
+  // could in principle be hand-typed before the owner uses it; the per-submission
+  // ownership check still governs the auto-apply (?promo= link) path.
   //
   // One retry on collision — the 62^8 keyspace makes this astronomically rare,
   // but Stripe will 400 if the code happens to already exist.
