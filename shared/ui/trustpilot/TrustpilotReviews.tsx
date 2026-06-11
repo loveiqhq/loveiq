@@ -21,6 +21,7 @@ declare global {
 const TP_GREEN = "#00b67a";
 
 type Variant = "carousel" | "compact";
+type Theme = "light" | "dark";
 
 /* ------------------------------------------------------------------ */
 /*  Cookieless brand marks (rendered by us — set no cookies)           */
@@ -28,12 +29,14 @@ type Variant = "carousel" | "compact";
 const STAR_PATH =
   "M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z";
 
-const TrustpilotLogo: FC = () => (
+const TrustpilotLogo: FC<{ theme: Theme }> = ({ theme }) => (
   <span className="inline-flex items-center gap-1.5">
     <svg viewBox="0 0 24 24" width="18" height="18" fill={TP_GREEN} aria-hidden="true">
       <path d={STAR_PATH} />
     </svg>
-    <span className="font-sans text-[15px] font-semibold tracking-tight text-white">
+    <span
+      className={`font-sans text-[15px] font-semibold tracking-tight ${theme === "light" ? "text-gray-900" : "text-white"}`}
+    >
       Trustpilot
     </span>
   </span>
@@ -71,19 +74,21 @@ const StaticBlock: FC<{
   variant: Variant;
   config: TrustpilotConfig;
   showProfileLink: boolean;
-}> = ({ variant, config, showProfileLink }) => {
+  theme: Theme;
+}> = ({ variant, config, showProfileLink, theme }) => {
   const showScore = config.score !== null && config.reviewCount !== null;
   const href = config.profileUrl ?? TRUSTPILOT_FALLBACK_URL;
   const starSize = variant === "carousel" ? 30 : 24;
+  const isLight = theme === "light";
 
   return (
     <div className="flex flex-col items-center gap-3 text-center">
-      <TrustpilotLogo />
+      <TrustpilotLogo theme={theme} />
       <TrustpilotStars size={starSize} />
-      <p className="font-sans text-white">
+      <p className={`font-sans ${isLight ? "text-gray-900" : "text-white"}`}>
         <span className="font-bold">Excellent</span>
         {showScore && (
-          <span className="font-normal text-white/70">
+          <span className={`font-normal ${isLight ? "text-gray-500" : "text-white/70"}`}>
             {" "}
             · TrustScore {config.score} · {config.reviewCount} reviews
           </span>
@@ -122,7 +127,10 @@ const TrustpilotReviews: FC<{
   className?: string;
   /** Show the "See our reviews on Trustpilot" link in the static block (default true). */
   showProfileLink?: boolean;
-}> = ({ variant, className, showProfileLink = true }) => {
+  /** Colour theme for the static block + live widget (default "dark"). The white
+   *  landing passes "light". */
+  theme?: Theme;
+}> = ({ variant, className, showProfileLink = true, theme = "dark" }) => {
   const config = getTrustpilotConfig();
   const liveConfigured = isTrustpilotLiveConfigured(config);
   const widgetRef = useRef<HTMLDivElement>(null);
@@ -180,7 +188,12 @@ const TrustpilotReviews: FC<{
   return (
     <div className={`relative ${className ?? ""}`}>
       {!liveReady && (
-        <StaticBlock variant={variant} config={config} showProfileLink={showProfileLink} />
+        <StaticBlock
+          variant={variant}
+          config={config}
+          showProfileLink={showProfileLink}
+          theme={theme}
+        />
       )}
 
       {liveConfigured && (
@@ -192,7 +205,7 @@ const TrustpilotReviews: FC<{
           data-businessunit-id={config.businessUnitId ?? undefined}
           data-style-height={variant === "carousel" ? "240px" : "120px"}
           data-style-width="100%"
-          data-theme="dark"
+          data-theme={theme}
           aria-hidden={liveReady ? undefined : true}
           style={
             liveReady

@@ -1,5 +1,11 @@
+import { headers } from "next/headers";
 import LandingPage from "@features/landing/ui/LandingPage";
+import LandingPageWhite from "@features/landing/ui/white/LandingPageWhite";
 import { jsonLdString } from "@shared/seo/json-ld";
+import {
+  LANDING_VARIANT_HEADER,
+  normalizeLandingVariant,
+} from "@shared/experiments/landingVariant";
 import { faqs } from "@/data/faqs";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.loveiq.org";
@@ -89,7 +95,13 @@ const academicBoardSchema = {
   ],
 };
 
-export default function Page() {
+export default async function Page() {
+  // White-landing A/B: the arm is decided in proxy.ts and handed over via the
+  // x-landing-variant request header (correct even on the cookie-minting first
+  // visit). JSON-LD + video preloads are variant-independent and render for both.
+  const headersList = await headers();
+  const variant = normalizeLandingVariant(headersList.get(LANDING_VARIANT_HEADER));
+
   return (
     <>
       <script
@@ -104,21 +116,30 @@ export default function Page() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: jsonLdString(academicBoardSchema) }}
       />
-      <link
-        rel="preload"
-        as="video"
-        href="/couple-hero-mobile.mp4"
-        type="video/mp4"
-        media="(max-width: 640px)"
-      />
-      <link
-        rel="preload"
-        as="video"
-        href="/couple-hero.mp4"
-        type="video/mp4"
-        media="(min-width: 641px)"
-      />
-      <LandingPage />
+      {/* Hero LCP preloads, per variant — the dark hero is video, the white hero
+          is a decorative image. Emitting only the active arm's asset avoids
+          fetching multi-MB videos on white-arm visits (and vice versa). */}
+      {variant === "white" ? (
+        <link rel="preload" as="image" href="/images/white/hero-bg.png" />
+      ) : (
+        <>
+          <link
+            rel="preload"
+            as="video"
+            href="/couple-hero-mobile.mp4"
+            type="video/mp4"
+            media="(max-width: 640px)"
+          />
+          <link
+            rel="preload"
+            as="video"
+            href="/couple-hero.mp4"
+            type="video/mp4"
+            media="(min-width: 641px)"
+          />
+        </>
+      )}
+      {variant === "white" ? <LandingPageWhite /> : <LandingPage />}
     </>
   );
 }

@@ -1,5 +1,6 @@
 import { createHash } from "crypto";
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { z } from "zod";
 import {
   REPORT_ACCESS_TOKEN_REGEX,
@@ -28,6 +29,10 @@ import {
 } from "@features/report/server/personalReport";
 import { isPlanOwnedForArchetype } from "@features/report/server/access";
 import { getForcedPaywallCohort } from "@shared/experiments/forcedPaywall";
+import {
+  LANDING_VARIANT_COOKIE,
+  normalizeLandingVariant,
+} from "@shared/experiments/landingVariant";
 import logger from "@shared/observability/logger";
 import {
   getReportPriceQuoteForContext,
@@ -239,6 +244,19 @@ export async function POST(request: Request) {
       })
     );
 
+    // White-landing A/B arm, read from the sticky cookie, so revenue is
+    // attributable to the landing variant the buyer first saw. Defaults to
+    // "control" when the cookie is absent (e.g. they never hit `/`) or when
+    // there is no request scope (cookies() throws — e.g. unit tests).
+    let landingVariant: "control" | "white" = "control";
+    try {
+      landingVariant = normalizeLandingVariant(
+        (await cookies()).get(LANDING_VARIANT_COOKIE)?.value
+      );
+    } catch {
+      /* no request scope — keep the control default */
+    }
+
     // Resolve the optional nurture promo. A miss (unknown/expired/wrong-owner)
     // silently falls through to the no-promo flow — never 400 — because the
     // email link could be opened on a forwarded device. Logged for analytics.
@@ -325,6 +343,7 @@ export async function POST(request: Request) {
           // webhook → fulfillment → payment.metadata for conversion attribution
           // that survives analytics-consent declines.
           forcedPaywallArm,
+          landingVariant,
           initialPrice: String((quote.initialPriceCents / 100).toFixed(2)),
           msrp: String((quote.msrpCents / 100).toFixed(2)),
           plan: parsed.data.plan,

@@ -2,10 +2,44 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createSupabaseMiddleware } from "@shared/auth/supabase-middleware";
 import logger from "@shared/observability/logger";
+import {
+  LANDING_VARIANT_COOKIE,
+  LANDING_VARIANT_HEADER,
+  isLandingVariant,
+  type LandingVariant,
+} from "@shared/experiments/landingVariant";
 
 const isProduction = process.env.NODE_ENV === "production";
 const CSRF_COOKIE_NAME = isProduction ? "__Host-csrf" : "__csrf";
 const CSRF_TOKEN_LENGTH = 32;
+
+// White-landing A/B: known search-engine + AI crawlers are forced to the dark
+// "control" arm so the indexed version of `/` never flips (no cloaking, stable
+// SEO). Anything matching here skips the random 50/50 assignment.
+const LANDING_BOT_UA_REGEX =
+  /bot|crawl|spider|slurp|bingpreview|facebookexternalhit|embedly|quora link preview|outbrain|pinterest|vkshare|w3c_validator|whatsapp|telegrambot|applebot|gptbot|chatgpt|ccbot|claudebot|claude-web|perplexity|google-extended|amazonbot|bytespider/i;
+
+/**
+ * Resolve the white-landing A/B arm for a `/` request. Precedence:
+ *   1. Known crawler UA → always "control" (keep the indexed page stable).
+ *   2. `?variant=white|control` → explicit QA override (also re-stamps cookie).
+ *   3. Existing valid cookie → sticky.
+ *   4. Fresh random 50/50 (one crypto byte, low bit decides).
+ */
+function resolveLandingVariant(request: NextRequest): LandingVariant {
+  const ua = request.headers.get("user-agent") || "";
+  if (LANDING_BOT_UA_REGEX.test(ua)) return "control";
+
+  const override = request.nextUrl.searchParams.get("variant");
+  if (isLandingVariant(override)) return override;
+
+  const existing = request.cookies.get(LANDING_VARIANT_COOKIE)?.value;
+  if (isLandingVariant(existing)) return existing;
+
+  const buf = new Uint8Array(1);
+  crypto.getRandomValues(buf);
+  return (buf[0]! & 1) === 0 ? "control" : "white";
+}
 
 // Visitor id cookie for top-of-funnel attribution. Stable per-browser UUID
 // (1yr) minted server-side so it survives JS being disabled / blocked. The
@@ -168,6 +202,16 @@ export async function proxy(request: NextRequest) {
       ? inboundRequestId
       : crypto.randomUUID();
   requestHeaders.set("x-request-id", requestId);
+
+  // White-landing A/B: compute the arm for the landing route and hand it to the
+  // server render via a request header. Reading it here (not from cookies() in
+  // the page) guarantees the FIRST visit renders the assigned arm — on the
+  // request that mints the cookie, cookies() wouldn't see it yet.
+  const isLandingRoute = request.nextUrl.pathname === "/";
+  const landingVariant = isLandingRoute ? resolveLandingVariant(request) : null;
+  if (landingVariant) {
+    requestHeaders.set(LANDING_VARIANT_HEADER, landingVariant);
+  }
 
   // Create response with security headers
   const response = NextResponse.next({
@@ -345,6 +389,30 @@ export async function proxy(request: NextRequest) {
       path: "/",
       maxAge: 60 * 60 * 24 * 365, // 1 year
     });
+  }
+
+  // White-landing A/B sticky cookie. Mint on `/` for non-bots when there is no
+  // valid existing value, or whenever a `?variant=` QA override is supplied (so
+  // the override sticks). This is a FUNCTIONAL cookie — it stores only
+  // "control"|"white", carries no PII, and is required for a consistent UX
+  // across visits — so it is set regardless of analytics consent, exactly like
+  // the CSRF cookie. Bots are never given a cookie (they don't keep one and we
+  // don't want their forced-control assignment polluting the population).
+  if (isLandingRoute && landingVariant) {
+    const ua = request.headers.get("user-agent") || "";
+    const isBot = LANDING_BOT_UA_REGEX.test(ua);
+    const existing = request.cookies.get(LANDING_VARIANT_COOKIE)?.value;
+    const override = request.nextUrl.searchParams.get("variant");
+    const shouldSet = !isBot && (isLandingVariant(override) || !isLandingVariant(existing));
+    if (shouldSet) {
+      response.cookies.set(LANDING_VARIANT_COOKIE, landingVariant, {
+        httpOnly: false,
+        secure: isProduction,
+        sameSite: "lax",
+        path: "/",
+        maxAge: 60 * 60 * 24 * 365, // 1 year
+      });
+    }
   }
 
   // Security logging for API routes (3.4)

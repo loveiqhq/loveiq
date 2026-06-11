@@ -496,6 +496,73 @@ input.autofill-dark:-internal-autofill-previewed {
   transform: none;
 }
 
+/* ===== White-landing mobile menu — light-theme twins of .mobile-menu-* =====
+   Same Safari-safe behaviour (no backdrop-filter/transform in the closed state,
+   visibility delayed on close) but light backgrounds. The structural classes
+   (.nav-header, .nav-hidden, .hamburger-line, .hamburger-open, .mobile-menu-link)
+   are theme-agnostic and reused as-is. */
+.w-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 24, 39, 0.35);
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+  transition:
+    opacity 300ms cubic-bezier(0.4, 0, 0.2, 1),
+    visibility 0ms 300ms;
+}
+
+.w-menu-backdrop.is-open {
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  opacity: 1;
+  pointer-events: auto;
+  visibility: visible;
+  transition:
+    opacity 300ms cubic-bezier(0.4, 0, 0.2, 1),
+    visibility 0ms 0ms;
+}
+
+.w-menu-panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 72px;
+  margin: 0 auto;
+  width: 100%;
+  max-width: 332px;
+  border-radius: 24px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.18);
+  /* No backdrop-filter or transform in closed state (iOS Safari GPU-layer
+     hit-test bug — see .mobile-menu-panel note above). */
+  overflow: hidden;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity 280ms cubic-bezier(0.4, 0, 0.2, 1),
+    visibility 0ms 280ms;
+}
+
+.w-menu-panel.is-open {
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition:
+    opacity 300ms cubic-bezier(0.16, 1, 0.3, 1),
+    visibility 0ms 0ms;
+}
+
+.w-menu-panel.is-open .mobile-menu-link {
+  opacity: 1;
+  transform: none;
+}
+
 /* Hamburger line base */
 .hamburger-line {
   display: block;

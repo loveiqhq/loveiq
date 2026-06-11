@@ -22,35 +22,47 @@ vi.mock("@shared/observability/logger", () => ({
 }));
 
 // Mock next/server
-const { mockCookiesSet, mockCookiesDelete, mockRedirect, mockJson, mockResponseHeaders } =
-  vi.hoisted(() => ({
-    mockResponseHeaders: new Map<string, string>(),
-    mockCookiesSet: vi.fn(),
-    mockCookiesDelete: vi.fn(),
-    mockRedirect: vi.fn((url: URL) => ({
-      redirectedTo: url.toString(),
-      cookies: { delete: vi.fn() },
-    })),
-    mockJson: vi.fn((body: unknown, init?: { status?: number }) => ({
-      status: init?.status ?? 200,
-      body,
-      cookies: { set: vi.fn(), delete: vi.fn() },
-    })),
-  }));
+const {
+  mockCookiesSet,
+  mockCookiesDelete,
+  mockRedirect,
+  mockJson,
+  mockResponseHeaders,
+  mockNextOpts,
+} = vi.hoisted(() => ({
+  mockResponseHeaders: new Map<string, string>(),
+  mockCookiesSet: vi.fn(),
+  mockCookiesDelete: vi.fn(),
+  // Captures the request headers passed to NextResponse.next({ request: { headers } })
+  // so tests can assert the cloned-request header injection (e.g. x-landing-variant).
+  mockNextOpts: { value: null as { request?: { headers?: Headers } } | null },
+  mockRedirect: vi.fn((url: URL) => ({
+    redirectedTo: url.toString(),
+    cookies: { delete: vi.fn() },
+  })),
+  mockJson: vi.fn((body: unknown, init?: { status?: number }) => ({
+    status: init?.status ?? 200,
+    body,
+    cookies: { set: vi.fn(), delete: vi.fn() },
+  })),
+}));
 
 vi.mock("next/server", () => {
   return {
     NextResponse: {
-      next: vi.fn((_opts?: unknown) => ({
-        headers: {
-          set: (key: string, value: string) => mockResponseHeaders.set(key, value),
-          get: (key: string) => mockResponseHeaders.get(key),
-        },
-        cookies: {
-          set: mockCookiesSet,
-          delete: mockCookiesDelete,
-        },
-      })),
+      next: vi.fn((opts?: { request?: { headers?: Headers } }) => {
+        mockNextOpts.value = opts ?? null;
+        return {
+          headers: {
+            set: (key: string, value: string) => mockResponseHeaders.set(key, value),
+            get: (key: string) => mockResponseHeaders.get(key),
+          },
+          cookies: {
+            set: mockCookiesSet,
+            delete: mockCookiesDelete,
+          },
+        };
+      }),
       redirect: mockRedirect,
       json: mockJson,
     },
@@ -84,11 +96,15 @@ function makeNextRequest(
    * R-13: supplies a `__admin_activity` cookie value (epoch-ms string) for
    * admin idle-timeout tests. Default = absent.
    */
-  adminActivityValue?: string
+  adminActivityValue?: string,
+  /** White-landing A/B: supplies an existing `__liq_lv` cookie value. */
+  landingCookie?: string,
+  /** Override the User-Agent (e.g. a bot UA for the SEO-control test). */
+  userAgent?: string
 ) {
   // Use a real Headers object so `new Headers(request.headers)` works
   const headers = new Headers();
-  headers.set("user-agent", "TestAgent/1.0");
+  headers.set("user-agent", userAgent ?? "TestAgent/1.0");
   headers.set("x-real-ip", "1.2.3.4");
 
   return {
@@ -109,12 +125,16 @@ function makeNextRequest(
         if (name === "__admin_activity" && adminActivityValue) {
           return { value: adminActivityValue };
         }
+        if ((name === "__liq_lv" || name === "__Host-liq_lv") && landingCookie) {
+          return { value: landingCookie };
+        }
         return undefined;
       },
     },
     nextUrl: {
       pathname: new URL(url).pathname,
       search: new URL(url).search,
+      searchParams: new URL(url).searchParams,
     },
   } as never;
 }
@@ -122,6 +142,7 @@ function makeNextRequest(
 describe("proxy middleware", () => {
   beforeEach(() => {
     mockResponseHeaders.clear();
+    mockNextOpts.value = null;
     mockCookiesSet.mockClear();
     mockCookiesDelete.mockClear();
     mockRedirect.mockClear();
@@ -415,5 +436,69 @@ describe("proxy middleware", () => {
       const res = await proxy(makeNextRequest("http://localhost:3000/api/admin/stats"));
       expect((res as unknown as { status: number }).status).toBe(401);
     });
+  });
+});
+
+describe("proxy middleware — white-landing A/B (__liq_lv)", () => {
+  beforeEach(() => {
+    mockResponseHeaders.clear();
+    mockNextOpts.value = null;
+    mockCookiesSet.mockClear();
+    delete process.env.STAGING_PASSWORD;
+  });
+
+  const landingCookieCalls = () =>
+    mockCookiesSet.mock.calls.filter((c) => c[0] === "__liq_lv" || c[0] === "__Host-liq_lv");
+  const variantHeader = () => mockNextOpts.value?.request?.headers?.get("x-landing-variant");
+
+  it("mints a sticky landing cookie + request header on / for a fresh non-bot visitor", async () => {
+    await proxy(makeNextRequest("http://localhost:3000/"));
+    // Mocked getRandomValues yields byte 0 → low bit 0 → "control".
+    expect(variantHeader()).toBe("control");
+    const calls = landingCookieCalls();
+    expect(calls).toHaveLength(1);
+    expect(calls[0]![1]).toBe("control");
+    expect(calls[0]![2]).toEqual(
+      expect.objectContaining({ path: "/", sameSite: "lax", maxAge: 60 * 60 * 24 * 365 })
+    );
+  });
+
+  it("honors a ?variant=white QA override and stamps the cookie", async () => {
+    await proxy(makeNextRequest("http://localhost:3000/?variant=white"));
+    expect(variantHeader()).toBe("white");
+    const calls = landingCookieCalls();
+    expect(calls).toHaveLength(1);
+    expect(calls[0]![1]).toBe("white");
+  });
+
+  it("keeps an existing sticky cookie and does not re-set it", async () => {
+    await proxy(
+      makeNextRequest("http://localhost:3000/", undefined, undefined, undefined, undefined, "white")
+    );
+    expect(variantHeader()).toBe("white");
+    expect(landingCookieCalls()).toHaveLength(0);
+  });
+
+  it("forces known crawlers to control and never sets a cookie (SEO anti-cloaking)", async () => {
+    await proxy(
+      makeNextRequest(
+        "http://localhost:3000/?variant=white",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
+      )
+    );
+    // Even with ?variant=white, a bot is pinned to control and gets no cookie.
+    expect(variantHeader()).toBe("control");
+    expect(landingCookieCalls()).toHaveLength(0);
+  });
+
+  it("does not touch the landing cookie or header on non-landing routes", async () => {
+    await proxy(makeNextRequest("http://localhost:3000/about"));
+    expect(variantHeader()).toBeFalsy();
+    expect(landingCookieCalls()).toHaveLength(0);
   });
 });

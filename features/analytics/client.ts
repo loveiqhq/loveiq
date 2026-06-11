@@ -1,4 +1,5 @@
 import { getCsrfToken } from "@shared/http/csrf-client";
+import { LANDING_VARIANT_COOKIE } from "@shared/experiments/landingVariant";
 
 type GTag = {
   (command: "event", eventName: string, params?: Record<string, unknown>): void;
@@ -129,10 +130,18 @@ const persistAnalyticsEvent = (
   const csrf = getCsrfToken();
   if (!csrf) return;
 
-  // Auto-stamp the forced-paywall arm onto every persisted event so the whole
-  // funnel is arm-attributable without per-call wiring. Caller keys win.
+  // Auto-stamp the experiment arms onto every persisted event so the whole
+  // funnel is attributable without per-call wiring. The forced-paywall arm
+  // comes from a window global (set on report/wizard once the token resolves);
+  // the white-landing variant is read straight from its cookie (source of
+  // truth, readable on every page). Caller keys win over both.
   const arm = window.__loveiqForcedPaywallArm ?? null;
-  const mergedMetadata = arm ? { forced_paywall_arm: arm, ...metadata } : metadata;
+  const landingVariant = getLandingVariant();
+  const mergedMetadata = {
+    ...(arm ? { forced_paywall_arm: arm } : {}),
+    ...(landingVariant ? { landing_variant: landingVariant } : {}),
+    ...metadata,
+  };
 
   const url = "/api/analytics-event";
   const headerBody = {
@@ -181,6 +190,33 @@ export const hasCookieYesConsent = (category: ConsentCategory) => {
     const [key, value] = entry.split(":");
     return key === category && value === "yes";
   });
+};
+
+/**
+ * White-landing A/B arm for the current visitor, read from the assignment
+ * cookie minted by `proxy.ts`. Returns null when absent (the visitor never hit
+ * `/`, e.g. arrived straight at /report from an email) so events are stamped
+ * only for the real experiment population. No consent gate: the cookie is a
+ * no-PII functional cookie, and reading it just classifies an already-allowed
+ * analytics event — it never sets anything.
+ */
+const getLandingVariant = (): "control" | "white" | null => {
+  const v = getCookieValue(LANDING_VARIANT_COOKIE);
+  return v === "control" || v === "white" ? v : null;
+};
+
+/**
+ * Mirror the white-landing arm into GA4 as a user-scoped property so every GA4
+ * event is segmentable by it in Explorations (no per-event wiring). Consent-
+ * gated like all GA4 traffic. Call once on landing-page mount. NOTE: register a
+ * custom dimension "landing_variant" (user-scoped) in GA4 Admin → Custom
+ * definitions to surface it in reports (one-time config, not code).
+ */
+export const setLandingVariant = (variant: "control" | "white" | null) => {
+  if (typeof window === "undefined") return;
+  if (variant && window.__loveiqAnalyticsEnabled && hasCookieYesConsent("analytics")) {
+    window.gtag?.("set", "user_properties", { landing_variant: variant });
+  }
 };
 
 export const track = (name: string, params?: Record<string, unknown>) => {

@@ -1,7 +1,9 @@
 import { randomBytes } from "crypto";
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { Resend } from "resend";
 import { z } from "zod";
+import { LANDING_VARIANT_COOKIE, isLandingVariant } from "@shared/experiments/landingVariant";
 import { checkRateLimit, checkCooldown, getClientIp } from "@shared/http/ratelimit";
 import { scheduleAfterResponse } from "@shared/http/after-response";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
@@ -190,6 +192,25 @@ export async function POST(request: Request) {
   const normalizedEmail = email.trim().toLowerCase();
   const normalizedFirstName = firstName.trim();
 
+  // White-landing A/B: stamp the sticky variant onto the submission's
+  // utm_tracker JSON so submissions are sliceable by arm in the DB. Guarded so
+  // the merged blob never exceeds the 500-char cap the column expects, and a
+  // non-JSON / unparseable tracker is left untouched.
+  let mergedUtmTracker = utmTracker ?? null;
+  try {
+    const landingVariant = (await cookies()).get(LANDING_VARIANT_COOKIE)?.value;
+    if (isLandingVariant(landingVariant)) {
+      const base = utmTracker ? JSON.parse(utmTracker) : {};
+      if (base && typeof base === "object" && !Array.isArray(base)) {
+        base.landing_variant = landingVariant;
+        const candidate = JSON.stringify(base);
+        if (candidate.length <= 500) mergedUtmTracker = candidate;
+      }
+    }
+  } catch {
+    /* utmTracker wasn't JSON — leave it untouched */
+  }
+
   if (website) {
     // Honeypot field was filled — almost certainly a bot. Fire-and-forget
     // ops ping so abuse patterns become visible. The 60s dedup in
@@ -238,7 +259,7 @@ export async function POST(request: Request) {
       answers: answers as SurveyAnswers,
       startedAt,
       durationMs,
-      utmTracker,
+      utmTracker: mergedUtmTracker,
       sessionId,
       marketingOptIn,
     });

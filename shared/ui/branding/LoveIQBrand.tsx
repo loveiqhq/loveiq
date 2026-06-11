@@ -27,11 +27,21 @@ export const LoveIQMark: FC<MarkProps> = ({
 
 type WordmarkProps = {
   className?: string;
+  /**
+   * Color class for the "Love" half. Defaults to `text-white` for the dark
+   * theme; the white landing passes a dark class (e.g. `text-gray-900`) so the
+   * wordmark is legible on a light background. The "IQ" half keeps its brand
+   * gradient on both themes.
+   */
+  loveClassName?: string;
 };
 
-export const LoveIQWordmark: FC<WordmarkProps> = ({ className = "" }) => (
+export const LoveIQWordmark: FC<WordmarkProps> = ({
+  className = "",
+  loveClassName = "text-white",
+}) => (
   <span className={`font-serif font-bold leading-none ${className}`} aria-label="LoveIQ">
-    <span aria-hidden="true" className="text-white">
+    <span aria-hidden="true" className={loveClassName}>
       Love
     </span>
     <span
