@@ -212,3 +212,118 @@ export function parseAnswerCount(answers: Record<string, unknown> | null): numbe
 export function sourceLabel(tracker: string | null): string {
   return parseUtmSource(tracker, "Direct");
 }
+
+/* ------------------------------------------------------------------ */
+/*  Marketing-channel classifier (for the journey-flow Sankey)         */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Canonical acquisition-channel buckets, in display order. The journey Sankey
+ * uses these as its left-edge source nodes. Keep "Other"/"Direct" last.
+ */
+export const CHANNEL_BUCKETS = [
+  "Google Ads",
+  "Paid Social",
+  "Organic Search",
+  "Organic Social",
+  "Email",
+  "Referral",
+  "Direct",
+  "Other",
+] as const;
+
+export type ChannelBucket = (typeof CHANNEL_BUCKETS)[number];
+
+const SEARCH_ENGINES = new Set([
+  "google",
+  "bing",
+  "yahoo",
+  "duckduckgo",
+  "ecosia",
+  "baidu",
+  "yandex",
+]);
+const SOCIAL_SOURCES = new Set([
+  "facebook",
+  "fb",
+  "instagram",
+  "ig",
+  "meta",
+  "tiktok",
+  "twitter",
+  "x",
+  "linkedin",
+  "pinterest",
+  "snapchat",
+  "reddit",
+  "youtube",
+  "threads",
+]);
+const PAID_MEDIA = new Set([
+  "cpc",
+  "ppc",
+  "paid",
+  "paidsearch",
+  "paid_search",
+  "paid-search",
+  "paidsocial",
+  "paid_social",
+  "paid-social",
+  "display",
+  "banner",
+  "sem",
+  "ads",
+  "cpm",
+  "retargeting",
+]);
+const EMAIL_MEDIA = new Set(["email", "e-mail", "mail", "newsletter"]);
+const EMAIL_SOURCES = new Set(["newsletter", "email", "klaviyo", "mailchimp", "resend"]);
+const GOOGLE_ADS_SOURCES = new Set([
+  "google",
+  "googleads",
+  "google_ads",
+  "adwords",
+  "gads",
+  "bing",
+]);
+
+/**
+ * Classify a stored `utm_tracker` JSON blob into one of `CHANNEL_BUCKETS`,
+ * using utm_source + utm_medium. Designed for messy real-world UTM data:
+ * unknown/missing values fall back to Direct (nothing) or Other (a source we
+ * can't place). Pure + deterministic so it's unit-testable.
+ */
+export function classifyChannel(tracker: string | null): ChannelBucket {
+  const parsed = parseUtmTracker(tracker);
+  const source = (parsed.utm_source || parsed.source || "").toLowerCase().trim();
+  const mediumRaw = (parsed.utm_medium || parsed.medium || "").toLowerCase().trim();
+  // GA writes the literal placeholders "(none)" / "(direct)" for untagged
+  // traffic — treat them as absent so they bucket correctly (organic / direct).
+  const medium = mediumRaw === "(none)" || mediumRaw === "none" ? "" : mediumRaw;
+
+  // Nothing meaningful → direct/typed-in traffic.
+  if ((!source || source === "(direct)") && !medium) return "Direct";
+
+  const isPaid = PAID_MEDIA.has(medium);
+  const isSocial = SOCIAL_SOURCES.has(source) || /social/.test(medium);
+  const isSearchEngine = SEARCH_ENGINES.has(source);
+
+  // Email first — distinctive and easy to misread as "referral".
+  if (EMAIL_MEDIA.has(medium) || EMAIL_SOURCES.has(source)) return "Email";
+
+  if (isPaid) {
+    if (isSocial) return "Paid Social";
+    if (isSearchEngine || GOOGLE_ADS_SOURCES.has(source)) return "Google Ads";
+    return "Other";
+  }
+
+  // Non-paid from here.
+  if (isSearchEngine && (medium === "organic" || medium === "" || medium === "search")) {
+    return "Organic Search";
+  }
+  if (isSocial) return "Organic Social";
+  if (medium === "referral" || medium === "ref") return "Referral";
+
+  // A source we couldn't place (and not direct).
+  return "Other";
+}
