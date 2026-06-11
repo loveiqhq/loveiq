@@ -54,7 +54,7 @@
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.3",
-    "@supabase/supabase-js": "^2.106.2",
+    "@supabase/supabase-js": "^2.108.1",
     "@upstash/redis": "^1.38.0",
     "@vercel/otel": "^2.1.2",
     "d3-sankey": "^0.12.3",
