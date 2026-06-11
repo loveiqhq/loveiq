@@ -26,7 +26,6 @@ type SNode = SankeyNodeMinimal<FlowNode, FlowLink> & FlowNode;
 type SLink = SankeyLinkMinimal<FlowNode, FlowLink> & FlowLink;
 
 const WIDTH = 1120;
-const HEIGHT = 560;
 
 // Kind → fill colour. Sources get a rotating warm/cool palette; the spine is
 // indigo, the win is green, leaks are muted red.
@@ -53,7 +52,16 @@ function nodeFill(node: SNode, sourceIndex: Map<string, number>): string {
   return KIND_FILL[node.kind] ?? "#6366f1";
 }
 
-const JourneyFlowSankey: FC<{ nodes: FlowNode[]; links: FlowLink[] }> = ({ nodes, links }) => {
+const JourneyFlowSankey: FC<{
+  nodes: FlowNode[];
+  links: FlowLink[];
+  /** SVG viewBox height — compact multi-band layouts pass ~240. */
+  height?: number;
+  nodeWidth?: number;
+  labelSize?: number;
+  /** Show the legend + biggest-leak footer (off for stacked bands). */
+  showLegend?: boolean;
+}> = ({ nodes, links, height = 560, nodeWidth = 15, labelSize = 11.5, showLegend = true }) => {
   const [hover, setHover] = useState<string | null>(null);
 
   const layout = useMemo(() => {
@@ -62,12 +70,12 @@ const JourneyFlowSankey: FC<{ nodes: FlowNode[]; links: FlowLink[] }> = ({ nodes
     try {
       const generator = sankey<FlowNode, FlowLink>()
         .nodeId((d) => d.id)
-        .nodeWidth(15)
-        .nodePadding(16)
+        .nodeWidth(nodeWidth)
+        .nodePadding(Math.max(8, Math.round(height / 35)))
         .nodeAlign(sankeyLeft)
         .extent([
           [4, 8],
-          [WIDTH - 4, HEIGHT - 8],
+          [WIDTH - 4, height - 8],
         ]);
       const graph = generator({
         nodes: nodes.map((n) => ({ ...n })),
@@ -82,15 +90,21 @@ const JourneyFlowSankey: FC<{ nodes: FlowNode[]; links: FlowLink[] }> = ({ nodes
     } catch {
       return null;
     }
-  }, [nodes, links]);
+  }, [nodes, links, height, nodeWidth]);
 
-  const submittedCount = useMemo(
-    () => nodes.find((n) => n.id === "submitted")?.count ?? 0,
+  // % base = the band's entry volume (largest spine stage — counts are
+  // monotone within a band, so this is the first stage's count).
+  const baseCount = useMemo(
+    () =>
+      nodes.reduce(
+        (max, n) => (n.kind !== "source" && n.kind !== "drop" && n.count > max ? n.count : max),
+        0
+      ),
     [nodes]
   );
   const biggestLeak = useMemo(() => {
     // Refunds are a terminal outcome, not an acquisition leak — exclude them.
-    const drops = nodes.filter((n) => n.kind === "drop" && n.id !== "refunded");
+    const drops = nodes.filter((n) => n.kind === "drop" && !n.id.endsWith("refunded"));
     return drops.length ? drops.reduce((a, b) => (b.count > a.count ? b : a)) : null;
   }, [nodes]);
 
@@ -106,15 +120,14 @@ const JourneyFlowSankey: FC<{ nodes: FlowNode[]; links: FlowLink[] }> = ({ nodes
   const sNodes = graph.nodes as SNode[];
   const sLinks = graph.links as SLink[];
   const linkPath = sankeyLinkHorizontal<FlowNode, FlowLink>();
-  const pct = (n: number) =>
-    submittedCount > 0 ? `${Math.round((n / submittedCount) * 100)}%` : "";
+  const pct = (n: number) => (baseCount > 0 ? `${Math.round((n / baseCount) * 100)}%` : "");
 
   const isDim = (id: string) => hover !== null && hover !== id;
 
   return (
     <div className="w-full overflow-x-auto">
       <svg
-        viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
+        viewBox={`0 0 ${WIDTH} ${height}`}
         className="h-auto w-full min-w-[760px]"
         role="img"
         aria-label="User journey funnel flow diagram"
@@ -188,8 +201,8 @@ const JourneyFlowSankey: FC<{ nodes: FlowNode[]; links: FlowLink[] }> = ({ nodes
                 <rect x={x0} y={y0} width={w} height={Math.max(1, h)} rx={2.5} fill={fill}>
                   <title>
                     {node.label}: {node.count.toLocaleString()}
-                    {node.kind !== "source" && submittedCount > 0
-                      ? ` (${pct(node.count)} of completed)`
+                    {node.kind !== "source" && baseCount > 0
+                      ? ` (${pct(node.count)} of band entry)`
                       : ""}
                   </title>
                 </rect>
@@ -199,14 +212,14 @@ const JourneyFlowSankey: FC<{ nodes: FlowNode[]; links: FlowLink[] }> = ({ nodes
                   textAnchor={labelLeft ? "end" : "start"}
                   dominantBaseline="middle"
                   className="select-none"
-                  fontSize={11.5}
+                  fontSize={labelSize}
                   fill={node.kind === "drop" ? "#fca5a5" : "#e2dafb"}
                 >
                   <tspan fontWeight={600}>{node.label}</tspan>
                   <tspan fill="#9b94b8" fontWeight={400}>
                     {"  "}
                     {node.count.toLocaleString()}
-                    {node.kind !== "source" && submittedCount > 0 ? ` · ${pct(node.count)}` : ""}
+                    {node.kind !== "source" && baseCount > 0 ? ` · ${pct(node.count)}` : ""}
                   </tspan>
                 </text>
               </g>
@@ -216,29 +229,31 @@ const JourneyFlowSankey: FC<{ nodes: FlowNode[]; links: FlowLink[] }> = ({ nodes
       </svg>
 
       {/* Legend + biggest leak */}
-      <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 px-1 text-xs text-text-muted">
-        <span className="inline-flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-sm" style={{ background: SOURCE_PALETTE[0] }} />
-          Source
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-sm" style={{ background: KIND_FILL.stage }} />
-          Funnel stage
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-sm" style={{ background: KIND_FILL.outcome }} />
-          Retained
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-sm" style={{ background: KIND_FILL.drop }} />
-          Drop-off
-        </span>
-        {biggestLeak && biggestLeak.count > 0 && (
-          <span className="ml-auto rounded-full bg-red-500/15 px-3 py-1 font-medium text-red-300">
-            Biggest leak: {biggestLeak.label} ({biggestLeak.count.toLocaleString()})
+      {showLegend && (
+        <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 px-1 text-xs text-text-muted">
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-sm" style={{ background: SOURCE_PALETTE[0] }} />
+            Source
           </span>
-        )}
-      </div>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-sm" style={{ background: KIND_FILL.stage }} />
+            Funnel stage
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-sm" style={{ background: KIND_FILL.outcome }} />
+            Retained
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-sm" style={{ background: KIND_FILL.drop }} />
+            Drop-off
+          </span>
+          {biggestLeak && biggestLeak.count > 0 && (
+            <span className="ml-auto rounded-full bg-red-500/15 px-3 py-1 font-medium text-red-300">
+              Biggest leak: {biggestLeak.label} ({biggestLeak.count.toLocaleString()})
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 };
