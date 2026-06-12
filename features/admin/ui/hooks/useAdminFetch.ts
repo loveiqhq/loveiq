@@ -11,11 +11,12 @@ interface UseAdminFetchResult<T> {
 
 export function useAdminFetch<T>(
   url: string,
-  params?: Record<string, string>
+  params?: Record<string, string>,
+  enabled = true
 ): UseAdminFetchResult<T> {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(enabled);
   const [requestKey, setRequestKey] = useState(0);
 
   const serializedParams = useMemo(() => (params ? JSON.stringify(params) : ""), [params]);
@@ -26,6 +27,7 @@ export function useAdminFetch<T>(
   }, []);
 
   useEffect(() => {
+    if (!enabled) return;
     let cancelled = false;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- loading must be set synchronously before async fetch
     setLoading(true);
@@ -62,7 +64,7 @@ export function useAdminFetch<T>(
     return () => {
       cancelled = true;
     };
-  }, [url, serializedParams, requestKey]);
+  }, [url, serializedParams, requestKey, enabled]);
 
   return { data, loading, error, refetch };
 }

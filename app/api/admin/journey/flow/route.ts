@@ -11,6 +11,8 @@ import {
 } from "@features/admin/server/next-level";
 import {
   buildLinearBand,
+  buildFriction,
+  buildPricing,
   withSourceColumn,
   type Band,
   type BandStage,
@@ -145,6 +147,8 @@ export async function GET(request: Request) {
       funnelRes,
       wizardRes,
       engagementRes,
+      behaviorRes,
+      priceShownRes,
     ] = await Promise.all([
       supabaseFetch(
         `/rest/v1/survey_submission?select=id,session_id,utm_tracker,created_date_time&created_date_time=gte.${since}&order=created_date_time.desc`,
@@ -172,6 +176,7 @@ export async function GET(request: Request) {
           "forced_paywall_arm",
           "checkout_started_at",
           "purchased_at",
+          "metadata",
         ].join(",")}&created_date_time=gte.${since}`,
         range
       ),
@@ -203,6 +208,14 @@ export async function GET(request: Request) {
         `/rest/v1/analytics_event?select=event_type,survey_submission_id&event_type=in.(${ENGAGEMENT_EVENTS.join(",")})&event_time=gte.${since}`,
         range
       ),
+      supabaseFetch(
+        `/rest/v1/survey_behavior_event?select=session_id,q_id,direction,time_spent_ms&event_time=gte.${since}`,
+        range
+      ),
+      supabaseFetch(
+        `/rest/v1/analytics_event?select=survey_submission_id,metadata&event_type=eq.price_shown&event_time=gte.${since}`,
+        range
+      ),
     ]);
 
     const allRes = [
@@ -219,11 +232,15 @@ export async function GET(request: Request) {
       funnelRes,
       wizardRes,
       engagementRes,
+      behaviorRes,
+      priceShownRes,
     ];
     if (!allRes.every((res) => res.ok)) {
       logger.error("Journey-flow: one or more Supabase queries failed");
       return NextResponse.json({ error: "Unable to load journey data." }, { status: 500 });
     }
+
+    const ROW_CAP = 50_000;
 
     const submissions = (await submissionsRes.json()) as Array<{
       id: number;
@@ -245,6 +262,7 @@ export async function GET(request: Request) {
       forced_paywall_arm: string | null;
       checkout_started_at: string | null;
       purchased_at: string | null;
+      metadata: { nurtureEmailsSent?: unknown } | null;
     }>;
     const payments = (await paymentsRes.json()) as Array<{
       personal_report_id: number | null;
@@ -274,6 +292,30 @@ export async function GET(request: Request) {
       event_type: string;
       survey_submission_id: number | null;
     }>;
+    const behaviorEvents = (await behaviorRes.json()) as Array<{
+      session_id: string;
+      q_id: string;
+      direction: string;
+      time_spent_ms: number | null;
+    }>;
+    const priceShownEvents = (await priceShownRes.json()) as Array<{
+      survey_submission_id: number | null;
+      metadata: { price?: number | string; discount_step?: number | string } | null;
+    }>;
+
+    // Any query that returned exactly the 50k cap was almost certainly
+    // truncated (the behaviour-event query is the one that trips this on long
+    // windows). We surface it rather than silently undercount.
+    const wasTruncated = [
+      submissions,
+      paywall,
+      partials,
+      funnelEvents,
+      wizardEvents,
+      engagementEvents,
+      behaviorEvents,
+      priceShownEvents,
+    ].some((arr) => arr.length >= ROW_CAP);
 
     // ---- Lookup sets/maps keyed by the journey keys --------------------
     const scoredSet = new Set(scoring.map((r) => r.survey_submission_id));
@@ -300,11 +342,21 @@ export async function GET(request: Request) {
     const armBySubmission = new Map<number, string>();
     const quoteCheckoutIds = new Set<number>();
     const quotePurchasedIds = new Set<number>();
+    const nurtureStagesBySubmission = new Map<number, Set<string>>();
     for (const q of quotes) {
       if (q.survey_submission_id == null) continue;
       if (q.forced_paywall_arm) armBySubmission.set(q.survey_submission_id, q.forced_paywall_arm);
       if (q.checkout_started_at) quoteCheckoutIds.add(q.survey_submission_id);
       if (q.purchased_at) quotePurchasedIds.add(q.survey_submission_id);
+      const sent = q.metadata?.nurtureEmailsSent;
+      if (Array.isArray(sent) && sent.length > 0) {
+        const set =
+          nurtureStagesBySubmission.get(q.survey_submission_id) ??
+          nurtureStagesBySubmission
+            .set(q.survey_submission_id, new Set())
+            .get(q.survey_submission_id)!;
+        for (const stage of sent) if (typeof stage === "string") set.add(stage);
+      }
     }
 
     const paidReportIds = new Set<number>();
@@ -488,12 +540,14 @@ export async function GET(request: Request) {
       }
       return count;
     };
+    const reachedByCId = new Map<number, number>();
+    for (const ch of chapters) reachedByCId.set(ch.cId, reachedChapter(ch.firstIndex));
     const surveyStages: BandStage[] = [
       { id: "sv:start", label: "Started survey", count: surveyStartedKeys.size },
       ...chapters.map((ch, i) => ({
         id: `sv:ch${ch.cId}`,
         label: `Ch ${i + 1} · ${ch.label}`,
-        count: reachedChapter(ch.firstIndex),
+        count: reachedByCId.get(ch.cId) ?? 0,
         dropLabel: i === 0 ? "Left before Ch 1" : `Left in Ch ${i}`,
       })),
       {
@@ -628,6 +682,91 @@ export async function GET(request: Request) {
     const engagementCount = (ev: (typeof ENGAGEMENT_EVENTS)[number]) =>
       engagementBySubmission.get(ev)?.size ?? 0;
 
+    // =====================================================================
+    // Band E — Email recovery ladder (nurtured submissions in the segment)
+    // =====================================================================
+    // Stages are sequential nurture sends (a later email only goes out if the
+    // user still hadn't unlocked), so per-submission membership is naturally
+    // nested ⇒ aggregate counts are monotone. The drop at each step is "unlocked
+    // after Nh" — i.e. re-engagement working.
+    const hasStage = (id: number, ...stages: string[]) => {
+      const set = nurtureStagesBySubmission.get(id);
+      return !!set && stages.some((s) => set.has(s));
+    };
+    const recoveryStages: BandStage[] = [
+      {
+        id: "rc:n6",
+        label: "Nurtured (6h email)",
+        count: filtered.filter((r) => hasStage(r.id, "6h_no_view", "6h_no_unlock")).length,
+      },
+      {
+        id: "rc:n30",
+        label: "Still locked → 30h",
+        count: filtered.filter((r) => hasStage(r.id, "30h_no_unlock")).length,
+        dropLabel: "Unlocked after 6h",
+      },
+      {
+        id: "rc:n54",
+        label: "Still locked → 54h",
+        count: filtered.filter((r) => hasStage(r.id, "54h_no_unlock")).length,
+        dropLabel: "Unlocked after 30h",
+      },
+      {
+        id: "rc:n78",
+        label: "Call invite (78h)",
+        count: filtered.filter((r) => hasStage(r.id, "78h_no_unlock")).length,
+        dropLabel: "Unlocked after 54h",
+      },
+    ];
+    const recoveryBuilt = buildLinearBand(recoveryStages);
+    // "Recovered" = ANY nurture email was sent (not just the 6h one — a 6h send
+    // can be skipped) AND the user eventually purchased.
+    const recoveredAmongNurtured = filtered.filter(
+      (r) =>
+        hasStage(
+          r.id,
+          "6h_no_view",
+          "6h_no_unlock",
+          "30h_no_unlock",
+          "54h_no_unlock",
+          "78h_no_unlock"
+        ) && r.purchased
+    ).length;
+
+    // ---- Survey friction (per-chapter) for the segment's sessions ------
+    // Resolve each behaviour event's chapter via the real q_id→cId map (the
+    // lead questions "00000"/"00001" belong to a chapter whose code isn't their
+    // 2-char prefix, so a prefix shortcut would silently drop them).
+    const qIdToCId = new Map<string, number>(surveyQuestions.map((q) => [q.qId, q.cId]));
+    const segmentSessionIds = new Set<string>([...maxIndexBySession.keys(), ...filteredSessionIds]);
+    const friction = buildFriction(
+      behaviorEvents.filter((e) => segmentSessionIds.has(e.session_id)),
+      chapters.map((ch, i) => ({ cId: ch.cId, label: `Ch ${i + 1} · ${ch.label}` })),
+      reachedByCId,
+      qIdToCId
+    );
+
+    // ---- Pricing exposure ----------------------------------------------
+    // "Converted" = actually purchased (the panel labels it "buy").
+    const convertedSubmissionIds = new Set<number>();
+    for (const r of filtered) if (r.purchased) convertedSubmissionIds.add(r.id);
+    const pricing = buildPricing(
+      priceShownEvents
+        .filter((e) => e.survey_submission_id != null && filteredIds.has(e.survey_submission_id))
+        .map((e) => ({
+          survey_submission_id: e.survey_submission_id,
+          price:
+            typeof e.metadata?.price === "string"
+              ? parseFloat(e.metadata.price)
+              : (e.metadata?.price ?? null),
+          discountStep:
+            typeof e.metadata?.discount_step === "string"
+              ? parseInt(e.metadata.discount_step, 10)
+              : (e.metadata?.discount_step ?? null),
+        })),
+      convertedSubmissionIds
+    );
+
     const visitorCount = stageCount("unique_visitor");
     const pct = (n: number, d: number) => (d > 0 ? Math.round((n / d) * 1000) / 10 : 0);
 
@@ -639,7 +778,11 @@ export async function GET(request: Request) {
         survey: { nodes: surveyBuilt.nodes, links: surveyBuilt.links },
         wizard: { nodes: wizardBuilt.nodes, links: wizardBuilt.links },
         monetization: { nodes: monetizationBuilt.nodes, links: monetizationBuilt.links },
+        recovery: { nodes: recoveryBuilt.nodes, links: recoveryBuilt.links },
       },
+      friction,
+      pricing,
+      recoveredAmongNurtured,
       engagement: {
         viewed: c.viewed,
         active1min: engagementCount("report_engagement_1min"),
@@ -686,6 +829,16 @@ export async function GET(request: Request) {
           "Wizard + engagement events require analytics consent, so those bands cover the consenting subset of submissions.",
         armScope:
           "The paywall-arm filter only covers journeys that reached the report stage; the landing-variant filter needs the white-landing A/B live in production.",
+        recovery:
+          "Recovery ladder = nurture emails actually sent. They're normally sequential (each step a subset of the prior); if an earlier send was skipped a step is clamped to keep flows conserved" +
+          (recoveryBuilt.wasClamped ? " (clamping applied here)" : "") +
+          ". Per-email purchase attribution isn't stamped on payments yet, so 'recovered' counts nurtured users who eventually purchased — not necessarily because of a specific email.",
+        ...(wasTruncated
+          ? {
+              truncation:
+                "Some underlying tables hit the 50,000-row query cap for this window (likely survey behaviour events) — friction/time figures may be undercounted. Use a shorter range for exact numbers.",
+            }
+          : {}),
       },
     });
   } catch (err) {

@@ -126,3 +126,130 @@ export function withSourceColumn(
   ];
   return { nodes, links };
 }
+
+/* ------------------------------------------------------------------ */
+/*  Survey friction (per-chapter abandons / backs / time)             */
+/* ------------------------------------------------------------------ */
+
+export interface FrictionRow {
+  cId: number;
+  label: string;
+  reached: number;
+  abandons: number;
+  backs: number;
+  medianMs: number;
+}
+
+export interface BehaviorEvent {
+  session_id: string;
+  q_id: string;
+  direction: string; // forward | back | abandon | complete
+  time_spent_ms: number | null;
+}
+
+function median(values: number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0
+    ? Math.round(((sorted[mid - 1] ?? 0) + (sorted[mid] ?? 0)) / 2)
+    : (sorted[mid] ?? 0);
+}
+
+/**
+ * Aggregate per-chapter friction from survey_behavior_event rows. The chapter
+ * for each event is resolved via `qIdToCId` (built from the survey data) —
+ * NOT `q_id.slice(0,2)`, because the lead questions "00000"/"00001" belong to a
+ * chapter whose code isn't their prefix. `reachedByCId` supplies the "reached"
+ * count from the survey band. `events` must already be filtered to the segment's
+ * sessions. Median time is per-session total time-in-chapter (a session that
+ * revisits a chapter counts once), so repeat-abandoners don't skew it.
+ */
+export function buildFriction(
+  events: BehaviorEvent[],
+  chapters: Array<{ cId: number; label: string }>,
+  reachedByCId: Map<number, number>,
+  qIdToCId: Map<string, number>
+): FrictionRow[] {
+  const abandons = new Map<number, Set<string>>();
+  const backs = new Map<number, Set<string>>();
+  // cId -> (session -> summed time in that chapter)
+  const timeBySession = new Map<number, Map<string, number>>();
+  for (const e of events) {
+    const cId = qIdToCId.get(e.q_id) ?? parseInt(e.q_id.slice(0, 2), 10);
+    if (!Number.isFinite(cId)) continue;
+    if (e.direction === "abandon") {
+      (abandons.get(cId) ?? abandons.set(cId, new Set()).get(cId)!).add(e.session_id);
+    } else if (e.direction === "back") {
+      (backs.get(cId) ?? backs.set(cId, new Set()).get(cId)!).add(e.session_id);
+    }
+    if (typeof e.time_spent_ms === "number" && e.time_spent_ms > 0) {
+      const sessions = timeBySession.get(cId) ?? timeBySession.set(cId, new Map()).get(cId)!;
+      sessions.set(e.session_id, (sessions.get(e.session_id) ?? 0) + e.time_spent_ms);
+    }
+  }
+  return chapters.map((ch) => ({
+    cId: ch.cId,
+    label: ch.label,
+    reached: reachedByCId.get(ch.cId) ?? 0,
+    abandons: abandons.get(ch.cId)?.size ?? 0,
+    backs: backs.get(ch.cId)?.size ?? 0,
+    medianMs: median([...(timeBySession.get(ch.cId)?.values() ?? [])]),
+  }));
+}
+
+/* ------------------------------------------------------------------ */
+/*  Pricing exposure (price points + discount steps)                  */
+/* ------------------------------------------------------------------ */
+
+export interface PriceShownEvent {
+  survey_submission_id: number | null;
+  price: number | null;
+  discountStep: number | null;
+}
+
+export interface PricingSummary {
+  points: Array<{ price: number; shown: number; converted: number }>;
+  steps: Array<{ step: number; shown: number; converted: number }>;
+}
+
+/**
+ * Aggregate price_shown events into price-point and discount-step distributions.
+ * A submission "converted" if it is in `convertedSubmissionIds` (reached
+ * begin_checkout / purchased). Each submission counts once per distinct price /
+ * step it was shown.
+ */
+export function buildPricing(
+  events: PriceShownEvent[],
+  convertedSubmissionIds: Set<number>
+): PricingSummary {
+  const byPrice = new Map<number, { shown: Set<number>; converted: Set<number> }>();
+  const byStep = new Map<number, { shown: Set<number>; converted: Set<number> }>();
+  const bump = (
+    map: Map<number, { shown: Set<number>; converted: Set<number> }>,
+    key: number,
+    sub: number
+  ) => {
+    const entry =
+      map.get(key) ?? map.set(key, { shown: new Set(), converted: new Set() }).get(key)!;
+    entry.shown.add(sub);
+    if (convertedSubmissionIds.has(sub)) entry.converted.add(sub);
+  };
+  for (const e of events) {
+    if (e.survey_submission_id == null) continue;
+    if (typeof e.price === "number" && Number.isFinite(e.price)) {
+      bump(byPrice, Math.round(e.price), e.survey_submission_id);
+    }
+    if (typeof e.discountStep === "number" && Number.isFinite(e.discountStep)) {
+      bump(byStep, e.discountStep, e.survey_submission_id);
+    }
+  }
+  const toRows = (map: Map<number, { shown: Set<number>; converted: Set<number> }>) =>
+    [...map.entries()]
+      .map(([key, v]) => ({ key, shown: v.shown.size, converted: v.converted.size }))
+      .sort((a, b) => a.key - b.key);
+  return {
+    points: toRows(byPrice).map((r) => ({ price: r.key, shown: r.shown, converted: r.converted })),
+    steps: toRows(byStep).map((r) => ({ step: r.key, shown: r.shown, converted: r.converted })),
+  };
+}
