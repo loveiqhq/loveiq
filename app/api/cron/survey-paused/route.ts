@@ -26,7 +26,7 @@ import { surveyPausedBEmail } from "@features/survey/server/emails/survey-paused
 import { getEmailSiteUrl } from "@shared/emails/site-url";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
 import { pickEmailVariant } from "@shared/emails/ab-variant";
-import { buildUnsubscribeUrl } from "@shared/emails/unsubscribe-token";
+import { buildUnsubscribeUrl, UNSUBSCRIBE_CAMPAIGNS } from "@shared/emails/unsubscribe-token";
 import { isEmailSuppressed } from "@shared/emails/suppression";
 import { getSurveyContactInfo } from "@features/survey/server/utils";
 import type { SurveyAnswers } from "@features/survey/server/types";
@@ -186,7 +186,7 @@ export async function GET(request: Request) {
 
       const unsubSecret = process.env.UNSUBSCRIBE_SECRET;
       const unsubscribeUrl = unsubSecret
-        ? buildUnsubscribeUrl(email, siteUrl, unsubSecret)
+        ? buildUnsubscribeUrl(email, siteUrl, unsubSecret, UNSUBSCRIBE_CAMPAIGNS.surveyPaused)
         : undefined;
 
       const variant = pickEmailVariant(email, "survey-paused");

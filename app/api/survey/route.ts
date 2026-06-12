@@ -10,7 +10,7 @@ import logger from "@shared/observability/logger";
 import { notifySlack, maskEmail, escapeSlack } from "@shared/observability/slack";
 import { surveyCompleteEmail } from "@features/survey/server/emails/survey-complete";
 import { surveyCompleteBEmail } from "@features/survey/server/emails/survey-complete-b";
-import { buildUnsubscribeUrl } from "@shared/emails/unsubscribe-token";
+import { buildUnsubscribeUrl, UNSUBSCRIBE_CAMPAIGNS } from "@shared/emails/unsubscribe-token";
 import { isEmailSuppressed } from "@shared/emails/suppression";
 import { pickEmailVariant } from "@shared/emails/ab-variant";
 import { getEmailSiteUrl } from "@shared/emails/site-url";
@@ -440,7 +440,12 @@ export async function POST(request: Request) {
 
       const unsubSecret = process.env.UNSUBSCRIBE_SECRET;
       const unsubscribeUrl = unsubSecret
-        ? buildUnsubscribeUrl(normalizedEmail, siteUrl, unsubSecret)
+        ? buildUnsubscribeUrl(
+            normalizedEmail,
+            siteUrl,
+            unsubSecret,
+            UNSUBSCRIBE_CAMPAIGNS.surveyComplete
+          )
         : undefined;
 
       const variant = pickEmailVariant(normalizedEmail, "survey-complete");

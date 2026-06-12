@@ -9,7 +9,7 @@ import { reportSharedEmail } from "@features/report/server/emails/report-shared"
 import { reportSharedBEmail } from "@features/report/server/emails/report-shared-b";
 import { reportSharedCEmail } from "@features/report/server/emails/report-shared-c";
 import { pickFromVariants } from "@shared/emails/ab-variant";
-import { buildUnsubscribeUrl } from "@shared/emails/unsubscribe-token";
+import { buildUnsubscribeUrl, UNSUBSCRIBE_CAMPAIGNS } from "@shared/emails/unsubscribe-token";
 import { isEmailSuppressed } from "@shared/emails/suppression";
 import { getEmailSiteUrl } from "@shared/emails/site-url";
 import {
@@ -165,7 +165,12 @@ export async function POST(request: Request) {
 
       const unsubSecret = process.env.UNSUBSCRIBE_SECRET;
       const unsubscribeUrl = unsubSecret
-        ? buildUnsubscribeUrl(recipientEmail, siteUrl, unsubSecret)
+        ? buildUnsubscribeUrl(
+            recipientEmail,
+            siteUrl,
+            unsubSecret,
+            UNSUBSCRIBE_CAMPAIGNS.reportShared
+          )
         : undefined;
 
       try {

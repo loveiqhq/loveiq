@@ -10,7 +10,7 @@ import { reportEssentialsEmail } from "@features/report/server/emails/report-ess
 import { reportFullEmail } from "@features/report/server/emails/report-full";
 import { reportFullBEmail } from "@features/report/server/emails/report-full-b";
 import { pickEmailVariant } from "@shared/emails/ab-variant";
-import { buildUnsubscribeUrl } from "@shared/emails/unsubscribe-token";
+import { buildUnsubscribeUrl, UNSUBSCRIBE_CAMPAIGNS } from "@shared/emails/unsubscribe-token";
 import { getEmailSiteUrl } from "@shared/emails/site-url";
 import {
   getReportPurchasePlan,
@@ -275,7 +275,12 @@ async function sendPurchaseEmail({
   // suppression list elsewhere.
   const unsubSecret = process.env.UNSUBSCRIBE_SECRET;
   const unsubscribeUrl = unsubSecret
-    ? buildUnsubscribeUrl(recipient.email, siteUrl, unsubSecret)
+    ? buildUnsubscribeUrl(
+        recipient.email,
+        siteUrl,
+        unsubSecret,
+        UNSUBSCRIBE_CAMPAIGNS.reportUnlocked
+      )
     : undefined;
 
   // Essentials has a single template; full_report and all_reports run an A/B

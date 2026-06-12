@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import { inviteEmail } from "@features/invite/emails/invite";
 import { inviteBEmail } from "@features/invite/emails/invite-b";
-import { buildUnsubscribeUrl } from "@shared/emails/unsubscribe-token";
+import { buildUnsubscribeUrl, UNSUBSCRIBE_CAMPAIGNS } from "@shared/emails/unsubscribe-token";
 import { isEmailSuppressed } from "@shared/emails/suppression";
 import { pickEmailVariant } from "@shared/emails/ab-variant";
 import { getEmailSiteUrl } from "@shared/emails/site-url";
@@ -97,7 +97,7 @@ export async function POST(request: Request) {
   // first-person testimonial copy (Figma node 5319-1846).
   const unsubSecret = process.env.UNSUBSCRIBE_SECRET;
   const unsubscribeUrl = unsubSecret
-    ? buildUnsubscribeUrl(normalizedRecipient, siteUrl, unsubSecret)
+    ? buildUnsubscribeUrl(normalizedRecipient, siteUrl, unsubSecret, UNSUBSCRIBE_CAMPAIGNS.invite)
     : undefined;
   const tpl =
     variant === "b"

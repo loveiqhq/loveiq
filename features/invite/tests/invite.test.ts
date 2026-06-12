@@ -31,7 +31,8 @@ vi.mock("@features/invite/emails/invite-b", () => ({
   inviteBEmail: vi.fn().mockReturnValue({ subject: "s", html: "<p>h</p>", text: "t" }),
 }));
 
-vi.mock("@shared/emails/unsubscribe-token", () => ({
+vi.mock("@shared/emails/unsubscribe-token", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@shared/emails/unsubscribe-token")>()),
   buildUnsubscribeUrl: vi.fn().mockReturnValue("https://example.test/unsub"),
 }));
 

@@ -35,7 +35,7 @@ import {
   tryClaimSlackAlert,
 } from "@shared/observability/slack-alert-dedup";
 import { notifySlack } from "@shared/observability/slack";
-import { buildUnsubscribeUrl } from "@shared/emails/unsubscribe-token";
+import { buildUnsubscribeUrl, UNSUBSCRIBE_CAMPAIGNS } from "@shared/emails/unsubscribe-token";
 import { isEmailSuppressed } from "@shared/emails/suppression";
 import { getEmailSiteUrl } from "@shared/emails/site-url";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
@@ -476,7 +476,7 @@ async function processCandidate(
     }
 
     const unsubscribeUrl = ctx.unsubSecret
-      ? buildUnsubscribeUrl(email, ctx.siteUrl, ctx.unsubSecret)
+      ? buildUnsubscribeUrl(email, ctx.siteUrl, ctx.unsubSecret, UNSUBSCRIBE_CAMPAIGNS.chapterNudge)
       : undefined;
     const tpl = chapterNudgeEmail({
       firstName: appUser?.first_name?.trim() || null,

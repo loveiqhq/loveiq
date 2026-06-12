@@ -219,7 +219,7 @@ export async function GET(request: Request) {
 
       const unsubSecret = process.env.UNSUBSCRIBE_SECRET;
       const unsubscribeUrl = unsubSecret
-        ? buildUnsubscribeUrl(email, siteUrl, unsubSecret)
+        ? buildUnsubscribeUrl(email, siteUrl, unsubSecret, `invite_reminder_${reminder}`)
         : undefined;
 
       const tpl =

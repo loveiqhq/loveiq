@@ -757,7 +757,7 @@ async function processCandidate(
 
     const firstName = candidate.survey_submission?.app_user?.first_name?.trim() || null;
     const unsubscribeUrl = ctx.unsubSecret
-      ? buildUnsubscribeUrl(email, ctx.siteUrl, ctx.unsubSecret)
+      ? buildUnsubscribeUrl(email, ctx.siteUrl, ctx.unsubSecret, stage)
       : undefined;
 
     let promo: StripeIssuedPromo | null = null;

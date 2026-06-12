@@ -43,11 +43,21 @@ export async function isEmailSuppressed(email: string): Promise<boolean> {
 
 export async function addToSuppression(
   email: string,
-  reason: "unsubscribed" | "hard_bounce" | "complaint"
+  reason: "unsubscribed" | "hard_bounce" | "complaint",
+  // Optional attribution for the email that triggered this suppression. Only the
+  // unsubscribe paths pass it; bounce/complaint callers omit it. Because the
+  // insert upserts with `resolution=merge-duplicates` (ON CONFLICT DO UPDATE
+  // over the columns sent), an omitted field never overwrites an existing one —
+  // so a later bounce can't wipe the campaign recorded on an earlier unsubscribe.
+  opts?: { campaign?: string; channel?: "footer" | "one-click" }
 ): Promise<void> {
   const supabaseUrl = process.env.SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!supabaseUrl || !serviceKey) return;
+
+  const row: Record<string, string> = { email, reason };
+  if (opts?.campaign) row.source_campaign = opts.campaign;
+  if (opts?.channel) row.source_channel = opts.channel;
 
   try {
     await fetchWithTimeout(`${supabaseUrl}/rest/v1/email_suppression`, {
@@ -58,7 +68,7 @@ export async function addToSuppression(
         "Content-Type": "application/json",
         Prefer: "resolution=merge-duplicates",
       },
-      body: JSON.stringify({ email, reason }),
+      body: JSON.stringify(row),
       timeoutMs: 5_000,
     });
   } catch (err) {
