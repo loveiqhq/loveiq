@@ -6,6 +6,12 @@ import { createHmac, timingSafeEqual } from "crypto";
 // recent sends; short enough to bound stale-archive replay.
 const TOKEN_TTL_MS = 180 * 24 * 60 * 60 * 1000; // 180 days
 
+// Deploy instant of commit e1d5261 (Jun 12 2026 17:10 +02:00 = 15:10 UTC), which
+// shipped unsubscribe source attribution. Tokens issued before this predate
+// tracking — a missing campaign on such a link is expected backlog, not a bug,
+// so the Slack ping labels it as such instead of an alarming "unknown".
+export const SOURCE_TRACKING_SINCE = Date.UTC(2026, 5, 12, 15, 10, 0);
+
 function sign(data: string, secret: string): string {
   return createHmac("sha256", secret).update(data).digest("base64url");
 }
@@ -17,20 +23,58 @@ function safeEqual(expectedB64: string, actualB64: string): boolean {
   return timingSafeEqual(expected, actual);
 }
 
-export function generateUnsubscribeToken(email: string, secret: string): string {
+export interface UnsubscribeTokenResult {
+  /** The verified recipient email. */
+  email: string;
+  /** Sanitized campaign slug baked into the token, or "" if none / legacy. */
+  campaign: string;
+  /** Token creation time (ms epoch), or null for legacy tokens with no timestamp. */
+  issuedAt: number | null;
+}
+
+/**
+ * Mint an unsubscribe token. When a `campaign` is supplied it is sanitized and
+ * embedded INSIDE the signed payload (4-part token), so attribution survives
+ * even if a mail client strips the trailing `&src=` query param from the link.
+ * With no campaign the 3-part format is unchanged.
+ */
+export function generateUnsubscribeToken(email: string, secret: string, campaign?: string): string {
   const encoded = Buffer.from(email).toString("base64url");
   const ts = Date.now().toString(36);
+  const src = sanitizeCampaign(campaign);
+  if (src) {
+    const sig = sign(`${email}:${ts}:${src}`, secret);
+    const campEncoded = Buffer.from(src).toString("base64url");
+    return `${encoded}.${ts}.${campEncoded}.${sig}`;
+  }
   const sig = sign(`${email}:${ts}`, secret);
   return `${encoded}.${ts}.${sig}`;
 }
 
-export function verifyUnsubscribeToken(token: string, secret: string): string | null {
-  // base64url (email), base36 (ts) and base64url (sig) never contain ".", so
-  // splitting on "." is unambiguous.
+export function verifyUnsubscribeToken(
+  token: string,
+  secret: string
+): UnsubscribeTokenResult | null {
+  // base64url (email/campaign), base36 (ts) and base64url (sig) never contain
+  // ".", so splitting on "." is unambiguous.
   const parts = token.split(".");
   try {
+    if (parts.length === 4) {
+      // Campaign-bearing format: encoded.ts.campaign.sig — signed over
+      // "email:ts:campaign" with a TTL. The campaign rides inside the signature,
+      // so it is both tamper-proof and immune to query-param stripping.
+      const [encoded, ts, campEncoded, sig] = parts;
+      if (!encoded || !ts || !campEncoded || !sig) return null;
+      const email = Buffer.from(encoded, "base64url").toString("utf8");
+      const campaign = sanitizeCampaign(Buffer.from(campEncoded, "base64url").toString("utf8"));
+      if (!safeEqual(sign(`${email}:${ts}:${campaign}`, secret), sig)) return null;
+      const issuedAt = parseInt(ts, 36);
+      if (!Number.isFinite(issuedAt) || issuedAt <= 0) return null;
+      if (Date.now() - issuedAt > TOKEN_TTL_MS) return null;
+      return { email, campaign, issuedAt };
+    }
     if (parts.length === 3) {
-      // Current format: encoded.ts.sig — signed over "email:ts" with a TTL.
+      // Campaign-less format: encoded.ts.sig — signed over "email:ts" with a TTL.
       const [encoded, ts, sig] = parts;
       if (!encoded || !ts || !sig) return null;
       const email = Buffer.from(encoded, "base64url").toString("utf8");
@@ -38,7 +82,7 @@ export function verifyUnsubscribeToken(token: string, secret: string): string | 
       const issuedAt = parseInt(ts, 36);
       if (!Number.isFinite(issuedAt) || issuedAt <= 0) return null;
       if (Date.now() - issuedAt > TOKEN_TTL_MS) return null;
-      return email;
+      return { email, campaign: "", issuedAt };
     }
     if (parts.length === 2) {
       // Legacy format: encoded.sig — signed over "email" only, no expiry. Still
@@ -48,7 +92,7 @@ export function verifyUnsubscribeToken(token: string, secret: string): string | 
       if (!encoded || !sig) return null;
       const email = Buffer.from(encoded, "base64url").toString("utf8");
       if (!safeEqual(sign(email, secret), sig)) return null;
-      return email;
+      return { email, campaign: "", issuedAt: null };
     }
     return null;
   } catch {
@@ -130,13 +174,38 @@ export function campaignLabel(campaign: string): string {
   return campaign;
 }
 
+/**
+ * Slack-ready description of where an unsubscribe came from, given the campaign
+ * resolved from the link and the token's creation time. Distinguishes a genuine
+ * gap (a new email with no campaign — worth investigating) from benign backlog
+ * (a link minted before source tracking shipped — see SOURCE_TRACKING_SINCE).
+ * Pure + escape-free: the caller escapes `label` for Slack; notes are static.
+ */
+export type UnsubscribeSource =
+  | { attributed: true; label: string }
+  | { attributed: false; note: string };
+
+export function describeUnsubscribeSource(
+  campaign: string,
+  issuedAt: number | null
+): UnsubscribeSource {
+  if (campaign) return { attributed: true, label: campaignLabel(campaign) };
+  if (issuedAt === null) return { attributed: false, note: "(legacy link — source unavailable)" };
+  if (issuedAt < SOURCE_TRACKING_SINCE) {
+    return { attributed: false, note: "(sent before source tracking)" };
+  }
+  return { attributed: false, note: "(source missing — investigate)" };
+}
+
 export function buildUnsubscribeUrl(
   email: string,
   siteUrl: string,
   secret: string,
   campaign?: string
 ): string {
-  const token = generateUnsubscribeToken(email, secret);
+  // Campaign is baked into the signed token (robust attribution) AND kept as a
+  // readable `&src=` fallback for in-flight 3-part tokens / analytics.
+  const token = generateUnsubscribeToken(email, secret, campaign);
   let url = `${siteUrl}/api/unsubscribe?token=${encodeURIComponent(token)}`;
   const src = sanitizeCampaign(campaign);
   if (src) url += `&src=${encodeURIComponent(src)}`;

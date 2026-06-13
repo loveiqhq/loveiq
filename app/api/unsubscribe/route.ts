@@ -2,17 +2,25 @@ import { NextResponse } from "next/server";
 import {
   verifyUnsubscribeToken,
   sanitizeCampaign,
-  campaignLabel,
+  describeUnsubscribeSource,
 } from "@shared/emails/unsubscribe-token";
 import { addToSuppression } from "@shared/emails/suppression";
 import { getEmailSiteUrl } from "@shared/emails/site-url";
 import logger from "@shared/observability/logger";
 import { notifySlack, maskEmail, escapeSlack } from "@shared/observability/slack";
 
-async function pingUnsubscribe(email: string, mode: "footer" | "one-click", campaign: string) {
+async function pingUnsubscribe(
+  email: string,
+  mode: "footer" | "one-click",
+  campaign: string,
+  issuedAt: number | null
+) {
   // `campaign` is already sanitized to a safe slug; escapeSlack guards the label
-  // (which falls back to that slug for unknown campaigns).
-  const via = campaign ? `via *${escapeSlack(campaignLabel(campaign))}*` : "(source unknown)";
+  // (which falls back to that slug for unknown campaigns). When no campaign is
+  // resolved, the token's age tells us whether this is benign pre-tracking
+  // backlog or a genuine gap worth investigating.
+  const source = describeUnsubscribeSource(campaign, issuedAt);
+  const via = source.attributed ? `via *${escapeSlack(source.label)}*` : source.note;
   await notifySlack({
     channel: "ops",
     kind: "unsubscribe",
@@ -36,20 +44,34 @@ function getSecret(): string | null {
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const token = searchParams.get("token") ?? "";
-  const campaign = sanitizeCampaign(searchParams.get("src"));
   const secret = getSecret();
-  const email = secret ? verifyUnsubscribeToken(token, secret) : null;
+  if (!secret) {
+    // Misconfiguration, not a bad link: a 400 would silently swallow every real
+    // unsubscribe. Surface it (logger.error → ops) and return 503 so RFC 8058
+    // clients retry rather than treat the link as permanently invalid.
+    logger.error("UNSUBSCRIBE_SECRET not set — unsubscribe requests cannot be verified");
+    return new Response("Unsubscribe is temporarily unavailable.", {
+      status: 503,
+      headers: { "Content-Type": "text/plain" },
+    });
+  }
+  const result = verifyUnsubscribeToken(token, secret);
 
-  if (!email) {
+  if (!result) {
     return new Response("Invalid or expired unsubscribe link.", {
       status: 400,
       headers: { "Content-Type": "text/plain" },
     });
   }
 
+  const { email, issuedAt } = result;
+  // Prefer the signed campaign baked into the token; fall back to the unsigned
+  // ?src= param for in-flight links minted before campaigns were embedded.
+  const campaign = result.campaign || sanitizeCampaign(searchParams.get("src"));
+
   await addToSuppression(email, "unsubscribed", { campaign, channel: "footer" });
   logger.info({ email, campaign }, "Email unsubscribed via GET");
-  await pingUnsubscribe(email, "footer", campaign);
+  await pingUnsubscribe(email, "footer", campaign, issuedAt);
 
   const siteUrl = getEmailSiteUrl();
   // eslint-disable-next-line no-secrets/no-secrets
@@ -62,16 +84,24 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const { searchParams } = new URL(request.url);
   const token = searchParams.get("token") ?? "";
-  const campaign = sanitizeCampaign(searchParams.get("src"));
   const secret = getSecret();
-  const email = secret ? verifyUnsubscribeToken(token, secret) : null;
+  if (!secret) {
+    logger.error("UNSUBSCRIBE_SECRET not set — unsubscribe requests cannot be verified");
+    return NextResponse.json({ error: "Service unavailable." }, { status: 503 });
+  }
+  const result = verifyUnsubscribeToken(token, secret);
 
-  if (!email) {
+  if (!result) {
     return NextResponse.json({ error: "Invalid token." }, { status: 400 });
   }
 
+  const { email, issuedAt } = result;
+  // Prefer the signed campaign baked into the token; fall back to the unsigned
+  // ?src= param for in-flight links minted before campaigns were embedded.
+  const campaign = result.campaign || sanitizeCampaign(searchParams.get("src"));
+
   await addToSuppression(email, "unsubscribed", { campaign, channel: "one-click" });
   logger.info({ email, campaign }, "Email unsubscribed via one-click POST");
-  await pingUnsubscribe(email, "one-click", campaign);
+  await pingUnsubscribe(email, "one-click", campaign, issuedAt);
   return NextResponse.json({ ok: true });
 }
