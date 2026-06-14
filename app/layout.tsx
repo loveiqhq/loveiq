@@ -11,7 +11,8 @@ import { GtmScript, GtmNoScript } from "@shared/ui/GtmScript";
 import { isTrustpilotEnabled } from "@shared/ui/trustpilot/config";
 import UxSignals from "@shared/ui/UxSignals";
 import WebVitals from "@shared/ui/WebVitals";
-import VisitorPinger from "@shared/observability/VisitorPinger";
+import { after } from "next/server";
+import { recordUniqueVisit } from "@shared/observability/recordVisit";
 import { jsonLdString } from "@shared/seo/json-ld";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.loveiq.org";
@@ -157,6 +158,15 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const headersList = await headers();
   const nonce = headersList.get("x-nonce") || "";
 
+  // Consent-independent daily unique-visit count. Middleware flags the first
+  // countable page view per browser per day via x-liq-new-visit; record it
+  // AFTER the response so it never blocks render. Aggregate + non-identifying
+  // (see recordUniqueVisit / proxy.ts) — this is the Visitor→Survey-start
+  // denominator that the consent-gated client pinger previously under-counted.
+  if (headersList.get("x-liq-new-visit") === "1") {
+    after(() => recordUniqueVisit());
+  }
+
   return (
     <html lang="en" className={`${manrope.variable} ${lora.variable}`}>
       <head>
@@ -279,7 +289,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <UtmCapture />
         <WebVitals />
         <UxSignals />
-        <VisitorPinger />
         <NonceProvider nonce={nonce}>
           <SmoothScroll>{children}</SmoothScroll>
         </NonceProvider>

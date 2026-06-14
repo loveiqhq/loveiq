@@ -79,7 +79,7 @@ vi.mock("@shared/auth/supabase-middleware", () => ({
   createSupabaseMiddleware: () => ({ auth: { getUser: mockGetUser } }),
 }));
 
-import { proxy } from "@/proxy";
+import { proxy, shouldCountVisit } from "@/proxy";
 import logger from "@shared/observability/logger";
 
 function makeNextRequest(
@@ -500,5 +500,87 @@ describe("proxy middleware — white-landing A/B (__liq_lv)", () => {
     await proxy(makeNextRequest("http://localhost:3000/about"));
     expect(variantHeader()).toBeFalsy();
     expect(landingCookieCalls()).toHaveLength(0);
+  });
+});
+
+describe("proxy — consent-independent daily unique-visit count", () => {
+  beforeEach(() => {
+    mockResponseHeaders.clear();
+    mockNextOpts.value = null;
+    mockCookiesSet.mockClear();
+    delete process.env.STAGING_PASSWORD;
+  });
+
+  function makeVisitRequest(
+    opts: {
+      path?: string;
+      method?: string;
+      dest?: string | null;
+      accept?: string;
+      ua?: string;
+      secPurpose?: string;
+      liqDv?: string;
+    } = {}
+  ) {
+    const url = `http://localhost:3000${opts.path ?? "/"}`;
+    const headers = new Headers();
+    headers.set("user-agent", opts.ua ?? "TestAgent/1.0");
+    if (opts.dest !== null) headers.set("sec-fetch-dest", opts.dest ?? "document");
+    if (opts.accept) headers.set("accept", opts.accept);
+    if (opts.secPurpose) headers.set("sec-purpose", opts.secPurpose);
+    return {
+      method: opts.method ?? "GET",
+      headers,
+      url,
+      cookies: {
+        get: (n: string) => (n === "liq_dv" && opts.liqDv ? { value: opts.liqDv } : undefined),
+      },
+      nextUrl: {
+        pathname: new URL(url).pathname,
+        search: "",
+        searchParams: new URL(url).searchParams,
+      },
+    } as never;
+  }
+
+  it("counts a fresh document GET on a public page", () => {
+    expect(shouldCountVisit(makeVisitRequest({ dest: "document" }))).toBe(true);
+  });
+
+  it("falls back to Accept: text/html when sec-fetch-dest is absent", () => {
+    expect(
+      shouldCountVisit(makeVisitRequest({ dest: null, accept: "text/html,application/xhtml+xml" }))
+    ).toBe(true);
+  });
+
+  it("ignores non-GET / api / admin / login / _next / bots / prefetch / non-document", () => {
+    expect(shouldCountVisit(makeVisitRequest({ method: "POST" }))).toBe(false);
+    expect(shouldCountVisit(makeVisitRequest({ path: "/api/contact" }))).toBe(false);
+    expect(shouldCountVisit(makeVisitRequest({ path: "/admin/x" }))).toBe(false);
+    expect(shouldCountVisit(makeVisitRequest({ path: "/login" }))).toBe(false);
+    expect(shouldCountVisit(makeVisitRequest({ path: "/_next/data/x.json" }))).toBe(false);
+    expect(shouldCountVisit(makeVisitRequest({ ua: "Googlebot/2.1" }))).toBe(false);
+    expect(shouldCountVisit(makeVisitRequest({ secPurpose: "prefetch" }))).toBe(false);
+    expect(shouldCountVisit(makeVisitRequest({ dest: "image" }))).toBe(false);
+    expect(shouldCountVisit(makeVisitRequest({ dest: null, accept: "application/json" }))).toBe(
+      false
+    );
+  });
+
+  it("flags x-liq-new-visit + sets the liq_dv cookie on a fresh daily document visit", async () => {
+    await proxy(makeVisitRequest({ dest: "document" }));
+    expect(mockNextOpts.value?.request?.headers?.get("x-liq-new-visit")).toBe("1");
+    const dvCall = mockCookiesSet.mock.calls.find((c) => c[0] === "liq_dv");
+    expect(dvCall).toBeDefined();
+    expect(dvCall![2]).toEqual(
+      expect.objectContaining({ httpOnly: true, sameSite: "lax", path: "/" })
+    );
+  });
+
+  it("does NOT flag/set when liq_dv already equals today (deduped)", async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    await proxy(makeVisitRequest({ dest: "document", liqDv: today }));
+    expect(mockNextOpts.value?.request?.headers?.get("x-liq-new-visit")).toBeFalsy();
+    expect(mockCookiesSet.mock.calls.find((c) => c[0] === "liq_dv")).toBeUndefined();
   });
 });

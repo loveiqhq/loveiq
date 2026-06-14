@@ -601,8 +601,9 @@ export async function fetchFunnelCaptureStart(): Promise<string | null> {
 /**
  * Splits today's unique visitors into NEW (first-ever seen) vs RETURNING
  * (seen on any prior day). Uses the funnel_event table where one row per
- * (visitor_id, day, event_type='unique_visitor') is written by the
- * VisitorPinger client.
+ * (visitor_id, day, event_type='unique_visitor') is written server-side by the
+ * root layout (recordUniqueVisit), flagged by proxy.ts on the first countable
+ * page view per browser per day (consent-independent, aggregate).
  *
  * Both queries are capped to keep page-cap behavior predictable; at prelaunch
  * volume neither approaches the limit.

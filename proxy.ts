@@ -41,6 +41,37 @@ function resolveLandingVariant(request: NextRequest): LandingVariant {
   return (buf[0]! & 1) === 0 ? "control" : "white";
 }
 
+// Daily dedup flag for the consent-independent unique-visit count (the
+// Visitor→Survey-start CVR denominator). Holds only a UTC date — no identifier,
+// no cross-day linkage — so it is a strictly-functional, aggregate-analytics
+// cookie, set regardless of analytics consent.
+const VISIT_DAY_COOKIE = "liq_dv";
+
+/**
+ * True when this request is a real, countable page view for the daily
+ * unique-visit metric: a top-level document GET on a public page, not a bot, not
+ * `/api|/admin|/login|/_next`. (Next prefetches are already excluded by the
+ * matcher; `sec-purpose` is belt-and-suspenders.) Exported for unit testing.
+ */
+export function shouldCountVisit(request: NextRequest): boolean {
+  if (request.method !== "GET") return false;
+  const path = request.nextUrl.pathname;
+  if (
+    path.startsWith("/api") ||
+    path.startsWith("/admin") ||
+    path.startsWith("/_next") ||
+    path === "/login"
+  ) {
+    return false;
+  }
+  if (request.headers.get("sec-purpose")?.includes("prefetch")) return false;
+  const dest = request.headers.get("sec-fetch-dest");
+  const accept = request.headers.get("accept") || "";
+  const isDocument = dest === "document" || (dest === null && accept.includes("text/html"));
+  if (!isDocument) return false;
+  return !LANDING_BOT_UA_REGEX.test(request.headers.get("user-agent") || "");
+}
+
 // Visitor id cookie for top-of-funnel attribution. Stable per-browser UUID
 // (1yr) minted server-side so it survives JS being disabled / blocked. The
 // companion `liq_vday` cookie is client-owned (set by VisitorPinger after
@@ -211,6 +242,18 @@ export async function proxy(request: NextRequest) {
   const landingVariant = isLandingRoute ? resolveLandingVariant(request) : null;
   if (landingVariant) {
     requestHeaders.set(LANDING_VARIANT_HEADER, landingVariant);
+  }
+
+  // Consent-independent daily unique-visit count (the Visitor→Survey-start CVR
+  // denominator). Aggregate only — the dedup cookie holds just a date and the
+  // funnel_event row gets a throwaway random id, so there is no profiling. The
+  // row itself is written by the root layout via after() when this header is
+  // present (keeps the DB write in Node app code, not the edge middleware).
+  const visitDay = new Date().toISOString().slice(0, 10);
+  const isNewDailyVisit =
+    shouldCountVisit(request) && request.cookies.get(VISIT_DAY_COOKIE)?.value !== visitDay;
+  if (isNewDailyVisit) {
+    requestHeaders.set("x-liq-new-visit", "1");
   }
 
   // Create response with security headers
@@ -413,6 +456,19 @@ export async function proxy(request: NextRequest) {
         maxAge: 60 * 60 * 24 * 365, // 1 year
       });
     }
+  }
+
+  // Daily dedup flag for the unique-visit metric: a date only (no identifier),
+  // HttpOnly, short-lived → strictly functional, no cross-day tracking. Set when
+  // this is the browser's first countable page view today (see x-liq-new-visit).
+  if (isNewDailyVisit) {
+    response.cookies.set(VISIT_DAY_COOKIE, visitDay, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60 * 36, // 36h — comfortably covers a UTC-day rollover
+    });
   }
 
   // Security logging for API routes (3.4)
