@@ -41,6 +41,10 @@ import { scoreArchetypes } from "../features/scoring/logic/engine";
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const DRY_RUN = !process.argv.includes("--apply");
+// --since=YYYY-MM-DD restricts the rescore to submissions created on/after that
+// date. Use it to rescore only one config era (e.g. post-V3 2026-05-19) so a
+// targeted fix doesn't rewrite older submissions under newer config.
+const SINCE = (process.argv.find((a) => a.startsWith("--since=")) ?? "").split("=")[1] ?? "";
 
 if (!SUPABASE_URL || !SERVICE_KEY) {
   console.error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in .env.local");
@@ -70,9 +74,15 @@ async function supabasePatch(path: string, body: Record<string, unknown>) {
 
 async function main() {
   console.log(DRY_RUN ? "=== DRY RUN (pass --apply to update DB) ===" : "=== APPLYING CHANGES ===");
+  if (SINCE) console.log(`Scope: submissions created on/after ${SINCE}`);
 
+  // When --since is set, inner-join survey_submission and filter by its created
+  // date so only that config era is rescored.
+  const sinceClause = SINCE
+    ? `,survey_submission!inner(created_date_time)&survey_submission.created_date_time=gte.${SINCE}`
+    : "";
   const scoringResults = await supabaseGet(
-    "scoring_result?select=id,survey_submission_id,primary_archetype,engine_version"
+    `scoring_result?select=id,survey_submission_id,primary_archetype,engine_version${sinceClause}`
   );
   console.log(`Found ${scoringResults.length} scored submissions`);
 

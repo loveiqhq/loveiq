@@ -43,6 +43,70 @@ function toFloatLocal(v: string | undefined, def: number): number {
   return Number.isFinite(n) ? n : def;
 }
 
+// ─── Survey-label aliases (V3 content-drift bridge) ──────────────────────────
+// The 2026-05-19 V3 refresh reworded some survey option labels in
+// data/survey-data.ts, but the scoring workbook (the source of labelToCodeMap)
+// kept the older canonical labels for a few questions. So resolveAnswerValue can
+// no longer map the V3 label → code, and that answer silently scores as nothing
+// (Q14020 — a scored multiselect — and three Q15005 options were affected from
+// 2026-05-19). Each pair below re-attaches a V3 survey label to the EXISTING
+// code of its canonical counterpart; the code is looked up from labelToCodeMap
+// at build time and never hardcoded, so a later workbook fix or rename can't
+// desync it (and becomes a redundant no-op). Only add a pair when the V3 label
+// genuinely fails to resolve. 03003/10002 already carry V3 labels — not listed.
+const SURVEY_LABEL_ALIASES: Record<string, ReadonlyArray<readonly [string, string]>> = {
+  // qid: [ [V3 survey label, canonical label already present in labelToCodeMap] ]
+  "14020": [
+    ["Feeling emotionally close to the other person", "Bonding and closeness"],
+    ["Fun and play — pleasure for its own sake", "Pleasure and play"],
+    ["Trying something new or unfamiliar", "Novelty and discovery"],
+    ["Strong charge, tension, or edge", "Intensity and edge"],
+    ["Feeling wanted, desired, or chosen", "Feeling desired"],
+    ["A clear lead/follow dynamic between us", "Power and polarity"],
+    ["Meaning, depth, or devotion", "Meaning and devotion"],
+    ["Pleasing or taking care of the other person", "Giving and service"],
+    ["Comfort, soothing, or stress relief", "Comfort and familiarity"],
+  ],
+  "15005": [
+    ["Yes, youngest is 0–3", "Yes, youngest child is 0-3 years"],
+    ["Yes, youngest is 4–10", "Yes, youngest child is 4-10 years"],
+    ["Yes, youngest is 11–17", "Yes, youngest child is 11-17 years"],
+  ],
+};
+
+// Mirror of engine.ts normalizeLabel — labelToCodeMap keys are stored normalized.
+function normalizeLabelLocal(label: string): string {
+  return label
+    .trim()
+    .toLowerCase()
+    .replace(/“|”/g, '"')
+    .replace(/‘|’/g, "'")
+    .replace(/–|—/g, "-")
+    .replace(/\s+/g, " ");
+}
+
+/**
+ * Augment labelToCodeMap with the V3 survey-label aliases above. Pure: returns a
+ * new map, mutates nothing. A pair is skipped when either the qid or the
+ * canonical label is absent, so a stale alias can never inject a wrong code.
+ */
+function applySurveyLabelAliases(
+  map: Record<string, Record<string, string>>
+): Record<string, Record<string, string>> {
+  const out: Record<string, Record<string, string>> = { ...map };
+  for (const [qid, pairs] of Object.entries(SURVEY_LABEL_ALIASES)) {
+    const qidMap = out[qid];
+    if (!qidMap) continue;
+    const merged: Record<string, string> = { ...qidMap };
+    for (const [surveyLabel, canonicalLabel] of pairs) {
+      const code = qidMap[normalizeLabelLocal(canonicalLabel)];
+      if (code != null) merged[normalizeLabelLocal(surveyLabel)] = code;
+    }
+    out[qid] = merged;
+  }
+  return out;
+}
+
 function buildConfig(): ScoringConfig {
   const knownQids = new Set<string>();
 
@@ -190,7 +254,7 @@ function buildConfig(): ScoringConfig {
     enumMap: enumMapCompiled,
     weightModifiers: weightMods,
     knownQids,
-    labelToCode: labelToCodeMap,
+    labelToCode: applySurveyLabelAliases(labelToCodeMap),
     archetypeIds,
     v5Helpers,
     v5Calibration,
