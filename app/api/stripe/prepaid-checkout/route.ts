@@ -191,7 +191,13 @@ export async function POST(request: Request) {
       {
         mode: "payment",
         billing_address_collection: "auto",
-        allow_promotion_codes: false,
+        // Show Stripe's "Add promotion code" field on the white pay-first page so a
+        // valid promotion code (e.g. a 100%-off) can be entered manually — same as
+        // the dark cohort's /api/stripe/checkout-session. A 100%-off code drops the
+        // total to €0; Stripe still fires checkout.session.completed and the webhook
+        // (syncPrepaidCheckoutSession) marks the entitlement succeeded via the
+        // no-PaymentIntent ($0) path, so the report unlocks after the survey.
+        allow_promotion_codes: true,
         line_items: [
           {
             price_data: {
