@@ -210,7 +210,7 @@ const WArchetypes: FC = () => {
   const { setNode: setChartNode, inView: chartInView } = useInView();
 
   return (
-    <section className="bg-white py-16 lg:py-24">
+    <section className="bg-white pb-4 pt-16 lg:py-24">
       <div className="content-shell flex flex-col gap-20">
         {/* Why we built LoveIQ — stats band */}
         <div className="animate-on-scroll rounded-3xl bg-[#f5f6f8] p-8 lg:p-12">

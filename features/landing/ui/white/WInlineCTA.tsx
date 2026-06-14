@@ -6,7 +6,7 @@ import { trackStartSurvey } from "@features/analytics/client";
 
 const WInlineCTA: FC = () => {
   return (
-    <section className="bg-white pb-10 pt-2">
+    <section className="bg-white pb-3 pt-2 lg:pb-10">
       <div className="animate-on-scroll content-shell flex justify-center">
         <Link
           href="/survey"

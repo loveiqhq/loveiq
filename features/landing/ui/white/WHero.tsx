@@ -3,6 +3,7 @@
 import type { FC } from "react";
 import Link from "next/link";
 import { trackStartSurvey } from "@features/analytics/client";
+import WHeroConstellation from "./WHeroConstellation";
 
 const stats: { label: string; value: string }[] = [
   { label: "Completion time", value: "≈ 15 min" },
@@ -16,23 +17,16 @@ const stats: { label: string; value: string }[] = [
 const WHero: FC = () => {
   return (
     <section className="relative overflow-hidden bg-white pt-[64px]">
-      {/* Decorative archetype-dot / logo graphic (from Figma) with ambient motion:
-          a slowly drifting molecule over a softly breathing brand-gradient halo. */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute right-0 top-1/2 hidden w-[820px] max-w-[55%] -translate-y-1/2 lg:block"
-      >
-        <div className="animate-logo-halo absolute inset-[14%] rounded-full bg-[radial-gradient(circle,_rgba(207,90,251,0.20),_rgba(125,136,255,0.10)_45%,_transparent_70%)] blur-3xl" />
-        <img
-          src="/images/white/hero-bg.png"
-          alt=""
-          className="animate-logo-drift relative w-full opacity-90 blur-[1px]"
-        />
-      </div>
       <div className="content-shell relative">
-        <div className="grid items-center gap-12 py-16 lg:grid-cols-[minmax(0,560px)_minmax(0,380px)] lg:gap-8 lg:py-24">
+        <div className="relative flex flex-col items-center gap-8 py-14 sm:gap-10 lg:py-24 xl:flex-row xl:justify-between xl:gap-6">
+          {/* Center: animated molecule "constellation" — archetype names + dimension
+              words appear/disappear one-by-one around the centered molecule. On
+              desktop it's the centered backdrop (behind copy + stats); on mobile it
+              sits in-flow between them. Single instance → one timer set. */}
+          <WHeroConstellation className="order-2 w-full max-w-[320px] sm:max-w-[380px] xl:absolute xl:left-1/2 xl:top-1/2 xl:order-none xl:w-[clamp(380px,40vw,540px)] xl:max-w-none xl:-translate-x-1/2 xl:-translate-y-1/2" />
+
           {/* Left: copy */}
-          <div className="flex flex-col gap-6">
+          <div className="relative z-10 order-1 flex w-full max-w-[40rem] flex-col gap-6 xl:order-none xl:max-w-[25rem]">
             <div className="animate-on-scroll flex items-center gap-2.5">
               <span className="animate-pulse-glow h-[7px] w-[7px] shrink-0 rounded-full bg-accent-orange" />
               <span className="text-[11px] font-bold uppercase tracking-wide text-[#6b6678]">
@@ -101,7 +95,7 @@ const WHero: FC = () => {
           </div>
 
           {/* Right: stat block */}
-          <dl className="animate-on-scroll stagger-2 relative flex flex-col">
+          <dl className="animate-on-scroll stagger-2 relative z-10 order-3 flex w-full max-w-[40rem] flex-col xl:order-none xl:max-w-[19rem]">
             {stats.map((stat) => (
               <div
                 key={stat.label}
