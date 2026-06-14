@@ -567,14 +567,20 @@ describe("proxy — consent-independent daily unique-visit count", () => {
     );
   });
 
-  it("flags x-liq-new-visit + sets the liq_dv cookie on a fresh daily document visit", async () => {
+  it("flags x-liq-new-visit (with the arm) + sets the liq_dv cookie on a fresh daily document visit", async () => {
     await proxy(makeVisitRequest({ dest: "document" }));
-    expect(mockNextOpts.value?.request?.headers?.get("x-liq-new-visit")).toBe("1");
+    // Mocked getRandomValues → byte 0 → low bit 0 → "control" arm on "/".
+    expect(mockNextOpts.value?.request?.headers?.get("x-liq-new-visit")).toBe("control");
     const dvCall = mockCookiesSet.mock.calls.find((c) => c[0] === "liq_dv");
     expect(dvCall).toBeDefined();
     expect(dvCall![2]).toEqual(
       expect.objectContaining({ httpOnly: true, sameSite: "lax", path: "/" })
     );
+  });
+
+  it("carries the white arm in x-liq-new-visit when ?variant=white", async () => {
+    await proxy(makeVisitRequest({ path: "/?variant=white", dest: "document" }));
+    expect(mockNextOpts.value?.request?.headers?.get("x-liq-new-visit")).toBe("white");
   });
 
   it("does NOT flag/set when liq_dv already equals today (deduped)", async () => {

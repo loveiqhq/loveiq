@@ -15,7 +15,7 @@ import logger from "@shared/observability/logger";
  * this writes at most once per browser per day. Best-effort: a failure must
  * never affect the page.
  */
-export async function recordUniqueVisit(): Promise<void> {
+export async function recordUniqueVisit(variant: string): Promise<void> {
   const supabaseUrl = process.env.SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!supabaseUrl || !serviceRoleKey) return;
@@ -33,6 +33,8 @@ export async function recordUniqueVisit(): Promise<void> {
         visitor_id: crypto.randomUUID(),
         day: new Date().toISOString().slice(0, 10),
         event_type: "unique_visitor",
+        // Landing A/B arm so the digest can split dark vs white (see proxy.ts).
+        landing_variant: variant === "white" ? "white" : "control",
       }),
       timeoutMs: 3000,
     });

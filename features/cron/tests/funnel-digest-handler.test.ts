@@ -162,7 +162,11 @@ const cvrSnap: FunnelCvrSnapshot = {
   days: Array.from({ length: 3 }, (_, i) => ({
     day: `2026-05-2${i + 5}`,
     visitors: 100,
+    visitors_control: 100,
+    visitors_white: 0,
     starts: 40,
+    white_checkout: 0,
+    white_paid: 0,
     completions: 25,
     eng_1m: 15,
     eng_5m: 10,
@@ -241,7 +245,7 @@ describe("funnel-digest cron handler — Phase 3 wiring", () => {
       expect(imageBlocks.length).toBeGreaterThanOrEqual(5);
       for (const img of imageBlocks) {
         expect(img.image_url).toMatch(
-          /^https:\/\/example\.test\/api\/admin\/digest-image\/(cvr-visitor-start|cvr-start-completion|cvr-completion-engagement|cvr-completion-paygate|cvr-paygate-purchase|bucket-performance|dropout-funnel|reactivation-email)\?d=[^&]+&s=/
+          /^https:\/\/example\.test\/api\/admin\/digest-image\/(cvr-visitor-start|cvr-visitor-start-dark|cvr-white-pay|cvr-start-completion|cvr-completion-engagement|cvr-completion-paygate|cvr-paygate-purchase|bucket-performance|dropout-funnel|reactivation-email)\?d=[^&]+&s=/
         );
       }
       // Revenue footer section present.

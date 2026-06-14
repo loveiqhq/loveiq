@@ -163,8 +163,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // AFTER the response so it never blocks render. Aggregate + non-identifying
   // (see recordUniqueVisit / proxy.ts) — this is the Visitor→Survey-start
   // denominator that the consent-gated client pinger previously under-counted.
-  if (headersList.get("x-liq-new-visit") === "1") {
-    after(() => recordUniqueVisit());
+  const newVisitVariant = headersList.get("x-liq-new-visit");
+  if (newVisitVariant) {
+    after(() => recordUniqueVisit(newVisitVariant));
   }
 
   return (

@@ -1077,7 +1077,15 @@ export function computeRate(numerator: number, denominator: number): number {
 export interface FunnelCvrDay {
   day: string;
   visitors: number;
+  /** unique_visitor tagged control (or legacy/untagged → control). */
+  visitors_control: number;
+  /** unique_visitor tagged white. */
+  visitors_white: number;
   starts: number;
+  /** White pay-first: prepaid_report_access rows created that day ("clicked pay"). */
+  white_checkout: number;
+  /** White pay-first: prepaid entitlements that reached succeeded that day. */
+  white_paid: number;
   completions: number;
   eng_1m: number;
   eng_5m: number;
@@ -1150,7 +1158,11 @@ export async function fetchFunnelCvrSparklines(
     days.push({
       day,
       visitors: coerceNonNegInt(r.visitors),
+      visitors_control: coerceNonNegInt(r.visitors_control),
+      visitors_white: coerceNonNegInt(r.visitors_white),
       starts: coerceNonNegInt(r.starts),
+      white_checkout: coerceNonNegInt(r.white_checkout),
+      white_paid: coerceNonNegInt(r.white_paid),
       completions: coerceNonNegInt(r.completions),
       eng_1m: coerceNonNegInt(r.eng_1m),
       eng_5m: coerceNonNegInt(r.eng_5m),

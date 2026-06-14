@@ -253,7 +253,13 @@ export async function proxy(request: NextRequest) {
   const isNewDailyVisit =
     shouldCountVisit(request) && request.cookies.get(VISIT_DAY_COOKIE)?.value !== visitDay;
   if (isNewDailyVisit) {
-    requestHeaders.set("x-liq-new-visit", "1");
+    // Tag the visit with the landing arm so the digest can split dark vs white.
+    // On "/" the arm is freshly resolved (the cookie isn't readable yet on the
+    // mint request); elsewhere read the sticky __liq_lv cookie. Default control.
+    const cookieVariant = request.cookies.get(LANDING_VARIANT_COOKIE)?.value;
+    const visitVariant =
+      landingVariant ?? (isLandingVariant(cookieVariant) ? cookieVariant : "control");
+    requestHeaders.set("x-liq-new-visit", visitVariant);
   }
 
   // Create response with security headers
