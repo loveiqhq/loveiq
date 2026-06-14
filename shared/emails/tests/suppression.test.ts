@@ -79,6 +79,45 @@ describe("addToSuppression", () => {
     });
   });
 
+  it("includes source_campaign/source_channel when opts are provided", async () => {
+    mockFetch.mockResolvedValueOnce({ ok: true } as Response);
+
+    await addToSuppression("u@example.com", "unsubscribed", {
+      campaign: "30h_no_unlock",
+      channel: "one-click",
+    });
+
+    const [, init] = mockFetch.mock.calls[0];
+    expect(JSON.parse(init?.body as string)).toMatchObject({
+      email: "u@example.com",
+      reason: "unsubscribed",
+      source_campaign: "30h_no_unlock",
+      source_channel: "one-click",
+    });
+  });
+
+  it("omits source columns when no opts (bounce/complaint never clobber attribution)", async () => {
+    mockFetch.mockResolvedValueOnce({ ok: true } as Response);
+
+    await addToSuppression("bounce@example.com", "hard_bounce");
+
+    const [, init] = mockFetch.mock.calls[0];
+    const body = JSON.parse(init?.body as string);
+    expect(body).not.toHaveProperty("source_campaign");
+    expect(body).not.toHaveProperty("source_channel");
+  });
+
+  it("omits an empty-string campaign (e.g. a footer link with no src)", async () => {
+    mockFetch.mockResolvedValueOnce({ ok: true } as Response);
+
+    await addToSuppression("u@example.com", "unsubscribed", { campaign: "", channel: "footer" });
+
+    const [, init] = mockFetch.mock.calls[0];
+    const body = JSON.parse(init?.body as string);
+    expect(body).not.toHaveProperty("source_campaign");
+    expect(body.source_channel).toBe("footer");
+  });
+
   it("does nothing when env vars are missing", async () => {
     delete process.env.SUPABASE_URL;
     await addToSuppression("x@example.com", "complaint");

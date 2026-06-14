@@ -22,14 +22,25 @@ thing binding a code to its intended user is `resolveNurturePromo`.
   — resolves submission from the CALLER's `reportToken`/`reportSessionId`, then
   looks for the code only among THAT submission's quotes. A code redeemed against
   a different report token misses → falls through to no-promo (never 400).
-- Checkout applies the resolved `stripePromotionCodeId` as `discounts:[]` and sets
-  `allow_promotion_codes` only when NO promo (they're mutually exclusive — manual
-  code entry is OFF when a code is pre-applied, so a forwarded email code can't be
-  typed into someone else's checkout).
+- Checkout applies the resolved `stripePromotionCodeId` as `discounts:[]` when a
+  code is owned; otherwise sets `allow_promotion_codes` (they're mutually exclusive).
 - `resolveNurturePromo` also re-checks expiry app-side and requires stripeId +
   percentOff + non-expired. Returns null on any miss; never throws.
 
-So: a leaked LIQ-100 cannot unlock an arbitrary report — verified 2026-06-01.
+So: a leaked LIQ-100 cannot unlock an arbitrary report VIA THE auto-apply (?promo=)
+path — verified 2026-06-01.
+
+## 2026-06-10: manual promo entry re-enabled (L6 control reverted)
+
+At the product owner's request, `allow_promotion_codes` on the checkout session was
+flipped back from `false` to `true` (the no-promo / unresolved-promo branch), so
+staff can hand-redeem test codes (e.g. a 100%-off code) on production — the original
+pre-audit behaviour. **Residual risk accepted:** with the hosted manual-entry field
+open, a forwarded single-use `LIQ-xx` code could be hand-typed by the wrong person
+before the intended owner redeems it (bounded by `max_redemptions: 1` + 24h/14d
+expiry). The per-submission ownership check still governs the auto-apply `?promo=`
+link path; it no longer prevents manual entry. This intentionally re-opens audit
+finding L6.
 
 ## post_call (100%-off) grant path
 

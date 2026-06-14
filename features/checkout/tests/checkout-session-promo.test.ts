@@ -187,7 +187,7 @@ describe("POST /api/stripe/checkout-session (promo wiring)", () => {
     );
   });
 
-  it("disables manual promo entry when no promo is present (no manual-entry UI; prevents forwarded-code hand-entry) [Audit L6]", async () => {
+  it("enables manual promo entry when no promo is present (staff can hand-redeem test codes; product decision 2026-06-10)", async () => {
     vi.mocked(resolveNurturePromo).mockResolvedValue(null);
 
     const res = await POST(
@@ -201,12 +201,12 @@ describe("POST /api/stripe/checkout-session (promo wiring)", () => {
     expect(res.status).toBe(200);
     expect(createSession).toHaveBeenCalledTimes(1);
     const args = createSession.mock.calls[0][0];
-    expect(args.allow_promotion_codes).toBe(false);
+    expect(args.allow_promotion_codes).toBe(true);
     expect(args.discounts).toBeUndefined();
     expect(args.metadata.promoCode).toBeUndefined();
   });
 
-  it("disables manual promo entry when a supplied promo resolves to null (unknown/expired/wrong-owner) — a forwarded code cannot be hand-entered [Audit L6]", async () => {
+  it("enables manual promo entry when a supplied promo resolves to null (unknown/expired/wrong-owner) — no code is pre-applied so the hosted field stays open", async () => {
     vi.mocked(resolveNurturePromo).mockResolvedValue(null);
 
     const res = await POST(
@@ -221,7 +221,7 @@ describe("POST /api/stripe/checkout-session (promo wiring)", () => {
 
     expect(res.status).toBe(200);
     const args = createSession.mock.calls[0][0];
-    expect(args.allow_promotion_codes).toBe(false);
+    expect(args.allow_promotion_codes).toBe(true);
     expect(args.discounts).toBeUndefined();
   });
 

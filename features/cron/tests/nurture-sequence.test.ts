@@ -21,7 +21,8 @@ vi.mock("@shared/emails/suppression", () => ({
   isEmailSuppressed: (...args: unknown[]) => mockIsEmailSuppressed(...args),
 }));
 
-vi.mock("@shared/emails/unsubscribe-token", () => ({
+vi.mock("@shared/emails/unsubscribe-token", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@shared/emails/unsubscribe-token")>()),
   buildUnsubscribeUrl: () => "https://test.loveiq.org/api/unsubscribe?token=x",
 }));
 

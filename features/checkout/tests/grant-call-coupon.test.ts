@@ -46,7 +46,8 @@ vi.mock("@features/pricing/logic/reportPricing", () => ({
 vi.mock("@shared/emails/site-url", () => ({
   getEmailSiteUrl: () => "https://www.loveiq.org",
 }));
-vi.mock("@shared/emails/unsubscribe-token", () => ({
+vi.mock("@shared/emails/unsubscribe-token", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@shared/emails/unsubscribe-token")>()),
   buildUnsubscribeUrl: (...args: unknown[]) => mockBuildUnsubscribeUrl(...args),
 }));
 vi.mock("@features/report/server/emails/nurture/post-call-coupon", () => ({

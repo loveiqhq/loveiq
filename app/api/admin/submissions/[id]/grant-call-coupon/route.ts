@@ -10,7 +10,7 @@ import logger from "@shared/observability/logger";
 import { getCouponIdForStage, mintUserPromoCode } from "@features/checkout/server/promoCodes";
 import { getReportPriceQuoteForContext } from "@features/pricing/logic/reportPricing";
 import { getEmailSiteUrl } from "@shared/emails/site-url";
-import { buildUnsubscribeUrl } from "@shared/emails/unsubscribe-token";
+import { buildUnsubscribeUrl, UNSUBSCRIBE_CAMPAIGNS } from "@shared/emails/unsubscribe-token";
 import { postCallCouponEmail } from "@features/report/server/emails/nurture/post-call-coupon";
 import { insertBookingEvent } from "@features/booking/server/calendly";
 
@@ -199,7 +199,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const ctaUrl = `${siteUrl}/report/${encodeURIComponent(reportToken)}?${params2.toString()}`;
     const unsubSecret = process.env.UNSUBSCRIBE_SECRET;
     const unsubscribeUrl = unsubSecret
-      ? buildUnsubscribeUrl(email, siteUrl, unsubSecret)
+      ? buildUnsubscribeUrl(email, siteUrl, unsubSecret, UNSUBSCRIBE_CAMPAIGNS.postCallCoupon)
       : undefined;
 
     let emailed = false;

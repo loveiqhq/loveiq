@@ -304,15 +304,16 @@ export async function POST(request: Request) {
 
     const session = await stripe.checkout.sessions.create(
       {
-        // Per-user nurture codes arrive only as ?promo= links and are auto-applied
-        // here after a server-side ownership check — there is NO manual promo-entry
-        // UI in the app. So we never enable Stripe's hosted manual-entry field:
-        // since minted codes are not customer-bound in Stripe, enabling it would
-        // let anyone hand-type a forwarded/foreign code. Matched owned code →
-        // pre-applied as discounts[]; otherwise no promo entry at all. [Audit L6]
+        // Manual promo entry on Stripe's hosted page is intentionally ON (product
+        // decision 2026-06-10) so staff can hand-redeem test codes (e.g. a 100%-off
+        // code) on production. Owned nurture codes from a ?promo= email link still
+        // auto-apply via discounts[]. discounts[] and allow_promotion_codes are
+        // mutually exclusive, so the pre-applied branch leaves allow_promotion_codes
+        // unset. (Reverts the [Audit L6] field-off control — residual risk accepted:
+        // a forwarded single-use LIQ code could be hand-typed by the wrong person.)
         ...(nurturePromoMatch
           ? { discounts: [{ promotion_code: nurturePromoMatch.stripePromotionCodeId }] }
-          : { allow_promotion_codes: false }),
+          : { allow_promotion_codes: true }),
         billing_address_collection: "auto",
         customer_email: customerEmail,
         line_items: [
