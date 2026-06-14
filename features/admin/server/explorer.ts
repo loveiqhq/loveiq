@@ -25,6 +25,7 @@ export type DimensionKey =
   | "trafficSource"
   | "utmMedium"
   | "utmCampaign"
+  | "landingVariant"
   | "device"
   | "paywallArm"
   | "experimentGroup"
@@ -46,6 +47,7 @@ export const DIMENSION_LABELS: Record<DimensionKey, string> = {
   trafficSource: "Traffic source",
   utmMedium: "UTM medium",
   utmCampaign: "UTM campaign",
+  landingVariant: "Landing variant (white/dark)",
   device: "Device",
   paywallArm: "Paywall arm (A/B)",
   experimentGroup: "Experiment group",
@@ -79,6 +81,7 @@ const DIMENSION_ORDER: Partial<Record<DimensionKey, readonly string[]>> = {
   sessionBucket: SESSION_ORDER,
   reportViewed: ["Viewed", "Not viewed"],
   paidStatus: ["Paid", "Free"],
+  landingVariant: ["white", "control"],
 };
 
 export interface EnrichedRow {
@@ -104,6 +107,8 @@ export interface EnrichedRow {
   trafficSource: string;
   utmMedium: string;
   utmCampaign: string;
+  /** Landing A/B arm ("white" | "control") from the submission's utm_tracker. */
+  landingVariant: string;
   // Pricing / experiment / device — from the submission's canonical quote.
   device: string | null;
   paywallArm: string | null;
@@ -227,6 +232,8 @@ export function dimensionValue(row: EnrichedRow, dim: DimensionKey, opts: Access
       return row.utmMedium || UNKNOWN_LABEL;
     case "utmCampaign":
       return row.utmCampaign || UNKNOWN_LABEL;
+    case "landingVariant":
+      return row.landingVariant || "control";
     case "device":
       return row.device ?? UNKNOWN_LABEL;
     case "paywallArm":

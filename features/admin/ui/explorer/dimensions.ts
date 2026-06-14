@@ -92,7 +92,7 @@ export function isMultiToken(token: string): boolean {
 /** Filter-panel groupings (paidStatus is a header toggle, not shown here). */
 export const DIMENSION_GROUPS: Array<{ title: string; dims: DimensionKey[] }> = [
   { title: "Who", dims: ["archetype", "age", "gender", "country", "orientation", "relationship"] },
-  { title: "Acquisition", dims: ["trafficSource", "utmMedium", "utmCampaign"] },
+  { title: "Acquisition", dims: ["trafficSource", "utmMedium", "utmCampaign", "landingVariant"] },
   {
     title: "Pricing & experiment",
     dims: [

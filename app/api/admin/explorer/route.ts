@@ -117,6 +117,19 @@ function parseUtmField(
   }
 }
 
+// Landing A/B arm stamped onto the submission's utm_tracker at submit time.
+// Anything not explicitly "white" (missing / pre-feature / unparseable) is the
+// original dark experience → "control", matching the get_landing_variant_funnel RPC.
+function parseLandingVariant(tracker: string | null): string {
+  if (!tracker?.trim()) return "control";
+  try {
+    const parsed = JSON.parse(tracker) as Record<string, string | undefined>;
+    return parsed.landing_variant?.trim() === "white" ? "white" : "control";
+  } catch {
+    return "control";
+  }
+}
+
 /**
  * Coerce a scoring_result percentages jsonb into a clean `{archetype: number}`.
  * Drops non-finite / non-numeric values so cohort averages never see NaN.
@@ -525,6 +538,7 @@ export async function GET(request: Request) {
         trafficSource: parseUtmField(s.utm_tracker, "utm_source"),
         utmMedium: parseUtmField(s.utm_tracker, "utm_medium"),
         utmCampaign: parseUtmField(s.utm_tracker, "utm_campaign"),
+        landingVariant: parseLandingVariant(s.utm_tracker),
         device: normalizeLabel(attrs?.device_type),
         paywallArm: normalizeLabel(attrs?.forced_paywall_arm),
         experimentGroup: normalizeLabel(attrs?.experiment_group),

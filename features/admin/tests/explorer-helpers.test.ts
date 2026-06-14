@@ -42,6 +42,7 @@ function row(p: Partial<EnrichedRow> = {}): EnrichedRow {
     trafficSource: "Direct",
     utmMedium: "(none)",
     utmCampaign: "(none)",
+    landingVariant: "control",
     device: "desktop",
     paywallArm: null,
     experimentGroup: "control",
@@ -141,6 +142,25 @@ describe("applyFilters", () => {
       selections: { country: ["United States"] },
     });
     expect(out.map((r) => r.submissionId)).toEqual([1]);
+  });
+
+  it("filters by landing variant (white vs dark journey)", () => {
+    const variantRows = [
+      row({ submissionId: 1, landingVariant: "white" }),
+      row({ submissionId: 2, landingVariant: "control" }),
+      row({ submissionId: 3, landingVariant: "white" }),
+    ];
+    expect(
+      applyFilters(variantRows, { ...baseFilters, selections: { landingVariant: ["white"] } }).map(
+        (r) => r.submissionId
+      )
+    ).toEqual([1, 3]);
+    expect(
+      applyFilters(variantRows, {
+        ...baseFilters,
+        selections: { landingVariant: ["control"] },
+      }).map((r) => r.submissionId)
+    ).toEqual([2]);
   });
 });
 

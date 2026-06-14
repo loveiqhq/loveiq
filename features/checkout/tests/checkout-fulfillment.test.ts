@@ -701,7 +701,8 @@ describe("checkout fulfillment", () => {
       plan: "essentials" | "full_report" | "all_reports",
       archetype?: string,
       paymentIntent: string | null = "pi_test_slack_001",
-      forcedPaywallArm?: string
+      forcedPaywallArm?: string,
+      landingVariant?: string
     ) {
       return {
         charges: { retrieve: vi.fn().mockResolvedValue({ id: "ch_test_slack_001" }) },
@@ -716,6 +717,7 @@ describe("checkout fulfillment", () => {
                 plan,
                 ...(archetype ? { archetype } : {}),
                 ...(forcedPaywallArm ? { forcedPaywallArm } : {}),
+                ...(landingVariant ? { landingVariant } : {}),
                 reportToken: "rpt_ABCDEFGHIJKLMNOPQRST",
               },
               payment_intent: paymentIntent,
@@ -769,9 +771,10 @@ describe("checkout fulfillment", () => {
       expect(body.text).toContain("Full report");
       expect(body.text).toContain("Relational Nurturer");
       expect(body.text).toContain("EUR 19.99");
-      // No utm_tracker and no forcedPaywallArm in this fixture → Direct + unknown.
+      // No utm_tracker, no forcedPaywallArm, no landingVariant → Direct + unknown.
       expect(body.text).toContain("Source: Direct");
       expect(body.text).toContain("Paywall: unknown");
+      expect(body.text).toContain("Journey: unknown");
 
       delete process.env.SLACK_PAYMENTS_WEBHOOK_URL;
     });
@@ -808,7 +811,8 @@ describe("checkout fulfillment", () => {
           "full_report",
           "Spark Seeker",
           "pi_test_slack_001",
-          "treatment"
+          "treatment",
+          "white"
         ) as never,
       });
 
@@ -818,6 +822,7 @@ describe("checkout fulfillment", () => {
       // utm values are escaped for Slack (underscore → \_ so it isn't italicised).
       expect(body.text).toContain("referral / email / survey\\_invite");
       expect(body.text).toContain("Paywall: Forced (must pay to view)");
+      expect(body.text).toContain("Journey: White landing");
       // utm_content (base64 referrer email) must never reach Slack.
       expect(body.text).not.toContain("cmVmZXJyZXJAZXhhbXBsZS5jb20=");
 
@@ -846,13 +851,20 @@ describe("checkout fulfillment", () => {
             },
           },
         } as never,
-        stripe: buildStripe("full_report", "Spark Seeker", "pi_test_slack_001", "control") as never,
+        stripe: buildStripe(
+          "full_report",
+          "Spark Seeker",
+          "pi_test_slack_001",
+          "control",
+          "control"
+        ) as never,
       });
 
       expect(slackCalls).toHaveLength(1);
       const body = JSON.parse(slackCalls[0]!.body) as { text: string };
       expect(body.text).toContain("Source: Organic");
       expect(body.text).toContain("Paywall: Closeable (can dismiss & pay later)");
+      expect(body.text).toContain("Journey: Dark / Control landing");
 
       delete process.env.SLACK_PAYMENTS_WEBHOOK_URL;
     });

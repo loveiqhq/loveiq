@@ -6,6 +6,7 @@ import TimeRangeSelector from "@features/admin/ui/TimeRangeSelector";
 import ConversionFunnelTab from "@features/admin/ui/funnel-tabs/ConversionFunnelTab";
 import CohortAnalysisTab from "@features/admin/ui/funnel-tabs/CohortAnalysisTab";
 import ImpactComparisonTab from "@features/admin/ui/funnel-tabs/ImpactComparisonTab";
+import LandingVariantTab from "@features/admin/ui/funnel-tabs/LandingVariantTab";
 import {
   FUNNEL_TABS,
   buildProductKpiHref,
@@ -116,6 +117,7 @@ export default function FunnelsDashboard() {
           }
         />
       )}
+      {activeTab === "Landing A/B" && <LandingVariantTab days={days} />}
     </div>
   );
 }

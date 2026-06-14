@@ -239,6 +239,52 @@ export const trackLandingPageView = () => {
   track("landing_page_view");
 };
 
+/**
+ * Durable top-of-funnel ping to `funnel_event` (keyed by visitor_id + day, NOT a
+ * survey_submission), mirroring the survey_engine_mount / intro_slide pings. It
+ * fires regardless of analytics consent — first-party funnel measurement with no
+ * third-party sharing — so pre-payment drop-off is never lost. No-op without a
+ * visitor cookie or CSRF token. PK (visitor_id, day, event_type) dedupes server-side.
+ */
+const pingFunnelEvent = (event: string) => {
+  if (typeof window === "undefined") return;
+  const visitorId = getCookieValue("__Host-liq_vid") || getCookieValue("__liq_vid");
+  if (!visitorId) return;
+  const csrf = getCsrfToken();
+  if (!csrf) return;
+  const url = "/api/funnel-event";
+  const payload = JSON.stringify({ event, visitor_id: visitorId, _csrf: csrf });
+  // Beacon survives the page navigation to Stripe; header-CSRF fallback otherwise.
+  if (navigator.sendBeacon) {
+    const blob = new Blob([payload], { type: "application/json" });
+    if (navigator.sendBeacon(url, blob)) return;
+  }
+  fetch(url, {
+    method: "POST",
+    keepalive: true,
+    headers: { "Content-Type": "application/json", "x-csrf-token": csrf },
+    body: payload,
+  }).catch(() => {
+    /* best-effort */
+  });
+};
+
+/**
+ * White pay-first funnel — the visitor REACHED the €9.99 prepaid gate (saw the
+ * price + pay button). This is the key "got to the paywall, then maybe bounced"
+ * signal: compare against prepaid_report_access rows to see who paid vs left.
+ */
+export const trackPrepaidGateViewed = () => {
+  track("prepaid_gate_viewed");
+  pingFunnelEvent("prepaid_gate_viewed");
+};
+
+/** White pay-first funnel — the visitor clicked "Pay & start test" (intent). */
+export const trackPrepaidCheckoutStarted = () => {
+  track("prepaid_checkout_started");
+  pingFunnelEvent("prepaid_checkout_started");
+};
+
 export const trackStartSurvey = (
   location: "nav" | "hero" | "report_section" | "footer" | "archetype-teaser"
 ) => {

@@ -25,10 +25,14 @@ import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import logger from "@shared/observability/logger";
 
-// Two existing top-of-funnel signals + four pre-survey intro slide signals
-// (added 2026-05-29 for the longitudinal Slack digest). All six predate
-// survey_submission so analytics_event can't host them — see funnel_event
-// migrations for the table-level CHECK constraint.
+// Top-of-funnel signals that all predate survey_submission, so analytics_event
+// can't host them — see funnel_event migrations for the table-level CHECK
+// constraint (which must list the same set):
+//   • unique_visitor / survey_engine_mount      — original
+//   • intro_slide_1..4                           — 2026-05-29 longitudinal digest
+//   • prepaid_gate_viewed / prepaid_checkout_started — 2026-06-14 white pay-first
+//     funnel: "reached the €9.99 gate" and "clicked pay", so pre-payment drop-off
+//     on the white journey is queryable (vs prepaid_report_access paid rows).
 const ALLOWED_EVENTS = [
   "unique_visitor",
   "survey_engine_mount",
@@ -36,6 +40,8 @@ const ALLOWED_EVENTS = [
   "intro_slide_2",
   "intro_slide_3",
   "intro_slide_4",
+  "prepaid_gate_viewed",
+  "prepaid_checkout_started",
 ] as const;
 
 const schema = z.object({

@@ -27,8 +27,27 @@ import {
 import { verifyCsrfToken } from "@shared/http/csrf";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import logger from "@shared/observability/logger";
+import { escapeSlack, notifySlack } from "@shared/observability/slack";
 
 export const runtime = "nodejs";
+
+/**
+ * Immediate, clearly-labeled alert to the ops/alerts Slack channel when the
+ * white pay-first checkout can't be created — i.e. white-cohort visitors are
+ * blocked from paying. notifySlack dedupes (60s window) so a Stripe outage
+ * won't flood, dead-letters on failure, and is bounded by a 5s timeout, so it's
+ * safe to await on the error path.
+ */
+async function alertWhitePrepaidFailure(detail: string): Promise<void> {
+  await notifySlack({
+    channel: "ops",
+    kind: "white_prepaid_failure",
+    text:
+      ":rotating_light: White pay-first checkout FAILED — white-cohort visitors may be unable to pay. " +
+      escapeSlack(detail),
+    username: "payments",
+  });
+}
 
 /**
  * White-cohort "pay-first" checkout.
@@ -206,6 +225,7 @@ export async function POST(request: Request) {
 
     if (!session.url) {
       logger.error({ sessionId: session.id }, "prepaid-checkout: session missing hosted URL");
+      await alertWhitePrepaidFailure("Stripe returned a session without a hosted checkout URL.");
       return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
     }
 
@@ -219,6 +239,13 @@ export async function POST(request: Request) {
         token,
       });
       if (!created) {
+        logger.error(
+          { sessionId: session.id },
+          "prepaid-checkout: pending entitlement write failed"
+        );
+        await alertWhitePrepaidFailure(
+          "Payment session was created but recording the pending entitlement failed — the user may pay without it being tracked."
+        );
         return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
       }
     }
@@ -233,6 +260,9 @@ export async function POST(request: Request) {
     const sanitized =
       error instanceof Error ? { name: error.name, message: error.message } : { name: "Unknown" };
     logger.error({ err: sanitized }, "prepaid-checkout: session creation failed");
+    await alertWhitePrepaidFailure(
+      `Reason: ${sanitized.name}${"message" in sanitized ? ` — ${sanitized.message}` : ""}`
+    );
     return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
   }
 }

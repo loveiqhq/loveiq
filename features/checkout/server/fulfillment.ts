@@ -143,6 +143,7 @@ async function notifySlackPurchase({
   email,
   firstName,
   forcedPaywallArm,
+  landingVariant,
   paymentId,
   plan,
   submissionId,
@@ -154,6 +155,7 @@ async function notifySlackPurchase({
   email: string | null;
   firstName: string | null;
   forcedPaywallArm: string | null;
+  landingVariant: string | null;
   paymentId: number;
   plan: ReportPurchasePlanId;
   submissionId: number;
@@ -197,7 +199,17 @@ async function notifySlackPurchase({
         ? ":unlock: Paywall: Closeable (can dismiss & pay later)"
         : ":lock: Paywall: unknown";
 
-  const text = `:credit_card: New purchase: *${safeName}* (${maskedEmail}) — ${planLabel}${archetypeSuffix} — ${formattedAmount}\n${sourceLine}\n${paywallLine}`;
+  // Landing A/B journey the buyer came through, so revenue is attributable to the
+  // landing variant they first saw. "white" = the new pay-first white landing,
+  // "control" = the original dark landing.
+  const journeyLine =
+    landingVariant === "white"
+      ? ":sparkles: Journey: White landing"
+      : landingVariant === "control"
+        ? ":crescent_moon: Journey: Dark / Control landing"
+        : ":grey_question: Journey: unknown";
+
+  const text = `:credit_card: New purchase: *${safeName}* (${maskedEmail}) — ${planLabel}${archetypeSuffix} — ${formattedAmount}\n${sourceLine}\n${paywallLine}\n${journeyLine}`;
 
   try {
     logger.info({ paymentId, plan, submissionId }, "Sending Slack purchase notification");
@@ -995,6 +1007,11 @@ async function syncCheckoutSessionPayment({
     // checkout-session creation. Query via payment.metadata->>'forcedPaywallArm'
     // for consent-independent conversion + revenue by arm.
     forcedPaywallArm: settledSession.metadata?.forcedPaywallArm ?? null,
+    // Landing A/B arm ("white" | "control") the buyer first saw, stamped on the
+    // Stripe session at checkout-session creation. Persisted here so paid rows are
+    // self-describing for CSV/exports; the admin funnel groups via the submission's
+    // utm_tracker (source of truth), this is the convenience copy.
+    landingVariant: settledSession.metadata?.landingVariant ?? null,
     basePriceBucket: settledSession.metadata?.basePriceBucket ?? null,
     discountStep: settledSession.metadata?.discountStep ?? null,
     currentPrice: settledSession.metadata?.currentPrice ?? null,
@@ -1138,6 +1155,7 @@ async function syncCheckoutSessionPayment({
         email: recipient.email,
         firstName: recipient.firstName,
         forcedPaywallArm: settledSession.metadata?.forcedPaywallArm ?? null,
+        landingVariant: settledSession.metadata?.landingVariant ?? null,
         paymentId,
         plan,
         submissionId: context.submissionId,
@@ -1550,6 +1568,12 @@ export async function applyPrepaidEntitlementToReport({
   const userId = await lookupSubmissionUserId(submissionId);
   if (!userId) {
     logger.error({ submissionId }, "prepaid: submission has no user_id — cannot create payment");
+    await notifySlack({
+      channel: "ops",
+      kind: "white_prepaid_unlock_failed",
+      text: `:rotating_light: White journey — user PAID but the report could NOT be unlocked (submission #${submissionId} has no user record). Manual fulfillment needed.`,
+      username: "payments",
+    });
     return { applied: false, reason: "missing_user" };
   }
 
@@ -1618,6 +1642,12 @@ export async function applyPrepaidEntitlementToReport({
   });
 
   if (!paymentId) {
+    await notifySlack({
+      channel: "ops",
+      kind: "white_prepaid_unlock_failed",
+      text: `:rotating_light: White journey — user PAID but the payment record failed to persist (submission #${submissionId}). Report not unlocked — manual fulfillment needed.`,
+      username: "payments",
+    });
     throw new Error("prepaid_payment_persist_failed");
   }
 

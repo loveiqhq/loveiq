@@ -11,7 +11,12 @@ export const PRODUCT_KPI_TABS = [
 
 export const SCORECARD_TABS = ["Scorecard", "Trends"] as const;
 
-export const FUNNEL_TABS = ["Conversion Funnel", "Cohort Analysis", "Impact Comparison"] as const;
+export const FUNNEL_TABS = [
+  "Conversion Funnel",
+  "Cohort Analysis",
+  "Impact Comparison",
+  "Landing A/B",
+] as const;
 
 export const COHORT_GROUP_BY_OPTIONS = ["week", "utm", "archetype"] as const;
 export const COHORT_COMPARISON_OPTIONS = ["release", "version", "experiment"] as const;

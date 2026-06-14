@@ -13,6 +13,7 @@ import {
 import { copySurveySessionToReportSession } from "./hooks/surveySession";
 import { getCsrfToken } from "@shared/http/csrf-client";
 import { readCookie } from "@shared/observability/cookie";
+import { trackPrepaidCheckoutStarted, trackPrepaidGateViewed } from "@features/analytics/client";
 import {
   WHITE_PREPAID_PRICE_CENTS,
   WHITE_PREPAID_STRIKE_CENTS,
@@ -1181,7 +1182,12 @@ const PrepaidUnlockGate: FC<{
         return;
       }
 
-      if (!cancelled) setPhase("ready");
+      if (!cancelled) {
+        setPhase("ready");
+        // Durable "reached the €9.99 gate" signal (funnel_event + GA4) so we can
+        // measure who saw the paywall and bounced vs paid. White-cohort only.
+        trackPrepaidGateViewed();
+      }
     };
 
     void run();
@@ -1193,6 +1199,9 @@ const PrepaidUnlockGate: FC<{
   const handlePay = useCallback(async () => {
     setPhase("starting");
     setErrorMsg(null);
+    // "Clicked pay" intent — fires before the redirect to Stripe (beacon survives
+    // the navigation). The server also writes a pending prepaid_report_access row.
+    trackPrepaidCheckoutStarted();
     try {
       const csrf = getCsrfToken();
       const res = await fetch("/api/stripe/prepaid-checkout", {
