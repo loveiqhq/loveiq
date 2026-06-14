@@ -2,7 +2,7 @@ name: Documentation Truth Check
 
 on:
   push:
-    branches: [main]
+    branches: [main, staging]
     paths:
       - "**/*.md"
       - "app/api/**/route.ts"
@@ -19,7 +19,7 @@ on:
       - ".github/pull_request_template.md"
       - ".github/workflows/docs-truth.yml"
   pull_request:
-    branches: [main]
+    branches: [main, staging]
     paths:
       - "**/*.md"
       - "app/api/**/route.ts"
