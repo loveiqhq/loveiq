@@ -26,6 +26,7 @@ import {
   type PaywallDismissSource,
 } from "@features/analytics/client";
 import TrustpilotReviews from "@shared/ui/trustpilot/TrustpilotReviews";
+import { isTrustpilotEnabled } from "@shared/ui/trustpilot/config";
 
 interface Props {
   open: boolean;
@@ -1691,55 +1692,57 @@ const ScrollPricingModal: FC<Props> = ({
                 </div>
               </div>
 
-              {/* ── Testimonials / social proof ──────────────────────────── */}
-              <div
-                style={{
-                  padding: "40px 0 48px",
-                  marginBottom: "40px",
-                  textAlign: "center",
-                }}
-              >
-                <h3
+              {/* ── Testimonials / social proof — whole block gated off until Trustpilot
+                  is enabled (the former curated carousel was removed by the TP commit). ── */}
+              {isTrustpilotEnabled() && (
+                <div
                   style={{
-                    fontFamily: "var(--font-serif)",
-                    fontSize: "50px",
-                    fontWeight: 700,
-                    color: "#fff",
-                    lineHeight: "normal",
+                    padding: "40px 0 48px",
+                    marginBottom: "40px",
                     textAlign: "center",
-                    marginBottom: "32px",
                   }}
                 >
-                  <span className="rpm-real-line">
-                    Real{" "}
-                    <em style={{ color: "#a78bfa", fontStyle: "italic", fontWeight: 700 }}>
-                      people
-                    </em>
-                    .
-                  </span>{" "}
-                  <span className="rpm-real-line">
-                    Real{" "}
-                    <em style={{ color: "#a78bfa", fontStyle: "italic", fontWeight: 700 }}>
-                      insights
-                    </em>
-                    .
-                  </span>{" "}
-                  <span className="rpm-real-line">
-                    Real{" "}
-                    <em style={{ color: "#a78bfa", fontStyle: "italic", fontWeight: 700 }}>
-                      results
-                    </em>
-                    .
-                  </span>
-                </h3>
+                  <h3
+                    style={{
+                      fontFamily: "var(--font-serif)",
+                      fontSize: "50px",
+                      fontWeight: 700,
+                      color: "#fff",
+                      lineHeight: "normal",
+                      textAlign: "center",
+                      marginBottom: "32px",
+                    }}
+                  >
+                    <span className="rpm-real-line">
+                      Real{" "}
+                      <em style={{ color: "#a78bfa", fontStyle: "italic", fontWeight: 700 }}>
+                        people
+                      </em>
+                      .
+                    </span>{" "}
+                    <span className="rpm-real-line">
+                      Real{" "}
+                      <em style={{ color: "#a78bfa", fontStyle: "italic", fontWeight: 700 }}>
+                        insights
+                      </em>
+                      .
+                    </span>{" "}
+                    <span className="rpm-real-line">
+                      Real{" "}
+                      <em style={{ color: "#a78bfa", fontStyle: "italic", fontWeight: 700 }}>
+                        results
+                      </em>
+                      .
+                    </span>
+                  </h3>
 
-                {/* Trustpilot rating (replaces the former avatar stack + "4.9/5 Rating") */}
-                <div style={{ marginBottom: "32px" }}>
-                  <TrustpilotReviews variant="compact" showProfileLink={false} />
+                  {/* Trustpilot rating (replaces the former avatar stack + "4.9/5 Rating"). */}
+                  <div style={{ marginBottom: "32px" }}>
+                    <TrustpilotReviews variant="compact" showProfileLink={false} />
+                  </div>
+                  <TrustpilotReviews variant="carousel" />
                 </div>
-
-                <TrustpilotReviews variant="carousel" />
-              </div>
+              )}
 
               {/* ── Why unlock section (2×2 grid) ────────────────────── */}
               <div

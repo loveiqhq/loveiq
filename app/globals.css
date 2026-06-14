@@ -180,6 +180,56 @@ input.autofill-dark:-internal-autofill-previewed {
   }
 }
 
+/* Horizontal marquee for the white "Field reports" testimonial carousel. The
+   track renders the cards twice, so translating by -50% loops seamlessly. */
+@keyframes marquee-x {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+/* Guarded so reduced-motion users get the static (scrollable) row instead. */
+@media (prefers-reduced-motion: no-preference) {
+  .animate-marquee-x {
+    animation: marquee-x 50s linear infinite;
+  }
+}
+
+/* Ambient motion for the white-hero background logo/molecule graphic: a slow
+   drift + a softer breathing brand-gradient halo behind it, so the logo feels
+   alive rather than a static image. Reduced-motion users get the still image. */
+@keyframes logo-drift {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg) scale(1);
+  }
+  50% {
+    transform: translateY(-12px) rotate(2.5deg) scale(1.03);
+  }
+}
+@keyframes logo-halo {
+  0%,
+  100% {
+    opacity: 0.4;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.08);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .animate-logo-drift {
+    animation: logo-drift 16s ease-in-out infinite;
+  }
+  .animate-logo-halo {
+    animation: logo-halo 10s ease-in-out infinite;
+  }
+}
+
 @keyframes pulse-glow {
   0%,
   100% {
@@ -277,7 +327,9 @@ input.autofill-dark:-internal-autofill-previewed {
   transform: translateY(24px);
   transition:
     opacity 0.85s cubic-bezier(0.16, 1, 0.3, 1),
-    transform 0.85s cubic-bezier(0.16, 1, 0.3, 1);
+    transform 0.85s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.3s ease,
+    border-color 0.3s ease;
 }
 .animate-on-scroll.animate {
   opacity: 1;

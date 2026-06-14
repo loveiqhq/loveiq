@@ -1,17 +1,92 @@
 "use client";
 
-import type { FC } from "react";
+import { useEffect, useState, type FC } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { trackStartSurvey } from "@features/analytics/client";
+import { archetypePresentation } from "@features/report/data/archetypePresentation";
+import type { ArchetypeName } from "@features/report/server/archetypeSlug";
 
 const stats = [
-  { value: "47%", body: "of adults report a sexual concern they have never voiced to a partner." },
-  { value: "20%", body: "of adults say they are satisfied with their sex life." },
+  { num: 47, body: "of adults report a sexual concern they have never voiced to a partner." },
+  { num: 20, body: "of adults say they are satisfied with their sex life." },
   {
-    value: "41%",
+    num: 41,
     body: "higher reported satisfaction when partners can name their own patterns.",
   },
 ];
+
+const prefersReducedMotion = () =>
+  typeof window !== "undefined" &&
+  typeof window.matchMedia === "function" &&
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/**
+ * Fire once when the element scrolls into view. Uses a callback ref stored in
+ * state (no ref access during render) so the React Compiler lint is happy.
+ */
+function useInView(): { setNode: (node: Element | null) => void; inView: boolean } {
+  const [node, setNode] = useState<Element | null>(null);
+  const [inView, setInView] = useState(false);
+  useEffect(() => {
+    if (!node || inView) return;
+    if (typeof IntersectionObserver === "undefined") {
+      let cancelled = false;
+      queueMicrotask(() => {
+        if (!cancelled) setInView(true);
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          setInView(true);
+          obs.disconnect();
+        }
+      },
+      { threshold: 0.2, rootMargin: "0px 0px -12% 0px" }
+    );
+    obs.observe(node);
+    return () => obs.disconnect();
+  }, [node, inView]);
+  return { setNode, inView };
+}
+
+/** Count 0 → target once `active`, easing out. Respects reduced motion. */
+const CountUp: FC<{ target: number; active: boolean }> = ({ target, active }) => {
+  const [val, setVal] = useState(0);
+  useEffect(() => {
+    if (!active) return;
+    if (prefersReducedMotion()) {
+      let cancelled = false;
+      queueMicrotask(() => {
+        if (!cancelled) setVal(target);
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+    let raf = 0;
+    let start: number | null = null;
+    const DURATION = 1400;
+    const tick = (ts: number) => {
+      if (start === null) start = ts;
+      const p = Math.min(1, (ts - start) / DURATION);
+      const eased = 1 - Math.pow(1 - p, 4);
+      if (p < 1) {
+        setVal(target * eased);
+        raf = requestAnimationFrame(tick);
+      } else {
+        setVal(target);
+      }
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [active, target]);
+  return <>{Math.round(val)}%</>;
+};
 
 const scoringSteps = [
   {
@@ -131,6 +206,9 @@ const Eyebrow: FC<{ children: string }> = ({ children }) => (
 );
 
 const WArchetypes: FC = () => {
+  const { setNode: setStatsNode, inView: statsInView } = useInView();
+  const { setNode: setChartNode, inView: chartInView } = useInView();
+
   return (
     <section className="bg-white py-16 lg:py-24">
       <div className="content-shell flex flex-col gap-20">
@@ -146,11 +224,11 @@ const WArchetypes: FC = () => {
             sexuality something we can explore with curiosity, confidence, and care — not shame or
             confusion.
           </p>
-          <div className="mt-10 grid gap-8 sm:grid-cols-3">
+          <div ref={setStatsNode} className="mt-10 grid gap-8 sm:grid-cols-3">
             {stats.map((s) => (
-              <div key={s.value} className="flex flex-col gap-2">
-                <span className="bg-gradient-to-r from-[#fe6839] via-[#d95b88] to-[#cb5fc1] bg-clip-text font-serif text-5xl font-semibold text-transparent">
-                  {s.value}
+              <div key={s.num} className="flex flex-col gap-2">
+                <span className="bg-gradient-to-r from-[#fe6839] via-[#d95b88] to-[#cb5fc1] bg-clip-text font-serif text-5xl font-semibold tabular-nums text-transparent">
+                  <CountUp target={s.num} active={statsInView} />
                 </span>
                 <span className="text-sm leading-relaxed text-[#6b6678]">{s.body}</span>
               </div>
@@ -193,45 +271,89 @@ const WArchetypes: FC = () => {
           <p className="mb-4 text-sm font-medium text-[#6b6678]">
             We will score you against all our existing archetypes:
           </p>
-          <ul className="m-0 flex list-none flex-col p-0">
-            {chart.map((row, i) => (
-              <li
-                key={row.name}
-                className="grid grid-cols-[28px_1fr] items-center gap-4 border-b border-black/[0.05] py-4 sm:grid-cols-[28px_minmax(0,1fr)_minmax(180px,300px)_auto]"
-              >
-                <span className="font-serif text-2xl text-[#c5c8cc]">
-                  {String(i + 1).padStart(2, "0")}
-                </span>
-                <div className="flex items-center gap-3">
-                  <span
-                    className="h-3 w-3 shrink-0 rounded-full"
-                    style={{ backgroundColor: row.color }}
-                  />
-                  <div className="min-w-0">
-                    <p className="truncate font-bold text-black">{row.name}</p>
-                    <p className="truncate text-[11px] italic text-[#57595e]">“{row.tagline}”</p>
-                  </div>
-                </div>
-                <div className="col-span-2 flex items-center gap-3 sm:col-span-1">
-                  <div className="h-[6px] flex-1 overflow-hidden rounded-full bg-black/10">
-                    <div
-                      className="h-full rounded-full"
-                      style={{ width: `${row.pct}%`, backgroundColor: row.color }}
-                    />
-                  </div>
-                  <span className="w-12 shrink-0 text-right text-sm font-medium text-black">
-                    {row.pct.toFixed(1)}%
-                  </span>
-                </div>
-                <Link
-                  href="/survey"
-                  onClick={() => trackStartSurvey("archetype-teaser")}
-                  className="focus-visible-ring col-span-2 justify-self-start rounded-full bg-gradient-brand px-4 py-1.5 text-xs font-bold text-white transition hover:opacity-90 sm:col-span-1 sm:justify-self-end"
+          <ul ref={setChartNode} className="m-0 flex list-none flex-col p-0">
+            {chart.map((row, i) => {
+              const presentation = archetypePresentation[row.name as ArchetypeName];
+              // Match the line/dot to the archetype's icon colour so the lowest-ranked
+              // rows carry their real hue instead of reading as dead gray.
+              const lineColor = presentation?.iconBg ?? presentation?.dotColor ?? row.color;
+              return (
+                <li
+                  key={row.name}
+                  className="grid grid-cols-[28px_minmax(0,1fr)] items-center gap-4 border-b border-black/[0.05] py-4 sm:grid-cols-[28px_minmax(0,1fr)_minmax(180px,300px)_auto]"
                 >
-                  Unlock report
-                </Link>
-              </li>
-            ))}
+                  <span className="font-serif text-2xl text-[#c5c8cc]">
+                    {String(i + 1).padStart(2, "0")}
+                  </span>
+                  <div className="flex items-center gap-3">
+                    <span
+                      className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg"
+                      style={
+                        presentation?.iconBg ? { backgroundColor: presentation.iconBg } : undefined
+                      }
+                    >
+                      {presentation && (
+                        <Image
+                          src={presentation.iconSrc}
+                          alt=""
+                          width={20}
+                          height={20}
+                          unoptimized
+                          className="h-5 w-5"
+                        />
+                      )}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="truncate font-bold text-black">{row.name}</p>
+                      <p className="truncate text-[11px] italic text-[#57595e]">“{row.tagline}”</p>
+                    </div>
+                  </div>
+                  <div className="col-span-2 flex items-center gap-3 sm:col-span-1">
+                    {/* Figma-style track line: colored fill + dot, animating L→R on scroll. */}
+                    <div className="relative h-[2px] flex-1 rounded-full bg-black/10">
+                      <div
+                        className="absolute inset-y-0 left-0 rounded-full transition-[width] duration-[900ms] ease-out motion-reduce:transition-none"
+                        style={{
+                          width: chartInView ? `${row.pct}%` : "0%",
+                          backgroundColor: lineColor,
+                        }}
+                      />
+                      <div
+                        className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full transition-[left] duration-[900ms] ease-out motion-reduce:transition-none"
+                        style={{
+                          left: chartInView ? `${row.pct}%` : "0%",
+                          backgroundColor: lineColor,
+                          boxShadow: `0 0 0 3px ${lineColor}26`,
+                        }}
+                      />
+                    </div>
+                    <span className="w-12 shrink-0 text-right text-sm font-medium tabular-nums text-black">
+                      {row.pct.toFixed(1)}%
+                    </span>
+                  </div>
+                  <Link
+                    href="/survey"
+                    onClick={() => trackStartSurvey("archetype-teaser")}
+                    className="focus-visible-ring col-span-2 inline-flex items-center justify-center gap-1.5 justify-self-start rounded-full bg-black px-4 py-1.5 text-xs font-bold text-white transition hover:bg-gray-800 sm:col-span-1 sm:justify-self-end"
+                  >
+                    <svg
+                      aria-hidden
+                      className="h-3 w-3"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <rect x="5" y="11" width="14" height="9" rx="2" />
+                      <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+                    </svg>
+                    Unlock report
+                  </Link>
+                </li>
+              );
+            })}
           </ul>
         </div>
       </div>

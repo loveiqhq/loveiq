@@ -8,6 +8,7 @@ import { NonceProvider } from "@shared/ui/NonceProvider";
 import HydrationMarker from "@shared/ui/HydrationMarker";
 import UtmCapture from "@shared/ui/UtmCapture";
 import { GtmScript, GtmNoScript } from "@shared/ui/GtmScript";
+import { isTrustpilotEnabled } from "@shared/ui/trustpilot/config";
 import UxSignals from "@shared/ui/UxSignals";
 import WebVitals from "@shared/ui/WebVitals";
 import VisitorPinger from "@shared/observability/VisitorPinger";
@@ -142,12 +143,15 @@ const HOTJAR_SITE_ID_RAW = process.env.NEXT_PUBLIC_HOTJAR_SITE_ID;
 const hotjarSiteId =
   HOTJAR_SITE_ID_RAW && /^\d+$/.test(HOTJAR_SITE_ID_RAW) ? HOTJAR_SITE_ID_RAW : null;
 
-// Trustpilot review widget. The bootstrap is loaded only when a Business Unit ID
-// is configured, and only after the visitor grants the CookieYes `functional`
-// category (it sets Trustpilot's third-party cookies). The cookieless static
-// rating block in TrustpilotReviews renders regardless.
+// Trustpilot review widget. The bootstrap is loaded only when the master kill
+// switch is on (isTrustpilotEnabled) AND a Business Unit ID is configured, and
+// only after the visitor grants the CookieYes `functional` category (it sets
+// Trustpilot's third-party cookies). Gated off by default until we have enough
+// reviews, so the script never loads while the on-site widgets are hidden.
 const trustpilotBusinessUnitId =
-  (process.env.NEXT_PUBLIC_TRUSTPILOT_BUSINESS_UNIT_ID || "").trim() || null;
+  isTrustpilotEnabled() && (process.env.NEXT_PUBLIC_TRUSTPILOT_BUSINESS_UNIT_ID || "").trim()
+    ? (process.env.NEXT_PUBLIC_TRUSTPILOT_BUSINESS_UNIT_ID || "").trim()
+    : null;
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const headersList = await headers();

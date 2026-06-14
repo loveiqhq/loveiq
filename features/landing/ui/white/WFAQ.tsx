@@ -17,14 +17,19 @@ const WFAQ: FC = () => {
   return (
     <section className="bg-white py-16 lg:py-24" aria-labelledby="w-faq-heading">
       <div className="content-shell max-w-3xl">
-        <div className="mb-10">
+        <div className="animate-on-scroll mb-10 flex flex-col items-center gap-3 text-center">
+          <div className="flex items-center gap-2.5">
+            <span className="h-[7px] w-[7px] shrink-0 rounded-full bg-accent-orange" />
+            <span className="text-[11px] font-bold tracking-wide text-[#6b6678]">FAQ</span>
+          </div>
           <h2
             id="w-faq-heading"
-            className="font-serif text-3xl font-medium text-[#161021] sm:text-[44px]"
+            className="font-serif text-3xl font-medium leading-tight text-[#161021] sm:text-[44px]"
           >
-            FAQ
+            Curious minds ask.
+            <br />
+            <span className="text-accent-orange">We answer.</span>
           </h2>
-          <p className="mt-2 text-[17px] text-[#6b6678]">Curious minds ask. We answer.</p>
         </div>
 
         <ul className="m-0 list-none border-t border-black/[0.08] p-0">
@@ -48,12 +53,18 @@ const WFAQ: FC = () => {
                     }
                   }}
                 >
-                  <span className="font-serif text-lg font-medium text-[#161021]">
-                    {faq.question}
+                  <span className="flex items-baseline gap-4">
+                    <span className="font-serif text-sm text-[#9a96a6]">
+                      {String(i + 1).padStart(2, "0")}
+                    </span>
+                    <span className="font-serif text-lg font-medium text-[#161021]">
+                      {faq.question}
+                    </span>
                   </span>
+                  {/* Plus icon → rotates 45° to an × when open (Figma). */}
                   <svg
                     aria-hidden
-                    className={`h-5 w-5 shrink-0 text-[#9a96a6] transition-transform ${isOpen ? "rotate-180" : ""}`}
+                    className={`h-5 w-5 shrink-0 text-[#9a96a6] transition-transform duration-300 ${isOpen ? "rotate-45" : ""}`}
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -61,7 +72,7 @@ const WFAQ: FC = () => {
                     strokeLinecap="round"
                     strokeLinejoin="round"
                   >
-                    <path d="m6 9 6 6 6-6" />
+                    <path d="M12 5v14M5 12h14" />
                   </svg>
                 </button>
                 <div
@@ -70,13 +81,26 @@ const WFAQ: FC = () => {
                   className={`grid transition-all duration-300 ease-out ${isOpen ? "grid-rows-[1fr] pb-5" : "grid-rows-[0fr]"}`}
                 >
                   <div className="overflow-hidden">
-                    <p className="text-[15px] leading-relaxed text-[#6b6678]">{faq.answer}</p>
+                    <p className="pl-9 text-[15px] leading-relaxed text-[#6b6678]">{faq.answer}</p>
                   </div>
                 </div>
               </li>
             );
           })}
         </ul>
+
+        {/* "Still unanswered" contact block (Figma). */}
+        <p className="mt-10 text-center text-[15px] text-[#6b6678]">
+          If a question is still unanswered, write to us. Reach us at{" "}
+          <a href="mailto:hello@loveiq.org" className="font-medium text-accent-orange">
+            hello@loveiq.org
+          </a>
+          .
+          <br />
+          <span className="text-[#9a96a6]">
+            We read every message, and we will get back to you.
+          </span>
+        </p>
       </div>
     </section>
   );

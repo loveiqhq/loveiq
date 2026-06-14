@@ -395,25 +395,26 @@ const slides: Slide[] = [
   },
   {
     icon: Slide6Icon,
-    heading: "Lets now view your free results and unlock deeper insights.",
+    // Neutral close shown to anyone who already HAS their report — the white
+    // pay-first cohort (paid before the survey) and the rare null-token case.
+    // Dark users get the "must pay" treatment slide below instead. Wording is
+    // kept access-agnostic ("let's take a look", not "explore every section") so
+    // it never over-promises full access on the rare null-token unpaid path.
+    heading: "Let's open your report.",
     body: (
       <>
-        <strong>Much of your report is free to explore.</strong> The deeper, archetype-specific
-        insights are unlocked in the full version.{" "}
-        <strong>
-          And if it doesn&rsquo;t feel valuable, you get a 14-day money-back guarantee — no
-          discussions.
-        </strong>
+        <strong>Your insights are ready</strong> — built from the answers you shared and drawn from
+        relationship science. Let&rsquo;s take a look.
       </>
     ),
   },
 ];
 
 /**
- * Final slide for the "treatment" arm of the coupled report-paywall experiment
- * (see `getForcedPaywallCohort`). It REPLACES the control "Lets now view your
- * free results…" slide (Figma 6968-8644) — same slide count, swapped ending —
- * so the treatment journey closes on the must-pay framing (Figma 7552-7703).
+ * Final slide for the "treatment" (forced, dark) arm of the report-paywall.
+ * It REPLACES the neutral "Let's open your report" final slide — same slide
+ * count, swapped ending — so the dark journey closes on the must-pay framing
+ * (Figma 7552-7703).
  * Copy + emphasis match that design; it renders inside the existing wizard
  * chrome so it inherits the same responsive layout as every other slide.
  */
@@ -442,12 +443,17 @@ interface PreReportWizardProps {
   onComplete: () => void;
   /**
    * Report token, used to bucket the user into the coupled paywall experiment.
-   * Treatment arm gets one extra final slide. Missing token → control.
+   * Treatment arm gets the must-pay final slide. Missing token → control.
    */
   reportToken?: string | null;
+  /**
+   * White pay-first cohort already paid before the survey, so they must NOT see
+   * the "must-pay" treatment closing slide — force the soft control slide.
+   */
+  prepaidPaid?: boolean;
 }
 
-const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete, reportToken }) => {
+const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete, prepaidPaid, reportToken }) => {
   const [slideIndex, setSlideIndex] = useState(0);
   const [isLeaving, setIsLeaving] = useState(false);
   const [hasEntered, setHasEntered] = useState(false);
@@ -467,9 +473,11 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete, reportToken }) 
       ),
     []
   );
+  // Paid (white pay-first) users always get the soft "control" closing slide —
+  // showing them a "must pay" slide after they've already paid would be wrong.
   const cohort = useMemo(
-    () => devArm ?? getForcedPaywallCohort(reportToken ?? null),
-    [devArm, reportToken]
+    () => devArm ?? (prepaidPaid ? "control" : getForcedPaywallCohort(reportToken ?? null)),
+    [devArm, prepaidPaid, reportToken]
   );
   const activeSlides = useMemo(
     () => (cohort === "treatment" ? [...slides.slice(0, -1), reportWaitingSlide] : slides),

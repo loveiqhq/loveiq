@@ -558,6 +558,29 @@ The Slack commit channel posts the full message, so Marcus automatically gets a 
 
 ## Postponed / TODO (deliberately deferred work)
 
+- **Turn on Trustpilot reviews on the site** (`NEXT_PUBLIC_TRUSTPILOT_ENABLED`).
+  The Trustpilot integration (`shared/ui/trustpilot/`) is fully built and wired
+  into the dark landing (`S15Testimonials`) and both report pricing modals, but
+  is **OFF by default** (decision 2026-06-13: hold until enough customers have
+  left a review on Trustpilot, so the widget isn't sparse/empty). The master
+  switch `isTrustpilotEnabled()` in `shared/ui/trustpilot/config.ts` hides ALL
+  on-site Trustpilot UI + the bootstrap script while off. **To turn on when
+  ready:** set `NEXT_PUBLIC_TRUSTPILOT_ENABLED=true` (and
+  `NEXT_PUBLIC_TRUSTPILOT_BUSINESS_UNIT_ID`) in the Vercel env — no code change.
+  Notes: (1) the **dark / control** landing (`S15Testimonials`) falls back to its
+  ORIGINAL curated testimonial grid + "30,000+" stat when off ("how it used to
+  be" — the landing A/B control arm), and swaps to Trustpilot only when the flag
+  is on. (2) the **white** landing variant deliberately shows a curated
+  "Field reports" section (`white/WTestimonials.tsx`, the former on-site
+  testimonials, pixel-matched to Figma 7828:9430) instead of Trustpilot, and
+  stays that way even after the flag flips — it's the A/B counterpart to the dark
+  arm. (3) the report **pricing modals** (`ScrollPricingModal`,
+  `ReportPricingModal`) currently render NO social-proof block when off — the old
+  `PricingTestimonialsCarousel` was deleted by the Trustpilot commit; restore it
+  there or accept the gap before merging staging→main. (4) the nurture **emails**
+  still reference Trustpilot copy; the flag does not touch emails (they're not
+  "the website" and staging crons are short-circuited) — revisit separately.
+
 - **Enable the data-retention purge cron** (`/api/cron/purge-old-data`). Built,
   tested, and verified safe, but intentionally **OFF** (decision 2026-05-31:
   postpone deletion until we have more customers and data old enough to trim —

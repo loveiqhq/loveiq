@@ -1,146 +1,127 @@
-import type { FC } from "react";
+"use client";
 
-// Self-contained subset of the archetype profile data shown on the dark site
-// (features/landing/ui/S06Archetypes.tsx). Duplicated here intentionally rather
-// than refactoring the dark carousel — these are static marketing values and
-// keeping the working dark component untouched avoids regression risk.
-const cards: {
-  name: string;
-  tagline: string;
-  color: string;
-  coreMotivation: string;
-  dims: { label: string; value: string }[];
-}[] = [
-  {
-    name: "Spark Seeker",
-    tagline: "Let’s find the spark — then turn it into a blaze.",
-    color: "#ff6a3d",
-    coreMotivation: "Pleasure & play",
-    dims: [
-      { label: "Communication", value: "Charming" },
-      { label: "Attachment", value: "Avoidant/secure" },
-      { label: "Initiation", value: "Active" },
-      { label: "Power orientation", value: "Switch" },
-    ],
-  },
-  {
-    name: "Sensual Connector",
-    tagline: "Touch me with presence and meet me with heart.",
-    color: "#e57373",
-    coreMotivation: "Intimacy & bonding",
-    dims: [
-      { label: "Communication", value: "Authentic" },
-      { label: "Attachment", value: "Anxious" },
-      { label: "Initiation", value: "Responsive" },
-      { label: "Power orientation", value: "Switch" },
-    ],
-  },
-  {
-    name: "Authority Conductor",
-    tagline: "I set the frame — and we play inside it.",
-    color: "#ff9f1c",
-    coreMotivation: "Power",
-    dims: [
-      { label: "Communication", value: "Commanding" },
-      { label: "Attachment", value: "Disorganized" },
-      { label: "Initiation", value: "Active" },
-      { label: "Power orientation", value: "Dominant" },
-    ],
-  },
-  {
-    name: "Tender Devotee",
-    tagline: "Tell me I’m enough.",
-    color: "#e7b3c2",
-    coreMotivation: "Validation",
-    dims: [
-      { label: "Communication", value: "Adaptive" },
-      { label: "Attachment", value: "Anxious" },
-      { label: "Initiation", value: "Responsive" },
-      { label: "Power orientation", value: "Submissive" },
-    ],
-  },
-  {
-    name: "Radiant Performer",
-    tagline: "Watch me shine.",
-    color: "#e6b65c",
-    coreMotivation: "Validation",
-    dims: [
-      { label: "Communication", value: "Expressive" },
-      { label: "Attachment", value: "Mixed" },
-      { label: "Initiation", value: "Active" },
-      { label: "Power orientation", value: "Switch" },
-    ],
-  },
-  {
-    name: "Curious Apprentice",
-    tagline: "Teach me everything.",
-    color: "#6faed9",
-    coreMotivation: "Growth",
-    dims: [
-      { label: "Communication", value: "Open" },
-      { label: "Attachment", value: "Secure" },
-      { label: "Initiation", value: "Shared" },
-      { label: "Power orientation", value: "Switch" },
-    ],
-  },
-];
+import { useCallback, useEffect, useRef, useState, type FC } from "react";
+import { ArchetypeCard, archetypes } from "../S06Archetypes";
 
+/**
+ * White-variant "14 abstractions" section (Figma 7828:9835): a centered heading
+ * above a one-direction auto-advancing carousel of the dark landing's archetype
+ * cards (reused from S06Archetypes), with prev/next controls + dots. All cards
+ * are forced to equal height (items-stretch + the card's h-full).
+ */
 const WArchetypeCards: FC = () => {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const [index, setIndex] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const count = archetypes.length;
+
+  const goTo = useCallback(
+    (next: number) => {
+      setIndex(((next % count) + count) % count);
+    },
+    [count]
+  );
+
+  // Auto-advance one direction; pauses on hover/touch.
+  useEffect(() => {
+    if (paused) return undefined;
+    const id = window.setInterval(() => {
+      setIndex((i) => (i + 1) % count);
+    }, 4000);
+    return () => window.clearInterval(id);
+  }, [paused, count]);
+
+  // Scroll the active card into view (native scroll-snap container).
+  useEffect(() => {
+    const track = trackRef.current;
+    if (!track) return;
+    const card = track.children[index] as HTMLElement | undefined;
+    if (card) {
+      track.scrollTo({ left: card.offsetLeft - 16, behavior: "smooth" });
+    }
+  }, [index]);
+
   return (
-    <section className="bg-[#f5f6f8] py-16 lg:py-24">
+    <section className="overflow-hidden bg-white py-16 lg:py-24">
       <div className="content-shell">
-        <div className="animate-on-scroll mb-12 max-w-2xl">
-          <h2 className="font-serif text-3xl font-medium text-[#161021] sm:text-[40px]">
-            A signature, not a box.
+        <div className="animate-on-scroll mx-auto mb-12 max-w-2xl text-center">
+          <h2 className="font-serif text-3xl font-medium leading-tight text-[#161021] sm:text-[40px]">
+            14 abstractions.{" "}
+            <span className="bg-gradient-to-r from-[#fe6839] via-[#d95b88] to-[#cb5fc1] bg-clip-text text-transparent">
+              You are more than just one of them.
+            </span>
           </h2>
-          <p className="mt-3 text-[17px] leading-relaxed text-[#6b6678]">
-            Every archetype is a distinct profile across the dimensions that shape intimacy. Here
-            are a few — your report places you across all fourteen.
-          </p>
         </div>
+      </div>
 
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {cards.map((card) => (
-            <div
-              key={card.name}
-              className="animate-on-scroll flex flex-col gap-4 rounded-2xl border border-black/[0.08] bg-white p-6 shadow-[0_2px_20px_rgba(0,0,0,0.04)]"
-            >
-              <div className="flex items-center gap-3">
-                <span
-                  className="h-10 w-10 shrink-0 rounded-xl"
-                  style={{ backgroundColor: card.color }}
-                />
-                <div className="min-w-0">
-                  <h3 className="font-serif text-lg font-bold text-[#161021]">{card.name}</h3>
-                  <p className="truncate font-serif text-[13px] italic text-[#6b7280]">
-                    “{card.tagline}”
-                  </p>
-                </div>
-              </div>
+      {/* Full-bleed scroll-snap carousel — items-stretch + the card's h-full keeps
+          every card the same height. */}
+      <div
+        ref={trackRef}
+        onMouseEnter={() => setPaused(true)}
+        onMouseLeave={() => setPaused(false)}
+        onTouchStart={() => setPaused(true)}
+        className="flex snap-x snap-mandatory items-stretch gap-6 overflow-x-auto scroll-smooth px-4 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
+        {archetypes.map((a) => (
+          <div key={a.name} className="shrink-0 snap-start">
+            <ArchetypeCard archetype={a} />
+          </div>
+        ))}
+      </div>
 
-              <div
-                className="rounded-xl border px-4 py-3"
-                style={{ borderColor: `${card.color}55` }}
-              >
-                <p className="text-[11px] font-bold uppercase tracking-wide text-[#6b6678]">
-                  Core motivation
-                </p>
-                <p className="font-serif text-lg font-medium text-[#161021]">
-                  {card.coreMotivation}
-                </p>
-              </div>
-
-              <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
-                {card.dims.map((d) => (
-                  <div key={d.label}>
-                    <dt className="text-[11px] text-[#6b7280]">{d.label}</dt>
-                    <dd className="font-serif text-[15px] font-medium text-[#161021]">{d.value}</dd>
-                  </div>
-                ))}
-              </dl>
-            </div>
+      {/* Controls */}
+      <div className="content-shell mt-8 flex items-center justify-center gap-4">
+        <button
+          type="button"
+          onClick={() => goTo(index - 1)}
+          aria-label="Previous archetype"
+          className="focus-visible-ring flex h-10 w-10 items-center justify-center rounded-full border border-black/10 text-[#161021] transition hover:bg-black/[0.04] active:scale-95"
+        >
+          <svg
+            className="h-5 w-5"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden
+          >
+            <path d="m15 18-6-6 6-6" />
+          </svg>
+        </button>
+        <div className="flex items-center gap-2">
+          {archetypes.map((a, i) => (
+            <button
+              key={a.name}
+              type="button"
+              onClick={() => goTo(i)}
+              aria-label={`Go to ${a.name}`}
+              aria-current={i === index ? "true" : undefined}
+              className={`h-2 rounded-full transition-all ${i === index ? "w-5 bg-accent-orange" : "w-2 bg-black/15 hover:bg-black/30"}`}
+            />
           ))}
         </div>
+        <button
+          type="button"
+          onClick={() => goTo(index + 1)}
+          aria-label="Next archetype"
+          className="focus-visible-ring flex h-10 w-10 items-center justify-center rounded-full border border-black/10 text-[#161021] transition hover:bg-black/[0.04] active:scale-95"
+        >
+          <svg
+            className="h-5 w-5"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden
+          >
+            <path d="m9 18 6-6-6-6" />
+          </svg>
+        </button>
       </div>
     </section>
   );

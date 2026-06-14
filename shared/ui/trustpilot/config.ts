@@ -57,6 +57,17 @@ export function getTrustpilotConfig(): TrustpilotConfig {
   };
 }
 
+/**
+ * Master kill switch for ALL on-site Trustpilot UI (landing sections + report
+ * pricing modals + the bootstrap script). Defaults OFF so nothing Trustpilot
+ * renders until we have enough reviews — the integration stays in the codebase,
+ * just hidden. Flip on by setting NEXT_PUBLIC_TRUSTPILOT_ENABLED to the string
+ * true in the Vercel env (no code change needed). Referenced by its full name so
+ * Next.js inlines it into the client bundle — do not refactor to dynamic access.
+ */
+export const isTrustpilotEnabled = (): boolean =>
+  (process.env.NEXT_PUBLIC_TRUSTPILOT_ENABLED ?? "").trim() === "true";
+
 /** True when the live, cookie-setting Trustpilot widget can be loaded (post-consent). */
 export const isTrustpilotLiveConfigured = (config: TrustpilotConfig): boolean =>
   config.businessUnitId !== null;

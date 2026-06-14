@@ -28,22 +28,24 @@ const WHowItWorks: FC = () => {
         <div className="animate-on-scroll mb-12 flex flex-col gap-2">
           <div className="flex items-center gap-2.5">
             <span className="h-[7px] w-[7px] shrink-0 rounded-full bg-accent-orange" />
-            <span className="text-[11px] font-bold uppercase tracking-wide text-[#6b6678]">
-              Protocol
-            </span>
+            <span className="text-[11px] font-bold tracking-wide text-[#6b6678]">Protocol</span>
           </div>
           <h2 className="bg-gradient-to-r from-[#fe6839] via-[#d95b88] to-[#cb5fc1] bg-clip-text font-serif text-4xl font-normal text-transparent sm:text-[46px]">
             How it works
           </h2>
         </div>
 
-        <div className="grid gap-10 md:grid-cols-3 md:gap-16">
-          {steps.map((s) => (
-            <div key={s.num} className="animate-on-scroll flex flex-col gap-3">
-              <div className="flex items-center justify-between border-t border-black/10 pt-3">
-                <span className="text-[11px] font-bold uppercase tracking-wide text-[#6b6678]">
-                  {s.step}
-                </span>
+        {/* Continuous top rule across all columns + vertical dividers between them (Figma). */}
+        <div className="grid border-t border-black/10 md:grid-cols-3">
+          {steps.map((s, i) => (
+            <div
+              key={s.num}
+              className={`animate-on-scroll flex flex-col gap-3 py-6 ${
+                i > 0 ? "md:border-l md:border-black/10 md:pl-10" : "md:pr-10"
+              } ${i === 1 ? "md:px-10" : ""}`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold tracking-wide text-[#6b6678]">{s.step}</span>
                 <span className="font-serif text-3xl text-[#161021]/15">{s.num}</span>
               </div>
               <h3 className="font-serif text-[22px] font-bold text-[#161021]">{s.title}</h3>

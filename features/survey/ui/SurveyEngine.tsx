@@ -40,9 +40,15 @@ type CompletionPhase = "processing" | "wizard" | "done";
 interface SurveyEngineProps {
   onExit: () => void;
   onComplete: (reportToken?: string | null) => void;
+  /**
+   * White pay-first cohort already paid before the survey. Propagated to the
+   * pre-report wizard so it keeps the soft closing slide (not the must-pay one)
+   * and stamps a non-forced paywall arm for these already-paid users.
+   */
+  prepaidPaid?: boolean;
 }
 
-const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
+const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete, prepaidPaid }) => {
   const { answers, currentIndex, startedAt, progress, setAnswer, getAnswer, setCurrentIndex } =
     useSurveyState();
   const {
@@ -65,9 +71,9 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
       // Stamp the forced-paywall arm so wizard analytics rows (and the wizard
       // exposure) self-identify the arm. Keyed on the same report token the
       // /report page uses, so both surfaces agree.
-      setForcedPaywallArm(getForcedPaywallCohort(reportToken));
+      setForcedPaywallArm(prepaidPaid ? "control" : getForcedPaywallCohort(reportToken));
     }
-  }, [submissionId, reportToken]);
+  }, [submissionId, reportToken, prepaidPaid]);
   const utmTracker = useUtmCapture();
   const { savePartial } = usePartialSave(answers, currentIndex, startedAt, utmTracker);
 
@@ -375,7 +381,11 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
     // Pre-report wizard phase
     if (completionPhase === "wizard") {
       return (
-        <PreReportWizard reportToken={reportToken} onComplete={() => onComplete(reportToken)} />
+        <PreReportWizard
+          reportToken={reportToken}
+          prepaidPaid={prepaidPaid}
+          onComplete={() => onComplete(reportToken)}
+        />
       );
     }
 

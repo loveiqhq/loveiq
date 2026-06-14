@@ -6,20 +6,20 @@ import { trackStartSurvey } from "@features/analytics/client";
 
 const WInlineCTA: FC = () => {
   return (
-    <section className="bg-white pb-8 pt-2">
-      <div className="content-shell flex justify-center">
+    <section className="bg-white pb-10 pt-2">
+      <div className="animate-on-scroll content-shell flex justify-center">
         <Link
           href="/survey"
           onClick={() => trackStartSurvey("report_section")}
-          className="focus-visible-ring group inline-flex items-center gap-2 text-center text-base font-medium text-[#3f3a4d] transition hover:text-black"
+          className="focus-visible-ring group inline-flex items-center justify-center gap-2 rounded-full bg-[linear-gradient(105deg,#ff6a3a_0%,#cf5afb_52%,#7d88ff_100%)] px-5 py-3 text-center text-sm font-semibold text-white shadow-[0_12px_30px_-8px_rgba(207,90,251,0.4)] transition hover:opacity-95 sm:gap-2.5 sm:px-8 sm:py-4 sm:text-base"
         >
-          <span>
-            <span className="font-bold text-black">Start test now</span> to reveal your archetype
-            probabilities
+          <span className="sm:hidden">Start test now</span>
+          <span className="hidden sm:inline">
+            Start test now to reveal your archetype probabilities
           </span>
           <svg
             aria-hidden
-            className="h-4 w-4 text-accent-orange transition-transform group-hover:translate-x-0.5"
+            className="h-4 w-4 shrink-0 transition-transform group-hover:translate-x-0.5"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"

@@ -26,11 +26,9 @@ const WProblemValue: FC = () => {
         <div className="animate-on-scroll flex flex-col gap-6">
           <div className="flex items-center gap-2.5">
             <span className="h-[7px] w-[7px] shrink-0 rounded-full bg-accent-orange" />
-            <span className="text-[11px] font-bold uppercase tracking-wide text-[#6b6678]">
-              The problem
-            </span>
+            <span className="text-[11px] font-bold tracking-wide text-[#6b6678]">The problem</span>
           </div>
-          <h2 className="font-serif text-[clamp(2rem,5vw,2.5rem)] font-medium italic leading-tight tracking-tight text-black">
+          <h2 className="font-serif text-[clamp(2.25rem,5.5vw,3.25rem)] font-medium italic leading-[1.15] tracking-tight text-black">
             Great intimacy requires a{" "}
             <span className="bg-gradient-to-r from-[#fe6839] via-[#bf66d9] to-[#958ef6] bg-clip-text not-italic text-transparent">
               vocabulary

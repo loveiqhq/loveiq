@@ -14,13 +14,13 @@ const WCTA: FC = () => {
             aria-hidden
             className="pointer-events-none absolute left-1/2 top-0 h-48 w-[80%] -translate-x-1/2 rounded-full bg-gradient-to-r from-[#fe6839]/15 via-[#d95b88]/15 to-[#9c7dff]/15 blur-3xl"
           />
-          <div className="relative mx-auto flex max-w-2xl flex-col items-center gap-6">
+          <div className="animate-on-scroll relative mx-auto flex max-w-2xl flex-col items-center gap-6">
             <h2 className="font-serif text-[clamp(2rem,5vw,3rem)] font-medium leading-tight text-[#161021]">
               Ready to understand and grow?
             </h2>
             <p className="text-[17px] leading-relaxed text-[#6b6678]">
-              In just 15 minutes, unlock a personalized report decoding your sexual archetype — and
-              the practical steps to improve intimacy.
+              Join us to build stronger relationships, communicate with real clarity, and step into
+              confident, authentic sexuality.
             </p>
             <Link
               href="/survey"
@@ -42,8 +42,8 @@ const WCTA: FC = () => {
                 <path d="m12 5 7 7-7 7" />
               </svg>
             </Link>
-            <p className="text-xs font-bold uppercase tracking-[1.4px] text-[#6b6678]">
-              • Takes 15 minutes • No account required
+            <p className="text-[13px] font-medium text-[#6b6678]">
+              Anonymous by default · 15 minutes · No account required
             </p>
           </div>
         </div>

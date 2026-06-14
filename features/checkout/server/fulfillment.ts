@@ -355,6 +355,14 @@ import {
 } from "@features/report/server/personalReport";
 import { isArchetypeName } from "@features/report/server/archetypeSlug";
 import { markReportPriceQuotePurchased } from "@features/pricing/logic/reportPricing";
+import {
+  claimPrepaidEntitlement,
+  findPrepaidEntitlementByToken,
+  markPrepaidEntitlementRefunded,
+  markPrepaidEntitlementSucceeded,
+  setPrepaidEntitlementPaymentId,
+  type PrepaidEntitlement,
+} from "./prepaidEntitlement";
 
 const SUPABASE_TIMEOUT_MS = 8_000;
 
@@ -1251,6 +1259,17 @@ async function syncRefundEvent({ charge, event }: { charge: Stripe.Charge; event
     });
   }
 
+  // White pay-first: invalidate any prepaid entitlement on a FULL refund so a
+  // refunded user can't pass the survey gate and re-unlock a report for free.
+  // No-op for dark purchases (no matching prepaid_report_access row).
+  if (!isPartialRefund) {
+    await markPrepaidEntitlementRefunded(
+      typeof charge.payment_intent === "string"
+        ? charge.payment_intent
+        : (charge.payment_intent?.id ?? null)
+    );
+  }
+
   await upsertWebhookEventRecord({
     event,
     paymentId: existingPayment.id,
@@ -1336,6 +1355,14 @@ async function syncDisputeEvent({
     });
   }
 
+  // White pay-first: invalidate any prepaid entitlement when a dispute opens, so
+  // a charged-back user can't re-unlock via the survey gate. We do NOT restore
+  // it on a won dispute — the original report is already re-unlocked via the
+  // payment row, and one payment should still map to one report.
+  if (outcome === "opened") {
+    await markPrepaidEntitlementRefunded(paymentIntentId);
+  }
+
   await upsertWebhookEventRecord({
     event,
     paymentId: existingPayment.id,
@@ -1364,6 +1391,264 @@ async function syncDisputeEvent({
   }
 }
 
+async function lookupSubmissionUserId(submissionId: number): Promise<number | null> {
+  const response = await supabaseServiceFetch(
+    `/rest/v1/survey_submission?id=eq.${submissionId}&select=user_id&limit=1`
+  );
+  if (!response.ok) return null;
+  const rows = (await response.json()) as Array<{ user_id: number | null }>;
+  return rows[0]?.user_id ?? null;
+}
+
+/**
+ * Webhook fulfillment for a PREPAID (white-cohort, pay-before-survey) checkout
+ * session — identified by `session.metadata.prepaidToken`. Unlike the normal
+ * path there is no submission / report / user yet, and `payment.user_id` is NOT
+ * NULL, so we deliberately DO NOT write a payment row here. We only flip the
+ * `prepaid_report_access` row to `succeeded` and stamp the settled Stripe facts.
+ * The real payment row is created later, at white survey-submit, by
+ * `applyPrepaidEntitlementToReport` (which has the user + report in hand).
+ */
+async function syncPrepaidCheckoutSession({
+  event,
+  eventStatus,
+  session,
+  stripe,
+}: {
+  event: Stripe.Event;
+  eventStatus: PaymentStatus;
+  session: Stripe.Checkout.Session;
+  stripe: Stripe;
+}) {
+  // Non-success prepaid events (expired/failed): nothing was captured, so leave
+  // the entitlement `pending` and just mark the webhook processed (no retry).
+  if (eventStatus !== "succeeded") {
+    logger.info(
+      { eventId: event.id, eventStatus, sessionId: session.id, type: event.type },
+      "prepaid: non-success checkout event — leaving entitlement pending"
+    );
+    await upsertWebhookEventRecord({
+      event,
+      processed: true,
+      processingError: null,
+      stripePaymentIntentId: null,
+    });
+    return;
+  }
+
+  const settledSession = await stripe.checkout.sessions.retrieve(session.id, {
+    expand: STRIPE_CHECKOUT_SESSION_EXPAND,
+  });
+
+  const paymentIntentId =
+    typeof settledSession.payment_intent === "string"
+      ? settledSession.payment_intent
+      : (settledSession.payment_intent?.id ?? null);
+
+  // T-04 parity: defer to Stripe's authoritative PaymentIntent.status. A session
+  // can "complete" then have the intent voided by Radar seconds later; only
+  // promote the entitlement when the money is really there.
+  if (paymentIntentId) {
+    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+    if (paymentIntent.status !== "succeeded" && paymentIntent.status !== "processing") {
+      logger.warn(
+        { eventId: event.id, paymentIntentId, paymentIntentStatus: paymentIntent.status },
+        "prepaid: PaymentIntent status disagrees with success event — not promoting"
+      );
+      await upsertWebhookEventRecord({
+        event,
+        processed: true,
+        processingError: null,
+        stripePaymentIntentId: paymentIntentId,
+      });
+      return;
+    }
+  }
+
+  await markPrepaidEntitlementSucceeded({
+    amountCents:
+      typeof settledSession.amount_total === "number" ? settledSession.amount_total : null,
+    currency: settledSession.currency ?? null,
+    stripePaymentIntentId: paymentIntentId,
+    stripeSessionId: settledSession.id,
+  });
+
+  logger.info(
+    { eventId: event.id, sessionId: settledSession.id },
+    "prepaid: entitlement marked succeeded (awaiting survey to unlock report)"
+  );
+
+  await notifySlack({
+    channel: "payments",
+    kind: "prepaid_purchase",
+    text: `:lock: Prepaid full report purchased (white cohort) — ${
+      typeof settledSession.amount_total === "number"
+        ? (settledSession.amount_total / 100).toFixed(2)
+        : "?"
+    } ${escapeSlack((settledSession.currency ?? "").toUpperCase())} — awaiting survey completion to unlock.`,
+    username: "payments",
+  });
+
+  await upsertWebhookEventRecord({
+    event,
+    processed: true,
+    processingError: null,
+    stripePaymentIntentId: paymentIntentId,
+  });
+}
+
+export type PrepaidApplyResult =
+  | { applied: true; paymentId: number | null }
+  | { applied: false; reason: "no_entitlement" | "not_paid" | "consumed_other" | "missing_user" };
+
+/**
+ * Consume a succeeded prepaid entitlement and unlock the white user's report.
+ * Called synchronously from /api/survey for the white cohort AFTER the
+ * submission + scoring + personal_report exist. Produces the SAME DB end-state
+ * as a dark full_report purchase: a `payment` row linked to the report
+ * (status=succeeded, metadata.plan=full_report) plus a `full_report` archetype
+ * tier on the primary archetype.
+ *
+ * Loophole-bound to ONE submission via an ATOMIC claim on
+ * `consumed_submission_id`: the claim PATCH (WHERE consumed_submission_id IS
+ * NULL) is the concurrency barrier, so even under simultaneous submits a single
+ * payment unlocks exactly one report. Idempotent for the same submission
+ * (re-submit / retry): a lost claim that re-reads as "already ours" returns
+ * success WITHOUT writing a second payment row.
+ */
+export async function applyPrepaidEntitlementToReport({
+  archetype,
+  personalReportId,
+  reportToken,
+  submissionId,
+  token,
+}: {
+  archetype: string | null;
+  personalReportId: number;
+  reportToken: string | null;
+  submissionId: number;
+  token: string;
+}): Promise<PrepaidApplyResult> {
+  const entitlement: PrepaidEntitlement | null = await findPrepaidEntitlementByToken(token);
+  if (!entitlement) return { applied: false, reason: "no_entitlement" };
+  if (entitlement.status !== "succeeded") return { applied: false, reason: "not_paid" };
+  if (
+    entitlement.consumed_submission_id !== null &&
+    entitlement.consumed_submission_id !== submissionId
+  ) {
+    logger.warn(
+      {
+        consumedBy: entitlement.consumed_submission_id,
+        entitlementId: entitlement.id,
+        submissionId,
+      },
+      "prepaid: entitlement already consumed by another submission — refusing reuse"
+    );
+    return { applied: false, reason: "consumed_other" };
+  }
+
+  const userId = await lookupSubmissionUserId(submissionId);
+  if (!userId) {
+    logger.error({ submissionId }, "prepaid: submission has no user_id — cannot create payment");
+    return { applied: false, reason: "missing_user" };
+  }
+
+  // Atomic claim — the concurrency barrier. Of any concurrent callers, only the
+  // one whose PATCH flips the still-null consumed_submission_id proceeds to
+  // write the payment. This is what makes "one payment → one report" hold under
+  // races, and makes re-submits idempotent (no duplicate payment rows). Claimed
+  // AFTER the cheap, recoverable pre-checks so a missing_user never burns it.
+  const wonClaim = await claimPrepaidEntitlement({ entitlementId: entitlement.id, submissionId });
+  if (!wonClaim) {
+    // Lost the claim: re-read to tell "a different submission grabbed it" from
+    // "this very submission already applied" (idempotent retry / concurrent twin).
+    const reread = await findPrepaidEntitlementByToken(token);
+    if (reread?.consumed_submission_id !== submissionId) {
+      logger.warn(
+        { consumedBy: reread?.consumed_submission_id, entitlementId: entitlement.id, submissionId },
+        "prepaid: entitlement claimed by another submission — refusing reuse"
+      );
+      return { applied: false, reason: "consumed_other" };
+    }
+    // Already ours — the winning run created (or is creating) the payment. Do
+    // NOT write a second row; return idempotently.
+    return { applied: true, paymentId: reread.payment_id };
+  }
+
+  const plan: ReportPurchasePlanId = normalizePlan(entitlement.plan) ?? "full_report";
+  const amount = toAmount(entitlement.amount_cents);
+  const archetypeForTier =
+    (archetype && isArchetypeName(archetype) ? archetype : null) ??
+    (await lookupPrimaryArchetypeForSubmission(submissionId));
+
+  const paymentId = await upsertPaymentRecord({
+    amount,
+    cardBrand: null,
+    cardExpMonth: null,
+    cardExpYear: null,
+    cardLast4: null,
+    currency: entitlement.currency,
+    description: `LoveIQ ${getReportPurchasePlan(plan).title}`,
+    failureCode: null,
+    failureMessage: null,
+    ipAddress: null,
+    metadata: {
+      archetype: archetypeForTier,
+      checkoutSessionId: entitlement.stripe_session_id,
+      landingVariant: entitlement.landing_variant ?? "white",
+      plan,
+      // Marks this as a white pay-first purchase for admin / revenue slicing.
+      prepaid: "true",
+      reportToken: reportToken ?? null,
+      stripePaymentStatus: "paid",
+    },
+    paymentDateTime: new Date().toISOString(),
+    paymentId: null,
+    paymentMethodId: null,
+    paymentMethodType: null,
+    personalReportId,
+    pricingQuoteId: null,
+    receiptUrl: null,
+    status: "succeeded",
+    stripeChargeId: null,
+    stripeCustomerId: null,
+    stripePaymentIntentId: entitlement.stripe_payment_intent_id,
+    userAgent: null,
+    userId,
+  });
+
+  if (!paymentId) {
+    throw new Error("prepaid_payment_persist_failed");
+  }
+
+  await ensurePaymentItem({ amount, paymentId, plan });
+  await updatePersonalReportPayment({ amount, paymentId, personalReportId, status: "succeeded" });
+
+  if (archetypeForTier) {
+    try {
+      await upsertArchetypeTierForPersonalReport({
+        archetype: archetypeForTier,
+        personalReportId,
+        tier: plan === "all_reports" ? "full_report" : plan,
+      });
+    } catch (err) {
+      logger.warn(
+        { archetype: archetypeForTier, err, personalReportId },
+        "prepaid: archetype tier write failed (accessPlan still unlocks via the payment row)"
+      );
+    }
+  }
+
+  await setPrepaidEntitlementPaymentId({ entitlementId: entitlement.id, paymentId });
+
+  logger.info(
+    { entitlementId: entitlement.id, paymentId, personalReportId, submissionId },
+    "prepaid: entitlement applied — report unlocked"
+  );
+
+  return { applied: true, paymentId };
+}
+
 export async function processStripeWebhookEvent({
   event,
   stripe,
@@ -1389,30 +1674,36 @@ export async function processStripeWebhookEvent({
 
     switch (event.type) {
       case "checkout.session.completed":
-      case "checkout.session.async_payment_succeeded":
-        await syncCheckoutSessionPayment({
-          event,
-          eventStatus: "succeeded",
-          session: event.data.object as Stripe.Checkout.Session,
-          stripe,
-        });
+      case "checkout.session.async_payment_succeeded": {
+        const session = event.data.object as Stripe.Checkout.Session;
+        // White pay-first sessions carry a prepaidToken and have NO submission
+        // yet — route them to the prepaid handler (records the entitlement,
+        // writes no payment row). Everything else is the normal post-survey path.
+        if (session.metadata?.prepaidToken) {
+          await syncPrepaidCheckoutSession({ event, eventStatus: "succeeded", session, stripe });
+        } else {
+          await syncCheckoutSessionPayment({ event, eventStatus: "succeeded", session, stripe });
+        }
         return;
-      case "checkout.session.async_payment_failed":
-        await syncCheckoutSessionPayment({
-          event,
-          eventStatus: "failed",
-          session: event.data.object as Stripe.Checkout.Session,
-          stripe,
-        });
+      }
+      case "checkout.session.async_payment_failed": {
+        const session = event.data.object as Stripe.Checkout.Session;
+        if (session.metadata?.prepaidToken) {
+          await syncPrepaidCheckoutSession({ event, eventStatus: "failed", session, stripe });
+        } else {
+          await syncCheckoutSessionPayment({ event, eventStatus: "failed", session, stripe });
+        }
         return;
-      case "checkout.session.expired":
-        await syncCheckoutSessionPayment({
-          event,
-          eventStatus: "canceled",
-          session: event.data.object as Stripe.Checkout.Session,
-          stripe,
-        });
+      }
+      case "checkout.session.expired": {
+        const session = event.data.object as Stripe.Checkout.Session;
+        if (session.metadata?.prepaidToken) {
+          await syncPrepaidCheckoutSession({ event, eventStatus: "canceled", session, stripe });
+        } else {
+          await syncCheckoutSessionPayment({ event, eventStatus: "canceled", session, stripe });
+        }
         return;
+      }
       case "charge.refunded":
         await syncRefundEvent({ charge: event.data.object as Stripe.Charge, event });
         return;

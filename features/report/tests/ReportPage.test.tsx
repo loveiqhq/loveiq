@@ -80,18 +80,11 @@ import ReportPage from "@features/report/ui/ReportPage";
 import { archetypeContent } from "@/data/report-archetypes";
 import { reportPracticeTendencies } from "@/data/report-practice-tendencies";
 import type { ReportPracticeTendencyContentForUser } from "@features/report/ui/hooks/useReportData";
-import { getForcedPaywallCohort } from "@shared/experiments/forcedPaywall";
-
-/** Find a report token that buckets into the given coupled-paywall arm. */
-function findCohortToken(cohort: "treatment" | "control"): string {
-  for (let i = 0; i < 10000; i++) {
-    const token = `rpt_report_test_${i}`;
-    if (getForcedPaywallCohort(token) === cohort) return token;
-  }
-  throw new Error(`no token found for cohort ${cohort}`);
-}
-const TREATMENT_TOKEN = findCohortToken("treatment");
-const CONTROL_TOKEN = findCohortToken("control");
+// The 50/50 was concluded → any non-empty token now buckets to the forced
+// "treatment" arm. The soft "control" (dismissible) experience is now reached
+// only via the email-return escape hatch (from=email / utm_source=email) or the
+// dev `?arm=` override — driven through mockSearchParams in the tests below.
+const TREATMENT_TOKEN = "rpt_report_test_001";
 
 const REPORT_MODAL_TEST_TIMEOUT_MS = 60_000;
 const mockScrollTo = vi.fn();
@@ -693,12 +686,17 @@ describe("ReportPage", () => {
     expect(teaser).toHaveAttribute("data-flipdeck", "true");
   });
 
-  it("keeps the scroll teaser dismissible + non-flip for the control cohort", () => {
+  it("keeps the scroll teaser dismissible + non-flip for an email-return (soft) visit", () => {
     mockUseReportData.mockReturnValue(buildSuccessResponse());
-    render(<ReportPage token={CONTROL_TOKEN} />);
-    const teaser = screen.getByTestId("scroll-teaser");
-    expect(teaser).toHaveAttribute("data-dismissible", "true");
-    expect(teaser).toHaveAttribute("data-flipdeck", "false");
+    mockSearchParams.mockImplementation(() => new URLSearchParams("from=email"));
+    try {
+      render(<ReportPage token={TREATMENT_TOKEN} />);
+      const teaser = screen.getByTestId("scroll-teaser");
+      expect(teaser).toHaveAttribute("data-dismissible", "true");
+      expect(teaser).toHaveAttribute("data-flipdeck", "false");
+    } finally {
+      mockSearchParams.mockImplementation(() => new URLSearchParams());
+    }
   });
 
   it("opens the forced paywall immediately on load for the treatment cohort", () => {
@@ -711,9 +709,14 @@ describe("ReportPage", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("does NOT open the teaser on load for the control cohort (waits for scroll)", () => {
+  it("does NOT open the teaser on load for an email-return (soft) visit (waits for scroll)", () => {
     mockUseReportData.mockReturnValue(buildSuccessResponse());
-    render(<ReportPage token={CONTROL_TOKEN} />);
-    expect(screen.getByTestId("scroll-teaser")).toHaveAttribute("data-open", "false");
+    mockSearchParams.mockImplementation(() => new URLSearchParams("from=email"));
+    try {
+      render(<ReportPage token={TREATMENT_TOKEN} />);
+      expect(screen.getByTestId("scroll-teaser")).toHaveAttribute("data-open", "false");
+    } finally {
+      mockSearchParams.mockImplementation(() => new URLSearchParams());
+    }
   });
 });

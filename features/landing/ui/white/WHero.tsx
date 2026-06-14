@@ -16,25 +16,31 @@ const stats: { label: string; value: string }[] = [
 const WHero: FC = () => {
   return (
     <section className="relative overflow-hidden bg-white pt-[64px]">
-      {/* Decorative archetype-dot graphic (from Figma), behind content. */}
-      <img
-        src="/images/white/hero-bg.png"
-        alt=""
+      {/* Decorative archetype-dot / logo graphic (from Figma) with ambient motion:
+          a slowly drifting molecule over a softly breathing brand-gradient halo. */}
+      <div
         aria-hidden="true"
-        className="pointer-events-none absolute right-0 top-1/2 hidden w-[820px] max-w-[60%] -translate-y-1/2 opacity-90 blur-[1px] lg:block"
-      />
+        className="pointer-events-none absolute right-0 top-1/2 hidden w-[820px] max-w-[55%] -translate-y-1/2 lg:block"
+      >
+        <div className="animate-logo-halo absolute inset-[14%] rounded-full bg-[radial-gradient(circle,_rgba(207,90,251,0.20),_rgba(125,136,255,0.10)_45%,_transparent_70%)] blur-3xl" />
+        <img
+          src="/images/white/hero-bg.png"
+          alt=""
+          className="animate-logo-drift relative w-full opacity-90 blur-[1px]"
+        />
+      </div>
       <div className="content-shell relative">
         <div className="grid items-center gap-12 py-16 lg:grid-cols-[minmax(0,560px)_minmax(0,380px)] lg:gap-8 lg:py-24">
           {/* Left: copy */}
           <div className="flex flex-col gap-6">
-            <div className="flex items-center gap-2.5">
-              <span className="h-[7px] w-[7px] shrink-0 rounded-full bg-accent-orange" />
+            <div className="animate-on-scroll flex items-center gap-2.5">
+              <span className="animate-pulse-glow h-[7px] w-[7px] shrink-0 rounded-full bg-accent-orange" />
               <span className="text-[11px] font-bold uppercase tracking-wide text-[#6b6678]">
                 Science-backed methodology
               </span>
             </div>
 
-            <h1 className="font-serif text-[clamp(2.75rem,8vw,3.75rem)] font-semibold leading-[1.05] text-[#161021]">
+            <h1 className="animate-on-scroll stagger-1 font-serif text-[clamp(2.75rem,8vw,3.75rem)] font-semibold leading-[1.05] text-[#161021]">
               Determine{" "}
               <span className="whitespace-nowrap">
                 Your{" "}
@@ -47,7 +53,7 @@ const WHero: FC = () => {
               </span>
             </h1>
 
-            <p className="max-w-[34rem] text-base leading-7 text-[#6b7280]">
+            <p className="animate-on-scroll stagger-2 max-w-[34rem] text-[15px] leading-7 text-[#6b7280]">
               Grounded in state-of-the-art science &amp; research.{" "}
               <strong className="font-extrabold text-black">In just 15 minutes</strong>,{" "}
               <strong className="font-extrabold text-black">
@@ -57,11 +63,11 @@ const WHero: FC = () => {
               improve intimacy.
             </p>
 
-            <div>
+            <div className="animate-on-scroll stagger-3">
               <Link
                 href="/survey"
                 aria-label="Start test now - hero"
-                className="focus-visible-ring inline-flex items-center justify-center gap-3 rounded-xl bg-black px-7 py-4 text-lg font-semibold text-white transition hover:bg-gray-800"
+                className="focus-visible-ring inline-flex items-center justify-center gap-3 rounded-xl bg-black px-6 py-3.5 text-base font-semibold text-white transition hover:bg-gray-800"
                 onClick={() => trackStartSurvey("hero")}
               >
                 <span>Start test now</span>
@@ -81,7 +87,7 @@ const WHero: FC = () => {
               </Link>
             </div>
 
-            <p className="text-sm text-black">
+            <p className="animate-on-scroll stagger-4 text-sm text-black">
               <span className="font-light">Your </span>
               <strong className="font-extrabold">privacy &amp; anonymity</strong>
               <span className="font-light"> come first. Learn more in our </span>
@@ -95,7 +101,7 @@ const WHero: FC = () => {
           </div>
 
           {/* Right: stat block */}
-          <dl className="relative flex flex-col">
+          <dl className="animate-on-scroll stagger-2 relative flex flex-col">
             {stats.map((stat) => (
               <div
                 key={stat.label}

@@ -10,6 +10,8 @@ import WProblemValue from "./WProblemValue";
 import WArchetypes from "./WArchetypes";
 import WInlineCTA from "./WInlineCTA";
 import WArchetypeCards from "./WArchetypeCards";
+import WTrustRow from "./WTrustRow";
+import WReportPreview from "./WReportPreview";
 import WAcademicBoard from "./WAcademicBoard";
 import WPerfectFor from "./WPerfectFor";
 import WPricing from "./WPricing";
@@ -45,6 +47,8 @@ const LandingPageWhite: FC = () => {
       <WArchetypes />
       <WInlineCTA />
       <WArchetypeCards />
+      <WTrustRow />
+      <WReportPreview />
       <WAcademicBoard />
       <WPerfectFor />
       <WPricing />

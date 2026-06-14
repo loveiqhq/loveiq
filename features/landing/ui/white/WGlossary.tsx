@@ -1,39 +1,172 @@
 import type { FC } from "react";
 import Link from "next/link";
 
-// A few representative terms; the full set lives at /glossary.
-const sampleTerms = [
-  {
-    term: "Responsive desire",
-    definition:
-      "Sexual interest that emerges in response to context, intimacy, or stimulation — rather than appearing on its own.",
-  },
-  {
-    term: "Spontaneous desire",
-    definition: "Sexual interest that arises seemingly out of nowhere, without an obvious trigger.",
-  },
-  {
-    term: "Desire discrepancy",
-    definition:
-      "A mismatch between partners in how much, how often, or in what way they want intimacy.",
-  },
+/**
+ * White-variant glossary section (Figma node 7828:10899): centered heading + a
+ * light "Glossary Explorer" mockup (sidebar term list, term detail, related
+ * terms), then a "Browse full glossary" link. Mirrors the dark S07Language
+ * explorer, re-themed light.
+ */
+
+const recentTerms = [
+  { term: "Responsive desire", cat: "Disposition", active: true },
+  { term: "Spontaneous desire", cat: "Psychology" },
+  { term: "Attachment theory", cat: "Psychology" },
+  { term: "Desire discrepancy", cat: "Relational" },
+  { term: "Eroticism", cat: "Sociology" },
+  { term: "Limerence", cat: "Psychology" },
+  { term: "Secure base", cat: "Psychology" },
 ];
 
 const WGlossary: FC = () => {
   return (
     <section className="bg-white py-16 lg:py-24">
-      <div className="content-shell grid items-start gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] lg:gap-16">
-        <div className="animate-on-scroll flex flex-col gap-5">
-          <h2 className="font-serif text-3xl font-medium text-[#161021] sm:text-[40px]">
-            LoveIQ gives you language.
+      <div className="content-shell">
+        <div className="animate-on-scroll mx-auto mb-12 max-w-2xl text-center">
+          <div className="mb-3 flex items-center justify-center gap-2.5">
+            <span className="h-[7px] w-[7px] shrink-0 rounded-full bg-accent-orange" />
+            <span className="text-[11px] font-bold uppercase tracking-wide text-[#6b6678]">
+              Glossary
+            </span>
+          </div>
+          <h2 className="font-serif text-3xl font-medium leading-tight text-[#161021] sm:text-[40px]">
+            LoveIQ gives you{" "}
+            <span className="bg-gradient-to-r from-[#fe6839] via-[#bf66d9] to-[#958ef6] bg-clip-text italic text-transparent">
+              language.
+            </span>
           </h2>
-          <p className="text-[17px] leading-relaxed text-[#6b6678]">
-            Naming what you feel is the first step to understanding it. Our glossary turns the
-            science of intimacy into plain, usable words.
+          <p className="mt-3 text-[16px] leading-relaxed text-[#6b7280]">
+            Stop guessing. Get clarity, vocabulary, and a deeper understanding of the terms that
+            define your connection — we decode the complex science of intimacy, one word at a time.
           </p>
+        </div>
+
+        {/* Glossary Explorer mockup */}
+        <div className="animate-on-scroll overflow-hidden rounded-2xl border border-black/[0.08] bg-white shadow-[0_20px_50px_rgba(0,0,0,0.07)]">
+          <div className="flex items-center justify-between border-b border-black/[0.06] bg-[#f5f6f8] px-5 py-3">
+            <span className="text-[10px] font-bold uppercase tracking-wide text-[#9a96a6]">
+              Glossary Explorer
+            </span>
+            <span className="text-[10px] font-bold uppercase tracking-wide text-[#9a96a6]">
+              7 terms indexed
+            </span>
+          </div>
+          <div className="grid lg:grid-cols-[210px_1fr_190px]">
+            {/* Sidebar */}
+            <div className="hidden flex-col gap-3 border-r border-black/[0.06] p-5 lg:flex">
+              <div className="flex items-center gap-2 rounded-lg border border-black/10 px-3 py-2 text-[12px] text-[#9a96a6]">
+                <svg
+                  aria-hidden
+                  className="h-3.5 w-3.5"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <circle cx="11" cy="11" r="7" />
+                  <path d="m20 20-3.5-3.5" strokeLinecap="round" />
+                </svg>
+                Search terminology
+              </div>
+              <span className="mt-1 text-[9px] font-bold uppercase tracking-wide text-[#b4b0bd]">
+                Recent terms
+              </span>
+              <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
+                {recentTerms.map((t) => (
+                  <li
+                    key={t.term}
+                    className={`flex flex-col rounded-md px-2.5 py-2 ${t.active ? "bg-[#f5f6f8]" : ""}`}
+                  >
+                    <span
+                      className={`text-[13px] ${t.active ? "font-bold text-[#161021]" : "font-medium text-[#3f3a4d]"}`}
+                    >
+                      {t.term}
+                    </span>
+                    <span className="text-[9px] uppercase tracking-wide text-[#b4b0bd]">
+                      {t.cat}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Term detail */}
+            <div className="flex flex-col gap-4 p-6 sm:p-8">
+              <span className="text-[10px] font-bold uppercase tracking-wide text-[#9a96a6]">
+                ← Back to glossary
+              </span>
+              <h3 className="font-serif text-3xl font-medium text-[#161021]">Responsive desire</h3>
+              <div className="flex flex-wrap gap-2">
+                <span className="rounded-full bg-black/[0.04] px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-[#6b6678]">
+                  Desire & arousal
+                </span>
+                <span className="rounded-full bg-[#bf66d9]/10 px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-[#9a4dbf]">
+                  Disposition
+                </span>
+              </div>
+              <p className="text-[15px] leading-relaxed text-[#3f3a4d]">
+                A pattern of desire that emerges in response to emotional connection, touch, or
+                context rather than appearing spontaneously.
+              </p>
+              <div className="flex items-center gap-2">
+                <span className="h-1.5 w-1.5 rounded-full bg-accent-orange" />
+                <span className="text-[10px] font-bold uppercase tracking-wide text-[#9a96a6]">
+                  What this really means
+                </span>
+              </div>
+              <p className="text-[13.5px] leading-relaxed text-[#6b7280]">
+                For a great many people, wanting does not switch on by itself. It warms in response
+                to context: safety, attention, touch, the sense of being chosen. Nothing is wrong;
+                the order is reversed.
+              </p>
+              <p className="text-[13.5px] leading-relaxed text-[#6b7280]">
+                If you wait to feel like it before you begin, you may wait a long time. Responsive
+                desire asks you to create the conditions first, and let the wanting catch up.
+              </p>
+              <div className="rounded-xl bg-[#f5f6f8] p-4">
+                <span className="text-[10px] font-bold uppercase tracking-wide text-[#9a4dbf]">
+                  Insider · clinical
+                </span>
+                <p className="mt-1.5 font-serif text-[13px] italic leading-relaxed text-[#6b7280]">
+                  In our data, partners who can name where their desire is responsive report
+                  markedly fewer conflicts about frequency.
+                </p>
+              </div>
+            </div>
+
+            {/* Related terms */}
+            <div className="hidden flex-col gap-5 border-l border-black/[0.06] p-5 lg:flex">
+              <div className="flex flex-col gap-2">
+                <span className="text-[9px] font-bold uppercase tracking-wide text-[#b4b0bd]">
+                  Related terms
+                </span>
+                {["Spontaneous desire", "Desire discrepancy"].map((t) => (
+                  <span
+                    key={t}
+                    className="rounded-lg border border-black/[0.06] px-3 py-2 text-[12px] font-medium text-[#3f3a4d]"
+                  >
+                    {t}
+                  </span>
+                ))}
+              </div>
+              <div className="flex flex-col gap-2">
+                <span className="text-[9px] font-bold uppercase tracking-wide text-[#b4b0bd]">
+                  Tags
+                </span>
+                <div className="flex flex-col gap-1 text-[12px] text-[#6b7280]">
+                  <span>desire · arousal</span>
+                  <span>intimacy needs</span>
+                  <span>self-knowledge</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-8 flex justify-center">
           <Link
             href="/glossary"
-            className="focus-visible-ring inline-flex w-fit items-center gap-2 rounded-xl border border-black/15 px-5 py-3 text-sm font-semibold text-[#161021] transition hover:bg-black/[0.04]"
+            className="focus-visible-ring inline-flex items-center gap-2 rounded-full border border-black/15 px-5 py-2.5 text-sm font-semibold text-[#161021] transition hover:bg-black/[0.04]"
           >
             <span>Browse full glossary</span>
             <svg
@@ -50,18 +183,6 @@ const WGlossary: FC = () => {
               <path d="m12 5 7 7-7 7" />
             </svg>
           </Link>
-        </div>
-
-        <div className="animate-on-scroll flex flex-col gap-3">
-          {sampleTerms.map((t) => (
-            <div
-              key={t.term}
-              className="rounded-2xl border border-black/[0.08] bg-[#f5f6f8] px-6 py-5"
-            >
-              <h3 className="font-serif text-lg font-bold text-[#161021]">{t.term}</h3>
-              <p className="mt-1.5 text-[15px] leading-relaxed text-[#6b6678]">{t.definition}</p>
-            </div>
-          ))}
         </div>
       </div>
     </section>

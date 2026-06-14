@@ -1,13 +1,18 @@
 import Image from "next/image";
 import type { FC } from "react";
 
+/**
+ * White-variant academic board. Mirrors the dark `S08AcademicBoard` card styling
+ * (photo + dark gradient at the base + university logos) — no white fade — on the
+ * white page section.
+ */
+
 const experts = [
   {
     name: "Dr. Dijana Galijašević",
     tags: ["Business Ethics", "Social Science"],
     photo: "/academic/dijana.jpg",
     photoPosition: "30% 15%",
-    universities: ["Columbia University", "HHL Leipzig"],
   },
   {
     name: "Dr. Bruno Steinkraus",
@@ -15,16 +20,66 @@ const experts = [
     photo: "/academic/bruno.jpg",
     photoPosition: "63% 15%",
     photoScale: 1.2,
-    universities: ["Imperial College London", "University of Oxford"],
   },
   {
     name: "Dr. Quentin Ferry",
     tags: ["Machine Learning", "Molecular Biology"],
     photo: "/academic/quentin.png",
     photoPosition: "center 25%",
-    universities: ["University of Oxford", "MIT"],
   },
 ];
+
+const renderLogos = (index: number) => {
+  switch (index) {
+    case 0:
+      return (
+        <>
+          <Image
+            src="/academic/columbia-logo.svg"
+            alt="Columbia University logo"
+            width={58}
+            height={40}
+            style={{ transform: "scaleY(-1)" }}
+          />
+          <Image src="/academic/hhl-logo.svg" alt="HHL Leipzig logo" width={136} height={34} />
+        </>
+      );
+    case 1:
+      return (
+        <>
+          <Image
+            src="/academic/icl-logo.svg"
+            alt="Imperial College London logo"
+            width={107}
+            height={28}
+            style={{ transform: "scaleY(-1)" }}
+          />
+          <Image
+            src="/academic/oxford-logo.svg"
+            alt="University of Oxford logo"
+            width={128}
+            height={38}
+            style={{ transform: "scaleY(-1)" }}
+          />
+        </>
+      );
+    case 2:
+      return (
+        <>
+          <Image
+            src="/academic/oxford-logo.svg"
+            alt="University of Oxford logo"
+            width={115}
+            height={34}
+            style={{ transform: "scaleY(-1)" }}
+          />
+          <Image src="/academic/mit-logo.svg" alt="MIT logo" width={75} height={40} />
+        </>
+      );
+    default:
+      return null;
+  }
+};
 
 const WAcademicBoard: FC = () => {
   return (
@@ -41,7 +96,7 @@ const WAcademicBoard: FC = () => {
           {experts.map((expert, index) => (
             <div
               key={expert.name}
-              className={`animate-on-scroll ${index > 0 ? `stagger-${index}` : ""} relative h-[480px] w-[320px] overflow-hidden rounded-[24px] border border-black/[0.08] shadow-[0_20px_45px_rgba(0,0,0,0.10)]`}
+              className={`animate-on-scroll ${index > 0 ? `stagger-${index}` : ""} relative h-[480px] w-[320px] overflow-hidden rounded-[24px] border border-black/[0.08] shadow-[0_20px_45px_rgba(0,0,0,0.12)]`}
             >
               <Image
                 src={expert.photo}
@@ -54,27 +109,26 @@ const WAcademicBoard: FC = () => {
                   ...(expert.photoScale ? { transform: `scale(${expert.photoScale})` } : {}),
                 }}
               />
+              {/* Dark gradient at the base for legibility (replaces the old white fade). */}
               <div
-                className="absolute inset-0 bg-gradient-to-t from-white via-white/70 to-transparent"
+                className="absolute inset-0 bg-gradient-to-t from-[#0a0510] from-[1%] via-[rgba(10,5,16,0.55)] via-[34%] to-transparent to-[70%]"
                 aria-hidden
               />
-              <div className="absolute inset-x-0 bottom-0 flex flex-col gap-3 p-5">
-                <h3 className="font-serif text-[24px] font-semibold leading-tight text-[#161021]">
+              <div className="absolute inset-x-0 bottom-0 flex flex-col gap-4 p-4">
+                <h3 className="font-serif text-[25px] font-semibold leading-[28px] tracking-[-0.5px] text-white">
                   {expert.name}
                 </h3>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-col items-start gap-2">
                   {expert.tags.map((tag) => (
                     <span
                       key={tag}
-                      className="rounded-full border border-black/10 bg-black/[0.04] px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-[#3f3a4d]"
+                      className="rounded-full border border-white/25 bg-white/15 px-[17px] py-[5px] font-sans text-[12px] font-bold uppercase tracking-[1.2px] text-white shadow-[0_10px_15px_-3px_rgba(0,0,0,0.2),0_4px_6px_-4px_rgba(0,0,0,0.2)] backdrop-blur-[2px]"
                     >
                       {tag}
                     </span>
                   ))}
                 </div>
-                <p className="text-[12px] font-medium text-[#6b6678]">
-                  {expert.universities.join(" · ")}
-                </p>
+                <div className="flex h-12 items-center justify-evenly">{renderLogos(index)}</div>
               </div>
             </div>
           ))}

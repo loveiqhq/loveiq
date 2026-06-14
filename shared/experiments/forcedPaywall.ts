@@ -1,30 +1,33 @@
-import { pickClientVariant } from "./clientBucket";
-
 /**
- * Coupled report-paywall experiment.
+ * Coupled report-paywall — now FORCED for every identifiable report.
  *
- * One 50/50 split, keyed on the report token, drives BOTH treatments together:
- *   - "treatment" → the pre-report wizard shows an extra final slide AND the
- *     scroll-triggered pricing modal becomes non-closable (must pay).
- *   - "control"   → no extra slide; the scroll modal stays dismissible (today's
- *     behaviour — the user can close it and pay later).
+ * Originally a 50/50 A/B keyed on the report token (treatment = non-closable
+ * scroll modal + a must-pay final wizard slide; control = dismissible "pay
+ * later"). The experiment was concluded in favour of the forced experience, so
+ * every dark/unpaid report viewer now gets "treatment".
  *
- * Both surfaces (the wizard right after submit, and `/report/[token]`) key on
- * the SAME report token, so a given user lands in the same arm everywhere with
- * no server state. The wizard's `reportToken` (from `/api/survey`) is the exact
- * value used in the `/report/[token]` URL.
+ * White pay-first users never hit the forced modal (their report is already
+ * unlocked), and the pre-report wizard is told they've paid (`prepaidPaid`) so
+ * it keeps the soft "view your report" closing slide instead of the must-pay
+ * one. Two escape hatches remain in resolveReportPaywallCohort: the dev `?arm=`
+ * preview and the email-return softener (re-engagement links must never trap a
+ * returning user in a wall they can't close).
+ *
+ * Kept as a single resolver (not inlined) so the wizard, the report modal, and
+ * the server-side attribution stamp all agree on one value per report.
  */
 export const FORCED_PAYWALL_EXPERIMENT = "report-forced-paywall";
 
 export type ForcedPaywallCohort = "treatment" | "control";
 
 /**
- * Resolve the coupled paywall arm for a report token. Missing token → control
- * (we never force a user we can't deterministically bucket).
+ * Resolve the coupled paywall arm for a report token. Now 100% "treatment" for
+ * any identifiable report. A missing token can't be tied to a report, so it
+ * stays "control" — we never force a user we can't bucket, which also keeps
+ * null-token wizard/preview states soft.
  */
 export function getForcedPaywallCohort(token: string | null | undefined): ForcedPaywallCohort {
-  if (!token) return "control";
-  return pickClientVariant(token, FORCED_PAYWALL_EXPERIMENT) === "a" ? "treatment" : "control";
+  return token ? "treatment" : "control";
 }
 
 /**
@@ -47,7 +50,7 @@ export function resolveDevCohortOverride(
 
 /**
  * Resolve the effective paywall arm for a single `/report/[token]` visit,
- * layering the email-return escape hatch on top of the deterministic bucketing.
+ * layering the email-return escape hatch on top of the (now-forced) base arm.
  *
  * Precedence:
  *   1. `devArm` — dev-only `?arm=` preview override (null in production).
@@ -55,11 +58,11 @@ export function resolveDevCohortOverride(
  *      gets the soft "control" experience (dismissible scroll modal, blurred
  *      premium sections, pay-if-you-want) instead of the forced hard wall.
  *      Re-engagement emails should never slam a returning user with a paywall
- *      they can't close. This does NOT change the user's true assigned arm —
- *      the server still recomputes the deterministic arm from the token for
- *      pricing + `report_price_quote.forced_paywall_arm` attribution, so A/B
- *      analysis by assigned arm is unaffected.
- *   3. Otherwise the normal deterministic 50/50 bucketing on the token.
+ *      they can't close. The server still stamps the base arm onto
+ *      `report_price_quote.forced_paywall_arm` for attribution.
+ *   3. Otherwise "treatment" for any identifiable token — the forced paywall is
+ *      now the standard experience (the 50/50 A/B was concluded). Only a missing
+ *      token falls back to "control".
  */
 export function resolveReportPaywallCohort({
   devArm,
