@@ -84,7 +84,7 @@
     "@types/node": "^25.9.3",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
-    "@vitest/coverage-v8": "^4.1.8",
+    "@vitest/coverage-v8": "^4.1.9",
     "autoprefixer": "^10.5.0",
     "cspell": "9.8.0",
     "csv-parse": "^6.2.1",
