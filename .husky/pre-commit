@@ -1,2 +1,5 @@
+# Fast pre-commit: format + lint ONLY the staged files (lint-staged).
+# The full suite (lint + typecheck + ~2.3k tests + docs:check) runs ONCE at
+# pre-push, which is the real enforcement gate. Running all tests here too just
+# ran them twice per push for no benefit — you commit more often than you push.
 npx lint-staged
-npm test
