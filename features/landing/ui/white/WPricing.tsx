@@ -16,6 +16,11 @@ import {
 // before the test. Matches Figma node 7828:10838.
 const PRICE_LABEL = formatReportPurchasePrice(WHITE_PREPAID_PRICE_CENTS);
 const STRIKE_LABEL = formatReportPurchasePrice(WHITE_PREPAID_STRIKE_CENTS);
+// Computed from the same constants so the advertised discount is always correct
+// (€59 → €9.99 = 83% off) and can't drift if the price ever changes.
+const DISCOUNT_PERCENT = Math.round(
+  ((WHITE_PREPAID_STRIKE_CENTS - WHITE_PREPAID_PRICE_CENTS) / WHITE_PREPAID_STRIKE_CENTS) * 100
+);
 const receives = [
   "Your Core Archetype",
   "Other Archetype Probabilities",
@@ -60,7 +65,7 @@ const WPricing: FC = () => {
           </h2>
           <p className="mt-4 max-w-2xl text-[16px] leading-relaxed text-[#6b7280]">
             One assessment, one payment, lifetime access. No subscription, no account required,
-            anonymous by default — now 50% off.
+            anonymous by default — now {DISCOUNT_PERCENT}% off.
           </p>
         </div>
 
@@ -121,7 +126,7 @@ const WPricing: FC = () => {
                 Full personal report
               </span>
               <span className="rounded-full bg-[#1f9d57] px-2.5 py-1 text-[11px] font-bold text-white">
-                50% OFF
+                {DISCOUNT_PERCENT}% OFF
               </span>
             </div>
             <p className="mt-5 text-[15px] text-[#9a96a6]">
