@@ -449,6 +449,8 @@ describe("GET /api/cron/nurture-sequence", () => {
   });
 
   it("78h candidate sends the Calendly call invite, mints NO promo, logs booking_event", async () => {
+    // The 78h call-invite stage is gated off by default; enable it for this test.
+    process.env.NURTURE_78H_CALL_ENABLED = "true";
     const candidate = {
       id: 78,
       survey_submission_id: 780,
@@ -493,6 +495,7 @@ describe("GET /api/cron/nurture-sequence", () => {
   });
 
   it("78h candidate already sent is skipped (idempotent)", async () => {
+    process.env.NURTURE_78H_CALL_ENABLED = "true";
     const candidate = {
       id: 79,
       survey_submission_id: 790,
@@ -512,6 +515,30 @@ describe("GET /api/cron/nurture-sequence", () => {
     const body = await res.json();
     expect(body.summaries["78h_no_unlock"].sent).toBe(0);
     expect(body.summaries["78h_no_unlock"].skippedAlreadySent).toBe(1);
+    expect(mockResendSend).not.toHaveBeenCalled();
+  });
+
+  it("78h call invite is paused by default (NURTURE_78H_CALL_ENABLED unset)", async () => {
+    // No product person to take the calls → the stage is gated off unless the
+    // env flag is explicitly "true". A fresh 78h candidate must NOT be emailed.
+    const candidate = {
+      id: 81,
+      survey_submission_id: 810,
+      created_date_time: new Date(Date.now() - 78 * 60 * 60 * 1000).toISOString(),
+      survey_submission: { app_user: { email: "paused@example.com", first_name: "Pz" } },
+    };
+    mockCandidateWindows({
+      sixHour: [],
+      thirtyHour: [],
+      fiftyFourHour: [],
+      seventyEightHour: [candidate],
+      quoteMetadata: { nurtureEmailsSent: [] },
+    });
+
+    const res = await GET(makeRequest("test-cron-secret"));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.summaries["78h_no_unlock"].sent).toBe(0);
     expect(mockResendSend).not.toHaveBeenCalled();
   });
 });

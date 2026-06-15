@@ -1027,7 +1027,19 @@ export async function GET(request: Request) {
     await runSixHourStages(sixCandidates, ctx, summaries["6h_no_view"], summaries["6h_no_unlock"]);
     await runSingleStage(thirtyCandidates, "30h_no_unlock", ctx, summaries["30h_no_unlock"]);
     await runSingleStage(fiftyFourCandidates, "54h_no_unlock", ctx, summaries["54h_no_unlock"]);
-    await runSingleStage(seventyEightCandidates, "78h_no_unlock", ctx, summaries["78h_no_unlock"]);
+    // 78h call-invite is PAUSED: no product person is available to take the
+    // 20-minute calls right now, so we don't invite users to book one (the email
+    // + its `call_invite_sent` booking_event are skipped). The other four nurture
+    // stages keep running. Re-enable WITHOUT a code change by setting the Vercel
+    // env var NURTURE_78H_CALL_ENABLED to "true" once someone can take the calls.
+    if (process.env.NURTURE_78H_CALL_ENABLED === "true") {
+      await runSingleStage(
+        seventyEightCandidates,
+        "78h_no_unlock",
+        ctx,
+        summaries["78h_no_unlock"]
+      );
+    }
 
     // Run-level aggregate alert. Per-email failures are logged with `slack:false`
     // (no per-email api_5xx spam); here we surface them once per run WITH the
