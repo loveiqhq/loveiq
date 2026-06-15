@@ -198,38 +198,6 @@ input.autofill-dark:-internal-autofill-previewed {
   }
 }
 
-/* Ambient motion for the white-hero background logo/molecule graphic: a slow
-   drift + a softer breathing brand-gradient halo behind it, so the logo feels
-   alive rather than a static image. Reduced-motion users get the still image. */
-@keyframes logo-drift {
-  0%,
-  100% {
-    transform: translateY(0) rotate(0deg) scale(1);
-  }
-  50% {
-    transform: translateY(-12px) rotate(2.5deg) scale(1.03);
-  }
-}
-@keyframes logo-halo {
-  0%,
-  100% {
-    opacity: 0.4;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.8;
-    transform: scale(1.08);
-  }
-}
-@media (prefers-reduced-motion: no-preference) {
-  .animate-logo-drift {
-    animation: logo-drift 16s ease-in-out infinite;
-  }
-  .animate-logo-halo {
-    animation: logo-halo 10s ease-in-out infinite;
-  }
-}
-
 @keyframes pulse-glow {
   0%,
   100% {

@@ -19,10 +19,11 @@ const WHero: FC = () => {
     <section className="relative overflow-hidden bg-white pt-[64px]">
       <div className="content-shell relative">
         <div className="relative flex flex-col items-center gap-8 py-14 sm:gap-10 lg:py-24 xl:flex-row xl:justify-between xl:gap-6">
-          {/* Center: animated molecule "constellation" — archetype names + dimension
-              words appear/disappear one-by-one around the centered molecule. On
-              desktop it's the centered backdrop (behind copy + stats); on mobile it
-              sits in-flow between them. Single instance → one timer set. */}
+          {/* Center: animated "constellation" — archetype names + dimension words
+              appear/disappear one-by-one across a soft brand glow (the old molecule
+              image was removed for reading as too noisy). On desktop it's the
+              centered backdrop (behind copy + stats); on mobile it sits in-flow
+              between them. Single instance → one timer set. */}
           <WHeroConstellation className="order-2 w-full max-w-[320px] sm:max-w-[380px] xl:absolute xl:left-1/2 xl:top-1/2 xl:order-none xl:w-[clamp(380px,40vw,540px)] xl:max-w-none xl:-translate-x-1/2 xl:-translate-y-1/2" />
 
           {/* Left: copy */}

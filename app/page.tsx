@@ -116,12 +116,10 @@ export default async function Page() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: jsonLdString(academicBoardSchema) }}
       />
-      {/* Hero LCP preloads, per variant — the dark hero is video, the white hero
-          is a decorative image. Emitting only the active arm's asset avoids
-          fetching multi-MB videos on white-arm visits (and vice versa). */}
-      {variant === "white" ? (
-        <link rel="preload" as="image" href="/images/white/hero-bg.png" />
-      ) : (
+      {/* Hero LCP preload — the dark hero is video, so emit it only on the dark arm
+          (white visits don't fetch multi-MB videos). The white hero is now CSS-only
+          (animated labels + a gradient glow), so it has no asset to preload. */}
+      {variant !== "white" && (
         <>
           <link
             rel="preload"

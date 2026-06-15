@@ -4,10 +4,11 @@ import { useEffect, useRef, useState, type FC } from "react";
 
 /**
  * Hero "constellation" (Figma 7809-19694 + the LoveIQ Report Card animation
- * reference). The LoveIQ molecule sits centered (reusing /images/white/hero-bg.png,
- * which already bakes in the dot-cluster + faint rings + halo), and the product's
- * 14 archetype names and its dimension words gently appear and disappear ONE BY
- * ONE at varied spots around it — a living constellation.
+ * reference). A soft brand glow sits at the center and the product's 14 archetype
+ * names and its dimension words gently appear and disappear ONE BY ONE at varied
+ * spots ACROSS the whole square — including the center — a living constellation.
+ * (The old baked-in molecule image was removed for reading as too noisy; the glow
+ * is a single static radial gradient — no asset, no animation.)
  *
  * Motion language is lifted from the provided reference: fade + a small rise +
  * subtle scale, ~0.5s, cubic-bezier(.22,1,.36,1), staggered per position so labels
@@ -16,11 +17,10 @@ import { useEffect, useRef, useState, type FC } from "react";
  * Lenis smooth-scroll or the WArchetypeCards marquee. Pauses when scrolled out of
  * view, and respects prefers-reduced-motion (renders a calm static handful).
  *
- * Layout: on the wide desktop hero the molecule is the centered backdrop and the
- * labels ring it — each label's dot sits on the OUTER edge with its text flowing
- * INWARD toward the molecule, so text always moves away from the copy/stats columns
- * (collision-proof at any width). Below `xl` the hero stacks and labels appear
- * centered above/below the molecule.
+ * Layout: on the wide desktop hero the labels fill the centered square — each
+ * label's dot is anchored at its spot with text flowing INWARD toward the center,
+ * so text always moves away from the copy/stats columns (collision-proof at any
+ * width). Below `xl` the hero stacks and labels appear centered top-to-bottom.
  */
 
 const ARCHETYPES = [
@@ -61,28 +61,29 @@ type Item = { text: string; kind: "archetype" | "dimension" };
 // flow right (inward); x===50 is centered (used for the stacked mobile layout).
 type Position = { x: number; y: number };
 
-// A ring around the molecule: top, bottom, and the four diagonals. We deliberately
-// skip the 3-o'clock / 9-o'clock spots — at mid-height the inward-flowing text would
-// cross the dense dot-cluster (and the left dot would creep toward the copy on wide
-// screens). Left and right arcs are vertically offset (~10%) so two inward labels
-// never converge, and every spot avoids the cluster's y36–64 band.
+// Spots spread across the WHOLE square (the freed center is now used). Each dot
+// anchors at (x,y) and its text flows INWARD — x>50 → text grows left, x<50 → grows
+// right, x=50 → centered — so text always moves away from the copy (left) / stats
+// (right) columns. The two center fillers flow rightward (away from the copy column)
+// and are staggered vertically + horizontally from each other so two inward labels
+// never converge.
 const DESKTOP_POSITIONS: Position[] = [
-  { x: 50, y: 4 }, // top
-  { x: 76, y: 18 }, // upper right
-  { x: 76, y: 82 }, // lower right
-  { x: 50, y: 96 }, // bottom
-  { x: 24, y: 72 }, // lower left
-  { x: 24, y: 28 }, // upper left
+  { x: 50, y: 6 }, // top center
+  { x: 78, y: 24 }, // upper right
+  { x: 38, y: 42 }, // center-left filler
+  { x: 78, y: 76 }, // lower right
+  { x: 50, y: 94 }, // bottom center
+  { x: 22, y: 58 }, // center-left-low filler
 ];
 
-// Mobile: no room for a side ring, so labels stack centered above and below the
-// molecule (center-anchored → even long archetype names never overflow). Two above,
-// two below, well spaced so two visible at once won't touch.
+// Mobile: no room for a side ring, so labels stack centered and spread across the
+// full height (center included). Center-anchored → even long archetype names never
+// overflow; well spaced so two visible at once won't touch.
 const MOBILE_POSITIONS: Position[] = [
-  { x: 50, y: 1 },
-  { x: 50, y: 19 },
-  { x: 50, y: 81 },
-  { x: 50, y: 99 },
+  { x: 50, y: 8 },
+  { x: 50, y: 34 },
+  { x: 50, y: 62 },
+  { x: 50, y: 90 },
 ];
 
 const IN_MS = 520;
@@ -103,15 +104,17 @@ type SlotState = { item: Item | null; visible: boolean };
 const EMPTY_SLOT: SlotState = { item: null, visible: false };
 
 // Calm static set shown to reduced-motion users (no cycling).
+// Ordered so the two desktop center fillers (indices 2 and 5) land on SHORT
+// dimension words — keeps the freed core calm in the static (reduced-motion) view.
 const STATIC_SAMPLE: Item[] = [
-  { text: "Authority Conductor", kind: "archetype" },
-  { text: "Desire", kind: "dimension" },
-  { text: "Tender Devotee", kind: "archetype" },
-  { text: "Closeness", kind: "dimension" },
-  { text: "Spark Seeker", kind: "archetype" },
-  { text: "Openness", kind: "dimension" },
-  { text: "Loyal Ritualist", kind: "archetype" },
-  { text: "Novelty", kind: "dimension" },
+  { text: "Authority Conductor", kind: "archetype" }, // 0 top center
+  { text: "Desire", kind: "dimension" }, // 1 upper right
+  { text: "Closeness", kind: "dimension" }, // 2 center-left filler
+  { text: "Tender Devotee", kind: "archetype" }, // 3 lower right
+  { text: "Spark Seeker", kind: "archetype" }, // 4 bottom center
+  { text: "Openness", kind: "dimension" }, // 5 center-left-low filler
+  { text: "Loyal Ritualist", kind: "archetype" }, // 6 (extra / mobile)
+  { text: "Novelty", kind: "dimension" }, // 7 (extra / mobile)
 ];
 
 const Dot: FC = () => (
@@ -239,18 +242,24 @@ const WHeroConstellation: FC<{ className?: string }> = ({ className = "" }) => {
       className={`pointer-events-none relative aspect-square ${className}`}
       aria-hidden
     >
-      {/* Molecule + rings + halo (baked into the asset), centered. */}
-      <img
-        src="/images/white/hero-bg.png"
-        alt=""
-        className="animate-logo-drift absolute inset-0 h-full w-full object-contain"
+      {/* Soft brand glow at the center (replaces the old molecule image, which read
+          as too noisy). Static radial gradient — no asset, no animation. closest-side
+          keeps it inside the square and fully transparent by ~72% so it never
+          hard-edges against the white section. */}
+      <div
+        aria-hidden
+        className="absolute inset-0"
+        style={{
+          background:
+            "radial-gradient(closest-side at 50% 50%, rgba(207,90,251,0.1) 0%, rgba(255,106,58,0.07) 38%, rgba(255,255,255,0) 72%)",
+        }}
       />
 
       {rendered.map((s, i) => {
         const pos = positions[i]!;
         const isCenter = pos.x === 50;
         const onRight = pos.x > 50;
-        // Anchor the dot at (x, y); flow text inward toward the molecule.
+        // Anchor the dot at (x, y); flow text inward toward the center.
         const translate = isCenter
           ? "-translate-x-1/2 -translate-y-1/2"
           : onRight
