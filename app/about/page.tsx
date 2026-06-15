@@ -44,13 +44,6 @@ const teamSchema = {
   "@graph": [
     {
       "@type": "Person",
-      name: "Ema Djedović",
-      jobTitle: "Product Lead",
-      worksFor: { "@id": `${siteUrl}/#organization` },
-      sameAs: ["https://www.linkedin.com/in/ema-djedovic/"],
-    },
-    {
-      "@type": "Person",
       name: "Eman Cickusic",
       jobTitle: "Tech Lead",
       worksFor: { "@id": `${siteUrl}/#organization` },
@@ -62,13 +55,6 @@ const teamSchema = {
       jobTitle: "Full-Stack Engineer",
       worksFor: { "@id": `${siteUrl}/#organization` },
       sameAs: ["https://www.linkedin.com/in/ferhad-juki%C4%87-7a9049333/"],
-    },
-    {
-      "@type": "Person",
-      name: "Ismar Fazlić",
-      jobTitle: "Design Lead",
-      worksFor: { "@id": `${siteUrl}/#organization` },
-      sameAs: ["https://www.linkedin.com/in/ismar-fazlic/"],
     },
     {
       "@type": "Person",

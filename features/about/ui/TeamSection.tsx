@@ -34,16 +34,6 @@ const LinkedInIcon: FC = () => (
 const TeamSection: FC = () => {
   const team = [
     {
-      name: "Ema Djedović",
-      role: "Product Lead",
-      image: "/about/team-ema-djedovic.png",
-      linkedinUrl: "https://www.linkedin.com/in/ema-djedovic/",
-      socials: ["linkedin"],
-      hoverColor: "purple",
-      imageScale: 1,
-      imagePosition: "center 20%",
-    },
-    {
       name: "Eman Cickusic",
       role: "Tech Lead",
       image: "/about/team-eman-cickusic.png",
@@ -75,16 +65,6 @@ const TeamSection: FC = () => {
     //   imageScale: 1.05,
     //   imagePosition: "center 25%",
     // },
-    {
-      name: "Ismar Fazlić",
-      role: "Design Lead",
-      image: "/about/team-ismar-fazlic.png",
-      linkedinUrl: "https://www.linkedin.com/in/ismar-fazlic/",
-      socials: ["linkedin"],
-      hoverColor: "purple",
-      imageScale: 1.35,
-      imagePosition: "center 15%",
-    },
     {
       name: "Marcus Börner",
       role: "Strategy Lead",
