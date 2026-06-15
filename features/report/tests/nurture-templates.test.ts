@@ -153,7 +153,7 @@ describe("nurture email templates", () => {
 
   it("nurture-78h-no-unlock builds the call invite (no testimonial, no discount)", () => {
     const calendly =
-      "https://calendly.com/ema-djedovic-loveiq/20min?utm_campaign=78h_no_unlock&email=sam%40example.com";
+      "https://calendly.com/loveiq-team/20min?utm_campaign=78h_no_unlock&email=sam%40example.com";
     const out = nurture78hNoUnlockEmail({ firstName: "Sam", ctaUrl: calendly, siteUrl: SITE });
     expect(out.subject).toBe("A free archetype report for you, Sam");
     expect(out.html).toContain("Your next archetype report is on us");
@@ -173,7 +173,7 @@ describe("nurture email templates", () => {
   it("nurture-78h-no-unlock subject base form is <=50 chars and drops the name when absent", () => {
     const out = nurture78hNoUnlockEmail({
       firstName: null,
-      ctaUrl: "https://calendly.com/ema-djedovic-loveiq/20min",
+      ctaUrl: "https://calendly.com/loveiq-team/20min",
       siteUrl: SITE,
     });
     expect(out.subject).toBe("A free archetype report for you");
@@ -184,7 +184,7 @@ describe("nurture email templates", () => {
   it("nurture-78h-no-unlock escapes a hostile firstName in the HTML body", () => {
     const out = nurture78hNoUnlockEmail({
       firstName: "<script>alert(1)</script>",
-      ctaUrl: "https://calendly.com/ema-djedovic-loveiq/20min",
+      ctaUrl: "https://calendly.com/loveiq-team/20min",
       siteUrl: SITE,
     });
     expect(out.html).not.toContain("<script>alert(1)</script>");

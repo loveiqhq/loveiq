@@ -105,8 +105,14 @@ function resolveTimeBudgetMs(): number {
 type Stage = "6h_no_view" | "6h_no_unlock" | "30h_no_unlock" | "54h_no_unlock" | "78h_no_unlock";
 
 // Final-stage CTA target. The 78h email links OUT to Calendly (a 20-min call),
-// not to /report. Fixed booking URL — UTM + invitee prefill are appended per-send.
-const CALENDLY_CALL_URL = "https://calendly.com/ema-djedovic-loveiq/20min";
+// not to /report. The booking link is operator-specific (whoever takes the
+// calls), so it is read from NURTURE_78H_CALENDLY_URL at send time rather than
+// hardcoded — UTM + invitee prefill are appended per-send. Read at request time
+// (not module scope) so env changes take effect without a redeploy. When unset
+// the 78h stage stays paused (see the gate below) so no dead link is ever sent.
+function getCalendlyCallUrl(): string {
+  return process.env.NURTURE_78H_CALENDLY_URL?.trim() || "";
+}
 
 interface AgeWindow {
   minMs: number;
@@ -437,7 +443,7 @@ function buildCallCtaUrl({
   });
   const name = firstName?.trim();
   if (name) params.set("name", name);
-  return `${CALENDLY_CALL_URL}?${params.toString()}`;
+  return `${getCalendlyCallUrl()}?${params.toString()}`;
 }
 
 function renderEmail(input: Omit<SendInput, "resend">): {
@@ -1030,9 +1036,11 @@ export async function GET(request: Request) {
     // 78h call-invite is PAUSED: no product person is available to take the
     // 20-minute calls right now, so we don't invite users to book one (the email
     // + its `call_invite_sent` booking_event are skipped). The other four nurture
-    // stages keep running. Re-enable WITHOUT a code change by setting the Vercel
-    // env var NURTURE_78H_CALL_ENABLED to "true" once someone can take the calls.
-    if (process.env.NURTURE_78H_CALL_ENABLED === "true") {
+    // stages keep running. Re-enable WITHOUT a code change by setting BOTH Vercel
+    // env vars once someone can take the calls: NURTURE_78H_CALL_ENABLED to "true"
+    // AND NURTURE_78H_CALENDLY_URL to that person's Calendly booking link. If the
+    // URL is missing the stage stays paused so no dead booking link is ever sent.
+    if (process.env.NURTURE_78H_CALL_ENABLED === "true" && getCalendlyCallUrl()) {
       await runSingleStage(
         seventyEightCandidates,
         "78h_no_unlock",

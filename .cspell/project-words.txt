@@ -91,7 +91,6 @@ stabilises
 
 # People (git authors / team)
 Eman
-Ferhad
 Marcus
 
 # Misc identifiers appearing in prose

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Converts 14 per-archetype DOCX summary files → data/report-summary.ts
 // Run: node scripts/convert-summary-docx.js
-// Source: /home/ferhad/Downloads/Summaries 2-Page/
+// Source: the per-archetype "Summaries 2-Page" DOCX exports
 
 import mammoth from "mammoth";
 import { readdir, writeFile } from "fs/promises";

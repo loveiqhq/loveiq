@@ -13,7 +13,6 @@ updates:
     open-pull-requests-limit: 10
     reviewers: # Valid field - IDE may show false warning
       - "eman-cickusic"
-      - "FerhadJukicc"
     labels:
       - "dependencies"
       - "security"
@@ -42,7 +41,6 @@ updates:
       interval: "monthly"
     reviewers: # Valid field - IDE may show false warning
       - "eman-cickusic"
-      - "FerhadJukicc"
     labels:
       - "dependencies"
       - "github-actions"

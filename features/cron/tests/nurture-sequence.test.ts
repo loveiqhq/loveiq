@@ -449,8 +449,10 @@ describe("GET /api/cron/nurture-sequence", () => {
   });
 
   it("78h candidate sends the Calendly call invite, mints NO promo, logs booking_event", async () => {
-    // The 78h call-invite stage is gated off by default; enable it for this test.
+    // The 78h call-invite stage is gated off by default; enable it + provide the
+    // operator Calendly URL (now env-driven, no longer hardcoded) for this test.
     process.env.NURTURE_78H_CALL_ENABLED = "true";
+    process.env.NURTURE_78H_CALENDLY_URL = "https://calendly.com/loveiq-team/20min";
     const candidate = {
       id: 78,
       survey_submission_id: 780,
@@ -477,7 +479,7 @@ describe("GET /api/cron/nurture-sequence", () => {
     const sent = mockResendSend.mock.calls[0][0];
     expect(sent.to).toBe("call@example.com");
     expect(sent.headers["X-LoveIQ-Stage"]).toBe("78h_no_unlock");
-    expect(sent.html).toContain("calendly.com/ema-djedovic-loveiq/20min");
+    expect(sent.html).toContain("calendly.com/loveiq-team/20min");
     expect(sent.html).toContain("utm_campaign=78h_no_unlock");
     expect(sent.html).toContain("email=call%40example.com");
 
@@ -496,6 +498,7 @@ describe("GET /api/cron/nurture-sequence", () => {
 
   it("78h candidate already sent is skipped (idempotent)", async () => {
     process.env.NURTURE_78H_CALL_ENABLED = "true";
+    process.env.NURTURE_78H_CALENDLY_URL = "https://calendly.com/loveiq-team/20min";
     const candidate = {
       id: 79,
       survey_submission_id: 790,
@@ -526,6 +529,33 @@ describe("GET /api/cron/nurture-sequence", () => {
       survey_submission_id: 810,
       created_date_time: new Date(Date.now() - 78 * 60 * 60 * 1000).toISOString(),
       survey_submission: { app_user: { email: "paused@example.com", first_name: "Pz" } },
+    };
+    mockCandidateWindows({
+      sixHour: [],
+      thirtyHour: [],
+      fiftyFourHour: [],
+      seventyEightHour: [candidate],
+      quoteMetadata: { nurtureEmailsSent: [] },
+    });
+
+    const res = await GET(makeRequest("test-cron-secret"));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.summaries["78h_no_unlock"].sent).toBe(0);
+    expect(mockResendSend).not.toHaveBeenCalled();
+  });
+
+  it("78h stays paused when enabled but NURTURE_78H_CALENDLY_URL is unset (no dead link)", async () => {
+    // Belt-and-braces after the call host was offboarded: even with the stage
+    // flag flipped on, a missing booking URL must NOT send an email pointing at
+    // a dead/empty Calendly link. Set NURTURE_78H_CALENDLY_URL to re-enable.
+    process.env.NURTURE_78H_CALL_ENABLED = "true";
+    delete process.env.NURTURE_78H_CALENDLY_URL;
+    const candidate = {
+      id: 82,
+      survey_submission_id: 820,
+      created_date_time: new Date(Date.now() - 78 * 60 * 60 * 1000).toISOString(),
+      survey_submission: { app_user: { email: "nourl@example.com", first_name: "No" } },
     };
     mockCandidateWindows({
       sixHour: [],
