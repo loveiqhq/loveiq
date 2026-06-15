@@ -17,13 +17,48 @@ import { trackPrepaidCheckoutStarted, trackPrepaidGateViewed } from "@features/a
 import {
   WHITE_PREPAID_PRICE_CENTS,
   WHITE_PREPAID_STRIKE_CENTS,
-  formatReportPurchasePrice,
 } from "@features/checkout/server/reportPurchase";
+import ScrollPricingModal from "@features/report/ui/ScrollPricingModal";
+import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 
-// Single source of truth for the prepaid gate's displayed price — the SAME
-// constant the prepaid-checkout route charges, so display and charge can't drift.
-const PREPAID_PRICE_LABEL = formatReportPurchasePrice(WHITE_PREPAID_PRICE_CENTS);
-const PREPAID_STRIKE_LABEL = formatReportPurchasePrice(WHITE_PREPAID_STRIKE_CENTS);
+// Synthesized price quote for the pre-survey pay screen, built from the SAME
+// constants the prepaid-checkout route charges (so display and charge can't
+// drift). In preSurvey mode the report ScrollPricingModal reads only
+// currentPriceCents / msrpCents / currency for display; the rest are inert
+// placeholders (its report-funnel analytics are guarded off in preSurvey mode).
+const PREPAID_QUOTE: ReportPriceQuoteSnapshot = {
+  id: -1,
+  plan: "full_report",
+  currency: "EUR",
+  experimentGroup: "A",
+  basePriceBucket: "white_prepaid",
+  basePriceCents: WHITE_PREPAID_PRICE_CENTS,
+  msrpCents: WHITE_PREPAID_STRIKE_CENTS,
+  startingPriceCents: WHITE_PREPAID_PRICE_CENTS,
+  currentPriceCents: WHITE_PREPAID_PRICE_CENTS,
+  initialPriceCents: WHITE_PREPAID_PRICE_CENTS,
+  discountMultiplier: 1,
+  discountStep: 0,
+  pricingClusterId: "white_prepaid",
+  countryTier: "default",
+  countryMultiplier: 1,
+  deviceType: "Desktop",
+  deviceMultiplier: 1,
+  trafficSource: "direct",
+  trafficMultiplier: 1,
+  behavioralBucket: "zero",
+  behavioralMultiplier: 1,
+  engagementScore: 0,
+  engagementMultiplier: 1,
+  reportPreviewViews: 0,
+  fantasySignalCount: 0,
+  surveyDurationMs: null,
+  initialPriceTimestamp: "1970-01-01T00:00:00.000Z",
+  expiresAt: "1970-01-01T00:00:00.000Z",
+  checkoutStartedAt: null,
+  purchasedAt: null,
+  viewCount: 0,
+};
 
 /**
  * One-shot per-visitor-day ping that lands a `intro_slide_<N>` row in
@@ -1248,6 +1283,22 @@ const PrepaidUnlockGate: FC<{
 
   const busy = phase === "checking" || phase === "confirming" || phase === "starting";
 
+  // Ready phase: the full report-style pay screen — reuses the report
+  // ScrollPricingModal with the archetype card omitted and "Full Test" copy.
+  // Non-dismissible: white users MUST pay to take the test (no close / exit).
+  if (phase === "ready") {
+    return (
+      <ScrollPricingModal
+        preSurvey
+        open
+        dismissible={false}
+        onClose={() => undefined}
+        onCheckout={handlePay}
+        quote={PREPAID_QUOTE}
+      />
+    );
+  }
+
   return (
     <main
       className="relative flex min-h-dvh items-center justify-center overflow-hidden px-4"
@@ -1298,95 +1349,32 @@ const PrepaidUnlockGate: FC<{
             </p>
           </div>
         ) : (
-          <>
-            <div className="flex justify-center">
-              <div className="rounded-[14px] border border-[rgba(254,104,57,0.3)] bg-[rgba(254,104,57,0.1)] px-5 py-[10px] shadow-[0_0_20px_rgba(254,104,57,0.15)]">
-                <span className="text-[13px] font-bold uppercase tracking-[1.4px] text-[#fe6839]">
-                  Full report
-                </span>
-              </div>
-            </div>
-
-            <h2 className="mt-5 text-center font-serif text-[28px] font-medium leading-[36px] text-white sm:text-[34px]">
-              Unlock your full report
-            </h2>
-            <p className="mx-auto mt-3 max-w-[420px] text-center text-[15px] font-light leading-[25px] text-white/70">
-              Your personalized report is reserved the moment you unlock it. Pay once, then take the
-              assessment — your complete results open automatically when you finish.
-            </p>
-
-            <ul className="mx-auto mt-6 flex max-w-[360px] flex-col gap-3">
-              {[
-                "Your full sexual archetype, decoded",
-                "20+ in-depth, personalized chapters",
-                "Tailored growth paths & recommendations",
-                "14-day money-back guarantee",
-              ].map((feature) => (
-                <li key={feature} className="flex items-center gap-3 text-[14px] text-white/85">
-                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#fe6839]">
-                    <svg className="h-3 w-3 text-white" viewBox="0 0 14 14" fill="none" aria-hidden>
-                      <path
-                        d="M11.6667 3.5L5.25 9.91667L2.33333 7"
-                        stroke="currentColor"
-                        strokeWidth="2.2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  </span>
-                  {feature}
-                </li>
-              ))}
-            </ul>
-
-            <div className="mt-7 flex items-baseline justify-center gap-3">
-              {/* Same constants the server charges — display and charge can't drift. */}
-              <span className="font-serif text-[40px] font-semibold leading-none text-white">
-                {PREPAID_PRICE_LABEL}
-              </span>
-              <span className="text-[15px] font-medium text-white/40 line-through">
-                {PREPAID_STRIKE_LABEL}
-              </span>
-              <span className="text-[13px] font-medium text-white/50">one-time</span>
-            </div>
-
+          // Error phase only (busy handled above; "ready" returns the modal).
+          <div className="flex flex-col gap-5 py-4 text-center">
+            <h2 className="font-serif text-[22px] font-medium text-white">Something went wrong</h2>
             {errorMsg && (
               <p
                 role="alert"
-                className="mt-5 rounded-[12px] border border-[rgba(254,104,57,0.3)] bg-[rgba(254,104,57,0.08)] px-4 py-3 text-center text-[13.5px] text-[#ffb59e]"
+                className="rounded-[12px] border border-[rgba(254,104,57,0.3)] bg-[rgba(254,104,57,0.08)] px-4 py-3 text-[13.5px] text-[#ffb59e]"
               >
                 {errorMsg}
               </p>
             )}
-
             <button
               type="button"
               onClick={handlePay}
-              className="mt-6 w-full rounded-full bg-[#fe6839] py-[15px] text-[15px] font-bold tracking-[0.4px] text-white shadow-[0_12px_22px_rgba(254,104,57,0.28)] transition hover:-translate-y-[1px] hover:shadow-[0_16px_28px_rgba(254,104,57,0.34)] focus-visible-ring"
+              className="mt-1 w-full rounded-full bg-[#fe6839] py-[15px] text-[15px] font-bold tracking-[0.4px] text-white shadow-[0_12px_22px_rgba(254,104,57,0.28)] transition hover:-translate-y-[1px] focus-visible-ring"
             >
-              Pay &amp; start the test
+              Try again
             </button>
             <button
               type="button"
               onClick={onReturn}
-              className="mt-3 w-full rounded-full border border-white/10 py-[13px] text-[13px] font-bold tracking-[0.5px] text-white/55 transition hover:border-white/20 hover:text-white/80 focus-visible-ring"
+              className="w-full rounded-full border border-white/10 py-[13px] text-[13px] font-bold tracking-[0.5px] text-white/55 transition hover:border-white/20 hover:text-white/80 focus-visible-ring"
             >
               Return to site
             </button>
-
-            <p className="mt-5 flex items-center justify-center gap-1.5 text-[11px] font-medium text-white/35">
-              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" aria-hidden>
-                <path
-                  d="M6 10V8a6 6 0 1 1 12 0v2M5 10h14v10H5z"
-                  stroke="currentColor"
-                  strokeWidth="1.6"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-              Secure checkout powered by Stripe
-            </p>
-          </>
+          </div>
         )}
       </div>
     </main>

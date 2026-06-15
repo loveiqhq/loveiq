@@ -32,10 +32,14 @@ interface Props {
   open: boolean;
   onClose: () => void;
   onCheckout: () => void;
-  archetype: string;
-  userName: string | null;
-  theme: ReportTheme;
-  matchScore: number;
+  /**
+   * Archetype/result data. Required for the report paywall; OPTIONAL (and unused)
+   * in pre-survey mode, where there is no result yet and no archetype card.
+   */
+  archetype?: string;
+  userName?: string | null;
+  theme?: ReportTheme;
+  matchScore?: number;
   quote: ReportPriceQuoteSnapshot | null;
   /**
    * When false, the modal cannot be dismissed: the close button is hidden and
@@ -50,6 +54,14 @@ interface Props {
    * (control keeps the side-by-side layout).
    */
   flipDeck?: boolean;
+  /**
+   * Pre-survey mode (white A/B cohort, "pay to take the full test"). Renders the
+   * SAME paywall as the report — pricing card, why-cards, testimonials, chapter
+   * preview, footer CTA — but with NO archetype card / flip (no result exists
+   * yet) and "Full Test" copy. Every preSurvey-specific change is guarded so the
+   * report paywall (preSurvey=false) renders byte-identically. Defaults to false.
+   */
+  preSurvey?: boolean;
 }
 
 const FOCUSABLE_SELECTOR =
@@ -325,6 +337,7 @@ const ScrollPricingModal: FC<Props> = ({
   quote,
   dismissible = true,
   flipDeck = false,
+  preSurvey = false,
 }) => {
   const dialogRef = useRef<HTMLDivElement>(null);
   const scrollRegionRef = useRef<HTMLDivElement>(null);
@@ -397,10 +410,10 @@ const ScrollPricingModal: FC<Props> = ({
       shownFiredRef.current = false;
       return;
     }
-    if (shownFiredRef.current) return;
+    if (shownFiredRef.current || preSurvey) return;
     shownFiredRef.current = true;
     trackScrollPaywallShown({ surface: "report_scroll_paywall" });
-  }, [open]);
+  }, [open, preSurvey]);
 
   // Periodic nudge hint — only while front-facing, before the first flip, and
   // not for reduced-motion users. Stops permanently once the user flips.
@@ -471,7 +484,7 @@ const ScrollPricingModal: FC<Props> = ({
   }, [dismissible, open, quote]);
 
   useEffect(() => {
-    if (!open || priceShownFiredRef.current || !quote) return;
+    if (!open || priceShownFiredRef.current || !quote || preSurvey) return;
     priceShownFiredRef.current = true;
     trackPriceShown({
       plan: "full_report",
@@ -484,7 +497,7 @@ const ScrollPricingModal: FC<Props> = ({
       msrp: quote.msrpCents / 100,
       initial_price: quote.initialPriceCents / 100,
     });
-  }, [open, quote]);
+  }, [open, quote, preSurvey]);
 
   // ── Focus management ───────────────────────────────────────────────────────
 
@@ -615,12 +628,14 @@ const ScrollPricingModal: FC<Props> = ({
     : null;
 
   const displayName = userName ?? "Friend";
-  const matchPct = Math.min(100, Math.round(matchScore));
-  const ArchetypeIcon = theme.Icon;
+  const matchPct = Math.min(100, Math.round(matchScore ?? 0));
+  const ArchetypeIcon = theme?.Icon;
 
   const handleCtaClick = () => {
     checkoutInitiatedRef.current = true;
-    if (quote) {
+    // Pre-survey checkout is the prepaid funnel, not the report funnel — don't
+    // fire report begin_checkout (the gate tracks trackPrepaidCheckoutStarted).
+    if (quote && !preSurvey) {
       trackBeginCheckout("full_report", quote.currentPriceCents / 100, quote.currency);
     }
     onCheckout();
@@ -703,6 +718,7 @@ const ScrollPricingModal: FC<Props> = ({
     <div
       className={`report-pricing-modal ${open ? "is-visible" : "is-hidden"}`}
       data-state={open ? "open" : "closed"}
+      data-pre-survey={preSurvey || undefined}
       data-focus-mode={focusMode}
       aria-hidden={!open}
     >
@@ -788,7 +804,7 @@ const ScrollPricingModal: FC<Props> = ({
                       strokeLinejoin="round"
                     />
                   </svg>
-                  Assessment Complete
+                  {preSurvey ? "Assessment ready" : "Assessment Complete"}
                 </div>
               </div>
 
@@ -797,7 +813,7 @@ const ScrollPricingModal: FC<Props> = ({
                 id="scroll-teaser-title"
                 style={{
                   fontFamily: "var(--font-serif)",
-                  fontSize: "var(--rpm-h1)",
+                  fontSize: preSurvey ? "calc(var(--rpm-h1) * 0.8)" : "var(--rpm-h1)",
                   fontWeight: 400,
                   lineHeight: "var(--rpm-h1-line)",
                   letterSpacing: "-1.2px",
@@ -806,8 +822,18 @@ const ScrollPricingModal: FC<Props> = ({
                   color: "#fff",
                 }}
               >
-                <span style={{ color: "#a78bfa" }}>{displayName},</span>
-                {" you score highest with the following Archetype:"}
+                {preSurvey ? (
+                  <>
+                    Unlock the <span style={{ color: "#fe6839" }}>Full Test</span> to get started
+                    and receive your <span style={{ color: "#a78bfa" }}>Full Personal Report</span>{" "}
+                    the moment you finish.
+                  </>
+                ) : (
+                  <>
+                    <span style={{ color: "#a78bfa" }}>{displayName},</span>
+                    {" you score highest with the following Archetype:"}
+                  </>
+                )}
               </h2>
 
               {/* ── Hero: archetype + pricing card. Treatment (flipDeck) turns
@@ -828,6 +854,8 @@ const ScrollPricingModal: FC<Props> = ({
                         marginBottom: "40px",
                         alignItems: "stretch",
                         flexWrap: "wrap",
+                        // Pre-survey shows only the pricing card → center it.
+                        ...(preSurvey ? { justifyContent: "center" } : null),
                       }
                 }
               >
@@ -845,277 +873,271 @@ const ScrollPricingModal: FC<Props> = ({
                       : undefined
                   }
                 >
-                  <div
-                    ref={frontFaceRef}
-                    className={
-                      flipDeck ? "rpm-flip__face rpm-flip__face--front" : "rpm-hero-contents"
-                    }
-                    role={flipDeck ? "button" : undefined}
-                    tabIndex={flipDeck ? (flipped ? -1 : 0) : undefined}
-                    aria-label={flipDeck ? "Reveal your offer" : undefined}
-                    aria-hidden={flipDeck && flipped ? true : undefined}
-                    inert={flipDeck && flipped ? true : undefined}
-                    onClick={flipDeck ? flipCard : undefined}
-                    onKeyDown={
-                      flipDeck
-                        ? (e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              e.preventDefault();
-                              flipCard();
-                            }
-                          }
-                        : undefined
-                    }
-                  >
-                    {/* LEFT: Core Archetype Card — Figma 7128:18577 */}
+                  {/* Archetype (front) card — report paywall only; pre-survey has no
+                      result yet, so it's omitted and only the pricing card shows. */}
+                  {!preSurvey && theme && (
                     <div
-                      style={{
-                        flex: "1 1 280px",
-                        position: "relative",
-                        border: `1px solid ${theme.accent}`,
-                        background: "#130b17",
-                        borderRadius: "18px",
-                        padding: "var(--rpm-card-pad)",
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: "26px",
-                      }}
+                      ref={frontFaceRef}
+                      className={
+                        flipDeck ? "rpm-flip__face rpm-flip__face--front" : "rpm-hero-contents"
+                      }
+                      role={flipDeck ? "button" : undefined}
+                      tabIndex={flipDeck ? (flipped ? -1 : 0) : undefined}
+                      aria-label={flipDeck ? "Reveal your offer" : undefined}
+                      aria-hidden={flipDeck && flipped ? true : undefined}
+                      inert={flipDeck && flipped ? true : undefined}
+                      onClick={flipDeck ? flipCard : undefined}
+                      onKeyDown={
+                        flipDeck
+                          ? (e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                flipCard();
+                              }
+                            }
+                          : undefined
+                      }
                     >
-                      {/* Inner clip — keeps the two decorative accent orbs bounded
-                      by the card's rounded shape (Figma ellipses 7128:18586/18587). */}
-                      <div
-                        aria-hidden="true"
-                        style={{
-                          position: "absolute",
-                          inset: 0,
-                          borderRadius: "18px",
-                          overflow: "hidden",
-                          pointerEvents: "none",
-                        }}
-                      >
-                        <div
-                          style={{
-                            position: "absolute",
-                            top: "-80px",
-                            right: "-60px",
-                            width: "240px",
-                            height: "240px",
-                            borderRadius: "50%",
-                            background: `rgba(${theme.accentRgb} / 0.28)`,
-                            filter: "blur(50px)",
-                          }}
-                        />
-                        <div
-                          style={{
-                            position: "absolute",
-                            bottom: "-80px",
-                            left: "-60px",
-                            width: "240px",
-                            height: "240px",
-                            borderRadius: "50%",
-                            background: `rgba(${theme.accentRgb} / 0.28)`,
-                            filter: "blur(50px)",
-                          }}
-                        />
-                      </div>
-
-                      {/* Header row: tag left, match strength right */}
+                      {/* LEFT: Core Archetype Card — Figma 7128:18577 */}
                       <div
                         style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "flex-start",
-                          gap: "20px",
-                          flexWrap: "wrap",
+                          flex: "1 1 280px",
                           position: "relative",
-                        }}
-                      >
-                        <div
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            padding: "9px 17px",
-                            borderRadius: "9999px",
-                            border: `0.75px solid rgba(${theme.accentRgb} / 0.2)`,
-                            background: `rgba(${theme.accentRgb} / 0.1)`,
-                            color: theme.accent,
-                            fontFamily: "var(--font-sans)",
-                            fontSize: "var(--rpm-card-tag)",
-                            fontWeight: 500,
-                            lineHeight: 1,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          Your Core Archetype
-                        </div>
-
-                        {/* Match Strength (top-right of card) */}
-                        <div
-                          className="rpm-match-strength"
-                          style={{ textAlign: "right", minWidth: "140px", flex: "0 1 auto" }}
-                        >
-                          <div className="rpm-match-strength__head">
-                            <div
-                              className="rpm-match-strength__label"
-                              style={{
-                                fontFamily: "var(--font-sans)",
-                                fontSize: "var(--rpm-match-label)",
-                                color: "rgba(255,255,255,0.5)",
-                                marginBottom: "6px",
-                                fontWeight: 500,
-                                lineHeight: 1,
-                              }}
-                            >
-                              Match Strength
-                            </div>
-                            <div
-                              className="rpm-match-strength__value"
-                              style={{
-                                fontFamily: "var(--font-serif)",
-                                fontSize: "var(--rpm-match-value)",
-                                fontWeight: 500,
-                                color: "#fff",
-                                lineHeight: 1,
-                                marginBottom: "8px",
-                              }}
-                            >
-                              {matchPct}%
-                            </div>
-                          </div>
-                          <div
-                            style={{
-                              width: "100%",
-                              height: "8px",
-                              borderRadius: "9999px",
-                              background: "rgba(255,255,255,0.1)",
-                              overflow: "hidden",
-                            }}
-                          >
-                            <div
-                              style={{
-                                height: "100%",
-                                width: `${matchPct}%`,
-                                borderRadius: "9999px",
-                                background:
-                                  "linear-gradient(to right, #fe6839 6.83%, #a78bfa 37.63%, #e9d5ff 100%)",
-                              }}
-                            />
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Archetype identity row — icon + (name + motto) */}
-                      <div
-                        style={{
+                          border: `1px solid ${theme.accent}`,
+                          background: "#130b17",
+                          borderRadius: "18px",
+                          padding: "var(--rpm-card-pad)",
                           display: "flex",
-                          gap: "16px",
-                          alignItems: "flex-start",
+                          flexDirection: "column",
+                          gap: "26px",
                         }}
                       >
-                        {/* Archetype icon (Figma 7022:23082 — 48×48 box on mobile) */}
+                        {/* Inner clip — keeps the two decorative accent orbs bounded
+                      by the card's rounded shape (Figma ellipses 7128:18586/18587). */}
                         <div
                           aria-hidden="true"
                           style={{
-                            flexShrink: 0,
-                            width: "var(--rpm-archetype-icon, 64px)",
-                            height: "var(--rpm-archetype-icon, 64px)",
-                            padding: "calc(var(--rpm-archetype-icon, 64px) * 0.2)",
-                            borderRadius: "16px",
-                            background: theme.iconBackground,
-                            color: "#fff",
-                            display: "inline-flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            boxSizing: "border-box",
+                            position: "absolute",
+                            inset: 0,
+                            borderRadius: "18px",
+                            overflow: "hidden",
+                            pointerEvents: "none",
                           }}
                         >
-                          <ArchetypeIcon
-                            width="100%"
-                            height="100%"
-                            style={{ display: "block", color: "#fff" }}
+                          <div
+                            style={{
+                              position: "absolute",
+                              top: "-80px",
+                              right: "-60px",
+                              width: "240px",
+                              height: "240px",
+                              borderRadius: "50%",
+                              background: `rgba(${theme.accentRgb} / 0.28)`,
+                              filter: "blur(50px)",
+                            }}
+                          />
+                          <div
+                            style={{
+                              position: "absolute",
+                              bottom: "-80px",
+                              left: "-60px",
+                              width: "240px",
+                              height: "240px",
+                              borderRadius: "50%",
+                              background: `rgba(${theme.accentRgb} / 0.28)`,
+                              filter: "blur(50px)",
+                            }}
                           />
                         </div>
 
+                        {/* Header row: tag left, match strength right */}
                         <div
                           style={{
-                            flex: "1 1 auto",
-                            minWidth: 0,
                             display: "flex",
-                            flexDirection: "column",
-                            gap: "8px",
+                            justifyContent: "space-between",
+                            alignItems: "flex-start",
+                            gap: "20px",
+                            flexWrap: "wrap",
+                            position: "relative",
                           }}
                         >
-                          {/* Archetype name */}
                           <div
                             style={{
-                              fontFamily: "var(--font-serif)",
-                              fontSize: "var(--rpm-archetype)",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              padding: "9px 17px",
+                              borderRadius: "9999px",
+                              border: `0.75px solid rgba(${theme.accentRgb} / 0.2)`,
+                              background: `rgba(${theme.accentRgb} / 0.1)`,
+                              color: theme.accent,
+                              fontFamily: "var(--font-sans)",
+                              fontSize: "var(--rpm-card-tag)",
                               fontWeight: 500,
-                              color: "#fff",
-                              lineHeight: "var(--rpm-archetype-line)",
-                              letterSpacing: "-1px",
+                              lineHeight: 1,
+                              whiteSpace: "nowrap",
                             }}
                           >
-                            {archetype}
+                            Your Core Archetype
                           </div>
 
-                          {/* Motto */}
+                          {/* Match Strength (top-right of card) */}
                           <div
-                            style={{
-                              fontFamily: "var(--font-sans)",
-                              fontSize: "var(--rpm-motto)",
-                              lineHeight: 1.35,
-                              color: "#fff",
-                            }}
+                            className="rpm-match-strength"
+                            style={{ textAlign: "right", minWidth: "140px", flex: "0 1 auto" }}
                           >
-                            <span style={{ fontWeight: 300, color: "#d1d5db" }}>Motto: </span>
-                            <span style={{ fontWeight: 400 }}>{theme.motto}</span>
+                            <div className="rpm-match-strength__head">
+                              <div
+                                className="rpm-match-strength__label"
+                                style={{
+                                  fontFamily: "var(--font-sans)",
+                                  fontSize: "var(--rpm-match-label)",
+                                  color: "rgba(255,255,255,0.5)",
+                                  marginBottom: "6px",
+                                  fontWeight: 500,
+                                  lineHeight: 1,
+                                }}
+                              >
+                                Match Strength
+                              </div>
+                              <div
+                                className="rpm-match-strength__value"
+                                style={{
+                                  fontFamily: "var(--font-serif)",
+                                  fontSize: "var(--rpm-match-value)",
+                                  fontWeight: 500,
+                                  color: "#fff",
+                                  lineHeight: 1,
+                                  marginBottom: "8px",
+                                }}
+                              >
+                                {matchPct}%
+                              </div>
+                            </div>
+                            <div
+                              style={{
+                                width: "100%",
+                                height: "8px",
+                                borderRadius: "9999px",
+                                background: "rgba(255,255,255,0.1)",
+                                overflow: "hidden",
+                              }}
+                            >
+                              <div
+                                style={{
+                                  height: "100%",
+                                  width: `${matchPct}%`,
+                                  borderRadius: "9999px",
+                                  background:
+                                    "linear-gradient(to right, #fe6839 6.83%, #a78bfa 37.63%, #e9d5ff 100%)",
+                                }}
+                              />
+                            </div>
                           </div>
                         </div>
-                      </div>
 
-                      {/* Behavioral tendencies label */}
-                      <div
-                        style={{
-                          fontFamily: "var(--font-sans)",
-                          fontSize: "var(--rpm-behavioral-label)",
-                          fontWeight: 400,
-                          color: "#fff",
-                          lineHeight: 1,
-                        }}
-                      >
-                        Behavioral tendencies:
-                      </div>
-
-                      {/* Core motivation — large boxed pill (Figma 7128:18590) */}
-                      <div
-                        style={{
-                          border: `0.75px solid ${theme.accent}`,
-                          borderRadius: "12px",
-                          padding: "18px",
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "16px",
-                        }}
-                      >
-                        {/* Concentric ring icon */}
-                        <span
-                          aria-hidden="true"
+                        {/* Archetype identity row — icon + (name + motto) */}
+                        <div
                           style={{
-                            flexShrink: 0,
-                            width: "42px",
-                            height: "42px",
-                            borderRadius: "50%",
-                            border: `0.75px solid ${theme.accent}`,
-                            display: "inline-flex",
-                            alignItems: "center",
-                            justifyContent: "center",
+                            display: "flex",
+                            gap: "16px",
+                            alignItems: "flex-start",
                           }}
                         >
-                          <span
+                          {/* Archetype icon (Figma 7022:23082 — 48×48 box on mobile) */}
+                          <div
+                            aria-hidden="true"
                             style={{
-                              width: "22px",
-                              height: "22px",
+                              flexShrink: 0,
+                              width: "var(--rpm-archetype-icon, 64px)",
+                              height: "var(--rpm-archetype-icon, 64px)",
+                              padding: "calc(var(--rpm-archetype-icon, 64px) * 0.2)",
+                              borderRadius: "16px",
+                              background: theme.iconBackground,
+                              color: "#fff",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              boxSizing: "border-box",
+                            }}
+                          >
+                            {ArchetypeIcon && (
+                              <ArchetypeIcon
+                                width="100%"
+                                height="100%"
+                                style={{ display: "block", color: "#fff" }}
+                              />
+                            )}
+                          </div>
+
+                          <div
+                            style={{
+                              flex: "1 1 auto",
+                              minWidth: 0,
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "8px",
+                            }}
+                          >
+                            {/* Archetype name */}
+                            <div
+                              style={{
+                                fontFamily: "var(--font-serif)",
+                                fontSize: "var(--rpm-archetype)",
+                                fontWeight: 500,
+                                color: "#fff",
+                                lineHeight: "var(--rpm-archetype-line)",
+                                letterSpacing: "-1px",
+                              }}
+                            >
+                              {archetype}
+                            </div>
+
+                            {/* Motto */}
+                            <div
+                              style={{
+                                fontFamily: "var(--font-sans)",
+                                fontSize: "var(--rpm-motto)",
+                                lineHeight: 1.35,
+                                color: "#fff",
+                              }}
+                            >
+                              <span style={{ fontWeight: 300, color: "#d1d5db" }}>Motto: </span>
+                              <span style={{ fontWeight: 400 }}>{theme.motto}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Behavioral tendencies label */}
+                        <div
+                          style={{
+                            fontFamily: "var(--font-sans)",
+                            fontSize: "var(--rpm-behavioral-label)",
+                            fontWeight: 400,
+                            color: "#fff",
+                            lineHeight: 1,
+                          }}
+                        >
+                          Behavioral tendencies:
+                        </div>
+
+                        {/* Core motivation — large boxed pill (Figma 7128:18590) */}
+                        <div
+                          style={{
+                            border: `0.75px solid ${theme.accent}`,
+                            borderRadius: "12px",
+                            padding: "18px",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "16px",
+                          }}
+                        >
+                          {/* Concentric ring icon */}
+                          <span
+                            aria-hidden="true"
+                            style={{
+                              flexShrink: 0,
+                              width: "42px",
+                              height: "42px",
                               borderRadius: "50%",
                               border: `0.75px solid ${theme.accent}`,
                               display: "inline-flex",
@@ -1125,149 +1147,166 @@ const ScrollPricingModal: FC<Props> = ({
                           >
                             <span
                               style={{
-                                width: "10px",
-                                height: "10px",
+                                width: "22px",
+                                height: "22px",
                                 borderRadius: "50%",
-                                background: theme.accent,
-                              }}
-                            />
-                          </span>
-                        </span>
-                        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                          <span
-                            style={{
-                              fontFamily: "var(--font-sans)",
-                              fontSize: "var(--rpm-core-mot-label)",
-                              fontWeight: 400,
-                              color: theme.accent,
-                              lineHeight: 1,
-                            }}
-                          >
-                            Core motivation:
-                          </span>
-                          <span
-                            style={{
-                              fontFamily: "var(--font-serif)",
-                              fontSize: "var(--rpm-core-mot-value)",
-                              fontWeight: 500,
-                              color: "#fff",
-                              lineHeight: 1.1,
-                            }}
-                          >
-                            {theme.motivation}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* 2×2 traits grid */}
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "1fr 1fr",
-                          columnGap: "32px",
-                          rowGap: "32px",
-                        }}
-                      >
-                        {(
-                          [
-                            {
-                              label: "Communication",
-                              value: theme.communication,
-                              Icon: TraitIcons.communication,
-                            },
-                            {
-                              label: "Initiation",
-                              value: theme.initiation,
-                              Icon: TraitIcons.initiation,
-                            },
-                            {
-                              label: "Attachment",
-                              value: theme.attachment,
-                              Icon: TraitIcons.attachment,
-                            },
-                            {
-                              label: "Power orientation",
-                              value: theme.powerOrientation,
-                              Icon: TraitIcons.powerOrientation,
-                            },
-                          ] as const
-                        ).map(({ label, value, Icon }) => (
-                          <div
-                            key={label}
-                            style={{ display: "flex", flexDirection: "column", gap: "10px" }}
-                          >
-                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                              <span
-                                aria-hidden="true"
-                                style={{
-                                  width: "18px",
-                                  height: "18px",
-                                  color: theme.accent,
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  justifyContent: "center",
-                                  flexShrink: 0,
-                                }}
-                              >
-                                <Icon width={18} height={18} />
-                              </span>
-                              <span
-                                style={{
-                                  fontFamily: "var(--font-sans)",
-                                  fontSize: "var(--rpm-trait-label)",
-                                  fontWeight: 400,
-                                  color: "#fff",
-                                  lineHeight: 1,
-                                }}
-                              >
-                                {label}
-                              </span>
-                            </div>
-                            <div
-                              style={{
-                                fontFamily: "var(--font-serif)",
-                                fontSize: "var(--rpm-trait-value)",
-                                fontWeight: 500,
-                                color: "#fff",
-                                lineHeight: 1.2,
+                                border: `0.75px solid ${theme.accent}`,
+                                display: "inline-flex",
+                                alignItems: "center",
+                                justifyContent: "center",
                               }}
                             >
-                              {value}
-                            </div>
+                              <span
+                                style={{
+                                  width: "10px",
+                                  height: "10px",
+                                  borderRadius: "50%",
+                                  background: theme.accent,
+                                }}
+                              />
+                            </span>
+                          </span>
+                          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                            <span
+                              style={{
+                                fontFamily: "var(--font-sans)",
+                                fontSize: "var(--rpm-core-mot-label)",
+                                fontWeight: 400,
+                                color: theme.accent,
+                                lineHeight: 1,
+                              }}
+                            >
+                              Core motivation:
+                            </span>
+                            <span
+                              style={{
+                                fontFamily: "var(--font-serif)",
+                                fontSize: "var(--rpm-core-mot-value)",
+                                fontWeight: 500,
+                                color: "#fff",
+                                lineHeight: 1.1,
+                              }}
+                            >
+                              {theme.motivation}
+                            </span>
                           </div>
-                        ))}
-                      </div>
+                        </div>
 
-                      {/* Risk + confidence bars */}
-                      <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-                        <SegmentBar
-                          label="Risk orientation"
-                          segments={theme.riskSegments}
-                          value={theme.riskOrientation}
-                          color={theme.accent}
-                        />
-                        <SegmentBar
-                          label="Typical confidence"
-                          segments={theme.confidenceSegments}
-                          value={theme.confidence}
-                          color={theme.accent}
-                        />
-                      </div>
-                    </div>
-                    {flipDeck && !flipped && (
-                      <div className="rpm-flip__hint" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path
-                            d="M3 12a9 9 0 1 0 3-6.7L3 8"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
+                        {/* 2×2 traits grid */}
+                        <div
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns: "1fr 1fr",
+                            columnGap: "32px",
+                            rowGap: "32px",
+                          }}
+                        >
+                          {(
+                            [
+                              {
+                                label: "Communication",
+                                value: theme.communication,
+                                Icon: TraitIcons.communication,
+                              },
+                              {
+                                label: "Initiation",
+                                value: theme.initiation,
+                                Icon: TraitIcons.initiation,
+                              },
+                              {
+                                label: "Attachment",
+                                value: theme.attachment,
+                                Icon: TraitIcons.attachment,
+                              },
+                              {
+                                label: "Power orientation",
+                                value: theme.powerOrientation,
+                                Icon: TraitIcons.powerOrientation,
+                              },
+                            ] as const
+                          ).map(({ label, value, Icon }) => (
+                            <div
+                              key={label}
+                              style={{ display: "flex", flexDirection: "column", gap: "10px" }}
+                            >
+                              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                <span
+                                  aria-hidden="true"
+                                  style={{
+                                    width: "18px",
+                                    height: "18px",
+                                    color: theme.accent,
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    flexShrink: 0,
+                                  }}
+                                >
+                                  <Icon width={18} height={18} />
+                                </span>
+                                <span
+                                  style={{
+                                    fontFamily: "var(--font-sans)",
+                                    fontSize: "var(--rpm-trait-label)",
+                                    fontWeight: 400,
+                                    color: "#fff",
+                                    lineHeight: 1,
+                                  }}
+                                >
+                                  {label}
+                                </span>
+                              </div>
+                              <div
+                                style={{
+                                  fontFamily: "var(--font-serif)",
+                                  fontSize: "var(--rpm-trait-value)",
+                                  fontWeight: 500,
+                                  color: "#fff",
+                                  lineHeight: 1.2,
+                                }}
+                              >
+                                {value}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Risk + confidence bars */}
+                        <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+                          <SegmentBar
+                            label="Risk orientation"
+                            segments={theme.riskSegments}
+                            value={theme.riskOrientation}
+                            color={theme.accent}
                           />
-                          <path d="M3 4v4h4" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                        <span>Tap to see your offer</span>
+                          <SegmentBar
+                            label="Typical confidence"
+                            segments={theme.confidenceSegments}
+                            value={theme.confidence}
+                            color={theme.accent}
+                          />
+                        </div>
                       </div>
-                    )}
-                  </div>
+                      {flipDeck && !flipped && (
+                        <div className="rpm-flip__hint" aria-hidden="true">
+                          <svg
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                          >
+                            <path
+                              d="M3 12a9 9 0 1 0 3-6.7L3 8"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                            <path d="M3 4v4h4" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                          <span>Tap to see your offer</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   <div
                     ref={backFaceRef}
@@ -1292,7 +1331,9 @@ const ScrollPricingModal: FC<Props> = ({
                     <div
                       className="rpm-pricing-card"
                       style={{
-                        flex: "1 1 280px",
+                        // Pre-survey: solo centered card (don't grow full-width).
+                        flex: preSurvey ? "0 1 440px" : "1 1 280px",
+                        maxWidth: preSurvey ? "440px" : undefined,
                         position: "relative",
                         border: "1px solid rgba(85,101,247,0.68)",
                         // On the flipped face, drop the backdrop blur and use a
@@ -1303,11 +1344,11 @@ const ScrollPricingModal: FC<Props> = ({
                         backdropFilter: flipDeck ? "none" : "blur(12px)",
                         WebkitBackdropFilter: flipDeck ? "none" : "blur(12px)",
                         borderRadius: "16px",
-                        padding: "49px 33px 41px",
+                        padding: preSurvey ? "32px 26px 28px" : "49px 33px 41px",
                         boxShadow: "0px 0px 30px 0px rgba(168,85,247,0.1)",
                         display: "flex",
                         flexDirection: "column",
-                        gap: "40px",
+                        gap: preSurvey ? "26px" : "40px",
                       }}
                     >
                       {/* Inner clip — keeps decorative blur inside the rounded card
@@ -1343,9 +1384,9 @@ const ScrollPricingModal: FC<Props> = ({
                           style={{
                             position: "absolute",
                             top: flipDeck ? "-16px" : "-21px",
-                            // Flip mock places the single discount badge top-right.
-                            left: flipDeck ? undefined : "24px",
-                            right: flipDeck ? "24px" : undefined,
+                            // Flip mock + pre-survey place the single discount badge top-right.
+                            left: flipDeck || preSurvey ? undefined : "24px",
+                            right: flipDeck || preSurvey ? "24px" : undefined,
                             padding: "10px 18px",
                             borderRadius: "9999px",
                             // Flip mock: translucent green + blur, white label.
@@ -1368,7 +1409,7 @@ const ScrollPricingModal: FC<Props> = ({
                           {badge}
                         </div>
                       )}
-                      {!flipDeck && (
+                      {!flipDeck && !preSurvey && (
                         <div
                           className="rpm-pricing-badge--popular"
                           style={{
@@ -1411,7 +1452,12 @@ const ScrollPricingModal: FC<Props> = ({
                             margin: 0,
                           }}
                         >
-                          {flipDeck ? (
+                          {preSurvey ? (
+                            <>
+                              Unlock the{" "}
+                              <span style={{ color: "#fe6839", fontWeight: 700 }}>Full Test</span>
+                            </>
+                          ) : flipDeck ? (
                             <>
                               Unlock your{" "}
                               <span style={{ fontWeight: 700 }}>Full Personal Report</span> now
@@ -1509,8 +1555,8 @@ const ScrollPricingModal: FC<Props> = ({
                             >
                               14-day money-back guarantee
                             </span>
-                            {/* Flip mock drops the "- no discussions" tail. */}
-                            {!flipDeck && (
+                            {/* Flip mock + pre-survey drop the "- no discussions" tail. */}
+                            {!flipDeck && !preSurvey && (
                               <span
                                 style={{
                                   fontFamily: "var(--font-sans)",
@@ -1539,6 +1585,15 @@ const ScrollPricingModal: FC<Props> = ({
                         >
                           {(
                             [
+                              // Pre-survey only: the test itself is the first benefit.
+                              ...(preSurvey
+                                ? [
+                                    {
+                                      lead: "The complete 15-minute deep-dive assessment",
+                                      tail: "",
+                                    },
+                                  ]
+                                : []),
                               { lead: "+50 pages", tail: " of deep insights into your sexuality" },
                               { lead: "Results based on +100 science papers", tail: "" },
                               {
@@ -1550,7 +1605,7 @@ const ScrollPricingModal: FC<Props> = ({
                                 tail: " & suggestions to improve your sexlife",
                               },
                               { lead: "Share your report", tail: " with up to 2 extra e-mails" },
-                            ] as const
+                            ] as Array<{ lead: string; tail: string }>
                           ).map(({ lead, tail }) => (
                             <li
                               key={lead}
@@ -1581,20 +1636,20 @@ const ScrollPricingModal: FC<Props> = ({
                           onClick={handleCtaClick}
                           style={{
                             width: "100%",
-                            maxWidth: "460px",
-                            padding: flipDeck ? "14px 28px" : "20px 24px",
+                            maxWidth: preSurvey ? "300px" : "460px",
+                            padding: preSurvey ? "13px 24px" : flipDeck ? "14px 28px" : "20px 24px",
                             borderRadius: "9999px",
                             background: "#ff6a3d",
                             border: "1px solid rgba(255,255,255,0.4)",
                             color: "#fff",
                             fontFamily: "var(--font-sans)",
-                            fontSize: "var(--rpm-cta-label)",
+                            fontSize: preSurvey ? "15px" : "var(--rpm-cta-label)",
                             fontWeight: 700,
                             cursor: "pointer",
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "center",
-                            gap: "16px",
+                            gap: preSurvey ? "10px" : "16px",
                             filter: "drop-shadow(0px 3px 12.65px #ff6a3d)",
                             lineHeight: 1,
                           }}
@@ -1602,7 +1657,11 @@ const ScrollPricingModal: FC<Props> = ({
                           <span className="rpm-cta__wash" aria-hidden="true" />
                           <span className="rpm-cta__reveal" aria-hidden="true" />
                           <span className="rpm-cta__label">
-                            {flipDeck ? "Unlock your full report" : "Unlock full report"}
+                            {preSurvey
+                              ? "Take the test"
+                              : flipDeck
+                                ? "Unlock your full report"
+                                : "Unlock full report"}
                           </span>
                           <svg
                             className="rpm-cta__arrow"
@@ -1765,9 +1824,10 @@ const ScrollPricingModal: FC<Props> = ({
                     marginBottom: "40px",
                   }}
                 >
-                  Why unlock the <span className="rpm-why-mobile-br" aria-hidden="true" />
+                  {preSurvey ? "Why take the " : "Why unlock the "}
+                  <span className="rpm-why-mobile-br" aria-hidden="true" />
                   <em style={{ color: "#a78bfa", fontStyle: "italic", fontWeight: 700 }}>
-                    Full Report
+                    {preSurvey ? "Full Test" : "Full Report"}
                   </em>
                   <span className="rpm-why-desktop-space"> </span>?
                 </h3>
@@ -2450,7 +2510,9 @@ const ScrollPricingModal: FC<Props> = ({
                     >
                       <span className="rpm-cta__wash" aria-hidden="true" />
                       <span className="rpm-cta__reveal" aria-hidden="true" />
-                      <span className="rpm-cta__label">Unlock full report</span>
+                      <span className="rpm-cta__label">
+                        {preSurvey ? "Take the test" : "Unlock full report"}
+                      </span>
                       <svg
                         className="rpm-cta__arrow"
                         width="14"
@@ -2570,34 +2632,46 @@ const ScrollPricingModal: FC<Props> = ({
               <section className="rpm-end-cta" aria-labelledby="rpm-end-cta-heading">
                 <div className="rpm-end-cta__inner">
                   <h3 id="rpm-end-cta-heading" className="rpm-end-cta__heading">
-                    Ready to dive deep?
+                    {preSurvey ? "Ready to meet yourself?" : "Ready to dive deep?"}
                   </h3>
                   <div className="rpm-end-cta__stats">
-                    <p className="rpm-end-cta__stats-line">
-                      <span className="rpm-end-cta__stats-num">32</span>
-                      <span className="rpm-end-cta__stats-text"> chapters. </span>
-                      <span className="rpm-end-cta__stats-num">~50</span>
-                      <span className="rpm-end-cta__stats-text"> pages. </span>
-                      <span className="rpm-end-cta__stats-num">
-                        {quote ? formatReportPurchasePrice(quote.currentPriceCents) : "€9.99"}
-                      </span>
-                      <span className="rpm-end-cta__stats-text"> once, yours forever.</span>
-                    </p>
-                    <p className="rpm-end-cta__stats-line">
-                      <span className="rpm-end-cta__stats-num">14-day money-back</span>
-                      <span className="rpm-end-cta__stats-text"> if it&rsquo;s not for you.</span>
-                    </p>
+                    {preSurvey ? (
+                      <p className="rpm-end-cta__stats-line">
+                        <span className="rpm-end-cta__stats-num">14-day money-back</span>
+                        <span className="rpm-end-cta__stats-text"> if it doesn&rsquo;t land.</span>
+                      </p>
+                    ) : (
+                      <>
+                        <p className="rpm-end-cta__stats-line">
+                          <span className="rpm-end-cta__stats-num">32</span>
+                          <span className="rpm-end-cta__stats-text"> chapters. </span>
+                          <span className="rpm-end-cta__stats-num">~50</span>
+                          <span className="rpm-end-cta__stats-text"> pages. </span>
+                          <span className="rpm-end-cta__stats-num">
+                            {quote ? formatReportPurchasePrice(quote.currentPriceCents) : "€9.99"}
+                          </span>
+                          <span className="rpm-end-cta__stats-text"> once, yours forever.</span>
+                        </p>
+                        <p className="rpm-end-cta__stats-line">
+                          <span className="rpm-end-cta__stats-num">14-day money-back</span>
+                          <span className="rpm-end-cta__stats-text">
+                            {" "}
+                            if it&rsquo;s not for you.
+                          </span>
+                        </p>
+                      </>
+                    )}
                   </div>
                   <button
                     type="button"
                     className="rpm-end-cta__button rpm-cta"
                     onClick={handleCtaClick}
-                    aria-label="Unlock full report"
+                    aria-label={preSurvey ? "Take the test" : "Unlock full report"}
                   >
                     <span className="rpm-cta__wash" aria-hidden="true" />
                     <span className="rpm-cta__reveal" aria-hidden="true" />
                     <span className="rpm-end-cta__button-label rpm-cta__label">
-                      Unlock full report
+                      {preSurvey ? "Take the test" : "Unlock full report"}
                     </span>
                     <svg
                       className="rpm-cta__arrow"
