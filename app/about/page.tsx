@@ -51,13 +51,6 @@ const teamSchema = {
     },
     {
       "@type": "Person",
-      name: "Ferhad Jukić",
-      jobTitle: "Full-Stack Engineer",
-      worksFor: { "@id": `${siteUrl}/#organization` },
-      sameAs: ["https://www.linkedin.com/in/ferhad-juki%C4%87-7a9049333/"],
-    },
-    {
-      "@type": "Person",
       name: "Marcus Börner",
       jobTitle: "Strategy Lead",
       worksFor: { "@id": `${siteUrl}/#organization` },
