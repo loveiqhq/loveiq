@@ -88,14 +88,21 @@ jobs:
               # BOLD and labeled on its own line. Slack code blocks (used for the
               # technical body below) render monospace and ignore bold, so the
               # Marcus line has to live outside the ``` block.
+              # The "For Marcus:" summary is the LAST paragraph by convention, but
+              # it may wrap across several physical lines (git/editors hard-wrap at
+              # ~72 chars). Capture the remainder of the matched line PLUS every
+              # following line, joined into one, so a multi-line summary isn't cut
+              # off at the first wrap. Everything before the marker stays in the body.
               marcus = None
               body_kept = []
-              for line in body.splitlines():
+              lines = body.splitlines()
+              for i, line in enumerate(lines):
                   m = marcus_re.match(line)
-                  if m and marcus is None:
-                      marcus = m.group(1).strip()
-                  else:
-                      body_kept.append(line)
+                  if m:
+                      rest = [m.group(1).strip()] + [l.strip() for l in lines[i + 1 :]]
+                      marcus = " ".join(s for s in rest if s).strip()
+                      break
+                  body_kept.append(line)
               body = "\n".join(body_kept).strip()
 
               link = f"<{url}|`{sha}`>" if url else f"`{sha}`"
@@ -105,6 +112,8 @@ jobs:
                   text = f"{text}\n```\n{body_trim}\n```"
               if marcus:
                   safe = marcus.replace("*", "").strip()
+                  if len(safe) > 2500:
+                      safe = safe[:2500] + "…"
                   text = f"{text}\n*📣 For Marcus: {safe}*"
               blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": text}})
 
