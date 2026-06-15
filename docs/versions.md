@@ -16,8 +16,8 @@ Use this file as the canonical source for pinned framework, runtime, and test-to
 | `react-dom`   | `19.2.7` | `package.json`             | UI runtime                                |
 | `typescript`  | `6.0.3`  | `package.json`             | Type-checking baseline                    |
 | `tailwindcss` | `3.4.19` | `package.json`             | Styling system                            |
-| `vitest`      | `4.0.18` | `package.json`             | Unit and integration tests                |
-| `playwright`  | `1.60.0` | `package.json`             | End-to-end tests                          |
+| `vitest`      | `4.1.9`  | `package.json`             | Unit and integration tests                |
+| `playwright`  | `1.61.0` | `package.json`             | End-to-end tests                          |
 | `eslint`      | `9.39.2` | `package.json`             | Linting baseline                          |
 
 ## Update Rule
