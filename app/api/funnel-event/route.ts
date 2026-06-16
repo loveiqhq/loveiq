@@ -30,9 +30,6 @@ import logger from "@shared/observability/logger";
 // constraint (which must list the same set):
 //   • unique_visitor / survey_engine_mount      — original
 //   • intro_slide_1..4                           — 2026-05-29 longitudinal digest
-//   • prepaid_gate_viewed / prepaid_checkout_started — 2026-06-14 white pay-first
-//     funnel: "reached the €9.99 gate" and "clicked pay", so pre-payment drop-off
-//     on the white journey is queryable (vs prepaid_report_access paid rows).
 const ALLOWED_EVENTS = [
   "unique_visitor",
   "survey_engine_mount",
@@ -40,8 +37,6 @@ const ALLOWED_EVENTS = [
   "intro_slide_2",
   "intro_slide_3",
   "intro_slide_4",
-  "prepaid_gate_viewed",
-  "prepaid_checkout_started",
 ] as const;
 
 const schema = z.object({

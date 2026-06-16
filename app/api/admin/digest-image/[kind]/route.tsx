@@ -54,7 +54,6 @@ const COLORS = {
 const VALID_KINDS = new Set([
   "cvr-visitor-start",
   "cvr-visitor-start-dark",
-  "cvr-white-pay",
   "cvr-start-completion",
   "cvr-completion-engagement",
   "cvr-completion-paygate",
@@ -75,7 +74,6 @@ interface LongitudinalPayload {
   kind:
     | "cvr-visitor-start"
     | "cvr-visitor-start-dark"
-    | "cvr-white-pay"
     | "cvr-start-completion"
     | "cvr-completion-engagement"
     | "cvr-completion-paygate"
@@ -122,7 +120,6 @@ type AnyPayload = LongitudinalPayload | StageConversionPayload | DropoutPayload;
 const LONG_TITLES: Record<LongitudinalPayload["kind"], string> = {
   "cvr-visitor-start": "Visitor → Survey-start CVR",
   "cvr-visitor-start-dark": "Dark journey — Visitor → Survey-start CVR",
-  "cvr-white-pay": "White journey — pay funnel CVR",
   "cvr-start-completion": "Survey-start → Completion CVR",
   "cvr-completion-engagement": "Completion → Report-view CVR (1m / 5m / 10m)",
   "cvr-completion-paygate": "Completion → Paygate CVR",
@@ -609,7 +606,6 @@ function renderForKind(
   switch (kind) {
     case "cvr-visitor-start":
     case "cvr-visitor-start-dark":
-    case "cvr-white-pay":
     case "cvr-start-completion":
     case "cvr-completion-engagement":
     case "cvr-completion-paygate":

@@ -113,10 +113,7 @@ const fullSnaps = {
         day: "2026-05-28",
         visitors: 180,
         visitors_control: 100,
-        visitors_white: 80,
         starts: 40,
-        white_checkout: 30,
-        white_paid: 10,
         completions: 25,
         eng_1m: 15,
         eng_5m: 10,
@@ -156,7 +153,7 @@ function imageKinds(blocks: Array<{ type: string; image_url?: string }>): string
 }
 
 describe("buildFunnelDigestBlocks", () => {
-  it("emits all 10 chart kinds when every snapshot has data", async () => {
+  it("emits all 9 chart kinds when every snapshot has data", async () => {
     const curr = mkDaily();
     const { blocks } = await buildFunnelDigestBlocks({
       title: "Test",
@@ -173,7 +170,6 @@ describe("buildFunnelDigestBlocks", () => {
     expect(kinds).toEqual([
       "cvr-visitor-start",
       "cvr-visitor-start-dark",
-      "cvr-white-pay",
       "cvr-start-completion",
       "cvr-completion-engagement",
       "cvr-completion-paygate",
@@ -220,10 +216,7 @@ describe("buildFunnelDigestBlocks", () => {
             day: "2026-05-28",
             visitors: 100,
             visitors_control: 100,
-            visitors_white: 0,
             starts: 40,
-            white_checkout: 0,
-            white_paid: 0,
             completions: 25,
             eng_1m: 15,
             eng_5m: 10,

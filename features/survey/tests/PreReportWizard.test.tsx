@@ -16,8 +16,8 @@ vi.mock("next/image", () => ({
 import PreReportWizard from "@features/survey/ui/PreReportWizard";
 
 // The 50/50 was concluded → any non-empty token now buckets to the forced
-// "treatment" arm. "control" is reached only via a missing token, the white
-// pay-first `prepaidPaid` flag, or the dev `?arm=` override.
+// "treatment" arm. "control" is reached only via a missing token or the dev
+// `?arm=` override.
 const TREATMENT_TOKEN = "rpt_wizard_test_001";
 
 /** Click a button and flush the 200ms leave-animation timer. */
@@ -136,7 +136,7 @@ describe("PreReportWizard — coupled paywall (now forced)", () => {
     expect(screen.getByText("1 / 6")).toBeInTheDocument();
   });
 
-  it("treatment cohort (token, not prepaid) swaps the final slide for the must-pay one", () => {
+  it("treatment cohort (token present) swaps the final slide for the must-pay one", () => {
     const onComplete = vi.fn();
     render(<PreReportWizard reportToken={TREATMENT_TOKEN} onComplete={onComplete} />);
 
@@ -160,18 +160,5 @@ describe("PreReportWizard — coupled paywall (now forced)", () => {
       vi.advanceTimersByTime(650);
     });
     expect(onComplete).toHaveBeenCalledTimes(1);
-  });
-
-  it("paid white user (prepaidPaid) gets the neutral 'open your report' close, NOT the must-pay slide — even WITH a token", () => {
-    render(<PreReportWizard reportToken={TREATMENT_TOKEN} prepaidPaid onComplete={vi.fn()} />);
-
-    for (let i = 0; i < 5; i++) {
-      clickAndFlush(screen.getByRole("button", { name: /continue/i }));
-    }
-
-    expect(screen.getByText("Let's open your report.")).toBeInTheDocument();
-    expect(
-      screen.queryByText("Your personalised report is waiting for you.")
-    ).not.toBeInTheDocument();
   });
 });

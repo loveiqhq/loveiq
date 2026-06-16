@@ -86,19 +86,6 @@ export const REPORT_PURCHASE_PLANS: ReportPurchasePlan[] = [
   },
 ];
 
-/**
- * Fixed price (in cents) the white "pay-first" A/B cohort is charged for the
- * full report. Decoupled from the dynamic dark-cohort pricing because there is
- * no survey submission to price against pre-survey. Single source of truth for
- * the charge (prepaid-checkout route), the pay-gate display (SurveyPage), and
- * the white landing's pricing card (WPricing) so they can never drift. The
- * buyer still receives `full_report` access — only the amount charged differs.
- */
-export const WHITE_PREPAID_PRICE_CENTS = 999;
-
-/** Marketing strike-through shown next to the white prepaid price (display only). */
-export const WHITE_PREPAID_STRIKE_CENTS = 5900;
-
 export function isReportPurchasePlanId(
   value: string | null | undefined
 ): value is ReportPurchasePlanId {

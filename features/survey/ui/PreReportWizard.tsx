@@ -395,11 +395,10 @@ const slides: Slide[] = [
   },
   {
     icon: Slide6Icon,
-    // Neutral close shown to anyone who already HAS their report — the white
-    // pay-first cohort (paid before the survey) and the rare null-token case.
-    // Dark users get the "must pay" treatment slide below instead. Wording is
-    // kept access-agnostic ("let's take a look", not "explore every section") so
-    // it never over-promises full access on the rare null-token unpaid path.
+    // Neutral close shown on the rare null-token / control case. The forced
+    // (treatment) arm gets the "must pay" slide below instead. Wording is kept
+    // access-agnostic ("let's take a look", not "explore every section") so it
+    // never over-promises full access on the null-token path.
     heading: "Let's open your report.",
     body: (
       <>
@@ -411,9 +410,9 @@ const slides: Slide[] = [
 ];
 
 /**
- * Final slide for the "treatment" (forced, dark) arm of the report-paywall.
+ * Final slide for the "treatment" (forced) arm of the report-paywall.
  * It REPLACES the neutral "Let's open your report" final slide — same slide
- * count, swapped ending — so the dark journey closes on the must-pay framing
+ * count, swapped ending — so the journey closes on the must-pay framing
  * (Figma 7552-7703).
  * Copy + emphasis match that design; it renders inside the existing wizard
  * chrome so it inherits the same responsive layout as every other slide.
@@ -446,14 +445,9 @@ interface PreReportWizardProps {
    * Treatment arm gets the must-pay final slide. Missing token → control.
    */
   reportToken?: string | null;
-  /**
-   * White pay-first cohort already paid before the survey, so they must NOT see
-   * the "must-pay" treatment closing slide — force the soft control slide.
-   */
-  prepaidPaid?: boolean;
 }
 
-const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete, prepaidPaid, reportToken }) => {
+const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete, reportToken }) => {
   const [slideIndex, setSlideIndex] = useState(0);
   const [isLeaving, setIsLeaving] = useState(false);
   const [hasEntered, setHasEntered] = useState(false);
@@ -473,11 +467,9 @@ const PreReportWizard: FC<PreReportWizardProps> = ({ onComplete, prepaidPaid, re
       ),
     []
   );
-  // Paid (white pay-first) users always get the soft "control" closing slide —
-  // showing them a "must pay" slide after they've already paid would be wrong.
   const cohort = useMemo(
-    () => devArm ?? (prepaidPaid ? "control" : getForcedPaywallCohort(reportToken ?? null)),
-    [devArm, prepaidPaid, reportToken]
+    () => devArm ?? getForcedPaywallCohort(reportToken ?? null),
+    [devArm, reportToken]
   );
   const activeSlides = useMemo(
     () => (cohort === "treatment" ? [...slides.slice(0, -1), reportWaitingSlide] : slides),

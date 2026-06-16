@@ -269,22 +269,6 @@ const pingFunnelEvent = (event: string) => {
   });
 };
 
-/**
- * White pay-first funnel — the visitor REACHED the €9.99 prepaid gate (saw the
- * price + pay button). This is the key "got to the paywall, then maybe bounced"
- * signal: compare against prepaid_report_access rows to see who paid vs left.
- */
-export const trackPrepaidGateViewed = () => {
-  track("prepaid_gate_viewed");
-  pingFunnelEvent("prepaid_gate_viewed");
-};
-
-/** White pay-first funnel — the visitor clicked "Pay & start test" (intent). */
-export const trackPrepaidCheckoutStarted = () => {
-  track("prepaid_checkout_started");
-  pingFunnelEvent("prepaid_checkout_started");
-};
-
 export const trackStartSurvey = (
   location: "nav" | "hero" | "report_section" | "footer" | "archetype-teaser"
 ) => {

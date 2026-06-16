@@ -352,7 +352,6 @@ jobs:
           #  - unsubscribe (auth via HMAC-signed token in URL; body is RFC 8058 fixed string)
           #  - admin/logout (no body to validate; just clears the auth session)
           #  - admin grant-call-coupon (no request body; acts on the validated [id] URL param)
-          #  - stripe/prepaid-checkout (no request body; reads the landing-variant + prepaid-token cookies. Already CSRF- and rate-limit-guarded.)
           #  - csp-report (browser-sent CSP violation report JSON; parsed leniently across legacy + Reporting-API shapes, then bounded + logged — a strict schema would just drop valid reports)
           for file in $(find app/api -name 'route.ts' \
               -not -path "*/staging-*" \
@@ -362,7 +361,6 @@ jobs:
               -not -path "*/unsubscribe/*" \
               -not -path "*/admin/logout/*" \
               -not -path "*/grant-call-coupon/*" \
-              -not -path "*/stripe/prepaid-checkout/*" \
               -not -path "*/csp-report/*" \
               2>/dev/null); do
             if [ -f "$file" ] && grep -q "export.*POST\|export.*PUT" "$file"; then

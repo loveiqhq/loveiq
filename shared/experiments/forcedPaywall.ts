@@ -6,12 +6,11 @@
  * later"). The experiment was concluded in favour of the forced experience, so
  * every dark/unpaid report viewer now gets "treatment".
  *
- * White pay-first users never hit the forced modal (their report is already
- * unlocked), and the pre-report wizard is told they've paid (`prepaidPaid`) so
- * it keeps the soft "view your report" closing slide instead of the must-pay
- * one. Two escape hatches remain in resolveReportPaywallCohort: the dev `?arm=`
- * preview and the email-return softener (re-engagement links must never trap a
- * returning user in a wall they can't close).
+ * The landing A/B (dark vs white) is purely cosmetic and does NOT affect this
+ * resolver — both arms take the same survey and hit the same forced report
+ * paywall. Two escape hatches remain in resolveReportPaywallCohort: the dev
+ * `?arm=` preview and the email-return softener (re-engagement links must never
+ * trap a returning user in a wall they can't close).
  *
  * Kept as a single resolver (not inlined) so the wizard, the report modal, and
  * the server-side attribution stamp all agree on one value per report.

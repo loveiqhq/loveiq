@@ -33,8 +33,8 @@ interface Props {
   onClose: () => void;
   onCheckout: () => void;
   /**
-   * Archetype/result data. Required for the report paywall; OPTIONAL (and unused)
-   * in pre-survey mode, where there is no result yet and no archetype card.
+   * Archetype/result data. Optional — when absent (or no theme is resolved) the
+   * archetype card is omitted and only the pricing card renders.
    */
   archetype?: string;
   userName?: string | null;
@@ -54,14 +54,6 @@ interface Props {
    * (control keeps the side-by-side layout).
    */
   flipDeck?: boolean;
-  /**
-   * Pre-survey mode (white A/B cohort, "pay to take the full test"). Renders the
-   * SAME paywall as the report — pricing card, why-cards, testimonials, chapter
-   * preview, footer CTA — but with NO archetype card / flip (no result exists
-   * yet) and "Full Test" copy. Every preSurvey-specific change is guarded so the
-   * report paywall (preSurvey=false) renders byte-identically. Defaults to false.
-   */
-  preSurvey?: boolean;
 }
 
 const FOCUSABLE_SELECTOR =
@@ -337,7 +329,6 @@ const ScrollPricingModal: FC<Props> = ({
   quote,
   dismissible = true,
   flipDeck = false,
-  preSurvey = false,
 }) => {
   const dialogRef = useRef<HTMLDivElement>(null);
   const scrollRegionRef = useRef<HTMLDivElement>(null);
@@ -410,10 +401,10 @@ const ScrollPricingModal: FC<Props> = ({
       shownFiredRef.current = false;
       return;
     }
-    if (shownFiredRef.current || preSurvey) return;
+    if (shownFiredRef.current) return;
     shownFiredRef.current = true;
     trackScrollPaywallShown({ surface: "report_scroll_paywall" });
-  }, [open, preSurvey]);
+  }, [open]);
 
   // Periodic nudge hint — only while front-facing, before the first flip, and
   // not for reduced-motion users. Stops permanently once the user flips.
@@ -484,7 +475,7 @@ const ScrollPricingModal: FC<Props> = ({
   }, [dismissible, open, quote]);
 
   useEffect(() => {
-    if (!open || priceShownFiredRef.current || !quote || preSurvey) return;
+    if (!open || priceShownFiredRef.current || !quote) return;
     priceShownFiredRef.current = true;
     trackPriceShown({
       plan: "full_report",
@@ -497,7 +488,7 @@ const ScrollPricingModal: FC<Props> = ({
       msrp: quote.msrpCents / 100,
       initial_price: quote.initialPriceCents / 100,
     });
-  }, [open, quote, preSurvey]);
+  }, [open, quote]);
 
   // ── Focus management ───────────────────────────────────────────────────────
 
@@ -633,9 +624,8 @@ const ScrollPricingModal: FC<Props> = ({
 
   const handleCtaClick = () => {
     checkoutInitiatedRef.current = true;
-    // Pre-survey checkout is the prepaid funnel, not the report funnel — don't
-    // fire report begin_checkout (the gate tracks trackPrepaidCheckoutStarted).
-    if (quote && !preSurvey) {
+    // Report-funnel begin_checkout fires whenever a price quote is present.
+    if (quote) {
       trackBeginCheckout("full_report", quote.currentPriceCents / 100, quote.currency);
     }
     onCheckout();
@@ -718,7 +708,6 @@ const ScrollPricingModal: FC<Props> = ({
     <div
       className={`report-pricing-modal ${open ? "is-visible" : "is-hidden"}`}
       data-state={open ? "open" : "closed"}
-      data-pre-survey={preSurvey || undefined}
       data-focus-mode={focusMode}
       aria-hidden={!open}
     >
@@ -804,7 +793,7 @@ const ScrollPricingModal: FC<Props> = ({
                       strokeLinejoin="round"
                     />
                   </svg>
-                  {preSurvey ? "Assessment ready" : "Assessment Complete"}
+                  {"Assessment Complete"}
                 </div>
               </div>
 
@@ -813,7 +802,7 @@ const ScrollPricingModal: FC<Props> = ({
                 id="scroll-teaser-title"
                 style={{
                   fontFamily: "var(--font-serif)",
-                  fontSize: preSurvey ? "calc(var(--rpm-h1) * 0.8)" : "var(--rpm-h1)",
+                  fontSize: "var(--rpm-h1)",
                   fontWeight: 400,
                   lineHeight: "var(--rpm-h1-line)",
                   letterSpacing: "-1.2px",
@@ -822,18 +811,10 @@ const ScrollPricingModal: FC<Props> = ({
                   color: "#fff",
                 }}
               >
-                {preSurvey ? (
-                  <>
-                    Unlock the <span style={{ color: "#fe6839" }}>Full Test</span> to get started
-                    and receive your <span style={{ color: "#a78bfa" }}>Full Personal Report</span>{" "}
-                    the moment you finish.
-                  </>
-                ) : (
-                  <>
-                    <span style={{ color: "#a78bfa" }}>{displayName},</span>
-                    {" you score highest with the following Archetype:"}
-                  </>
-                )}
+                <>
+                  <span style={{ color: "#a78bfa" }}>{displayName},</span>
+                  {" you score highest with the following Archetype:"}
+                </>
               </h2>
 
               {/* ── Hero: archetype + pricing card. Treatment (flipDeck) turns
@@ -854,8 +835,6 @@ const ScrollPricingModal: FC<Props> = ({
                         marginBottom: "40px",
                         alignItems: "stretch",
                         flexWrap: "wrap",
-                        // Pre-survey shows only the pricing card → center it.
-                        ...(preSurvey ? { justifyContent: "center" } : null),
                       }
                 }
               >
@@ -873,9 +852,8 @@ const ScrollPricingModal: FC<Props> = ({
                       : undefined
                   }
                 >
-                  {/* Archetype (front) card — report paywall only; pre-survey has no
-                      result yet, so it's omitted and only the pricing card shows. */}
-                  {!preSurvey && theme && (
+                  {/* Archetype (front) card — rendered when a theme/result exists. */}
+                  {theme && (
                     <div
                       ref={frontFaceRef}
                       className={
@@ -1331,9 +1309,8 @@ const ScrollPricingModal: FC<Props> = ({
                     <div
                       className="rpm-pricing-card"
                       style={{
-                        // Pre-survey: solo centered card (don't grow full-width).
-                        flex: preSurvey ? "0 1 440px" : "1 1 280px",
-                        maxWidth: preSurvey ? "440px" : undefined,
+                        flex: "1 1 280px",
+                        maxWidth: undefined,
                         position: "relative",
                         border: "1px solid rgba(85,101,247,0.68)",
                         // On the flipped face, drop the backdrop blur and use a
@@ -1344,11 +1321,11 @@ const ScrollPricingModal: FC<Props> = ({
                         backdropFilter: flipDeck ? "none" : "blur(12px)",
                         WebkitBackdropFilter: flipDeck ? "none" : "blur(12px)",
                         borderRadius: "16px",
-                        padding: preSurvey ? "32px 26px 28px" : "49px 33px 41px",
+                        padding: "49px 33px 41px",
                         boxShadow: "0px 0px 30px 0px rgba(168,85,247,0.1)",
                         display: "flex",
                         flexDirection: "column",
-                        gap: preSurvey ? "26px" : "40px",
+                        gap: "40px",
                       }}
                     >
                       {/* Inner clip — keeps decorative blur inside the rounded card
@@ -1384,9 +1361,9 @@ const ScrollPricingModal: FC<Props> = ({
                           style={{
                             position: "absolute",
                             top: flipDeck ? "-16px" : "-21px",
-                            // Flip mock + pre-survey place the single discount badge top-right.
-                            left: flipDeck || preSurvey ? undefined : "24px",
-                            right: flipDeck || preSurvey ? "24px" : undefined,
+                            // Flip mock places the single discount badge top-right.
+                            left: flipDeck ? undefined : "24px",
+                            right: flipDeck ? "24px" : undefined,
                             padding: "10px 18px",
                             borderRadius: "9999px",
                             // Flip mock: translucent green + blur, white label.
@@ -1409,7 +1386,7 @@ const ScrollPricingModal: FC<Props> = ({
                           {badge}
                         </div>
                       )}
-                      {!flipDeck && !preSurvey && (
+                      {!flipDeck && (
                         <div
                           className="rpm-pricing-badge--popular"
                           style={{
@@ -1452,12 +1429,7 @@ const ScrollPricingModal: FC<Props> = ({
                             margin: 0,
                           }}
                         >
-                          {preSurvey ? (
-                            <>
-                              Unlock the{" "}
-                              <span style={{ color: "#fe6839", fontWeight: 700 }}>Full Test</span>
-                            </>
-                          ) : flipDeck ? (
+                          {flipDeck ? (
                             <>
                               Unlock your{" "}
                               <span style={{ fontWeight: 700 }}>Full Personal Report</span> now
@@ -1555,8 +1527,8 @@ const ScrollPricingModal: FC<Props> = ({
                             >
                               14-day money-back guarantee
                             </span>
-                            {/* Flip mock + pre-survey drop the "- no discussions" tail. */}
-                            {!flipDeck && !preSurvey && (
+                            {/* Flip mock drops the "- no discussions" tail. */}
+                            {!flipDeck && (
                               <span
                                 style={{
                                   fontFamily: "var(--font-sans)",
@@ -1585,15 +1557,6 @@ const ScrollPricingModal: FC<Props> = ({
                         >
                           {(
                             [
-                              // Pre-survey only: the test itself is the first benefit.
-                              ...(preSurvey
-                                ? [
-                                    {
-                                      lead: "The complete 15-minute deep-dive assessment",
-                                      tail: "",
-                                    },
-                                  ]
-                                : []),
                               { lead: "+50 pages", tail: " of deep insights into your sexuality" },
                               { lead: "Results based on +100 science papers", tail: "" },
                               {
@@ -1636,20 +1599,20 @@ const ScrollPricingModal: FC<Props> = ({
                           onClick={handleCtaClick}
                           style={{
                             width: "100%",
-                            maxWidth: preSurvey ? "300px" : "460px",
-                            padding: preSurvey ? "13px 24px" : flipDeck ? "14px 28px" : "20px 24px",
+                            maxWidth: "460px",
+                            padding: flipDeck ? "14px 28px" : "20px 24px",
                             borderRadius: "9999px",
                             background: "#ff6a3d",
                             border: "1px solid rgba(255,255,255,0.4)",
                             color: "#fff",
                             fontFamily: "var(--font-sans)",
-                            fontSize: preSurvey ? "15px" : "var(--rpm-cta-label)",
+                            fontSize: "var(--rpm-cta-label)",
                             fontWeight: 700,
                             cursor: "pointer",
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "center",
-                            gap: preSurvey ? "10px" : "16px",
+                            gap: "16px",
                             filter: "drop-shadow(0px 3px 12.65px #ff6a3d)",
                             lineHeight: 1,
                           }}
@@ -1657,11 +1620,7 @@ const ScrollPricingModal: FC<Props> = ({
                           <span className="rpm-cta__wash" aria-hidden="true" />
                           <span className="rpm-cta__reveal" aria-hidden="true" />
                           <span className="rpm-cta__label">
-                            {preSurvey
-                              ? "Take the test"
-                              : flipDeck
-                                ? "Unlock your full report"
-                                : "Unlock full report"}
+                            {flipDeck ? "Unlock your full report" : "Unlock full report"}
                           </span>
                           <svg
                             className="rpm-cta__arrow"
@@ -1824,10 +1783,10 @@ const ScrollPricingModal: FC<Props> = ({
                     marginBottom: "40px",
                   }}
                 >
-                  {preSurvey ? "Why take the " : "Why unlock the "}
+                  {"Why unlock the "}
                   <span className="rpm-why-mobile-br" aria-hidden="true" />
                   <em style={{ color: "#a78bfa", fontStyle: "italic", fontWeight: 700 }}>
-                    {preSurvey ? "Full Test" : "Full Report"}
+                    {"Full Report"}
                   </em>
                   <span className="rpm-why-desktop-space"> </span>?
                 </h3>
@@ -2510,9 +2469,7 @@ const ScrollPricingModal: FC<Props> = ({
                     >
                       <span className="rpm-cta__wash" aria-hidden="true" />
                       <span className="rpm-cta__reveal" aria-hidden="true" />
-                      <span className="rpm-cta__label">
-                        {preSurvey ? "Take the test" : "Unlock full report"}
-                      </span>
+                      <span className="rpm-cta__label">{"Unlock full report"}</span>
                       <svg
                         className="rpm-cta__arrow"
                         width="14"
@@ -2632,46 +2589,34 @@ const ScrollPricingModal: FC<Props> = ({
               <section className="rpm-end-cta" aria-labelledby="rpm-end-cta-heading">
                 <div className="rpm-end-cta__inner">
                   <h3 id="rpm-end-cta-heading" className="rpm-end-cta__heading">
-                    {preSurvey ? "Ready to meet yourself?" : "Ready to dive deep?"}
+                    {"Ready to dive deep?"}
                   </h3>
                   <div className="rpm-end-cta__stats">
-                    {preSurvey ? (
-                      <p className="rpm-end-cta__stats-line">
-                        <span className="rpm-end-cta__stats-num">14-day money-back</span>
-                        <span className="rpm-end-cta__stats-text"> if it doesn&rsquo;t land.</span>
-                      </p>
-                    ) : (
-                      <>
-                        <p className="rpm-end-cta__stats-line">
-                          <span className="rpm-end-cta__stats-num">32</span>
-                          <span className="rpm-end-cta__stats-text"> chapters. </span>
-                          <span className="rpm-end-cta__stats-num">~50</span>
-                          <span className="rpm-end-cta__stats-text"> pages. </span>
-                          <span className="rpm-end-cta__stats-num">
-                            {quote ? formatReportPurchasePrice(quote.currentPriceCents) : "€9.99"}
-                          </span>
-                          <span className="rpm-end-cta__stats-text"> once, yours forever.</span>
-                        </p>
-                        <p className="rpm-end-cta__stats-line">
-                          <span className="rpm-end-cta__stats-num">14-day money-back</span>
-                          <span className="rpm-end-cta__stats-text">
-                            {" "}
-                            if it&rsquo;s not for you.
-                          </span>
-                        </p>
-                      </>
-                    )}
+                    <p className="rpm-end-cta__stats-line">
+                      <span className="rpm-end-cta__stats-num">32</span>
+                      <span className="rpm-end-cta__stats-text"> chapters. </span>
+                      <span className="rpm-end-cta__stats-num">~50</span>
+                      <span className="rpm-end-cta__stats-text"> pages. </span>
+                      <span className="rpm-end-cta__stats-num">
+                        {quote ? formatReportPurchasePrice(quote.currentPriceCents) : "€9.99"}
+                      </span>
+                      <span className="rpm-end-cta__stats-text"> once, yours forever.</span>
+                    </p>
+                    <p className="rpm-end-cta__stats-line">
+                      <span className="rpm-end-cta__stats-num">14-day money-back</span>
+                      <span className="rpm-end-cta__stats-text"> if it&rsquo;s not for you.</span>
+                    </p>
                   </div>
                   <button
                     type="button"
                     className="rpm-end-cta__button rpm-cta"
                     onClick={handleCtaClick}
-                    aria-label={preSurvey ? "Take the test" : "Unlock full report"}
+                    aria-label="Unlock full report"
                   >
                     <span className="rpm-cta__wash" aria-hidden="true" />
                     <span className="rpm-cta__reveal" aria-hidden="true" />
                     <span className="rpm-end-cta__button-label rpm-cta__label">
-                      {preSurvey ? "Take the test" : "Unlock full report"}
+                      {"Unlock full report"}
                     </span>
                     <svg
                       className="rpm-cta__arrow"

@@ -109,17 +109,6 @@ describe("POST /api/funnel-event", () => {
     expect(body.utm_source).toBe("google");
   });
 
-  it("accepts the white pay-first gate events (prepaid_gate_viewed, prepaid_checkout_started)", async () => {
-    for (const event of ["prepaid_gate_viewed", "prepaid_checkout_started"] as const) {
-      mockSupabaseFetch.mockReset();
-      mockSupabaseFetch.mockResolvedValue({ ok: true });
-      const res = await POST(makeRequest({ event, visitor_id: VALID_UUID }));
-      expect(res.status).toBe(204);
-      const body = JSON.parse((mockSupabaseFetch.mock.calls[0]![1] as { body: string }).body);
-      expect(body.event_type).toBe(event);
-    }
-  });
-
   it("returns 204 even when the insert fails (best-effort)", async () => {
     mockSupabaseFetch.mockResolvedValue({ ok: false, status: 500 });
     const res = await POST(makeRequest({ event: "unique_visitor", visitor_id: VALID_UUID }));

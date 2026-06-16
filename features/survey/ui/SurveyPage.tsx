@@ -13,52 +13,6 @@ import {
 import { copySurveySessionToReportSession } from "./hooks/surveySession";
 import { getCsrfToken } from "@shared/http/csrf-client";
 import { readCookie } from "@shared/observability/cookie";
-import { trackPrepaidCheckoutStarted, trackPrepaidGateViewed } from "@features/analytics/client";
-import {
-  WHITE_PREPAID_PRICE_CENTS,
-  WHITE_PREPAID_STRIKE_CENTS,
-} from "@features/checkout/server/reportPurchase";
-import ScrollPricingModal from "@features/report/ui/ScrollPricingModal";
-import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
-
-// Synthesized price quote for the pre-survey pay screen, built from the SAME
-// constants the prepaid-checkout route charges (so display and charge can't
-// drift). In preSurvey mode the report ScrollPricingModal reads only
-// currentPriceCents / msrpCents / currency for display; the rest are inert
-// placeholders (its report-funnel analytics are guarded off in preSurvey mode).
-const PREPAID_QUOTE: ReportPriceQuoteSnapshot = {
-  id: -1,
-  plan: "full_report",
-  currency: "EUR",
-  experimentGroup: "A",
-  basePriceBucket: "white_prepaid",
-  basePriceCents: WHITE_PREPAID_PRICE_CENTS,
-  msrpCents: WHITE_PREPAID_STRIKE_CENTS,
-  startingPriceCents: WHITE_PREPAID_PRICE_CENTS,
-  currentPriceCents: WHITE_PREPAID_PRICE_CENTS,
-  initialPriceCents: WHITE_PREPAID_PRICE_CENTS,
-  discountMultiplier: 1,
-  discountStep: 0,
-  pricingClusterId: "white_prepaid",
-  countryTier: "default",
-  countryMultiplier: 1,
-  deviceType: "Desktop",
-  deviceMultiplier: 1,
-  trafficSource: "direct",
-  trafficMultiplier: 1,
-  behavioralBucket: "zero",
-  behavioralMultiplier: 1,
-  engagementScore: 0,
-  engagementMultiplier: 1,
-  reportPreviewViews: 0,
-  fantasySignalCount: 0,
-  surveyDurationMs: null,
-  initialPriceTimestamp: "1970-01-01T00:00:00.000Z",
-  expiresAt: "1970-01-01T00:00:00.000Z",
-  checkoutStartedAt: null,
-  purchasedAt: null,
-  viewCount: 0,
-};
 
 /**
  * One-shot per-visitor-day ping that lands a `intro_slide_<N>` row in
@@ -1138,250 +1092,6 @@ const ConsentScreen: FC<{
 };
 
 /* ------------------------------------------------------------------ */
-/*  Prepaid unlock gate — white cohort "pay before the survey"          */
-/* ------------------------------------------------------------------ */
-/**
- * Rendered in place of the survey engine for the white A/B cohort until a
- * succeeded prepaid entitlement is confirmed. This is the client face of the
- * pay-first funnel; the server (/api/survey hard gate + the report paywall) is
- * the authoritative wall, so this screen is purely UX — it can't be the thing
- * that's bypassed. Flow: check status → if unpaid show the pay CTA → POST
- * prepaid-checkout → redirect to Stripe → return with ?prepaid=success → poll
- * status until the webhook confirms → onPaid() advances into the questions.
- */
-const PrepaidUnlockGate: FC<{
-  onPaid: () => void;
-  onReturn: () => void;
-}> = ({ onPaid, onReturn }) => {
-  const [phase, setPhase] = useState<"checking" | "ready" | "starting" | "confirming" | "error">(
-    "checking"
-  );
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-
-  // On mount: resolve paid state. Returning from Stripe (?prepaid=success) polls
-  // until the webhook/reconcile confirms so the user isn't stranded by lag.
-  useEffect(() => {
-    let cancelled = false;
-
-    const checkPaid = async (): Promise<boolean> => {
-      try {
-        const res = await fetch("/api/stripe/prepaid-status", { cache: "no-store" });
-        if (!res.ok) return false;
-        const data = (await res.json()) as { paid?: boolean };
-        return data?.paid === true;
-      } catch {
-        return false;
-      }
-    };
-
-    const run = async () => {
-      const params = new URLSearchParams(window.location.search);
-      const returningFromStripe = params.get("prepaid") === "success";
-
-      // Strip the Stripe return params right away so a refresh / re-mount can't
-      // re-trigger the poll loop, and the Stripe session id doesn't linger in
-      // browser history or get picked up by analytics.
-      if (params.has("prepaid") || params.has("session_id")) {
-        const clean = new URL(window.location.href);
-        clean.searchParams.delete("prepaid");
-        clean.searchParams.delete("session_id");
-        // Preserve the existing history state (the survey's {surveyStep}) — a
-        // bare null here would erase it and send the browser back button to the
-        // intro instead of the engine step.
-        window.history.replaceState(window.history.state, "", clean.toString());
-      }
-
-      if (await checkPaid()) {
-        if (!cancelled) onPaid();
-        return;
-      }
-      if (cancelled) return;
-
-      if (returningFromStripe) {
-        setPhase("confirming");
-        // Webhook usually lands in <5s; poll up to ~24s before surfacing a retry.
-        for (let i = 0; i < 12 && !cancelled; i++) {
-          await new Promise((resolve) => setTimeout(resolve, 2000));
-          if (cancelled) return;
-          if (await checkPaid()) {
-            if (!cancelled) onPaid();
-            return;
-          }
-        }
-        if (!cancelled) {
-          setPhase("error");
-          setErrorMsg(
-            "We couldn't confirm your payment yet. If you completed checkout, give it a moment and refresh."
-          );
-        }
-        return;
-      }
-
-      if (!cancelled) {
-        setPhase("ready");
-        // Durable "reached the €9.99 gate" signal (funnel_event + GA4) so we can
-        // measure who saw the paywall and bounced vs paid. White-cohort only.
-        trackPrepaidGateViewed();
-      }
-    };
-
-    void run();
-    return () => {
-      cancelled = true;
-    };
-  }, [onPaid]);
-
-  const handlePay = useCallback(async () => {
-    setPhase("starting");
-    setErrorMsg(null);
-    // "Clicked pay" intent — fires before the redirect to Stripe (beacon survives
-    // the navigation). The server also writes a pending prepaid_report_access row.
-    trackPrepaidCheckoutStarted();
-    try {
-      const csrf = getCsrfToken();
-      const res = await fetch("/api/stripe/prepaid-checkout", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(csrf ? { "x-csrf-token": csrf } : {}),
-        },
-        body: JSON.stringify({}),
-      });
-      const data = (await res.json().catch(() => ({}))) as {
-        alreadyPaid?: boolean;
-        url?: string;
-        enabled?: boolean;
-        message?: string;
-        error?: string;
-      };
-      // 403 == the white-cohort cookie was cleared/expired between landing and
-      // here. Generic "try again" would just loop; point them back to restart.
-      if (res.status === 403) {
-        setPhase("error");
-        setErrorMsg("Your session expired. Please return to the homepage and start again.");
-        return;
-      }
-      if (data?.alreadyPaid) {
-        onPaid();
-        return;
-      }
-      if (data?.url) {
-        window.location.href = data.url;
-        return;
-      }
-      setPhase("error");
-      setErrorMsg(
-        data?.enabled === false && typeof data.message === "string"
-          ? data.message
-          : "Unable to start checkout. Please try again."
-      );
-    } catch {
-      setPhase("error");
-      setErrorMsg("Something went wrong. Please try again.");
-    }
-  }, [onPaid]);
-
-  const busy = phase === "checking" || phase === "confirming" || phase === "starting";
-
-  // Ready phase: the full report-style pay screen — reuses the report
-  // ScrollPricingModal with the archetype card omitted and "Full Test" copy.
-  // Non-dismissible: white users MUST pay to take the test (no close / exit).
-  if (phase === "ready") {
-    return (
-      <ScrollPricingModal
-        preSurvey
-        open
-        dismissible={false}
-        onClose={() => undefined}
-        onCheckout={handlePay}
-        quote={PREPAID_QUOTE}
-      />
-    );
-  }
-
-  return (
-    <main
-      className="relative flex min-h-dvh items-center justify-center overflow-hidden px-4"
-      style={{
-        background:
-          "linear-gradient(145deg, #d4a88a 0%, #c89888 25%, #b8909a 45%, #a890b0 65%, #9a8cb8 85%, #9088b0 100%)",
-      }}
-    >
-      <div className="pointer-events-none absolute inset-0">
-        <div
-          className="animate-pulse-glow absolute h-[140%] w-[110%] rounded-full"
-          style={{
-            bottom: "-40%",
-            left: "-35%",
-            background:
-              "radial-gradient(ellipse at center, rgba(195,130,85,0.7) 0%, rgba(185,120,90,0.3) 45%, transparent 70%)",
-          }}
-        />
-        <div
-          className="animate-pulse-glow absolute h-[130%] w-[100%] rounded-full"
-          style={{
-            top: "-35%",
-            right: "-25%",
-            animationDelay: "2s",
-            animationFillMode: "backwards",
-            background:
-              "radial-gradient(ellipse at center, rgba(155,140,195,0.7) 0%, rgba(145,130,185,0.3) 45%, transparent 70%)",
-          }}
-        />
-      </div>
-
-      <div
-        className="survey-animate relative z-10 w-full max-w-[512px] overflow-hidden rounded-[24px] border border-[rgba(167,139,250,0.2)] bg-[rgba(19,11,28,0.92)] px-8 py-9 shadow-[0_0_50px_rgba(84,20,117,0.4)] sm:px-10 sm:py-10"
-        style={{ animation: "survey-scale-in 600ms cubic-bezier(0.16,1,0.3,1) 100ms both" }}
-      >
-        {busy ? (
-          <div className="flex flex-col items-center gap-5 py-6 text-center">
-            <span
-              className="h-10 w-10 animate-spin rounded-full border-[3px] border-white/15 border-t-[#fe6839]"
-              aria-hidden
-            />
-            <p className="text-[15px] font-medium text-white/80">
-              {phase === "confirming"
-                ? "Confirming your payment…"
-                : phase === "starting"
-                  ? "Taking you to secure checkout…"
-                  : "One moment…"}
-            </p>
-          </div>
-        ) : (
-          // Error phase only (busy handled above; "ready" returns the modal).
-          <div className="flex flex-col gap-5 py-4 text-center">
-            <h2 className="font-serif text-[22px] font-medium text-white">Something went wrong</h2>
-            {errorMsg && (
-              <p
-                role="alert"
-                className="rounded-[12px] border border-[rgba(254,104,57,0.3)] bg-[rgba(254,104,57,0.08)] px-4 py-3 text-[13.5px] text-[#ffb59e]"
-              >
-                {errorMsg}
-              </p>
-            )}
-            <button
-              type="button"
-              onClick={handlePay}
-              className="mt-1 w-full rounded-full bg-[#fe6839] py-[15px] text-[15px] font-bold tracking-[0.4px] text-white shadow-[0_12px_22px_rgba(254,104,57,0.28)] transition hover:-translate-y-[1px] focus-visible-ring"
-            >
-              Try again
-            </button>
-            <button
-              type="button"
-              onClick={onReturn}
-              className="w-full rounded-full border border-white/10 py-[13px] text-[13px] font-bold tracking-[0.5px] text-white/55 transition hover:border-white/20 hover:text-white/80 focus-visible-ring"
-            >
-              Return to site
-            </button>
-          </div>
-        )}
-      </div>
-    </main>
-  );
-};
-
-/* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
 function loadInitialStep(): number {
@@ -1432,10 +1142,6 @@ const SurveyPage: FC = () => {
   const [step, setStep] = useState(0);
   const [hydrated, setHydrated] = useState(false);
   const [transitioning, setTransitioning] = useState(false);
-  // White A/B cohort pays before the questions; `prepaidConfirmed` flips once a
-  // succeeded entitlement is verified (this session or on return from Stripe).
-  const [isWhiteCohort, setIsWhiteCohort] = useState(false);
-  const [prepaidConfirmed, setPrepaidConfirmed] = useState(false);
   const isPopStateNav = useRef(false);
 
   // Restore step from sessionStorage on mount (hydration-safe).
@@ -1445,10 +1151,6 @@ const SurveyPage: FC = () => {
   useEffect(() => {
     const restored = loadInitialStep();
     if (restored !== 0) setStep(restored);
-    // White A/B cohort drives the pay-first gate. Read both the prod (__Host-)
-    // and dev (__) cookie names, mirroring pingIntroSlide's visitor-id read.
-    const landingVariant = readCookie("__Host-liq_lv") || readCookie("__liq_lv");
-    if (landingVariant === "white") setIsWhiteCohort(true);
     setHydrated(true);
   }, []);
   /* eslint-enable react-hooks/set-state-in-effect */
@@ -1530,8 +1232,6 @@ const SurveyPage: FC = () => {
     setStep(TOTAL_STEPS + 2);
   }, []);
 
-  const handlePrepaidPaid = useCallback(() => setPrepaidConfirmed(true), []);
-
   // Wait for hydration before rendering to avoid flash
   if (!hydrated) return null;
 
@@ -1553,21 +1253,12 @@ const SurveyPage: FC = () => {
   } else if (step === TOTAL_STEPS + 1) {
     // Consent screen
     content = <ConsentScreen onAgree={handleAgree} onReturn={handleReturn} />;
-  } else if (isWhiteCohort && !prepaidConfirmed) {
-    // White cohort pay-first gate — rendered in place of the engine for EVERY
-    // path into the questions (skip-intro, returning user, back button) until a
-    // succeeded prepaid entitlement is confirmed. The server /api/survey gate +
-    // report paywall remain the authoritative wall.
-    content = <PrepaidUnlockGate onPaid={handlePrepaidPaid} onReturn={() => handleReturn()} />;
   } else {
-    // Survey engine. White users only reach here AFTER the pay gate, so
-    // prepaidPaid is true for them — the wizard then keeps its soft closing
-    // slide instead of the dark cohort's now-forced "must pay" slide.
+    // Survey engine — identical for both landing arms.
     content = (
       <SurveyEngine
         onExit={() => handleReturn()}
         onComplete={(token) => handleReturn(true, token)}
-        prepaidPaid={isWhiteCohort}
       />
     );
   }

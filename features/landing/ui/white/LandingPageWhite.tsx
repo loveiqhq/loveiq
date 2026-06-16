@@ -14,7 +14,6 @@ import WTrustRow from "./WTrustRow";
 import WReportPreview from "./WReportPreview";
 import WAcademicBoard from "./WAcademicBoard";
 import WPerfectFor from "./WPerfectFor";
-import WPricing from "./WPricing";
 import WGlossary from "./WGlossary";
 
 // Bottom-of-fold sections are code-split (SSR stays on) to keep initial client
@@ -51,7 +50,6 @@ const LandingPageWhite: FC = () => {
       <WReportPreview />
       <WAcademicBoard />
       <WPerfectFor />
-      <WPricing />
       <WGlossary />
       <WFAQ />
       <WCTA />

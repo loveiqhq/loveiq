@@ -60,7 +60,6 @@ const BUCKET_TOP_N = 5;
 type DigestImageKind =
   | "cvr-visitor-start"
   | "cvr-visitor-start-dark"
-  | "cvr-white-pay"
   | "cvr-start-completion"
   | "cvr-completion-engagement"
   | "cvr-completion-paygate"
@@ -229,10 +228,9 @@ async function buildCvrChartBlocks(
     "visitors"
   );
 
-  // Split the visitor→start funnel by landing arm. DARK (control) is the free
-  // survey — visitor → survey-start. WHITE pays first, so its "start" funnel is
-  // the pay funnel (visitor → clicked-pay → paid); we show both rates as two
-  // lines so we can see whether they click to pay and, if so, how many complete.
+  // Visitor → survey-start conversion for the control (dark) landing arm. Both
+  // arms now take the same free survey (the white arm's old pay-first funnel was
+  // removed), so there is no separate white pay-funnel chart.
   await single(
     "cvr-visitor-start-dark",
     "Dark journey: visitor to survey-start conversion over time",
@@ -240,22 +238,6 @@ async function buildCvrChartBlocks(
     "starts",
     "visitors_control"
   );
-  if (days.some((d) => d.visitors_white > 0 || d.white_checkout > 0)) {
-    const toCheckout = days.map((d) => computeRate(d.white_checkout, d.visitors_white));
-    const toPaid = days.map((d) => computeRate(d.white_paid, d.white_checkout));
-    const block = await lineChartBlock(
-      "cvr-white-pay",
-      "White journey pay funnel: visitor → clicked-pay → paid over time",
-      {
-        windowLabel,
-        labels: ["Visitor → Clicked pay", "Clicked pay → Paid"],
-        series: [toCheckout, toPaid],
-        rate: true,
-        xAxis,
-      }
-    );
-    if (block) out.push(block);
-  }
 
   await single(
     "cvr-start-completion",

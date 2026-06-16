@@ -3,11 +3,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { Resend } from "resend";
 import { z } from "zod";
-import {
-  LANDING_VARIANT_COOKIE,
-  isLandingVariant,
-  normalizeLandingVariant,
-} from "@shared/experiments/landingVariant";
+import { LANDING_VARIANT_COOKIE, isLandingVariant } from "@shared/experiments/landingVariant";
 import { checkRateLimit, checkCooldown, getClientIp } from "@shared/http/ratelimit";
 import { scheduleAfterResponse } from "@shared/http/after-response";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
@@ -21,12 +17,6 @@ import { isEmailSuppressed } from "@shared/emails/suppression";
 import { pickEmailVariant } from "@shared/emails/ab-variant";
 import { getEmailSiteUrl } from "@shared/emails/site-url";
 import { ensurePersonalReportForSubmission } from "@features/report/server/personalReport";
-import { applyPrepaidEntitlementToReport } from "@features/checkout/server/fulfillment";
-import {
-  PREPAID_COOKIE,
-  PREPAID_TOKEN_REGEX,
-  hasSucceededPrepaidEntitlement,
-} from "@features/checkout/server/prepaidEntitlement";
 import type { SurveyAnswers } from "@features/survey/server/types";
 import {
   computeSurveyScoring,
@@ -202,23 +192,16 @@ export async function POST(request: Request) {
   const normalizedEmail = email.trim().toLowerCase();
   const normalizedFirstName = firstName.trim();
 
-  // White pay-first cohort context, read ONCE and reused by: the utm_tracker
-  // variant stamp (below), the pre-submit hard gate, and the post-submit
-  // entitlement apply. Wrapped in try/catch because cookies() throws when there
-  // is no request scope (e.g. unit tests that call POST directly) — in that
-  // case we keep the control defaults, exactly as the prior utm-merge block did.
+  // White-landing A/B context: read the sticky variant cookie ONCE so the
+  // utm_tracker stamp below can record which arm the submission came from.
+  // Wrapped in try/catch because cookies() throws when there is no request
+  // scope (e.g. unit tests that call POST directly) — then we leave it unset.
   let landingVariantRaw: string | undefined;
-  let landingVariant: "control" | "white" = "control";
-  let prepaidToken: string | null = null;
   try {
     const cookieStore = await cookies();
     landingVariantRaw = cookieStore.get(LANDING_VARIANT_COOKIE)?.value;
-    landingVariant = normalizeLandingVariant(landingVariantRaw);
-    const prepaidTokenRaw = cookieStore.get(PREPAID_COOKIE)?.value;
-    prepaidToken =
-      prepaidTokenRaw && PREPAID_TOKEN_REGEX.test(prepaidTokenRaw) ? prepaidTokenRaw : null;
   } catch {
-    /* no request scope — keep control defaults (no gate, no prepaid apply) */
+    /* no request scope — leave landingVariantRaw undefined (no stamp) */
   }
 
   // White-landing A/B: stamp the sticky variant onto the submission's
@@ -268,21 +251,7 @@ export async function POST(request: Request) {
     );
   }
 
-  // White pay-first HARD GATE. The white A/B cohort pays for the full report
-  // BEFORE the survey, so a white submission is refused server-side unless a
-  // SUCCEEDED prepaid entitlement exists for this browser's cookie. This is the
-  // backstop behind the survey UI's pay interstitial + the report paywall: even
-  // a white user who scripts past the client cannot create a submission without
-  // having paid. Fail-closed (no entitlement / lookup error → refused). 402
-  // Payment Required lets the client re-open the pay gate. Dark cohort: no-op.
-  if (landingVariant === "white" && !(await hasSucceededPrepaidEntitlement(prepaidToken))) {
-    return NextResponse.json(
-      { error: "Payment required before completing the survey.", code: "prepaid_required" },
-      { status: 402 }
-    );
-  }
-
-  // End of gate (CSRF + rate limit + parse + cooldown + pay-first). Scoring is sync.
+  // End of gate (CSRF + rate limit + parse + cooldown). Scoring is sync.
   const tGate = performance.now();
 
   const questionCount = Object.keys(answers).filter((key) => !key.endsWith("_other")).length;
@@ -422,62 +391,6 @@ export async function POST(request: Request) {
       hotjarPromise,
       reportTokenPromise,
     ]);
-
-    // White pay-first: apply the prepaid entitlement NOW (synchronously) so the
-    // report is already unlocked by the time the client redirects to it. This
-    // produces the same DB end-state as a dark full_report purchase (payment row
-    // linked to the report + full_report archetype tier). A failure here never
-    // fails the request — the submission is saved and the payment captured — but
-    // it pages ops so the report can be unlocked manually. Idempotent on re-submit.
-    //
-    // Keyed on the prepaid TOKEN alone, NOT on landingVariant: the token cookie
-    // is the real proof of the white pay-first flow, and a user whose landing
-    // variant cookie expired/cleared between paying and finishing the survey must
-    // still get the report they paid for. applyPrepaidEntitlementToReport only
-    // ever consumes a SUCCEEDED entitlement, so this can't unlock anything unpaid.
-    if (prepaidToken) {
-      try {
-        const personalReport = await ensurePersonalReportForSubmission({
-          reportToken: reportToken ?? null,
-          submissionId,
-        });
-        if (personalReport?.id) {
-          const primaryArchetype =
-            scoringSummary?.v5PrimaryArchetype ?? scoringSummary?.primaryArchetype ?? null;
-          const result = await applyPrepaidEntitlementToReport({
-            archetype: primaryArchetype,
-            personalReportId: personalReport.id,
-            reportToken: reportToken ?? null,
-            submissionId,
-            token: prepaidToken,
-          });
-          if (!result.applied) {
-            logger.error(
-              { reason: result.reason, submissionId },
-              "prepaid: entitlement did not unlock report at submit"
-            );
-            scheduleAfterResponse("prepaid-apply-alert", () =>
-              notifySlack({
-                channel: "ops",
-                kind: "prepaid_apply_failed",
-                text: `:warning: Prepaid report not unlocked at submit — submission #${submissionId} — reason *${escapeSlack(result.reason)}*. Manual unlock may be needed.`,
-                username: "ops_alerts",
-              })
-            );
-          }
-        }
-      } catch (err) {
-        logger.error({ err, submissionId }, "prepaid: entitlement apply threw at submit");
-        scheduleAfterResponse("prepaid-apply-error", () =>
-          notifySlack({
-            channel: "ops",
-            kind: "prepaid_apply_error",
-            text: `:rotating_light: Prepaid apply threw for submission #${submissionId}. Report may show locked despite payment — investigate.`,
-            username: "ops_alerts",
-          })
-        );
-      }
-    }
 
     // End of user-blocking work. Everything below is fire-and-forget via
     // scheduleAfterResponse and does not affect response latency.

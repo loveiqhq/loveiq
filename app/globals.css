@@ -3626,14 +3626,6 @@ input.autofill-dark:-internal-autofill-previewed {
     left: unset !important;
     right: 14px !important;
   }
-  /* Pre-survey (solo card, no archetype): discount badge top-right + compact,
-     like the flip card. Without unsetting `left`, the control's top-left rule
-     above + the inline `right` would set BOTH edges and stretch the badge
-     full-width. */
-  .report-pricing-modal[data-pre-survey] .rpm-pricing-card .rpm-pricing-badge--discount {
-    left: unset !important;
-    right: 14px !important;
-  }
   /* Pricing-card CTA — slim down on mobile so it doesn't dominate. */
   .rpm-pricing-card .rpm-cta {
     padding: 14px 20px !important;
@@ -11066,12 +11058,6 @@ input.autofill-dark:-internal-autofill-previewed {
   padding: 0 24px;
 }
 
-/* Pre-survey pay screen shows the footer CTA on all breakpoints (the report
-   paywall keeps it desktop-only via the min-width:641px rule below). */
-.report-pricing-modal[data-pre-survey] .rpm-end-cta {
-  display: block;
-}
-
 .rpm-end-cta__inner {
   position: relative;
   display: flex;
@@ -11144,14 +11130,6 @@ input.autofill-dark:-internal-autofill-previewed {
   transition:
     transform 0.15s ease,
     filter 0.2s ease;
-}
-
-/* Pre-survey: a more compact footer CTA (the report keeps the larger one). */
-.report-pricing-modal[data-pre-survey] .rpm-end-cta__button {
-  width: 280px;
-  height: 44px;
-  padding: 0 22px;
-  font-size: 15px;
 }
 
 .rpm-end-cta__button:hover {
