@@ -856,6 +856,45 @@ async function syncCheckoutSessionPayment({
   session: Stripe.Checkout.Session;
   stripe: Stripe;
 }) {
+  // Legacy white "pay-first" prepaid sessions (feature removed 2026-06-16) keep
+  // emitting lifecycle webhooks as the in-flight ones expire. They carry a
+  // `prepaidToken` + `plan` but were created BEFORE any survey/report exists, so
+  // they have no submission context and the normal fulfillment path below would
+  // throw `stripe_checkout_missing_submission_context` → 500 → endless Stripe
+  // retries (the ops `api_5xx` storm). There is nothing to fulfill here (the old
+  // prepaid path is gone), so ack the event and stop. A genuinely PAID legacy
+  // session is surfaced to ops for manual handling rather than silently dropped.
+  if (session.metadata?.prepaidToken) {
+    if (eventStatus === "succeeded") {
+      logger.warn(
+        { eventId: event.id, sessionId: session.id, type: event.type },
+        "Legacy prepaid checkout completed after the pay-first removal — manual review"
+      );
+      await notifySlack({
+        channel: "ops",
+        kind: "legacy_prepaid_session",
+        text: `:warning: A legacy white pay-first checkout completed after the feature was removed — session \`${escapeSlack(
+          session.id
+        )}\` (${escapeSlack(
+          String(session.amount_total ?? "?")
+        )} ${escapeSlack((session.currency ?? "").toUpperCase())}). No auto-fulfillment exists anymore; review for manual unlock or refund.`,
+        username: "ops_alerts",
+      });
+    } else {
+      logger.info(
+        { eventId: event.id, eventStatus, sessionId: session.id, type: event.type },
+        "Skipping expired/failed legacy prepaid checkout session (pay-first removed)"
+      );
+    }
+    await upsertWebhookEventRecord({
+      event,
+      processed: true,
+      processingError: null,
+      stripePaymentIntentId: null,
+    });
+    return;
+  }
+
   const plan = normalizePlan(session.metadata?.plan);
   if (!plan) {
     // Sessions can expire (or async-fail) before any plan metadata was set —

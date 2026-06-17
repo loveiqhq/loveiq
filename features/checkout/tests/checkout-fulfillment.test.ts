@@ -636,6 +636,57 @@ describe("checkout fulfillment", () => {
     expect(unlockAllArchetypesForPersonalReport).not.toHaveBeenCalled();
   });
 
+  it("acks a legacy prepaid-token session (pay-first removed) instead of throwing on missing submission context", async () => {
+    // Regression: white pay-first sessions carry `prepaidToken` + `plan` but no
+    // submission context. After the pay-first removal they must be acked, not
+    // routed into the normal fulfillment path (which would throw
+    // stripe_checkout_missing_submission_context → 500 → endless Stripe retries).
+    let webhookProcessed = false;
+    mockFetchWithTimeout.mockImplementation(
+      async (url: string, options?: { body?: string; method?: string }) => {
+        if (url.includes("/rest/v1/payment_webhook_event?stripe_event_id=eq.")) {
+          return createJsonResponse([]);
+        }
+        if (options?.method === "POST" && url.endsWith("/rest/v1/payment_webhook_event")) {
+          if (options.body?.includes('"processed":true')) webhookProcessed = true;
+          return createJsonResponse([{ id: 201 }]);
+        }
+        throw new Error(`Unexpected fetch call: ${options?.method ?? "GET"} ${url}`);
+      }
+    );
+
+    const stripe = {
+      charges: { retrieve: vi.fn() },
+      checkout: { sessions: { retrieve: vi.fn() } },
+      paymentIntents: { retrieve: vi.fn() },
+    };
+
+    await expect(
+      processStripeWebhookEvent({
+        event: {
+          id: "evt_test_legacy_prepaid_expired",
+          type: "checkout.session.expired",
+          data: {
+            object: {
+              id: "cs_live_legacy_prepaid",
+              metadata: {
+                plan: "full_report",
+                prepaidToken: "rpp_legacy",
+                landingVariant: "white",
+              },
+            },
+          },
+        } as never,
+        stripe: stripe as never,
+      })
+    ).resolves.toBeUndefined();
+
+    expect(webhookProcessed).toBe(true);
+    // Guard short-circuits BEFORE the submission-context resolution that throws.
+    expect(resolveSubmissionAccessContext).not.toHaveBeenCalled();
+    expect(stripe.checkout.sessions.retrieve).not.toHaveBeenCalled();
+  });
+
   describe("Slack purchase notification", () => {
     const SLACK_URL = "https://hooks.slack.com/services/TEST/PAYMENTS/secret";
 
