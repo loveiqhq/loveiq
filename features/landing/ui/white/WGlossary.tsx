@@ -4,8 +4,7 @@ import Link from "next/link";
 /**
  * White-variant glossary section (Figma node 7828:10899): centered heading + a
  * light "Glossary Explorer" mockup (sidebar term list, term detail, related
- * terms), then a "Browse full glossary" link. Mirrors the dark S07Language
- * explorer, re-themed light.
+ * terms), then a "Browse full glossary" link.
  */
 
 const recentTerms = [

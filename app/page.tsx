@@ -1,11 +1,5 @@
-import { headers } from "next/headers";
-import LandingPage from "@features/landing/ui/LandingPage";
 import LandingPageWhite from "@features/landing/ui/white/LandingPageWhite";
 import { jsonLdString } from "@shared/seo/json-ld";
-import {
-  LANDING_VARIANT_HEADER,
-  normalizeLandingVariant,
-} from "@shared/experiments/landingVariant";
 import { faqs } from "@/data/faqs";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.loveiq.org";
@@ -38,7 +32,7 @@ const softwareApplicationSchema = {
   // unbacked figure misrepresents the data and risks a Google rich-result penalty.
 };
 
-// Built from the same `faqs` array that S13FAQ renders, so the FAQPage markup is
+// Built from the same `faqs` array that WFAQ renders, so the FAQPage markup is
 // byte-for-byte identical to the visible FAQ (Google requires the match).
 const faqSchema = {
   "@context": "https://schema.org",
@@ -50,9 +44,9 @@ const faqSchema = {
   })),
 };
 
-// E-E-A-T: the academic board rendered on this page (features/landing/ui/S08AcademicBoard.tsx)
+// E-E-A-T: the academic board rendered on this page (features/landing/ui/white/WAcademicBoard.tsx)
 // emits no schema. These Person nodes make that expertise machine-readable and tie it to the
-// LoveIQ organization entity via memberOf. Keep names/fields in sync with S08AcademicBoard.tsx.
+// LoveIQ organization entity via memberOf. Keep names/fields in sync with WAcademicBoard.tsx.
 const academicBoardSchema = {
   "@context": "https://schema.org",
   "@graph": [
@@ -95,13 +89,10 @@ const academicBoardSchema = {
   ],
 };
 
-export default async function Page() {
-  // White-landing A/B: the arm is decided in proxy.ts and handed over via the
-  // x-landing-variant request header (correct even on the cookie-minting first
-  // visit). JSON-LD + video preloads are variant-independent and render for both.
-  const headersList = await headers();
-  const variant = normalizeLandingVariant(headersList.get(LANDING_VARIANT_HEADER));
-
+export default function Page() {
+  // The landing A/B concluded: white is served to 100% of traffic (the dark
+  // landing was retired 2026-06-19). The white hero is CSS-only, so there is no
+  // video asset to preload. JSON-LD is product/site metadata, variant-independent.
   return (
     <>
       <script
@@ -116,28 +107,7 @@ export default async function Page() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: jsonLdString(academicBoardSchema) }}
       />
-      {/* Hero LCP preload — the dark hero is video, so emit it only on the dark arm
-          (white visits don't fetch multi-MB videos). The white hero is now CSS-only
-          (animated labels + a gradient glow), so it has no asset to preload. */}
-      {variant !== "white" && (
-        <>
-          <link
-            rel="preload"
-            as="video"
-            href="/couple-hero-mobile.mp4"
-            type="video/mp4"
-            media="(max-width: 640px)"
-          />
-          <link
-            rel="preload"
-            as="video"
-            href="/couple-hero.mp4"
-            type="video/mp4"
-            media="(min-width: 641px)"
-          />
-        </>
-      )}
-      {variant === "white" ? <LandingPageWhite /> : <LandingPage />}
+      <LandingPageWhite />
     </>
   );
 }

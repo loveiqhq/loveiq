@@ -10,27 +10,27 @@ Next.js App Router directory containing all pages and API routes.
 
 ## Page Route Map
 
-| Route                     | File                              | Component                                      |
-| ------------------------- | --------------------------------- | ---------------------------------------------- |
-| `/`                       | `page.tsx`                        | `features/landing/ui/LandingPage.tsx`          |
-| `/about`                  | `about/page.tsx`                  | `features/about/ui/AboutPage.tsx`              |
-| `/survey`                 | `survey/page.tsx`                 | `features/survey/ui/SurveyPage.tsx`            |
-| `/glossary`               | `glossary/page.tsx`               | `features/glossary/ui/GlossaryPage.tsx`        |
-| `/glossary/[slug]`        | `glossary/[slug]/page.tsx`        | `features/glossary/ui/GlossaryTermPage.tsx`    |
-| `/trust-zone`             | `trust-zone/page.tsx`             | `features/trust-zone/ui/TrustZonePage.tsx`     |
-| `/login`                  | `login/page.tsx`                  | `features/staging/ui/StagingLoginForm.tsx`     |
-| `/admin`                  | `admin/page.tsx`                  | `features/admin/ui/CommandCenterDashboard.tsx` |
-| `/admin/login`            | `admin/login/page.tsx`            | `features/admin/ui/AdminLoginForm.tsx`         |
-| `/admin/submissions`      | `admin/submissions/page.tsx`      | `features/admin/ui/SubmissionBrowser.tsx`      |
-| `/admin/submissions/[id]` | `admin/submissions/[id]/page.tsx` | `features/admin/ui/SubmissionDetail.tsx`       |
-| `/admin/survey-status`    | `admin/survey-status/page.tsx`    | `features/admin/ui/SurveyStatus.tsx`           |
-| `/privacy-policy`         | `privacy-policy/page.tsx`         | Inline legal content                           |
-| `/terms-of-use`           | `terms-of-use/page.tsx`           | Inline legal content                           |
-| `/terms-and-conditions`   | `terms-and-conditions/page.tsx`   | Inline legal content                           |
-| `/medical-disclaimer`     | `medical-disclaimer/page.tsx`     | Inline legal content                           |
-| `/digital-content-terms`  | `digital-content-terms/page.tsx`  | Inline legal content                           |
-| `/cookies`                | `cookies/page.tsx`                | Inline legal content                           |
-| `/imprint`                | `imprint/page.tsx`                | Inline legal content                           |
+| Route                     | File                              | Component                                        |
+| ------------------------- | --------------------------------- | ------------------------------------------------ |
+| `/`                       | `page.tsx`                        | `features/landing/ui/white/LandingPageWhite.tsx` |
+| `/about`                  | `about/page.tsx`                  | `features/about/ui/AboutPage.tsx`                |
+| `/survey`                 | `survey/page.tsx`                 | `features/survey/ui/SurveyPage.tsx`              |
+| `/glossary`               | `glossary/page.tsx`               | `features/glossary/ui/GlossaryPage.tsx`          |
+| `/glossary/[slug]`        | `glossary/[slug]/page.tsx`        | `features/glossary/ui/GlossaryTermPage.tsx`      |
+| `/trust-zone`             | `trust-zone/page.tsx`             | `features/trust-zone/ui/TrustZonePage.tsx`       |
+| `/login`                  | `login/page.tsx`                  | `features/staging/ui/StagingLoginForm.tsx`       |
+| `/admin`                  | `admin/page.tsx`                  | `features/admin/ui/CommandCenterDashboard.tsx`   |
+| `/admin/login`            | `admin/login/page.tsx`            | `features/admin/ui/AdminLoginForm.tsx`           |
+| `/admin/submissions`      | `admin/submissions/page.tsx`      | `features/admin/ui/SubmissionBrowser.tsx`        |
+| `/admin/submissions/[id]` | `admin/submissions/[id]/page.tsx` | `features/admin/ui/SubmissionDetail.tsx`         |
+| `/admin/survey-status`    | `admin/survey-status/page.tsx`    | `features/admin/ui/SurveyStatus.tsx`             |
+| `/privacy-policy`         | `privacy-policy/page.tsx`         | Inline legal content                             |
+| `/terms-of-use`           | `terms-of-use/page.tsx`           | Inline legal content                             |
+| `/terms-and-conditions`   | `terms-and-conditions/page.tsx`   | Inline legal content                             |
+| `/medical-disclaimer`     | `medical-disclaimer/page.tsx`     | Inline legal content                             |
+| `/digital-content-terms`  | `digital-content-terms/page.tsx`  | Inline legal content                             |
+| `/cookies`                | `cookies/page.tsx`                | Inline legal content                             |
+| `/imprint`                | `imprint/page.tsx`                | Inline legal content                             |
 
 Use [`app/admin/AGENT_README.md`](admin/AGENT_README.md) for the full admin page-route router. Use [`app/api/admin/AGENT_README.md`](api/admin/AGENT_README.md) for the admin API surface.
 

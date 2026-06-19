@@ -9,20 +9,20 @@ test.describe("FAQ accordion (landing page)", () => {
   });
 
   test("clicking a question reveals the answer", async ({ page }) => {
-    // The first FAQ question in S13FAQ
+    // The first FAQ question in the white landing FAQ (WFAQ), from @/data/faqs.
     const firstQuestion = page.getByRole("button", {
-      name: /is this a test or an ongoing journey/i,
+      name: /what exactly does loveiq do/i,
     });
     await expect(firstQuestion).toHaveAttribute("aria-expanded", "false");
     await firstQuestion.click();
     await expect(firstQuestion).toHaveAttribute("aria-expanded", "true");
     // Answer text is now visible
-    await expect(page.getByText(/loveiq is not a one-off quiz/i)).toBeVisible();
+    await expect(page.getByText(/loveiq analyzes how you think/i)).toBeVisible();
   });
 
   test("clicking the same question again hides the answer", async ({ page }) => {
     const firstQuestion = page.getByRole("button", {
-      name: /is this a test or an ongoing journey/i,
+      name: /what exactly does loveiq do/i,
     });
     await firstQuestion.click();
     await expect(firstQuestion).toHaveAttribute("aria-expanded", "true");
@@ -30,13 +30,15 @@ test.describe("FAQ accordion (landing page)", () => {
     await expect(firstQuestion).toHaveAttribute("aria-expanded", "false");
   });
 
-  test("multiple questions can be opened independently", async ({ page }) => {
-    const first = page.getByRole("button", { name: /is this a test or an ongoing journey/i });
-    const second = page.getByRole("button", { name: /what exactly does this app do/i });
+  test("opening a second question closes the first (single-open accordion)", async ({ page }) => {
+    const first = page.getByRole("button", { name: /what exactly does loveiq do/i });
+    const second = page.getByRole("button", { name: /how is my data used/i });
     await first.click();
-    await second.click();
     await expect(first).toHaveAttribute("aria-expanded", "true");
+    await second.click();
     await expect(second).toHaveAttribute("aria-expanded", "true");
+    // WFAQ keeps a single open panel, so opening the second collapses the first.
+    await expect(first).toHaveAttribute("aria-expanded", "false");
   });
 });
 

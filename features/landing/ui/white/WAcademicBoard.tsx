@@ -2,9 +2,9 @@ import Image from "next/image";
 import type { FC } from "react";
 
 /**
- * White-variant academic board. Mirrors the dark `S08AcademicBoard` card styling
- * (photo + dark gradient at the base + university logos) — no white fade — on the
- * white page section.
+ * Academic board section: photo card + dark gradient at the base + university
+ * logos. The Person/E-E-A-T JSON-LD for these board members is emitted from
+ * app/page.tsx — keep the names here in sync with that schema.
  */
 
 const experts = [

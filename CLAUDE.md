@@ -69,7 +69,8 @@ loveiq-web/
 │   ├── robots.ts               # robots.txt generation
 │   └── sitemap.ts              # sitemap.xml generation
 ├── features/                   # Domain-first feature folders (each: ui/, server/ or logic/, tests/, AGENT_README.md)
-│   ├── landing/ui/             # S01-S15 landing sections + NavSection + FooterSection + ScrollAnimator
+│   ├── landing/ui/white/       # White landing sections (W*) — the live landing (dark A/B retired 2026-06-19)
+│   ├── landing/ui/             # Shared: FooterSection + ScrollAnimator + NavSection (404) + S06Archetypes (data)
 │   ├── about/ui/               # About page sections (Hero, Team, Publications, etc.)
 │   ├── glossary/ui/            # /glossary index + term page
 │   ├── legal/ui/               # Shared chrome for legal pages
@@ -439,9 +440,12 @@ Always return `{ error: string }` or `{ success: true }`. Keep error messages ge
 
 #### Add a New Landing Section
 
-1. Create `features/landing/ui/S##NewSection.tsx`
-2. Follow existing section patterns (see `S06Archetypes.tsx` for complex example)
-3. Import and add to `features/landing/ui/LandingPage.tsx` in order
+The landing page is the white design under `features/landing/ui/white/` (served to
+100% of traffic; the dark A/B arm was retired 2026-06-19).
+
+1. Create `features/landing/ui/white/WNewSection.tsx`
+2. Follow existing section patterns (see `white/WArchetypes.tsx` / `white/WReportPreview.tsx`)
+3. Import and add to `features/landing/ui/white/LandingPageWhite.tsx` in order
 4. Use `animate-on-scroll` class for scroll animations
 
 #### Add a New Page
@@ -663,16 +667,16 @@ Check browser DevTools Network tab for response. Common causes:
 
 > For a complete task-based file index, see [`FILE_INDEX.md`](FILE_INDEX.md).
 
-| Need to...               | Look at...                                                 |
-| ------------------------ | ---------------------------------------------------------- |
-| Find any file by task    | `FILE_INDEX.md`                                            |
-| Add landing section      | `features/landing/ui/LandingPage.tsx`, existing `S##*.tsx` |
-| Modify navigation        | `features/landing/ui/NavSection.tsx`                       |
-| Modify footer            | `features/landing/ui/FooterSection.tsx`                    |
-| Add API endpoint         | `app/api/contact/route.ts` (reference)                     |
-| Change email template    | `features/invite/emails/invite.ts`                         |
-| Add analytics event      | `features/analytics/client.ts`                             |
-| Modify design tokens     | `app/globals.css` (CSS vars), `tailwind.config.js`         |
-| Update security headers  | `proxy.ts`                                                 |
-| Understand architecture  | `docs/architecture/ARCHITECTURE.md`                        |
-| Check coding conventions | `docs/architecture/CONVENTIONS.md`                         |
+| Need to...               | Look at...                                                                |
+| ------------------------ | ------------------------------------------------------------------------- |
+| Find any file by task    | `FILE_INDEX.md`                                                           |
+| Add landing section      | `features/landing/ui/white/LandingPageWhite.tsx`, existing `white/W*.tsx` |
+| Modify navigation        | `features/landing/ui/white/WNavSection.tsx`                               |
+| Modify footer            | `features/landing/ui/FooterSection.tsx`                                   |
+| Add API endpoint         | `app/api/contact/route.ts` (reference)                                    |
+| Change email template    | `features/invite/emails/invite.ts`                                        |
+| Add analytics event      | `features/analytics/client.ts`                                            |
+| Modify design tokens     | `app/globals.css` (CSS vars), `tailwind.config.js`                        |
+| Update security headers  | `proxy.ts`                                                                |
+| Understand architecture  | `docs/architecture/ARCHITECTURE.md`                                       |
+| Check coding conventions | `docs/architecture/CONVENTIONS.md`                                        |

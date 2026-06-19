@@ -6,8 +6,8 @@ export interface Faq {
 /**
  * Single source of truth for the homepage FAQ.
  *
- * Rendered by features/landing/ui/S13FAQ.tsx AND emitted as FAQPage JSON-LD on
- * the homepage (app/page.tsx). Sharing one array keeps the structured data
+ * Rendered by features/landing/ui/white/WFAQ.tsx AND emitted as FAQPage JSON-LD
+ * on the homepage (app/page.tsx). Sharing one array keeps the structured data
  * byte-for-byte identical to the visible content, which Google's structured-data
  * policy requires (FAQ rich results are rejected/penalized when the markup does
  * not match what users see). Edit here only.

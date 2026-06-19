@@ -13,32 +13,21 @@ const isProduction = process.env.NODE_ENV === "production";
 const CSRF_COOKIE_NAME = isProduction ? "__Host-csrf" : "__csrf";
 const CSRF_TOKEN_LENGTH = 32;
 
-// White-landing A/B: known search-engine + AI crawlers are forced to the dark
-// "control" arm so the indexed version of `/` never flips (no cloaking, stable
-// SEO). Anything matching here skips the random 50/50 assignment.
+// Bots are no longer given a landing cookie (see the cookie-mint block). The
+// landing A/B is concluded: the white redesign won and is now served to 100% of
+// traffic, so there is nothing to keep a crawler pinned to.
 const LANDING_BOT_UA_REGEX =
   /bot|crawl|spider|slurp|bingpreview|facebookexternalhit|embedly|quora link preview|outbrain|pinterest|vkshare|w3c_validator|whatsapp|telegrambot|applebot|gptbot|chatgpt|ccbot|claudebot|claude-web|perplexity|google-extended|amazonbot|bytespider/i;
 
 /**
- * Resolve the white-landing A/B arm for a `/` request. Precedence:
- *   1. Known crawler UA → always "control" (keep the indexed page stable).
- *   2. `?variant=white|control` → explicit QA override (also re-stamps cookie).
- *   3. Existing valid cookie → sticky.
- *   4. Fresh random 50/50 (one crypto byte, low bit decides).
+ * Landing variant for a `/` request. The white-vs-dark A/B concluded in favour
+ * of white (decision 2026-06-19), so EVERY visitor now gets "white" — the dark
+ * landing has been retired. The `landing_variant` value is still threaded
+ * through the cookie / visit tag / analytics so the funnel stays attributable
+ * (now constant "white") and the historical split is preserved.
  */
-function resolveLandingVariant(request: NextRequest): LandingVariant {
-  const ua = request.headers.get("user-agent") || "";
-  if (LANDING_BOT_UA_REGEX.test(ua)) return "control";
-
-  const override = request.nextUrl.searchParams.get("variant");
-  if (isLandingVariant(override)) return override;
-
-  const existing = request.cookies.get(LANDING_VARIANT_COOKIE)?.value;
-  if (isLandingVariant(existing)) return existing;
-
-  const buf = new Uint8Array(1);
-  crypto.getRandomValues(buf);
-  return (buf[0]! & 1) === 0 ? "control" : "white";
+function resolveLandingVariant(_request: NextRequest): LandingVariant {
+  return "white";
 }
 
 // Daily dedup flag for the consent-independent unique-visit count (the
@@ -253,12 +242,12 @@ export async function proxy(request: NextRequest) {
   const isNewDailyVisit =
     shouldCountVisit(request) && request.cookies.get(VISIT_DAY_COOKIE)?.value !== visitDay;
   if (isNewDailyVisit) {
-    // Tag the visit with the landing arm so the digest can split dark vs white.
-    // On "/" the arm is freshly resolved (the cookie isn't readable yet on the
-    // mint request); elsewhere read the sticky __liq_lv cookie. Default control.
+    // Tag the visit with the landing arm. On "/" the arm is freshly resolved
+    // (now always "white"); elsewhere read the sticky __liq_lv cookie. The A/B
+    // concluded, so an absent/unknown cookie defaults to "white" (no dark arm).
     const cookieVariant = request.cookies.get(LANDING_VARIANT_COOKIE)?.value;
     const visitVariant =
-      landingVariant ?? (isLandingVariant(cookieVariant) ? cookieVariant : "control");
+      landingVariant ?? (isLandingVariant(cookieVariant) ? cookieVariant : "white");
     requestHeaders.set("x-liq-new-visit", visitVariant);
   }
 
@@ -440,19 +429,17 @@ export async function proxy(request: NextRequest) {
     });
   }
 
-  // White-landing A/B sticky cookie. Mint on `/` for non-bots when there is no
-  // valid existing value, or whenever a `?variant=` QA override is supplied (so
-  // the override sticks). This is a FUNCTIONAL cookie — it stores only
-  // "control"|"white", carries no PII, and is required for a consistent UX
-  // across visits — so it is set regardless of analytics consent, exactly like
-  // the CSRF cookie. Bots are never given a cookie (they don't keep one and we
-  // don't want their forced-control assignment polluting the population).
+  // Landing variant cookie. The A/B concluded → everyone is "white", so we
+  // (re)mint the cookie on `/` for non-bots whenever it isn't already "white".
+  // This also migrates returning pre-cutover visitors off a stale "control"
+  // cookie so their analytics stamp "white" going forward. FUNCTIONAL cookie —
+  // stores only the variant, no PII — set regardless of analytics consent, like
+  // the CSRF cookie. Bots are never given a cookie.
   if (isLandingRoute && landingVariant) {
     const ua = request.headers.get("user-agent") || "";
     const isBot = LANDING_BOT_UA_REGEX.test(ua);
     const existing = request.cookies.get(LANDING_VARIANT_COOKIE)?.value;
-    const override = request.nextUrl.searchParams.get("variant");
-    const shouldSet = !isBot && (isLandingVariant(override) || !isLandingVariant(existing));
+    const shouldSet = !isBot && existing !== landingVariant;
     if (shouldSet) {
       response.cookies.set(LANDING_VARIANT_COOKIE, landingVariant, {
         httpOnly: false,

@@ -65,26 +65,29 @@
 
 ## Landing Page
 
-| Task                     | Files                                      |
-| ------------------------ | ------------------------------------------ |
-| Landing page composition | `features/landing/ui/LandingPage.tsx`      |
-| Navigation               | `features/landing/ui/NavSection.tsx`       |
-| Footer                   | `features/landing/ui/FooterSection.tsx`    |
-| Scroll animations        | `features/landing/ui/ScrollAnimator.tsx`   |
-| Hero section             | `features/landing/ui/S01Hero.tsx`          |
-| How It Works             | `features/landing/ui/S02HowItWorks.tsx`    |
-| Perfect For              | `features/landing/ui/S03PerfectFor.tsx`    |
-| Value Features           | `features/landing/ui/S05ValueFeatures.tsx` |
-| Archetypes               | `features/landing/ui/S06Archetypes.tsx`    |
-| Sample Profile           | `features/landing/ui/S07SampleProfile.tsx` |
-| Language                 | `features/landing/ui/S07Language.tsx`      |
-| Academic Board           | `features/landing/ui/S08AcademicBoard.tsx` |
-| Report Preview           | `features/landing/ui/S09Report.tsx`        |
-| Pillars                  | `features/landing/ui/S10Pillars.tsx`       |
-| Why We Created           | `features/landing/ui/S12WhyWeCreated.tsx`  |
-| FAQ                      | `features/landing/ui/S13FAQ.tsx`           |
-| CTA                      | `features/landing/ui/S14CTA.tsx`           |
-| Testimonials             | `features/landing/ui/S15Testimonials.tsx`  |
+> The landing page is the white design at `features/landing/ui/white/` (served to
+> 100% of traffic since 2026-06-19; the dark A/B arm was retired). `S06Archetypes.tsx`
+> is kept outside `white/` because `WArchetypeCards` imports its `ArchetypeCard` +
+> `archetypes`. `FooterSection`/`ScrollAnimator`/`NavSection` are shared with other routes.
+
+| Task                     | Files                                                                                          |
+| ------------------------ | ---------------------------------------------------------------------------------------------- |
+| Landing page composition | `features/landing/ui/white/LandingPageWhite.tsx`                                               |
+| Navigation               | `features/landing/ui/white/WNavSection.tsx`                                                    |
+| Footer                   | `features/landing/ui/white/WFooterSection.tsx`                                                 |
+| Scroll animations        | `features/landing/ui/ScrollAnimator.tsx`                                                       |
+| Hero section             | `features/landing/ui/white/WHero.tsx`                                                          |
+| How It Works             | `features/landing/ui/white/WHowItWorks.tsx`                                                    |
+| Perfect For              | `features/landing/ui/white/WPerfectFor.tsx`                                                    |
+| Problem / Value          | `features/landing/ui/white/WProblemValue.tsx`                                                  |
+| Archetypes               | `features/landing/ui/white/WArchetypes.tsx`, `WArchetypeCards.tsx`, `S06Archetypes.tsx` (data) |
+| Report Preview           | `features/landing/ui/white/WReportPreview.tsx`                                                 |
+| Academic Board           | `features/landing/ui/white/WAcademicBoard.tsx`                                                 |
+| Glossary                 | `features/landing/ui/white/WGlossary.tsx`                                                      |
+| Trust row                | `features/landing/ui/white/WTrustRow.tsx`                                                      |
+| FAQ                      | `features/landing/ui/white/WFAQ.tsx` (data: `data/faqs.ts`)                                    |
+| CTA                      | `features/landing/ui/white/WCTA.tsx`, `WInlineCTA.tsx`                                         |
+| Testimonials             | `features/landing/ui/white/WTestimonials.tsx`                                                  |
 
 ## About Page
 

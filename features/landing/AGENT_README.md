@@ -1,19 +1,20 @@
 # features/landing
 
-**Purpose:** Marketing landing page sections (S01-S15), top NavSection, and shared FooterSection. The `/` route renders these.
+**Purpose:** The marketing landing page (`/`) — the white design under `ui/white/` — plus shared chrome (footer, scroll animator) reused by other routes. The white-vs-dark A/B concluded in favour of white (2026-06-19); the dark `S##` sections + `LandingPage.tsx` were deleted. `S06Archetypes.tsx` is kept (white imports its `ArchetypeCard`/`archetypes`).
 
 **Entry points:**
 
-- `ui/LandingPage.tsx` — composition root; imports each `S##*.tsx` section in order and wraps in `ScrollAnimator`.
-- `ui/NavSection.tsx` — top nav (reused by legal pages, glossary, trust-zone, report, about, 404 via `@features/landing/ui/NavSection`).
-- `ui/FooterSection.tsx` — site footer (same reuse pattern).
+- `ui/white/LandingPageWhite.tsx` — composition root; renders each `white/W*.tsx` section in order, wrapped in `ScrollAnimator`.
+- `ui/white/WNavSection.tsx` — white landing top nav.
+- `ui/FooterSection.tsx` — site footer (reused by legal pages, glossary, trust-zone, report, about, 404).
+- `ui/NavSection.tsx` — dark nav, now only used by the 404 page (`features/not-found`).
 - `ui/ScrollAnimator.tsx` — IntersectionObserver-based fade-in orchestrator.
 - `ui/LandingPageTracker.tsx` — analytics pageview tracker for `/`.
 
 **Belongs here:**
 
-- Numbered section components `S##*.tsx` rendered by `LandingPage`.
-- Cross-page chrome (nav, footer) that the landing page owns and other pages consume.
+- White landing section components `white/W*.tsx` rendered by `LandingPageWhite`.
+- Cross-page chrome (footer, nav) that the landing owns and other pages consume.
 - Scroll/animation orchestration scoped to the landing experience.
 - Tests for the above in `tests/`.
 
@@ -31,6 +32,6 @@
 
 **Conventions:**
 
-- Sections are numbered (`S01`–`S15`) to encode render order in filenames. Gaps (S04, S11) are intentional historical removals.
+- White sections are prefixed `W` (e.g. `WHero`, `WFAQ`); render order is the order they appear in `LandingPageWhite.tsx`.
 - Animations use `animate-on-scroll` class; the `ScrollAnimator` adds `.animate` when visible.
 - Mobile breakpoint for the nav: `sm=640px` (hamburger) / `lg=1024px` (full nav).

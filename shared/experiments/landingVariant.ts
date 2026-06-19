@@ -1,24 +1,21 @@
 /**
- * White-landing A/B experiment.
+ * White-landing variant.
  *
- * A 50/50 split between the existing dark landing page ("control") and a new
- * white redesign ("white"), both served at the same `/` URL. Assignment is a
- * sticky, no-PII functional cookie minted in `proxy.ts` on the first `/` visit
- * (random, 1yr). The chosen variant is handed to the server render via the
- * `x-landing-variant` request header — NOT by reading the cookie in the page —
- * because on the very request that mints the cookie, `cookies()` would not yet
- * see it and 50% of brand-new visitors would wrongly render the dark control on
- * their first impression. The header is set on the SAME request the cookie is
- * minted, so the first paint is always the assigned arm.
+ * Originally a 50/50 A/B between the dark landing ("control") and a white
+ * redesign ("white") at `/`. The A/B concluded in favour of white (decision
+ * 2026-06-19): the dark landing was retired and `proxy.ts` now serves "white"
+ * to 100% of traffic. The sticky `__liq_lv` cookie + `x-landing-variant` header
+ * are still minted (now always "white") so the attribution plumbing below keeps
+ * working and historical rows stay comparable.
  *
- * Search-engine / AI crawlers are forced to "control" in middleware so the dark
- * page stays the single indexed version (no cloaking, stable SEO).
+ * The `"control"` type member is retained because historical analytics / Stripe
+ * metadata rows still carry it; no new traffic is ever tagged "control".
  *
- * The variant also flows through the funnel for attribution:
+ * The variant flows through the funnel for attribution (now constant "white"):
  *   - `persistAnalyticsEvent` (features/analytics/client.ts) auto-stamps
  *     `landing_variant` (read from this cookie) onto every durable event.
  *   - `/api/survey` reads the cookie server-side and packs it into the
- *     `utm_tracker` JSON on the submission (headline metric source).
+ *     `utm_tracker` JSON on the submission.
  *   - `/api/stripe/checkout-session` stamps it into Stripe session metadata.
  */
 

@@ -451,27 +451,27 @@ describe("proxy middleware — white-landing A/B (__liq_lv)", () => {
     mockCookiesSet.mock.calls.filter((c) => c[0] === "__liq_lv" || c[0] === "__Host-liq_lv");
   const variantHeader = () => mockNextOpts.value?.request?.headers?.get("x-landing-variant");
 
-  it("mints a sticky landing cookie + request header on / for a fresh non-bot visitor", async () => {
+  it("mints a sticky white cookie + request header on / for a fresh non-bot visitor", async () => {
     await proxy(makeNextRequest("http://localhost:3000/"));
-    // Mocked getRandomValues yields byte 0 → low bit 0 → "control".
-    expect(variantHeader()).toBe("control");
+    // A/B concluded: every visitor gets "white".
+    expect(variantHeader()).toBe("white");
     const calls = landingCookieCalls();
     expect(calls).toHaveLength(1);
-    expect(calls[0]![1]).toBe("control");
+    expect(calls[0]![1]).toBe("white");
     expect(calls[0]![2]).toEqual(
       expect.objectContaining({ path: "/", sameSite: "lax", maxAge: 60 * 60 * 24 * 365 })
     );
   });
 
-  it("honors a ?variant=white QA override and stamps the cookie", async () => {
-    await proxy(makeNextRequest("http://localhost:3000/?variant=white"));
+  it("ignores a ?variant=control override — the A/B is over, everyone is white", async () => {
+    await proxy(makeNextRequest("http://localhost:3000/?variant=control"));
     expect(variantHeader()).toBe("white");
     const calls = landingCookieCalls();
     expect(calls).toHaveLength(1);
     expect(calls[0]![1]).toBe("white");
   });
 
-  it("keeps an existing sticky cookie and does not re-set it", async () => {
+  it("keeps an existing white cookie and does not re-set it", async () => {
     await proxy(
       makeNextRequest("http://localhost:3000/", undefined, undefined, undefined, undefined, "white")
     );
@@ -479,10 +479,27 @@ describe("proxy middleware — white-landing A/B (__liq_lv)", () => {
     expect(landingCookieCalls()).toHaveLength(0);
   });
 
-  it("forces known crawlers to control and never sets a cookie (SEO anti-cloaking)", async () => {
+  it("migrates a returning visitor off a stale control cookie to white", async () => {
     await proxy(
       makeNextRequest(
-        "http://localhost:3000/?variant=white",
+        "http://localhost:3000/",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        "control"
+      )
+    );
+    expect(variantHeader()).toBe("white");
+    const calls = landingCookieCalls();
+    expect(calls).toHaveLength(1);
+    expect(calls[0]![1]).toBe("white");
+  });
+
+  it("serves white to crawlers too and never sets a cookie (no cloaking — one page for all)", async () => {
+    await proxy(
+      makeNextRequest(
+        "http://localhost:3000/",
         undefined,
         undefined,
         undefined,
@@ -491,8 +508,9 @@ describe("proxy middleware — white-landing A/B (__liq_lv)", () => {
         "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
       )
     );
-    // Even with ?variant=white, a bot is pinned to control and gets no cookie.
-    expect(variantHeader()).toBe("control");
+    // Bots see the same white page as everyone (no separate indexed arm), and
+    // are still never given a cookie.
+    expect(variantHeader()).toBe("white");
     expect(landingCookieCalls()).toHaveLength(0);
   });
 
@@ -569,8 +587,8 @@ describe("proxy — consent-independent daily unique-visit count", () => {
 
   it("flags x-liq-new-visit (with the arm) + sets the liq_dv cookie on a fresh daily document visit", async () => {
     await proxy(makeVisitRequest({ dest: "document" }));
-    // Mocked getRandomValues → byte 0 → low bit 0 → "control" arm on "/".
-    expect(mockNextOpts.value?.request?.headers?.get("x-liq-new-visit")).toBe("control");
+    // A/B concluded → the landing arm is always "white" on "/".
+    expect(mockNextOpts.value?.request?.headers?.get("x-liq-new-visit")).toBe("white");
     const dvCall = mockCookiesSet.mock.calls.find((c) => c[0] === "liq_dv");
     expect(dvCall).toBeDefined();
     expect(dvCall![2]).toEqual(
