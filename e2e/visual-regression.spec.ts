@@ -10,12 +10,12 @@ import { test, expect } from "@playwright/test";
 // If a baseline gets older than ~90 days, schedule a refresh — otherwise
 // "no regression" silently rots and stale screenshots become noise.
 //
-//   landing-page          last reviewed: 2026-05-11 — initial baseline
+//   landing-page          last reviewed: 2026-06-19 — white landing (dark A/B retired)
 //   about-page            last reviewed: 2026-05-11 — initial baseline
 //   survey-intro          last reviewed: 2026-05-11 — initial baseline
 //   glossary-page         last reviewed: 2026-05-11 — initial baseline
 //   admin-login           last reviewed: 2026-05-11 — initial baseline
-//   nav-mobile-menu-open  last reviewed: 2026-05-11 — initial baseline
+//   nav-mobile-menu-open  last reviewed: 2026-06-19 — white landing nav (dark A/B retired)
 //
 // To refresh: bump the date here, run `npx playwright test visual-regression
 // --update-snapshots --project="Desktop Chrome"`, eyeball every diff, commit.

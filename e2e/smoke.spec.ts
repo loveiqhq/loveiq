@@ -30,8 +30,9 @@ test.describe("smoke tests", () => {
     // 200 when all services are configured, 503 when env vars are missing (e.g. local dev)
     expect([200, 503]).toContain(res.status());
     const json = await res.json();
+    // The probe deliberately returns only `{ ok }` — it must NOT reveal which
+    // individual services are up/down to anonymous callers (see app/api/health).
     expect(typeof json.ok).toBe("boolean");
-    expect(json.checks).toBeDefined();
   });
 
   test("security headers are present", async ({ page }) => {
