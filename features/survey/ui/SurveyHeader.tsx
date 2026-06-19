@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type FC } from "react";
 import { createPortal } from "react-dom";
+import { useSurveyTheme } from "./SurveyThemeContext";
 
 interface SurveyHeaderProps {
   progress: number;
@@ -124,6 +125,7 @@ const SurveyHeader: FC<SurveyHeaderProps> = ({
   autoAdvance,
   onToggleAutoAdvance,
 }) => {
+  const white = useSurveyTheme() === "white";
   const minutesLeft = Math.ceil((TOTAL_MINUTES * (100 - progress)) / 100);
   const helpTriggerRef = useRef<HTMLButtonElement | null>(null);
   const helpTooltipRef = useRef<HTMLDivElement | null>(null);
@@ -259,7 +261,11 @@ const SurveyHeader: FC<SurveyHeaderProps> = ({
             ref={helpTooltipRef}
             role="tooltip"
             id="survey-auto-advance-help"
-            className="fixed z-[70] max-w-[320px] rounded-[16px] border border-white/10 bg-[#130b17] px-[17px] py-[13px] text-left shadow-[0_16px_48px_rgba(0,0,0,0.35)]"
+            className={`fixed z-[70] max-w-[320px] rounded-[16px] border px-[17px] py-[13px] text-left ${
+              white
+                ? "border-black/[0.08] bg-white shadow-[0_16px_48px_rgba(0,0,0,0.12)]"
+                : "border-white/10 bg-[#130b17] shadow-[0_16px_48px_rgba(0,0,0,0.35)]"
+            }`}
             style={
               tooltipPosition ?? {
                 left: `${TOOLTIP_EDGE_PADDING}px`,
@@ -269,10 +275,14 @@ const SurveyHeader: FC<SurveyHeaderProps> = ({
             onMouseEnter={useHoverTooltip ? cancelTooltipClose : undefined}
             onMouseLeave={useHoverTooltip ? scheduleTooltipClose : undefined}
           >
-            <p className="font-sans text-[14px] font-medium leading-[20px] text-[#e5e7eb]">
+            <p
+              className={`font-sans text-[14px] font-medium leading-[20px] ${white ? "text-[#161021]" : "text-[#e5e7eb]"}`}
+            >
               Auto-advance
             </p>
-            <p className="pt-[2px] font-sans text-[12px] font-light leading-[16px] text-[#d6d6d6]">
+            <p
+              className={`pt-[2px] font-sans text-[12px] font-light leading-[16px] ${white ? "text-[#6b6678]" : "text-[#d6d6d6]"}`}
+            >
               {AUTO_ADVANCE_HELP}
             </p>
           </div>,
@@ -287,27 +297,45 @@ const SurveyHeader: FC<SurveyHeaderProps> = ({
           <div
             className={`flex items-center gap-1.5 rounded-full border px-2 py-1.5 transition-colors ${
               isHelpTooltipOpen
-                ? "border-[#a78bfa]/30 bg-[rgba(167,139,250,0.08)]"
-                : "border-white/10 bg-transparent"
+                ? white
+                  ? "border-[#8b6fbf]/30 bg-[rgba(139,111,191,0.08)]"
+                  : "border-[#a78bfa]/30 bg-[rgba(167,139,250,0.08)]"
+                : white
+                  ? "border-black/10 bg-transparent"
+                  : "border-white/10 bg-transparent"
             }`}
           >
             <button
               type="button"
               onClick={onToggleAutoAdvance}
-              className="flex items-center gap-2.5 rounded-full px-1 py-0.5 font-sans text-[13px] font-medium text-white/75 transition hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a78bfa]/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0510]"
+              className={`flex items-center gap-2.5 rounded-full px-1 py-0.5 font-sans text-[13px] font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a78bfa]/50 focus-visible:ring-offset-2 ${
+                white
+                  ? "text-[#4a4458] hover:text-[#161021] focus-visible:ring-offset-white"
+                  : "text-white/75 hover:text-white focus-visible:ring-offset-[#0a0510]"
+              }`}
               aria-pressed={autoAdvance}
               title={autoAdvance ? "Auto-advance is on" : "Auto-advance is off"}
             >
               <span
                 className={`flex h-[16px] w-[32px] items-center rounded-full px-[2px] transition-colors duration-200 ${
-                  autoAdvance ? "bg-[#a78bfa]/35" : "bg-white/20"
+                  autoAdvance
+                    ? white
+                      ? "bg-[#8b6fbf]/35"
+                      : "bg-[#a78bfa]/35"
+                    : white
+                      ? "bg-black/15"
+                      : "bg-white/20"
                 }`}
               >
                 <span
                   className={`flex h-[12px] w-[12px] items-center justify-center rounded-full transition-transform duration-200 ${
                     autoAdvance
-                      ? "translate-x-[16px] bg-[#a78bfa] text-white shadow-[0_0_10px_rgba(167,139,250,0.45)]"
-                      : "translate-x-0 bg-[#d9d9d9] text-transparent"
+                      ? white
+                        ? "translate-x-[16px] bg-[#8b6fbf] text-white shadow-[0_0_10px_rgba(139,111,191,0.45)]"
+                        : "translate-x-[16px] bg-[#a78bfa] text-white shadow-[0_0_10px_rgba(167,139,250,0.45)]"
+                      : white
+                        ? "translate-x-0 bg-[#c9c5d4] text-transparent"
+                        : "translate-x-0 bg-[#d9d9d9] text-transparent"
                   }`}
                 >
                   {autoAdvance ? <CheckIcon /> : null}
@@ -322,7 +350,11 @@ const SurveyHeader: FC<SurveyHeaderProps> = ({
               aria-label="Explain auto-advance"
               aria-describedby={isHelpTooltipOpen ? "survey-auto-advance-help" : undefined}
               aria-expanded={isHelpTooltipOpen}
-              className="flex h-6 w-6 items-center justify-center rounded-full text-[#a78bfa]/80 transition hover:bg-[rgba(167,139,250,0.12)] hover:text-[#e0d9ff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a78bfa]/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0510]"
+              className={`flex h-6 w-6 items-center justify-center rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a78bfa]/50 focus-visible:ring-offset-2 ${
+                white
+                  ? "text-[#8b6fbf]/90 hover:bg-[rgba(139,111,191,0.12)] hover:text-[#6b5b95] focus-visible:ring-offset-white"
+                  : "text-[#a78bfa]/80 hover:bg-[rgba(167,139,250,0.12)] hover:text-[#e0d9ff] focus-visible:ring-offset-[#0a0510]"
+              }`}
               onBlur={useHoverTooltip ? scheduleTooltipClose : undefined}
               onClick={() => {
                 if (useHoverTooltip) {
@@ -343,7 +375,11 @@ const SurveyHeader: FC<SurveyHeaderProps> = ({
           <button
             type="button"
             onClick={onPause}
-            className="flex items-center gap-1.5 rounded-full border border-white/10 px-4 py-1.5 font-sans text-[13px] font-medium text-white/50 transition hover:border-white/20 hover:text-white/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#fe6839]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0510]"
+            className={`flex items-center gap-1.5 rounded-full border px-4 py-1.5 font-sans text-[13px] font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#fe6839]/60 focus-visible:ring-offset-2 ${
+              white
+                ? "border-black/[0.12] text-[#6b6678] hover:border-black/20 hover:text-[#161021] focus-visible:ring-offset-white"
+                : "border-white/10 text-white/50 hover:border-white/20 hover:text-white/60 focus-visible:ring-offset-[#0a0510]"
+            }`}
           >
             <PauseIcon />
             Pause
@@ -352,18 +388,32 @@ const SurveyHeader: FC<SurveyHeaderProps> = ({
 
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between">
-            <span className="font-sans text-[13px] font-semibold uppercase tracking-[0.1em] text-white/60">
+            <span
+              className={`font-sans text-[13px] font-semibold uppercase tracking-[0.1em] ${white ? "text-[#6b6678]" : "text-white/60"}`}
+            >
               Progress
             </span>
 
-            <div className="flex items-center gap-2.5 rounded-full border border-[rgba(167,139,250,0.2)] bg-[rgba(167,139,250,0.1)] px-3.5 py-1">
-              <span className="font-sans text-[10px] font-semibold uppercase tracking-[1px] text-[#a78bfa] sm:text-[13px] sm:tracking-[0.1em]">
+            <div
+              className={`flex items-center gap-2.5 rounded-full border px-3.5 py-1 ${
+                white
+                  ? "border-[rgba(139,111,191,0.25)] bg-[rgba(139,111,191,0.1)]"
+                  : "border-[rgba(167,139,250,0.2)] bg-[rgba(167,139,250,0.1)]"
+              }`}
+            >
+              <span
+                className={`font-sans text-[10px] font-semibold uppercase tracking-[1px] sm:text-[13px] sm:tracking-[0.1em] ${white ? "text-[#6b5b95]" : "text-[#a78bfa]"}`}
+              >
                 {progress}%
               </span>
               {progress < 100 && (
                 <>
-                  <div className="h-3 w-px bg-[rgba(167,139,250,0.4)]" />
-                  <div className="flex items-center gap-1.5 text-[#a78bfa]">
+                  <div
+                    className={`h-3 w-px ${white ? "bg-[rgba(139,111,191,0.4)]" : "bg-[rgba(167,139,250,0.4)]"}`}
+                  />
+                  <div
+                    className={`flex items-center gap-1.5 ${white ? "text-[#6b5b95]" : "text-[#a78bfa]"}`}
+                  >
                     <ClockIcon />
                     <span className="font-sans text-[10px] font-semibold uppercase tracking-[1px] sm:text-[13px] sm:tracking-[0.1em]">
                       ~{minutesLeft} min
@@ -374,9 +424,15 @@ const SurveyHeader: FC<SurveyHeaderProps> = ({
             </div>
           </div>
 
-          <div className="relative h-[6px] w-full overflow-hidden rounded-full bg-white/10">
+          <div
+            className={`relative h-[6px] w-full overflow-hidden rounded-full ${white ? "bg-black/10" : "bg-white/10"}`}
+          >
             <div
-              className="h-full rounded-full bg-[#a78bfa] shadow-[0_0_10px_rgba(167,139,250,0.4)] transition-all duration-500 ease-out"
+              className={`h-full rounded-full transition-all duration-500 ease-out ${
+                white
+                  ? "bg-[#8b6fbf] shadow-[0_0_10px_rgba(139,111,191,0.4)]"
+                  : "bg-[#a78bfa] shadow-[0_0_10px_rgba(167,139,250,0.4)]"
+              }`}
               style={{ width: `${Math.max(progress, 1)}%` }}
             />
           </div>

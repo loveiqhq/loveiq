@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, type FC } from "react";
 import { createPortal } from "react-dom";
+import { useSurveyTheme } from "./SurveyThemeContext";
 
 interface SurveyPauseModalProps {
   open: boolean;
@@ -105,6 +106,7 @@ const ArrowLeftGlyph: FC = () => (
 );
 
 const SurveyPauseModal: FC<SurveyPauseModalProps> = ({ open, email, onResume, onExit }) => {
+  const white = useSurveyTheme() === "white";
   const cardRef = useRef<HTMLDivElement | null>(null);
   const primaryCtaRef = useRef<HTMLButtonElement | null>(null);
   const closeBtnRef = useRef<HTMLButtonElement | null>(null);
@@ -184,7 +186,9 @@ const SurveyPauseModal: FC<SurveyPauseModalProps> = ({ open, email, onResume, on
         type="button"
         aria-label="Resume survey"
         onClick={onResume}
-        className="fixed inset-0 cursor-default bg-[rgba(10,5,16,0.55)] backdrop-blur-[3.75px]"
+        className={`fixed inset-0 cursor-default backdrop-blur-[3.75px] ${
+          white ? "bg-[rgba(20,15,30,0.4)]" : "bg-[rgba(10,5,16,0.55)]"
+        }`}
         tabIndex={-1}
       />
 
@@ -195,7 +199,9 @@ const SurveyPauseModal: FC<SurveyPauseModalProps> = ({ open, email, onResume, on
           aria-modal="true"
           aria-labelledby="survey-pause-title"
           aria-describedby="survey-pause-desc"
-          className="relative z-10 flex w-full max-w-[351px] flex-col items-center gap-[24px] rounded-[24px] border border-[#130b1c] bg-[#130b1c] px-[33px] py-[40px] shadow-[0px_25px_50px_-12px_rgba(0,0,0,0.45)] sm:max-w-[744px] sm:gap-[39px] sm:px-[33px] sm:py-[49px]"
+          className={`relative z-10 flex w-full max-w-[351px] flex-col items-center gap-[24px] rounded-[24px] border px-[33px] py-[40px] shadow-[0px_25px_50px_-12px_rgba(0,0,0,0.45)] sm:max-w-[744px] sm:gap-[39px] sm:px-[33px] sm:py-[49px] ${
+            white ? "border-black/[0.08] bg-white" : "border-[#130b1c] bg-[#130b1c]"
+          }`}
           style={{ animation: "survey-scale-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) both" }}
         >
           <button
@@ -203,7 +209,11 @@ const SurveyPauseModal: FC<SurveyPauseModalProps> = ({ open, email, onResume, on
             type="button"
             aria-label="Close pause dialog"
             onClick={onResume}
-            className="absolute right-5 top-5 flex h-6 w-6 items-center justify-center rounded-full bg-[rgba(255,255,255,0.05)] p-1 text-white/70 transition hover:bg-[rgba(255,255,255,0.1)] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a78bfa]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[#130b1c] sm:right-[22px] sm:top-[22px] sm:h-9 sm:w-9 sm:p-2"
+            className={`absolute right-5 top-5 flex h-6 w-6 items-center justify-center rounded-full p-1 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a78bfa]/60 focus-visible:ring-offset-2 sm:right-[22px] sm:top-[22px] sm:h-9 sm:w-9 sm:p-2 ${
+              white
+                ? "bg-black/[0.04] text-[#6b6678] hover:bg-black/[0.08] hover:text-[#161021] focus-visible:ring-offset-white"
+                : "bg-[rgba(255,255,255,0.05)] text-white/70 hover:bg-[rgba(255,255,255,0.1)] hover:text-white focus-visible:ring-offset-[#130b1c]"
+            }`}
           >
             <CloseGlyph />
           </button>
@@ -215,13 +225,13 @@ const SurveyPauseModal: FC<SurveyPauseModalProps> = ({ open, email, onResume, on
           <div className="flex flex-col items-center gap-4">
             <h2
               id="survey-pause-title"
-              className="text-center font-serif font-medium text-white text-[30px] leading-[38px] tracking-[-0.75px] sm:text-[49px] sm:leading-[49px] sm:tracking-[-1.2252px]"
+              className={`text-center font-serif font-medium text-[30px] leading-[38px] tracking-[-0.75px] sm:text-[49px] sm:leading-[49px] sm:tracking-[-1.2252px] ${white ? "text-[#161021]" : "text-white"}`}
             >
               You&rsquo;ve paused the test
             </h2>
             <p
               id="survey-pause-desc"
-              className="text-center font-sans font-light text-[rgba(255,255,255,0.7)] text-[14px] leading-[22px] max-w-[293px] sm:text-[20px] sm:leading-[31px] sm:max-w-[576px]"
+              className={`text-center font-sans font-light text-[14px] leading-[22px] max-w-[293px] sm:text-[20px] sm:leading-[31px] sm:max-w-[576px] ${white ? "text-[#4a4458]" : "text-[rgba(255,255,255,0.7)]"}`}
             >
               No worries &mdash; <strong className="font-bold">your progress is saved</strong>.
               We&apos;ll send reminders to{" "}
@@ -230,8 +240,12 @@ const SurveyPauseModal: FC<SurveyPauseModalProps> = ({ open, email, onResume, on
             </p>
           </div>
 
-          <div className="w-full rounded-[14px] bg-[rgba(255,255,255,0.03)] p-4 sm:w-[606px] sm:px-4 sm:pt-4 sm:pb-5">
-            <p className="font-sans font-medium uppercase tracking-[0.05em] text-[#a78bfa] text-[11px] sm:text-[13px]">
+          <div
+            className={`w-full rounded-[14px] p-4 sm:w-[606px] sm:px-4 sm:pt-4 sm:pb-5 ${white ? "bg-[#f5f6f8]" : "bg-[rgba(255,255,255,0.03)]"}`}
+          >
+            <p
+              className={`font-sans font-medium uppercase tracking-[0.05em] text-[11px] sm:text-[13px] ${white ? "text-[#6b5b95]" : "text-[#a78bfa]"}`}
+            >
               What happens next?
             </p>
             <ul className="mt-3 flex flex-col gap-2">
@@ -239,7 +253,9 @@ const SurveyPauseModal: FC<SurveyPauseModalProps> = ({ open, email, onResume, on
                 <span className="mt-0.5">
                   <MailGlyph />
                 </span>
-                <span className="font-sans font-light text-[rgba(255,255,255,0.7)] text-[11px] leading-[15px] sm:text-[13px] sm:leading-[20px]">
+                <span
+                  className={`font-sans font-light text-[11px] leading-[15px] sm:text-[13px] sm:leading-[20px] ${white ? "text-[#6b6678]" : "text-[rgba(255,255,255,0.7)]"}`}
+                >
                   You&apos;ll get a reminder email with a link to jump back in &mdash; no login
                   needed.
                 </span>
@@ -248,7 +264,9 @@ const SurveyPauseModal: FC<SurveyPauseModalProps> = ({ open, email, onResume, on
                 <span className="mt-0.5">
                   <ClockGlyph />
                 </span>
-                <span className="font-sans font-light text-[rgba(255,255,255,0.7)] text-[11px] leading-[15px] sm:text-[13px] sm:leading-[20px]">
+                <span
+                  className={`font-sans font-light text-[11px] leading-[15px] sm:text-[13px] sm:leading-[20px] ${white ? "text-[#6b6678]" : "text-[rgba(255,255,255,0.7)]"}`}
+                >
                   <span>Resume any time. </span>
                   <span>Click the link in your email to continue exactly where you stopped.</span>
                 </span>
@@ -261,7 +279,7 @@ const SurveyPauseModal: FC<SurveyPauseModalProps> = ({ open, email, onResume, on
               ref={primaryCtaRef}
               type="button"
               onClick={onResume}
-              className="flex h-[44px] w-[193px] items-center justify-center gap-2 rounded-full bg-[#fe6839] font-sans text-[12px] font-medium text-white shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-4px_rgba(0,0,0,0.1)] transition hover:bg-[#ff7a4f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#fe6839]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[#130b1c] sm:h-[56px] sm:w-full sm:text-[16px]"
+              className={`flex h-[44px] w-[193px] items-center justify-center gap-2 rounded-full bg-[#fe6839] font-sans text-[12px] font-medium text-white shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-4px_rgba(0,0,0,0.1)] transition hover:bg-[#ff7a4f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#fe6839]/60 focus-visible:ring-offset-2 sm:h-[56px] sm:w-full sm:text-[16px] ${white ? "focus-visible:ring-offset-white" : "focus-visible:ring-offset-[#130b1c]"}`}
             >
               <span>Continue where I left off</span>
               <ArrowRightGlyph />
@@ -270,7 +288,11 @@ const SurveyPauseModal: FC<SurveyPauseModalProps> = ({ open, email, onResume, on
               ref={secondaryCtaRef}
               type="button"
               onClick={onExit}
-              className="flex h-[44px] w-[193px] items-center justify-center gap-2 rounded-full border border-[rgba(239,239,239,0.5)] bg-[#221e27] font-sans text-[12px] font-medium text-white transition hover:border-white/70 hover:bg-[#2a2530] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 focus-visible:ring-offset-2 focus-visible:ring-offset-[#130b1c] sm:h-[56px] sm:w-full sm:text-[16px]"
+              className={`flex h-[44px] w-[193px] items-center justify-center gap-2 rounded-full border font-sans text-[12px] font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 sm:h-[56px] sm:w-full sm:text-[16px] ${
+                white
+                  ? "border-black/15 bg-[#f5f6f8] text-[#161021] hover:border-black/30 hover:bg-[#eef0f4] focus-visible:ring-black/20 focus-visible:ring-offset-white"
+                  : "border-[rgba(239,239,239,0.5)] bg-[#221e27] text-white hover:border-white/70 hover:bg-[#2a2530] focus-visible:ring-white/40 focus-visible:ring-offset-[#130b1c]"
+              }`}
             >
               <ArrowLeftGlyph />
               <span>Go back to main page</span>

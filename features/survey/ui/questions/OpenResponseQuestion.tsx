@@ -2,6 +2,8 @@
 
 import { useState, type FC } from "react";
 import type { SurveyQuestion } from "@/data/survey-data";
+import QuestionHeading from "./QuestionHeading";
+import { useSurveyTheme } from "../SurveyThemeContext";
 
 interface OpenResponseQuestionProps {
   question: SurveyQuestion;
@@ -72,19 +74,19 @@ const OpenResponseQuestion: FC<OpenResponseQuestionProps> = ({
     currentValue.trim().toLowerCase() !== confirmCurrent.trim().toLowerCase();
   const showConfirmError = (confirmTouched || forceValidation) && emailMismatch;
 
-  // Subtitle renders only when the canonical data (xlsx `Answer format
-  // guidance` column → `question.formatGuidance`) supplies one.
-  const subtitle = question.formatGuidance ?? null;
+  const white = useSurveyTheme() === "white";
+  // White autofill: omit the dark autofill overpaint class (it forces white
+  // fill text) and let the browser's default light autofill render on white.
+  const inputBase = `w-full border-b-2 bg-transparent pb-3 pt-2 font-sans text-[22px] focus:outline-none sm:text-[24px] ${
+    white
+      ? "text-[#161021] placeholder:text-black/30"
+      : "autofill-dark text-white placeholder:text-white/30"
+  }`;
 
   return (
     <div className="flex flex-col gap-5">
       {/* Question title */}
-      <div className="flex flex-col gap-2">
-        <h2 className="font-serif text-[31px] font-medium leading-[1.2] text-white break-words sm:text-[39px]">
-          {question.question}
-        </h2>
-        {subtitle && <p className="font-sans text-[15px] font-medium text-[#a78bfa]">{subtitle}</p>}
-      </div>
+      <QuestionHeading question={question} />
 
       {/* Input */}
       <div className="flex flex-col gap-2">
@@ -99,16 +101,20 @@ const OpenResponseQuestion: FC<OpenResponseQuestionProps> = ({
           autoComplete={question.inputType === "email" ? "email" : "off"}
           spellCheck={question.inputType === "email" ? false : undefined}
           maxLength={limited ? MAX_LENGTH : undefined}
-          className={`autofill-dark w-full border-b-2 bg-transparent pb-3 pt-2 font-sans text-[22px] text-white placeholder:text-white/30 focus:outline-none sm:text-[24px] ${
+          className={`${inputBase} ${
             error
               ? "border-[#ef4444]"
               : "border-[rgba(254,104,57,0.2)] focus:border-[rgba(254,104,57,0.4)]"
           }`}
-          style={{
-            ["--autofill-bg" as string]: "#0a0510",
-            ["--autofill-font-size" as string]: "22px",
-            ["--autofill-font-size-sm" as string]: "24px",
-          }}
+          style={
+            white
+              ? undefined
+              : {
+                  ["--autofill-bg" as string]: "#0a0510",
+                  ["--autofill-font-size" as string]: "22px",
+                  ["--autofill-font-size-sm" as string]: "24px",
+                }
+          }
         />
 
         {/* Below input: error message left, char count right */}
@@ -127,7 +133,9 @@ const OpenResponseQuestion: FC<OpenResponseQuestionProps> = ({
 
           {/* Character counter (hidden for unlimited Qs) */}
           {limited && (
-            <span className="font-sans text-[12px] font-medium text-white/30">
+            <span
+              className={`font-sans text-[12px] font-medium ${white ? "text-black/40" : "text-white/30"}`}
+            >
               {currentValue.length} / {MAX_LENGTH}
             </span>
           )}
@@ -147,7 +155,7 @@ const OpenResponseQuestion: FC<OpenResponseQuestionProps> = ({
             placeholder="Confirm email address."
             autoComplete="email"
             spellCheck={false}
-            className={`autofill-dark w-full border-b-2 bg-transparent pb-3 pt-2 font-sans text-[22px] text-white placeholder:text-white/30 focus:outline-none sm:text-[24px] ${
+            className={`${inputBase} ${
               showConfirmError
                 ? "border-[#ef4444]"
                 : "border-[rgba(254,104,57,0.2)] focus:border-[rgba(254,104,57,0.4)]"

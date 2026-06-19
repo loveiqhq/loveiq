@@ -2,6 +2,7 @@
 
 import { type FC } from "react";
 import type { SurveyQuestion } from "@/data/survey-data";
+import { useSurveyTheme } from "./SurveyThemeContext";
 
 interface GuidancePanelProps {
   question: SurveyQuestion;
@@ -50,10 +51,14 @@ const HelpCircleIcon: FC = () => (
 );
 
 const GuidancePanel: FC<GuidancePanelProps> = ({ question }) => {
+  const white = useSurveyTheme() === "white";
   const supportText = question.supportAndGuidance || question.guide;
   const howAnswerIsUsed = question.howAnswerIsUsed || question.comment;
 
   if (!supportText && !howAnswerIsUsed) return null;
+
+  const titleClass = `font-serif text-[16px] font-semibold sm:text-[20px] ${white ? "text-[#161021]" : "text-white/90"}`;
+  const bodyClass = `font-sans text-[13px] leading-[1.6] ${white ? "text-[#6b6678]" : "text-white/70"}`;
 
   return (
     <div className="flex flex-col gap-8">
@@ -61,11 +66,9 @@ const GuidancePanel: FC<GuidancePanelProps> = ({ question }) => {
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-2">
             <BookIcon />
-            <h4 className="font-serif text-[16px] font-semibold text-white/90 sm:text-[20px]">
-              Info and guidance
-            </h4>
+            <h4 className={titleClass}>Info and guidance</h4>
           </div>
-          <p className="font-sans text-[13px] leading-[1.6] text-white/70">{supportText}</p>
+          <p className={bodyClass}>{supportText}</p>
         </div>
       )}
 
@@ -73,11 +76,9 @@ const GuidancePanel: FC<GuidancePanelProps> = ({ question }) => {
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-2">
             <HelpCircleIcon />
-            <h4 className="font-serif text-[16px] font-semibold text-white/90 sm:text-[20px]">
-              How this answer will be used
-            </h4>
+            <h4 className={titleClass}>How this answer will be used</h4>
           </div>
-          <p className="font-sans text-[13px] leading-[1.6] text-white/70">{howAnswerIsUsed}</p>
+          <p className={bodyClass}>{howAnswerIsUsed}</p>
         </div>
       )}
     </div>

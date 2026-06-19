@@ -24,6 +24,8 @@ declare global {
     __loveiqReportSubmissionId?: number | null;
     /** Coupled forced-paywall A/B arm for the current report/wizard session. */
     __loveiqForcedPaywallArm?: "treatment" | "control" | null;
+    /** Survey white A/B arm for the current survey session. */
+    __loveiqSurveyVariant?: "white" | "dark" | null;
     /** Dev-only: tracks event_types we've already warned about for missing context. */
     __loveiqPersistSkipWarned?: Set<string>;
   }
@@ -98,6 +100,20 @@ export const setForcedPaywallArm = (arm: "treatment" | "control" | null) => {
   }
 };
 
+/**
+ * Set on the survey engine once the survey white-A/B arm is known. Like
+ * `setForcedPaywallArm`, every persisted analytics event then auto-carries
+ * `survey_variant`, so survey completion-by-arm is a single GROUP BY. Register a
+ * user-scoped GA4 custom dimension `survey_variant` to surface it in GA4 reports.
+ */
+export const setSurveyVariant = (variant: "white" | "dark" | null) => {
+  if (typeof window === "undefined") return;
+  window.__loveiqSurveyVariant = variant;
+  if (variant && window.__loveiqAnalyticsEnabled && hasCookieYesConsent("analytics")) {
+    window.gtag?.("set", "user_properties", { survey_variant: variant });
+  }
+};
+
 const persistAnalyticsEvent = (
   eventType: string,
   metadata: Record<string, unknown> | undefined,
@@ -136,9 +152,11 @@ const persistAnalyticsEvent = (
   // the white-landing variant is read straight from its cookie (source of
   // truth, readable on every page). Caller keys win over both.
   const arm = window.__loveiqForcedPaywallArm ?? null;
+  const surveyVariant = window.__loveiqSurveyVariant ?? null;
   const landingVariant = getLandingVariant();
   const mergedMetadata = {
     ...(arm ? { forced_paywall_arm: arm } : {}),
+    ...(surveyVariant ? { survey_variant: surveyVariant } : {}),
     ...(landingVariant ? { landing_variant: landingVariant } : {}),
     ...metadata,
   };

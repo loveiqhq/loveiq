@@ -19,8 +19,16 @@ import {
   trackSurveyPause,
   setReportSubmissionContext,
   setForcedPaywallArm,
+  setSurveyVariant,
+  trackExperimentExposure,
 } from "@features/analytics/client";
 import { getForcedPaywallCohort } from "@shared/experiments/forcedPaywall";
+import {
+  assignSurveyVariant,
+  SURVEY_VARIANT_EXPERIMENT,
+  type SurveyVariant,
+} from "@shared/experiments/surveyVariant";
+import { SurveyThemeProvider } from "./SurveyThemeContext";
 import { useSubmitSurvey } from "./hooks/useSubmitSurvey";
 import { useSurveyTracking } from "./hooks/useSurveyTracking";
 import { useUtmCapture } from "./hooks/useUtmCapture";
@@ -85,6 +93,31 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
   const hasCleared = useRef(false);
   const totalQuestions = surveyQuestions.length;
   const question = surveyQuestions[currentIndex];
+
+  // Survey white A/B. Resolve (and stick) the arm on first render so the very
+  // first question paint is already themed (the engine renders client-only,
+  // behind SurveyPage's hydration gate, so reading/minting the cookie here is
+  // SSR-safe and flash-free). `?survey=white|dark` is a dev-only override.
+  const [surveyVariant] = useState<SurveyVariant>(() => {
+    const devParam =
+      typeof window === "undefined"
+        ? null
+        : new URLSearchParams(window.location.search).get("survey");
+    return assignSurveyVariant(devParam);
+  });
+  const surveyExposureFired = useRef(false);
+  useEffect(() => {
+    if (surveyExposureFired.current) return;
+    surveyExposureFired.current = true;
+    // Stamp the arm onto every persisted survey event + fire the one-per-user
+    // exposure record (the per-arm denominator for completion-rate analysis).
+    setSurveyVariant(surveyVariant);
+    trackExperimentExposure({
+      experiment: SURVEY_VARIANT_EXPERIMENT,
+      variant: surveyVariant,
+      surface: "survey",
+    });
+  }, [surveyVariant]);
 
   // Post-survey completion phase management
   const [completionPhase, setCompletionPhase] = useState<CompletionPhase>(() =>
@@ -394,114 +427,136 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
 
   const canGoNext = (hasAnswer && isEmailValid && isSelectionCountValid) || !question.required;
 
+  const isWhite = surveyVariant === "white";
+
   return (
-    // [Audit L8] data-hj-suppress on the survey root keeps Hotjar session replay
-    // from capturing the intimate Q&A (question text, choice labels, selection
-    // state). Default Hotjar input masking covers form fields but not visible
-    // choice-button text / selected state, which would otherwise reconstruct
-    // Article-9 answers in recordings.
-    <main
-      className="relative flex min-h-screen flex-col bg-[#0a0510]"
-      style={{ touchAction: "pan-y" }}
-      data-hj-suppress
-    >
-      {/* Background gradient blurs */}
-      <div className="pointer-events-none fixed inset-0 overflow-hidden">
-        <div className="absolute -left-40 -top-40 h-[500px] w-[500px] rounded-full bg-[rgba(167,139,250,0.06)] blur-[120px]" />
-        <div className="absolute -bottom-40 -right-40 h-[500px] w-[500px] rounded-full bg-[rgba(254,104,57,0.04)] blur-[120px]" />
-      </div>
-
-      {/* Content */}
-      <div className="relative z-10 mx-auto flex w-full max-w-[768px] flex-1 flex-col gap-6 px-6 pb-[100px] pt-6 sm:pb-32 sm:pt-10">
-        {/* Header */}
-        <SurveyHeader
-          progress={progress}
-          onPause={handlePause}
-          autoAdvance={autoAdvance}
-          onToggleAutoAdvance={toggleAutoAdvance}
-        />
-
-        {/* Question with animation */}
-        <div
-          key={animKey}
-          className="flex-1"
-          style={{
-            animation: "survey-fade-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) both",
-          }}
-        >
-          {/* Question component */}
-          <div className="py-4">
-            {question.answerType === "open" && (
-              <OpenResponseQuestion
-                question={question}
-                value={currentAnswer as string | null}
-                onChange={handleChange}
-                forceValidation={attemptedNext}
-                confirmValue={emailConfirmValue}
-                onConfirmChange={setEmailConfirmValue}
-              />
-            )}
-            {question.answerType === "scale" && (
-              <ScaleQuestion
-                question={question}
-                value={currentAnswer as number | null}
-                onChange={handleChange}
-              />
-            )}
-            {question.answerType === "single" && (
-              <SingleChoiceQuestion
-                question={question}
-                value={currentAnswer as string | null}
-                onChange={handleChange}
-                otherText={otherText}
-                onOtherTextChange={handleOtherTextChange}
-              />
-            )}
-            {question.answerType === "multiple" && (
-              <MultipleChoiceQuestion
-                question={question}
-                value={currentAnswer as string[] | null}
-                onChange={handleChange}
-                otherText={otherText}
-                onOtherTextChange={handleOtherTextChange}
-                forceValidation={attemptedNext}
-              />
-            )}
-            {question.answerType === "country" && (
-              <CountryQuestion
-                question={question}
-                value={currentAnswer as string | null}
-                onChange={handleChange}
-              />
-            )}
-          </div>
-
-          {/* Guidance panel */}
-          <div className="mt-4">
-            <GuidancePanel question={question} />
-          </div>
-        </div>
-
-        {/* Navigation — fixed bottom bar on mobile, sticky glass card on desktop */}
-        <div className="fixed bottom-0 left-0 right-0 z-20 rounded-tl-[24px] rounded-tr-[24px] border-t border-white/10 bg-[rgba(10,5,16,0.8)] px-6 py-4 backdrop-blur-xl sm:sticky sm:bottom-6 sm:left-auto sm:right-auto sm:rounded-2xl sm:border sm:border-white/10">
-          <SurveyNav
-            canGoBack={currentIndex > 0}
-            canGoNext={canGoNext}
-            hasAnswer={hasAnswer}
-            statusText={statusText}
-            onPrevious={goPrev}
-            onNext={goNext}
+    // Survey white A/B: the QUESTIONS-only theme. The provider + data attribute
+    // scope it to this <main> (the post-submit processing/wizard/confirmation are
+    // separate early returns above and stay dark). Dark branch = current literal.
+    <SurveyThemeProvider variant={surveyVariant}>
+      {/* [Audit L8] data-hj-suppress on the survey root keeps Hotjar session replay
+          from capturing the intimate Q&A (question text, choice labels, selection
+          state). Default Hotjar input masking covers form fields but not visible
+          choice-button text / selected state, which would otherwise reconstruct
+          Article-9 answers in recordings. */}
+      <main
+        className={`relative flex min-h-screen flex-col ${isWhite ? "bg-white" : "bg-[#0a0510]"}`}
+        style={{ touchAction: "pan-y" }}
+        data-survey-theme={surveyVariant}
+        data-hj-suppress
+      >
+        {/* Background gradient blurs */}
+        <div className="pointer-events-none fixed inset-0 overflow-hidden">
+          <div
+            className={`absolute -left-40 -top-40 h-[500px] w-[500px] rounded-full blur-[120px] ${
+              isWhite ? "bg-[rgba(167,139,250,0.10)]" : "bg-[rgba(167,139,250,0.06)]"
+            }`}
+          />
+          <div
+            className={`absolute -bottom-40 -right-40 h-[500px] w-[500px] rounded-full blur-[120px] ${
+              isWhite ? "bg-[rgba(254,104,57,0.08)]" : "bg-[rgba(254,104,57,0.04)]"
+            }`}
           />
         </div>
-      </div>
 
-      <SurveyPauseModal
-        open={showPauseModal}
-        email={(answers["00000"] as string) || ""}
-        onResume={handleResumeFromPause}
-        onExit={handleExitFromPause}
-      />
-    </main>
+        {/* Content */}
+        <div className="relative z-10 mx-auto flex w-full max-w-[768px] flex-1 flex-col gap-6 px-6 pb-[100px] pt-6 sm:pb-32 sm:pt-10">
+          {/* Header */}
+          <SurveyHeader
+            progress={progress}
+            onPause={handlePause}
+            autoAdvance={autoAdvance}
+            onToggleAutoAdvance={toggleAutoAdvance}
+          />
+
+          {/* Question with animation */}
+          <div
+            key={animKey}
+            className="flex-1"
+            style={{
+              animation: "survey-fade-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) both",
+            }}
+          >
+            {/* Question component */}
+            <div className="py-4">
+              {question.answerType === "open" && (
+                <OpenResponseQuestion
+                  question={question}
+                  value={currentAnswer as string | null}
+                  onChange={handleChange}
+                  forceValidation={attemptedNext}
+                  confirmValue={emailConfirmValue}
+                  onConfirmChange={setEmailConfirmValue}
+                />
+              )}
+              {question.answerType === "scale" && (
+                <ScaleQuestion
+                  question={question}
+                  value={currentAnswer as number | null}
+                  onChange={handleChange}
+                />
+              )}
+              {question.answerType === "single" && (
+                <SingleChoiceQuestion
+                  question={question}
+                  value={currentAnswer as string | null}
+                  onChange={handleChange}
+                  otherText={otherText}
+                  onOtherTextChange={handleOtherTextChange}
+                />
+              )}
+              {question.answerType === "multiple" && (
+                <MultipleChoiceQuestion
+                  question={question}
+                  value={currentAnswer as string[] | null}
+                  onChange={handleChange}
+                  otherText={otherText}
+                  onOtherTextChange={handleOtherTextChange}
+                  forceValidation={attemptedNext}
+                />
+              )}
+              {question.answerType === "country" && (
+                <CountryQuestion
+                  question={question}
+                  value={currentAnswer as string | null}
+                  onChange={handleChange}
+                />
+              )}
+            </div>
+
+            {/* Guidance panel */}
+            <div className="mt-4">
+              <GuidancePanel question={question} />
+            </div>
+          </div>
+
+          {/* Navigation — fixed bottom bar on mobile, sticky glass card on desktop */}
+          <div
+            className={`fixed bottom-0 left-0 right-0 z-20 rounded-tl-[24px] rounded-tr-[24px] border-t px-6 py-4 backdrop-blur-xl sm:sticky sm:bottom-6 sm:left-auto sm:right-auto sm:rounded-2xl sm:border ${
+              isWhite
+                ? "border-black/[0.08] bg-white/80 sm:border-black/[0.08]"
+                : "border-white/10 bg-[rgba(10,5,16,0.8)] sm:border-white/10"
+            }`}
+          >
+            <SurveyNav
+              canGoBack={currentIndex > 0}
+              canGoNext={canGoNext}
+              hasAnswer={hasAnswer}
+              statusText={statusText}
+              onPrevious={goPrev}
+              onNext={goNext}
+            />
+          </div>
+        </div>
+
+        <SurveyPauseModal
+          open={showPauseModal}
+          email={(answers["00000"] as string) || ""}
+          onResume={handleResumeFromPause}
+          onExit={handleExitFromPause}
+        />
+      </main>
+    </SurveyThemeProvider>
   );
 };
 

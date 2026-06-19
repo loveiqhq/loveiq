@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { Resend } from "resend";
 import { z } from "zod";
 import { LANDING_VARIANT_COOKIE, isLandingVariant } from "@shared/experiments/landingVariant";
+import { SURVEY_VARIANT_COOKIE, isSurveyVariant } from "@shared/experiments/surveyVariant";
 import { checkRateLimit, checkCooldown, getClientIp } from "@shared/http/ratelimit";
 import { scheduleAfterResponse } from "@shared/http/after-response";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
@@ -192,30 +193,33 @@ export async function POST(request: Request) {
   const normalizedEmail = email.trim().toLowerCase();
   const normalizedFirstName = firstName.trim();
 
-  // White-landing A/B context: read the sticky variant cookie ONCE so the
-  // utm_tracker stamp below can record which arm the submission came from.
+  // A/B context: read the sticky landing + survey variant cookies ONCE so the
+  // utm_tracker stamp below can record which arms the submission came from.
   // Wrapped in try/catch because cookies() throws when there is no request
-  // scope (e.g. unit tests that call POST directly) — then we leave it unset.
+  // scope (e.g. unit tests that call POST directly) — then we leave them unset.
   let landingVariantRaw: string | undefined;
+  let surveyVariantRaw: string | undefined;
   try {
     const cookieStore = await cookies();
     landingVariantRaw = cookieStore.get(LANDING_VARIANT_COOKIE)?.value;
+    surveyVariantRaw = cookieStore.get(SURVEY_VARIANT_COOKIE)?.value;
   } catch {
-    /* no request scope — leave landingVariantRaw undefined (no stamp) */
+    /* no request scope — leave the variants undefined (no stamp) */
   }
 
-  // White-landing A/B: stamp the sticky variant onto the submission's
-  // utm_tracker JSON so submissions are sliceable by arm in the DB. Guarded so
-  // the merged blob never exceeds the 500-char cap the column expects, and a
-  // non-JSON / unparseable tracker is left untouched. Only stamps when the
-  // cookie is actually present (raw value is a real variant), preserving the
-  // prior "no cookie → no stamp" behaviour for crawlers / direct API hits.
+  // A/B: stamp the sticky landing + survey variants onto the submission's
+  // utm_tracker JSON so submissions are sliceable by arm in the DB (survey_variant
+  // is the survey-white A/B's completion-rate denominator). Guarded so the merged
+  // blob never exceeds the 500-char cap the column expects, and a non-JSON /
+  // unparseable tracker is left untouched. Each arm only stamps when its cookie is
+  // actually present, preserving "no cookie → no stamp" for crawlers / direct hits.
   let mergedUtmTracker = utmTracker ?? null;
   try {
-    if (isLandingVariant(landingVariantRaw)) {
+    if (isLandingVariant(landingVariantRaw) || isSurveyVariant(surveyVariantRaw)) {
       const base = utmTracker ? JSON.parse(utmTracker) : {};
       if (base && typeof base === "object" && !Array.isArray(base)) {
-        base.landing_variant = landingVariantRaw;
+        if (isLandingVariant(landingVariantRaw)) base.landing_variant = landingVariantRaw;
+        if (isSurveyVariant(surveyVariantRaw)) base.survey_variant = surveyVariantRaw;
         const candidate = JSON.stringify(base);
         if (candidate.length <= 500) mergedUtmTracker = candidate;
       }

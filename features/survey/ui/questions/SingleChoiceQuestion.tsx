@@ -3,7 +3,9 @@
 import type { FC } from "react";
 import type { SurveyQuestion } from "@/data/survey-data";
 import ChoiceCard from "./ChoiceCard";
+import QuestionHeading from "./QuestionHeading";
 import { getOptionExplanation } from "./getOptionExplanation";
+import { useSurveyTheme } from "../SurveyThemeContext";
 
 interface SingleChoiceQuestionProps {
   question: SurveyQuestion;
@@ -20,19 +22,12 @@ const SingleChoiceQuestion: FC<SingleChoiceQuestionProps> = ({
   otherText,
   onOtherTextChange,
 }) => {
-  // Subtitle renders only when the canonical data (xlsx `Answer format
-  // guidance` column → `question.formatGuidance`) supplies one.
-  const subtitle = question.formatGuidance ?? "";
+  const white = useSurveyTheme() === "white";
 
   return (
     <div className="flex flex-col gap-5">
       {/* Title + subtitle */}
-      <div className="flex flex-col gap-2">
-        <h2 className="font-serif text-[31px] font-medium leading-[1.2] text-white break-words sm:text-[39px]">
-          {question.question}
-        </h2>
-        {subtitle && <p className="font-sans text-[15px] font-medium text-[#a78bfa]">{subtitle}</p>}
-      </div>
+      <QuestionHeading question={question} />
 
       {/* Options — single column */}
       <div className="flex flex-col gap-3">
@@ -57,7 +52,11 @@ const SingleChoiceQuestion: FC<SingleChoiceQuestionProps> = ({
           value={otherText ?? ""}
           onChange={(e) => onOtherTextChange?.(e.target.value)}
           placeholder="Please specify…"
-          className="w-full border-b-2 border-[rgba(254,104,57,0.2)] bg-transparent pb-3 pt-2 font-sans text-[18px] text-white placeholder:text-white/30 focus:border-[rgba(254,104,57,0.4)] focus:outline-none"
+          className={`w-full border-b-2 border-[rgba(254,104,57,0.2)] bg-transparent pb-3 pt-2 font-sans text-[18px] focus:border-[rgba(254,104,57,0.4)] focus:outline-none ${
+            white
+              ? "text-[#161021] placeholder:text-black/30"
+              : "text-white placeholder:text-white/30"
+          }`}
           autoFocus
         />
       )}

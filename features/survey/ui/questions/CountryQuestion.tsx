@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo, type FC } from "react";
 import type { SurveyQuestion } from "@/data/survey-data";
 import { COUNTRIES, getCountryFlagUrl } from "@/data/countries";
+import { useSurveyTheme } from "../SurveyThemeContext";
 
 interface CountryQuestionProps {
   question: SurveyQuestion;
@@ -11,6 +12,7 @@ interface CountryQuestionProps {
 }
 
 const CountryQuestion: FC<CountryQuestionProps> = ({ question, value, onChange }) => {
+  const white = useSurveyTheme() === "white";
   // search tracks user typing only while dropdown is open
   const [search, setSearch] = useState("");
   const [isOpen, setIsOpen] = useState(false);
@@ -149,7 +151,9 @@ const CountryQuestion: FC<CountryQuestionProps> = ({ question, value, onChange }
 
   return (
     <div className="flex flex-col gap-6">
-      <h2 className="font-sans text-[28px] font-bold leading-tight text-white sm:text-[36px]">
+      <h2
+        className={`font-sans text-[28px] font-bold leading-tight sm:text-[36px] ${white ? "text-[#161021]" : "text-white"}`}
+      >
         {question.question}
       </h2>
 
@@ -178,7 +182,11 @@ const CountryQuestion: FC<CountryQuestionProps> = ({ question, value, onChange }
             onKeyDown={handleKeyDown}
             placeholder="Search for a country..."
             autoComplete="off"
-            className={`w-full rounded-xl border border-white/10 bg-white/5 py-3 font-sans text-[15px] text-white placeholder:text-white/30 focus:border-[#a78bfa] focus:outline-none ${value && !isEditing ? "pl-11" : "pl-4"} ${value ? "pr-10" : "pr-4"}`}
+            className={`w-full rounded-xl border py-3 font-sans text-[15px] focus:outline-none ${
+              white
+                ? "border-black/[0.08] bg-[#f5f6f8] text-[#161021] placeholder:text-black/30 focus:border-[#8b6fbf]"
+                : "border-white/10 bg-white/5 text-white placeholder:text-white/30 focus:border-[#a78bfa]"
+            } ${value && !isEditing ? "pl-11" : "pl-4"} ${value ? "pr-10" : "pr-4"}`}
           />
 
           {/* Clear button */}
@@ -186,7 +194,11 @@ const CountryQuestion: FC<CountryQuestionProps> = ({ question, value, onChange }
             <button
               type="button"
               onClick={clearSelection}
-              className="absolute right-3 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-white/60 transition hover:bg-white/20 hover:text-white"
+              className={`absolute right-3 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full transition ${
+                white
+                  ? "bg-black/[0.06] text-[#6b6678] hover:bg-black/[0.12] hover:text-[#161021]"
+                  : "bg-white/10 text-white/60 hover:bg-white/20 hover:text-white"
+              }`}
               aria-label="Clear selection"
             >
               <svg
@@ -208,7 +220,11 @@ const CountryQuestion: FC<CountryQuestionProps> = ({ question, value, onChange }
           <ul
             ref={listRef}
             data-lenis-prevent
-            className="absolute z-50 mt-2 max-h-[240px] w-full overflow-y-auto rounded-xl border border-white/10 bg-[#1a1225] py-1"
+            className={`absolute z-50 mt-2 max-h-[240px] w-full overflow-y-auto rounded-xl border py-1 ${
+              white
+                ? "border-black/[0.08] bg-white shadow-[0_16px_40px_rgba(0,0,0,0.12)]"
+                : "border-white/10 bg-[#1a1225]"
+            }`}
             role="listbox"
           >
             {filtered.map((country, i) => (
@@ -216,9 +232,11 @@ const CountryQuestion: FC<CountryQuestionProps> = ({ question, value, onChange }
                 key={country}
                 role="option"
                 aria-selected={country === value}
-                className={`cursor-pointer px-4 py-2.5 font-sans text-[15px] text-white/80 transition-colors ${
-                  i === highlightIndex ? "bg-white/[0.1] text-white" : "hover:bg-white/[0.07]"
-                } ${country === value ? "text-[#a78bfa]" : ""}`}
+                className={`cursor-pointer px-4 py-2.5 font-sans text-[15px] transition-colors ${
+                  white
+                    ? `text-[#4a4458] ${i === highlightIndex ? "bg-black/[0.06] text-[#161021]" : "hover:bg-black/[0.04]"} ${country === value ? "text-[#6b5b95]" : ""}`
+                    : `text-white/80 ${i === highlightIndex ? "bg-white/[0.1] text-white" : "hover:bg-white/[0.07]"} ${country === value ? "text-[#a78bfa]" : ""}`
+                }`}
                 onMouseDown={(e) => {
                   e.preventDefault();
                   selectCountry(country);
@@ -245,7 +263,13 @@ const CountryQuestion: FC<CountryQuestionProps> = ({ question, value, onChange }
 
         {/* No results */}
         {isOpen && isEditing && search && filtered.length === 0 && (
-          <div className="absolute z-50 mt-2 w-full rounded-xl border border-white/10 bg-[#1a1225] px-4 py-3 font-sans text-[14px] text-white/40">
+          <div
+            className={`absolute z-50 mt-2 w-full rounded-xl border px-4 py-3 font-sans text-[14px] ${
+              white
+                ? "border-black/[0.08] bg-white text-[#6b6678] shadow-[0_16px_40px_rgba(0,0,0,0.12)]"
+                : "border-white/10 bg-[#1a1225] text-white/40"
+            }`}
+          >
             No countries found
           </div>
         )}

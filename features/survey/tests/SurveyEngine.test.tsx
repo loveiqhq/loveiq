@@ -62,6 +62,8 @@ vi.mock("@features/analytics/client", () => ({
   trackSurveyPause: vi.fn(),
   setReportSubmissionContext: vi.fn(),
   setForcedPaywallArm: vi.fn(),
+  setSurveyVariant: vi.fn(),
+  trackExperimentExposure: vi.fn(),
 }));
 
 vi.mock("@features/survey/ui/questions/SingleChoiceQuestion", () => ({
