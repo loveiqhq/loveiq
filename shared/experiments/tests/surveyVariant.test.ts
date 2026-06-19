@@ -34,18 +34,33 @@ describe("isSurveyVariant / normalizeSurveyVariant", () => {
 });
 
 describe("resolveSurveyDevOverride", () => {
-  it("is null outside development regardless of param", () => {
-    vi.stubEnv("NODE_ENV", "production");
-    expect(resolveSurveyDevOverride("white")).toBeNull();
-    expect(resolveSurveyDevOverride("dark")).toBeNull();
-  });
-
-  it("honours ?survey=white|dark only in development", () => {
+  it("honours ?survey=white|dark in development (any site URL)", () => {
     vi.stubEnv("NODE_ENV", "development");
     expect(resolveSurveyDevOverride("white")).toBe("white");
     expect(resolveSurveyDevOverride("dark")).toBe("dark");
     expect(resolveSurveyDevOverride("bogus")).toBeNull();
     expect(resolveSurveyDevOverride(null)).toBeNull();
+  });
+
+  it("honours the override on staging / preview deploys", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://staging.loveiq.org");
+    expect(resolveSurveyDevOverride("white")).toBe("white");
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://loveiq-web-abc123.vercel.app");
+    expect(resolveSurveyDevOverride("dark")).toBe("dark");
+  });
+
+  it("is OFF on production (apex/www) so real users can't self-select", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://www.loveiq.org");
+    expect(resolveSurveyDevOverride("white")).toBeNull();
+    expect(resolveSurveyDevOverride("dark")).toBeNull();
+  });
+
+  it("defaults to OFF when the site URL is unknown/empty (safe default)", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "");
+    expect(resolveSurveyDevOverride("white")).toBeNull();
   });
 });
 
