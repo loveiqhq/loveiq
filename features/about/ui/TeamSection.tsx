@@ -56,6 +56,17 @@ const TeamSection: FC = () => {
       imagePosition: "center 0%",
       imageOffsetY: "-20%",
     },
+    {
+      name: "Iman Beslija",
+      role: "UX/UI Designer",
+      image: "/about/team-iman-beslija.png",
+      // LinkedIn URL pending — show a non-clickable placeholder icon until provided.
+      linkedinPending: true,
+      socials: ["linkedin"],
+      hoverColor: "purple",
+      imageScale: 1,
+      imagePosition: "center top",
+    },
   ];
 
   return (
@@ -144,7 +155,7 @@ const TeamSection: FC = () => {
 
                   {/* Social links */}
                   <div className="flex items-center gap-4 text-gray-500">
-                    {member.linkedinUrl && (
+                    {member.linkedinUrl ? (
                       <Link
                         href={member.linkedinUrl}
                         aria-label={`${member.name} on LinkedIn`}
@@ -154,7 +165,17 @@ const TeamSection: FC = () => {
                       >
                         <LinkedInIcon />
                       </Link>
-                    )}
+                    ) : member.linkedinPending ? (
+                      // Placeholder until the real LinkedIn URL is provided — visible but
+                      // non-interactive (no href, no hover), dimmed to read as "coming soon".
+                      <span
+                        aria-label={`${member.name} — LinkedIn coming soon`}
+                        title="LinkedIn coming soon"
+                        className="cursor-default opacity-50"
+                      >
+                        <LinkedInIcon />
+                      </span>
+                    ) : null}
                   </div>
                 </div>
               </div>
