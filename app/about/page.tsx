@@ -44,8 +44,15 @@ const teamSchema = {
   "@graph": [
     {
       "@type": "Person",
+      name: "Iman Beslija",
+      jobTitle: "UX/UI Designer",
+      worksFor: { "@id": `${siteUrl}/#organization` },
+      sameAs: ["https://www.linkedin.com/in/iman-be%C5%A1lija-370918336/"],
+    },
+    {
+      "@type": "Person",
       name: "Eman Cickusic",
-      jobTitle: "Tech Lead",
+      jobTitle: "Tech & Delivery Lead",
       worksFor: { "@id": `${siteUrl}/#organization` },
       sameAs: ["https://www.linkedin.com/in/eman-cickusic/"],
     },
