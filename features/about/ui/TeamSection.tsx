@@ -34,8 +34,18 @@ const LinkedInIcon: FC = () => (
 const TeamSection: FC = () => {
   const team = [
     {
+      name: "Iman Beslija",
+      role: "UX/UI Designer",
+      image: "/about/team-iman-beslija.png",
+      linkedinUrl: "https://www.linkedin.com/in/iman-be%C5%A1lija-370918336/",
+      socials: ["linkedin"],
+      hoverColor: "purple",
+      imageScale: 1,
+      imagePosition: "center top",
+    },
+    {
       name: "Eman Cickusic",
-      role: "Tech Lead",
+      role: "Tech & Delivery Lead",
       image: "/about/team-eman-cickusic.png",
       linkedinUrl: "https://www.linkedin.com/in/eman-cickusic/",
       socials: ["linkedin"],
@@ -55,17 +65,6 @@ const TeamSection: FC = () => {
       imageScale: 1,
       imagePosition: "center 0%",
       imageOffsetY: "-20%",
-    },
-    {
-      name: "Iman Beslija",
-      role: "UX/UI Designer",
-      image: "/about/team-iman-beslija.png",
-      // LinkedIn URL pending — show a non-clickable placeholder icon until provided.
-      linkedinPending: true,
-      socials: ["linkedin"],
-      hoverColor: "purple",
-      imageScale: 1,
-      imagePosition: "center top",
     },
   ];
 
@@ -155,7 +154,7 @@ const TeamSection: FC = () => {
 
                   {/* Social links */}
                   <div className="flex items-center gap-4 text-gray-500">
-                    {member.linkedinUrl ? (
+                    {member.linkedinUrl && (
                       <Link
                         href={member.linkedinUrl}
                         aria-label={`${member.name} on LinkedIn`}
@@ -165,17 +164,7 @@ const TeamSection: FC = () => {
                       >
                         <LinkedInIcon />
                       </Link>
-                    ) : member.linkedinPending ? (
-                      // Placeholder until the real LinkedIn URL is provided — visible but
-                      // non-interactive (no href, no hover), dimmed to read as "coming soon".
-                      <span
-                        aria-label={`${member.name} — LinkedIn coming soon`}
-                        title="LinkedIn coming soon"
-                        className="cursor-default opacity-50"
-                      >
-                        <LinkedInIcon />
-                      </span>
-                    ) : null}
+                    )}
                   </div>
                 </div>
               </div>
