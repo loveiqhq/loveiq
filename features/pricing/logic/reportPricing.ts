@@ -1076,6 +1076,8 @@ function buildQuotePayload({
         code:
           (existingBucketFromCode?.code as PricingBucketCode | undefined) ??
           ((existingQuote.base_price_bucket as PricingBucketCode) || "B"),
+        // weight is not read on the re-quote path; 0 is a harmless placeholder
+        // for legacy/unknown codes (all live "C" rows were normalized to A/B).
         weight: existingBucketFromCode?.weight ?? 0,
         msrpCents:
           existingQuote.msrp != null
@@ -1134,10 +1136,10 @@ function buildQuotePayload({
     now,
     plan,
   });
-  // Ladder is applied to initial_price so Group B's contextual uplift flows
-  // through to the charged amount. For Group A this equals starting × ladder
-  // which matches the xlsx advertised depth; for Group B the depth is
-  // relative to the uplifted initial, exactly as the MVP doc specifies.
+  // Pricing reset 2026-06: the ladder is a single no-decay step (multiplier 1)
+  // and there is no per-user uplift, so discountedCents == initialPriceCents ==
+  // the flat starting price. normalizePriceEnding is kept as a defensive no-op
+  // (the flat prices already end in .99) in case a future price is non-charm-ended.
   const discountedCents = normalizePriceEnding(initialPriceCents * discount.multiplier);
   const previousCurrentPriceCents =
     !regenerateInitialPrice && existingQuote?.current_price != null
@@ -1533,6 +1535,8 @@ export async function markReportPriceQuotePurchased({
  * Display helper used by legacy admin screens. Returns the bucket-B MSRP as
  * the default "retail" price — the per-user strike is stored on the quote now
  * and should be read from `ReportPriceQuoteSnapshot.msrpCents` instead.
+ * Since the 2026-06 reset A and B are identical, so the returned value is
+ * unambiguous regardless of the bucket-B preference.
  */
 export function getReportPriceStrikeDisplay(plan: ReportPurchasePlanId) {
   // eslint-disable-next-line security/detect-object-injection -- plan is a closed union of internal purchase-plan ids.

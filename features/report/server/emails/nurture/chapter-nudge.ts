@@ -20,8 +20,9 @@ import {
  *   [ Continue reading your full chapter → ]            (CTA → /report)
  *   <testimonial> · sign-off
  *
- * No promo code: the CTA link rides the report's existing time-based price
- * ladder. The in-card logo header is hidden (Figma 7725-11594); branding comes
+ * No promo code: the CTA link directs to the report at its flat current price
+ * (the time-decay ladder was retired 2026-06). The in-card logo header is hidden
+ * (Figma 7725-11594); branding comes
  * from the mail client's sender avatar. `teaseText` is plain text and is escaped
  * here.
  */
