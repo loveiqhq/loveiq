@@ -47,12 +47,11 @@ const PRICING_SIGNAL_SELECT = [
 ].join(",");
 
 /**
- * Pricing buckets. Pricing reset 2026-06: prices are now FLAT — both buckets
- * (A / B) carry identical MSRP + starting values per plan, so the 50/50 A/B split
- * is price-neutral (experiment_group stays populated for analytics continuity,
- * but every visitor pays the same). Per-user contextual uplift and the time-decay
- * ladder were removed at the same time, so `startingCents` is the final price
- * every visitor sees:
+ * Pricing buckets. 2026-06 reset: the BASE prices were lowered and the A/B
+ * buckets now carry identical base values per plan. Group A is charged the flat
+ * `startingCents`; Group B gets the per-user contextual uplift on top (see
+ * buildQuotePayload). The 14-day time-decay ladder is currently off (flat over
+ * time). Base prices:
  *   Essentials €9.99 (was €29.99) · Full €14.99 (was €49.99) · All €29.99 (was €79.99)
  * MSRP is the struck-out anchor shown in the modal/email.
  */
@@ -1119,13 +1118,25 @@ function buildQuotePayload({
       ? existingQuote.initial_price_timestamp
       : now.toISOString();
 
-  // Pricing reset 2026-06: per-user contextual uplift was removed. Every visitor
-  // (both experiment groups) pays the flat catalogue `starting` price, clamped to
-  // MSRP defensively. The country/device/traffic/behavioral/engagement signals are
-  // still computed and stamped on the quote for analytics, but they no longer move
-  // the charged price. The flat starting prices already use deliberate .99 endings,
-  // so no charm-rounding is applied.
-  const computedInitialCents = Math.min(bucket.msrpCents, bucket.startingCents);
+  // Per-user pricing: Group A is charged the flat catalogue `starting` price;
+  // Group B gets the contextual uplift (country × device × traffic × behavioral ×
+  // engagement), clamped to MSRP. Group A's starting is a deliberate .99 price so
+  // it's shown verbatim; Group B's computed uplift is charm-rounded to a .49/.99
+  // ending, then clamped to MSRP.
+  const groupBInitialRaw =
+    bucket.startingCents *
+    countryPricing.multiplier *
+    deviceMultiplier *
+    trafficMultiplier *
+    behavioralPricing.multiplier *
+    engagementMultiplier;
+  const computedInitialCents =
+    experimentGroup === "A"
+      ? Math.min(bucket.msrpCents, bucket.startingCents)
+      : Math.min(
+          bucket.msrpCents,
+          normalizePriceEnding(Math.min(bucket.msrpCents, groupBInitialRaw))
+        );
   const initialPriceCents =
     !regenerateInitialPrice && existingQuote?.initial_price != null
       ? fromEuroAmount(existingQuote.initial_price)
@@ -1136,10 +1147,9 @@ function buildQuotePayload({
     now,
     plan,
   });
-  // Pricing reset 2026-06: the ladder is a single no-decay step (multiplier 1)
-  // and there is no per-user uplift, so discountedCents == initialPriceCents ==
-  // the flat starting price. normalizePriceEnding is kept as a defensive no-op
-  // (the flat prices already end in .99) in case a future price is non-charm-ended.
+  // Ladder multiplier (currently a no-decay ×1 — the 14-day time-decay ladder is
+  // off) is applied to initial_price, so any Group B uplift baked into initial
+  // flows through to the charged amount.
   const discountedCents = normalizePriceEnding(initialPriceCents * discount.multiplier);
   const previousCurrentPriceCents =
     !regenerateInitialPrice && existingQuote?.current_price != null

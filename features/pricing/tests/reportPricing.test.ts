@@ -534,9 +534,10 @@ describe("reportPricing", () => {
     expect(lookupReportTokenBySubmissionId).not.toHaveBeenCalled();
   });
 
-  it("all_reports fresh quote is the flat €29.99 starting price (step 0, any group)", async () => {
-    // Post-2026-06 reset: all_reports is a flat €29.99 for every user. A fresh
-    // quote at step 0 → initial == current == the catalogue starting (2999).
+  it("group A all_reports fresh quote is the €29.99 base starting verbatim (step 0)", async () => {
+    // Group A is charged the flat base `starting` verbatim (no per-user uplift,
+    // no charm-snap). 2026-06 base for all_reports is €29.99. A fresh quote at
+    // step 0 → initial == current == the catalogue starting (2999).
     let groupAId = 0;
     for (let id = 1; id <= 5_000; id++) {
       if (getPricingExperimentGroup(id) === "A") {
@@ -597,7 +598,7 @@ describe("reportPricing", () => {
       reportToken: "rpt_ABCDEFGHIJKLMNOPQRST",
     });
 
-    // Flat €29.99 for everyone — no decay, no charm-snap.
+    // Group A: €29.99 base verbatim — no uplift, no decay, no charm-snap.
     expect(quote.initialPriceCents).toBe(2999);
     expect(quote.currentPriceCents).toBe(2999);
     expect(quote.msrpCents).toBe(7999);
