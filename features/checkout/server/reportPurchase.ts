@@ -20,10 +20,11 @@ export interface ReportPurchasePlan {
   features: ReportPurchaseFeature[];
   plan: ReportPurchasePlanId;
   /**
-   * Bucket-B MSRP per `Tracking & Pricing - Prices (2).csv` — display fallback
-   * when a live quote isn't available (e.g. the marketing site before the
-   * paywall, or a discount email when the cron failed to load the quote). The
-   * real per-user strike + current price come from `ReportPriceQuoteSnapshot`.
+   * Flat selling price (cents) — display fallback when a live quote isn't
+   * available (e.g. the marketing site before the paywall, or a discount email
+   * when the cron failed to load the quote). As of the 2026-06 flat-pricing
+   * reset this equals the price every visitor sees; the strike-through MSRP
+   * comes from `ReportPriceQuoteSnapshot.msrpCents`.
    */
   priceCents: number;
   priceSuffix: string;
@@ -48,7 +49,7 @@ export const REPORT_PURCHASE_PLANS: ReportPurchasePlan[] = [
       { label: "Share report with 1 extra email" },
     ],
     plan: "essentials",
-    priceCents: 1999,
+    priceCents: 999,
     priceSuffix: "one-time",
     title: "Essentials only",
   },
@@ -65,7 +66,7 @@ export const REPORT_PURCHASE_PLANS: ReportPurchasePlan[] = [
       { label: "Share report with 2 extra emails" },
     ],
     plan: "full_report",
-    priceCents: 4999,
+    priceCents: 1499,
     priceSuffix: "one-time",
     title: "Full report",
     tone: "highlight",
@@ -80,7 +81,7 @@ export const REPORT_PURCHASE_PLANS: ReportPurchasePlan[] = [
       { label: "Decode attraction & compatibility" },
     ],
     plan: "all_reports",
-    priceCents: 14999,
+    priceCents: 2999,
     priceSuffix: "one-time",
     title: "All 14 reports",
   },

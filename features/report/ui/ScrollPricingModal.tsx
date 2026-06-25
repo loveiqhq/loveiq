@@ -2598,7 +2598,7 @@ const ScrollPricingModal: FC<Props> = ({
                       <span className="rpm-end-cta__stats-num">~50</span>
                       <span className="rpm-end-cta__stats-text"> pages. </span>
                       <span className="rpm-end-cta__stats-num">
-                        {quote ? formatReportPurchasePrice(quote.currentPriceCents) : "€9.99"}
+                        {quote ? formatReportPurchasePrice(quote.currentPriceCents) : "€14.99"}
                       </span>
                       <span className="rpm-end-cta__stats-text"> once, yours forever.</span>
                     </p>

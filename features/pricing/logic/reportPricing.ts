@@ -20,26 +20,15 @@ const SUPABASE_TIMEOUT_MS = 8_000;
 const QUOTE_VALIDITY_MS = 21 * 24 * 60 * 60 * 1_000;
 
 /**
- * Per-plan discount ladder — source: `Tracking & Pricing - Prices (2).csv` rows 5-8.
- * Essentials + Full Report share the same ladder that deepens to -70% at 14d.
- * All Reports caps at -30% past 72h so the premium tier never free-falls.
- * Multipliers are applied to the quote's `starting_price` (NOT to MSRP).
+ * Pricing reset 2026-06: the per-plan time-decay ladder (−10/−30/−50/−70% over
+ * 14 days) was RETIRED in favour of flat, predictable prices (see PLAN_BUCKETS).
+ * Both ladders now collapse to a single no-decay step, so `getDiscountAdjustment`
+ * always returns step 0 / ×1 and `current_price` equals the flat starting price
+ * at every age. Nurture discounts still exist as Stripe promotion codes
+ * (50/75/100%) applied at checkout — independent of this ladder.
  */
-const ONE_HOUR_MS = 60 * 60 * 1_000;
-const PLAN_LADDER_ESSENTIALS_FULL = [
-  { delayMs: 0, multiplier: 1, step: 0 },
-  { delayMs: 24 * ONE_HOUR_MS, multiplier: 0.9, step: 1 }, // -10%
-  { delayMs: 72 * ONE_HOUR_MS, multiplier: 0.7, step: 2 }, // -30%
-  { delayMs: 7 * 24 * ONE_HOUR_MS, multiplier: 0.5, step: 3 }, // -50%
-  { delayMs: 14 * 24 * ONE_HOUR_MS, multiplier: 0.3, step: 4 }, // -70%
-] as const;
-const PLAN_LADDER_ALL = [
-  { delayMs: 0, multiplier: 1, step: 0 },
-  { delayMs: 24 * ONE_HOUR_MS, multiplier: 0.9, step: 1 }, // -10%
-  { delayMs: 72 * ONE_HOUR_MS, multiplier: 0.7, step: 2 }, // -30%
-  { delayMs: 7 * 24 * ONE_HOUR_MS, multiplier: 0.7, step: 3 }, // cap at -30%
-  { delayMs: 14 * 24 * ONE_HOUR_MS, multiplier: 0.7, step: 4 }, // cap at -30%
-] as const;
+const PLAN_LADDER_ESSENTIALS_FULL = [{ delayMs: 0, multiplier: 1, step: 0 }] as const;
+const PLAN_LADDER_ALL = [{ delayMs: 0, multiplier: 1, step: 0 }] as const;
 const PLAN_LADDERS = {
   essentials: PLAN_LADDER_ESSENTIALS_FULL,
   full_report: PLAN_LADDER_ESSENTIALS_FULL,
@@ -58,11 +47,14 @@ const PRICING_SIGNAL_SELECT = [
 ].join(",");
 
 /**
- * Pricing buckets — source: `Tracking & Pricing - Prices (2).csv` rows 2-3.
- * Each plan has 2 buckets (A / B) with an even 50/50 distribution.
- * MSRP is the struck-out anchor shown in the discount email and modal;
- * `startingCents` is the initial sale price before any ladder discount.
- * The ladder multipliers in `PLAN_LADDERS` are applied to `startingCents`.
+ * Pricing buckets. Pricing reset 2026-06: prices are now FLAT — both buckets
+ * (A / B) carry identical MSRP + starting values per plan, so the 50/50 A/B split
+ * is price-neutral (experiment_group stays populated for analytics continuity,
+ * but every visitor pays the same). Per-user contextual uplift and the time-decay
+ * ladder were removed at the same time, so `startingCents` is the final price
+ * every visitor sees:
+ *   Essentials €9.99 (was €29.99) · Full €14.99 (was €49.99) · All €29.99 (was €79.99)
+ * MSRP is the struck-out anchor shown in the modal/email.
  */
 // "C" retired 2026-06 (3-bucket → 2-bucket). Kept in the union so legacy quotes
 // stamped base_price_bucket="C" still rehydrate — they read msrp/starting off the
@@ -77,15 +69,15 @@ interface PricingBucket {
 const PLAN_BUCKETS: Record<ReportPurchasePlanId, readonly PricingBucket[]> = {
   essentials: [
     { code: "A", weight: 50, msrpCents: 2999, startingCents: 999 },
-    { code: "B", weight: 50, msrpCents: 1999, startingCents: 699 },
+    { code: "B", weight: 50, msrpCents: 2999, startingCents: 999 },
   ],
   full_report: [
-    { code: "A", weight: 50, msrpCents: 4999, startingCents: 2499 },
+    { code: "A", weight: 50, msrpCents: 4999, startingCents: 1499 },
     { code: "B", weight: 50, msrpCents: 4999, startingCents: 1499 },
   ],
   all_reports: [
-    { code: "A", weight: 50, msrpCents: 14999, startingCents: 9900 },
-    { code: "B", weight: 50, msrpCents: 14999, startingCents: 6900 },
+    { code: "A", weight: 50, msrpCents: 7999, startingCents: 2999 },
+    { code: "B", weight: 50, msrpCents: 7999, startingCents: 2999 },
   ],
 };
 
@@ -1125,32 +1117,13 @@ function buildQuotePayload({
       ? existingQuote.initial_price_timestamp
       : now.toISOString();
 
-  // Initial price rules (Tracking & Pricing - Prices (2).csv + MVP doc):
-  //   Group A  → initial = starting (no contextual adjustments).
-  //   Group B  → initial = min(msrp, starting × country × device × traffic ×
-  //              behavioral × engagement). The MVP doc's "Full Dynamic Pricing
-  //              Engine" lives in Group B — uplift flows through to what the
-  //              user is charged, not just analytics.
-  // Group A shows the catalogue starting verbatim — it's already a deliberate
-  // price from the pricing sheet (.99 for essentials/full, .00 for all_reports),
-  // so charm-rounding it would push e.g. €99.00 → €99.49 and contradict the
-  // sheet. Group B's contextual uplift is an arbitrary computed value, so it
-  // still gets normalized to a .49/.99 ending, then clamped to MSRP so the
-  // All Reports flat .00 MSRP doesn't drift above the retail anchor.
-  const groupBInitialRaw =
-    bucket.startingCents *
-    countryPricing.multiplier *
-    deviceMultiplier *
-    trafficMultiplier *
-    behavioralPricing.multiplier *
-    engagementMultiplier;
-  const computedInitialCents =
-    experimentGroup === "A"
-      ? Math.min(bucket.msrpCents, bucket.startingCents)
-      : Math.min(
-          bucket.msrpCents,
-          normalizePriceEnding(Math.min(bucket.msrpCents, groupBInitialRaw))
-        );
+  // Pricing reset 2026-06: per-user contextual uplift was removed. Every visitor
+  // (both experiment groups) pays the flat catalogue `starting` price, clamped to
+  // MSRP defensively. The country/device/traffic/behavioral/engagement signals are
+  // still computed and stamped on the quote for analytics, but they no longer move
+  // the charged price. The flat starting prices already use deliberate .99 endings,
+  // so no charm-rounding is applied.
+  const computedInitialCents = Math.min(bucket.msrpCents, bucket.startingCents);
   const initialPriceCents =
     !regenerateInitialPrice && existingQuote?.initial_price != null
       ? fromEuroAmount(existingQuote.initial_price)

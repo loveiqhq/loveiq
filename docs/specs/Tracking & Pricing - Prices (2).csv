@@ -1,8 +1,5 @@
-Bucket,Distriubtion,Essentials only,,Full report,,All reports,
-A,50%,€29.99,€9.99,€49.99,€24.99,€149.99,€99.00
-B,50%,€19.99,€6.99,€49.99,€14.99,€149.99,€69.00
+Bucket,Distribution,Essentials only,,Full report,,All reports,
+A,50%,€29.99,€9.99,€49.99,€14.99,€79.99,€29.99
+B,50%,€29.99,€9.99,€49.99,€14.99,€79.99,€29.99
 ,,,,,,,
-+24h,,,-10%,,-10%,,-10%
-+72h,,,-30%,,-30%,,-30%
-+7 days,,,-50%,,-50%,,-30%
-+14 days,,,-70%,,-70%,,-30%
+Pricing reset 2026-06: flat prices for everyone. Per-user uplift removed (both buckets are identical); the time-decay ladder (-10/-30/-50/-70%) was retired so the price is the same at every age. Each plan shows MSRP (strike-through anchor) then the live price.

@@ -61,66 +61,43 @@ describe("reportPricing", () => {
     process.env.SUPABASE_SERVICE_ROLE_KEY = originalSupabaseServiceRoleKey;
   });
 
-  describe("getDiscountAdjustment per plan (Pricing.xlsx)", () => {
+  describe("getDiscountAdjustment — flat (decay ladder retired 2026-06)", () => {
     const initialPriceTimestamp = "2026-04-14T10:00:00.000Z";
 
     it.each([
-      { now: "2026-04-14T10:00:00.000Z", step: 0, multiplier: 1 },
-      { now: "2026-04-15T10:00:00.000Z", step: 1, multiplier: 0.9 },
-      { now: "2026-04-17T10:00:00.000Z", step: 2, multiplier: 0.7 },
-      { now: "2026-04-21T10:00:00.000Z", step: 3, multiplier: 0.5 },
-      { now: "2026-04-28T10:00:00.000Z", step: 4, multiplier: 0.3 },
-    ])("full_report ladder at $now → step $step ×$multiplier", ({ now, step, multiplier }) => {
-      expect(
-        getDiscountAdjustment({ initialPriceTimestamp, now: new Date(now), plan: "full_report" })
-      ).toEqual(expect.objectContaining({ step, multiplier }));
-    });
-
-    it.each([
-      { now: "2026-04-14T10:00:00.000Z", step: 0, multiplier: 1 },
-      { now: "2026-04-15T10:00:00.000Z", step: 1, multiplier: 0.9 },
-      { now: "2026-04-17T10:00:00.000Z", step: 2, multiplier: 0.7 },
-      { now: "2026-04-21T10:00:00.000Z", step: 3, multiplier: 0.5 },
-      { now: "2026-04-28T10:00:00.000Z", step: 4, multiplier: 0.3 },
-    ])("essentials ladder at $now → step $step ×$multiplier", ({ now, step, multiplier }) => {
-      expect(
-        getDiscountAdjustment({ initialPriceTimestamp, now: new Date(now), plan: "essentials" })
-      ).toEqual(expect.objectContaining({ step, multiplier }));
-    });
-
-    it.each([
-      { now: "2026-04-14T10:00:00.000Z", step: 0, multiplier: 1 },
-      { now: "2026-04-15T10:00:00.000Z", step: 1, multiplier: 0.9 },
-      { now: "2026-04-17T10:00:00.000Z", step: 2, multiplier: 0.7 },
-      // All Reports caps at -30% past 72h per Pricing.xlsx column H.
-      { now: "2026-04-21T10:00:00.000Z", step: 3, multiplier: 0.7 },
-      { now: "2026-04-28T10:00:00.000Z", step: 4, multiplier: 0.7 },
-    ])("all_reports ladder at $now → step $step ×$multiplier", ({ now, step, multiplier }) => {
-      expect(
-        getDiscountAdjustment({ initialPriceTimestamp, now: new Date(now), plan: "all_reports" })
-      ).toEqual(expect.objectContaining({ step, multiplier }));
+      { now: "2026-04-14T10:00:00.000Z" }, // t0
+      { now: "2026-04-15T10:00:00.000Z" }, // +24h
+      { now: "2026-04-17T10:00:00.000Z" }, // +72h
+      { now: "2026-04-21T10:00:00.000Z" }, // +7d
+      { now: "2026-04-28T10:00:00.000Z" }, // +14d
+    ])("stays at step 0 / ×1 for every plan at $now", ({ now }) => {
+      for (const plan of ["essentials", "full_report", "all_reports"] as const) {
+        expect(getDiscountAdjustment({ initialPriceTimestamp, now: new Date(now), plan })).toEqual(
+          expect.objectContaining({ step: 0, multiplier: 1 })
+        );
+      }
     });
   });
 
-  describe("bucket catalogue (Tracking & Pricing - Prices (2).csv)", () => {
-    it("essentials buckets match csv MSRP / starting-sale pairs", () => {
+  describe("bucket catalogue (flat pricing 2026-06)", () => {
+    it("essentials buckets are flat €9.99 (A == B)", () => {
       expect(getPricingBucketsForPlan("essentials")).toEqual([
         { code: "A", weight: 50, msrpCents: 2999, startingCents: 999 },
-        { code: "B", weight: 50, msrpCents: 1999, startingCents: 699 },
+        { code: "B", weight: 50, msrpCents: 2999, startingCents: 999 },
       ]);
     });
 
-    it("full_report buckets match csv MSRP / starting-sale pairs", () => {
+    it("full_report buckets are flat €14.99 (A == B)", () => {
       expect(getPricingBucketsForPlan("full_report")).toEqual([
-        { code: "A", weight: 50, msrpCents: 4999, startingCents: 2499 },
+        { code: "A", weight: 50, msrpCents: 4999, startingCents: 1499 },
         { code: "B", weight: 50, msrpCents: 4999, startingCents: 1499 },
       ]);
     });
 
-    it("all_reports buckets match csv MSRP / starting-sale pairs", () => {
+    it("all_reports buckets are flat €29.99 (A == B)", () => {
       expect(getPricingBucketsForPlan("all_reports")).toEqual([
-        { code: "A", weight: 50, msrpCents: 14999, startingCents: 9900 },
-        { code: "B", weight: 50, msrpCents: 14999, startingCents: 6900 },
+        { code: "A", weight: 50, msrpCents: 7999, startingCents: 2999 },
+        { code: "B", weight: 50, msrpCents: 7999, startingCents: 2999 },
       ]);
     });
 
@@ -164,10 +141,11 @@ describe("reportPricing", () => {
     });
   });
 
-  it("applies the new ladder to the starting-sale price when revisiting a legacy quote", async () => {
+  it("flattens a revisited legacy quote to its starting price (decay ladder retired)", async () => {
     // Legacy row — pre-2026-04 migration, so msrp/starting_price are null.
-    // Engine falls back to `base_price` as both the msrp and starting
-    // anchor, then applies the new full_report ladder at step 1 (24h = 0.9).
+    // Engine falls back to `base_price` as both the msrp and starting anchor.
+    // With the 2026-06 reset there is no decay, so a non-expired revisit keeps
+    // the stored initial (€29.99) at step 0 / ×1 — current == initial.
     const initialPriceTimestamp = "2026-04-14T10:00:00.000Z";
     const existingQuote = {
       id: 77,
@@ -273,12 +251,12 @@ describe("reportPricing", () => {
       reportToken: "rpt_ABCDEFGHIJKLMNOPQRST",
     });
 
-    // Starting anchor = €29.99 (base_price fallback) × 0.9 = €26.99.
+    // Decay ladder retired → current = initial = starting = €29.99, step 0 / ×1.
     expect(quote).toEqual(
       expect.objectContaining({
-        currentPriceCents: 2699,
-        discountMultiplier: 0.9,
-        discountStep: 1,
+        currentPriceCents: 2999,
+        discountMultiplier: 1,
+        discountStep: 0,
         initialPriceCents: 2999,
         initialPriceTimestamp,
         msrpCents: 2999,
@@ -287,9 +265,9 @@ describe("reportPricing", () => {
     );
     expect(patchedPayload).toEqual(
       expect.objectContaining({
-        current_price: 26.99,
-        discount_multiplier: 0.9,
-        discount_step: 1,
+        current_price: 29.99,
+        discount_multiplier: 1,
+        discount_step: 0,
         // Stable: the arm already stamped on the row is preserved on re-quote,
         // never recomputed (even though a token is present this round).
         forced_paywall_arm: "treatment",
@@ -301,9 +279,9 @@ describe("reportPricing", () => {
         sessionLocks: [
           expect.objectContaining({
             pricingSessionId: "550e8400-e29b-41d4-a716-446655440001",
-            currentPriceCents: 2699,
-            discountMultiplier: 0.9,
-            discountStep: 1,
+            currentPriceCents: 2999,
+            discountMultiplier: 1,
+            discountStep: 0,
           }),
         ],
       })
@@ -556,10 +534,9 @@ describe("reportPricing", () => {
     expect(lookupReportTokenBySubmissionId).not.toHaveBeenCalled();
   });
 
-  it("group A all_reports shows the catalogue €99.00 / €69.00 starting verbatim (no .49 charm-snap)", async () => {
-    // Guards the fix: the CSV's only .00-ending prices (all_reports startings
-    // 9900/6900) must NOT be charm-rounded up to 9949/6949 on the flat group-A
-    // path. (Group B / ladder discounts still normalize.)
+  it("all_reports fresh quote is the flat €29.99 starting price (step 0, any group)", async () => {
+    // Post-2026-06 reset: all_reports is a flat €29.99 for every user. A fresh
+    // quote at step 0 → initial == current == the catalogue starting (2999).
     let groupAId = 0;
     for (let id = 1; id <= 5_000; id++) {
       if (getPricingExperimentGroup(id) === "A") {
@@ -568,8 +545,6 @@ describe("reportPricing", () => {
       }
     }
     expect(groupAId).toBeGreaterThan(0);
-    const expectedStarting =
-      __testing__.pickBucket("all_reports", groupAId).code === "A" ? 9900 : 6900;
     vi.mocked(ensurePersonalReportForSubmission).mockResolvedValue({ id: groupAId });
 
     mockFetchWithTimeout.mockImplementation(
@@ -622,9 +597,9 @@ describe("reportPricing", () => {
       reportToken: "rpt_ABCDEFGHIJKLMNOPQRST",
     });
 
-    // Fresh quote at step 0 → initial == current == the verbatim catalogue starting.
-    expect(quote.initialPriceCents).toBe(expectedStarting);
-    expect(quote.currentPriceCents).toBe(expectedStarting);
-    expect([9949, 6949]).not.toContain(quote.currentPriceCents);
+    // Flat €29.99 for everyone — no decay, no charm-snap.
+    expect(quote.initialPriceCents).toBe(2999);
+    expect(quote.currentPriceCents).toBe(2999);
+    expect(quote.msrpCents).toBe(7999);
   });
 });
