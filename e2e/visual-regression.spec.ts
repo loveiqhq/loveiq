@@ -13,7 +13,8 @@ import { test, expect } from "@playwright/test";
 //   landing-page          last reviewed: 2026-06-19 — white landing (dark A/B retired)
 //   about-page            last reviewed: 2026-05-11 — initial baseline
 //   survey-intro          last reviewed: 2026-05-11 — initial baseline
-//   glossary-page         last reviewed: 2026-05-11 — initial baseline
+//   glossary-page         last reviewed: 2026-06-27 — full-white redesign
+//   glossary-term-page    last reviewed: 2026-06-27 — full-white redesign (new baseline)
 //   admin-login           last reviewed: 2026-05-11 — initial baseline
 //   nav-mobile-menu-open  last reviewed: 2026-06-19 — white landing nav (dark A/B retired)
 //
@@ -111,8 +112,26 @@ test.describe("Visual Regression", () => {
     await page.goto("/glossary");
     await page.waitForLoadState("networkidle");
     await disableAnimations(page);
+    // Force scroll-triggered content visible for a deterministic full-page capture.
+    await page.addStyleTag({
+      content: `.reveal-on-scroll { opacity: 1 !important; transform: none !important; }`,
+    });
     await waitForVisualReady(page);
     await expect(page).toHaveScreenshot("glossary-page.png", {
+      fullPage: true,
+      maxDiffPixelRatio: 0.01,
+    });
+  });
+
+  test("glossary term page screenshot", async ({ page }) => {
+    await page.goto("/glossary/abandonment-insecurity");
+    await page.waitForLoadState("networkidle");
+    await disableAnimations(page);
+    await page.addStyleTag({
+      content: `.reveal-on-scroll { opacity: 1 !important; transform: none !important; }`,
+    });
+    await waitForVisualReady(page);
+    await expect(page).toHaveScreenshot("glossary-term-page.png", {
       fullPage: true,
       maxDiffPixelRatio: 0.01,
     });

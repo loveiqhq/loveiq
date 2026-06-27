@@ -5,6 +5,7 @@ const criticalRoutes = [
   "/",
   "/about",
   "/glossary",
+  "/glossary/abandonment-insecurity",
   "/trust-zone",
   "/survey",
   "/privacy-policy",

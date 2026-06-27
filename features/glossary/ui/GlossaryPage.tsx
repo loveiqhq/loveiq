@@ -4,8 +4,8 @@ import type { FC } from "react";
 import { useState, useEffect, useMemo } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
-import GlossaryNavSection from "./GlossaryNavSection";
-import FooterSection from "@features/landing/ui/FooterSection";
+import WNavSection from "@features/landing/ui/white/WNavSection";
+import WFooterSection from "@features/landing/ui/white/WFooterSection";
 import { trackStartSurvey } from "@features/analytics/client";
 import type { GlossaryTerm } from "@/data/glossary-data";
 
@@ -134,59 +134,21 @@ const GlossaryPage: FC = () => {
     return filteredTerms[letter] && filteredTerms[letter].length > 0;
   };
 
-  const renderTermWithArrow = (term: string) => {
-    const words = term.trim().split(/\s+/);
-    const leadingWords = words.slice(0, -1).join(" ");
-    const lastWord = words[words.length - 1] ?? "";
-
-    return (
-      <>
-        {leadingWords ? `${leadingWords} ` : ""}
-        <span className="inline-flex items-center whitespace-nowrap">
-          {lastWord}
-          <svg
-            className="ml-2 inline-block h-4 w-4 align-middle text-[#fe6839] opacity-0 transition-opacity group-hover:opacity-100"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M5 12h14" />
-            <path d="m12 5 7 7-7 7" />
-          </svg>
-        </span>
-      </>
-    );
-  };
-
   return (
-    <main className="relative bg-[#0A0510] text-white min-h-screen">
-      <GlossaryNavSection />
+    <main className="relative min-h-screen bg-white text-gray-900">
+      <WNavSection />
 
       {/* Hero Section */}
       <section className="relative pt-32 pb-8 sm:pt-40 sm:pb-12">
-        {/* Purple background orb */}
-        <div
-          className="pointer-events-none absolute left-1/2 -translate-x-1/2 rounded-full"
-          style={{
-            width: "600px",
-            height: "600px",
-            top: "80px",
-            background: "radial-gradient(circle, #2E014780 50%, transparent 70%)",
-            filter: "blur(60px)",
-          }}
-        />
         <div className="content-shell">
-          <div className="mx-auto max-w-[768px] text-center relative z-10">
-            <h1 className="font-serif text-4xl sm:text-5xl md:text-[61px] font-normal tracking-[-1.5px] leading-[1.1] reveal-on-scroll">
+          <div className="relative z-10 mx-auto max-w-[768px] text-center">
+            <h1 className="reveal-on-scroll font-serif text-4xl font-normal leading-[1.1] tracking-[-1.5px] text-gray-900 sm:text-5xl md:text-[61px]">
               The LoveIQ{" "}
-              <span className="bg-gradient-to-r from-[#fe6839] via-[#a78bfa] to-[#e9d5ff] bg-clip-text text-transparent">
+              <span className="bg-gradient-to-r from-[#d05976] via-[#c167cf] to-[#8887f6] bg-clip-text text-transparent">
                 Glossary
               </span>
             </h1>
-            <p className="mt-6 text-lg sm:text-xl text-[#9ca3af] leading-7 reveal-on-scroll stagger-1">
+            <p className="reveal-on-scroll stagger-1 mt-6 text-lg leading-7 text-gray-500 sm:text-xl">
               Your guide to the terminology of self-understanding. Decode the language of
               <br className="hidden sm:block" />
               intimacy, psychology, and personal growth.
@@ -200,11 +162,11 @@ const GlossaryPage: FC = () => {
         <div className="content-shell">
           <div className="mx-auto max-w-[768px]">
             {/* Search Input */}
-            <div className="relative reveal-on-scroll stagger-2">
+            <div className="reveal-on-scroll stagger-2 relative">
               {/* Icon — top-aligned on mobile (first text line), centered on desktop */}
               <div className="absolute left-5 top-[25px] sm:top-1/2 sm:-translate-y-1/2">
                 <svg
-                  className="h-[18px] w-[18px] text-white/30"
+                  className="h-[18px] w-[18px] text-gray-600"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
@@ -220,38 +182,41 @@ const GlossaryPage: FC = () => {
               {/* Mobile: textarea so placeholder wraps to 2 lines */}
               <textarea
                 rows={2}
+                aria-label="Search glossary terms"
                 placeholder="Search a term or concept (e.g. 'Arousal', 'Boundaries')"
                 value={searchQuery}
                 onChange={(e) => handleSearchChange(e.target.value.replace(/\n/g, ""))}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") e.preventDefault();
                 }}
-                className="sm:hidden w-full resize-none rounded-full border border-white/10 bg-white/[0.03] py-[22px] pl-[50px] pr-[25px] text-base text-white placeholder:text-white/30 hover:bg-white/[0.05] hover:border-white/50 focus:border-2 focus:border-[rgba(254,104,57,0.6)] focus:bg-white/[0.03] focus:outline-none focus:ring-0 transition"
+                className="w-full resize-none rounded-3xl border border-black/[0.08] bg-[#f4f4f6] py-[22px] pl-[50px] pr-[25px] text-base text-gray-900 transition placeholder:text-gray-600 hover:border-black/20 focus:border-2 focus:border-[rgba(254,104,57,0.6)] focus:bg-white focus:outline-none focus:ring-0 sm:hidden"
               />
 
               {/* Desktop: single-line input */}
               <input
                 type="text"
+                aria-label="Search glossary terms"
                 placeholder="Search a term or concept (e.g. 'Arousal', 'Boundaries')"
                 value={searchQuery}
                 onChange={(e) => handleSearchChange(e.target.value)}
-                className="hidden sm:block w-full rounded-full border border-white/10 bg-white/[0.03] pt-[20px] pb-[19px] pl-[49px] pr-[25px] text-base text-white placeholder:text-white/30 hover:bg-white/[0.05] hover:border-white/50 focus:border-2 focus:border-[rgba(254,104,57,0.6)] focus:bg-white/[0.03] focus:outline-none focus:ring-0 transition"
+                className="hidden w-full rounded-full border border-black/[0.08] bg-[#f4f4f6] pb-[19px] pl-[49px] pr-[25px] pt-[20px] text-base text-gray-900 transition placeholder:text-gray-600 hover:border-black/20 focus:border-2 focus:border-[rgba(254,104,57,0.6)] focus:bg-white focus:outline-none focus:ring-0 sm:block"
               />
             </div>
 
             {/* Filter Pills */}
-            <div className="mt-4 flex flex-wrap items-center justify-center gap-2 reveal-on-scroll stagger-3">
-              <span className="pr-2 py-2 text-xs font-semibold uppercase tracking-[1.2px] text-white/30">
+            <div className="reveal-on-scroll stagger-3 mt-4 flex flex-wrap items-center justify-center gap-2">
+              <span className="py-2 pr-2 text-xs font-semibold uppercase tracking-[1.2px] text-gray-500">
                 Filter By:
               </span>
               {filterCategories.map((filter) => (
                 <button
                   key={filter.id}
                   onClick={() => setActiveFilter(filter.id)}
-                  className={`rounded-full px-[13px] py-2 text-xs transition ${
+                  aria-pressed={activeFilter === filter.id}
+                  className={`focus-visible-ring rounded-full px-[13px] py-2 text-xs transition ${
                     activeFilter === filter.id
-                      ? "border border-[#fe6839] bg-[rgba(254,104,57,0.1)] text-[#fe6839]"
-                      : "border border-white/10 bg-white/5 text-white/60 hover:border-white/50 hover:text-white/80 hover:font-medium"
+                      ? "border border-[#fe6839] bg-[rgba(254,104,57,0.1)] font-semibold text-[#C2410C]"
+                      : "border border-black/[0.08] bg-black/[0.03] text-gray-600 hover:border-black/20 hover:text-gray-900"
                   }`}
                 >
                   {filter.label}
@@ -265,19 +230,20 @@ const GlossaryPage: FC = () => {
       {/* Alphabetical Navigation */}
       <section className="relative py-4 sm:py-8">
         <div className="content-shell">
-          <div className="px-0 sm:px-12 reveal-on-scroll stagger-4">
-            <div className="flex items-center gap-1 rounded-full border border-white/5 bg-[rgba(10,5,16,0.6)] p-2 shadow-[0_8px_32px_rgba(0,0,0,0.36)] backdrop-blur-[20px] overflow-x-auto scrollbar-hide sm:justify-center">
+          <div className="reveal-on-scroll stagger-4 px-0 sm:px-12">
+            <div className="scrollbar-hide flex items-center gap-1 overflow-x-auto rounded-full border border-black/[0.06] bg-white p-2 shadow-[0_8px_32px_rgba(0,0,0,0.06)] sm:justify-center">
               {alphabet.map((letter) => (
                 <button
                   key={letter}
                   onClick={() => scrollToLetter(letter)}
                   disabled={!hasTermsForLetterFiltered(letter)}
+                  aria-label={`Jump to terms starting with ${letter}`}
                   className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[24px] text-[10px] font-bold transition-all duration-200 ${
                     activeLetter === letter && hasTermsForLetterFiltered(letter)
-                      ? "bg-[#a78bfa] text-[#120b1c]"
+                      ? "bg-[#a78bfa] text-[#1a1330]"
                       : hasTermsForLetterFiltered(letter)
-                        ? "text-white/30 hover:text-white/60 hover:shadow-[0_0_15px_0_rgba(167,139,250,0.32)]"
-                        : "cursor-not-allowed text-white/10"
+                        ? "text-gray-500 hover:text-gray-800 hover:shadow-[0_0_15px_0_rgba(167,139,250,0.32)]"
+                        : "cursor-not-allowed text-gray-300"
                   }`}
                 >
                   {letter}
@@ -297,8 +263,8 @@ const GlossaryPage: FC = () => {
               .map(([letter, terms]) => (
                 <div key={letter} id={`section-${letter}`} className="reveal-on-scroll">
                   {/* Letter Header */}
-                  <div className="border-b border-white/5 pb-4 mb-8 backdrop-blur-[2px]">
-                    <span className="font-serif text-5xl text-white/20">{letter}</span>
+                  <div className="mb-8 border-b border-black/[0.08] pb-4">
+                    <span className="font-serif text-5xl text-gray-300">{letter}</span>
                   </div>
 
                   {/* Terms List */}
@@ -307,10 +273,26 @@ const GlossaryPage: FC = () => {
                       <Link
                         key={`${item.slug}-${idx}`}
                         href={`/glossary/${item.slug}`}
-                        className="group flex items-center gap-2"
+                        className="group focus-visible-ring block rounded"
                       >
-                        <span className="font-serif text-xl leading-7 text-white transition-colors group-hover:text-[#fe6839]">
-                          {renderTermWithArrow(item.term)}
+                        <span className="font-serif text-xl leading-7 text-gray-900 transition-colors group-hover:text-[#C2410C] group-focus:text-[#C2410C]">
+                          {item.term}
+                        </span>
+                        <span className="flex max-h-0 items-center gap-1 overflow-hidden text-[10px] font-bold uppercase tracking-[1px] text-[#C2410C] opacity-0 transition-all duration-300 group-hover:mt-1 group-hover:max-h-5 group-hover:opacity-100 group-focus:mt-1 group-focus:max-h-5 group-focus:opacity-100">
+                          View details
+                          <svg
+                            className="h-3 w-3"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2.4"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            aria-hidden
+                          >
+                            <path d="M5 12h14" />
+                            <path d="m12 5 7 7-7 7" />
+                          </svg>
                         </span>
                       </Link>
                     ))}
@@ -321,8 +303,8 @@ const GlossaryPage: FC = () => {
 
           {/* No results message */}
           {Object.keys(filteredTerms).length === 0 && (
-            <div className="text-center py-16">
-              <p className="text-white/50 text-lg">
+            <div className="py-16 text-center">
+              <p className="text-lg text-gray-500">
                 No terms found matching your search or filter criteria.
               </p>
               <button
@@ -330,7 +312,7 @@ const GlossaryPage: FC = () => {
                   handleSearchChange("");
                   setActiveFilter("all");
                 }}
-                className="mt-4 text-[#fe6839] hover:underline"
+                className="focus-visible-ring mt-4 rounded font-semibold text-[#C2410C] hover:underline"
               >
                 Clear filters
               </button>
@@ -342,68 +324,31 @@ const GlossaryPage: FC = () => {
       {/* CTA Section */}
       <section className="relative py-16 sm:py-24">
         <div className="content-shell">
-          <div
-            className="relative overflow-hidden rounded-[24px] border border-white/10 px-6 py-16 sm:px-12 sm:py-20 reveal-on-scroll"
-            style={{ background: "linear-gradient(135deg, #1A0F26 0%, #0A0510 100%)" }}
-          >
-            {/* Background gradient orbs */}
-            <div
-              className="pointer-events-none absolute rounded-full animate-float1"
-              style={{
-                width: "256px",
-                height: "256px",
-                left: "-128px",
-                bottom: "-116.5px",
-                background: "rgba(254, 104, 57, 0.10)",
-                filter: "blur(40px)",
-              }}
-            />
-            <div
-              className="pointer-events-none absolute rounded-full animate-float2"
-              style={{
-                width: "256px",
-                height: "256px",
-                right: "-79px",
-                top: "-107.5px",
-                background: "rgba(254, 104, 57, 0.10)",
-                filter: "blur(40px)",
-              }}
-            />
-
-            <div className="relative z-10 mx-auto max-w-2xl text-center">
-              <h2 className="font-serif text-3xl sm:text-4xl text-white mb-4">
-                Want deeper insight?
-              </h2>
-              <p className="text-[#9ca3af] text-base sm:text-lg mb-8">
-                Your assessment results connect these concepts directly to your personal
-                <br className="hidden sm:block" />
-                patterns and relationship dynamics.
-              </p>
+          <div className="reveal-on-scroll mx-auto max-w-2xl text-center">
+            <h2 className="font-serif text-3xl leading-[1.15] tracking-[-1px] text-gray-900 sm:text-[42px]">
+              Ready to understand{" "}
+              <span className="bg-gradient-to-r from-[#fe6839] to-[#c36ddf] bg-clip-text text-transparent">
+                and grow?
+              </span>
+            </h2>
+            <p className="mx-auto mt-5 max-w-md text-base leading-7 text-gray-500 sm:text-lg">
+              Join us to build stronger relationships, communicate with real clarity, and step into
+              confident, authentic sexuality.
+            </p>
+            <div className="mt-8">
               <Link
                 href="/survey"
-                className="group relative inline-flex items-center justify-center gap-2 overflow-hidden rounded-full bg-gradient-brand px-6 py-3 text-sm font-semibold text-white shadow-pill transition hover:translate-y-[-2px] focus-visible-ring"
+                className="focus-visible-ring group inline-flex items-center justify-center gap-2 rounded-full bg-black px-7 py-3.5 text-sm font-semibold text-white transition hover:bg-gray-800"
                 onClick={() => trackStartSurvey("footer")}
               >
-                <span
-                  aria-hidden
-                  className="pointer-events-none absolute inset-0 bg-white opacity-0 transition-opacity duration-500 group-hover:opacity-100"
-                />
-                <div
-                  aria-hidden
-                  className="absolute inset-0 translate-y-full bg-white/20 transition-transform duration-300 group-hover:translate-y-0"
-                />
-                <span className="pointer-events-none absolute inset-0 rounded-full bg-white/10 opacity-0 transition duration-300 group-hover:opacity-100" />
-                <span className="pointer-events-none absolute inset-[-12%] rounded-full border border-white/15 mix-blend-screen opacity-70" />
-                <span className="relative z-10 transition-colors duration-500 group-hover:text-black">
-                  Start test now
-                </span>
+                <span>Start test now</span>
                 <svg
                   aria-hidden
-                  className="relative z-10 h-5 w-5 transition-colors duration-500 group-hover:text-black"
+                  className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-0.5"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
-                  strokeWidth="2.2"
+                  strokeWidth="2.4"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 >
@@ -412,11 +357,14 @@ const GlossaryPage: FC = () => {
                 </svg>
               </Link>
             </div>
+            <p className="mt-6 text-sm text-gray-500">
+              Anonymous by default · 15 minutes · No account required
+            </p>
           </div>
         </div>
       </section>
 
-      <FooterSection />
+      <WFooterSection />
     </main>
   );
 };

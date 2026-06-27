@@ -78,6 +78,9 @@ export default async function Page({ params }: PageProps) {
 
   return (
     <>
+      {/* Paint the page surface white in the initial server shell (global body bg
+          is dark) → no dark flash before the client component hydrates. */}
+      <style dangerouslySetInnerHTML={{ __html: "html,body{background:#ffffff;}" }} />
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(definedTermSchema) }}

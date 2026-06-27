@@ -48,6 +48,10 @@ const definedTermSetSchema = {
 export default function Page() {
   return (
     <>
+      {/* Paint the page surface white before the client island hydrates (global
+          body bg is dark). Rendered into the initial server shell → no dark flash,
+          even while the Suspense-wrapped client component streams in. */}
+      <style dangerouslySetInnerHTML={{ __html: "html,body{background:#ffffff;}" }} />
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(definedTermSetSchema) }}

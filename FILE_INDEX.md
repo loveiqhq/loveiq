@@ -125,7 +125,7 @@
 | Regenerate glossary | `node scripts/update-glossary.js`                                        |
 | Glossary index page | `features/glossary/ui/GlossaryPage.tsx`                                  |
 | Glossary term page  | `features/glossary/ui/GlossaryTermPage.tsx`                              |
-| Glossary navigation | `features/glossary/ui/GlossaryNavSection.tsx`                            |
+| Glossary navigation | shared white nav `features/landing/ui/white/WNavSection.tsx`             |
 
 ## Database
 

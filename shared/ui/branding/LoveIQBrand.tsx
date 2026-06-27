@@ -40,7 +40,7 @@ export const LoveIQWordmark: FC<WordmarkProps> = ({
   className = "",
   loveClassName = "text-white",
 }) => (
-  <span className={`font-serif font-bold leading-none ${className}`} aria-label="LoveIQ">
+  <span className={`font-serif font-bold leading-none ${className}`} role="img" aria-label="LoveIQ">
     <span aria-hidden="true" className={loveClassName}>
       Love
     </span>
