@@ -116,7 +116,7 @@ const WReportPreview: FC = () => (
         {/* Testimonial */}
         <div className="flex items-center gap-4">
           <Image
-            src="/testimonials/philipp.jpg"
+            src="/testimonials/gebhardt.jpg"
             alt=""
             width={80}
             height={80}
