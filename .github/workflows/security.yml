@@ -231,10 +231,15 @@ jobs:
           #    literal <style> ("html,body{background:#fff}"): NO interpolation and
           #    NO user input, server-rendered to stop the dark body bg showing
           #    through on the white A/B arm. A constant string cannot carry XSS.
+          #  - app/glossary/page.tsx + app/glossary/[slug]/page.tsx — the same
+          #    single static literal <style> ("html,body{background:#fff}"),
+          #    server-rendered so the dark body bg doesn't flash before the white
+          #    glossary hydrates. Constant string, no interpolation/user input.
           if grep -r "dangerouslySetInnerHTML" app/ components/ features/ --include="*.tsx" --include="*.jsx" \
               | grep -v "JSON\.stringify" \
               | grep -v "jsonLdString" \
               | grep -v "white/LandingPageWhite\.tsx" \
+              | grep -vE "app/glossary/(page|\[slug\]/page)\.tsx" \
               | grep -vE "(components|features/report/ui)/(sections/|ReportPage\.tsx)"; then
             echo "⚠️  Found dangerouslySetInnerHTML usage - review for XSS risks"
             exit 1
