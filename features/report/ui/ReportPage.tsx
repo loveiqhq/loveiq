@@ -1496,13 +1496,9 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
         open={isScrollTeaserOpen}
         onClose={dismissScrollTeaser}
         onCheckout={handleTeaserCheckout}
-        archetype={effectiveViewArchetype}
         userName={data.userName}
-        theme={theme}
-        matchScore={matchScore}
         quote={data.pricingQuotes?.full_report ?? null}
         dismissible={forcedPaywallCohort !== "treatment"}
-        flipDeck={forcedPaywallCohort === "treatment"}
         offerDeadline={offerDeadline}
       />
       {data.accessPlan !== "full_report" && data.accessPlan !== "all_reports" && (

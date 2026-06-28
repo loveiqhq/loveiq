@@ -6,7 +6,6 @@ import type { ComponentProps } from "react";
 // Spy on the analytics helpers so we can assert the funnel events fire.
 vi.mock("@features/analytics/client", () => ({
   trackBeginCheckout: vi.fn(),
-  trackExperimentCardFlipped: vi.fn(),
   trackPriceShown: vi.fn(),
   trackScrollPaywallDismissed: vi.fn(),
   trackScrollPaywallShown: vi.fn(),
@@ -14,14 +13,7 @@ vi.mock("@features/analytics/client", () => ({
 }));
 
 import ScrollPricingModal from "@features/report/ui/ScrollPricingModal";
-import { reportThemes } from "@features/report/ui/reportTheme";
-import {
-  trackBeginCheckout,
-  trackExperimentCardFlipped,
-  trackScrollPaywallShown,
-} from "@features/analytics/client";
-
-const theme = reportThemes["Spark Seeker"]!;
+import { trackBeginCheckout, trackScrollPaywallShown } from "@features/analytics/client";
 
 // Minimal quote with a discount (msrp > current) so the discount/save pills render.
 const discountQuote = {
@@ -43,20 +35,12 @@ function renderModal(props?: Partial<ComponentProps<typeof ScrollPricingModal>>)
       open
       onClose={onClose}
       onCheckout={onCheckout}
-      archetype="Spark Seeker"
       userName="Alex"
-      theme={theme}
-      matchScore={86}
       quote={null}
       {...props}
     />
   );
   return { onClose, onCheckout, ...utils };
-}
-
-/** Advance to the pricing view from the archetype reveal. */
-function goToPricing() {
-  fireEvent.click(screen.getByRole("button", { name: /unlock your full report/i }));
 }
 
 afterEach(() => {
@@ -96,76 +80,50 @@ describe("ScrollPricingModal — dismissibility", () => {
     fireEvent.click(backdrop!);
     expect(onClose).not.toHaveBeenCalled();
   });
-
-  it("still lets the user reach checkout when not dismissible (archetype → pricing → pay)", () => {
-    const { onCheckout } = renderModal({ dismissible: false, quote: discountQuote });
-    goToPricing();
-    fireEvent.click(screen.getByRole("button", { name: /continue to payment/i }));
-    expect(onCheckout).toHaveBeenCalledTimes(1);
-  });
-
-  it("opens straight on the pricing view when no archetype/theme is provided", () => {
-    renderModal({ theme: undefined });
-    expect(screen.getByRole("button", { name: /continue to payment/i })).toBeInTheDocument();
-    expect(screen.queryByText("Your Core Archetype")).not.toBeInTheDocument();
-  });
 });
 
-describe("ScrollPricingModal — two-view hero", () => {
-  it("starts on the archetype reveal when a theme exists", () => {
+describe("ScrollPricingModal — pricing view", () => {
+  it("opens directly on the pricing view (no dark archetype reveal)", () => {
     renderModal();
-    expect(screen.getByText("Your Core Archetype")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /unlock your full report/i })).toBeInTheDocument();
-    // Pricing view not yet shown.
-    expect(screen.queryByRole("button", { name: /continue to payment/i })).not.toBeInTheDocument();
-    expect(screen.queryByText("Full personal report")).not.toBeInTheDocument();
-  });
-
-  it("advances to the pricing view on the unlock CTA (no checkout yet)", () => {
-    const { onCheckout } = renderModal({ quote: discountQuote });
-    goToPricing();
-    expect(onCheckout).not.toHaveBeenCalled();
+    expect(screen.getByText(/your results are in/i)).toBeInTheDocument();
     expect(screen.getByText("Full personal report")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /continue to payment/i })).toBeInTheDocument();
-    // Archetype reveal is gone.
+    // The dark archetype reveal is gone.
     expect(screen.queryByText("Your Core Archetype")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /unlock your full report/i })
+    ).not.toBeInTheDocument();
   });
 
   it("checks out from the pricing view, firing begin_checkout", () => {
     const { onCheckout } = renderModal({ quote: discountQuote });
-    goToPricing();
     fireEvent.click(screen.getByRole("button", { name: /continue to payment/i }));
     expect(onCheckout).toHaveBeenCalledTimes(1);
     expect(trackBeginCheckout).toHaveBeenCalledTimes(1);
   });
 
-  it("branches the heading per view", () => {
-    renderModal();
-    expect(screen.getByText(/you score highest with the following/i)).toBeInTheDocument();
-    goToPricing();
-    expect(screen.getByText(/your results are in/i)).toBeInTheDocument();
+  it("still reaches checkout when not dismissible (forced arm)", () => {
+    const { onCheckout } = renderModal({ dismissible: false, quote: discountQuote });
+    fireEvent.click(screen.getByRole("button", { name: /continue to payment/i }));
+    expect(onCheckout).toHaveBeenCalledTimes(1);
   });
 
   it("shows the live discount + save labels from the quote (not Figma placeholders)", () => {
     renderModal({ quote: discountQuote });
-    goToPricing();
     // 5900 → 999 ⇒ ~83% off, save €49.01.
     expect(screen.getByText(/% off · expires soon/i)).toBeInTheDocument();
     expect(screen.getByText(/You save/i)).toBeInTheDocument();
   });
 });
 
-describe("ScrollPricingModal — experiment analytics", () => {
-  it("fires a single scroll_paywall_shown impression when opened (both arms)", () => {
+describe("ScrollPricingModal — analytics", () => {
+  it("fires a single scroll_paywall_shown impression when opened", () => {
     const { rerender } = render(
       <ScrollPricingModal
         open={false}
         onClose={vi.fn()}
         onCheckout={vi.fn()}
-        archetype="Spark Seeker"
         userName="Alex"
-        theme={theme}
-        matchScore={86}
         quote={null}
       />
     );
@@ -176,28 +134,12 @@ describe("ScrollPricingModal — experiment analytics", () => {
         open
         onClose={vi.fn()}
         onCheckout={vi.fn()}
-        archetype="Spark Seeker"
         userName="Alex"
-        theme={theme}
-        matchScore={86}
         quote={null}
       />
     );
     expect(trackScrollPaywallShown).toHaveBeenCalledTimes(1);
     expect(trackScrollPaywallShown).toHaveBeenCalledWith({ surface: "report_scroll_paywall" });
-  });
-
-  it("records experiment_card_flipped on advance to pricing (treatment only)", () => {
-    renderModal({ flipDeck: true });
-    goToPricing();
-    expect(trackExperimentCardFlipped).toHaveBeenCalledTimes(1);
-    expect(trackExperimentCardFlipped).toHaveBeenCalledWith({ to: "pricing" });
-  });
-
-  it("never records a flip event for control", () => {
-    renderModal({ flipDeck: false });
-    goToPricing();
-    expect(trackExperimentCardFlipped).not.toHaveBeenCalled();
   });
 });
 
@@ -239,10 +181,7 @@ describe("ScrollPricingModal — countdown", () => {
         open
         onClose={vi.fn()}
         onCheckout={vi.fn()}
-        archetype="Spark Seeker"
         userName="Alex"
-        theme={theme}
-        matchScore={86}
         quote={null}
         offerDeadline={deadline}
       />
@@ -253,10 +192,7 @@ describe("ScrollPricingModal — countdown", () => {
         open={false}
         onClose={vi.fn()}
         onCheckout={vi.fn()}
-        archetype="Spark Seeker"
         userName="Alex"
-        theme={theme}
-        matchScore={86}
         quote={null}
         offerDeadline={deadline}
       />
@@ -269,10 +205,7 @@ describe("ScrollPricingModal — countdown", () => {
         open
         onClose={vi.fn()}
         onCheckout={vi.fn()}
-        archetype="Spark Seeker"
         userName="Alex"
-        theme={theme}
-        matchScore={86}
         quote={null}
         offerDeadline={deadline}
       />

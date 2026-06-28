@@ -3872,40 +3872,6 @@ input.autofill-dark:-internal-autofill-previewed {
   }
 }
 
-/* Match Strength — on mobile, collapse to a single horizontal row:
- * "Match Strength" label · "59%" value · gradient bar (flex-grow fills).
- * `display: contents` on the __head wrapper hoists its children up so
- * the bar can be a flex sibling on the same axis. Desktop keeps the
- * original right-aligned vertical stack. */
-@media (max-width: 640px) {
-  .rpm-match-strength {
-    display: flex !important;
-    align-items: center !important;
-    gap: 10px !important;
-    width: 100% !important;
-    min-width: 0 !important;
-    text-align: left !important;
-    flex: 1 1 100% !important;
-    flex-wrap: nowrap !important;
-  }
-  .rpm-match-strength__head {
-    display: contents;
-  }
-  .rpm-match-strength__label,
-  .rpm-match-strength__value {
-    margin: 0 !important;
-    flex-shrink: 0;
-    white-space: nowrap;
-  }
-  .rpm-match-strength__value {
-    font-size: var(--rpm-match-label) !important;
-  }
-  .rpm-match-strength > div:last-child {
-    flex: 1 1 auto;
-    min-width: 0;
-  }
-}
-
 /* Close button label — hide on very narrow phones so the X stays in the
  * corner without overlapping the modal content. */
 @media (max-width: 640px) {
@@ -4232,33 +4198,7 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-pricing-modal--white .rpm-hero-swap {
   animation: rpm-hero-fade 360ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-.report-pricing-modal--white .rpm-arch-view {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 28px;
-}
-
 /* ── CTA variants (the orange pills) ─────────────────────────────────────── */
-.report-pricing-modal--white .rpm-cta--arch {
-  width: 460px;
-  max-width: 100%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  padding: 20px 28px;
-  border-radius: 9999px;
-  background: #ff6a3d;
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  color: #fff;
-  font-family: var(--font-sans);
-  font-weight: 700;
-  font-size: clamp(16px, 1.4vw, 22px);
-  line-height: 1;
-  cursor: pointer;
-  box-shadow: 0 6px 20px -4px rgba(254, 104, 57, 0.55);
-}
 .report-pricing-modal--white .rpm-cta--pay {
   width: 100%;
   display: inline-flex;

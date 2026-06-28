@@ -12,7 +12,6 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
-import { TraitIcons, type ReportTheme } from "./reportTheme";
 import {
   PaywallCountdownPill,
   PaywallCountdownTiles,
@@ -27,7 +26,6 @@ import {
 } from "@features/checkout/server/reportPurchase";
 import {
   trackBeginCheckout,
-  trackExperimentCardFlipped,
   trackPriceShown,
   trackScrollPaywallDismissed,
   trackScrollPaywallShown,
@@ -39,15 +37,7 @@ interface Props {
   open: boolean;
   onClose: () => void;
   onCheckout: () => void;
-  /**
-   * Archetype/result data. Optional — when absent (or no theme is resolved) the
-   * archetype reveal view is skipped and the modal opens straight on the pricing
-   * view.
-   */
-  archetype?: string;
   userName?: string | null;
-  theme?: ReportTheme;
-  matchScore?: number;
   quote: ReportPriceQuoteSnapshot | null;
   /**
    * When false, the modal cannot be dismissed: the close button is hidden and
@@ -56,21 +46,12 @@ interface Props {
    */
   dismissible?: boolean;
   /**
-   * Treatment arm flag. Kept for analytics parity: when true, advancing from the
-   * archetype reveal to the pricing view fires `trackExperimentCardFlipped`. The
-   * white redesign shows a single hero per view in both arms; this no longer
-   * changes the layout. Defaults to false.
-   */
-  flipDeck?: boolean;
-  /**
    * Epoch-ms deadline for the urgency countdown, resolved once per report
-   * session by the caller (persisted in sessionStorage so it survives view
-   * switches + reopening). Falls back to a fresh 3-minute window when omitted.
+   * session by the caller (persisted in sessionStorage so it survives
+   * reopening). Falls back to a fresh 3-minute window when omitted.
    */
   offerDeadline?: number;
 }
-
-type HeroView = "archetype" | "pricing";
 
 const FOCUSABLE_SELECTOR =
   'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
@@ -150,61 +131,6 @@ function StarRow() {
           <path d="M10 1.5l2.47 5.01 5.53.8-4 3.9.94 5.5L10 14.1l-4.94 2.6.94-5.5-4-3.9 5.53-.8L10 1.5Z" />
         </svg>
       ))}
-    </div>
-  );
-}
-
-// SegmentBar lives inside the dark archetype card, so it stays white-on-dark.
-function SegmentBar({
-  segments,
-  value,
-  label,
-  color,
-}: {
-  segments: 1 | 2 | 3;
-  value: string;
-  label: string;
-  color: string;
-}) {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-        <span
-          style={{
-            fontFamily: "var(--font-sans)",
-            fontSize: "var(--rpm-bar-label)",
-            fontWeight: 400,
-            color: "#fff",
-            lineHeight: 1,
-          }}
-        >
-          {label}
-        </span>
-        <span
-          style={{
-            fontFamily: "var(--font-serif)",
-            fontSize: "var(--rpm-bar-label)",
-            fontWeight: 500,
-            color: "#fff",
-            lineHeight: 1,
-          }}
-        >
-          {value}
-        </span>
-      </div>
-      <div style={{ display: "flex", gap: "4px" }}>
-        {([1, 2, 3] as const).map((n) => (
-          <div
-            key={n}
-            style={{
-              flex: 1,
-              height: "6px",
-              borderRadius: "9999px",
-              background: n <= segments ? color : "rgba(255,255,255,0.12)",
-            }}
-          />
-        ))}
-      </div>
     </div>
   );
 }
@@ -338,13 +264,9 @@ const ScrollPricingModal: FC<Props> = ({
   open,
   onClose,
   onCheckout,
-  archetype,
   userName,
-  theme,
-  matchScore,
   quote,
   dismissible = true,
-  flipDeck = false,
   offerDeadline,
 }) => {
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -355,34 +277,6 @@ const ScrollPricingModal: FC<Props> = ({
   const restoreFocusRef = useRef<HTMLElement | null>(null);
   const [focusMode, setFocusMode] = useState<"keyboard" | "pointer">("pointer");
   const [portalMounted, setPortalMounted] = useState(false);
-
-  const hasArchetype = Boolean(theme);
-
-  // ── Hero view (archetype reveal ↔ pricing). The archetype view is only
-  //    available when a theme/result exists; otherwise the modal opens straight
-  //    on the pricing view. ───────────────────────────────────────────────────
-  const [view, setView] = useState<HeroView>(hasArchetype ? "archetype" : "pricing");
-
-  const goToPricing = useCallback(() => {
-    if (flipDeck) {
-      trackExperimentCardFlipped({ to: "pricing" });
-    }
-    setView("pricing");
-  }, [flipDeck]);
-
-  // Reset to the archetype reveal when the modal (re)OPENS — not on close. The
-  // dialog stays mounted and fades out over 220ms on close, so resetting then
-  // would visibly swap the pricing card back to the archetype card mid-fade.
-  // Resetting on the open transition starts every open on the first view with
-  // no flash.
-  const prevOpenRef = useRef(open);
-  useEffect(() => {
-    if (open && !prevOpenRef.current) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset to first view on (re)open
-      setView(hasArchetype ? "archetype" : "pricing");
-    }
-    prevOpenRef.current = open;
-  }, [open, hasArchetype]);
 
   // Modal-shown impression (both arms). Re-arms on close so a control re-open
   // is counted again. Keyed on `open` only — never re-fires on a view switch.
@@ -575,8 +469,6 @@ const ScrollPricingModal: FC<Props> = ({
       : null;
 
   const displayName = userName ?? "Friend";
-  const matchPct = Math.min(100, Math.round(matchScore ?? 0));
-  const ArchetypeIcon = theme?.Icon;
 
   // ── Countdown — one interval, gated on `open` so it ticks only while the
   //    modal is visible (no wasted re-renders when closed). Reads the same
@@ -605,11 +497,7 @@ const ScrollPricingModal: FC<Props> = ({
   };
 
   const handleStickyCta = () => {
-    if (view === "pricing" || !hasArchetype) {
-      handleCtaClick();
-    } else {
-      goToPricing();
-    }
+    handleCtaClick();
   };
 
   // ── Why-unlock mobile carousel ─────────────────────────────────────────────
@@ -823,8 +711,6 @@ const ScrollPricingModal: FC<Props> = ({
   // ── Render ─────────────────────────────────────────────────────────────────
   if (!portalMounted) return null;
 
-  const showArchetypeView = view === "archetype" && hasArchetype;
-
   return createPortal(
     <div
       className={`report-pricing-modal report-pricing-modal--white ${open ? "is-visible" : "is-hidden"}`}
@@ -889,418 +775,96 @@ const ScrollPricingModal: FC<Props> = ({
                 Assessment complete
               </div>
 
-              {/* ── Heading (branches on view) ───────────────────────────── */}
+              {/* ── Heading ──────────────────────────────────────────────── */}
               <h2 id="scroll-teaser-title" className="rpm-heading">
-                {showArchetypeView ? (
-                  <>
-                    <span style={gradientTextStyle}>{displayName}</span>
-                    {", you score highest with the following "}
-                    <em style={gradientTextStyle}>Archetype</em>:
-                  </>
-                ) : (
-                  <>
-                    <span style={gradientTextStyle}>{displayName}</span>
-                    {", your results are in — and they "}
-                    <em style={gradientTextStyle}>go deeper</em>
-                    {" than you’d expect."}
-                  </>
-                )}
+                <span style={gradientTextStyle}>{displayName}</span>
+                {", your results are in — and they "}
+                <em style={gradientTextStyle}>go deeper</em>
+                {" than you’d expect."}
               </h2>
 
-              {/* ── Hero (single view, fades on swap) ────────────────────── */}
-              <div className="rpm-hero-swap" key={showArchetypeView ? "archetype" : "pricing"}>
-                {showArchetypeView ? (
-                  <div className="rpm-arch-view">
-                    {/* Dark archetype card */}
-                    <div
-                      style={{
-                        position: "relative",
-                        border: `1px solid ${theme!.accent}`,
-                        background: "#130b17",
-                        borderRadius: "18px",
-                        padding: "var(--rpm-card-pad)",
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: "26px",
-                        width: "100%",
-                        maxWidth: "665px",
-                      }}
-                    >
-                      {/* Bounded accent orbs */}
-                      <div
-                        aria-hidden="true"
-                        style={{
-                          position: "absolute",
-                          inset: 0,
-                          borderRadius: "18px",
-                          overflow: "hidden",
-                          pointerEvents: "none",
-                        }}
-                      >
-                        <div
-                          style={{
-                            position: "absolute",
-                            top: "-80px",
-                            right: "-60px",
-                            width: "240px",
-                            height: "240px",
-                            borderRadius: "50%",
-                            background: `rgba(${theme!.accentRgb} / 0.28)`,
-                            filter: "blur(50px)",
-                          }}
-                        />
-                        <div
-                          style={{
-                            position: "absolute",
-                            bottom: "-80px",
-                            left: "-60px",
-                            width: "240px",
-                            height: "240px",
-                            borderRadius: "50%",
-                            background: `rgba(${theme!.accentRgb} / 0.28)`,
-                            filter: "blur(50px)",
-                          }}
-                        />
-                      </div>
+              {/* ── Pricing hero ─────────────────────────────────────────── */}
+              <div className="rpm-hero-swap">
+                <div className="rpm-pcard">
+                  <div className="rpm-pcard__taghead">
+                    <span className="rpm-pcard__tag">Full personal report</span>
+                  </div>
 
-                      {/* Header: tag + match strength */}
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "flex-start",
-                          gap: "20px",
-                          flexWrap: "wrap",
-                          position: "relative",
-                        }}
-                      >
-                        <div
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            padding: "9px 17px",
-                            borderRadius: "9999px",
-                            border: `0.75px solid rgba(${theme!.accentRgb} / 0.2)`,
-                            background: `rgba(${theme!.accentRgb} / 0.1)`,
-                            color: theme!.accent,
-                            fontFamily: "var(--font-sans)",
-                            fontSize: "var(--rpm-card-tag)",
-                            fontWeight: 500,
-                            lineHeight: 1,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          Your Core Archetype
-                        </div>
+                  <div className="rpm-pcard__body">
+                    <h3 className="rpm-pcard__title">
+                      Unlock your <em style={gradientTextStyle}>full personal report</em> now
+                    </h3>
 
-                        <div
-                          className="rpm-match-strength"
-                          style={{ textAlign: "right", minWidth: "140px", flex: "0 1 auto" }}
-                        >
-                          <div className="rpm-match-strength__head">
-                            <div
-                              className="rpm-match-strength__label"
-                              style={{
-                                fontFamily: "var(--font-sans)",
-                                fontSize: "var(--rpm-match-label)",
-                                color: "rgba(255,255,255,0.5)",
-                                marginBottom: "6px",
-                                fontWeight: 500,
-                                lineHeight: 1,
-                              }}
-                            >
-                              Match Strength
-                            </div>
-                            <div
-                              className="rpm-match-strength__value"
-                              style={{
-                                fontFamily: "var(--font-serif)",
-                                fontSize: "var(--rpm-match-value)",
-                                fontWeight: 500,
-                                color: "#fff",
-                                lineHeight: 1,
-                                marginBottom: "8px",
-                              }}
-                            >
-                              {matchPct}%
-                            </div>
-                          </div>
-                          <div
-                            style={{
-                              width: "100%",
-                              height: "8px",
-                              borderRadius: "9999px",
-                              background: "rgba(255,255,255,0.1)",
-                              overflow: "hidden",
-                            }}
-                          >
-                            <div
-                              style={{
-                                height: "100%",
-                                width: `${matchPct}%`,
-                                borderRadius: "9999px",
-                                background:
-                                  "linear-gradient(to right, #fe6839 6.83%, #a78bfa 37.63%, #e9d5ff 100%)",
-                              }}
-                            />
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Identity row */}
-                      <div style={{ display: "flex", gap: "16px", alignItems: "flex-start" }}>
-                        <div
-                          aria-hidden="true"
-                          style={{
-                            flexShrink: 0,
-                            width: "var(--rpm-archetype-icon, 64px)",
-                            height: "var(--rpm-archetype-icon, 64px)",
-                            padding: "calc(var(--rpm-archetype-icon, 64px) * 0.2)",
-                            borderRadius: "16px",
-                            background: theme!.iconBackground,
-                            color: "#fff",
-                            display: "inline-flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            boxSizing: "border-box",
-                          }}
-                        >
-                          {ArchetypeIcon && (
-                            <ArchetypeIcon
-                              width="100%"
-                              height="100%"
-                              style={{ display: "block", color: "#fff" }}
-                            />
-                          )}
-                        </div>
-
-                        <div
-                          style={{
-                            flex: "1 1 auto",
-                            minWidth: 0,
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: "8px",
-                          }}
-                        >
-                          <div
-                            style={{
-                              fontFamily: "var(--font-serif)",
-                              fontSize: "var(--rpm-archetype)",
-                              fontWeight: 500,
-                              color: "#fff",
-                              lineHeight: "var(--rpm-archetype-line)",
-                              letterSpacing: "-1px",
-                            }}
-                          >
-                            {archetype}
-                          </div>
-                          <div
-                            style={{
-                              fontFamily: "var(--font-sans)",
-                              fontSize: "var(--rpm-motto)",
-                              lineHeight: 1.35,
-                              color: "#fff",
-                            }}
-                          >
-                            <span style={{ fontWeight: 300, color: "#d1d5db" }}>Motto: </span>
-                            <span style={{ fontWeight: 400 }}>{theme!.motto}</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div
-                        style={{
-                          fontFamily: "var(--font-sans)",
-                          fontSize: "var(--rpm-behavioral-label)",
-                          fontWeight: 400,
-                          color: "#fff",
-                          lineHeight: 1,
-                        }}
-                      >
-                        Behavioral tendencies:
-                      </div>
-
-                      {/* Core motivation */}
-                      <div
-                        style={{
-                          border: `0.75px solid ${theme!.accent}`,
-                          borderRadius: "12px",
-                          padding: "18px",
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "16px",
-                        }}
-                      >
-                        <span
-                          aria-hidden="true"
-                          style={{
-                            flexShrink: 0,
-                            width: "42px",
-                            height: "42px",
-                            borderRadius: "50%",
-                            border: `0.75px solid ${theme!.accent}`,
-                            display: "inline-flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                          }}
-                        >
-                          <span
-                            style={{
-                              width: "22px",
-                              height: "22px",
-                              borderRadius: "50%",
-                              border: `0.75px solid ${theme!.accent}`,
-                              display: "inline-flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                            }}
-                          >
-                            <span
-                              style={{
-                                width: "10px",
-                                height: "10px",
-                                borderRadius: "50%",
-                                background: theme!.accent,
-                              }}
-                            />
-                          </span>
+                    {/* Offer + countdown + price (one bordered box, Figma 7928:31647) */}
+                    <div className="rpm-pcard__deal">
+                      {offerPillText && (
+                        <span className="rpm-pcard__offer-pill">
+                          <GreenCheck size={13} color="#ffffff" />
+                          {offerPillText}
                         </span>
-                        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                          <span
-                            style={{
-                              fontFamily: "var(--font-sans)",
-                              fontSize: "var(--rpm-core-mot-label)",
-                              fontWeight: 400,
-                              color: theme!.accent,
-                              lineHeight: 1,
-                            }}
-                          >
-                            Core motivation:
-                          </span>
-                          <span
-                            style={{
-                              fontFamily: "var(--font-serif)",
-                              fontSize: "var(--rpm-core-mot-value)",
-                              fontWeight: 500,
-                              color: "#fff",
-                              lineHeight: 1.1,
-                            }}
-                          >
-                            {theme!.motivation}
+                      )}
+                      <PaywallCountdownTiles mm={mm} ss={ss} />
+                      <div className="rpm-pcard__pricerow">
+                        <div className="rpm-pcard__pricecol">
+                          {strikePriceLabel && (
+                            <span className="rpm-pcard__strike">{strikePriceLabel}</span>
+                          )}
+                          <span className="rpm-pcard__price" style={gradientTextStyle}>
+                            {priceLabel}
                           </span>
                         </div>
-                      </div>
-
-                      {/* 2×2 traits */}
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "1fr 1fr",
-                          columnGap: "32px",
-                          rowGap: "32px",
-                        }}
-                      >
-                        {(
-                          [
-                            {
-                              label: "Communication",
-                              value: theme!.communication,
-                              Icon: TraitIcons.communication,
-                            },
-                            {
-                              label: "Initiation",
-                              value: theme!.initiation,
-                              Icon: TraitIcons.initiation,
-                            },
-                            {
-                              label: "Attachment",
-                              value: theme!.attachment,
-                              Icon: TraitIcons.attachment,
-                            },
-                            {
-                              label: "Power orientation",
-                              value: theme!.powerOrientation,
-                              Icon: TraitIcons.powerOrientation,
-                            },
-                          ] as const
-                        ).map(({ label, value, Icon }) => (
-                          <div
-                            key={label}
-                            style={{ display: "flex", flexDirection: "column", gap: "10px" }}
-                          >
-                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                              <span
-                                aria-hidden="true"
-                                style={{
-                                  width: "18px",
-                                  height: "18px",
-                                  color: theme!.accent,
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  justifyContent: "center",
-                                  flexShrink: 0,
-                                }}
-                              >
-                                <Icon width={18} height={18} />
-                              </span>
-                              <span
-                                style={{
-                                  fontFamily: "var(--font-sans)",
-                                  fontSize: "var(--rpm-trait-label)",
-                                  fontWeight: 400,
-                                  color: "#fff",
-                                  lineHeight: 1,
-                                }}
-                              >
-                                {label}
-                              </span>
-                            </div>
-                            <div
-                              style={{
-                                fontFamily: "var(--font-serif)",
-                                fontSize: "var(--rpm-trait-value)",
-                                fontWeight: 500,
-                                color: "#fff",
-                                lineHeight: 1.2,
-                              }}
-                            >
-                              {value}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-
-                      {/* Risk + confidence */}
-                      <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-                        <SegmentBar
-                          label="Risk orientation"
-                          segments={theme!.riskSegments}
-                          value={theme!.riskOrientation}
-                          color={theme!.accent}
-                        />
-                        <SegmentBar
-                          label="Typical confidence"
-                          segments={theme!.confidenceSegments}
-                          value={theme!.confidence}
-                          color={theme!.accent}
-                        />
+                        <div className="rpm-pcard__priceaside">
+                          {saveLabel && (
+                            <span className="rpm-pcard__save">
+                              <GreenCheck size={15} />
+                              You save {saveLabel}
+                            </span>
+                          )}
+                          <span className="rpm-pcard__once">One time payment</span>
+                        </div>
                       </div>
                     </div>
 
-                    {/* Unlock CTA → pricing view */}
-                    <button type="button" className="rpm-cta rpm-cta--arch" onClick={goToPricing}>
+                    {/* Features */}
+                    <ul className="rpm-pcard__features">
+                      {(
+                        [
+                          { lead: "+50 pages", tail: " of deep insights into your sexuality" },
+                          { lead: "Results based on +100 science papers", tail: "" },
+                          {
+                            lead: "30+ chapters",
+                            tail: " on your sexual fantasies, arousal & desire patterns",
+                          },
+                          {
+                            lead: "Personalised growth paths",
+                            tail: " & suggestions to improve your sex life",
+                          },
+                          { lead: "Share your report", tail: " with up to 2 extra emails" },
+                        ] as Array<{ lead: string; tail: string }>
+                      ).map(({ lead, tail }) => (
+                        <li key={lead}>
+                          <GreenCheck size={18} />
+                          <span>
+                            <span style={{ fontWeight: 700, color: "#161021" }}>{lead}</span>
+                            <span style={{ fontWeight: 400, color: "#3f3a4d" }}>{tail}</span>
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+
+                    {/* CTA */}
+                    <button type="button" className="rpm-cta rpm-cta--pay" onClick={handleCtaClick}>
                       <span className="rpm-cta__wash" aria-hidden="true" />
                       <span className="rpm-cta__reveal" aria-hidden="true" />
-                      <span className="rpm-cta__label">Unlock your full report</span>
+                      <span className="rpm-cta__label">Continue to payment</span>
                       <svg
                         className="rpm-cta__arrow"
-                        width="25"
-                        height="25"
+                        width="15"
+                        height="15"
                         viewBox="0 0 24 24"
                         fill="none"
                         stroke="currentColor"
-                        strokeWidth="2"
+                        strokeWidth="2.2"
                         aria-hidden="true"
                       >
                         <path
@@ -1310,120 +874,23 @@ const ScrollPricingModal: FC<Props> = ({
                         />
                       </svg>
                     </button>
-                  </div>
-                ) : (
-                  /* ── Pricing card ──────────────────────────────────────── */
-                  <div className="rpm-pcard">
-                    <div className="rpm-pcard__taghead">
-                      <span className="rpm-pcard__tag">Full personal report</span>
-                    </div>
 
-                    <div className="rpm-pcard__body">
-                      <h3 className="rpm-pcard__title">
-                        Unlock your <em style={gradientTextStyle}>full personal report</em> now
-                      </h3>
+                    <p className="rpm-pcard__fineprint">
+                      14-day money-back guarantee · secure checkout
+                    </p>
 
-                      {/* Offer + countdown + price (one bordered box, Figma 7928:31647) */}
-                      <div className="rpm-pcard__deal">
-                        {offerPillText && (
-                          <span className="rpm-pcard__offer-pill">
-                            <GreenCheck size={13} color="#ffffff" />
-                            {offerPillText}
+                    <div className="rpm-pcard__payments">
+                      <span className="rpm-pcard__payments-label">Our payment methods</span>
+                      <div className="rpm-pcard__payments-row">
+                        {PAYMENT_METHODS.map((m) => (
+                          <span key={m} className="rpm-pcard__payment">
+                            {m}
                           </span>
-                        )}
-                        <PaywallCountdownTiles mm={mm} ss={ss} />
-                        <div className="rpm-pcard__pricerow">
-                          <div className="rpm-pcard__pricecol">
-                            {strikePriceLabel && (
-                              <span className="rpm-pcard__strike">{strikePriceLabel}</span>
-                            )}
-                            <span className="rpm-pcard__price" style={gradientTextStyle}>
-                              {priceLabel}
-                            </span>
-                          </div>
-                          <div className="rpm-pcard__priceaside">
-                            {saveLabel && (
-                              <span className="rpm-pcard__save">
-                                <GreenCheck size={15} />
-                                You save {saveLabel}
-                              </span>
-                            )}
-                            <span className="rpm-pcard__once">One time payment</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Features */}
-                      <ul className="rpm-pcard__features">
-                        {(
-                          [
-                            { lead: "+50 pages", tail: " of deep insights into your sexuality" },
-                            { lead: "Results based on +100 science papers", tail: "" },
-                            {
-                              lead: "30+ chapters",
-                              tail: " on your sexual fantasies, arousal & desire patterns",
-                            },
-                            {
-                              lead: "Personalised growth paths",
-                              tail: " & suggestions to improve your sex life",
-                            },
-                            { lead: "Share your report", tail: " with up to 2 extra emails" },
-                          ] as Array<{ lead: string; tail: string }>
-                        ).map(({ lead, tail }) => (
-                          <li key={lead}>
-                            <GreenCheck size={18} />
-                            <span>
-                              <span style={{ fontWeight: 700, color: "#161021" }}>{lead}</span>
-                              <span style={{ fontWeight: 400, color: "#3f3a4d" }}>{tail}</span>
-                            </span>
-                          </li>
                         ))}
-                      </ul>
-
-                      {/* CTA */}
-                      <button
-                        type="button"
-                        className="rpm-cta rpm-cta--pay"
-                        onClick={handleCtaClick}
-                      >
-                        <span className="rpm-cta__wash" aria-hidden="true" />
-                        <span className="rpm-cta__reveal" aria-hidden="true" />
-                        <span className="rpm-cta__label">Continue to payment</span>
-                        <svg
-                          className="rpm-cta__arrow"
-                          width="15"
-                          height="15"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2.2"
-                          aria-hidden="true"
-                        >
-                          <path
-                            d="M5 12h14M13 6l6 6-6 6"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
-                      </button>
-
-                      <p className="rpm-pcard__fineprint">
-                        14-day money-back guarantee · secure checkout
-                      </p>
-
-                      <div className="rpm-pcard__payments">
-                        <span className="rpm-pcard__payments-label">Our payment methods</span>
-                        <div className="rpm-pcard__payments-row">
-                          {PAYMENT_METHODS.map((m) => (
-                            <span key={m} className="rpm-pcard__payment">
-                              {m}
-                            </span>
-                          ))}
-                        </div>
                       </div>
                     </div>
                   </div>
-                )}
+                </div>
               </div>
 
               {/* ── Why unlock the Full Report? (2×2) ────────────────────── */}

@@ -43,12 +43,11 @@ vi.mock("@features/checkout/server/reportCheckoutQuoteCache", () => ({
 // without simulating the scroll/timer. The real component is exercised in
 // features/report/tests/ScrollPricingModal.test.tsx.
 vi.mock("@features/report/ui/ScrollPricingModal", () => ({
-  default: (props: { dismissible?: boolean; open?: boolean; flipDeck?: boolean }) => (
+  default: (props: { dismissible?: boolean; open?: boolean }) => (
     <div
       data-testid="scroll-teaser"
       data-dismissible={String(props.dismissible)}
       data-open={String(props.open)}
-      data-flipdeck={String(props.flipDeck)}
     />
   ),
 }));
@@ -661,10 +660,9 @@ describe("ReportPage", () => {
     try {
       render(<ReportPage token={TREATMENT_TOKEN} />);
       const teaser = screen.getByTestId("scroll-teaser");
-      // Treatment-arm token, but an email return ⇒ soft control UX: dismissible,
-      // no flip deck, and NOT force-opened on load.
+      // Treatment-arm token, but an email return ⇒ soft control UX: dismissible
+      // and NOT force-opened on load.
       expect(teaser).toHaveAttribute("data-dismissible", "true");
-      expect(teaser).toHaveAttribute("data-flipdeck", "false");
       expect(teaser).toHaveAttribute("data-open", "false");
     } finally {
       mockSearchParams.mockImplementation(() => new URLSearchParams());
@@ -678,28 +676,25 @@ describe("ReportPage", () => {
       render(<ReportPage token={TREATMENT_TOKEN} />);
       const teaser = screen.getByTestId("scroll-teaser");
       expect(teaser).toHaveAttribute("data-dismissible", "true");
-      expect(teaser).toHaveAttribute("data-flipdeck", "false");
     } finally {
       mockSearchParams.mockImplementation(() => new URLSearchParams());
     }
   });
 
-  it("makes the scroll teaser non-dismissible + flip-deck for the forced-paywall treatment cohort", () => {
+  it("makes the scroll teaser non-dismissible for the forced-paywall treatment cohort", () => {
     mockUseReportData.mockReturnValue(buildSuccessResponse());
     render(<ReportPage token={TREATMENT_TOKEN} />);
     const teaser = screen.getByTestId("scroll-teaser");
     expect(teaser).toHaveAttribute("data-dismissible", "false");
-    expect(teaser).toHaveAttribute("data-flipdeck", "true");
   });
 
-  it("keeps the scroll teaser dismissible + non-flip for an email-return (soft) visit", () => {
+  it("keeps the scroll teaser dismissible for an email-return (soft) visit", () => {
     mockUseReportData.mockReturnValue(buildSuccessResponse());
     mockSearchParams.mockImplementation(() => new URLSearchParams("from=email"));
     try {
       render(<ReportPage token={TREATMENT_TOKEN} />);
       const teaser = screen.getByTestId("scroll-teaser");
       expect(teaser).toHaveAttribute("data-dismissible", "true");
-      expect(teaser).toHaveAttribute("data-flipdeck", "false");
     } finally {
       mockSearchParams.mockImplementation(() => new URLSearchParams());
     }
