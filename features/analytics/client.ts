@@ -70,6 +70,9 @@ const PERSISTED_EVENTS = new Set([
   "experiment_exposure",
   "scroll_paywall_shown",
   "experiment_card_flipped",
+  // Locked-chapter-card paywall surface (price + countdown shown inline)
+  "locked_card_price_shown",
+  "paywall_countdown_expired",
 ]);
 
 /**
@@ -439,6 +442,45 @@ export const trackBeginCheckout = (
   const params = { plan, price, currency };
   track("begin_checkout", params);
   persistAnalyticsEvent("begin_checkout", params);
+};
+
+/**
+ * Fires once per report the first time a LOCKED CHAPTER CARD renders a live
+ * price + 3-minute countdown (the `PremiumOverlay` surface — distinct from the
+ * pricing modal's `price_shown`). Lets the funnel measure the inline card as
+ * its own price-exposure surface, tagged `surface: "locked_chapter_card"`.
+ * Caller dedupes to one fire per report load.
+ */
+export const trackLockedCardPriceShown = (params: PriceShownParams) => {
+  const payload = {
+    ...params,
+    surface: "locked_chapter_card",
+  } as unknown as Record<string, unknown>;
+  track("locked_card_price_shown", payload);
+  persistAnalyticsEvent("locked_card_price_shown", payload);
+};
+
+/**
+ * Fires once per report when the shared 3-minute urgency countdown reaches
+ * 0:00 *during the session* (the same deadline drives the modal + every locked
+ * card). Powers "did the timer expire before they bought?" urgency analysis.
+ * Not fired for returning visitors who land after the deadline already passed.
+ * Caller dedupes + only schedules when time remains.
+ */
+export const trackPaywallCountdownExpired = (archetype?: string | null) => {
+  const params = { ...(archetype ? { archetype } : {}) };
+  track("paywall_countdown_expired", params);
+  persistAnalyticsEvent("paywall_countdown_expired", params);
+};
+
+/**
+ * Testimonial carousel engagement in the pricing modal (pause/resume, arrow
+ * nudge, drag). GA4-only — low-signal interaction, intentionally NOT persisted
+ * to `analytics_event` (same row-volume policy as section navigation).
+ */
+export type TestimonialAction = "pause" | "resume" | "prev" | "next" | "drag";
+export const trackTestimonialInteraction = (action: TestimonialAction) => {
+  track("testimonial_interaction", { action });
 };
 
 /**

@@ -23,6 +23,7 @@ import InviteModal from "@features/invite/ui/InviteModal";
 import FooterSection from "@features/landing/ui/FooterSection";
 import ReportDesktopSidebar from "./ReportDesktopSidebar";
 import ReportMobileNav from "./ReportMobileNav";
+import { PaywallCountdownProvider } from "./PaywallCountdown";
 import ReportPricingModal from "./ReportPricingModal";
 import ReportStickyUnlockBar from "./ReportStickyUnlockBar";
 import ScrollPricingModal from "./ScrollPricingModal";
@@ -32,6 +33,7 @@ import ShareReportModal from "./ShareReportModal";
 import ShareVerifyGate from "./ShareVerifyGate";
 import SharedViewerBanner from "./SharedViewerBanner";
 import {
+  getReportPaywallDeadline,
   getReportSessionId,
   setReportNurturePromo,
   setReportPricingSessionId,
@@ -64,7 +66,9 @@ import {
   setForcedPaywallArm,
   setReportSubmissionContext,
   trackExperimentExposure,
+  trackLockedCardPriceShown,
   trackLockIconClicked,
+  trackPaywallCountdownExpired,
   trackPaywallInitiated,
   trackReferFriendOpened,
   trackReportChapterMenuOpened,
@@ -314,6 +318,7 @@ interface ReportExperienceProps {
   isScrollTeaserOpen: boolean;
   isShareModalOpen: boolean;
   matchScore: number;
+  offerDeadline?: number;
   onBeginCheckout: (plan: ReportPurchasePlanId, archetype?: string | null) => void;
   onClosePricingModal: () => void;
   onCloseShareModal: () => void;
@@ -366,6 +371,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   isScrollTeaserOpen,
   isShareModalOpen,
   matchScore,
+  offerDeadline,
   onBeginCheckout,
   onClosePricingModal,
   onCloseShareModal,
@@ -397,6 +403,39 @@ const ReportExperience: FC<ReportExperienceProps> = ({
 }) => {
   const mainContentRef = useRef<HTMLElement | null>(null);
   const [activeSectionId, setActiveSectionId] = useState(resolvedSections[0]?.id ?? "welcome");
+  // Live full-report quote used by the locked premium cards' price/strike/save.
+  // Same source the pricing modal and sticky bar read, so all three agree.
+  const fullReportQuote = pricingQuotes?.full_report ?? null;
+  // The report shows locked premium cards (inline price + countdown) when it
+  // isn't fully unlocked and has at least one premium section. Gates both the
+  // shared countdown ticker and the price-exposure analytics event.
+  const hasLockedPremiumCards =
+    accessPlan !== "full_report" &&
+    accessPlan !== "all_reports" &&
+    resolvedSections.some((section) => section.isPremium);
+
+  // Fire one "locked chapter card price shown" event per report when the inline
+  // PremiumOverlay surface (live price + countdown) is actually on the page —
+  // i.e. the report isn't fully unlocked, there's a premium section, and a
+  // quote to price it. Deduped to a single row/report; arm auto-stamped.
+  const lockedCardPriceFiredRef = useRef(false);
+  useEffect(() => {
+    if (lockedCardPriceFiredRef.current) return;
+    if (!hasLockedPremiumCards) return;
+    if (!fullReportQuote) return;
+    lockedCardPriceFiredRef.current = true;
+    trackLockedCardPriceShown({
+      plan: "full_report",
+      price: fullReportQuote.currentPriceCents / 100,
+      currency: fullReportQuote.currency,
+      bucket: fullReportQuote.basePriceBucket,
+      pricing_cluster_id: fullReportQuote.pricingClusterId,
+      discount_step: fullReportQuote.discountStep,
+      experiment_group: fullReportQuote.experimentGroup,
+      msrp: fullReportQuote.msrpCents / 100,
+      initial_price: fullReportQuote.initialPriceCents / 100,
+    });
+  }, [hasLockedPremiumCards, fullReportQuote]);
   // Auto-open the Refer-a-Friend modal when the page is loaded with ?invite=1.
   // Reminder emails (`invite-reminder-1`/`-2`) deep-link to /report?invite=1
   // — they would silently fail without this auto-open.
@@ -504,37 +543,38 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   const viewArchetypeTier = archetypeTiers[viewArchetype] ?? null;
 
   return (
-    <main
-      id="main-content"
-      ref={mainContentRef}
-      tabIndex={-1}
-      className={`report-page${accessPlan === "full_report" || accessPlan === "all_reports" ? "" : " report-experience--sticky-pad"}`}
-      style={getReportThemeStyle(theme)}
-      onCopy={(e) => e.preventDefault()}
-      onContextMenu={(e) => e.preventDefault()}
-      onDragStart={(e) => e.preventDefault()}
-    >
-      {devParam && (
-        <div
-          style={{
-            position: "fixed",
-            bottom: 0,
-            left: 0,
-            right: 0,
-            background: "#f59e0b",
-            color: "#000",
-            textAlign: "center",
-            padding: "4px 8px",
-            fontSize: "12px",
-            zIndex: 9999,
-            fontFamily: "monospace",
-          }}
-        >
-          DEV — report loaded via ?dev_session URL param ({devParam.slice(0, 8)}...)
-        </div>
-      )}
-      {viewMode === "shared" && <SharedViewerBanner ownerFirstName={ownerFirstName} />}
-      {/* Mobile nav chrome lives outside .report-page__shell-wrap so the
+    <PaywallCountdownProvider deadline={offerDeadline ?? null} active={hasLockedPremiumCards}>
+      <main
+        id="main-content"
+        ref={mainContentRef}
+        tabIndex={-1}
+        className={`report-page${accessPlan === "full_report" || accessPlan === "all_reports" ? "" : " report-experience--sticky-pad"}`}
+        style={getReportThemeStyle(theme)}
+        onCopy={(e) => e.preventDefault()}
+        onContextMenu={(e) => e.preventDefault()}
+        onDragStart={(e) => e.preventDefault()}
+      >
+        {devParam && (
+          <div
+            style={{
+              position: "fixed",
+              bottom: 0,
+              left: 0,
+              right: 0,
+              background: "#f59e0b",
+              color: "#000",
+              textAlign: "center",
+              padding: "4px 8px",
+              fontSize: "12px",
+              zIndex: 9999,
+              fontFamily: "monospace",
+            }}
+          >
+            DEV — report loaded via ?dev_session URL param ({devParam.slice(0, 8)}...)
+          </div>
+        )}
+        {viewMode === "shared" && <SharedViewerBanner ownerFirstName={ownerFirstName} />}
+        {/* Mobile nav chrome lives outside .report-page__shell-wrap so the
           modal-blur filter never becomes a containing block for these fixed
           elements. Safari (WebKit) caches the containing block once
           filter/transform is applied, stranding fixed nav mid-page after a
@@ -542,105 +582,291 @@ const ReportExperience: FC<ReportExperienceProps> = ({
           The outer div groups all of them so inert/aria-hidden still scopes
           correctly when a modal is open — no filter/transform here, so the
           containing-block bug stays gone. */}
-      <div
-        aria-hidden={isPricingModalOpen || isShareModalOpen || isScrollTeaserOpen}
-        inert={isPricingModalOpen || isShareModalOpen || isScrollTeaserOpen}
-      >
-        <ReportMobileNav
-          activeSectionId={activeSectionId}
-          onDrawerOpened={() => {
-            trackReportChapterMenuOpened({
-              archetype: viewArchetype || null,
-              active_section_id: activeSectionId,
-            });
-          }}
-          onReferFriend={() => {
-            trackReferFriendOpened({ source: "drawer" });
-            setShowInvite(true);
-          }}
-          onSectionClick={handleSectionClick}
-          onShareClick={
-            viewMode === "owner" && ownerToken
-              ? () => {
-                  trackReportShareOpened({ source: "drawer" });
-                  onOpenShareModal();
-                }
-              : undefined
-          }
-          sections={resolvedSections}
-        />
         <div
-          className={[
-            "report-page__shell-wrap",
-            isPricingModalOpen || isShareModalOpen
-              ? "report-page__shell-wrap--obscured"
-              : isScrollTeaserOpen
-                ? "report-page__shell-wrap--obscured-soft"
-                : "",
-          ]
-            .filter(Boolean)
-            .join(" ")}
+          aria-hidden={isPricingModalOpen || isShareModalOpen || isScrollTeaserOpen}
+          inert={isPricingModalOpen || isShareModalOpen || isScrollTeaserOpen}
         >
-          <div className="report-shell">
-            <ReportDesktopSidebar
-              activeSectionId={activeSectionId}
-              onReferFriend={() => {
-                trackReferFriendOpened({ source: "sidebar" });
-                setShowInvite(true);
-              }}
-              onSectionClick={handleSectionClick}
-              onShareClick={
-                viewMode === "owner" && ownerToken
-                  ? () => {
-                      trackReportShareOpened({ source: "sidebar" });
-                      onOpenShareModal();
-                    }
-                  : undefined
-              }
-              sections={resolvedSections}
-            />
-
-            <div className="report-content">
-              {resolvedSections.map((section) => {
-                const title = section.displayTitle;
-                const generalHtml = replacePlaceholders(section.generalContent, placeholderValues);
-                const archetypeHtml = normalizeReportHtml(
-                  section.archetypeBlockId
-                    ? (archetypeContent?.[section.archetypeBlockId]?.[viewArchetype] ?? null)
-                    : null
-                );
-
-                const feedbackWidget = section.hasResonatesFeedback ? (
-                  <SectionFeedback
-                    sectionTitle={title}
-                    value={feedbacks[section.id] ?? null}
-                    isSent={submitted[section.id] ?? false}
-                    onFeedback={(payload) => submitFeedback(section.id, payload)}
-                  />
-                ) : null;
-
-                if (section.sectionNumber === 1) {
-                  return (
-                    <WelcomeSection
-                      key={section.id}
-                      feedbackWidget={feedbackWidget}
-                      generalHtml={generalHtml}
-                      sectionId={section.id}
-                      snapshot={snapshot}
-                    />
-                  );
+          <ReportMobileNav
+            activeSectionId={activeSectionId}
+            onDrawerOpened={() => {
+              trackReportChapterMenuOpened({
+                archetype: viewArchetype || null,
+                active_section_id: activeSectionId,
+              });
+            }}
+            onReferFriend={() => {
+              trackReferFriendOpened({ source: "drawer" });
+              setShowInvite(true);
+            }}
+            onSectionClick={handleSectionClick}
+            onShareClick={
+              viewMode === "owner" && ownerToken
+                ? () => {
+                    trackReportShareOpened({ source: "drawer" });
+                    onOpenShareModal();
+                  }
+                : undefined
+            }
+            sections={resolvedSections}
+          />
+          <div
+            className={[
+              "report-page__shell-wrap",
+              isPricingModalOpen || isShareModalOpen
+                ? "report-page__shell-wrap--obscured"
+                : isScrollTeaserOpen
+                  ? "report-page__shell-wrap--obscured-soft"
+                  : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+          >
+            <div className="report-shell">
+              <ReportDesktopSidebar
+                activeSectionId={activeSectionId}
+                onReferFriend={() => {
+                  trackReferFriendOpened({ source: "sidebar" });
+                  setShowInvite(true);
+                }}
+                onSectionClick={handleSectionClick}
+                onShareClick={
+                  viewMode === "owner" && ownerToken
+                    ? () => {
+                        trackReportShareOpened({ source: "sidebar" });
+                        onOpenShareModal();
+                      }
+                    : undefined
                 }
+                sections={resolvedSections}
+              />
 
-                if (section.id === "summary") {
-                  const summaryHtml = normalizeReportHtml(
-                    summaryArchetypeContent[viewArchetype] ?? null
+              <div className="report-content">
+                {resolvedSections.map((section) => {
+                  const title = section.displayTitle;
+                  const generalHtml = replacePlaceholders(
+                    section.generalContent,
+                    placeholderValues
                   );
-                  const isSummaryUnlocked = isSectionUnlockedForPlan({
+                  const archetypeHtml = normalizeReportHtml(
+                    section.archetypeBlockId
+                      ? (archetypeContent?.[section.archetypeBlockId]?.[viewArchetype] ?? null)
+                      : null
+                  );
+
+                  const feedbackWidget = section.hasResonatesFeedback ? (
+                    <SectionFeedback
+                      sectionTitle={title}
+                      value={feedbacks[section.id] ?? null}
+                      isSent={submitted[section.id] ?? false}
+                      onFeedback={(payload) => submitFeedback(section.id, payload)}
+                    />
+                  ) : null;
+
+                  if (section.sectionNumber === 1) {
+                    return (
+                      <WelcomeSection
+                        key={section.id}
+                        feedbackWidget={feedbackWidget}
+                        generalHtml={generalHtml}
+                        sectionId={section.id}
+                        snapshot={snapshot}
+                      />
+                    );
+                  }
+
+                  if (section.id === "summary") {
+                    const summaryHtml = normalizeReportHtml(
+                      summaryArchetypeContent[viewArchetype] ?? null
+                    );
+                    const isSummaryUnlocked = isSectionUnlockedForPlan({
+                      accessPlan,
+                      archetypeTier: viewArchetypeTier,
+                      isPremium: section.isPremium,
+                      sectionId: section.id,
+                    });
+                    return (
+                      <ReportSection
+                        key={section.id}
+                        feedbackWidget={feedbackWidget}
+                        primaryArchetype={viewArchetype}
+                        sectionId={section.id}
+                        title={title}
+                      >
+                        <DimensionSection
+                          archetype={viewArchetype}
+                          archetypeHtml={summaryHtml}
+                          generalHtml=""
+                          isPremium={section.isPremium}
+                          isUnlocked={isSummaryUnlocked}
+                          offerDeadline={offerDeadline}
+                          onUnlock={() => unlockSection(section)}
+                          quote={fullReportQuote}
+                          sectionId={section.id}
+                          sectionTitle={title}
+                          tier="essentials"
+                        />
+                      </ReportSection>
+                    );
+                  }
+
+                  if (section.sectionNumber === 3) {
+                    return (
+                      <ReportSection
+                        key={section.id}
+                        feedbackWidget={feedbackWidget}
+                        primaryArchetype={viewArchetype}
+                        sectionId={section.id}
+                        title={title}
+                      >
+                        <CoreArchetypeSection
+                          archetypeHtml={archetypeHtml}
+                          matchScore={matchScore}
+                          theme={theme}
+                        />
+                      </ReportSection>
+                    );
+                  }
+
+                  if (section.sectionNumber === 4) {
+                    return (
+                      <ReportSection
+                        key={section.id}
+                        feedbackWidget={feedbackWidget}
+                        primaryArchetype={primaryArchetype}
+                        sectionId={section.id}
+                        title={title}
+                      >
+                        <ArchetypeProbabilitySection
+                          generalHtml={generalHtml}
+                          onUnlock={onUnlockArchetype}
+                          onPurchaseFullReport={onPurchaseFullReport}
+                          percentages={percentages}
+                          primaryArchetype={primaryArchetype}
+                          ranking={ranking}
+                          unlockedArchetypes={unlockedArchetypes}
+                          accessPlan={accessPlan}
+                          diagnostics={
+                            diagnostics as { uDimensions?: Record<string, number> } | null
+                          }
+                          submissionSeed={submissionSeed}
+                        />
+                      </ReportSection>
+                    );
+                  }
+
+                  if (section.sectionNumber === 6) {
+                    return (
+                      <ReportSection
+                        key={section.id}
+                        feedbackWidget={feedbackWidget}
+                        primaryArchetype={viewArchetype}
+                        sectionId={section.id}
+                        title={title}
+                      >
+                        <SexualStageSection
+                          generalHtml={generalHtml}
+                          userStageLabel={snapshot.stage}
+                        />
+                      </ReportSection>
+                    );
+                  }
+
+                  if (section.sectionNumber === 7) {
+                    return (
+                      <ReportSection
+                        key={section.id}
+                        feedbackWidget={feedbackWidget}
+                        primaryArchetype={viewArchetype}
+                        sectionId={section.id}
+                        title={title}
+                      >
+                        <ImportanceOfSexualitySection
+                          generalHtml={generalHtml}
+                          importanceLabel={snapshot.importanceLabel}
+                          importanceValue={snapshot.importanceValue}
+                        />
+                      </ReportSection>
+                    );
+                  }
+
+                  if (section.sectionNumber === 8) {
+                    const isBackendUnlocked = isSectionUnlockedForPlan({
+                      accessPlan,
+                      archetypeTier: viewArchetypeTier,
+                      isPremium: section.isPremium,
+                      sectionId: section.id,
+                    });
+
+                    return (
+                      <ReportSection
+                        key={section.id}
+                        feedbackWidget={feedbackWidget}
+                        primaryArchetype={viewArchetype}
+                        sectionId={section.id}
+                        title={title}
+                      >
+                        <AttachmentPatternsSection
+                          archetype={viewArchetype}
+                          archetypeHtml={archetypeHtml}
+                          generalHtml={generalHtml}
+                          isPremium={section.isPremium}
+                          isUnlocked={isBackendUnlocked}
+                          offerDeadline={offerDeadline}
+                          onUnlock={() => unlockSection(section)}
+                          quote={fullReportQuote}
+                          sectionTitle={title}
+                          tier={
+                            isSectionIncludedInEssentials(section.id) ? "essentials" : "full_report"
+                          }
+                        />
+                      </ReportSection>
+                    );
+                  }
+
+                  if (section.sectionNumber === 27) {
+                    const isBackendUnlocked = isSectionUnlockedForPlan({
+                      accessPlan,
+                      archetypeTier: viewArchetypeTier,
+                      isPremium: section.isPremium,
+                      sectionId: section.id,
+                    });
+                    const practiceSectionTitle = `Typical Sexual Fantasy & Practice Tendencies of the ${viewArchetype}`;
+
+                    return (
+                      <ReportSection
+                        key={section.id}
+                        feedbackWidget={feedbackWidget}
+                        primaryArchetype={viewArchetype}
+                        sectionId={section.id}
+                        title={practiceSectionTitle}
+                      >
+                        <PracticeTendenciesSection
+                          archetype={viewArchetype}
+                          archetypeHtml={archetypeHtml}
+                          content={practiceTendencies[viewArchetype] ?? null}
+                          generalHtml={generalHtml}
+                          isPremium={section.isPremium}
+                          isUnlocked={isBackendUnlocked}
+                          offerDeadline={offerDeadline}
+                          onUnlock={() => unlockSection(section)}
+                          quote={fullReportQuote}
+                          sectionTitle={practiceSectionTitle}
+                          tier={
+                            isSectionIncludedInEssentials(section.id) ? "essentials" : "full_report"
+                          }
+                        />
+                      </ReportSection>
+                    );
+                  }
+
+                  const isBackendUnlocked = isSectionUnlockedForPlan({
                     accessPlan,
                     archetypeTier: viewArchetypeTier,
                     isPremium: section.isPremium,
                     sectionId: section.id,
                   });
+                  const isStageValueLocked = false;
+
                   return (
                     <ReportSection
                       key={section.id}
@@ -651,232 +877,60 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     >
                       <DimensionSection
                         archetype={viewArchetype}
-                        archetypeHtml={summaryHtml}
-                        generalHtml=""
+                        archetypeHtml={archetypeHtml}
+                        generalHtml={generalHtml}
                         isPremium={section.isPremium}
-                        isUnlocked={isSummaryUnlocked}
+                        isStageValueLocked={isStageValueLocked}
+                        isUnlocked={isBackendUnlocked}
+                        offerDeadline={offerDeadline}
                         onUnlock={() => unlockSection(section)}
+                        quote={fullReportQuote}
                         sectionId={section.id}
                         sectionTitle={title}
-                        tier="essentials"
-                      />
-                    </ReportSection>
-                  );
-                }
-
-                if (section.sectionNumber === 3) {
-                  return (
-                    <ReportSection
-                      key={section.id}
-                      feedbackWidget={feedbackWidget}
-                      primaryArchetype={viewArchetype}
-                      sectionId={section.id}
-                      title={title}
-                    >
-                      <CoreArchetypeSection
-                        archetypeHtml={archetypeHtml}
-                        matchScore={matchScore}
-                        theme={theme}
-                      />
-                    </ReportSection>
-                  );
-                }
-
-                if (section.sectionNumber === 4) {
-                  return (
-                    <ReportSection
-                      key={section.id}
-                      feedbackWidget={feedbackWidget}
-                      primaryArchetype={primaryArchetype}
-                      sectionId={section.id}
-                      title={title}
-                    >
-                      <ArchetypeProbabilitySection
-                        generalHtml={generalHtml}
-                        onUnlock={onUnlockArchetype}
-                        onPurchaseFullReport={onPurchaseFullReport}
-                        percentages={percentages}
-                        primaryArchetype={primaryArchetype}
-                        ranking={ranking}
-                        unlockedArchetypes={unlockedArchetypes}
-                        accessPlan={accessPlan}
-                        diagnostics={diagnostics as { uDimensions?: Record<string, number> } | null}
-                        submissionSeed={submissionSeed}
-                      />
-                    </ReportSection>
-                  );
-                }
-
-                if (section.sectionNumber === 6) {
-                  return (
-                    <ReportSection
-                      key={section.id}
-                      feedbackWidget={feedbackWidget}
-                      primaryArchetype={viewArchetype}
-                      sectionId={section.id}
-                      title={title}
-                    >
-                      <SexualStageSection
-                        generalHtml={generalHtml}
-                        userStageLabel={snapshot.stage}
-                      />
-                    </ReportSection>
-                  );
-                }
-
-                if (section.sectionNumber === 7) {
-                  return (
-                    <ReportSection
-                      key={section.id}
-                      feedbackWidget={feedbackWidget}
-                      primaryArchetype={viewArchetype}
-                      sectionId={section.id}
-                      title={title}
-                    >
-                      <ImportanceOfSexualitySection
-                        generalHtml={generalHtml}
-                        importanceLabel={snapshot.importanceLabel}
-                        importanceValue={snapshot.importanceValue}
-                      />
-                    </ReportSection>
-                  );
-                }
-
-                if (section.sectionNumber === 8) {
-                  const isBackendUnlocked = isSectionUnlockedForPlan({
-                    accessPlan,
-                    archetypeTier: viewArchetypeTier,
-                    isPremium: section.isPremium,
-                    sectionId: section.id,
-                  });
-
-                  return (
-                    <ReportSection
-                      key={section.id}
-                      feedbackWidget={feedbackWidget}
-                      primaryArchetype={viewArchetype}
-                      sectionId={section.id}
-                      title={title}
-                    >
-                      <AttachmentPatternsSection
-                        archetype={viewArchetype}
-                        archetypeHtml={archetypeHtml}
-                        generalHtml={generalHtml}
-                        isPremium={section.isPremium}
-                        isUnlocked={isBackendUnlocked}
-                        onUnlock={() => unlockSection(section)}
-                        sectionTitle={title}
                         tier={
                           isSectionIncludedInEssentials(section.id) ? "essentials" : "full_report"
                         }
                       />
                     </ReportSection>
                   );
-                }
+                })}
 
-                if (section.sectionNumber === 27) {
-                  const isBackendUnlocked = isSectionUnlockedForPlan({
-                    accessPlan,
-                    archetypeTier: viewArchetypeTier,
-                    isPremium: section.isPremium,
-                    sectionId: section.id,
-                  });
-                  const practiceSectionTitle = `Typical Sexual Fantasy & Practice Tendencies of the ${viewArchetype}`;
-
-                  return (
-                    <ReportSection
-                      key={section.id}
-                      feedbackWidget={feedbackWidget}
-                      primaryArchetype={viewArchetype}
-                      sectionId={section.id}
-                      title={practiceSectionTitle}
-                    >
-                      <PracticeTendenciesSection
-                        archetype={viewArchetype}
-                        archetypeHtml={archetypeHtml}
-                        content={practiceTendencies[viewArchetype] ?? null}
-                        generalHtml={generalHtml}
-                        isPremium={section.isPremium}
-                        isUnlocked={isBackendUnlocked}
-                        onUnlock={() => unlockSection(section)}
-                        sectionTitle={practiceSectionTitle}
-                        tier={
-                          isSectionIncludedInEssentials(section.id) ? "essentials" : "full_report"
-                        }
-                      />
-                    </ReportSection>
-                  );
-                }
-
-                const isBackendUnlocked = isSectionUnlockedForPlan({
-                  accessPlan,
-                  archetypeTier: viewArchetypeTier,
-                  isPremium: section.isPremium,
-                  sectionId: section.id,
-                });
-                const isStageValueLocked = false;
-
-                return (
-                  <ReportSection
-                    key={section.id}
-                    feedbackWidget={feedbackWidget}
-                    primaryArchetype={viewArchetype}
-                    sectionId={section.id}
-                    title={title}
-                  >
-                    <DimensionSection
-                      archetype={viewArchetype}
-                      archetypeHtml={archetypeHtml}
-                      generalHtml={generalHtml}
-                      isPremium={section.isPremium}
-                      isStageValueLocked={isStageValueLocked}
-                      isUnlocked={isBackendUnlocked}
-                      onUnlock={() => unlockSection(section)}
-                      sectionId={section.id}
-                      sectionTitle={title}
-                      tier={
-                        isSectionIncludedInEssentials(section.id) ? "essentials" : "full_report"
-                      }
-                    />
-                  </ReportSection>
-                );
-              })}
-
-              <FooterSection />
+                <FooterSection />
+              </div>
             </div>
           </div>
         </div>
-      </div>
-      <ReportPricingModal
-        accessPlan={accessPlan}
-        archetype={primaryArchetype}
-        archetypeTiers={archetypeTiers}
-        open={isPricingModalOpen}
-        onClose={onClosePricingModal}
-        onUnlock={onBeginCheckout}
-        quotes={pricingQuotes}
-        returnFocusRef={mainContentRef}
-        targetArchetype={pricingTargetArchetype}
-        primaryArchetype={primaryArchetype}
-        variant={pricingVariant}
-      />
-      {viewMode === "owner" && ownerToken ? (
-        <ShareReportModal
-          open={isShareModalOpen}
-          onClose={onCloseShareModal}
-          ownerToken={ownerToken}
-          initialPlan={accessPlan}
-          onUpgrade={onOpenPricingModal}
+        <ReportPricingModal
+          accessPlan={accessPlan}
+          archetype={primaryArchetype}
+          archetypeTiers={archetypeTiers}
+          open={isPricingModalOpen}
+          onClose={onClosePricingModal}
+          onUnlock={onBeginCheckout}
+          quotes={pricingQuotes}
           returnFocusRef={mainContentRef}
+          targetArchetype={pricingTargetArchetype}
+          primaryArchetype={primaryArchetype}
+          variant={pricingVariant}
         />
-      ) : null}
-      <InviteModal
-        open={showInvite}
-        onClose={() => setShowInvite(false)}
-        referrerEmail={userEmail ?? ""}
-        referrerName={userName ?? ""}
-      />
-    </main>
+        {viewMode === "owner" && ownerToken ? (
+          <ShareReportModal
+            open={isShareModalOpen}
+            onClose={onCloseShareModal}
+            ownerToken={ownerToken}
+            initialPlan={accessPlan}
+            onUpgrade={onOpenPricingModal}
+            returnFocusRef={mainContentRef}
+          />
+        ) : null}
+        <InviteModal
+          open={showInvite}
+          onClose={() => setShowInvite(false)}
+          referrerEmail={userEmail ?? ""}
+          referrerName={userName ?? ""}
+        />
+      </main>
+    </PaywallCountdownProvider>
   );
 };
 
@@ -986,6 +1040,43 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     () => resolveReportPaywallCohort({ devArm, fromEmail, token: resolvedReportToken }),
     [devArm, fromEmail, resolvedReportToken]
   );
+
+  // Resolve the paywall countdown deadline once per report session (client-only;
+  // reads/creates a sessionStorage entry keyed by token/session). Kept out of the
+  // render path so it can't cause a hydration mismatch. The 3-minute window then
+  // survives view switches + reopening the modal within the tab.
+  const [offerDeadline, setOfferDeadline] = useState<number | undefined>(undefined);
+  const offerDeadlineSetRef = useRef(false);
+  useEffect(() => {
+    // Resolve the deadline exactly once, as soon as a stable storage key exists
+    // (token or session). Re-resolving when `ownerToken` arrives later for
+    // session-based access would key a different sessionStorage entry and make
+    // the visible timer jump — so we lock it in on the first stable key.
+    if (offerDeadlineSetRef.current) return;
+    if (!resolvedReportToken && !sessionId) return;
+    offerDeadlineSetRef.current = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- client-only sessionStorage read, fires once
+    setOfferDeadline(getReportPaywallDeadline({ token: resolvedReportToken, sessionId }));
+  }, [resolvedReportToken, sessionId]);
+
+  // Fire one "countdown expired" event when the shared 3-minute urgency timer
+  // elapses DURING this session — only if time actually remained at resolve and
+  // the report is still locked. Returning visitors who land after it already
+  // expired never schedule it; a purchase mid-session cancels it (dep re-run).
+  const countdownExpiredFiredRef = useRef(false);
+  useEffect(() => {
+    if (countdownExpiredFiredRef.current) return;
+    if (offerDeadline == null) return;
+    const plan = data?.accessPlan;
+    if (plan === "full_report" || plan === "all_reports") return;
+    const msLeft = offerDeadline - Date.now();
+    if (msLeft <= 0) return;
+    const id = window.setTimeout(() => {
+      countdownExpiredFiredRef.current = true;
+      trackPaywallCountdownExpired(data?.primaryArchetype ?? null);
+    }, msLeft);
+    return () => window.clearTimeout(id);
+  }, [offerDeadline, data?.accessPlan, data?.primaryArchetype]);
 
   // Single guarded closer for the scroll teaser. For the forced (treatment)
   // arm the teaser must only be exitable via checkout, so every other close
@@ -1370,6 +1461,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
         isScrollTeaserOpen={isScrollTeaserOpen}
         isShareModalOpen={isShareModalOpen}
         matchScore={matchScore}
+        offerDeadline={offerDeadline}
         onBeginCheckout={beginCheckout}
         onClosePricingModal={closePricingModal}
         onCloseShareModal={closeShareModal}
@@ -1411,6 +1503,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
         quote={data.pricingQuotes?.full_report ?? null}
         dismissible={forcedPaywallCohort !== "treatment"}
         flipDeck={forcedPaywallCohort === "treatment"}
+        offerDeadline={offerDeadline}
       />
       {data.accessPlan !== "full_report" && data.accessPlan !== "all_reports" && (
         <ReportStickyUnlockBar

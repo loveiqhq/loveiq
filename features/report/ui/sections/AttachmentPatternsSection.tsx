@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type CSSProperties, type FC } from "react";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
+import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import {
   extractAttachmentSectionContent,
   extractReportHtmlBlocks,
@@ -16,7 +17,9 @@ interface Props {
   generalHtml: string;
   isPremium: boolean;
   isUnlocked?: boolean;
+  offerDeadline?: number;
   onUnlock?: () => void;
+  quote?: ReportPriceQuoteSnapshot | null;
   sectionTitle: string;
   tier?: PremiumOverlayTier;
 }
@@ -56,7 +59,9 @@ const AttachmentPatternsSection: FC<Props> = ({
   generalHtml,
   isPremium,
   isUnlocked = false,
+  offerDeadline,
   onUnlock,
+  quote = null,
   sectionTitle,
   tier = "essentials",
 }) => {
@@ -191,6 +196,8 @@ const AttachmentPatternsSection: FC<Props> = ({
                     archetype={archetype}
                     sectionTitle={sectionTitle}
                     tier={tier}
+                    quote={quote}
+                    offerDeadline={offerDeadline}
                     onUnlock={handleUnlock}
                   />
                 </div>

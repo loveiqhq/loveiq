@@ -1,44 +1,38 @@
 // @vitest-environment jsdom
-import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup, act } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ComponentProps } from "react";
 
-vi.mock("next/image", () => ({
-  default: ({
-    alt = "",
-    fill: _fill,
-    ...props
-  }: Record<string, unknown> & { alt?: string; fill?: boolean }) => (
-    // eslint-disable-next-line @next/next/no-img-element -- test-only mock for next/image
-    <img {...props} alt={alt} />
-  ),
-}));
-
-// The Trustpilot widget pulls in env config + consent/bootstrap logic; stub it so
-// these tests stay focused on dismiss behaviour.
-vi.mock("@shared/ui/trustpilot/TrustpilotReviews", () => ({
-  default: () => <div data-testid="trustpilot" />,
-}));
-
-// Spy on the analytics helpers so we can assert the experiment events fire.
+// Spy on the analytics helpers so we can assert the funnel events fire.
 vi.mock("@features/analytics/client", () => ({
   trackBeginCheckout: vi.fn(),
   trackExperimentCardFlipped: vi.fn(),
   trackPriceShown: vi.fn(),
   trackScrollPaywallDismissed: vi.fn(),
   trackScrollPaywallShown: vi.fn(),
+  trackTestimonialInteraction: vi.fn(),
 }));
 
 import ScrollPricingModal from "@features/report/ui/ScrollPricingModal";
 import { reportThemes } from "@features/report/ui/reportTheme";
-import { trackExperimentCardFlipped, trackScrollPaywallShown } from "@features/analytics/client";
+import {
+  trackBeginCheckout,
+  trackExperimentCardFlipped,
+  trackScrollPaywallShown,
+} from "@features/analytics/client";
 
 const theme = reportThemes["Spark Seeker"]!;
 
-// Minimal quote with a discount (msrp > current) so the discount badge renders.
+// Minimal quote with a discount (msrp > current) so the discount/save pills render.
 const discountQuote = {
   currentPriceCents: 999,
   msrpCents: 5900,
+  currency: "EUR",
+  basePriceBucket: "A",
+  pricingClusterId: "x",
+  discountStep: 0,
+  experimentGroup: "A",
+  initialPriceCents: 999,
 } as unknown as NonNullable<ComponentProps<typeof ScrollPricingModal>["quote"]>;
 
 function renderModal(props?: Partial<ComponentProps<typeof ScrollPricingModal>>) {
@@ -60,9 +54,15 @@ function renderModal(props?: Partial<ComponentProps<typeof ScrollPricingModal>>)
   return { onClose, onCheckout, ...utils };
 }
 
+/** Advance to the pricing view from the archetype reveal. */
+function goToPricing() {
+  fireEvent.click(screen.getByRole("button", { name: /unlock your full report/i }));
+}
+
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.useRealTimers();
 });
 
 describe("ScrollPricingModal — dismissibility", () => {
@@ -93,112 +93,65 @@ describe("ScrollPricingModal — dismissibility", () => {
     const { onClose } = renderModal({ dismissible: false });
     fireEvent.keyDown(document, { key: "Escape" });
     const backdrop = document.querySelector(".report-pricing-modal__backdrop");
-    expect(backdrop).not.toBeNull();
     fireEvent.click(backdrop!);
     expect(onClose).not.toHaveBeenCalled();
   });
 
-  it("still lets the user proceed via the unlock CTA when not dismissible", () => {
-    const { onCheckout } = renderModal({ dismissible: false });
-    // The modal repeats the unlock CTA (top / mid / end) — any of them proceeds.
-    const ctas = screen.getAllByRole("button", { name: /unlock full report/i });
-    expect(ctas.length).toBeGreaterThan(0);
-    fireEvent.click(ctas[0]!);
+  it("still lets the user reach checkout when not dismissible (archetype → pricing → pay)", () => {
+    const { onCheckout } = renderModal({ dismissible: false, quote: discountQuote });
+    goToPricing();
+    fireEvent.click(screen.getByRole("button", { name: /continue to payment/i }));
     expect(onCheckout).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens straight on the pricing view when no archetype/theme is provided", () => {
+    renderModal({ theme: undefined });
+    expect(screen.getByRole("button", { name: /continue to payment/i })).toBeInTheDocument();
+    expect(screen.queryByText("Your Core Archetype")).not.toBeInTheDocument();
   });
 });
 
-describe("ScrollPricingModal — flip deck (treatment)", () => {
-  it("keeps the side-by-side grid (no flip) by default", () => {
+describe("ScrollPricingModal — two-view hero", () => {
+  it("starts on the archetype reveal when a theme exists", () => {
     renderModal();
-    expect(document.querySelector(".rpm-hero-grid")).not.toBeNull();
-    expect(document.querySelector(".rpm-flip")).toBeNull();
+    expect(screen.getByText("Your Core Archetype")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /unlock your full report/i })).toBeInTheDocument();
+    // Pricing view not yet shown.
+    expect(screen.queryByRole("button", { name: /continue to payment/i })).not.toBeInTheDocument();
+    expect(screen.queryByText("Full personal report")).not.toBeInTheDocument();
   });
 
-  it("collapses to a single flip card when flipDeck is set", () => {
-    renderModal({ flipDeck: true });
-    expect(document.querySelector(".rpm-flip")).not.toBeNull();
-    expect(document.querySelector(".rpm-hero-grid")).toBeNull();
-    const inner = document.querySelector(".rpm-flip__inner");
-    expect(inner).not.toBeNull();
-    expect(inner!.className).not.toContain("is-flipped");
+  it("advances to the pricing view on the unlock CTA (no checkout yet)", () => {
+    const { onCheckout } = renderModal({ quote: discountQuote });
+    goToPricing();
+    expect(onCheckout).not.toHaveBeenCalled();
+    expect(screen.getByText("Full personal report")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /continue to payment/i })).toBeInTheDocument();
+    // Archetype reveal is gone.
+    expect(screen.queryByText("Your Core Archetype")).not.toBeInTheDocument();
   });
 
-  it("flips when the front face is activated, swapping aria-hidden", () => {
-    renderModal({ flipDeck: true });
-    const front = document.querySelector(".rpm-flip__face--front")!;
-    const back = document.querySelector(".rpm-flip__face--back")!;
-    // Front visible, back hidden initially.
-    expect(front.getAttribute("aria-hidden")).toBeNull();
-    expect(back.getAttribute("aria-hidden")).toBe("true");
-
-    fireEvent.click(screen.getByRole("button", { name: /reveal your offer/i }));
-
-    expect(document.querySelector(".rpm-flip__inner")!.className).toContain("is-flipped");
-    expect(front.getAttribute("aria-hidden")).toBe("true");
-    expect(back.getAttribute("aria-hidden")).toBeNull();
-    // The flip-back control is now on the visible back face.
-    expect(screen.getByRole("button", { name: /view your archetype/i })).toBeInTheDocument();
-  });
-
-  it("removes the front 'tap to flip' hint once flipped (no Safari backface bleed)", () => {
-    renderModal({ flipDeck: true });
-    // Hint is present while front-facing…
-    expect(screen.getByText("Tap to see your offer")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /reveal your offer/i }));
-    // …and gone from the DOM once flipped, so it can't render mirrored behind
-    // the pricing face on iOS Safari.
-    expect(screen.queryByText("Tap to see your offer")).not.toBeInTheDocument();
-  });
-
-  it("flips back to the archetype when the back card surface is tapped", () => {
-    renderModal({ flipDeck: true });
-    fireEvent.click(screen.getByRole("button", { name: /reveal your offer/i }));
-    expect(document.querySelector(".rpm-flip__inner")!.className).toContain("is-flipped");
-    // Tap the back face surface (not a button) → flips back to the front.
-    fireEvent.click(document.querySelector(".rpm-flip__face--back")!);
-    expect(document.querySelector(".rpm-flip__inner")!.className).not.toContain("is-flipped");
-  });
-
-  it("does not flip back when the unlock CTA on the back is clicked", () => {
-    const { onCheckout } = renderModal({ flipDeck: true });
-    fireEvent.click(screen.getByRole("button", { name: /reveal your offer/i }));
-    // Flip card CTA reads "Unlock your full report" (vs control "Unlock full report").
-    fireEvent.click(screen.getByRole("button", { name: /unlock your full report/i }));
+  it("checks out from the pricing view, firing begin_checkout", () => {
+    const { onCheckout } = renderModal({ quote: discountQuote });
+    goToPricing();
+    fireEvent.click(screen.getByRole("button", { name: /continue to payment/i }));
     expect(onCheckout).toHaveBeenCalledTimes(1);
-    // The CTA click must not bubble into a flip-back — stays on the offer.
-    expect(document.querySelector(".rpm-flip__inner")!.className).toContain("is-flipped");
+    expect(trackBeginCheckout).toHaveBeenCalledTimes(1);
   });
 
-  it("uses the modal-mock pricing content in flip mode", () => {
-    renderModal({ flipDeck: true, quote: discountQuote });
-    expect(screen.getByText("Full Personal Report")).toBeInTheDocument();
-    expect(screen.queryByText("FULL")).not.toBeInTheDocument();
-    expect(screen.queryByText("Most popular")).not.toBeInTheDocument();
-    expect(screen.queryByText(/no discussions/i)).not.toBeInTheDocument();
-    expect(screen.getByText("Unlock your full report")).toBeInTheDocument();
+  it("branches the heading per view", () => {
+    renderModal();
+    expect(screen.getByText(/you score highest with the following/i)).toBeInTheDocument();
+    goToPricing();
+    expect(screen.getByText(/your results are in/i)).toBeInTheDocument();
   });
 
-  it("keeps the original pricing content for control", () => {
-    renderModal({ flipDeck: false, quote: discountQuote });
-    expect(screen.getByText("Most popular")).toBeInTheDocument();
-    expect(screen.getByText("FULL")).toBeInTheDocument();
-    expect(screen.getByText(/no discussions/i)).toBeInTheDocument();
-  });
-
-  it("renders the discount badge white-on-solid-green in flip mode (green-on-dark for control)", () => {
-    const { unmount } = renderModal({ flipDeck: true, quote: discountQuote });
-    const flipBadge = document.querySelector(".rpm-pricing-badge--discount") as HTMLElement | null;
-    expect(flipBadge).not.toBeNull();
-    expect(flipBadge!.style.background).toMatch(/rgba\(0,\s*201,\s*80,\s*0?\.63\)/);
-    const flipColor = flipBadge!.style.color;
-    unmount();
-
-    renderModal({ flipDeck: false, quote: discountQuote });
-    const ctrlBadge = document.querySelector(".rpm-pricing-badge--discount") as HTMLElement | null;
-    expect(ctrlBadge).not.toBeNull();
-    expect(ctrlBadge!.style.background).not.toMatch(/rgba\(0,\s*201,\s*80,\s*0?\.63\)/);
-    expect(ctrlBadge!.style.color).not.toBe(flipColor);
+  it("shows the live discount + save labels from the quote (not Figma placeholders)", () => {
+    renderModal({ quote: discountQuote });
+    goToPricing();
+    // 5900 → 999 ⇒ ~83% off, save €49.01.
+    expect(screen.getByText(/% off · expires soon/i)).toBeInTheDocument();
+    expect(screen.getByText(/You save/i)).toBeInTheDocument();
   });
 });
 
@@ -234,21 +187,99 @@ describe("ScrollPricingModal — experiment analytics", () => {
     expect(trackScrollPaywallShown).toHaveBeenCalledWith({ surface: "report_scroll_paywall" });
   });
 
-  it("fires shown for control (non-flip) too", () => {
-    renderModal({ flipDeck: false });
-    expect(trackScrollPaywallShown).toHaveBeenCalledTimes(1);
-  });
-
-  it("records experiment_card_flipped on flip out and back (flip deck only)", () => {
+  it("records experiment_card_flipped on advance to pricing (treatment only)", () => {
     renderModal({ flipDeck: true });
-    fireEvent.click(screen.getByRole("button", { name: /reveal your offer/i }));
-    expect(trackExperimentCardFlipped).toHaveBeenNthCalledWith(1, { to: "pricing" });
-    fireEvent.click(document.querySelector(".rpm-flip__face--back")!);
-    expect(trackExperimentCardFlipped).toHaveBeenNthCalledWith(2, { to: "archetype" });
+    goToPricing();
+    expect(trackExperimentCardFlipped).toHaveBeenCalledTimes(1);
+    expect(trackExperimentCardFlipped).toHaveBeenCalledWith({ to: "pricing" });
   });
 
-  it("never records a flip event in control (no flip card)", () => {
+  it("never records a flip event for control", () => {
     renderModal({ flipDeck: false });
+    goToPricing();
     expect(trackExperimentCardFlipped).not.toHaveBeenCalled();
+  });
+});
+
+describe("ScrollPricingModal — countdown", () => {
+  it("renders the deadline as MM:SS in the sticky-bar pill", () => {
+    vi.useFakeTimers();
+    const base = 1_000_000_000_000;
+    vi.setSystemTime(base);
+    renderModal({ offerDeadline: base + 180_000 });
+    expect(screen.getByRole("timer")).toHaveAttribute("aria-label", "Offer expires in 03:00");
+  });
+
+  it("ticks down each second", () => {
+    vi.useFakeTimers();
+    const base = 1_000_000_000_000;
+    vi.setSystemTime(base);
+    renderModal({ offerDeadline: base + 180_000 });
+    act(() => {
+      vi.advanceTimersByTime(1_000);
+    });
+    expect(screen.getByRole("timer")).toHaveAttribute("aria-label", "Offer expires in 02:59");
+  });
+
+  it("clamps to 00:00 when the deadline has already passed", () => {
+    vi.useFakeTimers();
+    const base = 1_000_000_000_000;
+    vi.setSystemTime(base);
+    renderModal({ offerDeadline: base - 5_000 });
+    expect(screen.getByRole("timer")).toHaveAttribute("aria-label", "Offer expires in 00:00");
+  });
+
+  it("keeps counting from the absolute deadline across a reopen (no reset to 3:00)", () => {
+    vi.useFakeTimers();
+    const base = 1_000_000_000_000;
+    vi.setSystemTime(base);
+    const deadline = base + 180_000;
+    const { rerender } = render(
+      <ScrollPricingModal
+        open
+        onClose={vi.fn()}
+        onCheckout={vi.fn()}
+        archetype="Spark Seeker"
+        userName="Alex"
+        theme={theme}
+        matchScore={86}
+        quote={null}
+        offerDeadline={deadline}
+      />
+    );
+    // Close, let 30s pass, reopen — the same deadline still governs.
+    rerender(
+      <ScrollPricingModal
+        open={false}
+        onClose={vi.fn()}
+        onCheckout={vi.fn()}
+        archetype="Spark Seeker"
+        userName="Alex"
+        theme={theme}
+        matchScore={86}
+        quote={null}
+        offerDeadline={deadline}
+      />
+    );
+    act(() => {
+      vi.setSystemTime(base + 30_000);
+    });
+    rerender(
+      <ScrollPricingModal
+        open
+        onClose={vi.fn()}
+        onCheckout={vi.fn()}
+        archetype="Spark Seeker"
+        userName="Alex"
+        theme={theme}
+        matchScore={86}
+        quote={null}
+        offerDeadline={deadline}
+      />
+    );
+    act(() => {
+      vi.advanceTimersByTime(0);
+    });
+    expect(screen.getByRole("timer")).toHaveAttribute("aria-label", "Offer expires in 02:30");
   });
 });

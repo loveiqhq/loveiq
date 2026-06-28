@@ -2,6 +2,7 @@
 
 import type { FC } from "react";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
+import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import {
   ensureSexualStageHighlight,
   extractReportHtmlBlocks,
@@ -18,7 +19,9 @@ interface Props {
   isPremium: boolean;
   isStageValueLocked?: boolean;
   isUnlocked?: boolean;
+  offerDeadline?: number;
   onUnlock?: () => void;
+  quote?: ReportPriceQuoteSnapshot | null;
   sectionId: string;
   sectionTitle: string;
   tier?: PremiumOverlayTier;
@@ -34,7 +37,9 @@ const DimensionSection: FC<Props> = ({
   isPremium,
   isStageValueLocked = false,
   isUnlocked = false,
+  offerDeadline,
   onUnlock,
+  quote = null,
   sectionId,
   sectionTitle,
   tier = "full_report",
@@ -140,6 +145,8 @@ const DimensionSection: FC<Props> = ({
                     archetype={archetype}
                     sectionTitle={sectionTitle}
                     tier={tier}
+                    quote={quote}
+                    offerDeadline={offerDeadline}
                     onUnlock={handleUnlock}
                   />
                 </div>

@@ -1,6 +1,17 @@
 "use client";
 
-import type { FC } from "react";
+import { useState, type FC } from "react";
+import {
+  PaywallCountdownDigits,
+  usePaywallCountdownValue,
+} from "@features/report/ui/PaywallCountdown";
+import { REPORT_PAYWALL_COUNTDOWN_MS } from "@features/survey/ui/hooks/surveySession";
+import {
+  formatReportPurchasePrice,
+  getReportPurchaseBadgeFromPrice,
+  getReportPurchaseStrikePrice,
+} from "@features/checkout/server/reportPurchase";
+import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 
 export type PremiumOverlayTier = "essentials" | "full_report";
 
@@ -9,6 +20,20 @@ interface Props {
   sectionTitle: string;
   tier: PremiumOverlayTier;
   onUnlock?: () => void;
+  /**
+   * Live full-report price quote. When present the card renders the real
+   * price / strike / "you save" / discount badge (never Figma placeholders),
+   * matching the paywall modal exactly. Null while pricing is unavailable —
+   * the card then hides the price block but still shows the countdown + CTA.
+   */
+  quote?: ReportPriceQuoteSnapshot | null;
+  /**
+   * Shared epoch-ms deadline for the urgency countdown (resolved once per
+   * report session by ReportPage, persisted in sessionStorage). Passing the
+   * same value to the modal and every card keeps all timers in lock-step.
+   * Falls back to a fresh 3-minute window when omitted.
+   */
+  offerDeadline?: number;
 }
 
 const LockIcon: FC = () => (
@@ -24,6 +49,27 @@ const LockIcon: FC = () => (
     <path d="M14 2v5a1 1 0 0 0 1 1h5" />
     <path d="M9 17v-2a2 2 0 0 0-4 0v2" />
     <rect x="3" y="17" width="8" height="5" rx="1" />
+  </svg>
+);
+
+const BoltIcon: FC = () => (
+  <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <path d="M13 2 4.5 13.2a.6.6 0 0 0 .48.96H11l-1 8 8.5-11.2a.6.6 0 0 0-.48-.96H12l1-8Z" />
+  </svg>
+);
+
+const CheckIcon: FC = () => (
+  <svg
+    viewBox="0 0 16 16"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <circle cx="8" cy="8" r="6.6" />
+    <path d="m5.4 8.2 1.8 1.8 3.4-3.8" />
   </svg>
 );
 
@@ -72,82 +118,156 @@ const FlaskIcon: FC = () => (
   </svg>
 );
 
-const PremiumOverlay: FC<Props> = ({ archetype, tier, onUnlock }) => (
-  <div className="report-premium-overlay">
-    <div className="report-premium-overlay__card">
-      <div className="report-premium-overlay__icon" aria-hidden="true">
-        <LockIcon />
-      </div>
+const PremiumOverlay: FC<Props> = ({ archetype, tier, onUnlock, quote = null, offerDeadline }) => {
+  // ── Live pricing — identical computation to the paywall modal so the card
+  //    and modal always agree. ────────────────────────────────────────────────
+  const currentCents = quote?.currentPriceCents ?? 0;
+  const msrpCents = quote?.msrpCents ?? null;
+  const strikeEligible = typeof msrpCents === "number" && msrpCents > currentCents;
+  const priceLabel = quote ? formatReportPurchasePrice(currentCents) : null;
+  const strikeLabel = strikeEligible ? getReportPurchaseStrikePrice(msrpCents) : null;
+  const saveLabel =
+    strikeEligible && msrpCents != null
+      ? formatReportPurchasePrice(msrpCents - currentCents)
+      : null;
+  const badge = quote
+    ? getReportPurchaseBadgeFromPrice({ strikeCents: msrpCents, currentCents })
+    : null;
 
-      <h3 className="report-premium-overlay__title">Premium Content</h3>
+  // ── Countdown — same drift-free hook + shared deadline as the modal. ────────
+  const [fallbackDeadline] = useState(() =>
+    typeof window === "undefined" ? 0 : Date.now() + REPORT_PAYWALL_COUNTDOWN_MS
+  );
+  const deadline = offerDeadline ?? fallbackDeadline;
+  // Reads the shared report-level countdown (one interval for all cards) when
+  // rendered under a PaywallCountdownProvider; falls back to a local ticker with
+  // `deadline` when standalone (e.g. unit tests).
+  const { mm, ss, expired } = usePaywallCountdownValue(deadline);
 
-      <p className="report-premium-overlay__copy">
-        This section is part of the full report of the <strong>{archetype}</strong>. Unlock it to
-        keep reading.
-      </p>
+  // Offer pill: keep the live "N% OFF" but drop "· Expires soon" once the timer
+  // hits 00:00 so it never contradicts the readout. The discount stays valid.
+  const offerPillText = badge
+    ? expired
+      ? badge
+      : `${badge} · Expires soon`
+    : expired
+      ? null
+      : "Expires soon";
 
-      <div className="report-premium-overlay__features">
-        <div className="report-premium-overlay__feature report-premium-overlay__feature--green">
-          <span className="report-premium-overlay__feature-icon" aria-hidden="true">
-            <ShieldCheckIcon />
-          </span>
-          <span className="report-premium-overlay__feature-text">
-            <span className="report-premium-overlay__feature-title">
-              14-day money-back guarantee
-            </span>
-            <span className="report-premium-overlay__feature-sub">No questions asked.</span>
-          </span>
+  return (
+    <div className="report-premium-overlay">
+      <div className="report-premium-overlay__card">
+        <div className="report-premium-overlay__icon" aria-hidden="true">
+          <LockIcon />
         </div>
 
-        <div className="report-premium-overlay__feature report-premium-overlay__feature--purple">
-          <span className="report-premium-overlay__feature-icon" aria-hidden="true">
-            <DocumentIcon />
-          </span>
-          <span className="report-premium-overlay__feature-text">
-            <span className="report-premium-overlay__feature-title">
-              50+ pages of deep, personalised insight
-            </span>
-            <span className="report-premium-overlay__feature-sub">
-              Into how you love, desire, and connect
-            </span>
-          </span>
-        </div>
+        <h3 className="report-premium-overlay__title">Premium content</h3>
 
-        <div className="report-premium-overlay__feature report-premium-overlay__feature--purple">
-          <span className="report-premium-overlay__feature-icon" aria-hidden="true">
-            <FlaskIcon />
-          </span>
-          <span className="report-premium-overlay__feature-text">
-            <span className="report-premium-overlay__feature-title">
-              <span className="report-premium-overlay__feature-lead">Based on </span>100+ science
-              papers
-            </span>
-            <span className="report-premium-overlay__feature-sub">
-              Built on attachment, arousal, and intimacy science
-            </span>
-          </span>
-        </div>
-      </div>
+        <p className="report-premium-overlay__copy">
+          This section is part of the full <strong>{archetype}</strong> report.{" "}
+          <span className="report-premium-overlay__copy-cta">Unlock it to keep reading.</span>
+        </p>
 
-      <div className="report-premium-overlay__badges-group" aria-hidden="true">
-        <span className="report-premium-overlay__badges-label">Included in:</span>
-        <div className="report-premium-overlay__badges-row">
-          {tier === "essentials" ? (
-            <span className="report-premium-overlay__badge report-premium-overlay__badge--essentials">
-              Essentials
+        <div className="report-premium-overlay__offer">
+          {offerPillText ? (
+            <span className="report-premium-overlay__pill">
+              <span className="report-premium-overlay__pill-icon" aria-hidden="true">
+                <BoltIcon />
+              </span>
+              {offerPillText}
             </span>
           ) : null}
-          <span className="report-premium-overlay__badge report-premium-overlay__badge--full">
-            Full Report
-          </span>
-        </div>
-      </div>
 
-      <button type="button" className="report-premium-overlay__cta" onClick={onUnlock}>
-        Unlock your report
-      </button>
+          <PaywallCountdownDigits mm={mm} ss={ss} />
+
+          {priceLabel ? (
+            <div className="report-premium-overlay__price-row">
+              <span className="report-premium-overlay__price">{priceLabel}</span>
+              {strikeLabel ? (
+                <span className="report-premium-overlay__strike">{strikeLabel}</span>
+              ) : null}
+            </div>
+          ) : null}
+
+          {priceLabel ? (
+            <div className="report-premium-overlay__meta-row">
+              {saveLabel ? (
+                <span className="report-premium-overlay__save">
+                  <span className="report-premium-overlay__save-icon" aria-hidden="true">
+                    <CheckIcon />
+                  </span>
+                  You save {saveLabel}
+                </span>
+              ) : null}
+              <span className="report-premium-overlay__oneoff">One-time payment</span>
+            </div>
+          ) : null}
+
+          <div className="report-premium-overlay__divider" aria-hidden="true" />
+
+          <div className="report-premium-overlay__features">
+            <div className="report-premium-overlay__feature report-premium-overlay__feature--guarantee">
+              <span className="report-premium-overlay__feature-icon" aria-hidden="true">
+                <ShieldCheckIcon />
+              </span>
+              <span className="report-premium-overlay__feature-text">
+                <span className="report-premium-overlay__feature-title">
+                  14-day money-back guarantee
+                </span>
+                <span className="report-premium-overlay__feature-sub">No questions asked.</span>
+              </span>
+            </div>
+
+            <div className="report-premium-overlay__feature report-premium-overlay__feature--purple">
+              <span className="report-premium-overlay__feature-icon" aria-hidden="true">
+                <DocumentIcon />
+              </span>
+              <span className="report-premium-overlay__feature-text">
+                <span className="report-premium-overlay__feature-title">
+                  50+ pages of personalised insight
+                </span>
+                <span className="report-premium-overlay__feature-sub">
+                  Into how you love, desire, and connect.
+                </span>
+              </span>
+            </div>
+
+            <div className="report-premium-overlay__feature report-premium-overlay__feature--purple">
+              <span className="report-premium-overlay__feature-icon" aria-hidden="true">
+                <FlaskIcon />
+              </span>
+              <span className="report-premium-overlay__feature-text">
+                <span className="report-premium-overlay__feature-title">
+                  Grounded in 100+ science papers
+                </span>
+                <span className="report-premium-overlay__feature-sub">
+                  Built on attachment, arousal, and intimacy science.
+                </span>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="report-premium-overlay__badges-group" aria-hidden="true">
+          <span className="report-premium-overlay__badges-label">Included in</span>
+          <div className="report-premium-overlay__badges-row">
+            {tier === "essentials" ? (
+              <span className="report-premium-overlay__badge report-premium-overlay__badge--essentials">
+                Essentials
+              </span>
+            ) : null}
+            <span className="report-premium-overlay__badge report-premium-overlay__badge--full">
+              Full Report
+            </span>
+          </div>
+        </div>
+
+        <button type="button" className="report-premium-overlay__cta" onClick={onUnlock}>
+          Unlock your report
+        </button>
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 export default PremiumOverlay;

@@ -3,6 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type FC } from "react";
 import { createPortal } from "react-dom";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
+import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import type {
   ReportPracticeTendencyContentForUser,
   ReportPracticeTendencyGroupForUser,
@@ -33,7 +34,9 @@ interface Props {
   generalHtml: string;
   isPremium: boolean;
   isUnlocked?: boolean;
+  offerDeadline?: number;
   onUnlock?: () => void;
+  quote?: ReportPriceQuoteSnapshot | null;
   sectionTitle: string;
   tier?: PremiumOverlayTier;
 }
@@ -257,10 +260,12 @@ const PracticeRow: FC<{
 const PracticeGroupLocked: FC<{
   archetype: string;
   group: ReportPracticeTendencyGroup;
+  offerDeadline?: number;
   onUnlock: () => void;
+  quote?: ReportPriceQuoteSnapshot | null;
   sectionTitle: string;
   tier: PremiumOverlayTier;
-}> = ({ archetype, group, onUnlock, sectionTitle, tier }) => {
+}> = ({ archetype, group, offerDeadline, onUnlock, quote = null, sectionTitle, tier }) => {
   const freeRow = group.rows[0] ?? null;
   // Row 0 ships with real metric values (free preview). Rows 1+ ship with
   // their practice names but `fantasyPull` / `actualPleasure` nulled out by
@@ -375,6 +380,8 @@ const PracticeGroupLocked: FC<{
                       archetype={archetype}
                       sectionTitle={sectionTitle}
                       tier={tier}
+                      quote={quote}
+                      offerDeadline={offerDeadline}
                       onUnlock={onUnlock}
                     />
                   </div>
@@ -679,7 +686,9 @@ const PracticeTendenciesSection: FC<Props> = ({
   generalHtml,
   isPremium,
   isUnlocked = false,
+  offerDeadline,
   onUnlock,
+  quote = null,
   sectionTitle,
   tier = "full_report",
 }) => {
@@ -710,6 +719,8 @@ const PracticeTendenciesSection: FC<Props> = ({
               group={group}
               sectionTitle={sectionTitle}
               tier={tier}
+              quote={quote}
+              offerDeadline={offerDeadline}
               onUnlock={handleUnlock}
             />
           ))}

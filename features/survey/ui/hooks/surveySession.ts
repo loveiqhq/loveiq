@@ -2,6 +2,10 @@ export const SURVEY_SESSION_KEY = "loveiq-survey-session";
 export const REPORT_SESSION_KEY = "loveiq-report-session";
 export const REPORT_PRICING_SESSION_PREFIX = "loveiq-report-pricing-session";
 export const REPORT_NURTURE_PROMO_PREFIX = "loveiq-report-nurture-promo";
+export const REPORT_PAYWALL_DEADLINE_PREFIX = "loveiq-report-paywall-deadline";
+
+/** 3-minute urgency window for the report paywall countdown. */
+export const REPORT_PAYWALL_COUNTDOWN_MS = 3 * 60 * 1_000;
 
 function canUseStorage() {
   return typeof window !== "undefined";
@@ -193,5 +197,56 @@ export function getReportNurturePromo({
     return sessionStorage.getItem(storageKey);
   } catch {
     return null;
+  }
+}
+
+function getPaywallDeadlineStorageKey({
+  sessionId,
+  token,
+}: {
+  sessionId?: string | null;
+  token?: string | null;
+}): string | null {
+  if (token) return `${REPORT_PAYWALL_DEADLINE_PREFIX}:token:${token}`;
+  if (sessionId) return `${REPORT_PAYWALL_DEADLINE_PREFIX}:session:${sessionId}`;
+  return null;
+}
+
+/**
+ * Read-or-create the report paywall countdown deadline (epoch ms) for this
+ * report, persisted in sessionStorage so the 3-minute urgency window survives
+ * view switches, re-renders, and reopening the modal within the same tab — it
+ * does NOT silently reset to a fresh 3:00 on every open. Once the deadline has
+ * elapsed it is kept (the countdown shows 00:00), never regenerated.
+ *
+ * Returns a fresh in-memory deadline when storage is unavailable (private mode)
+ * or there's no token/session key, so the countdown still works — it just won't
+ * persist across reopens in that edge case.
+ */
+export function getReportPaywallDeadline({
+  sessionId,
+  token,
+}: {
+  sessionId?: string | null;
+  token?: string | null;
+}): number {
+  const fallback = Date.now() + REPORT_PAYWALL_COUNTDOWN_MS;
+  if (!canUseStorage()) return fallback;
+
+  const storageKey = getPaywallDeadlineStorageKey({ sessionId, token });
+  if (!storageKey) return fallback;
+
+  try {
+    const stored = sessionStorage.getItem(storageKey);
+    if (stored) {
+      const parsed = Number.parseInt(stored, 10);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        return parsed;
+      }
+    }
+    sessionStorage.setItem(storageKey, String(fallback));
+    return fallback;
+  } catch {
+    return fallback;
   }
 }
