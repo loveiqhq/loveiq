@@ -4,8 +4,8 @@ export const REPORT_PRICING_SESSION_PREFIX = "loveiq-report-pricing-session";
 export const REPORT_NURTURE_PROMO_PREFIX = "loveiq-report-nurture-promo";
 export const REPORT_PAYWALL_DEADLINE_PREFIX = "loveiq-report-paywall-deadline";
 
-/** 3-minute urgency window for the report paywall countdown. */
-export const REPORT_PAYWALL_COUNTDOWN_MS = 3 * 60 * 1_000;
+/** 5-minute urgency window for the report paywall countdown. */
+export const REPORT_PAYWALL_COUNTDOWN_MS = 5 * 60 * 1_000;
 
 function canUseStorage() {
   return typeof window !== "undefined";
@@ -214,9 +214,9 @@ function getPaywallDeadlineStorageKey({
 
 /**
  * Read-or-create the report paywall countdown deadline (epoch ms) for this
- * report, persisted in sessionStorage so the 3-minute urgency window survives
+ * report, persisted in sessionStorage so the 5-minute urgency window survives
  * view switches, re-renders, and reopening the modal within the same tab — it
- * does NOT silently reset to a fresh 3:00 on every open. Once the deadline has
+ * does NOT silently reset to a fresh 5:00 on every open. Once the deadline has
  * elapsed it is kept (the countdown shows 00:00), never regenerated.
  *
  * Returns a fresh in-memory deadline when storage is unavailable (private mode)

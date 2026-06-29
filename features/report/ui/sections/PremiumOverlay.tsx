@@ -31,7 +31,7 @@ interface Props {
    * Shared epoch-ms deadline for the urgency countdown (resolved once per
    * report session by ReportPage, persisted in sessionStorage). Passing the
    * same value to the modal and every card keeps all timers in lock-step.
-   * Falls back to a fresh 3-minute window when omitted.
+   * Falls back to a fresh 5-minute window when omitted.
    */
   offerDeadline?: number;
 }

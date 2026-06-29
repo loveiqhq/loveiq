@@ -19,7 +19,7 @@ vi.mock("@features/survey/ui/hooks/surveySession", () => ({
   getReportPaywallDeadline: () => 1_700_000_000_000,
   setReportNurturePromo: () => {},
   setReportPricingSessionId: () => {},
-  REPORT_PAYWALL_COUNTDOWN_MS: 180_000,
+  REPORT_PAYWALL_COUNTDOWN_MS: 300_000,
 }));
 
 const mockUseReportData = vi.fn();

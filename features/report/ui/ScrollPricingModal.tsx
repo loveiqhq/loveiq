@@ -15,7 +15,7 @@ import Image from "next/image";
 import {
   PaywallCountdownPill,
   PaywallCountdownTiles,
-  usePaywallCountdown,
+  usePaywallCountdownValue,
 } from "./PaywallCountdown";
 import { REPORT_PAYWALL_COUNTDOWN_MS } from "@features/survey/ui/hooks/surveySession";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
@@ -48,7 +48,7 @@ interface Props {
   /**
    * Epoch-ms deadline for the urgency countdown, resolved once per report
    * session by the caller (persisted in sessionStorage so it survives
-   * reopening). Falls back to a fresh 3-minute window when omitted.
+   * reopening). Falls back to a fresh 5-minute window when omitted.
    */
   offerDeadline?: number;
 }
@@ -470,15 +470,16 @@ const ScrollPricingModal: FC<Props> = ({
 
   const displayName = userName ?? "Friend";
 
-  // ── Countdown — one interval, gated on `open` so it ticks only while the
-  //    modal is visible (no wasted re-renders when closed). Reads the same
-  //    persisted `offerDeadline` as the locked-chapter cards, so both surfaces
-  //    show identical MM:SS (pure function of the absolute deadline). ──────────
+  // ── Countdown — reads the report-level shared ticker (ONE interval for the
+  //    whole locked report: every card + this modal), so all timers show the
+  //    exact same MM:SS. Context flows through the portal. Standalone (no
+  //    provider, e.g. unit tests) falls back to a local ticker seeded from the
+  //    persisted deadline. ─────────────────────────────────────────────────────
   const [fallbackDeadline] = useState(() =>
     typeof window === "undefined" ? 0 : Date.now() + REPORT_PAYWALL_COUNTDOWN_MS
   );
   const deadline = offerDeadline ?? fallbackDeadline;
-  const { mm, ss, expired } = usePaywallCountdown(deadline, open);
+  const { mm, ss, expired } = usePaywallCountdownValue(deadline);
 
   // Offer pill: drop "· expires soon" once the timer has elapsed so it never
   // contradicts a 00:00 readout. The discount itself stays valid.

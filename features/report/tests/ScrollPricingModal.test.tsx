@@ -171,47 +171,15 @@ describe("ScrollPricingModal — countdown", () => {
     expect(screen.getByRole("timer")).toHaveAttribute("aria-label", "Offer expires in 00:00");
   });
 
-  it("keeps counting from the absolute deadline across a reopen (no reset to 3:00)", () => {
+  it("counts from the absolute deadline over time (never resets to the full window)", () => {
     vi.useFakeTimers();
     const base = 1_000_000_000_000;
     vi.setSystemTime(base);
-    const deadline = base + 180_000;
-    const { rerender } = render(
-      <ScrollPricingModal
-        open
-        onClose={vi.fn()}
-        onCheckout={vi.fn()}
-        userName="Alex"
-        quote={null}
-        offerDeadline={deadline}
-      />
-    );
-    // Close, let 30s pass, reopen — the same deadline still governs.
-    rerender(
-      <ScrollPricingModal
-        open={false}
-        onClose={vi.fn()}
-        onCheckout={vi.fn()}
-        userName="Alex"
-        quote={null}
-        offerDeadline={deadline}
-      />
-    );
+    renderModal({ offerDeadline: base + 180_000 });
+    expect(screen.getByRole("timer")).toHaveAttribute("aria-label", "Offer expires in 03:00");
+    // 30s later the same absolute deadline still governs — it never resets to full.
     act(() => {
-      vi.setSystemTime(base + 30_000);
-    });
-    rerender(
-      <ScrollPricingModal
-        open
-        onClose={vi.fn()}
-        onCheckout={vi.fn()}
-        userName="Alex"
-        quote={null}
-        offerDeadline={deadline}
-      />
-    );
-    act(() => {
-      vi.advanceTimersByTime(0);
+      vi.advanceTimersByTime(30_000);
     });
     expect(screen.getByRole("timer")).toHaveAttribute("aria-label", "Offer expires in 02:30");
   });
