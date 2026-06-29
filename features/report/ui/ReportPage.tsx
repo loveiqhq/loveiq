@@ -1036,7 +1036,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
 
   // Resolve the paywall countdown deadline once per report session (client-only;
   // reads/creates a sessionStorage entry keyed by token/session). Kept out of the
-  // render path so it can't cause a hydration mismatch. The 5-minute window then
+  // render path so it can't cause a hydration mismatch. The 2-minute window then
   // survives view switches + reopening the modal within the tab.
   const [offerDeadline, setOfferDeadline] = useState<number | undefined>(undefined);
   const offerDeadlineSetRef = useRef(false);
@@ -1052,7 +1052,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     setOfferDeadline(getReportPaywallDeadline({ token: resolvedReportToken, sessionId }));
   }, [resolvedReportToken, sessionId]);
 
-  // Fire one "countdown expired" event when the shared 5-minute urgency timer
+  // Fire one "countdown expired" event when the shared 2-minute urgency timer
   // elapses DURING this session — only if time actually remained at resolve and
   // the report is still locked. Returning visitors who land after it already
   // expired never schedule it; a purchase mid-session cancels it (dep re-run).

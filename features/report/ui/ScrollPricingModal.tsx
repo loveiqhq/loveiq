@@ -48,7 +48,7 @@ interface Props {
   /**
    * Epoch-ms deadline for the urgency countdown, resolved once per report
    * session by the caller (persisted in sessionStorage so it survives
-   * reopening). Falls back to a fresh 5-minute window when omitted.
+   * reopening). Falls back to a fresh 2-minute window when omitted.
    */
   offerDeadline?: number;
 }
