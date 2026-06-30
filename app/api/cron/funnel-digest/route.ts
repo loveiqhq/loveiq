@@ -44,6 +44,7 @@ import {
   fetchFunnelCvrSparklines,
   fetchBucketPerformance,
   fetchDropoutFunnel,
+  fetchDropoutFunnelByArm,
   fetchNurturePerformance,
 } from "@features/admin/server/digest-metrics";
 
@@ -66,6 +67,7 @@ type DigestImageKind =
   | "cvr-paygate-purchase"
   | "bucket-performance"
   | "dropout-funnel"
+  | "dropout-by-arm"
   | "reactivation-email";
 
 // Human labels for the reactivation-email nurture stages.
@@ -410,6 +412,42 @@ async function buildDropoutChartBlock(
 }
 
 /**
+ * Chart 7b: per-arm drop-off (email-position A/B). Overlays the email-first
+ * (control) and email-last drop-off curves on a shared x-axis so the strategy
+ * lead can see whether asking email later reduces the early drop-off — the
+ * first-question (Q1) bar is the headline. Both arms aligned on the union of
+ * question labels; a question missing in one arm (too few sessions to clear the
+ * reach floor) is filled with 0% there. Skipped entirely until at least one arm
+ * has a drawable curve.
+ */
+async function buildDropoutByArmChartBlock(
+  firstSnap: DropoutFunnelSnapshot | null,
+  lastSnap: DropoutFunnelSnapshot | null,
+  windowLabel: string
+): Promise<SlackBlock | null> {
+  const firstBars = firstSnap ? computeDropoutBars(firstSnap.questions) : [];
+  const lastBars = lastSnap ? computeDropoutBars(lastSnap.questions) : [];
+  if (firstBars.length === 0 && lastBars.length === 0) return null;
+
+  const firstMap = new Map(firstBars.map((b) => [b.label, Math.round(b.dropPct)]));
+  const lastMap = new Map(lastBars.map((b) => [b.label, Math.round(b.dropPct)]));
+  // Union of question labels ("Q1".."Qn"), ordered by question number.
+  const labels = [...new Set([...firstMap.keys(), ...lastMap.keys()])].sort(
+    (a, b) => Number(a.slice(1)) - Number(b.slice(1))
+  );
+  const first = labels.map((l) => firstMap.get(l) ?? 0);
+  const last = labels.map((l) => lastMap.get(l) ?? 0);
+
+  const url = await buildSignedImageUrl("dropout-by-arm", { windowLabel, labels, first, last });
+  if (!url) return null;
+  return {
+    type: "image",
+    image_url: url,
+    alt_text: "Survey drop-off by question — email-first vs email-last arm",
+  };
+}
+
+/**
  * Chart 8: reactivation-email performance — per nurture stage sent + purchased
  * with CVR%. purchased may read 0 until checkout stamps payment.metadata.
  * promoStage (documented gap); the chart still shows send volume.
@@ -515,6 +553,8 @@ export async function buildFunnelDigestBlocks(opts: {
   cvr: FunnelCvrSnapshot | null;
   bucket: BucketPerfSnapshot | null;
   dropout: DropoutFunnelSnapshot | null;
+  dropoutFirst: DropoutFunnelSnapshot | null;
+  dropoutLast: DropoutFunnelSnapshot | null;
   nurture: NurturePerfSnapshot | null;
   curr: DailyMetrics;
   prev: DailyMetrics;
@@ -531,6 +571,12 @@ export async function buildFunnelDigestBlocks(opts: {
   if (bucketBlock) blocks.push(bucketBlock);
   const dropoutBlock = await buildDropoutChartBlock(opts.dropout, opts.windowLabel);
   if (dropoutBlock) blocks.push(dropoutBlock);
+  const dropoutByArmBlock = await buildDropoutByArmChartBlock(
+    opts.dropoutFirst,
+    opts.dropoutLast,
+    opts.windowLabel
+  );
+  if (dropoutByArmBlock) blocks.push(dropoutByArmBlock);
   const reactivationBlock = await buildReactivationChartBlock(opts.nurture, opts.windowLabel);
   if (reactivationBlock) blocks.push(reactivationBlock);
 
@@ -559,13 +605,15 @@ async function fetchChartSnapshots(untilIso: string) {
   const sinceIso = new Date(
     new Date(untilIso).getTime() - CHART_WINDOW_DAYS * 86_400_000
   ).toISOString();
-  const [cvr, bucket, dropout, nurture] = await Promise.all([
+  const [cvr, bucket, dropout, dropoutFirst, dropoutLast, nurture] = await Promise.all([
     fetchFunnelCvrSparklines(sinceIso, untilIso),
     fetchBucketPerformance(sinceIso, untilIso),
     fetchDropoutFunnel(sinceIso, untilIso),
+    fetchDropoutFunnelByArm(sinceIso, untilIso, "first"),
+    fetchDropoutFunnelByArm(sinceIso, untilIso, "last"),
     fetchNurturePerformance(sinceIso, untilIso),
   ]);
-  return { cvr, bucket, dropout, nurture };
+  return { cvr, bucket, dropout, dropoutFirst, dropoutLast, nurture };
 }
 
 export async function GET(request: Request) {
@@ -607,6 +655,8 @@ export async function GET(request: Request) {
         cvr: snaps.cvr,
         bucket: snaps.bucket,
         dropout: snaps.dropout,
+        dropoutFirst: snaps.dropoutFirst,
+        dropoutLast: snaps.dropoutLast,
         nurture: snaps.nurture,
         curr,
         prev,
@@ -642,6 +692,8 @@ export async function GET(request: Request) {
           cvr: snaps.cvr,
           bucket: snaps.bucket,
           dropout: snaps.dropout,
+          dropoutFirst: snaps.dropoutFirst,
+          dropoutLast: snaps.dropoutLast,
           nurture: snaps.nurture,
           curr: currW,
           prev: prevW,

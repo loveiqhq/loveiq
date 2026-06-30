@@ -93,7 +93,20 @@ interface CoreKpiData {
   };
 }
 
-type Tab = "board" | "marketing" | "segmentation";
+interface ArmFunnelData {
+  entered: number;
+  answered: number;
+  completed: number;
+  curve: Array<{ question_index: number; q_id: string; sessions: number }>;
+}
+
+interface EmailPositionAbData {
+  range: { since: string; days: number };
+  first: ArmFunnelData;
+  last: ArmFunnelData;
+}
+
+type Tab = "board" | "marketing" | "segmentation" | "email-position";
 
 const MARKETING_HINT = "Add a marketing-spend row to populate.";
 
@@ -105,7 +118,10 @@ export default function CoreKpiDashboard() {
   const parsedDays = daysParam != null ? parseInt(daysParam, 10) : NaN;
   const days = Number.isFinite(parsedDays) ? parsedDays : 30; // preserve days=0 (all time)
   const tabParam = searchParams.get("tab");
-  const tab: Tab = tabParam === "marketing" || tabParam === "segmentation" ? tabParam : "board";
+  const tab: Tab =
+    tabParam === "marketing" || tabParam === "segmentation" || tabParam === "email-position"
+      ? tabParam
+      : "board";
   const params = useMemo(() => ({ days: String(days) }), [days]);
   const { data, loading, error } = useAdminFetch<CoreKpiData>(
     "/api/admin/analytics/core-kpis",
@@ -147,6 +163,7 @@ export default function CoreKpiDashboard() {
             { id: "board", label: "KPI Board" },
             { id: "marketing", label: "Marketing Inputs" },
             { id: "segmentation", label: "Segmentation" },
+            { id: "email-position", label: "Email-position A/B" },
           ] as const
         ).map((t) => (
           <button
@@ -165,20 +182,29 @@ export default function CoreKpiDashboard() {
         ))}
       </nav>
 
-      {loading && <DashboardSkeleton />}
-      {error && (
-        <div
-          className="rounded-xl border border-red-500/20 bg-red-500/5 p-6 text-center text-sm text-red-400"
-          role="alert"
-        >
-          {error}
-        </div>
-      )}
-      {!loading && !error && data && (
+      {/* The email-position A/B tab fetches its own data, so it renders
+          independently of the core-kpis fetch state (a core-kpis failure must
+          not blank this panel). */}
+      {tab === "email-position" ? (
+        <EmailPositionAbTab days={days} />
+      ) : (
         <>
-          {tab === "board" && <BoardTab data={data} />}
-          {tab === "marketing" && <MarketingSpendEditor days={days} />}
-          {tab === "segmentation" && <SegmentationPanel {...data.segmentation} />}
+          {loading && <DashboardSkeleton />}
+          {error && (
+            <div
+              className="rounded-xl border border-red-500/20 bg-red-500/5 p-6 text-center text-sm text-red-400"
+              role="alert"
+            >
+              {error}
+            </div>
+          )}
+          {!loading && !error && data && (
+            <>
+              {tab === "board" && <BoardTab data={data} />}
+              {tab === "marketing" && <MarketingSpendEditor days={days} />}
+              {tab === "segmentation" && <SegmentationPanel {...data.segmentation} />}
+            </>
+          )}
         </>
       )}
     </div>
@@ -204,6 +230,146 @@ function DailyTrend({ title, points }: { title: string; points: DailyPoint[] }) 
         maxHeight={160}
       />
     </section>
+  );
+}
+
+// Reach floor mirrors the Slack digest's computeDropoutBars — drop tiny-sample
+// late questions whose drop-off % would be noise.
+const DROPOUT_REACH_FLOOR = 5;
+
+/**
+ * Per-question drop-off % from a retention curve (sessions reaching each
+ * question). dropPct at i = (reached_i − reached_{i+1}) / reached_i. The last
+ * question has no successor (no bar); sub-floor reach is skipped. Keyed by
+ * question_index so the two arms align even when one skips a question.
+ */
+function dropPctByIndex(
+  curve: Array<{ question_index: number; sessions: number }>
+): Map<number, number> {
+  const byIdx = new Map<number, number>();
+  for (let i = 0; i < curve.length - 1; i += 1) {
+    const reached = curve[i]!.sessions;
+    if (reached < DROPOUT_REACH_FLOOR) continue;
+    const dropped = Math.max(0, reached - curve[i + 1]!.sessions);
+    byIdx.set(curve[i]!.question_index, Math.round((dropped / reached) * 100));
+  }
+  return byIdx;
+}
+
+function ratePct(num: number, den: number): string {
+  return den > 0 ? `${Math.round((num / den) * 1000) / 10}%` : "—";
+}
+
+function EmailPositionAbTab({ days }: { days: number }) {
+  const params = useMemo(() => ({ days: String(days) }), [days]);
+  const { data, loading, error } = useAdminFetch<EmailPositionAbData>(
+    "/api/admin/analytics/email-position-ab",
+    params
+  );
+
+  if (loading) return <DashboardSkeleton />;
+  if (error) {
+    return (
+      <div
+        className="rounded-xl border border-red-500/20 bg-red-500/5 p-6 text-center text-sm text-red-400"
+        role="alert"
+      >
+        {error}
+      </div>
+    );
+  }
+  if (!data) return null;
+
+  const firstDrops = dropPctByIndex(data.first.curve);
+  const lastDrops = dropPctByIndex(data.last.curve);
+  const allIdx = [...new Set([...firstDrops.keys(), ...lastDrops.keys()])].sort((a, b) => a - b);
+  const items = allIdx.map((idx) => ({
+    label: `Q${idx + 1}`,
+    value: Math.max(firstDrops.get(idx) ?? 0, lastDrops.get(idx) ?? 0),
+    seriesData: { first: firstDrops.get(idx) ?? 0, last: lastDrops.get(idx) ?? 0 },
+  }));
+
+  const rows = [
+    {
+      label: "Entered survey (saw Q1)",
+      first: data.first.entered.toLocaleString(),
+      last: data.last.entered.toLocaleString(),
+    },
+    {
+      label: "Answered at least 1 question",
+      first: data.first.answered.toLocaleString(),
+      last: data.last.answered.toLocaleString(),
+    },
+    {
+      label: "Completed",
+      first: data.first.completed.toLocaleString(),
+      last: data.last.completed.toLocaleString(),
+    },
+    {
+      label: "Completion rate (of entered)",
+      first: ratePct(data.first.completed, data.first.entered),
+      last: ratePct(data.last.completed, data.last.entered),
+    },
+    {
+      label: "Q1 drop-off",
+      first: firstDrops.has(0) ? `${firstDrops.get(0)}%` : "—",
+      last: lastDrops.has(0) ? `${lastDrops.get(0)}%` : "—",
+    },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <section className="rounded-xl border border-white/10 bg-surface p-5">
+        <h3 className="mb-1 font-serif text-base font-semibold text-text-primary">
+          Email-position A/B — first vs. last
+        </h3>
+        <p className="mb-4 text-xs text-text-muted">
+          Does asking for email later reduce early drop-off? The first arm is the control (email is
+          Q1); the last arm moves email to just before the opt-in. Entered and answered are
+          consent-free first-party counts; completion comes from the submission record.
+        </p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs uppercase tracking-wide text-text-muted">
+                <th className="py-2 pr-4 font-medium">Metric</th>
+                <th className="py-2 pr-4 font-medium">Email first (control)</th>
+                <th className="py-2 font-medium">Email last</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.label} className="border-t border-white/5">
+                  <td className="py-2 pr-4 text-text-muted">{r.label}</td>
+                  <td className="py-2 pr-4 font-medium text-text-primary">{r.first}</td>
+                  <td className="py-2 font-medium text-text-primary">{r.last}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-white/10 bg-surface p-5">
+        <h3 className="mb-4 font-serif text-base font-semibold text-text-primary">
+          Drop-off % by question — per arm
+        </h3>
+        {items.length === 0 ? (
+          <p className="text-sm text-text-muted">
+            Not enough per-arm survey traffic in this window yet.
+          </p>
+        ) : (
+          <BarChart
+            items={items}
+            direction="horizontal"
+            series={[
+              { key: "first", label: "Email first (control)", color: "bg-accent-purple" },
+              { key: "last", label: "Email last", color: "bg-accent-orange" },
+            ]}
+          />
+        )}
+      </section>
+    </div>
   );
 }
 

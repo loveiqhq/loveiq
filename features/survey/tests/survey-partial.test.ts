@@ -30,6 +30,13 @@ vi.mock("@features/survey/server/server", () => ({
   isSurveyClosed: vi.fn().mockResolvedValue(false),
 }));
 
+// next/headers cookies() — drives the email-position A/B arm stamp. Default
+// returns no cookie (arm omitted), matching pre-experiment traffic.
+const { mockCookieGet } = vi.hoisted(() => ({ mockCookieGet: vi.fn() }));
+vi.mock("next/headers", () => ({
+  cookies: vi.fn(async () => ({ get: mockCookieGet })),
+}));
+
 import { POST } from "@/app/api/survey-partial/route";
 import { verifyCsrfHeaderOrBody } from "@shared/http/csrf";
 import { checkRateLimit } from "@shared/http/ratelimit";
@@ -67,6 +74,7 @@ describe("POST /api/survey-partial", () => {
       resetAt: new Date(),
     });
     mockFetchWithTimeout.mockResolvedValue({ ok: true });
+    mockCookieGet.mockReturnValue(undefined);
   });
 
   it("returns 200 with valid partial save", async () => {
@@ -146,5 +154,31 @@ describe("POST /api/survey-partial", () => {
     const call = mockFetchWithTimeout.mock.calls[0];
     const row = JSON.parse(call[1].body);
     expect(row.utm_tracker).toBeNull();
+  });
+
+  it("stamps email_position from the A/B cookie", async () => {
+    mockCookieGet.mockReturnValue({ value: "last" });
+    await POST(makeRequest(validBody()));
+
+    const call = mockFetchWithTimeout.mock.calls[0];
+    const row = JSON.parse(call[1].body);
+    expect(row.email_position).toBe("last");
+  });
+
+  it("omits email_position when no A/B cookie is present", async () => {
+    await POST(makeRequest(validBody()));
+
+    const call = mockFetchWithTimeout.mock.calls[0];
+    const row = JSON.parse(call[1].body);
+    expect(row.email_position).toBeUndefined();
+  });
+
+  it("ignores an invalid email_position cookie value", async () => {
+    mockCookieGet.mockReturnValue({ value: "sideways" });
+    await POST(makeRequest(validBody()));
+
+    const call = mockFetchWithTimeout.mock.calls[0];
+    const row = JSON.parse(call[1].body);
+    expect(row.email_position).toBeUndefined();
   });
 });

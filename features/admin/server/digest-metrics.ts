@@ -1204,14 +1204,7 @@ export async function fetchBucketPerformance(
  * Chart 7 source. Window-snapshot per-question reach counts, ordered by
  * question_index. Null on RPC failure.
  */
-export async function fetchDropoutFunnel(
-  sinceIso: string,
-  untilIso: string
-): Promise<DropoutFunnelSnapshot | null> {
-  const raw = await callRpc<{ questions?: unknown }>("get_dropout_funnel", {
-    since_ts: sinceIso,
-    until_ts: untilIso,
-  });
+function coerceDropoutQuestions(raw: { questions?: unknown } | null): DropoutFunnelSnapshot | null {
   if (!raw || !Array.isArray(raw.questions)) return null;
   const questions: DropoutQuestion[] = [];
   for (const item of raw.questions) {
@@ -1228,6 +1221,38 @@ export async function fetchDropoutFunnel(
   // RPC already orders, but re-sort defensively in case of transport reorder.
   questions.sort((a, b) => a.question_index - b.question_index);
   return { questions };
+}
+
+export async function fetchDropoutFunnel(
+  sinceIso: string,
+  untilIso: string
+): Promise<DropoutFunnelSnapshot | null> {
+  // NOTE: get_dropout_funnel is restricted to the control/legacy cohort
+  // (email_position IS NULL OR 'first') so the email-position A/B can't blend
+  // the two arms in this chart. Per-arm curves come from fetchDropoutFunnelByArm.
+  const raw = await callRpc<{ questions?: unknown }>("get_dropout_funnel", {
+    since_ts: sinceIso,
+    until_ts: untilIso,
+  });
+  return coerceDropoutQuestions(raw);
+}
+
+/**
+ * Per-arm drop-out funnel for the email-position A/B (survey-email-position-ab).
+ * Same shape as fetchDropoutFunnel but filtered to a single arm so the digest
+ * can chart email-first vs email-last side by side. Null on RPC failure.
+ */
+export async function fetchDropoutFunnelByArm(
+  sinceIso: string,
+  untilIso: string,
+  arm: "first" | "last"
+): Promise<DropoutFunnelSnapshot | null> {
+  const raw = await callRpc<{ questions?: unknown }>("get_dropout_funnel_by_arm", {
+    since_ts: sinceIso,
+    until_ts: untilIso,
+    arm,
+  });
+  return coerceDropoutQuestions(raw);
 }
 
 /**

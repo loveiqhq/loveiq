@@ -26,6 +26,8 @@ declare global {
     __loveiqForcedPaywallArm?: "treatment" | "control" | null;
     /** Survey white A/B arm for the current survey session. */
     __loveiqSurveyVariant?: "white" | "dark" | null;
+    /** Survey email-position A/B arm for the current survey session. */
+    __loveiqEmailPositionArm?: "first" | "last" | null;
     /** Dev-only: tracks event_types we've already warned about for missing context. */
     __loveiqPersistSkipWarned?: Set<string>;
   }
@@ -117,6 +119,21 @@ export const setSurveyVariant = (variant: "white" | "dark" | null) => {
   }
 };
 
+/**
+ * Set on the survey engine once the email-position A/B arm is known. Like
+ * `setSurveyVariant`, every persisted analytics event then auto-carries
+ * `survey_email_position`, so survey drop-off-by-arm is a single GROUP BY.
+ * Register a user-scoped GA4 custom dimension `survey_email_position` to surface
+ * it in GA4 reports.
+ */
+export const setEmailPositionArm = (arm: "first" | "last" | null) => {
+  if (typeof window === "undefined") return;
+  window.__loveiqEmailPositionArm = arm;
+  if (arm && window.__loveiqAnalyticsEnabled && hasCookieYesConsent("analytics")) {
+    window.gtag?.("set", "user_properties", { survey_email_position: arm });
+  }
+};
+
 const persistAnalyticsEvent = (
   eventType: string,
   metadata: Record<string, unknown> | undefined,
@@ -156,10 +173,12 @@ const persistAnalyticsEvent = (
   // truth, readable on every page). Caller keys win over both.
   const arm = window.__loveiqForcedPaywallArm ?? null;
   const surveyVariant = window.__loveiqSurveyVariant ?? null;
+  const emailPosition = window.__loveiqEmailPositionArm ?? null;
   const landingVariant = getLandingVariant();
   const mergedMetadata = {
     ...(arm ? { forced_paywall_arm: arm } : {}),
     ...(surveyVariant ? { survey_variant: surveyVariant } : {}),
+    ...(emailPosition ? { survey_email_position: emailPosition } : {}),
     ...(landingVariant ? { landing_variant: landingVariant } : {}),
     ...metadata,
   };

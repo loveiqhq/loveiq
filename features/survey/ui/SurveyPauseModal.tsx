@@ -174,7 +174,12 @@ const SurveyPauseModal: FC<SurveyPauseModalProps> = ({ open, email, onResume, on
 
   if (!open || typeof document === "undefined") return null;
 
-  const displayEmail = email && email.trim().length > 0 ? email.trim() : "the email you provide";
+  // In the email-position "last" arm a user can pause BEFORE giving their email,
+  // so we have no address. Don't over-promise a reminder email we can't send —
+  // fall back to honest "saved on this device" copy. The control arm (email
+  // first) always has the email by the time the survey can be paused.
+  const hasEmail = email.trim().length > 0;
+  const displayEmail = hasEmail ? email.trim() : "the email you provide";
 
   return createPortal(
     <div
@@ -233,10 +238,21 @@ const SurveyPauseModal: FC<SurveyPauseModalProps> = ({ open, email, onResume, on
               id="survey-pause-desc"
               className={`text-center font-sans font-light text-[14px] leading-[22px] max-w-[293px] sm:text-[20px] sm:leading-[31px] sm:max-w-[576px] ${white ? "text-[#4a4458]" : "text-[rgba(255,255,255,0.7)]"}`}
             >
-              No worries &mdash; <strong className="font-bold">your progress is saved</strong>.
-              We&apos;ll send reminders to{" "}
-              <strong className="break-all font-bold">{displayEmail}</strong> so you can{" "}
-              <strong className="font-bold">pick up right where you left off.</strong>
+              {hasEmail ? (
+                <>
+                  No worries &mdash; <strong className="font-bold">your progress is saved</strong>.
+                  We&apos;ll send reminders to{" "}
+                  <strong className="break-all font-bold">{displayEmail}</strong> so you can{" "}
+                  <strong className="font-bold">pick up right where you left off.</strong>
+                </>
+              ) : (
+                <>
+                  No worries &mdash;{" "}
+                  <strong className="font-bold">your progress is saved on this device</strong>. Come
+                  back any time to{" "}
+                  <strong className="font-bold">pick up right where you left off.</strong>
+                </>
+              )}
             </p>
           </div>
 
@@ -256,8 +272,9 @@ const SurveyPauseModal: FC<SurveyPauseModalProps> = ({ open, email, onResume, on
                 <span
                   className={`font-sans font-light text-[11px] leading-[15px] sm:text-[13px] sm:leading-[20px] ${white ? "text-[#6b6678]" : "text-[rgba(255,255,255,0.7)]"}`}
                 >
-                  You&apos;ll get a reminder email with a link to jump back in &mdash; no login
-                  needed.
+                  {hasEmail
+                    ? "You'll get a reminder email with a link to jump back in — no login needed."
+                    : "Your progress is saved on this device — no login needed."}
                 </span>
               </li>
               <li className="flex items-start gap-2">
@@ -268,7 +285,11 @@ const SurveyPauseModal: FC<SurveyPauseModalProps> = ({ open, email, onResume, on
                   className={`font-sans font-light text-[11px] leading-[15px] sm:text-[13px] sm:leading-[20px] ${white ? "text-[#6b6678]" : "text-[rgba(255,255,255,0.7)]"}`}
                 >
                   <span>Resume any time. </span>
-                  <span>Click the link in your email to continue exactly where you stopped.</span>
+                  <span>
+                    {hasEmail
+                      ? "Click the link in your email to continue exactly where you stopped."
+                      : "Reopen this survey in this browser to continue exactly where you stopped."}
+                  </span>
                 </span>
               </li>
             </ul>

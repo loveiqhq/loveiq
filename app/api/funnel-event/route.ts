@@ -19,11 +19,16 @@
  */
 
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { z } from "zod";
 import { verifyCsrfHeaderOrBody } from "@shared/http/csrf";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import logger from "@shared/observability/logger";
+import {
+  EMAIL_POSITION_COOKIE,
+  isEmailPositionVariant,
+} from "@shared/experiments/emailPositionVariant";
 
 // Top-of-funnel signals that all predate survey_submission, so analytics_event
 // can't host them — see funnel_event migrations for the table-level CHECK
@@ -70,6 +75,18 @@ export async function POST(request: Request) {
   const { event, visitor_id, utm_source } = parsed.data;
   void parsed.data._csrf;
 
+  // Email-position A/B arm. The sticky cookie is minted on survey-engine mount,
+  // so it's present for `survey_engine_mount` (the consent-free "entered survey"
+  // denominator by arm) and absent/NULL for events that fire earlier
+  // (unique_visitor, intro slides). Only stamped when valid, so pre-experiment
+  // traffic never references the column (safe if the migration lags a deploy).
+  let emailPositionRaw: string | undefined;
+  try {
+    emailPositionRaw = (await cookies()).get(EMAIL_POSITION_COOKIE)?.value;
+  } catch {
+    /* no request scope — no stamp */
+  }
+
   // PK (visitor_id, day, event_type) handles dedup — duplicates are no-ops
   // thanks to Prefer: resolution=ignore-duplicates.
   try {
@@ -83,6 +100,7 @@ export async function POST(request: Request) {
         day: new Date().toISOString().slice(0, 10),
         event_type: event,
         ...(utm_source ? { utm_source } : {}),
+        ...(isEmailPositionVariant(emailPositionRaw) ? { email_position: emailPositionRaw } : {}),
       }),
     });
 

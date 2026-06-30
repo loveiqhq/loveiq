@@ -60,6 +60,7 @@ const VALID_KINDS = new Set([
   "cvr-paygate-purchase",
   "bucket-performance",
   "dropout-funnel",
+  "dropout-by-arm",
   "reactivation-email",
 ]);
 
@@ -115,7 +116,25 @@ interface DropoutPayload {
   bars: Array<{ label: string; dropPct: number }>;
 }
 
-type AnyPayload = LongitudinalPayload | StageConversionPayload | DropoutPayload;
+/**
+ * Per-arm drop-off comparison (email-position A/B). Two drop-off-% curves
+ * overlaid on ONE shared y-scale so the email-first vs email-last drop at each
+ * question — especially Q1, the hypothesis — is directly comparable. `labels`
+ * are aligned question labels; `first`/`last` are drop-off % per index.
+ */
+interface DropoutByArmPayload {
+  kind: "dropout-by-arm";
+  windowLabel?: string;
+  labels: string[];
+  first: number[];
+  last: number[];
+}
+
+type AnyPayload =
+  | LongitudinalPayload
+  | StageConversionPayload
+  | DropoutPayload
+  | DropoutByArmPayload;
 
 const LONG_TITLES: Record<LongitudinalPayload["kind"], string> = {
   "cvr-visitor-start": "Visitor → Survey-start CVR",
@@ -599,6 +618,156 @@ function renderDropoutBars(p: DropoutPayload): {
   };
 }
 
+// -----------------------------------------------------------------------------
+// Per-arm drop-off comparison (email-position A/B) — two overlaid curves
+// -----------------------------------------------------------------------------
+
+const DROPOUT_ARM_PLOT_W = 740;
+const DROPOUT_ARM_PLOT_H = 260;
+const DROPOUT_ARM_HEIGHT = 520;
+
+function renderDropoutByArm(p: DropoutByArmPayload): {
+  element: React.ReactElement;
+  height: number;
+} {
+  const labels = Array.isArray(p.labels)
+    ? p.labels.map((l) => (typeof l === "string" ? l : ""))
+    : [];
+  const toVals = (a: unknown): number[] =>
+    (Array.isArray(a) ? a : []).map((v) => Math.max(0, Number(v) || 0));
+  const first = toVals(p.first);
+  const last = toVals(p.last);
+  const title = "Where users quit by arm — email first vs last";
+  const n = Math.max(first.length, last.length);
+
+  if (n === 0) {
+    return {
+      element: chartShell(
+        title,
+        p.windowLabel ?? "",
+        <div style={{ display: "flex", color: COLORS.textMuted, fontSize: 18, padding: 24 }}>
+          Awaiting data — not enough per-arm survey traffic in this window yet.
+        </div>
+      ),
+      height: HEIGHT,
+    };
+  }
+
+  // Shared y-scale across BOTH arms so the comparison is fair (svgPoints scaled
+  // to its own peak would distort one arm against the other).
+  const peak = Math.max(1, ...first, ...last);
+  const w = DROPOUT_ARM_PLOT_W;
+  const h = DROPOUT_ARM_PLOT_H;
+  const firstPts = svgPoints(first, peak, w, h);
+  const lastPts = svgPoints(last, peak, w, h);
+  const ticks = sampleTicks(labels);
+
+  // Headline: the first-question (index 0) drop-off per arm — the hypothesis.
+  const q1First = first[0];
+  const q1Last = last[0];
+  const headline = `Q1 drop-off — first: ${
+    q1First !== undefined ? Math.round(q1First) : "—"
+  }%  ·  last: ${q1Last !== undefined ? Math.round(q1Last) : "—"}%`;
+
+  const element = chartShell(
+    title,
+    p.windowLabel ?? "",
+    <div style={{ display: "flex", flexDirection: "column" }}>
+      {/* Legend */}
+      <div style={{ display: "flex", flexDirection: "row", gap: 18, marginBottom: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <div
+            style={{
+              display: "flex",
+              width: 12,
+              height: 12,
+              background: COLORS.accentPurple,
+              borderRadius: 2,
+            }}
+          />
+          <div style={{ display: "flex", fontSize: 13, color: COLORS.textMuted }}>
+            Email first (control)
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <div
+            style={{
+              display: "flex",
+              width: 12,
+              height: 12,
+              background: COLORS.accentOrange,
+              borderRadius: 2,
+            }}
+          />
+          <div style={{ display: "flex", fontSize: 13, color: COLORS.textMuted }}>Email last</div>
+        </div>
+      </div>
+      {/* Overlaid drop-off % curves (shared y-scale) */}
+      <svg width={w} height={h}>
+        <polyline
+          points={`0,${h - 1} ${w},${h - 1}`}
+          fill="none"
+          stroke={COLORS.barTrack}
+          strokeWidth="1"
+        />
+        {firstPts && (
+          <polyline
+            points={firstPts}
+            fill="none"
+            stroke={COLORS.accentPurple}
+            strokeWidth="2"
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+        )}
+        {lastPts && (
+          <polyline
+            points={lastPts}
+            fill="none"
+            stroke={COLORS.accentOrange}
+            strokeWidth="2"
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+        )}
+      </svg>
+      {/* X-axis question ticks */}
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "row",
+          width: w,
+          justifyContent: "space-between",
+          marginTop: 6,
+        }}
+      >
+        {ticks.map((t, i) => (
+          <div key={`${t}-${i}`} style={{ display: "flex", fontSize: 11, color: COLORS.textMuted }}>
+            {t}
+          </div>
+        ))}
+      </div>
+      {/* Headline first-question comparison + y-scale note */}
+      <div
+        style={{
+          display: "flex",
+          marginTop: 16,
+          fontSize: 16,
+          color: COLORS.text,
+          fontWeight: 700,
+        }}
+      >
+        {headline}
+      </div>
+      <div style={{ display: "flex", marginTop: 4, fontSize: 12, color: COLORS.textMuted }}>
+        {`drop-off % per question · shared y-scale (peak ${Math.round(peak)}%) · x-axis = question order`}
+      </div>
+    </div>,
+    DROPOUT_ARM_HEIGHT
+  );
+  return { element, height: DROPOUT_ARM_HEIGHT };
+}
+
 function renderForKind(
   kind: string,
   payload: AnyPayload
@@ -614,6 +783,8 @@ function renderForKind(
       return renderLongitudinal(payload as LongitudinalPayload);
     case "dropout-funnel":
       return renderDropoutBars(payload as DropoutPayload);
+    case "dropout-by-arm":
+      return renderDropoutByArm(payload as DropoutByArmPayload);
     case "reactivation-email":
       return renderStageConversion(payload as StageConversionPayload);
     default:

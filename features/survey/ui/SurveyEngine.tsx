@@ -20,6 +20,7 @@ import {
   setReportSubmissionContext,
   setForcedPaywallArm,
   setSurveyVariant,
+  setEmailPositionArm,
   trackExperimentExposure,
 } from "@features/analytics/client";
 import { getForcedPaywallCohort } from "@shared/experiments/forcedPaywall";
@@ -28,6 +29,12 @@ import {
   SURVEY_VARIANT_EXPERIMENT,
   type SurveyVariant,
 } from "@shared/experiments/surveyVariant";
+import {
+  assignEmailPositionVariant,
+  orderByEmailPosition,
+  EMAIL_POSITION_EXPERIMENT,
+  type EmailPositionVariant,
+} from "@shared/experiments/emailPositionVariant";
 import { SurveyThemeProvider } from "./SurveyThemeContext";
 import { useSubmitSurvey } from "./hooks/useSubmitSurvey";
 import { useSurveyTracking } from "./hooks/useSurveyTracking";
@@ -91,8 +98,26 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
   const autoAdvanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const hasCleared = useRef(false);
-  const totalQuestions = surveyQuestions.length;
-  const question = surveyQuestions[currentIndex];
+
+  // Survey email-position A/B. Resolve (and stick) the arm on first render, then
+  // order the questions for this arm: "first" (control) returns the canonical
+  // order unchanged (email at index 0); "last" moves the email question to just
+  // before the marketing opt-in. Reading the cookie + reordering here is SSR-safe
+  // and flash-free (the engine renders client-only behind SurveyPage's hydration
+  // gate). `?emailPosition=first|last` is a dev/preview-only override.
+  const [emailPositionVariant] = useState<EmailPositionVariant>(() => {
+    const devParam =
+      typeof window === "undefined"
+        ? null
+        : new URLSearchParams(window.location.search).get("emailPosition");
+    return assignEmailPositionVariant(devParam);
+  });
+  const orderedQuestions = useMemo(
+    () => orderByEmailPosition(surveyQuestions, emailPositionVariant),
+    [emailPositionVariant]
+  );
+  const totalQuestions = orderedQuestions.length;
+  const question = orderedQuestions[currentIndex];
 
   // Survey white A/B. Resolve (and stick) the arm on first render so the very
   // first question paint is already themed (the engine renders client-only,
@@ -109,15 +134,21 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
   useEffect(() => {
     if (surveyExposureFired.current) return;
     surveyExposureFired.current = true;
-    // Stamp the arm onto every persisted survey event + fire the one-per-user
-    // exposure record (the per-arm denominator for completion-rate analysis).
+    // Stamp the arms onto every persisted survey event + fire the one-per-user
+    // exposure records (the per-arm denominators for completion-rate analysis).
     setSurveyVariant(surveyVariant);
     trackExperimentExposure({
       experiment: SURVEY_VARIANT_EXPERIMENT,
       variant: surveyVariant,
       surface: "survey",
     });
-  }, [surveyVariant]);
+    setEmailPositionArm(emailPositionVariant);
+    trackExperimentExposure({
+      experiment: EMAIL_POSITION_EXPERIMENT,
+      variant: emailPositionVariant,
+      surface: "survey",
+    });
+  }, [surveyVariant, emailPositionVariant]);
 
   // Post-survey completion phase management
   const [completionPhase, setCompletionPhase] = useState<CompletionPhase>(() =>
@@ -231,14 +262,14 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
       setAnimKey((k) => k + 1);
       setAttemptedNext(false);
       // Clear transient email-confirm state when leaving the email question
-      const targetQuestion = surveyQuestions[index];
+      const targetQuestion = orderedQuestions[index];
       if (targetQuestion?.inputType !== "email") {
         setEmailConfirmValue("");
       }
       setCurrentIndex(index);
       window.scrollTo({ top: 0, behavior: "instant" });
     },
-    [totalQuestions, setCurrentIndex, cancelAutoAdvance]
+    [totalQuestions, setCurrentIndex, cancelAutoAdvance, orderedQuestions]
   );
 
   const goNext = useCallback(() => {
