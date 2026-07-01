@@ -30,6 +30,7 @@ describe("GET /api/health", () => {
     process.env.RESEND_API_KEY = "re_test";
     delete process.env.KV_REST_API_URL;
     delete process.env.KV_REST_API_TOKEN;
+    delete process.env.STRIPE_SECRET_KEY;
   });
 
   it("returns 200 with only { ok: true } when all checks pass", async () => {
@@ -67,7 +68,11 @@ describe("GET /api/health", () => {
     expect(await res.json()).toEqual({ ok: false });
   });
 
-  it("returns 503 when Resend ping fails", async () => {
+  // Resend/Stripe/KV are NOT liveness-critical — a transient blip in any of them
+  // leaves the site fully usable (email is after-response, checkout is togglable,
+  // the rate limiter falls back to in-memory). They must NOT flip the probe to
+  // 503 (that caused a false "site down" page on 2026-07-01 during a Resend blip).
+  it("returns 200 (degraded, not down) when Resend is unreachable", async () => {
     server.use(
       okSupabase,
       http.get("https://api.resend.com/api-keys", () =>
@@ -76,11 +81,11 @@ describe("GET /api/health", () => {
     );
 
     const res = await GET();
-    expect(res.status).toBe(503);
-    expect(await res.json()).toEqual({ ok: false });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
   });
 
-  it("returns 503 when KV is configured but unreachable", async () => {
+  it("returns 200 (degraded, not down) when KV is configured but unreachable", async () => {
     process.env.KV_REST_API_URL = "https://kv.test.upstash.io";
     process.env.KV_REST_API_TOKEN = "kv_test";
     server.use(
@@ -90,8 +95,21 @@ describe("GET /api/health", () => {
     );
 
     const res = await GET();
-    expect(res.status).toBe(503);
-    expect(await res.json()).toEqual({ ok: false });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+  });
+
+  it("returns 200 (degraded, not down) when Stripe is configured but unreachable", async () => {
+    process.env.STRIPE_SECRET_KEY = "sk_test_x";
+    server.use(
+      okSupabase,
+      okResend,
+      http.get("https://api.stripe.com/v1/balance", () => HttpResponse.error())
+    );
+
+    const res = await GET();
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
   });
 
   it("returns 200 when KV is unconfigured (in-memory fallback active)", async () => {
