@@ -33,11 +33,14 @@ interface ConversionFunnelResponse {
   };
 }
 
+// Fallback placeholder only (the RPC always returns populated stages). Kept in
+// sync with get_conversion_funnel's real acquisition→purchase stages.
 const DEFAULT_STAGES: FunnelStage[] = [
-  { name: "waitlist_signups", count: 0 },
+  { name: "unique_visitors", count: 0 },
   { name: "survey_started", count: 0 },
   { name: "survey_completed", count: 0 },
-  { name: "invite_sent", count: 0 },
+  { name: "report_viewed", count: 0 },
+  { name: "purchased", count: 0 },
 ];
 
 export default function ConversionFunnelTab({
