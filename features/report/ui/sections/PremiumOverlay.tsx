@@ -58,18 +58,15 @@ const BoltIcon: FC = () => (
   </svg>
 );
 
-const CheckIcon: FC = () => (
-  <svg
-    viewBox="0 0 16 16"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    aria-hidden="true"
-  >
-    <circle cx="8" cy="8" r="6.6" />
-    <path d="m5.4 8.2 1.8 1.8 3.4-3.8" />
+const ArrowIcon: FC = () => (
+  <svg viewBox="0 0 14 12" fill="none" aria-hidden="true">
+    <path
+      d="M1 6h11.5M8 1.5 12.5 6 8 10.5"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
   </svg>
 );
 
@@ -84,22 +81,6 @@ const ShieldCheckIcon: FC = () => (
   >
     <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
     <path d="m9 12 2 2 4-4" />
-  </svg>
-);
-
-const DocumentIcon: FC = () => (
-  <svg
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
-    <path d="M14 2v6h6" />
-    <path d="M8 13h8" />
-    <path d="M8 17h6" />
   </svg>
 );
 
@@ -142,26 +123,21 @@ const PremiumOverlay: FC<Props> = ({ archetype, tier, onUnlock, quote = null, of
   // Reads the shared report-level countdown (one interval for all cards) when
   // rendered under a PaywallCountdownProvider; falls back to a local ticker with
   // `deadline` when standalone (e.g. unit tests).
-  const { mm, ss, expired } = usePaywallCountdownValue(deadline);
+  const { mm, ss } = usePaywallCountdownValue(deadline);
 
-  // Offer pill: keep the live "N% OFF" but drop "· Expires soon" once the timer
-  // hits 00:00 so it never contradicts the readout. The discount stays valid.
-  const offerPillText = badge
-    ? expired
-      ? badge
-      : `${badge} · Expires soon`
-    : expired
-      ? null
-      : "Expires soon";
+  // Green offer pill (Figma 8005:744): "⚡ {badge} OFF · SAVE €{save}". The badge
+  // already reads "85% OFF"; append the merged "· SAVE €X" when we know the save.
+  const pillText = badge ? (saveLabel ? `${badge} · SAVE ${saveLabel}` : badge) : null;
 
   return (
     <div className="report-premium-overlay">
       <div className="report-premium-overlay__card">
-        <div className="report-premium-overlay__icon" aria-hidden="true">
-          <LockIcon />
+        <div className="report-premium-overlay__head">
+          <div className="report-premium-overlay__icon" aria-hidden="true">
+            <LockIcon />
+          </div>
+          <h3 className="report-premium-overlay__title">Premium content</h3>
         </div>
-
-        <h3 className="report-premium-overlay__title">Premium content</h3>
 
         <p className="report-premium-overlay__copy">
           This section is part of the full <strong>{archetype}</strong> report.{" "}
@@ -169,37 +145,35 @@ const PremiumOverlay: FC<Props> = ({ archetype, tier, onUnlock, quote = null, of
         </p>
 
         <div className="report-premium-overlay__offer">
-          {offerPillText ? (
+          {pillText ? (
             <span className="report-premium-overlay__pill">
               <span className="report-premium-overlay__pill-icon" aria-hidden="true">
                 <BoltIcon />
               </span>
-              {offerPillText}
+              {pillText}
             </span>
           ) : null}
 
-          <PaywallCountdownDigits mm={mm} ss={ss} />
+          <span className="report-premium-overlay__timer-label">
+            Time left to secure this price
+          </span>
 
-          {priceLabel ? (
-            <div className="report-premium-overlay__price-row">
-              <span className="report-premium-overlay__price">{priceLabel}</span>
-              {strikeLabel ? (
-                <span className="report-premium-overlay__strike">{strikeLabel}</span>
-              ) : null}
-            </div>
-          ) : null}
-
-          {priceLabel ? (
-            <div className="report-premium-overlay__meta-row">
-              {saveLabel ? (
-                <span className="report-premium-overlay__save">
-                  <span className="report-premium-overlay__save-icon" aria-hidden="true">
-                    <CheckIcon />
-                  </span>
-                  You save {saveLabel}
+          <div className="report-premium-overlay__price-line">
+            <PaywallCountdownDigits mm={mm} ss={ss} />
+            {priceLabel ? (
+              <>
+                <span className="report-premium-overlay__arrow" aria-hidden="true">
+                  <ArrowIcon />
                 </span>
-              ) : null}
-              <span className="report-premium-overlay__oneoff">One-time payment</span>
+                <span className="report-premium-overlay__price">{priceLabel}</span>
+              </>
+            ) : null}
+          </div>
+
+          {strikeLabel ? (
+            <div className="report-premium-overlay__otherwise">
+              <span className="report-premium-overlay__otherwise-label">Otherwise</span>
+              <span className="report-premium-overlay__strike">{strikeLabel}</span>
             </div>
           ) : null}
 
@@ -215,20 +189,6 @@ const PremiumOverlay: FC<Props> = ({ archetype, tier, onUnlock, quote = null, of
                   14-day money-back guarantee
                 </span>
                 <span className="report-premium-overlay__feature-sub">No questions asked.</span>
-              </span>
-            </div>
-
-            <div className="report-premium-overlay__feature report-premium-overlay__feature--purple">
-              <span className="report-premium-overlay__feature-icon" aria-hidden="true">
-                <DocumentIcon />
-              </span>
-              <span className="report-premium-overlay__feature-text">
-                <span className="report-premium-overlay__feature-title">
-                  50+ pages of personalised insight
-                </span>
-                <span className="report-premium-overlay__feature-sub">
-                  Into how you love, desire, and connect.
-                </span>
               </span>
             </div>
 

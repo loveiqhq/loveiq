@@ -166,7 +166,7 @@ const AnimatedPercentage: FC<AnimatedPercentageProps> = ({ target, isInView, del
       ref={spanRef}
       data-testid="archetype-pct"
       style={{ gridArea: "pct" }}
-      className="shrink-0 text-right font-medium tabular-nums text-white text-[13px] leading-[19.5px] lg:text-[16px] w-[38.94px] lg:w-[48px]"
+      className="shrink-0 text-right font-medium tabular-nums text-[#161021] text-[13px] leading-[19.5px] lg:text-[16px] w-[38.94px] lg:w-[48px]"
     >
       {formatPct(0)}
     </span>
@@ -251,13 +251,13 @@ const ArchetypeBreakdownListSection: FC<Props> = ({
       ref={sectionRef}
       data-in-view={isInView ? "true" : "false"}
       aria-labelledby="archetype-breakdown-heading"
-      className="archetype-breakdown relative mx-auto w-full max-w-[896px] rounded-[32px] border border-white/5 bg-[#0b0710] p-[25px] shadow-[0_20px_50px_rgba(0,0,0,0.5)] lg:p-[41px]"
+      className="archetype-breakdown relative mx-auto w-full max-w-[896px] rounded-[32px] border border-[rgba(22,16,33,0.1)] bg-white p-[25px] shadow-[0_20px_50px_rgba(22,16,33,0.08)] lg:p-[41px]"
     >
       <header className="flex flex-col items-start gap-[32px] lg:flex-row lg:justify-between">
         <div className="lg:max-w-[526px]">
           <h2
             id="archetype-breakdown-heading"
-            className="font-serif font-normal text-white text-[36px] leading-[45px] tracking-[-0.9px] lg:text-[48px] lg:leading-[48px] lg:tracking-[-1.2px]"
+            className="font-serif font-normal text-[#161021] text-[36px] leading-[45px] tracking-[-0.9px] lg:text-[48px] lg:leading-[48px] lg:tracking-[-1.2px]"
           >
             {/* Desktop: 2 lines with "Other" inline italic on line 1 */}
             <span className="hidden lg:block">
@@ -311,7 +311,7 @@ const ArchetypeBreakdownListSection: FC<Props> = ({
               Archetypes
             </span>
           </h2>
-          <p className="mt-[12px] max-w-[512px] text-[14px] font-light leading-[22.75px] text-[#9ca3af]">
+          <p className="mt-[12px] max-w-[512px] text-[14px] font-light leading-[22.75px] text-[#6b6678]">
             Your core archetype names the pattern that surfaces most strongly. The list below are
             the secondary tendencies that may take the lead in different relationships, phases, or
             moods.
@@ -320,7 +320,7 @@ const ArchetypeBreakdownListSection: FC<Props> = ({
 
         <aside
           aria-label="Methodology"
-          className="w-full shrink-0 rounded-[16px] border border-white/[0.13] bg-[#150b20] p-[25px] lg:w-[288px]"
+          className="w-full shrink-0 rounded-[16px] border border-[rgba(22,16,33,0.1)] bg-[#f5f6f8] p-[25px] lg:w-[288px]"
         >
           <div className="flex items-center gap-[8px]">
             <Image
@@ -332,13 +332,13 @@ const ArchetypeBreakdownListSection: FC<Props> = ({
               unoptimized
               className="h-[14px] w-[14px]"
             />
-            <span className="text-[10px] font-bold uppercase leading-[15px] tracking-[2px] text-[#c084fc]">
+            <span className="text-[10px] font-bold uppercase leading-[15px] tracking-[2px] text-[#6b5b95]">
               Methodology
             </span>
           </div>
           <dl className="mt-[20px] grid grid-cols-2 gap-x-[16px] gap-y-[24px]">
             <MethodologyStat label="Reference Sample">
-              <span className="text-[#c084fc]">n</span>
+              <span className="text-[#6b5b95]">n</span>
               {` = ${computeReferenceSample(submissionSeed ?? null).toLocaleString("en-US")}`}
             </MethodologyStat>
             <MethodologyStat label="Dimensions Scored">
@@ -353,7 +353,7 @@ const ArchetypeBreakdownListSection: FC<Props> = ({
             </MethodologyStat>
             <MethodologyStat label="Reliability (α)">0.94</MethodologyStat>
             <MethodologyStat label="Test — Retest (ICC)">
-              <span className="text-[#c084fc]">r</span>
+              <span className="text-[#6b5b95]">r</span>
               {" = 0.87"}
             </MethodologyStat>
           </dl>
@@ -371,22 +371,22 @@ const ArchetypeBreakdownListSection: FC<Props> = ({
           const rowStyle: CssVarStyle = {
             "--stagger-index": idx,
             "--fill-fraction": fillFraction,
-            "--bar-color": presentation?.barColorRgba ?? "rgba(255,255,255,0.4)",
-            "--dot-color": presentation?.dotColor ?? "#ffffff",
-            "--dot-shadow": presentation?.dotShadowColor ?? presentation?.dotColor ?? "#ffffff",
+            "--bar-color": presentation?.barColorRgba ?? "rgba(22,16,33,0.35)",
+            "--dot-color": presentation?.dotColor ?? "#6b6678",
+            "--dot-shadow": presentation?.dotShadowColor ?? presentation?.dotColor ?? "#6b6678",
           };
 
           return (
             <li
               key={name}
               style={rowStyle}
-              className={`archetype-breakdown__row group px-[12px] pb-[15px] pt-[14px] transition-colors duration-200 hover:bg-white/[0.02] ${
-                isLast ? "" : "border-b border-white/5"
+              className={`archetype-breakdown__row group px-[12px] pb-[15px] pt-[14px] transition-colors duration-200 hover:bg-[rgba(22,16,33,0.02)] ${
+                isLast ? "" : "border-b border-[rgba(22,16,33,0.1)]"
               }`}
             >
               <span
                 style={{ gridArea: "rank" }}
-                className="shrink-0 text-right font-serif font-normal text-[#4b5563] tabular-nums text-[18px] leading-[28px] lg:text-[24px]"
+                className="shrink-0 text-right font-serif font-normal text-[#6b6678] tabular-nums text-[18px] leading-[28px] lg:text-[24px]"
               >
                 {padRank(idx + 1)}
               </span>
@@ -420,11 +420,11 @@ const ArchetypeBreakdownListSection: FC<Props> = ({
               </span>
 
               <div style={{ gridArea: "nametag" }} className="flex min-w-0 flex-col gap-[2px]">
-                <h3 className="font-serif font-medium text-white text-[15px] leading-[22.5px] lg:text-[20px]">
+                <h3 className="font-serif font-medium text-[#161021] text-[15px] leading-[22.5px] lg:text-[20px]">
                   {name}
                 </h3>
                 {presentation ? (
-                  <p className="font-normal text-[#9ca3af] text-[9px] leading-[16px] max-w-[187px] lg:text-[11px] lg:max-w-[384px]">
+                  <p className="font-normal text-[#6b6678] text-[9px] leading-[16px] max-w-[187px] lg:text-[11px] lg:max-w-[384px]">
                     {presentation.tagline}
                   </p>
                 ) : null}
@@ -439,7 +439,7 @@ const ArchetypeBreakdownListSection: FC<Props> = ({
                 aria-valuemin={0}
                 aria-valuemax={100}
               >
-                <div className="relative h-[2px] w-full overflow-hidden rounded-full bg-white/10">
+                <div className="relative h-[2px] w-full overflow-hidden rounded-full bg-[rgba(22,16,33,0.08)]">
                   <div
                     className="archetype-breakdown__row-bar absolute inset-0 rounded-full"
                     style={{ backgroundColor: "var(--bar-color)" }}
@@ -466,7 +466,7 @@ const ArchetypeBreakdownListSection: FC<Props> = ({
                 onClick={() => onUnlock(name)}
                 aria-label={isRowUnlocked ? `View ${name} report` : `Unlock ${name} report`}
                 style={{ gridArea: "pill" }}
-                className="archetype-breakdown__pill relative hidden h-[38px] w-[130px] shrink-0 items-center justify-center gap-[6px] text-[12.5px] font-bold leading-none text-white/70 transition-colors duration-200 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0710] lg:inline-flex"
+                className="archetype-breakdown__pill relative hidden h-[38px] w-[130px] shrink-0 items-center justify-center gap-[6px] text-[12.5px] font-bold leading-none text-[#3f3a4d] transition-colors duration-200 hover:text-[#161021] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(22,16,33,0.3)] focus-visible:ring-offset-2 focus-visible:ring-offset-white lg:inline-flex"
               >
                 <Image
                   src={archetypeBreakdownStaticAssets.pillRing}
@@ -501,7 +501,7 @@ const ArchetypeBreakdownListSection: FC<Props> = ({
                 onClick={() => onUnlock(name)}
                 aria-label={isRowUnlocked ? `View ${name} report` : `Unlock ${name} report`}
                 style={{ gridArea: "pill" }}
-                className="archetype-breakdown__pill-mobile inline-flex h-[29px] w-[28px] shrink-0 items-center justify-center rounded-[24px] border border-white/10 bg-white/[0.04] p-[8px] text-white/70 transition-colors duration-200 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0710] lg:hidden"
+                className="archetype-breakdown__pill-mobile inline-flex h-[29px] w-[28px] shrink-0 items-center justify-center rounded-[24px] border border-[rgba(22,16,33,0.1)] bg-[rgba(22,16,33,0.04)] p-[8px] text-[#3f3a4d] transition-colors duration-200 hover:text-[#161021] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(22,16,33,0.3)] focus-visible:ring-offset-2 focus-visible:ring-offset-white lg:hidden"
               >
                 {isRowUnlocked ? (
                   <ArrowIcon />
@@ -527,7 +527,7 @@ const ArchetypeBreakdownListSection: FC<Props> = ({
           <button
             type="button"
             onClick={onPurchaseFullReport}
-            className="archetype-breakdown__cta group relative inline-flex h-[39.5px] w-[227.84px] items-center justify-center rounded-full bg-gradient-to-r from-[#f97316] to-[#a855f7] text-[13px] font-semibold leading-[19.5px] text-white drop-shadow-[0_0_10px_rgba(168,85,247,0.3)] transition-all duration-300 hover:scale-[1.02] hover:drop-shadow-[0_0_18px_rgba(168,85,247,0.5)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0710]"
+            className="archetype-breakdown__cta group relative inline-flex h-[39.5px] w-[227.84px] items-center justify-center rounded-full bg-gradient-to-r from-[#f97316] to-[#a855f7] text-[13px] font-semibold leading-[19.5px] text-white drop-shadow-[0_0_10px_rgba(168,85,247,0.3)] transition-all duration-300 hover:scale-[1.02] hover:drop-shadow-[0_0_18px_rgba(168,85,247,0.5)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a855f7] focus-visible:ring-offset-2 focus-visible:ring-offset-white"
           >
             <Image
               src={archetypeBreakdownStaticAssets.ctaIconLeft}
@@ -557,10 +557,12 @@ const ArchetypeBreakdownListSection: FC<Props> = ({
 
 const MethodologyStat: FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
   <div className="flex flex-col gap-[4px]">
-    <dt className="text-[9px] font-normal uppercase leading-[13.5px] tracking-[0.9px] text-[#6b7280]">
+    <dt className="text-[9px] font-normal uppercase leading-[13.5px] tracking-[0.9px] text-[#6b6678]">
       {label}
     </dt>
-    <dd className="text-[14px] font-medium leading-[20px] text-white tabular-nums">{children}</dd>
+    <dd className="text-[14px] font-medium leading-[20px] text-[#161021] tabular-nums">
+      {children}
+    </dd>
   </div>
 );
 

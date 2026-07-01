@@ -249,13 +249,13 @@ const RATING_AVATARS = [
 ];
 
 const PAYMENT_METHODS = [
-  "Apple Pay",
-  "PayPal",
-  "Google Pay",
-  "Klarna",
-  "Mastercard",
-  "VISA",
-  "Amex",
+  { key: "apple-pay", label: "Apple Pay" },
+  { key: "paypal", label: "PayPal" },
+  { key: "google-pay", label: "Google Pay" },
+  { key: "klarna", label: "Klarna" },
+  { key: "mastercard", label: "Mastercard" },
+  { key: "visa", label: "Visa" },
+  { key: "amex", label: "Amex" },
 ];
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -549,12 +549,6 @@ const ScrollPricingModal: FC<Props> = ({
     if (!open) return;
     const vp = tmViewportRef.current;
     if (!vp) return;
-    if (
-      typeof window !== "undefined" &&
-      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
-    ) {
-      return;
-    }
     let raf = 0;
     let last = 0;
     const tick = (ts: number) => {
@@ -566,7 +560,7 @@ const ScrollPricingModal: FC<Props> = ({
       if (half <= 0) return;
       // Modulo (not a single subtraction) so a manual nudge that pushed
       // scrollLeft well past one set still wraps cleanly.
-      vp.scrollLeft = (vp.scrollLeft + (dt / 1000) * 34) % half;
+      vp.scrollLeft = (vp.scrollLeft + (dt / 1000) * 46) % half;
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
@@ -884,9 +878,12 @@ const ScrollPricingModal: FC<Props> = ({
                       <span className="rpm-pcard__payments-label">Our payment methods</span>
                       <div className="rpm-pcard__payments-row">
                         {PAYMENT_METHODS.map((m) => (
-                          <span key={m} className="rpm-pcard__payment">
-                            {m}
-                          </span>
+                          <span
+                            key={m.key}
+                            className={`report-pricing-modal__payment-logo report-pricing-modal__payment-logo--${m.key}`}
+                            role="img"
+                            aria-label={m.label}
+                          />
                         ))}
                       </div>
                     </div>

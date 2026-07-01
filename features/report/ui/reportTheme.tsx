@@ -25,6 +25,10 @@ export interface ReportTheme {
   archetype: string;
   accent: string;
   accentRgb: string;
+  // Darkened, same-hue variant of `accent` with >=4.5:1 contrast on white —
+  // used wherever the accent renders as TEXT or a thin stroke on the white report.
+  accentInk: string;
+  accentInkRgb: string;
   iconBackground: string;
   iconBackgroundRgb: string;
   motto: string;
@@ -100,10 +104,13 @@ function hexToRgbTriplet(hex: string) {
   return `${red} ${green} ${blue}`;
 }
 
-function makeTheme(theme: Omit<ReportTheme, "accentRgb" | "iconBackgroundRgb">): ReportTheme {
+function makeTheme(
+  theme: Omit<ReportTheme, "accentRgb" | "accentInkRgb" | "iconBackgroundRgb">
+): ReportTheme {
   return {
     ...theme,
     accentRgb: hexToRgbTriplet(theme.accent),
+    accentInkRgb: hexToRgbTriplet(theme.accentInk),
     iconBackgroundRgb: hexToRgbTriplet(theme.iconBackground),
   };
 }
@@ -112,6 +119,7 @@ export const reportThemes: Record<string, ReportTheme> = {
   "Sensual Connector": makeTheme({
     archetype: "Sensual Connector",
     accent: "#EB7A84",
+    accentInk: "#DE2132",
     iconBackground: "#E97C84",
     motto: '"Touch me with presence and meet me with heart."',
     motivation: "Intimacy & bonding",
@@ -129,6 +137,7 @@ export const reportThemes: Record<string, ReportTheme> = {
   "Spark Seeker": makeTheme({
     archetype: "Spark Seeker",
     accent: "#FF6A3D",
+    accentInk: "#D63200",
     iconBackground: "#FF6A3D",
     motto: '"Let\'s find the spark\u2014then turn it into a blaze."',
     motivation: "Pleasure & play",
@@ -146,6 +155,7 @@ export const reportThemes: Record<string, ReportTheme> = {
   "Relational Nurturer": makeTheme({
     archetype: "Relational Nurturer",
     accent: "#8EB9AA",
+    accentInk: "#4C7B6A",
     iconBackground: "#8EB9AA",
     motto: '"Your comfort and pleasure matter\u2014so do mine."',
     motivation: "Healing",
@@ -163,6 +173,7 @@ export const reportThemes: Record<string, ReportTheme> = {
   "Radiant Performer": makeTheme({
     archetype: "Radiant Performer",
     accent: "#E5B85A",
+    accentInk: "#936B17",
     iconBackground: "#E5B85A",
     motto: '"Watch me shine."',
     motivation: "Validation",
@@ -180,6 +191,7 @@ export const reportThemes: Record<string, ReportTheme> = {
   "Explorer of Edges": makeTheme({
     archetype: "Explorer of Edges",
     accent: "#FF3D76",
+    accentInk: "#E20042",
     iconBackground: "#FF3D76",
     motto: '"Let\'s find the edge\u2014and keep going."',
     motivation: "Intensity & transformation",
@@ -197,6 +209,7 @@ export const reportThemes: Record<string, ReportTheme> = {
   "Curious Apprentice": makeTheme({
     archetype: "Curious Apprentice",
     accent: "#78B7E8",
+    accentInk: "#2076BA",
     iconBackground: "#78B7E8",
     motto: '"Teach me everything."',
     motivation: "Growth",
@@ -214,6 +227,7 @@ export const reportThemes: Record<string, ReportTheme> = {
   "Spiritual Lover": makeTheme({
     archetype: "Spiritual Lover",
     accent: "#9D8AD7",
+    accentInk: "#795FC8",
     iconBackground: "#9D8AD7",
     motto: '"Make love to my soul."',
     motivation: "Meaning",
@@ -231,6 +245,7 @@ export const reportThemes: Record<string, ReportTheme> = {
   "Minimalist Companion": makeTheme({
     archetype: "Minimalist Companion",
     accent: "#BDB9B4",
+    accentInk: "#777169",
     iconBackground: "#BDB9B4",
     motto: '"Simple is enough."',
     motivation: "Connection",
@@ -248,6 +263,7 @@ export const reportThemes: Record<string, ReportTheme> = {
   "Emotional Voyeur": makeTheme({
     archetype: "Emotional Voyeur",
     accent: "#34EAE4",
+    accentInk: "#0D7E7A",
     iconBackground: "#34EAE4",
     motto: '"I feel more from observing."',
     motivation: "Emotional fantasy",
@@ -265,6 +281,7 @@ export const reportThemes: Record<string, ReportTheme> = {
   "Authority Conductor": makeTheme({
     archetype: "Authority Conductor",
     accent: "#F3A62A",
+    accentInk: "#9E6509",
     iconBackground: "#F3A62A",
     motto: '"I set the frame\u2014and we play inside it."',
     motivation: "Power",
@@ -282,6 +299,7 @@ export const reportThemes: Record<string, ReportTheme> = {
   "Loyal Ritualist": makeTheme({
     archetype: "Loyal Ritualist",
     accent: "#2AFD96",
+    accentInk: "#018343",
     iconBackground: "#2AFD96",
     motto: '"Routine is intimacy."',
     motivation: "Stability",
@@ -299,6 +317,7 @@ export const reportThemes: Record<string, ReportTheme> = {
   "Tender Devotee": makeTheme({
     archetype: "Tender Devotee",
     accent: "#E7B6C8",
+    accentInk: "#C24472",
     iconBackground: "#E2AEC2",
     motto: '"Tell me I\'m enough."',
     motivation: "Validation",
@@ -316,6 +335,7 @@ export const reportThemes: Record<string, ReportTheme> = {
   "Analytical Sexualist": makeTheme({
     archetype: "Analytical Sexualist",
     accent: "#7A17FF",
+    accentInk: "#7A17FF",
     iconBackground: "#7A17FF",
     motto: '"Explain the system."',
     motivation: "Mastery",
@@ -333,6 +353,7 @@ export const reportThemes: Record<string, ReportTheme> = {
   "Quiet Withdrawer": makeTheme({
     archetype: "Quiet Withdrawer",
     accent: "#C7F3F1",
+    accentInk: "#1B7F7B",
     iconBackground: "#C7F3F1",
     motto: '"I disappear to survive."',
     motivation: "Avoidance",
@@ -361,6 +382,7 @@ export function getReportThemeStyle(theme: ReportTheme): CSSProperties {
   return {
     ["--report-accent" as string]: theme.accent,
     ["--report-accent-rgb" as string]: theme.accentRgb,
+    ["--report-accent-ink-rgb" as string]: theme.accentInkRgb,
     ["--report-icon-bg" as string]: theme.iconBackground,
     ["--report-icon-bg-rgb" as string]: theme.iconBackgroundRgb,
   };

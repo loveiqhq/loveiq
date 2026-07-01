@@ -306,7 +306,7 @@ const CheckCircleIcon: FC = () => (
 
 const EmptyCircleIcon: FC = () => (
   <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
-    <circle cx="10" cy="10" r="9" stroke="rgba(255,255,255,0.2)" strokeWidth="1.2" />
+    <circle cx="10" cy="10" r="9" stroke="rgba(22,16,33,0.25)" strokeWidth="1.2" />
   </svg>
 );
 

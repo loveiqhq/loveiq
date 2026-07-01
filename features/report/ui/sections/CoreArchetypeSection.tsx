@@ -135,17 +135,22 @@ const CoreArchetypeSection: FC<Props> = ({ archetypeHtml, matchScore, theme }) =
                   cx="20"
                   cy="20"
                   r="19.5"
-                  stroke="rgb(var(--report-accent-rgb))"
+                  stroke="rgb(var(--report-accent-ink-rgb, var(--report-accent-rgb)))"
                   strokeWidth="0.8"
                 />
                 <circle
                   cx="20"
                   cy="20"
                   r="11.5"
-                  stroke="rgb(var(--report-accent-rgb))"
+                  stroke="rgb(var(--report-accent-ink-rgb, var(--report-accent-rgb)))"
                   strokeWidth="0.8"
                 />
-                <circle cx="20" cy="20" r="5" fill="rgb(var(--report-accent-rgb))" />
+                <circle
+                  cx="20"
+                  cy="20"
+                  r="5"
+                  fill="rgb(var(--report-accent-ink-rgb, var(--report-accent-rgb)))"
+                />
               </svg>
             </div>
             <div className="report-hero-card__motivation-copy">

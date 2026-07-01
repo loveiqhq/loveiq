@@ -13,7 +13,7 @@ describe("report theme css contract", () => {
 
   it("themes the core archetype badge with the active archetype accent", () => {
     expect(globalsCss).toMatch(
-      /\.report-hero-card__badge\s*\{[\s\S]*?border:\s*1px solid rgb\(var\(--report-accent-rgb\) \/ 0\.28\);[\s\S]*?background:\s*rgb\(var\(--report-accent-rgb\) \/ 0\.12\);[\s\S]*?color:\s*rgb\(var\(--report-accent-rgb\)\);/
+      /\.report-hero-card__badge\s*\{[\s\S]*?border:\s*1px solid rgb\(var\(--report-accent-rgb\) \/ 0\.28\);[\s\S]*?background:\s*rgb\(var\(--report-accent-rgb\) \/ 0\.12\);[\s\S]*?color:\s*rgb\(var\(--report-accent(?:-ink)?-rgb[^;]*\);/
     );
   });
 
@@ -22,7 +22,7 @@ describe("report theme css contract", () => {
       /\.report-stage-highlight\s*\{[\s\S]*?border:\s*1px solid rgb\(var\(--report-accent-rgb\) \/ 0\.45\);/
     );
     expect(globalsCss).toMatch(
-      /\.report-stage-highlight__label\s*\{[\s\S]*?color:\s*rgb\(var\(--report-accent-rgb\)\);/
+      /\.report-stage-highlight__label\s*\{[\s\S]*?color:\s*rgb\(var\(--report-accent(?:-ink)?-rgb[^;]*\);/
     );
   });
 

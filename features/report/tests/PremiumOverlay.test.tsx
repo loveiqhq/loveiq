@@ -64,7 +64,7 @@ describe("PremiumOverlay", () => {
     expect(screen.getByRole("button", { name: /unlock your report/i })).toBeInTheDocument();
   });
 
-  it("renders live price, strike, save and discount badge from the quote", () => {
+  it("renders the inline price and merges the save into the green discount pill", () => {
     render(
       <PremiumOverlay
         archetype="Spark Seeker"
@@ -75,11 +75,13 @@ describe("PremiumOverlay", () => {
       />
     );
 
+    // Inline "MM:SS → €price" row shows the live price; strike sits under "Otherwise".
     expect(screen.getByText("€14.99")).toBeInTheDocument();
     expect(screen.getByText("€49.99")).toBeInTheDocument();
-    expect(screen.getByText(/You save €35\.00/)).toBeInTheDocument();
-    // 70% off ((4999-1499)/4999 ≈ 70%), shown in the urgency pill.
-    expect(screen.getByText(/70% OFF · Expires soon/i)).toBeInTheDocument();
+    expect(screen.getByText("Otherwise")).toBeInTheDocument();
+    // 70% off ((4999-1499)/4999 ≈ 70%); the "You save" row is merged into the pill.
+    expect(screen.getByText(/70% OFF · SAVE €35\.00/i)).toBeInTheDocument();
+    expect(screen.queryByText(/You save/i)).not.toBeInTheDocument();
   });
 
   it("hides the price block when no quote is available but still shows the countdown + CTA", () => {
@@ -95,9 +97,10 @@ describe("PremiumOverlay", () => {
 
     expect(screen.queryByText(/€/)).not.toBeInTheDocument();
     expect(screen.queryByText(/% OFF/i)).not.toBeInTheDocument();
+    expect(screen.queryByText("Otherwise")).not.toBeInTheDocument();
     // Countdown still runs (pure urgency), and the CTA is always present.
     expect(screen.getByRole("timer")).toBeInTheDocument();
-    expect(screen.getByText(/Expires soon/i)).toBeInTheDocument();
+    expect(screen.getByText("Time left to secure this price")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /unlock your report/i })).toBeInTheDocument();
   });
 
@@ -126,7 +129,7 @@ describe("PremiumOverlay", () => {
     expect(digits.join(":")).not.toBe("00:00");
   });
 
-  it("drops the “Expires soon” suffix once the countdown has elapsed", () => {
+  it("keeps the discount pill and shows 00:00 once the countdown has elapsed", () => {
     render(
       <PremiumOverlay
         archetype="Spark Seeker"
@@ -137,9 +140,8 @@ describe("PremiumOverlay", () => {
       />
     );
 
-    // Badge stays (the discount is still valid) but the urgency suffix is gone.
-    expect(screen.getByText("70% OFF")).toBeInTheDocument();
-    expect(screen.queryByText(/Expires soon/i)).not.toBeInTheDocument();
+    // Pill stays (the discount is still valid); only the timer reads 00:00.
+    expect(screen.getByText(/70% OFF · SAVE €35\.00/i)).toBeInTheDocument();
     expect(screen.getByRole("timer")).toHaveAttribute("aria-label", "Offer expires in 00:00");
   });
 

@@ -62,12 +62,7 @@ const ArcGauge: FC<Props> = ({ animate = false, tone = "accent", max, value }) =
           </filter>
         </defs>
       )}
-      <path
-        d={FULL_ARC}
-        stroke="rgba(255, 255, 255, 0.09)"
-        strokeWidth="12"
-        strokeLinecap="round"
-      />
+      <path d={FULL_ARC} stroke="rgba(22, 16, 33, 0.09)" strokeWidth="12" strokeLinecap="round" />
       {ratio > 0 && tone === "shared" && (
         <path
           d={FULL_ARC}
