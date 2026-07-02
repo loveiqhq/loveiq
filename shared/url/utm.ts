@@ -60,3 +60,31 @@ export function getStoredUtm(): string | null {
     return null;
   }
 }
+
+/**
+ * Normalize a raw utm_source into a single canonical channel label.
+ *
+ * Both writers of `funnel_event.utm_source` — the server visit path (proxy.ts →
+ * recordUniqueVisit) and the client survey-start path (SurveyEngine → funnel-event
+ * route) — call this so a given source string normalizes to the same canonical
+ * label on both rows. NOTE: it only unifies FORMAT, not provenance — the visitor
+ * row is last-touch (live URL on the daily visit) while the survey row is
+ * first-touch (sticky localStorage), so per-channel start-rate is DIRECTIONAL,
+ * not an exact numerator/denominator match for returning/multi-day visitors.
+ * Also strips to a safe charset at the trust boundary (the raw value is
+ * attacker-controllable via the URL), caps length, and lowercases.
+ *
+ * @returns the cleaned source, or `undefined` when there's nothing usable.
+ */
+export function sanitizeUtmSource(raw: string | null | undefined): string | undefined {
+  if (!raw) return undefined;
+  // trim BEFORE slice so leading/trailing whitespace doesn't eat into the
+  // 64-char budget (and can't clip the real token). charset-strip runs first so
+  // control chars / CRLF are gone before anything else.
+  const cleaned = raw
+    .replace(/[^\w.\- ]/g, "")
+    .trim()
+    .slice(0, 64)
+    .toLowerCase();
+  return cleaned || undefined;
+}

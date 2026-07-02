@@ -39,6 +39,11 @@ const READY_QUOTE = {
   viewCount: 1,
 } as const;
 
+// Mirror of CHECKOUT_SENT_KEY in CheckoutPage.tsx — the per-tab "already handed
+// off to Stripe" marker that suppresses the one-tap auto-forward on a
+// back-navigation return.
+const CHECKOUT_SENT_KEY = "liq_checkout_sent";
+
 function createJsonResponse(body: unknown, ok = true) {
   return {
     ok,
@@ -66,6 +71,13 @@ describe("CheckoutPage", () => {
   beforeEach(() => {
     originalFetch = globalThis.fetch;
     document.cookie = "__csrf=test-csrf-token; path=/";
+    // The one-tap auto-forward keys off a per-tab sessionStorage marker; clear it
+    // so tests don't leak the "already sent" state into one another.
+    try {
+      sessionStorage.clear();
+    } catch {
+      /* jsdom always has sessionStorage; guard is belt-and-suspenders */
+    }
     mockGetReportSessionId.mockReset();
     mockGetReportPricingSessionId.mockReset();
     mockCacheReportCheckoutQuote.mockReset();
@@ -82,7 +94,7 @@ describe("CheckoutPage", () => {
     cleanup();
   });
 
-  it("renders the review step and only requests Stripe checkout after clicking continue", async () => {
+  it("auto-forwards to Stripe once the fetched quote is ready (one tap)", async () => {
     const mockFetch = vi.fn(async (input: string | URL | Request) => {
       const url =
         typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
@@ -106,21 +118,18 @@ describe("CheckoutPage", () => {
       "href",
       "/report"
     );
-    expect(screen.getByText(/stripe-hosted checkout/i)).toBeInTheDocument();
-    expect(screen.getByText(/promo codes are entered directly on stripe/i)).toBeInTheDocument();
+
+    // Quote is fetched…
     await waitFor(() =>
       expect(mockFetch).toHaveBeenCalledWith(
         "/api/price?plan=full_report&reportSessionId=02d88f31-eceb-4402-940d-c8cd98d01848&pricingSessionId=pricing-session-123",
         expect.objectContaining({
-          headers: expect.objectContaining({
-            "x-csrf-token": "test-csrf-token",
-          }),
+          headers: expect.objectContaining({ "x-csrf-token": "test-csrf-token" }),
         })
       )
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: /continue to secure checkout/i }));
-
+    // …then checkout is requested and the redirect happens WITHOUT a manual click.
     await waitFor(() =>
       expect(mockFetch).toHaveBeenCalledWith(
         "/api/stripe/checkout-session",
@@ -143,6 +152,12 @@ describe("CheckoutPage", () => {
 
     await waitFor(() =>
       expect(mockedAssign).toHaveBeenCalledWith("https://checkout.stripe.com/c/pay/cs_test_123")
+    );
+
+    // The hand-off marker is set to THIS checkout's identity so a back-navigation
+    // return won't re-trap (but a different plan/report isn't suppressed).
+    expect(sessionStorage.getItem(CHECKOUT_SENT_KEY)).toBe(
+      "full_report:02d88f31-eceb-4402-940d-c8cd98d01848"
     );
   });
 
@@ -171,8 +186,6 @@ describe("CheckoutPage", () => {
       "/report/rpt_ABCDEFGHIJKLMNOPQRST"
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: /continue to secure checkout/i }));
-
     await waitFor(() =>
       expect(mockFetch).toHaveBeenCalledWith(
         "/api/stripe/checkout-session",
@@ -189,11 +202,12 @@ describe("CheckoutPage", () => {
     );
   });
 
-  it("renders a cached quote immediately and can continue before the refresh completes", async () => {
+  it("auto-forwards immediately from a cached quote (no price refresh needed)", async () => {
     const mockFetch = vi.fn(async (input: string | URL | Request) => {
       const url =
         typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
       if (url.startsWith("/api/price?")) {
+        // Never resolves — the cached quote should drive the auto-forward.
         return new Promise<Response>(() => {});
       }
 
@@ -209,11 +223,7 @@ describe("CheckoutPage", () => {
 
     render(<CheckoutPage planId="full_report" />);
 
-    expect(screen.getAllByText("€27.49")).toHaveLength(2);
-    expect(screen.queryByText(/preparing quote/i)).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /continue to secure checkout/i })).toBeEnabled();
-
-    fireEvent.click(screen.getByRole("button", { name: /continue to secure checkout/i }));
+    expect(screen.getAllByText("€27.49").length).toBeGreaterThan(0);
 
     await waitFor(() =>
       expect(mockFetch).toHaveBeenCalledWith(
@@ -229,6 +239,64 @@ describe("CheckoutPage", () => {
           method: "POST",
         })
       )
+    );
+    await waitFor(() =>
+      expect(mockedAssign).toHaveBeenCalledWith("https://checkout.stripe.com/c/pay/cs_test_cached")
+    );
+  });
+
+  it("does NOT auto-forward on a back-navigation return, then forwards on a deliberate retry", async () => {
+    // Simulate: the user already went to Stripe for THIS checkout (marker = its
+    // identity) and hit browser-back. The page must NOT bounce them straight back
+    // — even after the /api/price refetch RESOLVES and re-renders (the exact race
+    // that defeated the first consume-once guard). It shows the manual button and
+    // only forwards on an explicit click. The marker is write-only (persists), so
+    // a subsequent reload also stays on the review page.
+    sessionStorage.setItem(CHECKOUT_SENT_KEY, "full_report:02d88f31-eceb-4402-940d-c8cd98d01848");
+
+    const mockFetch = vi.fn(async (input: string | URL | Request) => {
+      const url =
+        typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      if (url.startsWith("/api/price?")) {
+        // Resolves (triggers a re-render) — the regression condition.
+        return createJsonResponse({ quote: READY_QUOTE });
+      }
+      return createJsonResponse({
+        enabled: true,
+        url: "https://checkout.stripe.com/c/pay/cs_test_retry",
+      });
+    });
+    globalThis.fetch = mockFetch;
+    mockGetReportSessionId.mockReturnValue("02d88f31-eceb-4402-940d-c8cd98d01848");
+    mockGetReportPricingSessionId.mockReturnValue("pricing-session-123");
+    mockGetCachedReportCheckoutQuote.mockReturnValue(READY_QUOTE);
+
+    render(<CheckoutPage planId="full_report" />);
+
+    // Wait for the price refetch to resolve + re-render, THEN confirm the manual
+    // button is still shown (i.e. auto-forward did not fire on the re-render).
+    await waitFor(() =>
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining("/api/price?"),
+        expect.anything()
+      )
+    );
+    const continueBtn = await screen.findByRole("button", {
+      name: /continue to secure checkout/i,
+    });
+    expect(continueBtn).toBeEnabled();
+    expect(mockFetch).not.toHaveBeenCalledWith("/api/stripe/checkout-session", expect.anything());
+    expect(mockedAssign).not.toHaveBeenCalled();
+    // Marker is write-only (persists), so back + reload both keep the manual
+    // button; the deliberate click below re-sends and works regardless.
+    expect(sessionStorage.getItem(CHECKOUT_SENT_KEY)).toBe(
+      "full_report:02d88f31-eceb-4402-940d-c8cd98d01848"
+    );
+
+    // A deliberate click forwards as normal.
+    fireEvent.click(continueBtn);
+    await waitFor(() =>
+      expect(mockedAssign).toHaveBeenCalledWith("https://checkout.stripe.com/c/pay/cs_test_retry")
     );
   });
 
@@ -269,8 +337,8 @@ describe("CheckoutPage", () => {
 
     render(<CheckoutPage planId="essentials" />);
 
-    fireEvent.click(await screen.findByRole("button", { name: /continue to secure checkout/i }));
-
+    // Auto-forward attempts checkout; the disabled response surfaces the fallback
+    // without any manual click.
     expect(
       (await screen.findAllByText(/payments are not enabled in this environment yet/i)).length
     ).toBeGreaterThan(0);

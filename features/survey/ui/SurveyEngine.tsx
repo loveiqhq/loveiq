@@ -45,6 +45,7 @@ import { clearPersistedSurveyState } from "./hooks/surveyStorage";
 import { copySurveySessionToReportSession } from "./hooks/surveySession";
 import { getCsrfToken } from "@shared/http/csrf-client";
 import { readCookie } from "@shared/observability/cookie";
+import { getStoredUtm, sanitizeUtmSource } from "@shared/url/utm";
 import SurveyConfirmation from "./SurveyConfirmation";
 import PreReportWizard from "./PreReportWizard";
 import ProcessingSequence from "./ProcessingSequence";
@@ -166,6 +167,24 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
       // same day is a no-op server-side.
       const visitorId = readCookie("__Host-liq_vid") || readCookie("__liq_vid");
       if (visitorId) {
+        // First-touch acquisition source, so start-rate can be split by channel
+        // (the visitor denominator carries it too — see proxy.ts/recordVisit.ts).
+        // Best-effort: empty/unparseable stored UTM just sends no source.
+        let utmSource: string | undefined;
+        try {
+          const rawUtm = getStoredUtm();
+          if (rawUtm) {
+            const parsed = JSON.parse(rawUtm) as { utm_source?: unknown };
+            if (typeof parsed.utm_source === "string") {
+              // Same normalizer as proxy.ts so both rows share one label format
+              // (this is first-touch localStorage; the visitor row is last-touch
+              // URL — per-channel start-rate is directional, not exact).
+              utmSource = sanitizeUtmSource(parsed.utm_source);
+            }
+          }
+        } catch {
+          /* no usable stored UTM */
+        }
         fetch("/api/funnel-event", {
           method: "POST",
           headers: {
@@ -175,6 +194,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
           body: JSON.stringify({
             event: "survey_engine_mount",
             visitor_id: visitorId,
+            ...(utmSource ? { utm_source: utmSource } : {}),
           }),
           keepalive: true,
         }).catch(() => {

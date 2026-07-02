@@ -4909,6 +4909,9 @@ input.autofill-dark:-internal-autofill-previewed {
   justify-content: space-between;
   gap: 16px;
   padding: 14px 24px;
+  /* Clear Android nav/gesture bars so the checkout CTA is never occluded.
+     No-op where safe-area-inset-bottom is 0 (desktop / most iOS). */
+  padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
 }
 .report-pricing-modal--white .rpm-sticky__copy {
   display: flex;
@@ -4941,6 +4944,7 @@ input.autofill-dark:-internal-autofill-previewed {
     align-items: stretch;
     gap: 10px;
     padding: 12px 16px;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
   }
   .report-pricing-modal--white .rpm-sticky__copy {
     justify-content: center;

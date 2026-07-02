@@ -77,3 +77,7 @@ __pycache__/
 sbom.json
 
 .vercel
+
+# Local-only strategy / audit deliverables (contain revenue, funnel counts, and
+# the prod DB id — kept on the strategy lead's machine, never committed)
+strategy/
