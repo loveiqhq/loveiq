@@ -5307,6 +5307,8 @@ input.autofill-dark:-internal-autofill-previewed {
   transition:
     transform 180ms ease,
     border-color 180ms ease,
+    color 180ms ease,
+    box-shadow 180ms ease,
     background 180ms ease;
 }
 
@@ -5316,14 +5318,30 @@ input.autofill-dark:-internal-autofill-previewed {
   transform: translateY(-1px);
 }
 
+/* Disabled tiers (the owned pill, or a tier whose live price failed to load)
+   must not present a hover affordance — no lift, no shadow — so a non-clickable
+   button never reads as clickable. */
+.report-pricing-card__cta:disabled:hover,
+.report-pricing-card__cta[aria-disabled="true"]:hover {
+  transform: none;
+  box-shadow: none;
+}
+
 .report-pricing-card__cta--primary {
   border-color: transparent;
   background: linear-gradient(180deg, #ff7a50 0%, #ff6a3d 100%);
+  color: #fff;
   box-shadow: 0 10px 24px rgba(255, 106, 61, 0.2);
 }
 
+/* Invert on hover: white fill + dark text. The subtle border keeps the now-white
+   button legible on the white modal; the translateY lift comes from the base
+   :hover rule above. */
 .report-pricing-card__cta--primary:hover {
-  background: linear-gradient(180deg, #ff845e 0%, #ff6a3d 100%);
+  background: #fff;
+  color: #161021;
+  border-color: rgba(22, 16, 33, 0.12);
+  box-shadow: 0 10px 24px rgba(22, 16, 33, 0.08);
 }
 
 /* Owned tier — replaces the buy CTA with a quiet "Your current plan" pill.
@@ -5413,6 +5431,75 @@ input.autofill-dark:-internal-autofill-previewed {
   justify-content: center;
   margin-top: 1.75rem;
   color: rgba(255, 255, 255, 0.82);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   3-tier ReportPricingModal — WHITE skin.
+   Reuses the shared `.report-pricing-modal--white` shell (white dialog + light
+   backdrop / close / scrollbar — the exact rules ScrollPricingModal uses). The
+   3-tier CARDS were already light-designed (#f5f6f8 bg, #161021 ink), so on a
+   white dialog their translucent highlight/essentials tints composite over
+   WHITE instead of the old dark bg — which is what fixes the "invisible €9.99"
+   (previously dark-on-dark). So these rules only need to (a) recolor the
+   remaining dark-theme text (header/copy/eyebrow/payments + the two too-light
+   card titles), and (b) restore the 3-tier content geometry that the shell's
+   rpm-tuned `padding:0` removed. Layout rules are scoped with `[data-variant]`
+   (only the 3-tier modal sets it) so ScrollPricingModal stays untouched. */
+
+/* (b) geometry — the shell zeroes __inner padding for the single-card rpm
+   content; restore the 3-tier's own centered inner box + responsive padding. */
+.report-pricing-modal--white[data-variant] .report-pricing-modal__inner {
+  width: 100%;
+  max-width: 64rem;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+}
+@media (max-width: 959px) {
+  .report-pricing-modal--white[data-variant] .report-pricing-modal__inner {
+    padding: 0 1rem 3rem;
+  }
+}
+
+/* (a) header text → dark ink on white; accent → the same brand gradient the
+   white ScrollPricingModal uses (orange → violet → blue). */
+.report-pricing-modal--white .report-pricing-modal__title,
+.report-pricing-modal--white .report-pricing-modal__title-tail {
+  color: #161021;
+}
+.report-pricing-modal--white .report-pricing-modal__title-accent {
+  background-image: linear-gradient(120deg, #ff6a3a 0%, #cf5afb 52%, #7d88ff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.report-pricing-modal--white .report-pricing-modal__copy {
+  color: #6b6678;
+}
+.report-pricing-modal--white .report-pricing-modal__eyebrow {
+  border-color: rgba(124, 58, 237, 0.25);
+  background: rgba(124, 58, 237, 0.08);
+  color: #7c3aed;
+}
+.report-pricing-modal--white .report-pricing-modal__payments {
+  color: #6b6678;
+}
+
+/* The two accent card titles were tuned light for the dark modal; darken them
+   so they read on the pale (over-white) highlight / essentials cards. */
+.report-pricing-modal--white .report-pricing-card--highlight .report-pricing-card__title {
+  color: #5457d9;
+}
+.report-pricing-modal--white .report-pricing-card--essentials .report-pricing-card__title {
+  color: #9333ea;
+}
+
+/* Offer-mode "EXTRA N% OFF" pill was dark-green (built for the dark modal); it's
+   the one element left in the old palette. Lighten to the success-green used by
+   the checks/badges so it reads on white (AA: #0f6b45 on #e7f8ef ≈ 5.9:1). */
+.report-pricing-modal--white .report-pricing-card__extra-pill {
+  border-color: rgba(0, 201, 80, 0.3);
+  background: #e7f8ef;
+  color: #0f6b45;
 }
 
 .report-pricing-modal__payment-method {

@@ -7,16 +7,15 @@ import {
   useState,
   type CSSProperties,
   type FC,
-  type PointerEvent as ReactPointerEvent,
   type TouchEvent as ReactTouchEvent,
 } from "react";
 import { createPortal } from "react-dom";
-import Image from "next/image";
 import {
   PaywallCountdownPill,
   PaywallCountdownTiles,
   usePaywallCountdownValue,
 } from "./PaywallCountdown";
+import PaywallTestimonials from "./PaywallTestimonials";
 import { REPORT_PAYWALL_COUNTDOWN_MS } from "@features/survey/ui/hooks/surveySession";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import {
@@ -29,7 +28,6 @@ import {
   trackPriceShown,
   trackScrollPaywallDismissed,
   trackScrollPaywallShown,
-  trackTestimonialInteraction,
   type PaywallDismissSource,
 } from "@features/analytics/client";
 
@@ -123,18 +121,6 @@ function LockGlyph({ size = 12 }: { size?: number }) {
   );
 }
 
-function StarRow() {
-  return (
-    <div style={{ display: "flex", gap: "3px" }} aria-hidden="true">
-      {[0, 1, 2, 3, 4].map((i) => (
-        <svg key={i} width="18" height="18" viewBox="0 0 20 20" fill="#fe6839">
-          <path d="M10 1.5l2.47 5.01 5.53.8-4 3.9.94 5.5L10 14.1l-4.94 2.6.94-5.5-4-3.9 5.53-.8L10 1.5Z" />
-        </svg>
-      ))}
-    </div>
-  );
-}
-
 // ─── Content data ─────────────────────────────────────────────────────────────
 
 // "Why unlock" cards (2×2). Each title = bold ink lead + italic gradient
@@ -201,52 +187,6 @@ const CHAPTER_CARDS = [
     why: "See how central sex is to your aliveness and well-being right now — and why “more” or “less” isn’t better, only mismatched.",
   },
 ] as const;
-
-const TESTIMONIALS = [
-  {
-    name: "Dorian",
-    age: 34,
-    role: "File manager",
-    avatarSrc: "/testimonials/dorian.jpg",
-    pre: "The ",
-    emph: "results are extensive and spot-on",
-    post: ", without the test being too long. I got to know myself better, and it will help my partner understand me better as well.",
-  },
-  {
-    name: "Philipp Leonhard",
-    age: 42,
-    role: "Product Owner IT",
-    avatarSrc: "/testimonials/philipp.jpg",
-    pre: "I’d never really explored my sexuality or the patterns behind it before. I already learned a lot just from taking the test, but ",
-    emph: "the insights in the full report were truly eye-opening.",
-    post: " Absolutely worth it.",
-  },
-  {
-    name: "Richard Petrich",
-    age: 34,
-    role: "Entrepreneur",
-    avatarSrc: "/testimonials/richard.jpg",
-    pre: "The results were ",
-    emph: "more insightful than I expected.",
-    post: " It connected dots between emotional triggers and communication styles I hadn’t noticed before. Solid UX, too.",
-  },
-  {
-    name: "Marija Mustapić",
-    age: 41,
-    role: "Marketing Lead",
-    avatarSrc: "/testimonials/marija.jpg",
-    pre: "Unlocking my report was ",
-    emph: "one of the best investments made for my sexuality.",
-    post: " It is shockingly precise.",
-  },
-] as const;
-
-// Overlapping rating-cluster avatars (curated, matched to real photos).
-const RATING_AVATARS = [
-  "/testimonials/rating-1.jpg",
-  "/testimonials/rating-2.jpg",
-  "/testimonials/rating-3.jpg",
-];
 
 const PAYMENT_METHODS = [
   { key: "apple-pay", label: "Apple Pay" },
@@ -514,152 +454,6 @@ const ScrollPricingModal: FC<Props> = ({
     track.scrollTo({ left: card.offsetLeft - 16, behavior: "smooth" });
     setWhyPage(page);
   };
-
-  // ── Testimonials carousel (continuous left auto-scroll; click to pause) ─────
-  const tmViewportRef = useRef<HTMLDivElement>(null);
-  const tmPausedRef = useRef(false);
-  const tmManualRef = useRef(false);
-  // Float source-of-truth for the auto-scroll position (see the auto-scroll
-  // effect) — kept separate from vp.scrollLeft, which rounds to an integer px.
-  const tmPosRef = useRef(0);
-  const [tmPaused, setTmPaused] = useState(false);
-
-  const toggleTmPause = useCallback(() => {
-    tmPausedRef.current = !tmPausedRef.current;
-    setTmPaused(tmPausedRef.current);
-    trackTestimonialInteraction(tmPausedRef.current ? "pause" : "resume");
-  }, []);
-
-  // Arrow nudge: jump one card and briefly suspend the auto-scroll so the
-  // smooth scroll isn't fought by the rAF loop, then auto-scroll resumes.
-  const nudgeTm = useCallback((dir: number) => {
-    const vp = tmViewportRef.current;
-    if (!vp) return;
-    const card = vp.querySelector<HTMLElement>(".rpm-tm-card");
-    const amount = card ? card.offsetWidth + 24 : 360;
-    tmManualRef.current = true;
-    vp.scrollBy({ left: dir * amount, behavior: "smooth" });
-    window.setTimeout(() => {
-      tmManualRef.current = false;
-    }, 520);
-    trackTestimonialInteraction(dir > 0 ? "next" : "prev");
-  }, []);
-
-  // Continuous leftward auto-scroll. The track renders the testimonials twice,
-  // so wrapping by one set width loops seamlessly.
-  useEffect(() => {
-    if (!open) return;
-    const vp = tmViewportRef.current;
-    if (!vp) return;
-    // Seed the float accumulator from the live offset so resuming is seamless.
-    tmPosRef.current = vp.scrollLeft;
-    let raf = 0;
-    let last = 0;
-    const tick = (ts: number) => {
-      raf = requestAnimationFrame(tick);
-      const dt = last ? ts - last : 0;
-      last = ts;
-      // While the user drives it (drag / arrow nudge / paused), keep the float
-      // in sync with the real offset and don't fight them.
-      if (tmPausedRef.current || tmManualRef.current) {
-        tmPosRef.current = vp.scrollLeft;
-        return;
-      }
-      const half = vp.scrollWidth / 2;
-      if (half <= 0) return;
-      // Advance a FLOAT accumulator instead of reading back vp.scrollLeft: the
-      // getter rounds to an integer CSS px, so reading it back drops the
-      // sub-pixel delta (~0.77px at 46px/s·60fps) EVERY frame — that lost
-      // fraction was the stutter. Writing the retained float lets the browser
-      // scroll at sub-pixel granularity. Modulo one-set width wraps seamlessly.
-      tmPosRef.current = (tmPosRef.current + (dt / 1000) * 46) % half;
-      vp.scrollLeft = tmPosRef.current;
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [open]);
-
-  // Mouse grab-to-pan (desktop). Touch/pen keep native momentum scrolling, so we
-  // only hijack the pointer for mice. A real drag suspends the auto-scroll and
-  // swallows the trailing click so it doesn't also toggle pause.
-  const tmDragRef = useRef({
-    active: false,
-    startX: 0,
-    startScroll: 0,
-    moved: false,
-    pointerId: 0,
-  });
-  const tmSuppressClickRef = useRef(false);
-
-  const onTmPointerDown = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
-    if (e.pointerType !== "mouse") return;
-    const vp = tmViewportRef.current;
-    if (!vp) return;
-    tmDragRef.current = {
-      active: true,
-      startX: e.clientX,
-      startScroll: vp.scrollLeft,
-      moved: false,
-      pointerId: e.pointerId,
-    };
-    tmManualRef.current = true;
-    try {
-      vp.setPointerCapture(e.pointerId);
-    } catch {
-      /* capture is best-effort */
-    }
-    vp.style.cursor = "grabbing";
-  }, []);
-
-  const onTmPointerMove = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
-    const drag = tmDragRef.current;
-    if (!drag.active) return;
-    const vp = tmViewportRef.current;
-    if (!vp) return;
-    const dx = e.clientX - drag.startX;
-    if (Math.abs(dx) > 4) drag.moved = true;
-    vp.scrollLeft = drag.startScroll - dx;
-  }, []);
-
-  const endTmDrag = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
-    const drag = tmDragRef.current;
-    if (!drag.active) return;
-    drag.active = false;
-    const vp = tmViewportRef.current;
-    if (vp) {
-      try {
-        vp.releasePointerCapture(e.pointerId);
-      } catch {
-        /* no-op */
-      }
-      vp.style.cursor = "";
-    }
-    if (drag.moved) {
-      tmSuppressClickRef.current = true;
-      trackTestimonialInteraction("drag");
-    }
-    window.setTimeout(() => {
-      tmManualRef.current = false;
-    }, 400);
-  }, []);
-
-  const onTmClick = useCallback(() => {
-    if (tmSuppressClickRef.current) {
-      tmSuppressClickRef.current = false;
-      return;
-    }
-    toggleTmPause();
-  }, [toggleTmPause]);
-
-  // Reset transient carousel interaction state when the modal closes, so a drag
-  // (or pause) left mid-gesture doesn't swallow the first click or freeze the
-  // auto-scroll on the next open.
-  useEffect(() => {
-    if (open) return;
-    tmSuppressClickRef.current = false;
-    tmManualRef.current = false;
-    tmDragRef.current.active = false;
-  }, [open]);
 
   // ── Chapter carousel ────────────────────────────────────────────────────────
   const chapterTrackRef = useRef<HTMLDivElement>(null);
@@ -1109,119 +903,7 @@ const ScrollPricingModal: FC<Props> = ({
                 </div>
               </section>
 
-              {/* ── Real people. Real insights. Real results. ────────────── */}
-              <section className="rpm-tm">
-                <h3 className="rpm-section-h">
-                  Real <em style={gradientTextStyle}>people</em>. Real{" "}
-                  <em style={gradientTextStyle}>insights</em>. Real{" "}
-                  <em style={gradientTextStyle}>results</em>.
-                </h3>
-
-                <div className="rpm-tm__rating">
-                  <div className="rpm-tm__avatars" aria-hidden="true">
-                    {RATING_AVATARS.map((src) => (
-                      <Image
-                        key={src}
-                        src={src}
-                        alt=""
-                        width={40}
-                        height={40}
-                        className="rpm-tm__avatar-img"
-                        sizes="40px"
-                      />
-                    ))}
-                  </div>
-                  <span className="rpm-tm__rating-text">4.9/5 Rating</span>
-                </div>
-
-                <div
-                  className="rpm-tm__viewport"
-                  ref={tmViewportRef}
-                  role="group"
-                  aria-label="Customer reviews"
-                  title={tmPaused ? "Click to resume" : "Drag to browse · click to pause"}
-                  onPointerDown={onTmPointerDown}
-                  onPointerMove={onTmPointerMove}
-                  onPointerUp={endTmDrag}
-                  onPointerLeave={endTmDrag}
-                  onPointerCancel={endTmDrag}
-                  onClick={onTmClick}
-                >
-                  <div className="rpm-tm__track" data-paused={tmPaused ? "true" : undefined}>
-                    {[...TESTIMONIALS, ...TESTIMONIALS].map((t, i) => (
-                      <figure
-                        key={`${t.name}-${i}`}
-                        className="rpm-tm-card"
-                        aria-hidden={i >= TESTIMONIALS.length ? true : undefined}
-                      >
-                        <div className="rpm-tm-card__person">
-                          <Image
-                            src={t.avatarSrc}
-                            alt={t.name}
-                            width={72}
-                            height={72}
-                            className="rpm-tm-card__photo"
-                            sizes="72px"
-                          />
-                          <figcaption className="rpm-tm-card__id">
-                            <span className="rpm-tm-card__name">
-                              {t.name}, {t.age}
-                            </span>
-                            <span className="rpm-tm-card__role">{t.role}</span>
-                            <StarRow />
-                          </figcaption>
-                        </div>
-                        <blockquote className="rpm-tm-card__quote">
-                          {t.pre}
-                          <em>{t.emph}</em>
-                          {t.post}
-                        </blockquote>
-                      </figure>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="rpm-tm__nav">
-                  <button
-                    type="button"
-                    aria-label="Previous reviews"
-                    className="rpm-cnav-btn"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      nudgeTm(-1);
-                    }}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                      <path
-                        d="M10 12 6 8l4-4"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  </button>
-                  <button
-                    type="button"
-                    aria-label="Next reviews"
-                    className="rpm-cnav-btn"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      nudgeTm(1);
-                    }}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                      <path
-                        d="M6 12l4-4-4-4"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  </button>
-                </div>
-              </section>
+              <PaywallTestimonials open={open} />
             </div>
           </div>
 

@@ -18,8 +18,8 @@ import {
 } from "@features/checkout/server/reportPurchase";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import TrustpilotReviews from "@shared/ui/trustpilot/TrustpilotReviews";
+import PaywallTestimonials from "./PaywallTestimonials";
 import { isTrustpilotEnabled } from "@shared/ui/trustpilot/config";
-import { getReportTheme, getReportThemeStyle } from "./reportTheme";
 import { isPlanOwnedForArchetype, type ReportAccessPlan } from "@features/report/server/access";
 import {
   trackBeginCheckout,
@@ -177,9 +177,6 @@ const ReportPricingModal: FC<Props> = ({
       : 0;
   const showExtraDiscountPill =
     isOffer && !!fullQuote && fullQuote.discountStep >= 2 && extraDiscountPct > 0;
-
-  const themeArchetype = targetArchetype ?? archetype;
-  const themeStyle = getReportThemeStyle(getReportTheme(themeArchetype));
 
   // Dismiss tracking — openedAtRef captures when the modal became visible;
   // dismissReasonRef is set by the 3 dismiss code paths (escape / backdrop /
@@ -379,12 +376,11 @@ const ReportPricingModal: FC<Props> = ({
 
   return (
     <div
-      className={`report-pricing-modal ${open ? "is-visible" : "is-hidden"}`}
+      className={`report-pricing-modal report-pricing-modal--white ${open ? "is-visible" : "is-hidden"}`}
       data-state={open ? "open" : "closed"}
       data-focus-mode={focusMode}
       data-variant={variant}
       aria-hidden={!open}
-      style={themeStyle}
     >
       <div
         className="report-pricing-modal__backdrop"
@@ -574,7 +570,12 @@ const ReportPricingModal: FC<Props> = ({
                         type="button"
                         className={[
                           "report-pricing-card__cta",
-                          card.tone === "highlight" ? "report-pricing-card__cta--primary" : "",
+                          // Every LIVE unlock CTA is the branded orange button; the
+                          // highlight tier is set apart by its card border + "Most
+                          // popular" badge, not a unique button colour. A disabled
+                          // (owned / pricing-unavailable) button skips the orange so
+                          // it doesn't read as clickable.
+                          !isOwned && pricing.available ? "report-pricing-card__cta--primary" : "",
                           isOwned ? "report-pricing-card__cta--owned" : "",
                         ]
                           .filter(Boolean)
@@ -667,6 +668,8 @@ const ReportPricingModal: FC<Props> = ({
                 <PricingMethodMark logo="visa" label="Visa" />
                 <PricingMethodMark logo="amex" label="American Express" />
               </div>
+
+              <PaywallTestimonials open={open} />
 
               {isTrustpilotEnabled() && <TrustpilotReviews variant="carousel" />}
             </div>
