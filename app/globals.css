@@ -5307,8 +5307,6 @@ input.autofill-dark:-internal-autofill-previewed {
   transition:
     transform 180ms ease,
     border-color 180ms ease,
-    color 180ms ease,
-    box-shadow 180ms ease,
     background 180ms ease;
 }
 
@@ -5329,19 +5327,20 @@ input.autofill-dark:-internal-autofill-previewed {
 
 .report-pricing-card__cta--primary {
   border-color: transparent;
-  background: linear-gradient(180deg, #ff7a50 0%, #ff6a3d 100%);
+  /* Solid brand orange (matches .rpm-cta--pay). The hover invert is driven by the
+     shared .rpm-cta wash/reveal overlay (stacked in the markup), not a background
+     transition — so this stays a solid colour the white wash reveals over. */
+  background: #fe6839;
   color: #fff;
   box-shadow: 0 10px 24px rgba(255, 106, 61, 0.2);
 }
 
-/* Invert on hover: white fill + dark text. The subtle border keeps the now-white
-   button legible on the white modal; the translateY lift comes from the base
-   :hover rule above. */
-.report-pricing-card__cta--primary:hover {
-  background: #fff;
-  color: #161021;
-  border-color: rgba(22, 16, 33, 0.12);
-  box-shadow: 0 10px 24px rgba(22, 16, 33, 0.08);
+/* When the shared .rpm-cta wash-reveal drives the hover, keep the button's own
+   fill orange (the white wash overlay handles the reveal) instead of the base
+   :hover's grey repaint, so the orange→white reveal reads cleanly. */
+.report-pricing-card__cta.rpm-cta:hover {
+  background: #fe6839;
+  border-color: transparent;
 }
 
 /* Owned tier — replaces the buy CTA with a quiet "Your current plan" pill.

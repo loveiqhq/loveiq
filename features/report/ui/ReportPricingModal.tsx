@@ -570,12 +570,16 @@ const ReportPricingModal: FC<Props> = ({
                         type="button"
                         className={[
                           "report-pricing-card__cta",
-                          // Every LIVE unlock CTA is the branded orange button; the
-                          // highlight tier is set apart by its card border + "Most
-                          // popular" badge, not a unique button colour. A disabled
-                          // (owned / pricing-unavailable) button skips the orange so
-                          // it doesn't read as clickable.
-                          !isOwned && pricing.available ? "report-pricing-card__cta--primary" : "",
+                          // Every LIVE unlock CTA is the branded orange button and
+                          // stacks the shared .rpm-cta wash-reveal (orange → white
+                          // with dark text on hover, same as the sticky "Unlock full
+                          // report" CTA). The highlight tier is set apart by its card
+                          // border + "Most popular" badge, not a unique button colour.
+                          // A disabled (owned / pricing-unavailable) button skips the
+                          // orange + animation so it doesn't read as clickable.
+                          !isOwned && pricing.available
+                            ? "report-pricing-card__cta--primary rpm-cta"
+                            : "",
                           isOwned ? "report-pricing-card__cta--owned" : "",
                         ]
                           .filter(Boolean)
@@ -611,11 +615,17 @@ const ReportPricingModal: FC<Props> = ({
                               }
                         }
                       >
-                        {isOwned
-                          ? "Your current plan"
-                          : pricing.available
-                            ? card.ctaLabel
-                            : "Pricing unavailable"}
+                        {isOwned ? (
+                          "Your current plan"
+                        ) : !pricing.available ? (
+                          "Pricing unavailable"
+                        ) : (
+                          <>
+                            <span className="rpm-cta__wash" aria-hidden="true" />
+                            <span className="rpm-cta__reveal" aria-hidden="true" />
+                            <span className="rpm-cta__label">{card.ctaLabel}</span>
+                          </>
+                        )}
                       </button>
 
                       <ul className="report-pricing-card__features">
