@@ -519,6 +519,9 @@ const ScrollPricingModal: FC<Props> = ({
   const tmViewportRef = useRef<HTMLDivElement>(null);
   const tmPausedRef = useRef(false);
   const tmManualRef = useRef(false);
+  // Float source-of-truth for the auto-scroll position (see the auto-scroll
+  // effect) — kept separate from vp.scrollLeft, which rounds to an integer px.
+  const tmPosRef = useRef(0);
   const [tmPaused, setTmPaused] = useState(false);
 
   const toggleTmPause = useCallback(() => {
@@ -543,24 +546,34 @@ const ScrollPricingModal: FC<Props> = ({
   }, []);
 
   // Continuous leftward auto-scroll. The track renders the testimonials twice,
-  // so wrapping by one set width loops seamlessly. Reduced-motion users get a
-  // static, arrow/scroll-navigable row (no rAF).
+  // so wrapping by one set width loops seamlessly.
   useEffect(() => {
     if (!open) return;
     const vp = tmViewportRef.current;
     if (!vp) return;
+    // Seed the float accumulator from the live offset so resuming is seamless.
+    tmPosRef.current = vp.scrollLeft;
     let raf = 0;
     let last = 0;
     const tick = (ts: number) => {
       raf = requestAnimationFrame(tick);
       const dt = last ? ts - last : 0;
       last = ts;
-      if (tmPausedRef.current || tmManualRef.current) return;
+      // While the user drives it (drag / arrow nudge / paused), keep the float
+      // in sync with the real offset and don't fight them.
+      if (tmPausedRef.current || tmManualRef.current) {
+        tmPosRef.current = vp.scrollLeft;
+        return;
+      }
       const half = vp.scrollWidth / 2;
       if (half <= 0) return;
-      // Modulo (not a single subtraction) so a manual nudge that pushed
-      // scrollLeft well past one set still wraps cleanly.
-      vp.scrollLeft = (vp.scrollLeft + (dt / 1000) * 46) % half;
+      // Advance a FLOAT accumulator instead of reading back vp.scrollLeft: the
+      // getter rounds to an integer CSS px, so reading it back drops the
+      // sub-pixel delta (~0.77px at 46px/s·60fps) EVERY frame — that lost
+      // fraction was the stutter. Writing the retained float lets the browser
+      // scroll at sub-pixel granularity. Modulo one-set width wraps seamlessly.
+      tmPosRef.current = (tmPosRef.current + (dt / 1000) * 46) % half;
+      vp.scrollLeft = tmPosRef.current;
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
