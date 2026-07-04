@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import LegalNavSection from "@features/legal/ui/LegalNavSection";
-import FooterSection from "@features/landing/ui/FooterSection";
+import WNavSection from "@features/landing/ui/white/WNavSection";
+import WFooterSection from "@features/landing/ui/white/WFooterSection";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.loveiq.org";
 
@@ -16,15 +16,16 @@ export const metadata: Metadata = {
 export default function TermsOfUsePage() {
   return (
     <>
-      <LegalNavSection />
-      <main className="min-h-screen px-4 py-20" style={{ backgroundColor: "#09050F" }}>
+      <style>{"html,body{background:#ffffff;}"}</style>
+      <WNavSection />
+      <main className="min-h-screen bg-white px-4 pt-32 pb-20 sm:pt-40">
         <article className="mx-auto max-w-3xl">
-          <h1 className="font-serif font-light text-white mb-10" style={{ fontSize: "36px" }}>
+          <h1 className="font-serif font-light text-[#161021] mb-10" style={{ fontSize: "36px" }}>
             Terms of Use
           </h1>
 
           <div
-            className="font-sans space-y-8 text-gray-300 leading-relaxed"
+            className="font-sans space-y-8 text-gray-600 leading-relaxed"
             style={{ fontSize: "18px" }}
           >
             {/* Intro */}
@@ -48,7 +49,7 @@ export default function TermsOfUsePage() {
                 Email:{" "}
                 <a
                   href="mailto:hello@loveiq.org"
-                  className="text-gray-300 hover:text-white transition-colors"
+                  className="text-[#C2410C] hover:text-[#fe6839] transition-colors"
                 >
                   hello@loveiq.org
                 </a>
@@ -59,7 +60,7 @@ export default function TermsOfUsePage() {
 
             {/* Section 1 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">1. Purpose of LoveIQ</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">1. Purpose of LoveIQ</h2>
               <p className="mb-4">LoveIQ provides digital tools for:</p>
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>psychometric self-exploration</li>
@@ -71,7 +72,7 @@ export default function TermsOfUsePage() {
 
             {/* Section 2 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">2. Eligibility</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">2. Eligibility</h2>
               <p className="mb-4">You may use LoveIQ only if:</p>
               <ul className="list-disc list-inside space-y-1">
                 <li>you are at least 18 years old</li>
@@ -82,7 +83,7 @@ export default function TermsOfUsePage() {
 
             {/* Section 3 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">3. User Account</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">3. User Account</h2>
               <p className="mb-4">You are responsible for:</p>
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>maintaining the confidentiality of your login</li>
@@ -94,7 +95,7 @@ export default function TermsOfUsePage() {
 
             {/* Section 4 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">4. Acceptable Use</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">4. Acceptable Use</h2>
               <p className="mb-4">You agree to use LoveIQ only for:</p>
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>personal</li>
@@ -114,7 +115,7 @@ export default function TermsOfUsePage() {
 
             {/* Section 5 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">5. Data Integrity</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">5. Data Integrity</h2>
               <p className="mb-4">You must not:</p>
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>provide false, misleading, or manipulative answers</li>
@@ -125,7 +126,7 @@ export default function TermsOfUsePage() {
 
             {/* Section 6 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">6. Reliance on Results</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">6. Reliance on Results</h2>
               <p className="mb-4">LoveIQ results are:</p>
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>informational</li>
@@ -142,7 +143,7 @@ export default function TermsOfUsePage() {
 
             {/* Section 7 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">7. Content Standards</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">7. Content Standards</h2>
               <p className="mb-4">You must not upload or submit:</p>
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>illegal content</li>
@@ -154,7 +155,7 @@ export default function TermsOfUsePage() {
 
             {/* Section 8 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">8. Monitoring and Enforcement</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">8. Monitoring and Enforcement</h2>
               <p className="mb-4">We may:</p>
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>monitor usage</li>
@@ -169,7 +170,7 @@ export default function TermsOfUsePage() {
 
             {/* Section 9 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">9. Platform Changes</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">9. Platform Changes</h2>
               <p className="mb-4">We may modify:</p>
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>features</li>
@@ -182,7 +183,7 @@ export default function TermsOfUsePage() {
 
             {/* Section 10 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">10. Termination</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">10. Termination</h2>
               <p className="mb-4">We may suspend or terminate your access if you:</p>
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>violate these Terms</li>
@@ -194,7 +195,7 @@ export default function TermsOfUsePage() {
 
             {/* Section 11 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">11. Liability</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">11. Liability</h2>
               <p className="mb-4">We are not responsible for:</p>
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>decisions you make based on LoveIQ outputs</li>
@@ -206,13 +207,13 @@ export default function TermsOfUsePage() {
 
             {/* Section 12 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">12. Governing Law</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">12. Governing Law</h2>
               <p>These Terms are governed by the laws of the Federal Republic of Germany.</p>
             </section>
           </div>
         </article>
       </main>
-      <FooterSection />
+      <WFooterSection />
     </>
   );
 }

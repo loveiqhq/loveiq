@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import LegalNavSection from "@features/legal/ui/LegalNavSection";
-import FooterSection from "@features/landing/ui/FooterSection";
+import WNavSection from "@features/landing/ui/white/WNavSection";
+import WFooterSection from "@features/landing/ui/white/WFooterSection";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.loveiq.org";
 
@@ -16,20 +16,21 @@ export const metadata: Metadata = {
 export default function PrivacyPolicyPage() {
   return (
     <>
-      <LegalNavSection />
-      <main className="min-h-screen px-4 py-20" style={{ backgroundColor: "#09050F" }}>
+      <style>{"html,body{background:#ffffff;}"}</style>
+      <WNavSection />
+      <main className="min-h-screen bg-white px-4 pt-32 pb-20 sm:pt-40">
         <article className="mx-auto max-w-3xl">
-          <h1 className="font-serif font-light text-white mb-10" style={{ fontSize: "36px" }}>
+          <h1 className="font-serif font-light text-[#161021] mb-10" style={{ fontSize: "36px" }}>
             Privacy Policy
           </h1>
 
           <div
-            className="font-sans space-y-8 text-gray-300 leading-relaxed"
+            className="font-sans space-y-8 text-gray-600 leading-relaxed"
             style={{ fontSize: "18px" }}
           >
             {/* Section 1 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">1. Controller</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">1. Controller</h2>
               <p className="mb-4">
                 Applied Psychometrics UG (in formation) (haftungsbeschraenkt)
                 <br />
@@ -45,7 +46,7 @@ export default function PrivacyPolicyPage() {
                 Email:{" "}
                 <a
                   href="mailto:hello@loveiq.org"
-                  className="text-gray-300 hover:text-white transition-colors"
+                  className="text-[#C2410C] hover:text-[#fe6839] transition-colors"
                 >
                   hello@loveiq.org
                 </a>
@@ -55,7 +56,7 @@ export default function PrivacyPolicyPage() {
 
             {/* Section 2 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">2. Scope of this Privacy Policy</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">2. Scope of this Privacy Policy</h2>
               <p>
                 This Privacy Policy applies to the LoveIQ platform, including our website, mobile
                 applications, surveys, psychometric tools, reports, subscription services and any
@@ -67,17 +68,17 @@ export default function PrivacyPolicyPage() {
 
             {/* Section 3 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">3. Categories of Personal Data</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">3. Categories of Personal Data</h2>
               <p className="mb-4">We process the following categories of personal data:</p>
 
-              <h3 className="text-white font-medium mb-2">3.1 Account and Identity Data</h3>
+              <h3 className="text-gray-900 font-medium mb-2">3.1 Account and Identity Data</h3>
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>Email address</li>
                 <li>Login credentials</li>
                 <li>User ID</li>
               </ul>
 
-              <h3 className="text-white font-medium mb-2">3.2 Psychometric and Survey Data</h3>
+              <h3 className="text-gray-900 font-medium mb-2">3.2 Psychometric and Survey Data</h3>
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>Answers to psychometric questionnaires</li>
                 <li>
@@ -89,7 +90,7 @@ export default function PrivacyPolicyPage() {
                 These data qualify as special categories of personal data under Art. 9 GDPR.
               </p>
 
-              <h3 className="text-white font-medium mb-2">3.3 Usage and Technical Data</h3>
+              <h3 className="text-gray-900 font-medium mb-2">3.3 Usage and Technical Data</h3>
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>IP address</li>
                 <li>Device and browser information</li>
@@ -97,7 +98,7 @@ export default function PrivacyPolicyPage() {
                 <li>Interaction logs</li>
               </ul>
 
-              <h3 className="text-white font-medium mb-2">3.4 Payment Data</h3>
+              <h3 className="text-gray-900 font-medium mb-2">3.4 Payment Data</h3>
               <p>
                 We do not store full payment data. Payments are processed by external payment
                 providers (e.g. Stripe). We receive transaction references, payment status and
@@ -107,7 +108,7 @@ export default function PrivacyPolicyPage() {
 
             {/* Section 4 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">4. Purposes of Processing</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">4. Purposes of Processing</h2>
               <p className="mb-4">We process personal data for the following purposes:</p>
               <ul className="list-disc list-inside space-y-1">
                 <li>Creating and managing user accounts</li>
@@ -126,7 +127,7 @@ export default function PrivacyPolicyPage() {
 
             {/* Section 5 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">
+              <h2 className="text-gray-900 font-semibold mb-4">
                 5. Legal Bases for Processing (Art. 6 &amp; 9 GDPR)
               </h2>
               <p className="mb-4">We rely on the following legal bases:</p>
@@ -145,7 +146,7 @@ export default function PrivacyPolicyPage() {
 
             {/* Section 6 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">6. Automated Processing and AI</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">6. Automated Processing and AI</h2>
               <p className="mb-4">
                 We use automated systems, including artificial intelligence, to analyze your inputs
                 and generate psychometric reports. This processing:
@@ -160,14 +161,14 @@ export default function PrivacyPolicyPage() {
 
             {/* Section 7 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">7. Recipients of Data</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">7. Recipients of Data</h2>
               <p className="mb-4">
                 We disclose your personal data to the following categories of recipients
                 (processors). All recipients act as our processors under data-processing agreements
                 in accordance with Art. 28 GDPR.
               </p>
 
-              <h3 className="text-white font-medium mb-2">7.1 Infrastructure and hosting</h3>
+              <h3 className="text-gray-900 font-medium mb-2">7.1 Infrastructure and hosting</h3>
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>Vercel Inc. (USA / EU) - application hosting and edge delivery</li>
                 <li>
@@ -176,19 +177,19 @@ export default function PrivacyPolicyPage() {
                 <li>Upstash Inc. (USA / EU) - Redis-compatible key-value store (rate-limiting)</li>
               </ul>
 
-              <h3 className="text-white font-medium mb-2">7.2 Payments</h3>
+              <h3 className="text-gray-900 font-medium mb-2">7.2 Payments</h3>
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>
                   Stripe Payments Europe Ltd. (IE) - payment processing, anti-fraud, invoicing
                 </li>
               </ul>
 
-              <h3 className="text-white font-medium mb-2">7.3 Email delivery</h3>
+              <h3 className="text-gray-900 font-medium mb-2">7.3 Email delivery</h3>
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>Resend Inc. (USA) - transactional and marketing email delivery</li>
               </ul>
 
-              <h3 className="text-white font-medium mb-2">7.4 Analytics and product insight</h3>
+              <h3 className="text-gray-900 font-medium mb-2">7.4 Analytics and product insight</h3>
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>Google Ireland Ltd. - Google Analytics 4 (consent-gated)</li>
                 <li>Hotjar Ltd. (MT) - heatmaps and session recording (consent-gated)</li>
@@ -197,21 +198,21 @@ export default function PrivacyPolicyPage() {
                 </li>
               </ul>
 
-              <h3 className="text-white font-medium mb-2">7.5 Advertising and attribution</h3>
+              <h3 className="text-gray-900 font-medium mb-2">7.5 Advertising and attribution</h3>
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>Meta Platforms Ireland Ltd. - Facebook/Instagram pixel (consent-gated)</li>
                 <li>TikTok Technology Ltd. (IE) - TikTok pixel (consent-gated)</li>
                 <li>Google Ireland Ltd. - Google Ads conversion tracking (consent-gated)</li>
               </ul>
 
-              <h3 className="text-white font-medium mb-2">7.6 Consent management</h3>
+              <h3 className="text-gray-900 font-medium mb-2">7.6 Consent management</h3>
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>
                   CookieYes Ltd. (UK) - cookie consent storage and proof-of-consent (Art. 7(1) GDPR)
                 </li>
               </ul>
 
-              <h3 className="text-white font-medium mb-2">7.7 Internal operations</h3>
+              <h3 className="text-gray-900 font-medium mb-2">7.7 Internal operations</h3>
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>
                   Slack Technologies Ltd. (IE) - internal incident-response notifications. Personal
@@ -219,7 +220,7 @@ export default function PrivacyPolicyPage() {
                 </li>
               </ul>
 
-              <h3 className="text-white font-medium mb-2">7.8 Reviews and social proof</h3>
+              <h3 className="text-gray-900 font-medium mb-2">7.8 Reviews and social proof</h3>
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>
                   Trustpilot A/S (DK) - collection, verification, and display of customer reviews
@@ -232,7 +233,7 @@ export default function PrivacyPolicyPage() {
                 contractual clauses for non-EU processors can be requested from{" "}
                 <a
                   href="mailto:hello@loveiq.org"
-                  className="text-gray-300 hover:text-white transition-colors"
+                  className="text-[#C2410C] hover:text-[#fe6839] transition-colors"
                 >
                   hello@loveiq.org
                 </a>
@@ -242,7 +243,7 @@ export default function PrivacyPolicyPage() {
 
             {/* Section 8 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">8. International Data Transfers</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">8. International Data Transfers</h2>
               <p className="mb-4">
                 Some service providers may process data outside the EU/EEA. Where this occurs, we
                 ensure protection through:
@@ -255,7 +256,7 @@ export default function PrivacyPolicyPage() {
 
             {/* Section 9 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">9. Storage Period</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">9. Storage Period</h2>
               <p className="mb-4">We store your data:</p>
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>For the duration of your account</li>
@@ -267,7 +268,7 @@ export default function PrivacyPolicyPage() {
 
             {/* Section 10 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">10. Your Rights</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">10. Your Rights</h2>
               <p className="mb-4">You have the right to:</p>
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>Access your data (Art. 15 GDPR)</li>
@@ -282,7 +283,7 @@ export default function PrivacyPolicyPage() {
                 Requests can be sent to:{" "}
                 <a
                   href="mailto:hello@loveiq.org"
-                  className="text-gray-300 hover:text-white transition-colors"
+                  className="text-[#C2410C] hover:text-[#fe6839] transition-colors"
                 >
                   hello@loveiq.org
                 </a>
@@ -291,7 +292,7 @@ export default function PrivacyPolicyPage() {
 
             {/* Section 11 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">11. Right to Lodge a Complaint</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">11. Right to Lodge a Complaint</h2>
               <p>
                 You may lodge a complaint with any EU supervisory authority, in particular: Berlin
                 Commissioner for Data Protection and Freedom of Information{" "}
@@ -299,7 +300,7 @@ export default function PrivacyPolicyPage() {
                   href="https://www.datenschutz-berlin.de"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-gray-300 hover:text-white transition-colors"
+                  className="text-[#C2410C] hover:text-[#fe6839] transition-colors"
                 >
                   https://www.datenschutz-berlin.de
                 </a>
@@ -308,7 +309,7 @@ export default function PrivacyPolicyPage() {
 
             {/* Section 12 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">
+              <h2 className="text-gray-900 font-semibold mb-4">
                 12. Data Protection Impact Assessment (Art. 35 GDPR)
               </h2>
               <p className="mb-4">
@@ -328,7 +329,7 @@ export default function PrivacyPolicyPage() {
 
             {/* Section 13 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">13. Security Measures</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">13. Security Measures</h2>
               <p className="mb-4">
                 We apply technical and organizational security measures including:
               </p>
@@ -342,7 +343,7 @@ export default function PrivacyPolicyPage() {
 
             {/* Section 14 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">14. Changes</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">14. Changes</h2>
               <p>
                 We may update this Privacy Policy from time to time. Users will be informed of
                 material changes.
@@ -351,7 +352,7 @@ export default function PrivacyPolicyPage() {
           </div>
         </article>
       </main>
-      <FooterSection />
+      <WFooterSection />
     </>
   );
 }

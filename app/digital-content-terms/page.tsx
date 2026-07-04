@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import LegalNavSection from "@features/legal/ui/LegalNavSection";
-import FooterSection from "@features/landing/ui/FooterSection";
+import WNavSection from "@features/landing/ui/white/WNavSection";
+import WFooterSection from "@features/landing/ui/white/WFooterSection";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.loveiq.org";
 
@@ -17,15 +17,16 @@ export const metadata: Metadata = {
 export default function DigitalContentTermsPage() {
   return (
     <>
-      <LegalNavSection />
-      <main className="min-h-screen px-4 py-20" style={{ backgroundColor: "#09050F" }}>
+      <style>{"html,body{background:#ffffff;}"}</style>
+      <WNavSection />
+      <main className="min-h-screen bg-white px-4 pt-32 pb-20 sm:pt-40">
         <article className="mx-auto max-w-3xl">
-          <h1 className="font-serif font-light text-white mb-10" style={{ fontSize: "36px" }}>
+          <h1 className="font-serif font-light text-[#161021] mb-10" style={{ fontSize: "36px" }}>
             Digital Content & Subscription Terms
           </h1>
 
           <div
-            className="font-sans space-y-8 text-gray-300 leading-relaxed"
+            className="font-sans space-y-8 text-gray-600 leading-relaxed"
             style={{ fontSize: "18px" }}
           >
             {/* Intro */}
@@ -49,7 +50,7 @@ export default function DigitalContentTermsPage() {
                 Email:{" "}
                 <a
                   href="mailto:hello@loveiq.org"
-                  className="text-gray-300 hover:text-white transition-colors"
+                  className="text-[#C2410C] hover:text-[#fe6839] transition-colors"
                 >
                   hello@loveiq.org
                 </a>
@@ -59,7 +60,7 @@ export default function DigitalContentTermsPage() {
 
             {/* Section 1 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">1. Scope</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">1. Scope</h2>
               <p className="mb-4">These Terms govern:</p>
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>psychometric reports</li>
@@ -73,7 +74,7 @@ export default function DigitalContentTermsPage() {
 
             {/* Section 2 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">2. Nature of Digital Content</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">2. Nature of Digital Content</h2>
               <p className="mb-4">LoveIQ provides:</p>
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>personalized psychometric reports</li>
@@ -88,7 +89,7 @@ export default function DigitalContentTermsPage() {
 
             {/* Section 3 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">3. Contract Formation</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">3. Contract Formation</h2>
               <p className="mb-4">A contract is formed when you:</p>
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>confirm your purchase, and</li>
@@ -99,7 +100,7 @@ export default function DigitalContentTermsPage() {
 
             {/* Section 4 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">
+              <h2 className="text-gray-900 font-semibold mb-4">
                 4. Right of Withdrawal & Loss of the Right of Withdrawal for Digital Content
                 (Consumers)
               </h2>
@@ -117,7 +118,7 @@ export default function DigitalContentTermsPage() {
               </ul>
               <p className="mb-4">This consent is given during checkout.</p>
 
-              <h3 className="text-white font-medium mb-2">
+              <h3 className="text-gray-900 font-medium mb-2">
                 Loss of the Right of Withdrawal for Digital Content:
               </h3>
               <p className="mb-4">
@@ -132,7 +133,7 @@ export default function DigitalContentTermsPage() {
 
             {/* Section 5 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">5. No Refunds After Delivery</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">5. No Refunds After Delivery</h2>
               <p className="mb-4">
                 Once digital content (including reports, unlocked sections or subscription access)
                 has been delivered or activated, refunds are excluded.
@@ -147,7 +148,7 @@ export default function DigitalContentTermsPage() {
 
             {/* Section 6 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">6. Subscriptions</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">6. Subscriptions</h2>
               <p className="mb-4">Subscriptions:</p>
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>grant access for the selected billing period</li>
@@ -162,7 +163,7 @@ export default function DigitalContentTermsPage() {
 
             {/* Section 7 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">7. Price Changes</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">7. Price Changes</h2>
               <p>
                 We may change subscription prices. Users will be informed in advance. If you do not
                 agree, you may cancel before the new price applies.
@@ -171,7 +172,7 @@ export default function DigitalContentTermsPage() {
 
             {/* Section 8 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">8. Payment Processing</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">8. Payment Processing</h2>
               <p>
                 Payments are processed by external providers (e.g. Stripe). We do not store your
                 payment card details.
@@ -180,7 +181,7 @@ export default function DigitalContentTermsPage() {
 
             {/* Section 9 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">9. Access Suspension</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">9. Access Suspension</h2>
               <p className="mb-4">We may suspend access if:</p>
               <ul className="list-disc list-inside space-y-1">
                 <li>payment fails</li>
@@ -191,7 +192,7 @@ export default function DigitalContentTermsPage() {
 
             {/* Section 10 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">10. Termination</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">10. Termination</h2>
               <p>
                 You may cancel subscriptions at any time. We may terminate accounts for violations
                 of law or Terms. Termination does not entitle you to a refund for already delivered
@@ -201,13 +202,13 @@ export default function DigitalContentTermsPage() {
 
             {/* Section 11 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">11. Governing Law</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">11. Governing Law</h2>
               <p>These Terms are governed by the laws of the Federal Republic of Germany.</p>
             </section>
           </div>
         </article>
       </main>
-      <FooterSection />
+      <WFooterSection />
     </>
   );
 }

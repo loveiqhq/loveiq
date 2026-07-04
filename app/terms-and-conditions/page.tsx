@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import LegalNavSection from "@features/legal/ui/LegalNavSection";
-import FooterSection from "@features/landing/ui/FooterSection";
+import WNavSection from "@features/landing/ui/white/WNavSection";
+import WFooterSection from "@features/landing/ui/white/WFooterSection";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.loveiq.org";
 
@@ -16,15 +16,16 @@ export const metadata: Metadata = {
 export default function TermsAndConditionsPage() {
   return (
     <>
-      <LegalNavSection />
-      <main className="min-h-screen px-4 py-20" style={{ backgroundColor: "#09050F" }}>
+      <style>{"html,body{background:#ffffff;}"}</style>
+      <WNavSection />
+      <main className="min-h-screen bg-white px-4 pt-32 pb-20 sm:pt-40">
         <article className="mx-auto max-w-3xl">
-          <h1 className="font-serif font-light text-white mb-10" style={{ fontSize: "36px" }}>
+          <h1 className="font-serif font-light text-[#161021] mb-10" style={{ fontSize: "36px" }}>
             Terms & Conditions
           </h1>
 
           <div
-            className="font-sans space-y-8 text-gray-300 leading-relaxed"
+            className="font-sans space-y-8 text-gray-600 leading-relaxed"
             style={{ fontSize: "18px" }}
           >
             {/* Intro */}
@@ -48,7 +49,7 @@ export default function TermsAndConditionsPage() {
                 Email:{" "}
                 <a
                   href="mailto:hello@loveiq.org"
-                  className="text-gray-300 hover:text-white transition-colors"
+                  className="text-[#C2410C] hover:text-[#fe6839] transition-colors"
                 >
                   hello@loveiq.org
                 </a>
@@ -59,7 +60,7 @@ export default function TermsAndConditionsPage() {
 
             {/* Section 1 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">1. Scope of Services</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">1. Scope of Services</h2>
               <p className="mb-4">LoveIQ provides a digital platform offering:</p>
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>psychometric questionnaires</li>
@@ -73,7 +74,7 @@ export default function TermsAndConditionsPage() {
 
             {/* Section 2 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">2. Account Registration</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">2. Account Registration</h2>
               <p className="mb-4">To use LoveIQ, you must:</p>
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>be at least 18 years old</li>
@@ -85,7 +86,7 @@ export default function TermsAndConditionsPage() {
 
             {/* Section 3 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">3. Contract Formation</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">3. Contract Formation</h2>
               <p className="mb-4">A contract is formed when you:</p>
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>create an account, and</li>
@@ -97,7 +98,7 @@ export default function TermsAndConditionsPage() {
 
             {/* Section 4 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">
+              <h2 className="text-gray-900 font-semibold mb-4">
                 4. Digital Content and Subscriptions
               </h2>
               <p className="mb-4">LoveIQ provides:</p>
@@ -111,7 +112,7 @@ export default function TermsAndConditionsPage() {
 
             {/* Section 5 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">5. Prices and Payments</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">5. Prices and Payments</h2>
               <p>
                 All prices are displayed including applicable VAT. Payments are processed via
                 third-party payment providers (e.g., Stripe). Fees are due in advance.
@@ -120,7 +121,9 @@ export default function TermsAndConditionsPage() {
 
             {/* Section 6 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">6. Right of Withdrawal (Consumers)</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">
+                6. Right of Withdrawal (Consumers)
+              </h2>
               <p className="mb-4">
                 If you are a consumer within the EU, you normally have a 14-day right of withdrawal.
                 However, for digital content, this right expires once:
@@ -134,7 +137,7 @@ export default function TermsAndConditionsPage() {
 
             {/* Section 7 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">7. Subscription Terms</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">7. Subscription Terms</h2>
               <p className="mb-4">Subscriptions:</p>
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>renew automatically</li>
@@ -146,7 +149,7 @@ export default function TermsAndConditionsPage() {
 
             {/* Section 8 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">8. User Obligations</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">8. User Obligations</h2>
               <p className="mb-4">You agree to:</p>
               <ul className="list-disc list-inside space-y-1">
                 <li>use LoveIQ for personal purposes only</li>
@@ -157,7 +160,7 @@ export default function TermsAndConditionsPage() {
 
             {/* Section 9 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">9. Intellectual Property</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">9. Intellectual Property</h2>
               <p className="mb-4">
                 All software, content, reports, and algorithms are the exclusive property of Applied
                 Psychometrics UG. Users receive a personal, non-transferable, non-exclusive license
@@ -167,7 +170,7 @@ export default function TermsAndConditionsPage() {
 
             {/* Section 10 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">10. Availability and Changes</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">10. Availability and Changes</h2>
               <p className="mb-4">We may:</p>
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>update, modify or discontinue parts of the platform</li>
@@ -178,7 +181,7 @@ export default function TermsAndConditionsPage() {
 
             {/* Section 11 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">11. Liability</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">11. Liability</h2>
               <p className="mb-4">We are liable only for:</p>
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>intent</li>
@@ -193,7 +196,7 @@ export default function TermsAndConditionsPage() {
 
             {/* Section 12 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">12. Termination</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">12. Termination</h2>
               <p className="mb-4">We may suspend or terminate accounts for:</p>
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>violations of these Terms</li>
@@ -206,7 +209,9 @@ export default function TermsAndConditionsPage() {
 
             {/* Section 13 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">13. Right of Withdrawal (Consumers)</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">
+                13. Right of Withdrawal (Consumers)
+              </h2>
               <p className="mb-4">
                 You have the right to withdraw from this contract within 14 days without giving any
                 reason.
@@ -220,7 +225,7 @@ export default function TermsAndConditionsPage() {
                 Hasenheide 62, 10967 Berlin, Germany,{" "}
                 <a
                   href="mailto:help@loveiq.org"
-                  className="text-gray-300 hover:text-white transition-colors"
+                  className="text-[#C2410C] hover:text-[#fe6839] transition-colors"
                 >
                   help@loveiq.org
                 </a>
@@ -242,19 +247,19 @@ export default function TermsAndConditionsPage() {
 
             {/* Section 14 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">14. Governing Law</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">14. Governing Law</h2>
               <p>These Terms are governed by the laws of the Federal Republic of Germany.</p>
             </section>
 
             {/* Section 15 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">15. Jurisdiction</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">15. Jurisdiction</h2>
               <p>If you are a merchant, the exclusive place of jurisdiction is Berlin, Germany.</p>
             </section>
           </div>
         </article>
       </main>
-      <FooterSection />
+      <WFooterSection />
     </>
   );
 }

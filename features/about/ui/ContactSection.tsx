@@ -31,16 +31,12 @@ const FormField: FC<FormFieldProps> = ({
   const errorId = `${id}-error`;
   return (
     <label htmlFor={id} className="flex flex-col gap-2">
-      <span className="text-sm font-medium text-[#9CA3AF]">{label}</span>
+      <span className="text-sm font-medium text-[#6b6678]">{label}</span>
       <input
         id={id}
         name={id}
         type={type}
-        className="autofill-dark h-[49px] w-full border-b border-white/10 bg-transparent text-sm text-white transition focus:border-white/30 focus:outline-none focus:ring-0 disabled:opacity-60"
-        style={{
-          ["--autofill-font-size" as string]: "14px",
-          ["--autofill-font-size-sm" as string]: "14px",
-        }}
+        className="h-[49px] w-full border-b border-black/[0.14] bg-transparent text-sm text-[#161021] transition focus:border-[#161021] focus:outline-none focus:ring-0 disabled:opacity-60"
         value={value}
         onChange={onChange}
         required
@@ -49,7 +45,7 @@ const FormField: FC<FormFieldProps> = ({
         aria-describedby={error ? errorId : undefined}
       />
       {error ? (
-        <span id={errorId} role="alert" className="text-xs text-red-400">
+        <span id={errorId} role="alert" className="text-xs text-red-600">
           {error}
         </span>
       ) : null}
@@ -230,20 +226,20 @@ const ContactSection: FC = () => {
   };
 
   return (
-    <section id="contact" className="overflow-hidden bg-[#0A0510] px-4 py-16 md:px-6 md:py-24">
+    <section id="contact" className="overflow-hidden bg-white px-4 py-16 md:px-6 md:py-24">
       <div className="content-shell mx-auto max-w-[1100px]">
         <div className="reveal-on-scroll">
           {/* Header card with gradient background */}
-          <div className="relative rounded-t-[24px] border border-b-0 border-white/10 bg-[#120B1C] p-8 md:rounded-t-[32px] md:p-16">
+          <div className="relative rounded-t-[24px] border border-b-0 border-black/[0.08] bg-[#f5f6f8] p-8 md:rounded-t-[32px] md:p-16">
             <div
               className="pointer-events-none absolute inset-0 isolate overflow-hidden rounded-t-[24px] md:rounded-t-[32px]"
               style={{ clipPath: "inset(0 round 24px 24px 0 0)" }}
             >
-              <div className="absolute -left-16 -top-16 h-[200px] w-[200px] rounded-full bg-[#2e0147] blur-[80px] md:-left-64 md:-top-64 md:h-[500px] md:w-[500px] md:blur-[200px]" />
-              <div className="absolute -bottom-12 -right-10 h-[120px] w-[120px] rounded-full bg-[#fe6839] blur-[80px] md:-bottom-52 md:-right-40 md:h-[300px] md:w-[300px] md:blur-[200px]" />
+              <div className="absolute -left-16 -top-16 h-[200px] w-[200px] rounded-full bg-[#9c7dff]/30 blur-[80px] md:-left-64 md:-top-64 md:h-[500px] md:w-[500px] md:blur-[200px]" />
+              <div className="absolute -bottom-12 -right-10 h-[120px] w-[120px] rounded-full bg-[#fe6839]/30 blur-[80px] md:-bottom-52 md:-right-40 md:h-[300px] md:w-[300px] md:blur-[200px]" />
             </div>
             <div className="relative">
-              <h2 className="font-serif text-4xl font-semibold leading-[1] tracking-[-0.025em] text-white md:text-[60px] md:leading-[60px]">
+              <h2 className="font-serif text-4xl font-semibold leading-[1] tracking-[-0.025em] text-[#161021] md:text-[60px] md:leading-[60px]">
                 Contact Our
                 <br />
                 <span className="text-[#fe6839]">Team</span>
@@ -252,7 +248,7 @@ const ContactSection: FC = () => {
           </div>
 
           {/* Form card */}
-          <div className="rounded-b-[24px] border border-white/10 bg-[#120B1C] p-6 md:rounded-b-[32px] md:p-12">
+          <div className="rounded-b-[24px] border border-black/[0.08] bg-white p-6 shadow-[0_10px_15px_-3px_rgba(0,0,0,0.08),0_4px_6px_-4px_rgba(0,0,0,0.08)] md:rounded-b-[32px] md:p-12">
             <Script
               src="https://www.google.com/recaptcha/api.js?render=explicit"
               strategy="afterInteractive"
@@ -282,10 +278,7 @@ const ContactSection: FC = () => {
                     className="absolute inset-0 rounded-full bg-gradient-to-br from-[#FE6839] to-[#9c7dff]"
                     aria-hidden="true"
                   />
-                  <div
-                    className="absolute inset-[2px] rounded-full bg-[#120B1C]"
-                    aria-hidden="true"
-                  />
+                  <div className="absolute inset-[2px] rounded-full bg-white" aria-hidden="true" />
                   <svg
                     className="relative h-7 w-7 text-white"
                     viewBox="0 0 24 24"
@@ -299,11 +292,11 @@ const ContactSection: FC = () => {
                     <path d="M5 13l4 4L19 7" />
                   </svg>
                 </div>
-                <h3 className="font-serif text-2xl text-white">Message Sent!</h3>
-                <p className="mt-2 text-sm text-white/70">We&apos;ll be in touch soon</p>
+                <h3 className="font-serif text-2xl text-[#161021]">Message Sent!</h3>
+                <p className="mt-2 text-sm text-[#6b6678]">We&apos;ll be in touch soon</p>
                 <button
                   type="button"
-                  className="mt-6 rounded-full border border-white/20 px-6 py-2.5 text-sm font-semibold text-white transition hover:-translate-y-[1px] hover:border-white/35 focus-visible-ring"
+                  className="mt-6 rounded-full bg-black px-6 py-2.5 text-sm font-semibold text-white transition hover:-translate-y-[1px] hover:bg-gray-800 focus-visible-ring"
                   onClick={() => setStatus({ type: "idle" })}
                 >
                   Send another message
@@ -350,14 +343,14 @@ const ContactSection: FC = () => {
                 {/* Message and bottom row in 2-column layout on desktop */}
                 <div className="flex w-full flex-col items-center gap-6 md:grid md:grid-cols-2 md:items-end md:gap-x-12">
                   <div className="flex w-full max-w-[400px] flex-col gap-2 md:max-w-none">
-                    <label htmlFor="message" className="text-sm font-medium text-[#9CA3AF]">
+                    <label htmlFor="message" className="text-sm font-medium text-[#6b6678]">
                       How can we help you?*
                     </label>
                     <textarea
                       id="message"
                       name="message"
                       rows={4}
-                      className="w-full rounded-xl border border-white/10 bg-[#0a0510]/50 px-4 py-4 text-sm font-light text-white placeholder:text-[#4B5563] focus:border-white/30 focus:outline-none disabled:opacity-60"
+                      className="w-full rounded-xl border border-black/[0.14] bg-white px-4 py-4 text-sm font-light text-[#161021] placeholder:text-[#9a96a6] focus:border-[#161021] focus:outline-none disabled:opacity-60"
                       placeholder="Tell us a bit about yourself and your project goals"
                       value={form.message}
                       onChange={handleChange}
@@ -366,7 +359,7 @@ const ContactSection: FC = () => {
                       disabled={submitting}
                       aria-describedby="message-count"
                     />
-                    <div id="message-count" className="text-right text-xs text-[#4B5563]">
+                    <div id="message-count" className="text-right text-xs text-[#6b6678]">
                       {1000 - form.message.length} characters remaining
                     </div>
                   </div>
@@ -381,14 +374,14 @@ const ContactSection: FC = () => {
                         data-sitekey={siteKey}
                       />
                       {!captchaReady && (
-                        <div className="mt-2 text-xs font-medium text-[#4B5563]">
+                        <div className="mt-2 text-xs font-medium text-[#6b6678]">
                           Captcha loading... If it does not appear, disable blockers and reload.
                         </div>
                       )}
                     </div>
                     <button
                       type="submit"
-                      className="flex w-full items-center justify-center gap-2 rounded-full border border-white/20 px-6 py-3 text-sm font-bold text-white transition hover:-translate-y-[2px] hover:border-white/35 focus-visible-ring disabled:cursor-not-allowed disabled:opacity-60 md:inline-flex md:w-fit md:px-8"
+                      className="flex w-full items-center justify-center gap-2 rounded-full bg-black px-6 py-3 text-sm font-bold text-white transition hover:-translate-y-[2px] hover:bg-gray-800 focus-visible-ring disabled:cursor-not-allowed disabled:opacity-60 md:inline-flex md:w-fit md:px-8"
                       disabled={submitting}
                     >
                       {submitting ? "Sending..." : "Submit"}
@@ -408,7 +401,7 @@ const ContactSection: FC = () => {
                 </div>
 
                 {status.type === "error" && (
-                  <div className="text-sm font-medium text-[#fca5a5]" role="alert">
+                  <div className="text-sm font-medium text-red-600" role="alert">
                     {status.message}
                   </div>
                 )}

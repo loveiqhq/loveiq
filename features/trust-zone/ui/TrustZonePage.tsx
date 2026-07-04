@@ -4,8 +4,8 @@ import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { useEffect } from "react";
-import LegalNavSection from "@features/legal/ui/LegalNavSection";
-import FooterSection from "@features/landing/ui/FooterSection";
+import WNavSection from "@features/landing/ui/white/WNavSection";
+import WFooterSection from "@features/landing/ui/white/WFooterSection";
 
 const Pill = ({ children, className = "" }: { children: ReactNode; className?: string }) => (
   <span
@@ -19,7 +19,7 @@ const IconShieldAlert = () => (
   <svg
     aria-hidden
     viewBox="0 0 24 24"
-    className="h-6 w-6 text-white"
+    className="h-6 w-6 text-gray-900"
     fill="none"
     stroke="currentColor"
     strokeWidth="1.5"
@@ -36,7 +36,7 @@ const IconGavel = () => (
   <svg
     aria-hidden
     viewBox="0 0 24 24"
-    className="h-6 w-6 text-white"
+    className="h-6 w-6 text-gray-900"
     fill="none"
     stroke="currentColor"
     strokeWidth="1.5"
@@ -137,7 +137,7 @@ const IconCircleCheck = () => (
   <svg
     aria-hidden
     viewBox="0 0 16 16"
-    className="h-4 w-4 text-[#4ade80]"
+    className="h-4 w-4 text-[#16a34a]"
     fill="none"
     stroke="currentColor"
     strokeLinecap="round"
@@ -211,7 +211,7 @@ const IconHeartHandshake = () => (
 
 const HeroSection = () => (
   <section className="relative isolate flex min-h-screen flex-col overflow-hidden">
-    <div className="absolute inset-0 overflow-hidden opacity-20">
+    <div className="absolute inset-0 overflow-hidden opacity-[0.55]">
       <Image
         src="/privacy/privacy-hero-bg.png"
         alt=""
@@ -222,29 +222,32 @@ const HeroSection = () => (
         style={{ objectPosition: "center 35%" }}
       />
     </div>
-    <div className="absolute bottom-0 left-0 right-0 h-[45%] bg-gradient-to-t from-[#0a0510] via-[#0a0510]/80 to-transparent" />
-    <div className="absolute top-[55%] left-1/2 h-[700px] w-[700px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#4a0d6e] blur-[160px] opacity-80 animate-pulse-glow" />
-    <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+    {/* Top wash for nav + headline legibility over the sky */}
+    <div className="absolute inset-x-0 top-0 h-[55%] bg-gradient-to-b from-white via-white/70 to-transparent" />
+    {/* Bottom wash blends the photo into the white page */}
+    <div className="absolute bottom-0 left-0 right-0 h-[55%] bg-gradient-to-t from-white via-white/85 to-transparent" />
+    <div className="absolute top-[55%] left-1/2 h-[700px] w-[700px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#c8a4e8] blur-[160px] opacity-30 animate-pulse-glow" />
+    <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-black/10 to-transparent" />
     <div className="content-shell relative z-10 flex flex-col items-center px-4 pt-40 pb-24 md:pt-[208px] md:pb-[176px]">
       <h1
         className="sensual-anim text-center font-serif text-4xl font-normal leading-[1.2] tracking-[-2.4px] sm:text-5xl md:text-6xl lg:text-[80px] lg:leading-[96px]"
         style={{ animationDelay: "0.2s" }}
       >
-        <span className="text-white">Your privacy</span>
-        <span className="mt-2 block bg-gradient-to-r from-[#fe6839] via-[#a78bfa] to-[#e9d5ff] bg-clip-text text-transparent md:mt-0">
+        <span className="text-gray-900">Your privacy</span>
+        <span className="mt-2 block bg-gradient-to-r from-[#fe6839] via-[#d95b88] to-[#cb5fc1] bg-clip-text text-transparent md:mt-0">
           comes first.
         </span>
       </h1>
       <p
-        className="sensual-anim mt-16 max-w-[768px] text-center text-base font-normal leading-[32px] text-[#9CA3AF] md:mt-[72px] md:text-[20px]"
+        className="sensual-anim mt-16 max-w-[768px] text-center text-base font-normal leading-[32px] text-gray-600 md:mt-[72px] md:text-[20px]"
         style={{ animationDelay: "0.5s" }}
       >
-        At LoveIQ, trust is <span className="font-bold text-white">not a feature</span>, it is{" "}
-        <span className="font-bold text-white">the foundation</span> of everything we build. We
-        created a space designed to engage <span className="font-bold text-white">openly</span>,
-        without fear of <span className="font-bold text-white">exposure</span>,{" "}
-        <span className="font-bold text-white">misuse</span>, or{" "}
-        <span className="font-bold text-white">judgment</span>.
+        At LoveIQ, trust is <span className="font-bold text-gray-900">not a feature</span>, it is{" "}
+        <span className="font-bold text-gray-900">the foundation</span> of everything we build. We
+        created a space designed to engage <span className="font-bold text-gray-900">openly</span>,
+        without fear of <span className="font-bold text-gray-900">exposure</span>,{" "}
+        <span className="font-bold text-gray-900">misuse</span>, or{" "}
+        <span className="font-bold text-gray-900">judgment</span>.
       </p>
     </div>
   </section>
@@ -254,57 +257,57 @@ const HonestySection = () => (
   <section className="relative px-4 py-24 md:py-[97px]">
     <div className="content-shell flex flex-col items-center gap-24 lg:flex-row lg:items-start lg:justify-center">
       <div className="max-w-[513px] space-y-6">
-        <span className="reveal-on-scroll inline-flex items-center gap-2 rounded-full border border-white/10 bg-[#1E102E] px-[13px] py-[5px] text-xs font-semibold uppercase tracking-[0.05em] text-[#fe6839]">
+        <span className="reveal-on-scroll inline-flex items-center gap-2 rounded-full border border-black/[0.08] bg-[rgba(254,104,57,0.1)] px-[13px] py-[5px] text-xs font-semibold uppercase tracking-[0.05em] text-[#fe6839]">
           <IconScale />
           Transparency
         </span>
-        <h3 className="reveal-on-scroll stagger-1 font-serif text-3xl font-normal leading-[40px] text-white md:text-[36px]">
+        <h3 className="reveal-on-scroll stagger-1 font-serif text-3xl font-normal leading-[40px] text-gray-900 md:text-[36px]">
           We believe in being honest
         </h3>
         <p className="reveal-on-scroll stagger-2 text-lg leading-[29.25px] md:text-[18px]">
-          <span className="font-bold text-white">
+          <span className="font-bold text-gray-900">
             No digital system can claim absolute, zero-risk security.{" "}
           </span>
-          <span className="font-light text-[#9CA3AF]">
+          <span className="font-light text-gray-600">
             The internet itself carries inherent risks.
           </span>
         </p>
-        <p className="reveal-on-scroll stagger-3 text-lg font-light leading-[29.25px] text-[#9CA3AF] md:text-[18px]">
+        <p className="reveal-on-scroll stagger-3 text-lg font-light leading-[29.25px] text-gray-600 md:text-[18px]">
           We commit to applying the best available technical standards, and ethical principles
           available to us, to reduce risk as far as responsibly possible.
         </p>
       </div>
 
       <div className="flex flex-col sm:flex-row w-full max-w-[280px] sm:max-w-[488px] gap-6 lg:mt-12">
-        <div className="reveal-on-scroll group relative flex flex-1 flex-col items-center justify-center gap-5 overflow-hidden rounded-2xl border border-white/10 bg-[#0F0816] px-6 py-8 transition-all duration-500 ease-out transform-gpu hover:-translate-y-2 hover:shadow-[0_25px_60px_-12px_rgba(255,104,57,0.3)]">
+        <div className="reveal-on-scroll group relative flex flex-1 flex-col items-center justify-center gap-5 overflow-hidden rounded-2xl border border-black/[0.08] bg-[#f5f6f8] px-6 py-8 shadow-[0_4px_12px_rgba(0,0,0,0.12)] transition-all duration-500 ease-out transform-gpu hover:-translate-y-2 hover:shadow-[0_25px_60px_-12px_rgba(255,104,57,0.18)]">
           <div
             aria-hidden
             className="pointer-events-none absolute inset-0 rounded-2xl bg-[radial-gradient(circle_at_50%_30%,rgba(254,104,57,0.18),transparent_65%)] opacity-0 transition-opacity duration-500 group-hover:opacity-100"
           />
-          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/5">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-black/[0.04]">
             <IconShieldAlert />
           </div>
-          <h4 className="text-center font-serif text-xl font-normal leading-[28px] text-white">
+          <h4 className="text-center font-serif text-xl font-normal leading-[28px] text-gray-900">
             Risk Awareness
           </h4>
-          <p className="text-center text-sm font-normal leading-5 text-[#6b7280]">
+          <p className="text-center text-sm font-normal leading-5 text-gray-600">
             We acknowledge risks to
             <br />
             better mitigate them.
           </p>
         </div>
-        <div className="reveal-on-scroll stagger-1 group relative flex flex-1 flex-col items-center justify-center gap-5 overflow-hidden rounded-2xl border border-white/10 bg-[#0F0816] px-6 py-8 transition-all duration-500 ease-out transform-gpu hover:-translate-y-2 hover:shadow-[0_25px_60px_-12px_rgba(255,104,57,0.3)]">
+        <div className="reveal-on-scroll stagger-1 group relative flex flex-1 flex-col items-center justify-center gap-5 overflow-hidden rounded-2xl border border-black/[0.08] bg-[#f5f6f8] px-6 py-8 shadow-[0_4px_12px_rgba(0,0,0,0.12)] transition-all duration-500 ease-out transform-gpu hover:-translate-y-2 hover:shadow-[0_25px_60px_-12px_rgba(255,104,57,0.18)]">
           <div
             aria-hidden
             className="pointer-events-none absolute inset-0 rounded-2xl bg-[radial-gradient(circle_at_50%_30%,rgba(254,104,57,0.18),transparent_65%)] opacity-0 transition-opacity duration-500 group-hover:opacity-100"
           />
-          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/5">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-black/[0.04]">
             <IconGavel />
           </div>
-          <h4 className="text-center font-serif text-xl font-normal leading-[28px] text-white">
+          <h4 className="text-center font-serif text-xl font-normal leading-[28px] text-gray-900">
             Confidentiality
           </h4>
-          <p className="text-center text-sm font-normal leading-5 text-[#6b7280]">
+          <p className="text-center text-sm font-normal leading-5 text-gray-600">
             Data usage is strictly limited
             <br />
             by ethics.
@@ -319,32 +322,32 @@ const SecuritySection = () => (
   <section className="relative px-4 py-24 md:py-[120px]">
     <div className="content-shell flex flex-col-reverse items-center gap-12 lg:gap-24 lg:flex-row lg:items-center lg:justify-center">
       {/* Code Card */}
-      <div className="reveal-on-scroll w-full max-w-[448px] overflow-hidden rounded-2xl border border-white/10 bg-[#120819] p-[33px] shadow-[0_25px_50px_-12px_rgba(0,0,0,0.25)]">
-        <div className="mb-6 space-y-2 font-mono text-[10px] leading-[15px] text-[#4b5563]">
+      <div className="reveal-on-scroll w-full max-w-[448px] overflow-hidden rounded-2xl border border-black/[0.08] bg-[#fafafa] p-[33px] shadow-[0_10px_25px_-12px_rgba(0,0,0,0.15)]">
+        <div className="mb-6 space-y-2 font-mono text-[10px] leading-[15px] text-[#6b6678]">
           <p>
             <span>01 </span>
-            <span className="text-[#c084fc]">const</span>{" "}
-            <span className="text-[#60a5fa]">encrypt</span> = (data) =&gt; {"{"}
+            <span className="text-[#7c3aed]">const</span>{" "}
+            <span className="text-[#2563eb]">encrypt</span> = (data) =&gt; {"{"}
           </p>
           <p>
             <span>02 </span>
-            <span className="text-[#c084fc]">return</span> AES.GCM(data, key);
+            <span className="text-[#7c3aed]">return</span> AES.GCM(data, key);
           </p>
           <p>03 {"}"}</p>
           <p>
             <span>04 </span>
-            <span className="text-[#4ade80]">{" // Data secured at rest"}</span>
+            <span className="text-[#15803d]">{" // Data secured at rest"}</span>
           </p>
         </div>
         <div className="flex items-center gap-6">
-          <div className="flex h-16 w-16 items-center justify-center rounded-xl border border-white/10 bg-gradient-to-br from-[#2E0147] to-[#0a0510] shadow-lg">
+          <div className="flex h-16 w-16 items-center justify-center rounded-xl border border-black/[0.08] bg-gradient-to-br from-[#fe6839] to-[#c36ddf] shadow-lg">
             <IconLockLarge />
           </div>
           <div className="flex flex-col gap-1">
-            <h4 className="font-serif text-lg font-normal leading-[28px] text-white">
+            <h4 className="font-serif text-lg font-normal leading-[28px] text-gray-900">
               TLS 1.3 Encryption
             </h4>
-            <p className="text-xs font-normal leading-4 text-[#6b7280]">
+            <p className="text-xs font-normal leading-4 text-gray-600">
               End-to-end protection active
             </p>
           </div>
@@ -353,23 +356,23 @@ const SecuritySection = () => (
 
       {/* Text Content */}
       <div className="max-w-[472px] space-y-6">
-        <span className="reveal-on-scroll inline-flex items-center gap-2 rounded-xl border border-white/10 bg-[#1e102e] px-[17px] py-[5px] text-xs font-semibold uppercase tracking-[0.05em] text-[#fe6839] shadow-lg">
+        <span className="reveal-on-scroll inline-flex items-center gap-2 rounded-xl border border-black/[0.08] bg-[rgba(254,104,57,0.1)] px-[17px] py-[5px] text-xs font-semibold uppercase tracking-[0.05em] text-[#fe6839] shadow-lg">
           <IconShieldCheck />
           Security
         </span>
-        <h3 className="reveal-on-scroll stagger-1 font-serif text-[26px] md:text-[36px] font-normal leading-[32px] md:leading-[40px] text-white">
+        <h3 className="reveal-on-scroll stagger-1 font-serif text-[26px] md:text-[36px] font-normal leading-[32px] md:leading-[40px] text-gray-900">
           Hardened technical security
         </h3>
         <p className="reveal-on-scroll stagger-2 text-lg leading-[29.25px] md:text-[18px]">
-          <span className="font-light text-[#9CA3AF]">
+          <span className="font-light text-gray-600">
             From a technical perspective, your data is protected using{" "}
           </span>
-          <span className="font-bold text-[#e7e7e7]">
+          <span className="font-bold text-gray-900">
             modern cryptographic standards, strict access controls, and hardened database security
           </span>
-          <span className="font-light text-[#9CA3AF]"> practices.</span>
+          <span className="font-light text-gray-600"> practices.</span>
         </p>
-        <p className="reveal-on-scroll stagger-3 text-lg font-light leading-[29.25px] text-[#9CA3AF] md:text-[18px]">
+        <p className="reveal-on-scroll stagger-3 text-lg font-light leading-[29.25px] text-gray-600 md:text-[18px]">
           We use industry-standard encryption for data in transit and at rest. Identifying
           information is separated from response data wherever possible, and exposure is minimized
           by design rather than policy alone.
@@ -384,22 +387,22 @@ const IdentitySection = () => (
     <div className="content-shell flex flex-col items-center gap-24 lg:flex-row lg:items-center lg:justify-center">
       {/* Text Content */}
       <div className="max-w-[472px] space-y-6">
-        <span className="reveal-on-scroll inline-flex items-center gap-2 rounded-xl border border-white/10 bg-[#1e102e] px-[17px] py-[5px] text-xs font-semibold uppercase tracking-[0.05em] text-[#fe6839] shadow-lg">
+        <span className="reveal-on-scroll inline-flex items-center gap-2 rounded-xl border border-black/[0.08] bg-[rgba(254,104,57,0.1)] px-[17px] py-[5px] text-xs font-semibold uppercase tracking-[0.05em] text-[#fe6839] shadow-lg">
           <IconGlasses />
           Anonymity
         </span>
-        <h3 className="reveal-on-scroll stagger-1 font-serif text-3xl font-normal leading-[40px] text-white md:text-[36px]">
+        <h3 className="reveal-on-scroll stagger-1 font-serif text-3xl font-normal leading-[40px] text-gray-900 md:text-[36px]">
           No real-world identity required
         </h3>
         <p className="reveal-on-scroll stagger-2 text-lg leading-[29.25px] md:text-[18px]">
-          <span className="font-bold text-[#e8e8e8]">
+          <span className="font-bold text-gray-900">
             We do not require real-world information that reveals your true identity.{" "}
           </span>
-          <span className="font-light text-[#9CA3AF]">
+          <span className="font-light text-gray-600">
             Your name, your social presence, or your life outside this space are not relevant to us.
           </span>
         </p>
-        <p className="reveal-on-scroll stagger-3 text-lg font-light leading-[29.25px] text-[#9CA3AF] md:text-[18px]">
+        <p className="reveal-on-scroll stagger-3 text-lg font-light leading-[29.25px] text-gray-600 md:text-[18px]">
           What truly matters is the honesty of your responses — because truthful answers are far
           more important for meaningful insight, accuracy, and personal growth than identifiable
           data ever could be. We will never sell, pass on, or share identity-linkable information.
@@ -407,44 +410,44 @@ const IdentitySection = () => (
       </div>
 
       {/* Form Card */}
-      <div className="reveal-on-scroll stagger-1 w-full max-w-[448px] overflow-hidden rounded-2xl border border-white/10 bg-[#0F0816] p-[33px] shadow-[0_25px_50px_-12px_rgba(0,0,0,0.25)]">
+      <div className="reveal-on-scroll stagger-1 w-full max-w-[448px] overflow-hidden rounded-2xl border border-black/[0.08] bg-[#f5f6f8] p-[33px] shadow-[0_10px_25px_-12px_rgba(0,0,0,0.15)]">
         {/* Avatar and loading bars */}
         <div className="mb-8 flex items-center gap-4">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-white/10">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full border border-black/[0.08] bg-black/[0.04]">
             <IconUserX />
           </div>
           <div className="flex flex-col gap-2">
-            <div className="h-2 w-24 rounded-full bg-white/20" />
-            <div className="h-2 w-16 rounded-full bg-white/10" />
+            <div className="h-2 w-24 rounded-full bg-black/10" />
+            <div className="h-2 w-16 rounded-full bg-black/[0.06]" />
           </div>
         </div>
 
         {/* Form fields */}
         <div className="space-y-4">
           {/* Name field */}
-          <div className="flex items-center justify-between rounded-lg border border-white/5 bg-white/5 p-[13px]">
-            <span className="text-xs font-normal uppercase tracking-[0.1em] text-[#6b7280]">
+          <div className="flex items-center justify-between rounded-lg border border-black/[0.06] bg-white p-[13px]">
+            <span className="text-xs font-normal uppercase tracking-[0.1em] text-gray-600">
               Name
             </span>
-            <span className="text-xs text-white/50 blur-[1.5px]">Sarah Doe</span>
+            <span className="text-xs text-gray-400 blur-[1.5px]">Sarah Doe</span>
             <IconEyeOff />
           </div>
 
           {/* Email field */}
-          <div className="flex items-center justify-between rounded-lg border border-white/5 bg-white/5 p-[13px]">
-            <span className="text-xs font-normal uppercase tracking-[0.1em] text-[#6b7280]">
+          <div className="flex items-center justify-between rounded-lg border border-black/[0.06] bg-white p-[13px]">
+            <span className="text-xs font-normal uppercase tracking-[0.1em] text-gray-600">
               Email
             </span>
-            <span className="text-xs text-white/50 blur-[1.5px]">sarahdoe@gmail.com</span>
+            <span className="text-xs text-gray-400 blur-[1.5px]">sarahdoe@gmail.com</span>
             <IconEyeOff />
           </div>
 
           {/* Status field - highlighted green */}
-          <div className="flex items-center justify-between rounded-lg border border-[#4ade80] bg-[rgba(34,197,94,0.1)] p-[13px]">
-            <span className="text-xs font-semibold uppercase tracking-[0.1em] text-[#4ade80]">
+          <div className="flex items-center justify-between rounded-lg border border-[#16a34a] bg-[rgba(22,163,74,0.1)] p-[13px]">
+            <span className="text-xs font-semibold uppercase tracking-[0.1em] text-[#15803d]">
               Status
             </span>
-            <span className="text-xs font-normal text-white">ANONYMOUS</span>
+            <span className="text-xs font-normal text-gray-900">ANONYMOUS</span>
             <IconCircleCheck />
           </div>
         </div>
@@ -482,11 +485,11 @@ const IconMail = () => (
 const BoundariesSection = () => (
   <section className="relative px-4 py-20 md:py-[80px]">
     <div className="content-shell flex flex-col items-center gap-12">
-      <h3 className="reveal-on-scroll text-center font-serif text-[30px] leading-[36px] text-white">
+      <h3 className="reveal-on-scroll text-center font-serif text-[30px] leading-[36px] text-gray-900">
         Respecting your boundaries
       </h3>
       <div className="flex w-full flex-col gap-8 md:flex-row md:justify-center">
-        <div className="reveal-on-scroll group relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-[#1A0B25] to-[#0A0510] p-8 md:w-[488px] transition-all duration-500 ease-out transform-gpu hover:-translate-y-2 hover:shadow-[0_25px_60px_-12px_rgba(254,104,57,0.25)]">
+        <div className="reveal-on-scroll group relative overflow-hidden rounded-2xl border border-black/[0.08] bg-white p-8 shadow-[0_4px_12px_rgba(0,0,0,0.12)] md:w-[488px] transition-all duration-500 ease-out transform-gpu hover:-translate-y-2 hover:shadow-[0_25px_60px_-12px_rgba(254,104,57,0.25)]">
           <div
             aria-hidden
             className="pointer-events-none absolute inset-0 rounded-2xl bg-[radial-gradient(circle_at_50%_25%,rgba(254,104,57,0.18),transparent_70%)] opacity-0 transition-opacity duration-500 group-hover:opacity-100"
@@ -495,15 +498,17 @@ const BoundariesSection = () => (
             <IconMail />
           </div>
           <div className="mt-6 space-y-4">
-            <h4 className="font-serif text-[20px] leading-[28px] text-white">Use an alias email</h4>
-            <p className="text-[16px] font-light leading-[26px] text-[#9CA3AF]">
+            <h4 className="font-serif text-[20px] leading-[28px] text-gray-900">
+              Use an alias email
+            </h4>
+            <p className="text-[16px] font-light leading-[26px] text-gray-600">
               If it feels safer, we welcome your to use an anonymous or alias email address. Many
               choose this option. Your experience, report quality, and access to insights remain
               exactly the same.
             </p>
           </div>
         </div>
-        <div className="reveal-on-scroll stagger-1 group relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-[#1A0B25] to-[#0A0510] p-8 md:w-[501px] transition-all duration-500 ease-out transform-gpu hover:-translate-y-2 hover:shadow-[0_25px_60px_-12px_rgba(254,104,57,0.25)]">
+        <div className="reveal-on-scroll stagger-1 group relative overflow-hidden rounded-2xl border border-black/[0.08] bg-white p-8 shadow-[0_4px_12px_rgba(0,0,0,0.12)] md:w-[501px] transition-all duration-500 ease-out transform-gpu hover:-translate-y-2 hover:shadow-[0_25px_60px_-12px_rgba(254,104,57,0.25)]">
           <div
             aria-hidden
             className="pointer-events-none absolute inset-0 rounded-2xl bg-[radial-gradient(circle_at_50%_25%,rgba(254,104,57,0.18),transparent_70%)] opacity-0 transition-opacity duration-500 group-hover:opacity-100"
@@ -515,10 +520,10 @@ const BoundariesSection = () => (
             <IconHeartHandshake />
           </div>
           <div className="mt-6 space-y-4">
-            <h4 className="font-serif text-[20px] leading-[28px] text-white">
+            <h4 className="font-serif text-[20px] leading-[28px] text-gray-900">
               A non-judgmental space
             </h4>
-            <p className="text-[16px] font-light leading-[26px] text-[#9CA3AF]">
+            <p className="text-[16px] font-light leading-[26px] text-gray-600">
               LoveIQ is built to be safe, discreet, non-judgmental, and respectful of your
               boundaries. You can focus on understanding yourself, not protecting yourself from
               scrutiny.
@@ -534,7 +539,7 @@ const SafeHavenSection = () => (
   <section className="relative px-4 py-24 md:py-[97px]">
     <div className="content-shell mx-auto max-w-[896px]">
       <div className="flex flex-col items-center gap-16 md:gap-20 px-6">
-        <h2 className="reveal-on-scroll text-center font-serif text-[32px] leading-[40px] text-white md:text-[48px] md:leading-[48px]">
+        <h2 className="reveal-on-scroll text-center font-serif text-[32px] leading-[40px] text-gray-900 md:text-[48px] md:leading-[48px]">
           {/* Mobile line breaks */}
           <span className="md:hidden">
             Delivering a safe
@@ -551,8 +556,8 @@ const SafeHavenSection = () => (
           </span>
         </h2>
         <p className="reveal-on-scroll stagger-1 max-w-[908px] text-center text-lg leading-[28px] md:text-[20px]">
-          <span className="font-light text-[#9CA3AF]">We understand that </span>
-          <span className="font-bold text-[#ededed]">
+          <span className="font-light text-gray-600">We understand that </span>
+          <span className="font-bold text-gray-900">
             reflecting on intimacy and identity requires a level of safety that goes beyond standard
             digital products.
           </span>
@@ -574,17 +579,17 @@ const UnderstandingSection = () => (
           className="object-cover"
           sizes="(min-width: 1024px) 484px, 100vw"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#0A0510] via-[#2E0147]/50 to-transparent opacity-80" />
+        <div className="absolute inset-0 bg-gradient-to-t from-white/70 via-white/20 to-transparent opacity-100" />
 
         {/* Overlay Card */}
-        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex w-[240px] md:w-[320px] flex-col items-center gap-1 md:gap-2 rounded-[16px] border border-white/10 bg-[#1A0B25]/80 px-5 py-5 md:px-10 md:py-8 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.25)] backdrop-blur-[6px]">
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex w-[240px] md:w-[320px] flex-col items-center gap-1 md:gap-2 rounded-[16px] border border-black/[0.08] bg-white/85 px-5 py-5 md:px-10 md:py-8 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.18)] backdrop-blur-[6px]">
           <div className="mb-2 md:mb-4 flex h-12 w-12 md:h-16 md:w-16 items-center justify-center rounded-full bg-[#FE6839]/10">
             <IconHeartHandshake />
           </div>
-          <h4 className="font-serif text-lg md:text-2xl leading-[24px] md:leading-[32px] text-white">
+          <h4 className="font-serif text-lg md:text-2xl leading-[24px] md:leading-[32px] text-gray-900">
             We are here for you.
           </h4>
-          <p className="mb-2 md:mb-4 text-center text-xs md:text-sm leading-[18px] md:leading-[20px] text-white/70">
+          <p className="mb-2 md:mb-4 text-center text-xs md:text-sm leading-[18px] md:leading-[20px] text-gray-600">
             And honestly — we built this for ourselves too, so we could feel safe, open, and
             understood within our own team
           </p>
@@ -596,16 +601,16 @@ const UnderstandingSection = () => (
 
       {/* Text Content */}
       <div className="flex max-w-[484px] flex-col gap-6">
-        <span className="reveal-on-scroll inline-flex w-fit items-center gap-2 rounded-full border border-white/10 bg-[#1E102E] px-[13px] py-[5px] text-xs font-semibold uppercase tracking-[0.05em] text-[#fe6839]">
+        <span className="reveal-on-scroll inline-flex w-fit items-center gap-2 rounded-full border border-black/[0.08] bg-[rgba(254,104,57,0.1)] px-[13px] py-[5px] text-xs font-semibold uppercase tracking-[0.05em] text-[#fe6839]">
           <IconHeartHand />
           Unconditional Regard
         </span>
-        <h3 className="reveal-on-scroll stagger-1 font-serif text-4xl leading-[48px] tracking-[-1.2px] text-white md:text-[48px]">
+        <h3 className="reveal-on-scroll stagger-1 font-serif text-4xl leading-[48px] tracking-[-1.2px] text-gray-900 md:text-[48px]">
           No judgment.
           <br />
           Just insights.
         </h3>
-        <div className="reveal-on-scroll stagger-2 space-y-4 text-[20px] leading-[29.25px] text-[#9CA3AF]">
+        <div className="reveal-on-scroll stagger-2 space-y-4 text-[20px] leading-[29.25px] text-gray-600">
           <p>
             The world can be loud with opinions. Here, there are only insights. Whether we are
             navigating heartbreak, confusion, or joy, our feelings are valid simply because we feel
@@ -682,26 +687,26 @@ const ResearchSection = () => (
     <div className="content-shell flex flex-col items-center gap-10 lg:flex-row lg:justify-center lg:gap-24">
       {/* Text Content */}
       <div className="max-w-[468px] space-y-6">
-        <span className="reveal-on-scroll inline-flex items-center gap-2 rounded-xl border border-white/10 bg-[#1e102e] px-[17px] py-[5px] text-xs font-semibold uppercase tracking-[0.6px] text-[#fe6839] shadow-lg">
+        <span className="reveal-on-scroll inline-flex items-center gap-2 rounded-xl border border-black/[0.08] bg-[rgba(254,104,57,0.1)] px-[17px] py-[5px] text-xs font-semibold uppercase tracking-[0.6px] text-[#fe6839] shadow-lg">
           <IconHeart />
           Impact
         </span>
-        <h3 className="reveal-on-scroll stagger-1 font-serif text-[28px] md:text-[36px] leading-[34px] md:leading-[40px] text-white">
+        <h3 className="reveal-on-scroll stagger-1 font-serif text-[28px] md:text-[36px] leading-[34px] md:leading-[40px] text-gray-900">
           Scientific &amp; societal progress
         </h3>
         <p className="reveal-on-scroll stagger-2 text-base md:text-[18px] leading-[26px] md:leading-[29.25px]">
-          <span className="font-light text-[#9CA3AF]">For scientific progress, </span>
-          <span className="font-bold text-[#ededed]">
+          <span className="font-light text-gray-600">For scientific progress, </span>
+          <span className="font-bold text-gray-900">
             we may use fully anonymized, non-personal, and non-reidentifiable data{" "}
           </span>
-          <span className="font-light text-[#9CA3AF]">for research purposes.</span>
+          <span className="font-light text-gray-600">for research purposes.</span>
         </p>
         <p className="reveal-on-scroll stagger-3 text-base md:text-[18px] leading-[26px] md:leading-[29.25px]">
-          <span className="font-light text-[#9CA3AF]">This </span>
-          <span className="font-bold text-[#ededed]">
+          <span className="font-light text-gray-600">This </span>
+          <span className="font-bold text-gray-900">
             data cannot be traced back to individuals{" "}
           </span>
-          <span className="font-light text-[#9CA3AF]">
+          <span className="font-light text-gray-600">
             and is used exclusively to advance understanding in areas such as sexuality, attachment,
             well-being, and human flourishing — always in service of reducing suffering and
             increasing human happiness.
@@ -710,7 +715,7 @@ const ResearchSection = () => (
       </div>
 
       {/* Image Card */}
-      <div className="reveal-on-scroll relative h-[380px] md:h-[576px] w-full max-w-[448px] overflow-hidden rounded-3xl border border-white/10">
+      <div className="reveal-on-scroll relative h-[380px] md:h-[576px] w-full max-w-[448px] overflow-hidden rounded-3xl border border-black/[0.08]">
         <Image
           src="/privacy/privacy-research.png"
           alt="Scientific research abstract"
@@ -718,7 +723,8 @@ const ResearchSection = () => (
           className="object-cover"
           sizes="(min-width: 1024px) 448px, 100vw"
         />
-        <div className="absolute inset-0 bg-gradient-to-tr from-[#0A0510] via-[#2E0147]/50 to-transparent" />
+        {/* Bottom scrim keeps the white label legible over the dark lower third of the photo */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
 
         {/* Bottom Overlay */}
         <div className="absolute bottom-0 left-0 right-0 p-8">
@@ -728,7 +734,7 @@ const ResearchSection = () => (
             </div>
             <span className="font-serif text-lg leading-[28px] text-white">Research Lab</span>
           </div>
-          <div className="mb-3 h-1 w-full overflow-hidden rounded-full bg-white/10">
+          <div className="mb-3 h-1 w-full overflow-hidden rounded-full bg-white/25">
             <div className="h-full w-2/3 rounded-full bg-[#fe6839] animate-gradient-move" />
           </div>
           <div className="flex items-center justify-start text-[10px] uppercase tracking-[0.5px] text-[#d1d5db]">
@@ -744,16 +750,16 @@ const IconEncrypted = () => (
   <svg aria-hidden viewBox="0 0 12 12" className="h-3 w-3" fill="none">
     <path
       d="M10 6.50001C10 9.00001 8.25 10.25 6.17 10.975C6.06108 11.0119 5.94277 11.0102 5.835 10.97C3.75 10.25 2 9.00001 2 6.50001V3.00001C2 2.72405 2.22404 2.50001 2.5 2.50001C3.5 2.50001 4.75 1.90001 5.62 1.14001C5.83884 0.953045 6.16116 0.953045 6.38 1.14001C7.255 1.90501 8.5 2.50001 9.5 2.50001C9.77614 2.50001 10 2.72387 10 3.00001V6.50001"
-      stroke="white"
-      strokeOpacity="0.4"
+      stroke="currentColor"
+      strokeOpacity="1"
       strokeWidth="0.75"
       strokeLinecap="round"
       strokeLinejoin="round"
     />
     <path
       d="M4.5 6L5.5 7L7.5 5"
-      stroke="white"
-      strokeOpacity="0.4"
+      stroke="currentColor"
+      strokeOpacity="1"
       strokeWidth="0.75"
       strokeLinecap="round"
       strokeLinejoin="round"
@@ -765,24 +771,24 @@ const IconAnonymous = () => (
   <svg aria-hidden viewBox="0 0 12 12" className="h-3 w-3" fill="none">
     <path
       d="M4.5 5H4.505"
-      stroke="white"
-      strokeOpacity="0.4"
+      stroke="currentColor"
+      strokeOpacity="1"
       strokeWidth="0.75"
       strokeLinecap="round"
       strokeLinejoin="round"
     />
     <path
       d="M7.5 5H7.505"
-      stroke="white"
-      strokeOpacity="0.4"
+      stroke="currentColor"
+      strokeOpacity="1"
       strokeWidth="0.75"
       strokeLinecap="round"
       strokeLinejoin="round"
     />
     <path
       d="M6 1C3.79234 1 2 2.79234 2 5V11L3.5 9.5L4.75 10.75L6 9.5L7.25 10.75L8.5 9.5L10 11V5C10 2.79234 8.20766 1 6 1V1"
-      stroke="white"
-      strokeOpacity="0.4"
+      stroke="currentColor"
+      strokeOpacity="1"
       strokeWidth="0.75"
       strokeLinecap="round"
       strokeLinejoin="round"
@@ -794,8 +800,8 @@ const IconSafeZone = () => (
   <svg aria-hidden viewBox="0 0 12 12" className="h-3 w-3" fill="none">
     <path
       d="M1 4.75002C1.00002 3.61099 1.70222 2.58986 2.7658 2.18222C3.82939 1.77457 5.03419 2.06479 5.7955 2.91202C5.84845 2.96863 5.92249 3.00076 6 3.00076C6.07751 3.00076 6.15155 2.96863 6.2045 2.91202C6.96356 2.05912 8.17131 1.76514 9.23744 2.17376C10.3036 2.58238 11.0054 3.60827 11 4.75002C11 5.89502 10.25 6.75002 9.5 7.50002L6.754 10.1565C6.56553 10.373 6.29315 10.498 6.00614 10.4998C5.71914 10.5017 5.44519 10.3801 5.254 10.166L2.5 7.50002C1.75 6.75002 1 5.90002 1 4.75002"
-      stroke="white"
-      strokeOpacity="0.4"
+      stroke="currentColor"
+      strokeOpacity="1"
       strokeWidth="0.75"
       strokeLinecap="round"
       strokeLinejoin="round"
@@ -804,19 +810,19 @@ const IconSafeZone = () => (
 );
 
 const QuoteSection = () => (
-  <section className="relative overflow-hidden bg-white/[0.02] px-4 pt-[37px] pb-24">
+  <section className="relative overflow-hidden bg-[#f5f6f8] px-4 pt-[37px] pb-24">
     <div className="content-shell relative flex flex-col items-center gap-5 py-8 text-center">
-      {/* Purple blur background - centered behind content */}
+      {/* Soft lilac glow behind content */}
       <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-        {/* Main purple glow - centered */}
-        <div className="absolute h-[250px] w-[250px] md:h-[600px] md:w-[600px] rounded-full bg-[#4a0d6e] blur-[80px] md:blur-[150px] opacity-30 md:opacity-50 animate-pulse-glow" />
-        {/* Inner concentrated glow for intensity */}
+        {/* Main glow - centered */}
+        <div className="absolute h-[250px] w-[250px] md:h-[600px] md:w-[600px] rounded-full bg-[#c8a4e8] blur-[80px] md:blur-[150px] opacity-20 md:opacity-25 animate-pulse-glow" />
+        {/* Inner concentrated glow */}
         <div
-          className="absolute h-[150px] w-[150px] md:h-[400px] md:w-[400px] rounded-full bg-[#6b21a8] blur-[60px] md:blur-[100px] opacity-25 md:opacity-40 animate-pulse-glow"
+          className="absolute h-[150px] w-[150px] md:h-[400px] md:w-[400px] rounded-full bg-[#d9b8f0] blur-[60px] md:blur-[100px] opacity-20 md:opacity-25 animate-pulse-glow"
           style={{ animationDelay: "1s" }}
         />
       </div>
-      <p className="reveal-on-scroll relative z-10 mx-auto max-w-[900px] font-serif text-[28px] leading-[36px] md:text-[48px] md:leading-[56px] tracking-[-1.2px] text-white">
+      <p className="reveal-on-scroll relative z-10 mx-auto max-w-[900px] font-serif text-[28px] leading-[36px] md:text-[48px] md:leading-[56px] tracking-[-1.2px] text-gray-900">
         This is a space designed for honest reflection — even on thoughts and desires we&apos;ve
         never spoken aloud.
       </p>
@@ -855,23 +861,23 @@ const QuoteSection = () => (
         </Link>
 
         <div className="flex flex-col items-center gap-1">
-          <div className="reveal-on-scroll stagger-2 flex items-center gap-2 text-[10px] sm:text-sm font-bold uppercase tracking-[1px] text-white/40">
+          <div className="reveal-on-scroll stagger-2 flex items-center gap-2 text-[10px] sm:text-sm font-bold uppercase tracking-[1px] text-gray-600">
             <span className="flex items-center gap-1 whitespace-nowrap">
               <IconEncrypted />
               Encrypted
             </span>
-            <span className="h-1 w-1 rounded-full bg-white/40" />
+            <span className="h-1 w-1 rounded-full bg-gray-400" />
             <span className="flex items-center gap-1 whitespace-nowrap">
               <IconAnonymous />
               Anonymous
             </span>
-            <span className="h-1 w-1 rounded-full bg-white/40" />
+            <span className="h-1 w-1 rounded-full bg-gray-400" />
             <span className="flex items-center gap-1 whitespace-nowrap">
               <IconSafeZone />
               Safe Zone
             </span>
           </div>
-          <p className="reveal-on-scroll stagger-3 text-[10px] sm:text-sm font-bold uppercase tracking-[1px] text-white/40">
+          <p className="reveal-on-scroll stagger-3 text-[10px] sm:text-sm font-bold uppercase tracking-[1px] text-gray-600">
             No account required
           </p>
         </div>
@@ -883,30 +889,30 @@ const QuoteSection = () => (
 const EthicalPledgeSection = () => (
   <section className="relative px-4 py-24">
     <div className="content-shell flex justify-center">
-      <div className="reveal-on-scroll relative w-full max-w-[996px] overflow-hidden rounded-[32px] border border-white/10 bg-[#13081A] shadow-[0_25px_50px_-12px_rgba(0,0,0,0.25)]">
-        <div className="pointer-events-none absolute right-10 top-0 h-64 w-64 rounded-full bg-[#2E0147]/25 blur-[160px] animate-pulse-glow" />
+      <div className="reveal-on-scroll relative w-full max-w-[996px] overflow-hidden rounded-[32px] border border-black/[0.08] bg-[#f5f6f8] shadow-[0_10px_25px_-12px_rgba(0,0,0,0.15)]">
+        <div className="pointer-events-none absolute right-10 top-0 h-64 w-64 rounded-full bg-[#c8a4e8]/40 blur-[160px] animate-pulse-glow" />
         <div className="grid overflow-hidden lg:grid-cols-[1.1fr_0.9fr]">
           <div className="relative flex flex-col justify-center gap-6 px-8 py-12 md:px-12">
             <Pill className="reveal-on-scroll w-fit">
               <IconSparkle />
               Our Ethical Pledge
             </Pill>
-            <h3 className="reveal-on-scroll stagger-1 font-serif text-3xl leading-[1.1] text-white md:text-4xl">
+            <h3 className="reveal-on-scroll stagger-1 font-serif text-3xl leading-[1.1] text-gray-900 md:text-4xl">
               Built by humans,
               <br />
               for humans.
             </h3>
-            <p className="reveal-on-scroll stagger-2 text-base leading-[1.7] text-[#9CA3AF]">
+            <p className="reveal-on-scroll stagger-2 text-base leading-[1.7] text-gray-600">
               We believe that emotional data is sacred. It is not just &quot;content&quot; - it is
               the fabric of your life.
             </p>
-            <p className="reveal-on-scroll stagger-3 text-base leading-[1.7] text-[#9CA3AF]">
+            <p className="reveal-on-scroll stagger-3 text-base leading-[1.7] text-gray-600">
               We promise to treat vulnerability with the same reverence as a therapist. We use data
               only to improve the tool, never to manipulate our choices or emotions.
             </p>
             <Link
               href="/privacy-policy"
-              className="reveal-on-scroll stagger-4 inline-flex w-fit items-center justify-center gap-2 rounded-full border border-[#FE6839]/40 px-6 py-3 text-sm font-semibold text-[#FE6839] transition-all duration-75 hover:-translate-y-[2px] hover:border-[#FE6839]/70 hover:text-white"
+              className="reveal-on-scroll stagger-4 inline-flex w-fit items-center justify-center gap-2 rounded-full border border-[#FE6839]/40 px-6 py-3 text-sm font-semibold text-[#C2410C] transition-all duration-75 hover:-translate-y-[2px] hover:border-[#fe6839] hover:bg-[#fe6839] hover:text-white"
             >
               Read our Privacy Policy
               <svg
@@ -932,7 +938,7 @@ const EthicalPledgeSection = () => (
               sizes="(min-width: 1024px) 450px, 100vw"
               style={{ objectPosition: "50% 35%", transform: "scale(1.7)" }}
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-[#13081A] via-transparent to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-t from-white via-transparent to-transparent" />
           </div>
         </div>
       </div>
@@ -971,8 +977,9 @@ export default function TrustZonePage() {
 
   return (
     <>
-      <LegalNavSection />
-      <main className="relative bg-[#0A0510] text-white">
+      <style>{"html,body{background:#ffffff;}"}</style>
+      <WNavSection />
+      <main className="relative bg-white text-gray-900">
         <HeroSection />
         <HonestySection />
         <SecuritySection />
@@ -983,7 +990,7 @@ export default function TrustZonePage() {
         <EthicalPledgeSection />
         <ResearchSection />
         <QuoteSection />
-        <FooterSection />
+        <WFooterSection />
       </main>
     </>
   );

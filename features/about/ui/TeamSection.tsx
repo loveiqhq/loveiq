@@ -34,16 +34,6 @@ const LinkedInIcon: FC = () => (
 const TeamSection: FC = () => {
   const team = [
     {
-      name: "Iman Beslija",
-      role: "UX/UI Designer",
-      image: "/about/team-iman-beslija.png",
-      linkedinUrl: "https://www.linkedin.com/in/iman-be%C5%A1lija-370918336/",
-      socials: ["linkedin"],
-      hoverColor: "purple",
-      imageScale: 1,
-      imagePosition: "center top",
-    },
-    {
       name: "Eman Cickusic",
       role: "Tech & Delivery Lead",
       image: "/about/team-eman-cickusic.png",
@@ -69,23 +59,20 @@ const TeamSection: FC = () => {
   ];
 
   return (
-    <section
-      id="team"
-      className="relative overflow-hidden border-t border-white/5 bg-[#0A0510] px-6 py-16 md:py-24"
-    >
+    <section id="team" className="relative overflow-hidden bg-white px-6 py-16 md:py-24">
       {/* Ambient Background Glows - Left and Right */}
       <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
         {/* Left gradient circle */}
-        <div className="absolute -left-64 top-1/3 h-[600px] w-[600px] rounded-full bg-[#2E0147] opacity-30 blur-[150px]" />
+        <div className="absolute -left-64 top-1/3 h-[600px] w-[600px] rounded-full bg-[#9c7dff] opacity-15 blur-[150px]" />
         {/* Right gradient circle */}
-        <div className="absolute -right-64 bottom-1/4 h-[600px] w-[600px] rounded-full bg-[#2E0147] opacity-30 blur-[150px]" />
+        <div className="absolute -right-64 bottom-1/4 h-[600px] w-[600px] rounded-full bg-[#9c7dff] opacity-15 blur-[150px]" />
       </div>
 
       <div className="content-shell relative z-10">
         {/* Header */}
         <div className="reveal-on-scroll mb-20 text-center">
           <div className="relative inline-block">
-            <h2 className="font-serif text-4xl tracking-tight text-white md:text-5xl">
+            <h2 className="font-serif text-4xl tracking-tight text-[#161021] md:text-5xl">
               Leadership Team With Vision
             </h2>
             {/* Badge */}
@@ -93,7 +80,7 @@ const TeamSection: FC = () => {
               Our Team
             </div>
           </div>
-          <p className="mx-auto mt-6 max-w-2xl text-lg font-light leading-relaxed text-gray-400">
+          <p className="mx-auto mt-6 max-w-2xl text-lg font-light leading-relaxed text-[#6b6678]">
             We are a team of researchers, builders, and designers shaped by emerging psychology,
             lived experience, and a shared belief that self-understanding should feel clearer,
             kinder, and more human.
@@ -105,20 +92,20 @@ const TeamSection: FC = () => {
           {team.map((member, index) => {
             const isPurple = member.hoverColor === "purple";
             const hoverShadow = isPurple
-              ? "hover:shadow-[0_20px_40px_-12px_rgba(46,1,71,0.5)]"
-              : "hover:shadow-[0_20px_40px_-12px_rgba(254,104,57,0.3)]";
+              ? "hover:shadow-[0_20px_40px_-12px_rgba(156,125,255,0.25)]"
+              : "hover:shadow-[0_20px_40px_-12px_rgba(254,104,57,0.20)]";
             const nameHoverColor = isPurple
-              ? "group-hover:text-[#a855f7]"
+              ? "group-hover:text-[#7c3aed]"
               : "group-hover:text-[#FE6839]";
 
             return (
               <div
                 key={member.name}
-                className={`reveal-on-scroll stagger-${Math.min(index + 1, 4)} group w-[290px] flex-shrink-0 rounded-[2rem] border border-white/5 bg-[#120B1C] p-4 transition-all duration-500 ease-[cubic-bezier(0.25,0.4,0.25,1)] hover:-translate-y-2 hover:border-white/20 hover:bg-[#1a1025] ${hoverShadow}`}
+                className={`reveal-on-scroll stagger-${Math.min(index + 1, 4)} group w-[290px] flex-shrink-0 rounded-[2rem] border border-black/[0.08] bg-white p-4 transition-all duration-500 ease-[cubic-bezier(0.25,0.4,0.25,1)] hover:-translate-y-2 hover:border-black/[0.14] ${hoverShadow}`}
               >
                 {/* Photo */}
-                <div className="relative mb-5 h-[256px] w-full overflow-hidden rounded-2xl bg-[#0A0510]">
-                  <div className="pointer-events-none absolute inset-0 z-10 bg-gradient-to-t from-[#0A0510] via-transparent to-transparent opacity-0 transition-opacity duration-500 group-hover:opacity-60" />
+                <div className="relative mb-5 h-[256px] w-full overflow-hidden rounded-2xl bg-[#f5f6f8]">
+                  <div className="pointer-events-none absolute inset-0 z-10 bg-gradient-to-t from-white via-transparent to-transparent opacity-0 transition-opacity duration-500 group-hover:opacity-60" />
                   <div
                     className="absolute inset-0"
                     style={
@@ -144,11 +131,11 @@ const TeamSection: FC = () => {
                 {/* Info */}
                 <div className="relative z-20 px-2 pb-2">
                   <h3
-                    className={`mb-1 text-xl font-medium text-white transition-colors duration-300 ${nameHoverColor}`}
+                    className={`mb-1 text-xl font-medium text-[#161021] transition-colors duration-300 ${nameHoverColor}`}
                   >
                     {member.name}
                   </h3>
-                  <p className="mb-5 text-sm text-gray-500 transition-colors duration-300 group-hover:text-gray-400">
+                  <p className="mb-5 text-sm text-[#6b6678] transition-colors duration-300 group-hover:text-[#4b4753]">
                     {member.role}
                   </p>
 
@@ -158,7 +145,7 @@ const TeamSection: FC = () => {
                       <Link
                         href={member.linkedinUrl}
                         aria-label={`${member.name} on LinkedIn`}
-                        className="transition-all duration-300 hover:scale-110 hover:text-white"
+                        className="transition-all duration-300 hover:scale-110 hover:text-[#161021]"
                         target="_blank"
                         rel="noreferrer"
                       >

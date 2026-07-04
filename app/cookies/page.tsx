@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import LegalNavSection from "@features/legal/ui/LegalNavSection";
-import FooterSection from "@features/landing/ui/FooterSection";
+import WNavSection from "@features/landing/ui/white/WNavSection";
+import WFooterSection from "@features/landing/ui/white/WFooterSection";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.loveiq.org";
 
@@ -16,15 +16,16 @@ export const metadata: Metadata = {
 export default function CookiesPage() {
   return (
     <>
-      <LegalNavSection />
-      <main className="min-h-screen px-4 py-20" style={{ backgroundColor: "#09050F" }}>
+      <style>{"html,body{background:#ffffff;}"}</style>
+      <WNavSection />
+      <main className="min-h-screen bg-white px-4 pt-32 pb-20 sm:pt-40">
         <article className="mx-auto max-w-3xl">
-          <h1 className="font-serif font-light text-white mb-10" style={{ fontSize: "36px" }}>
+          <h1 className="font-serif font-light text-[#161021] mb-10" style={{ fontSize: "36px" }}>
             Cookie Policy
           </h1>
 
           <div
-            className="font-sans space-y-8 text-gray-300 leading-relaxed"
+            className="font-sans space-y-8 text-gray-600 leading-relaxed"
             style={{ fontSize: "18px" }}
           >
             <p>
@@ -33,7 +34,7 @@ export default function CookiesPage() {
             </p>
 
             <p>
-              <span className="font-semibold text-white">
+              <span className="font-semibold text-gray-900">
                 Applied Psychometrics UG (in formation) (haftungsbeschränkt)
               </span>
               <br />
@@ -48,7 +49,7 @@ export default function CookiesPage() {
               Email:{" "}
               <a
                 href="mailto:hello@loveiq.org"
-                className="text-gray-300 hover:text-white transition-colors"
+                className="text-[#C2410C] hover:text-[#fe6839] transition-colors"
               >
                 hello@loveiq.org
               </a>
@@ -57,7 +58,7 @@ export default function CookiesPage() {
             </p>
 
             <section>
-              <h2 className="text-white font-semibold mb-4">1. What are Cookies?</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">1. What are Cookies?</h2>
               <p className="mb-4">
                 Cookies are small text files stored on your device when you visit a website. They
                 allow the website to recognize your device and store certain information about your
@@ -74,7 +75,7 @@ export default function CookiesPage() {
             </section>
 
             <section>
-              <h2 className="text-white font-semibold mb-4">2. Legal Basis</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">2. Legal Basis</h2>
               <p className="mb-4">We use cookies only in accordance with:</p>
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>General Data Protection Regulation (GDPR)</li>
@@ -92,9 +93,9 @@ export default function CookiesPage() {
             </section>
 
             <section>
-              <h2 className="text-white font-semibold mb-4">3. Categories of Cookies We Use</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">3. Categories of Cookies We Use</h2>
 
-              <h3 className="text-white font-medium mb-2">A. Strictly Necessary Cookies</h3>
+              <h3 className="text-gray-900 font-medium mb-2">A. Strictly Necessary Cookies</h3>
               <p className="mb-2">
                 These cookies are required for the operation of LoveIQ and cannot be disabled.
                 Examples:
@@ -110,7 +111,7 @@ export default function CookiesPage() {
                 §25(2) TTDSG)
               </p>
 
-              <h3 className="text-white font-medium mb-2">B. Functional Cookies</h3>
+              <h3 className="text-gray-900 font-medium mb-2">B. Functional Cookies</h3>
               <p className="mb-2">These improve usability:</p>
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>language preferences</li>
@@ -119,7 +120,7 @@ export default function CookiesPage() {
               </ul>
               <p className="mb-6">Legal basis: Consent (Art. 6(1)(a) GDPR)</p>
 
-              <h3 className="text-white font-medium mb-2">C. Analytics Cookies</h3>
+              <h3 className="text-gray-900 font-medium mb-2">C. Analytics Cookies</h3>
               <p className="mb-2">Used to understand how users interact with LoveIQ:</p>
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>page visits</li>
@@ -134,7 +135,7 @@ export default function CookiesPage() {
                 technically possible.
               </p>
 
-              <h3 className="text-white font-medium mb-2">D. Marketing Cookies</h3>
+              <h3 className="text-gray-900 font-medium mb-2">D. Marketing Cookies</h3>
               <p className="mb-2">We may use cookies for:</p>
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>advertising measurement</li>
@@ -144,7 +145,7 @@ export default function CookiesPage() {
               <p className="mb-2">These are only activated after explicit consent.</p>
               <p className="mb-6">Legal basis: Consent (Art. 6(1)(a) GDPR)</p>
 
-              <h3 className="text-white font-medium mb-2">E. Third-Party Services</h3>
+              <h3 className="text-gray-900 font-medium mb-2">E. Third-Party Services</h3>
               <p className="mb-2">LoveIQ may integrate services such as:</p>
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>payment providers (e.g., Stripe)</li>
@@ -160,7 +161,7 @@ export default function CookiesPage() {
             </section>
 
             <section>
-              <h2 className="text-white font-semibold mb-4">4. Consent Management</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">4. Consent Management</h2>
               <p className="mb-4">When you first visit loveiq.org, you will be asked to choose:</p>
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>Accept all cookies</li>
@@ -174,7 +175,7 @@ export default function CookiesPage() {
             </section>
 
             <section>
-              <h2 className="text-white font-semibold mb-4">5. How to Control Cookies</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">5. How to Control Cookies</h2>
               <p className="mb-4">You can:</p>
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>change preferences via our banner</li>
@@ -185,7 +186,7 @@ export default function CookiesPage() {
             </section>
 
             <section>
-              <h2 className="text-white font-semibold mb-4">6. Storage Duration</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">6. Storage Duration</h2>
               <p className="mb-4">Cookies are stored only as long as necessary:</p>
               <ul className="list-disc list-inside space-y-1">
                 <li>Session cookies: deleted after session</li>
@@ -196,7 +197,7 @@ export default function CookiesPage() {
             </section>
 
             <section>
-              <h2 className="text-white font-semibold mb-4">7. Data Transfers</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">7. Data Transfers</h2>
               <p className="mb-4">
                 Some third-party providers may process data outside the EU. We ensure protection
                 through:
@@ -209,7 +210,7 @@ export default function CookiesPage() {
             </section>
 
             <section>
-              <h2 className="text-white font-semibold mb-4">8. Your Rights</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">8. Your Rights</h2>
               <p className="mb-4">You have the right to:</p>
               <ul className="list-disc list-inside space-y-1">
                 <li>withdraw consent at any time</li>
@@ -222,18 +223,18 @@ export default function CookiesPage() {
             </section>
 
             <section>
-              <h2 className="text-white font-semibold mb-4">9. Updates</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">9. Updates</h2>
               <p>We may update this Cookie Policy to reflect legal or technical changes.</p>
             </section>
 
             <section>
-              <h2 className="text-white font-semibold mb-4">10. Governing Law</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">10. Governing Law</h2>
               <p>These Terms are governed by the laws of the Federal Republic of Germany.</p>
             </section>
           </div>
         </article>
       </main>
-      <FooterSection />
+      <WFooterSection />
     </>
   );
 }

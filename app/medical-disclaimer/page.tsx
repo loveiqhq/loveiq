@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import LegalNavSection from "@features/legal/ui/LegalNavSection";
-import FooterSection from "@features/landing/ui/FooterSection";
+import WNavSection from "@features/landing/ui/white/WNavSection";
+import WFooterSection from "@features/landing/ui/white/WFooterSection";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.loveiq.org";
 
@@ -17,15 +17,16 @@ export const metadata: Metadata = {
 export default function MedicalDisclaimerPage() {
   return (
     <>
-      <LegalNavSection />
-      <main className="min-h-screen px-4 py-20" style={{ backgroundColor: "#09050F" }}>
+      <style>{"html,body{background:#ffffff;}"}</style>
+      <WNavSection />
+      <main className="min-h-screen bg-white px-4 pt-32 pb-20 sm:pt-40">
         <article className="mx-auto max-w-3xl">
-          <h1 className="font-serif font-light text-white mb-10" style={{ fontSize: "36px" }}>
+          <h1 className="font-serif font-light text-[#161021] mb-10" style={{ fontSize: "36px" }}>
             Medical & Psychological Disclaimer
           </h1>
 
           <div
-            className="font-sans space-y-8 text-gray-300 leading-relaxed"
+            className="font-sans space-y-8 text-gray-600 leading-relaxed"
             style={{ fontSize: "18px" }}
           >
             {/* Intro */}
@@ -46,7 +47,7 @@ export default function MedicalDisclaimerPage() {
                 Email:{" "}
                 <a
                   href="mailto:hello@loveiq.org"
-                  className="text-gray-300 hover:text-white transition-colors"
+                  className="text-[#C2410C] hover:text-[#fe6839] transition-colors"
                 >
                   hello@loveiq.org
                 </a>
@@ -56,7 +57,7 @@ export default function MedicalDisclaimerPage() {
 
             {/* Section 1 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">
+              <h2 className="text-gray-900 font-semibold mb-4">
                 1. No Medical or Psychological Services
               </h2>
               <p className="mb-4">LoveIQ does not provide:</p>
@@ -77,7 +78,7 @@ export default function MedicalDisclaimerPage() {
 
             {/* Section 2 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">2. Nature of LoveIQ</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">2. Nature of LoveIQ</h2>
               <p className="mb-4">LoveIQ provides:</p>
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>psychometric self-exploration tools</li>
@@ -99,7 +100,7 @@ export default function MedicalDisclaimerPage() {
 
             {/* Section 3 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">3. No Diagnosis, No Treatment</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">3. No Diagnosis, No Treatment</h2>
               <p className="mb-4">LoveIQ does not:</p>
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>diagnose</li>
@@ -117,7 +118,7 @@ export default function MedicalDisclaimerPage() {
 
             {/* Section 4 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">4. AI and Automated Analysis</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">4. AI and Automated Analysis</h2>
               <p className="mb-4">
                 LoveIQ uses automated systems to analyze self-reported information. These systems:
               </p>
@@ -132,7 +133,7 @@ export default function MedicalDisclaimerPage() {
 
             {/* Section 5 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">5. User Responsibility</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">5. User Responsibility</h2>
               <p className="mb-4">You are solely responsible for:</p>
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>how you interpret results</li>
@@ -150,7 +151,9 @@ export default function MedicalDisclaimerPage() {
 
             {/* Section 6 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">6. No Reliance for Health or Safety</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">
+                6. No Reliance for Health or Safety
+              </h2>
               <p className="mb-4">LoveIQ must not be used for:</p>
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>suicide prevention</li>
@@ -167,12 +170,14 @@ export default function MedicalDisclaimerPage() {
                 <li>trauma</li>
                 <li>suicidal thoughts</li>
               </ul>
-              <p className="font-medium text-white">seek licensed professional help immediately.</p>
+              <p className="font-medium text-gray-900">
+                seek licensed professional help immediately.
+              </p>
             </section>
 
             {/* Section 7 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">7. Limitation of Liability</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">7. Limitation of Liability</h2>
               <p className="mb-4">Applied Psychometrics UG shall not be liable for:</p>
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>emotional impact</li>
@@ -187,7 +192,7 @@ export default function MedicalDisclaimerPage() {
 
             {/* Section 8 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">8. No Professional Relationship</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">8. No Professional Relationship</h2>
               <p className="mb-4">Using LoveIQ does not create:</p>
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>a therapist–client relationship</li>
@@ -199,7 +204,7 @@ export default function MedicalDisclaimerPage() {
 
             {/* Section 9 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">9. Consent</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">9. Consent</h2>
               <p className="mb-4">By using LoveIQ, you acknowledge that:</p>
               <ul className="list-disc list-inside space-y-1">
                 <li>you understand this disclaimer</li>
@@ -210,13 +215,13 @@ export default function MedicalDisclaimerPage() {
 
             {/* Section 10 */}
             <section>
-              <h2 className="text-white font-semibold mb-4">10. Governing Law</h2>
+              <h2 className="text-gray-900 font-semibold mb-4">10. Governing Law</h2>
               <p>These Terms are governed by the laws of the Federal Republic of Germany.</p>
             </section>
           </div>
         </article>
       </main>
-      <FooterSection />
+      <WFooterSection />
     </>
   );
 }

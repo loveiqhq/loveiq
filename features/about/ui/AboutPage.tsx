@@ -2,15 +2,14 @@
 
 import type { FC } from "react";
 import { useEffect } from "react";
-import AboutNavSection from "./AboutNavSection";
+import WNavSection from "@features/landing/ui/white/WNavSection";
 import HeroSection from "./HeroSection";
 import ChallengeVisionSection from "./ChallengeVisionSection";
 import SolutionSection from "./SolutionSection";
 import ProcessSection from "./ProcessSection";
-import PublicationsSection from "./PublicationsSection";
 import TeamSection from "./TeamSection";
 import ContactSection from "./ContactSection";
-import FooterSection from "@features/landing/ui/FooterSection";
+import WFooterSection from "@features/landing/ui/white/WFooterSection";
 
 const AboutPage: FC = () => {
   // Scroll reveal animation observer
@@ -40,18 +39,18 @@ const AboutPage: FC = () => {
   }, []);
 
   return (
-    <main id="main-content" className="relative bg-[#0A0510] text-white">
-      <AboutNavSection />
+    <main id="main-content" className="relative bg-white text-gray-900">
+      <style>{"html,body{background:#ffffff;}"}</style>
+      <WNavSection />
       <HeroSection />
       <div className="space-y-16 md:space-y-20">
         <ChallengeVisionSection />
         <SolutionSection />
         <ProcessSection />
-        {/* <PublicationsSection /> */}
         <TeamSection />
         <ContactSection />
       </div>
-      <FooterSection />
+      <WFooterSection />
     </main>
   );
 };

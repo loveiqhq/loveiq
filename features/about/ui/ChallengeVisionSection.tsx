@@ -3,7 +3,7 @@
 import type { FC } from "react";
 
 const IconContainer: FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/10">
+  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#161021]">
     {children}
   </div>
 );
@@ -67,29 +67,23 @@ const EyeIcon: FC = () => (
 
 const ChallengeVisionSection: FC = () => {
   return (
-    <section id="challenge-vision" className="relative bg-[#0A0510] px-6 py-16 md:py-24">
+    <section id="challenge-vision" className="relative bg-white px-6 py-16 md:py-24">
       <div className="content-shell relative z-10">
         {/* Top row: Challenge + Mission */}
         <div className="grid gap-6 lg:grid-cols-[1.65fr_1fr]">
           {/* The Challenge Card */}
-          <div
-            className="reveal-on-scroll group relative overflow-hidden rounded-[32px] border border-white/10 p-12"
-            style={{
-              backgroundImage:
-                "linear-gradient(155deg, rgba(31, 16, 41, 1) 0%, rgba(10, 5, 16, 1) 100%)",
-            }}
-          >
+          <div className="reveal-on-scroll group relative overflow-hidden rounded-[32px] border border-black/[0.08] bg-[#f5f6f8] p-12 shadow-[0_4px_12px_rgba(0,0,0,0.06)]">
             {/* Hover glow effect */}
-            <div className="pointer-events-none absolute right-0 top-0 h-32 w-32 bg-[#FE6839] opacity-5 blur-[80px] transition-opacity duration-700 group-hover:opacity-10" />
+            <div className="pointer-events-none absolute right-0 top-0 h-32 w-32 bg-[#FE6839] opacity-10 blur-[80px] transition-opacity duration-700 group-hover:opacity-20" />
             <div className="flex flex-col gap-6">
               <IconContainer>
                 <ZapIcon />
               </IconContainer>
-              <h3 className="font-serif text-[32px] font-normal leading-[1.125] text-white">
+              <h3 className="font-serif text-[32px] font-normal leading-[1.125] text-[#161021]">
                 The Challenge
               </h3>
-              <p className="max-w-[629px] text-base leading-[1.8] text-[#9CA3AF]">
-                <span className="text-white">
+              <p className="max-w-[629px] text-base leading-[1.8] text-[#6b6678]">
+                <span className="text-[#161021]">
                   Most people navigate personal growth guided by instinct, guesswork, or outdated
                   knowledge.{" "}
                 </span>
@@ -100,23 +94,17 @@ const ChallengeVisionSection: FC = () => {
           </div>
 
           {/* Our Mission Card */}
-          <div
-            className="reveal-on-scroll stagger-1 relative overflow-hidden rounded-[32px] border border-white/10 p-12"
-            style={{
-              backgroundImage:
-                "linear-gradient(143deg, rgba(31, 16, 41, 1) 0%, rgba(10, 5, 16, 1) 100%)",
-            }}
-          >
+          <div className="reveal-on-scroll stagger-1 relative overflow-hidden rounded-[32px] border border-black/[0.08] bg-[#f5f6f8] p-12 shadow-[0_4px_12px_rgba(0,0,0,0.06)]">
             <div className="flex flex-col gap-6">
               <IconContainer>
                 <GoalIcon />
               </IconContainer>
-              <h3 className="font-serif text-[32px] font-normal leading-[1] text-white">
+              <h3 className="font-serif text-[32px] font-normal leading-[1] text-[#161021]">
                 Our Mission
               </h3>
-              <p className="text-base leading-[1.8] text-[#9CA3AF]">
+              <p className="text-base leading-[1.8] text-[#6b6678]">
                 We exist to{" "}
-                <span className="text-white">
+                <span className="text-[#161021]">
                   help people understand their emotional patterns and grow
                 </span>
                 , so we can build healthier relationships, communicate more honestly, and live with
@@ -127,24 +115,18 @@ const ChallengeVisionSection: FC = () => {
         </div>
 
         {/* Bottom row: Our Vision */}
-        <div
-          className="reveal-on-scroll stagger-2 mt-6 overflow-hidden rounded-[32px] border border-white/10 p-12"
-          style={{
-            backgroundImage:
-              "linear-gradient(163deg, rgba(31, 16, 41, 1) 0%, rgba(10, 5, 16, 1) 100%)",
-          }}
-        >
+        <div className="reveal-on-scroll stagger-2 mt-6 overflow-hidden rounded-[32px] border border-black/[0.08] bg-[#f5f6f8] p-12 shadow-[0_4px_12px_rgba(0,0,0,0.06)]">
           <div className="flex flex-col items-center gap-12 lg:flex-row">
             {/* Left content */}
             <div className="flex flex-1 flex-col gap-6">
               <IconContainer>
                 <EyeIcon />
               </IconContainer>
-              <h3 className="font-serif text-[32px] font-medium leading-[1] text-white">
+              <h3 className="font-serif text-[32px] font-medium leading-[1] text-[#161021]">
                 Our Vision
               </h3>
-              <p className="max-w-[540px] text-base leading-[1.8] text-[#9CA3AF]">
-                <span className="text-white">
+              <p className="max-w-[540px] text-base leading-[1.8] text-[#6b6678]">
+                <span className="text-[#161021]">
                   Our vision is to become the world&apos;s most trusted platform for human
                   self-understanding &amp; personal growth.
                 </span>{" "}
@@ -156,7 +138,7 @@ const ChallengeVisionSection: FC = () => {
             </div>
 
             {/* Animated Vision Visual */}
-            <div className="group relative flex h-64 min-h-[250px] w-full items-center justify-center overflow-hidden rounded-2xl border border-white/5 bg-[#0A0510] md:h-full lg:w-[543px]">
+            <div className="group relative flex h-64 min-h-[250px] w-full items-center justify-center overflow-hidden rounded-2xl border border-black/[0.08] bg-[#f5f6f8] md:h-full lg:w-[543px]">
               {/* Animation Keyframes */}
               <style jsx>{`
                 @keyframes mist-cycle {
@@ -206,17 +188,17 @@ const ChallengeVisionSection: FC = () => {
               `}</style>
 
               {/* Ambient Background */}
-              <div className="absolute inset-0 bg-gradient-to-b from-[#2E0147]/10 via-[#0A0510] to-[#0A0510]" />
+              <div className="absolute inset-0 bg-gradient-to-b from-[#9c7dff]/10 via-white to-white" />
               <div className="absolute h-48 w-48 animate-[pulse-core_6s_ease-in-out_infinite] rounded-full bg-[#FE6839] opacity-10 blur-[90px]" />
 
               {/* Orbit Ring */}
-              <div className="absolute h-[180px] w-[180px] animate-[rotate-slow_30s_linear_infinite] rounded-full border border-dashed border-white/10 opacity-30" />
+              <div className="absolute h-[180px] w-[180px] animate-[rotate-slow_30s_linear_infinite] rounded-full border border-dashed border-black/[0.12] opacity-60" />
 
               {/* Sequence Content Container */}
               <div className="relative flex h-full w-full items-center justify-center">
                 {/* Phase 1: Identity (Fingerprint) */}
-                <div className="absolute flex flex-col items-center justify-center opacity-0 mix-blend-plus-lighter animate-[mist-cycle_12s_ease-in-out_infinite_0s]">
-                  <div className="flex h-14 w-14 items-center justify-center rounded-full border border-[#a855f7]/30 bg-gradient-to-b from-[#a855f7]/20 to-[#a855f7]/5 text-[#e9d5ff] shadow-[0_0_30px_rgba(168,85,247,0.25)] backdrop-blur-md">
+                <div className="absolute flex flex-col items-center justify-center opacity-0 animate-[mist-cycle_12s_ease-in-out_infinite_0s]">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-full border border-[#a855f7]/30 bg-gradient-to-b from-[#a855f7]/20 to-[#a855f7]/5 text-[#7c3aed] shadow-[0_4px_16px_rgba(124,58,237,0.15)] backdrop-blur-md">
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
                       width="24"
@@ -238,14 +220,14 @@ const ChallengeVisionSection: FC = () => {
                       <path d="M21.8 16c.2-2 .13-2.42-1.1-4.2-.27-.4-.28-1.13.1-1.3.47-.21.98-.18 1.2.2.14.24.2.4.2.6" />
                     </svg>
                   </div>
-                  <div className="mt-4 text-[11px] font-mono font-semibold uppercase tracking-[0.2em] text-[#e9d5ff] opacity-90 drop-shadow-[0_0_10px_rgba(168,85,247,0.5)]">
+                  <div className="mt-4 text-[11px] font-mono font-semibold uppercase tracking-[0.2em] text-[#7c3aed]">
                     Identity
                   </div>
                 </div>
 
                 {/* Phase 2: Needs (Heart - Filled) */}
-                <div className="absolute flex flex-col items-center justify-center opacity-0 mix-blend-plus-lighter animate-[mist-cycle_12s_ease-in-out_infinite_4s]">
-                  <div className="flex h-14 w-14 items-center justify-center rounded-full border border-[#c084fc]/30 bg-gradient-to-b from-[#c084fc]/20 to-[#9333ea]/10 text-[#f3e8ff] shadow-[0_0_30px_rgba(192,132,252,0.25)] backdrop-blur-md">
+                <div className="absolute flex flex-col items-center justify-center opacity-0 animate-[mist-cycle_12s_ease-in-out_infinite_4s]">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-full border border-[#c084fc]/40 bg-gradient-to-b from-[#c084fc]/20 to-[#9333ea]/10 text-[#9333ea] shadow-[0_4px_16px_rgba(147,51,234,0.15)] backdrop-blur-md">
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
                       width="24"
@@ -260,14 +242,14 @@ const ChallengeVisionSection: FC = () => {
                       <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
                     </svg>
                   </div>
-                  <div className="mt-4 text-[11px] font-mono font-semibold uppercase tracking-[0.2em] text-[#f3e8ff] opacity-90 drop-shadow-[0_0_10px_rgba(192,132,252,0.5)]">
+                  <div className="mt-4 text-[11px] font-mono font-semibold uppercase tracking-[0.2em] text-[#9333ea]">
                     Needs
                   </div>
                 </div>
 
                 {/* Phase 3: Patterns (Sparkles - Filled) */}
-                <div className="absolute flex flex-col items-center justify-center opacity-0 mix-blend-plus-lighter animate-[mist-cycle_12s_ease-in-out_infinite_8s]">
-                  <div className="flex h-14 w-14 items-center justify-center rounded-full border border-[#7c3aed]/30 bg-gradient-to-b from-[#7c3aed]/20 to-[#6d28d9]/10 text-[#ddd6fe] shadow-[0_0_30px_rgba(124,58,237,0.25)] backdrop-blur-md">
+                <div className="absolute flex flex-col items-center justify-center opacity-0 animate-[mist-cycle_12s_ease-in-out_infinite_8s]">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-full border border-[#7c3aed]/40 bg-gradient-to-b from-[#7c3aed]/20 to-[#6d28d9]/10 text-[#6d28d9] shadow-[0_4px_16px_rgba(109,40,217,0.15)] backdrop-blur-md">
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
                       width="24"
@@ -286,7 +268,7 @@ const ChallengeVisionSection: FC = () => {
                       <path d="M10 19H6" />
                     </svg>
                   </div>
-                  <div className="mt-4 text-[11px] font-mono font-semibold uppercase tracking-[0.2em] text-[#ddd6fe] opacity-90 drop-shadow-[0_0_10px_rgba(124,58,237,0.5)]">
+                  <div className="mt-4 text-[11px] font-mono font-semibold uppercase tracking-[0.2em] text-[#6d28d9]">
                     Pattern
                   </div>
                 </div>
@@ -294,7 +276,7 @@ const ChallengeVisionSection: FC = () => {
 
               {/* Bottom Indicator */}
               <div className="absolute bottom-4 z-20">
-                <div className="flex items-center gap-2 rounded-lg border border-white/5 bg-[#0A0510]/60 px-3 py-1.5 backdrop-blur-md">
+                <div className="flex items-center gap-2 rounded-lg border border-black/[0.08] bg-white/70 px-3 py-1.5 backdrop-blur-md">
                   <div className="flex gap-1">
                     <div className="h-1 w-1 animate-pulse rounded-full bg-[#FE6839]" />
                     <div
@@ -302,11 +284,11 @@ const ChallengeVisionSection: FC = () => {
                       style={{ animationDelay: "0.2s" }}
                     />
                     <div
-                      className="h-1 w-1 animate-pulse rounded-full bg-white"
+                      className="h-1 w-1 animate-pulse rounded-full bg-[#161021]"
                       style={{ animationDelay: "0.4s" }}
                     />
                   </div>
-                  <span className="font-mono text-[9px] uppercase tracking-tight text-white/40">
+                  <span className="font-mono text-[9px] uppercase tracking-tight text-[#9a96a6]">
                     Vision Index
                   </span>
                 </div>

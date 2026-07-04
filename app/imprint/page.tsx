@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import LegalNavSection from "@features/legal/ui/LegalNavSection";
-import FooterSection from "@features/landing/ui/FooterSection";
+import WNavSection from "@features/landing/ui/white/WNavSection";
+import WFooterSection from "@features/landing/ui/white/WFooterSection";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.loveiq.org";
 
@@ -16,19 +16,20 @@ export const metadata: Metadata = {
 export default function ImprintPage() {
   return (
     <>
-      <LegalNavSection />
-      <main className="min-h-screen px-4 py-20" style={{ backgroundColor: "#09050F" }}>
+      <style>{"html,body{background:#ffffff;}"}</style>
+      <WNavSection />
+      <main className="min-h-screen bg-white px-4 pt-32 pb-20 sm:pt-40">
         <article className="mx-auto max-w-3xl">
-          <h1 className="font-serif font-light text-white mb-10" style={{ fontSize: "36px" }}>
+          <h1 className="font-serif font-light text-[#161021] mb-10" style={{ fontSize: "36px" }}>
             Imprint
           </h1>
 
           <div
-            className="font-sans space-y-6 text-gray-300 leading-relaxed"
+            className="font-sans space-y-6 text-gray-600 leading-relaxed"
             style={{ fontSize: "18px" }}
           >
             <p>
-              <span className="font-semibold text-white">Applied Psychometrics UG</span>{" "}
+              <span className="font-semibold text-gray-900">Applied Psychometrics UG</span>{" "}
               (haftungsbeschränkt)
               <br />
               Hasenheide 62,
@@ -57,7 +58,7 @@ export default function ImprintPage() {
               Email:{" "}
               <a
                 href="mailto:hello@loveiq.org"
-                className="text-gray-300 hover:text-white transition-colors"
+                className="text-[#C2410C] hover:text-[#fe6839] transition-colors"
               >
                 hello@loveiq.org
               </a>
@@ -65,7 +66,7 @@ export default function ImprintPage() {
           </div>
         </article>
       </main>
-      <FooterSection />
+      <WFooterSection />
     </>
   );
 }
