@@ -211,7 +211,7 @@ const IconHeartHandshake = () => (
 
 const HeroSection = () => (
   <section className="relative isolate flex min-h-screen flex-col overflow-hidden">
-    <div className="absolute inset-0 overflow-hidden opacity-[0.55]">
+    <div className="absolute inset-0 overflow-hidden opacity-90">
       <Image
         src="/privacy/privacy-hero-bg.png"
         alt=""
@@ -222,11 +222,14 @@ const HeroSection = () => (
         style={{ objectPosition: "center 35%" }}
       />
     </div>
-    {/* Top wash for nav + headline legibility over the sky */}
-    <div className="absolute inset-x-0 top-0 h-[55%] bg-gradient-to-b from-white via-white/70 to-transparent" />
-    {/* Bottom wash blends the photo into the white page */}
-    <div className="absolute bottom-0 left-0 right-0 h-[55%] bg-gradient-to-t from-white via-white/85 to-transparent" />
-    <div className="absolute top-[55%] left-1/2 h-[700px] w-[700px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#c8a4e8] blur-[160px] opacity-30 animate-pulse-glow" />
+    {/* Light top wash so the fixed nav stays legible without hiding the photo */}
+    <div className="absolute inset-x-0 top-0 h-[38%] bg-gradient-to-b from-white via-white/45 to-transparent" />
+    {/* Soft scrim directly behind the headline + body so dark text stays readable
+        over the couple, while the photo edges remain vivid */}
+    <div className="absolute inset-x-0 top-[24%] h-[46%] bg-gradient-to-b from-transparent via-white/55 to-transparent" />
+    {/* Bottom wash blends the photo into the white page below */}
+    <div className="absolute bottom-0 left-0 right-0 h-[42%] bg-gradient-to-t from-white via-white/55 to-transparent" />
+    <div className="absolute top-[58%] left-1/2 h-[700px] w-[700px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#c8a4e8] blur-[160px] opacity-25 animate-pulse-glow" />
     <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-black/10 to-transparent" />
     <div className="content-shell relative z-10 flex flex-col items-center px-4 pt-40 pb-24 md:pt-[208px] md:pb-[176px]">
       <h1
@@ -812,14 +815,15 @@ const IconSafeZone = () => (
 const QuoteSection = () => (
   <section className="relative overflow-hidden bg-[#f5f6f8] px-4 pt-[37px] pb-24">
     <div className="content-shell relative flex flex-col items-center gap-5 py-8 text-center">
-      {/* Soft lilac glow behind content */}
+      {/* Living lilac aurora behind content — two glows drifting at different
+          speeds/directions so they overlap into shifting, clearly-animated colour. */}
       <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-        {/* Main glow - centered */}
-        <div className="absolute h-[250px] w-[250px] md:h-[600px] md:w-[600px] rounded-full bg-[#c8a4e8] blur-[80px] md:blur-[150px] opacity-20 md:opacity-25 animate-pulse-glow" />
-        {/* Inner concentrated glow */}
+        {/* Main glow */}
+        <div className="animate-aurora absolute h-[250px] w-[250px] rounded-full bg-[#c8a4e8] blur-[80px] will-change-transform md:h-[600px] md:w-[600px] md:blur-[150px]" />
+        {/* Inner concentrated glow, counter-drifting */}
         <div
-          className="absolute h-[150px] w-[150px] md:h-[400px] md:w-[400px] rounded-full bg-[#d9b8f0] blur-[60px] md:blur-[100px] opacity-20 md:opacity-25 animate-pulse-glow"
-          style={{ animationDelay: "1s" }}
+          className="animate-aurora-slow absolute h-[150px] w-[150px] rounded-full bg-[#c17fe0] blur-[60px] will-change-transform md:h-[400px] md:w-[400px] md:blur-[100px]"
+          style={{ animationDelay: "2s" }}
         />
       </div>
       <p className="reveal-on-scroll relative z-10 mx-auto max-w-[900px] font-serif text-[28px] leading-[36px] md:text-[48px] md:leading-[56px] tracking-[-1.2px] text-gray-900">
