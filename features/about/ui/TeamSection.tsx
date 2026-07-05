@@ -48,13 +48,15 @@ const TeamSection: FC = () => {
     {
       name: "Marcus Börner",
       role: "Strategy Lead",
-      image: "/about/marcus.png",
+      // Cut from the black-background studio portrait (like Eman) → transparent
+      // cutout, full hair + torso, framed to match Eman.
+      image: "/about/team-marcus-borner-cut.png",
       linkedinUrl: "https://www.linkedin.com/in/marcusb1/",
       socials: ["linkedin"],
       hoverColor: "orange",
-      imageScale: 1,
-      imagePosition: "center 0%",
-      imageOffsetY: "-20%",
+      imageScale: 0.9,
+      imagePosition: "center 12%",
+      imageOffsetY: "6%",
     },
   ];
 
