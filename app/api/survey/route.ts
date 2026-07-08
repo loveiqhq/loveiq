@@ -483,9 +483,14 @@ export async function POST(request: Request) {
       }
 
       const siteUrl = getEmailSiteUrl();
+      // Arriving at the report from an email is always the soft freemium
+      // experience, never the forced paywall — including this first report-ready
+      // email. resolveReportPaywallCohort() softens on `from=email`; the nurture
+      // + chapter-nudge links already carry it. `from=email` is the paywall-only
+      // signal (no utm_source), so first-view channel attribution is unchanged.
       const reportUrl = reportToken
-        ? `${siteUrl}/report/${encodeURIComponent(reportToken)}`
-        : `${siteUrl}/report`;
+        ? `${siteUrl}/report/${encodeURIComponent(reportToken)}?from=email`
+        : `${siteUrl}/report?from=email`;
 
       const unsubSecret = process.env.UNSUBSCRIBE_SECRET;
       const unsubscribeUrl = unsubSecret

@@ -8,6 +8,7 @@ import {
   isLandingVariant,
   type LandingVariant,
 } from "@shared/experiments/landingVariant";
+import { sanitizeUtmSource } from "@shared/url/utm";
 
 const isProduction = process.env.NODE_ENV === "production";
 const CSRF_COOKIE_NAME = isProduction ? "__Host-csrf" : "__csrf";
@@ -210,6 +211,13 @@ export async function proxy(request: NextRequest) {
   // Clone the request headers and set CSP nonce for use in components
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-nonce", nonce);
+  // Strip any inbound copies of our internal visit headers so a client can't
+  // spoof them (they are set below only for a genuine new daily visit). Without
+  // this, `x-liq-new-visit` + `x-liq-new-visit-utm` echoed by a client would
+  // reach the root layout and inject fake visitor rows / channel labels into
+  // funnel_event. These headers are only ever produced by this middleware.
+  requestHeaders.delete("x-liq-new-visit");
+  requestHeaders.delete("x-liq-new-visit-utm");
 
   // R-22: mint a request correlation id per request. Honor an inbound
   // x-request-id from the client/edge if present (helps trace across
@@ -249,6 +257,15 @@ export async function proxy(request: NextRequest) {
     const visitVariant =
       landingVariant ?? (isLandingVariant(cookieVariant) ? cookieVariant : "white");
     requestHeaders.set("x-liq-new-visit", visitVariant);
+    // Last-touch acquisition source for THIS visit. sanitizeUtmSource strips to
+    // a safe charset + length-caps + lowercases at the trust boundary (the raw
+    // query param is attacker-controllable) using the SAME normalizer as the
+    // survey-start writer, so channel labels share one format. NB: the two
+    // writers read different inputs (this = live-URL last-touch; survey-start =
+    // first-touch localStorage), so per-channel start-rate is DIRECTIONAL, not an
+    // exact numerator/denominator match. NULL for direct/untagged visits.
+    const utmSource = sanitizeUtmSource(request.nextUrl.searchParams.get("utm_source"));
+    if (utmSource) requestHeaders.set("x-liq-new-visit-utm", utmSource);
   }
 
   // Create response with security headers

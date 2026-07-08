@@ -24,6 +24,7 @@ import { z } from "zod";
 import { verifyCsrfHeaderOrBody } from "@shared/http/csrf";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import { supabaseFetch } from "@features/admin/server/supabase";
+import { sanitizeUtmSource } from "@shared/url/utm";
 import logger from "@shared/observability/logger";
 import {
   EMAIL_POSITION_COOKIE,
@@ -47,7 +48,11 @@ const ALLOWED_EVENTS = [
 const schema = z.object({
   event: z.enum(ALLOWED_EVENTS),
   visitor_id: z.string().uuid(),
-  utm_source: z.string().max(64).optional(),
+  // Generous bound only to reject abuse — sanitizeUtmSource() below is the real
+  // length authority (slice 0,64). A raw value between 64 and 2048 chars is
+  // trimmed-and-stored, NOT rejected, so an over-long UTM never drops the whole
+  // survey_engine_mount event (that event is the consent-free start denominator).
+  utm_source: z.string().max(2048).optional(),
   _csrf: z.string().optional(),
 });
 
@@ -74,6 +79,10 @@ export async function POST(request: Request) {
 
   const { event, visitor_id, utm_source } = parsed.data;
   void parsed.data._csrf;
+  // Authoritative server-side normalization (same policy as proxy.ts) so both
+  // funnel_event writers store byte-identical channel labels even if a client
+  // sends a raw/dirty value.
+  const cleanUtm = sanitizeUtmSource(utm_source);
 
   // Email-position A/B arm. The sticky cookie is minted on survey-engine mount,
   // so it's present for `survey_engine_mount` (the consent-free "entered survey"
@@ -99,7 +108,7 @@ export async function POST(request: Request) {
         visitor_id,
         day: new Date().toISOString().slice(0, 10),
         event_type: event,
-        ...(utm_source ? { utm_source } : {}),
+        ...(cleanUtm ? { utm_source: cleanUtm } : {}),
         ...(isEmailPositionVariant(emailPositionRaw) ? { email_position: emailPositionRaw } : {}),
       }),
     });

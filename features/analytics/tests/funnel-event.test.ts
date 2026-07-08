@@ -123,12 +123,43 @@ describe("POST /api/funnel-event", () => {
     expect(res.status).toBe(204);
   });
 
-  it("rejects utm_source longer than 64 chars", async () => {
+  it("accepts an over-long utm_source and stores it truncated (does not drop the event)", async () => {
+    mockSupabaseFetch.mockResolvedValue({ ok: true });
+    const res = await POST(
+      makeRequest({
+        event: "survey_engine_mount",
+        visitor_id: VALID_UUID,
+        utm_source: "g".repeat(100),
+      })
+    );
+    // The event is kept; sanitizeUtmSource caps the utm at 64 chars rather than
+    // rejecting the whole survey-start row (the consent-free start denominator).
+    expect(res.status).toBe(204);
+    expect(mockSupabaseFetch).toHaveBeenCalledOnce();
+    const body = JSON.parse((mockSupabaseFetch.mock.calls[0]![1] as { body: string }).body);
+    expect(body.utm_source).toBe("g".repeat(64));
+  });
+
+  it("sanitizes a dirty utm_source server-side (strips bad chars, lowercases)", async () => {
+    mockSupabaseFetch.mockResolvedValue({ ok: true });
+    const res = await POST(
+      makeRequest({
+        event: "survey_engine_mount",
+        visitor_id: VALID_UUID,
+        utm_source: "Google/CPC!",
+      })
+    );
+    expect(res.status).toBe(204);
+    const body = JSON.parse((mockSupabaseFetch.mock.calls[0]![1] as { body: string }).body);
+    expect(body.utm_source).toBe("googlecpc");
+  });
+
+  it("rejects an abusively long utm_source (>2048 chars)", async () => {
     const res = await POST(
       makeRequest({
         event: "unique_visitor",
         visitor_id: VALID_UUID,
-        utm_source: "x".repeat(65),
+        utm_source: "x".repeat(2049),
       })
     );
     expect(res.status).toBe(400);

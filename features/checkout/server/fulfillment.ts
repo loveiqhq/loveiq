@@ -1073,6 +1073,19 @@ async function syncCheckoutSessionPayment({
         ? promotionSummary.couponAmountOff / 100
         : null,
     discountAmount: promotionSummary?.discountAmount ?? null,
+    // Nurture-email promo attribution — the per-user code (LIQ-50/75-xxxx) and
+    // stage (e.g. "30h_no_unlock") stamped on the Stripe session at checkout when
+    // a ?promo= link was used. Distinct from `promotionCode` above (that's Stripe's
+    // applied-discount readback). NULL for full-price / hand-typed-code purchases.
+    // `|| null` (not `??`) so a stray empty-string code from the session coalesces
+    // to NULL, keeping GROUP BY promoCode clean.
+    promoCode: settledSession.metadata?.promoCode || null,
+    promoStage: settledSession.metadata?.promoStage || null,
+    promoPercentOff:
+      settledSession.metadata?.promoPercentOff &&
+      Number.isFinite(Number(settledSession.metadata.promoPercentOff))
+        ? Number(settledSession.metadata.promoPercentOff)
+        : null,
     // R-04: persist Stripe Radar outcome on every payment row so admin
     // queries can filter and analytics can correlate risk with refund/
     // dispute outcomes.

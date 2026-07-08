@@ -165,7 +165,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // denominator that the consent-gated client pinger previously under-counted.
   const newVisitVariant = headersList.get("x-liq-new-visit");
   if (newVisitVariant) {
-    after(() => recordUniqueVisit(newVisitVariant));
+    const newVisitUtm = headersList.get("x-liq-new-visit-utm") ?? undefined;
+    after(() => recordUniqueVisit(newVisitVariant, newVisitUtm));
   }
 
   return (

@@ -1,4 +1,5 @@
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
+import { sanitizeUtmSource } from "@shared/url/utm";
 import logger from "@shared/observability/logger";
 
 /**
@@ -15,10 +16,17 @@ import logger from "@shared/observability/logger";
  * this writes at most once per browser per day. Best-effort: a failure must
  * never affect the page.
  */
-export async function recordUniqueVisit(variant: string): Promise<void> {
+export async function recordUniqueVisit(variant: string, utmSource?: string): Promise<void> {
   const supabaseUrl = process.env.SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!supabaseUrl || !serviceRoleKey) return;
+
+  // Re-sanitize at the write boundary — do NOT trust the header to have been
+  // cleaned. `x-liq-new-visit-utm` is copied from inbound request headers in
+  // proxy.ts, so a spoofed/echoed header could otherwise inject arbitrary text
+  // into funnel_event.utm_source. This is the single choke point every caller
+  // routes through (mirrors the `variant` clamp below).
+  const cleanUtm = sanitizeUtmSource(utmSource);
 
   try {
     const res = await fetchWithTimeout(`${supabaseUrl}/rest/v1/funnel_event`, {
@@ -35,6 +43,10 @@ export async function recordUniqueVisit(variant: string): Promise<void> {
         event_type: "unique_visitor",
         // Landing A/B arm so the digest can split dark vs white (see proxy.ts).
         landing_variant: variant === "white" ? "white" : "control",
+        // Last-touch acquisition source for THIS visit (re-sanitized above).
+        // Omitted (stays NULL) for direct/untagged visits so COUNT(utm_source)
+        // reflects only real campaign traffic.
+        ...(cleanUtm ? { utm_source: cleanUtm } : {}),
       }),
       timeoutMs: 3000,
     });

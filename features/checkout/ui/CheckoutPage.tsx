@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, useSyncExternalStore, type FC } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type FC } from "react";
 import {
   getReportNurturePromo,
   getReportPricingSessionId,
@@ -27,6 +27,15 @@ import {
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 
 const subscribeNoop = () => () => {};
+
+// Per-tab sessionStorage key holding the identity (`${plan}:${token|session}`)
+// of the checkout we last handed off to Stripe. If this page loads and the
+// stored value matches the current checkout, the user came back from Stripe
+// (e.g. browser "back") — the one-tap auto-forward is suppressed so they aren't
+// bounced straight back; they see the manual button and can leave or retry on
+// purpose. Scoping by identity keeps one-tap working for a different plan/report
+// bought later in the same tab.
+const CHECKOUT_SENT_KEY = "liq_checkout_sent";
 
 type CheckoutSessionState =
   | {
@@ -245,6 +254,34 @@ const CheckoutPage: FC<Props> = ({ archetype = null, planId, token = null }) => 
   const backHref = getReportReturnHref(token);
   const hasCheckoutContext = Boolean(token || reportSessionId);
   const hasCachedQuote = Boolean(cachedQuote);
+  // Marker identity for THIS checkout, so backing out of one plan doesn't
+  // suppress the one-tap forward for a different plan in the same tab.
+  const checkoutKey = `${planId}:${token ?? reportSessionId ?? "anon"}`;
+  // Read the "already handed off to Stripe" marker exactly ONCE per page
+  // instance and keep it in a ref (never cleared inside the auto-forward effect)
+  // so a later re-render — e.g. when the /api/price refetch resolves — can't
+  // resurrect the forward and re-trap a user who came back from Stripe. A match
+  // means "don't auto-forward, show the manual button". The marker is
+  // write-only (never deleted here): a match suppresses auto-forward on EVERY
+  // return/reload of this checkout — not just the first — so a browser back OR
+  // an F5 keeps the user on the review page instead of re-shoving them to
+  // Stripe. A deliberate click re-sends. A different checkout has a different
+  // key and still auto-forwards; the marker is overwritten on the next hand-off.
+  //
+  // CRITICAL: gate on a RESOLVED checkout context. On a hard load / hydration
+  // (the exact back-from-Stripe path on Chrome Android), `reportSessionId` from
+  // useSyncExternalStore is null on the first render (server snapshot), so
+  // checkoutKey would be "<plan>:anon" and never match the marker written under
+  // the real session id — silently defeating the guard. Waiting until token or
+  // reportSessionId is present means we read the marker under the correct key.
+  const returnedFromStripeRef = useRef<boolean | null>(null);
+  if (returnedFromStripeRef.current === null && (token || reportSessionId)) {
+    try {
+      returnedFromStripeRef.current = sessionStorage.getItem(CHECKOUT_SENT_KEY) === checkoutKey;
+    } catch {
+      returnedFromStripeRef.current = false;
+    }
+  }
   const activeQuote = quoteState.status === "ready" ? quoteState.quote : cachedQuote;
 
   useEffect(() => {
@@ -411,6 +448,11 @@ const CheckoutPage: FC<Props> = ({ archetype = null, planId, token = null }) => 
         return;
       }
 
+      try {
+        sessionStorage.setItem(CHECKOUT_SENT_KEY, checkoutKey);
+      } catch {
+        /* storage unavailable — the back-forward guard just won't engage */
+      }
       window.location.assign(json.url);
     } catch {
       setSessionState({
@@ -419,6 +461,58 @@ const CheckoutPage: FC<Props> = ({ archetype = null, planId, token = null }) => 
       });
     }
   }
+
+  // One-tap checkout (all devices). This page's only job is to repeat the price
+  // and offer a "Continue to secure checkout" button — Stripe collects the
+  // payment (and always shows the final amount before charging), so the extra
+  // tap here is a redundant confirm. Once the quote is ready we auto-advance to
+  // Stripe. The quote is pre-cached by the paywall modal, so for the modal path
+  // this fires almost immediately; sticky-bar / other entries fetch the quote
+  // first, then forward.
+  //
+  // Scope note: this only trims a redundant tap INSIDE the already-healthy
+  // checkout-start→paid step (~72.5% of checkout-starters pay). It is NOT the fix
+  // for the Android paid-CVR ~0.24% leak — that leak is upstream at paywall→click
+  // (the ScrollPricingModal; see the strategy audit's Bet #1). Measure this via
+  // checkout-start→paid, not paywall→paid.
+  //
+  // One-shot; never fires when the user came back from Stripe
+  // (returnedFromStripeRef); on POST error sessionState flips to "error" and the
+  // manual button is the fallback. Gates on the primitive `hasActiveQuote` (not
+  // the quote object, whose identity changes every render) to avoid effect churn.
+  // NOTE: never reset autoContinuedRef to false — the effect below depends on
+  // sessionState.status, so re-arming it could resurrect the auto-forward
+  // (double-POST / redirect loop). A soft-error retry goes through the manual
+  // button, not by clearing this ref.
+  const autoContinuedRef = useRef(false);
+  const hasActiveQuote = Boolean(activeQuote);
+  useEffect(() => {
+    if (autoContinuedRef.current) return;
+    if (returnedFromStripeRef.current) return; // came back from Stripe — show the manual button
+    if (!hasCheckoutContext || !hasActiveQuote) return;
+    if (sessionState.status !== "idle") return;
+    autoContinuedRef.current = true;
+    void handleContinueToStripe();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot, ref-guarded; handleContinueToStripe intentionally omitted
+  }, [hasCheckoutContext, hasActiveQuote, sessionState.status]);
+
+  // bfcache safety. A browser "Back" from Stripe can restore this page WITHOUT
+  // remounting (Safari/Firefox, and Chrome on cross-origin back), so the effects
+  // above never re-run. The page would be frozen mid-"redirecting", showing a
+  // stuck, disabled "Redirecting to Stripe…" button. On a persisted restore,
+  // block any further auto-forward and reset to idle so the manual button works.
+  useEffect(() => {
+    function onPageShow(event: PageTransitionEvent) {
+      if (!event.persisted) return;
+      // Block auto-forward on the restored instance and un-stick the frozen
+      // "Redirecting…" state. Leave the write-only marker in place so a later
+      // reload still shows the manual button rather than re-forwarding.
+      returnedFromStripeRef.current = true;
+      setSessionState({ status: "idle" });
+    }
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
+  }, []);
 
   return (
     <main className="checkout-page">
