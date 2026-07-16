@@ -67,6 +67,12 @@ describe("POST /api/admin/login (magic link)", () => {
           json: async () => [{ email: "admin@test.com" }],
         });
       }
+      if (path === "/auth/v1/admin/users") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ id: "auth-user-uuid" }),
+        });
+      }
       if (path.includes("/admin/generate_link")) {
         return Promise.resolve({
           ok: true,
@@ -91,6 +97,55 @@ describe("POST /api/admin/login (magic link)", () => {
     );
     // Should have sent email via Resend
     expect(mockResendSend).toHaveBeenCalledOnce();
+  });
+
+  it("pre-creates and confirms the auth user before generating the link", async () => {
+    const res = await POST(makeRequest({ email: "admin@test.com" }));
+    expect(res.status).toBe(200);
+    // Root-cause fix: a brand-new admin's auth user must be created + email-confirmed,
+    // otherwise generate_link(magiclink) issues a confirmation_token the callback can't verify.
+    expect(mockSupabaseFetch).toHaveBeenCalledWith(
+      "/auth/v1/admin/users",
+      expect.objectContaining({
+        method: "POST",
+        body: expect.stringContaining('"email_confirm":true'),
+      })
+    );
+  });
+
+  it("still sends the link when the auth user already exists (422)", async () => {
+    mockSupabaseFetch.mockImplementation((path: string) => {
+      if (path.includes("/admin_users")) {
+        return Promise.resolve({ ok: true, json: async () => [{ email: "admin@test.com" }] });
+      }
+      if (path === "/auth/v1/admin/users") {
+        return Promise.resolve({
+          ok: false,
+          status: 422,
+          json: async () => ({ msg: "email address already registered" }),
+        });
+      }
+      if (path.includes("/admin/generate_link")) {
+        return Promise.resolve({ ok: true, json: async () => ({ hashed_token: "t" }) });
+      }
+      return Promise.resolve({ ok: false, json: async () => ({}) });
+    });
+
+    const res = await POST(makeRequest({ email: "admin@test.com" }));
+    expect(res.status).toBe(200);
+    expect(mockResendSend).toHaveBeenCalledOnce();
+  });
+
+  it("does NOT create an auth user for a non-allowlisted email", async () => {
+    mockSupabaseFetch.mockImplementation((path: string) => {
+      if (path.includes("/admin_users")) {
+        return Promise.resolve({ ok: true, json: async () => [] });
+      }
+      return Promise.resolve({ ok: false, json: async () => ({}) });
+    });
+
+    await POST(makeRequest({ email: "nobody@test.com" }));
+    expect(mockSupabaseFetch).not.toHaveBeenCalledWith("/auth/v1/admin/users", expect.anything());
   });
 
   it("returns same generic response for non-allowed email (no enumeration)", async () => {

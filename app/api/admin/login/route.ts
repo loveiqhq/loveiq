@@ -95,6 +95,31 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
   }
 
+  // Ensure the admin's Supabase auth user exists AND is email-confirmed before minting the
+  // link. generate_link(magiclink) only produces a verifiable magic-link token for an
+  // existing, confirmed user; for a brand-new email it silently creates an UNCONFIRMED user
+  // plus a `confirmation_token`, which verifyOtp({ type: "magiclink" }) in the callback
+  // cannot consume — surfacing as `403 "One-time token not found"` and the recurring
+  // "Admin auth callback failed" alert on a new admin's first login. We only reach here for
+  // allowlisted emails, so creating them pre-confirmed is safe. Best-effort: 200 = created +
+  // confirmed, 422 = already exists; a transient failure must not block an existing admin
+  // from logging in, so we log and continue.
+  try {
+    const ensureRes = await supabaseFetch("/auth/v1/admin/users", {
+      method: "POST",
+      body: JSON.stringify({ email, email_confirm: true }),
+    });
+    if (!ensureRes.ok && ensureRes.status !== 422) {
+      const ensureBody = await ensureRes.json().catch(() => ({}));
+      logger.warn(
+        { status: ensureRes.status, body: ensureBody, ip },
+        "Admin login: could not pre-confirm auth user"
+      );
+    }
+  } catch (err) {
+    logger.warn({ err, ip }, "Admin login: pre-confirm auth user threw");
+  }
+
   try {
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
 
