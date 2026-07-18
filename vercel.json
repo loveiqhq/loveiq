@@ -18,10 +18,6 @@
       "schedule": "*/30 * * * *"
     },
     {
-      "path": "/api/cron/abandoned-checkout-alert",
-      "schedule": "*/30 * * * *"
-    },
-    {
       "path": "/api/cron/deep-engagement-alert",
       "schedule": "0 */4 * * *"
     },
@@ -68,9 +64,6 @@
       "maxDuration": 60
     },
     "app/api/cron/payment-fulfillment-sweep/route.ts": {
-      "maxDuration": 60
-    },
-    "app/api/cron/abandoned-checkout-alert/route.ts": {
       "maxDuration": 60
     },
     "app/api/cron/deep-engagement-alert/route.ts": {
