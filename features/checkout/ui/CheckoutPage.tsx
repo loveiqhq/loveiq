@@ -8,6 +8,7 @@ import {
   getReportSessionId,
 } from "@features/survey/ui/hooks/surveySession";
 import { getCsrfToken } from "@shared/http/csrf-client";
+import { getGaMeasurementContext } from "@features/analytics/client";
 import {
   formatReportPurchasePrice,
   getReportPurchaseBadgeFromPrice,
@@ -395,6 +396,11 @@ const CheckoutPage: FC<Props> = ({ archetype = null, planId, token = null }) => 
       token,
     });
 
+    // GA4 client_id / session_id + analytics consent, so the webhook can replay
+    // this purchase server-side via the Measurement Protocol with attribution
+    // intact (the client-side purchase event is lossy — blockers, closed tabs).
+    const ga = getGaMeasurementContext();
+
     try {
       const response = await fetch("/api/stripe/checkout-session", {
         method: "POST",
@@ -404,6 +410,9 @@ const CheckoutPage: FC<Props> = ({ archetype = null, planId, token = null }) => 
         },
         body: JSON.stringify({
           archetype: archetype ?? undefined,
+          gaClientId: ga.clientId ?? undefined,
+          gaConsent: ga.consent,
+          gaSessionId: ga.sessionId ?? undefined,
           plan: planId,
           pricingSessionId,
           promo: stashedPromo ?? undefined,

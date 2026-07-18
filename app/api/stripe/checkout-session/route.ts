@@ -44,6 +44,13 @@ export const runtime = "nodejs";
 const createCheckoutSessionSchema = z
   .object({
     archetype: z.enum(KNOWN_ARCHETYPES as unknown as [string, ...string[]]).optional(),
+    // GA4 client_id / session_id (from the buyer's `_ga` cookies) + analytics
+    // consent, captured client-side so the webhook can replay the purchase via
+    // the GA4 Measurement Protocol with correct attribution. All optional — a
+    // consent-declining or cookie-less visitor simply omits them.
+    gaClientId: z.string().max(64).nullable().optional(),
+    gaConsent: z.boolean().nullable().optional(),
+    gaSessionId: z.string().max(64).nullable().optional(),
     plan: z.enum(REPORT_PURCHASE_PLAN_IDS),
     pricingSessionId: z.string().uuid().nullable().optional(),
     promo: z.string().regex(NURTURE_PROMO_CODE_REGEX).nullable().optional(),
@@ -339,6 +346,12 @@ export async function POST(request: Request) {
           discountStep: String(quote.discountStep),
           engagementScore: String(quote.engagementScore),
           experimentGroup: quote.experimentGroup,
+          // GA4 Measurement Protocol context — replayed server-side at fulfillment
+          // so the purchase reaches GA4 even when the client event is lost. Consent
+          // is stored so the server send stays consent-compliant ("1"/"0").
+          gaClientId: toStripeMetadataValue(parsed.data.gaClientId ?? null),
+          gaSessionId: toStripeMetadataValue(parsed.data.gaSessionId ?? null),
+          gaAnalyticsConsent: parsed.data.gaConsent ? "1" : "0",
           // Forced-paywall A/B arm (computed above from the canonical report
           // token, consent-independent). Mirrors experimentGroup → flows
           // webhook → fulfillment → payment.metadata for conversion attribution
