@@ -30,7 +30,9 @@ const partialSchema = z.object({
     .refine((obj) => Object.keys(obj).length <= 200, { message: "Too many answers" }),
   currentIndex: z.number().int().min(0).max(200),
   startedAt: z.string().datetime(),
-  utmTracker: z.string().max(500).optional().nullable(),
+  // 1000 (not 500) so a Google Ads click id (gclid) captured with utm params
+  // fits; column is `text`, so this is only an anti-abuse bound. See utm.ts.
+  utmTracker: z.string().max(1000).optional().nullable(),
   _csrf: z.string().optional(),
 });
 

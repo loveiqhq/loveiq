@@ -5,9 +5,17 @@
  * persists them in localStorage so they survive navigation and refresh.
  * Consumers (survey submission, waitlist form, etc.) call `getStoredUtm()`
  * to read the stored JSON string.
+ *
+ * Also captures Google Ads click ids (gclid / gbraid / wbraid). Ads auto-tagging
+ * (the default) sends a click id with NO utm_* params, so those clicks would
+ * otherwise be recorded as "Direct"; we keep the click id and normalize the
+ * session to google/cpc for correct first-party attribution.
  */
 
 const UTM_KEYS = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"] as const;
+
+/** Google Ads click identifiers appended by auto-tagging (gbraid/wbraid are iOS). */
+const CLICK_ID_KEYS = ["gclid", "gbraid", "wbraid"] as const;
 
 /** Current global storage key. */
 export const GLOBAL_UTM_KEY = "loveiq-utm";
@@ -30,6 +38,25 @@ export function captureUtmFromUrl(): string | null {
   for (const key of UTM_KEYS) {
     const value = params.get(key);
     if (value) utm.set(key, value);
+  }
+
+  // Google Ads auto-tagging lands users with a click id — `gclid`, or
+  // `gbraid`/`wbraid` on iOS — and NO utm_* params. Capture the click id and,
+  // when the campaign didn't also set utm_source, synthesize google/cpc so the
+  // whole first-party pipeline (traffic classification, funnel, pricing) attributes
+  // the session to paid Google instead of Direct. The raw click id is kept too so
+  // a conversion can be tied back to the ad click later (offline conversion import).
+  let hasClickId = false;
+  for (const key of CLICK_ID_KEYS) {
+    const value = params.get(key);
+    if (value) {
+      utm.set(key, value);
+      hasClickId = true;
+    }
+  }
+  if (hasClickId) {
+    if (!utm.has("utm_source")) utm.set("utm_source", "google");
+    if (!utm.has("utm_medium")) utm.set("utm_medium", "cpc");
   }
 
   if (utm.size === 0) return null;

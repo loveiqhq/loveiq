@@ -264,7 +264,15 @@ export async function proxy(request: NextRequest) {
     // writers read different inputs (this = live-URL last-touch; survey-start =
     // first-touch localStorage), so per-channel start-rate is DIRECTIONAL, not an
     // exact numerator/denominator match. NULL for direct/untagged visits.
-    const utmSource = sanitizeUtmSource(request.nextUrl.searchParams.get("utm_source"));
+    // Google Ads auto-tagging lands with a click id (gclid / gbraid / wbraid) and
+    // no utm_source, so attribute those visits to google instead of leaving them
+    // untagged (Direct). Mirrors the client-side capture in shared/url/utm.ts.
+    const hasGoogleClickId = ["gclid", "gbraid", "wbraid"].some((k) =>
+      request.nextUrl.searchParams.has(k)
+    );
+    const utmSource =
+      sanitizeUtmSource(request.nextUrl.searchParams.get("utm_source")) ??
+      (hasGoogleClickId ? "google" : undefined);
     if (utmSource) requestHeaders.set("x-liq-new-visit-utm", utmSource);
   }
 
