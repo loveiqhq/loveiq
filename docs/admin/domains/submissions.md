@@ -10,8 +10,7 @@ Use this domain for submission review, notes, detail drilldowns, exports, saved 
 
 ## What does not belong here
 
-- Shell-wide navigation and leadership dashboards: use [`command-center.md`](command-center.md)
-- Scoring, archetype, and report analytics: use [`scoring.md`](scoring.md)
+- Analytics dashboards (Core KPIs, Data Explorer, Funnels & Cohorts, User Journey, Answer Explorer) live in their own admin surfaces.
 
 ## Cross-root map
 

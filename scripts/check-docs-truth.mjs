@@ -29,12 +29,7 @@ const REQUIRED_DOC_PATHS = [
   "features/admin/server/AGENT_README.md",
   "docs/admin/AGENT_README.md",
   "docs/admin/domains/AGENT_README.md",
-  "docs/admin/domains/command-center.md",
   "docs/admin/domains/submissions.md",
-  "docs/admin/domains/scoring.md",
-  "docs/admin/domains/growth.md",
-  "docs/admin/domains/research.md",
-  "docs/admin/domains/health.md",
 ];
 
 // Directory trees removed by the lib/->shared and components/->features refactor.
