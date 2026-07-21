@@ -70,7 +70,7 @@ describe("PracticeTendenciesSection", () => {
     expect(screen.getByRole("heading", { name: "Technology & Distance" })).toBeInTheDocument();
     expect(container.querySelector(".report-practice-table")).toBeInTheDocument();
     expect(container.querySelector(".report-practice-panel__glow")).not.toBeInTheDocument();
-    expect(screen.getAllByText("60%").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/More likely|Neutral likely|Less likely/).length).toBeGreaterThan(0);
   });
 
   it("opens and closes explanation popovers from the row info affordance", async () => {
@@ -183,7 +183,7 @@ describe("PracticeTendenciesSection", () => {
     });
   }, 60_000);
 
-  it("scales the metric fill gradient intensity with the score", () => {
+  it("maps each score to its likelihood bucket (7–10 / 4–6 / 0–3)", () => {
     const { container } = render(
       <PracticeTendenciesSection
         archetype="Spark Seeker"
@@ -200,22 +200,24 @@ describe("PracticeTendenciesSection", () => {
       rows.find((row) => row.textContent?.includes("Double-penetration fantasy")) ?? null;
     const lowRow = rows.find((row) => row.textContent?.includes("Penetrating partner")) ?? null;
 
-    const highFill = highRow?.querySelector(
-      ".report-practice-table__metric--fantasy .report-practice-table__metric-bar span"
-    ) as HTMLElement | null;
-    const lowFill = lowRow?.querySelector(
-      ".report-practice-table__metric--fantasy .report-practice-table__metric-bar span"
-    ) as HTMLElement | null;
+    const fantasyCell = (row: Element | null) =>
+      row?.querySelector(".report-practice-table__metric--fantasy") ?? null;
+    const numberOf = (cell: Element | null) =>
+      cell?.querySelector(".report-practice-table__metric-value")?.textContent;
+    const labelOf = (cell: Element | null) =>
+      cell?.querySelector(".report-practice-table__metric-likelihood")?.textContent;
 
-    expect(
-      container.querySelectorAll(".report-practice-table__metric-bar span").length
-    ).toBeGreaterThan(0);
-    expect(highFill?.style.getPropertyValue("--practice-fill-w")).toBe("100%");
-    expect(lowFill?.style.getPropertyValue("--practice-fill-w")).toBe("20%");
-    expect(highFill?.style.getPropertyValue("--practice-fill-opacity-end")).toBe("0.940");
-    expect(lowFill?.style.getPropertyValue("--practice-fill-opacity-end")).toBe("0.556");
-    expect(highFill?.style.getPropertyValue("--practice-fill-shadow-opacity")).toBe("0.320");
-    expect(lowFill?.style.getPropertyValue("--practice-fill-shadow-opacity")).toBe("0.128");
+    const highCell = fantasyCell(highRow);
+    const lowCell = fantasyCell(lowRow);
+
+    // fantasyPull 10 → "More likely" (7–10); fantasyPull 2 → "Less likely" (0–3).
+    expect(numberOf(highCell)).toBe("10");
+    expect(labelOf(highCell)).toBe("More likely");
+    expect(numberOf(lowCell)).toBe("2");
+    expect(labelOf(lowCell)).toBe("Less likely");
+
+    // Middle bucket (4–6) surfaces somewhere in the fixture.
+    expect(screen.getAllByText("Neutral likely").length).toBeGreaterThan(0);
   });
 
   it("renders the premium overlay preview when the section is locked", () => {

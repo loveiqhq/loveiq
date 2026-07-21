@@ -83,24 +83,11 @@ function slugifyPracticeKey(value: string) {
     .replace(/^-+|-+$/g, "");
 }
 
-function toPercent(value: number) {
-  return Math.min(10, Math.max(1, value)) * 10;
-}
-
-function buildPracticeMetricFillStyle(percent: number): CSSProperties {
-  const strength = Math.min(1, Math.max(0.1, percent / 100));
-  const startOpacity = 0.22 + strength * 0.28;
-  const midOpacity = 0.34 + strength * 0.42;
-  const endOpacity = 0.46 + strength * 0.48;
-  const shadowOpacity = 0.08 + strength * 0.24;
-
-  return {
-    "--practice-fill-w": `${percent}%`,
-    "--practice-fill-opacity-start": startOpacity.toFixed(3),
-    "--practice-fill-opacity-mid": midOpacity.toFixed(3),
-    "--practice-fill-opacity-end": endOpacity.toFixed(3),
-    "--practice-fill-shadow-opacity": shadowOpacity.toFixed(3),
-  } as CSSProperties;
+// Maps a 1–10 score to its qualitative likelihood bucket (Figma 8146:76002).
+function likelihoodLabel(value: number): string {
+  if (value >= 7) return "More likely";
+  if (value >= 4) return "Neutral likely";
+  return "Less likely";
 }
 
 function buildDesktopPopoverPosition(anchorRect: DOMRect, tooltipRect: DOMRect): CSSProperties {
@@ -142,17 +129,13 @@ const InfoGlyph: FC<{ className?: string }> = ({ className }) => (
 );
 
 const PracticeMetricCell: FC<{
-  label: string;
   tone: MetricTone;
   value: number | null;
-}> = ({ label, tone, value }) => {
+}> = ({ tone, value }) => {
   // value === null marks a locked-row placeholder. Premium scores must NEVER
   // hit the DOM behind a CSS overlay — DevTools would surface them. Render a
-  // visible "--" with no underlying numeric value when locked.
+  // visible "--" with no underlying numeric value (and no label) when locked.
   const isLocked = value === null;
-  const percent = isLocked ? null : toPercent(value);
-  const fillStyle =
-    percent === null ? buildPracticeMetricFillStyle(0) : buildPracticeMetricFillStyle(percent);
 
   return (
     <div
@@ -161,14 +144,11 @@ const PracticeMetricCell: FC<{
       }`}
       role="cell"
     >
-      <span className="report-practice-table__metric-mobile-label">{label}</span>
       <div className="report-practice-table__metric-content">
-        <span className="report-practice-table__metric-value">
-          {percent === null ? "--" : `${percent}%`}
-        </span>
-        <span className="report-practice-table__metric-bar" aria-hidden="true">
-          <span style={fillStyle} />
-        </span>
+        <span className="report-practice-table__metric-value">{isLocked ? "--" : value}</span>
+        {!isLocked && (
+          <span className="report-practice-table__metric-likelihood">{likelihoodLabel(value)}</span>
+        )}
       </div>
     </div>
   );
@@ -238,8 +218,8 @@ const PracticeRow: FC<{
         </div>
       </div>
 
-      <PracticeMetricCell label="Fantasy Pull" tone="fantasy" value={row.fantasyPull} />
-      <PracticeMetricCell label="Actual Pleasure" tone="pleasure" value={row.actualPleasure} />
+      <PracticeMetricCell tone="fantasy" value={row.fantasyPull} />
+      <PracticeMetricCell tone="pleasure" value={row.actualPleasure} />
 
       {interactive && row.description && isOpen && !useDesktopPopover ? (
         <div className="report-practice-table__inline-popover" data-practice-popover-root>
@@ -320,16 +300,8 @@ const PracticeGroupLocked: FC<{
                     <InfoGlyph className="report-practice-table__info-glyph report-practice-table__info-glyph--muted" />
                   </div>
                 </div>
-                <PracticeMetricCell
-                  label="Fantasy Pull"
-                  tone="fantasy"
-                  value={freeRow.fantasyPull}
-                />
-                <PracticeMetricCell
-                  label="Actual Pleasure"
-                  tone="pleasure"
-                  value={freeRow.actualPleasure}
-                />
+                <PracticeMetricCell tone="fantasy" value={freeRow.fantasyPull} />
+                <PracticeMetricCell tone="pleasure" value={freeRow.actualPleasure} />
               </div>
             )}
 
@@ -352,16 +324,8 @@ const PracticeGroupLocked: FC<{
                         <InfoGlyph className="report-practice-table__info-glyph report-practice-table__info-glyph--muted" />
                       </div>
                     </div>
-                    <PracticeMetricCell
-                      label="Fantasy Pull"
-                      tone="fantasy"
-                      value={row.fantasyPull}
-                    />
-                    <PracticeMetricCell
-                      label="Actual Pleasure"
-                      tone="pleasure"
-                      value={row.actualPleasure}
-                    />
+                    <PracticeMetricCell tone="fantasy" value={row.fantasyPull} />
+                    <PracticeMetricCell tone="pleasure" value={row.actualPleasure} />
                   </div>
                 ))}
 
@@ -711,7 +675,9 @@ const PracticeTendenciesSection: FC<Props> = ({
       <PracticeIntro archetype={archetype} generalHtml={generalHtml} />
 
       {isPremium && !unlocked ? (
-        <div className="report-practice-panel">
+        // `is-animated` (static) so locked previews render immediately — this
+        // wrapper has no IntersectionObserver, unlike the interactive panel.
+        <div className="report-practice-panel is-animated">
           {content.groups.map((group) => (
             <PracticeGroupLocked
               key={group.title}

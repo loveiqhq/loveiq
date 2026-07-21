@@ -3245,7 +3245,7 @@ input.autofill-dark:-internal-autofill-previewed {
   }
 
   .report-prob__row-bar > div,
-  .report-practice-table__metric-bar span,
+  .report-practice-table__metric-content,
   .report-importance__bar-fill,
   .report-premium-overlay__card,
   .report-practice-table__popover {
@@ -3253,6 +3253,11 @@ input.autofill-dark:-internal-autofill-previewed {
     transition-delay: 0ms !important;
     animation-duration: 0.01ms !important;
     animation-delay: 0ms !important;
+  }
+
+  .report-practice-panel:not(.is-animated) .report-practice-table__metric-content {
+    opacity: 1 !important;
+    transform: none !important;
   }
 }
 
@@ -7469,12 +7474,6 @@ input.autofill-dark:-internal-autofill-previewed {
 
 /* ── Locked (premium) group layout ────────────────────────── */
 
-/* Static bar fill — no IntersectionObserver in locked state */
-.report-practice-group--locked .report-practice-table__metric-bar span {
-  width: var(--practice-fill-w);
-  transition: none;
-}
-
 /* Blur metric cells inside locked rows */
 .report-practice-table__row--locked .report-practice-table__metric {
   filter: blur(4.55px);
@@ -7677,66 +7676,55 @@ input.autofill-dark:-internal-autofill-previewed {
   justify-content: center;
 }
 
-.report-practice-table__metric-mobile-label {
-  display: none;
-}
-
 .report-practice-table__metric-content {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 1rem;
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity 520ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 520ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Fade + rise the score into view (reuses the panel's IntersectionObserver).
+   Locked previews carry `is-animated` statically, so they skip the hidden
+   state and render immediately. */
+.report-practice-panel:not(.is-animated) .report-practice-table__metric-content {
+  opacity: 0;
+  transform: translateY(8px);
 }
 
 .report-practice-table__metric-value {
-  min-width: 3.5rem;
+  min-width: 2rem;
   color: #161021;
   font-family: var(--font-serif);
-  font-size: 1.3rem;
-  font-weight: 400;
+  font-size: 1.3125rem;
+  font-weight: 700;
   line-height: 1;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.036em;
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
 
-.report-practice-table__metric-bar {
-  display: block;
-  width: 6rem;
-  height: 0.375rem;
-  border-radius: 9999px;
-  background: #f5f6f8;
-  overflow: hidden;
+.report-practice-table__metric-likelihood {
+  color: #6b6678;
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 400;
+  line-height: 1;
+  white-space: nowrap;
 }
 
-.report-practice-table__metric-bar span {
-  display: block;
-  width: 0%;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(
-    90deg,
-    rgba(var(--practice-fill-rgb), var(--practice-fill-opacity-start, 0.34)) 0%,
-    rgba(var(--practice-fill-rgb), var(--practice-fill-opacity-mid, 0.56)) 58%,
-    rgba(var(--practice-fill-rgb), var(--practice-fill-opacity-end, 0.78)) 100%
-  );
-  box-shadow: 0 0 0.7rem rgba(var(--practice-fill-rgb), var(--practice-fill-shadow-opacity, 0.14));
-  transition:
-    width 900ms cubic-bezier(0.22, 1, 0.36, 1),
-    background 220ms ease,
-    box-shadow 220ms ease;
+/* Column tones — the bold score carries the hue (deep tones stay AA on white:
+   ≥3:1 for large text). Labels stay neutral for AA at 12px. */
+.report-practice-table__metric--fantasy .report-practice-table__metric-value {
+  color: #7c3aed;
 }
 
-.report-practice-panel.is-animated .report-practice-table__metric-bar span {
-  width: var(--practice-fill-w, 0%);
-}
-
-.report-practice-table__metric--fantasy .report-practice-table__metric-bar span {
-  --practice-fill-rgb: 168, 85, 247;
-}
-
-.report-practice-table__metric--pleasure .report-practice-table__metric-bar span {
-  --practice-fill-rgb: 254, 104, 57;
+.report-practice-table__metric--pleasure .report-practice-table__metric-value {
+  color: #d9531f;
 }
 
 @media (max-width: 1024px) {
@@ -7843,14 +7831,14 @@ input.autofill-dark:-internal-autofill-previewed {
   .report-practice-table__metric-value {
     min-width: 0;
     width: 100%;
-    font-size: 0.98rem;
+    font-size: 1.02rem;
     text-align: left;
   }
 
-  .report-practice-table__metric-bar {
-    width: 100%;
-    max-width: none;
-    height: 0.32rem;
+  .report-practice-table__metric-likelihood {
+    white-space: normal;
+    font-size: 0.72rem;
+    line-height: 1.2;
   }
 
   .report-practice-table__popover--inline {
@@ -7876,7 +7864,11 @@ input.autofill-dark:-internal-autofill-previewed {
   }
 
   .report-practice-table__metric-value {
-    font-size: 0.92rem;
+    font-size: 0.96rem;
+  }
+
+  .report-practice-table__metric-likelihood {
+    font-size: 0.68rem;
   }
 
   .report-practice-table__locked-cover {
