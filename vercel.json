@@ -3,11 +3,11 @@
   "crons": [
     {
       "path": "/api/cron/survey-paused",
-      "schedule": "0 * * * *"
+      "schedule": "8 * * * *"
     },
     {
       "path": "/api/cron/nurture-sequence",
-      "schedule": "0 * * * *"
+      "schedule": "23 * * * *"
     },
     {
       "path": "/api/cron/invite-reminders",
@@ -15,15 +15,15 @@
     },
     {
       "path": "/api/cron/payment-fulfillment-sweep",
-      "schedule": "*/30 * * * *"
+      "schedule": "13,43 * * * *"
     },
     {
       "path": "/api/cron/deep-engagement-alert",
-      "schedule": "0 */4 * * *"
+      "schedule": "53 */4 * * *"
     },
     {
       "path": "/api/cron/security-storm-detector",
-      "schedule": "*/15 * * * *"
+      "schedule": "3,18,33,48 * * * *"
     },
     {
       "path": "/api/cron/funnel-digest",
@@ -31,7 +31,7 @@
     },
     {
       "path": "/api/cron/anomaly-watcher",
-      "schedule": "0 * * * *"
+      "schedule": "38 * * * *"
     },
     {
       "path": "/api/cron/product-digest",
@@ -47,7 +47,7 @@
     },
     {
       "path": "/api/cron/chapter-nudge",
-      "schedule": "0 11 * * *"
+      "schedule": "28 11 * * *"
     }
   ],
   "functions": {
