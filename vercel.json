@@ -18,32 +18,12 @@
       "schedule": "13,43 * * * *"
     },
     {
-      "path": "/api/cron/deep-engagement-alert",
-      "schedule": "53 */4 * * *"
-    },
-    {
       "path": "/api/cron/security-storm-detector",
       "schedule": "3,18,33,48 * * * *"
     },
     {
-      "path": "/api/cron/funnel-digest",
-      "schedule": "0 9 * * *"
-    },
-    {
       "path": "/api/cron/anomaly-watcher",
       "schedule": "38 * * * *"
-    },
-    {
-      "path": "/api/cron/product-digest",
-      "schedule": "5 9 * * *"
-    },
-    {
-      "path": "/api/cron/tech-digest",
-      "schedule": "10 9 * * *"
-    },
-    {
-      "path": "/api/cron/table-size-digest",
-      "schedule": "15 9 * * *"
     },
     {
       "path": "/api/cron/chapter-nudge",
