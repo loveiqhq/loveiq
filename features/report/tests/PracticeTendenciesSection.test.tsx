@@ -216,8 +216,24 @@ describe("PracticeTendenciesSection", () => {
     expect(numberOf(lowCell)).toBe("2");
     expect(labelOf(lowCell)).toBe("Less likely");
 
-    // Middle bucket (4–6) surfaces somewhere in the fixture.
-    expect(screen.getAllByText("Neutral likely").length).toBeGreaterThan(0);
+    // Invariant: EVERY rendered cell's label matches its number's bucket
+    // (7-10 More, 4-6 Neutral, 0-3 Less) — also proves the middle bucket is hit.
+    const bucket = (n: number) =>
+      n >= 7 ? "More likely" : n >= 4 ? "Neutral likely" : "Less likely";
+    let checked = 0;
+    let neutralSeen = 0;
+    for (const cell of container.querySelectorAll(".report-practice-table__metric")) {
+      const num = cell.querySelector(".report-practice-table__metric-value")?.textContent ?? "";
+      if (!/^\d+$/.test(num)) continue; // skip locked "--"
+      const n = Number(num);
+      expect(cell.querySelector(".report-practice-table__metric-likelihood")?.textContent).toBe(
+        bucket(n)
+      );
+      checked += 1;
+      if (n >= 4 && n <= 6) neutralSeen += 1;
+    }
+    expect(checked).toBeGreaterThan(0);
+    expect(neutralSeen).toBeGreaterThan(0);
   });
 
   it("renders the premium overlay preview when the section is locked", () => {
@@ -247,6 +263,19 @@ describe("PracticeTendenciesSection", () => {
     // One unlock button per practice group
     const unlockButtons = screen.getAllByRole("button", { name: /unlock your report/i });
     expect(unlockButtons.length).toBeGreaterThanOrEqual(1);
+
+    // Locked rows must render "--" with NO numeric score and NO likelihood label
+    // in the DOM (premium scores never reach the client behind the blur/overlay).
+    const lockedValues = container.querySelectorAll(
+      ".report-practice-table__row--locked .report-practice-table__metric-value"
+    );
+    expect(lockedValues.length).toBeGreaterThan(0);
+    lockedValues.forEach((cell) => expect(cell.textContent).toBe("--"));
+    expect(
+      container.querySelector(
+        ".report-practice-table__row--locked .report-practice-table__metric-likelihood"
+      )
+    ).not.toBeInTheDocument();
   }, 60_000);
 
   it("uses the compact locked modifier only for the shorter locked groups", () => {
