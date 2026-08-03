@@ -15,6 +15,7 @@ import {
   getForcedPaywallCohort,
   type ForcedPaywallCohort,
 } from "@shared/experiments/forcedPaywall";
+import { isFeatureEnabled } from "@shared/flags/system-flags";
 
 const SUPABASE_TIMEOUT_MS = 8_000;
 const QUOTE_VALIDITY_MS = 21 * 24 * 60 * 60 * 1_000;
@@ -32,6 +33,7 @@ const PLAN_LADDER_ALL = [{ delayMs: 0, multiplier: 1, step: 0 }] as const;
 const PLAN_LADDERS = {
   essentials: PLAN_LADDER_ESSENTIALS_FULL,
   full_report: PLAN_LADDER_ESSENTIALS_FULL,
+  core: PLAN_LADDER_ESSENTIALS_FULL,
   all_reports: PLAN_LADDER_ALL,
 } as const satisfies Record<
   ReportPurchasePlanId,
@@ -47,13 +49,14 @@ const PRICING_SIGNAL_SELECT = [
 ].join(",");
 
 /**
- * Pricing buckets. 2026-06 reset: the BASE prices were lowered and the A/B
- * buckets now carry identical base values per plan. Group A is charged the flat
- * `startingCents`; Group B gets the per-user contextual uplift on top (see
- * buildQuotePayload). The 14-day time-decay ladder is currently off (flat over
- * time). Base prices:
- *   Essentials €9.99 (was €29.99) · Full €14.99 (was €49.99) · All €29.99 (was €79.99)
- * MSRP is the struck-out anchor shown in the modal/email.
+ * Pricing buckets. Pricing 2.0 (2026-07): each A/B bucket carries its OWN base
+ * price per plan (Group A = low arm, Group B = high arm) and all per-visitor
+ * boosts are paused, so the charged price is simply the bucket's `startingCents`
+ * and the 14-day time-decay ladder is off. `msrpCents` is the struck-out anchor
+ * shown in the modal/email. Actual numbers live in PLAN_BUCKETS below — the
+ * single source of truth (see its per-tier comments). Existing quotes are frozen
+ * on create, so a change here also needs a re-sync of unpurchased rows (see
+ * supabase/migrations/*_pricing_2_resync_quotes.sql).
  */
 // "C" retired 2026-06 (3-bucket → 2-bucket). Kept in the union so legacy quotes
 // stamped base_price_bucket="C" still rehydrate — they read msrp/starting off the
@@ -65,18 +68,29 @@ interface PricingBucket {
   msrpCents: number;
   startingCents: number;
 }
+// Pricing 2.0 (2026-07, from Tracking & Pricing - pricing_2.0.csv). Each bucket
+// carries its OWN base — Group A low, Group B high — so the A/B test survives
+// with boosts paused (no per-visitor multipliers applied). startingCents = the
+// charged price; msrpCents = the strike-through. `essentials` retired (grandfathered).
 const PLAN_BUCKETS: Record<ReportPurchasePlanId, readonly PricingBucket[]> = {
   essentials: [
     { code: "A", weight: 50, msrpCents: 2999, startingCents: 999 },
     { code: "B", weight: 50, msrpCents: 2999, startingCents: 999 },
   ],
+  // Tier 1 "Just a snapshot": A €9.99 (was €14.99), B €29 (no strike)
   full_report: [
-    { code: "A", weight: 50, msrpCents: 4999, startingCents: 1499 },
-    { code: "B", weight: 50, msrpCents: 4999, startingCents: 1499 },
+    { code: "A", weight: 50, msrpCents: 1499, startingCents: 999 },
+    { code: "B", weight: 50, msrpCents: 2900, startingCents: 2900 },
   ],
+  // Tier 2 "All your core archetypes": A €19.99 (was €24.99), B €39 (was €87)
+  core: [
+    { code: "A", weight: 50, msrpCents: 2499, startingCents: 1999 },
+    { code: "B", weight: 50, msrpCents: 8700, startingCents: 3900 },
+  ],
+  // Tier 3 "For you & your partner": A €29.99 (was €34.99), B €49 (was €58)
   all_reports: [
-    { code: "A", weight: 50, msrpCents: 7999, startingCents: 2999 },
-    { code: "B", weight: 50, msrpCents: 7999, startingCents: 2999 },
+    { code: "A", weight: 50, msrpCents: 3499, startingCents: 2999 },
+    { code: "B", weight: 50, msrpCents: 5800, startingCents: 4900 },
   ],
 };
 
@@ -1054,6 +1068,7 @@ function buildQuotePayload({
   now,
   plan,
   pricingSessionId,
+  upliftEnabled,
 }: {
   context: PricingContext;
   existingQuote?: ReportPriceQuoteRow | null;
@@ -1061,6 +1076,10 @@ function buildQuotePayload({
   now: Date;
   plan: ReportPurchasePlanId;
   pricingSessionId?: string | null;
+  // When false (pricing_uplift_enabled flag OFF), all per-visitor boosts are
+  // paused: Group B is charged its flat bucket base, same as Group A. The A/B
+  // base prices still differ (bucket.startingCents), but no dynamic uplift.
+  upliftEnabled: boolean;
 }): BuiltQuotePayload {
   const experimentGroup =
     existingQuote?.experiment_group ?? getPricingExperimentGroup(context.personalReportId);
@@ -1087,7 +1106,14 @@ function buildQuotePayload({
             ? fromEuroAmount(existingQuote.starting_price)
             : (existingBucketFromCode?.startingCents ?? fromEuroAmount(existingQuote.base_price)),
       }
-    : pickBucket(plan, context.personalReportId);
+    : // Pricing 2.0: a fresh quote's price bucket follows the experiment arm
+      // (Group A → A bucket, Group B → B bucket) so "Group A/B" means ONE
+      // coherent thing across price, uplift gate, and analytics. Previously the
+      // bucket was an independent weighted draw (pickBucket) — harmless while
+      // A and B were the same price, incoherent now that they differ. Falls
+      // back to pickBucket only if the arm has no matching bucket code (never
+      // for the A/B catalogue, but keeps legacy "C" ids safe).
+      (bucketFromCode(plan, experimentGroup) ?? pickBucket(plan, context.personalReportId));
 
   const countryPricing = getCountryPricing(context.countryCode);
   const deviceType = existingQuote?.device_type ?? getDeviceTypeFromUserAgent(context.userAgent);
@@ -1118,11 +1144,12 @@ function buildQuotePayload({
       ? existingQuote.initial_price_timestamp
       : now.toISOString();
 
-  // Per-user pricing: Group A is charged the flat catalogue `starting` price;
-  // Group B gets the contextual uplift (country × device × traffic × behavioral ×
-  // engagement), clamped to MSRP. Group A's starting is a deliberate .99 price so
-  // it's shown verbatim; Group B's computed uplift is charm-rounded to a .49/.99
-  // ending, then clamped to MSRP.
+  // Per-user pricing (pricing 2.0): each arm is charged its OWN bucket's flat
+  // `starting` price — Group A the low arm, Group B the high arm. While
+  // `pricing_uplift_enabled` is OFF (current default) NO per-visitor uplift is
+  // applied to either arm. If uplift is ever re-enabled, Group B additionally
+  // gets the contextual multiplier (country × device × traffic × behavioral ×
+  // engagement) on its base, charm-rounded to a .49/.99 ending and clamped to MSRP.
   const groupBInitialRaw =
     bucket.startingCents *
     countryPricing.multiplier *
@@ -1131,7 +1158,7 @@ function buildQuotePayload({
     behavioralPricing.multiplier *
     engagementMultiplier;
   const computedInitialCents =
-    experimentGroup === "A"
+    experimentGroup === "A" || !upliftEnabled
       ? Math.min(bucket.msrpCents, bucket.startingCents)
       : Math.min(
           bucket.msrpCents,
@@ -1260,6 +1287,11 @@ async function persistQuote({
   plan: ReportPurchasePlanId;
   pricingSessionId?: string | null;
 }) {
+  const [upliftEnabled, forcedPaywallEnabled] = await Promise.all([
+    isFeatureEnabled("pricing_uplift_enabled", true),
+    isFeatureEnabled("forced_paywall_enabled", true),
+  ]);
+
   const builtQuote = buildQuotePayload({
     context,
     existingQuote,
@@ -1267,17 +1299,22 @@ async function persistQuote({
     now,
     plan,
     pricingSessionId,
+    upliftEnabled,
   });
 
   // Stamp the forced-paywall A/B arm ONCE (stable across re-quotes / per-plan
   // rows, like experiment_group). Keyed on the SAME canonical report token the
   // experience uses (token ?? data.ownerToken) so session-only users aren't
   // mis-stamped as control. Consent-independent denominator for the experiment.
+  // When forced_paywall_enabled is OFF, NEW quotes stamp "control" (report is
+  // viewable; modal is opt-in) — existing stamps stay stable.
   const forcedPaywallArm: ForcedPaywallCohort =
     existingQuote?.forced_paywall_arm ??
-    getForcedPaywallCohort(
-      context.reportToken ?? (await lookupReportTokenBySubmissionId(context.submissionId))
-    );
+    (forcedPaywallEnabled
+      ? getForcedPaywallCohort(
+          context.reportToken ?? (await lookupReportTokenBySubmissionId(context.submissionId))
+        )
+      : "control");
 
   const payload = {
     ...builtQuote.payload,

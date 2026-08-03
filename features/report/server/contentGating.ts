@@ -9,7 +9,7 @@
  * rows can show what's there.
  *
  * Inputs:
- *   - `accessPlan`: null | "essentials" | "full_report" | "all_reports"
+ *   - `accessPlan`: null | "essentials" | "full_report" | "core" | "all_reports"
  *   - `unlockedArchetypes`: every archetype this user can read for the
  *     sections their plan covers (always includes the primary archetype)
  *
@@ -76,21 +76,28 @@ export function buildArchetypeContentForUser(
 
 export function buildPracticeTendenciesForUser(
   accessPlan: ReportAccessPlan,
-  unlockedArchetypes: string[]
+  unlockedArchetypes: string[],
+  archetypeTiers: Record<string, "essentials" | "full_report"> = {}
 ): Record<string, PracticeTendencyContentForUser> {
   const result: Record<string, PracticeTendencyContentForUser> = {};
   const practiceSection = reportSections.find((s) => s.id === PRACTICE_SECTION_ID);
   if (!practiceSection) return result;
 
-  const sectionUnlocked = isSectionUnlockedForPlan({
-    accessPlan,
-    isPremium: practiceSection.isPremium ?? false,
-    sectionId: practiceSection.id,
-  });
-
   for (const archetype of unlockedArchetypes) {
     const content = reportPracticeTendencies[archetype];
     if (!content) continue;
+
+    // Gate per-archetype: the practice section is full_report-tier, so it
+    // unlocks for an archetype held at full_report (core's top-3, full_report's
+    // own, all_reports' everything) but stays locked at essentials tier. The
+    // earlier GLOBAL check broke `core` — its plan isn't in the tier fallback,
+    // so it stripped scores from the very top-3 the buyer paid to unlock.
+    const sectionUnlocked = isSectionUnlockedForPlan({
+      accessPlan,
+      archetypeTier: archetypeTiers[archetype] ?? null,
+      isPremium: practiceSection.isPremium ?? false,
+      sectionId: practiceSection.id,
+    });
 
     if (sectionUnlocked) {
       result[archetype] = {

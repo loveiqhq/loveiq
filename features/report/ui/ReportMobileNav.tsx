@@ -351,10 +351,11 @@ const ReportMobileNav: FC<Props> = ({
 };
 
 const NavBadge: FC<{ tier: AccessTier }> = ({ tier }) => {
-  const label =
-    tier === "essentials" ? "Essentials" : tier === "full_report" ? "Full Report" : "Free";
-  const modifier =
-    tier === "free" ? "is-free" : tier === "essentials" ? "is-essentials" : "is-full";
+  // Essentials tier retired (pricing 2.0) — any paid tier shows "Full Report".
+  const label = tier === "free" ? "Free" : "Full Report";
+  // Essentials retired (pricing 2.0): every paid tier shows the SAME "Full
+  // Report" chip color (is-full) — no more blue/purple mix.
+  const modifier = tier === "free" ? "is-free" : "is-full";
   return <span className={`report-nav-chip ${modifier}`}>{label}</span>;
 };
 

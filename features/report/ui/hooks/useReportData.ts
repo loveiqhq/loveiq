@@ -32,7 +32,9 @@ export interface ReportPracticeTendencyContentForUser {
 export interface ReportData {
   /** Numeric survey_submission.id — used to attach analytics_event rows. */
   submissionId?: number | null;
-  accessPlan: "essentials" | "full_report" | "all_reports" | null;
+  accessPlan: "essentials" | "full_report" | "core" | "all_reports" | null;
+  /** When false, the forced/non-dismissible paywall is paused (report freely viewable). */
+  forcedPaywallEnabled?: boolean;
   userName: string | null;
   userEmail: string | null;
   ownerFirstName?: string | null;

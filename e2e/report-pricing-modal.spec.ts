@@ -17,22 +17,13 @@ function buildPricingQuote(
     currency: "EUR",
     experimentGroup: "B",
     basePriceBucket: "B",
-    basePriceCents: plan === "all_reports" ? 6900 : plan === "full_report" ? 1499 : 699,
-    msrpCents: plan === "all_reports" ? 14999 : plan === "full_report" ? 4999 : 1999,
-    startingPriceCents: plan === "all_reports" ? 6900 : plan === "full_report" ? 1499 : 699,
-    currentPriceCents:
-      discountStep === 0
-        ? plan === "all_reports"
-          ? 6900
-          : plan === "full_report"
-            ? 1499
-            : 699
-        : plan === "all_reports"
-          ? 6210
-          : plan === "full_report"
-            ? 1349
-            : 629,
-    initialPriceCents: plan === "all_reports" ? 6900 : plan === "full_report" ? 1499 : 699,
+    // Pricing 2.0 Group-B base values (boosts paused → no decay ladder, so
+    // current = starting). msrp = the strike anchor; essentials is grandfathered.
+    basePriceCents: plan === "all_reports" ? 5800 : plan === "full_report" ? 2900 : 2999,
+    msrpCents: plan === "all_reports" ? 5800 : plan === "full_report" ? 2900 : 2999,
+    startingPriceCents: plan === "all_reports" ? 4900 : plan === "full_report" ? 2900 : 999,
+    currentPriceCents: plan === "all_reports" ? 4900 : plan === "full_report" ? 2900 : 999,
+    initialPriceCents: plan === "all_reports" ? 4900 : plan === "full_report" ? 2900 : 999,
     discountMultiplier: discountStep === 0 ? 1 : 0.9,
     discountStep,
     pricingClusterId: `B-${plan}-B-tier_2-desktop-direct-zero-standard-d${discountStep}`,

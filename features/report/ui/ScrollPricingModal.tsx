@@ -701,7 +701,7 @@ const ScrollPricingModal: FC<Props> = ({
               {/* ── Why unlock the Full Report? (2×2) ────────────────────── */}
               <section className="rpm-why">
                 <h3 className="rpm-section-h">
-                  Why unlock the <em style={gradientTextStyle}>Full Report</em>?
+                  Why unlock <em style={gradientTextStyle}>Reports</em>?
                 </h3>
 
                 <div

@@ -64,13 +64,13 @@ function makeRequest(token?: string): Request {
   });
 }
 
+function jsonResponse(body: unknown, status = 200) {
+  return { ok: status < 400, status, json: async () => body };
+}
+
 interface MockFetchCall {
   match: (url: string, init?: { method?: string }) => boolean;
   respond: () => unknown;
-}
-
-function jsonResponse(body: unknown, status = 200) {
-  return { ok: status < 400, status, json: async () => body };
 }
 
 /**
@@ -101,14 +101,14 @@ describe("GET /api/cron/nurture-sequence", () => {
       SUPABASE_URL: "https://test.supabase.co",
       SUPABASE_SERVICE_ROLE_KEY: "service-key",
       STRIPE_COUPON_50: "nurture_50",
-      STRIPE_COUPON_75: "nurture_75",
       NEXT_PUBLIC_SITE_URL: "https://test.loveiq.org",
     };
     mockGetReportPlan.mockResolvedValue(null);
     mockIsEmailSuppressed.mockResolvedValue(false);
     mockResendSend.mockResolvedValue({ data: { id: "msg_1" }, error: null });
+    // Pricing 2.0: the single nurture discount stage is 72h → 50% off.
     mockGetCouponIdForStage.mockImplementation((stage: string) =>
-      stage === "30h_no_unlock" ? "nurture_50" : stage === "54h_no_unlock" ? "nurture_75" : null
+      stage === "72h_no_unlock" ? "nurture_50" : null
     );
     mockGetStripeClient.mockReturnValue({
       promotionCodes: {
@@ -141,25 +141,20 @@ describe("GET /api/cron/nurture-sequence", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.success).toBe(true);
-    expect(body.summaries["6h_no_view"].sent).toBe(0);
-    expect(body.summaries["30h_no_unlock"].sent).toBe(0);
+    expect(body.summaries["72h_no_unlock"].sent).toBe(0);
   });
 
   // The 3 fetchCandidatesByAge calls are dispatched via Promise.all in fixed
-  // order: 6h, 30h, 54h. We mock by call-index — robust against URL encoding
+  // order: 6h, 72h, 78h. We mock by call-index — robust against URL encoding
   // of the timestamp differences.
   function mockCandidateWindows({
-    sixHour,
-    thirtyHour,
-    fiftyFourHour,
+    seventyTwoHour,
     seventyEightHour = [],
     quoteMetadata = {},
     accessToken = "rpt_AbCdEfGhIjKlMnOpQrSt",
     patchSpy,
   }: {
-    sixHour: unknown[];
-    thirtyHour: unknown[];
-    fiftyFourHour: unknown[];
+    seventyTwoHour: unknown[];
     seventyEightHour?: unknown[];
     quoteMetadata?: Record<string, unknown>;
     accessToken?: string | null;
@@ -169,10 +164,9 @@ describe("GET /api/cron/nurture-sequence", () => {
     mockFetchWithTimeout.mockImplementation((url: string, init?: { method?: string }) => {
       if (url.includes("/rest/v1/personal_report")) {
         personalReportCalls += 1;
-        if (personalReportCalls === 1) return Promise.resolve(jsonResponse(sixHour));
-        if (personalReportCalls === 2) return Promise.resolve(jsonResponse(thirtyHour));
-        if (personalReportCalls === 3) return Promise.resolve(jsonResponse(fiftyFourHour));
-        if (personalReportCalls === 4) return Promise.resolve(jsonResponse(seventyEightHour));
+        // Promise.all order (pricing 2.0): 1 = 72h window, 2 = 78h window.
+        if (personalReportCalls === 1) return Promise.resolve(jsonResponse(seventyTwoHour));
+        if (personalReportCalls === 2) return Promise.resolve(jsonResponse(seventyEightHour));
         return Promise.resolve(jsonResponse([]));
       }
       if (url.includes("/rest/v1/report_price_quote") && init?.method !== "PATCH") {
@@ -188,19 +182,17 @@ describe("GET /api/cron/nurture-sequence", () => {
     });
   }
 
-  it("routes a 30h candidate through promo creation + send + metadata write", async () => {
+  it("routes a 72h candidate through promo creation + send + metadata write", async () => {
     const candidate = {
       id: 42,
       survey_submission_id: 7,
-      created_date_time: new Date(Date.now() - 30 * 60 * 60 * 1000).toISOString(),
+      created_date_time: new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString(),
       survey_submission: { app_user: { email: "user@example.com", first_name: "Sam" } },
     };
     const patchSpy = vi.fn(() => jsonResponse({}, 204));
 
     mockCandidateWindows({
-      sixHour: [],
-      thirtyHour: [candidate],
-      fiftyFourHour: [],
+      seventyTwoHour: [candidate],
       quoteMetadata: { nurtureEmailsSent: [] },
       patchSpy,
     });
@@ -208,7 +200,7 @@ describe("GET /api/cron/nurture-sequence", () => {
     const res = await GET(makeRequest("test-cron-secret"));
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.summaries["30h_no_unlock"].sent).toBe(1);
+    expect(body.summaries["72h_no_unlock"].sent).toBe(1);
 
     expect(mockStripePromoCreate).toHaveBeenCalledTimes(1);
     const stripeArgs = mockStripePromoCreate.mock.calls[0][0];
@@ -232,21 +224,19 @@ describe("GET /api/cron/nurture-sequence", () => {
     const candidate = {
       id: 99,
       survey_submission_id: 9,
-      created_date_time: new Date(Date.now() - 30 * 60 * 60 * 1000).toISOString(),
+      created_date_time: new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString(),
       survey_submission: { app_user: { email: "already@example.com", first_name: "Al" } },
     };
     mockCandidateWindows({
-      sixHour: [],
-      thirtyHour: [candidate],
-      fiftyFourHour: [],
-      quoteMetadata: { nurtureEmailsSent: ["30h_no_unlock"] },
+      seventyTwoHour: [candidate],
+      quoteMetadata: { nurtureEmailsSent: ["72h_no_unlock"] },
     });
 
     const res = await GET(makeRequest("test-cron-secret"));
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.summaries["30h_no_unlock"].sent).toBe(0);
-    expect(body.summaries["30h_no_unlock"].skippedAlreadySent).toBe(1);
+    expect(body.summaries["72h_no_unlock"].sent).toBe(0);
+    expect(body.summaries["72h_no_unlock"].skippedAlreadySent).toBe(1);
     expect(mockStripePromoCreate).not.toHaveBeenCalled();
     expect(mockResendSend).not.toHaveBeenCalled();
   });
@@ -256,19 +246,17 @@ describe("GET /api/cron/nurture-sequence", () => {
     const candidate = {
       id: 50,
       survey_submission_id: 5,
-      created_date_time: new Date(Date.now() - 30 * 60 * 60 * 1000).toISOString(),
+      created_date_time: new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString(),
       survey_submission: { app_user: { email: "paid@example.com", first_name: "Pay" } },
     };
     mockCandidateWindows({
-      sixHour: [],
-      thirtyHour: [candidate],
-      fiftyFourHour: [],
+      seventyTwoHour: [candidate],
       quoteMetadata: {},
     });
 
     const res = await GET(makeRequest("test-cron-secret"));
     const body = await res.json();
-    expect(body.summaries["30h_no_unlock"].skippedPaid).toBe(1);
+    expect(body.summaries["72h_no_unlock"].skippedPaid).toBe(1);
     expect(mockStripePromoCreate).not.toHaveBeenCalled();
   });
 
@@ -289,13 +277,11 @@ describe("GET /api/cron/nurture-sequence", () => {
     const candidate = {
       id: 7,
       survey_submission_id: 70,
-      created_date_time: new Date(Date.now() - 30 * 60 * 60 * 1000).toISOString(),
+      created_date_time: new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString(),
       survey_submission: { app_user: { email: "order@example.com", first_name: "Or" } },
     };
     mockCandidateWindows({
-      sixHour: [],
-      thirtyHour: [candidate],
-      fiftyFourHour: [],
+      seventyTwoHour: [candidate],
       quoteMetadata: { nurtureEmailsSent: [] },
       patchSpy,
     });
@@ -320,13 +306,11 @@ describe("GET /api/cron/nurture-sequence", () => {
     const candidate = {
       id: 8,
       survey_submission_id: 80,
-      created_date_time: new Date(Date.now() - 30 * 60 * 60 * 1000).toISOString(),
+      created_date_time: new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString(),
       survey_submission: { app_user: { email: "boom@example.com", first_name: "Bo" } },
     };
     mockCandidateWindows({
-      sixHour: [],
-      thirtyHour: [candidate],
-      fiftyFourHour: [],
+      seventyTwoHour: [candidate],
       quoteMetadata: { nurtureEmailsSent: [] },
       patchSpy,
     });
@@ -336,64 +320,8 @@ describe("GET /api/cron/nurture-sequence", () => {
     expect(patchSpy).toHaveBeenCalledTimes(1);
 
     const body = await res.json();
-    expect(body.summaries["30h_no_unlock"].sent).toBe(0);
-    expect(body.summaries["30h_no_unlock"].failed).toBe(1);
-  });
-
-  it("R-06/F-08: 54h candidate deactivates the prior 30h promo code on Stripe", async () => {
-    // Pre-existing 30h promo code stored in quote metadata — the cron
-    // must deactivate it on Stripe before sending the more aggressive
-    // 54h offer so the user can't redeem the older smaller discount.
-    const priorPromoId = "promo_30h_existing";
-    const candidate = {
-      id: 9,
-      survey_submission_id: 90,
-      created_date_time: new Date(Date.now() - 54 * 60 * 60 * 1000).toISOString(),
-      survey_submission: { app_user: { email: "x@example.com", first_name: "X" } },
-    };
-
-    mockCandidateWindows({
-      sixHour: [],
-      thirtyHour: [],
-      fiftyFourHour: [candidate],
-      quoteMetadata: {
-        nurtureEmailsSent: ["30h_no_unlock"],
-        nurturePromoCodes: {
-          "30h_no_unlock": {
-            code: "LIQ-50-OLD1ABCD",
-            stripePromotionCodeId: priorPromoId,
-            percentOff: 50,
-            expiresAt: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
-          },
-        },
-      },
-    });
-
-    const res = await GET(makeRequest("test-cron-secret"));
-    expect(res.status).toBe(200);
-
-    // Verify Stripe was asked to deactivate the prior 30h code.
-    expect(mockStripePromoUpdate).toHaveBeenCalledWith(priorPromoId, { active: false });
-  });
-
-  it("R-06/F-08: 30h candidate does NOT call deactivate (no prior stage to retire)", async () => {
-    const candidate = {
-      id: 10,
-      survey_submission_id: 100,
-      created_date_time: new Date(Date.now() - 30 * 60 * 60 * 1000).toISOString(),
-      survey_submission: { app_user: { email: "y@example.com", first_name: "Y" } },
-    };
-
-    mockCandidateWindows({
-      sixHour: [],
-      thirtyHour: [candidate],
-      fiftyFourHour: [],
-      quoteMetadata: { nurtureEmailsSent: [] },
-    });
-
-    const res = await GET(makeRequest("test-cron-secret"));
-    expect(res.status).toBe(200);
-    expect(mockStripePromoUpdate).not.toHaveBeenCalled();
+    expect(body.summaries["72h_no_unlock"].sent).toBe(0);
+    expect(body.summaries["72h_no_unlock"].failed).toBe(1);
   });
 
   it("time-budget guard: defers all candidates when the wall-clock budget is exhausted", async () => {
@@ -405,13 +333,11 @@ describe("GET /api/cron/nurture-sequence", () => {
     const candidate = {
       id: 11,
       survey_submission_id: 110,
-      created_date_time: new Date(Date.now() - 30 * 60 * 60 * 1000).toISOString(),
+      created_date_time: new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString(),
       survey_submission: { app_user: { email: "deferred@example.com", first_name: "De" } },
     };
     mockCandidateWindows({
-      sixHour: [],
-      thirtyHour: [candidate],
-      fiftyFourHour: [],
+      seventyTwoHour: [candidate],
       quoteMetadata: { nurtureEmailsSent: [] },
     });
 
@@ -419,8 +345,8 @@ describe("GET /api/cron/nurture-sequence", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     // Candidate counted (set before the loop) but never processed → no send/promo.
-    expect(body.summaries["30h_no_unlock"].candidates).toBe(1);
-    expect(body.summaries["30h_no_unlock"].sent).toBe(0);
+    expect(body.summaries["72h_no_unlock"].candidates).toBe(1);
+    expect(body.summaries["72h_no_unlock"].sent).toBe(0);
     expect(mockStripePromoCreate).not.toHaveBeenCalled();
     expect(mockResendSend).not.toHaveBeenCalled();
   });
@@ -432,20 +358,18 @@ describe("GET /api/cron/nurture-sequence", () => {
     const candidate = {
       id: 12,
       survey_submission_id: 120,
-      created_date_time: new Date(Date.now() - 30 * 60 * 60 * 1000).toISOString(),
+      created_date_time: new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString(),
       survey_submission: { app_user: { email: "fallback@example.com", first_name: "Fa" } },
     };
     mockCandidateWindows({
-      sixHour: [],
-      thirtyHour: [candidate],
-      fiftyFourHour: [],
+      seventyTwoHour: [candidate],
       quoteMetadata: { nurtureEmailsSent: [] },
     });
 
     const res = await GET(makeRequest("test-cron-secret"));
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.summaries["30h_no_unlock"].sent).toBe(1);
+    expect(body.summaries["72h_no_unlock"].sent).toBe(1);
   });
 
   it("78h candidate sends the Calendly call invite, mints NO promo, logs booking_event", async () => {
@@ -460,9 +384,7 @@ describe("GET /api/cron/nurture-sequence", () => {
       survey_submission: { app_user: { email: "call@example.com", first_name: "Cal" } },
     };
     mockCandidateWindows({
-      sixHour: [],
-      thirtyHour: [],
-      fiftyFourHour: [],
+      seventyTwoHour: [],
       seventyEightHour: [candidate],
       quoteMetadata: { nurtureEmailsSent: [] },
     });
@@ -506,9 +428,7 @@ describe("GET /api/cron/nurture-sequence", () => {
       survey_submission: { app_user: { email: "again@example.com", first_name: "Ag" } },
     };
     mockCandidateWindows({
-      sixHour: [],
-      thirtyHour: [],
-      fiftyFourHour: [],
+      seventyTwoHour: [],
       seventyEightHour: [candidate],
       quoteMetadata: { nurtureEmailsSent: ["78h_no_unlock"] },
     });
@@ -531,9 +451,7 @@ describe("GET /api/cron/nurture-sequence", () => {
       survey_submission: { app_user: { email: "paused@example.com", first_name: "Pz" } },
     };
     mockCandidateWindows({
-      sixHour: [],
-      thirtyHour: [],
-      fiftyFourHour: [],
+      seventyTwoHour: [],
       seventyEightHour: [candidate],
       quoteMetadata: { nurtureEmailsSent: [] },
     });
@@ -558,9 +476,7 @@ describe("GET /api/cron/nurture-sequence", () => {
       survey_submission: { app_user: { email: "nourl@example.com", first_name: "No" } },
     };
     mockCandidateWindows({
-      sixHour: [],
-      thirtyHour: [],
-      fiftyFourHour: [],
+      seventyTwoHour: [],
       seventyEightHour: [candidate],
       quoteMetadata: { nurtureEmailsSent: [] },
     });

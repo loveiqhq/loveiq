@@ -15,7 +15,9 @@ const ESSENTIALS_SECTION_SET = new Set<string>(ESSENTIALS_SECTION_IDS);
 export type ReportAccessPlan = ReportPurchasePlanId | null;
 
 export function isReportPurchasePlan(value: unknown): value is ReportPurchasePlanId {
-  return value === "essentials" || value === "full_report" || value === "all_reports";
+  return (
+    value === "essentials" || value === "full_report" || value === "core" || value === "all_reports"
+  );
 }
 
 export function getStrongestReportAccessPlan(
@@ -39,8 +41,10 @@ function getPlanPriority(plan: ReportPurchasePlanId) {
       return 1;
     case "full_report":
       return 2;
-    case "all_reports":
+    case "core":
       return 3;
+    case "all_reports":
+      return 4;
     default:
       return 0;
   }
@@ -84,6 +88,10 @@ export function isPlanOwnedForArchetype({
   unlockedTier: "essentials" | "full_report" | null;
 }): boolean {
   if (accessPlan === "all_reports") return true;
+  // A core buyer owns the core tier (their top-3 are unlocked at full_report);
+  // they can still upgrade to all_reports. Checked before the unlockedTier guard
+  // so it holds even while viewing a not-yet-unlocked archetype.
+  if (accessPlan === "core" && targetPlan === "core") return true;
   if (targetPlan === "all_reports") return false;
   if (!unlockedTier) return false;
   if (targetPlan === "essentials") return true; // any tier covers essentials
@@ -125,7 +133,7 @@ export function isSectionUnlockedForPlan({
 export function getUnlockedPremiumSectionIdsForPlan(accessPlan: ReportAccessPlan) {
   if (!accessPlan) return [];
 
-  if (accessPlan === "full_report" || accessPlan === "all_reports") {
+  if (accessPlan === "full_report" || accessPlan === "core" || accessPlan === "all_reports") {
     return reportSections.filter((section) => section.isPremium).map((section) => section.id);
   }
 

@@ -406,7 +406,7 @@ describe("ReportPage", () => {
 
       const { container } = render(<ReportPage />);
 
-      expect(screen.getByRole("heading", { name: /unlock your full report/i })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: /unlock your reports/i })).toBeInTheDocument();
       expect(container.querySelector(".report-pricing-modal__scroll-region")).toBeInTheDocument();
 
       // Auto-mount paywalls no longer fire paywall_view (founder's "forced"
@@ -510,7 +510,7 @@ describe("ReportPage", () => {
 
       const { container } = render(<ReportPage />);
 
-      await user.click(screen.getByRole("button", { name: /^unlock full report$/i }));
+      await user.click(screen.getByRole("button", { name: /^unlock my report$/i }));
 
       // Price must be a positive, finite EUR amount (matches the pricingQuotes fixture).
       expect(mockTrackBeginCheckout).toHaveBeenCalledTimes(1);
@@ -634,9 +634,7 @@ describe("ReportPage", () => {
     render(<ReportPage />);
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("heading", { name: /unlock your full report/i })
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /unlock your reports/i })).not.toBeInTheDocument();
   });
 
   it("does NOT open the offer modal for a paid customer on an ?offer=1 email link (Marcus regression)", () => {

@@ -79,30 +79,40 @@ describe("reportPricing", () => {
     });
   });
 
-  describe("bucket catalogue (flat pricing 2026-06)", () => {
-    it("essentials buckets are flat €9.99 (A == B)", () => {
+  describe("bucket catalogue (pricing 2.0)", () => {
+    // Pricing 2.0: per-visitor boosts are paused, so A/B are just two flat base
+    // arms from the CSV (A = the low arm, B = the high arm). Group A always uses
+    // its bucket base verbatim; Group B uses its own (higher) flat base.
+    it("essentials buckets are flat €9.99 (grandfathered, A == B)", () => {
       expect(getPricingBucketsForPlan("essentials")).toEqual([
         { code: "A", weight: 50, msrpCents: 2999, startingCents: 999 },
         { code: "B", weight: 50, msrpCents: 2999, startingCents: 999 },
       ]);
     });
 
-    it("full_report buckets are flat €14.99 (A == B)", () => {
+    it("full_report buckets: A €9.99 (strike €14.99), B flat €29", () => {
       expect(getPricingBucketsForPlan("full_report")).toEqual([
-        { code: "A", weight: 50, msrpCents: 4999, startingCents: 1499 },
-        { code: "B", weight: 50, msrpCents: 4999, startingCents: 1499 },
+        { code: "A", weight: 50, msrpCents: 1499, startingCents: 999 },
+        { code: "B", weight: 50, msrpCents: 2900, startingCents: 2900 },
       ]);
     });
 
-    it("all_reports buckets are flat €29.99 (A == B)", () => {
+    it("core buckets: A €19.99 (strike €24.99), B €39 (strike €87)", () => {
+      expect(getPricingBucketsForPlan("core")).toEqual([
+        { code: "A", weight: 50, msrpCents: 2499, startingCents: 1999 },
+        { code: "B", weight: 50, msrpCents: 8700, startingCents: 3900 },
+      ]);
+    });
+
+    it("all_reports buckets: A €29.99 (strike €34.99), B €49 (strike €58)", () => {
       expect(getPricingBucketsForPlan("all_reports")).toEqual([
-        { code: "A", weight: 50, msrpCents: 7999, startingCents: 2999 },
-        { code: "B", weight: 50, msrpCents: 7999, startingCents: 2999 },
+        { code: "A", weight: 50, msrpCents: 3499, startingCents: 2999 },
+        { code: "B", weight: 50, msrpCents: 5800, startingCents: 4900 },
       ]);
     });
 
     it("weights sum to 100 per plan", () => {
-      for (const plan of ["essentials", "full_report", "all_reports"] as const) {
+      for (const plan of ["essentials", "full_report", "core", "all_reports"] as const) {
         const total = getPricingBucketsForPlan(plan).reduce((s, b) => s + b.weight, 0);
         expect(total).toBe(100);
       }
@@ -458,8 +468,9 @@ describe("reportPricing", () => {
     expect(quote.basePriceBucket).toMatch(/^[ABC]$/);
     expect(quote.msrpCents).toBeGreaterThan(0);
     expect(quote.startingPriceCents).toBeGreaterThan(0);
-    // MSRP is always ≥ starting (xlsx: ratio is 0.5 or 0.75 depending on plan).
-    expect(quote.msrpCents).toBeGreaterThan(quote.startingPriceCents);
+    // MSRP is always ≥ starting. Pricing 2.0 flat Group-B buckets can have
+    // msrp == starting (no strike shown), so this is ≥, not strictly >.
+    expect(quote.msrpCents).toBeGreaterThanOrEqual(quote.startingPriceCents);
     expect(createdPayload).toEqual(
       expect.objectContaining({
         experiment_group: quote.experimentGroup,
@@ -599,8 +610,9 @@ describe("reportPricing", () => {
     });
 
     // Group A: €29.99 base verbatim — no uplift, no decay, no charm-snap.
+    // Pricing 2.0 all_reports Group A: starting €29.99, strike (msrp) €34.99.
     expect(quote.initialPriceCents).toBe(2999);
     expect(quote.currentPriceCents).toBe(2999);
-    expect(quote.msrpCents).toBe(7999);
+    expect(quote.msrpCents).toBe(3499);
   });
 });

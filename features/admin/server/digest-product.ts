@@ -34,7 +34,7 @@ export interface DropOffRow {
 }
 
 export interface PricingTierRow {
-  plan: "essentials" | "full_report" | "all_reports";
+  plan: "essentials" | "full_report" | "core" | "all_reports";
   quoted: number;
   checkoutStarted: number;
   purchased: number;
@@ -223,7 +223,7 @@ export async function fetchPricingTierConversion(sinceIso: string): Promise<Pric
     revenue_eur: number | string | null;
   }>;
 
-  const PLANS: PricingTierRow["plan"][] = ["essentials", "full_report", "all_reports"];
+  const PLANS: PricingTierRow["plan"][] = ["essentials", "full_report", "core", "all_reports"];
   const agg = new Map<
     PricingTierRow["plan"],
     { quoted: number; co: number; bought: number; rev: number }

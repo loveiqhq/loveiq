@@ -97,9 +97,10 @@ describe("getUnlockedPremiumSectionIdsForPlan", () => {
 });
 
 describe("plan helpers", () => {
-  it("isReportPurchasePlan identifies all three known plan ids", () => {
+  it("isReportPurchasePlan identifies all four known plan ids", () => {
     expect(isReportPurchasePlan("essentials")).toBe(true);
     expect(isReportPurchasePlan("full_report")).toBe(true);
+    expect(isReportPurchasePlan("core")).toBe(true);
     expect(isReportPurchasePlan("all_reports")).toBe(true);
     expect(isReportPurchasePlan(null)).toBe(false);
     expect(isReportPurchasePlan("free")).toBe(false);

@@ -4,6 +4,7 @@ import {
   useState,
   useEffect,
   useRef,
+  type CSSProperties,
   type FC,
   type MutableRefObject,
   type TouchEvent as ReactTouchEvent,
@@ -19,6 +20,8 @@ import {
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import TrustpilotReviews from "@shared/ui/trustpilot/TrustpilotReviews";
 import PaywallTestimonials from "./PaywallTestimonials";
+import { usePaywallCountdown, PaywallCountdownDigits } from "./PaywallCountdown";
+import { REPORT_PAYWALL_COUNTDOWN_MS } from "@features/survey/ui/hooks/surveySession";
 import { isTrustpilotEnabled } from "@shared/ui/trustpilot/config";
 import { isPlanOwnedForArchetype, type ReportAccessPlan } from "@features/report/server/access";
 import {
@@ -42,6 +45,8 @@ interface Props {
    */
   primaryArchetype?: string | null;
   quotes: Record<ReportPurchasePlanId, ReportPriceQuoteSnapshot> | null;
+  /** Shared epoch-ms countdown deadline (resolved once per report session). */
+  offerDeadline?: number;
   returnFocusRef?: MutableRefObject<HTMLElement | null>;
   targetArchetype?: string | null;
   /**
@@ -56,6 +61,53 @@ interface Props {
 
 const FOCUSABLE_SELECTOR =
   'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+
+// Orange→purple gradient used for the italic emphasis in the "Why unlock
+// Reports?" cards (matches ScrollPricingModal + Figma 8442-16168).
+const gradientTextStyle: CSSProperties = {
+  background: "linear-gradient(90deg, #fe6839 0%, #a855f7 100%)",
+  WebkitBackgroundClip: "text",
+  backgroundClip: "text",
+  WebkitTextFillColor: "transparent",
+  color: "transparent",
+};
+
+// "Why unlock Reports?" 2×2 cards (Figma 8442-16168). Card 04 is price-prefixed
+// at render (filled from the cheapest live quote).
+const WHY_CARDS = [
+  {
+    num: "01",
+    tag: "Risk free",
+    lead: "14-day money-back guarantee.",
+    emph: "Zero risk.",
+    body: "Read the full report. If it doesn’t land, every cent back, no questions.",
+    priceLed: false,
+  },
+  {
+    num: "02",
+    tag: "Deep clarity",
+    lead: "Understand one of life’s most important areas:",
+    emph: "sexuality, desire, love, and intimacy.",
+    body: "Most of us were never taught any of this. Your report finally puts language to it.",
+    priceLed: false,
+  },
+  {
+    num: "03",
+    tag: "Break patterns",
+    lead: "Stop repeating old patterns",
+    emph: "and finally understand what drives them.",
+    body: "The same dynamics show up across relationships for a reason. See yours, named.",
+    priceLed: false,
+  },
+  {
+    num: "04",
+    tag: "Lifetime value",
+    lead: "For the price of a cocktail or a movie ticket,",
+    emph: "get insights that change how you connect and desire.",
+    body: "one time. Yours forever — re-read it, share it, return to it.",
+    priceLed: true,
+  },
+] as const;
 
 interface ScrollLockState {
   htmlOverflow: string;
@@ -89,6 +141,13 @@ function PricingMethodMark({
   );
 }
 
+// Whole euros without a ".00" tail (Figma renders "Save €5"); fractional amounts
+// keep 2 decimals ("Save €4.50").
+function formatSaveAmount(cents: number): string {
+  const euros = cents / 100;
+  return `€${Number.isInteger(euros) ? euros.toFixed(0) : euros.toFixed(2)}`;
+}
+
 function getCardPricing(
   _card: ReportPurchasePlan,
   quote: ReportPriceQuoteSnapshot | null | undefined
@@ -100,6 +159,7 @@ function getCardPricing(
       priceLabel: "Pricing unavailable",
       strikePriceLabel: null,
       startingStrikePriceLabel: null,
+      saveLabel: null,
     };
   }
 
@@ -123,6 +183,12 @@ function getCardPricing(
     priceLabel: formatReportPurchasePrice(currentCents),
     strikePriceLabel: strikeEligible ? getReportPurchaseStrikePrice(strikeCents) : null,
     startingStrikePriceLabel: startingEligible ? getReportPurchaseStrikePrice(startingCents) : null,
+    // Inline "Save €X" pill (Figma 8442-16168) — the euro amount off the strike,
+    // whole euros shown without ".00" (Figma renders "Save €5", not "Save €5.00").
+    saveLabel:
+      strikeEligible && typeof strikeCents === "number"
+        ? formatSaveAmount(strikeCents - currentCents)
+        : null,
   };
 }
 
@@ -135,6 +201,7 @@ const ReportPricingModal: FC<Props> = ({
   onUnlock,
   primaryArchetype = null,
   quotes,
+  offerDeadline,
   returnFocusRef,
   targetArchetype = null,
   variant = "default",
@@ -163,6 +230,17 @@ const ReportPricingModal: FC<Props> = ({
         ? "Unlock your complete archetype report \u2014 comprehensive coverage of your archetype probabilities, sexual stage, attachment style, desire drivers, and growth paths."
         : `Unlock your complete ${archetype} report \u2014 attachment style, core insecurities, confidence, love language, arousal, desire drivers, fantasies, and more.`;
   const planCards = REPORT_PURCHASE_PLANS;
+
+  // Urgency countdown (Figma 8442-16168) — same drift-free hook as the locked-
+  // section cards, gated on `open` so it never ticks while hidden.
+  const [fallbackDeadline] = useState(() =>
+    typeof window === "undefined" ? 0 : Date.now() + REPORT_PAYWALL_COUNTDOWN_MS
+  );
+  const { mm, ss } = usePaywallCountdown(offerDeadline ?? fallbackDeadline, open);
+  // Cheapest live price — prefixes the "Lifetime value" why-card ("€9.99, one time…").
+  const cheapestPriceLabel = quotes?.full_report
+    ? formatReportPurchasePrice(quotes.full_report.currentPriceCents)
+    : null;
 
   // "Extra N% OFF" pill on Full card — communicates the ladder depth relative
   // to the starting-sale price (NOT MSRP), so it reads as bonus savings on top
@@ -433,35 +511,28 @@ const ReportPricingModal: FC<Props> = ({
                     : "Don\u2019t miss out on truly understanding your sexuality"}
                 </span>
                 <h2 id="report-pricing-modal-title" className="report-pricing-modal__title">
-                  {isShare ? (
-                    "Upgrade your plan to share your results"
-                  ) : targetArchetype ? (
-                    <>
-                      Unlock your full report of{" "}
-                      <span className="report-pricing-modal__title-accent">
-                        the {targetArchetype}
-                      </span>
-                    </>
-                  ) : isOffer ? (
-                    <>
-                      <span className="report-pricing-modal__title-accent">
-                        Secure your extra discount now,
-                      </span>
-                      <br />
-                      <span className="report-pricing-modal__title-tail">
-                        to unlock your full report
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      Unlock your full report of{" "}
-                      <span className="report-pricing-modal__title-accent">the {archetype}</span>
-                    </>
-                  )}
+                  {isShare ? "Upgrade your plan to share your results" : "Unlock your reports."}
                 </h2>
                 <p id="report-pricing-modal-copy" className="report-pricing-modal__copy">
-                  {subtitle}
+                  {isShare
+                    ? subtitle
+                    : "Go deeper into the full picture of who you are, and how you fit with someone else."}
                 </p>
+                {!isShare ? (
+                  <div className="report-pricing-modal__stats" aria-hidden="true">
+                    <span className="report-pricing-modal__stat">
+                      <strong>59</strong> questions answered
+                    </span>
+                    <span className="report-pricing-modal__stat-dot" />
+                    <span className="report-pricing-modal__stat">
+                      <strong>14</strong> archetypes
+                    </span>
+                    <span className="report-pricing-modal__stat-dot" />
+                    <span className="report-pricing-modal__stat">
+                      <strong>30+</strong> personalised chapters
+                    </span>
+                  </div>
+                ) : null}
                 {!quotes ? (
                   <p className="report-pricing-modal__copy" role="alert">
                     Live pricing couldn&apos;t be loaded right now. Reload the page and try again.
@@ -488,6 +559,7 @@ const ReportPricingModal: FC<Props> = ({
                       role="listitem"
                       className={[
                         "report-pricing-card",
+                        `report-pricing-card--${card.plan}`,
                         card.tone === "highlight"
                           ? "report-pricing-card--hero"
                           : "report-pricing-card--side",
@@ -499,16 +571,18 @@ const ReportPricingModal: FC<Props> = ({
                         .filter(Boolean)
                         .join(" ")}
                     >
-                      {(pricing.badge && !isOffer) || card.featuredLabel ? (
+                      {card.featuredLabel || card.badge ? (
                         <div className="report-pricing-card__badges">
-                          {pricing.badge && !isOffer ? (
-                            <span className="report-pricing-card__badge">{pricing.badge}</span>
-                          ) : null}
-                          {card.featuredLabel ? (
-                            <span className="report-pricing-card__badge report-pricing-card__badge--featured">
-                              {card.featuredLabel}
-                            </span>
-                          ) : null}
+                          <span
+                            className={[
+                              "report-pricing-card__badge",
+                              card.featuredLabel
+                                ? "report-pricing-card__badge--featured"
+                                : "report-pricing-card__badge--outline",
+                            ].join(" ")}
+                          >
+                            {card.featuredLabel ?? card.badge}
+                          </span>
                         </div>
                       ) : null}
 
@@ -517,54 +591,29 @@ const ReportPricingModal: FC<Props> = ({
                         <p className="report-pricing-card__description">{card.description}</p>
                       </div>
 
-                      <div className="report-pricing-card__price">
-                        <span
-                          className={[
-                            "report-pricing-card__strike",
-                            !pricing.strikePriceLabel
-                              ? "report-pricing-card__strike--placeholder"
-                              : "",
-                          ]
-                            .filter(Boolean)
-                            .join(" ")}
-                          aria-hidden={pricing.strikePriceLabel ? undefined : "true"}
-                        >
-                          {pricing.strikePriceLabel
-                            ? `${pricing.strikePriceLabel} ${card.priceSuffix === "one-time" ? "one off" : card.priceSuffix}`
-                            : "\u00a0"}
-                        </span>
-                        {isOffer && pricing.startingStrikePriceLabel ? (
-                          <span className="report-pricing-card__strike report-pricing-card__strike--secondary">
-                            {pricing.startingStrikePriceLabel} /
-                            {card.priceSuffix === "one-time" ? "one off" : card.priceSuffix}
+                      <div className="report-pricing-card__price-row">
+                        {pricing.strikePriceLabel ? (
+                          <span className="report-pricing-card__strike">
+                            {pricing.strikePriceLabel}
                           </span>
                         ) : null}
-                        <div className="report-pricing-card__price-row">
-                          <strong>{pricing.priceLabel}</strong>
-                          {pricing.available && !isOffer ? (
-                            <span>
-                              /{card.priceSuffix === "one-time" ? "one off" : card.priceSuffix}
-                            </span>
-                          ) : null}
-                          {isOffer && pricing.available ? (
-                            card.plan === "full_report" && showExtraDiscountPill ? (
-                              <span
-                                className="report-pricing-card__extra-pill"
-                                aria-label={`Extra ${extraDiscountPct} percent off`}
-                              >
-                                EXTRA {extraDiscountPct}% OFF
-                              </span>
-                            ) : pricing.badge ? (
-                              <span
-                                className="report-pricing-card__extra-pill"
-                                aria-label={pricing.badge}
-                              >
-                                {pricing.badge}
-                              </span>
-                            ) : null
-                          ) : null}
-                        </div>
+                        <span className="report-pricing-card__amount">{pricing.priceLabel}</span>
+                        {pricing.available ? (
+                          <span className="report-pricing-card__suffix">
+                            {card.priceSuffix === "one-time" ? "one-off" : card.priceSuffix}
+                          </span>
+                        ) : null}
+                        <span className="report-pricing-card__price-flex" aria-hidden="true" />
+                        {pricing.saveLabel ? (
+                          <span className="report-pricing-card__save">
+                            Save {pricing.saveLabel}
+                          </span>
+                        ) : null}
                       </div>
+
+                      {card.subtitle ? (
+                        <p className="report-pricing-card__subtitle">{card.subtitle}</p>
+                      ) : null}
 
                       <button
                         type="button"
@@ -628,6 +677,28 @@ const ReportPricingModal: FC<Props> = ({
                         )}
                       </button>
 
+                      <p className="report-pricing-card__guarantee">
+                        <span className="report-pricing-card__guarantee-icon" aria-hidden="true">
+                          <svg
+                            viewBox="0 0 16 16"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.4"
+                          >
+                            <path
+                              d="M8 1.5 2.9 3.5v3.8c0 3.1 2.2 5.1 5.1 6.1 2.9-1 5.1-3 5.1-6.1V3.5L8 1.5Z"
+                              strokeLinejoin="round"
+                            />
+                            <path
+                              d="m5.9 7.9 1.5 1.5 2.9-3"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        </span>
+                        14-day money-back guarantee
+                      </p>
+
                       <ul className="report-pricing-card__features">
                         {card.features.map((feature) => (
                           <li
@@ -637,6 +708,7 @@ const ReportPricingModal: FC<Props> = ({
                               feature.icon === "none"
                                 ? "report-pricing-card__feature--subitem"
                                 : "",
+                              feature.icon === "lock" ? "report-pricing-card__feature--locked" : "",
                               feature.tone === "emphasis"
                                 ? "report-pricing-card__feature--emphasis"
                                 : "",
@@ -645,7 +717,22 @@ const ReportPricingModal: FC<Props> = ({
                               .filter(Boolean)
                               .join(" ")}
                           >
-                            {feature.icon !== "none" ? (
+                            {feature.icon === "lock" ? (
+                              <span
+                                className="report-pricing-card__feature-icon report-pricing-card__feature-icon--locked"
+                                aria-hidden="true"
+                              >
+                                <svg
+                                  viewBox="0 0 16 16"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="1.4"
+                                >
+                                  <rect x="3.6" y="7" width="8.8" height="6.4" rx="1.3" />
+                                  <path d="M5.5 7V5.1a2.5 2.5 0 0 1 5 0V7" strokeLinecap="round" />
+                                </svg>
+                              </span>
+                            ) : feature.icon !== "none" ? (
                               <span
                                 className="report-pricing-card__feature-icon"
                                 aria-hidden="true"
@@ -664,6 +751,24 @@ const ReportPricingModal: FC<Props> = ({
                           </li>
                         ))}
                       </ul>
+
+                      {card.footnote ? (
+                        <p className="report-pricing-card__footnote">
+                          {(() => {
+                            const q = card.footnote.indexOf("? ");
+                            return q === -1 ? (
+                              card.footnote
+                            ) : (
+                              <>
+                                <strong className="report-pricing-card__footnote-lead">
+                                  {card.footnote.slice(0, q + 1)}
+                                </strong>
+                                {card.footnote.slice(q + 1)}
+                              </>
+                            );
+                          })()}
+                        </p>
+                      ) : null}
                     </article>
                   );
                 })}
@@ -679,7 +784,42 @@ const ReportPricingModal: FC<Props> = ({
                 <PricingMethodMark logo="amex" label="American Express" />
               </div>
 
+              <div
+                className="report-pricing-modal__countdown"
+                role="timer"
+                aria-label={`Offer expires in ${mm}:${ss}`}
+              >
+                <span className="report-pricing-modal__countdown-label">
+                  Time left to secure this offer
+                </span>
+                <PaywallCountdownDigits mm={mm} ss={ss} />
+              </div>
+
               <PaywallTestimonials open={open} />
+
+              <section className="rpm-why report-pricing-modal__why">
+                <h3 className="rpm-section-h">
+                  Why unlock <em style={gradientTextStyle}>Reports</em>?
+                </h3>
+                <div className="rpm-why-grid rpm-why-grid--static">
+                  {WHY_CARDS.map(({ num, tag, lead, emph, body, priceLed }) => (
+                    <article key={num} className="rpm-why-card">
+                      <div className="rpm-why-card__head">
+                        <span className="rpm-why-card__num">{num}</span>
+                        <span className="rpm-why-card__tag">{tag}</span>
+                      </div>
+                      <div className="rpm-why-card__body">
+                        <h4 className="rpm-why-card__title">
+                          {lead} <em style={gradientTextStyle}>{emph}</em>
+                        </h4>
+                        <p className="rpm-why-card__text">
+                          {priceLed && cheapestPriceLabel ? `${cheapestPriceLabel}, ${body}` : body}
+                        </p>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </section>
 
               {isTrustpilotEnabled() && <TrustpilotReviews variant="carousel" />}
             </div>

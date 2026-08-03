@@ -13,7 +13,7 @@ interface Props {
   primaryArchetype: string;
   ranking: string[];
   unlockedArchetypes: Set<string>;
-  accessPlan: "essentials" | "full_report" | "all_reports" | null;
+  accessPlan: "essentials" | "full_report" | "core" | "all_reports" | null;
   onUnlock: (archetypeName: string) => void;
   onPurchaseFullReport: () => void;
   /** Scoring diagnostics from /api/report. The `uDimensions` field powers the

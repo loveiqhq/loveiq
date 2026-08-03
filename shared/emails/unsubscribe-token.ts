@@ -135,6 +135,9 @@ export const CAMPAIGN_LABELS: Record<string, string> = {
   // Nurture-sequence stages
   "6h_no_view": "Nurture 6h (report ready)",
   "6h_no_unlock": "Nurture 6h (unlock nudge)",
+  "72h_no_unlock": "Nurture 72h (50% off)",
+  // Retired stages (pre pricing 2.0) — kept so historical unsubscribe links
+  // already sitting in inboxes still resolve to a readable label.
   "30h_no_unlock": "Nurture 30h (50% off)",
   "54h_no_unlock": "Nurture 54h (75% off)",
   "78h_no_unlock": "Nurture 78h (call invite)",

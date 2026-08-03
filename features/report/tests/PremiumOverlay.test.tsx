@@ -162,7 +162,9 @@ describe("PremiumOverlay", () => {
     expect(onUnlock).toHaveBeenCalledTimes(1);
   });
 
-  it("shows the Essentials badge only for the essentials tier", () => {
+  it("always shows the Full Report badge (Essentials tier retired)", () => {
+    // Pricing 2.0 retired the Essentials tier — every premium section is now
+    // labelled "Full Report", regardless of the (legacy) tier prop.
     const { rerender } = render(
       <PremiumOverlay
         archetype="Spark Seeker"
@@ -172,7 +174,7 @@ describe("PremiumOverlay", () => {
       />
     );
     const group = screen.getByText("Included in").parentElement as HTMLElement;
-    expect(within(group).getByText("Essentials")).toBeInTheDocument();
+    expect(within(group).queryByText("Essentials")).not.toBeInTheDocument();
     expect(within(group).getByText("Full Report")).toBeInTheDocument();
 
     rerender(

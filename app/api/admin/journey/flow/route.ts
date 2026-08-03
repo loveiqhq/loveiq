@@ -700,22 +700,21 @@ export async function GET(request: Request) {
         count: filtered.filter((r) => hasStage(r.id, "6h_no_view", "6h_no_unlock")).length,
       },
       {
-        id: "rc:n30",
-        label: "Still locked → 30h",
-        count: filtered.filter((r) => hasStage(r.id, "30h_no_unlock")).length,
+        id: "rc:n72",
+        label: "Still locked → discount",
+        // Pricing 2.0 sends one −50% code at 72h; historical rows carry the
+        // retired 30h/54h ladder. Count any discount-stage send so this single
+        // step spans both cohorts across the transition.
+        count: filtered.filter((r) =>
+          hasStage(r.id, "72h_no_unlock", "30h_no_unlock", "54h_no_unlock")
+        ).length,
         dropLabel: "Unlocked after 6h",
-      },
-      {
-        id: "rc:n54",
-        label: "Still locked → 54h",
-        count: filtered.filter((r) => hasStage(r.id, "54h_no_unlock")).length,
-        dropLabel: "Unlocked after 30h",
       },
       {
         id: "rc:n78",
         label: "Call invite (78h)",
         count: filtered.filter((r) => hasStage(r.id, "78h_no_unlock")).length,
-        dropLabel: "Unlocked after 54h",
+        dropLabel: "Unlocked after discount",
       },
     ];
     const recoveryBuilt = buildLinearBand(recoveryStages);
@@ -727,6 +726,7 @@ export async function GET(request: Request) {
           r.id,
           "6h_no_view",
           "6h_no_unlock",
+          "72h_no_unlock",
           "30h_no_unlock",
           "54h_no_unlock",
           "78h_no_unlock"

@@ -46,7 +46,9 @@ export { parseUtmSource };
 export interface RevenueBreakdown {
   count: number;
   byCurrency: Record<string, number>;
-  planMix: { essentials: number; full_report: number; all_reports: number };
+  // `core` is optional so pre-pricing-2.0 fixtures/snapshots stay valid; the
+  // metric builder always populates it (0 when no core sales in the window).
+  planMix: { essentials: number; full_report: number; core?: number; all_reports: number };
   promoRedemptions: number;
 }
 
@@ -690,7 +692,7 @@ async function fetchRevenue(sinceIso: string, untilIso: string): Promise<Revenue
     return {
       count: 0,
       byCurrency: {},
-      planMix: { essentials: 0, full_report: 0, all_reports: 0 },
+      planMix: { essentials: 0, full_report: 0, core: 0, all_reports: 0 },
       promoRedemptions: 0,
     };
 
@@ -701,7 +703,7 @@ async function fetchRevenue(sinceIso: string, untilIso: string): Promise<Revenue
   }>;
 
   const byCurrency: Record<string, number> = {};
-  const planMix = { essentials: 0, full_report: 0, all_reports: 0 };
+  const planMix = { essentials: 0, full_report: 0, core: 0, all_reports: 0 };
   let promoRedemptions = 0;
 
   for (const row of rows) {
@@ -710,7 +712,12 @@ async function fetchRevenue(sinceIso: string, untilIso: string): Promise<Revenue
     byCurrency[currency] = (byCurrency[currency] ?? 0) + (Number.isFinite(amount) ? amount : 0);
 
     const plan = row.metadata && (row.metadata.plan as string | undefined);
-    if (plan === "essentials" || plan === "full_report" || plan === "all_reports") {
+    if (
+      plan === "essentials" ||
+      plan === "full_report" ||
+      plan === "core" ||
+      plan === "all_reports"
+    ) {
       planMix[plan] += 1;
     }
     const promo = row.metadata && (row.metadata.promotionCode as string | undefined);

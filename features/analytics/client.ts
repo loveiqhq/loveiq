@@ -345,7 +345,7 @@ export const trackSurveyComplete = (durationMs: number, totalQuestions?: number)
 };
 
 export const trackReportViewed = (
-  reportType: "essentials" | "full_report" | "all_reports" | "locked",
+  reportType: "essentials" | "full_report" | "core" | "all_reports" | "locked",
   archetype?: string | null
 ) => {
   const params = {
@@ -357,7 +357,7 @@ export const trackReportViewed = (
 };
 
 export interface PaywallPlanItem {
-  plan: "essentials" | "full_report" | "all_reports";
+  plan: "essentials" | "full_report" | "core" | "all_reports";
   price: number;
   currency: string;
 }
@@ -390,7 +390,7 @@ export interface PaywallInitiatedParams {
   /** Optional: which archetype is being upgraded. */
   archetype?: string | null;
   /** Optional: required plan tier for the locked section. */
-  plan_needed?: "essentials" | "full_report" | "all_reports";
+  plan_needed?: "essentials" | "full_report" | "core" | "all_reports";
 }
 
 /**
@@ -417,7 +417,7 @@ export const trackPaywallInitiated = (params: PaywallInitiatedParams) => {
 };
 
 export interface PriceShownParams {
-  plan: "essentials" | "full_report" | "all_reports";
+  plan: "essentials" | "full_report" | "core" | "all_reports";
   /** Final EUR amount the user sees (post-multipliers, post-ladder, normalized). */
   price: number;
   /** ISO currency code, e.g. "EUR". */
@@ -454,7 +454,7 @@ export const trackPriceShown = (params: PriceShownParams) => {
 };
 
 export const trackBeginCheckout = (
-  plan: "essentials" | "full_report" | "all_reports",
+  plan: "essentials" | "full_report" | "core" | "all_reports",
   price: number,
   currency: string
 ) => {
@@ -512,7 +512,7 @@ export const trackTestimonialInteraction = (action: TestimonialAction) => {
  * `trackReportPurchase`, so a refresh of the return page doesn't double-write.
  */
 export const trackPaywallUnlocked = (
-  plan: "essentials" | "full_report" | "all_reports",
+  plan: "essentials" | "full_report" | "core" | "all_reports",
   priceEur: number,
   currency: string,
   transactionId: string
@@ -523,7 +523,7 @@ export const trackPaywallUnlocked = (
 };
 
 export type ReportEngagementThreshold = 60 | 300 | 600;
-export type ReportEngagementType = "essentials" | "full_report" | "all_reports" | "locked";
+export type ReportEngagementType = "essentials" | "full_report" | "core" | "all_reports" | "locked";
 
 export const trackReportEngagement = (
   thresholdSeconds: ReportEngagementThreshold,
@@ -724,7 +724,7 @@ export const trackExperimentCardFlipped = (params: { to: "pricing" | "archetype"
 export const trackLockIconClicked = (params: {
   section_id: string;
   archetype?: string | null;
-  plan_needed: "essentials" | "full_report" | "all_reports";
+  plan_needed: "essentials" | "full_report" | "core" | "all_reports";
 }) => {
   const payload = {
     section_id: params.section_id,

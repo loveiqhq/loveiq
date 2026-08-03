@@ -74,6 +74,9 @@ type DigestImageKind =
 const NURTURE_STAGE_LABELS: Record<string, string> = {
   "6h_no_view": "6h · no view",
   "6h_no_unlock": "6h · no unlock",
+  "72h_no_unlock": "72h · 50% off",
+  // Retired stages (pre pricing 2.0) — retained so historical digests still label
+  // the old ladder correctly.
   "30h_no_unlock": "30h · 50% off",
   "54h_no_unlock": "54h · 75% off",
   "78h_no_unlock": "78h · call invite",
@@ -481,6 +484,7 @@ async function buildReactivationChartBlock(
 const PLAN_ORDER: Array<keyof DailyMetrics["revenue"]["planMix"]> = [
   "essentials",
   "full_report",
+  "core",
   "all_reports",
 ];
 

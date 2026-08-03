@@ -699,7 +699,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                         quote={fullReportQuote}
                         sectionId={section.id}
                         sectionTitle={title}
-                        tier="essentials"
+                        tier="full_report"
                       />
                     </ReportSection>
                   );
@@ -902,6 +902,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
         onClose={onClosePricingModal}
         onUnlock={onBeginCheckout}
         quotes={pricingQuotes}
+        offerDeadline={offerDeadline}
         returnFocusRef={mainContentRef}
         targetArchetype={pricingTargetArchetype}
         primaryArchetype={primaryArchetype}
@@ -1029,9 +1030,16 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   // the explicit, analytics-independent signal added to every report link.
   const fromEmail =
     searchParams.get("from") === "email" || searchParams.get("utm_source") === "email";
+  // `forced_paywall_enabled` OFF (server flag) hard-pauses the forced screen:
+  // everyone lands in "control" (dismissible modal, report viewable) regardless
+  // of the token-derived arm. Existing email-return / dev-override rules still
+  // apply within the enabled path.
   const forcedPaywallCohort = useMemo(
-    () => resolveReportPaywallCohort({ devArm, fromEmail, token: resolvedReportToken }),
-    [devArm, fromEmail, resolvedReportToken]
+    () =>
+      data?.forcedPaywallEnabled === false
+        ? "control"
+        : resolveReportPaywallCohort({ devArm, fromEmail, token: resolvedReportToken }),
+    [data?.forcedPaywallEnabled, devArm, fromEmail, resolvedReportToken]
   );
 
   // Resolve the paywall countdown deadline once per report session (client-only;
@@ -1179,7 +1187,13 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       window.removeEventListener("scroll", handleFirstScroll);
       scrollTeaserTimerRef.current = setTimeout(() => {
         if (!isPricingModalOpenRef.current) {
-          setIsScrollTeaserOpen(true);
+          // Pricing 2.0: the scroll pop-up shows the NEW 3-tier plans modal
+          // (ReportPricingModal), not the old single-price teaser — the same
+          // modal the locked-section "Unlock" CTAs open, so scroll and click
+          // are consistent.
+          setPricingTargetArchetype(null);
+          setPricingVariant(shouldShowOfferVariant ? "offer" : "default");
+          setIsPricingModalOpen(true);
         }
       }, 1000);
     }
@@ -1194,7 +1208,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       }
       scrollTeaserFiredRef.current = false;
     };
-  }, [accessPlan, data, viewMode, forcedPaywallCohort]);
+  }, [accessPlan, data, viewMode, forcedPaywallCohort, shouldShowOfferVariant]);
 
   // Experiment exposure — fire once when this report is eligible for the
   // forced-paywall test (locked + owner view). Both arms, for arm analysis.

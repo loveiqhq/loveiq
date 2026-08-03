@@ -13,7 +13,7 @@ interface Props {
    * modal skip the "Loading…" flash while the share-specific GET resolves —
    * locked-vs-active state is determined synchronously on first render.
    */
-  initialPlan?: "essentials" | "full_report" | "all_reports" | null;
+  initialPlan?: "essentials" | "full_report" | "core" | "all_reports" | null;
   onUpgrade?: () => void;
   returnFocusRef?: MutableRefObject<HTMLElement | null>;
 }

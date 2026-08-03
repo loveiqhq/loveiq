@@ -126,6 +126,11 @@ export async function resolveNurturePromo({
     if (!codes || typeof codes !== "object") continue;
 
     for (const [stage, entry] of Object.entries(codes)) {
+      // The `partner` code is minted for a DIFFERENT person (the buyer's partner)
+      // to type on their OWN hosted checkout — it must never auto-apply as the
+      // owner's promo. `post_call` stays resolvable: it is granted to the same
+      // user to redeem via their own ?promo= one-tap link.
+      if (stage === "partner") continue;
       const storedCode = asString(entry?.code);
       if (storedCode !== userCode) continue;
 
@@ -146,11 +151,16 @@ export async function resolveNurturePromo({
 }
 
 export function getCouponIdForStage(stage: string): string | null {
-  if (stage === "30h_no_unlock") return process.env.STRIPE_COUPON_50 ?? null;
-  if (stage === "54h_no_unlock") return process.env.STRIPE_COUPON_75 ?? null;
-  // Post-call goodwill grant: a one-time 100%-off code, minted by the admin
-  // "grant call coupon" action and resolved here at checkout like any nurture code.
-  if (stage === "post_call") return process.env.STRIPE_COUPON_100 ?? null;
+  // Pricing 2.0: the only nurture discount is a single −50% code at 72h. The old
+  // 30h(50%)/54h(75%) ladder is retired — historical codes were already minted
+  // and stored, and are resolved at redemption via their stored promotion id
+  // (never re-minted here), so the retired mappings are safe to drop.
+  if (stage === "72h_no_unlock") return process.env.STRIPE_COUPON_50 ?? null;
+  // Post-call goodwill grant + tier-3 partner code: both are one-time 100%-off
+  // codes drawn from the same coupon. post_call is minted by the admin "grant
+  // call coupon" action; partner is minted on a tier-3 purchase for the buyer to
+  // share. Both resolve here at checkout like any nurture code.
+  if (stage === "post_call" || stage === "partner") return process.env.STRIPE_COUPON_100 ?? null;
   return null;
 }
 

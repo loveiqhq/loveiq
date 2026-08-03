@@ -1,15 +1,16 @@
 /**
  * GET /api/cron/nurture-sequence
  *
- * Hourly nurture sequence cron that fans out across 5 timed stages keyed off
+ * Hourly nurture sequence cron that fans out across timed stages keyed off
  * `personal_report.created_date_time`:
  *
- *   - `6h_no_view`     — 5–7h ago, no `analytics_event.report_viewed` row
- *   - `6h_no_unlock`   — 5–7h ago, has a viewed event but no paid plan
- *   - `30h_no_unlock`  — 29–31h ago, no paid plan; issues 50% per-user code
- *   - `54h_no_unlock`  — 53–55h ago, no paid plan; issues 75% per-user code
+ *   - `72h_no_unlock`  — 71–73h ago, no paid plan; issues the single −50%
+ *                        per-user discount code (pricing 2.0 — the only nurture
+ *                        email; the 6h "report ready"/"unlock" reminders and the
+ *                        old 30h/54h discount ladder were retired — no more nudges)
  *   - `78h_no_unlock`  — 77–79h ago, no paid plan; invites a 20-min call (no
- *                        code), CTA → Calendly; logs a `booking_event` row
+ *                        code), CTA → Calendly; logs a `booking_event` row.
+ *                        PAUSED by default (NURTURE_78H_CALL_ENABLED gate)
  *
  * Idempotency lives in `report_price_quote.metadata.nurtureEmailsSent` (array
  * of stage strings) on the `full_report` quote row for the submission. Per-
@@ -43,10 +44,9 @@ import { getReportPlanByPersonalReportId } from "@features/report/server/planAcc
 import { getStripeServerClient } from "@features/checkout/server/stripeCheckout";
 import { getCouponIdForStage } from "@features/checkout/server/promoCodes";
 import { getReportPriceQuoteForContext } from "@features/pricing/logic/reportPricing";
-import { nurture6hNoViewEmail } from "@features/report/server/emails/nurture/nurture-6h-no-view";
-import { nurture6hNoUnlockEmail } from "@features/report/server/emails/nurture/nurture-6h-no-unlock";
+// The 50%-off template is timing-agnostic (it references the code's 24h expiry,
+// not the send hour), so the single 72h discount stage reuses it as-is.
 import { nurture30hNoUnlockEmail } from "@features/report/server/emails/nurture/nurture-30h-no-unlock";
-import { nurture54hNoUnlockEmail } from "@features/report/server/emails/nurture/nurture-54h-no-unlock";
 import { nurture78hNoUnlockEmail } from "@features/report/server/emails/nurture/nurture-78h-no-unlock";
 
 export const runtime = "nodejs";
@@ -102,7 +102,7 @@ function resolveTimeBudgetMs(): number {
   return Number.isFinite(n) && n >= 0 ? n : DEFAULT_TIME_BUDGET_MS;
 }
 
-type Stage = "6h_no_view" | "6h_no_unlock" | "30h_no_unlock" | "54h_no_unlock" | "78h_no_unlock";
+type Stage = "72h_no_unlock" | "78h_no_unlock";
 
 // Final-stage CTA target. The 78h email links OUT to Calendly (a 20-min call),
 // not to /report. The booking link is operator-specific (whoever takes the
@@ -121,9 +121,7 @@ interface AgeWindow {
 
 // 2h-wide windows so a missed hourly tick still catches users on the next run.
 const AGE_WINDOWS = {
-  six: { minMs: 5 * HOUR_MS, maxMs: 7 * HOUR_MS },
-  thirty: { minMs: 29 * HOUR_MS, maxMs: 31 * HOUR_MS },
-  fiftyFour: { minMs: 53 * HOUR_MS, maxMs: 55 * HOUR_MS },
+  seventyTwo: { minMs: 71 * HOUR_MS, maxMs: 73 * HOUR_MS },
   seventyEight: { minMs: 77 * HOUR_MS, maxMs: 79 * HOUR_MS },
 } as const satisfies Record<string, AgeWindow>;
 
@@ -243,7 +241,7 @@ async function fetchAccessToken(submissionId: number): Promise<string | null> {
  * Bootstrap a `full_report` quote row if none exists for the submission yet.
  * Quotes are normally created lazily on /report page-load; users who finish
  * the survey but never open the report have no quote, which would defeat the
- * 6h_no_view stage (whose whole purpose is to nudge those exact users). The
+ * 72h discount stage (the quote is that stage's idempotency carrier). The
  * shared pricing helper is idempotent on `(personal_report_id, plan)` so this
  * is safe to call even if another tick raced and created the row first.
  */
@@ -265,18 +263,6 @@ async function bootstrapFullReportQuote(
   return fetchFullReportQuote(submissionId);
 }
 
-async function hasReportViewedEvent(personalReportId: number): Promise<boolean> {
-  const path =
-    `/rest/v1/analytics_event` +
-    `?personal_report_id=eq.${personalReportId}` +
-    `&event_type=eq.report_viewed` +
-    `&select=id&limit=1`;
-  const r = await supabaseFetch(path);
-  if (!r.ok) return false;
-  const rows = (await r.json()) as Array<{ id: number }>;
-  return rows.length > 0;
-}
-
 function getNurtureEmailsSent(metadata: Record<string, unknown> | null): Stage[] {
   if (!metadata) return [];
   const raw = (metadata as Record<string, unknown>).nurtureEmailsSent;
@@ -296,7 +282,7 @@ function buildBase62Alphabet(): string {
 
 const BASE62_ALPHABET = buildBase62Alphabet();
 
-function generateUserCode(percentOff: 50 | 75): string {
+function generateUserCode(): string {
   // base62, 8 chars: ~62^8 ≈ 2.18e14 keyspace. Stripe enforces uniqueness, so
   // collisions trigger a re-roll via the catch in createPromoCode below.
   const buf = randomBytes(8);
@@ -306,32 +292,29 @@ function generateUserCode(percentOff: 50 | 75): string {
     // `noUncheckedIndexedAccess` strictness prefers it over `alphabet[idx]`.
     out += BASE62_ALPHABET.charAt(buf[i]! % BASE62_ALPHABET.length);
   }
-  return `LIQ-${percentOff}-${out}`;
+  return `LIQ-50-${out}`;
 }
 
 interface StripeIssuedPromo {
   code: string;
   stripePromotionCodeId: string;
-  percentOff: 50 | 75;
+  percentOff: 50;
   expiresAt: string;
 }
 
-async function createPromoCode({
-  stage,
-}: {
-  stage: "30h_no_unlock" | "54h_no_unlock";
-}): Promise<StripeIssuedPromo | null> {
+// Single discount stage (pricing 2.0): the only nurture discount is a −50% code
+// at 72h. The prior 30h(50%)/54h(75%) ladder was collapsed to this one stage.
+async function createPromoCode(): Promise<StripeIssuedPromo | null> {
   const stripe = getStripeServerClient();
-  const couponId = getCouponIdForStage(stage);
+  const couponId = getCouponIdForStage("72h_no_unlock");
   if (!stripe || !couponId) {
     logger.warn(
-      { stage, hasStripe: Boolean(stripe), hasCoupon: Boolean(couponId) },
+      { hasStripe: Boolean(stripe), hasCoupon: Boolean(couponId) },
       "nurture-sequence: stripe coupon not configured"
     );
     return null;
   }
 
-  const percentOff: 50 | 75 = stage === "30h_no_unlock" ? 50 : 75;
   const expiresAtSec = Math.floor(Date.now() / 1000) + 24 * 3600;
 
   // Per-user redemption restriction lives in the app layer via
@@ -346,7 +329,7 @@ async function createPromoCode({
   // One retry on collision — the 62^8 keyspace makes this astronomically rare,
   // but Stripe will 400 if the code happens to already exist.
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    const code = generateUserCode(percentOff);
+    const code = generateUserCode();
     try {
       const promo = await stripe.promotionCodes.create({
         promotion: { type: "coupon", coupon: couponId },
@@ -357,7 +340,7 @@ async function createPromoCode({
       return {
         code,
         stripePromotionCodeId: promo.id,
-        percentOff,
+        percentOff: 50,
         expiresAt: new Date(expiresAtSec * 1000).toISOString(),
       };
     } catch (err) {
@@ -368,7 +351,7 @@ async function createPromoCode({
       // The full error is still captured in Vercel runtime logs with
       // pino's `err` serializer (message + stack).
       logger.error(
-        { err, stage, errorMessage: message, slack: false },
+        { err, errorMessage: message, slack: false },
         "nurture-sequence: stripe promo create failed"
       );
       return null;
@@ -464,20 +447,9 @@ function renderEmail(input: Omit<SendInput, "resend">): {
     unsubscribeUrl: input.unsubscribeUrl,
   };
   switch (input.stage) {
-    case "6h_no_view":
-      return nurture6hNoViewEmail(common);
-    case "6h_no_unlock":
-      return nurture6hNoUnlockEmail(common);
-    case "30h_no_unlock":
-      if (!input.promo) throw new Error("30h_no_unlock requires promo");
+    case "72h_no_unlock":
+      if (!input.promo) throw new Error("72h_no_unlock requires promo");
       return nurture30hNoUnlockEmail({
-        ...common,
-        promoCode: input.promo.code,
-        percentOff: input.promo.percentOff,
-      });
-    case "54h_no_unlock":
-      if (!input.promo) throw new Error("54h_no_unlock requires promo");
-      return nurture54hNoUnlockEmail({
         ...common,
         promoCode: input.promo.code,
         percentOff: input.promo.percentOff,
@@ -496,31 +468,6 @@ function renderEmail(input: Omit<SendInput, "resend">): {
         siteUrl: input.siteUrl,
         unsubscribeUrl: input.unsubscribeUrl,
       });
-  }
-}
-
-/**
- * F-08: deactivate a previously-minted promo code so it can no longer be
- * redeemed at checkout. Pulled from `metadata.nurturePromoCodes[stage]`.
- * Best-effort: any failure is logged and swallowed — the caller proceeds.
- */
-async function deactivatePriorStagePromo(
-  metadata: Record<string, unknown> | null,
-  priorStage: Stage
-): Promise<void> {
-  const codes = (metadata?.nurturePromoCodes as Record<string, unknown> | undefined) ?? {};
-  const prior = codes[priorStage] as { stripePromotionCodeId?: string } | undefined;
-  const promoId = prior?.stripePromotionCodeId;
-  if (!promoId) return;
-  const stripe = getStripeServerClient();
-  if (!stripe) return;
-  try {
-    await stripe.promotionCodes.update(promoId, { active: false });
-  } catch (err) {
-    logger.warn(
-      { err, priorStage, promoId, slack: false },
-      "nurture-sequence: deactivate prior promo failed (best-effort)"
-    );
   }
 }
 
@@ -729,7 +676,7 @@ async function processCandidate(
 
     // Quote is the idempotency carrier. If absent, bootstrap it now — users who
     // never opened /report have no quote yet, and skipping them would gut the
-    // 6h_no_view stage.
+    // 72h discount stage.
     let quote = await fetchFullReportQuote(candidate.survey_submission_id);
     if (!quote) {
       quote = await bootstrapFullReportQuote(candidate.survey_submission_id, reportToken);
@@ -767,18 +714,11 @@ async function processCandidate(
       : undefined;
 
     let promo: StripeIssuedPromo | null = null;
-    if (stage === "30h_no_unlock" || stage === "54h_no_unlock") {
-      promo = await createPromoCode({ stage });
+    if (stage === "72h_no_unlock") {
+      promo = await createPromoCode();
       if (!promo) {
         summary.skippedNoPromo++;
         return;
-      }
-      // F-08: when the 54h (75%-off) code mints, deactivate any still-live
-      // 30h (50%-off) code for this user so promo stacking is impossible.
-      // Best-effort: a deactivate failure just leaves the smaller code live
-      // until its 24h Stripe expiry — degraded but not catastrophic.
-      if (stage === "54h_no_unlock") {
-        await deactivatePriorStagePromo(quote.metadata, "30h_no_unlock");
       }
     }
 
@@ -890,43 +830,6 @@ async function pingOps(kind: string, dayKey: string, text: string): Promise<void
   await markSlackAlertDelivered(kind, "cron_day", dayKey);
 }
 
-async function runSixHourStages(
-  candidates: CandidateRow[],
-  ctx: RouteContext,
-  noView: StageSummary,
-  noUnlock: StageSummary
-): Promise<void> {
-  for (let i = 0; i < candidates.length; i++) {
-    if (Date.now() >= ctx.deadlineAtMs) {
-      logger.warn(
-        { processed: i, remaining: candidates.length - i, stage: "6h" },
-        "nurture-sequence: time budget reached; deferring remaining candidates to next run"
-      );
-      return;
-    }
-    if (terminated) {
-      logger.warn(
-        { processed: i, remaining: candidates.length - i, stage: "6h" },
-        "nurture-sequence: SIGTERM received mid-loop; exiting"
-      );
-      return;
-    }
-    if (i > 0 && i % KILL_SWITCH_CHECK_INTERVAL === 0 && (await isNurtureKilled())) {
-      logger.warn(
-        { processed: i, remaining: candidates.length - i, stage: "6h" },
-        "nurture-sequence: kill switch tripped mid-loop; exiting"
-      );
-      return;
-    }
-    const c = candidates[i]!;
-    const viewed = await hasReportViewedEvent(c.id);
-    const stage: Stage = viewed ? "6h_no_unlock" : "6h_no_view";
-    const target = viewed ? noUnlock : noView;
-    target.candidates++;
-    await processCandidate(c, stage, ctx, target);
-  }
-}
-
 async function runSingleStage(
   candidates: CandidateRow[],
   stage: Stage,
@@ -1014,32 +917,27 @@ export async function GET(request: Request) {
   };
 
   const summaries: Record<Stage, StageSummary> = {
-    "6h_no_view": newStageSummary(),
-    "6h_no_unlock": newStageSummary(),
-    "30h_no_unlock": newStageSummary(),
-    "54h_no_unlock": newStageSummary(),
+    "72h_no_unlock": newStageSummary(),
     "78h_no_unlock": newStageSummary(),
   };
 
   try {
-    const [sixCandidates, thirtyCandidates, fiftyFourCandidates, seventyEightCandidates] =
-      await Promise.all([
-        fetchCandidatesByAge(AGE_WINDOWS.six),
-        fetchCandidatesByAge(AGE_WINDOWS.thirty),
-        fetchCandidatesByAge(AGE_WINDOWS.fiftyFour),
-        fetchCandidatesByAge(AGE_WINDOWS.seventyEight),
-      ]);
+    const [seventyTwoCandidates, seventyEightCandidates] = await Promise.all([
+      fetchCandidatesByAge(AGE_WINDOWS.seventyTwo),
+      fetchCandidatesByAge(AGE_WINDOWS.seventyEight),
+    ]);
 
-    await runSixHourStages(sixCandidates, ctx, summaries["6h_no_view"], summaries["6h_no_unlock"]);
-    await runSingleStage(thirtyCandidates, "30h_no_unlock", ctx, summaries["30h_no_unlock"]);
-    await runSingleStage(fiftyFourCandidates, "54h_no_unlock", ctx, summaries["54h_no_unlock"]);
+    // Single discount stage (pricing 2.0): one −50% code at 72h. The prior 6h
+    // "report ready"/"unlock" reminders and the 30h(50%)/54h(75%) discount
+    // ladder were all retired — this is the only nurture email now.
+    await runSingleStage(seventyTwoCandidates, "72h_no_unlock", ctx, summaries["72h_no_unlock"]);
     // 78h call-invite is PAUSED: no product person is available to take the
     // 20-minute calls right now, so we don't invite users to book one (the email
-    // + its `call_invite_sent` booking_event are skipped). The other four nurture
-    // stages keep running. Re-enable WITHOUT a code change by setting BOTH Vercel
-    // env vars once someone can take the calls: NURTURE_78H_CALL_ENABLED to "true"
-    // AND NURTURE_78H_CALENDLY_URL to that person's Calendly booking link. If the
-    // URL is missing the stage stays paused so no dead booking link is ever sent.
+    // + its `call_invite_sent` booking_event are skipped). The other stages keep
+    // running. Re-enable WITHOUT a code change by setting BOTH Vercel env vars
+    // once someone can take the calls: NURTURE_78H_CALL_ENABLED to "true" AND
+    // NURTURE_78H_CALENDLY_URL to that person's Calendly booking link. If the URL
+    // is missing the stage stays paused so no dead booking link is ever sent.
     if (process.env.NURTURE_78H_CALL_ENABLED === "true" && getCalendlyCallUrl()) {
       await runSingleStage(
         seventyEightCandidates,

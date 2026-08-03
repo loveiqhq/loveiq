@@ -341,7 +341,7 @@ export async function GET(request: Request) {
       );
     }
 
-    let accessPlan: "essentials" | "full_report" | "all_reports" | null = null;
+    let accessPlan: "essentials" | "full_report" | "core" | "all_reports" | null = null;
     let pricingQuotes: ReportPricingQuotesResponse = null;
     let unlockedArchetypeColumn: string[] = [];
     let archetypeTiersFromDb: Record<string, "essentials" | "full_report"> = {};
@@ -481,12 +481,21 @@ export async function GET(request: Request) {
     const filteredArchetypeContent = buildArchetypeContentForUser(accessPlan, unlockedArchetypes);
     const filteredPracticeTendencies = buildPracticeTendenciesForUser(
       accessPlan,
-      unlockedArchetypes
+      unlockedArchetypes,
+      archetypeTiers
     );
+
+    // When forced_paywall_enabled is OFF the report is freely viewable and the
+    // pricing modal is opt-in only (no non-dismissible screen). Shared viewers
+    // never see the forced wall regardless.
+    const forcedPaywallEnabled = isShareAccess
+      ? false
+      : await isFeatureEnabled("forced_paywall_enabled", true);
 
     const response = NextResponse.json({
       submissionId: submission.id,
       accessPlan,
+      forcedPaywallEnabled,
       userName: getSubmissionUserName(submission),
       userEmail: isShareAccess ? null : getSubmissionUserEmail(submission),
       ownerFirstName: isShareAccess ? getSubmissionUserName(submission) : null,

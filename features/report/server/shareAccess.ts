@@ -31,7 +31,7 @@ export interface ReportShareRow {
   recipient_email: string;
   share_token: string;
   shared_by_user_id: number | null;
-  plan_at_share: "essentials" | "full_report" | "all_reports";
+  plan_at_share: "essentials" | "full_report" | "core" | "all_reports";
   personal_message: string | null;
   last_viewed_at: string | null;
   view_count: number;
@@ -262,7 +262,7 @@ export async function createReportShareViaRpc(params: {
   personalReportId: number;
   recipientEmail: string;
   sharedByUserId: number | null;
-  plan: "essentials" | "full_report" | "all_reports";
+  plan: "essentials" | "full_report" | "core" | "all_reports";
   seatLimit: number;
   shareToken: string;
   personalMessage?: string | null;

@@ -6,9 +6,12 @@ import logger from "@shared/observability/logger";
 import { notifySlack, maskEmail, escapeSlack } from "@shared/observability/slack";
 import { reportAllEmail } from "@features/report/server/emails/report-all";
 import { reportAllBEmail } from "@features/report/server/emails/report-all-b";
+import { reportCoreEmail } from "@features/report/server/emails/report-core";
 import { reportEssentialsEmail } from "@features/report/server/emails/report-essentials";
 import { reportFullEmail } from "@features/report/server/emails/report-full";
 import { reportFullBEmail } from "@features/report/server/emails/report-full-b";
+import { partnerCodeEmail } from "@features/report/server/emails/nurture/partner-code";
+import { getCouponIdForStage, mintUserPromoCode } from "@features/checkout/server/promoCodes";
 import { pickEmailVariant } from "@shared/emails/ab-variant";
 import { buildUnsubscribeUrl, UNSUBSCRIBE_CAMPAIGNS } from "@shared/emails/unsubscribe-token";
 import { getEmailSiteUrl } from "@shared/emails/site-url";
@@ -254,7 +257,12 @@ async function sendPurchaseEmail({
   submissionId: number;
   unlockedArchetype?: string | null;
 }): Promise<void> {
-  if (plan !== "essentials" && plan !== "full_report" && plan !== "all_reports") {
+  if (
+    plan !== "essentials" &&
+    plan !== "full_report" &&
+    plan !== "all_reports" &&
+    plan !== "core"
+  ) {
     return;
   }
 
@@ -295,40 +303,54 @@ async function sendPurchaseEmail({
       )
     : undefined;
 
-  // Essentials has a single template; full_report and all_reports run an A/B
-  // copy test. Variant is deterministic per recipient (hashed email) so retries
-  // and dashboards stay consistent.
+  // Essentials + core each have a single template; full_report and all_reports
+  // run an A/B copy test. Variant is deterministic per recipient (hashed email)
+  // so retries and dashboards stay consistent. Core lists the buyer's unlocked
+  // top matches, so resolve them here (best-effort — a miss falls back to a
+  // single report CTA inside the template).
+  const coreArchetypes =
+    plan === "core" ? await lookupTopThreeArchetypesForSubmission(submissionId) : undefined;
   const variant =
-    plan === "essentials" ? "a" : pickEmailVariant(recipient.email, `purchase-${plan}`);
+    plan === "essentials" || plan === "core"
+      ? "a"
+      : pickEmailVariant(recipient.email, `purchase-${plan}`);
 
   const tpl =
     plan === "all_reports"
       ? variant === "b"
         ? reportAllBEmail({ firstName: recipient.firstName, reportUrl, siteUrl, unsubscribeUrl })
         : reportAllEmail({ firstName: recipient.firstName, reportUrl, siteUrl, unsubscribeUrl })
-      : plan === "essentials"
-        ? reportEssentialsEmail({
+      : plan === "core"
+        ? reportCoreEmail({
             firstName: recipient.firstName,
             reportUrl,
             siteUrl,
-            unlockedArchetype: unlockedArchetype ?? null,
+            archetypes: coreArchetypes,
             unsubscribeUrl,
           })
-        : variant === "b"
-          ? reportFullBEmail({
+        : plan === "essentials"
+          ? reportEssentialsEmail({
               firstName: recipient.firstName,
               reportUrl,
               siteUrl,
               unlockedArchetype: unlockedArchetype ?? null,
               unsubscribeUrl,
             })
-          : reportFullEmail({
-              firstName: recipient.firstName,
-              reportUrl,
-              siteUrl,
-              unlockedArchetype: unlockedArchetype ?? null,
-              unsubscribeUrl,
-            });
+          : variant === "b"
+            ? reportFullBEmail({
+                firstName: recipient.firstName,
+                reportUrl,
+                siteUrl,
+                unlockedArchetype: unlockedArchetype ?? null,
+                unsubscribeUrl,
+              })
+            : reportFullEmail({
+                firstName: recipient.firstName,
+                reportUrl,
+                siteUrl,
+                unlockedArchetype: unlockedArchetype ?? null,
+                unsubscribeUrl,
+              });
 
   try {
     const { error } = await Promise.race([
@@ -374,6 +396,150 @@ import { isArchetypeName } from "@features/report/server/archetypeSlug";
 import { markReportPriceQuotePurchased } from "@features/pricing/logic/reportPricing";
 
 const SUPABASE_TIMEOUT_MS = 8_000;
+
+// Partner code (tier-3 "For you & your partner") validity window. Longer than
+// the post-call grant because the partner has to take the full assessment
+// before they can redeem it.
+const PARTNER_CODE_EXPIRY_DAYS = 30;
+
+/**
+ * Tier-3 only: mint a one-time 100%-off code the buyer can hand to a partner,
+ * store it on the buyer's full_report quote (the code carrier), and email it.
+ *
+ * Redemption is DIFFERENT from nurture codes: the partner is a different person,
+ * so the code is NOT wired into a `?promo=` link (owner-scoped resolveNurturePromo
+ * would never match them). Instead the partner types it on Stripe's hosted page,
+ * which checkout-session enables via `allow_promotion_codes` whenever no owner
+ * promo is present. Stripe's `max_redemptions:1` + expiry are the guards.
+ *
+ * Idempotent + best-effort: never re-mints if a partner code already exists, and
+ * every failure degrades to a log (the tier-3 unlock itself already succeeded).
+ */
+async function mintAndEmailPartnerCode({
+  submissionId,
+  email,
+  firstName,
+}: {
+  submissionId: number;
+  email: string | null;
+  firstName: string | null;
+}): Promise<void> {
+  const couponId = getCouponIdForStage("partner");
+  if (!couponId) {
+    logger.error(
+      { submissionId },
+      "Partner code NOT minted — STRIPE_COUPON_100 not configured (tier-3 paid feature broken)"
+    );
+    return;
+  }
+
+  // Any quote row for this submission can carry the per-user partner code
+  // (metadata.nurturePromoCodes) — resolveNurturePromo scans ALL of a
+  // submission's quotes at redemption. Tier-3 buyers purchased `all_reports`, so
+  // filtering to `full_report` risked finding no row (partner code never minted).
+  // Take the newest quote, which is guaranteed to exist (the purchased
+  // all_reports quote at minimum).
+  let quote: { id: number; metadata: Record<string, unknown> | null } | null = null;
+  try {
+    const res = await supabaseServiceFetch(
+      `/rest/v1/report_price_quote?survey_submission_id=eq.${submissionId}&select=id,metadata&order=id.desc&limit=1`
+    );
+    if (res.ok) {
+      const rows = (await res.json()) as Array<{
+        id: number;
+        metadata: Record<string, unknown> | null;
+      }>;
+      quote = rows[0] ?? null;
+    }
+  } catch (err) {
+    logger.warn({ err, submissionId }, "Partner code: quote lookup failed");
+  }
+  if (!quote) {
+    logger.error({ submissionId }, "Partner code: no quote row to carry the code");
+    return;
+  }
+
+  const existingCodes =
+    (quote.metadata?.nurturePromoCodes as Record<string, { code?: string }> | undefined) ?? {};
+  if (existingCodes.partner?.code) return; // already granted — do not re-mint/re-email
+
+  const minted = await mintUserPromoCode({
+    percentOff: 100,
+    couponId,
+    expiresAtSec: Math.floor(Date.now() / 1000) + PARTNER_CODE_EXPIRY_DAYS * 24 * 3600,
+  });
+  if (!minted) {
+    logger.error({ submissionId }, "Partner code: mint failed");
+    return;
+  }
+
+  const nextMetadata: Record<string, unknown> = {
+    ...(quote.metadata ?? {}),
+    nurturePromoCodes: {
+      ...existingCodes,
+      partner: {
+        code: minted.code,
+        stripePromotionCodeId: minted.stripePromotionCodeId,
+        percentOff: minted.percentOff,
+        expiresAt: minted.expiresAt,
+      },
+    },
+  };
+  try {
+    const patch = await supabaseServiceFetch(`/rest/v1/report_price_quote?id=eq.${quote.id}`, {
+      body: JSON.stringify({
+        metadata: nextMetadata,
+        updated_date_time: new Date().toISOString(),
+      }),
+      headers: { Prefer: "return=minimal" },
+      method: "PATCH",
+    });
+    if (!patch.ok) {
+      // Non-fatal: the Stripe code is valid regardless; losing the DB copy only
+      // disables the buyer-side ?promo= convenience (partner types it anyway).
+      logger.error({ status: patch.status, submissionId }, "Partner code: metadata write failed");
+    }
+  } catch (err) {
+    logger.error({ err, submissionId }, "Partner code: metadata write threw");
+  }
+
+  const resend = getResend();
+  if (!resend || !email) return;
+  const siteUrl = getEmailSiteUrl();
+  const ctaUrl = `${siteUrl}/survey?utm_source=email&utm_medium=purchase&utm_campaign=partner_code`;
+  const unsubSecret = process.env.UNSUBSCRIBE_SECRET;
+  const unsubscribeUrl = unsubSecret
+    ? buildUnsubscribeUrl(email, siteUrl, unsubSecret, UNSUBSCRIBE_CAMPAIGNS.reportUnlocked)
+    : undefined;
+  const tpl = partnerCodeEmail({
+    firstName,
+    ctaUrl,
+    promoCode: minted.code,
+    siteUrl,
+    unsubscribeUrl,
+  });
+  try {
+    const { error } = await resend.emails.send({
+      from: process.env.RESEND_FROM || "LoveIQ <hello@send.loveiq.org>",
+      to: email,
+      replyTo: process.env.RESEND_REPLY_TO || "hello@loveiq.org",
+      subject: tpl.subject,
+      html: tpl.html,
+      text: tpl.text,
+      headers: {
+        "X-LoveIQ-Stage": "partner",
+        ...(unsubscribeUrl && {
+          "List-Unsubscribe": `<${unsubscribeUrl}>`,
+          "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+        }),
+      },
+    });
+    if (error) logger.error({ error, submissionId }, "Partner code email send failed");
+    else logger.info({ submissionId }, "Partner code email sent");
+  } catch (err) {
+    logger.error({ err, submissionId }, "Partner code email error");
+  }
+}
 
 interface ServiceFetchOptions {
   body?: string;
@@ -444,6 +610,33 @@ async function lookupPrimaryArchetypeForSubmission(submissionId: number): Promis
     // eslint-disable-next-line no-secrets/no-secrets -- log message, not a secret
     logger.warn({ err, submissionId }, "lookupPrimaryArchetypeForSubmission failed");
     return null;
+  }
+}
+
+/**
+ * The buyer's TOP 3 archetypes by V5 match % — the "core" tier unlocks all
+ * three at full_report tier. Ranked from scoring_result.v5_percentages (falls
+ * back to v4 percentages). Returns [] when scoring isn't available.
+ */
+async function lookupTopThreeArchetypesForSubmission(submissionId: number): Promise<string[]> {
+  try {
+    const response = await supabaseServiceFetch(
+      `/rest/v1/scoring_result?survey_submission_id=eq.${submissionId}&select=v5_percentages,percentages&limit=1`
+    );
+    if (!response.ok) return [];
+    const rows = (await response.json()) as Array<{
+      v5_percentages: Record<string, number> | null;
+      percentages: Record<string, number> | null;
+    }>;
+    const pct = rows[0]?.v5_percentages ?? rows[0]?.percentages ?? {};
+    return Object.entries(pct)
+      .filter(([name, value]) => isArchetypeName(name) && typeof value === "number")
+      .sort((a, b) => (b[1] as number) - (a[1] as number))
+      .slice(0, 3)
+      .map(([name]) => name);
+  } catch (err) {
+    logger.warn({ err, submissionId }, "top-archetypes lookup failed");
+    return [];
   }
 }
 
@@ -1164,6 +1357,31 @@ async function syncCheckoutSessionPayment({
         "No archetype available for tier persistence — purchase recorded but tier write skipped"
       );
     }
+  } else if (effectiveStatus === "succeeded" && plan === "core") {
+    // Core ("All your core archetypes"): unlock the buyer's TOP 3 archetypes
+    // (by V5 match %) at full_report tier.
+    const top3 = await lookupTopThreeArchetypesForSubmission(context.submissionId);
+    if (top3.length > 0) {
+      for (const archetype of top3) {
+        try {
+          await upsertArchetypeTierForPersonalReport({
+            archetype,
+            personalReportId: personalReport.id,
+            tier: "full_report",
+          });
+        } catch (err) {
+          logger.warn(
+            { archetype, err, personalReportId: personalReport.id },
+            "Unable to persist core archetype tier after checkout"
+          );
+        }
+      }
+    } else {
+      logger.error(
+        { personalReportId: personalReport.id, plan, submissionId: context.submissionId },
+        "No top-3 archetypes for core purchase — tier write skipped"
+      );
+    }
   } else if (effectiveStatus === "succeeded" && plan === "all_reports") {
     // The all-reports plan unlocks every archetype at full_report tier.
     // Resolver code synthesizes this at read time, but persisting the tiers
@@ -1210,6 +1428,17 @@ async function syncCheckoutSessionPayment({
         submissionId: context.submissionId,
         utmTracker: recipient.utmTracker,
       });
+
+      // Tier-3 ("For you & your partner") only: hand the buyer a one-time
+      // 100%-off code to share with a partner. Inside isFirstFulfillment so it
+      // mints exactly once per purchase (Stripe re-deliveries are skipped).
+      if (plan === "all_reports") {
+        await mintAndEmailPartnerCode({
+          submissionId: context.submissionId,
+          email: recipient.email,
+          firstName: recipient.firstName,
+        });
+      }
 
       // R-04: Stripe Radar elevated/highest risk alert. We still fulfill —
       // a hard block would slow legit buyers — but ops gets a heads-up so

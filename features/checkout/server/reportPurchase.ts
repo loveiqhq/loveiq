@@ -2,12 +2,22 @@ import { toArchetypeSlug } from "@features/report/server/archetypeSlug";
 
 export const REPORT_ACCESS_TOKEN_REGEX = /^rpt_[a-zA-Z0-9]{20}$/;
 
-export const REPORT_PURCHASE_PLAN_IDS = ["essentials", "full_report", "all_reports"] as const;
+// `essentials` is RETIRED (2026-07 pricing 2.0) — kept in the id union so
+// historical payments still validate + grandfather their access, but it's no
+// longer offered in REPORT_PURCHASE_PLANS below. The three live tiers are:
+//   full_report = "Just a snapshot" (own archetype), core = "All your core
+//   archetypes" (top 3), all_reports = "For you & your partner" (all + partner code).
+export const REPORT_PURCHASE_PLAN_IDS = [
+  "essentials",
+  "full_report",
+  "core",
+  "all_reports",
+] as const;
 
 export type ReportPurchasePlanId = (typeof REPORT_PURCHASE_PLAN_IDS)[number];
 
 export interface ReportPurchaseFeature {
-  icon?: "check" | "none";
+  icon?: "check" | "lock" | "none";
   label: string;
   tone?: "default" | "emphasis" | "muted";
 }
@@ -18,72 +28,81 @@ export interface ReportPurchasePlan {
   description: string;
   featuredLabel?: string;
   features: ReportPurchaseFeature[];
+  /** Small note box under a tier (e.g. the tier-3 "no partner yet" invite). */
+  footnote?: string;
   plan: ReportPurchasePlanId;
   /**
    * Flat selling price (cents) — display fallback when a live quote isn't
-   * available (e.g. the marketing site before the paywall, or a discount email
-   * when the cron failed to load the quote). As of the 2026-06 flat-pricing
-   * reset this equals the price every visitor sees; the strike-through MSRP
-   * comes from `ReportPriceQuoteSnapshot.msrpCents`.
+   * available. The live per-visitor quote (report_price_quote) is the source of
+   * truth; the strike-through MSRP comes from `ReportPriceQuoteSnapshot.msrpCents`.
    */
   priceCents: number;
   priceSuffix: string;
+  /** One-line note under the price (e.g. "The proven starting point"). */
+  subtitle?: string;
   title: string;
   tone?: "highlight";
 }
 
 export const DEFAULT_REPORT_PURCHASE_PLAN_ID: ReportPurchasePlanId = "full_report";
 
+// Uniform 6-feature list; each tier flips locks → checks as you go up (Figma 8442-16168).
 export const REPORT_PURCHASE_PLANS: ReportPurchasePlan[] = [
   {
-    ctaLabel: "Unlock essentials",
-    description: "Built for those with limited time",
+    ctaLabel: "Unlock my report",
+    description: "Your full archetype, and the patterns beneath it.",
+    subtitle: "The proven starting point",
     features: [
-      { label: "Includes the following chapters:" },
-      { icon: "none", label: "- Summary of the archetype", tone: "muted" },
-      { icon: "none", label: "- Attachment Style", tone: "muted" },
-      { icon: "none", label: "- Core Insecurities", tone: "muted" },
-      { icon: "none", label: "- Confidence Level", tone: "muted" },
-      { icon: "none", label: "- Typical Beliefs", tone: "muted" },
-      { label: "Unlocked report summary" },
-      { label: "Share report with 1 extra email" },
-    ],
-    plan: "essentials",
-    priceCents: 999,
-    priceSuffix: "one-time",
-    title: "Essentials only",
-  },
-  {
-    ctaLabel: "Unlock full report",
-    description: "Perfect for individuals who want to dive deep",
-    featuredLabel: "Most popular",
-    features: [
-      { label: "14-day money-back guarantee", tone: "emphasis" },
-      { label: "Get full access to the report" },
-      { label: "30+ analysed chapters" },
-      { label: "Personalized growth paths" },
-      { label: "Everything from Essentials and more" },
-      { label: "Share report with 2 extra emails" },
+      { icon: "check", label: "Your complete archetype report" },
+      { icon: "check", label: "30+ chapters and personalised growth" },
+      { icon: "lock", label: "Your top 3 archetypes: the full blend" },
+      { icon: "lock", label: "A free report for your partner" },
+      { icon: "lock", label: "Your ideal-match archetype" },
+      { icon: "lock", label: "Where you fit and where you clash" },
     ],
     plan: "full_report",
-    priceCents: 1499,
-    priceSuffix: "one-time",
-    title: "Full report",
+    priceCents: 999,
+    priceSuffix: "one-off",
+    title: "Just a snapshot",
+  },
+  {
+    ctaLabel: "Unlock now",
+    description: "How your three strongest types blend into one.",
+    featuredLabel: "Most popular",
+    subtitle: "Your three strongest, together",
+    features: [
+      { icon: "check", label: "Your complete archetype report" },
+      { icon: "check", label: "30+ chapters and personalised growth" },
+      { icon: "check", label: "Your top 3 archetypes: the full blend" },
+      { icon: "lock", label: "A free report for your partner" },
+      { icon: "lock", label: "Your ideal-match archetype" },
+      { icon: "lock", label: "Where you fit and where you clash" },
+    ],
+    plan: "core",
+    priceCents: 1999,
+    priceSuffix: "one-off",
+    title: "All your core archetypes",
     tone: "highlight",
   },
   {
-    ctaLabel: "Unlock all reports",
-    description: "Built for those wanting to explore all archetypes",
+    badge: "Go deeper",
+    ctaLabel: "Unlock us",
+    description: "Both of your profiles, and the chemistry between you.",
+    subtitle: "Two full reports, one price",
+    footnote:
+      "No partner yet? Discover the archetype that completes you now, and keep your free invite for when you meet them.",
     features: [
-      { label: "All 14 archetypes unlocked", tone: "emphasis" },
-      { label: "All benefits as full report" },
-      { label: "A complete map of human desire patterns" },
-      { label: "Decode attraction & compatibility" },
+      { icon: "check", label: "Your complete archetype report" },
+      { icon: "check", label: "30+ chapters and personalised growth" },
+      { icon: "check", label: "Your top 3 archetypes: the full blend" },
+      { icon: "check", label: "A free report for your partner" },
+      { icon: "check", label: "Your ideal-match archetype" },
+      { icon: "check", label: "Where you fit and where you clash" },
     ],
     plan: "all_reports",
     priceCents: 2999,
-    priceSuffix: "one-time",
-    title: "All 14 reports",
+    priceSuffix: "one-off",
+    title: "For you & your partner",
   },
 ];
 

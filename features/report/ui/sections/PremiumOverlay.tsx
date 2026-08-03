@@ -211,11 +211,8 @@ const PremiumOverlay: FC<Props> = ({ archetype, tier, onUnlock, quote = null, of
         <div className="report-premium-overlay__badges-group" aria-hidden="true">
           <span className="report-premium-overlay__badges-label">Included in</span>
           <div className="report-premium-overlay__badges-row">
-            {tier === "essentials" ? (
-              <span className="report-premium-overlay__badge report-premium-overlay__badge--essentials">
-                Essentials
-              </span>
-            ) : null}
+            {/* Essentials tier retired (pricing 2.0) — every premium section is
+                now labelled "Full Report". */}
             <span className="report-premium-overlay__badge report-premium-overlay__badge--full">
               Full Report
             </span>

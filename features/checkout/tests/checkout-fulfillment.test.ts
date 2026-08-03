@@ -66,6 +66,7 @@ describe("checkout fulfillment", () => {
   afterEach(() => {
     process.env.SUPABASE_URL = originalSupabaseUrl;
     process.env.SUPABASE_SERVICE_ROLE_KEY = originalSupabaseServiceRoleKey;
+    delete process.env.STRIPE_COUPON_100;
   });
 
   it("persists promo details and request context for a fully discounted checkout", async () => {
@@ -237,7 +238,7 @@ describe("checkout fulfillment", () => {
     );
     expect(paymentItemPayload).toEqual(
       expect.objectContaining({
-        item_name: "Full report",
+        item_name: "Just a snapshot",
         quantity: 1,
         total_price: 0,
         unit_price: 0,
@@ -443,6 +444,96 @@ describe("checkout fulfillment", () => {
 
     expect(unlockAllArchetypesForPersonalReport).toHaveBeenCalledWith(5);
     expect(upsertArchetypeTierForPersonalReport).not.toHaveBeenCalled();
+  });
+
+  it("all_reports partner-code quote lookup is NOT filtered to full_report (I-2 regression)", async () => {
+    // Tier-3's partner 100%-off code is carried by ANY of the buyer's quote rows
+    // (resolveNurturePromo scans them all at redemption). Filtering the lookup to
+    // plan=full_report meant an all_reports buyer — who may have no full_report
+    // quote — never got a code minted. Guard: the lookup keys on the submission
+    // only, never plan=full_report. STRIPE_COUPON_100 set so the path runs past
+    // the coupon guard to the quote lookup (the mint then no-ops on the unmocked
+    // Stripe client — we only assert the query shape here).
+    process.env.STRIPE_COUPON_100 = "nurture_100";
+    let quoteLookupUrl: string | null = null;
+
+    mockFetchWithTimeout.mockImplementation(
+      async (url: string, options?: { body?: string; method?: string }) => {
+        if (url.includes("/rest/v1/payment_webhook_event?stripe_event_id=eq.")) {
+          return createJsonResponse([]);
+        }
+        if (
+          url.includes("/rest/v1/payment?stripe_charge_id=eq.") ||
+          url.includes("/rest/v1/payment?stripe_payment_intent_id=eq.")
+        ) {
+          return createJsonResponse([]);
+        }
+        if (options?.method === "POST" && url.endsWith("/rest/v1/payment")) {
+          return createJsonResponse([{ id: 99 }]);
+        }
+        if (url.includes("/rest/v1/payment_item?payment_id=eq.99")) {
+          return createJsonResponse([]);
+        }
+        if (options?.method === "POST" && url.endsWith("/rest/v1/payment_item")) {
+          return createJsonResponse([{ id: 9 }]);
+        }
+        if (options?.method === "PATCH" && url.includes("/rest/v1/personal_report?id=eq.5")) {
+          return createJsonResponse([]);
+        }
+        if (options?.method === "POST" && url.endsWith("/rest/v1/payment_webhook_event")) {
+          return createJsonResponse([{ id: 100 }]);
+        }
+        // The partner-code carrier lookup inside mintAndEmailPartnerCode.
+        if (url.includes("/rest/v1/report_price_quote?survey_submission_id=eq.")) {
+          quoteLookupUrl = url;
+          return createJsonResponse([{ id: 55, metadata: {} }]);
+        }
+        throw new Error(`Unexpected fetch call: ${options?.method ?? "GET"} ${url}`);
+      }
+    );
+
+    const stripe = {
+      charges: { retrieve: vi.fn() },
+      checkout: {
+        sessions: {
+          retrieve: vi.fn().mockResolvedValue({
+            id: "cs_test_all_reports_i2",
+            amount_total: 4900,
+            currency: "eur",
+            customer: null,
+            metadata: {
+              plan: "all_reports",
+              reportToken: "rpt_ABCDEFGHIJKLMNOPQRST",
+              requestIp: "127.0.0.1",
+              requestUserAgent: "Mozilla/5.0 (Vitest)",
+            },
+            payment_intent: null,
+            payment_status: "paid",
+            total_details: { amount_discount: 0 },
+          }),
+        },
+      },
+      paymentIntents: { retrieve: vi.fn() },
+    };
+
+    await processStripeWebhookEvent({
+      event: {
+        id: "evt_test_all_reports_i2",
+        type: "checkout.session.completed",
+        data: {
+          object: {
+            id: "cs_test_all_reports_i2",
+            metadata: { plan: "all_reports", reportToken: "rpt_ABCDEFGHIJKLMNOPQRST" },
+          },
+        },
+      } as never,
+      stripe: stripe as never,
+    });
+
+    // The lookup fired and is scoped to the submission — NOT plan=full_report.
+    expect(quoteLookupUrl).not.toBeNull();
+    expect(quoteLookupUrl).toContain("survey_submission_id=eq.");
+    expect(quoteLookupUrl).not.toContain("plan=eq.full_report");
   });
 
   it("does not append unlocked archetype when metadata.archetype is unknown", async () => {
@@ -819,7 +910,7 @@ describe("checkout fulfillment", () => {
       // lookupRecipientForSubmission lowercases the email before returning it,
       // so the masked output is also lowercase.
       expect(body.text).toContain("e***@loveiq.org");
-      expect(body.text).toContain("Full report");
+      expect(body.text).toContain("Just a snapshot");
       expect(body.text).toContain("Relational Nurturer");
       expect(body.text).toContain("EUR 19.99");
       // No utm_tracker, no forcedPaywallArm, no landingVariant → Direct + unknown.
@@ -943,7 +1034,7 @@ describe("checkout fulfillment", () => {
 
       expect(slackCalls).toHaveLength(1);
       const body = JSON.parse(slackCalls[0]!.body) as { text: string };
-      expect(body.text).toContain("All 14 reports");
+      expect(body.text).toContain("For you & your partner");
       expect(body.text).not.toMatch(/\([A-Z][a-z]+ [A-Z][a-z]+\)/);
 
       delete process.env.SLACK_PAYMENTS_WEBHOOK_URL;
