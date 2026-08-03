@@ -1,11 +1,7 @@
-import type { Metadata } from "next";
-import CommandCenterDashboard from "@features/admin/ui/CommandCenterDashboard";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = {
-  title: "Command Center | LoveIQ Admin",
-  robots: { index: false, follow: false },
-};
-
+// The admin home is now Core KPIs (the Command Center was removed in the
+// 2026-07 admin cleanup). Land admins straight on the KPIs dashboard.
 export default function AdminPage() {
-  return <CommandCenterDashboard />;
+  redirect("/admin/analytics");
 }

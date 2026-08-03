@@ -69,7 +69,10 @@ const surveySchema = z.object({
     .refine((obj) => Object.keys(obj).length <= 200, { message: "Too many answers" }),
   startedAt: z.string().datetime(),
   durationMs: z.number().int().min(0).max(86_400_000),
-  utmTracker: z.string().max(500).optional().nullable(),
+  // 1000 (not 500) so a Google Ads click id (gclid, ~100 chars) captured
+  // alongside utm params + the A/B stamps below fits without rejecting the
+  // submission. Column is `text`, so the cap is only an anti-abuse bound.
+  utmTracker: z.string().max(1000).optional().nullable(),
   sessionId: z.string().regex(UUID_RE).optional().nullable(),
   hotjarUserId: z.string().max(64).optional().nullable(),
   website: z.string().max(0).optional().nullable(),
@@ -216,7 +219,7 @@ export async function POST(request: Request) {
   // A/B: stamp the sticky landing + survey variants onto the submission's
   // utm_tracker JSON so submissions are sliceable by arm in the DB (survey_variant
   // is the survey-white A/B's completion-rate denominator). Guarded so the merged
-  // blob never exceeds the 500-char cap the column expects, and a non-JSON /
+  // blob never exceeds the 1000-char utm_tracker budget, and a non-JSON /
   // unparseable tracker is left untouched. Each arm only stamps when its cookie is
   // actually present, preserving "no cookie → no stamp" for crawlers / direct hits.
   let mergedUtmTracker = utmTracker ?? null;
@@ -232,7 +235,7 @@ export async function POST(request: Request) {
         if (isSurveyVariant(surveyVariantRaw)) base.survey_variant = surveyVariantRaw;
         if (isEmailPositionVariant(emailPositionRaw)) base.survey_email_position = emailPositionRaw;
         const candidate = JSON.stringify(base);
-        if (candidate.length <= 500) mergedUtmTracker = candidate;
+        if (candidate.length <= 1000) mergedUtmTracker = candidate;
       }
     }
   } catch {

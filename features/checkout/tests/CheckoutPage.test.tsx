@@ -135,6 +135,7 @@ describe("CheckoutPage", () => {
         "/api/stripe/checkout-session",
         expect.objectContaining({
           body: JSON.stringify({
+            gaConsent: false,
             plan: "full_report",
             pricingSessionId: "pricing-session-123",
             quoteId: 42,
@@ -191,6 +192,7 @@ describe("CheckoutPage", () => {
         "/api/stripe/checkout-session",
         expect.objectContaining({
           body: JSON.stringify({
+            gaConsent: false,
             plan: "all_reports",
             pricingSessionId: "pricing-token-123",
             quoteId: 42,
@@ -230,6 +232,7 @@ describe("CheckoutPage", () => {
         "/api/stripe/checkout-session",
         expect.objectContaining({
           body: JSON.stringify({
+            gaConsent: false,
             plan: "full_report",
             pricingSessionId: "pricing-session-123",
             quoteId: 42,

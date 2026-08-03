@@ -90,8 +90,9 @@
   - Integration: Google Tag Manager via `next/script`
   - Custom events via `features/analytics/client.ts`:
     - `cta_click` - CTA button tracking
-    - `survey_started` / `survey_progress` / `survey_complete` - Funnel tracking
+    - `survey_started` / `survey_progress` / `survey_completed` - Funnel tracking
     - `report_viewed` / `paywall_initiated` / `begin_checkout` - Report engagement (note: `paywall_view` retained for back-compat but no longer fired; user-initiated clicks emit `paywall_initiated`)
+  - **Server-side `purchase`** via GA4 Measurement Protocol (`features/analytics/server/ga4.ts`), sent from the Stripe webhook (`features/checkout/server/fulfillment.ts`) so GA4's purchase count matches real payments — the client-side `purchase` event is lossy (ad blockers, closed tabs, consent, GTM). Same `transaction_id` (Stripe session id) as the client event, so GA4 dedupes to one purchase. Consent-gated via the `_ga`/consent captured at checkout. Requires `GA4_API_SECRET`.
 
 **Error Tracking:**
 

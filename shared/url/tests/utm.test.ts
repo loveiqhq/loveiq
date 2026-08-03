@@ -77,6 +77,40 @@ describe("lib/utm", () => {
       });
     });
 
+    it("captures gclid and attributes the session to google/cpc when auto-tagged (no utm)", () => {
+      setUrl("?gclid=Cj0KCQ_test123");
+
+      const parsed = JSON.parse(captureUtmFromUrl()!);
+
+      expect(parsed).toEqual({
+        gclid: "Cj0KCQ_test123",
+        utm_source: "google",
+        utm_medium: "cpc",
+      });
+    });
+
+    it("captures gbraid/wbraid (iOS click ids) the same way", () => {
+      setUrl("?gbraid=abc123");
+
+      const parsed = JSON.parse(captureUtmFromUrl()!);
+
+      expect(parsed.gbraid).toBe("abc123");
+      expect(parsed.utm_source).toBe("google");
+      expect(parsed.utm_medium).toBe("cpc");
+    });
+
+    it("keeps an explicit utm_source/medium alongside a click id", () => {
+      setUrl("?gclid=xyz&utm_source=newsletter&utm_medium=email");
+
+      const parsed = JSON.parse(captureUtmFromUrl()!);
+
+      expect(parsed).toEqual({
+        gclid: "xyz",
+        utm_source: "newsletter",
+        utm_medium: "email",
+      });
+    });
+
     it("writes to both global and legacy storage keys", () => {
       setUrl("?utm_source=email");
       captureUtmFromUrl();

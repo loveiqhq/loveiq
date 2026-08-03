@@ -20,6 +20,7 @@ import {
   isReportPurchasePlanId,
   type ReportPurchasePlanId,
 } from "./reportPurchase";
+import { sendGa4PurchaseEvent } from "@features/analytics/server/ga4";
 
 let _resend: Resend | null = null;
 function getResend(): Resend | null {
@@ -1439,6 +1440,34 @@ async function syncCheckoutSessionPayment({
           firstName: recipient.firstName,
         });
       }
+
+      // Server-side GA4 purchase — fires for 100% of paid checkouts, unlike the
+      // client event (GTM → GA4) which only catches consented buyers who return
+      // to /checkout/return. Same transaction_id (= session id) as the client,
+      // so GA4 dedupes to one purchase. Consent-gated via the flag captured at
+      // checkout creation. Best-effort: never throws, so it can't break fulfillment.
+      await sendGa4PurchaseEvent({
+        clientId: getMetadataString(settledSession.metadata?.gaClientId),
+        sessionId: getMetadataString(settledSession.metadata?.gaSessionId),
+        consentGranted: settledSession.metadata?.gaAnalyticsConsent === "1",
+        transactionId: settledSession.id,
+        value: amount ?? 0,
+        currency: (settledSession.currency ?? "eur").toUpperCase(),
+        itemName: getReportPurchasePlan(plan).title,
+        params: {
+          plan,
+          archetype: unlockedArchetype ?? undefined,
+          pricing_cluster_id: metadata.pricingClusterId ?? undefined,
+          experiment_group: metadata.experimentGroup ?? undefined,
+          base_price_bucket: metadata.basePriceBucket ?? undefined,
+          discount_step: metadata.discountStep ?? undefined,
+          country_tier: metadata.countryTier ?? undefined,
+          device_type: metadata.deviceType ?? undefined,
+          traffic_source: metadata.trafficSource ?? undefined,
+          forced_paywall_arm: metadata.forcedPaywallArm ?? undefined,
+          landing_variant: metadata.landingVariant ?? undefined,
+        },
+      });
 
       // R-04: Stripe Radar elevated/highest risk alert. We still fulfill —
       // a hard block would slow legit buyers — but ops gets a heads-up so

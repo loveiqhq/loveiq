@@ -24,6 +24,9 @@ Vitest
 gtag
 Waitlist
 
+# GA4 web-stream measurement ID fragment (from G-QTYY69L46N in app/layout.tsx)
+QTYY
+
 # AI-assistant config filenames
 clinerules
 continuerules

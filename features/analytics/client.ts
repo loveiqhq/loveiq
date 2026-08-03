@@ -14,6 +14,11 @@ const GOOGLE_ADS_PURCHASE_LABEL = ["guQ3CPHxh5cc", "EPms6adD"].join("");
 const GOOGLE_ADS_PURCHASE_SEND_TO = `${GOOGLE_ADS_TAG_ID}/${GOOGLE_ADS_PURCHASE_LABEL}`;
 const COOKIEYES_CONSENT_COOKIE = "cookieyes-consent";
 
+// GA4 web stream measurement ID (mirrors app/layout.tsx). The GA4 session cookie
+// is `_ga_<id-without-G->`, so `G-QTYY69L46N` → `_ga_QTYY69L46N`.
+const GA4_MEASUREMENT_ID = "G-QTYY69L46N";
+const GA4_SESSION_COOKIE = `_ga_${GA4_MEASUREMENT_ID.replace(/^G-/, "")}`;
+
 declare global {
   interface Window {
     gtag?: GTag;
@@ -230,6 +235,36 @@ export const hasCookieYesConsent = (category: ConsentCategory) => {
     const [key, value] = entry.split(":");
     return key === category && value === "yes";
   });
+};
+
+/**
+ * Reads the GA4 `client_id` + `session_id` from the first-party GA cookies, plus
+ * the current analytics-consent state, so the server can replay a purchase via
+ * the GA4 Measurement Protocol with correct attribution (see
+ * `features/analytics/server/ga4.ts`). Returns null ids when GA hasn't set the
+ * cookies (e.g. analytics consent was declined, so no `_ga` cookie exists) — the
+ * server then skips the send, keeping server-side tracking consent-compliant.
+ *
+ *   `_ga`                = "GA1.1.<clientId-hi>.<clientId-lo>"  → client_id = last two segments
+ *   `_ga_<measurement>`  = "GS1.1.<sessionId>.<...>"           → session_id = 3rd segment
+ */
+export const getGaMeasurementContext = (): {
+  clientId: string | null;
+  sessionId: string | null;
+  consent: boolean;
+} => {
+  const consent = hasCookieYesConsent("analytics");
+
+  const ga = getCookieValue("_ga");
+  const gaParts = ga ? ga.split(".") : [];
+  const clientId =
+    gaParts.length >= 4 ? `${gaParts[gaParts.length - 2]}.${gaParts[gaParts.length - 1]}` : null;
+
+  const gaSession = getCookieValue(GA4_SESSION_COOKIE);
+  const sessionParts = gaSession ? gaSession.split(".") : [];
+  const sessionId = sessionParts.length >= 3 ? (sessionParts[2] ?? null) : null;
+
+  return { clientId, sessionId, consent };
 };
 
 /**
