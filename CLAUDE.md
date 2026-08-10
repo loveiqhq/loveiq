@@ -446,7 +446,7 @@ The landing page is the white design under `features/landing/ui/white/` (served 
 100% of traffic; the dark A/B arm was retired 2026-06-19).
 
 1. Create `features/landing/ui/white/WNewSection.tsx`
-2. Follow existing section patterns (see `white/WArchetypes.tsx` / `white/WReportPreview.tsx`)
+2. Follow existing section patterns (see `white/WDiscover.tsx` / `white/WFindOut.tsx`)
 3. Import and add to `features/landing/ui/white/LandingPageWhite.tsx` in order
 4. Use `animate-on-scroll` class for scroll animations
 

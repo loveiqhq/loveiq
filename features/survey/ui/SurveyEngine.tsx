@@ -59,8 +59,16 @@ interface SurveyEngineProps {
 }
 
 const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
-  const { answers, currentIndex, startedAt, progress, setAnswer, getAnswer, setCurrentIndex } =
-    useSurveyState();
+  const {
+    answers,
+    currentIndex,
+    startedAt,
+    prefilled,
+    progress,
+    setAnswer,
+    getAnswer,
+    setCurrentIndex,
+  } = useSurveyState();
   const {
     submit: submitSurvey,
     retryPending,
@@ -113,9 +121,18 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
         : new URLSearchParams(window.location.search).get("emailPosition");
     return assignEmailPositionVariant(devParam);
   });
+  // Questions answered before the survey opened (the landing-page card) are
+  // dropped from the flow so nobody is asked twice. Their answers stay in
+  // `answers` and submit + score exactly like the rest, so the total is
+  // unchanged — only where the question gets asked moves.
+  // Joined into a string so the memo key is stable across re-renders.
+  const prefilledKey = prefilled.join(",");
   const orderedQuestions = useMemo(
-    () => orderByEmailPosition(surveyQuestions, emailPositionVariant),
-    [emailPositionVariant]
+    () =>
+      orderByEmailPosition(surveyQuestions, emailPositionVariant).filter(
+        (q) => !prefilledKey.split(",").includes(q.qId)
+      ),
+    [emailPositionVariant, prefilledKey]
   );
   const totalQuestions = orderedQuestions.length;
   const question = orderedQuestions[currentIndex];

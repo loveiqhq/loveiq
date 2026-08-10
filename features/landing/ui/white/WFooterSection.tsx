@@ -7,7 +7,7 @@ const exploreLinks = [
   { label: "About us", href: "/about" },
   { label: "Glossary", href: "/glossary" },
   { label: "Trust Center", href: "/trust-zone" },
-  { label: "Survey", href: "/survey" },
+  { label: "Test", href: "/survey" },
 ];
 
 const legalLinks = [

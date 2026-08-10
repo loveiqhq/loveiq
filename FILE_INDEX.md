@@ -70,24 +70,28 @@
 > is kept outside `white/` because `WArchetypeCards` imports its `ArchetypeCard` +
 > `archetypes`. `FooterSection`/`ScrollAnimator`/`NavSection` are shared with other routes.
 
-| Task                     | Files                                                                                          |
-| ------------------------ | ---------------------------------------------------------------------------------------------- |
-| Landing page composition | `features/landing/ui/white/LandingPageWhite.tsx`                                               |
-| Navigation               | `features/landing/ui/white/WNavSection.tsx`                                                    |
-| Footer                   | `features/landing/ui/white/WFooterSection.tsx`                                                 |
-| Scroll animations        | `features/landing/ui/ScrollAnimator.tsx`                                                       |
-| Hero section             | `features/landing/ui/white/WHero.tsx`                                                          |
-| How It Works             | `features/landing/ui/white/WHowItWorks.tsx`                                                    |
-| Perfect For              | `features/landing/ui/white/WPerfectFor.tsx`                                                    |
-| Problem / Value          | `features/landing/ui/white/WProblemValue.tsx`                                                  |
-| Archetypes               | `features/landing/ui/white/WArchetypes.tsx`, `WArchetypeCards.tsx`, `S06Archetypes.tsx` (data) |
-| Report Preview           | `features/landing/ui/white/WReportPreview.tsx`                                                 |
-| Academic Board           | `features/landing/ui/white/WAcademicBoard.tsx`                                                 |
-| Glossary                 | `features/landing/ui/white/WGlossary.tsx`                                                      |
-| Trust row                | `features/landing/ui/white/WTrustRow.tsx`                                                      |
-| FAQ                      | `features/landing/ui/white/WFAQ.tsx` (data: `data/faqs.ts`)                                    |
-| CTA                      | `features/landing/ui/white/WCTA.tsx`, `WInlineCTA.tsx`                                         |
-| Testimonials             | `features/landing/ui/white/WTestimonials.tsx`                                                  |
+| Task                     | Files                                                                                                                                                          |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Landing page composition | `features/landing/ui/white/LandingPageWhite.tsx`                                                                                                               |
+| Navigation               | `features/landing/ui/white/WNavSection.tsx`                                                                                                                    |
+| Footer                   | `features/landing/ui/white/WFooterSection.tsx`                                                                                                                 |
+| Scroll animations        | `features/landing/ui/ScrollAnimator.tsx`                                                                                                                       |
+| Hero section             | `features/landing/ui/white/WHero.tsx`                                                                                                                          |
+| Question-1 widget        | `features/landing/ui/white/WQuestionCard.tsx` (hero + closing CTA)                                                                                             |
+| Trust strip              | `features/landing/ui/white/WTrustStrip.tsx`                                                                                                                    |
+| What you'll find out     | `features/landing/ui/white/WDiscover.tsx`                                                                                                                      |
+| The language / vocab     | `features/landing/ui/white/WVocab.tsx`                                                                                                                         |
+| Free vs locked teaser    | `features/landing/ui/white/WFindOut.tsx`                                                                                                                       |
+| Why it matters (stats)   | `features/landing/ui/white/WWowStats.tsx`                                                                                                                      |
+| Locked result teaser     | `features/landing/ui/white/WResultTeaser.tsx`                                                                                                                  |
+| Archetypes               | `features/landing/ui/white/WArchetypeCards.tsx`, `S06Archetypes.tsx` (data)                                                                                    |
+| Foundation / board       | `features/landing/ui/white/WFoundation.tsx`                                                                                                                    |
+| Email-capture band       | `features/landing/ui/white/WCapBand.tsx` (API: `app/api/test-link/route.ts`)                                                                                   |
+| FAQ                      | `features/landing/ui/white/WFAQ.tsx` (data: `data/faqs.ts`)                                                                                                    |
+| CTA                      | `features/landing/ui/white/WCTA.tsx`                                                                                                                           |
+| Sticky bottom CTA        | `features/landing/ui/white/WStickyBar.tsx`                                                                                                                     |
+| Testimonials             | `features/landing/ui/white/WTestimonials.tsx`                                                                                                                  |
+| Off-page (kept, unused)  | `WHowItWorks`, `WPerfectFor`, `WProblemValue`, `WArchetypes`, `WReportPreview`, `WAcademicBoard`, `WGlossary`, `WTrustRow`, `WInlineCTA`, `WHeroConstellation` |
 
 ## About Page
 

@@ -44,9 +44,9 @@ const faqSchema = {
   })),
 };
 
-// E-E-A-T: the academic board rendered on this page (features/landing/ui/white/WAcademicBoard.tsx)
+// E-E-A-T: the academic board rendered on this page (features/landing/ui/white/WFoundation.tsx)
 // emits no schema. These Person nodes make that expertise machine-readable and tie it to the
-// LoveIQ organization entity via memberOf. Keep names/fields in sync with WAcademicBoard.tsx.
+// LoveIQ organization entity via memberOf. Keep names/fields in sync with WFoundation.tsx.
 const academicBoardSchema = {
   "@context": "https://schema.org",
   "@graph": [

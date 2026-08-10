@@ -11,6 +11,8 @@ const mockSubmit = vi.fn();
 let mockCurrentIndex = 0;
 let mockProgress = 0;
 let mockSubmitStatus = "idle";
+// qIds answered on the landing page — SurveyEngine drops these from the flow.
+let mockPrefilled: string[] = [];
 
 vi.mock("@features/survey/ui/hooks/useSurveyState", () => ({
   useSurveyState: () => ({
@@ -19,6 +21,9 @@ vi.mock("@features/survey/ui/hooks/useSurveyState", () => ({
       return mockCurrentIndex;
     },
     startedAt: new Date().toISOString(),
+    get prefilled() {
+      return mockPrefilled;
+    },
     get progress() {
       return mockProgress;
     },
@@ -145,6 +150,7 @@ beforeEach(() => {
   mockCurrentIndex = 0;
   mockProgress = 0;
   mockSubmitStatus = "idle";
+  mockPrefilled = [];
   mockSetAnswer.mockClear();
   mockGetAnswer.mockClear().mockReturnValue(null);
   mockSetCurrentIndex.mockClear();
@@ -158,6 +164,21 @@ afterEach(() => {
 });
 
 describe("SurveyEngine", () => {
+  it("drops a landing-prefilled question from the flow", () => {
+    // A question answered on the landing page must not be asked again: it is
+    // removed from the list, so everything after it shifts up by one index.
+    mockCurrentIndex = 1;
+    const { unmount } = render(<SurveyEngine onExit={() => {}} onComplete={() => {}} />);
+    expect(screen.getByText("Q2?")).toBeInTheDocument();
+    unmount();
+
+    mockPrefilled = ["q2"];
+    render(<SurveyEngine onExit={() => {}} onComplete={() => {}} />);
+    expect(screen.queryByText("Q2?")).toBeNull();
+    // Index 1 now holds what used to be index 2.
+    expect(screen.getByText("Q3?")).toBeInTheDocument();
+  });
+
   it("renders first question on mount", () => {
     render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
     expect(screen.getByTestId("single-choice")).toBeInTheDocument();

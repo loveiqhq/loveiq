@@ -5,6 +5,7 @@ import { reportAllEmail } from "@features/report/server/emails/report-all";
 import { reportEssentialsEmail } from "@features/report/server/emails/report-essentials";
 import { partnerCodeEmail } from "@features/report/server/emails/nurture/partner-code";
 import { nurture30hNoUnlockEmail } from "@features/report/server/emails/nurture/nurture-30h-no-unlock";
+import { testLinkEmail } from "@features/survey/server/emails/test-link";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -60,6 +61,14 @@ const TEMPLATES: Record<string, () => { subject: string; html: string }> = {
       promoCode: "LIQ-50-X1Y2Z3W4",
       percentOff: 50,
       siteUrl: SITE,
+    }),
+  // Landing "Not in the mood right now?" band → POST /api/test-link
+  testLink: () =>
+    testLinkEmail({
+      // eslint-disable-next-line no-secrets/no-secrets
+      testUrl: `${SITE}/survey?utm_source=loveiq_email&utm_medium=email&utm_campaign=test_link`,
+      siteUrl: SITE,
+      unsubscribeUrl: `${SITE}/api/unsubscribe?token=sample`,
     }),
   // Legacy (grandfathered) essentials confirmation
   essentials: () =>

@@ -328,6 +328,212 @@ input.autofill-dark:-internal-autofill-previewed {
   transform: translateY(0);
 }
 
+/* Line chart that draws itself once its card scrolls into view
+   (features/landing/ui/white/WFindOut.tsx).
+
+   Timing note: `linear` is deliberate. A CSS animation's timing function is
+   applied to EVERY keyframe interval, not once across the animation, so an
+   eased 17-stop path accelerates and decelerates 16 times — that is what read
+   as stutter. The stops are already arc-length sampled, so linear gives true
+   constant speed. Line and dot share the same timing so the marker never
+   drifts off the drawn part. */
+.w-draw-line {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+}
+.animate-on-scroll.animate .w-draw-line {
+  animation: w-draw-line 1.6s linear 0.15s forwards;
+}
+@keyframes w-draw-line {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+/* The marker rides the first cubic segment of the same curve and parks at its
+   end point (246.788, 61.25 in the 610.5×88.5 viewBox). Stops are that Bezier
+   sampled by ARC LENGTH at 1/16 steps — uniform-t sampling makes a cubic speed
+   up and slow down on its own.
+
+   It moves via two nested full-size wrappers animating translateX / translateY
+   rather than `left`/`top`: percentage translates on a full-size box resolve
+   against the container (so it stays responsive), transforms are subpixel
+   accurate and composited, and animating left/top instead visibly quantises to
+   whole device pixels — that stair-stepping is what read as stutter. */
+.w-dot-x,
+.w-dot-y {
+  will-change: transform;
+}
+.w-dot-x {
+  transform: translateX(0.2%);
+}
+.w-dot-y {
+  transform: translateY(98.59%);
+}
+.w-draw-dot {
+  opacity: 0;
+}
+.animate-on-scroll.animate .w-dot-x {
+  animation: w-dot-x 1.6s linear 0.15s forwards;
+}
+.animate-on-scroll.animate .w-dot-y {
+  animation: w-dot-y 1.6s linear 0.15s forwards;
+}
+.animate-on-scroll.animate .w-draw-dot {
+  animation: w-dot-fade 0.25s ease-out 0.2s forwards;
+}
+@keyframes w-dot-fade {
+  to {
+    opacity: 1;
+  }
+}
+@keyframes w-dot-x {
+  0% {
+    transform: translateX(0.2%);
+  }
+  6.25% {
+    transform: translateX(2.75%);
+  }
+  12.5% {
+    transform: translateX(5.28%);
+  }
+  18.75% {
+    transform: translateX(7.8%);
+  }
+  25% {
+    transform: translateX(10.36%);
+  }
+  31.25% {
+    transform: translateX(12.87%);
+  }
+  37.5% {
+    transform: translateX(15.41%);
+  }
+  43.75% {
+    transform: translateX(17.93%);
+  }
+  50% {
+    transform: translateX(20.47%);
+  }
+  56.25% {
+    transform: translateX(22.97%);
+  }
+  62.5% {
+    transform: translateX(25.5%);
+  }
+  68.75% {
+    transform: translateX(28%);
+  }
+  75% {
+    transform: translateX(30.52%);
+  }
+  81.25% {
+    transform: translateX(33.01%);
+  }
+  87.5% {
+    transform: translateX(35.49%);
+  }
+  93.75% {
+    transform: translateX(37.97%);
+  }
+  100% {
+    transform: translateX(40.42%);
+  }
+}
+@keyframes w-dot-y {
+  0% {
+    transform: translateY(98.59%);
+  }
+  6.25% {
+    transform: translateY(98.21%);
+  }
+  12.5% {
+    transform: translateY(97.75%);
+  }
+  18.75% {
+    transform: translateY(97.18%);
+  }
+  25% {
+    transform: translateY(96.48%);
+  }
+  31.25% {
+    transform: translateY(95.65%);
+  }
+  37.5% {
+    transform: translateY(94.63%);
+  }
+  43.75% {
+    transform: translateY(93.43%);
+  }
+  50% {
+    transform: translateY(91.99%);
+  }
+  56.25% {
+    transform: translateY(90.32%);
+  }
+  62.5% {
+    transform: translateY(88.35%);
+  }
+  68.75% {
+    transform: translateY(86.08%);
+  }
+  75% {
+    transform: translateY(83.44%);
+  }
+  81.25% {
+    transform: translateY(80.47%);
+  }
+  87.5% {
+    transform: translateY(77.1%);
+  }
+  93.75% {
+    transform: translateY(73.34%);
+  }
+  100% {
+    transform: translateY(69.21%);
+  }
+}
+
+/* Dark pill with a brand-gradient hairline border (Figma "btn-glow"). Two
+   backgrounds — the dark fill clipped to the padding box, the gradient to the
+   border box — so it stays a single element with no wrapper span. */
+.w-btn-gradient-border {
+  border: 1.5px solid transparent;
+  border-radius: 12px;
+  background:
+    linear-gradient(#161021, #161021) padding-box,
+    linear-gradient(90deg, #fe6839 0%, #bf66d9 50%, #958ef6 100%) border-box;
+  box-shadow: 0 10px 26px -14px rgba(191, 102, 217, 0.55);
+  transition:
+    box-shadow 0.3s ease,
+    transform 0.3s ease;
+}
+.w-btn-gradient-border:hover {
+  box-shadow: 0 14px 30px -12px rgba(191, 102, 217, 0.7);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .w-draw-line {
+    stroke-dashoffset: 0;
+  }
+  .animate-on-scroll.animate .w-draw-line {
+    animation: none;
+  }
+  .w-dot-x {
+    transform: translateX(40.42%);
+  }
+  .w-dot-y {
+    transform: translateY(69.21%);
+  }
+  .w-draw-dot {
+    opacity: 1;
+  }
+  .animate-on-scroll.animate .w-dot-x,
+  .animate-on-scroll.animate .w-dot-y,
+  .animate-on-scroll.animate .w-draw-dot {
+    animation: none;
+  }
+}
+
 @keyframes columnReveal {
   0% {
     clip-path: inset(0 0 100% 0);

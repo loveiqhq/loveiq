@@ -35,9 +35,13 @@ export function parseUtmSource(tracker: string | null): string | null {
 }
 
 export function isCompletionReady(currentIndex: number, answers: SurveyAnswers): boolean {
-  return (
-    currentIndex >= SURVEY_TOTAL_QUESTIONS && normalizeSurveyEmail(answers["00000"]).length > 0
-  );
+  // Also count-based, not index-only: a question answered on the landing page is
+  // dropped from the survey flow, so those visitors finish with `currentIndex`
+  // one short of the total. Judging by index alone would hide them from the
+  // admin recovery list. Having answered everything is the real signal.
+  const reachedEnd =
+    currentIndex >= SURVEY_TOTAL_QUESTIONS || countSurveyAnswers(answers) >= SURVEY_TOTAL_QUESTIONS;
+  return reachedEnd && normalizeSurveyEmail(answers["00000"]).length > 0;
 }
 
 export function mergeSavedAnswerValue(

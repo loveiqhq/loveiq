@@ -17,7 +17,8 @@ const StarIcon: FC = () => (
 );
 
 const Stars: FC = () => (
-  <div className="flex items-center gap-0.5" aria-label="5 out of 5 stars">
+  // role="img" — a bare <div> may not carry aria-label (axe: aria-prohibited-attr).
+  <div className="flex items-center gap-0.5" role="img" aria-label="5 out of 5 stars">
     {Array.from({ length: 5 }).map((_, i) => (
       <StarIcon key={i} />
     ))}
@@ -153,7 +154,8 @@ const WTestimonials: FC = () => {
                 </div>
               ))}
             </div>
-            <p className="pl-2 font-sans text-[14px] font-medium text-black">4.9/5 Rating</p>
+            <Stars />
+            <p className="font-sans text-[14px] font-medium text-black">4.9/5 Rating</p>
           </div>
         </div>
       </div>

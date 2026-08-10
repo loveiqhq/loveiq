@@ -95,3 +95,20 @@ describe("surveyStorage", () => {
     expect(sessionStorage.getItem("loveiq-survey-session")).toBe("session-123");
   });
 });
+
+describe("isCompletionReady with a landing-prefilled question", () => {
+  it("recognises a finished survey even though currentIndex stops one short", async () => {
+    const { isCompletionReady, SURVEY_TOTAL_QUESTIONS } =
+      await import("@features/survey/server/utils");
+    // Everything answered, but one question was answered on the landing page so
+    // it never appeared in the flow — the index tops out at total - 1.
+    const answers: Record<string, string> = { "00000": "someone@example.test" };
+    for (let i = 1; i < SURVEY_TOTAL_QUESTIONS; i++) answers[`q${i}`] = "x";
+    expect(Object.keys(answers)).toHaveLength(SURVEY_TOTAL_QUESTIONS);
+
+    expect(isCompletionReady(SURVEY_TOTAL_QUESTIONS - 1, answers)).toBe(true);
+    // Still gated on the email, and still false for a genuine mid-survey drop-off.
+    expect(isCompletionReady(SURVEY_TOTAL_QUESTIONS - 1, { "00000": "" })).toBe(false);
+    expect(isCompletionReady(3, { "00000": "someone@example.test" })).toBe(false);
+  });
+});

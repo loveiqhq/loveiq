@@ -345,7 +345,16 @@ const pingFunnelEvent = (event: string) => {
 };
 
 export const trackStartSurvey = (
-  location: "nav" | "hero" | "report_section" | "footer" | "archetype-teaser"
+  location:
+    | "nav"
+    | "hero"
+    | "report_section"
+    | "footer"
+    | "archetype-teaser"
+    | "vocab"
+    | "find_out"
+    | "result_teaser"
+    | "sticky"
 ) => {
   track("cta_click", { cta: "start_survey", location });
 };

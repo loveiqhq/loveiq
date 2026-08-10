@@ -50,6 +50,7 @@ Survey product-flow details such as step orchestration, storage, autosave, and r
 | `/api/survey`                         | `POST`      | Completed survey submission.                                                                                                                                                                                                                                                                                 |
 | `/api/survey-partial`                 | `POST`      | Partial survey autosave.                                                                                                                                                                                                                                                                                     |
 | `/api/survey-tracking`                | `POST`      | Survey behavior event batch ingest.                                                                                                                                                                                                                                                                          |
+| `/api/test-link`                      | `POST`      | Emails a link to the test ("Not in the mood right now?" band on the landing page).                                                                                                                                                                                                                           |
 | `/api/unsubscribe`                    | `GET, POST` | Email unsubscribe. GET returns confirmation page; POST handles RFC 8058 one-click.                                                                                                                                                                                                                           |
 
 ## Shared Behavior
@@ -255,6 +256,35 @@ Queues an invite email and related tracking side effects.
 | 403    | `{ "error": "Invalid request." }`        | Missing or invalid CSRF token.        |
 | 429    | `{ "error": "Please try again later." }` | IP rate limit hit.                    |
 | 503    | `{ "error": "Service unavailable." }`    | `RESEND_API_KEY` is missing.          |
+
+## POST /api/test-link
+
+Emails the caller a link back to the test. Backs the "Not in the mood right now?" band on the
+landing page. The send happens after the response.
+
+**Rate limit:** 5 requests per minute per IP, plus a 24-hour per-recipient cooldown.
+
+**Request body:**
+
+```json
+{
+  "email": "you@example.com"
+}
+```
+
+| Field   | Type   | Required | Notes                       |
+| ------- | ------ | -------- | --------------------------- |
+| `email` | string | Yes      | Valid email, max 320 chars. |
+
+**Responses:**
+
+| Status | Body                                                 | Meaning                                                                                                                              |
+| ------ | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| 200    | `{ "success": true }`                                | Accepted. Also returned when the recipient is in cooldown, so the endpoint cannot be used to probe whether an address already asked. |
+| 400    | `{ "error": "Please enter a valid email address." }` | Validation failed.                                                                                                                   |
+| 403    | `{ "error": "Invalid request." }`                    | Missing or invalid CSRF token.                                                                                                       |
+| 429    | `{ "error": "Please try again later." }`             | IP rate limit hit.                                                                                                                   |
+| 503    | `{ "error": "Service unavailable." }`                | `RESEND_API_KEY` is missing.                                                                                                         |
 
 ## POST /api/invite-tracking
 

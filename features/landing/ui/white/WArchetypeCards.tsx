@@ -190,7 +190,7 @@ const WArchetypeCards: FC = () => {
       <div className="content-shell">
         <div className="animate-on-scroll mx-auto max-w-2xl text-center">
           <h2 className="font-serif text-3xl font-medium leading-tight text-[#161021] sm:text-[40px]">
-            14 abstractions.{" "}
+            14 personalities.{" "}
             <span className="bg-gradient-to-r from-[#fe6839] via-[#d95b88] to-[#cb5fc1] bg-clip-text text-transparent">
               You are more than just one of them.
             </span>
@@ -238,7 +238,7 @@ const WArchetypeCards: FC = () => {
               className="mr-4 shrink-0 sm:mr-8 lg:mr-6"
               aria-hidden={i >= COUNT || undefined}
             >
-              <ArchetypeCard archetype={a} />
+              <ArchetypeCard archetype={a} variant="white" />
             </div>
           ))}
         </div>
@@ -269,7 +269,9 @@ const WArchetypeCards: FC = () => {
           </svg>
         </button>
 
-        <div className="flex items-center gap-2">
+        {/* No row gap: the spacing lives inside each button as padding, so the
+            tap targets reach 24px without overlapping each other. */}
+        <div className="flex items-center">
           {archetypes.map((a, i) => (
             <button
               key={a.name}
@@ -277,10 +279,17 @@ const WArchetypeCards: FC = () => {
               onClick={() => goToDot(i)}
               aria-label={`Go to ${a.name}`}
               aria-current={i === activeIndex ? "true" : undefined}
-              className={`h-2 rounded-full transition-all duration-300 ${
-                i === activeIndex ? "w-5 bg-[#fe6839]" : "w-2 bg-black/15 hover:bg-black/30"
-              }`}
-            />
+              // The visible pill stays 8px tall; the button around it is padded
+              // out to a 24px square tap target (WCAG 2.2 target-size).
+              className="-my-2 flex h-6 items-center px-2 py-2"
+            >
+              <span
+                aria-hidden
+                className={`block h-2 rounded-full transition-all duration-300 ${
+                  i === activeIndex ? "w-5 bg-[#fe6839]" : "w-2 bg-black/15 hover:bg-black/30"
+                }`}
+              />
+            </button>
           ))}
         </div>
 

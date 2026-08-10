@@ -15,11 +15,29 @@ interface SurveyState {
   answers: Record<string, AnswerValue>;
   currentIndex: number;
   startedAt: string;
+  /**
+   * qIds already answered before the survey opened (the landing-page question).
+   * SurveyEngine drops these from the flow so nobody is asked twice; the answers
+   * themselves stay in `answers` and submit + score exactly like any other.
+   */
+  prefilled: string[];
+}
+
+/** Prefilled qIds live alongside the answers, so they survive a resume. */
+function readPrefilled(): string[] {
+  try {
+    const raw = localStorage.getItem(SURVEY_STATE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed?.prefilled) ? parsed.prefilled.filter(Boolean) : [];
+  } catch {
+    return [];
+  }
 }
 
 function loadState(): SurveyState {
   if (typeof window === "undefined") {
-    return { answers: {}, currentIndex: 0, startedAt: new Date().toISOString() };
+    return { answers: {}, currentIndex: 0, startedAt: new Date().toISOString(), prefilled: [] };
   }
 
   try {
@@ -29,6 +47,9 @@ function loadState(): SurveyState {
         answers: pendingCompletion.answers || {},
         currentIndex: pendingCompletion.currentIndex || 0,
         startedAt: pendingCompletion.startedAt || new Date().toISOString(),
+        // A pending completion predates this field, so read it from the draft —
+        // otherwise the question list would grow back under a saved index.
+        prefilled: readPrefilled(),
       };
     }
 
@@ -39,13 +60,14 @@ function loadState(): SurveyState {
         answers: parsed.answers || {},
         currentIndex: parsed.currentIndex || 0,
         startedAt: parsed.startedAt || new Date().toISOString(),
+        prefilled: Array.isArray(parsed.prefilled) ? parsed.prefilled.filter(Boolean) : [],
       };
     }
   } catch {
     // Corrupted data - start fresh
   }
 
-  return { answers: {}, currentIndex: 0, startedAt: new Date().toISOString() };
+  return { answers: {}, currentIndex: 0, startedAt: new Date().toISOString(), prefilled: [] };
 }
 
 export function useSurveyState() {
@@ -76,7 +98,13 @@ export function useSurveyState() {
   }, []);
 
   const clearState = useCallback(() => {
-    setState({ answers: {}, currentIndex: 0, startedAt: new Date().toISOString() });
+    // Starting over drops the landing prefill too, so all 59 questions return.
+    setState({
+      answers: {},
+      currentIndex: 0,
+      startedAt: new Date().toISOString(),
+      prefilled: [],
+    });
     clearPersistedSurveyState({ clearPendingCompletion: true });
   }, []);
 
@@ -91,6 +119,7 @@ export function useSurveyState() {
     answers: state.answers,
     currentIndex: state.currentIndex,
     startedAt: state.startedAt,
+    prefilled: state.prefilled,
     progress,
     setAnswer,
     getAnswer,
