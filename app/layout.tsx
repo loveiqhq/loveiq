@@ -130,6 +130,13 @@ export const metadata: Metadata = {
       "Take LoveIQ's science-backed sexual psychology assessment to understand your desires, attachment patterns, and intimacy styles.",
     images: [`${siteUrl}/images/og-image.png`],
   },
+  // Google Search Console property verification. Renders
+  // <meta name="google-site-verification" ...> into <head> on every route.
+  // Search Console only requires the tag to be somewhere in <head> — its
+  // position there is not part of the check, and Next owns the tag order.
+  verification: {
+    google: "nVfAGktr8B1Ozc61mSDqVm6j0DuYsgyZIu5EnwKXmlk",
+  },
 };
 
 export const viewport: Viewport = {
