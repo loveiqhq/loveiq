@@ -75,7 +75,7 @@ Bases NOT in use: (c) legal obligation (we don't process for tax/accounting beyo
 
 ### A8 — Engagement analytics
 
-- **Data**: analytics_event rows (event_type + metadata), scroll depth, time-on-section, click telemetry; client-side: GA4 + Hotjar + Contentsquare
+- **Data**: analytics_event rows (event_type + metadata), scroll depth, time-on-section, click telemetry; client-side: GA4 + Microsoft Clarity
 - **Basis**: (a) consent — CookieYes "analytics" category. Visitor ID cookie (`__liq_vid`) only set after consent (T-02). Persisted analytics_event writes gated on `hasCookieYesConsent("analytics")` in client.ts.
 - **Retention**: 180 days (F-02 purge)
 
@@ -134,4 +134,4 @@ For activities under basis (a):
 ## Outstanding work
 
 - **Admin UI for `processing_restricted_at` (T-09 follow-up)**: a tiny admin button "Freeze processing for this user" needs to land. Out of this round per the no-UI-changes constraint.
-- **Cookies banner first-load timing**: CookieYes script loads `lazyOnload`. The banner appears AFTER hydration. A first-visit user has ~200ms of HTML rendering before the banner mounts. Strictly speaking the visitor ID cookie (T-02) now waits for consent, but other third-party scripts (Hotjar, Contentsquare) load before the banner is dismissed. F-09 deferred per user instruction.
+- **Cookies banner first-load timing**: CookieYes script loads `lazyOnload`. The banner appears AFTER hydration. A first-visit user has ~200ms of HTML rendering before the banner mounts. Strictly speaking the visitor ID cookie (T-02) waits for consent, but session recording (Microsoft Clarity), GA4 and Google Ads all load before the banner is dismissed — Clarity by explicit owner decision on 2026-08-10, the Google tags by the pre-existing `next/script` gap (measured on production the same day). Clarity additionally records unmasked Art. 9 survey answers, which is not reconcilable with the Art. 9(2)(a) explicit-consent basis claimed above. See DPIA §6 and ROPA §"Consent".

@@ -45,24 +45,25 @@ test.describe("smoke tests", () => {
     expect(headers["strict-transport-security"]).toBeDefined();
   });
 
-  test("Contentsquare tag is present AND consent-gated in the server-rendered head", async ({
-    request,
-  }) => {
+  test("Clarity tag is present in the server-rendered head", async ({ request }) => {
     const res = await request.get("/");
     expect(res.status()).toBe(200);
 
-    const html = await res.text();
-    const head = html.match(/<head[^>]*>([\s\S]*?)<\/head>/i)?.[1];
+    const head = (await res.text()).match(/<head[^>]*>([\s\S]*?)<\/head>/i)?.[1];
 
     expect(head).toBeDefined();
-    expect(head).toContain('src="https://t.contentsquare.net/uxa/f1a8d593041c0.js"');
+    expect(head).toContain('src="/clarity-init.js"');
 
-    // [Audit H1] The Contentsquare tag must be consent-gated: CookieYes category
-    // attribute + type="text/plain" so it does NOT execute before the visitor
-    // grants analytics consent (it would otherwise record Article-9 survey data).
-    const csTag = head?.match(/<script\b[^>]*contentsquare[^>]*>/i)?.[0] ?? "";
-    expect(csTag).toContain("text/plain");
-    expect(csTag).toContain('data-cookieyes="cookieyes-analytics"');
+    // Clarity is deliberately NOT consent-gated (owner decision 2026-08-10,
+    // reversing audit finding H1) — it must execute for every visitor, so it
+    // carries neither type="text/plain" nor data-cookieyes. Asserted rather
+    // than left implicit: those two attributes are the only thing measured to
+    // withhold a tag on this site, so a well-meaning "re-gate it" edit would
+    // silently cut recorded sessions to the consent rate. If gating is ever
+    // wanted back, flip this test with the tag in the same commit.
+    const clarityTag = head?.match(/<script[^>]*clarity-init[^>]*>/i)?.[0] ?? "";
+    expect(clarityTag).not.toContain("text/plain");
+    expect(clarityTag).not.toContain("data-cookieyes");
   });
 
   test("404 page handles unknown routes", async ({ page }) => {

@@ -428,19 +428,18 @@ describe("POST /api/survey", () => {
     );
   });
 
-  it("writes scoring, hotjar, and report-token after submit (parallelization contract)", async () => {
+  it("writes scoring and report-token after submit (parallelization contract)", async () => {
     // This test pins the contract that AFTER submitSurveyOnce returns, the
-    // route performs three independent writes: scoring_result upsert,
-    // survey_submission.hotjar_user_id PATCH (when hotjarUserId is provided
-    // and the row is new), and report_access_token POST. The test uses
+    // route performs two independent writes: scoring_result upsert and
+    // report_access_token POST. (A third write, the Hotjar user-id PATCH, was
+    // dropped when Hotjar was removed in favour of Clarity.) The test uses
     // URL-based mockImplementation rather than ordered mockResolvedValueOnce
-    // so it passes whether the three writes run serially or via Promise.all.
+    // so it passes whether the writes run serially or via Promise.all.
     allowCsrf();
     allowRateLimit();
     allowCooldown();
 
     const SUBMISSION_ID = 4242;
-    const HOTJAR_USER_ID = "hj-user-xyz";
     const SESSION_ID = "11111111-2222-3333-4444-555555555555";
 
     mockFetchWithTimeout.mockImplementation((url: string, init?: { method?: string }) => {
@@ -452,8 +451,8 @@ describe("POST /api/survey", () => {
         });
       }
       // fetchScoringSummary: return empty so storeScoringResult fires.
-      // setSubmissionHotjarUserId PATCH, report_access_token POST,
-      // and any session lookup all return ok with an empty body.
+      // report_access_token POST and any session lookup return ok with an
+      // empty body.
       return Promise.resolve({ ok: true, json: async () => [] });
     });
 
@@ -461,7 +460,6 @@ describe("POST /api/survey", () => {
       makeRequest({
         ...validBody(),
         sessionId: SESSION_ID,
-        hotjarUserId: HOTJAR_USER_ID,
       })
     );
 
@@ -485,18 +483,16 @@ describe("POST /api/survey", () => {
       survey_submission_id: SUBMISSION_ID,
     });
 
-    // Hotjar PATCH: setSubmissionHotjarUserId on survey_submission row. Match by
-    // body (not just method) — submitSurveyOnce also PATCHes consent fields. [Audit M2]
-    const hotjarPatch = calls.find(
+    // No recorder-id PATCH is expected any more: nothing writes
+    // survey_submission.hotjar_user_id since Hotjar was removed. Assert its
+    // absence so a revival has to be deliberate.
+    const recorderPatch = calls.find(
       (c) =>
         c.url.includes("/rest/v1/survey_submission") &&
         c.method === "PATCH" &&
         (c.body ?? "").includes("hotjar_user_id")
     );
-    expect(hotjarPatch, "expected PATCH to survey_submission").toBeDefined();
-    expect(JSON.parse(hotjarPatch!.body!)).toMatchObject({
-      hotjar_user_id: HOTJAR_USER_ID,
-    });
+    expect(recorderPatch, "no hotjar_user_id PATCH expected").toBeUndefined();
 
     // Consent PATCH: submitSurveyOnce stamps consent_at + terms_version on every
     // submission for GDPR Art. 5(2) accountability. [Audit M2]

@@ -5,7 +5,7 @@
 **Subtrees:**
 
 - `http/` — CSRF, rate limit, fetch-with-timeout, circuit breaker, after-response scheduler, is-prod-cron-host guard.
-- `observability/` — pino logger, Hotjar bootstrap, Slack alerts + dedup, UX signals, visitor pinger.
+- `observability/` — pino logger, Slack alerts + dedup, UX signals, visitor pinger.
 - `auth/` — Supabase Auth client helper for middleware (admin sessions only — no end-user auth).
 - `url/` — UTM capture, safe-href, share-message, signed-image-url builders.
 - `format/` — html-escape.

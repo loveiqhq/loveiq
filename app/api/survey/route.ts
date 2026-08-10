@@ -27,7 +27,6 @@ import {
   computeSurveyScoring,
   ensureSubmissionScored,
   isSurveyClosed,
-  setSubmissionHotjarUserId,
   submitSurveyOnce,
 } from "@features/survey/server/server";
 import { isFeatureEnabled } from "@shared/flags/system-flags";
@@ -74,7 +73,6 @@ const surveySchema = z.object({
   // submission. Column is `text`, so the cap is only an anti-abuse bound.
   utmTracker: z.string().max(1000).optional().nullable(),
   sessionId: z.string().regex(UUID_RE).optional().nullable(),
-  hotjarUserId: z.string().max(64).optional().nullable(),
   website: z.string().max(0).optional().nullable(),
 });
 
@@ -186,17 +184,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   }
 
-  const {
-    email,
-    firstName,
-    answers,
-    startedAt,
-    durationMs,
-    utmTracker,
-    sessionId,
-    hotjarUserId,
-    website,
-  } = parsed.data;
+  const { email, firstName, answers, startedAt, durationMs, utmTracker, sessionId, website } =
+    parsed.data;
   const normalizedEmail = email.trim().toLowerCase();
   const normalizedFirstName = firstName.trim();
 
@@ -353,12 +342,11 @@ export async function POST(request: Request) {
       );
     }
 
-    // Three independent post-submit writes run concurrently. Each only needs
+    // Two independent post-submit writes run concurrently. Each only needs
     // submissionId (already in scope), writes a different table/column, and
-    // has no data-flow dependency on the others. Failure semantics are
+    // has no data-flow dependency on the other. Failure semantics are
     // preserved per branch via try/catch or `.catch()`:
     //   - scoring: returns the summary or null on internal error (existing)
-    //   - hotjar PATCH: lib swallows failures internally; defensive .catch keeps Promise.all alive
     //   - report-token POST: failure clears reportToken so the response omits it
     const supabaseUrl = process.env.SUPABASE_URL;
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -396,17 +384,8 @@ export async function POST(request: Request) {
             })
         : Promise.resolve();
 
-    const hotjarPromise: Promise<void> =
-      !isExisting && hotjarUserId
-        ? setSubmissionHotjarUserId(submissionId, hotjarUserId).catch(() => {
-            // setSubmissionHotjarUserId already swallows internally; defensive
-            // catch here keeps Promise.all alive if that ever changes.
-          })
-        : Promise.resolve();
-
     const [scoringSummary] = await Promise.all([
       ensureSubmissionScored(submissionId, answers as SurveyAnswers, scoringResult),
-      hotjarPromise,
       reportTokenPromise,
     ]);
 

@@ -147,10 +147,6 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-const HOTJAR_SITE_ID_RAW = process.env.NEXT_PUBLIC_HOTJAR_SITE_ID;
-const hotjarSiteId =
-  HOTJAR_SITE_ID_RAW && /^\d+$/.test(HOTJAR_SITE_ID_RAW) ? HOTJAR_SITE_ID_RAW : null;
-
 // Trustpilot review widget. The bootstrap is loaded only when the master kill
 // switch is on (isTrustpilotEnabled) AND a Business Unit ID is configured, and
 // only after the visitor grants the CookieYes `functional` category (it sets
@@ -180,7 +176,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html lang="en" className={`${manrope.variable} ${lora.variable}`}>
       <head>
         <link rel="preconnect" href="https://cdn-cookieyes.com" />
-        <link rel="preconnect" href="https://t.contentsquare.net" />
+        <link rel="preconnect" href="https://www.clarity.ms" />
         <link rel="preconnect" href="https://www.googletagmanager.com" />
         <link rel="dns-prefetch" href="https://www.google.com" />
         <link rel="dns-prefetch" href="https://www.gstatic.com" />
@@ -242,16 +238,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             window.gtag('config', 'AW-18068690553');
           `}
         </Script>
-        {hotjarSiteId && (
-          <Script
-            id="hotjar-init"
-            strategy="lazyOnload"
-            nonce={nonce}
-            data-cookieyes="cookieyes-analytics"
-          >
-            {`(function(h,o,t,j,a,r){h.hj=h.hj||function(){(h.hj.q=h.hj.q||[]).push(arguments)};h._hjSettings={hjid:${hotjarSiteId},hjsv:6};a=o.getElementsByTagName('head')[0];r=o.createElement('script');r.async=1;r.src=t+h._hjSettings.hjid+j+h._hjSettings.hjsv;a.appendChild(r);})(window,document,'https://static.hotjar.com/c/hotjar-','.js?sv=');`}
-          </Script>
-        )}
         {trustpilotBusinessUnitId && (
           <Script
             id="trustpilot-bootstrap"
@@ -272,19 +258,24 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: jsonLdString(websiteSchema) }}
         />
-        {/* Contentsquare UXA tag — consent-gated via CookieYes. [Audit H1]
-            Marked type="text/plain" + data-cookieyes so the browser does NOT
-            execute it until the visitor grants analytics consent (CookieYes
-            rewrites the type post-consent). Previously this loaded pre-consent on
-            every page including /survey, instrumenting Article-9 special-category
-            answers before any consent. Trade-off: the Contentsquare vendor
-            verifier won't see CS_CONF/_uxa globals until after consent is given. */}
-        <script
-          type="text/plain"
-          data-cookieyes="cookieyes-analytics"
-          src="https://t.contentsquare.net/uxa/f1a8d593041c0.js"
-          defer
-        />
+        {/* Microsoft Clarity (session replay + heatmaps) — the only behavioural
+            recorder on the site; it replaced Hotjar and Contentsquare, which
+            were removed in the same change rather than run three tools over the
+            same sessions.
+
+            DELIBERATELY NOT CONSENT-GATED (owner decision, 2026-08-10). This
+            tag carries no type="text/plain" / data-cookieyes, so it executes on
+            every page load for every visitor regardless of the CookieYes
+            banner. That is a reversal of audit finding H1, taken knowingly to
+            maximise recorded sessions. Consequences, all documented in
+            docs/compliance/{DPIA,ROPA,LAWFUL_BASIS}.md: recording of EU
+            visitors happens without consent, and the survey mask was removed in
+            the same change, so Article-9 answers are captured. Re-gating is a
+            one-line change — restore type="text/plain" + data-cookieyes, which
+            is the only mechanism measured to actually withhold a tag here.
+            Bootstrap lives in public/clarity-init.js — see that file for why it
+            is not inline. */}
+        <script src="/clarity-init.js" defer />
       </head>
       <body className="bg-white dark:bg-[#050208]">
         <GtmNoScript />

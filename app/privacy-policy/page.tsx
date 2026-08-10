@@ -163,9 +163,9 @@ export default function PrivacyPolicyPage() {
             <section>
               <h2 className="text-gray-900 font-semibold mb-4">7. Recipients of Data</h2>
               <p className="mb-4">
-                We disclose your personal data to the following categories of recipients
-                (processors). All recipients act as our processors under data-processing agreements
-                in accordance with Art. 28 GDPR.
+                We disclose your personal data to the following categories of recipients. With the
+                exception noted in section 7.4, all recipients act as our processors under
+                data-processing agreements in accordance with Art. 28 GDPR.
               </p>
 
               <h3 className="text-gray-900 font-medium mb-2">7.1 Infrastructure and hosting</h3>
@@ -192,9 +192,9 @@ export default function PrivacyPolicyPage() {
               <h3 className="text-gray-900 font-medium mb-2">7.4 Analytics and product insight</h3>
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>Google Ireland Ltd. - Google Analytics 4 (consent-gated)</li>
-                <li>Hotjar Ltd. (MT) - heatmaps and session recording (consent-gated)</li>
                 <li>
-                  Contentsquare SAS (FR) - session replay and digital experience (consent-gated)
+                  Microsoft Ireland Operations Ltd. - Microsoft Clarity, heatmaps and session
+                  recording (loaded on all visits; Microsoft acts as an independent controller)
                 </li>
               </ul>
 

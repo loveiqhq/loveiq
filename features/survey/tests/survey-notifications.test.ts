@@ -61,7 +61,6 @@ vi.mock("@features/survey/server/server", () => ({
   ensureSubmissionScored: (...args: unknown[]) => mockEnsureSubmissionScored(...args),
   submitSurveyOnce: (...args: unknown[]) => mockSubmitSurveyOnce(...args),
   isSurveyClosed: () => Promise.resolve(false),
-  setSubmissionHotjarUserId: () => Promise.resolve(),
 }));
 
 vi.mock("@features/report/server/personalReport", () => ({

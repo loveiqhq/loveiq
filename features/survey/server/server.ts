@@ -207,37 +207,6 @@ export async function submitSurveyOnce(
   return { submissionId, isExisting: false };
 }
 
-/**
- * Persists the Hotjar user_id (parsed client-side from the
- * `_hjSessionUser_<siteid>` cookie) onto the submission row so admins can
- * deep-link to recordings. Best-effort: a failure here is logged and
- * swallowed — never block survey completion on optional analytics metadata.
- */
-export async function setSubmissionHotjarUserId(
-  submissionId: number,
-  hotjarUserId: string
-): Promise<void> {
-  try {
-    const response = await supabaseServiceFetch(
-      `/rest/v1/survey_submission?id=eq.${submissionId}`,
-      {
-        method: "PATCH",
-        headers: { Prefer: "return=minimal" },
-        body: JSON.stringify({ hotjar_user_id: hotjarUserId }),
-        timeoutMs: 3000,
-      }
-    );
-    if (!response.ok) {
-      logger.warn(
-        { submissionId, status: response.status },
-        "Failed to persist hotjar_user_id on submission"
-      );
-    }
-  } catch (err) {
-    logger.warn({ err, submissionId }, "Error setting hotjar_user_id");
-  }
-}
-
 export async function fetchScoringSummary(
   submissionId: number
 ): Promise<SurveyScoringSummary | null> {

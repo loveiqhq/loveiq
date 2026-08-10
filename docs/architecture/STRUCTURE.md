@@ -40,7 +40,7 @@ loveiq-web/
 │   └── admin/                  # ui/ (dashboards), server/ (data assembly + emails), tests/
 ├── shared/                     # Cross-cutting infrastructure
 │   ├── http/                   # csrf, csrf-client, ratelimit, fetch-with-timeout, circuit-breaker, after-response
-│   ├── observability/          # logger (pino), hotjar, slack, uxSignals
+│   ├── observability/          # logger (pino), slack, uxSignals
 │   ├── auth/                   # supabase-middleware (admin sessions only)
 │   ├── url/                    # utm, safe-href, share-message, signed-image-url
 │   ├── format/                 # html-escape

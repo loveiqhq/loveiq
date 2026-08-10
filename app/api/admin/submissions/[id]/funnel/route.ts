@@ -3,7 +3,7 @@
  * team tracks in `Tracking & Pricing - User tracking.csv`:
  *   landing → start survey → 25/50/75% progress → completed → report viewed
  *   → engagement 1/5/10 min → paywall view → price shown → unlocked → € paid
- * Plus invite recipients, share recipients, UTM, session, Hotjar id.
+ * Plus invite recipients, share recipients, UTM and session id.
  *
  * All data is derived from existing tables — no new client-side tracking is
  * required. Progress milestones are computed from `survey_behavior_event`
@@ -66,7 +66,6 @@ interface FunnelResponse {
   shares: ShareEntry[];
   context: {
     session_id: string | null;
-    hotjar_user_id: string | null;
     utm_source: string | null;
     utm_tracker: string | null;
   };
@@ -105,7 +104,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
   try {
     const subRes = await supabaseFetch(
-      `/rest/v1/survey_submission?id=eq.${submissionId}&select=id,user_id,session_id,start_date_time,created_date_time,status,utm_tracker,hotjar_user_id,app_user!fk_survey_submission_user(id,email,first_name)`
+      `/rest/v1/survey_submission?id=eq.${submissionId}&select=id,user_id,session_id,start_date_time,created_date_time,status,utm_tracker,app_user!fk_survey_submission_user(id,email,first_name)`
     );
     if (!subRes.ok) {
       return NextResponse.json({ error: "Unable to load submission." }, { status: 500 });
@@ -118,7 +117,6 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       created_date_time: string;
       status: string;
       utm_tracker: string | null;
-      hotjar_user_id: string | null;
       app_user: { id: number; email: string; first_name: string | null } | null;
     }>;
     if (subs.length === 0) {
@@ -352,7 +350,6 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       shares,
       context: {
         session_id: sub.session_id,
-        hotjar_user_id: sub.hotjar_user_id,
         utm_source: utmSource,
         utm_tracker: sub.utm_tracker,
       },

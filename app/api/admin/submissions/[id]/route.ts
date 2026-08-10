@@ -49,7 +49,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       // Join with app_user to get email/name. updated_date_time is included
       // so the UI can echo it back on PATCH for optimistic-lock enforcement (F-05).
       supabaseFetch(
-        `/rest/v1/survey_submission?id=eq.${numericId}&select=id,status,session_id,start_date_time,created_date_time,updated_date_time,duration_ms,utm_tracker,hotjar_user_id,app_user!fk_survey_submission_user(email,first_name)`
+        `/rest/v1/survey_submission?id=eq.${numericId}&select=id,status,session_id,start_date_time,created_date_time,updated_date_time,duration_ms,utm_tracker,app_user!fk_survey_submission_user(email,first_name)`
       ),
       supabaseFetch(
         `/rest/v1/survey_submission_answer?survey_submission_id=eq.${numericId}&select=id,answer_text,answer_option_id,normalized_value,answered_at,time_spent_seconds,revision_count,was_skipped,survey_question(frontend_qid,type,question),answer_option!fk_ssa_answer_option(option_text),survey_submission_answer_options(answer_option!fk_ssao_answer_option(option_text))&order=survey_question_id.asc`
@@ -96,7 +96,6 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       updated_date_time: string | null;
       duration_ms: number | null;
       utm_tracker: string | null;
-      hotjar_user_id: string | null;
       app_user: { email: string; first_name: string } | null;
     }>;
 
@@ -124,7 +123,6 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       duration_ms: raw.duration_ms,
       utm_source: parseUtmSource(raw.utm_tracker),
       report_token: reportToken,
-      hotjar_user_id: raw.hotjar_user_id,
     };
 
     // Flatten answers — resolve values by question type

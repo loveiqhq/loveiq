@@ -502,16 +502,21 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
     // scope it to this <main> (the post-submit processing/wizard/confirmation are
     // separate early returns above and stay dark). Dark branch = current literal.
     <SurveyThemeProvider variant={surveyVariant}>
-      {/* [Audit L8] data-hj-suppress on the survey root keeps Hotjar session replay
-          from capturing the intimate Q&A (question text, choice labels, selection
-          state). Default Hotjar input masking covers form fields but not visible
-          choice-button text / selected state, which would otherwise reconstruct
-          Article-9 answers in recordings. */}
+      {/* NOTE: the survey root is deliberately NOT masked from session replay
+          (owner decision, 2026-08-10) — this reverses audit finding L8. It
+          previously carried data-clarity-mask (and data-hj-suppress before
+          that), which stopped the recorder capturing question text, choice
+          labels and selection state. Without it, Clarity recordings can
+          reconstruct a visitor's Article-9 answers, and those recordings sit
+          with Microsoft as an independent controller (30-day retention, no
+          per-user deletion). Documented in docs/compliance/DPIA.md §6.
+
+          To restore the protection, put data-clarity-mask="true" back on the
+          <main> below — that single attribute is the whole control. */}
       <main
         className={`relative flex min-h-screen flex-col ${isWhite ? "bg-white" : "bg-[#0a0510]"}`}
         style={{ touchAction: "pan-y" }}
         data-survey-theme={surveyVariant}
-        data-hj-suppress
       >
         {/* Background gradient blurs */}
         <div className="pointer-events-none fixed inset-0 overflow-hidden">

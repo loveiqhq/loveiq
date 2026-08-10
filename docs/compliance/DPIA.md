@@ -17,7 +17,7 @@ GDPR Art. 35 requires a DPIA when processing involves "systematic monitoring of 
 | Email sending (transactional)     | recipient email, first_name, signed unsubscribe token                                                      | contract / legitimate interest (delivering the report the user paid for)                     | Resend (email service processor)                                       |
 | Email sending (marketing nurture) | recipient email, first_name                                                                                | consent (Q16015 marketing opt-in; versioned via `marketing_opt_in_terms_version` per T-11)   | Resend                                                                 |
 | Payment processing                | Stripe customer id, card brand/last4, charge id, amount, IP, user agent, **Stripe Radar risk_level**       | contract                                                                                     | Supabase (`payment`, `payment_webhook_event`) + Stripe                 |
-| Engagement analytics              | analytics_event rows, scroll depth, time-on-section, click telemetry                                       | consent (CookieYes "analytics" category — visitor ID cookie only set after consent per T-02) | Supabase (`analytics_event`) + GA4 + Hotjar + Contentsquare            |
+| Engagement analytics              | analytics_event rows, scroll depth, time-on-section, click telemetry                                       | consent (CookieYes "analytics" category — visitor ID cookie only set after consent per T-02) | Supabase (`analytics_event`) + GA4 + Microsoft Clarity                 |
 | Admin operations                  | admin email, action, IP, target resource                                                                   | legitimate interest (operational forensics)                                                  | Supabase (`admin_action_log`)                                          |
 | GDPR DSAR                         | email, action (export/delete), admin email, IP, rows_affected JSON                                         | legal obligation (Art. 17 / Art. 20)                                                         | Supabase (`data_subject_request_log`)                                  |
 
@@ -49,9 +49,9 @@ Survey answers were collected for archetype scoring. A future product decision c
 
 ### R3.3 — Vendor processor risk (MEDIUM)
 
-Stripe, Resend, Supabase, Vercel, Hotjar, Contentsquare each process some personal data.
+Stripe, Resend, Supabase and Vercel each process some personal data. Microsoft (Clarity) receives personal data as an INDEPENDENT CONTROLLER, not a processor — see ROPA §"Microsoft Clarity is an independent controller".
 
-- **Mitigations**: DPAs on file with each vendor (out-of-repo legal docs). Hotjar/Contentsquare gated by CookieYes consent. Resend open/click tracking disabled at the domain level per T-13/T-14 (see `docs/runbooks/SECURITY.md`).
+- **Mitigations**: DPAs on file with each processor (out-of-repo legal docs). No DPA exists or is obtainable for Clarity — Microsoft runs it as its own controller and does not sign processor addenda. **As of 2026-08-10 there is no technical safeguard either**: consent-gating and the survey mask were both removed by owner decision, so Art. 9 answers reach an independent controller with neither a contract nor consent behind them. Needs legal sign-off. Resend open/click tracking disabled at the domain level per T-13/T-14 (see `docs/runbooks/SECURITY.md`).
 
 ### R3.4 — Breach via leaked tokens (MEDIUM)
 
@@ -108,7 +108,19 @@ Cross-reference to the security runbook (`docs/runbooks/SECURITY.md`) and the re
 ## 6. Outstanding gaps (re-review when these change)
 
 - **No off-Supabase backup** (documented in DR runbook §9). Acceptable for current scale; revisit at 100k+ submissions.
-- **F-09 Contentsquare consent** still deferred (third-party loads pre-consent). Same gap exists for Hotjar — both gated via CookieYes script attributes, but their initial loader still runs before consent.
+- **F-09 pre-consent third-party loads — PARTIALLY CLOSED (2026-08-10).** Session
+  recording no longer loads before consent: Hotjar and Contentsquare were removed
+  and replaced by Microsoft Clarity. **REOPENED 2026-08-10 (owner decision):**
+  Clarity was subsequently un-gated — it carries neither `type="text/plain"` nor
+  `data-cookieyes`, so it now records every visitor regardless of consent, and
+  the `data-clarity-mask` on the survey root was removed, so Art. 9 answers are
+  captured. See ROPA §"Consent — Clarity is NOT consent-gated". **Also open:**
+  GA4 and Google Ads load via
+  `next/script` carrying only a `data-cookieyes` attribute, which does NOT
+  withhold them. Measured on production 2026-08-10 with the banner untouched,
+  these hosts were still contacted pre-consent: `www.googletagmanager.com`,
+  `www.google-analytics.com`, `pagead2.googlesyndication.com`. Closing this means
+  moving those tags to the same `type="text/plain"` treatment.
 - **No two-admin rule on destructive ops** (R-17 deferred). Acceptable for a 1–2 admin team.
 - **No DSAR E2E test against branch DB** (R-29 deferred).
 

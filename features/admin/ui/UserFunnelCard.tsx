@@ -42,7 +42,6 @@ interface FunnelData {
   shares: ShareEntry[];
   context: {
     session_id: string | null;
-    hotjar_user_id: string | null;
     utm_source: string | null;
     utm_tracker: string | null;
   };
@@ -286,7 +285,6 @@ export default function UserFunnelCard({ id }: { id: string }) {
             session: <span className="text-text-primary">{data.context.session_id}</span>
           </span>
         )}
-        {data.context.hotjar_user_id && <span>hjUid set</span>}
       </div>
     </div>
   );
