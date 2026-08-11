@@ -1,0 +1,208 @@
+"use client";
+
+import type { FC } from "react";
+import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
+import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
+
+/**
+ * Server-resolved reading copy (`getReport2Section(name, "reading")`), threaded
+ * as a prop because the 634KB copy module is server-only (see
+ * `app/api/report/route.ts` → `readingCopy`).
+ *
+ * GATING (Part IV, FULL_REPORT tier — this section is `recommendations`,
+ * section 32, NOT in `ESSENTIALS_SECTION_IDS`, so it only unlocks at the
+ * full_report tier). The framing slots (`gate.hook`, the universal category
+ * tags `book1..4.tag`, `closing.lead`, `learn.eyebrow`, `learn.body`) are
+ * UNIVERSAL and always shipped. The per-archetype payload — each book's
+ * `title` / `author` / `blurb` and `closing.formula` — is the gated content:
+ * shipped ONLY when unlocked at the full_report tier. A locked client
+ * (`locked: true`) receives those null and renders the hook teaser +
+ * PremiumOverlay instead. Never send locked per-archetype content to an unpaid
+ * client.
+ *
+ * Figma note: the design (8427:2777) shows real book-cover thumbnails and
+ * "View book" / "Open paper" links, but the copy matrix carries no cover-image
+ * or link-URL slot for any archetype — inventing them would fabricate data, so
+ * each card renders a tinted spine placeholder (initials-free) and no dead
+ * link. Everything else is pixel-matched to the card spec.
+ */
+export interface ReadingCopy {
+  // Universal (always shipped) — these frame the section for locked clients too.
+  "gate.hook"?: string | null;
+  "book1.tag"?: string | null;
+  "book2.tag"?: string | null;
+  "book3.tag"?: string | null;
+  "book4.tag"?: string | null;
+  "closing.lead"?: string | null;
+  "learn.eyebrow"?: string | null;
+  "learn.body"?: string | null;
+  // Per-archetype — withheld (null) from locked clients.
+  "book1.title"?: string | null;
+  "book1.author"?: string | null;
+  "book1.blurb"?: string | null;
+  "book2.title"?: string | null;
+  "book2.author"?: string | null;
+  "book2.blurb"?: string | null;
+  "book3.title"?: string | null;
+  "book3.author"?: string | null;
+  "book3.blurb"?: string | null;
+  "book4.title"?: string | null;
+  "book4.author"?: string | null;
+  "book4.blurb"?: string | null;
+  "closing.formula"?: string | null;
+  /** True when the per-archetype titles/authors/blurbs/formula were withheld. */
+  locked: boolean;
+}
+
+interface Props {
+  archetype: string;
+  copy: ReadingCopy | null;
+  offerDeadline?: number;
+  onUnlock: () => void;
+  quote?: ReportPriceQuoteSnapshot | null;
+  sectionTitle: string;
+  tier?: PremiumOverlayTier;
+}
+
+const BookIcon: FC = () => (
+  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path
+      d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v15.5H5.5A1.5 1.5 0 0 1 4 18V5.5Z"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M20 5.5A1.5 1.5 0 0 0 18.5 4H13v15.5h5.5A1.5 1.5 0 0 0 20 18V5.5Z"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+type Book = { tag: string | null; title: string; author: string | null; blurb: string | null };
+
+/**
+ * One book card (Figma 8427:2781): a tinted spine placeholder + a tag eyebrow,
+ * serif title, author line, and blurb. (Cover art + "View book" link have no
+ * copy slot — see the component note — so the spine is decorative.)
+ */
+const BookCard: FC<{ book: Book }> = ({ book }) => (
+  <article className="report-reading__card">
+    <span className="report-reading__spine" aria-hidden="true">
+      <BookIcon />
+    </span>
+    <div className="report-reading__body">
+      {book.tag ? <p className="report-reading__tag">{book.tag}</p> : null}
+      <h4 className="report-reading__title">{book.title}</h4>
+      {book.author ? <p className="report-reading__author">{book.author}</p> : null}
+      {book.blurb ? <p className="report-reading__blurb">{book.blurb}</p> : null}
+    </div>
+  </article>
+);
+
+const ReadingSection: FC<Props> = ({
+  archetype,
+  copy,
+  offerDeadline,
+  onUnlock,
+  quote = null,
+  sectionTitle,
+  tier = "full_report",
+}) => {
+  if (!copy) return null;
+
+  const locked = copy.locked;
+
+  // Collect the books that actually have a title — render only books whose
+  // title slot exists (counts vary per archetype; tag/author/blurb are optional
+  // per book). Never fabricate a book.
+  const books: Book[] = ([1, 2, 3, 4] as const)
+    .map((i) => ({
+      tag: copy[`book${i}.tag`]?.trim() || null,
+      title: copy[`book${i}.title`]?.trim() ?? "",
+      author: copy[`book${i}.author`]?.trim() || null,
+      blurb: copy[`book${i}.blurb`]?.trim() || null,
+    }))
+    .filter((b): b is Book => b.title.length > 0);
+
+  const closingLead = copy["closing.lead"]?.trim() || null;
+  const closingFormula = copy["closing.formula"]?.trim() || null;
+
+  return (
+    <div className="report-reading">
+      <h3 className="report-reading__heading">Reading Recommendations</h3>
+
+      {copy["learn.body"] ? (
+        <div className="report-reading__learn-pill-wrap">
+          <span className="report-reading__learn-pill">
+            <span className="report-reading__learn-pill-icon" aria-hidden="true">
+              <BookIcon />
+            </span>
+            {copy["learn.eyebrow"] ?? "What you will learn"}
+          </span>
+          <p className="report-reading__learn-body">{copy["learn.body"]}</p>
+        </div>
+      ) : null}
+
+      {locked ? (
+        <div className="report-reading__preview">
+          {copy["gate.hook"] ? <p className="report-reading__hook">{copy["gate.hook"]}</p> : null}
+          <div className="report-reading__preview-fade" aria-hidden="true">
+            {/* Blurred stand-in — the real per-archetype shortlist is withheld
+                server-side; four generic cards frame the paywall. */}
+            <div className="report-reading__grid">
+              {Array.from({ length: 4 }, (_, i) => (
+                <article key={i} className="report-reading__card">
+                  <span className="report-reading__spine" aria-hidden="true">
+                    <BookIcon />
+                  </span>
+                  <div className="report-reading__body">
+                    <p className="report-reading__tag">Core pick</p>
+                    <h4 className="report-reading__title">A read matched to how you are wired</h4>
+                    <p className="report-reading__author">Hand-picked · for you</p>
+                    <p className="report-reading__blurb">
+                      A short, personal note on why this one fits your archetype.
+                    </p>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </div>
+          <PremiumOverlay
+            archetype={archetype}
+            sectionTitle={sectionTitle}
+            tier={tier}
+            quote={quote}
+            offerDeadline={offerDeadline}
+            onUnlock={onUnlock}
+          />
+        </div>
+      ) : (
+        <>
+          {books.length > 0 ? (
+            <div className="report-reading__grid">
+              {books.map((book, i) => (
+                <BookCard key={i} book={book} />
+              ))}
+            </div>
+          ) : null}
+
+          {closingLead || closingFormula ? (
+            <p className="report-reading__closing">
+              {closingLead ? (
+                <span className="report-reading__closing-lead">{closingLead} </span>
+              ) : null}
+              {closingFormula ? (
+                <em className="report-reading__closing-formula">{closingFormula}</em>
+              ) : null}
+            </p>
+          ) : null}
+        </>
+      )}
+    </div>
+  );
+};
+
+export default ReadingSection;

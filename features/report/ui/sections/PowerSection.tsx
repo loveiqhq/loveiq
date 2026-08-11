@@ -1,0 +1,335 @@
+"use client";
+
+import { useEffect, useState, type CSSProperties, type FC } from "react";
+import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
+import { getReportTheme } from "../reportTheme";
+import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
+
+/**
+ * Server-resolved power copy (`getReport2Section(name, "power")`), threaded as a
+ * prop because the 634KB copy module is server-only (see
+ * `app/api/report/route.ts` → `powerCopy`).
+ *
+ * GATING (Part III, FULL_REPORT tier — `power_orientation`, section 15, NOT in
+ * `ESSENTIALS_SECTION_IDS`, so it only unlocks at the full_report tier). The
+ * educational slots (`gate.hook`, `edu.*`, `learn.*`) are universal (`gate.hook`
+ * verified identical across all 14) and always shipped. The per-archetype
+ * payload — `takeaway` (verdict) and `body.p1` (the reader's own read on the
+ * map) plus `zone` (the reader's power-zone region label + the "You" dot
+ * highlight/position) — is the gated content: shipped ONLY when the report is
+ * unlocked at the full_report tier. A locked client (`locked: true`) receives
+ * `takeaway: null` + `body.p1: null` + `zone: null`, renders the hook teaser +
+ * PremiumOverlay, and the plane still draws (universal layout) but WITHOUT the
+ * "You" highlight/zone. Never send locked per-archetype content to an unpaid
+ * client.
+ */
+export interface PowerCopy {
+  "gate.hook"?: string | null;
+  takeaway?: string | null;
+  "body.p1"?: string | null;
+  "edu.eyebrow"?: string | null;
+  "edu.teaser"?: string | null;
+  "edu.body.p1"?: string | null;
+  "edu.body.p2"?: string | null;
+  "edu.body.p3"?: string | null;
+  "edu.body.p4"?: string | null;
+  "learn.eyebrow"?: string | null;
+  "learn.body"?: string | null;
+  /**
+   * The reader's power-zone region label (from config `families.power_zone`),
+   * e.g. "Switch zone". Drives the top card label + the highlighted zone label
+   * on the plane. Per-archetype → withheld (null) from a locked client.
+   */
+  zone?: string | null;
+  /** True when the per-archetype takeaway/body + zone/You highlight were withheld. */
+  locked: boolean;
+}
+
+interface Props {
+  archetype: string;
+  copy: PowerCopy | null;
+  offerDeadline?: number;
+  onUnlock: () => void;
+  quote?: ReportPriceQuoteSnapshot | null;
+  sectionTitle: string;
+  tier?: PremiumOverlayTier;
+}
+
+const BookIcon: FC = () => (
+  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path
+      d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v15.5H5.5A1.5 1.5 0 0 1 4 18V5.5Z"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M20 5.5A1.5 1.5 0 0 0 18.5 4H13v15.5h5.5A1.5 1.5 0 0 0 20 18V5.5Z"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+/**
+ * All 14 archetypes plotted on the power plane, positions extracted from the
+ * Figma vectors (node 8427:1965 + the "You" dot 8427:1983) and normalized to
+ * the plot box (0..1). x = yielding(0) → leading(1); y = explicit-power(0, top)
+ * → implicit-power(1, bottom). This is a FIXED universal layout — every viewer
+ * sees the same 14 dots in the same places; only WHICH one is the highlighted
+ * "You" changes (the reader's `archetype` prop).
+ *
+ * Dot fill = each archetype's report-theme accent (the Figma renders them as
+ * pastel tints of exactly these accents). Only the "You" dot is labelled on the
+ * plane — the Figma labels no other dot — so the 13 others are anonymous
+ * context and their name→position pairing only affects dot colour.
+ */
+const PLANE: { name: string; x: number; y: number }[] = [
+  { name: "Spark Seeker", x: 0.856, y: 0.115 },
+  { name: "Explorer of Edges", x: 0.737, y: 0.206 },
+  { name: "Authority Conductor", x: 0.659, y: 0.309 },
+  { name: "Analytical Sexualist", x: 0.641, y: 0.618 },
+  { name: "Radiant Performer", x: 0.585, y: 0.418 },
+  { name: "Minimalist Companion", x: 0.404, y: 0.449 },
+  { name: "Emotional Voyeur", x: 0.33, y: 0.588 },
+  { name: "Sensual Connector", x: 0.311, y: 0.673 },
+  { name: "Loyal Ritualist", x: 0.274, y: 0.642 },
+  { name: "Relational Nurturer", x: 0.382, y: 0.752 },
+  { name: "Tender Devotee", x: 0.163, y: 0.63 },
+  { name: "Quiet Withdrawer", x: 0.126, y: 0.812 },
+  { name: "Curious Apprentice", x: 0.289, y: 0.873 },
+  { name: "Spiritual Lover", x: 0.467, y: 0.824 },
+];
+
+/** #RRGGBB → "r g b" for rgb() with slash-alpha halos. */
+function hexToRgbTriplet(hex: string): string {
+  const c = hex.replace("#", "");
+  const n = Number.parseInt(
+    c.length === 3
+      ? c
+          .split("")
+          .map((ch) => ch + ch)
+          .join("")
+      : c,
+    16
+  );
+  return `${(n >> 16) & 255} ${(n >> 8) & 255} ${n & 255}`;
+}
+
+/**
+ * The 2-axis power plane (per Figma 8427:1954). A fixed universal layout drawn
+ * for everyone; the "You" highlight + the tinted "switch/leading/…" zone are
+ * per-archetype and only render when unlocked. `youZoneLabel` is null when
+ * locked, so the zone glow + "You" pill drop out but the pack still reads.
+ */
+const PowerPlane: FC<{ archetype: string; youZoneLabel: string | null; animated: boolean }> = ({
+  archetype,
+  youZoneLabel,
+  animated,
+}) => {
+  const you = PLANE.find((d) => d.name === archetype) ?? null;
+  const showYou = !!youZoneLabel && !!you;
+
+  return (
+    <div className={`report-power-plane${animated ? " is-animated" : ""}`}>
+      <div className="report-power-plane__frame">
+        {/* Axis crosshair + border */}
+        <span className="report-power-plane__axis report-power-plane__axis--v" aria-hidden="true" />
+        <span className="report-power-plane__axis report-power-plane__axis--h" aria-hidden="true" />
+
+        {/* Reader's zone glow (per-archetype, unlocked only), centred on the You dot. */}
+        {showYou ? (
+          <span
+            className="report-power-plane__zone"
+            style={{ left: `${you!.x * 100}%`, top: `${you!.y * 100}%` }}
+            aria-hidden="true"
+          >
+            <span className="report-power-plane__zone-label">
+              {youZoneLabel!.toUpperCase()} ZONE
+            </span>
+          </span>
+        ) : null}
+
+        {/* The 14 dots */}
+        {PLANE.map((d, i) => {
+          const isYou = showYou && d.name === archetype;
+          const accent = getReportTheme(d.name).accent;
+          const style = {
+            "--dot-x": `${d.x * 100}%`,
+            "--dot-y": `${d.y * 100}%`,
+            "--dot-accent-rgb": hexToRgbTriplet(accent),
+            "--dot-order": i,
+          } as CSSProperties;
+          return (
+            <span
+              key={d.name}
+              className={`report-power-plane__dot${isYou ? " is-you" : ""}`}
+              style={style}
+            >
+              {isYou ? <span className="report-power-plane__dot-pill">You</span> : null}
+            </span>
+          );
+        })}
+      </div>
+
+      {/* Axis captions */}
+      <span className="report-power-plane__cap report-power-plane__cap--left" aria-hidden="true">
+        &larr; yielding
+      </span>
+      <span className="report-power-plane__cap report-power-plane__cap--right" aria-hidden="true">
+        leading &rarr;
+      </span>
+      <span className="report-power-plane__cap report-power-plane__cap--top" aria-hidden="true">
+        &rarr; explicit power
+      </span>
+      <span className="report-power-plane__cap report-power-plane__cap--bottom" aria-hidden="true">
+        implicit power &larr;
+      </span>
+    </div>
+  );
+};
+
+const PowerSection: FC<Props> = ({
+  archetype,
+  copy,
+  offerDeadline,
+  onUnlock,
+  quote = null,
+  sectionTitle,
+  tier = "full_report",
+}) => {
+  const [expanded, setExpanded] = useState(false);
+  const [animated, setAnimated] = useState(false);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setAnimated(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
+
+  if (!copy) return null;
+  const locked = copy.locked;
+
+  // Educational block is universal — always safe to show.
+  const eduParas = [
+    copy["edu.body.p1"],
+    copy["edu.body.p2"],
+    copy["edu.body.p3"],
+    copy["edu.body.p4"],
+  ].filter((p): p is string => !!p);
+  const hasEdu = !!copy["edu.teaser"] || eduParas.length > 0;
+
+  // The reader's zone label (from config power_zone) — null when locked, which
+  // also suppresses the "You" highlight on the plane.
+  const zoneLabel = locked ? null : (copy.zone ?? null);
+
+  return (
+    <div className="report-power">
+      <h3 className="report-power__heading">Power Orientation</h3>
+
+      {copy["learn.body"] ? (
+        <div className="report-power__learn-pill-wrap">
+          <span className="report-power__learn-pill">
+            <span className="report-power__learn-pill-icon" aria-hidden="true">
+              <BookIcon />
+            </span>
+            {copy["learn.eyebrow"] ?? "What you will learn"}
+          </span>
+          <p className="report-power__learn-body">{copy["learn.body"]}</p>
+        </div>
+      ) : null}
+
+      <article className="report-power__card">
+        {locked ? (
+          <>
+            {copy["gate.hook"] ? <p className="report-power__hook">{copy["gate.hook"]}</p> : null}
+            <div className="report-power__preview">
+              <div className="report-power__preview-fade" aria-hidden="true">
+                {/* The plane is a universal layout, safe to draw under the blur;
+                    the "You"/zone specifics are withheld (youZoneLabel=null). */}
+                <PowerPlane archetype={archetype} youZoneLabel={null} animated={animated} />
+              </div>
+              <PremiumOverlay
+                archetype={archetype}
+                sectionTitle={sectionTitle}
+                tier={tier}
+                quote={quote}
+                offerDeadline={offerDeadline}
+                onUnlock={onUnlock}
+              />
+            </div>
+          </>
+        ) : (
+          <>
+            {zoneLabel ? <p className="report-power__zone-eyebrow">{zoneLabel}</p> : null}
+
+            <PowerPlane archetype={archetype} youZoneLabel={zoneLabel} animated={animated} />
+
+            {copy["body.p1"] ? <p className="report-power__body">{copy["body.p1"]}</p> : null}
+
+            {copy.takeaway ? (
+              <div className="report-power__verdict">
+                <span className="report-power__star" aria-hidden="true">
+                  &#10037;
+                </span>
+                <p className="report-power__takeaway">{copy.takeaway}</p>
+              </div>
+            ) : null}
+
+            <div className="report-power__rule" aria-hidden="true" />
+          </>
+        )}
+
+        {hasEdu ? (
+          <div className="report-power__details">
+            <button
+              type="button"
+              className="report-power__details-summary"
+              aria-expanded={expanded}
+              onClick={() => setExpanded((v) => !v)}
+            >
+              <span className="report-power__details-icon" aria-hidden="true">
+                <BookIcon />
+              </span>
+              <span className="report-power__details-eyebrow">
+                {copy["edu.eyebrow"] ?? "Learn: leading and yielding"}
+              </span>
+              <span
+                className={`report-power__details-chevron${expanded ? " is-open" : ""}`}
+                aria-hidden="true"
+              >
+                ⌄
+              </span>
+            </button>
+
+            {!expanded ? (
+              <div className="report-power__details-peek">
+                {copy["edu.teaser"] ? (
+                  <p className="report-power__details-teaser">{copy["edu.teaser"]}</p>
+                ) : null}
+                {eduParas.length > 0 ? (
+                  <button
+                    type="button"
+                    className="report-power__peek-cta"
+                    onClick={() => setExpanded(true)}
+                  >
+                    Read the full explanation
+                  </button>
+                ) : null}
+              </div>
+            ) : (
+              <div className="report-power__details-body">
+                {eduParas.map((para, i) => (
+                  <p key={i} className="report-power__details-para">
+                    {para}
+                  </p>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : null}
+      </article>
+    </div>
+  );
+};
+
+export default PowerSection;

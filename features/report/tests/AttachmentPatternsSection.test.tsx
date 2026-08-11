@@ -1,42 +1,128 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
-import AttachmentPatternsSection from "@features/report/ui/sections/AttachmentPatternsSection";
-import { reportSections } from "@/data/report-general";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
+import AttachmentPatternsSection, {
+  type AttachmentCopy,
+  type AttachmentPlane,
+} from "@features/report/ui/sections/AttachmentPatternsSection";
 
-const attachmentGeneralHtml =
-  reportSections.find((section) => section.id === "attachment_style")?.generalContent ?? "";
-const resolvedAttachmentGeneralHtml = attachmentGeneralHtml.replace(
-  /\{\{CORE_ARCHETYPE\}\}/g,
-  '<span class="report-archetype-name">Spark Seeker</span>'
-);
+const baseCopy: AttachmentCopy = {
+  "gate.hook": "See where you sit on the attachment map",
+  eyebrow: "Your Attachment Style",
+  "edu.eyebrow": "Learn: the five attachment patterns",
+  "edu.teaser": "Five ways a nervous system learns to hold closeness.",
+  "edu.body.p1": "Attachment style is how your system handles closeness.",
+  "learn.eyebrow": "What you will learn",
+  "learn.body": "In this chapter you will learn what attachment is.",
+  result: "Secure",
+  "row1.label": "Most of the time",
+  "row1.value": "Deep closeness without losing yourself",
+  "row2.value": "Anxious notes surface",
+  "row3.value": "Desire stays closed until repair happens",
+  "insight.label": "The Key",
+  "insight.value": "Repair isn't the obstacle. It's the doorway.",
+  "body.p1": "Two dots, one person.",
+  locked: false,
+};
+
+const plane: AttachmentPlane = {
+  home: { x: 0.288, y: 0.714 },
+  strain: { x: 0.346, y: 0.342 },
+  homeLabel: "ORDINARY DAYS",
+  strainLabel: "UNDER DISCONNECTION",
+  accentCorner: "SECURE",
+};
+
+const noop = () => {};
 
 describe("AttachmentPatternsSection", () => {
-  it("renders the intro + premium archetype content; the 'Common Attachment Style Patterns' grid is no longer in the V3 template", () => {
-    const { container } = render(
+  afterEach(cleanup);
+
+  it("renders the unlocked per-archetype card with family-specific row labels + the map", () => {
+    render(
       <AttachmentPatternsSection
-        archetype="Spark Seeker"
-        archetypeHtml="<p>Attachment style of the Spark Seeker.</p>"
-        generalHtml={resolvedAttachmentGeneralHtml}
-        isPremium={true}
+        archetype="Spiritual Lover"
+        copy={baseCopy}
+        plane={plane}
+        family="secure-anxious"
+        onUnlock={noop}
         sectionTitle="Attachment Style"
       />
     );
 
-    // V3 template dropped the "Common Attachment Style Patterns Across Archetypes"
-    // subsection entirely. Component gracefully renders no patterns container.
-    expect(container.querySelector(".report-attachment-patterns")).not.toBeInTheDocument();
-    expect(container.querySelector(".report-attachment-patterns__grid")).not.toBeInTheDocument();
+    // Per-archetype gated content is present when unlocked.
+    expect(screen.getByText("Secure")).toBeInTheDocument();
+    expect(screen.getByText("Repair isn't the obstacle. It's the doorway.")).toBeInTheDocument();
 
-    // Locked premium HTML still renders inside `.report-themed-block__blurred` so
-    // the client can blur it visually behind the overlay.
-    const blurred = container.querySelector(".report-themed-block__blurred");
-    expect(blurred).toBeInTheDocument();
-    expect(blurred?.getAttribute("aria-hidden")).toBe("true");
-    expect(blurred).toHaveTextContent("Attachment style of the Spark Seeker");
-    expect(container.querySelector(".report-premium-overlay")).toBeInTheDocument();
-    expect(container.querySelector(".report-rich-heading")).toHaveTextContent(
-      "Attachment Style of the Spark Seeker"
+    // row1 label universal; row2/row3 labels come from the family map, NOT copy.
+    expect(screen.getByText("Most of the time")).toBeInTheDocument();
+    expect(screen.getByText("Under lingering disconnection")).toBeInTheDocument();
+    expect(screen.getByText("After rupture")).toBeInTheDocument();
+
+    // The map renders both dots + labels for an archetype with real coords.
+    expect(screen.getByText("ORDINARY DAYS")).toBeInTheDocument();
+    expect(screen.getByText("UNDER DISCONNECTION")).toBeInTheDocument();
+
+    // No overlay when unlocked.
+    expect(document.querySelector(".report-premium-overlay")).not.toBeInTheDocument();
+  });
+
+  it("uses the avoidant family labels for an avoidant archetype", () => {
+    render(
+      <AttachmentPatternsSection
+        archetype="Quiet Withdrawer"
+        copy={{ ...baseCopy, result: "Avoidant" }}
+        plane={null}
+        family="avoidant"
+        onUnlock={noop}
+        sectionTitle="Attachment Style"
+      />
     );
+
+    expect(screen.getByText("When closeness stays constant")).toBeInTheDocument();
+    expect(screen.getByText("After space is restored")).toBeInTheDocument();
+  });
+
+  it("withholds per-archetype content and shows the overlay when locked", () => {
+    const lockedCopy: AttachmentCopy = {
+      "gate.hook": baseCopy["gate.hook"],
+      eyebrow: baseCopy.eyebrow,
+      "edu.eyebrow": baseCopy["edu.eyebrow"],
+      "edu.teaser": baseCopy["edu.teaser"],
+      "edu.body.p1": baseCopy["edu.body.p1"],
+      "learn.eyebrow": baseCopy["learn.eyebrow"],
+      "learn.body": baseCopy["learn.body"],
+      // Per-archetype slots withheld server-side.
+      result: null,
+      "row1.value": null,
+      "row2.value": null,
+      "row3.value": null,
+      "insight.value": null,
+      "body.p1": null,
+      locked: true,
+    };
+
+    render(
+      <AttachmentPatternsSection
+        archetype="Spiritual Lover"
+        copy={lockedCopy}
+        plane={null}
+        family="secure-anxious"
+        onUnlock={noop}
+        sectionTitle="Attachment Style"
+      />
+    );
+
+    // The real result word is never in the DOM when locked.
+    expect(screen.queryByText("Secure")).not.toBeInTheDocument();
+    // The overlay anchors over the blurred stand-in.
+    expect(document.querySelector(".report-premium-overlay")).toBeInTheDocument();
+    expect(document.querySelector(".report-attachment-card--blur")).toBeInTheDocument();
+
+    // Universal educational content is STILL shown when locked.
+    expect(screen.getByText("What you will learn")).toBeInTheDocument();
+    expect(
+      screen.getByText("Common Attachment Style Patterns Across Archetypes")
+    ).toBeInTheDocument();
   });
 });

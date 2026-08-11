@@ -69,6 +69,193 @@ export interface ReportData {
    * locked-state placeholders render correctly without leaking premium scores.
    */
   practiceTendencies: Record<string, ReportPracticeTendencyContentForUser>;
+  /**
+   * Report 2.0 Snapshot section copy for the primary archetype, resolved
+   * server-side (the 634KB copy module is server-only). Null-valued slots for
+   * archetypes without a snapshot copy block. Threaded to `SnapshotSection`.
+   */
+  snapshotCopy: import("../sections/SnapshotSection").SnapshotCopy | null;
+  /**
+   * Report 2.0 Findings section copy for the primary archetype, resolved
+   * server-side and locked-aware: for a user without a paid plan, f3-5 carry
+   * ONLY the universal `.locked.` teaser text (`locked: true`). Threaded to
+   * `FindingsSection`.
+   */
+  findingsCopy: import("../sections/FindingsSection").FindingsCopy | null;
+  /**
+   * Report 2.0 Beliefs ("Typical Beliefs") copy for the primary archetype,
+   * resolved server-side and locked-aware. Educational slots are universal; the
+   * per-archetype keep/loosen/body payload is only present when unlocked at the
+   * essentials tier (`locked: false`). Threaded to `BeliefsSection`.
+   */
+  beliefsCopy: import("../sections/BeliefsSection").BeliefsCopy | null;
+  /**
+   * Report 2.0 Attachment Style copy for the primary archetype, resolved
+   * server-side and locked-aware. Universal slots (gate.hook, eyebrow, edu.*,
+   * learn.*) are always present; the per-archetype result/row-values/insight/
+   * body/plane are only present when unlocked at the essentials tier
+   * (`locked: false`). Threaded to `AttachmentPatternsSection`.
+   */
+  attachmentCopy: import("../sections/AttachmentPatternsSection").AttachmentCopy | null;
+  /** Attachment family (secure-anxious | secure-avoidant | avoidant) — drives row labels. */
+  attachmentFamily: string | null;
+  /** Normalized attachment-plane geometry; null for archetypes without real coords. */
+  attachmentPlane: import("../sections/AttachmentPatternsSection").AttachmentPlane | null;
+  /**
+   * Report 2.0 Accelerators & Brakes copy for the primary archetype, resolved
+   * server-side and locked-aware. Educational slots (gate.hook, edu.*, learn.*)
+   * are universal; the per-archetype `takeaway` verdict is only present when
+   * unlocked at the essentials tier (`locked: false`). Threaded to
+   * `AcceleratorsSection`.
+   */
+  accelCopy: import("../sections/AcceleratorsSection").AccelCopy | null;
+  /**
+   * Report 2.0 Core Insecurities copy for the primary archetype, resolved
+   * server-side and locked-aware. Universal slots (gate.hook, practical.label,
+   * learn.*) are always present; the per-archetype takeaway/practical-lines/
+   * body are only present when unlocked at the essentials tier
+   * (`locked: false`). Threaded to `InsecuritiesSection`.
+   */
+  insecuritiesCopy: import("../sections/InsecuritiesSection").InsecuritiesCopy | null;
+  /** Insecurity cue family (absence | abandonment | evaluation | engulfment | depletion | destabilisation) — drives the cue graph. Null when locked/unknown. */
+  insecurityCueFamily: string | null;
+  /** Config `insecurity_graph` (highlighted curve + axis overrides); null when locked/absent. */
+  insecurityGraph: import("../sections/InsecuritiesSection").InsecurityGraph | null;
+  /**
+   * Report 2.0 Reward System copy for the primary archetype, resolved
+   * server-side. Educational slots + stat are universal; `takeaway` is withheld
+   * when locked (`locked: true`). Threaded to `RewardSection`.
+   */
+  rewardCopy: import("../sections/RewardSection").RewardCopy | null;
+  /** Reward config (chemical order/roles/meters); null when locked or absent for the archetype. */
+  rewardConfig: import("../sections/RewardSection").RewardConfig | null;
+  /**
+   * Report 2.0 Energy & Risk copy for the primary archetype, resolved
+   * server-side. Educational slots + chartnote are universal; `gate.hook` and
+   * `takeaway` are withheld when locked (`locked: true`). Threaded to
+   * `EnergySection`.
+   */
+  energyCopy: import("../sections/EnergySection").EnergyCopy | null;
+  /** Energy config (curve family + readout levels); null when locked or absent for the archetype. */
+  energyConfig: import("../sections/EnergySection").EnergyConfig | null;
+  /**
+   * Report 2.0 Arousal Style copy for the primary archetype, resolved
+   * server-side. Universal slots (eyebrow, insight.label, edu.*, learn.*) are
+   * always shipped; `gate.hook`, `result`, `insight.value`, and the two
+   * mini-stats are withheld when locked (`locked: true`). Threaded to
+   * `ArousalSection`.
+   */
+  arousalCopy: import("../sections/ArousalSection").ArousalCopy | null;
+  /** Arc config (family + phase-label acts); null when locked or absent for the archetype. */
+  arousalConfig: import("../sections/ArousalSection").ArousalConfig | null;
+  /**
+   * Report 2.0 Initiation Style copy for the primary archetype, resolved
+   * server-side. Framing slots (`gate.hook`, `eyebrow`, `row1.label`,
+   * `practical.label`, `learn.*`) are universal; the per-archetype
+   * result/values/copy/mini-stat are withheld (null) for locked clients. See
+   * `InitiationSection`.
+   */
+  initiationCopy: import("../sections/InitiationSection").InitiationCopy | null;
+  /** Timeline-chart config (family + variant); null when locked or absent for the archetype. */
+  initiationConfig: import("../sections/InitiationSection").InitiationConfig | null;
+  /**
+   * Report 2.0 Libido Challenges copy for the primary archetype, resolved
+   * server-side. Framing slots (`gate.hook`, `eyebrow`, `row1..4.label`,
+   * `practical.label`, `learn.*`) are universal; the per-archetype
+   * result/row-values/practical copy are withheld (null) for locked clients.
+   * See `LibidoSection`.
+   */
+  libidoCopy: import("../sections/LibidoSection").LibidoCopy | null;
+  /** Named-loop config (name + steps); null when locked or absent for the archetype. */
+  libidoConfig: import("../sections/LibidoSection").LibidoConfig | null;
+  /**
+   * Report 2.0 "Challenges in Partnership" copy for the primary archetype,
+   * resolved server-side. Universal framing (`gate.hook`, `eyebrow`,
+   * `row1..3.label`, `edu.*`, `learn.*`) always present; per-archetype `result`
+   * + `row1..3.value` withheld (null) when locked. See `PartnershipSection`.
+   */
+  partnershipCopy: import("../sections/PartnershipSection").PartnershipCopy | null;
+  /**
+   * Report 2.0 "Challenges to Enjoy Sex" (Enjoyment) copy for the primary
+   * archetype, resolved server-side. Universal framing (`eyebrow`,
+   * `row1..3.label`, `insight.label`, `edu.*`, `learn.*`) always present;
+   * per-archetype `gate.hook`, `result`, `row1..3.value`, `insight.value`
+   * withheld (null) when locked. See `EnjoymentSection`.
+   */
+  enjoyCopy: import("../sections/EnjoymentSection").EnjoyCopy | null;
+  /**
+   * Report 2.0 "Growth Potentials" copy for the primary archetype, resolved
+   * server-side. Universal framing (`gate.hook`, `learn.*`) always present;
+   * per-archetype `takeaway`, `ladder.headline`, `rung1..5.{from,to,move}`,
+   * `ladder.close` withheld (null) when locked. See `GrowthSection`.
+   */
+  growthCopy: import("../sections/GrowthSection").GrowthCopy | null;
+  /** `growth_rungs` config hint (elevation-profile step count); null if absent. */
+  growthRungs: number | null;
+  /**
+   * Report 2.0 Reading Recommendations copy for the primary archetype, resolved
+   * server-side. Universal gate.hook/book*.tag/closing.lead/learn.* always
+   * shipped; per-archetype book*.title/author/blurb + closing.formula withheld
+   * (null) when locked. See `ReadingSection`.
+   */
+  readingCopy: import("../sections/ReadingSection").ReadingCopy | null;
+  /**
+   * Report 2.0 Power Orientation copy for the primary archetype, resolved
+   * server-side. Educational slots (`gate.hook`, `edu.*`, `learn.*`) are
+   * universal; `takeaway`, `body.p1`, and `zone` (the reader's power-zone +
+   * "You" highlight) are per-archetype and withheld when `locked`.
+   */
+  powerCopy: import("../sections/PowerSection").PowerCopy | null;
+  /**
+   * Report 2.0 Fantasy ("Fantasy vs. Reality") copy for the primary archetype,
+   * resolved server-side. EVERY slot is universal (hook, edu.*, the two
+   * chart-notes, learn.*), so all are always shipped; `locked` only drives
+   * whether the client blurs the fantasy map behind the overlay. No per-user
+   * fantasy dot data exists — the map draws the Figma's representative layout.
+   */
+  fantasyCopy: import("../sections/FantasySection").FantasyCopy | null;
+  /**
+   * Report 2.0 Curiosity & Relationship Form copy for the primary archetype,
+   * resolved server-side. Universal slots (`gate.hook`, `edu.*` incl. the
+   * `edu.struct.N` structure list, `learn.*`) are always present; `takeaway` and
+   * `body.p1/p2/p3` are per-archetype and withheld when `locked`. Threaded to
+   * `CuriositySection`.
+   */
+  curiosityCopy: import("../sections/CuriositySection").CuriosityCopy | null;
+  /** Config `relationship_fit` (structure → 0..3 fit score); null when locked or when the archetype has no fit map (only Spiritual Lover today). */
+  relationshipFit: Record<string, number> | null;
+  /** Report 2.0 Love Language copy for the primary archetype, resolved server-side; `locked` mirrors the full_report gate. */
+  lovelangCopy: import("../sections/LoveLanguageSection").LoveLanguageCopy | null;
+  /** Config `love_language_order` (five language slugs in rank order); null when locked or when the archetype has no order. */
+  loveLanguageOrder: string[] | null;
+  /**
+   * Report 2.0 Confidence Level copy for the primary archetype, resolved
+   * server-side. All copy slots are universal education; `locked` mirrors the
+   * essentials unlock. Threaded to `ConfidenceSection`.
+   */
+  confidenceCopy: import("../sections/ConfidenceSection").ConfidenceCopy | null;
+  /** Config `confidence_strip` (per-archetype result word + dot); null when locked or when the archetype has no strip (only Spiritual Lover today). */
+  confidenceStrip: import("../sections/ConfidenceSection").ConfidenceStrip | null;
+  /**
+   * Report 2.0 Insight Map section copy for the primary archetype, resolved
+   * server-side. Only the per-archetype sublines + featured title/sub; the tile
+   * labels are universal and hardcoded in `InsightMapSection`. Threaded to
+   * `InsightMapSection`.
+   */
+  mapCopy: import("../sections/InsightMapSection").MapCopy | null;
+  /**
+   * Report 2.0 Sexual Stage card copy for the primary archetype, resolved
+   * server-side. Labels are universal; `result` + row/practical values are
+   * per-archetype. Threaded to `SexualStageSection`.
+   */
+  stageCopy: import("../sections/SexualStageSection").StageCopy | null;
+  /**
+   * Report 2.0 Constellation ("Other Archetypes") mottos, keyed by archetype
+   * name — every one of the 14, resolved server-side. The section lists all
+   * archetypes ranked by match %, each showing its own motto. Threaded to
+   * `ConstellationSection`. A null value means that archetype has no motto copy.
+   */
+  constellationMottos: Record<string, string | null>;
 }
 
 export interface ReportRequestError {

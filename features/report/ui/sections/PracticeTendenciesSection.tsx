@@ -12,10 +12,6 @@ import type {
 
 // Wire-side row alias; metrics may be null on locked rows past index 0.
 type ReportPracticeTendencyRow = ReportPracticeTendencyRowData;
-import {
-  extractPracticeSectionIntroHtml,
-  extractReportHtmlBlocks,
-} from "@features/report/ui/reportContent";
 
 // Internal aliases for the legacy API used by PracticeRow / PracticeGroupTable.
 type ReportPracticeTendencyGroup = ReportPracticeTendencyGroupForUser;
@@ -23,7 +19,6 @@ type ReportPracticeTendencyContent = ReportPracticeTendencyContentForUser;
 
 interface Props {
   archetype: string;
-  archetypeHtml: string | null;
   /**
    * Practice tendency content for the current archetype, server-filtered. When
    * the practice section is locked the server ships only the free-preview row
@@ -31,9 +26,16 @@ interface Props {
    * Null when the user has no access to this archetype's practice content.
    */
   content: ReportPracticeTendencyContentForUser | null;
-  generalHtml: string;
   isPremium: boolean;
   isUnlocked?: boolean;
+  /**
+   * Suppress this section's own paywall card. Set when the host already shows
+   * one for the same section (the Fantasy card's map overlay), so the reader
+   * gets ONE "Premium content" card per section as the Figma locked page does,
+   * not one per block. Safe: locked metric values are stripped server-side, so
+   * the table renders `--` with or without a cover.
+   */
+  hideOverlay?: boolean;
   offerDeadline?: number;
   onUnlock?: () => void;
   quote?: ReportPriceQuoteSnapshot | null;
@@ -58,12 +60,6 @@ type DesktopPopoverState = {
 const DESKTOP_POPOVER_MEDIA_QUERY = "(min-width: 1025px)";
 const DESKTOP_POPOVER_EDGE_PADDING = 24;
 const DESKTOP_POPOVER_GAP = 18;
-const COMPACT_LOCKED_GROUP_TITLES = new Set([
-  "Penetration & Body Opening",
-  "Technology & Distance",
-  "Ritual, Tantra & Conscious Sex",
-]);
-
 function resolveDesktopPopoverMode() {
   if (typeof window === "undefined") {
     return false;
@@ -245,14 +241,23 @@ const PracticeGroupLocked: FC<{
   quote?: ReportPriceQuoteSnapshot | null;
   sectionTitle: string;
   tier: PremiumOverlayTier;
-}> = ({ archetype, group, offerDeadline, onUnlock, quote = null, sectionTitle, tier }) => {
+  hideOverlay?: boolean;
+}> = ({
+  archetype,
+  group,
+  hideOverlay = false,
+  offerDeadline,
+  onUnlock,
+  quote = null,
+  sectionTitle,
+  tier,
+}) => {
   const freeRow = group.rows[0] ?? null;
   // Row 0 ships with real metric values (free preview). Rows 1+ ship with
   // their practice names but `fantasyPull` / `actualPleasure` nulled out by
   // `buildPracticeTendenciesForUser` — names tease what's behind the paywall,
   // numbers stay server-stripped. The cover overlay sits over columns 2–3.
   const lockedRows = group.rows.slice(1);
-  const useCompactLockedCard = COMPACT_LOCKED_GROUP_TITLES.has(group.title);
 
   return (
     <section
@@ -306,10 +311,7 @@ const PracticeGroupLocked: FC<{
             )}
 
             {lockedRows.length > 0 && (
-              <div
-                className={`report-practice-table__locked-section${useCompactLockedCard ? " report-practice-table__locked-section--compact" : ""}`}
-                role="presentation"
-              >
+              <div className="report-practice-table__locked-section" role="presentation">
                 {lockedRows.map((row, index) => (
                   <div
                     key={`locked-${index}`}
@@ -330,26 +332,25 @@ const PracticeGroupLocked: FC<{
                 ))}
 
                 {/* Cover: replicates the table column grid so the card sits over
-                    exactly columns 2–3, leaving column 1 (names) fully visible */}
-                <div className="report-practice-table__locked-cover">
-                  <div className="report-practice-table__locked-cover__name-spacer" />
-                  <div
-                    className={`report-practice-table__locked-cover__metrics${
-                      useCompactLockedCard
-                        ? " report-practice-table__locked-cover__metrics--compact"
-                        : ""
-                    }`}
-                  >
-                    <PremiumOverlay
-                      archetype={archetype}
-                      sectionTitle={sectionTitle}
-                      tier={tier}
-                      quote={quote}
-                      offerDeadline={offerDeadline}
-                      onUnlock={onUnlock}
-                    />
+                    exactly columns 2–3, leaving column 1 (names) fully visible.
+                    Skipped entirely (not just hidden) when the host already shows
+                    the section's card — PremiumOverlay runs a countdown, so an
+                    invisible one would tick for nothing. */}
+                {hideOverlay ? null : (
+                  <div className="report-practice-table__locked-cover">
+                    <div className="report-practice-table__locked-cover__name-spacer" />
+                    <div className="report-practice-table__locked-cover__metrics">
+                      <PremiumOverlay
+                        archetype={archetype}
+                        sectionTitle={sectionTitle}
+                        tier={tier}
+                        quote={quote}
+                        offerDeadline={offerDeadline}
+                        onUnlock={onUnlock}
+                      />
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             )}
           </div>
@@ -416,29 +417,6 @@ const PracticeGroupTable: FC<{
   </section>
 );
 
-const PracticeIntro: FC<{
-  archetype: string;
-  generalHtml: string;
-}> = ({ archetype, generalHtml }) => {
-  const introBlocks = extractReportHtmlBlocks(extractPracticeSectionIntroHtml(generalHtml));
-
-  if (!introBlocks.length) {
-    return null;
-  }
-
-  return (
-    <div className="report-practice-panel__intro report-prose">
-      {introBlocks.map((block, index) => (
-        <div
-          key={`${archetype}-practice-intro-${index}`}
-          className="report-practice-panel__intro-block"
-          dangerouslySetInnerHTML={{ __html: block }}
-        />
-      ))}
-    </div>
-  );
-};
-
 const PracticePanel: FC<{
   archetype: string;
   content: ReportPracticeTendencyContent;
@@ -447,6 +425,11 @@ const PracticePanel: FC<{
   const rootRef = useRef<HTMLDivElement>(null);
   const desktopPopoverRef = useRef<HTMLDivElement | null>(null);
   const [openRowId, setOpenRowId] = useState<string | null>(null);
+  // Figma 8480:16003 — the unlocked panel opens showing ONE category, with the
+  // next one clipped + blurred behind a "Show all N categories" pill. Purely
+  // progressive disclosure (all rows are already unlocked here); the paywalled
+  // variant is the separate `PracticeGroupLocked` path.
+  const [showAll, setShowAll] = useState(false);
   const [desktopPopover, setDesktopPopover] = useState<DesktopPopoverState | null>(null);
   const [desktopPopoverPosition, setDesktopPopoverPosition] = useState<CSSProperties | null>(null);
   const [useDesktopPopover, setUseDesktopPopover] = useState(resolveDesktopPopoverMode);
@@ -623,10 +606,17 @@ const PracticePanel: FC<{
         )
       : null;
 
+  const groups = content.groups;
+  const visibleGroups = showAll ? groups : groups.slice(0, 1);
+  // The clipped teaser is the NEXT real category, never a placeholder — the
+  // Figma mock labels it "Power & Surrender" but that group doesn't exist in the
+  // data, so we show whatever genuinely comes next.
+  const peekGroup = !showAll && groups.length > 1 ? groups[1] : null;
+
   return (
     <div ref={rootRef} className={`report-practice-panel${isAnimated ? " is-animated" : ""}`}>
       <div className="report-practice-panel__groups">
-        {content.groups.map((group) => (
+        {visibleGroups.map((group) => (
           <PracticeGroupTable
             key={group.title}
             group={group}
@@ -639,6 +629,40 @@ const PracticePanel: FC<{
         ))}
       </div>
 
+      {peekGroup ? (
+        // `interactive={false}` leaves no focusable node inside, so aria-hidden
+        // here can't trap the keyboard.
+        <div className="report-practice-panel__peek" aria-hidden="true">
+          <PracticeGroupTable
+            group={peekGroup}
+            interactive={false}
+            onOpen={handleOpen}
+            onClose={handleClose}
+            openRowId={null}
+            useDesktopPopover={false}
+          />
+        </div>
+      ) : null}
+
+      {groups.length > 1 ? (
+        <div className="report-practice-panel__expand">
+          <button
+            type="button"
+            className="report-practice-panel__expand-pill"
+            aria-expanded={showAll}
+            onClick={() => setShowAll((v) => !v)}
+          >
+            {showAll ? "Show fewer categories" : `Show all ${groups.length} categories`}
+            <span
+              className={`report-practice-panel__expand-chevron${showAll ? " is-open" : ""}`}
+              aria-hidden="true"
+            >
+              ⌄
+            </span>
+          </button>
+        </div>
+      ) : null}
+
       {desktopPopoverNode}
     </div>
   );
@@ -647,7 +671,7 @@ const PracticePanel: FC<{
 const PracticeTendenciesSection: FC<Props> = ({
   archetype,
   content,
-  generalHtml,
+  hideOverlay = false,
   isPremium,
   isUnlocked = false,
   offerDeadline,
@@ -672,17 +696,22 @@ const PracticeTendenciesSection: FC<Props> = ({
 
   return (
     <div className="report-flow__stack report-flow__stack--md report-practice-layout">
-      <PracticeIntro archetype={archetype} generalHtml={generalHtml} />
-
       {isPremium && !unlocked ? (
         // `is-animated` (static) so locked previews render immediately — this
         // wrapper has no IntersectionObserver, unlike the interactive panel.
+        //
+        // ONE locked category, not all 11. Every group renders an identical
+        // PremiumOverlay, so stacking 11 repeated the same paywall (and its
+        // countdown) ten extra times. Figma has no locked design for this
+        // section at all — the whole locked page's paywall language is a single
+        // card per section (`8993:19141`), which is what one overlay gives.
         <div className="report-practice-panel is-animated">
-          {content.groups.map((group) => (
+          {content.groups.slice(0, 1).map((group) => (
             <PracticeGroupLocked
               key={group.title}
               archetype={archetype}
               group={group}
+              hideOverlay={hideOverlay}
               sectionTitle={sectionTitle}
               tier={tier}
               quote={quote}

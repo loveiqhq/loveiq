@@ -4,22 +4,27 @@ import Image from "next/image";
 import { useEffect, useRef, type FC } from "react";
 import { trackSectionNavigated } from "@features/analytics/client";
 import { ReferFriendIcon, ShareReportIcon } from "./ReportActionIcons";
-import type { AccessTier, DisplayReportSection } from "./reportTitles";
+import ReportNavBadge, { type ReportNavAccess } from "./ReportNavBadge";
+import { REPORT_NAV_PARTS } from "./reportNav";
 
 interface Props {
   activeSectionId: string;
+  /**
+   * Per-chapter access state, keyed by nav item id. Every item carries a badge:
+   * `free`, `locked`, or `unlocked` once the reader's plan opens it.
+   */
+  accessById?: ReadonlyMap<string, ReportNavAccess>;
   onReferFriend?: () => void;
   onSectionClick?: (sectionId: string) => void;
   onShareClick?: () => void;
-  sections: DisplayReportSection[];
 }
 
 const ReportDesktopSidebar: FC<Props> = ({
   activeSectionId,
+  accessById,
   onReferFriend,
   onSectionClick,
   onShareClick,
-  sections,
 }) => {
   const navRef = useRef<HTMLElement>(null);
 
@@ -111,60 +116,47 @@ const ReportDesktopSidebar: FC<Props> = ({
           )}
         </div>
 
-        <div className="report-sidebar__chapters">
-          <p className="report-sidebar__chapters-label">Chapters</p>
+        <nav ref={navRef} aria-label="Report sections" className="report-sidebar__nav">
+          {REPORT_NAV_PARTS.map((part) => (
+            <div key={part.part} className="report-sidebar__part-group">
+              <p className="report-sidebar__part">
+                {part.part} · {part.label}
+              </p>
+              <div className="report-sidebar__nav-list">
+                {part.items.map((item) => {
+                  const isActive = activeSectionId === item.id;
 
-          <nav ref={navRef} aria-label="Report sections" className="report-sidebar__nav">
-            <div className="report-sidebar__nav-list">
-              {sections.map((section) => {
-                const isActive = activeSectionId === section.id;
-                const isSubheading = section.navType === "subheading";
-
-                return (
-                  <a
-                    key={section.id}
-                    href={`#${section.id}`}
-                    aria-current={isActive ? "location" : undefined}
-                    title={section.displayTitle}
-                    onClick={() => {
-                      trackSectionNavigated({
-                        section_id: section.id,
-                        source: "desktop_sidebar",
-                      });
-                      onSectionClick?.(section.id);
-                    }}
-                    className={[
-                      "report-sidebar__item",
-                      isActive && "is-active",
-                      isSubheading && "is-subheading",
-                    ]
-                      .filter(Boolean)
-                      .join(" ")}
-                  >
-                    <span className="report-sidebar__item-label">
-                      <span>{section.navTitle}</span>
-                    </span>
-                    <span className="report-sidebar__item-meta">
-                      <NavBadge tier={section.accessTier} />
-                    </span>
-                  </a>
-                );
-              })}
+                  return (
+                    <a
+                      key={item.id}
+                      href={`#${item.id}`}
+                      aria-current={isActive ? "location" : undefined}
+                      title={item.label}
+                      onClick={() => {
+                        trackSectionNavigated({
+                          section_id: item.id,
+                          source: "desktop_sidebar",
+                        });
+                        onSectionClick?.(item.id);
+                      }}
+                      className={["report-sidebar__item", isActive && "is-active"]
+                        .filter(Boolean)
+                        .join(" ")}
+                    >
+                      <span className="report-sidebar__item-label">
+                        <span>{item.label}</span>
+                      </span>
+                      <ReportNavBadge access={accessById?.get(item.id) ?? "free"} />
+                    </a>
+                  );
+                })}
+              </div>
             </div>
-          </nav>
-        </div>
+          ))}
+        </nav>
       </div>
     </aside>
   );
-};
-
-const NavBadge: FC<{ tier: AccessTier }> = ({ tier }) => {
-  // Essentials tier retired (pricing 2.0) — any paid tier shows "Full Report".
-  const label = tier === "free" ? "Free" : "Full Report";
-  // Essentials retired (pricing 2.0): every paid tier shows the SAME "Full
-  // Report" chip color (is-full) — no more blue/purple mix.
-  const modifier = tier === "free" ? "is-free" : "is-full";
-  return <span className={`report-nav-chip ${modifier}`}>{label}</span>;
 };
 
 export default ReportDesktopSidebar;

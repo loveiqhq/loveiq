@@ -4,17 +4,25 @@ import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState, type FC } from "react";
 import { trackSectionNavigated } from "@features/analytics/client";
 import { ReferFriendIcon, ShareReportIcon } from "./ReportActionIcons";
-import type { AccessTier, DisplayReportSection } from "./reportTitles";
+import ReportNavBadge, { type ReportNavAccess } from "./ReportNavBadge";
+import { REPORT_NAV_PARTS } from "./reportNav";
 
 interface Props {
   activeSectionId: string;
+  /** Same contract as the desktop sidebar — every item gets a badge. */
+  accessById?: ReadonlyMap<string, ReportNavAccess>;
   onReferFriend?: () => void;
   onSectionClick?: (sectionId: string) => void;
   onShareClick?: () => void;
   /** Fired each time the chapter drawer opens (for analytics). */
   onDrawerOpened?: () => void;
-  sections: DisplayReportSection[];
 }
+
+// Flat id → label lookup for the floating "Chapter: …" pill, from the same
+// curated nav the drawer renders (Figma 8719:9326).
+const NAV_LABEL_BY_ID = new Map<string, string>(
+  REPORT_NAV_PARTS.flatMap((part) => part.items.map((item) => [item.id, item.label] as const))
+);
 
 const PILL_SCROLL_THRESHOLD = 15;
 const PILL_HIDE_BREAKPOINT = 1280;
@@ -36,11 +44,11 @@ const ChevronDownIcon: FC = () => (
 
 const ReportMobileNav: FC<Props> = ({
   activeSectionId,
+  accessById,
   onReferFriend,
   onSectionClick,
   onShareClick,
   onDrawerOpened,
-  sections,
 }) => {
   const pillButtonRef = useRef<HTMLButtonElement>(null);
   const panelPillButtonRef = useRef<HTMLButtonElement>(null);
@@ -54,10 +62,10 @@ const ReportMobileNav: FC<Props> = ({
   const drawerOpen = phase === "open";
   const drawerClosing = phase === "closing";
 
-  const activeChapter = useMemo(() => {
-    const match = sections.find((section) => section.id === activeSectionId);
-    return match?.navTitle ?? sections[0]?.navTitle ?? "Welcome";
-  }, [activeSectionId, sections]);
+  const activeChapter = useMemo(
+    () => NAV_LABEL_BY_ID.get(activeSectionId) ?? "Overview",
+    [activeSectionId]
+  );
 
   // Pill scroll-hide. Intentionally no `drawerOpen` dep — guards the same
   // race-condition class we hit on the landing NavSection where including a
@@ -305,58 +313,51 @@ const ReportMobileNav: FC<Props> = ({
               className="report-chapter-panel__nav"
               data-lenis-prevent
             >
-              {sections.map((section, idx) => {
-                const isActive = activeSectionId === section.id;
-                const isSubheading = section.navType === "subheading";
-                // Cap stagger delay so the last items don't lag noticeably on
-                // a long chapter list. 8 × 24ms = 192ms total stagger window.
-                const delayIdx = Math.min(idx, 8);
-                return (
-                  <a
-                    key={section.id}
-                    href={`#${section.id}`}
-                    aria-current={isActive ? "location" : undefined}
-                    title={section.displayTitle}
-                    className={[
-                      "report-mobile-nav__link",
-                      "report-chapter-panel__item",
-                      isActive && "is-active",
-                      isSubheading && "is-subheading",
-                    ]
-                      .filter(Boolean)
-                      .join(" ")}
-                    style={{ animationDelay: `${delayIdx * 24}ms` }}
-                    onClick={() => {
-                      trackSectionNavigated({
-                        section_id: section.id,
-                        source: "mobile_drawer",
-                      });
-                      onSectionClick?.(section.id);
-                      closeDrawer();
-                    }}
-                  >
-                    <span className="report-mobile-nav__label">{section.navTitle}</span>
-                    <span className="report-mobile-nav__meta">
-                      <NavBadge tier={section.accessTier} />
-                    </span>
-                  </a>
-                );
-              })}
+              {REPORT_NAV_PARTS.map((part) => (
+                <div key={part.part} className="report-chapter-panel__part-group">
+                  <p className="report-chapter-panel__part">
+                    {part.part} · {part.label}
+                  </p>
+                  {part.items.map((item, idx) => {
+                    const isActive = activeSectionId === item.id;
+                    // Cap stagger so the last items don't lag on a long list.
+                    const delayIdx = Math.min(idx, 8);
+                    return (
+                      <a
+                        key={item.id}
+                        href={`#${item.id}`}
+                        aria-current={isActive ? "location" : undefined}
+                        title={item.label}
+                        className={[
+                          "report-mobile-nav__link",
+                          "report-chapter-panel__item",
+                          isActive && "is-active",
+                        ]
+                          .filter(Boolean)
+                          .join(" ")}
+                        style={{ animationDelay: `${delayIdx * 24}ms` }}
+                        onClick={() => {
+                          trackSectionNavigated({
+                            section_id: item.id,
+                            source: "mobile_drawer",
+                          });
+                          onSectionClick?.(item.id);
+                          closeDrawer();
+                        }}
+                      >
+                        <span className="report-mobile-nav__label">{item.label}</span>
+                        <ReportNavBadge access={accessById?.get(item.id) ?? "free"} />
+                      </a>
+                    );
+                  })}
+                </div>
+              ))}
             </nav>
           </div>
         </div>
       )}
     </div>
   );
-};
-
-const NavBadge: FC<{ tier: AccessTier }> = ({ tier }) => {
-  // Essentials tier retired (pricing 2.0) — any paid tier shows "Full Report".
-  const label = tier === "free" ? "Free" : "Full Report";
-  // Essentials retired (pricing 2.0): every paid tier shows the SAME "Full
-  // Report" chip color (is-full) — no more blue/purple mix.
-  const modifier = tier === "free" ? "is-free" : "is-full";
-  return <span className={`report-nav-chip ${modifier}`}>{label}</span>;
 };
 
 export default ReportMobileNav;

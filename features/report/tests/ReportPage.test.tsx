@@ -117,6 +117,16 @@ describe("ReportPage", () => {
           currentSexualSatisfaction: 3,
           importanceOfSex: 5,
         },
+        // Report 2.0 Growth section (Part IV, full_report tier). An unpaid
+        // client receives only the universal framing slots + locked:true; the
+        // per-archetype ladder is withheld server-side.
+        growthCopy: {
+          locked: true,
+          "gate.hook": "There's a clear next step waiting for you here.",
+          "learn.eyebrow": "What you will learn",
+          "learn.body": "The specific shifts that move you toward what you want.",
+        },
+        growthRungs: 5,
         pricingQuotes: {
           essentials: {
             id: 1,
@@ -357,16 +367,32 @@ describe("ReportPage", () => {
     expect(screen.getByRole("link", { name: /reload report/i })).toHaveAttribute("href", "/report");
   });
 
-  it("renders the Figma-style satisfaction status from the stored 01002 answer", () => {
+  it("does not render pre-2.0 sections the redesign retired", () => {
     mockUseReportData.mockReturnValue(buildSuccessResponse());
 
-    render(<ReportPage />);
+    const { container } = render(<ReportPage />);
 
-    expect(screen.getByText("Slightly dissatisfied")).toBeInTheDocument();
-    expect(screen.getByText("Slightly important")).toBeInTheDocument();
-    expect(
-      screen.getByText(/enough frustration, inconsistency, or disappointment/i)
-    ).toBeInTheDocument();
+    // Report 2.0 opens on the Part I divider — the Welcome intro (which carried
+    // the 01002 satisfaction status) and the LoveIQ Concept are gone, as are the
+    // sections folded into combined ones.
+    for (const id of [
+      "welcome",
+      "the_loveiq_concept",
+      "core_motivation",
+      "probability_of_other_archetypes",
+      "risk_orientation",
+      "relationship_form_preference",
+      "communication_style",
+      "background_know_how_arousal_desire_and_pleasure",
+      "typical_arousal_brakes_turn_offs_of_the_core_archetype",
+      "about_fantasies_desire_amp_pleasure_per_context",
+      "about_living_or_not_living_fantasies",
+    ]) {
+      expect(container.querySelector(`#${id}`)).toBeNull();
+    }
+    // The satisfaction label is still interpolated into copy via
+    // {{SEXUAL_SATISFACTION}} — it just no longer has its own intro section.
+    expect(screen.queryByText("Slightly dissatisfied")).not.toBeInTheDocument();
   });
 
   it("fires trackReportViewed once on data success with locked accessPlan + primaryArchetype", async () => {
@@ -425,10 +451,11 @@ describe("ReportPage", () => {
       );
 
       expect(growthSection).toBeInTheDocument();
-      // Locked premium HTML now renders inside `.report-themed-block__blurred`
-      // so the client can blur it visually behind the overlay (visual tease,
-      // not byte-level paywall — see plan "whimsical-greeting-popcorn").
-      const blurred = growthSection?.querySelector(".report-themed-block__blurred");
+      // The Report 2.0 Growth section renders its locked preview: a blurred
+      // stand-in ladder (aria-hidden) sitting behind the premium overlay — a
+      // visual tease, not a byte-level paywall (the real per-archetype ladder is
+      // withheld server-side).
+      const blurred = growthSection?.querySelector(".report-growth__preview-fade");
       expect(blurred).toBeInTheDocument();
       expect(blurred?.getAttribute("aria-hidden")).toBe("true");
       expect(growthSection?.querySelector(".report-premium-overlay")).toBeInTheDocument();

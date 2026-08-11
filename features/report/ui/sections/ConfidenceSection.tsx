@@ -1,0 +1,328 @@
+"use client";
+
+import { useEffect, useState, type CSSProperties, type FC } from "react";
+import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
+import { getReportTheme } from "../reportTheme";
+import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
+
+/**
+ * Server-resolved Confidence Level copy (`getReport2Section(name, "confidence")`),
+ * threaded as a prop because the 634KB copy module is server-only (see
+ * `app/api/report/route.ts` → `confidenceCopy`).
+ *
+ * GATING (Part II, essentials tier): UNLIKE the sibling premium sections, EVERY
+ * copy slot here is universal education (`gate.hook`, `edu.*`, `chartnote1`,
+ * `learn.*`) — always shipped. The per-archetype specificity is the confidence
+ * RESULT, which lives in config `confidence_strip` (see `ConfidenceStrip`), not
+ * in copy. `locked` tells the client whether the report is unlocked at the
+ * essentials tier; when locked, `confidenceStrip` arrives `null` (withheld
+ * server-side) and the client renders a blurred stand-in + PremiumOverlay.
+ */
+export interface ConfidenceCopy {
+  "gate.hook"?: string | null;
+  "edu.eyebrow"?: string | null;
+  "edu.teaser"?: string | null;
+  "edu.body.p1"?: string | null;
+  "edu.body.p2"?: string | null;
+  chartnote1?: string | null;
+  "learn.eyebrow"?: string | null;
+  "learn.body"?: string | null;
+  /** True when the report is not unlocked at the essentials tier. */
+  locked: boolean;
+}
+
+/**
+ * The reader's confidence RESULT from `getReport2Config(name).confidence_strip`.
+ * Only Spiritual Lover carries a real one today (`result_word` "Meaning-
+ * Contingent"); the other 13 are null in config, so `confidenceStrip` is null for
+ * them and the strip renders WITHOUT the reader's dot/result (never fabricated).
+ * `you_dot_x` is the Figma fine x — unused for dot placement (the fixed ranking
+ * below owns positions), kept for parity with the handoff.
+ */
+export interface ConfidenceStrip {
+  you_dot_x?: number | null;
+  result_word: string;
+}
+
+interface Props {
+  archetype: string;
+  copy: ConfidenceCopy | null;
+  /** Per-archetype result; null when locked OR when config has no strip. */
+  strip: ConfidenceStrip | null;
+  offerDeadline?: number;
+  onUnlock: () => void;
+  quote?: ReportPriceQuoteSnapshot | null;
+  sectionTitle: string;
+  tier?: PremiumOverlayTier;
+}
+
+const BookIcon: FC = () => (
+  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path
+      d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v15.5H5.5A1.5 1.5 0 0 1 4 18V5.5Z"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M20 5.5A1.5 1.5 0 0 0 18.5 4H13v15.5h5.5A1.5 1.5 0 0 0 20 18V5.5Z"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+/**
+ * The confidence strip: 14 archetype dots on a horizontal continuum, positions
+ * extracted from Figma node 8427:1577 (normalized x, 0..1 across the axis). The
+ * SAME layout renders for every viewer — only the highlighted "You" dot changes.
+ * The Figma labels ONLY three: the two named endpoints (Quiet Withdrawer, left;
+ * Radiant Performer, right) and the reader's own dot. The other 11 stay anonymous
+ * colored markers — exactly as the frame shows — so no archetype→dot identity is
+ * fabricated. `youX` is the reader's own dot x (Spiritual Lover = 0.4909 per
+ * Figma); when null, the reader's dot/pill is omitted (config had no strip).
+ */
+const DOT_XS = [
+  0.0727, 0.1418, 0.2255, 0.3255, 0.4473, 0.4909, 0.5473, 0.64, 0.7109, 0.7891, 0.8364, 0.8855,
+  0.9291, 0.9691,
+] as const;
+
+// The reader's dot for Spiritual Lover sits at index 5 (x 0.4909) in the Figma.
+const SPIRITUAL_LOVER_YOU_X = 0.4909;
+
+// The two Figma-labelled endpoints (first + last dot x, from DOT_XS).
+const END_LABELS: { x: number; text: string }[] = [
+  { x: 0.0727, text: "Quiet Withdrawer" },
+  { x: 0.9691, text: "Radiant Performer" },
+];
+
+/** #RRGGBB → "r g b" for rgb() with slash-alpha halos. */
+function hexToRgbTriplet(hex: string): string {
+  const c = hex.replace("#", "");
+  const n = Number.parseInt(
+    c.length === 3
+      ? c
+          .split("")
+          .map((ch) => ch + ch)
+          .join("")
+      : c,
+    16
+  );
+  return `${(n >> 16) & 255} ${(n >> 8) & 255} ${n & 255}`;
+}
+
+/**
+ * The confidence continuum (inline CSS strip, per Figma 8427:1577). `youX` marks
+ * the reader's dot when known; `youAccent` colours it. `blurred` renders the
+ * gated stand-in (real result withheld). Anonymous dots use a neutral tint.
+ */
+const ConfidenceStripGraphic: FC<{
+  youX: number | null;
+  youAccent: string;
+  youLabel: string;
+}> = ({ youX, youAccent, youLabel }) => {
+  const [isAnimated, setIsAnimated] = useState(false);
+  useEffect(() => {
+    const rafId = requestAnimationFrame(() => setIsAnimated(true));
+    return () => cancelAnimationFrame(rafId);
+  }, []);
+
+  return (
+    <div
+      className={`report-confidence__strip${isAnimated ? " is-animated" : ""}`}
+      role="img"
+      aria-label="Where your sexual confidence sits among the archetypes"
+    >
+      <div className="report-confidence__endpoints" aria-hidden="true">
+        {END_LABELS.map((e) => (
+          <span
+            key={e.text}
+            className="report-confidence__endpoint"
+            style={{ "--dot-x": `${e.x * 100}%` } as CSSProperties}
+          >
+            {e.text}
+          </span>
+        ))}
+      </div>
+
+      <div className="report-confidence__axis" aria-hidden="true">
+        <span className="report-confidence__axis-line" />
+        {DOT_XS.map((x, i) => {
+          const isYou = youX !== null && Math.abs(x - youX) < 0.0001;
+          const style = {
+            "--dot-x": `${x * 100}%`,
+            "--dot-order": i,
+            ...(isYou ? { "--dot-accent-rgb": hexToRgbTriplet(youAccent) } : {}),
+          } as CSSProperties;
+          return (
+            <span
+              key={i}
+              className={`report-confidence__dot${isYou ? " is-you" : ""}`}
+              style={style}
+            >
+              {isYou && <span className="report-confidence__dot-pill">You</span>}
+            </span>
+          );
+        })}
+      </div>
+
+      <div className="report-confidence__ends" aria-hidden="true">
+        <span>steadier when conditions are met</span>
+        <span>steady by default</span>
+      </div>
+
+      {youX !== null ? <span className="report-confidence__sr-only">{youLabel}</span> : null}
+    </div>
+  );
+};
+
+const ConfidenceSection: FC<Props> = ({
+  archetype,
+  copy,
+  strip,
+  offerDeadline,
+  onUnlock,
+  quote = null,
+  sectionTitle,
+  tier = "essentials",
+}) => {
+  const [expanded, setExpanded] = useState(false);
+  if (!copy) return null;
+
+  const locked = copy.locked;
+  const accent = getReportTheme(archetype).accent;
+  // Reader's dot x: Spiritual Lover per Figma; other archetypes have no config
+  // strip, so no dot is placed (never fabricated).
+  const youX = strip ? SPIRITUAL_LOVER_YOU_X : null;
+
+  const eduParas = [copy["edu.body.p1"], copy["edu.body.p2"]].filter((p): p is string => !!p);
+  const hasEdu = !!copy["edu.teaser"] || eduParas.length > 0;
+
+  return (
+    <div className="report-confidence">
+      <h3 className="report-confidence__heading">Confidence Level</h3>
+
+      {copy["learn.body"] ? (
+        <div className="report-confidence__learn-pill-wrap">
+          <span className="report-confidence__learn-pill">
+            <span className="report-confidence__learn-pill-icon" aria-hidden="true">
+              <BookIcon />
+            </span>
+            {copy["learn.eyebrow"] ?? "What you will learn"}
+          </span>
+          <p className="report-confidence__learn-body">{copy["learn.body"]}</p>
+        </div>
+      ) : null}
+
+      <article className="report-confidence__card">
+        <p className="report-confidence__eyebrow">Your Sexual Confidence</p>
+
+        {locked ? (
+          <>
+            {copy["gate.hook"] ? (
+              <p className="report-confidence__hook">{copy["gate.hook"]}</p>
+            ) : null}
+            <div className="report-confidence__preview">
+              <div className="report-confidence__preview-fade" aria-hidden="true">
+                <p className="report-confidence__result-word">Meaning-Contingent</p>
+                <p className="report-confidence__result-def">
+                  How confident you feel initiating, expressing, and staying present during intimacy
+                  — not general self-confidence. Yours isn&rsquo;t low or high; it&rsquo;s
+                  conditional on the moment feeling sincere.
+                </p>
+                <ConfidenceStripGraphic
+                  youX={SPIRITUAL_LOVER_YOU_X}
+                  youAccent={accent}
+                  youLabel={`You — the ${archetype}`}
+                />
+              </div>
+              <PremiumOverlay
+                archetype={archetype}
+                sectionTitle={sectionTitle}
+                tier={tier}
+                quote={quote}
+                offerDeadline={offerDeadline}
+                onUnlock={onUnlock}
+              />
+            </div>
+          </>
+        ) : (
+          <>
+            {strip ? (
+              <div className="report-confidence__result">
+                <p className="report-confidence__result-word">{strip.result_word}</p>
+                <span className="report-confidence__result-divider" aria-hidden="true" />
+                <p className="report-confidence__result-def">
+                  How confident you feel initiating, expressing, and staying present during intimacy
+                  — not general self-confidence.
+                </p>
+              </div>
+            ) : null}
+
+            <ConfidenceStripGraphic
+              youX={youX}
+              youAccent={accent}
+              youLabel={`You — the ${archetype}`}
+            />
+
+            {copy.chartnote1 ? (
+              <p className="report-confidence__chartnote">{copy.chartnote1}</p>
+            ) : null}
+          </>
+        )}
+
+        {hasEdu ? (
+          <div className="report-confidence__details">
+            <button
+              type="button"
+              className="report-confidence__details-summary"
+              aria-expanded={expanded}
+              onClick={() => setExpanded((v) => !v)}
+            >
+              <span className="report-confidence__details-icon" aria-hidden="true">
+                <BookIcon />
+              </span>
+              <span className="report-confidence__details-eyebrow">
+                {copy["edu.eyebrow"] ?? "Learn: sexual confidence"}
+              </span>
+              <span
+                className={`report-confidence__details-chevron${expanded ? " is-open" : ""}`}
+                aria-hidden="true"
+              >
+                ⌄
+              </span>
+            </button>
+
+            {copy["edu.teaser"] && !expanded ? (
+              <div className="report-confidence__details-peek">
+                <p className="report-confidence__details-teaser">{copy["edu.teaser"]}</p>
+                {eduParas.length > 0 ? (
+                  <button
+                    type="button"
+                    className="report-confidence__peek-cta"
+                    onClick={() => setExpanded(true)}
+                  >
+                    Read the full explanation
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+
+            {expanded ? (
+              <div className="report-confidence__details-body">
+                {eduParas.map((para, i) => (
+                  <p key={i} className="report-confidence__details-para">
+                    {para}
+                  </p>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </article>
+    </div>
+  );
+};
+
+export default ConfidenceSection;

@@ -31,11 +31,7 @@ describe("CoreArchetypeSection", () => {
 
   it("renders the archetype-specific theme content", () => {
     const { container } = render(
-      <CoreArchetypeSection
-        archetypeHtml="<p>Power-specific narrative.</p>"
-        matchScore={88}
-        theme={reportThemes["Authority Conductor"]}
-      />
+      <CoreArchetypeSection matchScore={88} theme={reportThemes["Authority Conductor"]} />
     );
 
     const motto = container.querySelector(".report-hero-card__motto");
@@ -46,14 +42,15 @@ describe("CoreArchetypeSection", () => {
     expect(screen.getByText(/^power$/i)).toBeInTheDocument();
     expect(screen.getByText(/commanding/i)).toBeInTheDocument();
     expect(screen.getByText(/dominant/i)).toBeInTheDocument();
-    expect(screen.getByText(/power-specific narrative/i)).toBeInTheDocument();
+    // The hero card ends at the progress rows — Figma 8427:801 has no prose
+    // block after it. The pre-2.0 `archetypeHtml` dump that used to render here
+    // was the "text from the previous report" showing under the new design.
+    expect(container.querySelector(".report-prose")).toBeNull();
   });
 
   it("groups long mottos at the dash so wrap points stay phrase-safe", () => {
     for (const theme of Object.values(reportThemes)) {
-      const { container, unmount } = render(
-        <CoreArchetypeSection archetypeHtml={null} matchScore={80} theme={theme} />
-      );
+      const { container, unmount } = render(<CoreArchetypeSection matchScore={80} theme={theme} />);
 
       const motto = container.querySelector(".report-hero-card__motto");
       const chunks = container.querySelectorAll(".report-hero-card__motto-chunk");
@@ -78,11 +75,7 @@ describe("CoreArchetypeSection", () => {
 
   it("renders the motto as its own header row instead of inside the title column", () => {
     const { container } = render(
-      <CoreArchetypeSection
-        archetypeHtml={null}
-        matchScore={91}
-        theme={reportThemes["Authority Conductor"]}
-      />
+      <CoreArchetypeSection matchScore={91} theme={reportThemes["Authority Conductor"]} />
     );
 
     const header = container.querySelector(".report-hero-card__header");
@@ -99,18 +92,13 @@ describe("CoreArchetypeSection", () => {
   });
 
   it("uses the dedicated 16x14 attachment heart icon footprint", () => {
-    render(
-      <CoreArchetypeSection
-        archetypeHtml={null}
-        matchScore={76}
-        theme={reportThemes["Explorer of Edges"]}
-      />
-    );
+    render(<CoreArchetypeSection matchScore={76} theme={reportThemes["Explorer of Edges"]} />);
 
+    // The trait label is now the fuller "Attachment — how closeness feels"
+    // (Report 2.0 hero restyle); match on it and climb to the label row.
     const attachmentLabel = screen
-      .getAllByText(/^attachment$/i)
-      .find((node) => node.closest(".report-trait__label"))
-      ?.closest(".report-trait__label");
+      .getByText(/attachment.*closeness feels/i)
+      .closest(".report-trait__label");
     const icon = attachmentLabel?.querySelector("svg");
 
     expect(icon).toBeInTheDocument();
@@ -166,11 +154,7 @@ describe("CoreArchetypeSection match strength animation", () => {
 
   it("starts match value at 0 and counts up to final value on mount", async () => {
     const { container } = render(
-      <CoreArchetypeSection
-        archetypeHtml={null}
-        matchScore={88}
-        theme={reportThemes["Authority Conductor"]}
-      />
+      <CoreArchetypeSection matchScore={88} theme={reportThemes["Authority Conductor"]} />
     );
 
     const matchValue = container.querySelector(".report-hero-card__match-value");
@@ -193,11 +177,7 @@ describe("CoreArchetypeSection match strength animation", () => {
     stubMatchMedia(true);
 
     const { container } = render(
-      <CoreArchetypeSection
-        archetypeHtml={null}
-        matchScore={72}
-        theme={reportThemes["Authority Conductor"]}
-      />
+      <CoreArchetypeSection matchScore={72} theme={reportThemes["Authority Conductor"]} />
     );
 
     const matchValue = container.querySelector(".report-hero-card__match-value");

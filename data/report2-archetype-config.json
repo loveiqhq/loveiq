@@ -1,0 +1,503 @@
+{
+  "_schema": "One object per archetype. Prose lives in report2-copy; everything visual/data-driven lives here. SL = complete reference. SS/SC: written prose, config partially derived; geometry (dot/curve coordinates, meters, hero pcts, orderings) is null where it must come from Figma components or v5 scored data — see STATS-AUDIT.md. The 11 remaining archetypes are accent+name stubs only.",
+  "_inferred_marker": "Fields whose value was inferred from copy/stats rather than sourced from the sample or scored data carry a sibling key <field>__inferred: true.",
+  "spiritual-lover": {
+    "name": "Spiritual Lover",
+    "accent": {
+      "base": "#9D8AD7",
+      "ink": "#795FC8",
+      "tintBg": "rgb(157 138 215 / .06)"
+    },
+    "families": {
+      "energy": "wave",
+      "arousal": "responsive",
+      "initiation": "lost-in-translation",
+      "attachment": "secure-anxious",
+      "insecurity_cue": "absence",
+      "power_zone": "switch"
+    },
+    "hero": {
+      "match_pct": 71.7,
+      "risk_segments": 1,
+      "confidence_segments": 2,
+      "traits": {
+        "communication": "Depth-first",
+        "initiation": "Responsive",
+        "attachment": "Secure",
+        "power": "Switch"
+      }
+    },
+    "energy_readouts": {
+      "energy": 2,
+      "risk": 1,
+      "endurance": 3
+    },
+    "energy_scale_graph": {
+      "highlighted_curve": "wave-slow-build",
+      "note": "all 14 curves fixed; per archetype only the highlighted one + label change"
+    },
+    "insecurity_graph": {
+      "highlighted_curve": "early-hot-riser",
+      "y_axis": "sensitivity to absence",
+      "x_axis": "time"
+    },
+    "attachment_plane": {
+      "home": [150, 372],
+      "strain": [182, 176],
+      "home_label": "ORDINARY DAYS",
+      "strain_label": "UNDER DISCONNECTION",
+      "accent_corner": "SECURE",
+      "drift": "one-way"
+    },
+    "confidence_strip": {
+      "you_dot_x": 310,
+      "result_word": "Meaning-Contingent"
+    },
+    "importance_strip": {
+      "you_dot_x": 438,
+      "band": "High",
+      "_note": "band selects which universal Low/Medium/High description shows; the archetype dot is labelled on the strip"
+    },
+    "arousal_acts": ["The build", "The dip", "The return"],
+    "initiation_variant": "presence-led",
+    "loop": {
+      "name": "The Waiting Loop",
+      "steps": 3
+    },
+    "fantasy_map": {
+      "note": "dot positions + 8-label set per archetype from scored data",
+      "labels_min_per_quadrant": 1
+    },
+    "reward_order": ["oxytocin", "endorphins", "dopamine", "adrenaline"],
+    "reward_roles": ["lead", "support", "amplifier", "disruptor"],
+    "reward_meters": [88, 56, 30, 12],
+    "relationship_fit": {
+      "monogamy": 3,
+      "deep_monogamy": 3,
+      "structured_openness": 2,
+      "monogamish": 1.5,
+      "open_no_priority": 0.5,
+      "polyamory_no_priority": 0.5,
+      "dadt": 0.5,
+      "casual": 0.5,
+      "anarchy": 0.5
+    },
+    "love_language_order": [
+      "presence_time",
+      "reverent_touch",
+      "sincere_words",
+      "acts_of_care",
+      "gifts"
+    ],
+    "growth_rungs": 5,
+    "stage_default": "Evolving / Transcending",
+    "stats": {
+      "arousal": "52%",
+      "initiation_first_move": "1 in 10",
+      "reward_lead": "57%",
+      "compare1": "1 in 8 men",
+      "compare2": "1 in 5 women",
+      "compare3_runner_up_example": "68%"
+    },
+    "_stats_note": "Authoritative stat copy lives in report2-copy.json; compare3 is per-user dynamic (example only)."
+  },
+  "spark-seeker": {
+    "name": "Spark Seeker",
+    "accent": {
+      "base": "#f97316",
+      "ink": "#c2542f",
+      "tintBg": "rgb(249 115 22 / .06)"
+    },
+    "families": {
+      "energy": "spike",
+      "arousal": "spontaneous",
+      "initiation": "heard-too-loudly",
+      "attachment": "secure-avoidant",
+      "insecurity_cue": "engulfment",
+      "power_zone": "switch"
+    },
+    "arousal_acts": ["The ignition", "The fade", "The rekindle"],
+    "initiation_variant": "play-led",
+    "initiation_variant__inferred": true,
+    "loop": {
+      "name": "The Novelty Loop",
+      "steps": 3
+    },
+    "reward_order": ["dopamine", "adrenaline", "oxytocin", "endorphins"],
+    "reward_roles": ["lead", "support", "amplifier", "settler"],
+    "reward_meters": null,
+    "stats": {
+      "arousal": "67%",
+      "initiation_first_move": "1 in 5",
+      "reward_lead": "66%",
+      "compare1": "1 in 9",
+      "compare2": "39%",
+      "compare3_runner_up_example": "57%"
+    },
+    "hero": null,
+    "energy_readouts": null,
+    "energy_scale_graph": null,
+    "insecurity_graph": null,
+    "attachment_plane": null,
+    "confidence_strip": null,
+    "importance_strip": {
+      "band": "High",
+      "_note": "band selects which universal Low/Medium/High description shows; the archetype dot is labelled on the strip"
+    },
+    "fantasy_map": null,
+    "relationship_fit": null,
+    "love_language_order": null,
+    "growth_rungs": null,
+    "stage_default": null,
+    "_stats_note": "Authoritative stat copy lives in report2-copy.json; compare3 is per-user dynamic (example only)."
+  },
+  "sensual-connector": {
+    "name": "Sensual Connector",
+    "accent": {
+      "base": "#ef4444",
+      "ink": "#b83a3a",
+      "tintBg": "rgb(239 68 68 / .06)"
+    },
+    "families": {
+      "energy": "wave",
+      "arousal": "responsive",
+      "initiation": "lost-in-translation",
+      "attachment": "secure-anxious",
+      "insecurity_cue": "absence",
+      "power_zone": "switch"
+    },
+    "arousal_acts": ["Warm-up", "Wave", "Afterglow"],
+    "arousal_acts__inferred": true,
+    "initiation_variant": "invitation-led",
+    "initiation_variant__inferred": true,
+    "loop": {
+      "name": "The Harmony Loop",
+      "steps": 3
+    },
+    "reward_order": ["oxytocin", "endorphins", "dopamine", "adrenaline"],
+    "reward_order__inferred": true,
+    "reward_roles": null,
+    "reward_meters": null,
+    "stats": {
+      "arousal": "47%",
+      "initiation_first_move": "1 in 6",
+      "reward_lead": "47%",
+      "compare1": "1 in 10 women",
+      "compare2": "68%",
+      "compare3_runner_up_example": "64%"
+    },
+    "hero": null,
+    "energy_readouts": null,
+    "energy_scale_graph": null,
+    "insecurity_graph": null,
+    "attachment_plane": null,
+    "confidence_strip": null,
+    "importance_strip": {
+      "band": "Medium",
+      "_note": "band selects which universal Low/Medium/High description shows; the archetype dot is labelled on the strip"
+    },
+    "fantasy_map": null,
+    "relationship_fit": null,
+    "love_language_order": null,
+    "growth_rungs": null,
+    "stage_default": null,
+    "_stats_note": "Authoritative stat copy lives in report2-copy.json; compare3 is per-user dynamic (example only)."
+  },
+  "relational-nurturer": {
+    "name": "Relational Nurturer",
+    "accent": {
+      "base": "#10b981",
+      "ink": "#10b981",
+      "_note": "accent sourced from archetypePresentation.ts dotColor(base)/iconBg(ink); report accent not yet defined"
+    },
+    "_stub": true,
+    "families": {
+      "energy": "steady",
+      "arousal": "responsive",
+      "initiation": "lost-in-translation",
+      "attachment": "secure-anxious",
+      "insecurity_cue": "depletion",
+      "power_zone": "switch"
+    },
+    "hero": null,
+    "arousal_acts": null,
+    "loop": null,
+    "reward_order": null,
+    "stats": null,
+    "importance_strip": {
+      "band": "High",
+      "_note": "band selects which universal Low/Medium/High description shows; the archetype dot is labelled on the strip"
+    }
+  },
+  "radiant-performer": {
+    "name": "Radiant Performer",
+    "accent": {
+      "base": "#facc15",
+      "ink": "#e6b65c",
+      "_note": "accent sourced from archetypePresentation.ts dotColor(base)/iconBg(ink); report accent not yet defined"
+    },
+    "_stub": true,
+    "families": {
+      "energy": "spike",
+      "arousal": "spontaneous",
+      "initiation": "heard-too-loudly",
+      "attachment": "secure-anxious",
+      "insecurity_cue": "evaluation",
+      "power_zone": "switch"
+    },
+    "hero": null,
+    "arousal_acts": null,
+    "loop": null,
+    "reward_order": null,
+    "stats": null,
+    "importance_strip": {
+      "band": "High",
+      "_note": "band selects which universal Low/Medium/High description shows; the archetype dot is labelled on the strip"
+    }
+  },
+  "explorer-of-edges": {
+    "name": "Explorer of Edges",
+    "accent": {
+      "base": "#ec4899",
+      "ink": "#ff2e63",
+      "_note": "accent sourced from archetypePresentation.ts dotColor(base)/iconBg(ink); report accent not yet defined"
+    },
+    "_stub": true,
+    "families": {
+      "energy": "spike",
+      "arousal": "spontaneous",
+      "initiation": "heard-too-loudly",
+      "attachment": "secure-avoidant",
+      "insecurity_cue": "evaluation",
+      "power_zone": "dominant-leaning"
+    },
+    "hero": null,
+    "arousal_acts": null,
+    "loop": null,
+    "reward_order": null,
+    "stats": null,
+    "importance_strip": {
+      "band": "High",
+      "_note": "band selects which universal Low/Medium/High description shows; the archetype dot is labelled on the strip"
+    }
+  },
+  "curious-apprentice": {
+    "name": "Curious Apprentice",
+    "accent": {
+      "base": "#06b6d4",
+      "ink": "#6faed9",
+      "_note": "accent sourced from archetypePresentation.ts dotColor(base)/iconBg(ink); report accent not yet defined"
+    },
+    "_stub": true,
+    "families": {
+      "energy": "conditional",
+      "arousal": "contextual",
+      "initiation": "lost-in-translation",
+      "attachment": "secure-anxious",
+      "insecurity_cue": "evaluation",
+      "power_zone": "switch"
+    },
+    "hero": null,
+    "arousal_acts": null,
+    "loop": null,
+    "reward_order": null,
+    "stats": null,
+    "importance_strip": {
+      "band": "Medium",
+      "_note": "band selects which universal Low/Medium/High description shows; the archetype dot is labelled on the strip"
+    }
+  },
+  "minimalist-companion": {
+    "name": "Minimalist Companion",
+    "accent": {
+      "base": "#94a3b8",
+      "ink": "#b5b2ad",
+      "_note": "accent sourced from archetypePresentation.ts dotColor(base)/iconBg(ink); report accent not yet defined"
+    },
+    "_stub": true,
+    "families": {
+      "energy": "steady",
+      "arousal": "responsive",
+      "initiation": "lost-in-translation",
+      "attachment": "secure-avoidant",
+      "insecurity_cue": "engulfment",
+      "power_zone": "low-polarity"
+    },
+    "hero": null,
+    "arousal_acts": null,
+    "loop": null,
+    "reward_order": null,
+    "stats": null,
+    "importance_strip": {
+      "band": "Low",
+      "_note": "band selects which universal Low/Medium/High description shows; the archetype dot is labelled on the strip"
+    }
+  },
+  "emotional-voyeur": {
+    "name": "Emotional Voyeur",
+    "accent": {
+      "base": "#2ef6e3",
+      "ink": "#2ef6e3",
+      "_note": "accent sourced from archetypePresentation.ts dotColor(base)/iconBg(ink); report accent not yet defined"
+    },
+    "_stub": true,
+    "families": {
+      "energy": "conditional",
+      "arousal": "contextual",
+      "initiation": "lost-in-translation",
+      "attachment": "secure-avoidant",
+      "insecurity_cue": "engulfment",
+      "power_zone": "switch"
+    },
+    "hero": null,
+    "arousal_acts": null,
+    "loop": null,
+    "reward_order": null,
+    "stats": null,
+    "importance_strip": {
+      "band": "Medium",
+      "_note": "band selects which universal Low/Medium/High description shows; the archetype dot is labelled on the strip"
+    }
+  },
+  "authority-conductor": {
+    "name": "Authority Conductor",
+    "accent": {
+      "base": "#eab308",
+      "ink": "#ff9f1c",
+      "_note": "accent sourced from archetypePresentation.ts dotColor(base)/iconBg(ink); report accent not yet defined"
+    },
+    "_stub": true,
+    "families": {
+      "energy": "spike",
+      "arousal": "contextual",
+      "initiation": "heard-too-loudly",
+      "attachment": "secure-avoidant",
+      "insecurity_cue": "destabilisation",
+      "power_zone": "dominant-leaning"
+    },
+    "hero": null,
+    "arousal_acts": null,
+    "loop": null,
+    "reward_order": null,
+    "stats": null,
+    "importance_strip": {
+      "band": "High",
+      "_note": "band selects which universal Low/Medium/High description shows; the archetype dot is labelled on the strip"
+    }
+  },
+  "loyal-ritualist": {
+    "name": "Loyal Ritualist",
+    "accent": {
+      "base": "#22c55e",
+      "ink": "#2aff8f",
+      "_note": "accent sourced from archetypePresentation.ts dotColor(base)/iconBg(ink); report accent not yet defined"
+    },
+    "_stub": true,
+    "families": {
+      "energy": "steady",
+      "arousal": "contextual",
+      "initiation": "lost-in-translation",
+      "attachment": "secure-anxious",
+      "insecurity_cue": "abandonment",
+      "power_zone": "low-polarity"
+    },
+    "hero": null,
+    "arousal_acts": null,
+    "loop": null,
+    "reward_order": null,
+    "stats": null,
+    "importance_strip": {
+      "band": "Low",
+      "_note": "band selects which universal Low/Medium/High description shows; the archetype dot is labelled on the strip"
+    }
+  },
+  "tender-devotee": {
+    "name": "Tender Devotee",
+    "accent": {
+      "base": "#ef46c5",
+      "ink": "#e7b3c2",
+      "_note": "accent sourced from archetypePresentation.ts dotColor(base)/iconBg(ink); report accent not yet defined"
+    },
+    "_stub": true,
+    "families": {
+      "energy": "conditional",
+      "arousal": "responsive",
+      "initiation": "lost-in-translation",
+      "attachment": "secure-anxious",
+      "insecurity_cue": "abandonment",
+      "power_zone": "switch"
+    },
+    "hero": null,
+    "arousal_acts": null,
+    "loop": null,
+    "reward_order": null,
+    "stats": null,
+    "importance_strip": {
+      "band": "Medium",
+      "_note": "band selects which universal Low/Medium/High description shows; the archetype dot is labelled on the strip"
+    }
+  },
+  "analytical-sexualist": {
+    "name": "Analytical Sexualist",
+    "accent": {
+      "base": "#6366f1",
+      "ink": "#6a00ff",
+      "_note": "accent sourced from archetypePresentation.ts dotColor(base)/iconBg(ink); report accent not yet defined"
+    },
+    "_stub": true,
+    "families": {
+      "energy": "conditional",
+      "arousal": "contextual",
+      "initiation": "lost-in-translation",
+      "attachment": "secure-avoidant",
+      "insecurity_cue": "evaluation",
+      "power_zone": "switch"
+    },
+    "hero": null,
+    "arousal_acts": null,
+    "loop": null,
+    "reward_order": null,
+    "stats": null,
+    "importance_strip": {
+      "band": "Medium",
+      "_note": "band selects which universal Low/Medium/High description shows; the archetype dot is labelled on the strip"
+    }
+  },
+  "quiet-withdrawer": {
+    "name": "Quiet Withdrawer",
+    "accent": {
+      "base": "#c9f7f5",
+      "ink": "#c9f7f5",
+      "_note": "accent sourced from archetypePresentation.ts dotColor(base)/iconBg(ink); report accent not yet defined"
+    },
+    "_stub": true,
+    "families": {
+      "energy": "wave",
+      "arousal": "responsive",
+      "initiation": "lost-in-translation",
+      "attachment": "avoidant",
+      "insecurity_cue": "engulfment",
+      "power_zone": "switch"
+    },
+    "hero": null,
+    "arousal_acts": null,
+    "loop": null,
+    "reward_order": null,
+    "stats": null,
+    "importance_strip": {
+      "band": "Low",
+      "_note": "band selects which universal Low/Medium/High description shows; the archetype dot is labelled on the strip"
+    }
+  },
+  "_families_note": "families derived from the finished copy: arousal + attachment read directly from each archetype's result word; initiation (direct=heard-too-loudly vs indirect=lost-in-translation) from the scalability doc; energy mapped from arousal family (responsive->wave, spontaneous->spike, contextual->conditional) and insecurity_direction (self vs outward monitoring) are INFERRED — confirm against the v5 scoring model. Chart geometry (curves/dots/meters) remains null and is sourced from the Figma components.",
+  "_decisions_2026_07_30": {
+    "1_families_source": "RATIFIED: families for all 14 derived from the report chapter masters (ch.8 attachment, ch.9 insecurity, ch.13 energy, ch.15 power, ch.21 arousal, ch.22 initiation). No longer provisional. If v5 scoring later disagrees it is a one-line change per archetype.",
+    "2_insecurity": "6 cue families: absence, abandonment, evaluation, engulfment, depletion, destabilisation. families.insecurity_direction REMOVED, replaced by families.insecurity_cue. Each family owns its x-axis label too.",
+    "3_attachment": "3 values only: secure-anxious, secure-avoidant, avoidant. secure / secure-contextual / secure-mixed removed - ch.8 assigns none of them. Spiritual Lover is secure-anxious.",
+    "4_power": "Power is NOT a family system - 14 unique positions on a 2-axis map. families.power_zone is a region label only. The map must name ONLY the reader own dot; the other 13 stay anonymous.",
+    "5_importance": "3 bands (Low / Medium / High) in importance_strip.band. The band description is UNIVERSAL - one text per band, not per archetype. The archetype dot is labelled on the strip.",
+    "6_beliefs": "Spark Seeker 4th positive belief = \"Playfulness is real intimacy\" (ch.11 has it as prose, not a quote). Kept as written.",
+    "7_relational_nurturer_iconBg": "null in production; Eman to set at build.",
+    "8_ink_tokens": "Eman has these."
+  }
+}

@@ -1,0 +1,262 @@
+"use client";
+
+import type { FC } from "react";
+import { archetypeSlug, getReport2Config, type Report2CopySlug } from "@/data/report2-config";
+import { snapshotCards } from "@/data/report2-snapshot-cards";
+import {
+  AROUSAL_CURVES,
+  resolveArousalFamily,
+  SNAPSHOT_DOT_R,
+  SNAPSHOT_STROKE,
+  SNAPSHOT_VB_WIDTH,
+  type ArousalFamily,
+} from "../arousalCurves";
+
+/**
+ * Server-resolved snapshot copy slots (`getReport2Section(name, "snapshot")`).
+ * The 634KB copy module is server-only, so these are threaded down as props
+ * (see `app/api/report/route.ts` → `snapshotCopy`). Every field is optional so
+ * an archetype with a config stub still renders without throwing.
+ */
+export interface SnapshotCopy {
+  "compare1.stat"?: string;
+  "compare1.caption"?: string;
+  "compare2.stat"?: string;
+  "compare2.caption"?: string;
+  "compare3.stat"?: string;
+  "compare3.caption"?: string;
+  "stage.subline"?: string;
+}
+
+interface Props {
+  archetype: string;
+  copy: SnapshotCopy | null;
+}
+
+function capitalizeWord(value: string): string {
+  return value.length ? value.charAt(0).toUpperCase() + value.slice(1) : value;
+}
+
+/**
+ * Card 1 donut — geometry taken from Figma `8719:8893/8894`: a 46px ring,
+ * 5.06px stroke, faint #9D8AD7 track at 18%, and a HALF (180°) accent arc
+ * starting at 12 o'clock. r = (46 − 5.06) / 2 = 20.47, so the circumference is
+ * 2π·20.47 ≈ 128.6 and half of it is ≈ 64.3.
+ */
+const HiddenEdgeArc: FC = () => (
+  <svg viewBox="0 0 46 46" fill="none" className="report-snapshot-card__viz" aria-hidden="true">
+    <circle cx="23" cy="23" r="20.47" stroke="#9d8ad7" strokeOpacity="0.18" strokeWidth="5.06" />
+    <circle
+      cx="23"
+      cy="23"
+      r="20.47"
+      stroke="#9d8ad7"
+      strokeWidth="5.06"
+      strokeDasharray="64.3 128.6"
+      transform="rotate(-90 23 23)"
+    />
+  </svg>
+);
+
+/**
+ * Card 2 arousal curve — the path, stroke and gradient are verbatim from Figma
+ * `8719:8914` (vector) and `8719:8915` (dot). The previous version was a
+ * hand-drawn S with no gradient and the dot floating off the line; here the dot
+ * sits exactly on the curve's inflection (73.25, 18.25), which is where Figma
+ * places it.
+ */
+const ArousalWave: FC<{ family: ArousalFamily }> = ({ family }) => {
+  const curve = AROUSAL_CURVES[family];
+  const gradientId = `snapshotArousal-${family}`;
+
+  return (
+    <svg
+      // Each family's arc has its own height in Figma (33.5 / 30.71 / 26.68),
+      // so the viewBox travels with the path — a shared height would squash or
+      // letterbox two of the three.
+      viewBox={`0 0 ${SNAPSHOT_VB_WIDTH} ${curve.snapshot.vbHeight}`}
+      fill="none"
+      className="report-snapshot-card__viz report-snapshot-card__viz--curve"
+      aria-hidden="true"
+    >
+      <defs>
+        <linearGradient
+          id={gradientId}
+          x1="1.25"
+          y1={curve.snapshot.vbHeight / 2}
+          x2="113.25"
+          y2={curve.snapshot.vbHeight / 2}
+          gradientUnits="userSpaceOnUse"
+        >
+          <stop stopColor={curve.from} />
+          <stop offset="1" stopColor={curve.to} />
+        </linearGradient>
+      </defs>
+      <path
+        className="report-draw-line"
+        pathLength={1}
+        d={curve.snapshot.path}
+        stroke={`url(#${gradientId})`}
+        strokeWidth={SNAPSHOT_STROKE}
+        strokeLinecap="round"
+      />
+      <circle
+        className="report-draw-dot"
+        cx={curve.snapshot.dot.x}
+        cy={curve.snapshot.dot.y}
+        r={SNAPSHOT_DOT_R}
+        fill={curve.dotColor}
+      />
+    </svg>
+  );
+};
+
+/**
+ * Pull the N out of a "1 in 7 men" stat so the dot row can VISUALISE the ratio,
+ * which is the whole point of it in Figma (`8719:8941` shows 7 dots beside
+ * "1 in 7 men", `8719:8955` shows 5 beside "1 in 5 women"). This was previously
+ * a fixed 7 dots, so a "1 in 8" reader still saw 7 and the graphic contradicted
+ * the number next to it. Clamped to a sane row length.
+ */
+function dotsFromStat(stat: string | undefined): number {
+  const n = Number.parseInt(stat?.match(/\b1\s+in\s+(\d+)/i)?.[1] ?? "", 10);
+  return Number.isFinite(n) ? Math.min(Math.max(n, 2), 12) : 7;
+}
+
+/** Row of `total` dots with the first `filled` painted accent. */
+const CompareDots: FC<{ filled: number; total: number }> = ({ filled, total }) => (
+  <div className="report-snapshot-compare__dots" aria-hidden="true">
+    {Array.from({ length: total }, (_, i) => (
+      <span key={i} className={i < filled ? "is-filled" : ""} />
+    ))}
+  </div>
+);
+
+/** Short gradient bar — used for the third compare column. */
+const CompareBar: FC = () => (
+  <div className="report-snapshot-compare__bar" aria-hidden="true">
+    <span />
+  </div>
+);
+
+const SnapshotSection: FC<Props> = ({ archetype, copy }) => {
+  const slug = archetypeSlug(archetype) as Report2CopySlug;
+  const config = getReport2Config(archetype);
+  const cards = snapshotCards[slug];
+
+  // Card 2 value from config (families.arousal "responsive" → "Responsive").
+  // The SAME value drives the arc shape, so the word and the curve can never
+  // disagree — which is exactly what Figma's variant note requires.
+  const arousalRaw = config?.families?.arousal ?? null;
+  const arousalValue = arousalRaw ? capitalizeWord(arousalRaw) : null;
+  const arousalFamily = resolveArousalFamily(arousalRaw);
+
+  // Card 3 from config.stage_default ("Evolving / Transcending"). Big value is
+  // the LAST word ("Transcending"); the purple line is the full string.
+  const stageFull = typeof config?.stage_default === "string" ? config.stage_default : null;
+  const stageWord = stageFull ? (stageFull.split("/").pop()?.trim() ?? stageFull) : null;
+  const stageSubline = copy?.["stage.subline"] ?? null;
+
+  const compares = [
+    {
+      stat: copy?.["compare1.stat"],
+      caption: copy?.["compare1.caption"],
+      viz: "dots" as const,
+      // Figma paints exactly ONE dot in both rows — it reads "you are the 1".
+      filled: 1,
+      total: dotsFromStat(copy?.["compare1.stat"]),
+    },
+    {
+      stat: copy?.["compare2.stat"],
+      caption: copy?.["compare2.caption"],
+      viz: "dots" as const,
+      filled: 1,
+      total: dotsFromStat(copy?.["compare2.stat"]),
+    },
+    {
+      stat: copy?.["compare3.stat"],
+      caption: copy?.["compare3.caption"],
+      viz: "bar" as const,
+      filled: 0,
+      total: 0,
+    },
+  ].filter((c) => c.stat || c.caption);
+
+  return (
+    <div className="report-snapshot">
+      <h3 className="report-snapshot__heading">Your snapshot</h3>
+
+      <div className="report-snapshot__cards">
+        {/* Card 1 — Your hidden edge */}
+        {cards?.hiddenEdge ? (
+          <article className="report-snapshot-card">
+            <p className="report-snapshot-card__eyebrow">Your Hidden Edge</p>
+            {/* Figma 8719:8895 puts the value ABOVE the ring (y≈82) and the 46px
+                ring below it (y≈142) — it is not a value-inside-donut. Same
+                stack order as card 2: eyebrow → value → viz → subtext. */}
+            <span className="report-snapshot-card__value">{cards.hiddenEdge.value}</span>
+            <HiddenEdgeArc />
+            <p className="report-snapshot-card__subtext">{cards.hiddenEdge.subtext}</p>
+          </article>
+        ) : null}
+
+        {/* Card 2 — Your arousal type */}
+        {arousalValue ? (
+          <article className="report-snapshot-card">
+            <p className="report-snapshot-card__eyebrow">Your Arousal Type</p>
+            <span className="report-snapshot-card__value">{arousalValue}</span>
+            <ArousalWave family={arousalFamily} />
+            {/* The body line is per FAMILY, not per archetype ("only the family
+                word, the body line and the arc change"). `snapshotCards` only
+                ever carried a Spiritual Lover entry, so the other 13 rendered no
+                line at all — fall back to the family text from Figma. */}
+            <p className="report-snapshot-card__subtext">
+              {cards?.arousalSubtext ?? AROUSAL_CURVES[arousalFamily].snapshotSubtext}
+            </p>
+          </article>
+        ) : null}
+
+        {/* Card 3 — Likely current / sexual stage */}
+        {stageWord ? (
+          <article className="report-snapshot-card report-snapshot-card--stage">
+            {/* Figma 8719:8921 breaks the line with no separator — the "/" was
+                rendering as a literal slash in the eyebrow. */}
+            <p className="report-snapshot-card__eyebrow">
+              Likely Current
+              <br />
+              Sexual Stage
+            </p>
+            <div className="report-snapshot-card__stage-value-wrap">
+              <span className="report-snapshot-card__stage-glow" aria-hidden="true" />
+              <span className="report-snapshot-card__stage-value">{stageWord}</span>
+            </div>
+            {stageFull ? <p className="report-snapshot-card__stage-full">{stageFull}</p> : null}
+            {stageSubline ? <p className="report-snapshot-card__subtext">{stageSubline}</p> : null}
+          </article>
+        ) : null}
+      </div>
+
+      {/* How you compare */}
+      {compares.length > 0 ? (
+        <article className="report-snapshot-compare">
+          <p className="report-snapshot-compare__eyebrow">How you compare</p>
+          <div className="report-snapshot-compare__cols">
+            {compares.map((c, i) => (
+              <div key={i} className="report-snapshot-compare__col">
+                {c.viz === "bar" ? (
+                  <CompareBar />
+                ) : (
+                  <CompareDots filled={c.filled} total={c.total} />
+                )}
+                {c.stat ? <p className="report-snapshot-compare__stat">{c.stat}</p> : null}
+                {c.caption ? <p className="report-snapshot-compare__caption">{c.caption}</p> : null}
+              </div>
+            ))}
+          </div>
+        </article>
+      ) : null}
+    </div>
+  );
+};
+
+export default SnapshotSection;

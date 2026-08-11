@@ -9,7 +9,6 @@
 // report hands its client section after server-side access filtering.
 import { notFound } from "next/navigation";
 import { reportPracticeTendencies } from "@/data/report-practice-tendencies";
-import { reportSections } from "@/data/report-general";
 import type { ReportPracticeTendencyContentForUser } from "@features/report/ui/hooks/useReportData";
 import PracticePreviewClient from "./PracticePreviewClient";
 
@@ -20,7 +19,6 @@ const content: ReportPracticeTendencyContentForUser = {
   introBlocks: raw.introBlocks,
   groups: raw.groups.map((g) => ({ title: g.title, rows: g.rows, totalRowCount: g.rows.length })),
 };
-const generalHtml = reportSections.find((s) => s.sectionNumber === 27)?.generalContent ?? "";
 
 export default async function PracticePreviewPage({
   searchParams,
@@ -37,11 +35,6 @@ export default async function PracticePreviewPage({
   const { locked } = await searchParams; // ?locked=1 → paywalled variant, default unlocked
 
   return (
-    <PracticePreviewClient
-      archetype={ARCHETYPE}
-      content={content}
-      generalHtml={generalHtml}
-      locked={locked !== undefined}
-    />
+    <PracticePreviewClient archetype={ARCHETYPE} content={content} locked={locked !== undefined} />
   );
 }

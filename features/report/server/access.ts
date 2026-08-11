@@ -8,6 +8,7 @@ export const ESSENTIALS_SECTION_IDS = [
   "confidence_level",
 
   "typical_beliefs",
+  "typical_arousal_accelerators_turn_ons_of_the_core_archetype",
 ] as const;
 
 const ESSENTIALS_SECTION_SET = new Set<string>(ESSENTIALS_SECTION_IDS);

@@ -15,12 +15,10 @@ const PracticeTendenciesSection = dynamic(
 export default function PracticePreviewClient({
   archetype,
   content,
-  generalHtml,
   locked,
 }: {
   archetype: string;
   content: ReportPracticeTendencyContentForUser;
-  generalHtml: string;
   locked: boolean;
 }) {
   return (
@@ -28,9 +26,7 @@ export default function PracticePreviewClient({
       <div className="content-shell" style={{ paddingTop: 48, paddingBottom: 48 }}>
         <PracticeTendenciesSection
           archetype={archetype}
-          archetypeHtml={null}
           content={content}
-          generalHtml={generalHtml}
           isPremium={locked}
           isUnlocked={false}
           sectionTitle="Typical Sexual Fantasy & Practice Tendencies"

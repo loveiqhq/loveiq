@@ -72,20 +72,22 @@ describe("SexualStageExplorer", () => {
     );
   });
 
-  it("locks the desktop detail card to the user's stage and expands the chip on hover", async () => {
+  it("anchors the user's stage and expands ring chips in place on hover", async () => {
     const user = userEvent.setup();
     const { container } = render(<SexualStageExplorer userStageLabel="Awakening / Exploring" />);
 
-    // The main detail card always renders the user's anchor stage.
-    const detail = container.querySelector(".stage-detail");
-    expect(detail).toBeTruthy();
-    expect(within(detail as HTMLElement).getByRole("heading")).toHaveTextContent(
-      "Awakening / Exploring"
-    );
+    // The anchor chip always renders the user's stage, flagged as their current
+    // stage. (The old locked desktop detail card was removed in the Report 2.0
+    // orbit redesign — the "Your Likely Stage" card above the orbit replaces it.)
+    const anchorChip = container.querySelector('[data-chip-id="awakening"]');
+    expect(anchorChip).toBeTruthy();
+    expect(anchorChip).toHaveClass("stage-explorer__chip--anchor", "is-user-stage");
+    expect(anchorChip).toHaveTextContent("Awakening / Exploring");
+    expect(anchorChip).toHaveTextContent("YOUR LIKELY CURRENT STAGE");
 
-    // Hovering a non-anchor chip expands it in place (aria-expanded flips and
-    // its detail content becomes part of the chip) without mutating the
-    // locked detail card.
+    // A ring chip starts collapsed and expands in place on hover — aria-expanded
+    // flips and its detail rows + need block become visible, without mutating
+    // the anchor chip.
     const evolvingChip = container.querySelector<HTMLButtonElement>('[data-chip-id="evolving"]')!;
     expect(evolvingChip).toHaveAttribute("aria-expanded", "false");
 
@@ -95,10 +97,8 @@ describe("SexualStageExplorer", () => {
     expect(evolvingChip).toHaveTextContent("Evolving / Transcending");
     expect(evolvingChip).toHaveTextContent("Integration + grounding + devotion");
 
-    // Detail card content stays anchored to the user's stage.
-    expect(within(detail as HTMLElement).getByRole("heading")).toHaveTextContent(
-      "Awakening / Exploring"
-    );
+    // The anchor chip stays the user's stage.
+    expect(anchorChip).toHaveTextContent("Awakening / Exploring");
   });
 
   it("renders the user's stage in the mobile pill header", () => {

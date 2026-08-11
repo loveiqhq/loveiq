@@ -304,10 +304,9 @@ const SexualStageExplorer: FC<Props> = ({ userStageLabel }) => {
       className={`stage-explorer${isRevealed ? " is-revealed" : ""}`}
       data-user-stage-id={userStageId ?? ""}
     >
-      {/* Desktop: detail card (locked to user's stage) on top, orbit below */}
+      {/* Desktop: orbit only. The static "Your Likely Stage" card above the
+          orbit (rendered by SexualStageSection) replaces the old detail card. */}
       <div className="stage-explorer__desktop">
-        <DetailCard stage={anchorStage} isAnchorStage={Boolean(userStage)} />
-
         <div className="stage-explorer__orbit-wrap">
           <div
             className="stage-explorer__orbit"
@@ -572,40 +571,6 @@ const SexualStageExplorer: FC<Props> = ({ userStageLabel }) => {
     </div>
   );
 };
-
-const DetailCard: FC<{ stage: Stage; isAnchorStage: boolean }> = ({ stage, isAnchorStage }) => (
-  <div
-    key={stage.id}
-    className="stage-detail"
-    aria-live="polite"
-    style={
-      {
-        "--detail-accent": stage.accent,
-        "--detail-eyebrow-accent": stage.eyebrowAccent,
-      } as CSSProperties
-    }
-  >
-    <span className="stage-detail__blob stage-detail__blob--tr" aria-hidden="true" />
-    <span className="stage-detail__blob stage-detail__blob--bl" aria-hidden="true" />
-
-    <header className="stage-detail__header">
-      <span className="stage-detail__eyebrow">
-        {isAnchorStage ? "YOUR LIKELY CURRENT STAGE" : "EXPLORE THIS STAGE"}
-      </span>
-      <h3 className="stage-detail__title">{stage.label}</h3>
-      <span className="stage-detail__divider" aria-hidden="true" />
-    </header>
-
-    <div className="stage-detail__rows">
-      <StageRows stage={stage} />
-    </div>
-
-    <div className="stage-detail__need">
-      <span className="stage-detail__need-label">Main Need Right Now</span>
-      <span className="stage-detail__need-value">{stage.need}</span>
-    </div>
-  </div>
-);
 
 const StageRows: FC<{ stage: Stage }> = ({ stage }) => (
   <dl className="stage-rows">
