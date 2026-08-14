@@ -3,6 +3,7 @@
 import { useState, type FC } from "react";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
+import { renderEduPara } from "./eduPara";
 
 /**
  * Server-resolved curiosity copy (`getReport2Section(name, "curiosity")`),
@@ -43,9 +44,9 @@ interface Props {
   copy: CuriosityCopy | null;
   /**
    * Reader's fit across relationship forms — config `relationship_fit`
-   * (structure slug → 0..3 score). Null when locked or absent for the archetype
-   * (only Spiritual Lover carries one today); absent ⇒ the fit rows render
-   * without dots rather than fabricating a score.
+   * (structure slug → 0..3 score), falling back to
+   * `data/report2-relationship-fit.ts` for the 13 archetypes with no config
+   * entry. Null only when locked ⇒ the fit rows render without dots.
    */
   relationshipFit: Record<string, number> | null;
   offerDeadline?: number;
@@ -126,6 +127,27 @@ const FitRow: FC<{ label: string; score: number | null }> = ({ label, score }) =
   </li>
 );
 
+/**
+ * Figma 8427:2010 sets the lead paragraph's opening phrase in Manrope Bold
+ * `#161021` and the rest in regular `#3f3a4d` — the phrase naming the reader's
+ * curiosity type ("Depth-first curiosity", "Care-first curiosity", …). Two
+ * archetypes phrase it as a condition instead ("Your curiosity has one
+ * condition:"), so the early-colon form is bolded too. Anything else is left
+ * plain rather than guessing where the emphasis ends.
+ */
+function renderCuriosityLead(text: string) {
+  const typed = /^[A-Z][\w-]*-first curiosity/.exec(text);
+  const colon = typed ? null : /^[^.!?]{0,44}?:/.exec(text);
+  const lead = typed?.[0] ?? colon?.[0];
+  if (!lead) return text;
+  return (
+    <>
+      <strong className="report-curiosity__lead-strong">{lead}</strong>
+      {text.slice(lead.length)}
+    </>
+  );
+}
+
 /** The compact fit table — the nine forms with the reader's dots. */
 const FitTable: FC<{ fit: Record<string, number> | null }> = ({ fit }) => (
   <>
@@ -202,7 +224,9 @@ const CuriositySection: FC<Props> = ({
           </>
         ) : (
           <>
-            {copy["body.p1"] ? <p className="report-curiosity__lead">{copy["body.p1"]}</p> : null}
+            {copy["body.p1"] ? (
+              <p className="report-curiosity__lead">{renderCuriosityLead(copy["body.p1"])}</p>
+            ) : null}
 
             <FitTable fit={relationshipFit} />
 
@@ -240,14 +264,16 @@ const CuriositySection: FC<Props> = ({
             </button>
 
             {!expanded ? (
-              <div className="report-curiosity__details-peek">
+              <div className="report-curiosity__details-peek report-learn-peek">
                 {copy["edu.teaser"] ? (
-                  <p className="report-curiosity__details-teaser">{copy["edu.teaser"]}</p>
+                  <p className="report-curiosity__details-teaser report-learn-teaser">
+                    {copy["edu.teaser"]}
+                  </p>
                 ) : null}
                 {eduIntro.length > 0 || structs.length > 0 ? (
                   <button
                     type="button"
-                    className="report-curiosity__peek-cta"
+                    className="report-curiosity__peek-cta report-learn-cta"
                     onClick={() => setExpanded(true)}
                   >
                     Read the full explanation
@@ -256,9 +282,14 @@ const CuriositySection: FC<Props> = ({
               </div>
             ) : (
               <div className="report-curiosity__details-body">
+                {copy["edu.teaser"] ? (
+                  <p className="report-curiosity__details-teaser report-learn-teaser-full">
+                    {copy["edu.teaser"]}
+                  </p>
+                ) : null}
                 {eduIntro.map((para, i) => (
                   <p key={i} className="report-curiosity__details-para">
-                    {para}
+                    {renderEduPara(para)}
                   </p>
                 ))}
                 {structs.length > 0 ? (

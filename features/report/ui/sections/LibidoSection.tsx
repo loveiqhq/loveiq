@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, type FC } from "react";
+import { useState, type CSSProperties, type FC } from "react";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
+import { useRevealOnView } from "../hooks/useRevealOnView";
 
 /**
  * Server-resolved libido copy (`getReport2Section(name, "libido")`), threaded as
@@ -47,16 +48,13 @@ export interface LibidoCopy {
 }
 
 /**
- * Loop config from `getReport2Config(name).loop` — `{ name, steps }` (e.g.
- * Spiritual Lover `{ name: "The Waiting Loop", steps: 3 }`). Only sent when
- * unlocked (null otherwise). The named loop renders as a cycle of `steps`
- * connected chips. `loop` is null for the 11 archetypes without one → the
- * component renders WITHOUT the chips rather than fabricating a cycle.
+ * The loop's three step beats, resolved server-side from
+ * `data/report2-libido-loops.ts` (Figma 8427:2593 / 9114:546). Covers all 14 —
+ * the frames' footer promises "every archetype has its own named loop, three rows
+ * and three steps". Null only when locked, so the chips drop out with the rest of
+ * the per-archetype content. The loop's NAME is `copy.result`.
  */
-export interface LibidoConfig {
-  name: string;
-  steps: number;
-}
+export type LibidoConfig = [string, string, string];
 
 interface Props {
   archetype: string;
@@ -109,19 +107,82 @@ const BulbIcon: FC = () => (
  * per-archetype and gated — never fabricated. Renders only when `config.loop`
  * exists AND there are step values to show (absent loop ⇒ no chips).
  */
-const LoopChips: FC<{ steps: string[] }> = ({ steps }) => (
-  <div className="report-libido__loop" role="img" aria-label="The repeating loop, step by step">
-    <span className="report-libido__loop-connector" aria-hidden="true" />
-    <ol className="report-libido__loop-steps">
-      {steps.map((step, i) => (
-        <li key={i} className="report-libido__loop-chip">
-          <span className="report-libido__loop-num">{i + 1}</span>
-          <span className="report-libido__loop-text">{step}</span>
-        </li>
-      ))}
-    </ol>
-  </div>
+/**
+ * One chip's text, exactly as Figma sets it (8427:2596): the number and the lead
+ * clause in Manrope Bold #161021, then everything from the em-dash on in Regular
+ * #3f3a4d. The number is INLINE — there is no badge.
+ */
+const LoopChipText: FC<{ index: number; step: string }> = ({ index, step }) => {
+  const dash = step.indexOf(" — ");
+  const lead = dash > 0 ? step.slice(0, dash) : step;
+  const tail = dash > 0 ? step.slice(dash) : "";
+  return (
+    <p className="report-libido__loop-text">
+      <strong className="report-libido__loop-lead">{`${index} · ${lead}`}</strong>
+      {tail}
+    </p>
+  );
+};
+
+/** Generic filler shown blurred behind the paywall — Figma's own base example. */
+const LOCKED_PREVIEW_STEPS = [
+  "Daily life feels ordinary — not sacred, not inviting",
+  "You wait for the right mood — it rarely arrives on its own",
+  "Chances pass, doubt grows — and tomorrow looks like today",
+];
+
+/**
+ * The loop-back arrow (Figma 8427:2601): a dashed curve running from step 3 up
+ * the left side to an arrowhead beside step 1 — the cycle restarting. It is an
+ * OPEN curve that never touches the chips, not a closed bracket, and it carries
+ * an arrowhead. Colour is Figma's `#9D8AD7` at 45%; `preserveAspectRatio="none"`
+ * matches the Figma node's own setting so it stretches with the chip stack.
+ */
+const LoopArrow: FC = () => (
+  <svg
+    className="report-libido__loop-arrow"
+    viewBox="0 0 22.57 157.84"
+    preserveAspectRatio="none"
+    fill="none"
+    aria-hidden="true"
+  >
+    <path
+      className="report-libido__loop-curve"
+      d="M19.7 135.7 C4.5 127 2.4 92 6.9 71.7 C10.2 56.6 15.5 32 19.6 14.5"
+      pathLength={1}
+      stroke="#9D8AD7"
+      strokeOpacity="0.45"
+      strokeWidth="1.5"
+      strokeDasharray="3 4.5"
+      strokeLinecap="round"
+      vectorEffect="non-scaling-stroke"
+    />
+    <path d="M22.96 7.67 L15.82 10.76 L22.07 15.40 Z" fill="#9D8AD7" fillOpacity="0.45" />
+  </svg>
 );
+
+const LoopChips: FC<{ steps: string[] }> = ({ steps }) => {
+  // The three steps arrive in order, then the loop-back arrow draws itself from
+  // step 3 up to step 1 — so the cycle closes only once there is a cycle to close.
+  const [loopRef, revealed] = useRevealOnView<HTMLDivElement>();
+  return (
+    <div
+      ref={loopRef}
+      className={`report-libido__loop report-chart-reveal${revealed ? " is-revealed" : ""}`}
+      role="img"
+      aria-label="The repeating loop, step by step"
+    >
+      <LoopArrow />
+      <ol className="report-libido__loop-steps">
+        {steps.map((step, i) => (
+          <li key={i} className="report-libido__loop-chip" style={{ "--row": i } as CSSProperties}>
+            <LoopChipText index={i + 1} step={step} />
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+};
 
 const LibidoSection: FC<Props> = ({
   archetype,
@@ -147,15 +208,13 @@ const LibidoSection: FC<Props> = ({
     { label: copy["row4.label"], value: copy["row4.value"] },
   ].filter((r): r is { label: string; value: string } => !!r.label && !!r.value);
 
-  // Loop chips — the named cycle. Use the first `config.steps` row VALUES as the
-  // chip beats (the pattern, per-archetype). Only when config present + we have
-  // that many values; otherwise no chips (never fabricate a loop).
-  const loopSteps =
-    config && config.steps > 0
-      ? [copy["row1.value"], copy["row2.value"], copy["row3.value"], copy["row4.value"]]
-          .filter((v): v is string => !!v)
-          .slice(0, config.steps)
-      : [];
+  /*
+   * Loop chips — the named cycle's three beats. These used to re-print row values
+   * 1–3, so the chips repeated verbatim the text shown directly beneath them, and
+   * only the 3 archetypes with a `loop` config got them at all. They are now the
+   * distinct three-beat arc Figma draws, for all 14.
+   */
+  const loopSteps = config ?? [];
   const hasLoop = loopSteps.length > 0;
 
   // Practical ("The Exit") block — per-archetype but the label is universal;
@@ -194,26 +253,13 @@ const LibidoSection: FC<Props> = ({
                 <p className="report-libido__pattern-eyebrow">The Pattern</p>
                 <p className="report-libido__loop-name">The Waiting Loop</p>
                 <div className="report-libido__loop">
-                  <span className="report-libido__loop-connector" />
+                  <LoopArrow />
                   <ol className="report-libido__loop-steps">
-                    <li className="report-libido__loop-chip">
-                      <span className="report-libido__loop-num">1</span>
-                      <span className="report-libido__loop-text">
-                        Daily life feels ordinary — not sacred, not inviting
-                      </span>
-                    </li>
-                    <li className="report-libido__loop-chip">
-                      <span className="report-libido__loop-num">2</span>
-                      <span className="report-libido__loop-text">
-                        You wait for the right mood — it rarely arrives on its own
-                      </span>
-                    </li>
-                    <li className="report-libido__loop-chip">
-                      <span className="report-libido__loop-num">3</span>
-                      <span className="report-libido__loop-text">
-                        Chances pass, doubt grows — and tomorrow looks like today
-                      </span>
-                    </li>
+                    {LOCKED_PREVIEW_STEPS.map((step, i) => (
+                      <li key={i} className="report-libido__loop-chip">
+                        <LoopChipText index={i + 1} step={step} />
+                      </li>
+                    ))}
                   </ol>
                 </div>
               </div>
@@ -272,14 +318,16 @@ const LibidoSection: FC<Props> = ({
             </button>
 
             {!expanded ? (
-              <div className="report-libido__details-peek">
+              <div className="report-libido__details-peek report-learn-peek">
                 {copy["practical.teaser"] ? (
-                  <p className="report-libido__details-teaser">{copy["practical.teaser"]}</p>
+                  <p className="report-libido__details-teaser report-learn-teaser">
+                    {copy["practical.teaser"]}
+                  </p>
                 ) : null}
                 {practicalLines.length > 0 ? (
                   <button
                     type="button"
-                    className="report-libido__peek-cta"
+                    className="report-libido__peek-cta report-learn-cta"
                     onClick={() => setExpanded(true)}
                   >
                     Read the full practice
@@ -288,6 +336,11 @@ const LibidoSection: FC<Props> = ({
               </div>
             ) : (
               <div className="report-libido__details-body">
+                {copy["practical.teaser"] ? (
+                  <p className="report-libido__details-teaser report-learn-teaser-full">
+                    {copy["practical.teaser"]}
+                  </p>
+                ) : null}
                 {practicalLines.map((para, i) => (
                   <p key={i} className="report-libido__details-para">
                     {para}

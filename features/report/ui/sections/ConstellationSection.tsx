@@ -2,6 +2,7 @@
 
 import { type CSSProperties, type FC } from "react";
 import { getReportTheme } from "../reportTheme";
+import { useRevealOnView } from "../hooks/useRevealOnView";
 
 /**
  * Report 2.0 "Other Archetypes" / Constellation section — the LAST free Part I
@@ -59,6 +60,9 @@ const ConstellationSection: FC<Props> = ({
   viewArchetype,
   onViewArchetype,
 }) => {
+  // Before the early return — a hook may not be conditional.
+  const [listRef, revealed] = useRevealOnView<HTMLOListElement>();
+
   if (ranking.length === 0) return null;
 
   return (
@@ -75,7 +79,10 @@ const ConstellationSection: FC<Props> = ({
         </p>
       </div>
 
-      <ol className="report-constellation__list">
+      <ol
+        ref={listRef}
+        className={`report-constellation__list report-chart-reveal${revealed ? " is-revealed" : ""}`}
+      >
         {ranking.map((name, idx) => {
           const theme = getReportTheme(name);
           const Icon = theme.Icon;
@@ -87,6 +94,8 @@ const ConstellationSection: FC<Props> = ({
             "--accent": theme.accent,
             "--accent-rgb": hexToRgbTriplet(theme.accent),
             "--fill-fraction": fillFraction,
+            // Staggers this bar behind the one above it (see .report-chart-reveal).
+            "--row": idx,
           };
 
           return (

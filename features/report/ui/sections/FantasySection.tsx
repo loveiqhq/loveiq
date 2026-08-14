@@ -3,6 +3,9 @@
 import { useEffect, useState, type CSSProperties, type FC, type ReactNode } from "react";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
+import { renderEduPara } from "./eduPara";
+import type { FantasyMapDot } from "@features/report/server/fantasyMap";
+import { useRevealOnView } from "../hooks/useRevealOnView";
 
 /**
  * Server-resolved fantasy copy (`getReport2Section(name, "fantasy")`), threaded
@@ -55,6 +58,12 @@ interface Props {
    */
   tables?: ReactNode;
   tier?: PremiumOverlayTier;
+  /**
+   * Per-archetype map dots derived server-side from the practice-tendency
+   * scores. Null when locked (or for an unknown archetype) ⇒ the universal
+   * illustrative layout is used instead.
+   */
+  dots?: FantasyMapDot[] | null;
 }
 
 type Quadrant = "lean" | "keep" | "hidden" | "not";
@@ -119,13 +128,14 @@ const QUADRANT_DOT: Record<Quadrant, string> = {
   not: "#b3aac0",
 };
 
-// The map's representative dots, positions extracted + normalized from the Figma
-// vectors (node 8427:2479) to the plot box (0..1). x = lived pleasure, y =
-// fantasy pull (0 top → 1 bottom, matching CSS top%). This is the FIXED
-// illustrative layout the Figma ships for every viewer — NOT per-user scores
-// (no per-user fantasy data exists yet, so none is fabricated; the chartnote
-// says so). Only 8 dots are labelled on the plane, per the Figma; the other 8
-// are anonymous context. `q` (quadrant) drives dot colour.
+// Fallback dots: positions extracted + normalized from the Figma vectors (node
+// 8427:2479) to the plot box (0..1). x = lived pleasure, y = fantasy pull (0 top
+// → 1 bottom, matching CSS top%). Used only when the server sends no `dots` —
+// i.e. a LOCKED reader, where the real per-archetype placements are withheld and
+// this universal layout sits blurred behind the overlay. Unlocked readers get
+// dots derived from their archetype's practice-tendency scores
+// (`features/report/server/fantasyMap.ts`), which is what the chartnote
+// promises. Only 8 dots are labelled, per the Figma; `q` drives dot colour.
 const MAP_DOTS: { label: string | null; q: Quadrant; x: number; y: number }[] = [
   { label: "Mutual surrender", q: "lean", x: 0.92, y: 0.12 },
   { label: "Sacred kink", q: "lean", x: 0.8, y: 0.17 },
@@ -172,64 +182,68 @@ const BookIcon: FC = () => (
 /**
  * The 2-axis fantasy map (per Figma 8427:2479). Four tinted quadrants, the 8
  * labelled + 8 anonymous representative dots, axis captions. A fixed universal
- * layout — the same for every viewer (no per-user scores exist). `animated`
- * staggers the dots in on scroll.
+ * layout — the same for every viewer (no per-user scores exist). The dots stagger
+ * in when the map itself reaches the viewport; this used to fire off a mount-time
+ * requestAnimationFrame, so the cascade was over before the reader arrived.
  */
-const FantasyMap: FC<{ animated: boolean; filter: MapFilter }> = ({ animated, filter }) => (
-  <div className={`report-fantasy-map${animated ? " is-animated" : ""}`}>
-    <div className="report-fantasy-map__frame">
-      {QUADRANTS.map((quad) => (
-        <div
-          key={quad.id}
-          className="report-fantasy-map__quad"
-          style={
-            {
-              gridColumn: quad.col,
-              gridRow: quad.row,
-              background: quad.bg,
-            } as CSSProperties
-          }
-        >
-          <span className="report-fantasy-map__quad-label" style={{ color: quad.ink }}>
-            {quad.label}
-          </span>
-        </div>
-      ))}
-
-      {/* Dots layer sits over the quadrant grid. */}
-      <div className="report-fantasy-map__dots" aria-hidden="true">
-        {MAP_DOTS.map((dot, i) => {
-          const style = {
-            "--dot-x": `${dot.x * 100}%`,
-            "--dot-y": `${dot.y * 100}%`,
-            "--dot-accent-rgb": hexToRgbTriplet(QUADRANT_DOT[dot.q]),
-            "--dot-order": i,
-          } as CSSProperties;
-          const dimmed = filter !== "all" && dot.q !== filter;
-          return (
-            <span
-              key={i}
-              className={`report-fantasy-map__dot${dimmed ? " is-dim" : ""}`}
-              style={style}
-            >
-              {dot.label ? (
-                <span className="report-fantasy-map__dot-label">{dot.label}</span>
-              ) : null}
+const FantasyMap: FC<{ filter: MapFilter; dots?: FantasyMapDot[] | null }> = ({ filter, dots }) => {
+  const [mapRef, animated] = useRevealOnView<HTMLDivElement>();
+  return (
+    <div ref={mapRef} className={`report-fantasy-map${animated ? " is-animated" : ""}`}>
+      <div className="report-fantasy-map__frame">
+        {QUADRANTS.map((quad) => (
+          <div
+            key={quad.id}
+            className="report-fantasy-map__quad"
+            style={
+              {
+                gridColumn: quad.col,
+                gridRow: quad.row,
+                background: quad.bg,
+              } as CSSProperties
+            }
+          >
+            <span className="report-fantasy-map__quad-label" style={{ color: quad.ink }}>
+              {quad.label}
             </span>
-          );
-        })}
-      </div>
-    </div>
+          </div>
+        ))}
 
-    {/* Axis captions around the frame. */}
-    <span className="report-fantasy-map__cap report-fantasy-map__cap--x" aria-hidden="true">
-      lived pleasure &rarr;
-    </span>
-    <span className="report-fantasy-map__cap report-fantasy-map__cap--y" aria-hidden="true">
-      fantasy pull &rarr;
-    </span>
-  </div>
-);
+        {/* Dots layer sits over the quadrant grid. */}
+        <div className="report-fantasy-map__dots" aria-hidden="true">
+          {(dots?.length ? dots : MAP_DOTS).map((dot, i) => {
+            const style = {
+              "--dot-x": `${dot.x * 100}%`,
+              "--dot-y": `${dot.y * 100}%`,
+              "--dot-accent-rgb": hexToRgbTriplet(QUADRANT_DOT[dot.q]),
+              "--dot-order": i,
+            } as CSSProperties;
+            const dimmed = filter !== "all" && dot.q !== filter;
+            return (
+              <span
+                key={i}
+                className={`report-fantasy-map__dot${dimmed ? " is-dim" : ""}`}
+                style={style}
+              >
+                {dot.label ? (
+                  <span className="report-fantasy-map__dot-label">{dot.label}</span>
+                ) : null}
+              </span>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Axis captions around the frame. */}
+      <span className="report-fantasy-map__cap report-fantasy-map__cap--x" aria-hidden="true">
+        lived pleasure &rarr;
+      </span>
+      <span className="report-fantasy-map__cap report-fantasy-map__cap--y" aria-hidden="true">
+        fantasy pull &rarr;
+      </span>
+    </div>
+  );
+};
 
 const FantasySection: FC<Props> = ({
   archetype,
@@ -240,14 +254,10 @@ const FantasySection: FC<Props> = ({
   sectionTitle,
   tables,
   tier = "full_report",
+  dots,
 }) => {
   const [expanded, setExpanded] = useState(false);
   const [mapFilter, setMapFilter] = useState<MapFilter>("all");
-  const [animated, setAnimated] = useState(false);
-  useEffect(() => {
-    const id = requestAnimationFrame(() => setAnimated(true));
-    return () => cancelAnimationFrame(id);
-  }, []);
 
   // Only the PRIMARY archetype has a fantasy copy block. When browsing another
   // archetype there is no map/education to show — but the category tables are
@@ -287,7 +297,7 @@ const FantasySection: FC<Props> = ({
             {copy["gate.hook"] ? <p className="report-fantasy__hook">{copy["gate.hook"]}</p> : null}
             <div className="report-fantasy__preview">
               <div className="report-fantasy__preview-fade" aria-hidden="true">
-                <FantasyMap animated={animated} filter="all" />
+                <FantasyMap filter="all" />
               </div>
               <PremiumOverlay
                 archetype={archetype}
@@ -319,7 +329,7 @@ const FantasySection: FC<Props> = ({
               ))}
             </div>
 
-            <FantasyMap animated={animated} filter={mapFilter} />
+            <FantasyMap filter={mapFilter} dots={dots} />
 
             {copy.chartnote1 ? (
               <p className="report-fantasy__chartnote">{copy.chartnote1}</p>
@@ -361,14 +371,16 @@ const FantasySection: FC<Props> = ({
             </button>
 
             {!expanded ? (
-              <div className="report-fantasy__details-peek">
+              <div className="report-fantasy__details-peek report-learn-peek">
                 {copy["edu.teaser"] ? (
-                  <p className="report-fantasy__details-teaser">{copy["edu.teaser"]}</p>
+                  <p className="report-fantasy__details-teaser report-learn-teaser">
+                    {copy["edu.teaser"]}
+                  </p>
                 ) : null}
                 {eduParas.length > 0 ? (
                   <button
                     type="button"
-                    className="report-fantasy__peek-cta"
+                    className="report-fantasy__peek-cta report-learn-cta"
                     onClick={() => setExpanded(true)}
                   >
                     Read the full explanation
@@ -377,9 +389,14 @@ const FantasySection: FC<Props> = ({
               </div>
             ) : (
               <div className="report-fantasy__details-body">
+                {copy["edu.teaser"] ? (
+                  <p className="report-fantasy__details-teaser report-learn-teaser-full">
+                    {copy["edu.teaser"]}
+                  </p>
+                ) : null}
                 {eduParas.map((para, i) => (
                   <p key={i} className="report-fantasy__details-para">
-                    {para}
+                    {renderEduPara(para)}
                   </p>
                 ))}
               </div>

@@ -1,9 +1,13 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties, type FC } from "react";
+import { useState, type CSSProperties, type FC } from "react";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import { getReportTheme } from "../reportTheme";
+import { useRevealOnView } from "../hooks/useRevealOnView";
+import { archetypePresentation } from "@features/report/data/archetypePresentation";
+import type { ArchetypeName } from "@features/report/server/archetypeSlug";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
+import { renderEduPara } from "./eduPara";
 
 /**
  * Server-resolved power copy (`getReport2Section(name, "power")`), threaded as a
@@ -41,6 +45,13 @@ export interface PowerCopy {
    * on the plane. Per-archetype → withheld (null) from a locked client.
    */
   zone?: string | null;
+  /**
+   * The card's top eyebrow — the reader's "result line" (Figma 8427:1953), e.g.
+   * "Devotional switch — presence-guided". Distinct from `zone`: the
+   * low-polarity plane reads "LOW-POLARITY ZONE" but its eyebrow reads "Gentle
+   * switch — comfort-guided". Per-archetype → withheld from a locked client.
+   */
+  "zone.result"?: string | null;
   /** True when the per-archetype takeaway/body + zone/You highlight were withheld. */
   locked: boolean;
 }
@@ -123,16 +134,19 @@ function hexToRgbTriplet(hex: string): string {
  * per-archetype and only render when unlocked. `youZoneLabel` is null when
  * locked, so the zone glow + "You" pill drop out but the pack still reads.
  */
-const PowerPlane: FC<{ archetype: string; youZoneLabel: string | null; animated: boolean }> = ({
+const PowerPlane: FC<{ archetype: string; youZoneLabel: string | null }> = ({
   archetype,
   youZoneLabel,
-  animated,
 }) => {
   const you = PLANE.find((d) => d.name === archetype) ?? null;
   const showYou = !!youZoneLabel && !!you;
+  // The dots used to stagger in on a mount-time requestAnimationFrame, so the
+  // whole cascade was over before the reader had scrolled anywhere near the
+  // plane. Triggered off the plane itself now.
+  const [planeRef, animated] = useRevealOnView<HTMLDivElement>();
 
   return (
-    <div className={`report-power-plane${animated ? " is-animated" : ""}`}>
+    <div ref={planeRef} className={`report-power-plane${animated ? " is-animated" : ""}`}>
       <div className="report-power-plane__frame">
         {/* Axis crosshair + border */}
         <span className="report-power-plane__axis report-power-plane__axis--v" aria-hidden="true" />
@@ -142,7 +156,18 @@ const PowerPlane: FC<{ archetype: string; youZoneLabel: string | null; animated:
         {showYou ? (
           <span
             className="report-power-plane__zone"
-            style={{ left: `${you!.x * 100}%`, top: `${you!.y * 100}%` }}
+            style={
+              {
+                left: `${you!.x * 100}%`,
+                top: `${you!.y * 100}%`,
+                // Zone glow + label take the reader's own dot colour (Figma
+                // 9125:576/577 are #94a3b8 for Minimalist Companion).
+                "--zone-accent-rgb": hexToRgbTriplet(
+                  archetypePresentation[archetype as ArchetypeName]?.dotColor ??
+                    getReportTheme(archetype).accent
+                ),
+              } as CSSProperties
+            }
             aria-hidden="true"
           >
             <span className="report-power-plane__zone-label">
@@ -154,7 +179,13 @@ const PowerPlane: FC<{ archetype: string; youZoneLabel: string | null; animated:
         {/* The 14 dots */}
         {PLANE.map((d, i) => {
           const isYou = showYou && d.name === archetype;
-          const accent = getReportTheme(d.name).accent;
+          // Figma's own note: "Accent = production dotColor from
+          // archetypePresentation.ts" (e.g. Minimalist Companion #94a3b8,
+          // Authority Conductor #eab308) — NOT the report-theme accent, which
+          // differs for all 14.
+          const accent =
+            archetypePresentation[d.name as ArchetypeName]?.dotColor ??
+            getReportTheme(d.name).accent;
           const style = {
             "--dot-x": `${d.x * 100}%`,
             "--dot-y": `${d.y * 100}%`,
@@ -200,11 +231,6 @@ const PowerSection: FC<Props> = ({
   tier = "full_report",
 }) => {
   const [expanded, setExpanded] = useState(false);
-  const [animated, setAnimated] = useState(false);
-  useEffect(() => {
-    const id = requestAnimationFrame(() => setAnimated(true));
-    return () => cancelAnimationFrame(id);
-  }, []);
 
   if (!copy) return null;
   const locked = copy.locked;
@@ -246,7 +272,7 @@ const PowerSection: FC<Props> = ({
               <div className="report-power__preview-fade" aria-hidden="true">
                 {/* The plane is a universal layout, safe to draw under the blur;
                     the "You"/zone specifics are withheld (youZoneLabel=null). */}
-                <PowerPlane archetype={archetype} youZoneLabel={null} animated={animated} />
+                <PowerPlane archetype={archetype} youZoneLabel={null} />
               </div>
               <PremiumOverlay
                 archetype={archetype}
@@ -260,9 +286,11 @@ const PowerSection: FC<Props> = ({
           </>
         ) : (
           <>
-            {zoneLabel ? <p className="report-power__zone-eyebrow">{zoneLabel}</p> : null}
+            {(copy["zone.result"] ?? zoneLabel) ? (
+              <p className="report-power__zone-eyebrow">{copy["zone.result"] ?? zoneLabel}</p>
+            ) : null}
 
-            <PowerPlane archetype={archetype} youZoneLabel={zoneLabel} animated={animated} />
+            <PowerPlane archetype={archetype} youZoneLabel={zoneLabel} />
 
             {copy["body.p1"] ? <p className="report-power__body">{copy["body.p1"]}</p> : null}
 
@@ -302,14 +330,16 @@ const PowerSection: FC<Props> = ({
             </button>
 
             {!expanded ? (
-              <div className="report-power__details-peek">
+              <div className="report-power__details-peek report-learn-peek">
                 {copy["edu.teaser"] ? (
-                  <p className="report-power__details-teaser">{copy["edu.teaser"]}</p>
+                  <p className="report-power__details-teaser report-learn-teaser">
+                    {copy["edu.teaser"]}
+                  </p>
                 ) : null}
                 {eduParas.length > 0 ? (
                   <button
                     type="button"
-                    className="report-power__peek-cta"
+                    className="report-power__peek-cta report-learn-cta"
                     onClick={() => setExpanded(true)}
                   >
                     Read the full explanation
@@ -318,9 +348,14 @@ const PowerSection: FC<Props> = ({
               </div>
             ) : (
               <div className="report-power__details-body">
+                {copy["edu.teaser"] ? (
+                  <p className="report-power__details-teaser report-learn-teaser-full">
+                    {copy["edu.teaser"]}
+                  </p>
+                ) : null}
                 {eduParas.map((para, i) => (
                   <p key={i} className="report-power__details-para">
-                    {para}
+                    {renderEduPara(para)}
                   </p>
                 ))}
               </div>

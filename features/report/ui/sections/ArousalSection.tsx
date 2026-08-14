@@ -1,8 +1,13 @@
 "use client";
 
-import { useState, type FC } from "react";
+import { useState, type CSSProperties, type FC } from "react";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
+import { renderEduPara } from "./eduPara";
+import { getReportTheme } from "../reportTheme";
+import { SHARED_ACT_DETAIL, getArousalFamily } from "@/data/report2-arousal";
+import { useRevealOnView } from "../hooks/useRevealOnView";
+import { curveEndPoint } from "../curveEnd";
 
 /**
  * Server-resolved arousal copy (`getReport2Section(name, "arousal")`), threaded
@@ -106,94 +111,91 @@ const PANELS = [
 ] as const;
 
 /**
- * Three arc shapes keyed by `families.arousal`. Each is a stall/recovery curve
- * that reads left→right (arousal over the encounter):
- *   • responsive — the Figma default (8427:2213): low build with three climbing
- *     condition-dots, a plateau + slip (hollow circle), a small dip, then a
- *     strong return that keeps climbing.
- *   • spontaneous — fast early ignition to a high peak, an unprompted fade, then
- *     a partial rekindle (what lights unprompted also fades unprompted).
- *   • contextual — stays low/flat while conditions are unmet, then lifts sharply
- *     once they arrive and holds.
- * All share the same baseline and end high-right so the arc fills the panels.
+ * Per-family arc geometry keyed by `families.arousal`. Each arc reads left→right
+ * (arousal over the encounter) and every family shows the same three markers the
+ * Figma draws: three climbing condition dots through act 1, a hollow "slip"
+ * circle where a condition drops, and a solid dot at the high end.
+ *   • responsive  (8427:2213) — low build, plateau + slip, dip, strong return
+ *   • spontaneous (9107:1150) — fast early ignition, unprompted fade, rekindle
+ *   • contextual  (9107:1237) — climbs as context assembles, breaks, reopens
+ * Act names and captions live in `data/report2-arousal.ts` (Figma verbatim).
  */
-const ARC_SHAPES: Record<string, string> = {
-  responsive:
-    "M6 215 C70 213 150 205 205 181 C280 149 330 148 397 160 C440 168 470 190 523 170 C640 126 730 80 829 52",
-  spontaneous:
-    "M6 214 C60 210 96 70 165 62 C250 53 300 150 397 168 C455 179 480 150 540 140 C650 122 740 108 829 96",
-  contextual: "M6 216 C120 214 300 210 430 205 C500 202 515 200 560 172 C640 124 740 74 829 52",
-};
+interface ArcGeometry {
+  path: string;
+  /** y of the arc's right end, where the solid dot sits. */
+  /** Three climbing "condition met" dots through act 1. */
+  dots: [number, number][];
+  /** The hollow circle where a condition slips. */
+  slip: [number, number];
+}
 
-/** End-point y of each arc (anchor for the trailing rise). */
-const ARC_END_Y: Record<string, number> = {
-  responsive: 52,
-  spontaneous: 96,
-  contextual: 52,
-};
-
-/**
- * Per-family default phase labels + the three condition annotations shown under
- * the panels (Figma 8427:2219/2220/2221 for `responsive`). Config `acts` (from
- * `arousal_acts`) overrides the phase labels when present; the annotations are
- * universal-per-family framing (never per-archetype prose), so they stay fixed.
- */
-type ArcFamily = {
-  acts: [string, string, string];
-  /** captions under panels 1/2/3. */
-  notes: [string, string, string];
-};
-
-const ARC_FAMILIES: Record<string, ArcFamily> = {
+export const ARC_GEOMETRY: Record<string, ArcGeometry> = {
   responsive: {
-    acts: ["The build", "The dip", "The return"],
-    notes: [
-      "three conditions met, one by one",
-      "a condition slips",
-      "named — the wave resumes, higher",
+    path: "M6 215 C70 213 150 205 205 181 C280 149 330 148 397 160 C440 168 470 190 523 170 C640 126 730 80 829 52",
+    dots: [
+      [70, 213],
+      [140, 202],
+      [205, 181],
     ],
+    slip: [404, 162],
   },
   spontaneous: {
-    acts: ["The ignition", "The fade", "The rekindle"],
-    notes: [
-      "lights fast, unprompted",
-      "fades just as unprompted",
-      "rebuilt on purpose, not chance",
+    path: "M6 214 C22 205 32 186 45 162 C60 132 70 106 90 92 C106 79 130 69 165 64 C250 56 300 150 397 168 C455 179 480 152 540 141 C650 122 740 108 829 96",
+    dots: [
+      [45, 162],
+      [90, 92],
+      [150, 66],
     ],
+    slip: [400, 168],
   },
   contextual: {
-    acts: ["The wait", "The threshold", "The lift"],
-    notes: ["low while conditions are unmet", "the threshold is crossed", "it lifts, and holds"],
+    path: "M6 216 C60 214 120 205 156 196 C200 184 220 172 242 158 C300 128 335 116 372 124 C430 146 476 172 523 178 C630 152 740 122 829 100",
+    dots: [
+      [62, 212],
+      [156, 196],
+      [242, 158],
+    ],
+    slip: [523, 178],
   },
 };
 
-const RESPONSIVE = ARC_FAMILIES.responsive!;
-
-/** Three ascending "condition met" dots on the build phase (responsive only). */
-const BUILD_DOTS = [
-  { cx: 70, cy: 213, fill: "#c4b5fd" },
-  { cx: 140, cy: 202, fill: "#a78bfa" },
-  { cx: 205, cy: 181, fill: "#795fc8" },
-] as const;
-
 /** The reader's arousal arc (inline SVG, per Figma 8427:2204). */
-const ArousalArc: FC<{ family: string; acts: [string, string, string] }> = ({ family, acts }) => {
-  const key = ARC_SHAPES[family] ? family : "responsive";
-  const fam = ARC_FAMILIES[key] ?? RESPONSIVE;
-  const path = ARC_SHAPES[key]!;
-  const endY = ARC_END_Y[key] ?? 52;
-  const isResponsive = key === "responsive";
+const ArousalArc: FC<{ family: string; acts: [string, string, string]; accent: string }> = ({
+  family,
+  acts,
+  accent,
+}) => {
+  const key = ARC_GEOMETRY[family] ? family : "responsive";
+  const geo = ARC_GEOMETRY[key]!;
+  const fam = getArousalFamily(key);
+  const arcEnd = curveEndPoint(geo.path);
+
+  // Panels settle, the arc draws through build → dip → return, each condition dot
+  // lights as the stroke reaches it, then the end dot lands and the act labels
+  // arrive. The order is the chart's own argument.
+  const [arcRef, revealed] = useRevealOnView<HTMLDivElement>();
 
   return (
     <div
-      className="report-arousal-arc"
+      ref={arcRef}
+      className={`report-arousal-arc report-chart-reveal${revealed ? " is-revealed" : ""}`}
       role="img"
       aria-label="How your arousal builds, stalls, and returns"
     >
       <svg viewBox={`0 0 ${AX.w} ${AX.h}`} preserveAspectRatio="xMidYMid meet" aria-hidden="true">
         {/* phase panels */}
         {PANELS.map((p, i) => (
-          <rect key={i} x={p.x} y={0} width={p.w} height={252} rx={11} fill={p.tint} />
+          <rect
+            key={i}
+            className="report-chart-fade"
+            style={{ "--row": i } as CSSProperties}
+            x={p.x}
+            y={0}
+            width={p.w}
+            height={252}
+            rx={11}
+            fill={p.tint}
+          />
         ))}
 
         {/* dashed baseline */}
@@ -208,34 +210,53 @@ const ArousalArc: FC<{ family: string; acts: [string, string, string] }> = ({ fa
           strokeDasharray="2 6"
         />
 
-        {/* the reader's arc */}
+        {/* the reader's arc. `pathLength={1}` makes the dash units path-relative,
+            so one dasharray draws every family's arc whatever its real length. */}
         <path
-          d={path}
+          className="report-draw-line"
+          d={geo.path}
+          pathLength={1}
           fill="none"
-          stroke="#795fc8"
+          stroke={accent}
           strokeWidth="4.2"
           strokeLinecap="round"
           strokeLinejoin="round"
         />
-        {/* solid dot at the arc's high end */}
-        <circle cx={829} cy={endY} r="7" fill="#795fc8" />
+        {/* solid dot at the arc's high end — lands once the stroke reaches it */}
+        {/* Position read off the arc itself, so the dot cannot drift from the
+            line it belongs to (see `curveEndPoint`). */}
+        <circle className="report-draw-dot" cx={arcEnd.x} cy={arcEnd.y} r="7" fill={accent} />
 
-        {/* responsive: three climbing condition dots + the hollow "slip" circle */}
-        {isResponsive ? (
-          <>
-            {BUILD_DOTS.map((d, i) => (
-              <circle key={i} cx={d.cx} cy={d.cy} r="6.5" fill={d.fill} />
-            ))}
-            {/* the plateau slip point (Figma 8427:2214) */}
-            <circle cx={404} cy={162} r="7.2" fill="#ffffff" stroke="#795fc8" strokeWidth="2.4" />
-          </>
-        ) : null}
+        {/* three climbing condition dots, then the hollow "slip" circle — the
+            Figma draws both on every family, fading the dots in as they are met */}
+        {geo.dots.map(([cx, cy], i) => (
+          <circle
+            key={i}
+            className="report-arousal-arc__cue"
+            style={{ "--row": i } as CSSProperties}
+            cx={cx}
+            cy={cy}
+            r="6.5"
+            fill={accent}
+            opacity={0.4 + i * 0.3}
+          />
+        ))}
+        <circle
+          className="report-arousal-arc__cue"
+          style={{ "--row": 3 } as CSSProperties}
+          cx={geo.slip[0]}
+          cy={geo.slip[1]}
+          r="7.2"
+          fill="#ffffff"
+          stroke={accent}
+          strokeWidth="2.4"
+        />
 
         {/* phase labels (top of each panel) */}
         {PANELS.map((p, i) => (
           <text
             key={i}
-            className="report-arousal-arc__act"
+            className="report-arousal-arc__act report-chart-late"
             x={p.x + p.w / 2}
             y={54}
             textAnchor="middle"
@@ -249,7 +270,7 @@ const ArousalArc: FC<{ family: string; acts: [string, string, string] }> = ({ fa
         {fam.notes.map((note, i) => (
           <text
             key={i}
-            className="report-arousal-arc__note"
+            className="report-arousal-arc__note report-chart-late"
             x={PANELS[i]!.x + PANELS[i]!.w / 2}
             y={288}
             textAnchor="middle"
@@ -262,6 +283,40 @@ const ArousalArc: FC<{ family: string; acts: [string, string, string] }> = ({ fa
     </div>
   );
 };
+
+/**
+ * The three act columns under the arc (Figma 8427:2222 / 9107:1159 / 9107:1246):
+ * act 1 lists the three conditions as chips plus a note, acts 2 and 3 carry a
+ * paragraph each. Act names swap per family; the bodies have only one authored
+ * version — see `SHARED_ACT_DETAIL`.
+ */
+const ActDetail: FC<{ acts: [string, string, string]; accent: string }> = ({ acts, accent }) => (
+  <div className="report-arousal__acts">
+    <div className="report-arousal__act" style={{ "--act-accent": accent } as CSSProperties}>
+      <p className="report-arousal__act-eyebrow">1 &middot; {acts[0]}</p>
+      <ul className="report-arousal__conditions">
+        {SHARED_ACT_DETAIL.conditions.map((c) => (
+          <li key={c.label} className="report-arousal__condition">
+            <span className="report-arousal__condition-dot" aria-hidden="true" />
+            <span className="report-arousal__condition-label">{c.label}</span>
+            <span className="report-arousal__condition-note">&middot; {c.note}</span>
+          </li>
+        ))}
+      </ul>
+      <p className="report-arousal__act-note">{SHARED_ACT_DETAIL.conditionsNote}</p>
+    </div>
+
+    <div className="report-arousal__act" style={{ "--act-accent": accent } as CSSProperties}>
+      <p className="report-arousal__act-eyebrow">2 &middot; {acts[1]}</p>
+      <p className="report-arousal__act-body">{SHARED_ACT_DETAIL.act2Body}</p>
+    </div>
+
+    <div className="report-arousal__act" style={{ "--act-accent": accent } as CSSProperties}>
+      <p className="report-arousal__act-eyebrow is-live">3 &middot; {acts[2]}</p>
+      <p className="report-arousal__act-body">{SHARED_ACT_DETAIL.act3Body}</p>
+    </div>
+  </div>
+);
 
 /** One mini-stat: big value + caption (Figma 8502:684/698). */
 const MiniStat: FC<{ value: string; caption: string }> = ({ value, caption }) => (
@@ -285,6 +340,7 @@ const ArousalSection: FC<Props> = ({
   if (!copy) return null;
 
   const locked = copy.locked;
+  const accent = getReportTheme(archetype).accent;
 
   // Educational block is universal — always safe to show.
   const eduParas = [
@@ -299,12 +355,12 @@ const ArousalSection: FC<Props> = ({
   // config is absent (locked). The arc is framing, so it's safe to draw even
   // locked (under the blur), keyed off config when present.
   const family = config?.family ?? "responsive";
-  const famDefault = ARC_FAMILIES[ARC_SHAPES[family] ? family : "responsive"] ?? RESPONSIVE;
+  const arousalFamily = getArousalFamily(family);
   // Act labels: config `arousal_acts` wins; else the family default (Figma).
   const acts: [string, string, string] =
     config?.acts && config.acts.length === 3
       ? [config.acts[0]!, config.acts[1]!, config.acts[2]!]
-      : famDefault.acts;
+      : arousalFamily.acts;
 
   // Mini-stats — per-archetype but render only when both value + caption present
   // (never fabricate a stat). Withheld (null) for a locked client.
@@ -342,7 +398,7 @@ const ArousalSection: FC<Props> = ({
                     withheld server-side; generic filler under the blur. */}
                 <p className="report-arousal__result-eyebrow">Your Arousal Style</p>
                 <p className="report-arousal__result">Responsive</p>
-                <ArousalArc family={family} acts={acts} />
+                <ArousalArc family={family} acts={acts} accent={accent} />
               </div>
               <PremiumOverlay
                 archetype={archetype}
@@ -360,10 +416,22 @@ const ArousalSection: FC<Props> = ({
               <p className="report-arousal__result-eyebrow">
                 {copy.eyebrow ?? "Your Arousal Style"}
               </p>
-              {copy.result ? <p className="report-arousal__result">{copy.result}</p> : null}
+              {/*
+               * The family word alone, exactly as every Figma frame heads the
+               * card ("Responsive" / "Spontaneous" / "Contextual"). The copy
+               * matrix's `result` carries a bracketed qualifier ("Spontaneous
+               * (clarity-led)") that appears in no frame — and for Authority
+               * Conductor it names a DIFFERENT family than its own config, so
+               * the heading used to contradict the arc drawn under it.
+               */}
+              <p className="report-arousal__result">{arousalFamily.name}</p>
+              {/* Centred line under the heading (Figma 8427:2203) — per family. */}
+              <p className="report-arousal__intro">{arousalFamily.intro}</p>
             </div>
 
-            <ArousalArc family={family} acts={acts} />
+            <ArousalArc family={family} acts={acts} accent={accent} />
+
+            <ActDetail acts={acts} accent={accent} />
 
             {hasStats ? (
               <div className="report-arousal__stats">
@@ -408,14 +476,16 @@ const ArousalSection: FC<Props> = ({
             </button>
 
             {!expanded ? (
-              <div className="report-arousal__details-peek">
+              <div className="report-arousal__details-peek report-learn-peek">
                 {copy["edu.teaser"] ? (
-                  <p className="report-arousal__details-teaser">{copy["edu.teaser"]}</p>
+                  <p className="report-arousal__details-teaser report-learn-teaser">
+                    {copy["edu.teaser"]}
+                  </p>
                 ) : null}
                 {eduParas.length > 0 ? (
                   <button
                     type="button"
-                    className="report-arousal__peek-cta"
+                    className="report-arousal__peek-cta report-learn-cta"
                     onClick={() => setExpanded(true)}
                   >
                     Read the full explanation
@@ -424,9 +494,14 @@ const ArousalSection: FC<Props> = ({
               </div>
             ) : (
               <div className="report-arousal__details-body">
+                {copy["edu.teaser"] ? (
+                  <p className="report-arousal__details-teaser report-learn-teaser-full">
+                    {copy["edu.teaser"]}
+                  </p>
+                ) : null}
                 {eduParas.map((para, i) => (
                   <p key={i} className="report-arousal__details-para">
-                    {para}
+                    {renderEduPara(para)}
                   </p>
                 ))}
               </div>

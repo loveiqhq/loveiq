@@ -24,6 +24,7 @@ import InviteModal from "@features/invite/ui/InviteModal";
 import FooterSection from "@features/landing/ui/FooterSection";
 import ReportDesktopSidebar from "./ReportDesktopSidebar";
 import MeansForYouSection from "./sections/MeansForYouSection";
+import type { PartnershipLoop } from "@/data/report2-partnership-loops";
 import type { ReportNavAccess } from "./ReportNavBadge";
 import {
   REPORT_NAV_PARTS,
@@ -85,6 +86,7 @@ import InsecuritiesSection, {
 import InsightMapSection, { type MapCopy } from "./sections/InsightMapSection";
 import CuriositySection, { type CuriosityCopy } from "./sections/CuriositySection";
 import FantasySection, { type FantasyCopy } from "./sections/FantasySection";
+import type { FantasyMapDot } from "@features/report/server/fantasyMap";
 import LoveLanguageSection, { type LoveLanguageCopy } from "./sections/LoveLanguageSection";
 import PowerSection, { type PowerCopy } from "./sections/PowerSection";
 import PracticeTendenciesSection from "./sections/PracticeTendenciesSection";
@@ -428,12 +430,14 @@ interface ReportExperienceProps {
   libidoCopy: LibidoCopy | null;
   libidoConfig: LibidoConfig | null;
   partnershipCopy: PartnershipCopy | null;
+  partnershipLoop: PartnershipLoop | null;
   enjoyCopy: EnjoyCopy | null;
   growthCopy: GrowthCopy | null;
   growthRungs: number | null;
   readingCopy: ReadingCopy | null;
   powerCopy: PowerCopy | null;
   fantasyCopy: FantasyCopy | null;
+  fantasyDots: FantasyMapDot[] | null;
   curiosityCopy: CuriosityCopy | null;
   relationshipFit: Record<string, number> | null;
   lovelangCopy: LoveLanguageCopy | null;
@@ -502,12 +506,14 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   libidoCopy,
   libidoConfig,
   partnershipCopy,
+  partnershipLoop,
   enjoyCopy,
   growthCopy,
   growthRungs,
   readingCopy,
   powerCopy,
   fantasyCopy,
+  fantasyDots,
   curiosityCopy,
   relationshipFit,
   lovelangCopy,
@@ -927,7 +933,11 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                           sectionId="snapshot"
                           title=""
                         >
-                          <SnapshotSection archetype={viewArchetype} copy={snapshotCopy} />
+                          <SnapshotSection
+                            archetype={viewArchetype}
+                            copy={snapshotCopy}
+                            stageResult={stageCopy?.result ?? null}
+                          />
                         </ReportSection>
                         {/* Findings renders directly after Snapshot with the same
                           reveal treatment (Figma 8501:683). Locked findings
@@ -1420,6 +1430,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                           <PartnershipSection
                             archetype={viewArchetype}
                             copy={isPrimaryView ? partnershipCopy : null}
+                            loop={isPrimaryView ? partnershipLoop : null}
                             offerDeadline={offerDeadline}
                             onUnlock={() => unlockSection(section)}
                             quote={fullReportQuote}
@@ -1668,6 +1679,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                         <FantasySection
                           archetype={viewArchetype}
                           copy={isPrimaryView ? fantasyCopy : null}
+                          dots={isPrimaryView ? fantasyDots : null}
                           offerDeadline={offerDeadline}
                           onUnlock={() => unlockSection(section)}
                           quote={fullReportQuote}
@@ -2410,9 +2422,11 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
         growthRungs={data.growthRungs ?? null}
         readingCopy={data.readingCopy ?? null}
         partnershipCopy={data.partnershipCopy ?? null}
+        partnershipLoop={data.partnershipLoop ?? null}
         enjoyCopy={data.enjoyCopy ?? null}
         powerCopy={data.powerCopy ?? null}
         fantasyCopy={data.fantasyCopy ?? null}
+        fantasyDots={data.fantasyDots ?? null}
         curiosityCopy={data.curiosityCopy ?? null}
         relationshipFit={data.relationshipFit ?? null}
         lovelangCopy={data.lovelangCopy ?? null}

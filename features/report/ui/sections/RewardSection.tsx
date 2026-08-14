@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, type FC } from "react";
+import { useState, type CSSProperties, type FC } from "react";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
+import { useRevealOnView } from "../hooks/useRevealOnView";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
+import { renderEduPara } from "./eduPara";
 
 /**
  * Server-resolved reward copy (`getReport2Section(name, "reward")`), threaded as
@@ -153,7 +155,8 @@ const RewardRow: FC<{
   const fill = meter == null ? null : Math.max(0, Math.min(100, meter));
 
   return (
-    <li className="report-reward__row">
+    // `--row` staggers this row's meter behind the one above it (.report-chart-reveal).
+    <li className="report-reward__row" style={{ "--row": index } as CSSProperties}>
       <span className="report-reward__rank" aria-hidden="true">
         {String(index + 1).padStart(2, "0")}
       </span>
@@ -189,6 +192,77 @@ const RewardRow: FC<{
     </li>
   );
 };
+
+/**
+ * The rarity dots above the stat line — Figma 9114:839 → 9114:840. Seven dots,
+ * d=11.41 on a 16.3 pitch across a 109.211-wide viewBox; the first carries the
+ * purple gradient (#B7A6E3 → #795FC8 across the dot's own box) and the remaining
+ * six sit at #9D8AD7 / 16%. It reads as "you are the one in many". This was the
+ * piece missing from the section: the card, its border, the stat type and the
+ * caption already matched the design, but the dot row was absent entirely.
+ */
+const REWARD_STAT_DOT_XS = [5.705, 22.0058, 38.3048, 54.6054, 70.9042, 87.205, 103.506] as const;
+
+/**
+ * The reader's real ranking. Separate from the locked blurred stand-in so only
+ * this one carries the scroll reveal — the stand-in sits under a blur behind the
+ * paywall overlay, where animating meters would be motion nobody can read.
+ */
+const RewardRankedList: FC<{
+  rows: { name: string; blurb: string; role: string; meter: number | null }[];
+}> = ({ rows }) => {
+  const [listRef, revealed] = useRevealOnView<HTMLOListElement>();
+  return (
+    <ol
+      ref={listRef}
+      className={`report-reward__list report-chart-reveal${revealed ? " is-revealed" : ""}`}
+    >
+      {rows.map((row, i) => (
+        <RewardRow
+          key={i}
+          index={i}
+          name={row.name}
+          blurb={row.blurb}
+          role={row.role}
+          meter={row.meter}
+        />
+      ))}
+    </ol>
+  );
+};
+
+const RewardStatDots: FC = () => (
+  <svg
+    className="report-reward__stat-dots"
+    viewBox="0 0 109.211 11.41"
+    fill="none"
+    aria-hidden="true"
+  >
+    <defs>
+      <linearGradient
+        id="report-reward-stat-dot"
+        x1="0"
+        y1="0"
+        x2="11.41"
+        y2="11.41"
+        gradientUnits="userSpaceOnUse"
+      >
+        <stop stopColor="#B7A6E3" />
+        <stop offset="1" stopColor="#795FC8" />
+      </linearGradient>
+    </defs>
+    {REWARD_STAT_DOT_XS.map((cx, i) => (
+      <circle
+        key={cx}
+        cx={cx}
+        cy={5.705}
+        r={5.705}
+        fill={i === 0 ? "url(#report-reward-stat-dot)" : "#9D8AD7"}
+        fillOpacity={i === 0 ? 1 : 0.16}
+      />
+    ))}
+  </svg>
+);
 
 const RewardSection: FC<Props> = ({
   archetype,
@@ -281,23 +355,11 @@ const RewardSection: FC<Props> = ({
           </>
         ) : (
           <>
-            {rows.length > 0 ? (
-              <ol className="report-reward__list">
-                {rows.map((row, i) => (
-                  <RewardRow
-                    key={i}
-                    index={i}
-                    name={row.name}
-                    blurb={row.blurb}
-                    role={row.role}
-                    meter={row.meter}
-                  />
-                ))}
-              </ol>
-            ) : null}
+            {rows.length > 0 ? <RewardRankedList rows={rows} /> : null}
 
             {hasStat ? (
               <div className="report-reward__stat">
+                <RewardStatDots />
                 <span className="report-reward__stat-num">{stat}</span>
                 <span className="report-reward__stat-caption">{statCaption}</span>
               </div>
@@ -339,14 +401,16 @@ const RewardSection: FC<Props> = ({
             </button>
 
             {!expanded ? (
-              <div className="report-reward__details-peek">
+              <div className="report-reward__details-peek report-learn-peek">
                 {copy["edu.teaser"] ? (
-                  <p className="report-reward__details-teaser">{copy["edu.teaser"]}</p>
+                  <p className="report-reward__details-teaser report-learn-teaser">
+                    {copy["edu.teaser"]}
+                  </p>
                 ) : null}
                 {eduParas.length > 0 ? (
                   <button
                     type="button"
-                    className="report-reward__peek-cta"
+                    className="report-reward__peek-cta report-learn-cta"
                     onClick={() => setExpanded(true)}
                   >
                     Read the full explanation
@@ -355,9 +419,14 @@ const RewardSection: FC<Props> = ({
               </div>
             ) : (
               <div className="report-reward__details-body">
+                {copy["edu.teaser"] ? (
+                  <p className="report-reward__details-teaser report-learn-teaser-full">
+                    {copy["edu.teaser"]}
+                  </p>
+                ) : null}
                 {eduParas.map((para, i) => (
                   <p key={i} className="report-reward__details-para">
-                    {para}
+                    {renderEduPara(para)}
                   </p>
                 ))}
               </div>

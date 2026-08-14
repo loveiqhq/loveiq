@@ -126,6 +126,17 @@ describe("ReportPage", () => {
           "learn.eyebrow": "What you will learn",
           "learn.body": "The specific shifts that move you toward what you want.",
         },
+        // A SECOND locked premium section, so "clicking one CTA leaves the others
+        // locked" is actually exercised. The legacy `summary` chapter used to be
+        // the incidental second one; it is retired (not in the Report 2.0 Figma),
+        // so the fixture now supplies one deliberately.
+        libidoCopy: {
+          locked: true,
+          "gate.hook": "There's a loop running underneath this.",
+          eyebrow: "The Pattern",
+          "learn.eyebrow": "What you will learn",
+          "learn.body": "The loop that quietly drains desire, and the way out.",
+        },
         growthRungs: 5,
         pricingQuotes: {
           essentials: {

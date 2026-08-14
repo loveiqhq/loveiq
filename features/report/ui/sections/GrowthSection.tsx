@@ -1,6 +1,6 @@
 "use client";
 
-import type { FC } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type FC } from "react";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 
@@ -86,43 +86,97 @@ type Rung = { from: string; to: string; move: string | null };
  * scales to `n` rungs (min 2). Purely presentational; the real per-archetype
  * content is the ladder rungs below.
  */
-const ElevationProfile: FC<{ n: number }> = ({ n }) => {
-  const steps = Math.max(n, 2);
-  const W = 800;
-  const H = 104;
-  const padX = 18;
-  const dotR = 7;
-  // Evenly space dots; each is one riser higher (smaller y) than the last.
-  const pts = Array.from({ length: steps }, (_, i) => ({
-    x: padX + (i * (W - padX * 2)) / (steps - 1),
-    y: H - dotR - (i * (H - dotR * 2)) / (steps - 1),
-  }));
-  const first = pts[0] ?? { x: padX, y: H - dotR };
-  // Stepped path: horizontal to each dot's x, then vertical up to its y.
-  const d = pts.reduce((acc, p, i) => {
-    if (i === 0) return `M ${p.x} ${p.y}`;
-    const prev = pts[i - 1]!;
-    return `${acc} L ${p.x} ${prev.y} L ${p.x} ${p.y}`;
-  }, "");
+/**
+ * Elevation profile (Figma 9114:680): a flat plateau under each rung joined by
+ * diagonal ramps with ROUNDED corners — not the sharp vertical risers this used to
+ * draw. Dot 1 is the orange "start here" marker and larger; the rest are purple
+ * and deepen as the reader climbs, matching the Figma dot fills.
+ *
+ * When `animated`, the line draws itself in left→right and each dot pops in
+ * behind it (see `.report-growth__profile` in globals.css).
+ */
+const PROFILE_W = 835;
+const PROFILE_H = 143;
+/** Figma dot centres, x/y in the 835×143 frame. */
+const PROFILE_DOTS: { x: number; y: number; r: number; fill: string }[] = [
+  { x: 77.5, y: 128.2, r: 8.9, fill: "#fe6839" },
+  { x: 256.5, y: 101.4, r: 7.5, fill: "#c4b5fd" },
+  { x: 435.5, y: 74.6, r: 7.5, fill: "#a78bfa" },
+  { x: 614.5, y: 49.2, r: 7.5, fill: "#8b6fe0" },
+  { x: 775.5, y: 23.9, r: 7.5, fill: "#795fc8" },
+];
+/** Half-width of each flat plateau, and the corner radius on every turn. */
+const PLATEAU = 56;
+const CORNER = 11;
+
+/** Polyline → path with every interior corner cut to a `r` quadratic. */
+function roundedPolyline(points: { x: number; y: number }[], r: number): string {
+  if (points.length < 2) return "";
+  let d = `M ${points[0]!.x} ${points[0]!.y}`;
+  for (let i = 1; i < points.length - 1; i += 1) {
+    const prev = points[i - 1]!;
+    const cur = points[i]!;
+    const next = points[i + 1]!;
+    const inLen = Math.hypot(cur.x - prev.x, cur.y - prev.y) || 1;
+    const outLen = Math.hypot(next.x - cur.x, next.y - cur.y) || 1;
+    const rIn = Math.min(r, inLen / 2);
+    const rOut = Math.min(r, outLen / 2);
+    const a = {
+      x: cur.x - ((cur.x - prev.x) / inLen) * rIn,
+      y: cur.y - ((cur.y - prev.y) / inLen) * rIn,
+    };
+    const b = {
+      x: cur.x + ((next.x - cur.x) / outLen) * rOut,
+      y: cur.y + ((next.y - cur.y) / outLen) * rOut,
+    };
+    d += ` L ${a.x.toFixed(1)} ${a.y.toFixed(1)} Q ${cur.x} ${cur.y} ${b.x.toFixed(1)} ${b.y.toFixed(1)}`;
+  }
+  const last = points[points.length - 1]!;
+  return `${d} L ${last.x} ${last.y}`;
+}
+
+const ElevationProfile: FC<{
+  n: number;
+  animated: boolean;
+  svgRef?: React.Ref<SVGSVGElement>;
+}> = ({ n, animated, svgRef }) => {
+  const dots = PROFILE_DOTS.slice(0, Math.max(2, Math.min(n, PROFILE_DOTS.length)));
+  const pts: { x: number; y: number }[] = [{ x: 0, y: dots[0]!.y }];
+  dots.forEach((dot, i) => {
+    if (i > 0) pts.push({ x: dot.x - PLATEAU, y: dot.y });
+    pts.push({ x: dot.x + PLATEAU, y: dot.y });
+  });
+  pts.push({ x: PROFILE_W, y: dots[dots.length - 1]!.y });
+
   return (
     <svg
-      className="report-growth__profile"
-      viewBox={`0 0 ${W} ${H + 16}`}
-      preserveAspectRatio="none"
+      ref={svgRef}
+      className={`report-growth__profile${animated ? " is-animated" : ""}`}
+      viewBox={`0 0 ${PROFILE_W} ${PROFILE_H}`}
       role="img"
       aria-label="Each shift is a step up from the one before"
     >
-      <path d={d} fill="none" stroke="#9d8ad7" strokeWidth="2.5" strokeLinejoin="round" />
-      {pts.map((p, i) => (
+      <path
+        className="report-growth__profile-line"
+        d={roundedPolyline(pts, CORNER)}
+        fill="none"
+        stroke="#b7a6e3"
+        strokeWidth="3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      {dots.map((dot, i) => (
         <circle
           key={i}
-          cx={p.x}
-          cy={p.y}
-          r={i === 0 ? dotR + 1.5 : dotR}
-          fill={i === 0 ? "#fe6839" : "#9d8ad7"}
+          className="report-growth__profile-dot"
+          style={{ "--dot-i": i } as CSSProperties}
+          cx={dot.x}
+          cy={dot.y}
+          r={dot.r}
+          fill={dot.fill}
         />
       ))}
-      <text x={first.x} y={first.y + 22} className="report-growth__profile-start">
+      <text className="report-growth__profile-start" x={dots[0]!.x - 36} y={dots[0]!.y - 18}>
         START HERE
       </text>
     </svg>
@@ -142,7 +196,7 @@ const RungItem: FC<{ rung: Rung; index: number; isFirst: boolean }> = ({
 }) => (
   <li
     className={`report-growth__rung${isFirst ? " is-first" : ""}`}
-    style={{ marginLeft: `${index * 22.5}px` }}
+    style={{ marginLeft: `${index * 22.5}px`, "--rung-i": index } as CSSProperties}
   >
     <span className="report-growth__rung-dot" aria-hidden="true" />
     <div className="report-growth__rung-body">
@@ -169,6 +223,36 @@ const GrowthSection: FC<Props> = ({
   sectionTitle,
   tier = "full_report",
 }) => {
+  /*
+   * The climb animates when the reader ARRIVES at the chart — not when the
+   * section's top edge appears. Observing the section root fired while the chart
+   * was still a few hundred pixels below the fold, so the draw and the rung
+   * stagger had already finished by the time it was on screen.
+   *
+   * So: observe the chart itself, and shrink the viewport by 30% at the bottom
+   * (`rootMargin`) so it must be properly in view, not just peeking in. Starts
+   * "already animated" where IntersectionObserver is unavailable, so content is
+   * never left hidden.
+   */
+  const chartRef = useRef<SVGSVGElement>(null);
+  const [isAnimated, setIsAnimated] = useState(() => typeof IntersectionObserver === "undefined");
+
+  useEffect(() => {
+    const el = chartRef.current;
+    if (!el || isAnimated) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          setIsAnimated(true);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.25, rootMargin: "0px 0px -30% 0px" }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [isAnimated]);
+
   if (!copy) return null;
 
   const locked = copy.locked;
@@ -191,7 +275,7 @@ const GrowthSection: FC<Props> = ({
   const profileSteps = hasLadder ? rungs.length : Math.max(rungCount ?? 5, 2);
 
   return (
-    <div className="report-growth">
+    <div className={`report-growth${isAnimated ? " is-animated" : ""}`}>
       <h3 className="report-growth__heading">Growth Potentials</h3>
 
       {copy["learn.body"] ? (
@@ -214,7 +298,7 @@ const GrowthSection: FC<Props> = ({
               <div className="report-growth__preview-fade" aria-hidden="true">
                 {/* Blurred stand-in — the real per-archetype ladder is withheld
                     server-side; the universal elevation profile frames it. */}
-                <ElevationProfile n={profileSteps} />
+                <ElevationProfile n={profileSteps} animated={isAnimated} />
                 <ol className="report-growth__ladder">
                   {Array.from({ length: profileSteps }, (_, i) => (
                     <li
@@ -251,7 +335,9 @@ const GrowthSection: FC<Props> = ({
               <p className="report-growth__ladder-headline">{copy["ladder.headline"]}</p>
             ) : null}
 
-            {hasLadder ? <ElevationProfile n={profileSteps} /> : null}
+            {hasLadder ? (
+              <ElevationProfile n={profileSteps} animated={isAnimated} svgRef={chartRef} />
+            ) : null}
 
             {hasLadder ? (
               <ol className="report-growth__ladder">

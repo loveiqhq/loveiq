@@ -1,8 +1,11 @@
 "use client";
 
-import { useState, type FC } from "react";
+import { useState, type CSSProperties, type FC } from "react";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
+import { getReportTheme } from "../reportTheme";
+import { useRevealOnView } from "../hooks/useRevealOnView";
+import { curveEndPoint } from "../curveEnd";
 
 /**
  * Server-resolved insecurities copy (`getReport2Section(name, "insecurities")`),
@@ -163,7 +166,7 @@ const OTHER_CURVES: { d: string; stroke: string }[] = [
  * reactive) while differing enough to match the family's story. Each ends at the
  * right edge (~x778) so the "You" dot/label anchor lands consistently.
  */
-const HIGHLIGHT_CURVES: Record<string, string> = {
+export const HIGHLIGHT_CURVES: Record<string, string> = {
   // Rises early and steep — reacts first (absence / abandonment).
   "early-hot-riser": "M64 340 C189 329 254 149 368 106 C482 64 620 49 778 44",
   // Climbs through the middle — reacts once things are underway (evaluation).
@@ -177,19 +180,37 @@ const HIGHLIGHT_CURVES: Record<string, string> = {
 };
 
 /** The reader's cue-curve chart (inline SVG, per Figma 8427:1525). */
-const CueGraph: FC<{ yAxis: string; xAxis: string; curveKey: string; youLabel: string }> = ({
-  yAxis,
-  xAxis,
-  curveKey,
-  youLabel,
-}) => {
-  const highlight = HIGHLIGHT_CURVES[curveKey] ?? HIGHLIGHT_CURVES["early-hot-riser"];
+/**
+ * Figma colours the highlighted curve, its end dot and the "You" label in the
+ * ARCHETYPE'S colour, not a fixed purple — verified on node 9107:587/591/592,
+ * where the evaluation variant draws all three in #06B6D4 (stroke-width 3.78 vs
+ * 2.27 for the faint context curves). Ours had them hardcoded to #795FC8, so the
+ * chart looked identical for every archetype.
+ */
+const CueGraph: FC<{
+  yAxis: string;
+  xAxis: string;
+  curveKey: string;
+  youLabel: string;
+  accent: string;
+}> = ({ yAxis, xAxis, curveKey, youLabel, accent }) => {
+  const highlight = HIGHLIGHT_CURVES[curveKey] ?? HIGHLIGHT_CURVES["early-hot-riser"]!;
+  // Pack fades in, then the reader's own curve draws over it, then the dot lands
+  // and the labels arrive — the order the chart is read in.
+  const [graphRef, revealed] = useRevealOnView<HTMLDivElement>();
   // End point of the highlighted curve (right edge) — anchor for dot/label.
-  const youX = PLOT.x1;
-  const youY = curveKey === "mid-riser" ? 52 : curveKey === "volatile" ? 50 : 46;
+  // Read off the curve, never maintained beside it: this was a three-branch
+  // lookup over five curves, which put the depletion family's dot 12px above its
+  // own line and both risers 2px off. See `curveEndPoint`.
+  const { x: youX, y: youY } = curveEndPoint(highlight);
 
   return (
-    <div className="report-insecurity-graph" role="img" aria-label="Where your sensitivity sits">
+    <div
+      ref={graphRef}
+      className={`report-insecurity-graph report-chart-reveal${revealed ? " is-revealed" : ""}`}
+      role="img"
+      aria-label="Where your sensitivity sits"
+    >
       <svg viewBox="0 0 800 390" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
         {/* axes */}
         <line
@@ -215,6 +236,8 @@ const CueGraph: FC<{ yAxis: string; xAxis: string; curveKey: string; youLabel: s
         {OTHER_CURVES.map((c, i) => (
           <path
             key={i}
+            className="report-chart-fade"
+            style={{ "--row": i } as CSSProperties}
             d={c.d}
             fill="none"
             stroke={c.stroke}
@@ -226,10 +249,19 @@ const CueGraph: FC<{ yAxis: string; xAxis: string; curveKey: string; youLabel: s
         {/* dashed connector from the "Other archetypes" label to the pack */}
         <line x1={751} y1={280} x2={702} y2={260} stroke="#C4BED0" strokeWidth="1.42" />
 
-        {/* the reader's highlighted curve */}
-        <path d={highlight} fill="none" stroke="#795FC8" strokeWidth="4.27" strokeLinecap="round" />
-        {/* solid dot at the curve's high end */}
-        <circle cx={youX} cy={youY} r="7.1" fill="#795FC8" />
+        {/* the reader's highlighted curve. `pathLength={1}` makes the dash units
+            path-relative, so one dasharray draws any archetype's curve. */}
+        <path
+          className="report-draw-line"
+          d={highlight}
+          pathLength={1}
+          fill="none"
+          stroke={accent}
+          strokeWidth="3.78"
+          strokeLinecap="round"
+        />
+        {/* solid dot at the curve's high end — lands once the stroke reaches it */}
+        <circle className="report-draw-dot" cx={youX} cy={youY} r="7.1" fill={accent} />
 
         {/* y-axis label (rotated) */}
         <text
@@ -255,16 +287,16 @@ const CueGraph: FC<{ yAxis: string; xAxis: string; curveKey: string; youLabel: s
 
         {/* series labels */}
         <text
-          className="report-insecurity-graph__you"
+          className="report-insecurity-graph__you report-chart-late"
           x={youX - 10}
           y={30}
           textAnchor="end"
-          fill="#795fc8"
+          fill={accent}
         >
           {youLabel}
         </text>
         <text
-          className="report-insecurity-graph__other"
+          className="report-insecurity-graph__other report-chart-late"
           x={686}
           y={247}
           textAnchor="end"
@@ -336,6 +368,7 @@ const InsecuritiesSection: FC<Props> = ({
             xAxis={xAxis}
             curveKey={curveKey}
             youLabel={`You — the ${archetype}`}
+            accent={getReportTheme(archetype).accent}
           />
         </div>
 
@@ -409,14 +442,16 @@ const InsecuritiesSection: FC<Props> = ({
             </button>
 
             {!expanded ? (
-              <div className="report-insecurities__details-peek">
+              <div className="report-insecurities__details-peek report-learn-peek">
                 {copy["practical.teaser"] ? (
-                  <p className="report-insecurities__details-teaser">{copy["practical.teaser"]}</p>
+                  <p className="report-insecurities__details-teaser report-learn-teaser">
+                    {copy["practical.teaser"]}
+                  </p>
                 ) : null}
                 {practicalLines.length > 0 ? (
                   <button
                     type="button"
-                    className="report-insecurities__peek-cta"
+                    className="report-insecurities__peek-cta report-learn-cta"
                     onClick={() => setExpanded(true)}
                   >
                     Read the full practice
@@ -425,6 +460,11 @@ const InsecuritiesSection: FC<Props> = ({
               </div>
             ) : (
               <div className="report-insecurities__details-body">
+                {copy["practical.teaser"] ? (
+                  <p className="report-insecurities__details-teaser report-learn-teaser-full">
+                    {copy["practical.teaser"]}
+                  </p>
+                ) : null}
                 {practicalLines.map((para, i) => (
                   <p key={i} className="report-insecurities__details-para">
                     {para}

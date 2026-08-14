@@ -1,8 +1,12 @@
 "use client";
 
-import { useState, type FC } from "react";
+import { useState, type CSSProperties, type FC } from "react";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
+import { useRevealOnView } from "../hooks/useRevealOnView";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
+import { archetypeSlug } from "@/data/report2-config";
+import { getAccelRows, type AccelRow, type AccelVerdict } from "@/data/report2-accel-rows";
+import { renderEduPara } from "./eduPara";
 
 /**
  * Server-resolved accelerators copy (`getReport2Section(name, "accel")`),
@@ -17,12 +21,14 @@ import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPri
  * For a locked client it arrives `null` and the client renders the `gate.hook`
  * teaser + PremiumOverlay instead. `locked` tells the client which it received.
  *
- * NOTE (Figma vs data): the Figma mock (node 8946:4286) shows ten ranked
- * accelerator/brake rows + a slider "verdict meter". No per-archetype data
- * exists for those — the copy provides only the `takeaway` verdict prose — so
- * they are intentionally NOT rendered (fabricating them would be wrong for all
- * 14 archetypes). The card, learn pill, verdict line, and the collapsible
- * dual-control educational block ARE built to the Figma spec.
+ * ROWS + METER (Figma 8946:4286): the ten ranked accelerator/brake rows and the
+ * accelerator↔brake verdict meter ARE rendered now. They are not in Mark's copy
+ * matrix, so they come from `data/report2-accel-rows.ts` — hardcoding this section
+ * was approved 2026-08-12. Each archetype gets its OWN rows, derived from its own
+ * `turn_ons` / `turn_offs` prose in `data/report-archetypes.ts`; only Spiritual
+ * Lover uses the Figma set verbatim (it is the archetype Figma mocks). Rows are
+ * premium payload, so a locked client still sees only the legend + blurred
+ * stand-in. The card, learn pill and verdict line follow the Figma spec.
  */
 export interface AccelCopy {
   "gate.hook"?: string | null;
@@ -66,6 +72,43 @@ const BookIcon: FC = () => (
   </svg>
 );
 
+/**
+ * One ranked trigger row: label, subtext, then the track whose bar width IS the
+ * rank (Figma 8946:4308 — a 403.99px divider with a shorter filled bar and a
+ * 6.77px marker at its end). The marker is positioned at the fill percentage so
+ * bar and dot can never disagree.
+ */
+const AccelTriggerRow: FC<{ row: AccelRow; kind: "open" | "shut"; index: number }> = ({
+  row,
+  kind,
+  index,
+}) => (
+  // `--row` staggers this row's bar behind the one above it (.report-chart-reveal).
+  <li className="report-accel__row" style={{ "--row": index } as CSSProperties}>
+    <p className="report-accel__row-label">{row.label}</p>
+    <p className="report-accel__row-subtext">{row.subtext}</p>
+    <div
+      className={`report-accel__track report-accel__track--${kind}`}
+      role="img"
+      aria-label={`${row.label}: ${row.fill}% of the strongest`}
+    >
+      <span className="report-accel__track-fill" style={{ width: `${row.fill}%` }} />
+      <span className="report-accel__track-dot" style={{ left: `${row.fill}%` }} />
+    </div>
+  </li>
+);
+
+/** Splits the verdict caption so the leaning side renders bold, as in Figma. */
+function verdictCaptionParts(v: AccelVerdict): [string, string, string] {
+  const i = v.caption.toLowerCase().indexOf(v.side.toLowerCase());
+  if (i < 0) return [v.caption, "", ""];
+  return [
+    v.caption.slice(0, i),
+    v.caption.slice(i, i + v.side.length),
+    v.caption.slice(i + v.side.length),
+  ];
+}
+
 const AcceleratorsSection: FC<Props> = ({
   archetype,
   copy,
@@ -76,9 +119,18 @@ const AcceleratorsSection: FC<Props> = ({
   tier = "essentials",
 }) => {
   const [expanded, setExpanded] = useState(false);
+  // Two reveals, not one: the verdict meter sits below the columns and would
+  // otherwise slide its marker while still off-screen. Hooks before the early
+  // return — a hook may not be conditional.
+  const [chartRef, revealed] = useRevealOnView<HTMLDivElement>();
+  const [verdictRef, verdictRevealed] = useRevealOnView<HTMLDivElement>();
   if (!copy) return null;
 
   const locked = copy.locked;
+  // Rows + meter are hardcoded from Figma 8946:4286 (approved 2026-08-12) because
+  // the copy handoff carries no row data — see `data/report2-accel-rows.ts`.
+  const rows = getAccelRows(archetypeSlug(archetype));
+  const [capBefore, capSide, capAfter] = verdictCaptionParts(rows.verdict);
   const eduParas = [copy["edu.body.p1"], copy["edu.body.p2"], copy["edu.body.p3"]].filter(
     (p): p is string => !!p
   );
@@ -101,10 +153,70 @@ const AcceleratorsSection: FC<Props> = ({
       ) : null}
 
       <article className="report-accel__card">
-        <div className="report-accel__legend" aria-hidden="true">
-          <span className="report-accel__legend-open">&#9650; What opens you</span>
-          <span className="report-accel__legend-shut">&#9660; What shuts you down</span>
-        </div>
+        {/* Unlocked: the ten ranked rows + verdict meter from Figma 8946:4286.
+            Locked: the rows ARE the premium payload, so only the legend teaser and
+            the blurred stand-in show, exactly as before. */}
+        {!locked ? (
+          <>
+            <div
+              ref={chartRef}
+              className={`report-accel__columns report-chart-reveal${revealed ? " is-revealed" : ""}`}
+            >
+              <section className="report-accel__col">
+                <h4 className="report-accel__col-heading report-accel__col-heading--open">
+                  <span aria-hidden="true">&#9650;</span> What opens you
+                </h4>
+                <ul className="report-accel__rows">
+                  {rows.opens.map((row, i) => (
+                    <AccelTriggerRow key={row.label} row={row} kind="open" index={i} />
+                  ))}
+                </ul>
+              </section>
+              <section className="report-accel__col">
+                <h4 className="report-accel__col-heading report-accel__col-heading--shut">
+                  <span aria-hidden="true">&#9660;</span> What shuts you down
+                </h4>
+                <ul className="report-accel__rows">
+                  {rows.shuts.map((row, i) => (
+                    <AccelTriggerRow key={row.label} row={row} kind="shut" index={i} />
+                  ))}
+                </ul>
+              </section>
+            </div>
+
+            <div
+              ref={verdictRef}
+              className={`report-accel__meter report-chart-reveal${verdictRevealed ? " is-revealed" : ""}`}
+            >
+              <div className="report-accel__meter-labels" aria-hidden="true">
+                <span className="report-accel__meter-label--open">accelerator-led</span>
+                <span className="report-accel__meter-label--shut">brake-led</span>
+              </div>
+              <div
+                className="report-accel__meter-track"
+                role="img"
+                aria-label={rows.verdict.caption}
+              >
+                {/* `--dot`, not `left`: the marker travels here from centre, and the
+                    real reading stays the resting value. See .report-accel__meter-dot. */}
+                <span
+                  className="report-accel__meter-dot"
+                  style={{ "--dot": `${rows.verdict.dot}%` } as CSSProperties}
+                />
+              </div>
+              <p className="report-accel__meter-caption">
+                {capBefore}
+                {capSide ? <strong>{capSide}</strong> : null}
+                {capAfter}
+              </p>
+            </div>
+          </>
+        ) : (
+          <div className="report-accel__legend" aria-hidden="true">
+            <span className="report-accel__legend-open">&#9650; What opens you</span>
+            <span className="report-accel__legend-shut">&#9660; What shuts you down</span>
+          </div>
+        )}
 
         {locked ? (
           <div className="report-accel__verdict report-accel__verdict--locked">
@@ -157,19 +269,40 @@ const AcceleratorsSection: FC<Props> = ({
               </span>
             </button>
 
-            {copy["edu.teaser"] && !expanded ? (
-              <p className="report-accel__details-teaser">{copy["edu.teaser"]}</p>
-            ) : null}
-
-            {expanded ? (
+            {/* Figma's "peek CTA" (node 8762:15996 on the twin attachment block,
+                and the pill visible in the accel mock 8946:4286). 13 of the 16
+                collapsibles already shipped it; this was one of three missing. */}
+            {!expanded ? (
+              <div className="report-accel__details-peek report-learn-peek">
+                {copy["edu.teaser"] ? (
+                  <p className="report-accel__details-teaser report-learn-teaser">
+                    {copy["edu.teaser"]}
+                  </p>
+                ) : null}
+                {eduParas.length > 0 ? (
+                  <button
+                    type="button"
+                    className="report-accel__peek-cta report-learn-cta"
+                    onClick={() => setExpanded(true)}
+                  >
+                    Read the full explanation
+                  </button>
+                ) : null}
+              </div>
+            ) : (
               <div className="report-accel__details-body">
+                {copy["edu.teaser"] ? (
+                  <p className="report-accel__details-teaser report-learn-teaser-full">
+                    {copy["edu.teaser"]}
+                  </p>
+                ) : null}
                 {eduParas.map((para, i) => (
                   <p key={i} className="report-accel__details-para">
-                    {para}
+                    {renderEduPara(para)}
                   </p>
                 ))}
               </div>
-            ) : null}
+            )}
           </div>
         ) : null}
       </article>

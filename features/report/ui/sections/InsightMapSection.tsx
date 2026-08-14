@@ -51,6 +51,13 @@ const IgnitionCurve: FC<{ family: ArousalFamily }> = ({ family }) => {
   const curve = AROUSAL_CURVES[family];
   const gradientId = `report-map-ignition-${family}`;
 
+  // NOTE: `preserveAspectRatio="none"` stretches the viewBox non-uniformly so the
+  // path spans the card's full width, which also scales the marker below — at
+  // 1440px it renders ~13.71x14.54, i.e. ~6% taller than wide. That was moved out
+  // of the SVG once to make it a true circle, but the replacement element did not
+  // paint in Safari, so it was reverted deliberately: a marker 6% off round beats
+  // a marker that is missing. Leave the <circle> here unless a fix is verified in
+  // real Safari, not just Playwright's WebKit.
   return (
     <svg
       viewBox={`0 0 ${TEASER_VB_WIDTH} ${curve.teaser.vbHeight}`}

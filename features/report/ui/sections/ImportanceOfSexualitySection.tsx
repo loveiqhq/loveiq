@@ -3,6 +3,7 @@
 import { useEffect, useState, type CSSProperties, type FC } from "react";
 import { getReport2Config } from "@/data/report2-config";
 import { getReportTheme } from "../reportTheme";
+import { useRevealOnView } from "../hooks/useRevealOnView";
 
 interface Props {
   archetype: string;
@@ -76,11 +77,9 @@ const ImportanceOfSexualitySection: FC<Props> = ({ archetype, importanceValue })
     getReport2Config(archetype)?.importance_strip?.band ?? bandFromValue(importanceValue);
   const description = BAND_DESCRIPTION[band];
 
-  const [isAnimated, setIsAnimated] = useState(false);
-  useEffect(() => {
-    const rafId = requestAnimationFrame(() => setIsAnimated(true));
-    return () => cancelAnimationFrame(rafId);
-  }, []);
+  // Was a mount-time requestAnimationFrame — the dots had finished landing
+  // before the reader ever reached the strip.
+  const [stripRef, isAnimated] = useRevealOnView<HTMLDivElement>();
 
   // The viewer's own dot = their entry in the fixed ranking.
   const youIndex = RANKING.findIndex((d) => d.name === archetype);
@@ -107,7 +106,10 @@ const ImportanceOfSexualitySection: FC<Props> = ({ archetype, importanceValue })
         </div>
 
         {/* Continuum: matters less ●———●———(You)———●——— matters more */}
-        <div className={`report-importance__strip${isAnimated ? " is-animated" : ""}`}>
+        <div
+          ref={stripRef}
+          className={`report-importance__strip${isAnimated ? " is-animated" : ""}`}
+        >
           <div className="report-importance__axis" aria-hidden="true">
             <span className="report-importance__axis-line" />
 

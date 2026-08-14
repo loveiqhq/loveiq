@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, type FC } from "react";
+import { useState, type CSSProperties, type FC } from "react";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
+import { useRevealOnView } from "../hooks/useRevealOnView";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
+import { renderEduPara } from "./eduPara";
 
 /**
  * Server-resolved love-language copy (`getReport2Section(name, "lovelang")`),
@@ -121,7 +123,8 @@ const LanguageRow: FC<{ index: number; name: string; blurb: string }> = ({
 }) => {
   const style = RANK_STYLES[Math.min(index, RANK_STYLES.length - 1)]!;
   return (
-    <li className="report-lovelang__row">
+    // `--row` staggers this row's bar behind the one above it (see .report-chart-reveal).
+    <li className="report-lovelang__row" style={{ "--row": index } as CSSProperties}>
       <span className="report-lovelang__rank" aria-hidden="true">
         {String(index + 1).padStart(2, "0")}
       </span>
@@ -150,14 +153,20 @@ const LanguageRow: FC<{ index: number; name: string; blurb: string }> = ({
 };
 
 /** The ranked list of the five languages in the reader's order (rank 1..5). */
-const RankedList: FC<{ order: string[] }> = ({ order }) => (
-  <ol className="report-lovelang__list">
-    {order.map((slug, i) => {
-      const lang = LANGUAGES[slug] ?? { name: slug, blurb: "" };
-      return <LanguageRow key={slug} index={i} name={lang.name} blurb={lang.blurb} />;
-    })}
-  </ol>
-);
+const RankedList: FC<{ order: string[] }> = ({ order }) => {
+  const [listRef, revealed] = useRevealOnView<HTMLOListElement>();
+  return (
+    <ol
+      ref={listRef}
+      className={`report-lovelang__list report-chart-reveal${revealed ? " is-revealed" : ""}`}
+    >
+      {order.map((slug, i) => {
+        const lang = LANGUAGES[slug] ?? { name: slug, blurb: "" };
+        return <LanguageRow key={slug} index={i} name={lang.name} blurb={lang.blurb} />;
+      })}
+    </ol>
+  );
+};
 
 // Fallback ordering for the locked blurred stand-in only — generic filler under
 // the blur; the reader's real order is withheld server-side.
@@ -270,14 +279,16 @@ const LoveLanguageSection: FC<Props> = ({
             </button>
 
             {!expanded ? (
-              <div className="report-lovelang__details-peek">
+              <div className="report-lovelang__details-peek report-learn-peek">
                 {copy["edu.teaser"] ? (
-                  <p className="report-lovelang__details-teaser">{copy["edu.teaser"]}</p>
+                  <p className="report-lovelang__details-teaser report-learn-teaser">
+                    {copy["edu.teaser"]}
+                  </p>
                 ) : null}
                 {eduParas.length > 0 ? (
                   <button
                     type="button"
-                    className="report-lovelang__peek-cta"
+                    className="report-lovelang__peek-cta report-learn-cta"
                     onClick={() => setExpanded(true)}
                   >
                     Read the full explanation
@@ -286,9 +297,14 @@ const LoveLanguageSection: FC<Props> = ({
               </div>
             ) : (
               <div className="report-lovelang__details-body">
+                {copy["edu.teaser"] ? (
+                  <p className="report-lovelang__details-teaser report-learn-teaser-full">
+                    {copy["edu.teaser"]}
+                  </p>
+                ) : null}
                 {eduParas.map((para, i) => (
                   <p key={i} className="report-lovelang__details-para">
-                    {para}
+                    {renderEduPara(para)}
                   </p>
                 ))}
               </div>

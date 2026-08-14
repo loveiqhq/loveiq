@@ -25,12 +25,31 @@ export interface SnapshotCopy {
   "compare2.caption"?: string;
   "compare3.stat"?: string;
   "compare3.caption"?: string;
+  /**
+   * Card 1's share stat + caption, resolved server-side from `initiation.stat1`
+   * ("share choosing I make the first move", RESOLVED in STATS-AUDIT.md and
+   * present for all 14 archetypes). Figma mocked this card as "Your Hidden Edge"
+   * with `1 in 3`, but that value is a RETRACTED `arousal.stat1` matrix figure the
+   * audit replaced with 52%, and no per-archetype hidden-edge copy exists — so the
+   * card carries the real, audited, per-archetype share instead.
+   */
+  "openingMove.stat"?: string | null;
+  "openingMove.caption"?: string | null;
   "stage.subline"?: string;
 }
 
 interface Props {
   archetype: string;
   copy: SnapshotCopy | null;
+  /**
+   * The authoritative per-archetype stage string (`stage.result` from the copy
+   * matrix, e.g. "Deepening / Balancing"), threaded from `ReportPage` — the SAME
+   * value `SexualStageSection` renders, so card 3 and the Sexual Stage section
+   * can never disagree. Card 3 used to read `config.stage_default`, which the
+   * copy handoff only ever filled for Spiritual Lover, so 13 of 14 archetypes
+   * silently dropped the card.
+   */
+  stageResult?: string | null;
 }
 
 function capitalizeWord(value: string): string {
@@ -139,7 +158,7 @@ const CompareBar: FC = () => (
   </div>
 );
 
-const SnapshotSection: FC<Props> = ({ archetype, copy }) => {
+const SnapshotSection: FC<Props> = ({ archetype, copy, stageResult = null }) => {
   const slug = archetypeSlug(archetype) as Report2CopySlug;
   const config = getReport2Config(archetype);
   const cards = snapshotCards[slug];
@@ -151,11 +170,24 @@ const SnapshotSection: FC<Props> = ({ archetype, copy }) => {
   const arousalValue = arousalRaw ? capitalizeWord(arousalRaw) : null;
   const arousalFamily = resolveArousalFamily(arousalRaw);
 
-  // Card 3 from config.stage_default ("Evolving / Transcending"). Big value is
-  // the LAST word ("Transcending"); the purple line is the full string.
-  const stageFull = typeof config?.stage_default === "string" ? config.stage_default : null;
+  // Card 3 stage string ("Evolving / Transcending"). Big value is the LAST word
+  // ("Transcending"); the purple line is the full string. Prefer the copy
+  // matrix's `stage.result` (present for all 14 archetypes) over the config's
+  // `stage_default` (only ever filled for Spiritual Lover, in both the repo and
+  // Mark's handoff) so the card renders for every archetype.
+  const stageFull =
+    stageResult ?? (typeof config?.stage_default === "string" ? config.stage_default : null);
   const stageWord = stageFull ? (stageFull.split("/").pop()?.trim() ?? stageFull) : null;
   const stageSubline = copy?.["stage.subline"] ?? null;
+
+  // Card 1 — audited per-archetype share (see `openingMove.*` on SnapshotCopy).
+  const openingStat = copy?.["openingMove.stat"] ?? null;
+  const openingCaption = copy?.["openingMove.caption"] ?? null;
+  // Numeric values ("1 in 4") are unaffected; this only lifts the word-form ones
+  // so a lowercase "rarely first" doesn't render as a lowercase headline figure.
+  const displayStat = openingStat
+    ? openingStat.charAt(0).toUpperCase() + openingStat.slice(1)
+    : null;
 
   const compares = [
     {
@@ -187,8 +219,23 @@ const SnapshotSection: FC<Props> = ({ archetype, copy }) => {
       <h3 className="report-snapshot__heading">Your snapshot</h3>
 
       <div className="report-snapshot__cards">
-        {/* Card 1 — Your hidden edge */}
-        {cards?.hiddenEdge ? (
+        {/* Card 1 — Figma's "Your Hidden Edge" composition (eyebrow → value → 46px
+            ring → subtext, node 8719:8895) with the label kept verbatim per
+            Eman's call. The NUMBER is not Figma's `1 in 3`: STATS-AUDIT.md
+            retracted that value, so the card carries the audited per-archetype
+            first-move share instead, which reads as an edge (being one of the few
+            who open). Renders for all 14 archetypes.
+            `displayStat` only fixes capitalisation — Mark's matrix has
+            "Rarely first" for loyal-ritualist but "rarely first" for
+            minimalist-companion, and this value renders as a large serif figure. */}
+        {openingStat && openingCaption ? (
+          <article className="report-snapshot-card">
+            <p className="report-snapshot-card__eyebrow">Your Hidden Edge</p>
+            <span className="report-snapshot-card__value">{displayStat}</span>
+            <HiddenEdgeArc />
+            <p className="report-snapshot-card__subtext">{openingCaption}</p>
+          </article>
+        ) : cards?.hiddenEdge ? (
           <article className="report-snapshot-card">
             <p className="report-snapshot-card__eyebrow">Your Hidden Edge</p>
             {/* Figma 8719:8895 puts the value ABOVE the ring (y≈82) and the 46px

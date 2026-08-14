@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, type FC } from "react";
+import { useState, type CSSProperties, type FC } from "react";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
+import { getReportTheme } from "../reportTheme";
+import { useRevealOnView } from "../hooks/useRevealOnView";
 
 /**
  * Server-resolved initiation copy (`getReport2Section(name, "initiation")`),
@@ -116,9 +118,12 @@ const BulbIcon: FC = () => (
  *   • heard-too-loudly — the invitation is OVER-received: a direct, playful,
  *     high-energy signal lands as pressure or a claim on the whole evening.
  *
- * The right-column heading changes with the family ("What arrived" for the
- * under-received story; "What they heard" for the over-received one) so the
- * mismatch reads correctly for every archetype.
+ * Both families head the right column "What arrived" (Figma 8427:2307 and
+ * 9107:1326) — the two stories are told by the six row values, which is exactly
+ * what the variant frame's footer promises: "one editorial spread, two mirrored
+ * families. The six row values and the takeaway swap." Values are Figma verbatim:
+ * lost-in-translation from the base card 8427:2294, heard-too-loudly from
+ * 9107:1313.
  */
 type ChartFamily = {
   rightHeading: string;
@@ -135,49 +140,66 @@ const LOST_IN_TRANSLATION: ChartFamily = {
 };
 
 const HEARD_TOO_LOUDLY: ChartFamily = {
-  rightHeading: "What they heard",
+  // Figma 9107:1326 keeps "What arrived" for BOTH families — the mismatch is
+  // carried by the row values, not by relabelling the column.
+  rightHeading: "What arrived",
   rows: [
-    { sent: "a sudden kiss, no preamble", got: '"intense, out of nowhere"' },
-    { sent: "a cheeky grab in the hallway", got: '"a claim on the whole night"' },
-    { sent: "banter that keeps escalating", got: '"pressure, not an invitation"' },
+    { sent: "a clear move, said out loud", got: '"pressure"' },
+    { sent: "a hand with stated intention", got: '"a demand to answer now"' },
+    { sent: "an invitation without hedging", got: '"something to deflect"' },
   ],
 };
 
-const CHART_FAMILIES: Record<string, ChartFamily> = {
+export const CHART_FAMILIES: Record<string, ChartFamily> = {
   "lost-in-translation": LOST_IN_TRANSLATION,
   "heard-too-loudly": HEARD_TOO_LOUDLY,
 };
 
 /** The two-column sent → received mismatch chart (Figma 8427:2294). */
-const TimelineChart: FC<{ fam: ChartFamily }> = ({ fam }) => (
-  <div
-    className="report-initiation__chart"
-    role="img"
-    aria-label="What you send versus how it arrives"
-  >
-    <div className="report-initiation__chart-col report-initiation__chart-col--sent">
-      <p className="report-initiation__chart-head report-initiation__chart-head--sent">
-        What you sent
-      </p>
-      {fam.rows.map((row, i) => (
-        <p key={i} className="report-initiation__chart-cell">
-          {row.sent}
+const TimelineChart: FC<{ fam: ChartFamily }> = ({ fam }) => {
+  // Each row's "what you sent" appears just before "what arrived", pair by pair
+  // down the chart — the mismatch is the point, so it reads as a sequence of
+  // send-then-land rather than two columns switching on at once.
+  const [chartRef, revealed] = useRevealOnView<HTMLDivElement>();
+  return (
+    <div
+      ref={chartRef}
+      className={`report-initiation__chart report-chart-reveal${revealed ? " is-revealed" : ""}`}
+      role="img"
+      aria-label="What you send versus how it arrives"
+    >
+      <div className="report-initiation__chart-col report-initiation__chart-col--sent">
+        <p className="report-initiation__chart-head report-initiation__chart-head--sent">
+          What you sent
         </p>
-      ))}
-    </div>
-    <span className="report-initiation__chart-divider" aria-hidden="true" />
-    <div className="report-initiation__chart-col report-initiation__chart-col--got">
-      <p className="report-initiation__chart-head report-initiation__chart-head--got">
-        {fam.rightHeading}
-      </p>
-      {fam.rows.map((row, i) => (
-        <p key={i} className="report-initiation__chart-cell report-initiation__chart-cell--got">
-          {row.got}
+        {fam.rows.map((row, i) => (
+          <p
+            key={i}
+            className="report-initiation__chart-cell"
+            style={{ "--row": i } as CSSProperties}
+          >
+            {row.sent}
+          </p>
+        ))}
+      </div>
+      <span className="report-initiation__chart-divider" aria-hidden="true" />
+      <div className="report-initiation__chart-col report-initiation__chart-col--got">
+        <p className="report-initiation__chart-head report-initiation__chart-head--got">
+          {fam.rightHeading}
         </p>
-      ))}
+        {fam.rows.map((row, i) => (
+          <p
+            key={i}
+            className="report-initiation__chart-cell report-initiation__chart-cell--got"
+            style={{ "--row": i } as CSSProperties}
+          >
+            {row.got}
+          </p>
+        ))}
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 /**
  * The mini-stat's dot-progress meter (Figma 8503:685): a row of six dots with
@@ -206,6 +228,13 @@ const InitiationSection: FC<Props> = ({
   if (!copy) return null;
 
   const locked = copy.locked;
+  // Figma tints the eyebrow + "What you sent" with the reader's accent (purple on
+  // the base card, orange on the variant); both were hardcoded purple for all 14.
+  const accent = getReportTheme(archetype).accent;
+  const accentVars = {
+    "--init-accent": accent,
+    "--init-accent-muted": `color-mix(in srgb, ${accent} 70%, #3f3a4d)`,
+  } as CSSProperties;
 
   // Chart family — universal fallback to `lost-in-translation` (the Figma
   // default) when config is absent (locked). The chart is family framing, so
@@ -232,7 +261,7 @@ const InitiationSection: FC<Props> = ({
   const hasRow1 = !!copy["row1.value"]?.trim();
 
   return (
-    <div className="report-initiation">
+    <div className="report-initiation" style={accentVars}>
       <h3 className="report-initiation__heading">Initiation Style</h3>
 
       {copy["learn.body"] ? (
@@ -336,14 +365,16 @@ const InitiationSection: FC<Props> = ({
             </button>
 
             {!expanded ? (
-              <div className="report-initiation__details-peek">
+              <div className="report-initiation__details-peek report-learn-peek">
                 {copy["practical.teaser"] ? (
-                  <p className="report-initiation__details-teaser">{copy["practical.teaser"]}</p>
+                  <p className="report-initiation__details-teaser report-learn-teaser">
+                    {copy["practical.teaser"]}
+                  </p>
                 ) : null}
                 {practicalLines.length > 0 ? (
                   <button
                     type="button"
-                    className="report-initiation__peek-cta"
+                    className="report-initiation__peek-cta report-learn-cta"
                     onClick={() => setExpanded(true)}
                   >
                     Read the full practice
@@ -352,6 +383,11 @@ const InitiationSection: FC<Props> = ({
               </div>
             ) : (
               <div className="report-initiation__details-body">
+                {copy["practical.teaser"] ? (
+                  <p className="report-initiation__details-teaser report-learn-teaser-full">
+                    {copy["practical.teaser"]}
+                  </p>
+                ) : null}
                 {practicalLines.map((para, i) => (
                   <p key={i} className="report-initiation__details-para">
                     {para}

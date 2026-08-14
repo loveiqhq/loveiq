@@ -2,6 +2,7 @@
 
 import type { FC } from "react";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
+import { getReadingSource, readingHref } from "@/data/report2-reading-links";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 
 /**
@@ -21,10 +22,11 @@ import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPri
  * client.
  *
  * Figma note: the design (8427:2777) shows real book-cover thumbnails and
- * "View book" / "Open paper" links, but the copy matrix carries no cover-image
- * or link-URL slot for any archetype — inventing them would fabricate data, so
- * each card renders a tinted spine placeholder (initials-free) and no dead
- * link. Everything else is pixel-matched to the card spec.
+ * "View book" / "Open paper" links, and the copy matrix carries no cover-image or
+ * link-URL slot for any archetype. Both come from `data/report2-reading-links.ts`,
+ * which resolves all 47 distinct titles to a real jacket and a real destination —
+ * see that file for how each was sourced and checked. Everything else is
+ * pixel-matched to the card spec.
  */
 export interface ReadingCopy {
   // Universal (always shipped) — these frame the section for locked clients too.
@@ -84,23 +86,60 @@ const BookIcon: FC = () => (
 type Book = { tag: string | null; title: string; author: string | null; blurb: string | null };
 
 /**
- * One book card (Figma 8427:2781): a tinted spine placeholder + a tag eyebrow,
- * serif title, author line, and blurb. (Cover art + "View book" link have no
- * copy slot — see the component note — so the spine is decorative.)
+ * One book card (Figma 8427:2781): cover spine, tag eyebrow, serif title, author
+ * line, blurb and the link pill.
+ *
+ * A title with no jacket on file falls back to the treatment Figma itself applies
+ * to the card that has no cover either — the journal paper at 8427:2808: a dark
+ * gradient spine with the author line small and uppercase above the title in
+ * serif. So the design language holds whether or not artwork exists.
+ *
+ * The link label follows the destination: an academic source (one with a DOI)
+ * reads "Open paper", a trade book "View book". That reproduces all four of
+ * Figma's base cards, and unlike a guess from the copy it cannot mislabel — the
+ * tag vocabulary ("Core pick" / "Research pick" / "The science" / "The stretch")
+ * puts its research-flavoured tags on famous trade BOOKS as often as on papers.
  */
-const BookCard: FC<{ book: Book }> = ({ book }) => (
-  <article className="report-reading__card">
-    <span className="report-reading__spine" aria-hidden="true">
-      <BookIcon />
-    </span>
-    <div className="report-reading__body">
-      {book.tag ? <p className="report-reading__tag">{book.tag}</p> : null}
-      <h4 className="report-reading__title">{book.title}</h4>
-      {book.author ? <p className="report-reading__author">{book.author}</p> : null}
-      {book.blurb ? <p className="report-reading__blurb">{book.blurb}</p> : null}
-    </div>
-  </article>
-);
+const BookCard: FC<{ book: Book }> = ({ book }) => {
+  const source = getReadingSource(book.title);
+  const isPaper = Boolean(source?.doi);
+  return (
+    <article className="report-reading__card">
+      {source?.cover ? (
+        // eslint-disable-next-line @next/next/no-img-element -- 180px-wide local jacket at a 79px spine; next/image adds nothing
+        <img
+          className="report-reading__cover"
+          src={`/report/books/${source.cover}`}
+          width={source.w}
+          height={source.h}
+          alt=""
+          aria-hidden="true"
+          loading="lazy"
+          decoding="async"
+        />
+      ) : (
+        <span className="report-reading__spine" aria-hidden="true">
+          {book.author ? <span className="report-reading__spine-author">{book.author}</span> : null}
+          <span className="report-reading__spine-title">{book.title}</span>
+        </span>
+      )}
+      <div className="report-reading__body">
+        {book.tag ? <p className="report-reading__tag">{book.tag}</p> : null}
+        <h4 className="report-reading__title">{book.title}</h4>
+        {book.author ? <p className="report-reading__author">{book.author}</p> : null}
+        {book.blurb ? <p className="report-reading__blurb">{book.blurb}</p> : null}
+        <a
+          className="report-reading__link"
+          href={readingHref(book.title, book.author)}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          {isPaper ? "Open paper" : "View book"}
+        </a>
+      </div>
+    </article>
+  );
+};
 
 const ReadingSection: FC<Props> = ({
   archetype,

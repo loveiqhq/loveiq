@@ -3,6 +3,7 @@
 import { useState, type FC } from "react";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
+import { renderEduPara } from "./eduPara";
 
 /**
  * Server-resolved beliefs copy (`getReport2Section(name, "beliefs")`), threaded
@@ -239,19 +240,39 @@ const BeliefsSection: FC<Props> = ({
               </span>
             </button>
 
-            {copy["edu.teaser"] && !expanded ? (
-              <p className="report-beliefs__details-teaser">{copy["edu.teaser"]}</p>
-            ) : null}
-
-            {expanded ? (
+            {/* Figma's "peek CTA" — the third and last collapsible that was
+                missing it (see AttachmentPatternsSection / AcceleratorsSection). */}
+            {!expanded ? (
+              <div className="report-beliefs__details-peek report-learn-peek">
+                {copy["edu.teaser"] ? (
+                  <p className="report-beliefs__details-teaser report-learn-teaser">
+                    {copy["edu.teaser"]}
+                  </p>
+                ) : null}
+                {eduParas.length > 0 ? (
+                  <button
+                    type="button"
+                    className="report-beliefs__peek-cta report-learn-cta"
+                    onClick={() => setExpanded(true)}
+                  >
+                    Read the full explanation
+                  </button>
+                ) : null}
+              </div>
+            ) : (
               <div className="report-beliefs__details-body">
+                {copy["edu.teaser"] ? (
+                  <p className="report-beliefs__details-teaser report-learn-teaser-full">
+                    {copy["edu.teaser"]}
+                  </p>
+                ) : null}
                 {eduParas.map((para, i) => (
                   <p key={i} className="report-beliefs__details-para">
-                    {para}
+                    {renderEduPara(para)}
                   </p>
                 ))}
               </div>
-            ) : null}
+            )}
           </div>
         ) : null}
       </article>

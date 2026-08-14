@@ -1,0 +1,74 @@
+import { describe, expect, it } from "vitest";
+import config from "@/data/report2-archetype-config.json";
+import { AROUSAL_FAMILIES, SHARED_ACT_DETAIL, getArousalFamily } from "@/data/report2-arousal";
+
+const rows = Object.entries(config as Record<string, { families?: { arousal?: string } }>).filter(
+  ([slug, v]) => !slug.startsWith("_") && !!v && typeof v === "object"
+);
+
+describe("report2 arousal families", () => {
+  it("resolves every archetype's families.arousal", () => {
+    expect(rows).toHaveLength(14);
+    for (const [slug, v] of rows) {
+      const family = v.families?.arousal;
+      expect(family, `${slug} has no families.arousal`).toBeTruthy();
+      expect(AROUSAL_FAMILIES[family!], `${slug} → "${family}" has no entry`).toBeDefined();
+    }
+  });
+
+  it("splits the 14 across the three Figma scales (6 / 3 / 5)", () => {
+    const counts = rows.reduce<Record<string, number>>((acc, [, v]) => {
+      const f = v.families!.arousal!;
+      acc[f] = (acc[f] ?? 0) + 1;
+      return acc;
+    }, {});
+    expect(counts).toEqual({ responsive: 6, spontaneous: 3, contextual: 5 });
+  });
+
+  it("keeps each family's act names and captions distinct and Figma-verbatim", () => {
+    // Regression guard: contextual used to ship "The wait / The threshold / The
+    // lift", which matched no Figma frame.
+    expect(getArousalFamily("contextual").acts).toEqual([
+      "The setting",
+      "The disruption",
+      "The re-entry",
+    ]);
+    expect(getArousalFamily("spontaneous").acts).toEqual([
+      "The ignition",
+      "The fade",
+      "The rekindle",
+    ]);
+    expect(getArousalFamily("responsive").acts).toEqual(["The build", "The dip", "The return"]);
+
+    const allActs = Object.values(AROUSAL_FAMILIES).flatMap((f) => f.acts);
+    expect(new Set(allActs).size, "act names repeat across families").toBe(allActs.length);
+    const allNotes = Object.values(AROUSAL_FAMILIES).flatMap((f) => f.notes);
+    expect(new Set(allNotes).size, "captions repeat across families").toBe(allNotes.length);
+  });
+
+  it("gives every family an intro ending in the three-acts promise", () => {
+    for (const [family, entry] of Object.entries(AROUSAL_FAMILIES)) {
+      expect(entry.intro.length, `${family} intro`).toBeGreaterThan(30);
+      expect(entry.intro.toLowerCase(), `${family} intro`).toContain("three acts");
+      expect(entry.name.length, `${family} name`).toBeGreaterThan(3);
+    }
+  });
+
+  it("carries the three act-1 conditions and both later act bodies", () => {
+    expect(SHARED_ACT_DETAIL.conditions.map((c) => c.label)).toEqual([
+      "Repair",
+      "Presence",
+      "Sincerity",
+    ]);
+    for (const c of SHARED_ACT_DETAIL.conditions) {
+      expect(c.note.startsWith("nothing "), `${c.label} tail`).toBe(true);
+    }
+    expect(SHARED_ACT_DETAIL.act2Body.length).toBeGreaterThan(40);
+    expect(SHARED_ACT_DETAIL.act3Body.length).toBeGreaterThan(40);
+  });
+
+  it("falls back to the Figma base for an unknown or missing family", () => {
+    expect(getArousalFamily(null)).toBe(AROUSAL_FAMILIES.responsive);
+    expect(getArousalFamily("nope")).toBe(AROUSAL_FAMILIES.responsive);
+  });
+});

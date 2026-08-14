@@ -175,6 +175,7 @@ export interface ReportData {
    * + `row1..3.value` withheld (null) when locked. See `PartnershipSection`.
    */
   partnershipCopy: import("../sections/PartnershipSection").PartnershipCopy | null;
+  partnershipLoop: import("@/data/report2-partnership-loops").PartnershipLoop | null;
   /**
    * Report 2.0 "Challenges to Enjoy Sex" (Enjoyment) copy for the primary
    * archetype, resolved server-side. Universal framing (`eyebrow`,
@@ -214,6 +215,7 @@ export interface ReportData {
    * fantasy dot data exists — the map draws the Figma's representative layout.
    */
   fantasyCopy: import("../sections/FantasySection").FantasyCopy | null;
+  fantasyDots: import("@features/report/server/fantasyMap").FantasyMapDot[] | null;
   /**
    * Report 2.0 Curiosity & Relationship Form copy for the primary archetype,
    * resolved server-side. Universal slots (`gate.hook`, `edu.*` incl. the

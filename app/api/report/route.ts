@@ -19,6 +19,15 @@ import {
   buildPracticeTendenciesForUser,
 } from "@features/report/server/contentGating";
 import { getReport2Section, getReport2Config } from "@/data/report2";
+import { getAttachmentPlaneForFamily } from "@/data/report2-attachment-planes";
+import { getRewardProfile } from "@/data/report2-reward";
+import { archetypeSlug as report2ArchetypeSlug } from "@/data/report2-config";
+import { getRelationshipFit } from "@/data/report2-relationship-fit";
+import { getPowerZone } from "@/data/report2-power-zones";
+import { getLoveLanguageOrder } from "@/data/report2-love-languages";
+import { getLibidoLoopSteps } from "@/data/report2-libido-loops";
+import { getPartnershipLoop } from "@/data/report2-partnership-loops";
+import { getFantasyMapDots } from "@features/report/server/fantasyMap";
 import { isSectionUnlockedForPlan } from "@features/report/server/access";
 import type { AttachmentPlane } from "@features/report/ui/sections/AttachmentPatternsSection";
 import logger from "@shared/observability/logger";
@@ -225,28 +234,6 @@ function normalizeInitiationConfig(cfg: Record<string, unknown> | null | undefin
     typeof families?.initiation === "string" ? families.initiation : "lost-in-translation";
   const variant = typeof cfg.initiation_variant === "string" ? cfg.initiation_variant : null;
   return { family, variant };
-}
-
-/**
- * Map config `families.power_zone` → the short region word shown on the Power
- * plane ("… ZONE") + as the card's top eyebrow. The config only carries three
- * zone values today (switch / dominant-leaning / low-polarity); each maps to a
- * plain-language region label. Unknown/absent falls back to "Switch" (the
- * plane's centre) rather than fabricating a specific position. This is the
- * "region label for copy" the Figma renders — the underlying dot COORDINATES
- * are a fixed universal layout hardcoded client-side from the Figma.
- */
-function powerZoneToLabel(zone: unknown): string | null {
-  switch (zone) {
-    case "switch":
-      return "Switch";
-    case "dominant-leaning":
-      return "Leading";
-    case "low-polarity":
-      return "Low-polarity";
-    default:
-      return typeof zone === "string" && zone.trim() ? "Switch" : null;
-  }
 }
 
 export async function GET(request: Request) {
@@ -639,6 +626,9 @@ export async function GET(request: Request) {
     // slots that section renders are threaded, keyed to the viewer's primary
     // archetype. Empty object for archetypes without a snapshot copy block.
     const snapshotSection = getReport2Section(primaryArchetype, "snapshot");
+    // Card 1's stat lives in the initiation section (see the note below). Resolved
+    // here rather than reusing `initiationSection`, which is declared further down.
+    const snapshotInitiation = getReport2Section(primaryArchetype, "initiation");
     const snapshotCopy = {
       "compare1.stat": snapshotSection["compare1.stat"] ?? null,
       "compare1.caption": snapshotSection["compare1.caption"] ?? null,
@@ -647,6 +637,16 @@ export async function GET(request: Request) {
       "compare3.stat": snapshotSection["compare3.stat"] ?? null,
       "compare3.caption": snapshotSection["compare3.caption"] ?? null,
       "stage.subline": snapshotSection["stage.subline"] ?? null,
+      // Snapshot card 1. Figma (8719:8875) mocked this as "Your Hidden Edge" with
+      // the value `1 in 3`, but STATS-AUDIT.md records that number as a retracted
+      // `arousal.stat1` matrix value ("Used real. Wrong before." → 52%), and no
+      // per-archetype hidden-edge copy exists in the matrix at all. `initiation
+      // .stat1` IS audited ("RESOLVED — reframed to ROLE", share choosing "I make
+      // the first move"), present for all 14, distinct per archetype, and its
+      // caption names the archetype the way Figma's teaser did — so the card is
+      // driven by the real share instead of shipping the retracted stat.
+      "openingMove.stat": snapshotInitiation["stat1"] ?? null,
+      "openingMove.caption": snapshotInitiation["stat1.caption"] ?? null,
     };
 
     // Report 2.0 Findings section copy — findings 1-2 are always the real
@@ -746,8 +746,17 @@ export async function GET(request: Request) {
     });
     const attachmentConfig = getReport2Config(primaryArchetype);
     const attachmentFamily = attachmentConfig?.families?.attachment ?? null;
+    // Geometry is keyed by attachment FAMILY, per Mark's handoff ("chart geometry
+    // ... lives in the Figma components, not the copy. Only the ... dot-position
+    // slot changes per archetype, from the `families` value") and the designer's
+    // three scales (Figma 9108:549 / 9107:549 / 9107:571), which together cover
+    // 7 + 6 + 1 = all 14 archetypes. `attachment_plane` is only ever set on
+    // spiritual-lover, so without the family fallback 13 of 14 drew an empty map.
+    // Per-archetype config still wins where present.
     const attachmentPlane = attachmentUnlocked
-      ? normalizeAttachmentPlane(attachmentConfig?.attachment_plane)
+      ? normalizeAttachmentPlane(
+          attachmentConfig?.attachment_plane ?? getAttachmentPlaneForFamily(attachmentFamily)
+        )
       : null;
     const attachmentCopy = {
       "gate.hook": attachmentSection["gate.hook"] ?? null,
@@ -872,8 +881,23 @@ export async function GET(request: Request) {
       isPremium: true,
       sectionId: "biochemical_reward_system_dynamics",
     });
+    // `reward_order` is set for 3 of 14 archetypes, `reward_roles` for 2 and
+    // `reward_meters` for 1, so this returned null and the section drew no rows at
+    // all for 11 of 14. The per-archetype fallback in `data/report2-reward.ts` is
+    // derived from each archetype's own reward prose and reproduces all three
+    // existing configs exactly. Per-archetype config still wins where present.
+    const rewardFallback = getRewardProfile(report2ArchetypeSlug(primaryArchetype));
     const rewardConfig = rewardUnlocked
-      ? normalizeRewardConfig(getReport2Config(primaryArchetype) as Record<string, unknown> | null)
+      ? (normalizeRewardConfig(
+          getReport2Config(primaryArchetype) as Record<string, unknown> | null
+        ) ??
+        (rewardFallback
+          ? normalizeRewardConfig({
+              reward_order: rewardFallback.order,
+              reward_roles: rewardFallback.roles,
+              reward_meters: rewardFallback.meters,
+            })
+          : null))
       : null;
     const rewardCopy = {
       "gate.hook": rewardSection["gate.hook"] ?? null,
@@ -1047,19 +1071,17 @@ export async function GET(request: Request) {
       isPremium: true,
       sectionId: "libido_challenges_in_relationships",
     });
-    const rawLoop = libidoUnlocked ? getReport2Config(primaryArchetype)?.loop : null;
-    const libidoConfig =
-      rawLoop &&
-      typeof rawLoop === "object" &&
-      typeof (rawLoop as { name?: unknown }).name === "string" &&
-      typeof (rawLoop as { steps?: unknown }).steps === "number" &&
-      Number.isFinite((rawLoop as { steps: number }).steps) &&
-      (rawLoop as { steps: number }).steps > 0
-        ? {
-            name: (rawLoop as { name: string }).name,
-            steps: (rawLoop as { steps: number }).steps,
-          }
-        : null;
+    /*
+     * The loop's three steps. Config `loop` only ever carried { name, steps } and
+     * existed for 3 of 14 — its `name` duplicates `libido.result` and `steps` is
+     * always 3 — so it gated the chips off for 11 archetypes. The frames' footer
+     * says "every archetype has its own named loop, three rows and three steps",
+     * so the real step text now comes from `data/report2-libido-loops.ts` (all 14)
+     * and the config is no longer consulted. Still withheld when locked.
+     */
+    const libidoConfig = libidoUnlocked
+      ? getLibidoLoopSteps(report2ArchetypeSlug(primaryArchetype))
+      : null;
     const libidoCopy = {
       // Universal — always shipped (frame the section for locked clients too).
       "gate.hook": libidoSection["gate.hook"] ?? null,
@@ -1099,6 +1121,11 @@ export async function GET(request: Request) {
     // viewers inherit the owner's plan. Keyed to the primary archetype.
     const partnershipSection = getReport2Section(primaryArchetype, "partnership");
     const partnershipUnlocked = libidoUnlocked;
+    // The orbit's three steps + the reader's own bid. All 14 have their own (the
+    // frames' footer: "All 14 need their own"); withheld when locked.
+    const partnershipLoop = partnershipUnlocked
+      ? getPartnershipLoop(report2ArchetypeSlug(primaryArchetype))
+      : null;
     const partnershipCopy = {
       // Universal — always shipped (frame the section for locked clients too).
       "gate.hook": partnershipSection["gate.hook"] ?? null,
@@ -1269,8 +1296,8 @@ export async function GET(request: Request) {
       isPremium: true,
       sectionId: "power_orientation",
     });
-    const powerZoneLabel = powerUnlocked
-      ? powerZoneToLabel(getReport2Config(primaryArchetype)?.families?.power_zone)
+    const powerZoneInfo = powerUnlocked
+      ? getPowerZone(getReport2Config(primaryArchetype)?.families?.power_zone)
       : null;
     const powerCopy = {
       "gate.hook": powerSection["gate.hook"] ?? null,
@@ -1285,7 +1312,8 @@ export async function GET(request: Request) {
       // Per-archetype — withheld from locked clients.
       takeaway: powerUnlocked ? (powerSection.takeaway ?? null) : null,
       "body.p1": powerUnlocked ? (powerSection["body.p1"] ?? null) : null,
-      zone: powerZoneLabel,
+      zone: powerZoneInfo?.label ?? null,
+      "zone.result": powerZoneInfo?.result ?? null,
       locked: !powerUnlocked,
     };
 
@@ -1310,6 +1338,12 @@ export async function GET(request: Request) {
       isPremium: true,
       sectionId: "typical_sexual_fantasy_amp_practice_tendencies",
     });
+    // Per-archetype map dots, DERIVED from the practice-tendency scores (fantasy
+    // pull × lived pleasure) rather than hand-authored — see
+    // `features/report/server/fantasyMap.ts`. Withheld when locked: the client
+    // then falls back to the universal illustrative layout behind the blur, so no
+    // per-archetype placement leaks to an unpaid reader.
+    const fantasyDots = fantasyUnlocked ? getFantasyMapDots(primaryArchetype) : null;
     const fantasyCopy = {
       "gate.hook": fantasySection["gate.hook"] ?? null,
       "edu.eyebrow": fantasySection["edu.eyebrow"] ?? null,
@@ -1334,17 +1368,20 @@ export async function GET(request: Request) {
     // bold intro read) and `body.p2/p3` — is the gated content: shipped ONLY when
     // unlocked. The reader's fit across relationship forms comes from config
     // `relationship_fit` (structure → 0..3 score); only Spiritual Lover carries
-    // one today, the other 13 are null, so even unlocked they render the framing
-    // + struct list WITHOUT the reader's fit bars rather than fabricating. Also
-    // withheld from a locked client. Shared viewers inherit the owner's plan via
-    // `accessPlan`. Keyed to the primary archetype.
+    // one in config, so the other 13 fall back to `data/report2-relationship-fit.ts`
+    // (read off each archetype's own curiosity copy; the Spiritual Lover entry
+    // reproduces the real config exactly) — without it 13 of 14 drew a fit table
+    // with no segments. Withheld from a locked client. Shared viewers inherit the
+    // owner's plan via `accessPlan`. Keyed to the primary archetype.
     const curiositySection = getReport2Section(primaryArchetype, "curiosity");
     const curiosityUnlocked = isSectionUnlockedForPlan({
       accessPlan,
       isPremium: true,
       sectionId: "curiosity_level",
     });
-    const rawFit = getReport2Config(primaryArchetype)?.relationship_fit;
+    const rawFit =
+      getReport2Config(primaryArchetype)?.relationship_fit ??
+      getRelationshipFit(report2ArchetypeSlug(primaryArchetype));
     const relationshipFit =
       curiosityUnlocked && rawFit && typeof rawFit === "object"
         ? (rawFit as Record<string, number>)
@@ -1390,7 +1427,13 @@ export async function GET(request: Request) {
       isPremium: true,
       sectionId: "love_language",
     });
-    const rawLoveOrder = getReport2Config(primaryArchetype)?.love_language_order;
+    // Config carries `love_language_order` for Spiritual Lover only, so the other
+    // 13 fall back to `data/report2-love-languages.ts` (each order read off that
+    // archetype's own lovelang copy; the Spiritual Lover entry reproduces the real
+    // config exactly). Without it 13 of 14 rendered NO ranked list at all.
+    const rawLoveOrder =
+      getReport2Config(primaryArchetype)?.love_language_order ??
+      getLoveLanguageOrder(report2ArchetypeSlug(primaryArchetype));
     const loveLanguageOrder =
       lovelangUnlocked && Array.isArray(rawLoveOrder)
         ? rawLoveOrder.filter((v): v is string => typeof v === "string")
@@ -1554,12 +1597,14 @@ export async function GET(request: Request) {
       libidoCopy,
       libidoConfig,
       partnershipCopy,
+      partnershipLoop,
       enjoyCopy,
       growthCopy,
       growthRungs,
       readingCopy,
       powerCopy,
       fantasyCopy,
+      fantasyDots,
       curiosityCopy,
       relationshipFit,
       lovelangCopy,

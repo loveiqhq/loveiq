@@ -3,6 +3,7 @@
 import { useState, type FC } from "react";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
+import { renderEduPara } from "./eduPara";
 
 /**
  * Server-resolved enjoyment copy (`getReport2Section(name, "enjoy")`), threaded
@@ -217,14 +218,16 @@ const EnjoymentSection: FC<Props> = ({
             </button>
 
             {!expanded ? (
-              <div className="report-enjoy__details-peek">
+              <div className="report-enjoy__details-peek report-learn-peek">
                 {copy["edu.teaser"] ? (
-                  <p className="report-enjoy__details-teaser">{copy["edu.teaser"]}</p>
+                  <p className="report-enjoy__details-teaser report-learn-teaser">
+                    {copy["edu.teaser"]}
+                  </p>
                 ) : null}
                 {eduParas.length > 0 ? (
                   <button
                     type="button"
-                    className="report-enjoy__peek-cta"
+                    className="report-enjoy__peek-cta report-learn-cta"
                     onClick={() => setExpanded(true)}
                   >
                     Read the full explanation
@@ -233,9 +236,14 @@ const EnjoymentSection: FC<Props> = ({
               </div>
             ) : (
               <div className="report-enjoy__details-body">
+                {copy["edu.teaser"] ? (
+                  <p className="report-enjoy__details-teaser report-learn-teaser-full">
+                    {copy["edu.teaser"]}
+                  </p>
+                ) : null}
                 {eduParas.map((para, i) => (
                   <p key={i} className="report-enjoy__details-para">
-                    {para}
+                    {renderEduPara(para)}
                   </p>
                 ))}
               </div>

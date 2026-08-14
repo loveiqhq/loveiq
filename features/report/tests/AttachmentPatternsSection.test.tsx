@@ -2,6 +2,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import AttachmentPatternsSection, {
+  splitAttachmentResult,
   type AttachmentCopy,
   type AttachmentPlane,
 } from "@features/report/ui/sections/AttachmentPatternsSection";
@@ -124,5 +125,54 @@ describe("AttachmentPatternsSection", () => {
     expect(
       screen.getByText("Common Attachment Style Patterns Across Archetypes")
     ).toBeInTheDocument();
+  });
+});
+
+describe("splitAttachmentResult", () => {
+  it("splits the parenthesised qualifier onto its own line", () => {
+    expect(splitAttachmentResult("Secure (anxious under imbalance)")).toEqual([
+      "Secure",
+      "anxious under imbalance",
+    ]);
+  });
+
+  it("handles the comma form tender-devotee uses instead of parentheses", () => {
+    expect(splitAttachmentResult("Secure, anxious when criticised")).toEqual([
+      "Secure",
+      "anxious when criticised",
+    ]);
+  });
+
+  it("returns no qualifier for a bare pattern word (spiritual-lover)", () => {
+    expect(splitAttachmentResult("Secure")).toEqual(["Secure", null]);
+  });
+
+  it("keeps a non-secure primary word (quiet-withdrawer inverts the pair)", () => {
+    expect(splitAttachmentResult("Avoidant (secure when pressure stays low)")).toEqual([
+      "Avoidant",
+      "secure when pressure stays low",
+    ]);
+  });
+
+  it("never leaves brackets or a trailing comma in either half", () => {
+    for (const raw of [
+      "Secure (avoidant under pressure)",
+      "Secure, anxious when criticised",
+      "Avoidant (secure when pressure stays low)",
+      "Secure",
+    ]) {
+      const [word, qualifier] = splitAttachmentResult(raw);
+      expect(word).not.toMatch(/[()]/);
+      expect(word).not.toMatch(/,$/);
+      expect(word.length).toBeGreaterThan(0);
+      if (qualifier !== null) expect(qualifier).not.toMatch(/[()]/);
+    }
+  });
+
+  it("tolerates surrounding whitespace", () => {
+    expect(splitAttachmentResult("  Secure (anxious under strain)  ")).toEqual([
+      "Secure",
+      "anxious under strain",
+    ]);
   });
 });

@@ -3,6 +3,7 @@
 import { useState, type FC } from "react";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
+import { renderEduPara } from "./eduPara";
 
 /**
  * Server-resolved attachment copy (`getReport2Section(name, "attachment")`),
@@ -170,6 +171,71 @@ const CORNERS: { key: AttachmentPlane["accentCorner"]; label: string; pos: strin
  * a hollow "strain" dot joined by a dashed drift line. Coords are pre-normalized
  * to 0..1 over the axis box; percentages position them responsively.
  */
+/**
+ * Mark's `attachment.result` carries a qualifier for 13 of the 14 archetypes —
+ * parenthesised in 12 ("Secure (anxious under imbalance)") and comma-separated in
+ * `tender-devotee` ("Secure, anxious when criticised"). Only `spiritual-lover` is
+ * a bare "Secure", and that is the archetype the Figma frame mocks, which is why
+ * the design shows no bracket.
+ *
+ * Rather than discard the qualifier (real copy) or keep it inline (reads as
+ * parenthetical clutter against the design's single bold pattern word), split it
+ * onto its own smaller line: the pattern word keeps the design's visual weight and
+ * the nuance survives. Returns `[word, qualifier | null]`.
+ */
+export function splitAttachmentResult(raw: string): [string, string | null] {
+  const trimmed = raw.trim();
+  const paren = trimmed.match(/^(.+?)\s*\((.+)\)$/);
+  if (paren?.[1] && paren[2]) return [paren[1].trim(), paren[2].trim()];
+  const comma = trimmed.match(/^([^,]+),\s*(.+)$/);
+  if (comma?.[1] && comma[2]) return [comma[1].trim(), comma[2].trim()];
+  return [trimmed, null];
+}
+
+/**
+ * Figma draws the drift connector as a BOWED bezier, not a straight segment. That
+ * is not a judgement call: in the design the two axes are vectors with `w=0` /
+ * `h=0` (genuinely straight), while the connector's box is `174.79 x 28.181` with
+ * both dimensions non-zero, and its exported path is a cubic —
+ * `M47.8452 27.5914 C-71.1362 16.179 47.8452 7.55018 174.759 0.591419`
+ * (Figma 9107:530, SCALE 2). Its endpoints do not sit on the dot centres, so it is
+ * a decorative swoop rather than a strict dot-to-dot join; reproducing it from the
+ * two dot positions keeps one implementation correct for all three family scales
+ * instead of hardcoding a per-scale path.
+ *
+ * A quadratic's maximum deviation from its chord is HALF the control offset, so
+ * `DRIFT_BOW = 0.28` yields a ~14% sagitta — matching the design's proportions
+ * (~28.18 of excursion across a ~174.79 span ≈ 16%). The bow points AWAY from the
+ * plane centre, which is the direction Figma's control point swings.
+ */
+const DRIFT_BOW = 0.28;
+
+function driftPath(a: { x: number; y: number }, b: { x: number; y: number }): string {
+  const ax = a.x * 100;
+  const ay = a.y * 100;
+  const bx = b.x * 100;
+  const by = b.y * 100;
+  const dx = bx - ax;
+  const dy = by - ay;
+  const len = Math.hypot(dx, dy);
+  // Degenerate case: dots coincide, so there is no chord to bow off.
+  if (len === 0) return `M${ax.toFixed(2)} ${ay.toFixed(2)}`;
+
+  const mx = (ax + bx) / 2;
+  const my = (ay + by) / 2;
+  let px = -dy / len;
+  let py = dx / len;
+  // Flip the perpendicular so the arc bows outward, away from the centre (50,50).
+  if ((mx - 50) * px + (my - 50) * py < 0) {
+    px = -px;
+    py = -py;
+  }
+  const off = len * DRIFT_BOW;
+  const cx = mx + px * off;
+  const cy = my + py * off;
+  return `M${ax.toFixed(2)} ${ay.toFixed(2)} Q${cx.toFixed(2)} ${cy.toFixed(2)} ${bx.toFixed(2)} ${by.toFixed(2)}`;
+}
+
 const AttachmentPlane: FC<{ plane: AttachmentPlane }> = ({ plane }) => {
   const home = plane.home;
   const strain = plane.strain;
@@ -212,7 +278,7 @@ const AttachmentPlane: FC<{ plane: AttachmentPlane }> = ({ plane }) => {
           preserveAspectRatio="none"
           aria-hidden="true"
         >
-          <line x1={home.x * 100} y1={home.y * 100} x2={strain.x * 100} y2={strain.y * 100} />
+          <path d={driftPath(home, strain)} />
         </svg>
       ) : null}
 
@@ -265,7 +331,9 @@ const AttachmentPatternsSection: FC<Props> = ({
 
   const locked = copy.locked;
 
-  const result = copy.result;
+  const [resultWord, resultQualifier] = copy.result
+    ? splitAttachmentResult(copy.result)
+    : [null, null];
   // row2/row3 labels are family-specific (Figma-verified); values come from copy.
   const labels = family ? ATTACHMENT_ROW_LABELS_BY_FAMILY[family] : undefined;
 
@@ -304,7 +372,7 @@ const AttachmentPatternsSection: FC<Props> = ({
       ) : null}
 
       {/* ── Result card ("Your Attachment Style") — GATED per-archetype ── */}
-      {locked || result || rows.length > 0 ? (
+      {locked || resultWord || rows.length > 0 ? (
         <div className="report-attachment__result-wrap">
           {locked ? (
             <>
@@ -347,7 +415,10 @@ const AttachmentPatternsSection: FC<Props> = ({
               {copy.eyebrow ? (
                 <p className="report-attachment-card__eyebrow">{copy.eyebrow}</p>
               ) : null}
-              {result ? <h3 className="report-attachment-card__result">{result}</h3> : null}
+              {resultWord ? <h3 className="report-attachment-card__result">{resultWord}</h3> : null}
+              {resultQualifier ? (
+                <p className="report-attachment-card__result-note">{resultQualifier}</p>
+              ) : null}
 
               {rows.length > 0 ? (
                 <dl className="report-attachment-card__rows">
@@ -444,19 +515,42 @@ const AttachmentPatternsSection: FC<Props> = ({
                 </span>
               </button>
 
-              {copy["edu.teaser"] && !expanded ? (
-                <p className="report-attachment__details-teaser">{copy["edu.teaser"]}</p>
-              ) : null}
-
-              {expanded ? (
+              {/* Collapsed state shows the teaser plus the "peek CTA" that Figma
+                  specifies (node 8762:15996 "peek CTA" → 8762:15997 "Read the full
+                  explanation"). 13 of the report's 16 collapsibles already ship
+                  this button; Attachment was one of three that never did, so the
+                  only way to expand was the header row. */}
+              {!expanded ? (
+                <div className="report-attachment__details-peek report-learn-peek">
+                  {copy["edu.teaser"] ? (
+                    <p className="report-attachment__details-teaser report-learn-teaser">
+                      {copy["edu.teaser"]}
+                    </p>
+                  ) : null}
+                  {eduParas.length > 0 ? (
+                    <button
+                      type="button"
+                      className="report-attachment__peek-cta report-learn-cta"
+                      onClick={() => setExpanded(true)}
+                    >
+                      Read the full explanation
+                    </button>
+                  ) : null}
+                </div>
+              ) : (
                 <div className="report-attachment__details-body">
+                  {copy["edu.teaser"] ? (
+                    <p className="report-attachment__details-teaser report-learn-teaser-full">
+                      {copy["edu.teaser"]}
+                    </p>
+                  ) : null}
                   {eduParas.map((para, i) => (
                     <p key={i} className="report-attachment__details-para">
-                      {para}
+                      {renderEduPara(para)}
                     </p>
                   ))}
                 </div>
-              ) : null}
+              )}
             </div>
           ) : null}
 

@@ -4,6 +4,10 @@ import { useEffect, useState, type CSSProperties, type FC } from "react";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import { getReportTheme } from "../reportTheme";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
+import { renderEduPara } from "./eduPara";
+import { archetypeSlug } from "@/data/report2-config";
+import { getConfidenceProfile } from "@/data/report2-confidence";
+import { useRevealOnView } from "../hooks/useRevealOnView";
 
 /**
  * Server-resolved Confidence Level copy (`getReport2Section(name, "confidence")`),
@@ -122,14 +126,13 @@ const ConfidenceStripGraphic: FC<{
   youAccent: string;
   youLabel: string;
 }> = ({ youX, youAccent, youLabel }) => {
-  const [isAnimated, setIsAnimated] = useState(false);
-  useEffect(() => {
-    const rafId = requestAnimationFrame(() => setIsAnimated(true));
-    return () => cancelAnimationFrame(rafId);
-  }, []);
+  // Was a mount-time requestAnimationFrame, so the marker had already slid into
+  // place long before the reader scrolled down to the strip.
+  const [stripRef, isAnimated] = useRevealOnView<HTMLDivElement>();
 
   return (
     <div
+      ref={stripRef}
       className={`report-confidence__strip${isAnimated ? " is-animated" : ""}`}
       role="img"
       aria-label="Where your sexual confidence sits among the archetypes"
@@ -192,9 +195,15 @@ const ConfidenceSection: FC<Props> = ({
 
   const locked = copy.locked;
   const accent = getReportTheme(archetype).accent;
-  // Reader's dot x: Spiritual Lover per Figma; other archetypes have no config
-  // strip, so no dot is placed (never fabricated).
-  const youX = strip ? SPIRITUAL_LOVER_YOU_X : null;
+  // Per-archetype result word + definition tail + strip position for ALL 14.
+  // `confidence_strip` config only ever existed for Spiritual Lover, so the result
+  // block and the reader's dot used to be absent for the other 13 — the section
+  // rendered a strip with no "You" marker and no result at all. See
+  // `data/report2-confidence.ts` for where these come from.
+  const profile = getConfidenceProfile(archetypeSlug(archetype));
+  // Config wins where it exists (Spiritual Lover), then the derived profile.
+  const resultWord = strip?.result_word ?? profile?.resultWord ?? null;
+  const youX = profile ? profile.dot / 100 : strip ? SPIRITUAL_LOVER_YOU_X : null;
 
   const eduParas = [copy["edu.body.p1"], copy["edu.body.p2"]].filter((p): p is string => !!p);
   const hasEdu = !!copy["edu.teaser"] || eduParas.length > 0;
@@ -249,13 +258,16 @@ const ConfidenceSection: FC<Props> = ({
           </>
         ) : (
           <>
-            {strip ? (
+            {resultWord ? (
               <div className="report-confidence__result">
-                <p className="report-confidence__result-word">{strip.result_word}</p>
+                <p className="report-confidence__result-word">{resultWord}</p>
                 <span className="report-confidence__result-divider" aria-hidden="true" />
+                {/* Figma 9107:800 bolds the middle clause and follows it with a
+                    per-archetype "Yours …" line. */}
                 <p className="report-confidence__result-def">
-                  How confident you feel initiating, expressing, and staying present during intimacy
-                  — not general self-confidence.
+                  How confident you feel{" "}
+                  <strong>initiating, expressing, and staying present</strong> during intimacy.
+                  {profile ? <> Yours {profile.anchor}.</> : null}
                 </p>
               </div>
             ) : null}
@@ -268,6 +280,44 @@ const ConfidenceSection: FC<Props> = ({
 
             {copy.chartnote1 ? (
               <p className="report-confidence__chartnote">{copy.chartnote1}</p>
+            ) : null}
+
+            {/* The three condition rows + trap + way out. Figma shows these under
+                the strip; the section rendered none of them. Per-archetype, from
+                `data/report2-confidence.ts`. */}
+            {profile ? (
+              <>
+                <dl className="report-confidence__conditions">
+                  {(
+                    [
+                      ["rises", "Rises with", "↑", profile.risesWith],
+                      ["contracts", "Contracts with", "↓", profile.contractsWith],
+                      ["unmoved", "Unmoved by", "→", profile.unmovedBy],
+                    ] as const
+                  ).map(([kind, label, glyph, value]) => (
+                    <div
+                      key={kind}
+                      className={`report-confidence__condition report-confidence__condition--${kind}`}
+                    >
+                      <span className="report-confidence__condition-icon" aria-hidden="true">
+                        {glyph}
+                      </span>
+                      <dt className="report-confidence__condition-label">{label}</dt>
+                      <dd className="report-confidence__condition-value">{value}</dd>
+                    </div>
+                  ))}
+                </dl>
+
+                <div className="report-confidence__trap">
+                  <p className="report-confidence__block-label">The trap</p>
+                  <p className="report-confidence__trap-body">{profile.trap}</p>
+                </div>
+
+                <div className="report-confidence__wayout">
+                  <p className="report-confidence__block-label">The way out</p>
+                  <p className="report-confidence__wayout-body">{profile.wayOut}</p>
+                </div>
+              </>
             ) : null}
           </>
         )}
@@ -295,12 +345,14 @@ const ConfidenceSection: FC<Props> = ({
             </button>
 
             {copy["edu.teaser"] && !expanded ? (
-              <div className="report-confidence__details-peek">
-                <p className="report-confidence__details-teaser">{copy["edu.teaser"]}</p>
+              <div className="report-confidence__details-peek report-learn-peek">
+                <p className="report-confidence__details-teaser report-learn-teaser">
+                  {copy["edu.teaser"]}
+                </p>
                 {eduParas.length > 0 ? (
                   <button
                     type="button"
-                    className="report-confidence__peek-cta"
+                    className="report-confidence__peek-cta report-learn-cta"
                     onClick={() => setExpanded(true)}
                   >
                     Read the full explanation
@@ -311,9 +363,14 @@ const ConfidenceSection: FC<Props> = ({
 
             {expanded ? (
               <div className="report-confidence__details-body">
+                {copy["edu.teaser"] ? (
+                  <p className="report-confidence__details-teaser report-learn-teaser-full">
+                    {copy["edu.teaser"]}
+                  </p>
+                ) : null}
                 {eduParas.map((para, i) => (
                   <p key={i} className="report-confidence__details-para">
-                    {para}
+                    {renderEduPara(para)}
                   </p>
                 ))}
               </div>

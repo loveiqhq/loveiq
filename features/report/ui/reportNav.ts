@@ -48,6 +48,23 @@ export const RETIRED_REPORT_SECTION_IDS: ReadonlySet<string> = new Set([
   // `challenges_in_partnership` anchor. Both were rendering — the redesigned
   // one plus this legacy duplicate below it.
   "typical_challenges_to_sustain_partner_for_the_core_archetype",
+  /*
+   * The legacy "Summary of the {{CORE_ARCHETYPE}}" chapter. Not in the Report 2.0
+   * Figma at all, and its copy (`data/report-summary.ts`) is the pre-2.0 THIRD
+   * PERSON voice ("Experiences sexuality primarily as a space for…"), which reads
+   * wrong in a report that speaks to the reader throughout. Figma's own summary is
+   * "What this means for you" under the Hero (8719:8865) — a different block.
+   */
+  "summary",
+  /*
+   * "Typical Challenges to Enjoy Sex". Absent from the newest Report 2.0 Figma —
+   * the Part IV flow goes Libido Challenges → Challenges in Partnership → Growth
+   * Potentials. It had been kept on the grounds that its copy exists for all 14,
+   * but the current design is the source of truth: had it belonged, it would be
+   * in the frames. Its copy stays in `report2-copy.ts` under `enjoy` if it is
+   * ever reinstated.
+   */
+  "typical_challenges_to_enjoy_sex_for_the_core_archetype",
 ]);
 
 /**
@@ -91,12 +108,9 @@ export const REPORT_SECTION_ORDER: readonly string[] = [
   "typical_sexual_fantasy_amp_practice_tendencies",
   // Part IV — Your growth edges
   "libido_challenges_in_relationships",
-  // No Figma frame of its own (built in the Arousal pattern); kept in the slot
-  // it has always rendered in rather than dropping paid content.
-  "typical_challenges_to_enjoy_sex_for_the_core_archetype",
   "typical_growth_potentials_for_the_core_archetype",
   "recommendations",
-  "summary",
+  // "summary" retired — see RETIRED_REPORT_SECTION_IDS above.
 ];
 
 /** Section id that each part divider is rendered BEFORE. */
