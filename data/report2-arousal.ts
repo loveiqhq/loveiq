@@ -8,15 +8,23 @@
  * The frames' own footer states the contract: "three arousal families cover all
  * 14. The curve, the three act names and the three act bodies swap."
  *
- * `intro`, `acts` and `notes` DO swap and are Figma verbatim per family.
+ * `intro`, `acts` and `notes` are Figma verbatim per family.
  *
- * The act BODIES do not — despite the contract. Both variant frames were
- * duplicated from the base and their bodies, condition chips, act-1 note and
- * reframe were left byte-identical to it (the same copy-forgotten-in-a-duplicate
- * artifact as the Energy meter bars and the Power lit-wave). Only one version of
- * that copy was ever written, so it lives here once, as `SHARED_ACT_DETAIL`,
- * rather than being invented three times. If per-family bodies are authored
- * later, move them onto each family entry.
+ * The act DETAIL — the three act-1 condition chips, their note, and the act 2/3
+ * bodies — is Figma verbatim for `responsive` only. Both variant frames were
+ * duplicated from the base and left byte-identical to it (the same
+ * copy-forgotten-in-a-duplicate artifact as the Energy meter bars and the Power
+ * lit-wave), so the frames cannot be read as authority for the other two. It
+ * used to live here once as a single shared block, which meant a Spontaneous
+ * reader was told their wave climbs on "Repair · nothing unresolved" — copy
+ * describing a responsive build they do not have.
+ *
+ * So `spontaneous` and `contextual` now carry their own, written to each family's
+ * OWN arc as its `acts`/`notes` already state it: ignition → fade → rekindle is a
+ * charge that must be kept lit, and setting → disruption → re-entry is a context
+ * that must be restored. Register follows the responsive set exactly: three chips
+ * whose tails all begin "nothing …", a note naming the three dots on the curve,
+ * and act bodies that end on what happens if the reader does nothing.
  */
 
 export interface ArousalCondition {
@@ -35,21 +43,15 @@ export interface ArousalFamily {
   acts: [string, string, string];
   /** Captions under the three arc panels. */
   notes: [string, string, string];
+  /** Act 1's three chips — the three climbing dots on the curve. */
+  conditions: ArousalCondition[];
+  /** The line under those chips. */
+  conditionsNote: string;
+  /** Act 2's paragraph — what the dip is. */
+  act2Body: string;
+  /** Act 3's paragraph — what resolves it, and what happens if nothing does. */
+  act3Body: string;
 }
-
-/** Act-1 conditions + the two later act bodies — one authored version (see above). */
-export const SHARED_ACT_DETAIL = {
-  conditions: [
-    { label: "Repair", note: "nothing unresolved" },
-    { label: "Presence", note: "nothing competing" },
-    { label: "Sincerity", note: "nothing performed" },
-  ] as ArousalCondition[],
-  conditionsNote: "Each condition met lets the wave climb — the three dots on the curve.",
-  act2Body:
-    "A phone, an unspoken tension — one slipped condition pauses the wave. It doesn't end the evening.",
-  act3Body:
-    'Say what happened — "I lost you for a second" — and the wave resumes where it left off. Unspoken, the dip becomes the ending.',
-} as const;
 
 export const AROUSAL_FAMILIES: Record<string, ArousalFamily> = {
   // Card 8427:2196 — the version already built into the report.
@@ -62,6 +64,17 @@ export const AROUSAL_FAMILIES: Record<string, ArousalFamily> = {
       "a condition slips",
       "named — the wave resumes, higher",
     ],
+    // Figma verbatim (card 8427:2196).
+    conditions: [
+      { label: "Repair", note: "nothing unresolved" },
+      { label: "Presence", note: "nothing competing" },
+      { label: "Sincerity", note: "nothing performed" },
+    ],
+    conditionsNote: "Each condition met lets the wave climb — the three dots on the curve.",
+    act2Body:
+      "A phone, an unspoken tension — one slipped condition pauses the wave. It doesn't end the evening.",
+    act3Body:
+      'Say what happened — "I lost you for a second" — and the wave resumes where it left off. Unspoken, the dip becomes the ending.',
   },
   // Card 9107:1133.
   spontaneous: {
@@ -73,6 +86,18 @@ export const AROUSAL_FAMILIES: Record<string, ArousalFamily> = {
       "intensity decays without fuel",
       "novelty or play re-lights it",
     ],
+    // Written to this family's own arc: nothing has to be built, so the three
+    // dots are what keeps the charge high rather than what lets a wave climb.
+    conditions: [
+      { label: "Novelty", note: "nothing rehearsed" },
+      { label: "Charge", note: "nothing owed" },
+      { label: "Freedom", note: "nothing scheduled" },
+    ],
+    conditionsNote: "Each one present keeps the charge high — the three dots on the curve.",
+    act2Body:
+      "Nothing went wrong. Repetition simply spent the charge, and the same touch stops registering. That is fuel running out, not feeling running out.",
+    act3Body:
+      "Change one variable — the room, the hour, who starts it — and it lights again. Waiting for the old spark to come back on its own is what keeps it away.",
   },
   // Card 9107:1220.
   contextual: {
@@ -84,6 +109,18 @@ export const AROUSAL_FAMILIES: Record<string, ArousalFamily> = {
       "the setting breaks — desire pauses",
       "context restored — it reopens",
     ],
+    // Written to this family's own arc: the switch is the setting, so the three
+    // dots are the conditions that assemble it.
+    conditions: [
+      { label: "Privacy", note: "nothing intruding" },
+      { label: "Time", note: "nothing rushed" },
+      { label: "Ease", note: "nothing left on the list" },
+    ],
+    conditionsNote: "Each condition in place opens the setting — the three dots on the curve.",
+    act2Body:
+      "A door left open, a message that pulls you out — the setting breaks before your body does. The wanting is intact; the context is not.",
+    act3Body:
+      "Restore what broke — close the door, put the day down — and desire returns without coaxing. Pushing on inside the broken setting is what ends it.",
   },
 };
 

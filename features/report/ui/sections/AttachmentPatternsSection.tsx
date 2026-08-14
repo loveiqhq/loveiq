@@ -373,7 +373,11 @@ const AttachmentPatternsSection: FC<Props> = ({
 
       {/* ── Result card ("Your Attachment Style") — GATED per-archetype ── */}
       {locked || resultWord || rows.length > 0 ? (
-        <div className="report-attachment__result-wrap">
+        <div
+          className={`report-attachment__result-wrap${
+            locked ? " report-attachment__result-wrap--locked" : ""
+          }`}
+        >
           {locked ? (
             <>
               <article

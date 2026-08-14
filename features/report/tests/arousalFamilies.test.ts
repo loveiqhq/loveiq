@@ -54,17 +54,44 @@ describe("report2 arousal families", () => {
     }
   });
 
-  it("carries the three act-1 conditions and both later act bodies", () => {
-    expect(SHARED_ACT_DETAIL.conditions.map((c) => c.label)).toEqual([
+  it("gives EVERY family its own act detail, not the responsive build's", () => {
+    // Regression guard: all three shared one copy block, so a Spontaneous reader
+    // was told their wave climbs on "Repair · nothing unresolved".
+    expect(getArousalFamily("responsive").conditions.map((c) => c.label)).toEqual([
       "Repair",
       "Presence",
       "Sincerity",
     ]);
-    for (const c of SHARED_ACT_DETAIL.conditions) {
-      expect(c.note.startsWith("nothing "), `${c.label} tail`).toBe(true);
+    expect(getArousalFamily("spontaneous").conditions.map((c) => c.label)).toEqual([
+      "Novelty",
+      "Charge",
+      "Freedom",
+    ]);
+    expect(getArousalFamily("contextual").conditions.map((c) => c.label)).toEqual([
+      "Privacy",
+      "Time",
+      "Ease",
+    ]);
+
+    const seen = { labels: new Set<string>(), notes: new Set<string>(), bodies: new Set<string>() };
+    for (const [family, entry] of Object.entries(AROUSAL_FAMILIES)) {
+      expect(entry.conditions, `${family} conditions`).toHaveLength(3);
+      for (const c of entry.conditions) {
+        // The frame's register: a bold chip, then a "nothing …" tail.
+        expect(c.note.startsWith("nothing "), `${family}/${c.label} tail`).toBe(true);
+        seen.labels.add(c.label);
+      }
+      expect(entry.conditionsNote, `${family} note`).toContain("the three dots on the curve");
+      expect(entry.act2Body.length, `${family} act2`).toBeGreaterThan(40);
+      expect(entry.act3Body.length, `${family} act3`).toBeGreaterThan(40);
+      seen.notes.add(entry.conditionsNote);
+      seen.bodies.add(entry.act2Body);
+      seen.bodies.add(entry.act3Body);
     }
-    expect(SHARED_ACT_DETAIL.act2Body.length).toBeGreaterThan(40);
-    expect(SHARED_ACT_DETAIL.act3Body.length).toBeGreaterThan(40);
+    // 9 distinct chips, 3 distinct notes, 6 distinct bodies — nothing reused.
+    expect(seen.labels.size, "condition chips repeat across families").toBe(9);
+    expect(seen.notes.size, "condition notes repeat across families").toBe(3);
+    expect(seen.bodies.size, "act bodies repeat across families").toBe(6);
   });
 
   it("falls back to the Figma base for an unknown or missing family", () => {

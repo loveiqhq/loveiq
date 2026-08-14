@@ -1,6 +1,6 @@
 "use client";
 
-import type { FC, ReactNode } from "react";
+import { useEffect, useRef, useState, type FC, type ReactNode } from "react";
 import { getReport2Config } from "@/data/report2-config";
 import {
   AROUSAL_CURVES,
@@ -50,16 +50,56 @@ interface Props {
 const IgnitionCurve: FC<{ family: ArousalFamily }> = ({ family }) => {
   const curve = AROUSAL_CURVES[family];
   const gradientId = `report-map-ignition-${family}`;
+  const svgRef = useRef<SVGSVGElement>(null);
+  // x-stretch that cancels the outer squeeze: renders 1 until measured, which is
+  // the current (elliptical) behaviour rather than a missing marker.
+  const [xStretch, setXStretch] = useState(1);
+  const vbHeight = curve.teaser.vbHeight;
 
-  // NOTE: `preserveAspectRatio="none"` stretches the viewBox non-uniformly so the
-  // path spans the card's full width, which also scales the marker below — at
-  // 1440px it renders ~13.71x14.54, i.e. ~6% taller than wide. That was moved out
-  // of the SVG once to make it a true circle, but the replacement element did not
-  // paint in Safari, so it was reverted deliberately: a marker 6% off round beats
-  // a marker that is missing. Leave the <circle> here unless a fix is verified in
-  // real Safari, not just Playwright's WebKit.
+  useEffect(() => {
+    const el = svgRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const measure = () => {
+      const box = el.getBoundingClientRect();
+      if (!box.width || !box.height) return;
+      const sx = box.width / TEASER_VB_WIDTH;
+      const sy = box.height / vbHeight;
+      // Pre-stretching x by sy/sx makes the rendered x-radius equal the y-radius.
+      setXStretch(sx > 0 ? sy / sx : 1);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [vbHeight]);
+
+  const { x: dotX, y: dotY } = curve.teaser.dot;
+
+  // `preserveAspectRatio="none"` stretches the viewBox non-uniformly so the path
+  // spans the card's full width — which also stretches the marker. The earlier
+  // note here measured only 1440px, where it is ~6% taller than wide and hard to
+  // see. On a 390px screen the same SVG scales x by 0.39 and y by 0.71, so the
+  // marker rendered 6x10: a vertical ellipse whose ends poke out above and below
+  // the stroke, which reads as a dot sitting off its own line (its CENTRE is on
+  // the curve to 0.01px — the position was never wrong, the shape was).
+  //
+  // Fixed by counter-stretching a wrapper <g> by the inverse of the outer
+  // squeeze, so the marker stays inside the SVG — the previous attempt used an
+  // HTML element over the chart and never painted in real Safari.
+  //
+  // The factor has to be measured: it is the SVG's rendered box over its viewBox,
+  // and the rendered width is whatever the card is. A nested <svg> with
+  // `xMidYMid` does NOT work here — preserveAspectRatio resolves in the nested
+  // element's own user space, and the ancestor's non-uniform transform is applied
+  // afterwards, so the ellipse comes back (verified: still 5.72x10.38).
+  //
+  // The stretch goes on a wrapper <g>, not the circle: `.report-draw-dot` animates
+  // `transform` in CSS, and a CSS transform overrides the presentation attribute,
+  // so putting both on one element loses the correction the moment the reveal
+  // animation runs.
   return (
     <svg
+      ref={svgRef}
       viewBox={`0 0 ${TEASER_VB_WIDTH} ${curve.teaser.vbHeight}`}
       fill="none"
       preserveAspectRatio="none"
@@ -88,13 +128,15 @@ const IgnitionCurve: FC<{ family: ArousalFamily }> = ({ family }) => {
         strokeLinecap="round"
         fill="none"
       />
-      <circle
-        className="report-draw-dot"
-        cx={curve.teaser.dot.x}
-        cy={curve.teaser.dot.y}
-        r={TEASER_DOT_R}
-        fill={curve.dotColor}
-      />
+      <g transform={`translate(${dotX} ${dotY}) scale(${xStretch} 1) translate(${-dotX} ${-dotY})`}>
+        <circle
+          className="report-draw-dot"
+          cx={dotX}
+          cy={dotY}
+          r={TEASER_DOT_R}
+          fill={curve.dotColor}
+        />
+      </g>
     </svg>
   );
 };

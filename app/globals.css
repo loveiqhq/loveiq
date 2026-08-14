@@ -23642,3 +23642,100 @@ input.autofill-dark:-internal-autofill-previewed {
     transition: none;
   }
 }
+
+/* ==========================================================================
+   Locked sections: the paywall card sizes its own box
+   --------------------------------------------------------------------------
+   `.report-premium-overlay` is `position: absolute; inset: 0`, which only works
+   if the box it covers is at least as tall as the card. It is not: the card is
+   ~682-706px (offer + timer + price + guarantee + science + badges) and these
+   preview boxes are sized by their blurred stand-in — as little as 180px. Every
+   one of the 17 locked sections overflowed, by up to 502px, and the spill landed
+   on top of the section's own copy: measured 1-15 text-on-text collisions per
+   section, on BOTH mobile and desktop ("Grounded in 100+ science papers" printed
+   over "LEARN: WHERE BELIEFS COME FROM", the CTA over the body paragraph).
+
+   Same fix already proven on the full-dimension cards above: the overlay joins
+   the normal flow so the box grows to the card, and the blurred stand-in becomes
+   an absolute backdrop behind it and is clipped. Nothing about the card's own
+   design changes — it simply stops being asked to fit a box smaller than itself.
+
+   The `--practice` covers are deliberately NOT included (see the note above);
+   their own compact rules size them.
+   ========================================================================== */
+.report-accel__preview,
+.report-arousal__preview,
+.report-beliefs__preview,
+.report-confidence__preview,
+.report-curiosity__preview,
+.report-energy__preview,
+.report-fantasy__preview,
+.report-growth__preview,
+.report-initiation__preview,
+.report-insecurities__preview,
+.report-libido__preview,
+.report-lovelang__preview,
+.report-partnership__preview,
+.report-power__preview,
+.report-reading__preview,
+.report-reward__preview {
+  overflow: hidden;
+}
+
+.report-accel__preview > .report-accel__preview-fade,
+.report-arousal__preview > .report-arousal__preview-fade,
+.report-beliefs__preview > .report-beliefs__preview-fade,
+.report-confidence__preview > .report-confidence__preview-fade,
+.report-curiosity__preview > .report-curiosity__preview-fade,
+.report-energy__preview > .report-energy__preview-fade,
+.report-fantasy__preview > .report-fantasy__preview-fade,
+.report-growth__preview > .report-growth__preview-fade,
+.report-initiation__preview > .report-initiation__preview-fade,
+.report-insecurities__preview > .report-insecurities__preview-fade,
+.report-libido__preview > .report-libido__preview-fade,
+.report-lovelang__preview > .report-lovelang__preview-fade,
+.report-partnership__preview > .report-partnership__preview-fade,
+.report-power__preview > .report-power__preview-fade,
+.report-reading__preview > .report-reading__preview-fade,
+.report-reward__preview > .report-reward__preview-fade {
+  position: absolute;
+  inset: 0;
+}
+
+.report-accel__preview > .report-premium-overlay,
+.report-arousal__preview > .report-premium-overlay,
+.report-beliefs__preview > .report-premium-overlay,
+.report-confidence__preview > .report-premium-overlay,
+.report-curiosity__preview > .report-premium-overlay,
+.report-energy__preview > .report-premium-overlay,
+.report-fantasy__preview > .report-premium-overlay,
+.report-growth__preview > .report-premium-overlay,
+.report-initiation__preview > .report-premium-overlay,
+.report-insecurities__preview > .report-premium-overlay,
+.report-libido__preview > .report-premium-overlay,
+.report-lovelang__preview > .report-premium-overlay,
+.report-partnership__preview > .report-premium-overlay,
+.report-power__preview > .report-premium-overlay,
+.report-reading__preview > .report-premium-overlay,
+.report-reward__preview > .report-premium-overlay {
+  position: relative;
+  inset: auto;
+}
+
+/* Attachment's locked card is the same problem with different class names: its
+   blurred stand-in is an `<article>`, not a `__preview-fade`, and the wrapper is
+   shared with the unlocked state — hence the `--locked` modifier rather than
+   folding it into the list above. */
+.report-attachment__result-wrap--locked {
+  overflow: hidden;
+}
+
+.report-attachment__result-wrap--locked > .report-attachment-card--blur {
+  position: absolute;
+  inset: 0;
+}
+
+.report-attachment__result-wrap--locked > .report-premium-overlay {
+  position: relative;
+  inset: auto;
+}

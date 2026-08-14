@@ -5,7 +5,7 @@ import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import { renderEduPara } from "./eduPara";
 import { getReportTheme } from "../reportTheme";
-import { SHARED_ACT_DETAIL, getArousalFamily } from "@/data/report2-arousal";
+import { getArousalFamily, type ArousalFamily } from "@/data/report2-arousal";
 import { useRevealOnView } from "../hooks/useRevealOnView";
 import { curveEndPoint } from "../curveEnd";
 
@@ -287,36 +287,45 @@ const ArousalArc: FC<{ family: string; acts: [string, string, string]; accent: s
 /**
  * The three act columns under the arc (Figma 8427:2222 / 9107:1159 / 9107:1246):
  * act 1 lists the three conditions as chips plus a note, acts 2 and 3 carry a
- * paragraph each. Act names swap per family; the bodies have only one authored
- * version — see `SHARED_ACT_DETAIL`.
+ * paragraph each. All of it comes off the reader's own arousal family — a
+ * Spontaneous reader used to be shown the responsive build's conditions
+ * ("Repair · nothing unresolved") because the three frames share one duplicated
+ * copy block. See `data/report2-arousal.ts`.
  */
-const ActDetail: FC<{ acts: [string, string, string]; accent: string }> = ({ acts, accent }) => (
-  <div className="report-arousal__acts">
-    <div className="report-arousal__act" style={{ "--act-accent": accent } as CSSProperties}>
-      <p className="report-arousal__act-eyebrow">1 &middot; {acts[0]}</p>
-      <ul className="report-arousal__conditions">
-        {SHARED_ACT_DETAIL.conditions.map((c) => (
-          <li key={c.label} className="report-arousal__condition">
-            <span className="report-arousal__condition-dot" aria-hidden="true" />
-            <span className="report-arousal__condition-label">{c.label}</span>
-            <span className="report-arousal__condition-note">&middot; {c.note}</span>
-          </li>
-        ))}
-      </ul>
-      <p className="report-arousal__act-note">{SHARED_ACT_DETAIL.conditionsNote}</p>
-    </div>
+const ActDetail: FC<{
+  family: ArousalFamily;
+  /** Act NAMES, which the copy matrix may override — not `family.acts`. */
+  acts: [string, string, string];
+  accent: string;
+}> = ({ family, acts, accent }) => {
+  return (
+    <div className="report-arousal__acts">
+      <div className="report-arousal__act" style={{ "--act-accent": accent } as CSSProperties}>
+        <p className="report-arousal__act-eyebrow">1 &middot; {acts[0]}</p>
+        <ul className="report-arousal__conditions">
+          {family.conditions.map((c) => (
+            <li key={c.label} className="report-arousal__condition">
+              <span className="report-arousal__condition-dot" aria-hidden="true" />
+              <span className="report-arousal__condition-label">{c.label}</span>
+              <span className="report-arousal__condition-note">&middot; {c.note}</span>
+            </li>
+          ))}
+        </ul>
+        <p className="report-arousal__act-note">{family.conditionsNote}</p>
+      </div>
 
-    <div className="report-arousal__act" style={{ "--act-accent": accent } as CSSProperties}>
-      <p className="report-arousal__act-eyebrow">2 &middot; {acts[1]}</p>
-      <p className="report-arousal__act-body">{SHARED_ACT_DETAIL.act2Body}</p>
-    </div>
+      <div className="report-arousal__act" style={{ "--act-accent": accent } as CSSProperties}>
+        <p className="report-arousal__act-eyebrow">2 &middot; {acts[1]}</p>
+        <p className="report-arousal__act-body">{family.act2Body}</p>
+      </div>
 
-    <div className="report-arousal__act" style={{ "--act-accent": accent } as CSSProperties}>
-      <p className="report-arousal__act-eyebrow is-live">3 &middot; {acts[2]}</p>
-      <p className="report-arousal__act-body">{SHARED_ACT_DETAIL.act3Body}</p>
+      <div className="report-arousal__act" style={{ "--act-accent": accent } as CSSProperties}>
+        <p className="report-arousal__act-eyebrow is-live">3 &middot; {acts[2]}</p>
+        <p className="report-arousal__act-body">{family.act3Body}</p>
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 /** One mini-stat: big value + caption (Figma 8502:684/698). */
 const MiniStat: FC<{ value: string; caption: string }> = ({ value, caption }) => (
@@ -431,7 +440,7 @@ const ArousalSection: FC<Props> = ({
 
             <ArousalArc family={family} acts={acts} accent={accent} />
 
-            <ActDetail acts={acts} accent={accent} />
+            <ActDetail family={arousalFamily} acts={acts} accent={accent} />
 
             {hasStats ? (
               <div className="report-arousal__stats">
