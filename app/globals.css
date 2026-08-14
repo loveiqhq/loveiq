@@ -3522,6 +3522,23 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #161021;
 }
 
+/*
+ * The wordmark's "Love" half carries its own colour class (`text-white`, the
+ * shared component's dark-theme default), so the `footer h2` rule above cannot
+ * reach it — a class on the element beats a colour inherited from its parent. On
+ * this white footer it rendered white-on-white at 1.00:1 contrast while still
+ * taking up its 44px, so the footer read as a mark, a gap, then "IQ".
+ *
+ * Recoloured here rather than by changing the component's default, which is
+ * correct for the eight genuinely dark surfaces that rely on it (nav, 404, both
+ * login screens); the white landing already passes its own override. Targeting
+ * the colour class keeps the gradient "IQ" half untouched, and if that class ever
+ * changes the span simply inherits the dark `h2` colour, which is also correct.
+ */
+.report-content > footer [aria-label="LoveIQ"] .text-white {
+  color: #161021;
+}
+
 .report-content > footer .border-t {
   border-color: rgba(22, 16, 33, 0.1);
   color: #6b6678;
