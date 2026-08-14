@@ -118,6 +118,7 @@
     "esbuild": "^0.28.1",
     "glob": "^10.5.0",
     "minimatch": ">=10.2.1",
+    "nanoid": "^3.3.18",
     "postcss": "$postcss",
     "uuid": ">=11.0.0",
     "vite": "^8.0.16",
