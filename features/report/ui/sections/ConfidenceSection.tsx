@@ -327,8 +327,8 @@ const ConfidenceSection: FC<Props> = ({
             <button
               type="button"
               className="report-confidence__details-summary"
-              aria-expanded={expanded}
-              onClick={() => setExpanded((v) => !v)}
+              aria-expanded={locked ? false : expanded}
+              onClick={locked ? onUnlock : () => setExpanded((v) => !v)}
             >
               <span className="report-confidence__details-icon" aria-hidden="true">
                 <BookIcon />
@@ -344,24 +344,24 @@ const ConfidenceSection: FC<Props> = ({
               </span>
             </button>
 
-            {copy["edu.teaser"] && !expanded ? (
+            {copy["edu.teaser"] && (locked || !expanded) ? (
               <div className="report-confidence__details-peek report-learn-peek">
                 <p className="report-confidence__details-teaser report-learn-teaser">
                   {copy["edu.teaser"]}
                 </p>
-                {eduParas.length > 0 ? (
+                {locked || eduParas.length > 0 ? (
                   <button
                     type="button"
                     className="report-confidence__peek-cta report-learn-cta"
-                    onClick={() => setExpanded(true)}
+                    onClick={locked ? onUnlock : () => setExpanded(true)}
                   >
-                    Read the full explanation
+                    {locked ? "Unlock to read the full explanation" : "Read the full explanation"}
                   </button>
                 ) : null}
               </div>
             ) : null}
 
-            {expanded ? (
+            {!locked && expanded ? (
               <div className="report-confidence__details-body">
                 {copy["edu.teaser"] ? (
                   <p className="report-confidence__details-teaser report-learn-teaser-full">

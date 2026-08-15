@@ -347,8 +347,8 @@ const InitiationSection: FC<Props> = ({
             <button
               type="button"
               className="report-initiation__details-summary"
-              aria-expanded={expanded}
-              onClick={() => setExpanded((v) => !v)}
+              aria-expanded={locked ? false : expanded}
+              onClick={locked ? onUnlock : () => setExpanded((v) => !v)}
             >
               <span className="report-initiation__details-icon" aria-hidden="true">
                 <BulbIcon />
@@ -364,20 +364,20 @@ const InitiationSection: FC<Props> = ({
               </span>
             </button>
 
-            {!expanded ? (
+            {locked || !expanded ? (
               <div className="report-initiation__details-peek report-learn-peek">
                 {copy["practical.teaser"] ? (
                   <p className="report-initiation__details-teaser report-learn-teaser">
                     {copy["practical.teaser"]}
                   </p>
                 ) : null}
-                {practicalLines.length > 0 ? (
+                {locked || practicalLines.length > 0 ? (
                   <button
                     type="button"
                     className="report-initiation__peek-cta report-learn-cta"
-                    onClick={() => setExpanded(true)}
+                    onClick={locked ? onUnlock : () => setExpanded(true)}
                   >
-                    Read the full practice
+                    {locked ? "Unlock to read the full practice" : "Read the full practice"}
                   </button>
                 ) : null}
               </div>

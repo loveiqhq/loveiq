@@ -334,8 +334,8 @@ const PartnershipSection: FC<Props> = ({
             <button
               type="button"
               className="report-partnership__details-summary"
-              aria-expanded={expanded}
-              onClick={() => setExpanded((v) => !v)}
+              aria-expanded={locked ? false : expanded}
+              onClick={locked ? onUnlock : () => setExpanded((v) => !v)}
             >
               <span className="report-partnership__details-icon" aria-hidden="true">
                 <BookIcon />
@@ -351,20 +351,20 @@ const PartnershipSection: FC<Props> = ({
               </span>
             </button>
 
-            {!expanded ? (
+            {locked || !expanded ? (
               <div className="report-partnership__details-peek report-learn-peek">
                 {copy["edu.teaser"] ? (
                   <p className="report-partnership__details-teaser report-learn-teaser">
                     {copy["edu.teaser"]}
                   </p>
                 ) : null}
-                {eduBody.length > 0 ? (
+                {locked || eduBody.length > 0 ? (
                   <button
                     type="button"
                     className="report-partnership__peek-cta report-learn-cta"
-                    onClick={() => setExpanded(true)}
+                    onClick={locked ? onUnlock : () => setExpanded(true)}
                   >
-                    Read the full explanation
+                    {locked ? "Unlock to read the full explanation" : "Read the full explanation"}
                   </button>
                 ) : null}
               </div>

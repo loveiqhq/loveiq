@@ -383,8 +383,8 @@ const RewardSection: FC<Props> = ({
             <button
               type="button"
               className="report-reward__details-summary"
-              aria-expanded={expanded}
-              onClick={() => setExpanded((v) => !v)}
+              aria-expanded={locked ? false : expanded}
+              onClick={locked ? onUnlock : () => setExpanded((v) => !v)}
             >
               <span className="report-reward__details-icon" aria-hidden="true">
                 <BookIcon />
@@ -400,20 +400,20 @@ const RewardSection: FC<Props> = ({
               </span>
             </button>
 
-            {!expanded ? (
+            {locked || !expanded ? (
               <div className="report-reward__details-peek report-learn-peek">
                 {copy["edu.teaser"] ? (
                   <p className="report-reward__details-teaser report-learn-teaser">
                     {copy["edu.teaser"]}
                   </p>
                 ) : null}
-                {eduParas.length > 0 ? (
+                {locked || eduParas.length > 0 ? (
                   <button
                     type="button"
                     className="report-reward__peek-cta report-learn-cta"
-                    onClick={() => setExpanded(true)}
+                    onClick={locked ? onUnlock : () => setExpanded(true)}
                   >
-                    Read the full explanation
+                    {locked ? "Unlock to read the full explanation" : "Read the full explanation"}
                   </button>
                 ) : null}
               </div>

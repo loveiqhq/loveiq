@@ -25,6 +25,55 @@ import { isSectionUnlockedForPlan, type ReportAccessPlan } from "@features/repor
 
 export const PRACTICE_SECTION_ID = "typical_sexual_fantasy_amp_practice_tendencies";
 
+/**
+ * Withhold the "Learn:" disclosure body from a locked section.
+ *
+ * Every section copy carries universal educational slots. The eyebrow and the
+ * one-line `edu.teaser` are the tease and stay — they're what makes the reader
+ * want the section. The body paragraphs (`edu.body.*`) and the enumerated
+ * structure list (`edu.struct.*`) are the paid asset.
+ *
+ * These used to ship whole regardless of `locked`, and the peek→expand control
+ * that reveals them is client-side only — so a reader who had bought nothing
+ * could open "Read the full explanation" and get all of it. Hiding the control
+ * alone would not have been enough either: the prose would still sit in the
+ * /api/report JSON for anyone reading the network tab. It has to come off the
+ * wire, which is what this does.
+ *
+ * The `practical.*` sections (libido, initiation, insecurities) already gate
+ * their own teaser and lines at the call site, so they need nothing here.
+ */
+export function stripLockedEduBody<T extends { locked?: boolean }>(copy: T): T {
+  if (!copy || typeof copy !== "object" || copy.locked !== true) return copy;
+
+  const gated: Record<string, unknown> = { ...copy };
+  for (const key of Object.keys(gated)) {
+    if (key.startsWith("edu.body.") || key.startsWith("edu.struct.")) {
+      gated[key] = null;
+    }
+  }
+  return gated as T;
+}
+
+/**
+ * Apply {@link stripLockedEduBody} across a whole response payload.
+ *
+ * Section copies are top-level keys on the /api/report body, so gating here
+ * covers every section at once — including any added later, which is the point:
+ * a new section gets the gate for free instead of depending on whoever writes
+ * it remembering to ask for one.
+ */
+export function stripLockedEduBodyFromPayload<T extends Record<string, unknown>>(payload: T): T {
+  const out: Record<string, unknown> = { ...payload };
+  for (const [key, value] of Object.entries(out)) {
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      const candidate = value as { locked?: boolean };
+      if (candidate.locked === true) out[key] = stripLockedEduBody(candidate);
+    }
+  }
+  return out as T;
+}
+
 export interface PracticeTendencyRowForUser {
   practice: string;
   fantasyPull: number | null;

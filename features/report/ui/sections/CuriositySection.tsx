@@ -246,8 +246,8 @@ const CuriositySection: FC<Props> = ({
             <button
               type="button"
               className="report-curiosity__details-summary"
-              aria-expanded={expanded}
-              onClick={() => setExpanded((v) => !v)}
+              aria-expanded={locked ? false : expanded}
+              onClick={locked ? onUnlock : () => setExpanded((v) => !v)}
             >
               <span className="report-curiosity__details-icon" aria-hidden="true">
                 <BookIcon />
@@ -263,20 +263,20 @@ const CuriositySection: FC<Props> = ({
               </span>
             </button>
 
-            {!expanded ? (
+            {locked || !expanded ? (
               <div className="report-curiosity__details-peek report-learn-peek">
                 {copy["edu.teaser"] ? (
                   <p className="report-curiosity__details-teaser report-learn-teaser">
                     {copy["edu.teaser"]}
                   </p>
                 ) : null}
-                {eduIntro.length > 0 || structs.length > 0 ? (
+                {locked || eduIntro.length > 0 || structs.length > 0 ? (
                   <button
                     type="button"
                     className="report-curiosity__peek-cta report-learn-cta"
-                    onClick={() => setExpanded(true)}
+                    onClick={locked ? onUnlock : () => setExpanded(true)}
                   >
-                    Read the full explanation
+                    {locked ? "Unlock to read the full explanation" : "Read the full explanation"}
                   </button>
                 ) : null}
               </div>

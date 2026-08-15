@@ -502,8 +502,8 @@ const AttachmentPatternsSection: FC<Props> = ({
               <button
                 type="button"
                 className="report-attachment__details-summary"
-                aria-expanded={expanded}
-                onClick={() => setExpanded((v) => !v)}
+                aria-expanded={locked ? false : expanded}
+                onClick={locked ? onUnlock : () => setExpanded((v) => !v)}
               >
                 <span className="report-attachment__details-icon" aria-hidden="true">
                   <BookIcon />
@@ -524,20 +524,20 @@ const AttachmentPatternsSection: FC<Props> = ({
                   explanation"). 13 of the report's 16 collapsibles already ship
                   this button; Attachment was one of three that never did, so the
                   only way to expand was the header row. */}
-              {!expanded ? (
+              {locked || !expanded ? (
                 <div className="report-attachment__details-peek report-learn-peek">
                   {copy["edu.teaser"] ? (
                     <p className="report-attachment__details-teaser report-learn-teaser">
                       {copy["edu.teaser"]}
                     </p>
                   ) : null}
-                  {eduParas.length > 0 ? (
+                  {locked || eduParas.length > 0 ? (
                     <button
                       type="button"
                       className="report-attachment__peek-cta report-learn-cta"
-                      onClick={() => setExpanded(true)}
+                      onClick={locked ? onUnlock : () => setExpanded(true)}
                     >
-                      Read the full explanation
+                      {locked ? "Unlock to read the full explanation" : "Read the full explanation"}
                     </button>
                   ) : null}
                 </div>

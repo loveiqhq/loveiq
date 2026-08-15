@@ -252,8 +252,8 @@ const AcceleratorsSection: FC<Props> = ({
             <button
               type="button"
               className="report-accel__details-summary"
-              aria-expanded={expanded}
-              onClick={() => setExpanded((v) => !v)}
+              aria-expanded={locked ? false : expanded}
+              onClick={locked ? onUnlock : () => setExpanded((v) => !v)}
             >
               <span className="report-accel__details-icon" aria-hidden="true">
                 <BookIcon />
@@ -272,20 +272,20 @@ const AcceleratorsSection: FC<Props> = ({
             {/* Figma's "peek CTA" (node 8762:15996 on the twin attachment block,
                 and the pill visible in the accel mock 8946:4286). 13 of the 16
                 collapsibles already shipped it; this was one of three missing. */}
-            {!expanded ? (
+            {locked || !expanded ? (
               <div className="report-accel__details-peek report-learn-peek">
                 {copy["edu.teaser"] ? (
                   <p className="report-accel__details-teaser report-learn-teaser">
                     {copy["edu.teaser"]}
                   </p>
                 ) : null}
-                {eduParas.length > 0 ? (
+                {locked || eduParas.length > 0 ? (
                   <button
                     type="button"
                     className="report-accel__peek-cta report-learn-cta"
-                    onClick={() => setExpanded(true)}
+                    onClick={locked ? onUnlock : () => setExpanded(true)}
                   >
-                    Read the full explanation
+                    {locked ? "Unlock to read the full explanation" : "Read the full explanation"}
                   </button>
                 ) : null}
               </div>
