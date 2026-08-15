@@ -456,6 +456,18 @@ interface ReportExperienceProps {
   viewMode: "owner" | "shared";
 }
 
+/**
+ * Sections that carry `hasResonatesFeedback: true` in the auto-generated
+ * `data/report-general.ts` but must NOT show the control.
+ *
+ * Figma 8988:15822 puts "Does this resonate?" on every section EXCEPT the hero
+ * pair (Section - HERO / Section - 5. Core Archetype Score) and Snapshot — you
+ * are not asked whether your own archetype result resonates before you have read
+ * anything. Suppressed here rather than in the data file, which is generated from
+ * the source .docx and would lose the edit on the next run.
+ */
+const FEEDBACK_SUPPRESSED_SECTION_IDS = new Set(["core_archetype"]);
+
 const ReportExperience: FC<ReportExperienceProps> = ({
   accessPlan,
   archetypeTiers,
@@ -532,6 +544,24 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   viewMode,
 }) => {
   const mainContentRef = useRef<HTMLElement | null>(null);
+
+  /**
+   * "Does this resonate?" for one section.
+   *
+   * Shared by the mapped sections and the bespoke Report 2.0 ones. The mapped
+   * ones take it from `hasResonatesFeedback` in the auto-generated
+   * `data/report-general.ts`; the 2.0 sections (Summary, Findings, Insight Map,
+   * Constellation, Partnership) are rendered outside that map and so had no way
+   * to receive one — Figma 8988:15822 puts the control on all five.
+   */
+  const renderFeedback = (sectionId: string, sectionTitle: string) => (
+    <SectionFeedback
+      sectionTitle={sectionTitle}
+      value={feedbacks[sectionId] ?? null}
+      isSent={submitted[sectionId] ?? false}
+      onFeedback={(payload) => submitFeedback(sectionId, payload)}
+    />
+  );
   const [activeSectionId, setActiveSectionId] = useState(
     resolvedSections[0]?.id ?? "core_archetype"
   );
@@ -852,14 +882,10 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                       : null
                   );
 
-                  const feedbackWidget = section.hasResonatesFeedback ? (
-                    <SectionFeedback
-                      sectionTitle={title}
-                      value={feedbacks[section.id] ?? null}
-                      isSent={submitted[section.id] ?? false}
-                      onFeedback={(payload) => submitFeedback(section.id, payload)}
-                    />
-                  ) : null;
+                  const feedbackWidget =
+                    section.hasResonatesFeedback && !FEEDBACK_SUPPRESSED_SECTION_IDS.has(section.id)
+                      ? renderFeedback(section.id, title)
+                      : null;
 
                   if (section.id === "summary") {
                     const summaryHtml = normalizeReportHtml(
@@ -920,6 +946,10 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                           primaryArchetype={viewArchetype}
                           sectionId="means_for_you"
                           title=""
+                          feedbackWidget={renderFeedback(
+                            "means_for_you",
+                            "What this means for you"
+                          )}
                         >
                           <MeansForYouSection archetype={viewArchetype} />
                         </ReportSection>
@@ -947,6 +977,10 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                           primaryArchetype={viewArchetype}
                           sectionId="findings"
                           title=""
+                          feedbackWidget={renderFeedback(
+                            "findings",
+                            "Five things this report found"
+                          )}
                         >
                           <FindingsSection copy={findingsCopy} onUnlock={() => unlockFindings()} />
                         </ReportSection>
@@ -954,7 +988,12 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                           same reveal treatment (Figma 8762:15822). Fully visible
                           (featured tile is "always unlocked"); pill CTAs reuse
                           the shared pricing-modal path. */}
-                        <ReportSection primaryArchetype={viewArchetype} sectionId="map" title="">
+                        <ReportSection
+                          primaryArchetype={viewArchetype}
+                          sectionId="map"
+                          title=""
+                          feedbackWidget={renderFeedback("map", "Your insight map")}
+                        >
                           <InsightMapSection
                             archetype={viewArchetype}
                             copy={mapCopy}
@@ -1008,6 +1047,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                           primaryArchetype={viewArchetype}
                           sectionId="constellation"
                           title=""
+                          feedbackWidget={renderFeedback("constellation", "Other archetypes")}
                         >
                           <ConstellationSection
                             ranking={ranking}
@@ -1426,6 +1466,10 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                           primaryArchetype={viewArchetype}
                           sectionId="challenges_in_partnership"
                           title=""
+                          feedbackWidget={renderFeedback(
+                            "challenges_in_partnership",
+                            "Challenges in Partnership"
+                          )}
                         >
                           <PartnershipSection
                             archetype={viewArchetype}

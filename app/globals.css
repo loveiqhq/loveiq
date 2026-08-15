@@ -3,6 +3,31 @@
 @tailwind utilities;
 
 :root {
+  /*
+   * Every paywall blur in the report. Tuned by eye against the LARGEST text in a
+   * locked chapter, which is what survives blur longest, and judged at 1x — the
+   * pixels a desktop reader actually sees. Measured on the Attachment patterns
+   * heading: 3-4px plainly readable, 4.5px mostly makeable, 5px right at the
+   * edge, 6px gone, 8px soft enough that the shape of the content is lost too.
+   *
+   * 5.5px is the intended "pure edge": past legible, but light enough that the
+   * reader can still see the shape and volume of what they are buying. Judging
+   * this on a 2x capture viewed magnified reads a stop or two too high — that is
+   * how it first landed at 7-8px.
+   *
+   * These were 4px-8.25px across 25 separate declarations; one token so they
+   * cannot drift apart again and so this is a one-line change.
+   */
+  --report-lock-blur: 4px;
+  /* Feather distances in PIXELS, not percentages. As percentages a short block —
+     most of them on mobile — got a fade only a few px wide, which is a hard edge
+     with extra steps; that is why the mobile audit still showed 236-level cuts at
+     the top of Attachment and Reading while the tall desktop blocks looked fine. */
+  --report-lock-fade-start: 52px;
+  /* Side feather — hides the overflow clip on the left and right edges. */
+  --report-lock-fade-side: 26px;
+  --report-lock-fade-end: calc(100% - 44px);
+
   color-scheme: light;
   --color-bg: #0b0613;
   --color-surface: #0f0a18;
@@ -3655,7 +3680,16 @@ input.autofill-dark:-internal-autofill-previewed {
     color 500ms ease;
 }
 
-/* Full-bleed white fade layer (matches the landing's first overlay). */
+/*
+ * Hover sheen. This was a full-bleed WHITE fill taken from the landing page,
+ * where the CTA sits on a dark hero and going white reads as an invert. These
+ * buttons sit on white — the sticky bar and both pricing modals — so at opacity 1
+ * the orange pill turned into a white rectangle with black text and read as a
+ * stray box floating over the page rather than a button.
+ *
+ * Kept as a light wash instead: enough to brighten the orange on hover, not
+ * enough to erase it. The label stays white throughout (see below).
+ */
 .rpm-cta .rpm-cta__wash {
   position: absolute !important;
   inset: 0 !important;
@@ -3688,17 +3722,12 @@ input.autofill-dark:-internal-autofill-previewed {
 
 .rpm-cta:hover {
   transform: translateY(-2px);
-  color: #000 !important;
 }
 .rpm-cta:hover .rpm-cta__wash {
-  opacity: 1 !important;
+  opacity: 0.16 !important;
 }
 .rpm-cta:hover .rpm-cta__reveal {
   transform: translateY(0) !important;
-}
-.rpm-cta:hover .rpm-cta__label,
-.rpm-cta:hover .rpm-cta__arrow {
-  color: #000 !important;
 }
 
 .rpm-cta:active {
@@ -7425,7 +7454,7 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 .report-attachment-card--blur {
-  filter: blur(6px);
+  filter: blur(var(--report-lock-blur));
   user-select: none;
   pointer-events: none;
 }
@@ -8124,7 +8153,7 @@ input.autofill-dark:-internal-autofill-previewed {
 
 .report-stage-highlight__value--locked,
 .report-stage-highlight__meta--locked {
-  filter: blur(8.25px);
+  filter: blur(var(--report-lock-blur));
   user-select: none;
   pointer-events: none;
 }
@@ -8197,8 +8226,14 @@ input.autofill-dark:-internal-autofill-previewed {
   font-weight: 700;
 }
 
+/*
+ * Same ink as the paragraphs above it. This used to take the archetype accent,
+ * which made the one closing line green for a Relational Nurturer, purple for a
+ * Spiritual Lover and so on — the only coloured body copy in the report, and it
+ * read as a link rather than as the sentence that closes the section.
+ */
 .report-means__closing {
-  color: rgb(var(--report-accent-rgb));
+  color: inherit;
 }
 
 /* Glow orbs — the blurred accent blobs in corners */
@@ -8746,9 +8781,12 @@ input.autofill-dark:-internal-autofill-previewed {
   display: flex;
   align-items: center;
   justify-content: center;
-  /* Card 3's equivalent of `__value` — same auto-margin pairing so the stage
-     block centres like the other two. */
-  margin-top: auto;
+  /* Auto on BOTH sides: that centres the stage word in the space between the
+     eyebrow and the caption, and — because the caption is the last child — the
+     lower auto is what pushes it onto the same baseline as cards 1 and 2. A
+     single `margin-top: auto` here competed with the caption's own auto and the
+     two split the free space, leaving the caption short of the others. */
+  margin: auto 0;
   padding: 6px 4px;
 }
 
@@ -8777,17 +8815,20 @@ input.autofill-dark:-internal-autofill-previewed {
   letter-spacing: -0.025em;
 }
 
-/* Card 3 needs TWO auto margins to centre its value block, exactly like cards 1-2
-   (`__value` + `__subtext` each carry an auto top margin). Card 3's second auto
-   sits on `__subtext` — but that element only renders when `stage.subline` copy
-   exists, which it does for almost no archetype. With a single auto the whole free
-   space collected above the block and it sank to the bottom of the card (measured
-   74.4% down vs Figma's 43.2%). Supplying the missing auto only when `__stage-full`
-   is last preserves the already-correct behaviour when the subtext IS present. */
-.report-snapshot-card__stage-full:last-child {
-  margin-bottom: auto;
-}
-
+/*
+ * Card 3's caption sits on the SAME baseline as the captions in cards 1 and 2
+ * (bottom 334 of a 361px card), so the row of three reads level.
+ *
+ * This replaces an earlier `__stage-full:last-child { margin-bottom: auto }`,
+ * which held the block at Figma's 43.2% instead. That was a deliberate match to
+ * the frame, but it left this caption finishing 79px above the other two and the
+ * row looked ragged — changed on request (2026-08-15).
+ *
+ * The centring still works the way that rule intended: `__stage-value-wrap`
+ * carries auto margins on BOTH sides, so the stage word stays centred in the
+ * space above the caption rather than riding up under the eyebrow. A third auto
+ * margin here is what used to stop the caption reaching the floor.
+ */
 .report-snapshot-card__stage-full {
   margin: 12px 0 0;
   color: rgb(var(--report-accent-ink-rgb, var(--report-accent-rgb)));
@@ -8999,7 +9040,7 @@ input.autofill-dark:-internal-autofill-previewed {
 /* Locked findings (f3-5, unpaid): teaser text blurred + lock glyph. The real
    head/body never reach the client — only the universal .locked. teaser does. */
 .report-findings__row--locked .report-findings__body-wrap {
-  filter: blur(4px);
+  filter: blur(var(--report-lock-blur));
   opacity: 0.75;
   user-select: none;
   pointer-events: none;
@@ -9293,7 +9334,7 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 .report-beliefs__preview-fade {
-  filter: blur(6px);
+  filter: blur(var(--report-lock-blur));
   opacity: 0.55;
   user-select: none;
   pointer-events: none;
@@ -9657,7 +9698,7 @@ input.autofill-dark:-internal-autofill-previewed {
   flex-direction: column;
   align-items: center;
   gap: 12px;
-  filter: blur(6px);
+  filter: blur(var(--report-lock-blur));
   opacity: 0.55;
   user-select: none;
   pointer-events: none;
@@ -10082,7 +10123,7 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 .report-reward__preview-fade {
-  filter: blur(6px);
+  filter: blur(var(--report-lock-blur));
   opacity: 0.55;
   user-select: none;
   pointer-events: none;
@@ -10561,7 +10602,7 @@ input.autofill-dark:-internal-autofill-previewed {
   display: flex;
   flex-direction: column;
   gap: clamp(14px, 1.6vw, 20.3px);
-  filter: blur(6px);
+  filter: blur(var(--report-lock-blur));
   opacity: 0.55;
   user-select: none;
   pointer-events: none;
@@ -11061,7 +11102,7 @@ input.autofill-dark:-internal-autofill-previewed {
   flex-direction: column;
   align-items: center;
   gap: clamp(10px, 1.4vw, 16px);
-  filter: blur(6px);
+  filter: blur(var(--report-lock-blur));
   opacity: 0.55;
   user-select: none;
   pointer-events: none;
@@ -11423,7 +11464,7 @@ input.autofill-dark:-internal-autofill-previewed {
   align-items: center;
   gap: clamp(10px, 1.4vw, 16px);
   width: 100%;
-  filter: blur(6px);
+  filter: blur(var(--report-lock-blur));
   opacity: 0.55;
   user-select: none;
   pointer-events: none;
@@ -11980,7 +12021,7 @@ input.autofill-dark:-internal-autofill-previewed {
   flex-direction: column;
   align-items: center;
   gap: clamp(10px, 1.4vw, 16px);
-  filter: blur(6px);
+  filter: blur(var(--report-lock-blur));
   opacity: 0.55;
   user-select: none;
   pointer-events: none;
@@ -12354,7 +12395,7 @@ input.autofill-dark:-internal-autofill-previewed {
   flex-direction: column;
   align-items: center;
   gap: clamp(10px, 1.4vw, 16px);
-  filter: blur(6px);
+  filter: blur(var(--report-lock-blur));
   opacity: 0.55;
   user-select: none;
   pointer-events: none;
@@ -12878,7 +12919,7 @@ input.autofill-dark:-internal-autofill-previewed {
   flex-direction: column;
   align-items: center;
   gap: clamp(10px, 1.4vw, 16px);
-  filter: blur(6px);
+  filter: blur(var(--report-lock-blur));
   opacity: 0.55;
   user-select: none;
   pointer-events: none;
@@ -13402,7 +13443,7 @@ input.autofill-dark:-internal-autofill-previewed {
   display: flex;
   flex-direction: column;
   gap: clamp(8px, 1.2vw, 14px);
-  filter: blur(6px);
+  filter: blur(var(--report-lock-blur));
   opacity: 0.55;
   user-select: none;
   pointer-events: none;
@@ -13682,7 +13723,7 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 .report-reading__preview-fade {
-  filter: blur(6px);
+  filter: blur(var(--report-lock-blur));
   opacity: 0.55;
   user-select: none;
   pointer-events: none;
@@ -14133,7 +14174,7 @@ input.autofill-dark:-internal-autofill-previewed {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  filter: blur(6px);
+  filter: blur(var(--report-lock-blur));
   opacity: 0.55;
   user-select: none;
   pointer-events: none;
@@ -14699,7 +14740,7 @@ input.autofill-dark:-internal-autofill-previewed {
   flex-direction: column;
   align-items: center;
   gap: 10px;
-  filter: blur(6px);
+  filter: blur(var(--report-lock-blur));
   opacity: 0.55;
   user-select: none;
   pointer-events: none;
@@ -15850,7 +15891,7 @@ input.autofill-dark:-internal-autofill-previewed {
 
 /* Blur metric cells inside locked rows */
 .report-practice-table__row--locked .report-practice-table__metric {
-  filter: blur(4.55px);
+  filter: blur(var(--report-lock-blur));
   opacity: 0.5;
   user-select: none;
   pointer-events: none;
@@ -16228,7 +16269,7 @@ input.autofill-dark:-internal-autofill-previewed {
   /* All locked groups on mobile: blur rows/header only, not the cover card */
   .report-practice-group--locked .report-practice-table__header,
   .report-practice-group--locked .report-practice-table__row {
-    filter: blur(4.55px);
+    filter: blur(var(--report-lock-blur));
     opacity: 0.5;
     user-select: none;
     pointer-events: none;
@@ -21579,7 +21620,7 @@ input.autofill-dark:-internal-autofill-previewed {
   display: flex;
   flex-direction: column;
   gap: clamp(14px, 1.6vw, 20.3px);
-  filter: blur(6px);
+  filter: blur(var(--report-lock-blur));
   opacity: 0.55;
   user-select: none;
   pointer-events: none;
@@ -22118,7 +22159,7 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 .report-fantasy__preview-fade {
-  filter: blur(6px);
+  filter: blur(var(--report-lock-blur));
   opacity: 0.55;
   user-select: none;
   pointer-events: none;
@@ -22490,7 +22531,7 @@ input.autofill-dark:-internal-autofill-previewed {
   display: flex;
   flex-direction: column;
   gap: clamp(12px, 1.4vw, 16px);
-  filter: blur(6px);
+  filter: blur(var(--report-lock-blur));
   opacity: 0.55;
   user-select: none;
   pointer-events: none;
@@ -22898,7 +22939,7 @@ input.autofill-dark:-internal-autofill-previewed {
   display: flex;
   flex-direction: column;
   gap: clamp(12px, 1.4vw, 16px);
-  filter: blur(6px);
+  filter: blur(var(--report-lock-blur));
   opacity: 0.55;
   user-select: none;
   pointer-events: none;
@@ -23755,4 +23796,131 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-attachment__result-wrap--locked > .report-premium-overlay {
   position: relative;
   inset: auto;
+}
+
+/* ==========================================================================
+   Attachment: the WHOLE chapter locks, not just its result card
+   --------------------------------------------------------------------------
+   Only `__result-wrap--locked` was ever gated, so a reader who had bought
+   nothing still got the rest of the chapter in full: the map's caption and the
+   entire "Common Attachment Style Patterns Across Archetypes" table — measured
+   1897 characters of readable payload, by far the most of any locked section.
+
+   Blurred rather than removed, deliberately: the point of a locked chapter is to
+   show that something substantial is there. The heading, the "what you will
+   learn" pill and the intro stay sharp — they are the tease — and the "Learn:"
+   disclosure keeps its own peek + unlock CTA, so it is excluded here rather than
+   blurred twice.
+   ========================================================================== */
+.report-attachment__article--locked .report-attachment__map-eyebrow,
+.report-attachment__article--locked .report-attachment__map-caption,
+.report-attachment__article--locked .report-attachment-plane,
+.report-attachment__article--locked .report-attachment__patterns {
+  filter: blur(var(--report-lock-blur));
+  user-select: none;
+  pointer-events: none;
+}
+
+/* Slightly stronger than the 6px it used to be: at 6px the result card's rows
+   were still legible, which defeats the paywall. */
+.report-attachment-card--blur {
+  filter: blur(var(--report-lock-blur));
+}
+
+/* The same "lock the whole chapter" rule as Attachment, for the two other places
+   a locked reader could still read their own results in full:
+   - the insecurity curve, which plots the reader's own sensitivity and labels it
+     "You — the <archetype>" (369px of chart, no paragraph text, which is why a
+     text-only sweep missed it);
+   - the practice-tendency tables, 905px of per-category Fantasy-Pull / Actual-
+     Pleasure scores — the largest single leak left in the report. */
+.report-insecurities__graph-wrap--locked,
+.report-fantasy__tables--locked {
+  filter: blur(var(--report-lock-blur));
+  user-select: none;
+  pointer-events: none;
+}
+
+/* ==========================================================================
+   Locked content dissolves; it does not sit behind a slab
+   --------------------------------------------------------------------------
+   Two separate hard edges had to go.
+
+   1. A uniform blur reads as a grey rectangle laid on top rather than content
+      receding, because the blur starts and stops at the element boundary. So the
+      blur drops to 4px and a gradient carries the hiding.
+
+   2. The blurred stand-in is `position: absolute; inset: 0` inside a box with
+      `overflow: hidden`, so its content is CLIPPED at the box edge — a razor
+      straight cut through the middle of a row ("Energy", "Risk", "Endurance"
+      sliced off mid-word). Feathering only the bottom left the left, right and
+      top cuts fully visible.
+
+   So the mask feathers on BOTH axes and the two are intersected: wherever the
+   box clips, the content has already faded to nothing, so there is no edge to
+   see on any side.
+   ========================================================================== */
+.report-beliefs__preview-fade,
+.report-insecurities__preview-fade,
+.report-reward__preview-fade,
+.report-energy__preview-fade,
+.report-arousal__preview-fade,
+.report-enjoy__preview-fade,
+.report-initiation__preview-fade,
+.report-libido__preview-fade,
+.report-partnership__preview-fade,
+.report-growth__preview-fade,
+.report-reading__preview-fade,
+.report-confidence__preview-fade,
+.report-accel__preview-fade,
+.report-power__preview-fade,
+.report-fantasy__preview-fade,
+.report-curiosity__preview-fade,
+.report-lovelang__preview-fade,
+.report-attachment-card--blur,
+.report-attachment__article--locked .report-attachment__patterns,
+.report-attachment__article--locked .report-attachment-plane,
+.report-fantasy__tables--locked,
+.report-insecurities__graph-wrap--locked {
+  -webkit-mask-image:
+    linear-gradient(
+      to bottom,
+      rgba(0, 0, 0, 0) 0%,
+      rgba(0, 0, 0, 1) var(--report-lock-fade-start),
+      rgba(0, 0, 0, 0.22) var(--report-lock-fade-end),
+      rgba(0, 0, 0, 0) 100%
+    ),
+    linear-gradient(
+      to right,
+      rgba(0, 0, 0, 0) 0%,
+      rgba(0, 0, 0, 1) var(--report-lock-fade-side),
+      rgba(0, 0, 0, 1) calc(100% - var(--report-lock-fade-side)),
+      rgba(0, 0, 0, 0) 100%
+    );
+  -webkit-mask-composite: source-in;
+  mask-image:
+    linear-gradient(
+      to bottom,
+      rgba(0, 0, 0, 0) 0%,
+      rgba(0, 0, 0, 1) var(--report-lock-fade-start),
+      rgba(0, 0, 0, 0.22) var(--report-lock-fade-end),
+      rgba(0, 0, 0, 0) 100%
+    ),
+    linear-gradient(
+      to right,
+      rgba(0, 0, 0, 0) 0%,
+      rgba(0, 0, 0, 1) var(--report-lock-fade-side),
+      rgba(0, 0, 0, 1) calc(100% - var(--report-lock-fade-side)),
+      rgba(0, 0, 0, 0) 100%
+    );
+  mask-composite: intersect;
+}
+
+/* The locked reading stand-in draws four solid dark "spine" blocks. Under the
+   fade they stop reading as book covers and start reading as hard-cut
+   rectangles — the one place the dissolve still had a visible edge. Softened so
+   they recede with everything else. */
+.report-reading__preview-fade .report-reading__spine {
+  opacity: 0.35;
+  box-shadow: none;
 }

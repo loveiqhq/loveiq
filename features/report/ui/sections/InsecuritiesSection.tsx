@@ -362,7 +362,11 @@ const InsecuritiesSection: FC<Props> = ({
       <article className="report-insecurities__card">
         <p className="report-insecurities__eyebrow">Where your sensitivity sits</p>
 
-        <div className="report-insecurities__graph-wrap">
+        <div
+          className={`report-insecurities__graph-wrap${
+            locked ? " report-insecurities__graph-wrap--locked" : ""
+          }`}
+        >
           <CueGraph
             yAxis={yAxis}
             xAxis={xAxis}

@@ -344,7 +344,15 @@ const FantasySection: FC<Props> = ({
 
         {/* Category tables sit inside the card, after the chart note and before
             the Learn block (Figma 8427:2466 child order). */}
-        {tables ? <div className="report-fantasy__tables">{tables}</div> : null}
+        {tables ? (
+          <div
+            className={`report-fantasy__tables${
+              copy.locked ? " report-fantasy__tables--locked" : ""
+            }`}
+          >
+            {tables}
+          </div>
+        ) : null}
 
         {hasEdu ? <div className="report-fantasy__rule" aria-hidden="true" /> : null}
 

@@ -449,7 +449,11 @@ const AttachmentPatternsSection: FC<Props> = ({
       ) : null}
 
       {/* ── Article: the map + caption + educational block ── */}
-      <article className="report-attachment__article">
+      <article
+        className={`report-attachment__article${
+          locked ? " report-attachment__article--locked" : ""
+        }`}
+      >
         <p className="report-attachment__map-eyebrow">The map — where those two states live</p>
 
         {plane && !locked ? (
