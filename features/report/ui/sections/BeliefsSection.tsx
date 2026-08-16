@@ -92,6 +92,33 @@ const LoosenItem: FC<{ belief: string; shift: string | null }> = ({ belief, shif
   </div>
 );
 
+/**
+ * Generic stand-in rows for the locked state. Deliberately NOT per-archetype —
+ * the real beliefs are withheld server-side and never reach a locked client —
+ * but sized to the real grid so the blurred layer actually fills the space the
+ * paywall card sits on.
+ */
+const STANDIN_KEEP = [
+  "A belief that already serves you",
+  "Something you learned that still fits",
+  "A quiet rule worth keeping",
+  "One that makes closeness easier",
+  "A story that still holds up",
+  "Something you would choose again",
+  "A belief that leaves room for you",
+  "One that makes wanting simple",
+];
+
+const STANDIN_LOOSEN: [string, string][] = [
+  ["A belief that quietly boxes you in", "The gentler reframe it can become"],
+  ["Another rule you never chose", "What it can soften into"],
+  ["Something you absorbed early", "How it reads once you question it"],
+  ["A rule that costs you more than it gives", "The version that costs you less"],
+  ["One that makes asking feel unsafe", "What it sounds like without the fear"],
+  ["A standard nobody set but you", "The kinder line you can hold"],
+  ["Something that turns care into duty", "How it becomes a choice again"],
+];
+
 const BeliefsSection: FC<Props> = ({
   archetype,
   copy,
@@ -157,20 +184,34 @@ const BeliefsSection: FC<Props> = ({
             ) : null}
 
             <div className="report-beliefs__preview report-beliefs__preview--locked">
+              {/* The stand-in mirrors the REAL unlocked layout: two columns,
+                  and enough rows to sit behind the whole overlay card. It used
+                  to be a single column of two rows against a card roughly
+                  890px tall, so the paywall floated over blank white for most
+                  of its height and the section read as though nothing was
+                  behind it. Generic copy — the per-archetype beliefs are
+                  withheld server-side and never reach a locked client. */}
               <div className="report-beliefs__preview-fade" aria-hidden="true">
-                <div className="report-beliefs__col">
-                  <p className="report-beliefs__col-label report-beliefs__col-label--loosen">
-                    Box you in &mdash; loosen
-                  </p>
-                  <div className="report-beliefs__list">
-                    <LoosenItem
-                      belief="A belief that quietly boxes you in"
-                      shift="The gentler reframe it can become"
-                    />
-                    <LoosenItem
-                      belief="Another rule you never chose"
-                      shift="What it can soften into"
-                    />
+                <div className="report-beliefs__cols">
+                  <div className="report-beliefs__col">
+                    <p className="report-beliefs__col-label report-beliefs__col-label--keep">
+                      Serve you &mdash; keep
+                    </p>
+                    <div className="report-beliefs__list">
+                      {STANDIN_KEEP.map((text, i) => (
+                        <KeepItem key={i} text={text} />
+                      ))}
+                    </div>
+                  </div>
+                  <div className="report-beliefs__col">
+                    <p className="report-beliefs__col-label report-beliefs__col-label--loosen">
+                      Box you in &mdash; loosen
+                    </p>
+                    <div className="report-beliefs__list">
+                      {STANDIN_LOOSEN.map(([belief, shift], i) => (
+                        <LoosenItem key={i} belief={belief} shift={shift} />
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>
