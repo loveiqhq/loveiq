@@ -2609,8 +2609,11 @@ input.autofill-dark:-internal-autofill-previewed {
 
 .report-themed-block__blurred {
   user-select: none;
-  filter: blur(4.55px);
-  opacity: 0.5;
+  /* The shared lock blur, not its own 4.55px/0.5 — this was the last locked
+     surface still setting its own values, so it read very slightly softer and
+     fainter than the other 25. One token means one look everywhere. */
+  filter: blur(var(--report-lock-blur));
+  opacity: 0.55;
 }
 
 .report-themed-block__teaser {
