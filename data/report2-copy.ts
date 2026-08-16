@@ -1035,7 +1035,7 @@ export const report2Copy = {
     snapshot: {
       "compare1.stat": "1 in 9",
       "compare1.caption": "carry Spark Seeker as their core",
-      "compare2.stat": "39%",
+      "compare2.stat": "2 in 5",
       "compare2.caption": "have Spark Seeker in their top three",
       "compare3.stat": "57%",
       "compare3.caption": "Explorer of Edges rides shotgun",
@@ -1571,7 +1571,7 @@ export const report2Copy = {
     snapshot: {
       "compare1.stat": "1 in 10 women",
       "compare1.caption": "carry your archetype at their core",
-      "compare2.stat": "68%",
+      "compare2.stat": "2 in 3",
       "compare2.caption": "want more closeness than space",
       "compare3.stat": "64%",
       "compare3.caption": "a Relational Nurturer streak runs underneath",
@@ -2107,7 +2107,7 @@ export const report2Copy = {
     snapshot: {
       "compare1.stat": "1 in 6 men",
       "compare1.caption": "share your core archetype among men",
-      "compare2.stat": "87%",
+      "compare2.stat": "7 in 8",
       "compare2.caption": "feel desire rise when they care for a partner",
       "compare3.stat": "55%",
       "compare3.caption": "a Sensual Connector streak runs nearly as deep",
@@ -2643,7 +2643,7 @@ export const report2Copy = {
     snapshot: {
       "compare1.stat": "1 in 13 women",
       "compare1.caption": "carry Radiant Performer at their core",
-      "compare2.stat": "99%",
+      "compare2.stat": "nearly all",
       "compare2.caption": "lose desire when a partner is impossible to read",
       "compare3.stat": "59%",
       "compare3.caption": "a Spark Seeker streak runs nearly as deep",
@@ -3714,7 +3714,7 @@ export const report2Copy = {
     snapshot: {
       "compare1.stat": "1 in 8 men",
       "compare1.caption": "carry Curious Apprentice at their core",
-      "compare2.stat": "65%",
+      "compare2.stat": "2 in 3",
       "compare2.caption": "want more variety than they get now",
       "compare3.stat": "62%",
       "compare3.caption": "a Sensual Connector streak runs close behind",
@@ -4253,7 +4253,7 @@ export const report2Copy = {
     snapshot: {
       "compare1.stat": "1 in 9 women",
       "compare1.caption": "share your core archetype among women",
-      "compare2.stat": "61%",
+      "compare2.stat": "3 in 5",
       "compare2.caption": "put a partner's pleasure ahead of their own",
       "compare3.stat": "53%",
       "compare3.caption": "a Relational Nurturer streak runs nearly as deep",
@@ -4794,7 +4794,7 @@ export const report2Copy = {
     snapshot: {
       "compare1.stat": "fewer than 1 in 40",
       "compare1.caption": "carry Authority Conductor at their core",
-      "compare2.stat": "83%",
+      "compare2.stat": "5 in 6",
       "compare2.caption": "are fully at ease saying a clear no",
       "compare3.stat": "51%",
       "compare3.caption": "an Explorer of Edges streak runs close behind",
@@ -5336,7 +5336,7 @@ export const report2Copy = {
     snapshot: {
       "compare1.stat": "1 in 86 men",
       "compare1.caption": "carry Analytical Sexualist at their core",
-      "compare2.stat": "79%",
+      "compare2.stat": "4 in 5",
       "compare2.caption": "ask for what they want in plain words",
       "compare3.stat": "44%",
       "compare3.caption": "carry a Curious Apprentice streak just behind",
@@ -5880,7 +5880,7 @@ export const report2Copy = {
     snapshot: {
       "compare1.stat": "1 in 66",
       "compare1.caption": "carry Emotional Voyeur at their core, among the rarest we measure",
-      "compare2.stat": "53%",
+      "compare2.stat": "5 in 9",
       "compare2.caption": "lose desire the moment they feel pushed to perform",
       "compare3.stat": "56%",
       "compare3.caption": "a Curious Apprentice streak often runs underneath",
@@ -6420,7 +6420,7 @@ export const report2Copy = {
     snapshot: {
       "compare1.stat": "fewer than 1 in 80",
       "compare1.caption": "carry Loyal Ritualist at their core",
-      "compare2.stat": "53%",
+      "compare2.stat": "5 in 9",
       "compare2.caption": "lose desire when pushed to reinvent what already works",
       "compare3.stat": "58%",
       "compare3.caption": "a Sensual Connector streak often runs close behind",
@@ -7497,7 +7497,7 @@ export const report2Copy = {
     snapshot: {
       "compare1.stat": "fewer than 1 in 40",
       "compare1.caption": "carry Quiet Withdrawer at their core",
-      "compare2.stat": "97%",
+      "compare2.stat": "nearly all",
       "compare2.caption": "lose desire the moment sex feels like a demand",
       "compare3.stat": "56%",
       "compare3.caption": "a Minimalist Companion streak often runs close behind",

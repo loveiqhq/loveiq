@@ -137,9 +137,20 @@ const ArousalWave: FC<{ family: ArousalFamily }> = ({ family }) => {
  * a fixed 7 dots, so a "1 in 8" reader still saw 7 and the graphic contradicted
  * the number next to it. Clamped to a sane row length.
  */
-function dotsFromStat(stat: string | undefined): number {
-  const n = Number.parseInt(stat?.match(/\b1\s+in\s+(\d+)/i)?.[1] ?? "", 10);
-  return Number.isFinite(n) ? Math.min(Math.max(n, 2), 12) : 7;
+function dotsFromStat(stat: string | undefined): { filled: number; total: number } {
+  const raw = stat?.trim() ?? "";
+  // "N in M" — the general form. Only "1 in N" parsed before, so any other
+  // ratio silently fell back to a 7-dot row.
+  const ratio = raw.match(/\b(\d+)\s+in\s+(\d+)/i);
+  if (ratio) {
+    const filled = Number(ratio[1]);
+    const total = Number(ratio[2]);
+    if (total >= 2 && total <= 12 && filled >= 1 && filled <= total) return { filled, total };
+    // Rows longer than the strip can show stay readable as one-in-many.
+    if (total > 12 && filled === 1) return { filled: 1, total: 12 };
+  }
+  if (/nearly all/i.test(raw)) return { filled: 7, total: 8 };
+  return { filled: 1, total: 7 };
 }
 
 /** Row of `total` dots with the first `filled` painted accent. */
@@ -203,16 +214,17 @@ const SnapshotSection: FC<Props> = ({ archetype, copy, stageResult = null }) => 
       stat: copy?.["compare1.stat"],
       caption: copy?.["compare1.caption"],
       viz: "dots" as const,
-      // Figma paints exactly ONE dot in both rows — it reads "you are the 1".
-      filled: 1,
-      total: dotsFromStat(copy?.["compare1.stat"]),
+      // Both count derived from the stat. `filled` used to be hardcoded to 1
+      // and the total only understood "1 in N", so a stat like "87%" drew a
+      // 7-dot row with one filled — a graphic claiming ~14% under a label
+      // saying 87%.
+      ...dotsFromStat(copy?.["compare1.stat"]),
     },
     {
       stat: copy?.["compare2.stat"],
       caption: copy?.["compare2.caption"],
       viz: "dots" as const,
-      filled: 1,
-      total: dotsFromStat(copy?.["compare2.stat"]),
+      ...dotsFromStat(copy?.["compare2.stat"]),
     },
     {
       stat: copy?.["compare3.stat"],
