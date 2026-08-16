@@ -15451,6 +15451,9 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 .report-map-row__cta {
+  /* Renders as a <button> when the section is locked and an <a> when the reader
+     owns it, so this must not assume either — hence the decoration reset. */
+  text-decoration: none;
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;

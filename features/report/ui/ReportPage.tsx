@@ -685,6 +685,34 @@ const ReportExperience: FC<ReportExperienceProps> = ({
     onOpenPricingModal(viewArchetype || null);
   };
 
+  /**
+   * An Insight Map CTA points at a real pattern section. If the reader already
+   * owns that section, take them to it; only open the paywall when they do not.
+   * Before this the CTAs called `unlockMap()` unconditionally, so a reader who
+   * had paid for Accelerators & Brakes still got a pricing modal when they
+   * clicked "See what quietly shuts it down".
+   */
+  const isMapTargetOpen = (sectionId: string) => {
+    const section = resolvedSections.find((s) => s.id === sectionId);
+    // Unknown id would otherwise read as "open" and link to nothing.
+    if (!section) return false;
+    if (!section.isPremium) return true;
+    return isSectionUnlockedForPlan({
+      accessPlan,
+      archetypeTier: viewArchetypeTier,
+      isPremium: section.isPremium,
+      sectionId: section.id,
+    });
+  };
+
+  const openMapTarget = (sectionId: string) => {
+    const unlocked = isMapTargetOpen(sectionId);
+    // Owned sections render their CTA as an anchor, so this only runs for
+    // locked ones; the guard stays in case a target is ever wired without one.
+    if (unlocked) return;
+    unlockMap();
+  };
+
   useEffect(() => {
     const ACTIVATION_LINE = 90;
 
@@ -997,7 +1025,8 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                           <InsightMapSection
                             archetype={viewArchetype}
                             copy={mapCopy}
-                            onUnlock={() => unlockMap()}
+                            onOpen={openMapTarget}
+                            isSectionOpen={isMapTargetOpen}
                           />
                         </ReportSection>
                       </Fragment>

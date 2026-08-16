@@ -35,7 +35,16 @@ interface Props {
   /** Drives the arousal arc shape via `families.arousal`. */
   archetype: string;
   copy: MapCopy | null;
-  onUnlock: () => void;
+  /**
+   * Open a pattern section by id. The page decides what that means: scroll to
+   * it when the reader already owns it, open the paywall when they do not.
+   * Previously this was a bare `onUnlock`, so every CTA opened the pricing
+   * modal — including for a reader who had already paid for the section it
+   * points at.
+   */
+  onOpen: (sectionId: string) => void;
+  /** True when the reader already owns that section, so the CTA can be a link. */
+  isSectionOpen: (sectionId: string) => boolean;
 }
 
 /**
@@ -149,8 +158,10 @@ const PatternRow: FC<{
   title: string;
   sub: string | null | undefined;
   cta: string;
-  onUnlock: () => void;
-}> = ({ symbol, symbolColor, title, sub, cta, onUnlock }) => {
+  target: string;
+  onOpen: (sectionId: string) => void;
+  isSectionOpen: (sectionId: string) => boolean;
+}> = ({ symbol, symbolColor, title, sub, cta, target, onOpen, isSectionOpen }) => {
   if (!sub) return null;
   return (
     <div className="report-map-row">
@@ -170,9 +181,20 @@ const PatternRow: FC<{
           <p className="report-map-row__learn-text">{sub}</p>
         </div>
       </div>
-      <button type="button" className="report-map-row__cta" onClick={onUnlock}>
-        {cta}
-      </button>
+      {/* A real anchor when the section is owned: that is the sidebar's proven
+          path, so it inherits the sections' scroll-margin-top and lands under
+          the sticky header exactly as sidebar navigation does. Scripted
+          scrolling landed 250-700px short because the page reflows after the
+          jump. Still a button when locked — it opens the paywall, not a link. */}
+      {isSectionOpen(target) ? (
+        <a className="report-map-row__cta" href={`#${target}`}>
+          {cta}
+        </a>
+      ) : (
+        <button type="button" className="report-map-row__cta" onClick={() => onOpen(target)}>
+          {cta}
+        </button>
+      )}
     </div>
   );
 };
@@ -187,7 +209,7 @@ const HeartGlyph: FC = () => (
   </svg>
 );
 
-const InsightMapSection: FC<Props> = ({ archetype, copy, onUnlock }) => {
+const InsightMapSection: FC<Props> = ({ archetype, copy, onOpen, isSectionOpen }) => {
   const family = resolveArousalFamily(getReport2Config(archetype)?.families?.arousal);
 
   if (!copy) return null;
@@ -206,6 +228,7 @@ const InsightMapSection: FC<Props> = ({ archetype, copy, onUnlock }) => {
       title: "Desire Brakes",
       sub: copy["tile1.sub"],
       cta: "See what quietly shuts it down →",
+      target: "typical_arousal_accelerators_turn_ons_of_the_core_archetype",
     },
     {
       symbol: "▲",
@@ -213,6 +236,7 @@ const InsightMapSection: FC<Props> = ({ archetype, copy, onUnlock }) => {
       title: "Desire Accelerators",
       sub: copy["tile2.sub"],
       cta: "See what opens you fastest →",
+      target: "typical_arousal_accelerators_turn_ons_of_the_core_archetype",
     },
     {
       symbol: "⇄",
@@ -220,6 +244,7 @@ const InsightMapSection: FC<Props> = ({ archetype, copy, onUnlock }) => {
       title: "Initiation Pattern",
       sub: copy["tile3.sub"],
       cta: "See why your invites get lost →",
+      target: "initiation_style",
     },
     {
       symbol: <HeartGlyph />,
@@ -227,6 +252,7 @@ const InsightMapSection: FC<Props> = ({ archetype, copy, onUnlock }) => {
       title: "Peak Zone",
       sub: copy["tile4.sub"],
       cta: "See where body & mind agree →",
+      target: "typical_sexual_fantasy_amp_practice_tendencies",
     },
     {
       symbol: "↻",
@@ -234,6 +260,7 @@ const InsightMapSection: FC<Props> = ({ archetype, copy, onUnlock }) => {
       title: "Libido Pattern",
       sub: copy["tile5.sub"],
       cta: "See the loop that eats desire →",
+      target: "libido_challenges_in_relationships",
     },
   ];
 
@@ -254,7 +281,11 @@ const InsightMapSection: FC<Props> = ({ archetype, copy, onUnlock }) => {
           <h4 className="report-map-featured__title">{featuredTitle}</h4>
           {featuredSub ? <p className="report-map-featured__sub">{featuredSub}</p> : null}
           <IgnitionCurve family={family} />
-          <button type="button" className="report-map-featured__link" onClick={onUnlock}>
+          <button
+            type="button"
+            className="report-map-featured__link"
+            onClick={() => onOpen("arousal_style")}
+          >
             See how your desire switches on →
           </button>
         </article>
@@ -272,7 +303,9 @@ const InsightMapSection: FC<Props> = ({ archetype, copy, onUnlock }) => {
               title={r.title}
               sub={r.sub}
               cta={r.cta}
-              onUnlock={onUnlock}
+              target={r.target}
+              onOpen={onOpen}
+              isSectionOpen={isSectionOpen}
             />
           ))}
         </div>
