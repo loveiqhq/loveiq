@@ -25196,39 +25196,73 @@ input.autofill-dark:-internal-autofill-previewed {
   }
 }
 
-/* Hover: the step lifts and takes focus, the rest recede. Pointer devices only
-   — there is no hover to reward on touch, and dimming the other two under a
-   finger would just make the diagram harder to read. */
+/* Hover: the step takes focus and the arc that FEEDS it lights up.
+   Never a transform — these boxes are positioned with translate(-50%,-50%), so
+   a hover transform replaces their centring and the box jumps by half its own
+   size. That is what made this feel wrong, not the styling.
+   And never a lift-and-shadow: a card popping off the surface is a generic
+   pattern that says nothing here. What is worth showing on a cycle is the
+   relationship — so pointing at a step brightens the step, its dot, and the
+   dashed arc arriving into it, which is the thing that causes it. */
 @media (hover: hover) and (pointer: fine) {
   .report-partnership__orbit-step {
     transition:
-      transform 420ms cubic-bezier(0.22, 1, 0.36, 1),
-      box-shadow 420ms ease,
+      border-color 320ms ease,
+      background-color 320ms ease,
       opacity 300ms ease;
   }
 
   .report-partnership__orbit-step:hover {
-    transform: translateY(-3px) scale(1.03);
-    box-shadow: 0 14px 30px -14px rgba(22, 16, 33, 0.28);
+    border-color: rgba(168, 85, 247, 0.55);
+    background-color: rgba(168, 85, 247, 0.07);
     z-index: 3;
   }
 
-  /* Carries the `.report-section.is-visible` prefix so it outranks the arrival
-     rule, which sets opacity:1 on these same steps — without it the dim was
-     silently losing and the siblings never receded. */
-  .report-section.is-visible
-    .report-partnership__orbit:has(.report-partnership__orbit-step:hover)
-    .report-partnership__orbit-step:not(:hover),
-  .report-partnership__orbit:has(.report-partnership__orbit-step:hover)
-    .report-partnership__orbit-step:not(:hover) {
-    opacity: 0.42;
-  }
-
-  /* Its own dot holds lit while hovered rather than continuing the cycle. */
   .report-partnership__orbit-step:hover .report-partnership__orbit-dot {
     animation: none;
-    transform: scale(1.5);
-    box-shadow: 0 0 0 5px rgba(157, 138, 215, 0.22);
+    background: #a341ff;
+    box-shadow: 0 0 0 5px rgba(163, 65, 255, 0.16);
+  }
+
+  /* Beats `.report-partnership__orbit.report-chart-reveal .…-step` (3 classes),
+     which sets opacity for the reveal — at lower specificity the dim silently
+     lost and the siblings never receded. */
+  .report-partnership__orbit.report-chart-reveal:has(.report-partnership__orbit-step:hover)
+    .report-partnership__orbit-step:not(:hover),
+  .report-partnership__orbit.report-chart-reveal:has(.report-partnership__orbit-step:hover)
+    .report-partnership__orbit-step:hover {
+    /* The reveal carries up to 1060ms of stagger (300ms + row * 380ms). Left
+       inherited, the dim only began a second after the pointer arrived — the
+       rule was matching all along, it just had not started yet. */
+    transition:
+      opacity 260ms ease,
+      border-color 300ms ease,
+      background-color 300ms ease;
+    transition-delay: 0ms;
+  }
+
+  .report-partnership__orbit.report-chart-reveal:has(.report-partnership__orbit-step:hover)
+    .report-partnership__orbit-step:not(:hover) {
+    opacity: 0.38;
+  }
+
+  /* The arc into each step: hop 1 carries 1->2, hop 2 carries 2->3, hop 3
+     closes 3->1. Hovering a step lights the hop that arrives at it. */
+  .report-partnership__orbit:has(.report-partnership__orbit-step--2:hover)
+    .report-partnership__orbit-hop:nth-of-type(1),
+  .report-partnership__orbit:has(.report-partnership__orbit-step--3:hover)
+    .report-partnership__orbit-hop:nth-of-type(2),
+  .report-partnership__orbit:has(.report-partnership__orbit-step--1:hover)
+    .report-partnership__orbit-hop:nth-of-type(3) {
+    animation: none;
+    opacity: 1;
+  }
+
+  .report-partnership__orbit:has(.report-partnership__orbit-step:hover)
+    .report-partnership__orbit-hop {
+    animation: none;
+    opacity: 0.22;
+    transition: opacity 300ms ease;
   }
 }
 
@@ -25238,7 +25272,7 @@ input.autofill-dark:-internal-autofill-previewed {
     animation: none !important;
   }
 
-  .report-partnership__orbit-step:hover {
-    transform: none !important;
+  .report-partnership__orbit-step:hover .report-partnership__orbit-dot {
+    box-shadow: none !important;
   }
 }
