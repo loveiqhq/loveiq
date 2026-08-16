@@ -5,10 +5,6 @@ import { Resend } from "resend";
 import { z } from "zod";
 import { LANDING_VARIANT_COOKIE, isLandingVariant } from "@shared/experiments/landingVariant";
 import { SURVEY_VARIANT_COOKIE, isSurveyVariant } from "@shared/experiments/surveyVariant";
-import {
-  EMAIL_POSITION_COOKIE,
-  isEmailPositionVariant,
-} from "@shared/experiments/emailPositionVariant";
 import { checkRateLimit, checkCooldown, getClientIp } from "@shared/http/ratelimit";
 import { scheduleAfterResponse } from "@shared/http/after-response";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
@@ -195,12 +191,10 @@ export async function POST(request: Request) {
   // scope (e.g. unit tests that call POST directly) — then we leave them unset.
   let landingVariantRaw: string | undefined;
   let surveyVariantRaw: string | undefined;
-  let emailPositionRaw: string | undefined;
   try {
     const cookieStore = await cookies();
     landingVariantRaw = cookieStore.get(LANDING_VARIANT_COOKIE)?.value;
     surveyVariantRaw = cookieStore.get(SURVEY_VARIANT_COOKIE)?.value;
-    emailPositionRaw = cookieStore.get(EMAIL_POSITION_COOKIE)?.value;
   } catch {
     /* no request scope — leave the variants undefined (no stamp) */
   }
@@ -213,16 +207,11 @@ export async function POST(request: Request) {
   // actually present, preserving "no cookie → no stamp" for crawlers / direct hits.
   let mergedUtmTracker = utmTracker ?? null;
   try {
-    if (
-      isLandingVariant(landingVariantRaw) ||
-      isSurveyVariant(surveyVariantRaw) ||
-      isEmailPositionVariant(emailPositionRaw)
-    ) {
+    if (isLandingVariant(landingVariantRaw) || isSurveyVariant(surveyVariantRaw)) {
       const base = utmTracker ? JSON.parse(utmTracker) : {};
       if (base && typeof base === "object" && !Array.isArray(base)) {
         if (isLandingVariant(landingVariantRaw)) base.landing_variant = landingVariantRaw;
         if (isSurveyVariant(surveyVariantRaw)) base.survey_variant = surveyVariantRaw;
-        if (isEmailPositionVariant(emailPositionRaw)) base.survey_email_position = emailPositionRaw;
         const candidate = JSON.stringify(base);
         if (candidate.length <= 1000) mergedUtmTracker = candidate;
       }

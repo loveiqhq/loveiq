@@ -1234,9 +1234,10 @@ export async function fetchDropoutFunnel(
   sinceIso: string,
   untilIso: string
 ): Promise<DropoutFunnelSnapshot | null> {
-  // NOTE: get_dropout_funnel is restricted to the control/legacy cohort
-  // (email_position IS NULL OR 'first') so the email-position A/B can't blend
-  // the two arms in this chart. Per-arm curves come from fetchDropoutFunnelByArm.
+  // NOTE: get_dropout_funnel excludes the retired email-FIRST arm
+  // (email_position IS DISTINCT FROM 'first') so this curve only ever contains
+  // the one question order we still ship — email asked last. See the 2026-08-16
+  // migration that retired the email-position A/B.
   const raw = await callRpc<{ questions?: unknown }>("get_dropout_funnel", {
     since_ts: sinceIso,
     until_ts: untilIso,
@@ -1248,6 +1249,12 @@ export async function fetchDropoutFunnel(
  * Per-arm drop-out funnel for the email-position A/B (survey-email-position-ab).
  * Same shape as fetchDropoutFunnel but filtered to a single arm so the digest
  * can chart email-first vs email-last side by side. Null on RPC failure.
+ *
+ * HISTORICAL as of 2026-08-16: the experiment was retired ("last" shipped to
+ * everyone) and nothing stamps `email_position` anymore, so both arms return
+ * empty once the requested window no longer overlaps the experiment period —
+ * at which point the digest's chart 7b self-disables (it returns null with no
+ * drawable curve) and this fetcher can be deleted with it.
  */
 export async function fetchDropoutFunnelByArm(
   sinceIso: string,
