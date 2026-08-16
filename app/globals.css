@@ -23637,23 +23637,15 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 /*
- * The accent word is the one word the divider is about, so it resolves last — and
- * it comes into focus rather than sliding, because it is inline inside a heading
- * that is already moving and a second transform on an inline run fights that.
+ * The accent word gets NO treatment of its own. It is inline inside the heading,
+ * so it already fades and rises with the words either side of it — which is the
+ * point: "Your Core Archetype" should arrive as one line.
+ *
+ * It used to resolve last, out of a blur, so "Core" landed after "Your" and
+ * "Archetype" were already sharp. That read as the word lagging rather than as
+ * emphasis, so it is gone. Do not re-add a delay here without also solving the
+ * hole it leaves mid-animation ("Your ___ Archetype").
  */
-.report-part-reveal:not(.is-revealed) .report-part-divider__accent {
-  opacity: 0;
-  filter: blur(7px);
-}
-
-.report-part-reveal .report-part-divider__accent {
-  /* Opacity shares the heading's 420ms delay, only the blur lags. Holding the
-     opacity back too left a frame reading "Your ___ Archetype" — a hole where the
-     word will be, which looks like a rendering fault rather than a word arriving. */
-  transition:
-    opacity 640ms ease-out 420ms,
-    filter 900ms cubic-bezier(0.22, 1, 0.36, 1) 620ms;
-}
 
 @media (prefers-reduced-motion: reduce) {
   .report-part-reveal:not(.is-revealed) .report-part-divider__glow {
@@ -23669,11 +23661,6 @@ input.autofill-dark:-internal-autofill-previewed {
   .report-part-reveal:not(.is-revealed) .report-part-divider__heading {
     opacity: 1;
     translate: none;
-  }
-
-  .report-part-reveal:not(.is-revealed) .report-part-divider__accent {
-    opacity: 1;
-    filter: none;
   }
 
   /* No bloom and, crucially, no endless drift — a permanently moving background is
@@ -23695,8 +23682,7 @@ input.autofill-dark:-internal-autofill-previewed {
   }
 
   .report-part-reveal .report-part-divider__eyebrow,
-  .report-part-reveal .report-part-divider__heading,
-  .report-part-reveal .report-part-divider__accent {
+  .report-part-reveal .report-part-divider__heading {
     transition: none;
   }
 }
