@@ -20,7 +20,6 @@ import {
   setReportSubmissionContext,
   setForcedPaywallArm,
   setSurveyVariant,
-  setEmailPositionArm,
   trackExperimentExposure,
 } from "@features/analytics/client";
 import { getForcedPaywallCohort } from "@shared/experiments/forcedPaywall";
@@ -29,12 +28,7 @@ import {
   SURVEY_VARIANT_EXPERIMENT,
   type SurveyVariant,
 } from "@shared/experiments/surveyVariant";
-import {
-  assignEmailPositionVariant,
-  orderByEmailPosition,
-  EMAIL_POSITION_EXPERIMENT,
-  type EmailPositionVariant,
-} from "@shared/experiments/emailPositionVariant";
+import { orderEmailLast } from "./questionOrder";
 import { SurveyThemeProvider } from "./SurveyThemeContext";
 import { useSubmitSurvey } from "./hooks/useSubmitSurvey";
 import { useSurveyTracking } from "./hooks/useSurveyTracking";
@@ -108,31 +102,18 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
 
   const hasCleared = useRef(false);
 
-  // Survey email-position A/B. Resolve (and stick) the arm on first render, then
-  // order the questions for this arm: "first" (control) returns the canonical
-  // order unchanged (email at index 0); "last" moves the email question to just
-  // before the marketing opt-in. Reading the cookie + reordering here is SSR-safe
-  // and flash-free (the engine renders client-only behind SurveyPage's hydration
-  // gate). `?emailPosition=first|last` is a dev/preview-only override.
-  const [emailPositionVariant] = useState<EmailPositionVariant>(() => {
-    const devParam =
-      typeof window === "undefined"
-        ? null
-        : new URLSearchParams(window.location.search).get("emailPosition");
-    return assignEmailPositionVariant(devParam);
-  });
   // Questions answered before the survey opened (the landing-page card) are
   // dropped from the flow so nobody is asked twice. Their answers stay in
   // `answers` and submit + score exactly like the rest, so the total is
   // unchanged — only where the question gets asked moves.
+  // `orderEmailLast` moves the email question from its generated index 0 to just
+  // before the marketing opt-in, for everyone (the email-position A/B that used
+  // to pick this per visitor was retired 2026-08-16 in favour of "last").
   // Joined into a string so the memo key is stable across re-renders.
   const prefilledKey = prefilled.join(",");
   const orderedQuestions = useMemo(
-    () =>
-      orderByEmailPosition(surveyQuestions, emailPositionVariant).filter(
-        (q) => !prefilledKey.split(",").includes(q.qId)
-      ),
-    [emailPositionVariant, prefilledKey]
+    () => orderEmailLast(surveyQuestions).filter((q) => !prefilledKey.split(",").includes(q.qId)),
+    [prefilledKey]
   );
   const totalQuestions = orderedQuestions.length;
   const question = orderedQuestions[currentIndex];
@@ -152,21 +133,15 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
   useEffect(() => {
     if (surveyExposureFired.current) return;
     surveyExposureFired.current = true;
-    // Stamp the arms onto every persisted survey event + fire the one-per-user
-    // exposure records (the per-arm denominators for completion-rate analysis).
+    // Stamp the arm onto every persisted survey event + fire the one-per-user
+    // exposure record (the per-arm denominator for completion-rate analysis).
     setSurveyVariant(surveyVariant);
     trackExperimentExposure({
       experiment: SURVEY_VARIANT_EXPERIMENT,
       variant: surveyVariant,
       surface: "survey",
     });
-    setEmailPositionArm(emailPositionVariant);
-    trackExperimentExposure({
-      experiment: EMAIL_POSITION_EXPERIMENT,
-      variant: emailPositionVariant,
-      surface: "survey",
-    });
-  }, [surveyVariant, emailPositionVariant]);
+  }, [surveyVariant]);
 
   // Post-survey completion phase management
   const [completionPhase, setCompletionPhase] = useState<CompletionPhase>(() =>

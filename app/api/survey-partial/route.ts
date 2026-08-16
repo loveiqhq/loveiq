@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { z } from "zod";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
@@ -8,10 +7,6 @@ import { verifyCsrfHeaderOrBody } from "@shared/http/csrf";
 import logger from "@shared/observability/logger";
 import { isSurveyClosed } from "@features/survey/server/server";
 import { isFeatureEnabled } from "@shared/flags/system-flags";
-import {
-  EMAIL_POSITION_COOKIE,
-  isEmailPositionVariant,
-} from "@shared/experiments/emailPositionVariant";
 
 const partialSchema = z.object({
   sessionId: z.string().uuid(),
@@ -94,17 +89,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Service unavailable." }, { status: 503 });
   }
 
-  // Email-position A/B arm (survey-email-position-ab). Read the sticky cookie so
-  // this consent-FREE row carries the drop-off-depth signal (current_index by
-  // arm). Only stamped when the cookie is present + valid, so pre-experiment
-  // traffic never references the column (safe if the migration lags a deploy).
-  let emailPositionRaw: string | undefined;
-  try {
-    emailPositionRaw = (await cookies()).get(EMAIL_POSITION_COOKIE)?.value;
-  } catch {
-    /* no request scope (e.g. unit tests calling POST directly) — no stamp */
-  }
-
   const row = {
     session_id: parsed.data.sessionId,
     answers: parsed.data.answers,
@@ -113,7 +97,6 @@ export async function POST(request: Request) {
     utm_tracker: parsed.data.utmTracker || null,
     client_ip: ip,
     saved_at: new Date().toISOString(),
-    ...(isEmailPositionVariant(emailPositionRaw) ? { email_position: emailPositionRaw } : {}),
   };
 
   try {

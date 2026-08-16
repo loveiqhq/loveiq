@@ -68,7 +68,6 @@ vi.mock("@features/analytics/client", () => ({
   setReportSubmissionContext: vi.fn(),
   setForcedPaywallArm: vi.fn(),
   setSurveyVariant: vi.fn(),
-  setEmailPositionArm: vi.fn(),
   trackExperimentExposure: vi.fn(),
 }));
 

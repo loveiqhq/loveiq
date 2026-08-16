@@ -66,10 +66,6 @@ interface PartialSaveRow {
   session_id: string;
   answers: Record<string, unknown> | null;
   saved_at: string;
-  // Email-position A/B arm. The "last" arm structurally can't be recovered here
-  // (abandoners have no email), so tracking sends per arm quantifies the
-  // recovery-rate confound on completion-by-arm. NULL = pre-experiment/control.
-  email_position: string | null;
 }
 
 async function supabaseGet(path: string) {
@@ -95,7 +91,7 @@ async function fetchCandidates(): Promise<PartialSaveRow[]> {
   const minAgeIso = new Date(now - PAUSE_AGE_MIN_MINUTES * 60 * 1000).toISOString();
   const maxAgeIso = new Date(now - PAUSE_AGE_MAX_HOURS * 60 * 60 * 1000).toISOString();
 
-  const path = `/rest/v1/survey_partial_save?saved_at=lte.${encodeURIComponent(minAgeIso)}&saved_at=gte.${encodeURIComponent(maxAgeIso)}&select=session_id,answers,saved_at,email_position&order=saved_at.desc&limit=${CANDIDATE_LIMIT}`;
+  const path = `/rest/v1/survey_partial_save?saved_at=lte.${encodeURIComponent(minAgeIso)}&saved_at=gte.${encodeURIComponent(maxAgeIso)}&select=session_id,answers,saved_at&order=saved_at.desc&limit=${CANDIDATE_LIMIT}`;
   const response = await supabaseGet(path);
   if (!response.ok) {
     throw new Error(`survey_partial_save_query_failed:${response.status}`);
@@ -150,10 +146,6 @@ export async function GET(request: Request) {
   const summary = {
     candidates: 0,
     sent: 0,
-    // Per-arm recovery sends (email-position A/B). "last" should be ~0 by design
-    // — its abandoners have no email — which is the confound to account for when
-    // comparing completion-rate by arm.
-    sentByArm: { first: 0, last: 0, unknown: 0 },
     skippedSubmitted: 0,
     skippedCooldown: 0,
     skippedSuppressed: 0,
@@ -237,9 +229,6 @@ export async function GET(request: Request) {
           logger.warn({ error, sessionId: row.session_id, variant }, "Paused email send failed");
         } else {
           summary.sent++;
-          if (row.email_position === "first") summary.sentByArm.first++;
-          else if (row.email_position === "last") summary.sentByArm.last++;
-          else summary.sentByArm.unknown++;
         }
       } catch (err) {
         summary.errors++;

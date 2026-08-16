@@ -1,15 +1,10 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { z } from "zod";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { getBreaker, CircuitOpenError } from "@shared/http/circuit-breaker";
 import { verifyCsrfHeaderOrBody } from "@shared/http/csrf";
 import logger from "@shared/observability/logger";
-import {
-  EMAIL_POSITION_COOKIE,
-  isEmailPositionVariant,
-} from "@shared/experiments/emailPositionVariant";
 
 const eventSchema = z.object({
   sessionId: z.string().uuid(),
@@ -73,21 +68,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Service unavailable." }, { status: 503 });
   }
 
-  // Email-position A/B arm — read once and stamp every event in the batch so
-  // per-question abandons (incl. the no-answer first-question bounce, the
-  // headline metric) are sliceable by arm and `get_dropout_funnel` can split
-  // cleanly. Only stamped when valid; pre-experiment traffic omits the column
-  // (safe if the migration lags a deploy).
-  let emailPositionRaw: string | undefined;
-  try {
-    emailPositionRaw = (await cookies()).get(EMAIL_POSITION_COOKIE)?.value;
-  } catch {
-    /* no request scope — no stamp */
-  }
-  const emailPositionStamp = isEmailPositionVariant(emailPositionRaw)
-    ? { email_position: emailPositionRaw }
-    : {};
-
   const rows = parsed.data.events.map((e) => ({
     session_id: e.sessionId,
     q_id: e.qId,
@@ -98,7 +78,6 @@ export async function POST(request: Request) {
     direction: e.direction,
     client_ip: ip,
     event_time: e.timestamp,
-    ...emailPositionStamp,
   }));
 
   try {
