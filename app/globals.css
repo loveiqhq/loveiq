@@ -3465,12 +3465,77 @@ input.autofill-dark:-internal-autofill-previewed {
     animation-delay: 0ms !important;
   }
 
+  /* The attachment map: show it fully assembled, no arrival, no breathing. */
+  .report-attachment-plane__field,
+  .report-attachment-plane__corner,
+  .report-attachment-plane__dot,
+  .report-attachment-plane__dot-label,
+  .report-attachment-plane__glow {
+    opacity: 1 !important;
+    animation: none !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+  }
+
+  .report-attachment-plane__field {
+    transform: none !important;
+  }
+
+  .report-attachment-plane__glow {
+    transform: translate(-50%, -50%) !important;
+  }
+
+  .report-attachment-plane__dot {
+    transform: translate(-50%, -50%) scale(1) !important;
+  }
+
+  .report-attachment-plane__axis--v {
+    transform: translateX(-0.5px) scaleY(1) !important;
+  }
+
+  .report-attachment-plane__axis--h {
+    transform: translateY(-0.5px) scaleX(1) !important;
+  }
+
+  .report-attachment-plane__drift-reveal {
+    stroke-dashoffset: 0 !important;
+    transition: none !important;
+  }
+
   /* Motion-by-definition: the continuum dot fade/scale-in — snap. */
   .report-importance__dot {
     opacity: 1 !important;
     transform: scale(1) !important;
     transition-duration: 0.01ms !important;
     transition-delay: 0ms !important;
+  }
+
+  /* The scrub still has to say which dot it is — keep the label and the
+     highlight, drop the travel, the bloom and the blur. */
+  .report-importance__dot-disc,
+  .report-importance__dot-disc::after,
+  .report-importance__dot-pill,
+  .report-importance__dot-label,
+  .report-importance__scrub {
+    transition-duration: 0.01ms !important;
+  }
+
+  .report-importance__scrub {
+    filter: none !important;
+    transform: translateX(-50%) !important;
+  }
+
+  .report-importance__dot.is-active .report-importance__dot-disc {
+    transform: scale(1.35) !important;
+  }
+
+  .report-importance__dot-disc::after,
+  .report-importance__dot-disc::before {
+    display: none;
+  }
+
+  .report-confidence__dot.is-you::before {
+    display: none;
   }
 
   .report-prob__row-bar > div,
@@ -7620,33 +7685,67 @@ input.autofill-dark:-internal-autofill-previewed {
   margin-top: clamp(14px, 1.8vw, 20px);
 }
 
-.report-attachment-plane__ring {
+/* The field: a rounded SQUARE divided into four quadrants.
+   Figma 8427:1488 draws a 441px panel inside a 497px box (inset 5.63%) with a
+   15px radius (3.4%), a #edecef hairline and a #faf8fe fill.
+   This previously rendered as two concentric rings — a circular field, which is
+   a different chart: rings say "how far from centre", quadrants say "which of
+   these four states", and the four corner labels only mean anything against
+   quadrants. The dot coordinates were already correct for a square panel; only
+   the field drawn under them was wrong. */
+.report-attachment-plane__field {
   position: absolute;
-  border-radius: 50%;
+  inset: 5.63%;
+  border: 1px solid #edecef;
+  border-radius: 3.4%;
+  /* Tinted to the archetype, not a fixed lavender. Sampling the three scale
+     mocks gives #faf8fe on the purple archetype, #f8fefe on the teal one — the
+     field follows its accent. Hardcoding the purple put every other archetype's
+     glow on a clashing hue, which is what made a green or amber map read harsh
+     when the same alphas look calm in the frame. ~6% reproduces the sampled
+     fill on the mocked archetypes. */
+  background: rgb(var(--report-accent-rgb, 157 138 215) / 0.06);
   pointer-events: none;
 }
 
-.report-attachment-plane__ring--outer {
-  inset: 5.77%;
-  border: 1px solid rgba(157, 138, 215, 0.16);
-  background: radial-gradient(
-    circle at 50% 50%,
-    rgba(157, 138, 215, 0.05) 0%,
-    rgba(157, 138, 215, 0) 70%
-  );
-}
-
-.report-attachment-plane__ring--inner {
-  inset: 42.31% 42.31% -0.38% 0;
-  width: 57.69%;
-  height: 57.69%;
-  border: 1px solid rgba(157, 138, 215, 0.1);
-  opacity: 0.6;
+/* Sits above the field and is deliberately NOT clipped by it — in the design
+   the glow spills past the panel edge into the surrounding margin, so it cannot
+   be a background of the field. Falls off to nothing by ~34% of the panel
+   width, sampled out from the home dot in the frame. */
+.report-attachment-plane__glow {
+  position: absolute;
+  width: 54%;
+  height: 54%;
+  transform: translate(-50%, -50%);
+  /* Two overlapping ellipses, offset from each other, rather than one perfect
+     circle: a single radial reads as a flat disc with a visible rim, which is
+     what made this look pasted on. Offsetting them breaks the circular edge and
+     gives the cloud some depth, and terminating each well inside the element
+     keeps the falloff off the panel border. Smaller and weaker than the first
+     pass — the sampled alphas came from a purple mock and land heavier on a
+     saturated accent. */
+  background:
+    radial-gradient(
+      46% 52% at 45% 43%,
+      rgb(var(--report-accent-rgb, 157 138 215) / 0.17) 0%,
+      rgb(var(--report-accent-rgb, 157 138 215) / 0.1) 38%,
+      rgb(var(--report-accent-rgb, 157 138 215) / 0.042) 60%,
+      rgb(var(--report-accent-rgb, 157 138 215) / 0) 74%
+    ),
+    radial-gradient(
+      38% 43% at 59% 61%,
+      rgb(var(--report-accent-rgb, 157 138 215) / 0.13) 0%,
+      rgb(var(--report-accent-rgb, 157 138 215) / 0.075) 40%,
+      rgb(var(--report-accent-rgb, 157 138 215) / 0.028) 62%,
+      rgb(var(--report-accent-rgb, 157 138 215) / 0) 78%
+    );
+  pointer-events: none;
 }
 
 .report-attachment-plane__axis {
   position: absolute;
-  background: rgba(157, 138, 215, 0.22);
+  /* #f1eff6 in the frame — far fainter than the 0.22 accent this replaces. */
+  background: #f1eff6;
   pointer-events: none;
 }
 
@@ -7673,12 +7772,12 @@ input.autofill-dark:-internal-autofill-previewed {
   font-size: 10.503px;
   letter-spacing: 0.02em;
   line-height: 1;
-  color: #c1bccb;
+  color: #cbc7d4;
   white-space: nowrap;
 }
 
 .report-attachment-plane__corner.is-accent {
-  color: #795fc8;
+  color: rgb(var(--report-accent-ink-rgb, 121 95 200));
 }
 
 .report-attachment-plane__corner--tl {
@@ -7715,8 +7814,8 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-attachment-plane__drift line,
 .report-attachment-plane__drift path {
   fill: none;
-  stroke: rgba(121, 95, 200, 0.5);
-  stroke-width: 0.5;
+  stroke: rgb(var(--report-accent-ink-rgb, 121 95 200) / 0.72);
+  stroke-width: 1.15;
   stroke-dasharray: 1.4 1.4;
   stroke-linecap: round;
   vector-effect: non-scaling-stroke;
@@ -7731,31 +7830,15 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-attachment-plane__dot--home {
   width: 14.32px;
   height: 14.32px;
-  background: #795fc8;
-  box-shadow: 0 0 0 4px rgba(121, 95, 200, 0.18);
-}
-
-.report-attachment-plane__aura {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 132px;
-  height: 132px;
-  transform: translate(-50%, -50%);
-  border-radius: 50%;
-  background: radial-gradient(
-    circle at 50% 50%,
-    rgba(121, 95, 200, 0.22) 0%,
-    rgba(121, 95, 200, 0) 70%
-  );
-  pointer-events: none;
+  background: rgb(var(--report-accent-ink-rgb, 121 95 200));
+  box-shadow: 0 0 0 4px rgb(var(--report-accent-rgb, 157 138 215) / 0.22);
 }
 
 .report-attachment-plane__dot--strain {
   width: 14.32px;
   height: 14.32px;
   background: #ffffff;
-  border: 2px solid #a58fd0;
+  border: 2px solid rgb(var(--report-accent-rgb, 157 138 215));
 }
 
 .report-attachment-plane__dot-label {
@@ -7771,30 +7854,210 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 .report-attachment-plane__dot-label--home {
-  color: #795fc8;
+  color: rgb(var(--report-accent-ink-rgb, 121 95 200));
   transform: translate(-50%, 18px);
 }
 
 .report-attachment-plane__dot-label--strain {
-  color: #a58fd0;
+  color: rgb(var(--report-accent-ink-rgb, 121 95 200));
+}
+
+/* A dot low in the field would hang its label off the bottom edge. */
+.report-attachment-plane__dot-label.is-above {
+  transform: translate(-50%, -22px);
+}
+
+/* ── Arrival ───────────────────────────────────────────────────────────────
+   The map assembles in the order you would read it: the field and its axes
+   first, then the corners that name the quadrants, then the glow, then your
+   home dot, then the trail out to where strain takes you, and only then the
+   dot at the end of it. The sequencing is the point — the trail drawing from
+   home to strain is what says these two are one person, which is the sentence
+   the caption underneath spends a paragraph making. */
+.report-attachment-plane__field,
+.report-attachment-plane__corner,
+.report-attachment-plane__dot,
+.report-attachment-plane__dot-label {
+  opacity: 0;
+}
+
+.report-attachment-plane__field {
+  transform: scale(0.985);
+  transition:
+    opacity 520ms ease,
+    transform 700ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.report-attachment-plane.is-revealed .report-attachment-plane__field {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* Axes grow out of the centre, which is where the two of them cross. */
+.report-attachment-plane__axis {
+  transition: transform 760ms cubic-bezier(0.16, 1, 0.3, 1) 140ms;
+}
+
+.report-attachment-plane__axis--v {
+  transform: translateX(-0.5px) scaleY(0);
+}
+
+.report-attachment-plane__axis--h {
+  transform: translateY(-0.5px) scaleX(0);
+}
+
+.report-attachment-plane.is-revealed .report-attachment-plane__axis--v {
+  transform: translateX(-0.5px) scaleY(1);
+}
+
+.report-attachment-plane.is-revealed .report-attachment-plane__axis--h {
+  transform: translateY(-0.5px) scaleX(1);
+}
+
+.report-attachment-plane__corner {
+  transform: translateY(4px);
+  transition:
+    opacity 440ms ease,
+    transform 560ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.report-attachment-plane.is-revealed .report-attachment-plane__corner {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.report-attachment-plane.is-revealed .report-attachment-plane__corner--tl {
+  transition-delay: 230ms;
+}
+
+.report-attachment-plane.is-revealed .report-attachment-plane__corner--tr {
+  transition-delay: 290ms;
+}
+
+.report-attachment-plane.is-revealed .report-attachment-plane__corner--br {
+  transition-delay: 350ms;
+}
+
+.report-attachment-plane.is-revealed .report-attachment-plane__corner--bl {
+  transition-delay: 410ms;
+}
+
+.report-attachment-plane__glow {
+  opacity: 0;
+}
+
+/* Blooms open, then hands straight over to a slow breath — the second
+   animation starts exactly when the first ends (300 + 1100), so transform
+   passes between them without a jump. */
+.report-attachment-plane.is-revealed .report-attachment-plane__glow {
+  animation:
+    attach-glow-in 1100ms cubic-bezier(0.16, 1, 0.3, 1) 300ms both,
+    attach-glow-breathe 7s ease-in-out 1400ms infinite;
+}
+
+@keyframes attach-glow-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.72);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+@keyframes attach-glow-breathe {
+  0%,
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.045);
+  }
+}
+
+.report-attachment-plane__dot {
+  transition:
+    opacity 240ms ease,
+    transform 620ms cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+
+.report-attachment-plane__dot--home {
+  transform: translate(-50%, -50%) scale(0.3);
+  transition-delay: 460ms;
+}
+
+.report-attachment-plane__dot--strain {
+  transform: translate(-50%, -50%) scale(0.3);
+  /* After the trail has finished drawing to it. */
+  transition-delay: 1460ms;
+}
+
+.report-attachment-plane.is-revealed .report-attachment-plane__dot {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.report-attachment-plane__dot-label {
+  transition:
+    opacity 420ms ease,
+    transform 560ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.report-attachment-plane.is-revealed .report-attachment-plane__dot-label {
+  opacity: 1;
+}
+
+.report-attachment-plane.is-revealed .report-attachment-plane__dot-label--home {
+  transition-delay: 640ms;
+}
+
+.report-attachment-plane.is-revealed .report-attachment-plane__dot-label--strain {
+  transition-delay: 1560ms;
+}
+
+/* The mask stroke is what animates; the dashed trail underneath is revealed
+   through it. pathLength 1 makes the timing identical for every scale's curve
+   whatever its actual length. */
+.report-attachment-plane__drift-reveal {
+  fill: none;
+  stroke: #ffffff;
+  stroke-width: 5;
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  transition: stroke-dashoffset 900ms cubic-bezier(0.16, 1, 0.3, 1) 700ms;
+}
+
+.report-attachment-plane.is-revealed .report-attachment-plane__drift-reveal {
+  stroke-dashoffset: 0;
 }
 
 /* ── Educational block (universal, always shown). ── */
 .report-attachment__edu {
   align-self: stretch;
   width: calc(100% + 2 * clamp(22px, 3vw, 30.5px));
-  margin: clamp(18px, 2vw, 26px) clamp(-30.5px, -3vw, -22px) 0;
+  /* Bottom margin pulls into the card's remaining bottom padding so this panel
+     closes the card like the other fourteen — it was the last one still leaving
+     a white band under its tint (13px desktop / 5px mobile, measured). This
+     container predates the shared rule and keeps its own 3vw geometry. */
+  margin: clamp(18px, 2vw, 26px) clamp(-30.5px, -3vw, -22px) clamp(-13px, -1.1vw, -5px);
   padding: 1.128px clamp(22px, 3vw, 30.5px) 0;
   border-top: 1.128px solid rgba(157, 138, 215, 0.22);
   background: linear-gradient(180deg, rgba(157, 138, 215, 0.1) 0%, rgba(157, 138, 215, 0.02) 100%);
   position: relative;
 }
 
+/* The accent rule spans its panel edge to edge. It used to be inset 16px on
+   both sides, which read as a line that had been cut short of the panel it
+   sits on — and the same rule is duplicated across all twelve chapters, so it
+   was cut in every one of them. Changed in all twelve together; they are
+   copies of each other, not independent styles. */
 .report-attachment__edu::before {
   content: "";
   position: absolute;
-  left: 16px;
-  right: 16px;
+  left: 0;
+  right: 0;
   top: -1.4px;
   height: 2.8px;
   border-radius: 0 0 3.4px 3.4px;
@@ -7810,7 +8073,7 @@ input.autofill-dark:-internal-autofill-previewed {
   align-items: center;
   gap: 13.5px;
   width: 100%;
-  padding: 6px 8px 6px 0;
+  padding: 6px 8px 6px 27px;
   border: none;
   background: transparent;
   cursor: pointer;
@@ -8210,7 +8473,14 @@ input.autofill-dark:-internal-autofill-previewed {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  padding-left: clamp(0px, 1.4vw, 20px);
+  /* Flush with the title and with every other section.
+     Figma 8719:8865 does indent this body ~23px on its 896px frame (2.6%), and
+     the clamp that used to live here reproduced that to within 2px. But that
+     frame is drawn in isolation; in the assembled report this is the ONLY
+     prose block not inside a card, so it was the one run of text that failed
+     to line up with the section above and below it. Auditing every section
+     confirmed it: every other offset belongs to a card's own padding.
+     Restore by putting back `padding-left: clamp(0px, 1.4vw, 20px)`. */
   color: #3f3a4d;
   font-family: var(--font-sans);
   font-size: clamp(0.95rem, 1.15vw, 1.0625rem);
@@ -8382,10 +8652,20 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 /* Body content */
+/*
+ * Block rhythm inside the hero card. Figma leaves deliberate air between these
+ * groups — measured on the locked frame (8988:15953) and the mobile frame
+ * (9087:9524): roughly 48-55px desktop and 49-70px mobile between "Behavioral
+ * tendencies:", the motivation card, the trait grid and the meters. Ours was a
+ * flat 18px for all of them, which ran the four groups together.
+ *
+ * `gap` sets the base; the two larger jumps Figma makes (into the trait grid, and
+ * into the meters) are added on those children below.
+ */
 .report-hero-card__content {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: clamp(30px, 3.6vw, 44px);
   width: 100%;
   padding-top: 18px;
 }
@@ -8526,7 +8806,10 @@ input.autofill-dark:-internal-autofill-previewed {
   }
 
   .report-hero-card__content {
-    gap: 12px;
+    /* Figma leaves real air between the hero's four blocks (48-55px between the
+       label, the motivation card, the trait grid and the meters). This used to
+       tighten it to 12px, which ran them together — the "no space" report. */
+    gap: 34px;
   }
 
   .report-hero-card__motivation {
@@ -8846,12 +9129,32 @@ input.autofill-dark:-internal-autofill-previewed {
      dev-mode export flattens to its first stop (#fe6839) — that flat orange is
      what shipped. Painted here as a two-layer background so the gradient
      survives the 27px radius: white fills the padding-box, the gradient fills
-     the border-box and shows through the transparent border. */
+     the border-box and shows through the transparent border.
+
+     ANGLE: sampling only the TOP edge makes this look near-horizontal, and a
+     near-horizontal angle is wrong in a way that shows — it paints the whole
+     left edge orange and drags orange a quarter of the way across the top. The
+     bottom edge is what gives it away: its left end is already the mid purple
+     (#a78af9) that the top edge only reaches at 65%, so the ramp descends
+     diagonally. Fitting all 2097 border-ring pixels of 8988:16044 (interior
+     pixels excluded — the progress dots are purple too and pull the fit off)
+     gives 162.75deg at a 0.0004 residual, and the two edges then agree within
+     1/255 everywhere they overlap.
+
+     Figma stores the gradient relative to the shape, so it stretches on resize
+     while a CSS angle does not. In shape space the direction is (258, 154), so
+     the faithful angle is 180deg - atan(1.675 * H / W): 162deg at our desktop
+     855x166 (Figma's own box is 854x162), 122deg once the columns stack to
+     358x345. The tail is flat #e9d4ff from 76% — the handle stops short of the
+     corner, so CSS extending the last stop reproduces it exactly.
+
+     Stop positions were solved against 268 corner-inset border samples rather
+     than read off bins: 41%/76% lands at max 2/255, mean 0.8/255. */
   border: 2.5px solid transparent;
   border-radius: 27px;
   background:
     linear-gradient(#ffffff, #ffffff) padding-box,
-    linear-gradient(97deg, #fe6839 0%, #a97ab0 55%, #6b5b95 100%) border-box;
+    linear-gradient(162deg, #fa6941 0%, #a78af9 41%, #e9d4ff 76%) border-box;
   /* Figma: 0 22.569 56.423 rgba(22,16,33,0.06) — a soft neutral drop, not the
      orange glow this previously carried. */
   box-shadow: 0 22.5px 56px rgba(22, 16, 33, 0.06);
@@ -8905,16 +9208,29 @@ input.autofill-dark:-internal-autofill-previewed {
   width: 72px;
   height: 8px;
   border-radius: 9999px;
-  background: rgba(107, 91, 149, 0.18);
+  /* Figma 8988:16044 samples #f1eef9 here; the old translucent ink sat ~13
+     levels darker. */
+  background: #f1eef9;
   overflow: hidden;
 }
 
 .report-snapshot-compare__bar span {
   display: block;
-  width: 62%;
+  /* Overridden inline from the stat — see CompareBar. 66% is Figma's own fill. */
+  width: 66%;
   height: 100%;
   border-radius: 9999px;
-  background: linear-gradient(90deg, #fe6839 0%, #a78bfa 100%);
+  /* Accent-driven, not a fixed colour: sampling Figma's fill down its centre
+     row lands on #9d8ad7 at 60% and #8169cb at 90% — Spiritual Lover's own
+     `accent` (#9D8AD7) and `accentInk` (#795FC8) to within 4/255. The frame
+     only shows that one archetype, so a literal violet would have been the
+     same mistake as the orange it replaces: right for one report, wrong for
+     the other thirteen, and clashing with the accent-coloured dots beside it. */
+  background: linear-gradient(
+    90deg,
+    rgb(var(--report-accent-rgb) / 0.3) 0%,
+    rgb(var(--report-accent-ink-rgb, var(--report-accent-rgb))) 100%
+  );
 }
 
 .report-snapshot-compare__stat {
@@ -9353,20 +9669,24 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-beliefs__details::before {
   content: "";
   position: absolute;
-  left: 16px;
-  right: 16px;
+  left: 0;
+  right: 0;
   top: -1.4px;
   height: 2.8px;
   border-radius: 0 0 3.4px 3.4px;
   background: linear-gradient(90deg, #9d8ad7 0%, #c36ddf 100%);
 }
 
+/* padding-left 27px matches the twelve other LEARN summaries and, more to the
+   point, the 69px left padding of this block's own expanded body: at 0 the
+   eyebrow sat 27px left of the paragraphs it introduces. beliefs, accel and
+   attachment were the only three out of line. */
 .report-beliefs__details-summary {
   display: flex;
   align-items: center;
   gap: 13.5px;
   width: 100%;
-  padding: 6px 8px 6px 0;
+  padding: 6px 8px 6px 27px;
   border: none;
   background: transparent;
   cursor: pointer;
@@ -9656,7 +9976,7 @@ input.autofill-dark:-internal-autofill-previewed {
 
 .report-insecurities__takeaway {
   margin: 0;
-  max-width: 30rem;
+  max-width: none;
   text-align: center;
   color: #161021;
   font-family: var(--font-serif);
@@ -10031,18 +10351,28 @@ input.autofill-dark:-internal-autofill-previewed {
      solid orange. Sampling the exported node proves the gradient: the top edge runs
      rgb(236,111,96) → (202,124,169) → (169,138,244) → (196,171,252) left-to-right,
      and the bottom-right corner sits at (233,212,255). Rendered with the
-     two-background technique so the radius is preserved and it works in Safari. */
+     two-background technique so the radius is preserved and it works in Safari.
+
+     Stops are the ones solved for the "How you compare" box (fitted to 2097
+     border-ring pixels of 8988:16044): #fa6941 -> #a78af9 at 41% -> #e9d4ff
+     flat from 76%. Both boxes carry the same stroke in the design — they end on
+     the same #e9d4ff — and this one had been left on the older flat-orange
+     #fe6839 at 135deg, so the two disagreed in the same report.
+     Figma stores the gradient relative to the shape, so the faithful CSS angle
+     is 180deg - atan(1.675 * H / W): 168deg at this box's desktop 792x99,
+     152deg once it narrows to 312x99. */
   border: 2.5px solid transparent;
   border-radius: 16px;
   background:
     linear-gradient(#fcfbfe, #fcfbfe) padding-box,
-    linear-gradient(135deg, #fe6839 0%, #a78bfa 55%, #e9d4ff 100%) border-box;
+    linear-gradient(168deg, #fa6941 0%, #a78af9 41%, #e9d4ff 76%) border-box;
   text-align: center;
 }
 
 .report-reward__stat-dots {
   display: block;
-  width: 109.211px;
+  /* Width follows the viewBox now that the dot count varies with the stat. */
+  width: auto;
   max-width: 100%;
   height: 11.41px;
   /* Figma wraps the graphic in a 29.34px-tall box, i.e. ~9px of air each side. */
@@ -10085,7 +10415,7 @@ input.autofill-dark:-internal-autofill-previewed {
 
 .report-reward__takeaway {
   margin: 0;
-  max-width: 29rem;
+  max-width: none;
   text-align: center;
   color: #161021;
   font-family: var(--font-serif);
@@ -10144,8 +10474,8 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-reward__details::before {
   content: "";
   position: absolute;
-  left: 16px;
-  right: 16px;
+  left: 0;
+  right: 0;
   top: -1.4px;
   height: 2.8px;
   border-radius: 0 0 3.4px 3.4px;
@@ -10555,7 +10885,7 @@ input.autofill-dark:-internal-autofill-previewed {
 
 .report-energy__takeaway {
   margin: 0;
-  max-width: 29rem;
+  max-width: none;
   text-align: center;
   color: #161021;
   font-family: var(--font-serif);
@@ -10623,8 +10953,8 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-energy__details::before {
   content: "";
   position: absolute;
-  left: 16px;
-  right: 16px;
+  left: 0;
+  right: 0;
   top: -1.4px;
   height: 2.8px;
   border-radius: 0 0 3.4px 3.4px;
@@ -11006,9 +11336,16 @@ input.autofill-dark:-internal-autofill-previewed {
   align-items: stretch;
   width: 100%;
   padding: 16px 28px;
-  border: 2.5px solid #fe6839;
+  /* Was a SOLID #fe6839 — the design's gradient stroke flattened to its first
+     stop, the same failure as the compare box and the reward stat. Same solved
+     stops as both of those (#fa6941 -> #a78af9 41% -> #e9d4ff 76%), painted with
+     the two-background technique so the 16px radius survives, at the angle this
+     box's own aspect resolves to: 180deg - atan(1.675 * H / W). */
+  border: 2.5px solid transparent;
   border-radius: 16px;
-  background: #fcfbfe;
+  background:
+    linear-gradient(#fcfbfe, #fcfbfe) padding-box,
+    linear-gradient(168deg, #fa6941 0%, #a78af9 41%, #e9d4ff 76%) border-box;
 }
 
 .report-arousal__stat {
@@ -11021,14 +11358,17 @@ input.autofill-dark:-internal-autofill-previewed {
   text-align: center;
 }
 
+/* Matched to the Reward box's stat line, which is the Figma-verified one: this
+   sat at 800/1.06rem against its 700/0.67rem, so the same component rendered
+   noticeably heavier and larger in one section than the other. */
 .report-arousal__stat-value {
   color: #6b5b95;
   font-family: var(--font-sans);
-  font-weight: 800;
-  font-size: 1.06rem;
-  letter-spacing: 0.4px;
+  font-weight: 700;
+  font-size: 0.67rem;
+  letter-spacing: 1.39px;
   text-transform: uppercase;
-  line-height: 1.2;
+  line-height: 1.65;
 }
 
 .report-arousal__stat-caption {
@@ -11122,8 +11462,8 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-arousal__details::before {
   content: "";
   position: absolute;
-  left: 16px;
-  right: 16px;
+  left: 0;
+  right: 0;
   top: -1.4px;
   height: 2.8px;
   border-radius: 0 0 3.4px 3.4px;
@@ -11484,8 +11824,8 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-enjoy__details::before {
   content: "";
   position: absolute;
-  left: 16px;
-  right: 16px;
+  left: 0;
+  right: 0;
   top: -1.4px;
   height: 2.8px;
   border-radius: 0 0 3.4px 3.4px;
@@ -11920,9 +12260,13 @@ input.autofill-dark:-internal-autofill-previewed {
   gap: 6.8px;
   width: 100%;
   padding: 14px 28px;
-  border: 2.5px solid #fe6839;
+  /* Last of the flattened-to-first-stop strokes; same treatment as the compare,
+     reward and arousal boxes so all four agree. */
+  border: 2.5px solid transparent;
   border-radius: 16px;
-  background: #fcfbfe;
+  background:
+    linear-gradient(#fcfbfe, #fcfbfe) padding-box,
+    linear-gradient(168deg, #fa6941 0%, #a78af9 41%, #e9d4ff 76%) border-box;
   text-align: center;
 }
 
@@ -11980,7 +12324,7 @@ input.autofill-dark:-internal-autofill-previewed {
 
 .report-initiation__takeaway {
   margin: 0;
-  max-width: 29rem;
+  max-width: none;
   color: #161021;
   font-family: var(--font-serif);
   font-style: italic;
@@ -12945,8 +13289,8 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-partnership__details::before {
   content: "";
   position: absolute;
-  left: 16px;
-  right: 16px;
+  left: 0;
+  right: 0;
   top: -1.5px;
   height: 2.8px;
   border-radius: 0 0 3.4px 3.4px;
@@ -13842,7 +14186,7 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-confidence__result-word {
   margin: 0;
   /* Figma 9107:798 sets this word in the ARCHETYPE'S accent, not ink — its demo
-     frame is gold #b28a3c for Radiant Performer, and the designer's note says
+     frame is gold #6b5b95 for Radiant Performer, and the designer's note says
      "the accent color follows the archetype". Uses the same ink-accent pairing as
      `.report-snapshot-card__stage-full` so the 34px serif keeps its contrast. */
   color: rgb(var(--report-accent-ink-rgb, var(--report-accent-rgb)));
@@ -14066,12 +14410,27 @@ input.autofill-dark:-internal-autofill-previewed {
   height: 13px;
   transform: translate(-50%, -50%) scale(0);
   border-radius: 9999px;
-  background: rgba(157, 138, 215, 0.45);
+  /* Per-dot, from DOT_COLORS (sampled off the frame). This was one flat purple
+     for all fourteen. */
+  background: var(--dot-color, rgba(157, 138, 215, 0.45));
   opacity: 0;
   transition:
-    transform 0.5s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.5s cubic-bezier(0.34, 1.45, 0.64, 1),
     opacity 0.5s ease;
   transition-delay: calc(var(--dot-order) * 45ms);
+}
+
+/* "You are here" — the same slow radar ping the Importance strip uses, reusing
+   its keyframes rather than defining a second identical set. Starts after the
+   dots have finished landing so it doesn't compete with the reveal stagger. */
+.report-confidence__strip.is-animated .report-confidence__dot.is-you::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  border: 1.5px solid rgb(var(--dot-accent-rgb, 157 138 215) / 0.7);
+  pointer-events: none;
+  animation: report-importance-ping 3400ms linear 900ms infinite;
 }
 
 .report-confidence__strip.is-animated .report-confidence__dot {
@@ -14185,8 +14544,8 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-confidence__details {
   position: relative;
   width: 100%;
-  border-left: 3.385px solid #e6b65c;
-  background: linear-gradient(180deg, rgba(230, 182, 92, 0.14) 0%, rgba(230, 182, 92, 0.03) 100%);
+  border-left: 3.385px solid #9d8ad7;
+  background: linear-gradient(180deg, rgba(157, 138, 215, 0.1) 0%, rgba(157, 138, 215, 0.02) 100%);
 }
 
 .report-confidence__details-summary {
@@ -14209,7 +14568,7 @@ input.autofill-dark:-internal-autofill-previewed {
   width: 29px;
   height: 29px;
   border-radius: 9px;
-  color: #b28a3c;
+  color: #6b5b95;
 }
 
 .report-confidence__details-icon svg {
@@ -14219,7 +14578,7 @@ input.autofill-dark:-internal-autofill-previewed {
 
 .report-confidence__details-eyebrow {
   flex: 1 1 auto;
-  color: #b28a3c;
+  color: #6b5b95;
   font-family: var(--font-sans);
   font-weight: 700;
   font-size: 0.706rem;
@@ -14230,7 +14589,7 @@ input.autofill-dark:-internal-autofill-previewed {
 
 .report-confidence__details-chevron {
   flex: 0 0 auto;
-  color: #b28a3c;
+  color: #6b5b95;
   font-family: var(--font-sans);
   font-weight: 800;
   font-size: 1.06rem;
@@ -14760,8 +15119,8 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-accel__details::before {
   content: "";
   position: absolute;
-  left: 16px;
-  right: 16px;
+  left: 0;
+  right: 0;
   top: -1.4px;
   height: 2.8px;
   border-radius: 0 0 3.4px 3.4px;
@@ -14773,7 +15132,7 @@ input.autofill-dark:-internal-autofill-previewed {
   align-items: center;
   gap: 13.5px;
   width: 100%;
-  padding: 6px 8px 6px 0;
+  padding: 6px 8px 6px 27px;
   border: none;
   background: transparent;
   cursor: pointer;
@@ -15245,7 +15604,9 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-constellation__icon-glyph {
   width: 14px;
   height: 14px;
-  color: #ffffff;
+  /* Per-chip — two of the fourteen are dark in Figma, and on the pale teal
+     chip white was invisible. See DARK_GLYPH_CHIPS in ConstellationSection. */
+  color: var(--icon-ink, #ffffff);
 }
 
 .report-constellation__nametag {
@@ -16058,8 +16419,13 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-practice-table__metric-content {
   display: flex;
   align-items: center;
+  /* Centred as a PAIR. The original split came from `center` plus a 1rem gap
+     and a right-aligned 2rem min-width on the number — that spread "7" and
+     "More likely" to opposite sides of the column. With the tight gap they read
+     as one value and centring puts that value under its own column heading;
+     left-aligning it instead pushed the pair off-centre from the header. */
   justify-content: center;
-  gap: 1rem;
+  gap: 0.4rem;
   opacity: 1;
   transform: none;
   transition:
@@ -16076,14 +16442,22 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 .report-practice-table__metric-value {
-  min-width: 2rem;
+  /* The 2rem box is what keeps the NUMBER column aligned: centring the pair
+     alone means a two-digit 10 widens it and drags the whole pair left, so 10
+     stops starting where 9 does. Fixed box + right-align pins every numeral's
+     right edge and starts every word at the same x, while the pair as a whole
+     still centres under its heading. It was never this that split them — that
+     was the 1rem gap, now 0.4rem. */
+  /* Wide enough for a two-digit 10 at this size — at 2rem the 10 overflowed the
+     box, widening the pair and reintroducing the very drift this prevents. */
+  min-width: 2.6rem;
+  text-align: right;
   color: #161021;
   font-family: var(--font-serif);
   font-size: 1.3125rem;
   font-weight: 700;
   line-height: 1;
   letter-spacing: -0.036em;
-  text-align: right;
   font-variant-numeric: tabular-nums;
 }
 
@@ -16094,6 +16468,13 @@ input.autofill-dark:-internal-autofill-previewed {
   font-weight: 400;
   line-height: 1;
   white-space: nowrap;
+  /* Pinned to the widest label ("Neutral likely"). The residual drift was never
+     the numeral — it was this word: with the pair centred, a wider label pushed
+     the whole pair left, so rows with "Neutral likely" sat off from rows with
+     "More likely". Fixing both boxes makes the pair a constant width, so
+     centring it keeps every numeral and every word on the same x. */
+  min-width: 6.6rem;
+  text-align: left;
 }
 
 /* Column tones — the bold score carries the hue (deep tones stay AA on white:
@@ -16205,6 +16586,14 @@ input.autofill-dark:-internal-autofill-previewed {
     flex-direction: column;
     align-items: flex-start;
     gap: 0.38rem;
+  }
+
+  /* The fixed boxes exist to hold the desktop row on one line; stacked, they
+     only overflow the narrow cell (all 40 of them, measured) and the stack is
+     already flush-left without them. */
+  .report-practice-table__metric-value,
+  .report-practice-table__metric-likelihood {
+    min-width: 0;
   }
 
   .report-practice-table__metric-value {
@@ -16444,6 +16833,9 @@ input.autofill-dark:-internal-autofill-previewed {
   position: relative;
   height: 88px;
   --axis-pad: 40px;
+  /* The scrub reads horizontal drags; pan-y keeps vertical scrolling with the
+     page instead of being swallowed by the strip. */
+  touch-action: pan-y;
 }
 
 .report-importance__axis-line {
@@ -16463,8 +16855,6 @@ input.autofill-dark:-internal-autofill-previewed {
   width: 13px;
   height: 13px;
   margin: -6.5px 0 0 -6.5px;
-  border-radius: 9999px;
-  background: rgb(var(--dot-accent-rgb, 141 132 166));
   opacity: 0;
   transform: scale(0.6);
   transition:
@@ -16472,6 +16862,35 @@ input.autofill-dark:-internal-autofill-previewed {
     transform 420ms cubic-bezier(0.16, 1, 0.3, 1);
   /* stagger the reveal left → right */
   transition-delay: calc(var(--dot-order, 0) * 28ms);
+}
+
+/* The visible circle sits on its own element so the scrub can scale it at
+   once: the reveal above carries up to 364ms of transition-delay, and sharing
+   one transform would drag the highlight a third of a second behind the
+   pointer. */
+.report-importance__dot-disc {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: rgb(var(--dot-accent-rgb, 141 132 166));
+  transition:
+    opacity 260ms ease,
+    transform 380ms cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+
+/* Halo — blooms outward on pick, slower and on a different curve than the
+   disc so the two don't travel in lockstep and read as one mechanical pop. */
+.report-importance__dot-disc::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  border: 1.5px solid rgb(var(--dot-accent-rgb, 141 132 166) / 0.5);
+  opacity: 0;
+  transform: scale(1);
+  transition:
+    opacity 240ms ease,
+    transform 620ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .report-importance__strip.is-animated .report-importance__dot {
@@ -16485,9 +16904,101 @@ input.autofill-dark:-internal-autofill-previewed {
   height: 20px;
   margin: -10px 0 0 -10px;
   z-index: 2;
+}
+
+.report-importance__dot.is-you .report-importance__dot-disc {
   box-shadow:
     0 0 0 4px #ffffff,
     0 0 0 6px rgb(var(--dot-accent-rgb, 157 138 215) / 0.55);
+}
+
+/* "You are here" — a slow radar ping on the viewer's own dot.
+   Deliberately a ring that expands and dissolves rather than the dot itself
+   throbbing: a scaling dot pulls the eye the way an error state does, and at
+   13-20px it visibly shifts against the axis line it sits on. The cycle is
+   longer than the ping, so roughly a third of it is rest — that pause is what
+   keeps this reading as calm presence instead of something demanding a click.
+   Gated on .is-animated so it can't ping before the strip has revealed, and
+   suppressed mid-scrub so it never competes with the pick halo. */
+.report-importance__strip.is-animated
+  .report-importance__dot.is-you:not(.is-active):not(.is-muted)
+  .report-importance__dot-disc::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  border: 1.5px solid rgb(var(--dot-accent-rgb, 157 138 215) / 0.7);
+  pointer-events: none;
+  /* linear, with the ease-out shape written into the keyframes below — an
+     easing function on the whole animation front-loads the travel so hard
+     that the ring is spent inside the first third and the rest of the cycle
+     is dead air. Shaping it by hand keeps it legible across the expansion. */
+  animation: report-importance-ping 3400ms linear infinite;
+}
+
+@keyframes report-importance-ping {
+  0% {
+    opacity: 0;
+    transform: scale(1);
+  }
+  6% {
+    opacity: 0.6;
+  }
+  20% {
+    opacity: 0.5;
+    transform: scale(1.5);
+  }
+  38% {
+    opacity: 0.34;
+    transform: scale(2);
+  }
+  56% {
+    opacity: 0.16;
+    transform: scale(2.3);
+  }
+  /* Spent by 70%; the last third is the rest between pings. */
+  70%,
+  100% {
+    opacity: 0;
+    transform: scale(2.5);
+  }
+}
+
+/* Picked by the scrub. */
+.report-importance__dot.is-active {
+  z-index: 3;
+}
+
+.report-importance__dot.is-active .report-importance__dot-disc {
+  transform: scale(1.55);
+}
+
+.report-importance__dot.is-active .report-importance__dot-disc::after {
+  opacity: 1;
+  transform: scale(2.3);
+}
+
+/* Everything else recedes, so the picked dot reads without having to shout. */
+.report-importance__dot.is-muted .report-importance__dot-disc {
+  opacity: 0.3;
+}
+
+/* Standing labels clear out entirely during a scrub rather than just dimming:
+   they share the scrub label's band, so at the left end it lands on top of
+   "Loyal Ritualist" and near the right end on top of the "You" pill. The
+   scrub label is naming a dot anyway, so they are redundant while it is up. */
+.report-importance__dot.is-muted .report-importance__dot-pill,
+.report-importance__dot.is-muted .report-importance__dot-label {
+  opacity: 0;
+  transform: translateX(-50%) translateY(-3px);
+}
+
+/* The picked dot's standing label steps aside — the scrub label takes that
+   slot, so the two would otherwise stack. */
+.report-importance__dot.is-active .report-importance__dot-pill,
+.report-importance__dot.is-active .report-importance__dot-label {
+  opacity: 0;
+  transform: translateX(-50%) translateY(-5px);
 }
 
 .report-importance__dot-pill {
@@ -16507,6 +17018,9 @@ input.autofill-dark:-internal-autofill-previewed {
   line-height: 1;
   white-space: nowrap;
   box-shadow: 0 4px 10px -4px rgba(22, 16, 33, 0.4);
+  transition:
+    opacity 220ms ease,
+    transform 340ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .report-importance__dot-pill::after {
@@ -16531,6 +17045,56 @@ input.autofill-dark:-internal-autofill-previewed {
   line-height: 1;
   white-space: nowrap;
   color: #6b6678;
+  transition:
+    opacity 220ms ease,
+    transform 340ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* The travelling scrub label. Left/caret come from the component in px — it
+   measures the label and clamps it inside the card, then offsets the caret by
+   however far it had to push, so the caret keeps pointing at the dot. */
+.report-importance__scrub {
+  position: absolute;
+  bottom: calc(50% + 32px);
+  left: var(--scrub-left, 0px);
+  transform: translateX(-50%) translateY(5px) scale(0.97);
+  padding: 5px 12px;
+  border-radius: 9999px;
+  background: #161021;
+  color: #ffffff;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow: 0 8px 20px -8px rgba(22, 16, 33, 0.5);
+  opacity: 0;
+  /* Resolving out of a slight blur is what keeps this from reading as a plain
+     fade; it arrives rather than switches on. */
+  filter: blur(3px);
+  pointer-events: none;
+  z-index: 4;
+  transition:
+    opacity 190ms ease,
+    filter 240ms ease,
+    transform 420ms cubic-bezier(0.22, 1, 0.36, 1),
+    left 480ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.report-importance__scrub.is-on {
+  opacity: 1;
+  filter: blur(0);
+  transform: translateX(-50%) translateY(0) scale(1);
+}
+
+.report-importance__scrub::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: calc(50% + var(--scrub-caret, 0px));
+  transform: translateX(-50%) translateY(-1px);
+  border: 5px solid transparent;
+  border-top-color: #161021;
 }
 
 .report-importance__ends {
@@ -16597,6 +17161,14 @@ input.autofill-dark:-internal-autofill-previewed {
   }
 
   .report-importance__dot-label {
+    font-size: 11px;
+  }
+
+  /* Narrower card, so the label has to be smaller to survive the clamp with
+     the longest name ("Minimalist Companion") still centred on its dot. */
+  .report-importance__scrub {
+    bottom: calc(50% + 26px);
+    padding: 4px 10px;
     font-size: 11px;
   }
 
@@ -17146,11 +17718,14 @@ input.autofill-dark:-internal-autofill-previewed {
     padding-right: 12px;
   }
 
-  /* Keep the long dot labels from spilling off the small map — anchor the
-     strain label to the left of its dot on narrow screens. */
+  /* Centred ABOVE its dot, which is what Figma's mobile scale does. Hanging it
+     to one SIDE only moves the overflow: anchored left it ran 19px off the left
+     edge for a left-half dot (measured), anchored right it does the same on the
+     other side. Centring it over the dot is the only placement that survives a
+     116px nowrap label on a 312px plane wherever the dot lands. */
   .report-attachment-plane__dot-label--strain {
-    transform: translate(calc(-100% - 12px), -50%);
-    text-align: right;
+    transform: translate(-50%, -22px);
+    text-align: center;
   }
 
   .report-stage-highlight {
@@ -17246,7 +17821,9 @@ input.autofill-dark:-internal-autofill-previewed {
 
   .report-hero-card__content {
     max-width: 100%;
-    gap: 14px;
+    /* Mobile Figma (9087:9524) is even more generous than desktop — 49-70px
+       between the same four blocks. This was 14px. */
+    gap: 28px;
   }
 
   .report-hero-card__motivation {
@@ -17292,6 +17869,15 @@ input.autofill-dark:-internal-autofill-previewed {
     max-width: 340px;
     min-height: 0;
     padding: 24px 20px;
+  }
+
+  .report-snapshot-compare {
+    /* Stacked, the box goes near-square (358x345 at 390px) — see the angle note
+       on the base rule. Holding 162deg there would run the ramp off the bottom
+       and leave the whole top edge orange. */
+    background:
+      linear-gradient(#ffffff, #ffffff) padding-box,
+      linear-gradient(122deg, #fa6941 0%, #a78af9 41%, #e9d4ff 76%) border-box;
   }
 
   .report-snapshot-compare__cols {
@@ -21579,7 +22165,7 @@ input.autofill-dark:-internal-autofill-previewed {
 
 .report-power__takeaway {
   margin: 0;
-  max-width: 30rem;
+  max-width: none;
   text-align: center;
   color: #161021;
   font-family: var(--font-serif);
@@ -21641,8 +22227,8 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-power__details::before {
   content: "";
   position: absolute;
-  left: 16px;
-  right: 16px;
+  left: 0;
+  right: 0;
   top: -1.4px;
   height: 2.8px;
   border-radius: 0 0 3.4px 3.4px;
@@ -22178,8 +22764,8 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-fantasy__details::before {
   content: "";
   position: absolute;
-  left: 16px;
-  right: 16px;
+  left: 0;
+  right: 0;
   top: -1.4px;
   height: 2.8px;
   border-radius: 0 0 3.4px 3.4px;
@@ -22497,7 +23083,7 @@ input.autofill-dark:-internal-autofill-previewed {
 
 .report-curiosity__takeaway {
   margin: 0;
-  max-width: 30rem;
+  max-width: none;
   text-align: center;
   color: #161021;
   font-family: var(--font-serif);
@@ -22552,8 +23138,8 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-curiosity__details::before {
   content: "";
   position: absolute;
-  left: 16px;
-  right: 16px;
+  left: 0;
+  right: 0;
   top: -1.4px;
   height: 2.8px;
   border-radius: 0 0 3.4px 3.4px;
@@ -22960,8 +23546,8 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-lovelang__details::before {
   content: "";
   position: absolute;
-  left: 16px;
-  right: 16px;
+  left: 0;
+  right: 0;
   top: -1.4px;
   height: 2.8px;
   border-radius: 0 0 3.4px 3.4px;
@@ -23909,4 +24495,750 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-reading__preview-fade .report-reading__spine {
   opacity: 0.35;
   box-shadow: none;
+}
+
+/* Figma's two widest breaks in the hero card: into the trait grid and into the
+   meters. Additive on top of the base gap above rather than replacing it, so the
+   rhythm still scales with the viewport. */
+.report-hero-card__content > .report-hero-card__traits {
+  margin-top: clamp(6px, 1.2vw, 14px);
+}
+
+.report-hero-card__content > .report-hero-card__progress {
+  margin-top: clamp(4px, 1vw, 12px);
+}
+
+/* ── LEARN panels bleed to their card's edges ──────────────────────────────
+   The collapsible LEARN panel is the same component in every chapter, but
+   only the Attachment Style one escaped its card's padding — the other eleven
+   sat inside it, so the identical panel stopped ~30px short of the card edge
+   depending on which chapter you were reading.
+   All eleven of these cards pad by exactly clamp(22px, 2.4vw, 30.5px), with no
+   media-query override, so one negative inline margin cancels it for all of
+   them; the same value returns as padding so the panel's CONTENTS stay lined
+   up with the rest of the card and only its background, top rule and accent
+   line reach the edges. Grouped rather than copied into eleven blocks — they
+   are one component, and they drifted apart precisely because it was eleven
+   copies. Must stay after those rules: several set `width: 100%`, and this
+   wins on source order at equal specificity.
+   Left/right only, matching Attachment Style — the card's bottom padding is
+   unchanged. */
+.report-beliefs__details,
+.report-reward__details,
+.report-energy__details,
+.report-arousal__details,
+.report-enjoy__details,
+.report-partnership__details,
+.report-accel__details,
+.report-power__details,
+.report-fantasy__details,
+.report-curiosity__details,
+.report-lovelang__details,
+/* The amber variant of the same dropdown — a left accent bar instead of a top
+   rule, no ::before line. Found by enumerating every `__details-summary` in
+   the sheet rather than every accent line, which is what turned these four up:
+   going by the line alone would have fixed twelve panels and left four
+   identical-looking ones inset. Their bar lands on the card edge and their
+   contents keep the 3.4px offset the bar already gave them. */
+.report-confidence__details,
+.report-initiation__details,
+.report-insecurities__details,
+.report-libido__details {
+  width: calc(100% + 2 * clamp(22px, 2.4vw, 30.5px));
+  margin-inline: clamp(-30.5px, -2.4vw, -22px);
+  padding-inline: clamp(22px, 2.4vw, 30.5px);
+  /* And down to the card's bottom edge. The panel reached the left and right
+     edges but stopped 31.5px short of the bottom, leaving a white band under
+     its tinted background and accent bar — the panel looked like it had been
+     cut off rather than closing the card. Verified safe: every one of these
+     panels is its card's last child, so pulling into the bottom padding cannot
+     overlap anything. The card's overflow:hidden clips it to the radius. */
+  margin-bottom: clamp(-30.5px, -2.4vw, -22px);
+}
+
+/* Narrower box on small screens, so the shape-relative gradient resolves to a
+   steeper angle — same stops, 180deg - atan(1.675 * H / W) at 312x99. */
+@media (max-width: 767px) {
+  .report-reward__stat {
+    background:
+      linear-gradient(#fcfbfe, #fcfbfe) padding-box,
+      linear-gradient(152deg, #fa6941 0%, #a78af9 41%, #e9d4ff 76%) border-box;
+  }
+}
+
+/* ── Reward meters draw in ─────────────────────────────────────────────────
+   The list already carries `is-revealed` from useRevealOnView, so the meters
+   can animate off it with no component change. Each fill grows from zero and
+   its dot rides the growing end — width and left animate together on the same
+   curve, so the dot never detaches from the bar it terminates. Staggered top to
+   bottom in the rows' own rank order, which is the order the numbers 01–04 ask
+   you to read them in. Only four rows, so nth-child carries the stagger rather
+   than threading an index through the component. */
+.report-reward__meter-fill,
+.report-reward__meter-dot {
+  transition:
+    width 880ms cubic-bezier(0.16, 1, 0.3, 1),
+    left 880ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 320ms ease;
+  transition-delay: calc(var(--meter-row, 0) * 120ms);
+}
+
+.report-reward__list > *:nth-child(1) {
+  --meter-row: 0;
+}
+.report-reward__list > *:nth-child(2) {
+  --meter-row: 1;
+}
+.report-reward__list > *:nth-child(3) {
+  --meter-row: 2;
+}
+.report-reward__list > *:nth-child(4) {
+  --meter-row: 3;
+}
+
+/* Pre-reveal state. The final width/left are inline (per-archetype), so the
+   start state is expressed here and released on reveal rather than duplicating
+   the values. */
+.report-reward__list:not(.is-revealed) .report-reward__meter-fill {
+  width: 0 !important;
+}
+
+.report-reward__list:not(.is-revealed) .report-reward__meter-dot {
+  left: 0 !important;
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .report-reward__meter-fill,
+  .report-reward__meter-dot {
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+  }
+}
+
+/* ── Energy readouts: the three segmented bars fill in ─────────────────────
+   They were static — the segments simply appeared already filled. Each lit
+   segment now wipes in from its left edge, stepping along the bar and then down
+   the three rows, so the eye reads energy → risk → endurance in order rather
+   than being handed three finished bars at once. Rides the same
+   `.report-section.is-visible` trigger the charts use, so it needs no component
+   change and stays in step with the graph below it. Unlit segments are the
+   track and stay put. */
+.report-energy__readout-seg.is-on {
+  transform-origin: left center;
+  transform: scaleX(0);
+  opacity: 0;
+  transition:
+    transform 520ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 240ms ease;
+  transition-delay: calc(var(--seg, 0) * 85ms + var(--readout-row, 0) * 200ms);
+}
+
+.report-section.is-visible .report-energy__readout-seg.is-on,
+.report-chart-reveal.is-revealed .report-energy__readout-seg.is-on {
+  transform: scaleX(1);
+  opacity: 1;
+}
+
+.report-energy__readouts > *:nth-child(1) {
+  --readout-row: 0;
+}
+.report-energy__readouts > *:nth-child(2) {
+  --readout-row: 1;
+}
+.report-energy__readouts > *:nth-child(3) {
+  --readout-row: 2;
+}
+
+.report-energy__readout-segments > *:nth-child(1) {
+  --seg: 0;
+}
+.report-energy__readout-segments > *:nth-child(2) {
+  --seg: 1;
+}
+.report-energy__readout-segments > *:nth-child(3) {
+  --seg: 2;
+}
+.report-energy__readout-segments > *:nth-child(4) {
+  --seg: 3;
+}
+.report-energy__readout-segments > *:nth-child(5) {
+  --seg: 4;
+}
+.report-energy__readout-segments > *:nth-child(6) {
+  --seg: 5;
+}
+
+/* The reader's own curve keeps a slow glow once it has finished drawing, so the
+   line reads as live energy rather than a printed stroke. Starts after the
+   1.6s draw so the two never overlap. */
+/* BOTH animations in one shorthand. Declaring the glow on its own here silently
+   replaced `w-draw-line` — this selector outranks the generic
+   `.report-chart-reveal.is-revealed .report-draw-line`, and `animation` is a
+   shorthand, so the draw was dropped and the line stayed at stroke-dashoffset:1,
+   i.e. never drawn at all. The draw values below must stay in step with that
+   rule. */
+.report-energy-graph.is-revealed .report-draw-line {
+  animation:
+    w-draw-line 1.6s linear 0.15s forwards,
+    energy-line-breathe 5.5s ease-in-out 1.9s infinite;
+}
+
+@keyframes energy-line-breathe {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 0 rgba(157, 138, 215, 0));
+  }
+  50% {
+    filter: drop-shadow(0 0 5px rgba(157, 138, 215, 0.55));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .report-energy__readout-seg.is-on {
+    transform: scaleX(1) !important;
+    opacity: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+  }
+
+  .report-energy-graph .report-draw-line {
+    animation: none !important;
+  }
+}
+
+/* ── Power plane: arrival ──────────────────────────────────────────────────
+   Reuses the choreography built for the attachment map and the two dot strips
+   rather than inventing a fourth dialect: axes grow out of the crossing point,
+   the fourteen dots settle in on a spring, the reader's zone blooms open and
+   then keeps a slow breath, and their own dot carries the same radar ping the
+   Importance and Confidence strips use. Consistency across the report's charts
+   is the point — these should feel like one instrument, not four. */
+.report-power-plane__axis {
+  transition: transform 720ms cubic-bezier(0.16, 1, 0.3, 1) 120ms;
+}
+
+.report-power-plane__axis--v {
+  transform: scaleY(0);
+}
+
+.report-power-plane__axis--h {
+  transform: scaleX(0);
+}
+
+.report-power-plane.is-animated .report-power-plane__axis--v {
+  transform: scaleY(1);
+}
+
+.report-power-plane.is-animated .report-power-plane__axis--h {
+  transform: scaleX(1);
+}
+
+/* Spring, so the dots land rather than merely appear. */
+.report-power-plane__dot {
+  transition:
+    opacity 360ms ease,
+    transform 520ms cubic-bezier(0.34, 1.45, 0.64, 1);
+}
+
+/* Blooms open, then hands to a slow breath — BOTH in one shorthand, since a
+   second `animation` declaration would silently replace the first. */
+.report-power-plane.is-animated .report-power-plane__zone {
+  animation:
+    power-zone-in 1000ms cubic-bezier(0.16, 1, 0.3, 1) 260ms both,
+    power-zone-breathe 7.5s ease-in-out 1260ms infinite;
+}
+
+@keyframes power-zone-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.74);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+@keyframes power-zone-breathe {
+  0%,
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.04);
+  }
+}
+
+.report-power-plane.is-animated .report-power-plane__dot.is-you::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  border: 1.5px solid rgb(var(--dot-accent-rgb, 157 138 215) / 0.7);
+  pointer-events: none;
+  animation: report-importance-ping 3400ms linear 1100ms infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .report-power-plane__axis--v {
+    transform: scaleY(1) !important;
+  }
+
+  .report-power-plane__axis--h {
+    transform: scaleX(1) !important;
+  }
+
+  .report-power-plane__zone {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: translate(-50%, -50%) !important;
+  }
+
+  .report-power-plane__dot.is-you::before {
+    display: none;
+  }
+}
+
+/* ── Power plane: pick-nearest interaction ─────────────────────────────────
+   Pinned readout. Deliberately NOT floating at the dot: the mobile frame is
+   272x166 and the closest pair is 11.2px apart, so a label at the dot would sit
+   under the finger doing the selecting, and a nowrap archetype name near an
+   edge would overflow the frame. A fixed slot can do neither. */
+.report-power-plane__readout {
+  position: absolute;
+  left: 50%;
+  top: 8px;
+  transform: translate(-50%, -4px);
+  padding: 5px 12px;
+  border-radius: 9999px;
+  background: #161021;
+  color: #ffffff;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  max-width: calc(100% - 16px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: 0 8px 20px -8px rgba(22, 16, 33, 0.5);
+  opacity: 0;
+  filter: blur(3px);
+  pointer-events: none;
+  z-index: 5;
+  transition:
+    opacity 190ms ease,
+    filter 240ms ease,
+    transform 420ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.report-power-plane__readout.is-on {
+  opacity: 1;
+  filter: blur(0);
+  transform: translate(-50%, 0);
+}
+
+/* Specificity must beat `.report-power-plane.is-animated .report-power-plane__dot`
+   (3 classes), which sets transform: scale(1) for the reveal — at 2 classes this
+   scale was silently discarded and the picked dot never grew.
+   The delay reset matters just as much: the reveal carries up to 364ms of
+   per-dot stagger, and inheriting it would drag the highlight a third of a
+   second behind the pointer. */
+.report-power-plane.is-animated .report-power-plane__dot.is-active,
+.report-power-plane__dot.is-active {
+  z-index: 4;
+  transform: scale(1.55);
+  transition-delay: 0ms;
+}
+
+.report-power-plane.is-animated .report-power-plane__dot.is-muted,
+.report-power-plane__dot.is-muted {
+  transition-delay: 0ms;
+}
+
+.report-power-plane__dot.is-active::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  border: 1.5px solid rgb(var(--dot-accent-rgb, 157 138 215) / 0.55);
+  animation: report-importance-ping 1400ms cubic-bezier(0.16, 1, 0.3, 1) 1;
+  pointer-events: none;
+}
+
+/* Everything else recedes so the picked dot reads without shouting. */
+.report-power-plane__dot.is-muted {
+  opacity: 0.28;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .report-power-plane__readout {
+    filter: none !important;
+    transform: translate(-50%, 0) !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .report-power-plane__dot.is-active::after {
+    display: none;
+  }
+}
+
+/* Narrower box on small screens; same stops, steeper shape-relative angle. */
+@media (max-width: 767px) {
+  .report-arousal__stats {
+    background:
+      linear-gradient(#fcfbfe, #fcfbfe) padding-box,
+      linear-gradient(152deg, #fa6941 0%, #a78af9 41%, #e9d4ff 76%) border-box;
+  }
+}
+
+@media (max-width: 767px) {
+  .report-initiation__stat {
+    background:
+      linear-gradient(#fcfbfe, #fcfbfe) padding-box,
+      linear-gradient(152deg, #fa6941 0%, #a78af9 41%, #e9d4ff 76%) border-box;
+  }
+}
+
+/* Arousal mini-stat graphics — the frame's dot row and gradient bar, which the
+   box was missing entirely. Geometry matches the Reward stat dots so the two
+   boxes read as the same component. */
+.report-arousal__stat-dots {
+  display: block;
+  width: auto;
+  height: 11.41px;
+  max-width: 100%;
+  margin: 0 0 6px;
+}
+
+.report-arousal__stat-bar {
+  display: block;
+  width: 72px;
+  max-width: 100%;
+  height: 8px;
+  margin: 2px 0 8px;
+  border-radius: 9999px;
+  background: #f1eef9;
+  overflow: hidden;
+}
+
+.report-arousal__stat-bar > span {
+  display: block;
+  width: 62%;
+  height: 100%;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, #b7a6e3 0%, #795fc8 100%);
+}
+
+/* ── Curiosity + Relationship Form: the same arrival standard ──────────────
+   Both sections' rows appeared fully formed. They now build in the order they
+   are meant to be read, riding the shared `.report-section.is-visible` trigger
+   so no component changes are needed and they stay in step with the charts. */
+.report-curiosity__fit-dot,
+.report-curiosity__struct-item,
+.report-partnership__row,
+.report-partnership__orbit-step {
+  opacity: 0;
+  transform: translateY(5px);
+  transition:
+    opacity 380ms ease,
+    transform 560ms cubic-bezier(0.34, 1.4, 0.64, 1);
+  transition-delay: calc(var(--rowi, 0) * 95ms);
+}
+
+/* Dots pop rather than rise — they read as marks on a scale, not as text. */
+.report-curiosity__fit-dot {
+  transform: scale(0.4);
+}
+
+.report-section.is-visible .report-curiosity__fit-dot,
+.report-chart-reveal.is-revealed .report-curiosity__fit-dot {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.report-section.is-visible .report-curiosity__struct-item,
+.report-section.is-visible .report-partnership__row,
+.report-section.is-visible .report-partnership__orbit-step,
+.report-chart-reveal.is-revealed .report-curiosity__struct-item,
+.report-chart-reveal.is-revealed .report-partnership__row,
+.report-chart-reveal.is-revealed .report-partnership__orbit-step {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.report-curiosity__fit-list > *:nth-child(1),
+.report-curiosity__struct-list > *:nth-child(1),
+.report-partnership__rows > *:nth-child(1),
+.report-partnership__orbit > *:nth-child(1) {
+  --rowi: 0;
+}
+.report-curiosity__fit-list > *:nth-child(2),
+.report-curiosity__struct-list > *:nth-child(2),
+.report-partnership__rows > *:nth-child(2),
+.report-partnership__orbit > *:nth-child(2) {
+  --rowi: 1;
+}
+.report-curiosity__fit-list > *:nth-child(3),
+.report-curiosity__struct-list > *:nth-child(3),
+.report-partnership__rows > *:nth-child(3),
+.report-partnership__orbit > *:nth-child(3) {
+  --rowi: 2;
+}
+.report-curiosity__fit-list > *:nth-child(4),
+.report-curiosity__struct-list > *:nth-child(4),
+.report-partnership__rows > *:nth-child(4),
+.report-partnership__orbit > *:nth-child(4) {
+  --rowi: 3;
+}
+.report-curiosity__fit-list > *:nth-child(5),
+.report-curiosity__struct-list > *:nth-child(5),
+.report-partnership__rows > *:nth-child(5),
+.report-partnership__orbit > *:nth-child(5) {
+  --rowi: 4;
+}
+
+/* Dots step along their own row on top of the row's own delay. */
+.report-curiosity__fit-dots > *:nth-child(2) {
+  --rowi: 1;
+}
+.report-curiosity__fit-dots > *:nth-child(3) {
+  --rowi: 2;
+}
+.report-curiosity__fit-dots > *:nth-child(4) {
+  --rowi: 3;
+}
+.report-curiosity__fit-dots > *:nth-child(5) {
+  --rowi: 4;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .report-curiosity__fit-dot,
+  .report-curiosity__struct-item,
+  .report-partnership__row,
+  .report-partnership__orbit-step {
+    opacity: 1 !important;
+    transform: none !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+  }
+}
+
+/* ── The Over-Giving Loop: the arrow behaves like a loop ───────────────────
+   The curve draws itself in, then a bright short segment runs the path forever.
+   The section's whole claim is that the cycle has not stopped, so a static
+   arrow undersells it — a current still moving says it without a word of copy.
+   The three steps light in sequence and then keep re-lighting 1 -> 2 -> 3 on
+   the same 3.2s period as the current, so the chips and the arrow are visibly
+   the same loop rather than two unrelated animations. */
+.report-libido__loop-curve {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+}
+
+.report-libido__loop.is-revealed .report-libido__loop-curve {
+  animation: libido-loop-draw 1100ms cubic-bezier(0.16, 1, 0.3, 1) 200ms forwards;
+}
+
+@keyframes libido-loop-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Hidden until the base curve has finished drawing. */
+.report-libido__loop-current {
+  stroke-dasharray: 0.14 0.86;
+  stroke-dashoffset: 1;
+  opacity: 0;
+}
+
+.report-libido__loop.is-revealed .report-libido__loop-current {
+  animation:
+    libido-loop-fade 400ms ease 1300ms forwards,
+    libido-loop-travel 3200ms linear 1300ms infinite;
+}
+
+@keyframes libido-loop-fade {
+  to {
+    opacity: 0.85;
+  }
+}
+
+@keyframes libido-loop-travel {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.report-libido__loop-head {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.report-libido__loop.is-revealed .report-libido__loop-head {
+  animation: libido-loop-head 3200ms ease-in-out 1300ms infinite;
+}
+
+@keyframes libido-loop-head {
+  0%,
+  62%,
+  100% {
+    fill-opacity: 0.45;
+    transform: scale(1);
+  }
+  /* Brightens as the current arrives at the head. */
+  78% {
+    fill-opacity: 1;
+    transform: scale(1.18);
+  }
+}
+
+/* Each chip re-lights as the current passes it. */
+.report-libido__loop.is-revealed .report-libido__loop-chip {
+  animation: libido-chip-pulse 3200ms ease-in-out infinite;
+  animation-delay: calc(1300ms + var(--chip, 0) * 620ms);
+}
+
+.report-libido__loop-steps > *:nth-child(1) {
+  --chip: 0;
+}
+.report-libido__loop-steps > *:nth-child(2) {
+  --chip: 1;
+}
+.report-libido__loop-steps > *:nth-child(3) {
+  --chip: 2;
+}
+
+@keyframes libido-chip-pulse {
+  0%,
+  22%,
+  100% {
+    border-color: rgba(157, 138, 215, 0.18);
+    background-color: #ffffff;
+  }
+  9% {
+    border-color: rgba(157, 138, 215, 0.55);
+    background-color: rgba(157, 138, 215, 0.06);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .report-libido__loop-curve {
+    stroke-dashoffset: 0 !important;
+    animation: none !important;
+  }
+
+  .report-libido__loop-current,
+  .report-libido__loop-head,
+  .report-libido__loop-chip {
+    animation: none !important;
+  }
+
+  .report-libido__loop-current {
+    opacity: 0 !important;
+  }
+}
+
+/* ── The Imbalance Loop orbit: make the cycle run ──────────────────────────
+   Three boxes sat static around a static ring. Same treatment as the libido
+   loop, for the same reason: the section's claim is that the cycle keeps
+   turning, so the diagram should turn. Each step's dot lights in turn on one
+   shared 4.2s period, and the dashed arc that carries you to the NEXT step
+   brightens as the hand-off happens — so the ring reads as one circuit rather
+   than three decorations. */
+.report-partnership__orbit-dot {
+  animation: partner-orbit-dot 4200ms ease-in-out infinite;
+  animation-delay: calc(var(--orbit-i, 0) * 1400ms);
+}
+
+.report-partnership__orbit-step--1 {
+  --orbit-i: 0;
+}
+.report-partnership__orbit-step--2 {
+  --orbit-i: 1;
+}
+.report-partnership__orbit-step--3 {
+  --orbit-i: 2;
+}
+
+@keyframes partner-orbit-dot {
+  0%,
+  26%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(157, 138, 215, 0);
+  }
+  10% {
+    transform: scale(1.5);
+    box-shadow: 0 0 0 5px rgba(157, 138, 215, 0.18);
+  }
+}
+
+/* The arc into each step brightens as that step lights. */
+.report-partnership__orbit-hop {
+  animation: partner-orbit-hop 4200ms ease-in-out infinite;
+  animation-delay: calc(var(--row, 0) * 1400ms);
+}
+
+@keyframes partner-orbit-hop {
+  0%,
+  30%,
+  100% {
+    opacity: 0.45;
+  }
+  12% {
+    opacity: 1;
+  }
+}
+
+/* Hover: the step lifts and takes focus, the rest recede. Pointer devices only
+   — there is no hover to reward on touch, and dimming the other two under a
+   finger would just make the diagram harder to read. */
+@media (hover: hover) and (pointer: fine) {
+  .report-partnership__orbit-step {
+    transition:
+      transform 420ms cubic-bezier(0.22, 1, 0.36, 1),
+      box-shadow 420ms ease,
+      opacity 300ms ease;
+  }
+
+  .report-partnership__orbit-step:hover {
+    transform: translateY(-3px) scale(1.03);
+    box-shadow: 0 14px 30px -14px rgba(22, 16, 33, 0.28);
+    z-index: 3;
+  }
+
+  /* Carries the `.report-section.is-visible` prefix so it outranks the arrival
+     rule, which sets opacity:1 on these same steps — without it the dim was
+     silently losing and the siblings never receded. */
+  .report-section.is-visible
+    .report-partnership__orbit:has(.report-partnership__orbit-step:hover)
+    .report-partnership__orbit-step:not(:hover),
+  .report-partnership__orbit:has(.report-partnership__orbit-step:hover)
+    .report-partnership__orbit-step:not(:hover) {
+    opacity: 0.42;
+  }
+
+  /* Its own dot holds lit while hovered rather than continuing the cycle. */
+  .report-partnership__orbit-step:hover .report-partnership__orbit-dot {
+    animation: none;
+    transform: scale(1.5);
+    box-shadow: 0 0 0 5px rgba(157, 138, 215, 0.22);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .report-partnership__orbit-dot,
+  .report-partnership__orbit-hop {
+    animation: none !important;
+  }
+
+  .report-partnership__orbit-step:hover {
+    transform: none !important;
+  }
 }

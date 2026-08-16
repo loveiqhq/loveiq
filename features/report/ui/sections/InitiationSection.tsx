@@ -5,6 +5,7 @@ import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import { getReportTheme } from "../reportTheme";
 import { useRevealOnView } from "../hooks/useRevealOnView";
+import { rewardStatDots } from "./RewardSection";
 
 /**
  * Server-resolved initiation copy (`getReport2Section(name, "initiation")`),
@@ -206,13 +207,19 @@ const TimelineChart: FC<{ fam: ChartFamily }> = ({ fam }) => {
  * one filled — "1 in 10 make the first move". Universal decorative framing that
  * accompanies the per-archetype stat number/caption.
  */
-const StatDots: FC = () => (
-  <span className="report-initiation__stat-dots" aria-hidden="true">
-    {Array.from({ length: 6 }, (_, i) => (
-      <span key={i} className={`report-initiation__stat-dot${i === 0 ? " is-on" : ""}`} />
-    ))}
-  </span>
-);
+const StatDots: FC<{ stat?: string | null }> = ({ stat }) => {
+  // Derived from the stat, not a fixed six: the comment above describes "1 in
+  // 10" while six dots were drawn, so the graphic contradicted the number
+  // beside it. Same rule as the Reward and Arousal boxes.
+  const { filled, total } = rewardStatDots(stat);
+  return (
+    <span className="report-initiation__stat-dots" aria-hidden="true">
+      {Array.from({ length: total }, (_, i) => (
+        <span key={i} className={`report-initiation__stat-dot${i < filled ? " is-on" : ""}`} />
+      ))}
+    </span>
+  );
+};
 
 const InitiationSection: FC<Props> = ({
   archetype,
@@ -324,7 +331,7 @@ const InitiationSection: FC<Props> = ({
 
             {hasStat ? (
               <div className="report-initiation__stat">
-                <StatDots />
+                <StatDots stat={stat} />
                 <span className="report-initiation__stat-value">{stat}</span>
                 <span className="report-initiation__stat-caption">{statCaption}</span>
               </div>

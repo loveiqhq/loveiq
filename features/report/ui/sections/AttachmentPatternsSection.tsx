@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, type FC } from "react";
+import { useId, useState, type FC } from "react";
+import { useRevealOnView } from "../hooks/useRevealOnView";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import { renderEduPara } from "./eduPara";
@@ -240,15 +241,43 @@ const AttachmentPlane: FC<{ plane: AttachmentPlane }> = ({ plane }) => {
   const home = plane.home;
   const strain = plane.strain;
   const pct = (n: number) => `${(n * 100).toFixed(2)}%`;
+  const [planeRef, revealed] = useRevealOnView<HTMLDivElement>({ threshold: 0.3 });
+  // Two planes can render on one page (the map and its locked stand-in), and a
+  // duplicated mask id would make the first one's mask win for both.
+  const driftMaskId = `attach-drift-${useId().replace(/:/g, "")}`;
+
+  /**
+   * A label normally hangs under its dot, but a dot low in the field would push
+   * its label off the bottom edge, so those flip above. Figma places these by
+   * hand per scale — under the dot on scale 2, above it on the mobile scale 3,
+   * beside it on the base — and a rule that reads the dot's own position
+   * reproduces all three instead of hardcoding one scale's choice. The
+   * threshold is 0.82, not 0.7: the base scale's home dot sits at y=0.715 and
+   * Figma keeps ITS label underneath, so a lower bar flips a label the design
+   * leaves alone.
+   */
+  const labelFlip = (p: { y: number }) => (p.y > 0.82 ? " is-above" : "");
 
   return (
-    <div className="report-attachment-plane" role="img" aria-label="Attachment map">
-      <div
-        className="report-attachment-plane__ring report-attachment-plane__ring--outer"
-        aria-hidden="true"
-      />
-      <div
-        className="report-attachment-plane__ring report-attachment-plane__ring--inner"
+    <div
+      ref={planeRef}
+      className={`report-attachment-plane${revealed ? " is-revealed" : ""}`}
+      role="img"
+      aria-label="Attachment map"
+    >
+      {/* The field is a rounded SQUARE split into four quadrants — Figma
+          8427:1488 (441px panel, 15px radius, #edecef hairline on #faf8fe).
+          This used to render two concentric rings, i.e. a circular field, which
+          is a different chart entirely: a quadrant map says "which of these
+          four states are you in", rings say "how far from centre", and the
+          corner labels only mean anything against quadrants. */}
+      <span className="report-attachment-plane__field" aria-hidden="true" />
+      {/* Sits ABOVE the field and outside its clip: in the design the glow
+          spills past the panel edge into the margin, so it cannot be a
+          background of the field itself. */}
+      <span
+        className="report-attachment-plane__glow"
+        style={{ left: pct(home.x), top: pct(home.y) }}
         aria-hidden="true"
       />
       <span
@@ -272,13 +301,27 @@ const AttachmentPlane: FC<{ plane: AttachmentPlane }> = ({ plane }) => {
       ))}
 
       {strain ? (
+        /* The trail draws itself from the home dot outward. A dashed stroke
+           can't be drawn with stroke-dashoffset — that just slides the dashes
+           along — so the dashes are revealed through a mask whose own solid
+           stroke is what animates, at pathLength 1 so the timing is identical
+           for every scale's curve regardless of its length. */
         <svg
           className="report-attachment-plane__drift"
           viewBox="0 0 100 100"
           preserveAspectRatio="none"
           aria-hidden="true"
         >
-          <path d={driftPath(home, strain)} />
+          <defs>
+            <mask id={driftMaskId} maskUnits="userSpaceOnUse">
+              <path
+                className="report-attachment-plane__drift-reveal"
+                d={driftPath(home, strain)}
+                pathLength={1}
+              />
+            </mask>
+          </defs>
+          <path d={driftPath(home, strain)} mask={`url(#${driftMaskId})`} />
         </svg>
       ) : null}
 
@@ -286,11 +329,9 @@ const AttachmentPlane: FC<{ plane: AttachmentPlane }> = ({ plane }) => {
         className="report-attachment-plane__dot report-attachment-plane__dot--home"
         style={{ left: pct(home.x), top: pct(home.y) }}
         aria-hidden="true"
-      >
-        <span className="report-attachment-plane__aura" />
-      </span>
+      />
       <span
-        className="report-attachment-plane__dot-label report-attachment-plane__dot-label--home"
+        className={`report-attachment-plane__dot-label report-attachment-plane__dot-label--home${labelFlip(home)}`}
         style={{ left: pct(home.x), top: pct(home.y) }}
       >
         {plane.homeLabel}
@@ -304,7 +345,7 @@ const AttachmentPlane: FC<{ plane: AttachmentPlane }> = ({ plane }) => {
             aria-hidden="true"
           />
           <span
-            className="report-attachment-plane__dot-label report-attachment-plane__dot-label--strain"
+            className={`report-attachment-plane__dot-label report-attachment-plane__dot-label--strain${labelFlip(strain)}`}
             style={{ left: pct(strain.x), top: pct(strain.y) }}
           >
             {plane.strainLabel}
@@ -327,6 +368,44 @@ const AttachmentPatternsSection: FC<Props> = ({
   tier = "essentials",
 }) => {
   const [expanded, setExpanded] = useState(false);
+
+  /* Defined once and rendered in two places: inside the expanded explainer
+     for a reader who opened it, and directly in the locked peek. These five
+     patterns are UNIVERSAL, not per-archetype, so putting them inside the
+     explainer alone would have paywalled free educational content — which is
+     exactly what the locked-state test guards against.  */
+  const patternsBlock = (
+    <div className="report-attachment__patterns">
+      <h3 className="report-attachment__patterns-title">
+        Common Attachment Style Patterns Across Archetypes
+      </h3>
+      <div className="report-attachment__patterns-grid">
+        {ATTACHMENT_FAMILY_CARDS.map((card) => (
+          <div key={card.title} className="report-attachment-family">
+            <h4 className="report-attachment-family__title">{card.title}</h4>
+            <p className="report-attachment-family__body">{card.body}</p>
+            <div className="report-attachment-family__chips-wrap">
+              <p className="report-attachment-family__chips-label">Associated Archetypes</p>
+              <div className="report-attachment-family__chips">
+                {card.chips.map((chip) => (
+                  <span
+                    key={chip.label}
+                    className="report-attachment-family__chip"
+                    style={{
+                      borderColor: chip.color,
+                      backgroundColor: `color-mix(in srgb, ${chip.color} 20%, transparent)`,
+                    }}
+                  >
+                    {chip.label}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
   if (!copy) return null;
 
   const locked = copy.locked;
@@ -460,18 +539,14 @@ const AttachmentPatternsSection: FC<Props> = ({
           <AttachmentPlane plane={plane} />
         ) : (
           <div
-            className="report-attachment-plane report-attachment-plane--empty"
+            /* is-revealed from the start: this stand-in never mounts the reveal
+               observer, and without it the shared arrival styles would leave
+               the field and its labels sitting at opacity 0 forever. */
+            className="report-attachment-plane report-attachment-plane--empty is-revealed"
             role="img"
             aria-label="Attachment map"
           >
-            <div
-              className="report-attachment-plane__ring report-attachment-plane__ring--outer"
-              aria-hidden="true"
-            />
-            <div
-              className="report-attachment-plane__ring report-attachment-plane__ring--inner"
-              aria-hidden="true"
-            />
+            <span className="report-attachment-plane__field" aria-hidden="true" />
             <span
               className="report-attachment-plane__axis report-attachment-plane__axis--v"
               aria-hidden="true"
@@ -544,6 +619,7 @@ const AttachmentPatternsSection: FC<Props> = ({
                       {locked ? "Unlock to read the full explanation" : "Read the full explanation"}
                     </button>
                   ) : null}
+                  {locked ? patternsBlock : null}
                 </div>
               ) : (
                 <div className="report-attachment__details-body">
@@ -557,41 +633,11 @@ const AttachmentPatternsSection: FC<Props> = ({
                       {renderEduPara(para)}
                     </p>
                   ))}
+                  {patternsBlock}
                 </div>
               )}
             </div>
           ) : null}
-
-          <div className="report-attachment__patterns">
-            <h3 className="report-attachment__patterns-title">
-              Common Attachment Style Patterns Across Archetypes
-            </h3>
-            <div className="report-attachment__patterns-grid">
-              {ATTACHMENT_FAMILY_CARDS.map((card) => (
-                <div key={card.title} className="report-attachment-family">
-                  <h4 className="report-attachment-family__title">{card.title}</h4>
-                  <p className="report-attachment-family__body">{card.body}</p>
-                  <div className="report-attachment-family__chips-wrap">
-                    <p className="report-attachment-family__chips-label">Associated Archetypes</p>
-                    <div className="report-attachment-family__chips">
-                      {card.chips.map((chip) => (
-                        <span
-                          key={chip.label}
-                          className="report-attachment-family__chip"
-                          style={{
-                            borderColor: chip.color,
-                            backgroundColor: `color-mix(in srgb, ${chip.color} 20%, transparent)`,
-                          }}
-                        >
-                          {chip.label}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
       </article>
     </div>

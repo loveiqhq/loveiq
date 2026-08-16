@@ -92,6 +92,41 @@ const DOT_XS = [
   0.9291, 0.9691,
 ] as const;
 
+/**
+ * Per-dot colour, sampled straight off Figma 8427:1577 in x order.
+ *
+ * The frame gives every dot its own archetype accent; ours painted all fourteen
+ * the same flat rgba(157,138,215,0.45), so thirteen archetypes were rendered as
+ * anonymous grey-purple and only the reader's own dot carried colour.
+ *
+ * The index mapping is measured, not assumed: solving the axis span from the
+ * first and last dot predicts every intermediate dot's x to within 1px of
+ * DOT_XS, and index 5 comes back both #9d8ad7 (Spiritual Lover, the archetype
+ * this frame mocks) and physically wider than its neighbours — the "you" dot,
+ * exactly where DOT_XS puts it at 0.4909. Index 1 is grey because it is
+ * Minimalist Companion; it needs sampling off the axis line to isolate, since a
+ * saturation test drops it.
+ *
+ * No archetype→dot identity is named here — these stay anonymous markers as the
+ * frame intends. Only their colour is restored.
+ */
+const DOT_COLORS = [
+  "#9fc4df",
+  "#cccac8",
+  "#c9f7f5",
+  "#bb96f0",
+  "#e7bdc9",
+  "#9d8ad7",
+  "#92f2bf",
+  "#e5a1a2",
+  "#81efe6",
+  "#f5bb6e",
+  "#f59c82",
+  "#e7c78d",
+  "#f57898",
+  "#94b9ac",
+] as const;
+
 // The reader's dot for Spiritual Lover sits at index 5 (x 0.4909) in the Figma.
 const SPIRITUAL_LOVER_YOU_X = 0.4909;
 
@@ -156,6 +191,7 @@ const ConfidenceStripGraphic: FC<{
           const style = {
             "--dot-x": `${x * 100}%`,
             "--dot-order": i,
+            "--dot-color": DOT_COLORS[i] ?? "#9d8ad7",
             ...(isYou ? { "--dot-accent-rgb": hexToRgbTriplet(youAccent) } : {}),
           } as CSSProperties;
           return (

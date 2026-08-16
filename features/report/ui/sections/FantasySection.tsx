@@ -334,11 +334,12 @@ const FantasySection: FC<Props> = ({
             {copy.chartnote1 ? (
               <p className="report-fantasy__chartnote">{copy.chartnote1}</p>
             ) : null}
-            {copy.chartnote2 ? (
-              <p className="report-fantasy__chartnote report-fantasy__chartnote--muted">
-                {copy.chartnote2}
-              </p>
-            ) : null}
+            {/* chartnote2 is NOT rendered. Its copy is an internal handoff note to
+                whoever built this section — "Each report ships its own 8-label set
+                (one per quadrant minimum)" — describing how the chart is authored,
+                not anything a reader needs. It was shipping verbatim under the map
+                for all 14 archetypes. Left in the copy data rather than deleted,
+                since that file is the copy owner's, but it must not render. */}
           </>
         )}
 

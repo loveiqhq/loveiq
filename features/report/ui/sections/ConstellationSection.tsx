@@ -35,6 +35,18 @@ interface Props {
 
 type CssVarStyle = CSSProperties & Record<`--${string}`, string | number>;
 
+/**
+ * Chips whose glyph is painted dark rather than white.
+ *
+ * Sampled from every one of the 14 chips in Figma 8427:1070: twelve carry a
+ * white glyph on a saturated fill, these two carry #000000. For Quiet
+ * Withdrawer that is not a stylistic choice — its accent is #C7F3F1, so the
+ * hardcoded white this replaces put a 1.16:1 glyph on the chip, i.e. an icon
+ * that was effectively invisible. Analytical Sexualist is the designer's call
+ * on a vivid #6A00FF fill, and still clears 3:1.
+ */
+const DARK_GLYPH_CHIPS = new Set(["Analytical Sexualist", "Quiet Withdrawer"]);
+
 const padRank = (n: number) => n.toString().padStart(2, "0");
 const formatPct = (pct: number) => `${pct.toFixed(1)}%`;
 
@@ -93,6 +105,7 @@ const ConstellationSection: FC<Props> = ({
           const rowStyle: CssVarStyle = {
             "--accent": theme.accent,
             "--accent-rgb": hexToRgbTriplet(theme.accent),
+            "--icon-ink": DARK_GLYPH_CHIPS.has(name) ? "#000000" : "#ffffff",
             "--fill-fraction": fillFraction,
             // Staggers this bar behind the one above it (see .report-chart-reveal).
             "--row": idx,

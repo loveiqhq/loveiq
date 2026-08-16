@@ -201,7 +201,34 @@ const RewardRow: FC<{
  * piece missing from the section: the card, its border, the stat type and the
  * caption already matched the design, but the dot row was absent entirely.
  */
-const REWARD_STAT_DOT_XS = [5.705, 22.0058, 38.3048, 54.6054, 70.9042, 87.205, 103.506] as const;
+/** Figma's geometry: d=11.41 dots on a 16.3 pitch. */
+const DOT_D = 11.41;
+const DOT_PITCH = 16.3;
+const DOT_FALLBACK = { filled: 1, total: 7 };
+
+/**
+ * How many dots to draw, read off the stat line itself.
+ *
+ * The frame hardcodes seven dots with one filled and prints "1 IN 4" beneath
+ * them, so the graphic contradicts its own number — tolerable when it read as a
+ * loose "one in many" motif, but not once a precise ratio sits directly under it
+ * inviting you to count. Deriving the row from the stat makes the two agree for
+ * every archetype instead of only the one the frame mocked.
+ *
+ * Stats that aren't a ratio ("about half", "Rarely first", "ease-led") have
+ * nothing to count, so they keep the frame's decorative seven.
+ */
+export function rewardStatDots(stat: string | null | undefined): { filled: number; total: number } {
+  const m = stat?.match(/(\d+)\s*in\s*(\d+)/i);
+  if (!m) return DOT_FALLBACK;
+  const filled = Number(m[1]);
+  const total = Number(m[2]);
+  // A row long enough to need scrolling, or one that can't be counted, helps
+  // nobody — fall back rather than render something worse than the motif.
+  if (!Number.isFinite(filled) || !Number.isFinite(total)) return DOT_FALLBACK;
+  if (total < 2 || total > 14 || filled < 1 || filled >= total) return DOT_FALLBACK;
+  return { filled, total };
+}
 
 /**
  * The reader's real ranking. Separate from the locked blurred stand-in so only
@@ -231,38 +258,42 @@ const RewardRankedList: FC<{
   );
 };
 
-const RewardStatDots: FC = () => (
-  <svg
-    className="report-reward__stat-dots"
-    viewBox="0 0 109.211 11.41"
-    fill="none"
-    aria-hidden="true"
-  >
-    <defs>
-      <linearGradient
-        id="report-reward-stat-dot"
-        x1="0"
-        y1="0"
-        x2="11.41"
-        y2="11.41"
-        gradientUnits="userSpaceOnUse"
-      >
-        <stop stopColor="#B7A6E3" />
-        <stop offset="1" stopColor="#795FC8" />
-      </linearGradient>
-    </defs>
-    {REWARD_STAT_DOT_XS.map((cx, i) => (
-      <circle
-        key={cx}
-        cx={cx}
-        cy={5.705}
-        r={5.705}
-        fill={i === 0 ? "url(#report-reward-stat-dot)" : "#9D8AD7"}
-        fillOpacity={i === 0 ? 1 : 0.16}
-      />
-    ))}
-  </svg>
-);
+const RewardStatDots: FC<{ stat?: string | null }> = ({ stat }) => {
+  const { filled, total } = rewardStatDots(stat);
+  const width = (total - 1) * DOT_PITCH + DOT_D;
+  return (
+    <svg
+      className="report-reward__stat-dots"
+      viewBox={`0 0 ${width.toFixed(3)} ${DOT_D}`}
+      fill="none"
+      aria-hidden="true"
+    >
+      <defs>
+        <linearGradient
+          id="report-reward-stat-dot"
+          x1="0"
+          y1="0"
+          x2={DOT_D}
+          y2={DOT_D}
+          gradientUnits="userSpaceOnUse"
+        >
+          <stop stopColor="#B7A6E3" />
+          <stop offset="1" stopColor="#795FC8" />
+        </linearGradient>
+      </defs>
+      {Array.from({ length: total }, (_, i) => (
+        <circle
+          key={i}
+          cx={DOT_D / 2 + i * DOT_PITCH}
+          cy={DOT_D / 2}
+          r={DOT_D / 2}
+          fill={i < filled ? "url(#report-reward-stat-dot)" : "#9D8AD7"}
+          fillOpacity={i < filled ? 1 : 0.16}
+        />
+      ))}
+    </svg>
+  );
+};
 
 const RewardSection: FC<Props> = ({
   archetype,
@@ -359,7 +390,7 @@ const RewardSection: FC<Props> = ({
 
             {hasStat ? (
               <div className="report-reward__stat">
-                <RewardStatDots />
+                <RewardStatDots stat={stat} />
                 <span className="report-reward__stat-num">{stat}</span>
                 <span className="report-reward__stat-caption">{statCaption}</span>
               </div>

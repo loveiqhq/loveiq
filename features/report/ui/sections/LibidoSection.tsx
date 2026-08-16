@@ -157,7 +157,26 @@ const LoopArrow: FC = () => (
       strokeLinecap="round"
       vectorEffect="non-scaling-stroke"
     />
-    <path d="M22.96 7.67 L15.82 10.76 L22.07 15.40 Z" fill="#9D8AD7" fillOpacity="0.45" />
+    {/* A bright short segment that travels the curve forever. The base dashed
+        path above stays put; this rides on top of it, so the line reads as a
+        current still running rather than a drawn decoration — which is the
+        whole claim of the section: the loop has not stopped. Separate path
+        because a dashed stroke cannot be drawn AND travelled at once. */}
+    <path
+      className="report-libido__loop-current"
+      d="M19.7 135.7 C4.5 127 2.4 92 6.9 71.7 C10.2 56.6 15.5 32 19.6 14.5"
+      pathLength={1}
+      stroke="#795FC8"
+      strokeWidth="1.9"
+      strokeLinecap="round"
+      vectorEffect="non-scaling-stroke"
+    />
+    <path
+      className="report-libido__loop-head"
+      d="M22.96 7.67 L15.82 10.76 L22.07 15.40 Z"
+      fill="#9D8AD7"
+      fillOpacity="0.45"
+    />
   </svg>
 );
 

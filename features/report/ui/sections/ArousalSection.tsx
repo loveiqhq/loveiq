@@ -7,6 +7,7 @@ import { renderEduPara } from "./eduPara";
 import { getReportTheme } from "../reportTheme";
 import { getArousalFamily, type ArousalFamily } from "@/data/report2-arousal";
 import { useRevealOnView } from "../hooks/useRevealOnView";
+import { rewardStatDots } from "./RewardSection";
 import { curveEndPoint } from "../curveEnd";
 
 /**
@@ -327,13 +328,65 @@ const ActDetail: FC<{
   );
 };
 
-/** One mini-stat: big value + caption (Figma 8502:684/698). */
-const MiniStat: FC<{ value: string; caption: string }> = ({ value, caption }) => (
-  <div className="report-arousal__stat">
-    <span className="report-arousal__stat-value">{value}</span>
-    <span className="report-arousal__stat-caption">{caption}</span>
-  </div>
-);
+/**
+ * One mini-stat: a graphic, the value, then the caption (Figma 8502:684/698).
+ *
+ * Both halves were text only — the frame puts a dot row above the left stat and
+ * a gradient bar above the right one, and neither was built, so the box read as
+ * two bare labels where the design has two small charts. The dot row is derived
+ * from the stat rather than fixed, the same rule the Reward box uses, so the
+ * graphic can never contradict the number printed under it.
+ */
+const MiniStat: FC<{ value: string; caption: string; viz: "dots" | "bar" }> = ({
+  value,
+  caption,
+  viz,
+}) => {
+  const { filled, total } = rewardStatDots(value);
+  const width = (total - 1) * 16.3 + 11.41;
+  return (
+    <div className="report-arousal__stat">
+      {viz === "dots" ? (
+        <svg
+          className="report-arousal__stat-dots"
+          viewBox={`0 0 ${width.toFixed(3)} 11.41`}
+          fill="none"
+          aria-hidden="true"
+        >
+          <defs>
+            <linearGradient
+              id="report-arousal-stat-dot"
+              x1="0"
+              y1="0"
+              x2="11.41"
+              y2="11.41"
+              gradientUnits="userSpaceOnUse"
+            >
+              <stop stopColor="#B7A6E3" />
+              <stop offset="1" stopColor="#795FC8" />
+            </linearGradient>
+          </defs>
+          {Array.from({ length: total }, (_, i) => (
+            <circle
+              key={i}
+              cx={5.705 + i * 16.3}
+              cy={5.705}
+              r={5.705}
+              fill={i < filled ? "url(#report-arousal-stat-dot)" : "#9D8AD7"}
+              fillOpacity={i < filled ? 1 : 0.16}
+            />
+          ))}
+        </svg>
+      ) : (
+        <span className="report-arousal__stat-bar" aria-hidden="true">
+          <span />
+        </span>
+      )}
+      <span className="report-arousal__stat-value">{value}</span>
+      <span className="report-arousal__stat-caption">{caption}</span>
+    </div>
+  );
+};
 
 const ArousalSection: FC<Props> = ({
   archetype,
@@ -444,8 +497,8 @@ const ArousalSection: FC<Props> = ({
 
             {hasStats ? (
               <div className="report-arousal__stats">
-                {hasStat1 ? <MiniStat value={stat1!} caption={stat1Cap!} /> : null}
-                {hasStat2 ? <MiniStat value={stat2!} caption={stat2Cap!} /> : null}
+                {hasStat1 ? <MiniStat value={stat1!} caption={stat1Cap!} viz="dots" /> : null}
+                {hasStat2 ? <MiniStat value={stat2!} caption={stat2Cap!} viz="bar" /> : null}
               </div>
             ) : null}
 

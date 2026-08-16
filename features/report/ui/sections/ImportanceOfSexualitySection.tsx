@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties, type FC } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type FC,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import { getReport2Config } from "@/data/report2-config";
 import { getReportTheme } from "../reportTheme";
 import { useRevealOnView } from "../hooks/useRevealOnView";
@@ -84,6 +91,56 @@ const ImportanceOfSexualitySection: FC<Props> = ({ archetype, importanceValue })
   // The viewer's own dot = their entry in the fixed ranking.
   const youIndex = RANKING.findIndex((d) => d.name === archetype);
 
+  // Scrub state. `shown` lags `active` so the label keeps its text while it
+  // fades out instead of blanking mid-transition.
+  const axisRef = useRef<HTMLDivElement>(null);
+  const chipRef = useRef<HTMLSpanElement>(null);
+  const [active, setActive] = useState<number | null>(null);
+  const [shown, setShown] = useState(0);
+  const [chipPos, setChipPos] = useState({ left: 0, caret: 0 });
+
+  const handlePointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const el = axisRef.current;
+    if (!el) return;
+    const box = el.getBoundingClientRect();
+    const pad = Number.parseFloat(getComputedStyle(el).getPropertyValue("--axis-pad")) || 40;
+    const inner = box.width - 2 * pad;
+    if (inner <= 0) return;
+    const rel = (e.clientX - box.left - pad) / inner;
+    let best = 0;
+    for (let i = 1; i < RANKING.length; i += 1) {
+      if (Math.abs(RANKING[i]!.x - rel) < Math.abs(RANKING[best]!.x - rel)) best = i;
+    }
+    setActive(best);
+    setShown(best);
+  };
+
+  // A finger lifting fires pointerleave as well, so only a mouse clears it —
+  // on touch the label stays up after the scrub, which is the readable result.
+  const handlePointerLeave = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (e.pointerType === "mouse") setActive(null);
+  };
+
+  // The card clips (overflow:hidden), and the end dots sit close enough to the
+  // edge that a centred label would be cut — so clamp it inside and point the
+  // caret back at the dot by however far it was pushed.
+  useEffect(() => {
+    const place = () => {
+      const el = axisRef.current;
+      const chip = chipRef.current;
+      if (!el || !chip) return;
+      const box = el.getBoundingClientRect();
+      const pad = Number.parseFloat(getComputedStyle(el).getPropertyValue("--axis-pad")) || 40;
+      const dotX = pad + (box.width - 2 * pad) * RANKING[shown]!.x;
+      const half = chip.offsetWidth / 2;
+      const left = Math.min(Math.max(dotX, half), Math.max(half, box.width - half));
+      setChipPos({ left, caret: dotX - left });
+    };
+    place();
+    window.addEventListener("resize", place);
+    return () => window.removeEventListener("resize", place);
+  }, [shown]);
+
   return (
     <div className="report-flow report-flow--gap-xl">
       <article className="report-importance">
@@ -110,7 +167,14 @@ const ImportanceOfSexualitySection: FC<Props> = ({ archetype, importanceValue })
           ref={stripRef}
           className={`report-importance__strip${isAnimated ? " is-animated" : ""}`}
         >
-          <div className="report-importance__axis" aria-hidden="true">
+          <div
+            ref={axisRef}
+            className="report-importance__axis"
+            aria-hidden="true"
+            onPointerMove={handlePointerMove}
+            onPointerDown={handlePointerMove}
+            onPointerLeave={handlePointerLeave}
+          >
             <span className="report-importance__axis-line" />
 
             {RANKING.map((dot, i) => {
@@ -121,12 +185,14 @@ const ImportanceOfSexualitySection: FC<Props> = ({ archetype, importanceValue })
                 "--dot-accent-rgb": hexToRgbTriplet(accent),
                 "--dot-order": i,
               } as CSSProperties;
+              const state = active === i ? " is-active" : active !== null ? " is-muted" : "";
               return (
                 <span
                   key={dot.name}
-                  className={`report-importance__dot${isYou ? " is-you" : ""}`}
+                  className={`report-importance__dot${isYou ? " is-you" : ""}${state}`}
                   style={style}
                 >
+                  <span className="report-importance__dot-disc" />
                   {isYou && <span className="report-importance__dot-pill">You</span>}
                   {END_LABELS.has(dot.name) && !isYou && (
                     <span className="report-importance__dot-label">{shortLabel(dot.name)}</span>
@@ -134,6 +200,26 @@ const ImportanceOfSexualitySection: FC<Props> = ({ archetype, importanceValue })
                 </span>
               );
             })}
+
+            {/* One travelling label rather than 14 that fade in place: the dots
+                are as little as 8.6px apart (3.4px on mobile), so a per-dot
+                target would leave the tighter half of them unreachable behind
+                their neighbour. Nearest-dot picking makes every one reachable
+                and lets the same gesture read as hover on a mouse and as a
+                scrub under a finger. Kept mounted so its width is measurable
+                before it is shown. */}
+            <span
+              ref={chipRef}
+              className={`report-importance__scrub${active !== null ? " is-on" : ""}`}
+              style={
+                {
+                  "--scrub-left": `${chipPos.left}px`,
+                  "--scrub-caret": `${chipPos.caret}px`,
+                } as CSSProperties
+              }
+            >
+              {RANKING[shown]!.name}
+            </span>
           </div>
           <div className="report-importance__ends" aria-hidden="true">
             <span>matters less</span>

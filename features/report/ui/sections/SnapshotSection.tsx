@@ -151,12 +151,21 @@ const CompareDots: FC<{ filled: number; total: number }> = ({ filled, total }) =
   </div>
 );
 
-/** Short gradient bar — used for the third compare column. */
-const CompareBar: FC = () => (
-  <div className="report-snapshot-compare__bar" aria-hidden="true">
-    <span />
-  </div>
-);
+/**
+ * Short gradient bar — used for the third compare column. The fill tracks the
+ * stat printed under it ("55%" → 55%); it used to be a fixed 62% in CSS, so the
+ * bar contradicted its own caption for every archetype whose number wasn't 62.
+ * Falls back to Figma's own 66% when the stat carries no percentage.
+ */
+const CompareBar: FC<{ stat?: string }> = ({ stat }) => {
+  const pct = Number.parseInt(stat?.match(/(\d{1,3})\s*%/)?.[1] ?? "", 10);
+  const fill = Number.isFinite(pct) ? Math.min(Math.max(pct, 4), 100) : 66;
+  return (
+    <div className="report-snapshot-compare__bar" aria-hidden="true">
+      <span style={{ width: `${fill}%` }} />
+    </div>
+  );
+};
 
 const SnapshotSection: FC<Props> = ({ archetype, copy, stageResult = null }) => {
   const slug = archetypeSlug(archetype) as Report2CopySlug;
@@ -291,7 +300,7 @@ const SnapshotSection: FC<Props> = ({ archetype, copy, stageResult = null }) => 
             {compares.map((c, i) => (
               <div key={i} className="report-snapshot-compare__col">
                 {c.viz === "bar" ? (
-                  <CompareBar />
+                  <CompareBar stat={c.stat} />
                 ) : (
                   <CompareDots filled={c.filled} total={c.total} />
                 )}

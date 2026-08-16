@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type CSSProperties, type FC } from "react";
+import { useState, type CSSProperties, type FC, useRef } from "react";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import { getReportTheme } from "../reportTheme";
 import { useRevealOnView } from "../hooks/useRevealOnView";
@@ -144,10 +144,55 @@ const PowerPlane: FC<{ archetype: string; youZoneLabel: string | null }> = ({
   // whole cascade was over before the reader had scrolled anywhere near the
   // plane. Triggered off the plane itself now.
   const [planeRef, animated] = useRevealOnView<HTMLDivElement>();
+  const frameRef = useRef<HTMLDivElement>(null);
+  const [active, setActive] = useState<number | null>(null);
+
+  /**
+   * Nearest dot to the pointer, in the plane's own normalised space.
+   *
+   * Picking by proximity rather than per-dot hit areas is not a preference: on
+   * a 390px screen the frame is 272x166 and the closest pair sits 11.2px apart
+   * while the dots themselves are 9px, so per-dot targets would overlap and the
+   * tighter half of them could never be selected. Proximity means every dot is
+   * reachable at any size, and the same gesture is hover on a mouse and a drag
+   * under a finger.
+   */
+  const pick = (e: { clientX: number; clientY: number }) => {
+    const el = frameRef.current;
+    if (!el) return;
+    const b = el.getBoundingClientRect();
+    if (b.width <= 0 || b.height <= 0) return;
+    const px = (e.clientX - b.left) / b.width;
+    const py = (e.clientY - b.top) / b.height;
+    let best = 0;
+    let bestD = Infinity;
+    PLANE.forEach((d, i) => {
+      // Scaled to the frame's real aspect so "nearest" means nearest on screen,
+      // not nearest in a square that the plane is not.
+      const dx = (d.x - px) * b.width;
+      const dy = (d.y - py) * b.height;
+      const dist = dx * dx + dy * dy;
+      if (dist < bestD) {
+        bestD = dist;
+        best = i;
+      }
+    });
+    setActive(best);
+  };
 
   return (
     <div ref={planeRef} className={`report-power-plane${animated ? " is-animated" : ""}`}>
-      <div className="report-power-plane__frame">
+      <div
+        ref={frameRef}
+        className="report-power-plane__frame"
+        onPointerMove={pick}
+        onPointerDown={pick}
+        onPointerLeave={(e) => {
+          // A finger lifting fires leave too; on touch the readout stays up so
+          // it can actually be read after the drag.
+          if (e.pointerType === "mouse") setActive(null);
+        }}
+      >
         {/* Axis crosshair + border */}
         <span className="report-power-plane__axis report-power-plane__axis--v" aria-hidden="true" />
         <span className="report-power-plane__axis report-power-plane__axis--h" aria-hidden="true" />
@@ -176,6 +221,18 @@ const PowerPlane: FC<{ archetype: string; youZoneLabel: string | null }> = ({
           </span>
         ) : null}
 
+        {/* Readout pinned to the top of the frame rather than floating at the
+            dot. On a 272px-wide mobile plane a floating label sits under the
+            finger that is selecting it, and a nowrap name near an edge would
+            overflow; a fixed slot can do neither, and it is what Stocks/Health
+            do for the same reason. */}
+        <span
+          className={`report-power-plane__readout${active !== null ? " is-on" : ""}`}
+          aria-hidden="true"
+        >
+          {PLANE[active ?? 0]!.name}
+        </span>
+
         {/* The 14 dots */}
         {PLANE.map((d, i) => {
           const isYou = showYou && d.name === archetype;
@@ -195,7 +252,9 @@ const PowerPlane: FC<{ archetype: string; youZoneLabel: string | null }> = ({
           return (
             <span
               key={d.name}
-              className={`report-power-plane__dot${isYou ? " is-you" : ""}`}
+              className={`report-power-plane__dot${isYou ? " is-you" : ""}${
+                active === i ? " is-active" : active !== null ? " is-muted" : ""
+              }`}
               style={style}
             >
               {isYou ? <span className="report-power-plane__dot-pill">You</span> : null}
