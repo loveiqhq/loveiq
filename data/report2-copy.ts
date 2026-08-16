@@ -176,7 +176,7 @@ export const report2Copy = {
         'Dopamine is the "wanting" chemical, driving anticipation, novelty, and chase. Oxytocin is the bonding current, released through eye contact, touch, and trust. Endorphins deliver warmth, calm, and afterglow. Adrenaline adds edge, risk, and intensity.',
       "edu.body.p2":
         "Each currency tends to travel with a pattern. Dopamine ties to novelty and a taste for risk, so it spikes in the before, in the chase and the possibility. Oxytocin ties to attachment and low-risk bonding, and often arrives after connection rather than before. Adrenaline ties to intensity, taboo, and edge. Endorphins tie to rhythm, repetition, and the afterglow. Knowing which currencies you and a partner rank highest is one of the fastest compatibility upgrades there is.",
-      stat1: "43%",
+      stat1: "2 in 5",
       "stat1.caption": "of Spiritual Lovers run on closeness first",
       "edu.body.p3":
         "Every archetype runs the same four currencies with a different ranking, which is why mismatched couples aren't broken; they're often just paying each other in the wrong currency.",
@@ -297,7 +297,7 @@ export const report2Copy = {
         'Desire is the wanting, the mental and emotional pull toward sex. Arousal is the body\'s activation. They can disagree in both directions: wanting without a responsive body ("wanting to want"), or a responsive body without felt wanting.',
       "edu.body.p2":
         "For responsive styles, the usual order reverses: willingness and the right conditions come first, the body warms up, and desire arrives during, not before. Spontaneous styles run the textbook order and pay at the other end: what ignites unprompted also fades unprompted. Neither version is broken; each one just fails differently.",
-      stat1: "52%",
+      stat1: "1 in 2",
       "stat1.caption": "of Spiritual Lovers share your responsive pattern",
       stat2: "wave + spike",
       "stat2.caption": "the two curves your desire moves between",
@@ -702,7 +702,7 @@ export const report2Copy = {
         'Dopamine is the "wanting" chemical, driving anticipation, novelty, and chase. Oxytocin is the bonding current, released through eye contact, touch, and trust. Endorphins deliver warmth, calm, and afterglow. Adrenaline adds edge, risk, and intensity.',
       "edu.body.p2":
         "Each currency tends to travel with a pattern. Dopamine ties to novelty and a taste for risk, so it spikes in the before, in the chase and the possibility. Oxytocin ties to attachment and low-risk bonding, and often arrives after connection rather than before. Adrenaline ties to intensity, taboo, and edge. Endorphins tie to rhythm, repetition, and the afterglow. Knowing which currencies you and a partner rank highest is one of the fastest compatibility upgrades there is.",
-      stat1: "55%",
+      stat1: "1 in 2",
       "stat1.caption": "of Spark Seekers run on novelty first",
       "edu.body.p3":
         "Every archetype runs the same four currencies with a different ranking, which is why mismatched couples aren't broken; they're often just paying each other in the wrong currency.",
@@ -823,7 +823,7 @@ export const report2Copy = {
         'Desire is the wanting, the mental and emotional pull toward sex. Arousal is the body\'s activation. They can disagree in both directions: wanting without a responsive body ("wanting to want"), or a responsive body without felt wanting.',
       "edu.body.p2":
         "For responsive styles, the usual order reverses: willingness and the right conditions come first, the body warms up, and desire arrives during, not before. Spontaneous styles run the textbook order and pay at the other end: what ignites unprompted also fades unprompted. Neither version is broken; each one just fails differently.",
-      stat1: "67%",
+      stat1: "2 in 3",
       "stat1.caption": "of Spark Seekers share your spontaneous pattern",
       stat2: "3 acts",
       "stat2.caption": "ignition, fade, rekindle: your full arc",
@@ -1233,7 +1233,7 @@ export const report2Copy = {
         'Dopamine is the "wanting" chemical, driving anticipation, novelty, and chase. Oxytocin is the bonding current, released through eye contact, touch, and trust. Endorphins deliver warmth, calm, and afterglow. Adrenaline adds edge, risk, and intensity.',
       "edu.body.p2":
         "Each currency tends to travel with a pattern. Dopamine ties to novelty and a taste for risk, so it spikes in the before, in the chase and the possibility. Oxytocin ties to attachment and low-risk bonding, and often arrives after connection rather than before. Adrenaline ties to intensity, taboo, and edge. Endorphins tie to rhythm, repetition, and the afterglow. Knowing which currencies you and a partner rank highest is one of the fastest compatibility upgrades there is.",
-      stat1: "31%",
+      stat1: "1 in 3",
       "stat1.caption": "of Sensual Connectors run on closeness first",
       "edu.body.p3":
         "Every archetype runs the same four currencies with a different ranking, which is why mismatched couples aren't broken; they're often just paying each other in the wrong currency.",
@@ -1356,7 +1356,7 @@ export const report2Copy = {
         'Desire is the wanting, the mental and emotional pull toward sex. Arousal is the body\'s activation. They can disagree in both directions: wanting without a responsive body ("wanting to want"), or a responsive body without felt wanting.',
       "edu.body.p2":
         "For responsive styles, the usual order reverses: willingness and the right conditions come first, the body warms up, and desire arrives during, not before. Spontaneous styles run the textbook order and pay at the other end: what ignites unprompted also fades unprompted. Neither version is broken; each one just fails differently.",
-      stat1: "47%",
+      stat1: "1 in 2",
       "stat1.caption": "of Sensual Connectors share your responsive pattern",
       stat2: "3 phases",
       "stat2.caption": "warm-up, wave, afterglow: how your arousal moves",
@@ -1767,7 +1767,7 @@ export const report2Copy = {
         'Dopamine is the "wanting" chemical, driving anticipation, novelty, and chase. Oxytocin is the bonding current, released through eye contact, touch, and trust. Endorphins deliver warmth, calm, and afterglow. Adrenaline adds edge, risk, and intensity.',
       "edu.body.p2":
         "Each currency tends to travel with a pattern. Dopamine ties to novelty and a taste for risk, so it spikes in the before, in the chase and the possibility. Oxytocin ties to attachment and low-risk bonding, and often arrives after connection rather than before. Adrenaline ties to intensity, taboo, and edge. Endorphins tie to rhythm, repetition, and the afterglow. Knowing which currencies you and a partner rank highest is one of the fastest compatibility upgrades there is.",
-      stat1: "41%",
+      stat1: "2 in 5",
       "stat1.caption": "of Relational Nurturers run on closeness first",
       "edu.body.p3":
         "Every archetype runs the same four currencies with a different ranking, which is why mismatched couples aren't broken; they're often just paying each other in the wrong currency.",
@@ -1891,7 +1891,7 @@ export const report2Copy = {
         'Desire is the wanting, the mental and emotional pull toward sex. Arousal is the body\'s activation. They can disagree in both directions: wanting without a responsive body ("wanting to want"), or a responsive body without felt wanting.',
       "edu.body.p2":
         "For responsive styles, the usual order reverses: willingness and the right conditions come first, the body warms up, and desire arrives during, not before. Spontaneous styles run the textbook order and pay at the other end: what ignites unprompted also fades unprompted. Neither version is broken; each one just fails differently.",
-      stat1: "52%",
+      stat1: "1 in 2",
       "stat1.caption": "of Relational Nurturers share your responsive pattern",
       stat2: "slow build",
       "stat2.caption": "reassurance, warmth, then wanting: how your arousal builds",
@@ -2305,7 +2305,7 @@ export const report2Copy = {
         'Dopamine is the "wanting" chemical, driving anticipation, novelty, and chase. Oxytocin is the bonding current, released through eye contact, touch, and trust. Endorphins deliver warmth, calm, and afterglow. Adrenaline adds edge, risk, and intensity.',
       "edu.body.p2":
         "Each currency tends to travel with a pattern. Dopamine ties to novelty and a taste for risk, so it spikes in the before, in the chase and the possibility. Oxytocin ties to attachment and low-risk bonding, and often arrives after connection rather than before. Adrenaline ties to intensity, taboo, and edge. Endorphins tie to rhythm, repetition, and the afterglow. Knowing which currencies you and a partner rank highest is one of the fastest compatibility upgrades there is.",
-      stat1: "24%",
+      stat1: "1 in 4",
       "stat1.caption": "of Radiant Performers run on being wanted first",
       "edu.body.p3":
         "Every archetype runs the same four currencies with a different ranking, which is why mismatched couples aren't broken; they're often just paying each other in the wrong currency.",
@@ -2428,7 +2428,7 @@ export const report2Copy = {
         'Desire is the wanting, the mental and emotional pull toward sex. Arousal is the body\'s activation. They can disagree in both directions: wanting without a responsive body ("wanting to want"), or a responsive body without felt wanting.',
       "edu.body.p2":
         "For responsive styles, the usual order reverses: willingness and the right conditions come first, the body warms up, and desire arrives during, not before. Spontaneous styles run the textbook order and pay at the other end: what ignites unprompted also fades unprompted. Neither version is broken; each one just fails differently.",
-      stat1: "44%",
+      stat1: "2 in 5",
       "stat1.caption": "of Radiant Performers share your spontaneous pattern",
       stat2: "seen + lit",
       "stat2.caption": "attention lights the spark, response keeps it burning",
@@ -2841,7 +2841,7 @@ export const report2Copy = {
         'Dopamine is the "wanting" chemical, driving anticipation, novelty, and chase. Oxytocin is the bonding current, released through eye contact, touch, and trust. Endorphins deliver warmth, calm, and afterglow. Adrenaline adds edge, risk, and intensity.',
       "edu.body.p2":
         "Each currency tends to travel with a pattern. Dopamine ties to novelty and a taste for risk, so it spikes in the before, in the chase and the possibility. Oxytocin ties to attachment and low-risk bonding, and often arrives after connection rather than before. Adrenaline ties to intensity, taboo, and edge. Endorphins tie to rhythm, repetition, and the afterglow. Knowing which currencies you and a partner rank highest is one of the fastest compatibility upgrades there is.",
-      stat1: "50%",
+      stat1: "1 in 2",
       "stat1.caption": "of Explorers of Edges run on charge first",
       "edu.body.p3":
         "Every archetype runs the same four currencies with a different ranking, which is why mismatched couples aren't broken; they're often just paying each other in the wrong currency.",
@@ -2963,7 +2963,7 @@ export const report2Copy = {
         'Desire is the wanting, the mental and emotional pull toward sex. Arousal is the body\'s activation. They can disagree in both directions: wanting without a responsive body ("wanting to want"), or a responsive body without felt wanting.',
       "edu.body.p2":
         "For responsive styles, the usual order reverses: willingness and the right conditions come first, the body warms up, and desire arrives during, not before. Spontaneous styles run the textbook order and pay at the other end: what ignites unprompted also fades unprompted. Neither version is broken; each one just fails differently.",
-      stat1: "48%",
+      stat1: "1 in 2",
       "stat1.caption": "of Explorers of Edges share your spontaneous pattern",
       stat2: "edge + aftercare",
       "stat2.caption": "your arc needs both: the climb, then the landing",
@@ -3376,7 +3376,7 @@ export const report2Copy = {
         'Dopamine is the "wanting" chemical, driving anticipation, novelty, and chase. Oxytocin is the bonding current, released through eye contact, touch, and trust. Endorphins deliver warmth, calm, and afterglow. Adrenaline adds edge, risk, and intensity.',
       "edu.body.p2":
         "Each currency tends to travel with a pattern. Dopamine ties to novelty and a taste for risk, so it spikes in the before, in the chase and the possibility. Oxytocin ties to attachment and low-risk bonding, and often arrives after connection rather than before. Adrenaline ties to intensity, taboo, and edge. Endorphins tie to rhythm, repetition, and the afterglow. Knowing which currencies you and a partner rank highest is one of the fastest compatibility upgrades there is.",
-      stat1: "42%",
+      stat1: "2 in 5",
       "stat1.caption": "of Curious Apprentices run on play first",
       "edu.body.p3":
         "Every archetype runs the same four currencies with a different ranking, which is why mismatched couples aren't broken; they're often just paying each other in the wrong currency.",
@@ -3499,7 +3499,7 @@ export const report2Copy = {
         'Desire is the wanting, the mental and emotional pull toward sex. Arousal is the body\'s activation. They can disagree in both directions: wanting without a responsive body ("wanting to want"), or a responsive body without felt wanting.',
       "edu.body.p2":
         "For responsive styles, the usual order reverses: willingness and the right conditions come first, the body warms up, and desire arrives during, not before. Spontaneous styles run the textbook order and pay at the other end: what ignites unprompted also fades unprompted. Neither version is broken; each one just fails differently.",
-      stat1: "38%",
+      stat1: "2 in 5",
       "stat1.caption": "of Curious Apprentices share your safety-led pattern",
       stat2: "3 conditions",
       "stat2.caption": "encouragement, guidance, room to explore: what opens you",
@@ -3914,7 +3914,7 @@ export const report2Copy = {
         'Dopamine is the "wanting" chemical, driving anticipation, novelty, and chase. Oxytocin is the bonding current, released through eye contact, touch, and trust. Endorphins deliver warmth, calm, and afterglow. Adrenaline adds edge, risk, and intensity.',
       "edu.body.p2":
         "Each currency tends to travel with a pattern. Dopamine ties to novelty and a taste for risk, so it spikes in the before, in the chase and the possibility. Oxytocin ties to attachment and low-risk bonding, and often arrives after connection rather than before. Adrenaline ties to intensity, taboo, and edge. Endorphins tie to rhythm, repetition, and the afterglow. Knowing which currencies you and a partner rank highest is one of the fastest compatibility upgrades there is.",
-      stat1: "22%",
+      stat1: "1 in 5",
       "stat1.caption": "of Tender Devotees run on being wanted first",
       "edu.body.p3":
         "Every archetype runs the same four currencies with a different ranking, which is why mismatched couples aren't broken; they're often just paying each other in the wrong currency.",
@@ -4038,7 +4038,7 @@ export const report2Copy = {
         'Desire is the wanting, the mental and emotional pull toward sex. Arousal is the body\'s activation. They can disagree in both directions: wanting without a responsive body ("wanting to want"), or a responsive body without felt wanting.',
       "edu.body.p2":
         "For responsive styles, the usual order reverses: willingness and the right conditions come first, the body warms up, and desire arrives during, not before. Spontaneous styles run the textbook order and pay at the other end: what ignites unprompted also fades unprompted. Neither version is broken; each one just fails differently.",
-      stat1: "48%",
+      stat1: "1 in 2",
       "stat1.caption": "of Tender Devotees share your responsive pattern",
       stat2: "affirmation first",
       "stat2.caption": "praise and safety, then the body follows",
@@ -5120,7 +5120,7 @@ export const report2Copy = {
         'Desire is the wanting, the mental and emotional pull toward sex. Arousal is the body\'s activation. They can disagree in both directions: wanting without a responsive body ("wanting to want"), or a responsive body without felt wanting.',
       "edu.body.p2":
         "For responsive styles, the usual order reverses: willingness and the right conditions come first, the body warms up, and desire arrives during, not before. Spontaneous styles run the textbook order and pay at the other end: what ignites unprompted also fades unprompted. Neither version is broken; each one just fails differently.",
-      stat1: "50%",
+      stat1: "1 in 2",
       "stat1.caption": "of Analytical Sexualists share your clarity-led pattern",
       stat2: "a clear plan",
       "stat2.caption": "knowing the intention is what lets your body relax",
@@ -6203,7 +6203,7 @@ export const report2Copy = {
         'Desire is the wanting, the mental and emotional pull toward sex. Arousal is the body\'s activation. They can disagree in both directions: wanting without a responsive body ("wanting to want"), or a responsive body without felt wanting.',
       "edu.body.p2":
         "For responsive styles, the usual order reverses: willingness and the right conditions come first, the body warms up, and desire arrives during, not before. Spontaneous styles run the textbook order and pay at the other end: what ignites unprompted also fades unprompted. Neither version is broken; each one just fails differently.",
-      stat1: "50%",
+      stat1: "1 in 2",
       "stat1.caption": "of Loyal Ritualists share your security-led pattern",
       stat2: "familiar build",
       "stat2.caption": "known cues and a steady pace, then wanting: how yours opens",
