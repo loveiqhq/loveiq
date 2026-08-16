@@ -16584,7 +16584,10 @@ input.autofill-dark:-internal-autofill-previewed {
   .report-practice-table__metric-content {
     width: 100%;
     flex-direction: column;
-    align-items: flex-start;
+    /* Centred, matching Figma's mobile table (9018:537) — it stacks the number
+       above its label exactly as we do, but centres the pair under the column
+       heading rather than flushing it left. */
+    align-items: center;
     gap: 0.38rem;
   }
 
@@ -16594,6 +16597,7 @@ input.autofill-dark:-internal-autofill-previewed {
   .report-practice-table__metric-value,
   .report-practice-table__metric-likelihood {
     min-width: 0;
+    text-align: center;
   }
 
   .report-practice-table__metric-value {
