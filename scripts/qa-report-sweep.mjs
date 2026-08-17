@@ -10,7 +10,7 @@
  *
  * USAGE
  *   npm run dev                        # in another terminal
- *   node scripts/qa-report-sweep.mjs   # add --phase=access|leak|archetypes|ui|pricing
+ *   node scripts/qa-report-sweep.mjs   # --phase=access|trigger|leak|archetypes|ui|pricing
  *
  * The four report tokens below are internal staff reports, one per access plan,
  * so the plan matrix is checked against real rows rather than mocks.
@@ -543,6 +543,79 @@ async function phaseUi(browser) {
 }
 
 // ---------------------------------------------------------------------------
+// Phase: trigger — the plans pop-up waits until the reader reaches the snapshot
+// ---------------------------------------------------------------------------
+async function phaseTrigger(browser) {
+  console.log("\n== PLANS POP-UP TRIGGER (locked report)");
+
+  const isOpen = (page) =>
+    page.evaluate(() => {
+      const modal = document.querySelector(
+        '[class*="rpm-"][class*="overlay"], [role="dialog"], .rpm-modal'
+      );
+      if (!modal) return false;
+      const r = modal.getBoundingClientRect();
+      return r.width > 100 && r.height > 100 && getComputedStyle(modal).display !== "none";
+    });
+
+  for (const viewport of VIEWPORTS) {
+    const { page } = await openReport(browser, viewport, REPORTS.locked);
+    // openReport presses Escape to clear the modal; reload so this phase sees a
+    // pristine page whose pop-up has never been dismissed.
+    await page.reload({ waitUntil: "networkidle", timeout: 120_000 });
+    await page.waitForTimeout(1200);
+
+    record("trigger", `${viewport.name}: shut on load`, !(await isOpen(page)));
+
+    // The old trigger fired on the first scroll event of any size.
+    await page.mouse.wheel(0, 250);
+    await page.waitForTimeout(1800);
+    record("trigger", `${viewport.name}: shut after a small scroll nudge`, !(await isOpen(page)));
+
+    const snapshotTop = await page.evaluate(() => {
+      const el = document.getElementById("snapshot");
+      return el ? el.getBoundingClientRect().top + window.scrollY : null;
+    });
+    record(
+      "trigger",
+      `${viewport.name}: snapshot section exists to trigger on`,
+      snapshotTop !== null
+    );
+    if (snapshotTop === null) {
+      await page.close();
+      continue;
+    }
+
+    // Well into the report but still above the snapshot.
+    await page.evaluate((y) => window.scrollTo(0, y), Math.max(0, snapshotTop - viewport.height));
+    await page.waitForTimeout(1800);
+    record(
+      "trigger",
+      `${viewport.name}: still shut while above the snapshot`,
+      !(await isOpen(page))
+    );
+
+    await page.evaluate(() =>
+      document.getElementById("snapshot").scrollIntoView({ block: "start" })
+    );
+    await page.waitForTimeout(2200);
+    record("trigger", `${viewport.name}: opens on reaching the snapshot`, await isOpen(page));
+
+    // Dismissing must stick — no second interruption further down.
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(600);
+    const dismissed = !(await isOpen(page));
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight * 0.5));
+    await page.waitForTimeout(2000);
+    record("trigger", `${viewport.name}: dismissible`, dismissed);
+    record("trigger", `${viewport.name}: does not re-open after dismissal`, !(await isOpen(page)));
+
+    await page.close();
+    await new Promise((r) => setTimeout(r, 6500));
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Phase: pricing — the paywall offers a coherent set of plans
 // ---------------------------------------------------------------------------
 async function phasePricing(browser) {
@@ -652,6 +725,7 @@ async function phasePricing(browser) {
 
 const PHASES = {
   access: phaseAccess,
+  trigger: phaseTrigger,
   leak: phaseLeak,
   archetypes: phaseArchetypes,
   ui: phaseUi,

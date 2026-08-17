@@ -2184,10 +2184,14 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       return;
     }
 
-    function handleFirstScroll() {
+    // Open the plans pop-up once the reader REACHES "Your snapshot", not on the
+    // first scroll event. Firing on first scroll interrupted people a second
+    // into the report, before they had read anything worth paying for; the
+    // snapshot is the first section that shows them their own numbers, so it is
+    // the earliest point the offer makes sense.
+    function openPlans() {
       if (scrollTeaserFiredRef.current) return;
       scrollTeaserFiredRef.current = true;
-      window.removeEventListener("scroll", handleFirstScroll);
       scrollTeaserTimerRef.current = setTimeout(() => {
         if (!isPricingModalOpenRef.current) {
           // Pricing 2.0: the scroll pop-up shows the NEW 3-tier plans modal
@@ -2201,10 +2205,45 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       }, 1000);
     }
 
-    window.addEventListener("scroll", handleFirstScroll, { passive: true });
+    const snapshot = document.getElementById("snapshot");
+
+    // No snapshot section (an archetype without one, or a future layout change)
+    // must not mean the offer never appears — fall back to the old first-scroll
+    // trigger so the pop-up is never silently lost.
+    if (!snapshot) {
+      const handleFirstScroll = () => {
+        window.removeEventListener("scroll", handleFirstScroll);
+        openPlans();
+      };
+      window.addEventListener("scroll", handleFirstScroll, { passive: true });
+      return () => {
+        window.removeEventListener("scroll", handleFirstScroll);
+        if (scrollTeaserTimerRef.current) {
+          clearTimeout(scrollTeaserTimerRef.current);
+          scrollTeaserTimerRef.current = null;
+        }
+        scrollTeaserFiredRef.current = false;
+      };
+    }
+
+    // `threshold: 0` with a -25% bottom inset rather than a ratio: the section is
+    // 620px tall on desktop but 1089px on mobile against a 900px viewport, so it
+    // can never be more than 83% visible there — any threshold high enough to
+    // mean "arrived" on desktop risks never firing on a phone. The inset instead
+    // waits until the section's top has risen past three quarters of the
+    // viewport, which reads as "arrived" at every width.
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return;
+        observer.disconnect();
+        openPlans();
+      },
+      { threshold: 0, rootMargin: "0px 0px -25% 0px" }
+    );
+    observer.observe(snapshot);
 
     return () => {
-      window.removeEventListener("scroll", handleFirstScroll);
+      observer.disconnect();
       if (scrollTeaserTimerRef.current) {
         clearTimeout(scrollTeaserTimerRef.current);
         scrollTeaserTimerRef.current = null;
