@@ -8795,9 +8795,11 @@ input.autofill-dark:-internal-autofill-previewed {
   display: flex;
   flex-direction: column;
   /* Separation between the two readings (Risk orientation / Typical confidence).
-     Each is a label plus its own bars, so they need more space between the pairs
-     than inside them, or the four rows read as one block of eight. */
-  gap: clamp(26px, 2.4vw, 34px);
+     Figma 8430:703/711 puts 24px here — the same as the gap INSIDE a reading, so
+     the design relies on the bars themselves to group the pairs. That reads as one
+     block of four rows at our type sizes, so this is deliberately above the
+     design: enough that a label clearly belongs to the bars under it. */
+  gap: clamp(30px, 2.9vw, 42px);
   width: 100%;
 }
 
@@ -8851,9 +8853,9 @@ input.autofill-dark:-internal-autofill-previewed {
   }
 
   .report-hero-card__progress {
-    /* Was 10px here — TIGHTER than the base 16px, so the widest layout had the
-       least room between the two readings. */
-    gap: 34px;
+    /* Was 10px here — TIGHTER than the base, so the widest layout had the least
+       room between the two readings. */
+    gap: 42px;
   }
 }
 
@@ -8861,9 +8863,11 @@ input.autofill-dark:-internal-autofill-previewed {
   display: flex;
   justify-content: space-between;
   align-items: flex-end;
-  /* Air between the reading's label row and the bars it belongs to — at 12px
-     the label sat on top of its own meter. */
-  margin-bottom: clamp(16px, 1.7vw, 22px);
+  /* Air between the reading's label row and the bars it belongs to.
+     Figma 8430:704/707 puts 24px here (label ends y=20, bars start y=44); this
+     shipped at 12px, then 22px, and now sits at or above the design's 24 at every
+     width — 30px on a wide desktop, where there is room for it. */
+  margin-bottom: clamp(20px, 2.1vw, 30px);
   color: #191a1b;
   font-family: var(--font-sans);
   font-size: clamp(1rem, 1.5vw, 1.25rem);
