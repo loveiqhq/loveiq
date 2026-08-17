@@ -8579,16 +8579,19 @@ input.autofill-dark:-internal-autofill-previewed {
   line-height: 16px;
 }
 
+/* Figma spec for the archetype name: Lora Medium 500, 48px, 48px line-height,
+   0 letter-spacing. All four were off — weight sat at 700 (an earlier "make it
+   bold" went past Medium), the size was capped at 37.6px by the >=1280 override
+   below, leading was 1.02 and tracking was -0.01em. */
 .report-hero-card__title {
   margin: 0;
   color: #161021;
   font-family: var(--font-serif);
-  /* Lora is loaded at 400/500/600/700, so 700 is a real cut rather than a
-     browser-synthesised fake bold. */
-  font-weight: 700;
+  /* Lora ships 400/500/600/700, so 500 is a real Medium cut, not a synthesised one. */
+  font-weight: 500;
   font-size: clamp(2rem, 3.4vw, 3rem);
-  line-height: 1.02;
-  letter-spacing: -0.01em;
+  line-height: 1;
+  letter-spacing: 0;
 }
 
 .report-hero-card__motto {
@@ -8811,7 +8814,9 @@ input.autofill-dark:-internal-autofill-previewed {
   }
 
   .report-hero-card__title {
-    font-size: 2.35rem;
+    /* Pinned to the spec's 48px rather than left to 3.4vw, which only reaches 48
+       at ~1412px and rendered 43.5px at 1280. */
+    font-size: 3rem;
   }
 
   .report-hero-card__motto {
@@ -17855,7 +17860,10 @@ input.autofill-dark:-internal-autofill-previewed {
 
   .report-hero-card__title {
     font-size: 25px;
+    /* Looser than the spec's 1.0 on purpose: a two-word archetype wraps to two
+       lines at this size, and at 1.0 Lora's descenders touch the next line. */
     line-height: 1.1;
+    letter-spacing: 0;
   }
 
   .report-hero-card__motto {
