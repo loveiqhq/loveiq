@@ -8792,7 +8792,10 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-hero-card__progress {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  /* Separation between the two readings (Risk orientation / Typical confidence).
+     Each is a label plus its own bars, so they need more space between the pairs
+     than inside them, or the four rows read as one block of eight. */
+  gap: clamp(26px, 2.4vw, 34px);
   width: 100%;
 }
 
@@ -8846,7 +8849,9 @@ input.autofill-dark:-internal-autofill-previewed {
   }
 
   .report-hero-card__progress {
-    gap: 10px;
+    /* Was 10px here — TIGHTER than the base 16px, so the widest layout had the
+       least room between the two readings. */
+    gap: 34px;
   }
 }
 
@@ -8854,7 +8859,9 @@ input.autofill-dark:-internal-autofill-previewed {
   display: flex;
   justify-content: space-between;
   align-items: flex-end;
-  margin-bottom: 12px;
+  /* Air between the reading's label row and the bars it belongs to — at 12px
+     the label sat on top of its own meter. */
+  margin-bottom: clamp(16px, 1.7vw, 22px);
   color: #191a1b;
   font-family: var(--font-sans);
   font-size: clamp(1rem, 1.5vw, 1.25rem);
