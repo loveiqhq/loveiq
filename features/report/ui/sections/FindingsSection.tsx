@@ -22,6 +22,11 @@ export interface FindingsCopy {
   "f4.body"?: string | null;
   "f5.head"?: string | null;
   "f5.body"?: string | null;
+  /**
+   * Shipped by the server but deliberately NOT rendered: the paywall shows only
+   * the CTA over the withheld rows, per Figma 8988:16141, which carries no line
+   * of copy above its button. Kept on the type so the payload stays described.
+   */
   "upsell.line"?: string | null;
   /** True when f3-5 carry the locked teaser text (user lacks paid access). */
   locked: boolean;
@@ -92,8 +97,6 @@ const FindingsSection: FC<Props> = ({ copy, onUnlock }) => {
   // Nothing to render (archetype without a findings block) — bail.
   if (rows.every((r) => !r.head && !r.body)) return null;
 
-  const upsellLine = copy["upsell.line"] ?? null;
-
   return (
     <div className="report-findings">
       <h3 className="report-findings__heading">Five things this report found</h3>
@@ -118,7 +121,6 @@ const FindingsSection: FC<Props> = ({ copy, onUnlock }) => {
 
             {locked ? (
               <div className="report-findings__upsell">
-                {upsellLine ? <p className="report-findings__upsell-line">{upsellLine}</p> : null}
                 {/* Figma labels this CTA "Unlock the Full Report →" — distinct
                     from PremiumOverlay's "Unlock your report" (8993:19194),
                     which is a different component in the design. */}

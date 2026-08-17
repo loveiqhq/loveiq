@@ -9440,26 +9440,16 @@ input.autofill-dark:-internal-autofill-previewed {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 14px;
   text-align: center;
-  /* Soft white wash so the line and button stay legible over the blurred rows
-     behind them — Figma carries the same glow around its CTA. */
+  /* Soft white wash so the button reads clearly against the blurred rows behind
+     it — Figma carries the same glow around its CTA. Tighter than when a line of
+     copy sat above the button, since it now only has to clear one element. */
   background: radial-gradient(
-    ellipse 60% 55% at 50% 50%,
+    ellipse 42% 34% at 50% 50%,
     rgba(255, 255, 255, 0.92) 0%,
     rgba(255, 255, 255, 0.7) 55%,
     rgba(255, 255, 255, 0) 100%
   );
-}
-
-.report-findings__upsell-line {
-  margin: 0;
-  max-width: 30rem;
-  color: #6b6678;
-  font-family: var(--font-sans);
-  font-weight: 400;
-  font-size: clamp(0.85rem, 1.05vw, 0.90625rem);
-  line-height: 1.5;
 }
 
 .report-findings__unlock {
