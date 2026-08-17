@@ -8472,10 +8472,12 @@ input.autofill-dark:-internal-autofill-previewed {
   margin: 0 0 18px;
   color: #161021;
   font-family: var(--font-serif);
-  /* The report's chapter-heading scale, shared with the other twenty
-     chapters. This one had drifted onto its own size. */
-  font-size: clamp(1.4rem, 2vw, 1.834rem);
+  /* Figma 8988:15757: Lora Medium 20px, the same step-down as the findings
+     heading rather than the 29.34px chapter scale. */
+  font-size: clamp(1.0625rem, 1.45vw, 1.25rem);
   line-height: 1.2;
+  /* Figma 8988:15757 sets this Medium; it was inheriting Regular. */
+  font-weight: 500;
 }
 
 .report-means__body {
@@ -8916,7 +8918,7 @@ input.autofill-dark:-internal-autofill-previewed {
   /* Chapter-heading scale, shared with the other twenty chapters. Its own
      clamp had a higher MINIMUM, so it matched on desktop but came out 2px
      larger than every sibling once the column narrowed. */
-  font-size: clamp(1.4rem, 2vw, 1.834rem);
+  font-size: clamp(1.4rem, 2.05vw, 1.834rem);
   line-height: 1.15;
   letter-spacing: -0.29px;
 }
@@ -9309,9 +9311,11 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #161021;
   font-family: var(--font-serif);
   font-weight: 500;
-  /* The report's chapter-heading scale, shared with the other twenty
-     chapters. This one had drifted onto its own size. */
-  font-size: clamp(1.4rem, 2vw, 1.834rem);
+  /* Figma 8501:685: Lora Medium 20px, a deliberate step DOWN from the
+     29.34px chapter scale — this heading introduces a card, it does not open
+     a chapter. An earlier pass normalised it up to 29.34px on the assumption
+     that every heading should match; the design says otherwise. */
+  font-size: clamp(1.0625rem, 1.45vw, 1.25rem);
   line-height: 1.42;
   letter-spacing: -0.29px;
 }
@@ -9511,7 +9515,7 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #161021;
   font-family: var(--font-serif);
   font-weight: 500;
-  font-size: clamp(1.4rem, 2vw, 1.834rem);
+  font-size: clamp(1.4rem, 2.05vw, 1.834rem);
   line-height: 1.16;
   letter-spacing: -0.29px;
 }
@@ -9900,7 +9904,7 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #161021;
   font-family: var(--font-serif);
   font-weight: 500;
-  font-size: clamp(1.4rem, 2vw, 1.834rem);
+  font-size: clamp(1.4rem, 2.05vw, 1.834rem);
   line-height: 1.16;
   letter-spacing: -0.29px;
 }
@@ -10231,7 +10235,7 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #161021;
   font-family: var(--font-serif);
   font-weight: 500;
-  font-size: clamp(1.4rem, 2vw, 1.834rem);
+  font-size: clamp(1.4rem, 2.05vw, 1.834rem);
   line-height: 1.16;
   letter-spacing: -0.29px;
 }
@@ -10686,7 +10690,7 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #161021;
   font-family: var(--font-serif);
   font-weight: 500;
-  font-size: clamp(1.4rem, 2vw, 1.834rem);
+  font-size: clamp(1.4rem, 2.05vw, 1.834rem);
   line-height: 1.16;
   letter-spacing: -0.29px;
 }
@@ -11137,7 +11141,7 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #161021;
   font-family: var(--font-serif);
   font-weight: 500;
-  font-size: clamp(1.4rem, 2vw, 1.834rem);
+  font-size: clamp(1.4rem, 2.05vw, 1.834rem);
   line-height: 1.16;
   letter-spacing: -0.29px;
 }
@@ -11641,7 +11645,7 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #161021;
   font-family: var(--font-serif);
   font-weight: 500;
-  font-size: clamp(1.4rem, 2vw, 1.834rem);
+  font-size: clamp(1.4rem, 2.05vw, 1.834rem);
   line-height: 1.16;
   letter-spacing: -0.29px;
 }
@@ -12066,7 +12070,7 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #161021;
   font-family: var(--font-serif);
   font-weight: 500;
-  font-size: clamp(1.4rem, 2vw, 1.834rem);
+  font-size: clamp(1.4rem, 2.05vw, 1.834rem);
   line-height: 1.16;
   letter-spacing: -0.29px;
 }
@@ -12532,7 +12536,7 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #161021;
   font-family: var(--font-serif);
   font-weight: 500;
-  font-size: clamp(1.4rem, 2vw, 1.834rem);
+  font-size: clamp(1.4rem, 2.05vw, 1.834rem);
   line-height: 1.16;
   letter-spacing: -0.29px;
 }
@@ -12911,7 +12915,7 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #161021;
   font-family: var(--font-serif);
   font-weight: 500;
-  font-size: clamp(1.4rem, 2vw, 1.834rem);
+  font-size: clamp(1.4rem, 2.05vw, 1.834rem);
   line-height: 1.16;
   letter-spacing: -0.29px;
 }
@@ -13448,7 +13452,7 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #161021;
   font-family: var(--font-serif);
   font-weight: 500;
-  font-size: clamp(1.4rem, 2vw, 1.834rem);
+  font-size: clamp(1.4rem, 2.05vw, 1.834rem);
   line-height: 1.16;
   letter-spacing: -0.29px;
 }
@@ -13846,7 +13850,7 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #161021;
   font-family: var(--font-serif);
   font-weight: 500;
-  font-size: clamp(1.4rem, 2vw, 1.834rem);
+  font-size: clamp(1.4rem, 2.05vw, 1.834rem);
   line-height: 1.16;
   letter-spacing: -0.29px;
 }
@@ -14143,7 +14147,7 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #161021;
   font-family: var(--font-serif);
   font-weight: 500;
-  font-size: clamp(1.4rem, 2vw, 1.834rem);
+  font-size: clamp(1.4rem, 2.05vw, 1.834rem);
   line-height: 1.16;
   letter-spacing: -0.29px;
 }
@@ -14738,7 +14742,7 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #161021;
   font-family: var(--font-serif);
   font-weight: 500;
-  font-size: clamp(1.4rem, 2vw, 1.834rem);
+  font-size: clamp(1.4rem, 2.05vw, 1.834rem);
   line-height: 1.16;
   letter-spacing: -0.29px;
 }
@@ -15317,7 +15321,7 @@ input.autofill-dark:-internal-autofill-previewed {
   /* Chapter-heading scale, shared with the other twenty chapters. Its own
      clamp had a higher MINIMUM, so it matched on desktop but came out 2px
      larger than every sibling once the column narrowed. */
-  font-size: clamp(1.4rem, 2vw, 1.834rem);
+  font-size: clamp(1.4rem, 2.05vw, 1.834rem);
   line-height: 1.16;
   letter-spacing: -0.29px;
 }
@@ -15593,9 +15597,11 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #161021;
   font-family: var(--font-serif);
   font-weight: 400;
-  /* The report's chapter-heading scale, shared with the other twenty
-     chapters. This one had drifted onto its own size. */
-  font-size: clamp(1.4rem, 2vw, 1.834rem);
+  /* Figma 8427:1072: Lora Regular 31.597px, tracking -0.474px — a size of its
+     own, ABOVE the chapter scale, because this heading opens the section that
+     reframes the whole report. Restored after being flattened to 29.34px. */
+  font-size: clamp(1.6rem, 2.6vw, 1.975rem);
+  letter-spacing: -0.474px;
   line-height: 1.12;
   letter-spacing: -0.47px;
 }
@@ -21975,7 +21981,7 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #161021;
   font-family: var(--font-serif);
   font-weight: 500;
-  font-size: clamp(1.4rem, 2vw, 1.834rem);
+  font-size: clamp(1.4rem, 2.05vw, 1.834rem);
   line-height: 1.16;
   letter-spacing: -0.29px;
 }
@@ -22467,7 +22473,7 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #161021;
   font-family: var(--font-serif);
   font-weight: 500;
-  font-size: clamp(1.4rem, 2vw, 1.834rem);
+  font-size: clamp(1.4rem, 2.05vw, 1.834rem);
   line-height: 1.16;
   letter-spacing: -0.29px;
 }
@@ -22986,7 +22992,7 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #161021;
   font-family: var(--font-serif);
   font-weight: 500;
-  font-size: clamp(1.4rem, 2vw, 1.834rem);
+  font-size: clamp(1.4rem, 2.05vw, 1.834rem);
   line-height: 1.16;
   letter-spacing: -0.29px;
 }
@@ -23383,7 +23389,7 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #161021;
   font-family: var(--font-serif);
   font-weight: 500;
-  font-size: clamp(1.4rem, 2vw, 1.834rem);
+  font-size: clamp(1.4rem, 2.05vw, 1.834rem);
   line-height: 1.16;
   letter-spacing: -0.29px;
 }
