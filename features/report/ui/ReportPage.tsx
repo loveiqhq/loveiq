@@ -1650,6 +1650,13 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     // suppresses ReportSection's header (hidden via CSS on
                     // #typical_beliefs) — the section renders its own "Typical
                     // Beliefs" heading per Figma 8427:1656.
+                    // Only the primary archetype gets a copy block; when browsing
+                    // another archetype's report the section falls back to null
+                    // (renders nothing) — same handoff as attachment/insecurities/
+                    // reward. Without this guard an `all_reports` reader browsing
+                    // e.g. Spark Seeker saw the PRIMARY archetype's keep/loosen
+                    // beliefs presented as Spark Seeker's.
+                    const isPrimaryView = viewArchetype === primaryArchetype;
                     const isBeliefsUnlocked = isSectionUnlockedForPlan({
                       accessPlan,
                       archetypeTier: viewArchetypeTier,
@@ -1666,7 +1673,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                       >
                         <BeliefsSection
                           archetype={viewArchetype}
-                          copy={beliefsCopy}
+                          copy={isPrimaryView ? beliefsCopy : null}
                           isUnlocked={isBeliefsUnlocked}
                           offerDeadline={offerDeadline}
                           onUnlock={() => unlockSection(section)}
@@ -1689,6 +1696,15 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     // title suppresses ReportSection's header (hidden via CSS on
                     // #typical_arousal_accelerators_turn_ons_of_the_core_archetype)
                     // — the section renders its own heading per Figma 8946:4286.
+                    // The accelerator/brake ROWS come from `archetypeContent` and
+                    // already switch with `viewArchetype`; only `takeaway` is
+                    // primary-keyed, so browsing another archetype strips that one
+                    // slot rather than nulling the whole (universal) copy — which
+                    // would needlessly blank the educational header too.
+                    const accelCopyForView =
+                      viewArchetype === primaryArchetype || !accelCopy
+                        ? accelCopy
+                        : { ...accelCopy, takeaway: null };
                     return (
                       <ReportSection
                         key={section.id}
@@ -1699,7 +1715,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                       >
                         <AcceleratorsSection
                           archetype={viewArchetype}
-                          copy={accelCopy}
+                          copy={accelCopyForView}
                           offerDeadline={offerDeadline}
                           onUnlock={() => unlockSection(section)}
                           quote={fullReportQuote}

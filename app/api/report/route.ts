@@ -907,7 +907,12 @@ export async function GET(request: Request) {
       "edu.body.p1": rewardSection["edu.body.p1"] ?? null,
       "edu.body.p2": rewardSection["edu.body.p2"] ?? null,
       "edu.body.p3": rewardSection["edu.body.p3"] ?? null,
-      // Universal-safe stat — rendered only when both parts exist (never fabricated).
+      // Deliberate teaser, shipped to locked clients too. NOT universal: the
+      // value and caption are per-archetype ("2 in 5 of Relational Nurturers"
+      // vs "1 in 2 of Spark Seekers"), so never hardcode one archetype's copy
+      // here. It names only the archetype the reader already sees for free, so
+      // giving it away costs nothing — the paid verdict is `takeaway` below.
+      // Rendered only when both parts exist (never fabricated).
       stat1: rewardSection.stat1 ?? null,
       "stat1.caption": rewardSection["stat1.caption"] ?? null,
       "learn.eyebrow": rewardSection["learn.eyebrow"] ?? null,
