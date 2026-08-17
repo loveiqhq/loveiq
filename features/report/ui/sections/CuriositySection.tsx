@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FC } from "react";
+import LockedPreviewImage from "./LockedPreviewImage";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import { renderEduPara } from "./eduPara";
@@ -206,11 +207,14 @@ const CuriositySection: FC<Props> = ({
               <p className="report-curiosity__hook">{copy["gate.hook"]}</p>
             ) : null}
             <div className="report-curiosity__preview">
-              <div className="report-curiosity__preview-fade" aria-hidden="true">
-                {/* Blurred stand-in — the reader's real per-archetype read + fit
-                    scores are withheld server-side; the fit table draws its
-                    universal form labels only (no dots). */}
-                <FitTable fit={null} />
+              {/* A pre-blurred render of the REAL chapter. Blurring the PIXELS at
+                  build time means the paid copy is not in the file that ships, so
+                  it cannot be read back out of the DOM. See LockedPreviewImage. */}
+              <div
+                className="report-curiosity__preview-fade report-preview-fade--image"
+                aria-hidden="true"
+              >
+                <LockedPreviewImage name="curiosity" />
               </div>
               <PremiumOverlay
                 archetype={archetype}

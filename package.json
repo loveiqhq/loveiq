@@ -17,6 +17,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "previews:generate": "node scripts/generate-locked-previews.mjs",
     "docs:truth": "node scripts/check-docs-truth.mjs",
     "docs:lint": "markdownlint-cli2",
     "docs:spell": "cspell lint \"**/*.md\" --no-progress --no-must-find-files",

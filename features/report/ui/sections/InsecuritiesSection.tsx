@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type CSSProperties, type FC } from "react";
+import LockedPreviewImage from "./LockedPreviewImage";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import { getReportTheme } from "../reportTheme";
@@ -382,17 +383,14 @@ const InsecuritiesSection: FC<Props> = ({
               <p className="report-insecurities__hook">{copy["gate.hook"]}</p>
             ) : null}
             <div className="report-insecurities__preview">
-              <div className="report-insecurities__preview-fade" aria-hidden="true">
-                <p className="report-insecurities__body">
-                  Every archetype carries one core sensitivity — the thing its nervous system
-                  watches the relationship through. Yours runs hotter than most, and reacts
-                  earliest: a detector, not a defect.
-                </p>
-                <span className="report-insecurities__star">&#10037;</span>
-                <p className="report-insecurities__takeaway">
-                  Your deepest fear isn&rsquo;t closeness. It&rsquo;s closeness that feels a certain
-                  way.
-                </p>
+              {/* A pre-blurred render of the REAL chapter. Blurring the PIXELS at
+                  build time means the paid copy is not in the file that ships, so
+                  it cannot be read back out of the DOM. See LockedPreviewImage. */}
+              <div
+                className="report-insecurities__preview-fade report-preview-fade--image"
+                aria-hidden="true"
+              >
+                <LockedPreviewImage name="insecurities" />
               </div>
               <PremiumOverlay
                 archetype={archetype}

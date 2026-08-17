@@ -25286,3 +25286,38 @@ input.autofill-dark:-internal-autofill-previewed {
     box-shadow: none !important;
   }
 }
+
+/* ==========================================================================
+   LOCKED PREVIEW IMAGES
+
+   The blurred chapter behind a paywall overlay is a pre-rasterised render of
+   the REAL chapter (scripts/generate-locked-previews.mjs), not DOM. A CSS blur
+   over real DOM is only a paint effect — one deleted line in DevTools and the
+   paid chapter is readable — so the pixels are blurred and downsampled at build
+   time instead, and the words never reach the client at all.
+
+   The host fade keeps its mask and opacity (so these surfaces match every other
+   locked surface in the report) but drops `filter`: the image arrives already
+   blurred, and the inherited blur would double it.
+   ========================================================================== */
+.report-locked-preview {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.report-locked-preview__img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* Chapters are taller than their locked box; show the top of the chapter
+     rather than squashing the whole thing into the frame. */
+  object-fit: cover;
+  object-position: top center;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.report-preview-fade--image {
+  filter: none;
+}

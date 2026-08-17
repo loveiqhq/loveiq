@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type CSSProperties, type FC, type ReactNode } from "react";
+import LockedPreviewImage from "./LockedPreviewImage";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import { renderEduPara } from "./eduPara";
@@ -296,8 +297,14 @@ const FantasySection: FC<Props> = ({
           <>
             {copy["gate.hook"] ? <p className="report-fantasy__hook">{copy["gate.hook"]}</p> : null}
             <div className="report-fantasy__preview">
-              <div className="report-fantasy__preview-fade" aria-hidden="true">
-                <FantasyMap filter="all" />
+              {/* A pre-blurred render of the REAL chapter. Blurring the PIXELS at
+                  build time means the paid copy is not in the file that ships, so
+                  it cannot be read back out of the DOM. See LockedPreviewImage. */}
+              <div
+                className="report-fantasy__preview-fade report-preview-fade--image"
+                aria-hidden="true"
+              >
+                <LockedPreviewImage name="fantasy" />
               </div>
               <PremiumOverlay
                 archetype={archetype}

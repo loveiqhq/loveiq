@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type CSSProperties, type FC } from "react";
+import LockedPreviewImage from "./LockedPreviewImage";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import { getReportTheme } from "../reportTheme";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
@@ -269,18 +270,14 @@ const ConfidenceSection: FC<Props> = ({
               <p className="report-confidence__hook">{copy["gate.hook"]}</p>
             ) : null}
             <div className="report-confidence__preview">
-              <div className="report-confidence__preview-fade" aria-hidden="true">
-                <p className="report-confidence__result-word">Meaning-Contingent</p>
-                <p className="report-confidence__result-def">
-                  How confident you feel initiating, expressing, and staying present during intimacy
-                  — not general self-confidence. Yours isn&rsquo;t low or high; it&rsquo;s
-                  conditional on the moment feeling sincere.
-                </p>
-                <ConfidenceStripGraphic
-                  youX={SPIRITUAL_LOVER_YOU_X}
-                  youAccent={accent}
-                  youLabel={`You — the ${archetype}`}
-                />
+              {/* A pre-blurred render of the REAL chapter. Blurring the PIXELS at
+                  build time means the paid copy is not in the file that ships, so
+                  it cannot be read back out of the DOM. See LockedPreviewImage. */}
+              <div
+                className="report-confidence__preview-fade report-preview-fade--image"
+                aria-hidden="true"
+              >
+                <LockedPreviewImage name="confidence" />
               </div>
               <PremiumOverlay
                 archetype={archetype}

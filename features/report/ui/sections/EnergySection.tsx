@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type CSSProperties, type FC } from "react";
+import LockedPreviewImage from "./LockedPreviewImage";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import { renderEduPara } from "./eduPara";
@@ -430,21 +431,14 @@ const EnergySection: FC<Props> = ({
           <>
             {copy["gate.hook"] ? <p className="report-energy__hook">{copy["gate.hook"]}</p> : null}
             <div className="report-energy__preview">
-              <div className="report-energy__preview-fade" aria-hidden="true">
-                {/* Blurred stand-in — the real per-archetype readouts/takeaway are
-                    withheld server-side; generic filler under the blur. */}
-                <div className="report-energy__readouts">
-                  {READOUT_ROWS.map((r) => (
-                    <ReadoutRow key={r.key} label={r.label} reading={profile[r.key]} />
-                  ))}
-                </div>
-                <WaveGraph
-                  curveFamily={curveFamily}
-                  youLabel={profile.youLabel}
-                  contrastLabel={profile.contrastLabel}
-                  accent={accent}
-                  note={copy.chartnote1}
-                />
+              {/* A pre-blurred render of the REAL chapter. Blurring the PIXELS at
+                  build time means the paid copy is not in the file that ships, so
+                  it cannot be read back out of the DOM. See LockedPreviewImage. */}
+              <div
+                className="report-energy__preview-fade report-preview-fade--image"
+                aria-hidden="true"
+              >
+                <LockedPreviewImage name="energy" />
               </div>
               <PremiumOverlay
                 archetype={archetype}

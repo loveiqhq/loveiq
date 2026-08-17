@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type CSSProperties, type FC } from "react";
+import LockedPreviewImage from "./LockedPreviewImage";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import { useRevealOnView } from "../hooks/useRevealOnView";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
@@ -222,11 +223,14 @@ const AcceleratorsSection: FC<Props> = ({
           <div className="report-accel__verdict report-accel__verdict--locked">
             {copy["gate.hook"] ? <p className="report-accel__hook">{copy["gate.hook"]}</p> : null}
             <div className="report-accel__preview">
-              <div className="report-accel__preview-fade" aria-hidden="true">
-                <span className="report-accel__star">&#10037;</span>
-                <p className="report-accel__quote">
-                  Removing one brake does more than adding three accelerators.
-                </p>
+              {/* A pre-blurred render of the REAL chapter. Blurring the PIXELS at
+                  build time means the paid copy is not in the file that ships, so
+                  it cannot be read back out of the DOM. See LockedPreviewImage. */}
+              <div
+                className="report-accel__preview-fade report-preview-fade--image"
+                aria-hidden="true"
+              >
+                <LockedPreviewImage name="accel" />
               </div>
               <PremiumOverlay
                 archetype={archetype}

@@ -1,6 +1,7 @@
 "use client";
 
 import type { FC } from "react";
+import LockedPreviewImage from "./LockedPreviewImage";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import { getReadingSource, readingHref } from "@/data/report2-reading-links";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
@@ -188,26 +189,14 @@ const ReadingSection: FC<Props> = ({
       {locked ? (
         <div className="report-reading__preview">
           {copy["gate.hook"] ? <p className="report-reading__hook">{copy["gate.hook"]}</p> : null}
-          <div className="report-reading__preview-fade" aria-hidden="true">
-            {/* Blurred stand-in — the real per-archetype shortlist is withheld
-                server-side; four generic cards frame the paywall. */}
-            <div className="report-reading__grid">
-              {Array.from({ length: 4 }, (_, i) => (
-                <article key={i} className="report-reading__card">
-                  <span className="report-reading__spine" aria-hidden="true">
-                    <BookIcon />
-                  </span>
-                  <div className="report-reading__body">
-                    <p className="report-reading__tag">Core pick</p>
-                    <h4 className="report-reading__title">A read matched to how you are wired</h4>
-                    <p className="report-reading__author">Hand-picked · for you</p>
-                    <p className="report-reading__blurb">
-                      A short, personal note on why this one fits your archetype.
-                    </p>
-                  </div>
-                </article>
-              ))}
-            </div>
+          {/* A pre-blurred render of the REAL chapter. Blurring the PIXELS at
+              build time means the paid copy is not in the file that ships, so
+              it cannot be read back out of the DOM. See LockedPreviewImage. */}
+          <div
+            className="report-reading__preview-fade report-preview-fade--image"
+            aria-hidden="true"
+          >
+            <LockedPreviewImage name="reading" />
           </div>
           <PremiumOverlay
             archetype={archetype}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type CSSProperties, type FC } from "react";
+import LockedPreviewImage from "./LockedPreviewImage";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import { useRevealOnView } from "../hooks/useRevealOnView";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
@@ -358,21 +359,14 @@ const RewardSection: FC<Props> = ({
           <>
             {copy["gate.hook"] ? <p className="report-reward__hook">{copy["gate.hook"]}</p> : null}
             <div className="report-reward__preview">
-              <div className="report-reward__preview-fade" aria-hidden="true">
-                {/* Blurred stand-in — the real per-archetype ranking/meters are
-                    withheld server-side; this is generic filler under the blur. */}
-                <ol className="report-reward__list">
-                  {["oxytocin", "endorphins", "dopamine", "adrenaline"].map((slug, i) => (
-                    <RewardRow
-                      key={slug}
-                      index={i}
-                      name={CHEMICALS[slug]!.name}
-                      blurb={CHEMICALS[slug]!.blurb}
-                      role={["lead", "support", "amplifier", "disruptor"][i]!}
-                      meter={[80, 55, 32, 14][i]!}
-                    />
-                  ))}
-                </ol>
+              {/* A pre-blurred render of the REAL chapter. Blurring the PIXELS at
+                  build time means the paid copy is not in the file that ships, so
+                  it cannot be read back out of the DOM. See LockedPreviewImage. */}
+              <div
+                className="report-reward__preview-fade report-preview-fade--image"
+                aria-hidden="true"
+              >
+                <LockedPreviewImage name="reward" />
               </div>
               <PremiumOverlay
                 archetype={archetype}

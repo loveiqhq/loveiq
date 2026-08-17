@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type CSSProperties, type FC } from "react";
+import LockedPreviewImage from "./LockedPreviewImage";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import { renderEduPara } from "./eduPara";
@@ -455,12 +456,14 @@ const ArousalSection: FC<Props> = ({
           <>
             {copy["gate.hook"] ? <p className="report-arousal__hook">{copy["gate.hook"]}</p> : null}
             <div className="report-arousal__preview">
-              <div className="report-arousal__preview-fade" aria-hidden="true">
-                {/* Blurred stand-in — the real per-archetype result/arc/stats are
-                    withheld server-side; generic filler under the blur. */}
-                <p className="report-arousal__result-eyebrow">Your Arousal Style</p>
-                <p className="report-arousal__result">Responsive</p>
-                <ArousalArc family={family} acts={acts} accent={accent} />
+              {/* A pre-blurred render of the REAL chapter. Blurring the PIXELS at
+                  build time means the paid copy is not in the file that ships, so
+                  it cannot be read back out of the DOM. See LockedPreviewImage. */}
+              <div
+                className="report-arousal__preview-fade report-preview-fade--image"
+                aria-hidden="true"
+              >
+                <LockedPreviewImage name="arousal" />
               </div>
               <PremiumOverlay
                 archetype={archetype}

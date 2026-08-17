@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type CSSProperties, type FC } from "react";
+import LockedPreviewImage from "./LockedPreviewImage";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import { getReportTheme } from "../reportTheme";
@@ -290,12 +291,14 @@ const InitiationSection: FC<Props> = ({
               <p className="report-initiation__hook">{copy["gate.hook"]}</p>
             ) : null}
             <div className="report-initiation__preview">
-              <div className="report-initiation__preview-fade" aria-hidden="true">
-                {/* Blurred stand-in — the real per-archetype result/rows/stat are
-                    withheld server-side; generic filler under the blur. */}
-                <p className="report-initiation__result-eyebrow">Your Initiation Style</p>
-                <p className="report-initiation__result">Presence-led</p>
-                <TimelineChart fam={fam} />
+              {/* A pre-blurred render of the REAL chapter. Blurring the PIXELS at
+                  build time means the paid copy is not in the file that ships, so
+                  it cannot be read back out of the DOM. See LockedPreviewImage. */}
+              <div
+                className="report-initiation__preview-fade report-preview-fade--image"
+                aria-hidden="true"
+              >
+                <LockedPreviewImage name="initiation" />
               </div>
               <PremiumOverlay
                 archetype={archetype}

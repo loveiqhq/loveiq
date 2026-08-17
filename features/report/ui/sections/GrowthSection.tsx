@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type CSSProperties, type FC } from "react";
+import LockedPreviewImage from "./LockedPreviewImage";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 
@@ -295,29 +296,14 @@ const GrowthSection: FC<Props> = ({
           <>
             {copy["gate.hook"] ? <p className="report-growth__hook">{copy["gate.hook"]}</p> : null}
             <div className="report-growth__preview">
-              <div className="report-growth__preview-fade" aria-hidden="true">
-                {/* Blurred stand-in — the real per-archetype ladder is withheld
-                    server-side; the universal elevation profile frames it. */}
-                <ElevationProfile n={profileSteps} animated={isAnimated} />
-                <ol className="report-growth__ladder">
-                  {Array.from({ length: profileSteps }, (_, i) => (
-                    <li
-                      key={i}
-                      className={`report-growth__rung${i === 0 ? " is-first" : ""}`}
-                      style={{ marginLeft: `${i * 22.5}px` }}
-                    >
-                      <span className="report-growth__rung-dot" />
-                      <div className="report-growth__rung-body">
-                        <p className="report-growth__rung-line">
-                          <span className="report-growth__rung-from">waiting for the moment</span>
-                          <span className="report-growth__rung-arrow">{"→"}</span>
-                          <span className="report-growth__rung-to">creating it</span>
-                        </p>
-                        <p className="report-growth__rung-move">First move · one small shift.</p>
-                      </div>
-                    </li>
-                  ))}
-                </ol>
+              {/* A pre-blurred render of the REAL chapter. Blurring the PIXELS at
+                  build time means the paid copy is not in the file that ships, so
+                  it cannot be read back out of the DOM. See LockedPreviewImage. */}
+              <div
+                className="report-growth__preview-fade report-preview-fade--image"
+                aria-hidden="true"
+              >
+                <LockedPreviewImage name="growth" />
               </div>
               <PremiumOverlay
                 archetype={archetype}

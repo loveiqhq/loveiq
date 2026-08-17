@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type CSSProperties, type FC } from "react";
+import LockedPreviewImage from "./LockedPreviewImage";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import { useRevealOnView } from "../hooks/useRevealOnView";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
@@ -225,11 +226,14 @@ const LoveLanguageSection: FC<Props> = ({
               <p className="report-lovelang__hook">{copy["gate.hook"]}</p>
             ) : null}
             <div className="report-lovelang__preview">
-              <div className="report-lovelang__preview-fade" aria-hidden="true">
-                {/* Blurred stand-in — the reader's real ranked order + catch line
-                    are withheld server-side; this is generic filler under the
-                    blur (universal language names only). */}
-                <RankedList order={PLACEHOLDER_ORDER} />
+              {/* A pre-blurred render of the REAL chapter. Blurring the PIXELS at
+                  build time means the paid copy is not in the file that ships, so
+                  it cannot be read back out of the DOM. See LockedPreviewImage. */}
+              <div
+                className="report-lovelang__preview-fade report-preview-fade--image"
+                aria-hidden="true"
+              >
+                <LockedPreviewImage name="lovelang" />
               </div>
               <PremiumOverlay
                 archetype={archetype}

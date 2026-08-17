@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type CSSProperties, type FC, useRef } from "react";
+import LockedPreviewImage from "./LockedPreviewImage";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import { getReportTheme } from "../reportTheme";
 import { useRevealOnView } from "../hooks/useRevealOnView";
@@ -328,10 +329,14 @@ const PowerSection: FC<Props> = ({
           <>
             {copy["gate.hook"] ? <p className="report-power__hook">{copy["gate.hook"]}</p> : null}
             <div className="report-power__preview">
-              <div className="report-power__preview-fade" aria-hidden="true">
-                {/* The plane is a universal layout, safe to draw under the blur;
-                    the "You"/zone specifics are withheld (youZoneLabel=null). */}
-                <PowerPlane archetype={archetype} youZoneLabel={null} />
+              {/* A pre-blurred render of the REAL chapter. Blurring the PIXELS at
+                  build time means the paid copy is not in the file that ships, so
+                  it cannot be read back out of the DOM. See LockedPreviewImage. */}
+              <div
+                className="report-power__preview-fade report-preview-fade--image"
+                aria-hidden="true"
+              >
+                <LockedPreviewImage name="power" />
               </div>
               <PremiumOverlay
                 archetype={archetype}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type CSSProperties, type FC } from "react";
+import LockedPreviewImage from "./LockedPreviewImage";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import { partnershipCentreMessage } from "@/data/report2-partnership-loops";
@@ -271,31 +272,14 @@ const PartnershipSection: FC<Props> = ({
               <p className="report-partnership__hook">{copy["gate.hook"]}</p>
             ) : null}
             <div className="report-partnership__preview">
-              <div className="report-partnership__preview-fade" aria-hidden="true">
-                {/* Blurred stand-in — the real per-archetype result/rows are
-                    withheld server-side; generic filler under the blur. */}
-                <p className="report-partnership__pattern-eyebrow">The Pattern</p>
-                <p className="report-partnership__loop-name">The Resonance Loop</p>
-                <div className="report-partnership__rows">
-                  <div className="report-partnership__row">
-                    <p className="report-partnership__row-term">How it Starts</p>
-                    <p className="report-partnership__row-detail">
-                      Intimacy feels hollow, so you bid for depth
-                    </p>
-                  </div>
-                  <div className="report-partnership__row">
-                    <p className="report-partnership__row-term">How it Escalates</p>
-                    <p className="report-partnership__row-detail">
-                      Your partner hears criticism and pulls back; your bids get louder
-                    </p>
-                  </div>
-                  <div className="report-partnership__row">
-                    <p className="report-partnership__row-term">What It Costs</p>
-                    <p className="report-partnership__row-detail">
-                      Sex becomes collateral, closed rather than withheld
-                    </p>
-                  </div>
-                </div>
+              {/* A pre-blurred render of the REAL chapter. Blurring the PIXELS at
+                  build time means the paid copy is not in the file that ships, so
+                  it cannot be read back out of the DOM. See LockedPreviewImage. */}
+              <div
+                className="report-partnership__preview-fade report-preview-fade--image"
+                aria-hidden="true"
+              >
+                <LockedPreviewImage name="partnership" />
               </div>
               <PremiumOverlay
                 archetype={archetype}

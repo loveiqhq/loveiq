@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type CSSProperties, type FC } from "react";
+import LockedPreviewImage from "./LockedPreviewImage";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import { useRevealOnView } from "../hooks/useRevealOnView";
@@ -266,21 +267,14 @@ const LibidoSection: FC<Props> = ({
           <>
             {copy["gate.hook"] ? <p className="report-libido__hook">{copy["gate.hook"]}</p> : null}
             <div className="report-libido__preview">
-              <div className="report-libido__preview-fade" aria-hidden="true">
-                {/* Blurred stand-in — the real per-archetype loop/rows/practical
-                    are withheld server-side; generic filler under the blur. */}
-                <p className="report-libido__pattern-eyebrow">The Pattern</p>
-                <p className="report-libido__loop-name">The Waiting Loop</p>
-                <div className="report-libido__loop">
-                  <LoopArrow />
-                  <ol className="report-libido__loop-steps">
-                    {LOCKED_PREVIEW_STEPS.map((step, i) => (
-                      <li key={i} className="report-libido__loop-chip">
-                        <LoopChipText index={i + 1} step={step} />
-                      </li>
-                    ))}
-                  </ol>
-                </div>
+              {/* A pre-blurred render of the REAL chapter. Blurring the PIXELS at
+                  build time means the paid copy is not in the file that ships, so
+                  it cannot be read back out of the DOM. See LockedPreviewImage. */}
+              <div
+                className="report-libido__preview-fade report-preview-fade--image"
+                aria-hidden="true"
+              >
+                <LockedPreviewImage name="libido" />
               </div>
               <PremiumOverlay
                 archetype={archetype}
