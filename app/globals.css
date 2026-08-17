@@ -25803,3 +25803,36 @@ input.autofill-dark:-internal-autofill-previewed {
     );
   mask-composite: intersect;
 }
+
+/* "Five more patterns" header row: the label on the left, a group-level LOCKED
+   chip on the right — Figma leaves an empty right-hand container there in the
+   unlocked variant, which is where the chip belongs. The chip is shown only while
+   at least one of the five rows is still withheld, so it disappears along with the
+   per-row padlocks once the chapters are owned. */
+.report-map-patterns__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 15.8px;
+}
+
+/* The label carries the row's bottom margin on its own elsewhere; inside the
+   header row the flex container owns it. */
+.report-map-patterns__head .report-map-patterns__label {
+  margin-bottom: 0;
+}
+
+.report-map-patterns__locked {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  color: rgba(22, 16, 33, 0.38);
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: 0.705rem;
+  line-height: 1.65;
+  letter-spacing: 1.47px;
+  text-transform: uppercase;
+}

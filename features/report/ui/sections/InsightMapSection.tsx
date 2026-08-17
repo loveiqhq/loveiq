@@ -308,7 +308,20 @@ const InsightMapSection: FC<Props> = ({ archetype, copy, onOpen, isSectionOpen }
 
       {/* Five more patterns (Figma "5 Patterns — Variant C"). */}
       <article className="report-map-patterns">
-        <p className="report-map-patterns__label">Five more patterns</p>
+        {/* Figma puts a "LOCKED" chip at the FAR RIGHT of this header row — the
+            empty right-hand container at x=830 in the unlocked variant is where
+            it goes. It is a group-level mark, distinct from the per-row padlocks
+            in each row's top-right corner, and it disappears with them once the
+            chapters are owned. */}
+        <div className="report-map-patterns__head">
+          <p className="report-map-patterns__label">Five more patterns</p>
+          {rows.some((r) => !isSectionOpen(r.target)) ? (
+            <span className="report-map-patterns__locked">
+              <PadlockIcon open={false} />
+              Locked
+            </span>
+          ) : null}
+        </div>
         <div className="report-map-patterns__rows">
           {rows.map((r) => (
             <PatternRow
