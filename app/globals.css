@@ -8480,14 +8480,12 @@ input.autofill-dark:-internal-autofill-previewed {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  /* Flush with the title and with every other section.
-     Figma 8719:8865 does indent this body ~23px on its 896px frame (2.6%), and
-     the clamp that used to live here reproduced that to within 2px. But that
-     frame is drawn in isolation; in the assembled report this is the ONLY
-     prose block not inside a card, so it was the one run of text that failed
-     to line up with the section above and below it. Auditing every section
-     confirmed it: every other offset belongs to a card's own padding.
-     Restore by putting back `padding-left: clamp(0px, 1.4vw, 20px)`. */
+  /* Indented, per Figma 8719:8865: ~23px on its 896px frame (2.6%).
+     This was previously flattened to flush on the reasoning that it is the only
+     prose block in the report not inside a card, so the indent made it the one
+     run of text not lining up with its neighbours. Reinstated on request —
+     Figma is the reference, and the offset is what the frame draws. */
+  padding-left: clamp(0px, 1.4vw, 20px);
   color: #3f3a4d;
   font-family: var(--font-sans);
   font-size: clamp(0.95rem, 1.15vw, 1.0625rem);
@@ -8504,13 +8502,16 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 /*
- * Same ink as the paragraphs above it. This used to take the archetype accent,
- * which made the one closing line green for a Relational Nurturer, purple for a
- * Spiritual Lover and so on — the only coloured body copy in the report, and it
- * read as a link rather than as the sentence that closes the section.
+ * "Not a verdict. A mirror, and a map …" carries the reader's archetype colour.
+ *
+ * It was flattened to the body ink at one point, on the reasoning that a single
+ * coloured line read like a link. Reinstated on request: it is the sentence the
+ * section turns on, and the colour is what marks it as a conclusion rather than
+ * another paragraph. Medium weight keeps it from reading as a link.
  */
 .report-means__closing {
-  color: inherit;
+  color: rgb(var(--report-accent-ink-rgb, var(--report-accent-rgb)));
+  font-weight: 500;
 }
 
 /* Glow orbs — the blurred accent blobs in corners */
@@ -13903,13 +13904,45 @@ input.autofill-dark:-internal-autofill-previewed {
  * (Figma's frame within 3px), and the card geometry is untouched because its
  * height comes from the taller text column, not the cover.
  */
+/* Reads as a physical book, not a flat thumbnail: a dark spine edge down the
+   left, a thin page block down the right, a soft gradient across the jacket for
+   the curve of the paper, and a drop that sits under the object. Built with
+   box-shadow layers rather than a wrapper element so no markup changes and the
+   `<img>` keeps its own aspect ratio. */
+.report-reading__cover,
+.report-reading__spine {
+  box-shadow:
+    /* spine edge */
+    2px 0 0 rgba(255, 255, 255, 0.16) inset,
+    5px 0 6px -4px rgba(22, 16, 33, 0.55) inset,
+    /* page block on the fore edge */ -1.5px 0 0 rgba(255, 255, 255, 0.75) inset,
+    -3px 0 0 rgba(22, 16, 33, 0.1) inset,
+    /* the book sitting on the card */ 0 10px 18px -8px rgba(22, 16, 33, 0.45),
+    0 2px 4px rgba(22, 16, 33, 0.18);
+  transition:
+    transform 320ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 320ms ease;
+}
+
 .report-reading__cover {
   flex: 0 0 auto;
   display: block;
   width: clamp(64px, 8vw, 79px);
   height: auto;
-  border-radius: 5.6px;
-  box-shadow: 0 9px 20.3px rgba(22, 16, 33, 0.22);
+  border-radius: 3px 6px 6px 3px;
+}
+
+/* Lifts and turns very slightly towards the reader on hover. */
+.report-reading__card:hover .report-reading__cover,
+.report-reading__card:hover .report-reading__spine {
+  transform: translateY(-3px) rotate(-0.6deg);
+  box-shadow:
+    2px 0 0 rgba(255, 255, 255, 0.16) inset,
+    5px 0 6px -4px rgba(22, 16, 33, 0.55) inset,
+    -1.5px 0 0 rgba(255, 255, 255, 0.75) inset,
+    -3px 0 0 rgba(22, 16, 33, 0.1) inset,
+    0 16px 26px -10px rgba(22, 16, 33, 0.5),
+    0 3px 6px rgba(22, 16, 33, 0.2);
 }
 
 /*
@@ -13927,9 +13960,8 @@ input.autofill-dark:-internal-autofill-previewed {
   width: clamp(64px, 8vw, 79px);
   height: clamp(85px, 10.5vw, 97px);
   padding: 8px 9px 9px;
-  border-radius: 5.6px;
+  border-radius: 3px 6px 6px 3px;
   background: linear-gradient(150deg, #241a35 0%, #3b2452 100%);
-  box-shadow: 0 9px 20.3px rgba(22, 16, 33, 0.22);
 }
 
 .report-reading__spine-author {
@@ -13957,7 +13989,8 @@ input.autofill-dark:-internal-autofill-previewed {
 /* Link pill (Figma 8427:2792). */
 .report-reading__link {
   align-self: flex-start;
-  margin-top: 2px;
+  margin-top: clamp(10px, 1.2vw, 14px);
+  margin-bottom: clamp(4px, 0.6vw, 8px);
   padding: 3.4px 13.5px;
   border: 1.128px solid rgba(157, 138, 215, 0.35);
   border-radius: 9999px;
@@ -24968,10 +25001,15 @@ input.autofill-dark:-internal-autofill-previewed {
    Both sections' rows appeared fully formed. They now build in the order they
    are meant to be read, riding the shared `.report-section.is-visible` trigger
    so no component changes are needed and they stay in step with the charts. */
+/* NOTE: `.report-partnership__orbit-step` is deliberately NOT in this list. Its
+   cards are positioned with `transform: translate(-50%, -50%)`, and `transform`
+   is a single property — declaring it here at equal specificity but later in the
+   file silently replaced that centring, which is what pushed the three cards off
+   their orbit points. It has its own reveal above, built on the independent
+   `translate` property, which composes with the positioning instead. */
 .report-curiosity__fit-dot,
 .report-curiosity__struct-item,
-.report-partnership__row,
-.report-partnership__orbit-step {
+.report-partnership__row {
   opacity: 0;
   transform: translateY(5px);
   transition:
@@ -24993,10 +25031,8 @@ input.autofill-dark:-internal-autofill-previewed {
 
 .report-section.is-visible .report-curiosity__struct-item,
 .report-section.is-visible .report-partnership__row,
-.report-section.is-visible .report-partnership__orbit-step,
 .report-chart-reveal.is-revealed .report-curiosity__struct-item,
-.report-chart-reveal.is-revealed .report-partnership__row,
-.report-chart-reveal.is-revealed .report-partnership__orbit-step {
+.report-chart-reveal.is-revealed .report-partnership__row {
   opacity: 1;
   transform: translateY(0);
 }
@@ -25588,4 +25624,93 @@ input.autofill-dark:-internal-autofill-previewed {
   .report-energy__readouts.report-chart-reveal .report-energy__readout-seg {
     transition: none;
   }
+}
+
+/* A phrase carried in the section's own HTML that should read in the reader's
+   archetype colour rather than the body ink — "your current stage is not a
+   verdict" is the line the whole chapter turns on. Falls back to the accent when
+   the ink variable is absent, so it is never left unstyled. */
+.report-accent-phrase {
+  color: rgb(var(--report-accent-ink-rgb, var(--report-accent-rgb)));
+}
+
+/* Unnamed fantasy dots: the zone name appears on hover only. Half the dots carry
+   no label in the data (eight labels ship per report, the two most extreme per
+   quadrant), so this answers "what is this one?" with the quadrant it sits in
+   rather than an invented practice name. */
+.report-fantasy-map__dot-zone {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 6px);
+  transform: translateX(-50%);
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: rgba(22, 16, 33, 0.9);
+  color: #ffffff;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 0.6rem;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease;
+  z-index: 3;
+}
+
+.report-fantasy-map__dot:hover .report-fantasy-map__dot-zone,
+.report-fantasy-map__dot:focus-visible .report-fantasy-map__dot-zone {
+  opacity: 1;
+}
+
+/* The dot itself needs to be hoverable and to read as inspectable. */
+.report-fantasy-map__dot {
+  pointer-events: auto;
+  cursor: default;
+}
+
+/* ==========================================================================
+   FANTASY PRACTICE TABLES — FADE FROM THE MIDDLE
+
+   The shared lock mask dissolves BOTH ends: it ramps in from transparent at the
+   top and back out at the bottom. On the practice tables that meant the first
+   rows were half-gone before the reader had seen anything, so the whole block
+   read as withheld rather than as a table trailing off.
+
+   Here it stays fully present down to the midpoint and only then falls away, so
+   the top of the 1-10 scoring is readable and the fade begins where the
+   withholding does. Declared after the shared rule and at higher specificity so
+   it wins regardless of source order.
+   ========================================================================== */
+.report-fantasy__tables.report-fantasy__tables--locked {
+  -webkit-mask-image:
+    linear-gradient(
+      to bottom,
+      rgba(0, 0, 0, 1) 0%,
+      rgba(0, 0, 0, 1) 50%,
+      rgba(0, 0, 0, 0.28) 78%,
+      rgba(0, 0, 0, 0) 100%
+    ),
+    linear-gradient(
+      to right,
+      rgba(0, 0, 0, 0) 0%,
+      rgba(0, 0, 0, 1) var(--report-lock-fade-side),
+      rgba(0, 0, 0, 1) calc(100% - var(--report-lock-fade-side)),
+      rgba(0, 0, 0, 0) 100%
+    );
+  mask-image:
+    linear-gradient(
+      to bottom,
+      rgba(0, 0, 0, 1) 0%,
+      rgba(0, 0, 0, 1) 50%,
+      rgba(0, 0, 0, 0.28) 78%,
+      rgba(0, 0, 0, 0) 100%
+    ),
+    linear-gradient(
+      to right,
+      rgba(0, 0, 0, 0) 0%,
+      rgba(0, 0, 0, 1) var(--report-lock-fade-side),
+      rgba(0, 0, 0, 1) calc(100% - var(--report-lock-fade-side)),
+      rgba(0, 0, 0, 0) 100%
+    );
 }

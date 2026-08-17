@@ -137,6 +137,12 @@ const QUADRANT_DOT: Record<Quadrant, string> = {
 // dots derived from their archetype's practice-tendency scores
 // (`features/report/server/fantasyMap.ts`), which is what the chartnote
 // promises. Only 8 dots are labelled, per the Figma; `q` drives dot colour.
+/** Quadrant id -> its display name, for the hover label on unnamed dots. */
+const QUADRANT_LABEL: Record<Quadrant, string> = QUADRANTS.reduce(
+  (acc, quad) => ({ ...acc, [quad.id]: quad.label }),
+  {} as Record<Quadrant, string>
+);
+
 const MAP_DOTS: { label: string | null; q: Quadrant; x: number; y: number }[] = [
   { label: "Mutual surrender", q: "lean", x: 0.92, y: 0.12 },
   { label: "Sacred kink", q: "lean", x: 0.8, y: 0.17 },
@@ -228,7 +234,15 @@ const FantasyMap: FC<{ filter: MapFilter; dots?: FantasyMapDot[] | null }> = ({ 
               >
                 {dot.label ? (
                   <span className="report-fantasy-map__dot-label">{dot.label}</span>
-                ) : null}
+                ) : (
+                  /* The data ships exactly eight labels — the two most extreme
+                     per quadrant — so half the dots have no name to show, and
+                     inventing one would be fabricating a practice this reader
+                     was never scored on. Hover instead names the ZONE the dot
+                     sits in, which IS real: it answers "what is this one?"
+                     without putting words in the data's mouth. */
+                  <span className="report-fantasy-map__dot-zone">{QUADRANT_LABEL[dot.q]}</span>
+                )}
               </span>
             );
           })}
