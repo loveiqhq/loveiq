@@ -8799,7 +8799,7 @@ input.autofill-dark:-internal-autofill-previewed {
      the design relies on the bars themselves to group the pairs. That reads as one
      block of four rows at our type sizes, so this is deliberately above the
      design: enough that a label clearly belongs to the bars under it. */
-  gap: clamp(26px, 2.4vw, 34px);
+  gap: clamp(28px, 2.6vw, 38px);
   width: 100%;
 }
 
@@ -8834,7 +8834,7 @@ input.autofill-dark:-internal-autofill-previewed {
     /* Figma leaves real air between the hero's four blocks (48-55px between the
        label, the motivation card, the trait grid and the meters). This used to
        tighten it to 12px, which ran them together — the "no space" report. */
-    gap: 34px;
+    gap: 38px;
   }
 
   .report-hero-card__motivation {
@@ -8855,7 +8855,7 @@ input.autofill-dark:-internal-autofill-previewed {
   .report-hero-card__progress {
     /* Was 10px here — TIGHTER than the base, so the widest layout had the least
        room between the two readings. */
-    gap: 34px;
+    gap: 38px;
   }
 }
 
@@ -8867,7 +8867,7 @@ input.autofill-dark:-internal-autofill-previewed {
      Figma 8430:704/707 puts 24px here (label ends y=20, bars start y=44); this
      shipped at 12px, then 22px, and now sits at or above the design's 24 at every
      width — 30px on a wide desktop, where there is room for it. */
-  margin-bottom: clamp(18px, 1.8vw, 26px);
+  margin-bottom: clamp(19px, 1.95vw, 28px);
   color: #191a1b;
   font-family: var(--font-sans);
   font-size: clamp(1rem, 1.5vw, 1.25rem);
