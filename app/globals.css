@@ -25321,3 +25321,46 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-preview-fade--image {
   filter: none;
 }
+
+/* ==========================================================================
+   SNAPSHOT "YOUR HIDDEN EDGE" RING
+
+   The accent arc sweeps the fraction printed above it ("1 in 4" -> a quarter),
+   set per-archetype as `--arc-offset` on the element. It used to be a hardcoded
+   half sweep, so twelve of the fourteen archetypes had a ring contradicting
+   their own figure.
+
+   Draw-in follows the same primitive as `.report-draw-line`: `pathLength={1}`
+   puts the dash units in 0-1, so the stroke grows from nothing to its share.
+   The 1.15s duration and 0.15s delay sit just under the arousal curve beside it
+   (1.6s), so the two cards resolve together rather than in lockstep.
+   ========================================================================== */
+.report-snapshot-card__arc {
+  stroke-dashoffset: 1;
+}
+
+.report-section.is-visible .report-snapshot-card__arc,
+.report-chart-reveal.is-revealed .report-snapshot-card__arc {
+  animation: report-snapshot-arc-draw 1.15s cubic-bezier(0.16, 1, 0.3, 1) 0.15s forwards;
+}
+
+@keyframes report-snapshot-arc-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: var(--arc-offset, 0.5);
+  }
+}
+
+/* Reduced motion: land on the finished sweep with no draw. */
+@media (prefers-reduced-motion: reduce) {
+  .report-snapshot-card__arc {
+    stroke-dashoffset: var(--arc-offset, 0.5);
+  }
+
+  .report-section.is-visible .report-snapshot-card__arc,
+  .report-chart-reveal.is-revealed .report-snapshot-card__arc {
+    animation: none;
+  }
+}

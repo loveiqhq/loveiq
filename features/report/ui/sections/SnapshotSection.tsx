@@ -1,6 +1,6 @@
 "use client";
 
-import type { FC } from "react";
+import type { CSSProperties, FC } from "react";
 import { archetypeSlug, getReport2Config, type Report2CopySlug } from "@/data/report2-config";
 import { snapshotCards } from "@/data/report2-snapshot-cards";
 import {
@@ -57,25 +57,71 @@ function capitalizeWord(value: string): string {
 }
 
 /**
- * Card 1 donut — geometry taken from Figma `8719:8893/8894`: a 46px ring,
- * 5.06px stroke, faint #9D8AD7 track at 18%, and a HALF (180°) accent arc
- * starting at 12 o'clock. r = (46 − 5.06) / 2 = 20.47, so the circumference is
- * 2π·20.47 ≈ 128.6 and half of it is ≈ 64.3.
+ * The share of the ring the accent arc should sweep, from the value printed
+ * directly above it. Returns null when the value carries no number.
+ *
+ * Figma's frame mocks a HALF ring, which is only right for the value that frame
+ * happened to show. Hardcoding it meant "1 in 3" drew a 50% arc — a graphic
+ * contradicting the figure sitting on top of it, the same defect the compare
+ * dots and bar already had.
  */
-const HiddenEdgeArc: FC = () => (
-  <svg viewBox="0 0 46 46" fill="none" className="report-snapshot-card__viz" aria-hidden="true">
-    <circle cx="23" cy="23" r="20.47" stroke="#9d8ad7" strokeOpacity="0.18" strokeWidth="5.06" />
-    <circle
-      cx="23"
-      cy="23"
-      r="20.47"
-      stroke="#9d8ad7"
-      strokeWidth="5.06"
-      strokeDasharray="64.3 128.6"
-      transform="rotate(-90 23 23)"
-    />
-  </svg>
-);
+function hiddenEdgeFraction(value: string | null | undefined): number | null {
+  const raw = value?.trim() ?? "";
+
+  const ratio = raw.match(/\b(\d+)\s+in\s+(\d+)/i);
+  if (ratio) {
+    const numerator = Number(ratio[1]);
+    const denominator = Number(ratio[2]);
+    if (denominator > 0 && numerator > 0 && numerator <= denominator) {
+      return numerator / denominator;
+    }
+  }
+
+  const percent = raw.match(/(\d+(?:\.\d+)?)\s*%/);
+  if (percent) {
+    const pct = Number(percent[1]);
+    if (pct > 0 && pct <= 100) return pct / 100;
+  }
+
+  return null;
+}
+
+/**
+ * Card 1 donut — geometry taken from Figma `8719:8893/8894`: a 46px ring,
+ * 5.06px stroke, faint #9D8AD7 track at 18%, accent arc starting at 12 o'clock.
+ * r = (46 − 5.06) / 2 = 20.47.
+ *
+ * `pathLength={1}` puts the dash units in 0–1 so the sweep IS the fraction, and
+ * the draw-in is a plain dashoffset — the same primitive every other chart in the
+ * report uses.
+ *
+ * Two of the fourteen audited values are qualitative ("Rarely first"), so they
+ * get the track and no accent arc. Figma's mocked half sweep would say the
+ * opposite of the word above it, and picking any other size would be inventing a
+ * statistic the audit deliberately did not give.
+ */
+const HiddenEdgeArc: FC<{ value?: string | null }> = ({ value }) => {
+  const fraction = hiddenEdgeFraction(value);
+  return (
+    <svg viewBox="0 0 46 46" fill="none" className="report-snapshot-card__viz" aria-hidden="true">
+      <circle cx="23" cy="23" r="20.47" stroke="#9d8ad7" strokeOpacity="0.18" strokeWidth="5.06" />
+      {fraction === null ? null : (
+        <circle
+          className="report-snapshot-card__arc"
+          cx="23"
+          cy="23"
+          r="20.47"
+          stroke="#9d8ad7"
+          strokeWidth="5.06"
+          pathLength={1}
+          strokeDasharray="1"
+          style={{ "--arc-offset": 1 - fraction } as CSSProperties}
+          transform="rotate(-90 23 23)"
+        />
+      )}
+    </svg>
+  );
+};
 
 /**
  * Card 2 arousal curve — the path, stroke and gradient are verbatim from Figma
@@ -253,7 +299,7 @@ const SnapshotSection: FC<Props> = ({ archetype, copy, stageResult = null }) => 
           <article className="report-snapshot-card">
             <p className="report-snapshot-card__eyebrow">Your Hidden Edge</p>
             <span className="report-snapshot-card__value">{displayStat}</span>
-            <HiddenEdgeArc />
+            <HiddenEdgeArc value={displayStat} />
             <p className="report-snapshot-card__subtext">{openingCaption}</p>
           </article>
         ) : cards?.hiddenEdge ? (
@@ -263,7 +309,7 @@ const SnapshotSection: FC<Props> = ({ archetype, copy, stageResult = null }) => 
                 ring below it (y≈142) — it is not a value-inside-donut. Same
                 stack order as card 2: eyebrow → value → viz → subtext. */}
             <span className="report-snapshot-card__value">{cards.hiddenEdge.value}</span>
-            <HiddenEdgeArc />
+            <HiddenEdgeArc value={cards.hiddenEdge.value} />
             <p className="report-snapshot-card__subtext">{cards.hiddenEdge.subtext}</p>
           </article>
         ) : null}
