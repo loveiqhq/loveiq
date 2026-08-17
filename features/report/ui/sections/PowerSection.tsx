@@ -366,8 +366,6 @@ const PowerSection: FC<Props> = ({
                 <p className="report-power__takeaway">{copy.takeaway}</p>
               </div>
             ) : null}
-
-            <div className="report-power__rule" aria-hidden="true" />
           </>
         )}
 

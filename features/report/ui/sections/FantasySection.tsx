@@ -362,8 +362,6 @@ const FantasySection: FC<Props> = ({
           </div>
         ) : null}
 
-        {hasEdu ? <div className="report-fantasy__rule" aria-hidden="true" /> : null}
-
         {hasEdu ? (
           <div className="report-fantasy__details">
             <button

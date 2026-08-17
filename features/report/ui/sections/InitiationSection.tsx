@@ -346,7 +346,6 @@ const InitiationSection: FC<Props> = ({
                   &#10037;
                 </span>
                 <p className="report-initiation__takeaway">{copy.takeaway}</p>
-                <span className="report-initiation__rule" aria-hidden="true" />
               </div>
             ) : null}
           </>

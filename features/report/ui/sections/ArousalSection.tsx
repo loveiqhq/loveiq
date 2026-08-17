@@ -513,8 +513,6 @@ const ArousalSection: FC<Props> = ({
                 <p className="report-arousal__reframe-value">{copy["insight.value"]}</p>
               </div>
             ) : null}
-
-            <div className="report-arousal__rule" aria-hidden="true" />
           </>
         )}
 

@@ -217,16 +217,11 @@ const ReadingSection: FC<Props> = ({
             </div>
           ) : null}
 
-          {closingLead || closingFormula ? (
-            <p className="report-reading__closing">
-              {closingLead ? (
-                <span className="report-reading__closing-lead">{closingLead} </span>
-              ) : null}
-              {closingFormula ? (
-                <em className="report-reading__closing-formula">{closingFormula}</em>
-              ) : null}
-            </p>
-          ) : null}
+          {/* The closing line ("Your sexuality isn't complicated. It's …") was
+              removed on request: it restates the chapter after the books have
+              already made the point, and the reading list reads better ending on
+              the shelf. `closing.lead` / `closing.formula` stay in the copy
+              matrix and on the props so nothing else that reads them breaks. */}
         </>
       )}
     </div>

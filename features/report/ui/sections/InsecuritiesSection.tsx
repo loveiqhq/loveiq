@@ -419,8 +419,6 @@ const InsecuritiesSection: FC<Props> = ({
           </>
         )}
 
-        <div className="report-insecurities__rule" aria-hidden="true" />
-
         {hasPractical ? (
           <div className="report-insecurities__details">
             <button

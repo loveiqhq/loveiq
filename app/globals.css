@@ -3596,6 +3596,10 @@ input.autofill-dark:-internal-autofill-previewed {
   background: #ffffff;
   color: #3f3a4d;
   border-top: 1px solid rgba(22, 16, 33, 0.08);
+  /* The closing card ended almost flush against the footer, so the report ran
+     straight into site chrome with no pause. This is the last beat of a very
+     long page and wants room to land. */
+  margin-top: clamp(56px, 7vw, 112px);
 }
 
 /* The shared FooterSection ships dark-mode text (text-white / #9CA3AF); recolor
@@ -8543,7 +8547,7 @@ input.autofill-dark:-internal-autofill-previewed {
     "copy match"
     "motto motto";
   column-gap: 24px;
-  row-gap: 12px;
+  row-gap: clamp(18px, 1.9vw, 26px);
   align-items: flex-start;
   margin-bottom: 18px;
 }
@@ -8576,6 +8580,9 @@ input.autofill-dark:-internal-autofill-previewed {
   margin: 0;
   color: #161021;
   font-family: var(--font-serif);
+  /* Lora is loaded at 400/500/600/700, so 700 is a real cut rather than a
+     browser-synthesised fake bold. */
+  font-weight: 700;
   font-size: clamp(2rem, 3.4vw, 3rem);
   line-height: 1.02;
   letter-spacing: -0.01em;
@@ -8918,7 +8925,7 @@ input.autofill-dark:-internal-autofill-previewed {
   max-width: 290px;
   margin-inline: auto;
   min-height: 361px;
-  padding: 28px 22px 26px;
+  padding: clamp(28px, 2.6vw, 36px) clamp(22px, 2vw, 28px) clamp(26px, 2.4vw, 34px);
   border: 0.9px solid rgba(0, 0, 0, 0.1);
   border-radius: 22px;
   background: rgba(255, 255, 255, 0.72);
@@ -9178,6 +9185,9 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-snapshot-compare__cols {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
+  /* `stretch` gives each column the row's full height so `justify-content:
+     flex-end` on the column has something to push against. */
+  align-items: stretch;
   gap: 11px;
 }
 
@@ -9185,8 +9195,13 @@ input.autofill-dark:-internal-autofill-previewed {
   display: flex;
   flex-direction: column;
   align-items: center;
+  /* Bottom-aligned: the three columns have different graphic heights and
+     caption line counts, so top-aligning left the captions at three different
+     heights with dead space under them. */
+  justify-content: flex-end;
   gap: 10px;
   text-align: center;
+  height: 100%;
 }
 
 .report-snapshot-compare__dots {
@@ -10027,13 +10042,6 @@ input.autofill-dark:-internal-autofill-previewed {
   pointer-events: none;
 }
 
-.report-insecurities__rule {
-  width: 42.9px;
-  height: 1.7px;
-  border-radius: 2.3px;
-  background: rgba(157, 138, 215, 0.4);
-}
-
 /* Collapsible "three moves" practice block — gold left rule + gradient wash
    (Figma 8427:1547), gold pill summary, italic teaser + "Read the full
    practice" CTA, expandable numbered body. */
@@ -10426,13 +10434,6 @@ input.autofill-dark:-internal-autofill-previewed {
   font-weight: 400;
   font-size: clamp(1.05rem, 1.55vw, 1.164rem);
   line-height: 1.55;
-}
-
-.report-reward__rule {
-  width: 42.9px;
-  height: 1.7px;
-  border-radius: 2.3px;
-  background: rgba(157, 138, 215, 0.4);
 }
 
 .report-reward__hook {
@@ -10898,18 +10899,7 @@ input.autofill-dark:-internal-autofill-previewed {
   line-height: 1.55;
 }
 
-.report-energy__rule {
-  width: 42.9px;
-  height: 1.7px;
-  border-radius: 2.3px;
-  background: rgba(157, 138, 215, 0.4);
-}
-
 /* The wider rule above the graph (Figma 8427:1897). */
-.report-energy__rule--wide {
-  width: 72.2px;
-  height: 2.26px;
-}
 
 .report-energy__hook {
   margin: 0 0 6px;
@@ -11413,13 +11403,6 @@ input.autofill-dark:-internal-autofill-previewed {
   line-height: 1.5;
 }
 
-.report-arousal__rule {
-  width: 42.9px;
-  height: 1.7px;
-  border-radius: 2.3px;
-  background: rgba(157, 138, 215, 0.4);
-}
-
 .report-arousal__hook {
   margin: 0 0 6px;
   text-align: center;
@@ -11774,13 +11757,6 @@ input.autofill-dark:-internal-autofill-previewed {
   line-height: 1.5;
 }
 
-.report-enjoy__rule {
-  width: 42.9px;
-  height: 1.7px;
-  border-radius: 2.3px;
-  background: rgba(157, 138, 215, 0.4);
-}
-
 .report-enjoy__hook {
   margin: 0 0 6px;
   text-align: center;
@@ -12019,15 +11995,6 @@ input.autofill-dark:-internal-autofill-previewed {
 
 .report-closing__body-accent {
   color: #795fc8;
-}
-
-.report-closing__rule {
-  position: relative;
-  display: block;
-  width: 63.2px;
-  height: 2.3px;
-  border-radius: 2.3px;
-  background: linear-gradient(90deg, #9d8ad7 0%, #c36ddf 100%);
 }
 
 /* ── Initiation Style (Report 2.0, Part III premium) — Figma 8427:2283 ───────
@@ -12334,13 +12301,6 @@ input.autofill-dark:-internal-autofill-previewed {
   font-size: clamp(1.05rem, 1.5vw, 1.164rem);
   text-align: center;
   line-height: 1.55;
-}
-
-.report-initiation__rule {
-  width: 42.9px;
-  height: 1.7px;
-  border-radius: 2.3px;
-  background: rgba(157, 138, 215, 0.4);
 }
 
 .report-initiation__hook {
@@ -17795,7 +17755,10 @@ input.autofill-dark:-internal-autofill-previewed {
       "copy"
       "motto"
       "match";
-    gap: 12px;
+    /* `gap` here overrides the base `row-gap`, so the extra air between the
+       archetype name and its motto has to be restated for the stacked layout —
+       otherwise mobile stayed at the old 12px while desktop opened up. */
+    gap: 18px;
   }
 
   .report-hero-card__header-copy {
@@ -22185,13 +22148,6 @@ input.autofill-dark:-internal-autofill-previewed {
   line-height: 1.55;
 }
 
-.report-power__rule {
-  width: 42.9px;
-  height: 1.7px;
-  border-radius: 2.3px;
-  background: rgba(157, 138, 215, 0.4);
-}
-
 .report-power__hook {
   margin: 0 0 6px;
   text-align: center;
@@ -22738,13 +22694,6 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-fantasy__chartnote--muted {
   color: #8d84a6;
   font-size: clamp(0.78rem, 1.1vw, 0.84rem);
-}
-
-.report-fantasy__rule {
-  width: 42.9px;
-  height: 1.7px;
-  border-radius: 2.3px;
-  background: rgba(157, 138, 215, 0.4);
 }
 
 /* Locked: blurred map stand-in the PremiumOverlay anchors on. */
@@ -25361,6 +25310,136 @@ input.autofill-dark:-internal-autofill-previewed {
 
   .report-section.is-visible .report-snapshot-card__arc,
   .report-chart-reveal.is-revealed .report-snapshot-card__arc {
+    animation: none;
+  }
+}
+
+/* ==========================================================================
+   "HOW YOU COMPARE" REVEAL
+
+   The box and its three columns were static — the numbers simply existed. They
+   now arrive: the card lifts in, each dot lands in sequence so the ratio reads
+   as it fills, the percentage bar grows from its left edge, and the figure plus
+   caption follow once the graphic has settled.
+
+   The bar grows with scaleX rather than width because its fill width is set
+   inline from the stat, and a keyframe cannot animate to an inline value.
+   Nothing here uses transform for positioning, so there is no shorthand to
+   clobber.
+   ========================================================================== */
+.report-snapshot-compare {
+  opacity: 0;
+  transform: translateY(14px);
+}
+
+.report-section.is-visible .report-snapshot-compare,
+.report-chart-reveal.is-revealed .report-snapshot-compare {
+  animation: report-compare-in 640ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes report-compare-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.report-snapshot-compare__dots span {
+  opacity: 0;
+  transform: scale(0.4);
+  transform-box: fill-box;
+}
+
+/* Sequential fill, so the ratio reads as it lands. The delay is computed from
+   `--dot-i` INSIDE the shorthand: a separate `animation-delay` rule on
+   `:nth-child` loses to this selector's higher specificity, and the shorthand
+   then resets every delay to 0 — which is exactly how all twelve dots ended up
+   appearing simultaneously the first time. */
+.report-section.is-visible .report-snapshot-compare__dots span,
+.report-chart-reveal.is-revealed .report-snapshot-compare__dots span {
+  animation: report-compare-dot-in 260ms cubic-bezier(0.16, 1, 0.3, 1)
+    calc(260ms + var(--dot-i, 0) * 60ms) forwards;
+}
+
+@keyframes report-compare-dot-in {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.report-snapshot-compare__bar span {
+  transform: scaleX(0);
+  transform-origin: left center;
+}
+
+.report-section.is-visible .report-snapshot-compare__bar span,
+.report-chart-reveal.is-revealed .report-snapshot-compare__bar span {
+  animation: report-compare-bar-grow 900ms cubic-bezier(0.16, 1, 0.3, 1) 300ms forwards;
+}
+
+@keyframes report-compare-bar-grow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.report-snapshot-compare__stat,
+.report-snapshot-compare__caption {
+  opacity: 0;
+}
+
+.report-section.is-visible .report-snapshot-compare__stat,
+.report-chart-reveal.is-revealed .report-snapshot-compare__stat {
+  animation: report-compare-fade-up 420ms ease-out 900ms forwards;
+}
+
+.report-section.is-visible .report-snapshot-compare__caption,
+.report-chart-reveal.is-revealed .report-snapshot-compare__caption {
+  animation: report-compare-fade-up 420ms ease-out 1020ms forwards;
+}
+
+@keyframes report-compare-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Reduced motion: everything at rest, nothing animates. */
+@media (prefers-reduced-motion: reduce) {
+  .report-snapshot-compare,
+  .report-snapshot-compare__dots span,
+  .report-snapshot-compare__stat,
+  .report-snapshot-compare__caption {
+    opacity: 1;
+    transform: none;
+  }
+
+  .report-snapshot-compare__bar span {
+    transform: scaleX(1);
+  }
+
+  .report-section.is-visible .report-snapshot-compare,
+  .report-section.is-visible .report-snapshot-compare__dots span,
+  .report-section.is-visible .report-snapshot-compare__bar span,
+  .report-section.is-visible .report-snapshot-compare__stat,
+  .report-section.is-visible .report-snapshot-compare__caption {
     animation: none;
   }
 }

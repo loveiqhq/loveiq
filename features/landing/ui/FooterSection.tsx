@@ -18,9 +18,14 @@ const FooterSection: FC = () => {
                 <LoveIQWordmark className="text-xl" />
               </h2>
             </div>
+            {/* Two sentences, two rows. As one paragraph the column width broke
+                the line mid-sentence ("… sexual psychology. We" / "translate
+                …"), so the second sentence started hanging off the first line. */}
             <p className="max-w-xs text-sm leading-relaxed text-[#9CA3AF]">
-              Democratizing sexual psychology. We translate complex research into actionable
-              insights for everyday life.
+              <span className="block">Democratizing sexual psychology.</span>
+              <span className="block">
+                We translate complex research into actionable insights for everyday life.
+              </span>
             </p>
           </div>
 

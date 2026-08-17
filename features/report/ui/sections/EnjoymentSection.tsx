@@ -190,8 +190,6 @@ const EnjoymentSection: FC<Props> = ({
                 <p className="report-enjoy__insight-value">{copy["insight.value"]}</p>
               </div>
             ) : null}
-
-            <div className="report-enjoy__rule" aria-hidden="true" />
           </>
         )}
 

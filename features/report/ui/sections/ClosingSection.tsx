@@ -28,7 +28,6 @@ const ClosingSection: FC = () => (
         . When those are honored, you&apos;re not the &quot;difficult&quot; archetype. You&apos;re
         one of the most devoted, present, and quietly erotic ways a person can love.
       </p>
-      <span className="report-closing__rule" aria-hidden="true" />
     </div>
   </section>
 );

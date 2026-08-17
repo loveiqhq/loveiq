@@ -470,7 +470,6 @@ const EnergySection: FC<Props> = ({
             </p>
 
             {/* Wide rule between the callout and the graph (Figma 8427:1897). */}
-            <div className="report-energy__rule report-energy__rule--wide" aria-hidden="true" />
 
             <div className="report-energy__graph-wrap">
               <p className="report-energy__eyebrow">
@@ -493,8 +492,6 @@ const EnergySection: FC<Props> = ({
                 <p className="report-energy__takeaway">{copy.takeaway}</p>
               </div>
             ) : null}
-
-            <div className="report-energy__rule" aria-hidden="true" />
           </>
         )}
 

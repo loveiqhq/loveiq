@@ -199,11 +199,23 @@ function dotsFromStat(stat: string | undefined): { filled: number; total: number
   return { filled: 1, total: 7 };
 }
 
-/** Row of `total` dots with the first `filled` painted accent. */
+/**
+ * Row of `total` dots with the first `filled` painted accent.
+ *
+ * `--dot-i` carries the position so the reveal can stagger them, the same way
+ * the growth ladder uses `--rung-i`. It has to be a custom property rather than
+ * `:nth-child` delays: the reveal rule sets the `animation` SHORTHAND, which
+ * outranks a lower-specificity `animation-delay` and silently resets every
+ * delay to 0 — all twelve dots then landed at once.
+ */
 const CompareDots: FC<{ filled: number; total: number }> = ({ filled, total }) => (
   <div className="report-snapshot-compare__dots" aria-hidden="true">
     {Array.from({ length: total }, (_, i) => (
-      <span key={i} className={i < filled ? "is-filled" : ""} />
+      <span
+        key={i}
+        className={i < filled ? "is-filled" : ""}
+        style={{ "--dot-i": i } as CSSProperties}
+      />
     ))}
   </div>
 );
