@@ -14,6 +14,12 @@ import { describe, expect, it } from "vitest";
  *
  * Rendering all sixteen sections would need sixteen prop fixtures, so this
  * checks the source and the assets directly.
+ *
+ * BeliefsSection is deliberately NOT in this registry. Figma's locked frame for
+ * that chapter does not blur it — it shows the real rows sharp at the top, fading
+ * out toward the paywall card — so it teases server-trimmed copy instead of a
+ * raster. See BeliefsSection.locked.test.tsx. Its generated images are therefore
+ * unreferenced, which the orphan check below allows for by name.
  */
 const SECTIONS_DIR = join(process.cwd(), "features/report/ui/sections");
 const PREVIEW_DIR = join(process.cwd(), "public/report-previews");
@@ -22,7 +28,6 @@ const PREVIEW_DIR = join(process.cwd(), "public/report-previews");
 const SECTIONS: Record<string, string> = {
   "AcceleratorsSection.tsx": "accel",
   "ArousalSection.tsx": "arousal",
-  "BeliefsSection.tsx": "beliefs",
   "ConfidenceSection.tsx": "confidence",
   "CuriositySection.tsx": "curiosity",
   "EnergySection.tsx": "energy",
@@ -66,6 +71,10 @@ describe("locked preview images", () => {
     const referenced = new Set(
       Object.values(SECTIONS).flatMap((n) => [`${n}-desktop.jpg`, `${n}-mobile.jpg`])
     );
+    // Beliefs switched to a copy-based tease; its rasters stay on disk so the
+    // generator's section list and the wiring can diverge without failing here.
+    referenced.add("beliefs-desktop.jpg");
+    referenced.add("beliefs-mobile.jpg");
     const orphans = readdirSync(PREVIEW_DIR).filter(
       (f) => f.endsWith(".jpg") && !referenced.has(f)
     );

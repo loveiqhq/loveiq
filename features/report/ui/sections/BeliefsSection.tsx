@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, type FC } from "react";
-import LockedPreviewImage from "./LockedPreviewImage";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import { renderEduPara } from "./eduPara";
@@ -120,7 +119,6 @@ const BeliefsSection: FC<Props> = ({
   // When locked, tease the first two "keep" beliefs unblurred (universal-safe
   // in spirit — they're gentle, and the real per-archetype set is withheld
   // server-side anyway) and blur any that remain behind the overlay.
-  const teaserKeep = locked ? keep.slice(0, 2) : keep;
 
   return (
     <div className="report-beliefs">
@@ -144,31 +142,44 @@ const BeliefsSection: FC<Props> = ({
             {/* Teaser: a couple of "keep" beliefs peek through, the full
                 per-archetype keep/loosen grid is withheld server-side and the
                 PremiumOverlay anchors over the blurred stand-in. */}
-            {teaserKeep.length > 0 ? (
-              <div className="report-beliefs__col report-beliefs__col--teaser">
-                <p className="report-beliefs__col-label report-beliefs__col-label--keep">
-                  Serve you &mdash; keep
-                </p>
-                <div className="report-beliefs__list">
-                  {teaserKeep.map((text, i) => (
-                    <KeepItem key={i} text={text} />
-                  ))}
-                </div>
-              </div>
-            ) : null}
-
             <div className="report-beliefs__preview report-beliefs__preview--locked">
-              {/* A pre-blurred render of the REAL chapter. It replaced a
-                  hand-written stand-in grid: the stand-in was honest about
-                  layout but its words were invented, and the ask was for the
-                  actual content behind the paywall without making it
-                  recoverable. Blurring the PIXELS at build time gives both —
-                  see LockedPreviewImage. */}
-              <div
-                className="report-beliefs__preview-fade report-preview-fade--image"
-                aria-hidden="true"
-              >
-                <LockedPreviewImage name="beliefs" />
+              {/* The REAL beliefs, sharp and readable, fading out downward — which
+                  is what Figma's locked frame draws. Not blurred: the frame keeps
+                  the top rows crisp black and lets them go grey then transparent
+                  toward the paywall card.
+
+                  The server ships only the first four rows per column
+                  (BELIEFS_TEASER_ROWS), so the fade is a real boundary and not a
+                  CSS trick over the whole list — strip the opacity in devtools and
+                  there is nothing further to read. */}
+              <div className="report-beliefs__preview-fade report-beliefs__preview-fade--tease">
+                <div className="report-beliefs__cols">
+                  {keep.length > 0 ? (
+                    <div className="report-beliefs__col">
+                      <p className="report-beliefs__col-label report-beliefs__col-label--keep">
+                        Serve you &mdash; keep
+                      </p>
+                      <div className="report-beliefs__list">
+                        {keep.map((text, i) => (
+                          <KeepItem key={i} text={text} />
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {loosen.length > 0 ? (
+                    <div className="report-beliefs__col report-beliefs__col--loosen-col">
+                      <p className="report-beliefs__col-label report-beliefs__col-label--loosen">
+                        Box you in &mdash; loosen
+                      </p>
+                      <div className="report-beliefs__list">
+                        {loosen.map((item, i) => (
+                          <LoosenItem key={i} belief={item.belief as string} shift={item.shift} />
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
               </div>
               <PremiumOverlay
                 archetype={archetype}

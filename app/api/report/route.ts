@@ -702,15 +702,32 @@ export async function GET(request: Request) {
       isPremium: true,
       sectionId: "typical_beliefs",
     });
-    const beliefsKeep: (string | null)[] = beliefsUnlocked
-      ? Array.from({ length: 9 }, (_, i) => beliefsSection[`keep.${i + 1}`] ?? null)
-      : [];
-    const beliefsLoosen = beliefsUnlocked
-      ? Array.from({ length: 10 }, (_, i) => ({
-          belief: beliefsSection[`loosen.${i + 1}.belief`] ?? null,
-          shift: beliefsSection[`loosen.${i + 1}.shift`] ?? null,
-        }))
-      : [];
+    /**
+     * How many rows a LOCKED client receives.
+     *
+     * Figma's locked Beliefs frame does not blur the chapter: it shows the real
+     * beliefs sharp and readable at the top of each column, fading black -> grey ->
+     * gone on the way down, with the paywall card over the lower half. So the
+     * tease is genuine content, and the server has to ship some of it.
+     *
+     * Four per column is what the frame shows crisp before the fade takes over. It
+     * is a deliberate giveaway of 4 of 9 keeps and 4 of 10 loosens; the rest never
+     * leave the server, so the fade is a real boundary rather than a CSS effect
+     * over the full list — remove the opacity in devtools and there is simply
+     * nothing more to read.
+     */
+    const BELIEFS_TEASER_ROWS = 4;
+    const beliefsRowCount = beliefsUnlocked ? 9 : BELIEFS_TEASER_ROWS;
+    const beliefsLoosenCount = beliefsUnlocked ? 10 : BELIEFS_TEASER_ROWS;
+
+    const beliefsKeep: (string | null)[] = Array.from(
+      { length: beliefsRowCount },
+      (_, i) => beliefsSection[`keep.${i + 1}`] ?? null
+    );
+    const beliefsLoosen = Array.from({ length: beliefsLoosenCount }, (_, i) => ({
+      belief: beliefsSection[`loosen.${i + 1}.belief`] ?? null,
+      shift: beliefsSection[`loosen.${i + 1}.shift`] ?? null,
+    }));
     const beliefsCopy = {
       "gate.hook": beliefsSection["gate.hook"] ?? null,
       "edu.eyebrow": beliefsSection["edu.eyebrow"] ?? null,
