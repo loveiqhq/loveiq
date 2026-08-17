@@ -10,6 +10,7 @@ import {
   type TouchEvent as ReactTouchEvent,
 } from "react";
 import { createPortal } from "react-dom";
+import { PadlockIcon } from "./ReportNavBadge";
 import {
   PaywallCountdownPill,
   PaywallCountdownTiles,
@@ -100,24 +101,22 @@ function GreenCheck({ size = 18, color = "#1f8a5b" }: { size?: number; color?: s
   );
 }
 
+/**
+ * The "Locked · in your report" chip's padlock.
+ *
+ * Delegates to the report's shared `PadlockIcon` rather than drawing a fourth
+ * padlock: this file had its own 12x14 outline with a hardcoded #9a96a6 stroke,
+ * so the same idea was drawn differently here than in the nav and the insight
+ * map. The wrapper keeps the call sites and the size prop unchanged.
+ */
 function LockGlyph({ size = 12 }: { size?: number }) {
   return (
-    <svg
-      width={size}
-      height={(size * 14) / 12}
-      viewBox="0 0 12 14"
-      fill="none"
+    <span
       aria-hidden="true"
-      style={{ flexShrink: 0 }}
+      style={{ display: "inline-flex", flexShrink: 0, width: size, height: (size * 14) / 12 }}
     >
-      <rect x="1" y="6" width="10" height="7.4" rx="2" stroke="#9a96a6" strokeWidth="1.2" />
-      <path
-        d="M3.5 6V4a2.5 2.5 0 0 1 5 0v2"
-        stroke="#9a96a6"
-        strokeWidth="1.2"
-        strokeLinecap="round"
-      />
-    </svg>
+      <PadlockIcon open={false} />
+    </span>
   );
 }
 

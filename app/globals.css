@@ -15450,6 +15450,8 @@ input.autofill-dark:-internal-autofill-previewed {
   border-radius: 20.3px;
   background: #ffffff;
   filter: drop-shadow(0 15.8px 19.2px rgba(22, 16, 33, 0.05));
+  /* Positioning context for the top-right access mark. */
+  position: relative;
 }
 
 .report-map-row__left {
@@ -25595,12 +25597,17 @@ input.autofill-dark:-internal-autofill-previewed {
 /* Access mark on the Insight Map rows. Sits with the title, inheriting the
    row's ink at a muted opacity so it reads as metadata rather than decoration. */
 .report-map-row__lock {
+  /* Top-right corner of the row, per Figma's section name ("lock top-right").
+     It sat inline beside the title first, which put it in the middle of the
+     heading rather than marking the row. */
+  position: absolute;
+  top: clamp(10px, 1.1vw, 14px);
+  right: clamp(10px, 1.1vw, 14px);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  flex: 0 0 auto;
-  margin-left: 8px;
   color: #9a93a6;
+  z-index: 1;
 }
 
 /* ==========================================================================

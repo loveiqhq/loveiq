@@ -166,6 +166,20 @@ const PatternRow: FC<{
   if (!sub) return null;
   return (
     <div className="report-map-row">
+      {/* Top-right, per Figma's own name for this section: "Section - INSIGHT MAP
+          — B2 final, lock top-right". The five rows carried no access mark at
+          all, so a withheld chapter looked identical to an owned one until you
+          clicked its CTA and hit the paywall.
+
+          An owned chapter gets NOTHING here — not an open padlock. Figma's
+          unlocked variant (8762:15833) draws no lock on any row, and at this size
+          an open padlock reads as "still locked" anyway. */}
+      {isSectionOpen(target) ? null : (
+        <span className="report-map-row__lock" title="Locked chapter">
+          <span className="sr-only">Locked chapter</span>
+          <PadlockIcon open={false} />
+        </span>
+      )}
       <div className="report-map-row__left">
         <div className="report-map-row__title-line">
           <span
@@ -176,17 +190,6 @@ const PatternRow: FC<{
             {symbol}
           </span>
           <h4 className="report-map-row__title">{title}</h4>
-          {/* The five map rows carried no access mark at all, so a withheld
-              chapter looked identical to an owned one until you clicked its CTA
-              and got the paywall. Same glyph as the nav badge — and, like the
-              nav, an owned chapter gets NO mark rather than an open padlock,
-              which at this size reads as "still locked". */}
-          {isSectionOpen(target) ? null : (
-            <span className="report-map-row__lock" title="Locked chapter">
-              <span className="sr-only">Locked chapter</span>
-              <PadlockIcon open={false} />
-            </span>
-          )}
         </div>
         <div className="report-map-row__learn">
           <p className="report-map-row__learn-label">WHAT YOU&apos;LL LEARN</p>
