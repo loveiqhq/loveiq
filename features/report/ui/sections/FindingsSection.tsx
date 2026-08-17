@@ -100,22 +100,35 @@ const FindingsSection: FC<Props> = ({ copy, onUnlock }) => {
 
       <article className="report-findings__card">
         <div className="report-findings__rows">
-          {rows.map((r, i) => (
+          {rows.slice(0, 2).map((r, i) => (
             <FindingRow key={i} index={i + 1} head={r.head} body={r.body} locked={r.locked} />
           ))}
-        </div>
 
-        {locked ? (
-          <div className="report-findings__upsell">
-            {upsellLine ? <p className="report-findings__upsell-line">{upsellLine}</p> : null}
-            {/* Figma locked page 8988:16141 labels this CTA "Unlock the Full
-                Report →" — distinct from PremiumOverlay's "Unlock your report"
-                (8993:19194), which is a different component in the design. */}
-            <button type="button" className="report-findings__unlock" onClick={onUnlock}>
-              Unlock the Full Report →
-            </button>
+          {/* The withheld findings are grouped so the CTA can sit centred OVER
+              them, which is where Figma 8988:16141 puts it. Pinned under the
+              rows behind a divider, it read as a footnote rather than the way
+              past the blur. The group is the positioning context, so the CTA
+              stays centred on the blurred block at any width or copy length. */}
+          <div
+            className={`report-findings__group${locked ? " report-findings__group--locked" : ""}`}
+          >
+            {rows.slice(2).map((r, i) => (
+              <FindingRow key={i + 2} index={i + 3} head={r.head} body={r.body} locked={r.locked} />
+            ))}
+
+            {locked ? (
+              <div className="report-findings__upsell">
+                {upsellLine ? <p className="report-findings__upsell-line">{upsellLine}</p> : null}
+                {/* Figma labels this CTA "Unlock the Full Report →" — distinct
+                    from PremiumOverlay's "Unlock your report" (8993:19194),
+                    which is a different component in the design. */}
+                <button type="button" className="report-findings__unlock" onClick={onUnlock}>
+                  Unlock the Full Report →
+                </button>
+              </div>
+            ) : null}
           </div>
-        ) : null}
+        </div>
       </article>
     </div>
   );

@@ -9373,7 +9373,8 @@ input.autofill-dark:-internal-autofill-previewed {
 
 /* Locked findings (f3-5, unpaid): teaser text blurred + lock glyph. The real
    head/body never reach the client — only the universal .locked. teaser does. */
-.report-findings__row--locked .report-findings__body-wrap {
+.report-findings__row--locked .report-findings__body-wrap,
+.report-findings__row--locked .report-findings__num {
   filter: blur(var(--report-lock-blur));
   opacity: 0.75;
   user-select: none;
@@ -9393,15 +9394,38 @@ input.autofill-dark:-internal-autofill-previewed {
   height: 22px;
 }
 
+/* The rows container has no gap — each row carries its own vertical padding —
+   so the group only needs to stack, adding no spacing of its own. */
+.report-findings__group {
+  display: flex;
+  flex-direction: column;
+}
+
+.report-findings__group--locked {
+  /* Positioning context for the centred CTA. */
+  position: relative;
+}
+
 .report-findings__upsell {
+  /* Centred on the blurred block, per Figma 8988:16141. Anchoring to the group
+     rather than the card keeps it centred on the WITHHELD rows at any width,
+     without a magic percentage that drifts when the copy rewraps. */
+  position: absolute;
+  inset: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 14px;
-  margin-top: 20px;
-  padding-top: 22px;
-  border-top: 1.128px solid rgba(22, 16, 33, 0.09);
   text-align: center;
+  /* Soft white wash so the line and button stay legible over the blurred rows
+     behind them — Figma carries the same glow around its CTA. */
+  background: radial-gradient(
+    ellipse 60% 55% at 50% 50%,
+    rgba(255, 255, 255, 0.92) 0%,
+    rgba(255, 255, 255, 0.7) 55%,
+    rgba(255, 255, 255, 0) 100%
+  );
 }
 
 .report-findings__upsell-line {
@@ -10862,7 +10886,9 @@ input.autofill-dark:-internal-autofill-previewed {
 
 /* Universal caption under the graph ("Every line is one of the 14 archetypes…"). */
 .report-energy-graph__note {
-  margin: 6px 0 0;
+  /* Real air on both sides: at 6px above and nothing below, the note read as
+     part of the chart's axis labels rather than a caption under it. */
+  margin: clamp(16px, 1.8vw, 24px) 0 clamp(12px, 1.4vw, 18px);
   text-align: center;
   color: #6b6678;
   font-family: var(--font-sans);
@@ -13493,8 +13519,11 @@ input.autofill-dark:-internal-autofill-previewed {
   stroke-dashoffset: 2000;
 }
 
+/* Slower, and paired: the curve now takes as long as the whole rung sequence, so
+   the line is still travelling while each step lands rather than finishing first
+   and leaving the rungs to catch up. */
 .report-growth__profile.is-animated .report-growth__profile-line {
-  animation: report-growth-draw 1.5s cubic-bezier(0.33, 1, 0.68, 1) forwards;
+  animation: report-growth-draw 2.4s cubic-bezier(0.33, 1, 0.68, 1) forwards;
 }
 
 .report-growth__profile-dot {
@@ -13506,8 +13535,11 @@ input.autofill-dark:-internal-autofill-previewed {
 
 .report-growth__profile.is-animated .report-growth__profile-dot {
   animation: report-growth-pop 420ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-  /* Each dot lands just after the line reaches it. */
-  animation-delay: calc(220ms + var(--dot-i, 0) * 250ms);
+  /* One beat per step, shared with the rungs below so a dot and its own line of
+     text read as a pair. At 250ms for dots against 130ms for rungs the two
+     sequences drifted apart and by the third step the text was arriving before
+     its dot. */
+  animation-delay: calc(300ms + var(--dot-i, 0) * 430ms);
 }
 
 .report-growth__profile.is-animated .report-growth__profile-start {
@@ -13523,7 +13555,9 @@ input.autofill-dark:-internal-autofill-previewed {
 
 .report-growth.is-animated .report-growth__rung {
   animation: report-growth-rise 520ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  animation-delay: calc(420ms + var(--rung-i, 0) * 130ms);
+  /* Same 430ms beat as the dots, offset 210ms so each rung follows the dot it
+     belongs to: dot, its text, next dot, its text. */
+  animation-delay: calc(510ms + var(--rung-i, 0) * 430ms);
 }
 
 @keyframes report-growth-draw {
@@ -14464,7 +14498,8 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 .report-confidence__chartnote {
-  margin: 0;
+  /* Matches the energy chapter's note spacing — same sentence, same job. */
+  margin: clamp(16px, 1.8vw, 24px) 0 clamp(12px, 1.4vw, 18px);
   color: #7a7486;
   font-family: var(--font-sans);
   font-weight: 400;
@@ -14723,7 +14758,10 @@ input.autofill-dark:-internal-autofill-previewed {
    teaser's last line — which is the Figma behaviour — is preserved. */
 .report-learn-peek {
   position: relative;
-  padding-bottom: 34px;
+  /* The pill sits ON the faded tail, so this padding is what separates the whole
+     block from the card edge below it. 34px left the expander almost touching
+     the bottom of the card. */
+  padding-bottom: clamp(48px, 4vw, 62px);
 }
 
 /* Figma sets the leading label of a "Label: explanation" paragraph in Manrope Bold
@@ -14736,18 +14774,23 @@ input.autofill-dark:-internal-autofill-previewed {
 /* Fade the tail of the teaser so it reads as "there is more below". A mask is
    used rather than an overlay gradient so it works on any card background. */
 .report-learn-peek .report-learn-teaser {
+  /* Fades the last TWO LINES specifically, in line-height units rather than
+     percentages. The teaser runs 3 lines on desktop but 5-7 once the column
+     narrows, so a percentage stop faded a different amount of text at every
+     width — at 30% it was already eating into the first line on desktop while
+     barely touching the tail on mobile. 1.45 is this block's line-height. */
   -webkit-mask-image: linear-gradient(
     to bottom,
-    #000 0%,
-    #000 30%,
-    rgba(0, 0, 0, 0.35) 72%,
+    #000 0,
+    #000 calc(100% - 2.9em),
+    rgba(0, 0, 0, 0.42) calc(100% - 1.45em),
     rgba(0, 0, 0, 0) 100%
   );
   mask-image: linear-gradient(
     to bottom,
-    #000 0%,
-    #000 30%,
-    rgba(0, 0, 0, 0.35) 72%,
+    #000 0,
+    #000 calc(100% - 2.9em),
+    rgba(0, 0, 0, 0.42) calc(100% - 1.45em),
     rgba(0, 0, 0, 0) 100%
   );
 }
@@ -21951,6 +21994,9 @@ input.autofill-dark:-internal-autofill-previewed {
   width: 100%;
   /* Room for the axis captions outside the plot frame. */
   padding: 26px 56px 30px;
+  /* And room BELOW the frame: the zone paragraph started immediately under the
+     axis caption, so the chart and the prose read as one block. */
+  margin-bottom: clamp(18px, 2.2vw, 30px);
 }
 
 .report-power-plane__frame {
@@ -23451,7 +23497,9 @@ input.autofill-dark:-internal-autofill-previewed {
 
 /* Centered "catch" line under the list (Figma 8427:2173) — per-archetype. */
 .report-lovelang__catch {
-  margin: 0;
+  /* The closing line sat tight against the ranked list above and the expander
+     below, so the chapter's takeaway had nowhere to breathe. */
+  margin: clamp(18px, 2.2vw, 30px) 0 clamp(10px, 1.2vw, 16px);
   text-align: center;
   color: #3f3a4d;
   font-family: var(--font-sans);
@@ -23918,6 +23966,12 @@ input.autofill-dark:-internal-autofill-previewed {
   stroke-dasharray: 1;
   stroke-dashoffset: 1;
   opacity: 1;
+  /* The path ships a `3 4.5` dashed presentation attribute, which read as a
+     line broken in the middle. CSS overrides it to a single full-length dash so
+     the loop-back arc is continuous once drawn, and a little more ink so it does
+     not disappear against the card at 1.5px. */
+  stroke-opacity: 0.7;
+  stroke-width: 1.8;
 }
 
 .report-libido__loop.report-chart-reveal.is-revealed .report-libido__loop-curve {
@@ -24018,8 +24072,28 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 .report-arousal-arc.report-chart-reveal .report-arousal-arc__cue {
-  transition: opacity 300ms ease-out;
-  transition-delay: calc(420ms + var(--row, 0) * 300ms);
+  /* Per-property delays inside the shorthand, NOT a blanket `transition-delay`.
+     The reveal stagger runs up to 1.3s, and a shared delay made hover feel
+     broken — the dot only began growing a second after the cursor arrived. This
+     keeps the stagger on opacity while transform and the glow respond at once,
+     in both directions. */
+  transition:
+    opacity 300ms ease-out calc(420ms + var(--row, 0) * 300ms),
+    transform 240ms cubic-bezier(0.34, 1.56, 0.64, 1) 0ms,
+    filter 240ms ease 0ms;
+  transform-box: fill-box;
+  transform-origin: center;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+/* Hover: the dot swells and lights up, so the condition it marks is inspectable
+   rather than decorative. Kept off the arc's own end dot, which is the result
+   rather than a condition. */
+.report-arousal-arc .report-arousal-arc__cue:hover {
+  transform: scale(1.55);
+  filter: drop-shadow(0 0 7px rgb(var(--report-accent-rgb) / 0.7));
+  opacity: 1;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -25016,12 +25090,23 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-libido__loop.is-revealed .report-libido__loop-current {
   animation:
     libido-loop-fade 400ms ease 1300ms forwards,
-    libido-loop-travel 3200ms linear 1300ms infinite;
+    /* Three passes, not forever: the point lands in three and a permanent
+       flicker kept pulling the eye for the rest of the chapter. The dim at the
+       end (1300 + 3 x 3200) retires the travelling segment so it does not
+       freeze halfway along the curve. */
+    libido-loop-travel 3200ms linear 1300ms 3,
+    libido-loop-dim 600ms ease 10900ms forwards;
 }
 
 @keyframes libido-loop-fade {
   to {
     opacity: 0.85;
+  }
+}
+
+@keyframes libido-loop-dim {
+  to {
+    opacity: 0;
   }
 }
 
@@ -25040,7 +25125,7 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 .report-libido__loop.is-revealed .report-libido__loop-head {
-  animation: libido-loop-head 3200ms ease-in-out 1300ms infinite;
+  animation: libido-loop-head 3200ms ease-in-out 1300ms 3;
 }
 
 @keyframes libido-loop-head {
@@ -25059,7 +25144,7 @@ input.autofill-dark:-internal-autofill-previewed {
 
 /* Each chip re-lights as the current passes it. */
 .report-libido__loop.is-revealed .report-libido__loop-chip {
-  animation: libido-chip-pulse 3200ms ease-in-out infinite;
+  animation: libido-chip-pulse 3200ms ease-in-out 3;
   animation-delay: calc(1300ms + var(--chip, 0) * 620ms);
 }
 
@@ -25441,5 +25526,66 @@ input.autofill-dark:-internal-autofill-previewed {
   .report-section.is-visible .report-snapshot-compare__stat,
   .report-section.is-visible .report-snapshot-compare__caption {
     animation: none;
+  }
+}
+
+/* Access mark on the Insight Map rows. Sits with the title, inheriting the
+   row's ink at a muted opacity so it reads as metadata rather than decoration. */
+.report-map-row__lock {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  margin-left: 8px;
+  color: #9a93a6;
+}
+
+/* ==========================================================================
+   ENERGY READOUTS IN SEQUENCE
+
+   Energy, Risk and Endurance appeared at once, which read as one block being
+   switched on rather than three separate readings. Each row now gets its own
+   beat, and its three segments fill after the row that owns them — so the
+   reader's eye follows the reading being made.
+
+   The stagger lives in per-property delays inside the `transition` shorthand
+   rather than a blanket `transition-delay`, so nothing else on these elements
+   inherits a second of lag.
+   ========================================================================== */
+.report-energy__readouts.report-chart-reveal:not(.is-revealed) .report-energy__readout {
+  opacity: 0;
+  translate: 0 10px;
+}
+
+.report-energy__readouts.report-chart-reveal .report-energy__readout {
+  transition:
+    opacity 420ms ease-out calc(var(--readout-i, 0) * 420ms),
+    translate 520ms cubic-bezier(0.16, 1, 0.3, 1) calc(var(--readout-i, 0) * 420ms);
+}
+
+.report-energy__readouts.report-chart-reveal:not(.is-revealed) .report-energy__readout-seg {
+  opacity: 0;
+  scale: 0.55 1;
+}
+
+.report-energy__readouts.report-chart-reveal .report-energy__readout-seg {
+  transform-origin: left center;
+  transition:
+    opacity 300ms ease-out calc(var(--readout-i, 0) * 420ms + 180ms + var(--seg-i, 0) * 110ms),
+    scale 340ms cubic-bezier(0.34, 1.56, 0.64, 1)
+      calc(var(--readout-i, 0) * 420ms + 180ms + var(--seg-i, 0) * 110ms);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .report-energy__readouts.report-chart-reveal:not(.is-revealed) .report-energy__readout,
+  .report-energy__readouts.report-chart-reveal:not(.is-revealed) .report-energy__readout-seg {
+    opacity: 1;
+    translate: none;
+    scale: none;
+  }
+
+  .report-energy__readouts.report-chart-reveal .report-energy__readout,
+  .report-energy__readouts.report-chart-reveal .report-energy__readout-seg {
+    transition: none;
   }
 }

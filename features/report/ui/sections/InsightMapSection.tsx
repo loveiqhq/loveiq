@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type FC, type ReactNode } from "react";
+import { PadlockIcon } from "../ReportNavBadge";
 import { getReport2Config } from "@/data/report2-config";
 import {
   AROUSAL_CURVES,
@@ -175,6 +176,17 @@ const PatternRow: FC<{
             {symbol}
           </span>
           <h4 className="report-map-row__title">{title}</h4>
+          {/* The five map rows carried no access mark at all, so a withheld
+              chapter looked identical to an owned one until you clicked its CTA
+              and got the paywall. Same glyph as the nav badge — and, like the
+              nav, an owned chapter gets NO mark rather than an open padlock,
+              which at this size reads as "still locked". */}
+          {isSectionOpen(target) ? null : (
+            <span className="report-map-row__lock" title="Locked chapter">
+              <span className="sr-only">Locked chapter</span>
+              <PadlockIcon open={false} />
+            </span>
+          )}
         </div>
         <div className="report-map-row__learn">
           <p className="report-map-row__learn-label">WHAT YOU&apos;LL LEARN</p>

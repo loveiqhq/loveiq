@@ -126,15 +126,22 @@ const READOUT_ROWS = [
 
 const TOTAL_SEGMENTS = 3;
 
-/** One readout: icon + serif label + 3 segment bars, then result + detail. */
-const ReadoutRow: FC<{ label: string; reading: EnergyReading; level?: number }> = ({
+/**
+ * One readout: icon + serif label + 3 segment bars, then result + detail.
+ *
+ * `index` drives the reveal stagger. Energy, Risk and Endurance used to appear
+ * together, which read as a single block switching on; in sequence each reading
+ * is given its own beat, and the segments fill after the row that owns them.
+ */
+const ReadoutRow: FC<{ label: string; reading: EnergyReading; level?: number; index: number }> = ({
   label,
   reading,
   level,
+  index,
 }) => {
   const filled = Math.max(0, Math.min(TOTAL_SEGMENTS, level ?? reading.level));
   return (
-    <div className="report-energy__readout">
+    <div className="report-energy__readout" style={{ "--readout-i": index } as CSSProperties}>
       <div className="report-energy__readout-head">
         <span className="report-energy__readout-icon" aria-hidden="true">
           <BoltIcon />
@@ -142,7 +149,11 @@ const ReadoutRow: FC<{ label: string; reading: EnergyReading; level?: number }> 
         <span className="report-energy__readout-label">{label}</span>
         <span className="report-energy__readout-segments" aria-hidden="true">
           {Array.from({ length: TOTAL_SEGMENTS }, (_, i) => (
-            <span key={i} className={`report-energy__readout-seg${i < filled ? " is-on" : ""}`} />
+            <span
+              key={i}
+              className={`report-energy__readout-seg${i < filled ? " is-on" : ""}`}
+              style={{ "--seg-i": i } as CSSProperties}
+            />
           ))}
         </span>
       </div>
@@ -387,6 +398,10 @@ const EnergySection: FC<Props> = ({
   sectionTitle,
   tier = "full_report",
 }) => {
+  // Own reveal for the readouts, so Energy/Risk/Endurance start their
+  // sequence when the block itself arrives rather than when the section's
+  // top edge does — this chapter runs several viewports tall.
+  const [readoutsRef, readoutsRevealed] = useRevealOnView<HTMLDivElement>();
   const [expanded, setExpanded] = useState(false);
   if (!copy) return null;
 
@@ -452,10 +467,14 @@ const EnergySection: FC<Props> = ({
           </>
         ) : (
           <>
-            <div className="report-energy__readouts">
-              {READOUT_ROWS.map((r) => (
+            <div
+              ref={readoutsRef}
+              className={`report-energy__readouts report-chart-reveal${readoutsRevealed ? " is-revealed" : ""}`}
+            >
+              {READOUT_ROWS.map((r, i) => (
                 <ReadoutRow
                   key={r.key}
+                  index={i}
                   label={r.label}
                   reading={profile[r.key]}
                   level={readouts?.[r.key]}
