@@ -703,29 +703,30 @@ export async function GET(request: Request) {
       sectionId: "typical_beliefs",
     });
     /**
-     * A LOCKED client receives the FULL row list.
+     * A locked client receives only the FIRST FEW rows.
      *
-     * Figma's locked frame (8427:1656) shows all nine keeps and all ten loosens:
-     * the first four of each column in solid black, the rest stepping down through
-     * grey to nothing, with the paywall card over the lower half. The tall fading
-     * list IS the tease — that is what makes the chapter look substantial enough to
-     * buy. A four-row trim produced a short block with the card covering most of
-     * it, which is not the design.
+     * Shipping the whole list and fading it made the entire chapter legible — the
+     * fade is gentle enough that all nine keeps and ten loosens could be read, so
+     * there was nothing left to buy. THREE per column is the tease: the first two
+     * read clearly and the third dissolves, so the reader gets a real taste and the
+     * remaining six keeps and seven loosens never leave the server.
      *
-     * KNOWN TRADE-OFF, decided deliberately: the faded rows are real text in the
-     * DOM, so removing the mask in devtools reveals them. That is accepted here in
-     * exchange for matching the design — the fade is a visual tease, not a security
-     * boundary. What still never reaches a locked client is `body.p1`, the
-     * per-archetype closing paragraph below the grid.
+     * This is the real boundary: strip the mask in devtools and there is simply
+     * nothing further in the DOM. `body.p1`, the per-archetype closing paragraph,
+     * stays withheld as well.
      */
+    const BELIEFS_TEASER_ROWS = 3;
     const beliefsKeep: (string | null)[] = Array.from(
-      { length: 9 },
+      { length: beliefsUnlocked ? 9 : BELIEFS_TEASER_ROWS },
       (_, i) => beliefsSection[`keep.${i + 1}`] ?? null
     );
-    const beliefsLoosen = Array.from({ length: 10 }, (_, i) => ({
-      belief: beliefsSection[`loosen.${i + 1}.belief`] ?? null,
-      shift: beliefsSection[`loosen.${i + 1}.shift`] ?? null,
-    }));
+    const beliefsLoosen = Array.from(
+      { length: beliefsUnlocked ? 10 : BELIEFS_TEASER_ROWS },
+      (_, i) => ({
+        belief: beliefsSection[`loosen.${i + 1}.belief`] ?? null,
+        shift: beliefsSection[`loosen.${i + 1}.shift`] ?? null,
+      })
+    );
 
     const beliefsCopy = {
       "gate.hook": beliefsSection["gate.hook"] ?? null,
