@@ -215,7 +215,11 @@ const StatDots: FC<{ stat?: string | null }> = ({ stat }) => {
   return (
     <span className="report-initiation__stat-dots" aria-hidden="true">
       {Array.from({ length: total }, (_, i) => (
-        <span key={i} className={`report-initiation__stat-dot${i < filled ? " is-on" : ""}`} />
+        <span
+          key={i}
+          style={{ "--i": i } as CSSProperties}
+          className={`report-initiation__stat-dot${i < filled ? " is-on" : ""}`}
+        />
       ))}
     </span>
   );
@@ -231,6 +235,7 @@ const InitiationSection: FC<Props> = ({
   sectionTitle,
   tier = "full_report",
 }) => {
+  const [statRef, statRevealed] = useRevealOnView<HTMLDivElement>({ threshold: 0 });
   const [expanded, setExpanded] = useState(false);
   if (!copy) return null;
 
@@ -344,7 +349,12 @@ const InitiationSection: FC<Props> = ({
             ) : null}
 
             {hasStat ? (
-              <div className="report-initiation__stat">
+              <div
+                ref={statRef}
+                className={`report-initiation__stat report-chart-reveal${
+                  statRevealed ? " is-revealed" : ""
+                }`}
+              >
                 <StatDots stat={stat} />
                 <span className="report-initiation__stat-value">{stat}</span>
                 <span className="report-initiation__stat-caption">{statCaption}</span>

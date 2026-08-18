@@ -25064,6 +25064,106 @@ input.autofill-dark:-internal-autofill-previewed {
   background: linear-gradient(90deg, #b7a6e3 0%, #795fc8 100%);
 }
 
+/* ── The mini-stat boxes arrive instead of just being there ─────────────────
+   Three sections carry this gradient-bordered box — Arousal, Reward, Initiation —
+   and its two graphics (a row of dots, a filled bar) were the only charts in the
+   report that were simply painted. They now build when the reader reaches them.
+
+   The dots land left to right, 60ms apart, on a curve with a touch of overshoot so
+   each one settles rather than stops; the filled ones are leftmost, so the eye
+   reads the ratio in the order it means. The bar wipes out from its left edge on
+   the smooth settle curve the report uses everywhere else, and the number and its
+   caption rise the last 4px behind them. Nothing waits for the part before it to
+   finish, which is what keeps it one movement rather than a queue.
+
+   Each box owns its own `useRevealOnView` root: it sits well below the chart above
+   it, so riding that chart's root would have played this out long before the reader
+   arrived. ========================================================================= */
+.report-chart-reveal:not(.is-revealed) .report-arousal__stat-dots circle,
+.report-chart-reveal:not(.is-revealed) .report-reward__stat-dots circle,
+.report-chart-reveal:not(.is-revealed) .report-initiation__stat-dot {
+  opacity: 0;
+  transform: scale(0.3);
+}
+
+.report-chart-reveal .report-arousal__stat-dots circle,
+.report-chart-reveal .report-reward__stat-dots circle,
+.report-chart-reveal .report-initiation__stat-dot {
+  /* fill-box so an SVG circle scales about its own centre rather than the
+     viewBox origin, which would slide it across the row. */
+  transform-box: fill-box;
+  transform-origin: center;
+  transition:
+    opacity 300ms ease-out calc(var(--i, 0) * 60ms),
+    transform 460ms cubic-bezier(0.34, 1.42, 0.5, 1) calc(var(--i, 0) * 60ms);
+}
+
+.report-chart-reveal:not(.is-revealed) .report-arousal__stat-bar > span {
+  transform: scaleX(0);
+}
+
+.report-chart-reveal .report-arousal__stat-bar > span {
+  transform-origin: left center;
+  transition: transform 780ms cubic-bezier(0.22, 1, 0.36, 1) 60ms;
+}
+
+.report-chart-reveal:not(.is-revealed) .report-arousal__stat-value,
+.report-chart-reveal:not(.is-revealed) .report-arousal__stat-caption,
+.report-chart-reveal:not(.is-revealed) .report-reward__stat-num,
+.report-chart-reveal:not(.is-revealed) .report-reward__stat-caption,
+.report-chart-reveal:not(.is-revealed) .report-initiation__stat-value,
+.report-chart-reveal:not(.is-revealed) .report-initiation__stat-caption {
+  opacity: 0;
+  transform: translateY(4px);
+}
+
+.report-chart-reveal .report-arousal__stat-value,
+.report-chart-reveal .report-reward__stat-num,
+.report-chart-reveal .report-initiation__stat-value {
+  transition:
+    opacity 360ms ease-out 170ms,
+    transform 460ms cubic-bezier(0.22, 1, 0.36, 1) 170ms;
+}
+
+.report-chart-reveal .report-arousal__stat-caption,
+.report-chart-reveal .report-reward__stat-caption,
+.report-chart-reveal .report-initiation__stat-caption {
+  transition:
+    opacity 360ms ease-out 240ms,
+    transform 460ms cubic-bezier(0.22, 1, 0.36, 1) 240ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Final state up front. An empty stat box is a worse failure than an
+     unanimated one — the same rule the other charts here follow. */
+  .report-chart-reveal:not(.is-revealed) .report-arousal__stat-dots circle,
+  .report-chart-reveal:not(.is-revealed) .report-reward__stat-dots circle,
+  .report-chart-reveal:not(.is-revealed) .report-initiation__stat-dot,
+  .report-chart-reveal:not(.is-revealed) .report-arousal__stat-bar > span,
+  .report-chart-reveal:not(.is-revealed) .report-arousal__stat-value,
+  .report-chart-reveal:not(.is-revealed) .report-arousal__stat-caption,
+  .report-chart-reveal:not(.is-revealed) .report-reward__stat-num,
+  .report-chart-reveal:not(.is-revealed) .report-reward__stat-caption,
+  .report-chart-reveal:not(.is-revealed) .report-initiation__stat-value,
+  .report-chart-reveal:not(.is-revealed) .report-initiation__stat-caption {
+    opacity: 1;
+    transform: none;
+  }
+
+  .report-chart-reveal .report-arousal__stat-dots circle,
+  .report-chart-reveal .report-reward__stat-dots circle,
+  .report-chart-reveal .report-initiation__stat-dot,
+  .report-chart-reveal .report-arousal__stat-bar > span,
+  .report-chart-reveal .report-arousal__stat-value,
+  .report-chart-reveal .report-arousal__stat-caption,
+  .report-chart-reveal .report-reward__stat-num,
+  .report-chart-reveal .report-reward__stat-caption,
+  .report-chart-reveal .report-initiation__stat-value,
+  .report-chart-reveal .report-initiation__stat-caption {
+    transition: none;
+  }
+}
+
 /* ── Curiosity + Relationship Form: the same arrival standard ──────────────
    Both sections' rows appeared fully formed. They now build in the order they
    are meant to be read, riding the shared `.report-section.is-visible` trigger
@@ -25596,6 +25696,19 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-section.is-visible .report-snapshot-compare__caption,
 .report-chart-reveal.is-revealed .report-snapshot-compare__caption {
   animation: report-compare-fade-up 420ms ease-out 1020ms forwards;
+}
+
+/* A box that owns a reveal root waits for THAT root, never for the section.
+   Same fix, same reason as the self-drawing charts: the section trigger above is an
+   OR, and it fires as soon as the section's top crosses the fold — which had the
+   dots landing and the bar finishing before the reader had scrolled to them.
+   `:not(.is-revealed)` is (0,3,0) and beats the (0,2,0) section rules whatever the
+   source order. */
+.report-chart-reveal:not(.is-revealed) .report-snapshot-compare__dots span,
+.report-chart-reveal:not(.is-revealed) .report-snapshot-compare__bar span,
+.report-chart-reveal:not(.is-revealed) .report-snapshot-compare__stat,
+.report-chart-reveal:not(.is-revealed) .report-snapshot-compare__caption {
+  animation: none;
 }
 
 @keyframes report-compare-fade-up {

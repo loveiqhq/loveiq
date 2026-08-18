@@ -284,6 +284,7 @@ const RewardStatDots: FC<{ stat?: string | null }> = ({ stat }) => {
       {Array.from({ length: total }, (_, i) => (
         <circle
           key={i}
+          style={{ "--i": i } as CSSProperties}
           cx={DOT_D / 2 + i * DOT_PITCH}
           cy={DOT_D / 2}
           r={DOT_D / 2}
@@ -305,6 +306,7 @@ const RewardSection: FC<Props> = ({
   sectionTitle,
   tier = "full_report",
 }) => {
+  const [statRef, statRevealed] = useRevealOnView<HTMLDivElement>({ threshold: 0 });
   const [expanded, setExpanded] = useState(false);
   if (!copy) return null;
 
@@ -381,7 +383,12 @@ const RewardSection: FC<Props> = ({
             {rows.length > 0 ? <RewardRankedList rows={rows} /> : null}
 
             {hasStat ? (
-              <div className="report-reward__stat">
+              <div
+                ref={statRef}
+                className={`report-reward__stat report-chart-reveal${
+                  statRevealed ? " is-revealed" : ""
+                }`}
+              >
                 <RewardStatDots stat={stat} />
                 <span className="report-reward__stat-num">{stat}</span>
                 <span className="report-reward__stat-caption">{statCaption}</span>

@@ -1,6 +1,7 @@
 "use client";
 
 import type { CSSProperties, FC } from "react";
+import { useRevealOnView } from "../hooks/useRevealOnView";
 import { archetypeSlug, getReport2Config, type Report2CopySlug } from "@/data/report2-config";
 import { snapshotCards } from "@/data/report2-snapshot-cards";
 import {
@@ -237,6 +238,11 @@ const CompareBar: FC<{ stat?: string }> = ({ stat }) => {
 };
 
 const SnapshotSection: FC<Props> = ({ archetype, copy, stageResult = null }) => {
+  // Its own reveal root, like the three mini-stat boxes. This box rides
+  // `.report-section.is-visible` as a fallback, and that fires when the SECTION's
+  // top crosses the fold — which for a box further down the section means the dots
+  // have finished landing before the reader gets there.
+  const [compareRef, compareRevealed] = useRevealOnView<HTMLElement>({ threshold: 0 });
   const slug = archetypeSlug(archetype) as Report2CopySlug;
   const config = getReport2Config(archetype);
   const cards = snapshotCards[slug];
@@ -364,7 +370,12 @@ const SnapshotSection: FC<Props> = ({ archetype, copy, stageResult = null }) => 
 
       {/* How you compare */}
       {compares.length > 0 ? (
-        <article className="report-snapshot-compare">
+        <article
+          ref={compareRef}
+          className={`report-snapshot-compare report-chart-reveal${
+            compareRevealed ? " is-revealed" : ""
+          }`}
+        >
           <p className="report-snapshot-compare__eyebrow">How you compare</p>
           <div className="report-snapshot-compare__cols">
             {compares.map((c, i) => (

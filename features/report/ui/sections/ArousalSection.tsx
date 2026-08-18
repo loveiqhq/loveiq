@@ -457,8 +457,15 @@ const MiniStat: FC<{ value: string; caption: string; viz: "dots" | "bar" }> = ({
 }) => {
   const { filled, total } = rewardStatDots(value);
   const width = (total - 1) * 16.3 + 11.41;
+  // Its own reveal root: this box sits below the arc, so the arc's root is long
+  // revealed by the time the reader reaches it. `threshold: 0` for the reason
+  // EnergySection gives — a missed crossing here would leave the graphic blank.
+  const [statRef, revealed] = useRevealOnView<HTMLDivElement>({ threshold: 0 });
   return (
-    <div className="report-arousal__stat">
+    <div
+      ref={statRef}
+      className={`report-arousal__stat report-chart-reveal${revealed ? " is-revealed" : ""}`}
+    >
       {viz === "dots" ? (
         <svg
           className="report-arousal__stat-dots"
@@ -482,6 +489,7 @@ const MiniStat: FC<{ value: string; caption: string; viz: "dots" | "bar" }> = ({
           {Array.from({ length: total }, (_, i) => (
             <circle
               key={i}
+              style={{ "--i": i } as CSSProperties}
               cx={5.705 + i * 16.3}
               cy={5.705}
               r={5.705}
