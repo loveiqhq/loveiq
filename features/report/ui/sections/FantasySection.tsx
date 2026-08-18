@@ -29,7 +29,6 @@ import { useRevealOnView } from "../hooks/useRevealOnView";
  * renders live. No per-user fantasy scores are ever fabricated.
  */
 export interface FantasyCopy {
-  "gate.hook"?: string | null;
   "edu.eyebrow"?: string | null;
   "edu.teaser"?: string | null;
   "edu.body.p1"?: string | null;
@@ -309,7 +308,6 @@ const FantasySection: FC<Props> = ({
       <article className="report-fantasy__card">
         {locked ? (
           <>
-            {copy["gate.hook"] ? <p className="report-fantasy__hook">{copy["gate.hook"]}</p> : null}
             <div className="report-fantasy__preview">
               {/* A pre-blurred render of the REAL chapter. Blurring the PIXELS at
                   build time means the paid copy is not in the file that ships, so
@@ -333,9 +331,9 @@ const FantasySection: FC<Props> = ({
         ) : (
           <>
             {/* Quadrant filter tabs (Figma 8427:2467) — the first element of the
-                unlocked card, above the map. The `gate.hook` eyebrow that used to
-                sit here is not in the Figma Article and was removed; the hook
-                still fronts the LOCKED preview above. */}
+                unlocked card, above the map. The hook eyebrow that used to sit
+                here is not in the Figma Article and was removed; the locked
+                preview's copy of it went the same way (see route.ts). */}
             <div className="report-fantasy__filters" role="group" aria-label="Filter map by group">
               {MAP_FILTERS.map((f) => (
                 <button

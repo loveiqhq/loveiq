@@ -10,7 +10,7 @@ import { renderEduPara } from "./eduPara";
  * as a prop because the 634KB copy module is server-only (see
  * `app/api/report/route.ts` → `beliefsCopy`).
  *
- * GATING: `gate.hook`, `edu.*` and `learn.*` are universal and always shipped.
+ * GATING: `edu.*` and `learn.*` are universal and always shipped.
  * The per-archetype `body.p1`, `keep.*`, `loosen.*.{belief,shift}` slots are the
  * premium payload — the server sends them ONLY when the report is unlocked at the
  * essentials tier (or above). For a locked client they arrive `null` and the
@@ -18,7 +18,6 @@ import { renderEduPara } from "./eduPara";
  * which it received. Slot counts vary per archetype; render only what exists.
  */
 export interface BeliefsCopy {
-  "gate.hook"?: string | null;
   "edu.eyebrow"?: string | null;
   "edu.teaser"?: string | null;
   "edu.body.p1"?: string | null;

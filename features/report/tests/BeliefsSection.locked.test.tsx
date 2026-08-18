@@ -21,7 +21,6 @@ import BeliefsSection, { type BeliefsCopy } from "@features/report/ui/sections/B
  * rows it was given, sharp, with the fade — and it renders nothing it was not given.
  */
 const lockedCopy: BeliefsCopy = {
-  "gate.hook": "See which beliefs still serve you",
   "learn.eyebrow": "What you will learn",
   "learn.body": "In this chapter you will learn where your beliefs came from.",
   // What a locked client now receives: the first four rows of each column.

@@ -122,7 +122,6 @@ describe("ReportPage", () => {
         // per-archetype ladder is withheld server-side.
         growthCopy: {
           locked: true,
-          "gate.hook": "There's a clear next step waiting for you here.",
           "learn.eyebrow": "What you will learn",
           "learn.body": "The specific shifts that move you toward what you want.",
         },
@@ -132,7 +131,6 @@ describe("ReportPage", () => {
         // so the fixture now supplies one deliberately.
         libidoCopy: {
           locked: true,
-          "gate.hook": "There's a loop running underneath this.",
           eyebrow: "The Pattern",
           "learn.eyebrow": "What you will learn",
           "learn.body": "The loop that quietly drains desire, and the way out.",

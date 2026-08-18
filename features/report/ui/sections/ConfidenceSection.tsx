@@ -16,7 +16,7 @@ import { useRevealOnView } from "../hooks/useRevealOnView";
  * `app/api/report/route.ts` → `confidenceCopy`).
  *
  * GATING (Part II, essentials tier): UNLIKE the sibling premium sections, EVERY
- * copy slot here is universal education (`gate.hook`, `edu.*`, `chartnote1`,
+ * copy slot here is universal education (`edu.*`, `chartnote1`,
  * `learn.*`) — always shipped. The per-archetype specificity is the confidence
  * RESULT, which lives in config `confidence_strip` (see `ConfidenceStrip`), not
  * in copy. `locked` tells the client whether the report is unlocked at the
@@ -24,7 +24,6 @@ import { useRevealOnView } from "../hooks/useRevealOnView";
  * server-side) and the client renders a blurred stand-in + PremiumOverlay.
  */
 export interface ConfidenceCopy {
-  "gate.hook"?: string | null;
   "edu.eyebrow"?: string | null;
   "edu.teaser"?: string | null;
   "edu.body.p1"?: string | null;
@@ -266,9 +265,6 @@ const ConfidenceSection: FC<Props> = ({
 
         {locked ? (
           <>
-            {copy["gate.hook"] ? (
-              <p className="report-confidence__hook">{copy["gate.hook"]}</p>
-            ) : null}
             <div className="report-confidence__preview">
               {/* A pre-blurred render of the REAL chapter. Blurring the PIXELS at
                   build time means the paid copy is not in the file that ships, so

@@ -23,18 +23,14 @@ import {
  * 13, NOT in `ESSENTIALS_SECTION_IDS`, so it only unlocks at the full_report
  * tier). The educational slots (`edu.*`, `chartnote1`, `learn.*`) are universal
  * (verified identical across all 14 archetypes for `chartnote1`) and always
- * shipped. The per-archetype payload — `gate.hook` (the per-archetype hook here)
- * and `takeaway` (the verdict) plus the energy config (readouts + highlighted
- * curve) — is the gated content: shipped ONLY when the report is unlocked at the
- * full_report tier. A locked client (`locked: true`) receives `gate.hook` (as a
- * teaser) but `takeaway: null` + null config, and renders the hook teaser +
+ * shipped. The per-archetype payload — `takeaway` (the verdict) plus the energy
+ * config (readouts + highlighted curve) — is the gated content: shipped ONLY when
+ * the report is unlocked at the full_report tier. A locked client
+ * (`locked: true`) receives `takeaway: null` + null config and renders the
  * PremiumOverlay instead. Never send locked per-archetype content to an unpaid
  * client.
  */
 export interface EnergyCopy {
-  // gate.hook is per-archetype here — it IS shown (as the locked teaser), but
-  // its per-archetype text is the reason it's withheld from a locked client.
-  "gate.hook"?: string | null;
   takeaway?: string | null;
   "edu.eyebrow"?: string | null;
   "edu.teaser"?: string | null;
@@ -444,7 +440,6 @@ const EnergySection: FC<Props> = ({
       <article className="report-energy__card">
         {locked ? (
           <>
-            {copy["gate.hook"] ? <p className="report-energy__hook">{copy["gate.hook"]}</p> : null}
             <div className="report-energy__preview">
               {/* A pre-blurred render of the REAL chapter. Blurring the PIXELS at
                   build time means the paid copy is not in the file that ships, so

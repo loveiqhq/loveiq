@@ -13,7 +13,7 @@ import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPri
  *
  * GATING (Part IV, FULL_REPORT tier — this section is `recommendations`,
  * section 32, NOT in `ESSENTIALS_SECTION_IDS`, so it only unlocks at the
- * full_report tier). The framing slots (`gate.hook`, the universal category
+ * full_report tier). The framing slots (the universal category
  * tags `book1..4.tag`, `closing.lead`, `learn.eyebrow`, `learn.body`) are
  * UNIVERSAL and always shipped. The per-archetype payload — each book's
  * `title` / `author` / `blurb` and `closing.formula` — is the gated content:
@@ -31,7 +31,6 @@ import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPri
  */
 export interface ReadingCopy {
   // Universal (always shipped) — these frame the section for locked clients too.
-  "gate.hook"?: string | null;
   "book1.tag"?: string | null;
   "book2.tag"?: string | null;
   "book3.tag"?: string | null;
@@ -188,7 +187,6 @@ const ReadingSection: FC<Props> = ({
 
       {locked ? (
         <div className="report-reading__preview">
-          {copy["gate.hook"] ? <p className="report-reading__hook">{copy["gate.hook"]}</p> : null}
           {/* A pre-blurred render of the REAL chapter. Blurring the PIXELS at
               build time means the paid copy is not in the file that ships, so
               it cannot be read back out of the DOM. See LockedPreviewImage. */}

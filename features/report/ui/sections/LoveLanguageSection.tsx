@@ -14,7 +14,7 @@ import { renderEduPara } from "./eduPara";
  *
  * GATING (Part III, FULL_REPORT tier — section `love_language`, #19; NOT in
  * `ESSENTIALS_SECTION_IDS`, so it only unlocks at the full_report tier). The
- * universal slots — `gate.hook`, `edu.*`, `learn.*` — are always shipped. The
+ * universal slots — `edu.*`, `learn.*` — are always shipped. The
  * per-archetype payload — `body.p1` (the "catch" line) plus `love_language_order`
  * (the reader's ranked ordering of the five languages) — is the gated content:
  * shipped ONLY when unlocked at the full_report tier. A locked client
@@ -23,7 +23,6 @@ import { renderEduPara } from "./eduPara";
  * content to an unpaid client.
  */
 export interface LoveLanguageCopy {
-  "gate.hook"?: string | null;
   "body.p1"?: string | null;
   "edu.eyebrow"?: string | null;
   "edu.teaser"?: string | null;
@@ -222,9 +221,6 @@ const LoveLanguageSection: FC<Props> = ({
       <article className="report-lovelang__card">
         {locked ? (
           <>
-            {copy["gate.hook"] ? (
-              <p className="report-lovelang__hook">{copy["gate.hook"]}</p>
-            ) : null}
             <div className="report-lovelang__preview">
               {/* A pre-blurred render of the REAL chapter. Blurring the PIXELS at
                   build time means the paid copy is not in the file that ships, so

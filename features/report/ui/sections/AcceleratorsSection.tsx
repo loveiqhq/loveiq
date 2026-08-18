@@ -14,12 +14,12 @@ import { renderEduPara } from "./eduPara";
  * threaded as a prop because the 634KB copy module is server-only (see
  * `app/api/report/route.ts` → `accelCopy`).
  *
- * GATING: `gate.hook`, `edu.*` and `learn.*` are universal and always shipped.
+ * GATING: `edu.*` and `learn.*` are universal and always shipped.
  * `takeaway` is the ONLY per-archetype slot — a single verdict sentence
  * ("Removing the thing that shuts you down beats adding three new turn-ons.")
  * whose polarity flips per archetype. It is the premium payload: the server
  * sends it ONLY when the report is unlocked at the essentials tier (or above).
- * For a locked client it arrives `null` and the client renders the `gate.hook`
+ * For a locked client it arrives `null` and the client renders the
  * teaser + PremiumOverlay instead. `locked` tells the client which it received.
  *
  * ROWS + METER (Figma 8946:4286): the ten ranked accelerator/brake rows and the
@@ -32,7 +32,6 @@ import { renderEduPara } from "./eduPara";
  * stand-in. The card, learn pill and verdict line follow the Figma spec.
  */
 export interface AccelCopy {
-  "gate.hook"?: string | null;
   "edu.eyebrow"?: string | null;
   "edu.teaser"?: string | null;
   "edu.body.p1"?: string | null;
@@ -221,7 +220,6 @@ const AcceleratorsSection: FC<Props> = ({
 
         {locked ? (
           <div className="report-accel__verdict report-accel__verdict--locked">
-            {copy["gate.hook"] ? <p className="report-accel__hook">{copy["gate.hook"]}</p> : null}
             <div className="report-accel__preview">
               {/* A pre-blurred render of the REAL chapter. Blurring the PIXELS at
                   build time means the paid copy is not in the file that ships, so

@@ -11,7 +11,7 @@ import { renderEduPara } from "./eduPara";
  * threaded as a prop because the 634KB copy module is server-only (see
  * `app/api/report/route.ts` → `attachmentCopy`).
  *
- * GATING (Part II, essentials tier): `gate.hook`, `eyebrow`, `edu.*` and
+ * GATING (Part II, essentials tier): `eyebrow`, `edu.*` and
  * `learn.*` are universal and always shipped. The per-archetype `result`,
  * `row*.value`, `insight.value`, `body.p1` and the attachment-plane coords are
  * the premium payload — the server sends them ONLY when the report is unlocked
@@ -24,7 +24,6 @@ import { renderEduPara } from "./eduPara";
  * disconnection" / "After rupture"). Figma 8427:1447 is the source of truth.
  */
 export interface AttachmentCopy {
-  "gate.hook"?: string | null;
   eyebrow?: string | null;
   result?: string | null;
   "row1.label"?: string | null;

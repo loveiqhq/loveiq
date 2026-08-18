@@ -13,7 +13,7 @@ import { renderEduPara } from "./eduPara";
  *
  * GATING (Part III, FULL_REPORT tier — `curiosity_level`, section 16; NOT in
  * `ESSENTIALS_SECTION_IDS`, so it only unlocks at the full_report tier). The
- * universal slots — `gate.hook`, `edu.*` (incl. the 14-item `edu.struct.N` list
+ * universal slots — `edu.*` (incl. the 14-item `edu.struct.N` list
  * of relationship structures) and `learn.*` — are always shipped. The
  * per-archetype payload — `takeaway` (italic pull-quote), `body.p1` (the bold
  * intro read) plus `body.p2/p3`, and the `relationshipFit` map — is the gated
@@ -23,7 +23,6 @@ import { renderEduPara } from "./eduPara";
  * locked per-archetype content to an unpaid client.
  */
 export interface CuriosityCopy {
-  "gate.hook"?: string | null;
   takeaway?: string | null;
   "body.p1"?: string | null;
   "body.p2"?: string | null;
@@ -203,9 +202,6 @@ const CuriositySection: FC<Props> = ({
       <article className="report-curiosity__card">
         {locked ? (
           <>
-            {copy["gate.hook"] ? (
-              <p className="report-curiosity__hook">{copy["gate.hook"]}</p>
-            ) : null}
             <div className="report-curiosity__preview">
               {/* A pre-blurred render of the REAL chapter. Blurring the PIXELS at
                   build time means the paid copy is not in the file that ships, so

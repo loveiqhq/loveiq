@@ -17,7 +17,7 @@ import { renderEduPara } from "./eduPara";
  * `report-general.ts` — it renders inline right after Libido (section 28,
  * `libido_challenges_in_relationships`), and shares that section's gate: NOT in
  * `ESSENTIALS_SECTION_IDS`, so it only unlocks at the full_report tier. The
- * framing slots (`gate.hook`, `eyebrow`, `row1..3.label`, `edu.*`, `learn.*`)
+ * framing slots (`eyebrow`, `row1..3.label`, `edu.*`, `learn.*`)
  * are UNIVERSAL (verified identical across all 14 archetypes) and always
  * shipped. The per-archetype payload — `result` (the loop name, e.g. "The
  * Resonance Loop") and `row1..3.value` — is the gated content: shipped ONLY when
@@ -27,7 +27,6 @@ import { renderEduPara } from "./eduPara";
  */
 export interface PartnershipCopy {
   // Universal (always shipped) — these frame the section for locked clients too.
-  "gate.hook"?: string | null;
   eyebrow?: string | null;
   "row1.label"?: string | null;
   "row2.label"?: string | null;
@@ -268,9 +267,6 @@ const PartnershipSection: FC<Props> = ({
       <article className="report-partnership__card">
         {locked ? (
           <>
-            {copy["gate.hook"] ? (
-              <p className="report-partnership__hook">{copy["gate.hook"]}</p>
-            ) : null}
             <div className="report-partnership__preview">
               {/* A pre-blurred render of the REAL chapter. Blurring the PIXELS at
                   build time means the paid copy is not in the file that ships, so

@@ -14,7 +14,7 @@ import { renderEduPara } from "./eduPara";
  *
  * GATING (Part III, FULL_REPORT tier — this section is NOT in
  * `ESSENTIALS_SECTION_IDS`, so it only unlocks at the full_report tier): the
- * educational slots (`gate.hook`, `edu.*`, `learn.*`) are universal and always
+ * educational slots (`edu.*`, `learn.*`) are universal and always
  * shipped. The per-archetype payload — `takeaway` (verdict) and the reward
  * `config` (chemical order / roles / meter fills) — is the gated content:
  * shipped ONLY when the report is unlocked at the full_report tier. A locked
@@ -27,7 +27,6 @@ import { renderEduPara } from "./eduPara";
  * rule they render only when present; absent ⇒ the stat block is omitted.
  */
 export interface RewardCopy {
-  "gate.hook"?: string | null;
   takeaway?: string | null;
   "edu.eyebrow"?: string | null;
   "edu.teaser"?: string | null;
@@ -357,7 +356,6 @@ const RewardSection: FC<Props> = ({
       <article className="report-reward__card">
         {locked ? (
           <>
-            {copy["gate.hook"] ? <p className="report-reward__hook">{copy["gate.hook"]}</p> : null}
             <div className="report-reward__preview">
               {/* A pre-blurred render of the REAL chapter. Blurring the PIXELS at
                   build time means the paid copy is not in the file that ships, so

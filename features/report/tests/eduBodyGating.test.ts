@@ -11,7 +11,6 @@ import { stripLockedEduBody } from "@features/report/server/contentGating";
  */
 describe("stripLockedEduBody", () => {
   const lockedSection = {
-    "gate.hook": "Where your desire actually starts",
     "edu.eyebrow": "Learn: arousal, desire, and pleasure",
     "edu.teaser": "Desire has two engines, and most people only know one.",
     "edu.body.p1": "The first engine is spontaneous — it arrives unbidden.",
@@ -64,7 +63,6 @@ describe("stripLockedEduBody", () => {
   it("does not disturb unrelated keys", () => {
     const result = stripLockedEduBody(lockedSection);
 
-    expect(result["gate.hook"]).toBe("Where your desire actually starts");
     expect(result["learn.body"]).toBe("What you will learn in this section");
     expect(result.locked).toBe(true);
   });

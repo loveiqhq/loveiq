@@ -20,7 +20,7 @@ import { curveEndPoint } from "../curveEnd";
  * 21, NOT in `ESSENTIALS_SECTION_IDS`, so it only unlocks at the full_report
  * tier). The educational slots (`eyebrow`, `insight.label`, `edu.*`, `learn.*`)
  * are UNIVERSAL (identical across all 14 archetypes) and always shipped. The
- * per-archetype payload — `gate.hook`, `result` (e.g. "Responsive"),
+ * per-archetype payload — `result` (e.g. "Responsive"),
  * `insight.value`, and the two mini-stats (`stat1`/`stat1.caption`,
  * `stat2`/`stat2.caption`) plus the arc config (family + act labels) — is the
  * gated content: shipped ONLY when the report is unlocked at the full_report
@@ -41,7 +41,6 @@ export interface ArousalCopy {
   "learn.eyebrow"?: string | null;
   "learn.body"?: string | null;
   // Per-archetype — withheld (null) from locked clients.
-  "gate.hook"?: string | null;
   result?: string | null;
   "insight.value"?: string | null;
   stat1?: string | null;
@@ -454,7 +453,6 @@ const ArousalSection: FC<Props> = ({
       <article className="report-arousal__card">
         {locked ? (
           <>
-            {copy["gate.hook"] ? <p className="report-arousal__hook">{copy["gate.hook"]}</p> : null}
             <div className="report-arousal__preview">
               {/* A pre-blurred render of the REAL chapter. Blurring the PIXELS at
                   build time means the paid copy is not in the file that ships, so

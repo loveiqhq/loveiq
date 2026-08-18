@@ -50,7 +50,12 @@ function makeQuote(overrides: Partial<ReportPriceQuoteSnapshot> = {}): ReportPri
 describe("PremiumOverlay", () => {
   afterEach(() => cleanup());
 
-  it("shows the user's archetype name in the copy", () => {
+  it("carries only the copy Figma's card carries", () => {
+    // 8993:19140 holds exactly: the "Premium content" heading, the offer block, the
+    // two reassurance rows and the button. The line that used to sit under the
+    // heading ("This section is part of the full Spark Seeker report. Unlock it to
+    // keep reading.") was ours, not the design's, and is gone — along with the
+    // archetype name, which appeared nowhere else on the card.
     render(
       <PremiumOverlay
         archetype="Spark Seeker"
@@ -60,8 +65,11 @@ describe("PremiumOverlay", () => {
       />
     );
 
-    expect(screen.getByText("Spark Seeker")).toBeInTheDocument();
+    expect(screen.getByText("Premium content")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /unlock your report/i })).toBeInTheDocument();
+    expect(screen.queryByText("Spark Seeker")).not.toBeInTheDocument();
+    expect(screen.queryByText(/part of the full/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/keep reading/i)).not.toBeInTheDocument();
   });
 
   it("renders the inline price and merges the save into the green discount pill", () => {

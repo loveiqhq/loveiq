@@ -15,7 +15,7 @@ import { rewardStatDots } from "./RewardSection";
  *
  * GATING (Part III, FULL_REPORT tier — this section is `initiation_style`,
  * section 22, NOT in `ESSENTIALS_SECTION_IDS`, so it only unlocks at the
- * full_report tier). The framing slots (`gate.hook`, `eyebrow`, `row1.label`,
+ * full_report tier). The framing slots (`eyebrow`, `row1.label`,
  * `practical.label`, `learn.*`) are UNIVERSAL (identical across all 14
  * archetypes) and always shipped. The per-archetype payload — `result` (e.g.
  * "Presence-led"), `row1.value`, `takeaway`, `practical.teaser`,
@@ -28,7 +28,6 @@ import { rewardStatDots } from "./RewardSection";
  */
 export interface InitiationCopy {
   // Universal (always shipped) — these frame the section for locked clients too.
-  "gate.hook"?: string | null;
   eyebrow?: string | null;
   "row1.label"?: string | null;
   "practical.label"?: string | null;
@@ -302,9 +301,6 @@ const InitiationSection: FC<Props> = ({
       <article className="report-initiation__card">
         {locked ? (
           <>
-            {copy["gate.hook"] ? (
-              <p className="report-initiation__hook">{copy["gate.hook"]}</p>
-            ) : null}
             <div className="report-initiation__preview">
               {/* A pre-blurred render of the REAL chapter. Blurring the PIXELS at
                   build time means the paid copy is not in the file that ships, so

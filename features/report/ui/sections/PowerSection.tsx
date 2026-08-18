@@ -17,7 +17,7 @@ import { renderEduPara } from "./eduPara";
  *
  * GATING (Part III, FULL_REPORT tier — `power_orientation`, section 15, NOT in
  * `ESSENTIALS_SECTION_IDS`, so it only unlocks at the full_report tier). The
- * educational slots (`gate.hook`, `edu.*`, `learn.*`) are universal (`gate.hook`
+ * educational slots (`edu.*`, `learn.*`) are universal (
  * verified identical across all 14) and always shipped. The per-archetype
  * payload — `takeaway` (verdict) and `body.p1` (the reader's own read on the
  * map) plus `zone` (the reader's power-zone region label + the "You" dot
@@ -29,7 +29,6 @@ import { renderEduPara } from "./eduPara";
  * client.
  */
 export interface PowerCopy {
-  "gate.hook"?: string | null;
   takeaway?: string | null;
   "body.p1"?: string | null;
   "edu.eyebrow"?: string | null;
@@ -327,7 +326,6 @@ const PowerSection: FC<Props> = ({
       <article className="report-power__card">
         {locked ? (
           <>
-            {copy["gate.hook"] ? <p className="report-power__hook">{copy["gate.hook"]}</p> : null}
             <div className="report-power__preview">
               {/* A pre-blurred render of the REAL chapter. Blurring the PIXELS at
                   build time means the paid copy is not in the file that ships, so

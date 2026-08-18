@@ -14,7 +14,7 @@ import { useRevealOnView } from "../hooks/useRevealOnView";
  * GATING (Part IV, FULL_REPORT tier — this section is
  * `libido_challenges_in_relationships`, section 28, NOT in
  * ESSENTIALS_SECTION_IDS, so it only unlocks at the full_report tier). The
- * framing slots (`gate.hook`, `eyebrow`, `row1.label`..`row4.label`,
+ * framing slots (`eyebrow`, `row1.label`..`row4.label`,
  * `practical.label`, `learn.*`) are UNIVERSAL and always shipped. The
  * per-archetype payload — `result` (the loop name, e.g. "The Waiting Loop"),
  * `row1.value`..`row4.value`, `practical.teaser`, `practical.line1..3` PLUS the
@@ -25,7 +25,6 @@ import { useRevealOnView } from "../hooks/useRevealOnView";
  */
 export interface LibidoCopy {
   // Universal (always shipped) — these frame the section for locked clients too.
-  "gate.hook"?: string | null;
   eyebrow?: string | null;
   "row1.label"?: string | null;
   "row2.label"?: string | null;
@@ -280,7 +279,6 @@ const LibidoSection: FC<Props> = ({
       <article className="report-libido__card">
         {locked ? (
           <>
-            {copy["gate.hook"] ? <p className="report-libido__hook">{copy["gate.hook"]}</p> : null}
             <div className="report-libido__preview">
               {/* A pre-blurred render of the REAL chapter. Blurring the PIXELS at
                   build time means the paid copy is not in the file that ships, so

@@ -16,6 +16,13 @@ import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPri
 export type PremiumOverlayTier = "essentials" | "full_report";
 
 interface Props {
+  /**
+   * Kept on the type because every call site passes it, but nothing renders it any
+   * more: the line it fed ("This section is part of the full <archetype>
+   * report...") is not on Figma's paywall card (8993:19140, whose only copy is the
+   * "Premium content" heading, the offer block, the two reassurance rows and the
+   * button), so it was removed.
+   */
   archetype: string;
   sectionTitle: string;
   tier: PremiumOverlayTier;
@@ -102,7 +109,7 @@ const FlaskIcon: FC = () => (
 // `tier` stays on Props — all sixteen call sites pass it and it still describes
 // which plan opens the section — but nothing renders it now that the badge is gone,
 // so it is deliberately not destructured.
-const PremiumOverlay: FC<Props> = ({ archetype, onUnlock, quote = null, offerDeadline }) => {
+const PremiumOverlay: FC<Props> = ({ onUnlock, quote = null, offerDeadline }) => {
   // ── Live pricing — identical computation to the paywall modal so the card
   //    and modal always agree. ────────────────────────────────────────────────
   const currentCents = quote?.currentPriceCents ?? 0;
@@ -141,11 +148,6 @@ const PremiumOverlay: FC<Props> = ({ archetype, onUnlock, quote = null, offerDea
           </div>
           <h3 className="report-premium-overlay__title">Premium content</h3>
         </div>
-
-        <p className="report-premium-overlay__copy">
-          This section is part of the full <strong>{archetype}</strong> report.{" "}
-          <span className="report-premium-overlay__copy-cta">Unlock it to keep reading.</span>
-        </p>
 
         <div className="report-premium-overlay__offer">
           {pillText ? (

@@ -13,7 +13,7 @@ import { curveEndPoint } from "../curveEnd";
  * threaded as a prop because the 634KB copy module is server-only (see
  * `app/api/report/route.ts` → `insecuritiesCopy`).
  *
- * GATING (Part II, essentials tier): `gate.hook` (universal hook),
+ * GATING (Part II, essentials tier):
  * `practical.label` and `learn.*` are universal and always shipped. The
  * per-archetype payload — `takeaway`, `practical.teaser`, `practical.line1..3`
  * and `body.p1` (plus the cue-curve highlight/axis specifics) — is the premium
@@ -24,7 +24,6 @@ import { curveEndPoint } from "../curveEnd";
  * client.
  */
 export interface InsecuritiesCopy {
-  "gate.hook"?: string | null;
   "practical.label"?: string | null;
   "learn.eyebrow"?: string | null;
   "learn.body"?: string | null;
@@ -394,9 +393,6 @@ const InsecuritiesSection: FC<Props> = ({
 
         {locked ? (
           <div className="report-insecurities__locked">
-            {copy["gate.hook"] ? (
-              <p className="report-insecurities__hook">{copy["gate.hook"]}</p>
-            ) : null}
             <div className="report-insecurities__preview">
               {/* A pre-blurred render of the REAL chapter. Blurring the PIXELS at
                   build time means the paid copy is not in the file that ships, so

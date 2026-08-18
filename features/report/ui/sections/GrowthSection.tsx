@@ -13,7 +13,7 @@ import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPri
  * GATING (Part IV, FULL_REPORT tier — this section is
  * `typical_growth_potentials_for_the_core_archetype`, section 31, NOT in
  * `ESSENTIALS_SECTION_IDS`, so it only unlocks at the full_report tier). The
- * framing slots (`gate.hook`, `learn.eyebrow`, `learn.body`) are UNIVERSAL and
+ * framing slots (`learn.eyebrow`, `learn.body`) are UNIVERSAL and
  * always shipped. The per-archetype payload — `takeaway`, `ladder.headline`,
  * `rung1..5.{from,to,move}` (the ladder rungs; counts vary per archetype) and
  * `ladder.close` — is the gated content: shipped ONLY when unlocked at the
@@ -23,7 +23,6 @@ import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPri
  */
 export interface GrowthCopy {
   // Universal (always shipped) — these frame the section for locked clients too.
-  "gate.hook"?: string | null;
   "learn.eyebrow"?: string | null;
   "learn.body"?: string | null;
   // Per-archetype — withheld (null) from locked clients.
@@ -294,7 +293,6 @@ const GrowthSection: FC<Props> = ({
       <article className="report-growth__card">
         {locked ? (
           <>
-            {copy["gate.hook"] ? <p className="report-growth__hook">{copy["gate.hook"]}</p> : null}
             <div className="report-growth__preview">
               {/* A pre-blurred render of the REAL chapter. Blurring the PIXELS at
                   build time means the paid copy is not in the file that ships, so

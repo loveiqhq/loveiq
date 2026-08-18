@@ -8,7 +8,6 @@ import AttachmentPatternsSection, {
 } from "@features/report/ui/sections/AttachmentPatternsSection";
 
 const baseCopy: AttachmentCopy = {
-  "gate.hook": "See where you sit on the attachment map",
   eyebrow: "Your Attachment Style",
   "edu.eyebrow": "Learn: the five attachment patterns",
   "edu.teaser": "Five ways a nervous system learns to hold closeness.",
@@ -86,7 +85,6 @@ describe("AttachmentPatternsSection", () => {
 
   it("withholds per-archetype content and shows the overlay when locked", () => {
     const lockedCopy: AttachmentCopy = {
-      "gate.hook": baseCopy["gate.hook"],
       eyebrow: baseCopy.eyebrow,
       "edu.eyebrow": baseCopy["edu.eyebrow"],
       "edu.teaser": baseCopy["edu.teaser"],

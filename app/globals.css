@@ -2688,7 +2688,12 @@ input.autofill-dark:-internal-autofill-previewed {
   align-items: center;
   justify-content: center;
   gap: 14px;
-  margin: 0 0 14px;
+  /* Figma leaves 32px between the heading row and the offer box on a 560px card
+     (8993:19140: head ends at y=96.2, the offer frame starts at 128.2). Our card is
+     460px, so 26px holds the same rhythm. The old 14px was fine while an
+     explanatory line sat in the gap; with that line gone (it is not in the design)
+     the heading was almost touching the box. */
+  margin: 0 0 26px;
 }
 
 .report-premium-overlay__icon {
@@ -2715,26 +2720,6 @@ input.autofill-dark:-internal-autofill-previewed {
   line-height: 1.15;
   letter-spacing: -0.5px;
   color: #161021;
-}
-
-.report-premium-overlay__copy {
-  margin: 0 0 20px;
-  max-width: 380px;
-  color: #4b4658;
-  font-family: var(--font-sans);
-  font-size: 15px;
-  font-weight: 500;
-  line-height: 1.55;
-}
-
-.report-premium-overlay__copy strong {
-  color: rgb(var(--report-accent-ink-rgb, var(--report-accent-rgb)));
-  font-weight: 600;
-}
-
-.report-premium-overlay__copy-cta {
-  color: #161021;
-  font-weight: 800;
 }
 
 /* ── Offer box: light inner panel — green save pill + countdown → price + trust
@@ -2998,7 +2983,8 @@ input.autofill-dark:-internal-autofill-previewed {
   }
   .report-premium-overlay__head {
     gap: 10px;
-    margin-bottom: 12px;
+    /* 296px card at this width — the same 32-in-560 proportion lands at 17px. */
+    margin-bottom: 17px;
   }
   .report-premium-overlay__icon {
     width: 44px;
@@ -3007,9 +2993,6 @@ input.autofill-dark:-internal-autofill-previewed {
   }
   .report-premium-overlay__title {
     font-size: 24px;
-  }
-  .report-premium-overlay__copy {
-    font-size: 14px;
   }
   .report-premium-overlay__offer {
     padding: 18px 16px;
@@ -9995,18 +9978,6 @@ input.autofill-dark:-internal-autofill-previewed {
   line-height: 1.55;
 }
 
-.report-insecurities__hook {
-  margin: 0 0 6px;
-  text-align: center;
-  color: #6b5b95;
-  font-family: var(--font-sans);
-  font-weight: 800;
-  font-size: 0.635rem;
-  letter-spacing: 1.42px;
-  text-transform: uppercase;
-  line-height: 1.6;
-}
-
 /* Locked: blurred stand-in the PremiumOverlay anchors on — the real
    per-archetype takeaway/body never reaches a locked client. */
 .report-insecurities__locked {
@@ -10425,18 +10396,6 @@ input.autofill-dark:-internal-autofill-previewed {
   font-weight: 400;
   font-size: clamp(1.05rem, 1.55vw, 1.164rem);
   line-height: 1.55;
-}
-
-.report-reward__hook {
-  margin: 0 0 6px;
-  text-align: center;
-  color: #6b5b95;
-  font-family: var(--font-sans);
-  font-weight: 800;
-  font-size: 0.635rem;
-  letter-spacing: 1.42px;
-  text-transform: uppercase;
-  line-height: 1.6;
 }
 
 /* Locked: blurred stand-in the PremiumOverlay anchors on — the real
@@ -10893,18 +10852,6 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 /* The wider rule above the graph (Figma 8427:1897). */
-
-.report-energy__hook {
-  margin: 0 0 6px;
-  text-align: center;
-  color: #6b5b95;
-  font-family: var(--font-sans);
-  font-weight: 800;
-  font-size: 0.635rem;
-  letter-spacing: 1.42px;
-  text-transform: uppercase;
-  line-height: 1.6;
-}
 
 /* Locked: blurred stand-in the PremiumOverlay anchors on — the real
    per-archetype readouts/takeaway never reach a locked client. */
@@ -11396,18 +11343,6 @@ input.autofill-dark:-internal-autofill-previewed {
   line-height: 1.5;
 }
 
-.report-arousal__hook {
-  margin: 0 0 6px;
-  text-align: center;
-  color: #6b5b95;
-  font-family: var(--font-sans);
-  font-weight: 800;
-  font-size: 0.635rem;
-  letter-spacing: 1.42px;
-  text-transform: uppercase;
-  line-height: 1.6;
-}
-
 /* Locked: blurred stand-in the PremiumOverlay anchors on — the real
    per-archetype result/arc/stats never reach a locked client. */
 .report-arousal__preview {
@@ -11748,18 +11683,6 @@ input.autofill-dark:-internal-autofill-previewed {
   font-weight: 400;
   font-size: clamp(1rem, 1.4vw, 1.058rem);
   line-height: 1.5;
-}
-
-.report-enjoy__hook {
-  margin: 0 0 6px;
-  text-align: center;
-  color: #6b5b95;
-  font-family: var(--font-sans);
-  font-weight: 800;
-  font-size: 0.635rem;
-  letter-spacing: 1.42px;
-  text-transform: uppercase;
-  line-height: 1.6;
 }
 
 /* Locked: blurred stand-in the PremiumOverlay anchors on — the real
@@ -12296,18 +12219,6 @@ input.autofill-dark:-internal-autofill-previewed {
   line-height: 1.55;
 }
 
-.report-initiation__hook {
-  margin: 0 0 6px;
-  text-align: center;
-  color: #6b5b95;
-  font-family: var(--font-sans);
-  font-weight: 800;
-  font-size: 0.635rem;
-  letter-spacing: 1.42px;
-  text-transform: uppercase;
-  line-height: 1.6;
-}
-
 /* Locked: blurred stand-in the PremiumOverlay anchors on — the real
    per-archetype result/chart/copy never reach a locked client. */
 .report-initiation__preview {
@@ -12668,18 +12579,6 @@ input.autofill-dark:-internal-autofill-previewed {
   font-weight: 400;
   font-size: clamp(0.9rem, 1.2vw, 0.906rem);
   line-height: 1.5;
-}
-
-.report-libido__hook {
-  margin: 0 0 6px;
-  text-align: center;
-  color: #6b5b95;
-  font-family: var(--font-sans);
-  font-weight: 800;
-  font-size: 0.635rem;
-  letter-spacing: 1.42px;
-  text-transform: uppercase;
-  line-height: 1.6;
 }
 
 /* Locked: blurred stand-in the PremiumOverlay anchors on — the real
@@ -13192,18 +13091,6 @@ input.autofill-dark:-internal-autofill-previewed {
   font-weight: 400;
   font-size: clamp(0.9rem, 1.2vw, 0.906rem);
   line-height: 1.5;
-}
-
-.report-partnership__hook {
-  margin: 0 0 6px;
-  text-align: center;
-  color: #6b5b95;
-  font-family: var(--font-sans);
-  font-weight: 800;
-  font-size: 0.635rem;
-  letter-spacing: 1.42px;
-  text-transform: uppercase;
-  line-height: 1.6;
 }
 
 /* Locked: blurred stand-in the PremiumOverlay anchors on — the real
@@ -13727,18 +13614,6 @@ input.autofill-dark:-internal-autofill-previewed {
   line-height: 1.55;
 }
 
-.report-growth__hook {
-  margin: 0 0 6px;
-  text-align: center;
-  color: #6b5b95;
-  font-family: var(--font-sans);
-  font-weight: 800;
-  font-size: 0.635rem;
-  letter-spacing: 1.42px;
-  text-transform: uppercase;
-  line-height: 1.6;
-}
-
 /* Locked: blurred stand-in the PremiumOverlay anchors on — the real
    per-archetype ladder never reaches a locked client. */
 .report-growth__preview {
@@ -14040,18 +13915,6 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-reading__closing-formula {
   color: #6b5b95;
   font-style: italic;
-}
-
-.report-reading__hook {
-  margin: 0 0 6px;
-  text-align: center;
-  color: #6b5b95;
-  font-family: var(--font-sans);
-  font-weight: 800;
-  font-size: 0.635rem;
-  letter-spacing: 1.42px;
-  text-transform: uppercase;
-  line-height: 1.6;
 }
 
 /* Locked: blurred stand-in the PremiumOverlay anchors on — the real
@@ -14504,18 +14367,6 @@ input.autofill-dark:-internal-autofill-previewed {
   font-weight: 400;
   font-size: clamp(0.82rem, 1.15vw, 0.875rem);
   line-height: 1.55;
-}
-
-.report-confidence__hook {
-  margin: 0;
-  text-align: center;
-  color: #6b5b95;
-  font-family: var(--font-sans);
-  font-weight: 800;
-  font-size: 0.635rem;
-  letter-spacing: 1.42px;
-  text-transform: uppercase;
-  line-height: 1.6;
 }
 
 /* Locked: blurred stand-in the PremiumOverlay anchors on — the real result word
@@ -15110,18 +14961,6 @@ input.autofill-dark:-internal-autofill-previewed {
   align-items: center;
   gap: 10px;
   padding: clamp(6px, 1.4vw, 16px) 0 clamp(2px, 0.6vw, 6px);
-}
-
-.report-accel__hook {
-  margin: 0 0 6px;
-  text-align: center;
-  color: #6b5b95;
-  font-family: var(--font-sans);
-  font-weight: 800;
-  font-size: 0.635rem;
-  letter-spacing: 1.42px;
-  text-transform: uppercase;
-  line-height: 1.6;
 }
 
 .report-accel__star {
@@ -22257,18 +22096,6 @@ input.autofill-dark:-internal-autofill-previewed {
   line-height: 1.55;
 }
 
-.report-power__hook {
-  margin: 0 0 6px;
-  text-align: center;
-  color: #6b5b95;
-  font-family: var(--font-sans);
-  font-weight: 800;
-  font-size: 0.635rem;
-  letter-spacing: 1.42px;
-  text-transform: uppercase;
-  line-height: 1.6;
-}
-
 /* Locked: blurred stand-in the PremiumOverlay anchors on — the reader's "You"
    highlight/zone never reach a locked client (the plane layout is universal). */
 .report-power__preview {
@@ -22540,18 +22367,6 @@ input.autofill-dark:-internal-autofill-previewed {
   letter-spacing: 2.23px;
   text-transform: uppercase;
   line-height: 1.65;
-}
-
-.report-fantasy__hook {
-  margin: 0 0 6px;
-  text-align: center;
-  color: #6b5b95;
-  font-family: var(--font-sans);
-  font-weight: 800;
-  font-size: 0.635rem;
-  letter-spacing: 1.42px;
-  text-transform: uppercase;
-  line-height: 1.6;
 }
 
 /* ── Report nav access badges (Figma locked page, Aside 8993:19278) ─────────────
@@ -23161,18 +22976,6 @@ input.autofill-dark:-internal-autofill-previewed {
   line-height: 1.55;
 }
 
-.report-curiosity__hook {
-  margin: 0 0 6px;
-  text-align: center;
-  color: #6b5b95;
-  font-family: var(--font-sans);
-  font-weight: 800;
-  font-size: 0.635rem;
-  letter-spacing: 1.42px;
-  text-transform: uppercase;
-  line-height: 1.6;
-}
-
 /* Locked: blurred stand-in the PremiumOverlay anchors on — the reader's fit
    scores never reach a locked client (the fit-form labels are universal). */
 .report-curiosity__preview {
@@ -23569,18 +23372,6 @@ input.autofill-dark:-internal-autofill-previewed {
   font-weight: 400;
   font-size: clamp(0.95rem, 1.4vw, 0.988rem);
   line-height: 1.68;
-}
-
-.report-lovelang__hook {
-  margin: 0 0 6px;
-  text-align: center;
-  color: #6b5b95;
-  font-family: var(--font-sans);
-  font-weight: 800;
-  font-size: 0.635rem;
-  letter-spacing: 1.42px;
-  text-transform: uppercase;
-  line-height: 1.6;
 }
 
 /* Locked: blurred stand-in the PremiumOverlay anchors on — the reader's real

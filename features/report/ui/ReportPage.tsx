@@ -1130,7 +1130,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     // Report 2.0 "Core Insecurities" — a Part II, essentials-tier
                     // PREMIUM section. Gating is resolved SERVER-SIDE: a locked
                     // client's insecuritiesCopy carries only the universal slots
-                    // (gate.hook, practical.label, learn.*) — the per-archetype
+                    // (practical.label, learn.*) — the per-archetype
                     // takeaway/practical-lines/body AND the cue family + graph
                     // config are withheld — and `insecuritiesCopy.locked` mirrors
                     // this unlock check. The cue graph highlights the reader's
@@ -1210,7 +1210,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     // so it unlocks only at full_report). Gating is resolved
                     // SERVER-SIDE: a locked client's energyCopy carries only the
                     // universal educational slots + chart caption (the per-archetype
-                    // gate.hook AND takeaway AND the energy config — curve family +
+                    // takeaway AND the energy config — curve family +
                     // readout levels — are withheld), and `energyCopy.locked` mirrors
                     // this unlock check. Only the primary archetype gets a copy
                     // block; browsing another archetype's report renders nothing.
@@ -1369,7 +1369,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     // after Love Language (19). Gating is resolved SERVER-SIDE: a
                     // locked client's arousalCopy carries only the universal slots
                     // (eyebrow, insight.label, edu.*, learn.*) — the per-archetype
-                    // gate.hook / result / insight.value / mini-stats AND the arc
+                    // result / insight.value / mini-stats AND the arc
                     // config (family + acts) are withheld — and `arousalCopy.locked`
                     // mirrors this unlock check. The arc shape is framing (drawn even
                     // locked, under the blur). Only the primary archetype gets a copy
@@ -1408,7 +1408,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     // ESSENTIALS_SECTION_IDS, so it unlocks only at full_report).
                     // Mounts in Part III right after Arousal (21). Gating is
                     // resolved SERVER-SIDE: a locked client's initiationCopy carries
-                    // only the universal framing slots (gate.hook, eyebrow,
+                    // only the universal framing slots (eyebrow,
                     // row1.label, practical.label, learn.*) — the per-archetype
                     // result / row1.value / takeaway / practical teaser+lines /
                     // body.p1 / mini-stat AND the timeline-chart config (family +
@@ -1450,7 +1450,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     // PREMIUM section (libido_challenges_in_relationships; NOT in
                     // ESSENTIALS_SECTION_IDS, so it unlocks only at full_report).
                     // Gating is resolved SERVER-SIDE: a locked client's libidoCopy
-                    // carries only the universal framing slots (gate.hook, eyebrow,
+                    // carries only the universal framing slots (eyebrow,
                     // row1..4.label, practical.label, learn.*) — the per-archetype
                     // result (loop name) / row1..4.value / practical teaser+lines
                     // AND the loop config (name + steps) are withheld — and
@@ -1531,7 +1531,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     // Gating is resolved SERVER-SIDE: a locked client's enjoyCopy
                     // carries only the universal slots (eyebrow, row*.label,
                     // insight.label, edu.*, learn.*) — the per-archetype
-                    // gate.hook / result / row*.value / insight.value are withheld —
+                    // result / row*.value / insight.value are withheld —
                     // and `enjoyCopy.locked` mirrors this unlock check. Only the
                     // primary archetype gets a copy block; browsing another
                     // archetype's report renders nothing. Empty title suppresses
@@ -1568,7 +1568,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     // NOT in ESSENTIALS_SECTION_IDS, so it unlocks only at
                     // full_report). Gating is resolved SERVER-SIDE: a locked
                     // client's growthCopy carries only the universal framing slots
-                    // (gate.hook, learn.*) — the per-archetype takeaway /
+                    // (learn.*) — the per-archetype takeaway /
                     // ladder.headline / rung1..5.{from,to,move} / ladder.close are
                     // withheld — and `growthCopy.locked` mirrors this unlock check.
                     // The ladder renders as a vertically stacked stair of rungs,
@@ -1807,7 +1807,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     // FULL_REPORT-tier PREMIUM section (recommendations; NOT in
                     // ESSENTIALS_SECTION_IDS, so it unlocks only at full_report).
                     // Gating is resolved SERVER-SIDE: a locked client's readingCopy
-                    // carries only the universal framing slots (gate.hook, book*.tag,
+                    // carries only the universal framing slots (book*.tag,
                     // closing.lead, learn.*) — the per-archetype book titles /
                     // authors / blurbs and closing.formula are withheld — and
                     // `readingCopy.locked` mirrors this unlock check. Renders only

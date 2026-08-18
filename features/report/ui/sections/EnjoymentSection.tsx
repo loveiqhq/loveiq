@@ -21,7 +21,7 @@ import { renderEduPara } from "./eduPara";
  * `isPremium` and NOT in `ESSENTIALS_SECTION_IDS`, so it only unlocks at the
  * full_report tier). The framing slots (`eyebrow`, the three `row*.label`,
  * `insight.label`, `edu.*`, `learn.*`) are UNIVERSAL (identical across all 14
- * archetypes) and always shipped. The per-archetype payload — `gate.hook`,
+ * archetypes) and always shipped. The per-archetype payload —
  * `result` (e.g. "Wanting to Want"), the three `row*.value`, and `insight.value`
  * — is the gated content: shipped ONLY when the report is unlocked at the
  * full_report tier. A locked client (`locked: true`) receives those null and
@@ -44,7 +44,6 @@ export interface EnjoyCopy {
   "learn.eyebrow"?: string | null;
   "learn.body"?: string | null;
   // Per-archetype — withheld (null) from locked clients.
-  "gate.hook"?: string | null;
   result?: string | null;
   "row1.value"?: string | null;
   "row2.value"?: string | null;
@@ -139,7 +138,6 @@ const EnjoymentSection: FC<Props> = ({
       <article className="report-enjoy__card">
         {locked ? (
           <>
-            {copy["gate.hook"] ? <p className="report-enjoy__hook">{copy["gate.hook"]}</p> : null}
             <div className="report-enjoy__preview">
               <div className="report-enjoy__preview-fade" aria-hidden="true">
                 {/* Blurred stand-in — the real per-archetype result/rows/insight

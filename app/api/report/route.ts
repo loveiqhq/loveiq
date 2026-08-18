@@ -686,9 +686,16 @@ export async function GET(request: Request) {
       locked: !findingsUnlocked,
     };
 
+    // NOTE: `gate.hook` used to ship with every one of these blocks and render as
+    // a small uppercase line above the paywall card ("Your confidence anchors in
+    // one place. Knowing where changes what actually builds it."). The design has
+    // no such line — not in the section frames (8427:1656) and not on the paywall
+    // card (8988:16141, which carries no copy above its button) — so it is neither
+    // sent nor drawn any more. The copy still exists in data/report2-copy.ts if a
+    // future design wants it back.
     // Report 2.0 Beliefs ("Typical Beliefs") section copy — a Part II,
-    // essentials-tier PREMIUM section. The educational slots (`gate.hook`,
-    // `edu.*`, `learn.*`) are universal and always shipped. The per-archetype
+    // essentials-tier PREMIUM section. The educational slots (`edu.*`,
+    // `learn.*`) are universal and always shipped. The per-archetype
     // payload (`body.p1`, `keep.*`, `loosen.N.{belief,shift}`) is the gated
     // content: shipped ONLY when the report is unlocked at the essentials tier
     // (or above) — a locked client (`accessPlan === null`, or a tier that
@@ -729,7 +736,6 @@ export async function GET(request: Request) {
     );
 
     const beliefsCopy = {
-      "gate.hook": beliefsSection["gate.hook"] ?? null,
       "edu.eyebrow": beliefsSection["edu.eyebrow"] ?? null,
       "edu.teaser": beliefsSection["edu.teaser"] ?? null,
       "edu.body.p1": beliefsSection["edu.body.p1"] ?? null,
@@ -745,7 +751,7 @@ export async function GET(request: Request) {
     };
 
     // Report 2.0 Attachment Style section copy — a Part II, essentials-tier
-    // PREMIUM section (section 8). The universal slots (`gate.hook`, `eyebrow`,
+    // PREMIUM section (section 8). The universal slots (`eyebrow`,
     // `edu.*`, `learn.*`) are always shipped. The per-archetype payload — the
     // result word, the three row VALUES, the insight value, the map caption
     // (`body.p1`), and the attachment-plane coordinates — is the gated content:
@@ -777,7 +783,6 @@ export async function GET(request: Request) {
         )
       : null;
     const attachmentCopy = {
-      "gate.hook": attachmentSection["gate.hook"] ?? null,
       eyebrow: attachmentSection.eyebrow ?? null,
       "edu.eyebrow": attachmentSection["edu.eyebrow"] ?? null,
       "edu.teaser": attachmentSection["edu.teaser"] ?? null,
@@ -803,7 +808,7 @@ export async function GET(request: Request) {
     };
 
     // Report 2.0 Accelerators & Brakes section copy — a Part II, essentials-tier
-    // PREMIUM section. The educational slots (`gate.hook`, `edu.*`, `learn.*`)
+    // PREMIUM section. The educational slots (`edu.*`, `learn.*`)
     // are universal and always shipped. `takeaway` is the ONLY per-archetype
     // slot (a single verdict sentence whose polarity flips per archetype) — the
     // gated content: shipped ONLY when the report is unlocked at the essentials
@@ -816,7 +821,6 @@ export async function GET(request: Request) {
       sectionId: "typical_arousal_accelerators_turn_ons_of_the_core_archetype",
     });
     const accelCopy = {
-      "gate.hook": accelSection["gate.hook"] ?? null,
       "edu.eyebrow": accelSection["edu.eyebrow"] ?? null,
       "edu.teaser": accelSection["edu.teaser"] ?? null,
       "edu.body.p1": accelSection["edu.body.p1"] ?? null,
@@ -830,8 +834,8 @@ export async function GET(request: Request) {
     };
 
     // Report 2.0 Core Insecurities section copy — a Part II, essentials-tier
-    // PREMIUM section (section 9). The universal slots (`gate.hook`,
-    // `practical.label`, `learn.*`) are always shipped. The per-archetype
+    // PREMIUM section (section 9). The universal slots (`practical.label`,
+    // `learn.*`) are always shipped. The per-archetype
     // payload — `takeaway`, the practical teaser + three practical lines, and
     // the `body.p1` sensitivity paragraph — is the gated content: shipped ONLY
     // when the report is unlocked at the essentials tier (or above). A locked
@@ -859,7 +863,6 @@ export async function GET(request: Request) {
         } | null) ?? null)
       : null;
     const insecuritiesCopy = {
-      "gate.hook": insecuritiesSection["gate.hook"] ?? null,
       "practical.label": insecuritiesSection["practical.label"] ?? null,
       "learn.eyebrow": insecuritiesSection["learn.eyebrow"] ?? null,
       "learn.body": insecuritiesSection["learn.body"] ?? null,
@@ -884,7 +887,7 @@ export async function GET(request: Request) {
     // Report 2.0 Reward System ("Biochemical Reward System Dynamics") section
     // copy — a Part III, FULL_REPORT-tier PREMIUM section (section 12; NOT in
     // ESSENTIALS_SECTION_IDS, so it unlocks only at the full_report tier). The
-    // educational slots (`gate.hook`, `edu.*`, `learn.*`) are universal and
+    // educational slots (`edu.*`, `learn.*`) are universal and
     // always shipped, as are `stat1`/`stat1.caption` (universal-safe education).
     // The per-archetype payload — `takeaway` (verdict) and the reward config
     // (chemical order / roles / meter fills) — is the gated content: shipped
@@ -918,7 +921,6 @@ export async function GET(request: Request) {
           : null))
       : null;
     const rewardCopy = {
-      "gate.hook": rewardSection["gate.hook"] ?? null,
       "edu.eyebrow": rewardSection["edu.eyebrow"] ?? null,
       "edu.teaser": rewardSection["edu.teaser"] ?? null,
       "edu.body.p1": rewardSection["edu.body.p1"] ?? null,
@@ -943,7 +945,7 @@ export async function GET(request: Request) {
     // FULL_REPORT-tier PREMIUM section (section 13; NOT in ESSENTIALS_SECTION_IDS,
     // so it unlocks only at the full_report tier). The educational slots (`edu.*`,
     // `chartnote1`, `learn.*`) are universal (verified: `chartnote1` is identical
-    // across all 14) and always shipped. The per-archetype payload — `gate.hook`
+    // across all 14) and always shipped. The per-archetype payload —
     // (the per-archetype hook, shown as the locked teaser) and `takeaway` (the
     // verdict) plus the energy config (readouts + highlighted curve family) — is
     // the gated content: shipped ONLY when the report is unlocked at the
@@ -963,8 +965,6 @@ export async function GET(request: Request) {
       ? normalizeEnergyConfig(getReport2Config(primaryArchetype) as Record<string, unknown> | null)
       : null;
     const energyCopy = {
-      // gate.hook is per-archetype — withheld from locked clients.
-      "gate.hook": energyUnlocked ? (energySection["gate.hook"] ?? null) : null,
       "edu.eyebrow": energySection["edu.eyebrow"] ?? null,
       "edu.teaser": energySection["edu.teaser"] ?? null,
       "edu.body.p1": energySection["edu.body.p1"] ?? null,
@@ -983,13 +983,13 @@ export async function GET(request: Request) {
     // PREMIUM section (`arousal_style`, section 21; NOT in ESSENTIALS_SECTION_IDS,
     // so it unlocks only at the full_report tier). The educational slots
     // (`eyebrow`, `insight.label`, `edu.*`, `learn.*`) are UNIVERSAL (identical
-    // across all 14) and always shipped. The per-archetype payload — `gate.hook`,
+    // across all 14) and always shipped. The per-archetype payload —
     // `result` (e.g. "Responsive"), `insight.value`, the two mini-stats
     // (`stat1`/`stat1.caption`, `stat2`/`stat2.caption`) plus the arc config
     // (family + act labels) — is the gated content: shipped ONLY when unlocked at
     // the full_report tier. A locked client (`arousalCopy.locked`) receives those
-    // null + null config and renders the hook teaser + PremiumOverlay. All 14
-    // archetypes carry full arousal copy (result/insight.value/stats/gate.hook),
+    // null + null config and renders the PremiumOverlay. All 14
+    // archetypes carry full arousal copy (result/insight.value/stats),
     // so nothing is fabricated. Shared viewers inherit the owner's plan via
     // `accessPlan`. Keyed to the primary archetype.
     const arousalSection = getReport2Section(primaryArchetype, "arousal");
@@ -1014,7 +1014,6 @@ export async function GET(request: Request) {
       "learn.eyebrow": arousalSection["learn.eyebrow"] ?? null,
       "learn.body": arousalSection["learn.body"] ?? null,
       // Per-archetype — withheld from locked clients.
-      "gate.hook": arousalUnlocked ? (arousalSection["gate.hook"] ?? null) : null,
       result: arousalUnlocked ? (arousalSection.result ?? null) : null,
       "insight.value": arousalUnlocked ? (arousalSection["insight.value"] ?? null) : null,
       stat1: arousalUnlocked ? (arousalSection.stat1 ?? null) : null,
@@ -1027,7 +1026,7 @@ export async function GET(request: Request) {
     // Report 2.0 Initiation Style section copy — a Part III, FULL_REPORT-tier
     // PREMIUM section (`initiation_style`, section 22; NOT in
     // ESSENTIALS_SECTION_IDS, so it unlocks only at the full_report tier). The
-    // framing slots (`gate.hook`, `eyebrow`, `row1.label`, `practical.label`,
+    // framing slots (`eyebrow`, `row1.label`, `practical.label`,
     // `learn.*`) are UNIVERSAL (identical across all 14) and always shipped. The
     // per-archetype payload — `result` (e.g. "Presence-led"), `row1.value`,
     // `takeaway`, `practical.teaser`, `practical.line1..3`, `body.p1`, the
@@ -1052,7 +1051,6 @@ export async function GET(request: Request) {
       : null;
     const initiationCopy = {
       // Universal — always shipped (frame the section for locked clients too).
-      "gate.hook": initiationSection["gate.hook"] ?? null,
       eyebrow: initiationSection.eyebrow ?? null,
       "row1.label": initiationSection["row1.label"] ?? null,
       "practical.label": initiationSection["practical.label"] ?? null,
@@ -1077,7 +1075,7 @@ export async function GET(request: Request) {
     // Report 2.0 Libido Challenges section copy — a Part IV, FULL_REPORT-tier
     // PREMIUM section (`libido_challenges_in_relationships`, section 28; NOT in
     // ESSENTIALS_SECTION_IDS, so it unlocks only at the full_report tier). The
-    // framing slots (`gate.hook`, `eyebrow`, `row1..4.label`, `practical.label`,
+    // framing slots (`eyebrow`, `row1..4.label`, `practical.label`,
     // `learn.*`) are UNIVERSAL and always shipped. The per-archetype payload —
     // `result` (the loop name, e.g. "The Waiting Loop"), `row1..4.value`,
     // `practical.teaser`, `practical.line1..3` PLUS the loop config (name +
@@ -1107,7 +1105,6 @@ export async function GET(request: Request) {
       : null;
     const libidoCopy = {
       // Universal — always shipped (frame the section for locked clients too).
-      "gate.hook": libidoSection["gate.hook"] ?? null,
       eyebrow: libidoSection.eyebrow ?? null,
       "row1.label": libidoSection["row1.label"] ?? null,
       "row2.label": libidoSection["row2.label"] ?? null,
@@ -1133,7 +1130,7 @@ export async function GET(request: Request) {
     // after Libido (section 28); it has no own row in report-general.ts, so it
     // shares Libido's gate: a Part IV, FULL_REPORT-tier PREMIUM section (NOT in
     // ESSENTIALS_SECTION_IDS, so it unlocks only at the full_report tier). The
-    // framing slots (`gate.hook`, `eyebrow`, `row1..3.label`, `edu.*`, `learn.*`)
+    // framing slots (`eyebrow`, `row1..3.label`, `edu.*`, `learn.*`)
     // are UNIVERSAL (verified identical across all 14) and always shipped. The
     // per-archetype payload — `result` (the loop name, e.g. "The Resonance Loop")
     // and `row1..3.value` — is the gated content: shipped ONLY when unlocked at
@@ -1151,7 +1148,6 @@ export async function GET(request: Request) {
       : null;
     const partnershipCopy = {
       // Universal — always shipped (frame the section for locked clients too).
-      "gate.hook": partnershipSection["gate.hook"] ?? null,
       eyebrow: partnershipSection.eyebrow ?? null,
       "row1.label": partnershipSection["row1.label"] ?? null,
       "row2.label": partnershipSection["row2.label"] ?? null,
@@ -1179,7 +1175,7 @@ export async function GET(request: Request) {
     // renders it in the established Arousal pattern (result card + labelled rows
     // + insight + edu block). The framing slots (`eyebrow`, `row1..3.label`,
     // `insight.label`, `edu.*`, `learn.*`) are UNIVERSAL (identical across all
-    // 14) and always shipped. The per-archetype payload — `gate.hook`, `result`
+    // 14) and always shipped. The per-archetype payload — `result`
     // (e.g. "Wanting to Want"), `row1..3.value`, and `insight.value` — is the
     // gated content: shipped ONLY when unlocked at the full_report tier. A locked
     // client (`enjoyCopy.locked`) receives those null and renders the hook teaser
@@ -1206,7 +1202,6 @@ export async function GET(request: Request) {
       "learn.eyebrow": enjoySection["learn.eyebrow"] ?? null,
       "learn.body": enjoySection["learn.body"] ?? null,
       // Per-archetype — withheld from locked clients.
-      "gate.hook": enjoyUnlocked ? (enjoySection["gate.hook"] ?? null) : null,
       result: enjoyUnlocked ? (enjoySection.result ?? null) : null,
       "row1.value": enjoyUnlocked ? (enjoySection["row1.value"] ?? null) : null,
       "row2.value": enjoyUnlocked ? (enjoySection["row2.value"] ?? null) : null,
@@ -1218,7 +1213,7 @@ export async function GET(request: Request) {
     // Report 2.0 "Growth Potentials" section copy — a Part IV, FULL_REPORT-tier
     // PREMIUM section (`typical_growth_potentials_for_the_core_archetype`,
     // section 31; NOT in ESSENTIALS_SECTION_IDS, so it unlocks only at the
-    // full_report tier). The framing slots (`gate.hook`, `learn.eyebrow`,
+    // full_report tier). The framing slots (`learn.eyebrow`,
     // `learn.body`) are UNIVERSAL and always shipped. The per-archetype payload —
     // `takeaway`, `ladder.headline`, `rung1..5.{from,to,move}` (the growth-ladder
     // rungs; counts vary per archetype) and `ladder.close` — is the gated
@@ -1242,7 +1237,6 @@ export async function GET(request: Request) {
         : null;
     const growthCopy = {
       // Universal — always shipped (frame the section for locked clients too).
-      "gate.hook": growthSection["gate.hook"] ?? null,
       "learn.eyebrow": growthSection["learn.eyebrow"] ?? null,
       "learn.body": growthSection["learn.body"] ?? null,
       // Per-archetype — withheld from locked clients.
@@ -1263,7 +1257,7 @@ export async function GET(request: Request) {
     // Report 2.0 "Reading Recommendations" section copy — a Part IV,
     // FULL_REPORT-tier PREMIUM section (`recommendations`, section 32; NOT in
     // ESSENTIALS_SECTION_IDS, so it unlocks only at the full_report tier). The
-    // framing slots (`gate.hook`, universal category tags `book1..4.tag`,
+    // framing slots (universal category tags `book1..4.tag`,
     // `closing.lead`, `learn.eyebrow`, `learn.body`) are UNIVERSAL and always
     // shipped. The per-archetype payload — each book's `title` / `author` /
     // `blurb` plus `closing.formula` — is the gated content: shipped ONLY when
@@ -1280,7 +1274,6 @@ export async function GET(request: Request) {
     });
     const readingCopy = {
       // Universal — always shipped (frame the section for locked clients too).
-      "gate.hook": readingSection["gate.hook"] ?? null,
       "closing.lead": readingSection["closing.lead"] ?? null,
       "learn.eyebrow": readingSection["learn.eyebrow"] ?? null,
       "learn.body": readingSection["learn.body"] ?? null,
@@ -1300,8 +1293,7 @@ export async function GET(request: Request) {
     // Report 2.0 Power Orientation section copy — a Part III, FULL_REPORT-tier
     // PREMIUM section (`power_orientation`, section 15; NOT in
     // ESSENTIALS_SECTION_IDS, so it unlocks only at the full_report tier). The
-    // educational slots (`gate.hook` — universal, verified identical across all
-    // 14 — plus `edu.*`, `learn.*`) are always shipped. The per-archetype
+    // educational slots (`edu.*`, `learn.*`) are always shipped. The per-archetype
     // payload — `takeaway` (verdict), `body.p1` (the reader's own read on the
     // map) and `zone` (the reader's power-zone region label, which drives the
     // top label + the highlighted "You" zone + dot on the plane) — is the gated
@@ -1323,7 +1315,6 @@ export async function GET(request: Request) {
       ? getPowerZone(getReport2Config(primaryArchetype)?.families?.power_zone)
       : null;
     const powerCopy = {
-      "gate.hook": powerSection["gate.hook"] ?? null,
       "edu.eyebrow": powerSection["edu.eyebrow"] ?? null,
       "edu.teaser": powerSection["edu.teaser"] ?? null,
       "edu.body.p1": powerSection["edu.body.p1"] ?? null,
@@ -1368,7 +1359,6 @@ export async function GET(request: Request) {
     // per-archetype placement leaks to an unpaid reader.
     const fantasyDots = fantasyUnlocked ? getFantasyMapDots(primaryArchetype) : null;
     const fantasyCopy = {
-      "gate.hook": fantasySection["gate.hook"] ?? null,
       "edu.eyebrow": fantasySection["edu.eyebrow"] ?? null,
       "edu.teaser": fantasySection["edu.teaser"] ?? null,
       "edu.body.p1": fantasySection["edu.body.p1"] ?? null,
@@ -1385,7 +1375,7 @@ export async function GET(request: Request) {
     // Report 2.0 Curiosity & Relationship Form section copy — a Part III,
     // FULL_REPORT-tier PREMIUM section (`curiosity_level`, section 16; NOT in
     // ESSENTIALS_SECTION_IDS, so it unlocks only at the full_report tier). The
-    // universal slots — `gate.hook`, `edu.*` (incl. the 14-item `edu.struct.N`
+    // universal slots — `edu.*` (incl. the 14-item `edu.struct.N`
     // list of relationship structures) and `learn.*` — are always shipped. The
     // per-archetype payload — `takeaway` (the italic pull-quote), `body.p1` (the
     // bold intro read) and `body.p2/p3` — is the gated content: shipped ONLY when
@@ -1410,7 +1400,6 @@ export async function GET(request: Request) {
         ? (rawFit as Record<string, number>)
         : null;
     const curiosityCopy = {
-      "gate.hook": curiositySection["gate.hook"] ?? null,
       "edu.eyebrow": curiositySection["edu.eyebrow"] ?? null,
       "edu.teaser": curiositySection["edu.teaser"] ?? null,
       "edu.body.p1": curiositySection["edu.body.p1"] ?? null,
@@ -1435,7 +1424,7 @@ export async function GET(request: Request) {
     // Report 2.0 Love Language section copy — a Part III, FULL_REPORT-tier
     // PREMIUM section (`love_language`, section 19; NOT in ESSENTIALS_SECTION_IDS,
     // so it unlocks only at the full_report tier). The universal slots —
-    // `gate.hook`, `edu.*` and `learn.*` — are always shipped. The per-archetype
+    // `edu.*` and `learn.*` — are always shipped. The per-archetype
     // payload — `body.p1` (the "catch" line) plus the reader's ranked ordering of
     // the five languages (config `love_language_order`) — is the gated content:
     // shipped ONLY when unlocked. The five languages themselves are universal
@@ -1462,7 +1451,6 @@ export async function GET(request: Request) {
         ? rawLoveOrder.filter((v): v is string => typeof v === "string")
         : null;
     const lovelangCopy = {
-      "gate.hook": lovelangSection["gate.hook"] ?? null,
       "edu.eyebrow": lovelangSection["edu.eyebrow"] ?? null,
       "edu.teaser": lovelangSection["edu.teaser"] ?? null,
       "edu.body.p1": lovelangSection["edu.body.p1"] ?? null,
@@ -1477,7 +1465,7 @@ export async function GET(request: Request) {
 
     // Report 2.0 Confidence Level section copy — a Part II, essentials-tier
     // PREMIUM section (section 10). UNLIKE the other Part II sections, EVERY copy
-    // slot here is universal education (`gate.hook`, `edu.*`, `chartnote1`,
+    // slot here is universal education (`edu.*`, `chartnote1`,
     // `learn.*`) — always shipped. The per-archetype specificity is the confidence
     // RESULT, which lives in config `confidence_strip` = { you_dot_x, result_word }
     // — that is the gated bit: shipped ONLY when the report is unlocked at the
@@ -1507,7 +1495,6 @@ export async function GET(request: Request) {
           }
         : null;
     const confidenceCopy = {
-      "gate.hook": confidenceSection["gate.hook"] ?? null,
       "edu.eyebrow": confidenceSection["edu.eyebrow"] ?? null,
       "edu.teaser": confidenceSection["edu.teaser"] ?? null,
       "edu.body.p1": confidenceSection["edu.body.p1"] ?? null,
