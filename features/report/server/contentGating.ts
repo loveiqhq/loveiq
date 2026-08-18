@@ -40,15 +40,47 @@ export const PRACTICE_SECTION_ID = "typical_sexual_fantasy_amp_practice_tendenci
  * /api/report JSON for anyone reading the network tab. It has to come off the
  * wire, which is what this does.
  *
+ * The one exception is the FIRST body paragraph, which ships as a short prefix
+ * — see {@link LOCKED_EDU_BODY_TEASE_CHARS}.
+ *
  * The `practical.*` sections (libido, initiation, insecurities) already gate
  * their own teaser and lines at the call site, so they need nothing here.
  */
+/**
+ * How much of the opening body paragraph a locked client receives.
+ *
+ * Figma's collapsed peek (8762:15709) is three lines whose last one breaks
+ * mid-sentence: the teaser, then the start of the body. Nulling the body
+ * outright left the third line BLANK on most chapters, because at desktop width
+ * a line holds ~97 characters and the teasers run 197-290 — two to three lines,
+ * no more. 140 characters is the smallest prefix that carries every chapter past
+ * three lines, so the cut always lands inside a sentence the way the design
+ * draws it. The remainder of p1 and every later paragraph stay on the server.
+ */
+const LOCKED_EDU_BODY_TEASE_CHARS = 140;
+
+/**
+ * Cut to `max` characters on a word boundary, with no ellipsis — Figma's peek
+ * ends mid-word-free but mid-SENTENCE, and the fade sells the cut. Falls back to
+ * a hard cut only if the prefix holds no late space (a 140-char single word).
+ */
+function clipToWordBoundary(value: unknown, max: number): string | null {
+  if (typeof value !== "string") return null;
+  const text = value.trim();
+  if (text.length <= max) return text || null;
+  const head = text.slice(0, max);
+  const lastSpace = head.lastIndexOf(" ");
+  return (lastSpace > max * 0.6 ? head.slice(0, lastSpace) : head).trimEnd();
+}
+
 export function stripLockedEduBody<T extends { locked?: boolean }>(copy: T): T {
   if (!copy || typeof copy !== "object" || copy.locked !== true) return copy;
 
   const gated: Record<string, unknown> = { ...copy };
   for (const key of Object.keys(gated)) {
-    if (key.startsWith("edu.body.") || key.startsWith("edu.struct.")) {
+    if (key === "edu.body.p1") {
+      gated[key] = clipToWordBoundary(gated[key], LOCKED_EDU_BODY_TEASE_CHARS);
+    } else if (key.startsWith("edu.body.") || key.startsWith("edu.struct.")) {
       gated[key] = null;
     }
   }

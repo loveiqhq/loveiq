@@ -428,6 +428,7 @@ const RewardSection: FC<Props> = ({
                 {copy["edu.teaser"] ? (
                   <p className="report-reward__details-teaser report-learn-teaser">
                     {copy["edu.teaser"]}
+                    {copy["edu.body.p1"] ? ` ${copy["edu.body.p1"]}` : null}
                   </p>
                 ) : null}
                 {locked || eduParas.length > 0 ? (

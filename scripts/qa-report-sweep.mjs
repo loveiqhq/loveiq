@@ -517,6 +517,63 @@ async function phaseUi(browser) {
         deadAnchors.join(", ")
       );
 
+      // Collapsed "Learn:" teasers — Figma 8762:15709 draws three lines whose
+      // last one breaks mid-sentence, with the peek CTA over the fade. The
+      // geometry is easy to break from four directions (the server clip that
+      // fills line three, the 3-line clamp, the two paragraph paddings, the
+      // pill's anchor), so it is measured rather than eyeballed.
+      const peeks = await page.evaluate(() =>
+        Array.from(document.querySelectorAll(".report-learn-peek")).map((peek) => {
+          const el = peek.querySelector(".report-learn-teaser");
+          const cta = peek.querySelector(".report-learn-cta");
+          const sec = peek.closest(".report-section")?.id ?? "?";
+          if (!el) return { sec, missing: true };
+          const lh = parseFloat(getComputedStyle(el).lineHeight);
+          const range = document.createRange();
+          range.selectNodeContents(el);
+          // One rect per line box; layout is unaffected by the overflow clip, so
+          // this counts the copy's real lines. `scrollHeight` cannot: the 3-line
+          // min-height floors it at three whether the copy fills them or not.
+          const lines = new Set(
+            Array.from(range.getClientRects())
+              .filter((r) => r.height > 1)
+              .map((r) => Math.round(r.top))
+          ).size;
+          const er = el.getBoundingClientRect();
+          const card = peek.closest("article") ?? peek.parentElement;
+          const kr = card.getBoundingClientRect();
+          const out = { sec, lines, boxLines: el.clientHeight / lh };
+          if (cta) {
+            const cr = cta.getBoundingClientRect();
+            out.pct = ((cr.top + cr.height / 2 - er.top) / er.height) * 100;
+            out.overlapsText = cr.top < er.top + 3 * lh - 2;
+            out.pastCard = Math.max(kr.left - cr.left, cr.right - kr.right);
+          }
+          return out;
+        })
+      );
+      const peekBad = peeks.filter((r) => {
+        if (r.missing) return true;
+        if (r.lines < 4) return true; // line three must be full and cut, not short
+        if (r.boxLines < 2.95 || r.boxLines > 3.6) return true;
+        if (r.pastCard > 0) return true;
+        // On a phone the pill is 70% of the column, so it sits BELOW the tease;
+        // from 1024px up it straddles lines 2-3 at Figma's 71%.
+        return viewport.width <= 768 ? r.overlapsText : r.pct < 66 || r.pct > 75;
+      });
+      record(
+        "ui",
+        `${viewport.name}/${plan}: collapsed teasers are 3 full lines with the CTA placed (${peeks.length})`,
+        peekBad.length === 0,
+        peekBad
+          .slice(0, 4)
+          .map(
+            (r) =>
+              `${r.sec}: lines=${r.lines} box=${r.boxLines?.toFixed(2)} pct=${r.pct?.toFixed(0)}`
+          )
+          .join(" | ")
+      );
+
       // Open every expander and make sure nothing throws.
       const expanders = await page.locator("details > summary, button[aria-expanded]").all();
       let opened = 0;

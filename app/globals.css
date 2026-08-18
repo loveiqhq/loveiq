@@ -2917,57 +2917,6 @@ input.autofill-dark:-internal-autofill-previewed {
   line-height: 1.35;
 }
 
-/* Included-in label + plan badges */
-.report-premium-overlay__badges-group {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  margin: 0 0 18px;
-}
-
-.report-premium-overlay__badges-label {
-  color: #6b6678;
-  font-family: var(--font-sans);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 1.2px;
-  text-transform: uppercase;
-}
-
-.report-premium-overlay__badges-row {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 12px;
-}
-
-.report-premium-overlay__badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 3px 8px;
-  border-radius: 5px;
-  border: 1px solid transparent;
-  font-family: var(--font-sans);
-  font-size: 10px;
-  font-weight: 600;
-  line-height: 1.5;
-  letter-spacing: 0.45px;
-  text-transform: uppercase;
-}
-
-.report-premium-overlay__badge--essentials {
-  border-color: rgba(163, 65, 255, 0.35);
-  background: rgba(163, 65, 255, 0.12);
-  color: #a341ff;
-}
-
-.report-premium-overlay__badge--full {
-  border-color: rgba(85, 101, 247, 0.35);
-  background: rgba(85, 101, 247, 0.12);
-  color: #5565f7;
-}
-
 .report-premium-overlay__cta {
   display: flex;
   align-items: center;
@@ -14824,24 +14773,56 @@ input.autofill-dark:-internal-autofill-previewed {
 /* Fade the tail of the teaser so it reads as "there is more below". A mask is
    used rather than an overlay gradient so it works on any card background. */
 .report-learn-peek .report-learn-teaser {
-  /* Fades the last TWO LINES specifically, in line-height units rather than
-     percentages. The teaser runs 3 lines on desktop but 5-7 once the column
-     narrows, so a percentage stop faded a different amount of text at every
-     width — at 30% it was already eating into the first line on desktop while
-     barely touching the tail on mobile. 1.45 is this block's line-height. */
+  /* Exactly THREE lines, at every width. Figma's collapsed teaser
+     (8762:15709) is 72px tall at 23.698px leading — three lines — but ours ran 3 on
+     desktop and 5-7 once the column narrowed, so the tease grew as the screen
+     shrank. Clamped by max-height rather than `-webkit-line-clamp`, which appends
+     an ellipsis Figma does not have; the cut is invisible because the third line
+     has already faded. */
+  /* min AND max: three lines of copy where there are three, and three lines of
+     RESERVED SPACE where the copy runs short (3 of the 12 chapters do). Without the
+     min, those three collapsed to two lines and the CTA pill — which is positioned
+     against this block — sat at a different height on them than on the other nine. */
+  /* content-box so the three lines are three lines of TEXT. Under the global
+     border-box these heights included the block's own padding-bottom, leaving room
+     for only two and a half lines and cutting the third mid-glyph. */
+  box-sizing: content-box;
+  min-height: calc(3 * 1.45em);
+  max-height: calc(3 * 1.45em);
+  overflow: hidden;
+  /* Two paragraph geometries exist and both are correct. Nine sections give the
+     teaser `margin: 8px 0 0` with no padding, so the margin collapses out of the
+     peek and the text starts at the peek's top edge. Three (beliefs, accelerators,
+     attachment) add `padding-bottom: 12px`, which keeps the margin inside and
+     starts the text 8px down on a box 12px taller. The two offsets cancel against
+     the pill's fixed `top`, so it lands at 70-71% of its own paragraph either way
+     — verified at 320/360/390/430/768/1024/1440. Change one of those paddings and
+     that pill moves; re-measure if you do. */
+
+  /* Figma's fade is three FLAT colour steps, one per line — #161021, then
+     #969696, then #c7c7c7 (8762:15709) — not a smooth ramp. Line two is already
+     light; ours ramped gradually and so read as two dark lines with a faint tail.
+     Stepped here with paired stops so each line sits at one alpha: 1, then 0.41
+     (#969696 on white), then 0.22 (#c7c7c7).
+
+     Stops are in line-height units so they land on the same lines at any width. */
   -webkit-mask-image: linear-gradient(
     to bottom,
-    #000 0,
-    #000 calc(100% - 2.9em),
-    rgba(0, 0, 0, 0.42) calc(100% - 1.45em),
-    rgba(0, 0, 0, 0) 100%
+    rgba(0, 0, 0, 1) 0,
+    rgba(0, 0, 0, 1) calc(1.45em - 1px),
+    rgba(0, 0, 0, 0.41) 1.45em,
+    rgba(0, 0, 0, 0.41) calc(2.9em - 1px),
+    rgba(0, 0, 0, 0.22) 2.9em,
+    rgba(0, 0, 0, 0.22) 100%
   );
   mask-image: linear-gradient(
     to bottom,
-    #000 0,
-    #000 calc(100% - 2.9em),
-    rgba(0, 0, 0, 0.42) calc(100% - 1.45em),
-    rgba(0, 0, 0, 0) 100%
+    rgba(0, 0, 0, 1) 0,
+    rgba(0, 0, 0, 1) calc(1.45em - 1px),
+    rgba(0, 0, 0, 0.41) 1.45em,
+    rgba(0, 0, 0, 0.41) calc(2.9em - 1px),
+    rgba(0, 0, 0, 0.22) 2.9em,
+    rgba(0, 0, 0, 0.22) 100%
   );
 }
 
@@ -14854,13 +14835,40 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-learn-cta.report-learn-cta {
   position: absolute;
   left: 50%;
-  /* Sits just inside the teaser's last line (the peek adds 34px of padding below,
-     so this keeps the Figma overlap while leaving that padding as clear space). */
-  bottom: 26px;
-  transform: translateX(-50%);
+  /* Anchored to the TOP, over the teaser's lower half. Figma centres the pill at
+     71% of the three-line paragraph (8762:15713 at y≈99.6 against a paragraph
+     spanning 63.3-135.3). Anchoring to `bottom` instead pushed it below the
+     paragraph entirely once the peek's bottom padding grew — measured at 126% of
+     the paragraph, i.e. clear of the text it is supposed to overlap. */
+  /* 71% of the paragraph at both ends of the range: the block is 3 lines of
+     15.2px/22px type on a phone (66px) and 16.36px/23.7px on desktop (71px), so
+     the pill's centre wants ~55px and ~58px respectively. The old 52px floor
+     (5vw bottoms out at 19.5px on a 390px phone) put it at 67% there. */
+  top: clamp(55px, 5vw, 58px);
+  bottom: auto;
+  transform: translate(-50%, -50%);
   margin: 0;
   white-space: nowrap;
+  /* Figma's pill is 169x30 with 7px vertical padding and an 11.5px SemiBold label
+     at NORMAL leading (8762:15713/8762:15714). Every section rule sets
+     `line-height: 1`, which collapsed the label's line box to 11.5px and the pill
+     to 25.5px — 4.5px short at every breakpoint. */
+  line-height: normal;
   z-index: 1;
+}
+
+/* Below 768px the pill moves OFF the tease and sits under it.
+   Figma only draws this pill at desktop width, where 169px across an 825px column
+   covers a fifth of a line and lines two and three still read around it. The same
+   pill on a 312px phone column is 70% of the width: centred over the line-2/line-3
+   boundary it hid the middle of line two and most of line three, so the three-line
+   tease we just built was only half readable on a phone. Under the text it clears
+   both — 14-22px below the last line, still ~20px inside the peek's bottom padding,
+   which is the same room the overlapping version used. */
+@media (max-width: 768px) {
+  .report-learn-cta.report-learn-cta {
+    top: 88px;
+  }
 }
 
 /* Expanded: the teaser is repeated in full, unfaded, above the body paragraphs.
@@ -14875,13 +14883,6 @@ input.autofill-dark:-internal-autofill-previewed {
   padding-right: 0;
   /* Separate the repeated teaser from the paragraphs it introduces. */
   margin-bottom: 14px;
-}
-
-@media (max-width: 768px) {
-  /* Narrow columns wrap the teaser to more lines; keep the pill clear of them. */
-  .report-learn-cta {
-    bottom: 2px;
-  }
 }
 
 /* ── Ten ranked trigger rows + verdict meter — Figma 8946:4286 ──────────────
@@ -25856,77 +25857,75 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-beliefs__preview-fade--tease {
   filter: none;
   opacity: 1;
-  /* Ramp fitted to the FULL nine-row column, matching Figma's locked frame: the
-     first four rows solid (roughly the top 40%), then stepping down through grey
-     to nothing by the last row. The earlier stops were tuned for a four-row block
-     and started fading inside row two once the whole list was shown. */
-  -webkit-mask-image: linear-gradient(
-    to bottom,
-    rgba(0, 0, 0, 1) 0%,
-    rgba(0, 0, 0, 1) 40%,
-    rgba(0, 0, 0, 0.62) 58%,
-    rgba(0, 0, 0, 0.34) 74%,
-    rgba(0, 0, 0, 0.14) 88%,
-    rgba(0, 0, 0, 0) 100%
-  );
-  mask-image: linear-gradient(
-    to bottom,
-    rgba(0, 0, 0, 1) 0%,
-    rgba(0, 0, 0, 1) 40%,
-    rgba(0, 0, 0, 0.62) 58%,
-    rgba(0, 0, 0, 0.34) 74%,
-    rgba(0, 0, 0, 0.14) 88%,
-    rgba(0, 0, 0, 0) 100%
-  );
-  -webkit-mask-composite: source-over;
-  mask-composite: add;
+  /* Cancel the shared lock mask on the WRAPPER. It feathers all four edges, which
+     ate the first letter of "SERVE YOU — KEEP" and dimmed the top of the content —
+     the fade for this treatment belongs on the lists below, not here. */
+  -webkit-mask-image: none;
+  mask-image: none;
   /* Text the reader can see but not select or tab into — it is a preview. */
   user-select: none;
   pointer-events: none;
 }
 
+/* The ramp lives on each COLUMN'S LIST, not on the wrapper.
+   The wrapper is `position: absolute; inset: 0`, so its height is the paywall
+   card's, not the content's. A percentage ramp there landed the fade far below a
+   short teaser — every row sat in the solid band, so nothing faded — and when the
+   full list was shipped it landed so late that everything stayed readable. Sizing
+   it to each list makes the stops mean rows: solid through the first two, the third
+   dissolving to nothing.
+
+   Per list rather than per grid on purpose: a keep row is 51px and a loosen row
+   111px, so one shared ramp over the grid would fade two loosens against four
+   keeps. */
+.report-beliefs__preview-fade--tease .report-beliefs__list {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 1) 0%,
+    rgba(0, 0, 0, 1) 62%,
+    rgba(0, 0, 0, 0.28) 84%,
+    rgba(0, 0, 0, 0) 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 1) 0%,
+    rgba(0, 0, 0, 1) 62%,
+    rgba(0, 0, 0, 0.28) 84%,
+    rgba(0, 0, 0, 0) 100%
+  );
+}
+
 /* ==========================================================================
-   BELIEFS TEASE SIZES ITSELF TO THE CONTENT, NOT TO THE PAYWALL CARD
+   EXPANDED LEARN PANELS NEED ROOM AT THE BOTTOM
 
-   The shared locked-preview rules put the paywall card in normal FLOW and the
-   teaser layer at `position: absolute; inset: 0`. That is right when the teaser is
-   a backdrop meant to be clipped to the card — but here the teaser IS the chapter,
-   and the card sizing the box cut 463px off a 1210px list. It also left a dead
-   band: the keep column runs 572px and the loosen column 1182px, so once the box
-   was clipped to the card's 746px you saw the short column simply stop.
+   Every chapter's expanded body ended with 4px (attachment, beliefs) or 12px
+   (the other fourteen) of bottom padding, so the last paragraph sat flush against
+   the panel's edge on all of them.
 
-   Inverted for this one case: the tease is in flow so the box grows to the real
-   list, and the card floats over it. Both columns then fade to nothing well before
-   the bottom, so their different lengths stop being visible — which is how Figma's
-   locked frame reads (its grid is 1013px tall with the card overlapping it).
+   One substring selector instead of sixteen rules: nothing else in the file
+   contains `__details-body`, and the per-section mobile overrides only touch
+   padding-left/right, so this survives them. Same specificity as those rules and
+   declared after, so it wins on source order.
+
+   The COLLAPSED state is handled separately by `.report-learn-peek`, which needs a
+   different value because its CTA pill overlaps the faded tail.
    ========================================================================== */
-/* The tease sizes the box at every width; mobile just gets a shorter one.
-   Card-driven sizing on mobile hid the tease almost completely — only the column
-   label and a sliver of rule showed above an ~840px card. Content-driven with a
-   1020px cap leaves about three rows readable above the card, which is the same
-   proportion desktop gets, without turning the chapter into five screens of
-   scrolling. The mask spans the CLAMPED height, so it reaches zero at the cut and
-   everything past it was already invisible. */
-.report-beliefs__preview--locked > .report-beliefs__preview-fade--tease {
-  position: relative;
-  inset: auto;
+[class*="__details-body"] {
+  padding-bottom: clamp(30px, 3.2vw, 46px);
 }
 
-.report-beliefs__preview--locked > .report-premium-overlay {
-  position: absolute;
-  /* Low-centre rather than dead centre: Figma sits the card over the lower half,
-     where the rows have already begun to fade. */
-  top: 58%;
-  left: 50%;
-  right: auto;
-  bottom: auto;
-  transform: translate(-50%, -50%);
-  width: 100%;
-}
-
+/* Mobile: the paywall card is nearly the full width of the box, so nothing showed
+   through beside it — only the column label and a sliver of rule. On desktop the
+   card is narrower than the box and the tease reads to its left and right; on a
+   phone the tease has to live ABOVE it. Extra height plus bottom-aligning the card
+   opens roughly four rows of clear space at the top. */
 @media (max-width: 768px) {
-  .report-beliefs__preview--locked > .report-beliefs__preview-fade--tease {
-    max-height: 1020px;
-    overflow: hidden;
+  /* The height goes on the OVERLAY, not the preview. The overlay is the in-flow
+     child, so it is what sizes the box — putting min-height on the preview just
+     left dead space under a content-sized overlay, and `flex-end` had nothing to
+     push against. */
+  .report-beliefs__preview--locked > .report-premium-overlay {
+    min-height: 840px;
+    align-items: flex-end;
   }
 }

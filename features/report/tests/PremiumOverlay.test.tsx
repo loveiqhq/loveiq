@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import userEvent from "@testing-library/user-event";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import PremiumOverlay from "@features/report/ui/sections/PremiumOverlay";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
@@ -162,9 +162,11 @@ describe("PremiumOverlay", () => {
     expect(onUnlock).toHaveBeenCalledTimes(1);
   });
 
-  it("always shows the Full Report badge (Essentials tier retired)", () => {
-    // Pricing 2.0 retired the Essentials tier — every premium section is now
-    // labelled "Full Report", regardless of the (legacy) tier prop.
+  it("carries no tier badge row at all", () => {
+    // The card used to label every locked section "Included in — Full Report".
+    // It was dropped (2026-08-17) because the row restated what the button below
+    // it already says, and on a phone it pushed the price out of the card. The
+    // legacy `tier` prop stays on the type; nothing renders from it.
     const { rerender } = render(
       <PremiumOverlay
         archetype="Spark Seeker"
@@ -173,9 +175,8 @@ describe("PremiumOverlay", () => {
         quote={makeQuote()}
       />
     );
-    const group = screen.getByText("Included in").parentElement as HTMLElement;
-    expect(within(group).queryByText("Essentials")).not.toBeInTheDocument();
-    expect(within(group).getByText("Full Report")).toBeInTheDocument();
+    expect(screen.queryByText("Included in")).not.toBeInTheDocument();
+    expect(screen.queryByText("Essentials")).not.toBeInTheDocument();
 
     rerender(
       <PremiumOverlay
@@ -185,8 +186,6 @@ describe("PremiumOverlay", () => {
         quote={makeQuote()}
       />
     );
-    const group2 = screen.getByText("Included in").parentElement as HTMLElement;
-    expect(within(group2).queryByText("Essentials")).not.toBeInTheDocument();
-    expect(within(group2).getByText("Full Report")).toBeInTheDocument();
+    expect(screen.queryByText("Included in")).not.toBeInTheDocument();
   });
 });

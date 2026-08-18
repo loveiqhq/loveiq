@@ -342,6 +342,21 @@ const InsecuritiesSection: FC<Props> = ({
     copy["practical.line2"],
     copy["practical.line3"],
   ].filter((p): p is string => !!p);
+
+  /**
+   * The collapsed peek is three lines of flowing prose that break mid-sentence
+   * (Figma 8762:15709). The teaser alone runs ~2.7 lines at desktop width, so the
+   * tease continues into the numbered steps — with their "1." / "2." markers
+   * dropped, since inside a paragraph they read as stray digits rather than a list.
+   */
+  const practicalTease = [
+    copy["practical.teaser"],
+    copy["practical.line1"],
+    copy["practical.line2"],
+  ]
+    .filter((part): part is string => !!part)
+    .map((part, i) => (i === 0 ? part : part.replace(/^\s*\d+\.\s*/, "")))
+    .join(" ");
   const hasPractical = !!copy["practical.teaser"] || practicalLines.length > 0;
 
   return (
@@ -445,7 +460,7 @@ const InsecuritiesSection: FC<Props> = ({
               <div className="report-insecurities__details-peek report-learn-peek">
                 {copy["practical.teaser"] ? (
                   <p className="report-insecurities__details-teaser report-learn-teaser">
-                    {copy["practical.teaser"]}
+                    {practicalTease}
                   </p>
                 ) : null}
                 {locked || practicalLines.length > 0 ? (

@@ -99,7 +99,10 @@ const FlaskIcon: FC = () => (
   </svg>
 );
 
-const PremiumOverlay: FC<Props> = ({ archetype, tier, onUnlock, quote = null, offerDeadline }) => {
+// `tier` stays on Props — all sixteen call sites pass it and it still describes
+// which plan opens the section — but nothing renders it now that the badge is gone,
+// so it is deliberately not destructured.
+const PremiumOverlay: FC<Props> = ({ archetype, onUnlock, quote = null, offerDeadline }) => {
   // ── Live pricing — identical computation to the paywall modal so the card
   //    and modal always agree. ────────────────────────────────────────────────
   const currentCents = quote?.currentPriceCents ?? 0;
@@ -208,16 +211,10 @@ const PremiumOverlay: FC<Props> = ({ archetype, tier, onUnlock, quote = null, of
           </div>
         </div>
 
-        <div className="report-premium-overlay__badges-group" aria-hidden="true">
-          <span className="report-premium-overlay__badges-label">Included in</span>
-          <div className="report-premium-overlay__badges-row">
-            {/* Essentials tier retired (pricing 2.0) — every premium section is
-                now labelled "Full Report". */}
-            <span className="report-premium-overlay__badge report-premium-overlay__badge--full">
-              Full Report
-            </span>
-          </div>
-        </div>
+        {/* The "Included in — Full Report" badge block was removed on request. With
+            the essentials tier retired every premium section carried the same
+            single "Full Report" pill, so it told the reader nothing and only put a
+            step between the guarantees and the CTA. */}
 
         <button type="button" className="report-premium-overlay__cta" onClick={onUnlock}>
           Unlock your report
