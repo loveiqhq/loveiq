@@ -25600,10 +25600,16 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-map-row__lock {
   /* Top-right corner of the row, per Figma's section name ("lock top-right").
      It sat inline beside the title first, which put it in the middle of the
-     heading rather than marking the row. */
+     heading rather than marking the row.
+     Insets measured off the design's locked frame: the padlock's INK sits 10.7px
+     from the card's right edge and 8px from its top. Our glyph carries 2.25px of
+     right padding and 1.25px of top padding inside its 14px box (the 14x14
+     PadlockIcon viewBox), and the row's own 1px border shifts this box in again, so
+     5.5/7.5 is what lands the ink where Figma puts it. The old clamp(10px, 1.1vw, 14px) sat it 15px in on both axes — a
+     corner mark drifting toward the middle of the row. */
   position: absolute;
-  top: clamp(10px, 1.1vw, 14px);
-  right: clamp(10px, 1.1vw, 14px);
+  top: 5.5px;
+  right: 7.5px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -25829,7 +25835,12 @@ input.autofill-dark:-internal-autofill-previewed {
   align-items: center;
   gap: 5px;
   flex: 0 0 auto;
-  color: rgba(22, 16, 33, 0.38);
+  /* Figma sets this chip in the same purple as the "WHAT YOU'LL LEARN" labels in
+     the rows below it (sampled #7155c3 off the design's locked frame against our
+     #795fc8 token) — not the muted grey of the "FIVE MORE PATTERNS" label it sits
+     opposite. Grey read as a second eyebrow; the purple reads as the access mark
+     it is. Colour carries the padlock too, which draws with currentColor. */
+  color: #795fc8;
   font-family: var(--font-sans);
   font-weight: 700;
   font-size: 0.705rem;
