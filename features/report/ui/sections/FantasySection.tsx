@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties, type FC, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type FC, type ReactNode } from "react";
 import LockedPreviewImage from "./LockedPreviewImage";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
@@ -142,7 +142,20 @@ const QUADRANT_LABEL: Record<Quadrant, string> = QUADRANTS.reduce(
   {} as Record<Quadrant, string>
 );
 
-const MAP_DOTS: { label: string | null; q: Quadrant; x: number; y: number }[] = [
+type MapDot = {
+  /** Printed under the dot. */
+  label: string | null;
+  /** What the dot IS — null only for the illustrative fallback set. */
+  name?: string | null;
+  q: Quadrant;
+  x: number;
+  y: number;
+  /** 1-10 scores behind the position; absent on the fallback set. */
+  pull?: number | null;
+  pleasure?: number | null;
+};
+
+const MAP_DOTS: MapDot[] = [
   { label: "Mutual surrender", q: "lean", x: 0.92, y: 0.12 },
   { label: "Sacred kink", q: "lean", x: 0.8, y: 0.17 },
   { label: "Tantra", q: "lean", x: 0.89, y: 0.22 },
@@ -192,10 +205,42 @@ const BookIcon: FC = () => (
  * in when the map itself reaches the viewport; this used to fire off a mount-time
  * requestAnimationFrame, so the cascade was over before the reader arrived.
  */
+/** Ten pips, filled to `value` — the same readout the mini-stat boxes use. */
+const DotMeter: FC<{ label: string; value: number }> = ({ label, value }) => (
+  <span className="report-fantasy-map__meter">
+    <span className="report-fantasy-map__meter-head">
+      <span className="report-fantasy-map__meter-label">{label}</span>
+      <span className="report-fantasy-map__meter-value">{value}</span>
+    </span>
+    <span className="report-fantasy-map__meter-pips" aria-hidden="true">
+      {Array.from({ length: 10 }, (_, i) => (
+        <span key={i} className={i < value ? "is-on" : ""} />
+      ))}
+    </span>
+  </span>
+);
+
 const FantasyMap: FC<{ filter: MapFilter; dots?: FantasyMapDot[] | null }> = ({ filter, dots }) => {
   const [mapRef, animated] = useRevealOnView<HTMLDivElement>();
+  /** Which dot is open. Hover, focus and tap all drive this one value. */
+  const [openDot, setOpenDot] = useState<number | null>(null);
+  /*
+   * Touch needs a second tap to CLOSE, and that has to be told apart from a mouse
+   * click. On a tap the sequence is pointerdown → focus (which opens the card) →
+   * click; an unconditional toggle in that click therefore closed the card the
+   * focus had just opened, so the first tap did nothing and the second one opened
+   * it. These two remember what the pointer was and whether the dot was already
+   * open when it went down, so the toggle only runs for touch.
+   */
+  const wasTouch = useRef(false);
+  const wasOpen = useRef(false);
   return (
-    <div ref={mapRef} className={`report-fantasy-map${animated ? " is-animated" : ""}`}>
+    <div
+      ref={mapRef}
+      className={`report-fantasy-map${animated ? " is-animated" : ""}${
+        openDot === null ? "" : " is-inspecting"
+      }`}
+    >
       <div className="report-fantasy-map__frame">
         {QUADRANTS.map((quad) => (
           <div
@@ -215,8 +260,15 @@ const FantasyMap: FC<{ filter: MapFilter; dots?: FantasyMapDot[] | null }> = ({ 
           </div>
         ))}
 
-        {/* Dots layer sits over the quadrant grid. */}
-        <div className="report-fantasy-map__dots" aria-hidden="true">
+        {/*
+          Dots layer sits over the quadrant grid. Each dot is a real button: only
+          eight of the sixteen can PRINT their name (the rest would collide with a
+          neighbour's label or a quadrant title), so the other eight were mute —
+          the reader could see a dot and never learn what it was. Every dot now
+          opens a readout with its practice and the two scores that put it there,
+          which is also what makes the chart legible to a screen reader.
+        */}
+        <div className="report-fantasy-map__dots">
           {(dots?.length ? dots : MAP_DOTS).map((dot, i) => {
             const style = {
               "--dot-x": `${dot.x * 100}%`,
@@ -225,24 +277,74 @@ const FantasyMap: FC<{ filter: MapFilter; dots?: FantasyMapDot[] | null }> = ({ 
               "--dot-order": i,
             } as CSSProperties;
             const dimmed = filter !== "all" && dot.q !== filter;
+            const open = openDot === i;
+            const name = (dot as MapDot).name ?? dot.label ?? null;
+            const pull = (dot as MapDot).pull ?? null;
+            const pleasure = (dot as MapDot).pleasure ?? null;
+            const zone = QUADRANT_LABEL[dot.q];
+            /* The readout is anchored to a 12px dot, so near an edge it would hang
+               outside the plot. It opens toward the middle instead: left of the dot
+               past 62% across, below it inside the top quarter. */
+            /* 0.55/0.45 rather than 0.62/0.38: a centred card is ~70px wide either
+               side of the dot, and at x = 0.62 that still ran 9px past the plot's
+               right edge at every width tested. Only the narrow middle band centres
+               now; everything else anchors an edge to the dot. */
+            const flip = `${
+              dot.x > 0.55 ? " is-flip-x" : dot.x < 0.45 ? " is-flip-start" : ""
+            }${dot.y < 0.26 ? " is-flip-y" : ""}`;
+            const readout = [
+              name ?? zone,
+              pull === null ? null : `fantasy pull ${pull} of 10`,
+              pleasure === null ? null : `lived pleasure ${pleasure} of 10`,
+              `zone: ${zone}`,
+            ]
+              .filter(Boolean)
+              .join(", ");
             return (
-              <span
+              <button
                 key={i}
-                className={`report-fantasy-map__dot${dimmed ? " is-dim" : ""}`}
+                type="button"
+                aria-label={readout}
+                aria-expanded={open}
+                className={`report-fantasy-map__dot${dimmed ? " is-dim" : ""}${
+                  open ? " is-open" : ""
+                }${flip}`}
                 style={style}
+                onMouseEnter={() => setOpenDot(i)}
+                onMouseLeave={() => setOpenDot((c) => (c === i ? null : c))}
+                onFocus={() => setOpenDot(i)}
+                onBlur={() => setOpenDot((c) => (c === i ? null : c))}
+                onPointerDown={(event) => {
+                  wasTouch.current = event.pointerType === "touch";
+                  wasOpen.current = openDot === i;
+                }}
+                onClick={() => {
+                  // Mouse: hover already governs, and closing under the cursor would
+                  // fight it. Touch: toggle.
+                  if (!wasTouch.current) return;
+                  setOpenDot(wasOpen.current ? null : i);
+                }}
               >
+                <span className="report-fantasy-map__halo" aria-hidden="true" />
                 {dot.label ? (
                   <span className="report-fantasy-map__dot-label">{dot.label}</span>
-                ) : (
-                  /* The data ships exactly eight labels — the two most extreme
-                     per quadrant — so half the dots have no name to show, and
-                     inventing one would be fabricating a practice this reader
-                     was never scored on. Hover instead names the ZONE the dot
-                     sits in, which IS real: it answers "what is this one?"
-                     without putting words in the data's mouth. */
-                  <span className="report-fantasy-map__dot-zone">{QUADRANT_LABEL[dot.q]}</span>
-                )}
-              </span>
+                ) : null}
+                <span className="report-fantasy-map__card" aria-hidden="true">
+                  <span
+                    className="report-fantasy-map__card-zone"
+                    style={{ color: QUADRANT_DOT[dot.q] }}
+                  >
+                    {zone}
+                  </span>
+                  {name ? <span className="report-fantasy-map__card-name">{name}</span> : null}
+                  {pull !== null && pleasure !== null ? (
+                    <span className="report-fantasy-map__meters">
+                      <DotMeter label="fantasy pull" value={pull} />
+                      <DotMeter label="lived pleasure" value={pleasure} />
+                    </span>
+                  ) : null}
+                </span>
+              </button>
             );
           })}
         </div>

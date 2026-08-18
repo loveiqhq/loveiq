@@ -25825,39 +25825,286 @@ input.autofill-dark:-internal-autofill-previewed {
   color: rgb(var(--report-accent-ink-rgb, var(--report-accent-rgb)));
 }
 
-/* Unnamed fantasy dots: the zone name appears on hover only. Half the dots carry
-   no label in the data (eight labels ship per report, the two most extreme per
-   quadrant), so this answers "what is this one?" with the quadrant it sits in
-   rather than an invented practice name. */
-.report-fantasy-map__dot-zone {
+/* ── Every dot answers "what is this one?" ─────────────────────────────────
+   Eight of the sixteen dots can print their name; the rest would drop their label
+   onto a neighbour's or onto a quadrant title, so they used to show only the name
+   of the zone they sat in. The practice behind each one was always known — it just
+   never reached the reader. Each dot is now a button that opens a small readout:
+   the zone, the practice, and the two 1-10 scores that put the dot where it is.
+
+   Anchored to a 12px dot, so the card would hang out of the plot near an edge:
+   `is-flip-x` opens it to the left past 62% across, `is-flip-y` below the dot
+   inside the top quarter. Both come from the dot's own coordinates in the JSX.
+
+   The dot is a real <button>, which is what makes this work by keyboard and by
+   touch as well as on hover — and what lets a screen reader read the chart at all
+   (`aria-label` carries the whole readout). Hence the button reset here. */
+.report-fantasy-map__dot {
+  appearance: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.report-fantasy-map__dot:focus {
+  outline: none;
+}
+
+/* A printed label is up to 132px wide and two lines tall, and it sits INSIDE its
+   dot's button — so it covered the dots around it and swallowed their hover
+   entirely. (Playwright refused to hover four of the sixteen: "…dot-label …
+   subtree intercepts pointer events".) The text is decoration; only the dot is
+   interactive. */
+.report-fantasy-map__dot-label {
+  pointer-events: none;
+}
+
+/* 12px of dot is a 12px target. This gives it 26px without changing the artwork —
+   the same reason the arousal cues carry a transparent hit circle. */
+.report-fantasy-map__dot::before {
+  content: "";
   position: absolute;
-  left: 50%;
-  bottom: calc(100% + 6px);
-  transform: translateX(-50%);
-  padding: 3px 7px;
-  border-radius: 6px;
-  background: rgba(22, 16, 33, 0.9);
-  color: #ffffff;
-  font-family: var(--font-sans);
-  font-weight: 600;
-  font-size: 0.6rem;
-  letter-spacing: 0.06em;
-  white-space: nowrap;
+  inset: -7px;
+  border-radius: 9999px;
+}
+
+.report-fantasy-map__dot:focus-visible {
+  outline: 2px solid rgb(var(--dot-accent-rgb, 141 132 166));
+  outline-offset: 3px;
+}
+
+/* The open dot grows and takes a ring; the rest of the plot recedes so the one
+   being read is unmistakable. `filter` rather than `opacity`: these dots carry
+   their entrance stagger on an opacity transition (up to ~420ms of delay), and a
+   hover that reused it would arrive after the cursor had already moved on. */
+.report-fantasy-map__dot.is-open {
+  transform: scale(1.5);
+  z-index: 5;
+}
+
+.report-fantasy-map.is-inspecting .report-fantasy-map__dot:not(.is-open) {
+  filter: opacity(0.32);
+}
+
+.report-fantasy-map.is-inspecting
+  .report-fantasy-map__dot:not(.is-open)
+  .report-fantasy-map__dot-label {
+  opacity: 0.25;
+}
+
+/* A ring leaving the open dot, once every 1.6s — the same beat the arousal cues
+   use, so the two charts feel like one instrument. */
+.report-fantasy-map__halo {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: rgb(var(--dot-accent-rgb, 141 132 166));
   opacity: 0;
   pointer-events: none;
-  transition: opacity 180ms ease;
-  z-index: 3;
 }
 
-.report-fantasy-map__dot:hover .report-fantasy-map__dot-zone,
-.report-fantasy-map__dot:focus-visible .report-fantasy-map__dot-zone {
+.report-fantasy-map__dot.is-open .report-fantasy-map__halo {
+  animation: report-fantasy-halo 1600ms cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
+@keyframes report-fantasy-halo {
+  0% {
+    opacity: 0.38;
+    transform: scale(1);
+  }
+  70% {
+    opacity: 0;
+    transform: scale(2.6);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(2.6);
+  }
+}
+
+/* The readout card. */
+.report-fantasy-map__card {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 10px);
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: max-content;
+  max-width: clamp(148px, 42vw, 208px);
+  padding: 9px 11px 10px;
+  border: 1px solid rgb(var(--dot-accent-rgb, 141 132 166) / 0.3);
+  border-radius: 11px;
+  background: #ffffff;
+  box-shadow:
+    0 14px 30px -16px rgb(22 16 33 / 0.32),
+    0 2px 6px -3px rgb(22 16 33 / 0.14);
+  text-align: left;
+  /* The card scales back with the dot's own 1.5x when open, so its type stays the
+     size it was designed at. */
+  transform: translate(-50%, 4px) scale(0.62);
+  transform-origin: bottom center;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity 200ms ease-out,
+    transform 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 0s linear 320ms;
+}
+
+.report-fantasy-map__dot.is-open .report-fantasy-map__card {
   opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0) scale(0.667);
+  transition:
+    opacity 200ms ease-out,
+    transform 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 0s;
 }
 
-/* The dot itself needs to be hoverable and to read as inspectable. */
-.report-fantasy-map__dot {
-  pointer-events: auto;
-  cursor: default;
+/* Near the right edge the card opens leftward, near the top it drops below. */
+/* The card's outer edge is pinned to the DOT's outer edge — `right: 0`, no X
+   translate. Two earlier tries both leaked out of the plot: `translate(50%)` put the
+   card back on the dot's centre (97px past the right edge at 1100), and a fixed
+   +16px nudge past the dot ran 9px out for the two dots that sit ~7px from the edge.
+   Pinned to the dot's own edge it cannot exceed the dot, which is by definition
+   inside the plot. The scale shrinks toward that same anchored edge. */
+.report-fantasy-map__dot.is-flip-x .report-fantasy-map__card {
+  left: auto;
+  right: 0;
+  transform: translate(0, 4px) scale(0.62);
+  transform-origin: bottom right;
+}
+
+.report-fantasy-map__dot.is-flip-x.is-open .report-fantasy-map__card {
+  transform: translate(0, 0) scale(0.667);
+}
+
+/* Mirror of `is-flip-x`: inside the left 38% the card would hang off that edge, so
+   it opens rightward from the dot instead of being centred on it. Measured at
+   390px, where a centred card on the leftmost dot sat 21px outside the plot. */
+.report-fantasy-map__dot.is-flip-start .report-fantasy-map__card {
+  left: 0;
+  right: auto;
+  transform: translate(0, 4px) scale(0.62);
+  transform-origin: bottom left;
+}
+
+.report-fantasy-map__dot.is-flip-start.is-open .report-fantasy-map__card {
+  transform: translate(0, 0) scale(0.667);
+}
+
+.report-fantasy-map__dot.is-flip-start.is-flip-y .report-fantasy-map__card {
+  transform-origin: top left;
+}
+
+.report-fantasy-map__dot.is-flip-y .report-fantasy-map__card {
+  bottom: auto;
+  top: calc(100% + 10px);
+  transform-origin: top center;
+}
+
+.report-fantasy-map__dot.is-flip-x.is-flip-y .report-fantasy-map__card {
+  transform-origin: top right;
+}
+
+.report-fantasy-map__card-zone {
+  font-family: var(--font-sans);
+  font-weight: 800;
+  font-size: 13.5px;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  line-height: 1.1;
+}
+
+.report-fantasy-map__card-name {
+  color: #161021;
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: 19px;
+  line-height: 1.3;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.report-fantasy-map__meters {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 1px;
+}
+
+.report-fantasy-map__meter {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+/* Name and score on one line, pips under both. The first pass put the value in a
+   second column and the label wrapped to two lines beside it, which read as three
+   loose fragments instead of one reading. */
+.report-fantasy-map__meter-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.report-fantasy-map__meter-label {
+  color: #6b6678;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 14px;
+  line-height: 1.2;
+  /* Both labels are short; wrapping them is what made the card tall. */
+  white-space: nowrap;
+}
+
+.report-fantasy-map__meter-value {
+  color: #161021;
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: 17px;
+  line-height: 1;
+}
+
+/* Ten pips, filled to the score — the readout the mini-stat boxes already use. */
+.report-fantasy-map__meter-pips {
+  display: flex;
+  gap: 2.5px;
+}
+
+.report-fantasy-map__meter-pips span {
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background: rgb(var(--dot-accent-rgb, 141 132 166) / 0.18);
+}
+
+.report-fantasy-map__meter-pips span.is-on {
+  background: rgb(var(--dot-accent-rgb, 141 132 166));
+}
+
+/* A dot filtered out of the current view is not inspectable either. */
+.report-fantasy-map__dot.is-dim {
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .report-fantasy-map__dot.is-open .report-fantasy-map__halo {
+    animation: none;
+  }
+
+  .report-fantasy-map__card,
+  .report-fantasy-map__dot.is-open .report-fantasy-map__card {
+    transition:
+      opacity 1ms linear,
+      visibility 0s;
+  }
 }
 
 /* ==========================================================================

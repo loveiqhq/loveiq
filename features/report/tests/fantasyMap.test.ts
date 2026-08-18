@@ -90,4 +90,32 @@ describe("fantasy map dots", () => {
   it("returns null for an unknown archetype", () => {
     expect(getFantasyMapDots("Nobody")).toBeNull();
   });
+
+  it("names EVERY dot and carries the two scores behind its position", () => {
+    // Only eight of the sixteen can print a label (the rest would drop their text
+    // onto a neighbour's or onto a quadrant title), and for a while that meant half
+    // the map was mute — a dot the reader could see and never identify. The name is
+    // separate from the label for exactly that reason, and the client reveals it on
+    // hover, with the scores that put the dot where it is.
+    for (const name of NAMES) {
+      const dots = getFantasyMapDots(name)!;
+      const practices = new Set(
+        reportPracticeTendencies[name]!.groups.flatMap((g) => g.rows.map((r) => r.practice))
+      );
+      for (const d of dots) {
+        expect(d.name, `${name}: every dot is named`).toBeTruthy();
+        expect(practices.has(d.name), `${name}: ${d.name} is a real practice`).toBe(true);
+        // The position is derived from these two, so they must agree with it.
+        expect(d.pull, `${name}: ${d.name} pull`).toBeGreaterThanOrEqual(1);
+        expect(d.pull).toBeLessThanOrEqual(10);
+        expect(d.pleasure).toBeGreaterThanOrEqual(1);
+        expect(d.pleasure).toBeLessThanOrEqual(10);
+        // `scale()` is score/10 (see fantasyMap.ts), y inverted for CSS top%.
+        expect(d.x, `${name}: ${d.name} x`).toBeCloseTo(d.pleasure / 10, 3);
+        expect(d.y, `${name}: ${d.name} y`).toBeCloseTo(1 - d.pull / 10, 3);
+      }
+      // A printed label is always that dot's own name, never another's.
+      for (const d of dots) if (d.label) expect(d.label).toBe(d.name);
+    }
+  });
 });

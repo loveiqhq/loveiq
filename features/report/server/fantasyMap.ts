@@ -25,13 +25,28 @@ import { reportPracticeTendencies } from "@/data/report-practice-tendencies";
 export type FantasyQuadrant = "lean" | "keep" | "hidden" | "not";
 
 export interface FantasyMapDot {
-  /** Practice name, or null for an anonymous context dot. */
+  /**
+   * The name to PRINT under the dot, or null when printing it would collide with
+   * a neighbour's label or a quadrant title. Null here never meant "unnamed" —
+   * see `name`.
+   */
   label: string | null;
+  /**
+   * The practice this dot IS, always. Eight of the sixteen go unlabelled for
+   * layout reasons alone, and the reader had no way to find out what they were;
+   * the client reveals this one on hover or tap. Practice NAMES are not gated
+   * (see `contentGating.ts`) — only their scores are, and these dots only ship at
+   * all once the chapter is unlocked.
+   */
+  name: string;
   q: FantasyQuadrant;
   /** 0..1 across the plot box — lived pleasure. */
   x: number;
   /** 0..1 down the plot box (CSS top%) — inverted fantasy pull. */
   y: number;
+  /** The raw 1-10 scores behind the position, for the hover readout. */
+  pull: number;
+  pleasure: number;
 }
 
 /** Midpoint of the 1–10 scale; splits the four quadrants. */
@@ -113,9 +128,12 @@ export function getFantasyMapDots(archetype: string): FantasyMapDot[] | null {
       const q = quadrantOf(row.fantasyPull, row.actualPleasure);
       const candidate: Candidate = {
         label: row.practice,
+        name: row.practice,
         q,
         x: scale(row.actualPleasure),
         y: 1 - scale(row.fantasyPull),
+        pull: row.fantasyPull,
+        pleasure: row.actualPleasure,
         weight: Math.hypot(row.actualPleasure - MID, row.fantasyPull - MID),
       };
       const bucket = byQuadrant.get(q);
@@ -277,8 +295,12 @@ export function getFantasyMapDots(archetype: string): FantasyMapDot[] | null {
 
   return dots.map((dot) => ({
     label: labelled.has(dot) ? dot.label : null,
+    // Every dot carries its practice, printed or not.
+    name: dot.name,
     q: dot.q,
     x: Number(dot.x.toFixed(4)),
     y: Number(dot.y.toFixed(4)),
+    pull: dot.pull,
+    pleasure: dot.pleasure,
   }));
 }
