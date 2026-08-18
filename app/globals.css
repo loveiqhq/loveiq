@@ -7749,9 +7749,14 @@ input.autofill-dark:-internal-autofill-previewed {
   pointer-events: none;
 }
 
-/* `path` since the connector is a bowed bezier (Figma 9107:530), not a <line>. */
+/* `path` since the connector is a bowed bezier (Figma 9107:530), not a <line>.
+   The mask's own path is excluded by name: this selector is (0,2,1) and the
+   `__drift-reveal` rule below is (0,1,0), so the mask stroke was inheriting THIS
+   dash pattern and this 0.72-alpha accent colour. A dashed mask cannot sweep — the
+   dashes just slide — and a translucent mask stroke only half-reveals what is
+   under it, so the trail never drew itself and sat dimmed instead. */
 .report-attachment-plane__drift line,
-.report-attachment-plane__drift path {
+.report-attachment-plane__drift path:not(.report-attachment-plane__drift-reveal) {
   fill: none;
   stroke: rgb(var(--report-accent-ink-rgb, 121 95 200) / 0.72);
   stroke-width: 1.15;
