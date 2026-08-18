@@ -16026,22 +16026,47 @@ input.autofill-dark:-internal-autofill-previewed {
       clips the 320px group to 170px, so keep that ratio. ─────────────────────── */
 .report-practice-panel__peek {
   position: relative;
-  margin-top: 2.25rem;
-  max-height: 170px;
+  margin-top: 1.75rem;
+  /* Three lines of the next category — its title, the column header, and the first
+     practice row fading out. 170px reached exactly the same three lines, but the
+     mask hit full transparency at the clip, so the bottom ~40px carried nothing:
+     the teaser read as three lines followed by a large empty pane above the pill.
+     The clip now ends inside the fade instead of after it. Desktop title+header is
+     69px and a row 61px; mobile 90px and 64px — hence the narrow clamp. */
+  max-height: 132px;
   overflow: hidden;
   filter: blur(3px);
   opacity: 0.5;
   pointer-events: none;
   user-select: none;
-  /* Fade the clip edge instead of cutting it hard. */
-  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 38%, transparent 100%);
-  mask-image: linear-gradient(180deg, #000 0%, #000 38%, transparent 100%);
+  /* Hold the title and header legible, then fall away over the row: 0.3 alpha at
+     82% still shows the row is a row, so the cut reads as "more of this" rather
+     than as blank space. */
+  -webkit-mask-image: linear-gradient(
+    180deg,
+    #000 0%,
+    #000 46%,
+    rgba(0, 0, 0, 0.3) 82%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(180deg, #000 0%, #000 46%, rgba(0, 0, 0, 0.3) 82%, transparent 100%);
+}
+
+/* The category title wraps to two lines on a phone (54px against 32px), so the
+   desktop clip would end on the column header and tease none of the table. 146px
+   keeps the same three lines and lets the first row fade in under them. */
+@media (max-width: 768px) {
+  .report-practice-panel__peek {
+    max-height: 146px;
+  }
 }
 
 .report-practice-panel__expand {
   display: flex;
   justify-content: center;
-  margin-top: 1rem;
+  /* The teaser's last 20% is nearly transparent, so a 1rem margin measured ~100px
+     of apparent gap under it. */
+  margin-top: 0.35rem;
 }
 
 /* Figma 8480:16004 — 186×38 white pill, border #9d8ad7, label #795fc8. */
