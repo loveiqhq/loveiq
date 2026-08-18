@@ -8936,6 +8936,29 @@ input.autofill-dark:-internal-autofill-previewed {
   animation: report-draw-dot-in 320ms ease-out 1.35s forwards;
 }
 
+/* A chart that owns a `.report-chart-reveal` root waits for THAT root, never for
+   the section.
+   The two triggers above are an OR, and the section-level one fires as soon as the
+   section's top crosses the fold. A report section runs several viewports tall, so
+   on Energy & Risk the reader's own line drew itself — and its end dot landed —
+   while the graph was still far below the fold; by the time the graph came into
+   view its line was already there and only the pack of faint context curves (which
+   is gated on the chart root alone) faded in, so the line read as arriving FIRST
+   and the rest afterwards. Holding the pre-state here keeps the whole chart still
+   until its own root reveals, and then the pack and the line start together.
+   Specificity: `:not(.is-revealed)` adds its argument's weight, so these are
+   (0,3,0) and beat the (0,2,0) section trigger regardless of source order.
+   Snapshot and the Insight Map have no chart root and still ride the section. */
+.report-chart-reveal:not(.is-revealed) .report-draw-line {
+  animation: none;
+  stroke-dashoffset: 1;
+}
+
+.report-chart-reveal:not(.is-revealed) .report-draw-dot {
+  animation: none;
+  opacity: 0;
+}
+
 /*
  * Second trigger for the two primitives above. `.report-section.is-visible`
  * fires off the SECTION, at threshold 0.01 with a -12% inset — right for a chart

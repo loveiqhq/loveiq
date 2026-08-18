@@ -197,7 +197,8 @@ const CueGraph: FC<{
   const highlight = HIGHLIGHT_CURVES[curveKey] ?? HIGHLIGHT_CURVES["early-hot-riser"]!;
   // Pack fades in, then the reader's own curve draws over it, then the dot lands
   // and the labels arrive — the order the chart is read in.
-  const [graphRef, revealed] = useRevealOnView<HTMLDivElement>();
+  // `threshold: 0` for the same reason as the energy graph — see EnergySection.
+  const [graphRef, revealed] = useRevealOnView<HTMLDivElement>({ threshold: 0 });
   // End point of the highlighted curve (right edge) — anchor for dot/label.
   // Read off the curve, never maintained beside it: this was a three-branch
   // lookup over five curves, which put the depletion family's dot 12px above its

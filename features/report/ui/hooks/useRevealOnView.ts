@@ -24,6 +24,12 @@ import { useEffect, useRef, useState } from "react";
  * in CSS, which keeps presentation in one place: the `is-animated` class still
  * lands, and the reduce block pins each part to its final value.
  */
+/**
+ * Mirrors the default `rootMargin`'s -30% bottom inset: the fraction of the
+ * viewport, measured from the top, that counts as "readable".
+ */
+const REVEAL_BAND = 0.7;
+
 export function useRevealOnView<T extends Element>({
   threshold = 0.25,
   rootMargin = "0px 0px -30% 0px",
@@ -34,17 +40,60 @@ export function useRevealOnView<T extends Element>({
   useEffect(() => {
     const el = ref.current;
     if (!el || isRevealed) return;
+
+    let frame = 0;
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0]?.isIntersecting) {
-          setIsRevealed(true);
-          observer.disconnect();
-        }
+        if (entries[0]?.isIntersecting) reveal();
       },
       { threshold, rootMargin }
     );
+
+    function reveal() {
+      observer.disconnect();
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("scrollend", check);
+      if (frame) cancelAnimationFrame(frame);
+      setIsRevealed(true);
+    }
+
+    /**
+     * The safety net. An IntersectionObserver reports a CHANGE of state, and only
+     * for frames the browser actually rendered — so a viewport that jumps the whole
+     * chart in one frame (scrollbar drag, End, ⌘↓, an in-page anchor) goes
+     * not-intersecting → not-intersecting and fires nothing. The chart would then
+     * sit in its pre-animation state forever, which for a self-drawing chart means a
+     * permanently BLANK chart. Measured: roughly one in three fast scrolls left the
+     * energy graph empty.
+     *
+     * This checks the same band the `rootMargin` inset describes, so it reveals at
+     * the same moment the observer would have — it just also catches the case where
+     * the chart is already past.
+     */
+    function check() {
+      frame = 0;
+      const node = ref.current;
+      if (!node) return;
+      if (node.getBoundingClientRect().top < window.innerHeight * REVEAL_BAND) reveal();
+    }
+
+    function onScroll() {
+      if (!frame) frame = requestAnimationFrame(check);
+    }
+
     observer.observe(el);
-    return () => observer.disconnect();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("scrollend", check);
+    // Already on screen at mount (hydration part-way down the page, or a deep link
+    // to a chapter) — no crossing is coming.
+    check();
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("scrollend", check);
+      if (frame) cancelAnimationFrame(frame);
+    };
   }, [isRevealed, threshold, rootMargin]);
 
   return [ref, isRevealed];

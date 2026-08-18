@@ -283,7 +283,13 @@ const WaveGraph: FC<{
 
   // The pack fades in first, then the reader's own line draws itself over it, then
   // the end dot lands and the labels arrive — the order the chart is read in.
-  const [graphRef, revealed] = useRevealOnView<HTMLDivElement>();
+  // `threshold: 0` — any overlap with the readable band starts it. The 0.25
+  // default is a crossing this chart can miss on a fast flick (the observer only
+  // reports the state it samples, and a 305px graph in a 400px scroll step can be
+  // sampled below the inset and then above the fold), and a missed crossing now
+  // means a permanently blank chart: the draw primitives wait on THIS root alone
+  // rather than falling back to the section, so nothing else would start it.
+  const [graphRef, revealed] = useRevealOnView<HTMLDivElement>({ threshold: 0 });
 
   return (
     <div

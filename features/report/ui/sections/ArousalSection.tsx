@@ -174,7 +174,8 @@ const ArousalArc: FC<{ family: string; acts: [string, string, string]; accent: s
   // Panels settle, the arc draws through build → dip → return, each condition dot
   // lights as the stroke reaches it, then the end dot lands and the act labels
   // arrive. The order is the chart's own argument.
-  const [arcRef, revealed] = useRevealOnView<HTMLDivElement>();
+  // `threshold: 0` for the same reason as the energy graph — see EnergySection.
+  const [arcRef, revealed] = useRevealOnView<HTMLDivElement>({ threshold: 0 });
 
   return (
     <div
