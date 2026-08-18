@@ -603,7 +603,9 @@ const AttachmentPatternsSection: FC<Props> = ({
                   this button; Attachment was one of three that never did, so the
                   only way to expand was the header row. */}
               {locked || !expanded ? (
-                <div className="report-attachment__details-peek report-learn-peek">
+                <div
+                  className={`report-attachment__details-peek report-learn-peek${locked ? " report-learn-peek--locked" : ""}`}
+                >
                   {copy["edu.teaser"] ? (
                     <p className="report-attachment__details-teaser report-learn-teaser">
                       {copy["edu.teaser"]}

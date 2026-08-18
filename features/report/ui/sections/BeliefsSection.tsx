@@ -249,7 +249,9 @@ const BeliefsSection: FC<Props> = ({
             {/* Figma's "peek CTA" — the third and last collapsible that was
                 missing it (see AttachmentPatternsSection / AcceleratorsSection). */}
             {locked || !expanded ? (
-              <div className="report-beliefs__details-peek report-learn-peek">
+              <div
+                className={`report-beliefs__details-peek report-learn-peek${locked ? " report-learn-peek--locked" : ""}`}
+              >
                 {copy["edu.teaser"] ? (
                   <p className="report-beliefs__details-teaser report-learn-teaser">
                     {copy["edu.teaser"]}

@@ -14612,6 +14612,12 @@ input.autofill-dark:-internal-autofill-previewed {
      block from the card edge below it. 34px left the expander almost touching
      the bottom of the card. */
   padding-bottom: clamp(48px, 4vw, 62px);
+  /* Every section gives its teaser `margin: 8px 0 0`. In nine of them that margin
+     collapses out of this box (no padding-top of their own), so the text started at
+     the peek's very top while three others started 8px down — two geometries the
+     pill's fixed `top` had to straddle. Owning the 8px here makes all sixteen the
+     same, which is what lets the teaser be exactly three lines below. */
+  padding-top: 8px;
 }
 
 /* Figma sets the leading label of a "Label: explanation" paragraph in Manrope Bold
@@ -14641,14 +14647,14 @@ input.autofill-dark:-internal-autofill-previewed {
   min-height: calc(3 * 1.45em);
   max-height: calc(3 * 1.45em);
   overflow: hidden;
-  /* Two paragraph geometries exist and both are correct. Nine sections give the
-     teaser `margin: 8px 0 0` with no padding, so the margin collapses out of the
-     peek and the text starts at the peek's top edge. Three (beliefs, accelerators,
-     attachment) add `padding-bottom: 12px`, which keeps the margin inside and
-     starts the text 8px down on a box 12px taller. The two offsets cancel against
-     the pill's fixed `top`, so it lands at 70-71% of its own paragraph either way
-     — verified at 320/360/390/430/768/1024/1440. Change one of those paddings and
-     that pill moves; re-measure if you do. */
+  /* THREE lines, and only three. Beliefs, Accelerators and Attachment carry
+     `margin: 8px 0 0; padding: 0 20px 12px 69px` — that 12px of bottom padding sits
+     INSIDE the clip, so a fourth line showed through it at the fade's last alpha
+     (visible at 900-1023px, where the copy wraps to four). The margin is zeroed
+     because the peek owns that 8px now; the horizontal padding is left alone since
+     it carries the 69px indent. */
+  margin-top: 0;
+  padding-bottom: 0;
 
   /* Figma's fade is three FLAT colour steps, one per line — #161021, then
      #969696, then #c7c7c7 (8762:15709) — not a smooth ramp. Line two is already
@@ -14706,6 +14712,18 @@ input.autofill-dark:-internal-autofill-previewed {
      to 25.5px — 4.5px short at every breakpoint. */
   line-height: normal;
   z-index: 1;
+}
+
+/* Locked: the tease carries the same blur as everything around it.
+   In a locked chapter the stand-in above and (for Attachment) the pattern cards
+   below are both blurred at `--report-lock-blur`, which left this band the one
+   sharp island in the chapter — the design blurs it with its neighbours. The pill
+   stays sharp on top: that is how the paywall card already sits over the blurred
+   stand-in, and a blurred CTA reads as broken. `user-select: none` matches the
+   other blurred blocks so the copy cannot be dragged out of the blur. */
+.report-learn-peek--locked .report-learn-teaser {
+  filter: blur(var(--report-lock-blur));
+  user-select: none;
 }
 
 /* Below 768px the pill moves OFF the tease and sits under it.

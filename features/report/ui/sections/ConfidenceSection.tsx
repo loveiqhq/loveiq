@@ -374,7 +374,9 @@ const ConfidenceSection: FC<Props> = ({
             </button>
 
             {copy["edu.teaser"] && (locked || !expanded) ? (
-              <div className="report-confidence__details-peek report-learn-peek">
+              <div
+                className={`report-confidence__details-peek report-learn-peek${locked ? " report-learn-peek--locked" : ""}`}
+              >
                 <p className="report-confidence__details-teaser report-learn-teaser">
                   {copy["edu.teaser"]}
                   {copy["edu.body.p1"] ? ` ${copy["edu.body.p1"]}` : null}

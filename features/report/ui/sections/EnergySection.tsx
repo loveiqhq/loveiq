@@ -532,7 +532,9 @@ const EnergySection: FC<Props> = ({
             </button>
 
             {locked || !expanded ? (
-              <div className="report-energy__details-peek report-learn-peek">
+              <div
+                className={`report-energy__details-peek report-learn-peek${locked ? " report-learn-peek--locked" : ""}`}
+              >
                 {copy["edu.teaser"] ? (
                   <p className="report-energy__details-teaser report-learn-teaser">
                     {copy["edu.teaser"]}
