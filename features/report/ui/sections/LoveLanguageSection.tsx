@@ -279,9 +279,7 @@ const LoveLanguageSection: FC<Props> = ({
             </button>
 
             {locked || !expanded ? (
-              <div
-                className={`report-lovelang__details-peek report-learn-peek${locked ? " report-learn-peek--locked" : ""}`}
-              >
+              <div className="report-lovelang__details-peek report-learn-peek">
                 {copy["edu.teaser"] ? (
                   <p className="report-lovelang__details-teaser report-learn-teaser">
                     {copy["edu.teaser"]}

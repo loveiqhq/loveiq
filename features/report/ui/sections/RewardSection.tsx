@@ -422,9 +422,7 @@ const RewardSection: FC<Props> = ({
             </button>
 
             {locked || !expanded ? (
-              <div
-                className={`report-reward__details-peek report-learn-peek${locked ? " report-learn-peek--locked" : ""}`}
-              >
+              <div className="report-reward__details-peek report-learn-peek">
                 {copy["edu.teaser"] ? (
                   <p className="report-reward__details-teaser report-learn-teaser">
                     {copy["edu.teaser"]}

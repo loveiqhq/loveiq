@@ -385,9 +385,7 @@ const InitiationSection: FC<Props> = ({
             </button>
 
             {locked || !expanded ? (
-              <div
-                className={`report-initiation__details-peek report-learn-peek${locked ? " report-learn-peek--locked" : ""}`}
-              >
+              <div className="report-initiation__details-peek report-learn-peek">
                 {copy["practical.teaser"] ? (
                   <p className="report-initiation__details-teaser report-learn-teaser">
                     {practicalTease}

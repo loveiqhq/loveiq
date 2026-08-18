@@ -390,9 +390,7 @@ const PowerSection: FC<Props> = ({
             </button>
 
             {locked || !expanded ? (
-              <div
-                className={`report-power__details-peek report-learn-peek${locked ? " report-learn-peek--locked" : ""}`}
-              >
+              <div className="report-power__details-peek report-learn-peek">
                 {copy["edu.teaser"] ? (
                   <p className="report-power__details-teaser report-learn-teaser">
                     {copy["edu.teaser"]}

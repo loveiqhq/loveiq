@@ -14714,18 +14714,6 @@ input.autofill-dark:-internal-autofill-previewed {
   z-index: 1;
 }
 
-/* Locked: the tease carries the same blur as everything around it.
-   In a locked chapter the stand-in above and (for Attachment) the pattern cards
-   below are both blurred at `--report-lock-blur`, which left this band the one
-   sharp island in the chapter — the design blurs it with its neighbours. The pill
-   stays sharp on top: that is how the paywall card already sits over the blurred
-   stand-in, and a blurred CTA reads as broken. `user-select: none` matches the
-   other blurred blocks so the copy cannot be dragged out of the blur. */
-.report-learn-peek--locked .report-learn-teaser {
-  filter: blur(var(--report-lock-blur));
-  user-select: none;
-}
-
 /* Below 768px the pill moves OFF the tease and sits under it.
    Figma only draws this pill at desktop width, where 169px across an 825px column
    covers a fifth of a line and lines two and three still read around it. The same
@@ -24289,6 +24277,18 @@ input.autofill-dark:-internal-autofill-previewed {
    disclosure keeps its own peek + unlock CTA, so it is excluded here rather than
    blurred twice.
    ========================================================================== */
+/* The Learn band joins this list for Attachment ONLY. This is the one chapter
+   whose expander is SURROUNDED by locked content — the plane and caption above it,
+   the pattern cards below — so leaving it sharp made it the single clear island in
+   a blurred chapter. Everywhere else the band sits after the paywall card with
+   nothing blurred beside it, and its three-line tease stays readable: that tease is
+   the hook, and blurring it there would leave a locked chapter with nothing to read.
+   The summary row and the teaser are listed individually rather than blurring
+   `__details`, because the pill inside it must stay sharp (the paywall card sits
+   sharp over blurred content the same way) and because the pattern cards already
+   carry their own blur — nesting one filter inside another compounds it. */
+.report-attachment__article--locked .report-attachment__details-summary,
+.report-attachment__article--locked .report-attachment__details-teaser,
 .report-attachment__article--locked .report-attachment__map-eyebrow,
 .report-attachment__article--locked .report-attachment__map-caption,
 .report-attachment__article--locked .report-attachment-plane,

@@ -344,9 +344,7 @@ const LibidoSection: FC<Props> = ({
             </button>
 
             {locked || !expanded ? (
-              <div
-                className={`report-libido__details-peek report-learn-peek${locked ? " report-learn-peek--locked" : ""}`}
-              >
+              <div className="report-libido__details-peek report-learn-peek">
                 {copy["practical.teaser"] ? (
                   <p className="report-libido__details-teaser report-learn-teaser">
                     {practicalTease}

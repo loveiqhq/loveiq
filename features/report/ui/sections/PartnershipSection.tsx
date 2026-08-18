@@ -332,9 +332,7 @@ const PartnershipSection: FC<Props> = ({
             </button>
 
             {locked || !expanded ? (
-              <div
-                className={`report-partnership__details-peek report-learn-peek${locked ? " report-learn-peek--locked" : ""}`}
-              >
+              <div className="report-partnership__details-peek report-learn-peek">
                 {copy["edu.teaser"] ? (
                   <p className="report-partnership__details-teaser report-learn-teaser">
                     {copy["edu.teaser"]}

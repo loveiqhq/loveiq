@@ -275,9 +275,7 @@ const AcceleratorsSection: FC<Props> = ({
                 and the pill visible in the accel mock 8946:4286). 13 of the 16
                 collapsibles already shipped it; this was one of three missing. */}
             {locked || !expanded ? (
-              <div
-                className={`report-accel__details-peek report-learn-peek${locked ? " report-learn-peek--locked" : ""}`}
-              >
+              <div className="report-accel__details-peek report-learn-peek">
                 {copy["edu.teaser"] ? (
                   <p className="report-accel__details-teaser report-learn-teaser">
                     {copy["edu.teaser"]}

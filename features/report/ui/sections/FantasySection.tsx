@@ -397,9 +397,7 @@ const FantasySection: FC<Props> = ({
             </button>
 
             {locked || !expanded ? (
-              <div
-                className={`report-fantasy__details-peek report-learn-peek${locked ? " report-learn-peek--locked" : ""}`}
-              >
+              <div className="report-fantasy__details-peek report-learn-peek">
                 {copy["edu.teaser"] ? (
                   <p className="report-fantasy__details-teaser report-learn-teaser">
                     {copy["edu.teaser"]}
