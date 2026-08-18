@@ -25856,20 +25856,26 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-beliefs__preview-fade--tease {
   filter: none;
   opacity: 1;
+  /* Ramp fitted to the FULL nine-row column, matching Figma's locked frame: the
+     first four rows solid (roughly the top 40%), then stepping down through grey
+     to nothing by the last row. The earlier stops were tuned for a four-row block
+     and started fading inside row two once the whole list was shown. */
   -webkit-mask-image: linear-gradient(
     to bottom,
     rgba(0, 0, 0, 1) 0%,
-    rgba(0, 0, 0, 1) 34%,
-    rgba(0, 0, 0, 0.5) 62%,
-    rgba(0, 0, 0, 0.16) 82%,
+    rgba(0, 0, 0, 1) 40%,
+    rgba(0, 0, 0, 0.62) 58%,
+    rgba(0, 0, 0, 0.34) 74%,
+    rgba(0, 0, 0, 0.14) 88%,
     rgba(0, 0, 0, 0) 100%
   );
   mask-image: linear-gradient(
     to bottom,
     rgba(0, 0, 0, 1) 0%,
-    rgba(0, 0, 0, 1) 34%,
-    rgba(0, 0, 0, 0.5) 62%,
-    rgba(0, 0, 0, 0.16) 82%,
+    rgba(0, 0, 0, 1) 40%,
+    rgba(0, 0, 0, 0.62) 58%,
+    rgba(0, 0, 0, 0.34) 74%,
+    rgba(0, 0, 0, 0.14) 88%,
     rgba(0, 0, 0, 0) 100%
   );
   -webkit-mask-composite: source-over;
@@ -25877,4 +25883,50 @@ input.autofill-dark:-internal-autofill-previewed {
   /* Text the reader can see but not select or tab into — it is a preview. */
   user-select: none;
   pointer-events: none;
+}
+
+/* ==========================================================================
+   BELIEFS TEASE SIZES ITSELF TO THE CONTENT, NOT TO THE PAYWALL CARD
+
+   The shared locked-preview rules put the paywall card in normal FLOW and the
+   teaser layer at `position: absolute; inset: 0`. That is right when the teaser is
+   a backdrop meant to be clipped to the card — but here the teaser IS the chapter,
+   and the card sizing the box cut 463px off a 1210px list. It also left a dead
+   band: the keep column runs 572px and the loosen column 1182px, so once the box
+   was clipped to the card's 746px you saw the short column simply stop.
+
+   Inverted for this one case: the tease is in flow so the box grows to the real
+   list, and the card floats over it. Both columns then fade to nothing well before
+   the bottom, so their different lengths stop being visible — which is how Figma's
+   locked frame reads (its grid is 1013px tall with the card overlapping it).
+   ========================================================================== */
+/* The tease sizes the box at every width; mobile just gets a shorter one.
+   Card-driven sizing on mobile hid the tease almost completely — only the column
+   label and a sliver of rule showed above an ~840px card. Content-driven with a
+   1020px cap leaves about three rows readable above the card, which is the same
+   proportion desktop gets, without turning the chapter into five screens of
+   scrolling. The mask spans the CLAMPED height, so it reaches zero at the cut and
+   everything past it was already invisible. */
+.report-beliefs__preview--locked > .report-beliefs__preview-fade--tease {
+  position: relative;
+  inset: auto;
+}
+
+.report-beliefs__preview--locked > .report-premium-overlay {
+  position: absolute;
+  /* Low-centre rather than dead centre: Figma sits the card over the lower half,
+     where the rows have already begun to fade. */
+  top: 58%;
+  left: 50%;
+  right: auto;
+  bottom: auto;
+  transform: translate(-50%, -50%);
+  width: 100%;
+}
+
+@media (max-width: 768px) {
+  .report-beliefs__preview--locked > .report-beliefs__preview-fade--tease {
+    max-height: 1020px;
+    overflow: hidden;
+  }
 }
