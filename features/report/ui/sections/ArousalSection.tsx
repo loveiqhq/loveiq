@@ -161,11 +161,14 @@ export const ARC_GEOMETRY: Record<string, ArcGeometry> = {
 };
 
 /** The reader's arousal arc (inline SVG, per Figma 8427:2204). */
-const ArousalArc: FC<{ family: string; acts: [string, string, string]; accent: string }> = ({
-  family,
-  acts,
-  accent,
-}) => {
+const ArousalArc: FC<{
+  family: string;
+  acts: [string, string, string];
+  accent: string;
+  /** Which cue the reader is pointing at — see `ArousalCard`'s `cue` state. */
+  cue: number | null;
+  onCue: (cue: number | null) => void;
+}> = ({ family, acts, accent, cue, onCue }) => {
   const key = ARC_GEOMETRY[family] ? family : "responsive";
   const geo = ARC_GEOMETRY[key]!;
   const fam = getArousalFamily(key);
@@ -180,7 +183,9 @@ const ArousalArc: FC<{ family: string; acts: [string, string, string]; accent: s
   return (
     <div
       ref={arcRef}
-      className={`report-arousal-arc report-chart-reveal${revealed ? " is-revealed" : ""}`}
+      className={`report-arousal-arc report-chart-reveal${revealed ? " is-revealed" : ""}${
+        cue === null ? "" : " is-cued"
+      }`}
       role="img"
       aria-label="How your arousal builds, stalls, and returns"
     >
@@ -227,32 +232,67 @@ const ArousalArc: FC<{ family: string; acts: [string, string, string]; accent: s
         {/* solid dot at the arc's high end — lands once the stroke reaches it */}
         {/* Position read off the arc itself, so the dot cannot drift from the
             line it belongs to (see `curveEndPoint`). */}
-        <circle className="report-draw-dot" cx={arcEnd.x} cy={arcEnd.y} r="7" fill={accent} />
+        <g
+          className={`report-arousal-arc__cue-group${cue === 4 ? " is-active" : ""}`}
+          onMouseEnter={() => onCue(4)}
+          onMouseLeave={() => onCue(null)}
+        >
+          <circle className="report-draw-dot" cx={arcEnd.x} cy={arcEnd.y} r="7" fill={accent} />
+          <circle cx={arcEnd.x} cy={arcEnd.y} r="17" fill="transparent" />
+        </g>
 
         {/* three climbing condition dots, then the hollow "slip" circle — the
             Figma draws both on every family, fading the dots in as they are met */}
         {geo.dots.map(([cx, cy], i) => (
-          <circle
+          <g
             key={i}
-            className="report-arousal-arc__cue"
-            style={{ "--row": i } as CSSProperties}
-            cx={cx}
-            cy={cy}
-            r="6.5"
-            fill={accent}
-            opacity={0.4 + i * 0.3}
-          />
+            className={`report-arousal-arc__cue-group${cue === i ? " is-active" : ""}`}
+            onMouseEnter={() => onCue(i)}
+            onMouseLeave={() => onCue(null)}
+          >
+            {/* Halo. A 6.5px circle cannot carry a pseudo-element, so the ring the
+                dot pulses out lives as its own circle, scaled from the dot's centre.
+                Painted first so the dot always sits on top of it. */}
+            <circle className="report-arousal-arc__halo" cx={cx} cy={cy} r="6.5" fill={accent} />
+            <circle
+              className="report-arousal-arc__cue"
+              style={{ "--row": i } as CSSProperties}
+              cx={cx}
+              cy={cy}
+              r="6.5"
+              fill={accent}
+              opacity={0.4 + i * 0.3}
+            />
+            {/* The pointer target: 6.5px of dot is a 13px target, well under the 24px
+                minimum, and the reader is aiming at a dot on a curve. Transparent
+                rather than sized-up so the artwork stays Figma's. */}
+            <circle cx={cx} cy={cy} r="17" fill="transparent" />
+          </g>
         ))}
-        <circle
-          className="report-arousal-arc__cue"
-          style={{ "--row": 3 } as CSSProperties}
-          cx={geo.slip[0]}
-          cy={geo.slip[1]}
-          r="7.2"
-          fill="#ffffff"
-          stroke={accent}
-          strokeWidth="2.4"
-        />
+        <g
+          className={`report-arousal-arc__cue-group${cue === 3 ? " is-active" : ""}`}
+          onMouseEnter={() => onCue(3)}
+          onMouseLeave={() => onCue(null)}
+        >
+          <circle
+            className="report-arousal-arc__halo"
+            cx={geo.slip[0]}
+            cy={geo.slip[1]}
+            r="7.2"
+            fill={accent}
+          />
+          <circle
+            className="report-arousal-arc__cue"
+            style={{ "--row": 3 } as CSSProperties}
+            cx={geo.slip[0]}
+            cy={geo.slip[1]}
+            r="7.2"
+            fill="#ffffff"
+            stroke={accent}
+            strokeWidth="2.4"
+          />
+          <circle cx={geo.slip[0]} cy={geo.slip[1]} r="17" fill="transparent" />
+        </g>
 
         {/* phase labels (top of each panel) */}
         {PANELS.map((p, i) => (
@@ -299,14 +339,30 @@ const ActDetail: FC<{
   /** Act NAMES, which the copy matrix may override — not `family.acts`. */
   acts: [string, string, string];
   accent: string;
-}> = ({ family, acts, accent }) => {
+  /** Cue the reader is pointing at: 0-2 a condition, 3 the slip, 4 the high end. */
+  cue: number | null;
+  onCue: (cue: number | null) => void;
+}> = ({ family, acts, accent, cue, onCue }) => {
   return (
     <div className="report-arousal__acts">
-      <div className="report-arousal__act" style={{ "--act-accent": accent } as CSSProperties}>
+      <div
+        className={`report-arousal__act${cue !== null && cue <= 2 ? " is-cued" : ""}`}
+        style={{ "--act-accent": accent } as CSSProperties}
+      >
         <p className="report-arousal__act-eyebrow">1 &middot; {acts[0]}</p>
         <ul className="report-arousal__conditions">
-          {family.conditions.map((c) => (
-            <li key={c.label} className="report-arousal__condition">
+          {family.conditions.map((c, i) => (
+            <li
+              key={c.label}
+              className={`report-arousal__condition${cue === i ? " is-active" : ""}`}
+              /* Focusable so the link works from the keyboard too: the chip is the
+                 half a reader can reach, and the dot on the curve answers it. */
+              tabIndex={0}
+              onMouseEnter={() => onCue(i)}
+              onMouseLeave={() => onCue(null)}
+              onFocus={() => onCue(i)}
+              onBlur={() => onCue(null)}
+            >
               <span className="report-arousal__condition-dot" aria-hidden="true" />
               <span className="report-arousal__condition-label">{c.label}</span>
               <span className="report-arousal__condition-note">&middot; {c.note}</span>
@@ -316,12 +372,22 @@ const ActDetail: FC<{
         <p className="report-arousal__act-note">{family.conditionsNote}</p>
       </div>
 
-      <div className="report-arousal__act" style={{ "--act-accent": accent } as CSSProperties}>
+      <div
+        className={`report-arousal__act${cue === 3 ? " is-cued" : ""}`}
+        style={{ "--act-accent": accent } as CSSProperties}
+        onMouseEnter={() => onCue(3)}
+        onMouseLeave={() => onCue(null)}
+      >
         <p className="report-arousal__act-eyebrow">2 &middot; {acts[1]}</p>
         <p className="report-arousal__act-body">{family.act2Body}</p>
       </div>
 
-      <div className="report-arousal__act" style={{ "--act-accent": accent } as CSSProperties}>
+      <div
+        className={`report-arousal__act${cue === 4 ? " is-cued" : ""}`}
+        style={{ "--act-accent": accent } as CSSProperties}
+        onMouseEnter={() => onCue(4)}
+        onMouseLeave={() => onCue(null)}
+      >
         <p className="report-arousal__act-eyebrow is-live">3 &middot; {acts[2]}</p>
         <p className="report-arousal__act-body">{family.act3Body}</p>
       </div>
@@ -400,6 +466,8 @@ const ArousalSection: FC<Props> = ({
   tier = "full_report",
 }) => {
   const [expanded, setExpanded] = useState(false);
+  /** 0-2 a build condition, 3 the slip, 4 the high end; null when nothing is cued. */
+  const [cue, setCue] = useState<number | null>(null);
   if (!copy) return null;
 
   const locked = copy.locked;
@@ -493,9 +561,19 @@ const ArousalSection: FC<Props> = ({
               <p className="report-arousal__intro">{arousalFamily.intro}</p>
             </div>
 
-            <ArousalArc family={family} acts={acts} accent={accent} />
+            {/* One piece of state links the arc to the columns under it: pointing at
+                a dot lights the condition it stands for, and pointing at a
+                condition lights its dot. Both halves are siblings, so the state
+                lives here rather than in either of them. */}
+            <ArousalArc family={family} acts={acts} accent={accent} cue={cue} onCue={setCue} />
 
-            <ActDetail family={arousalFamily} acts={acts} accent={accent} />
+            <ActDetail
+              family={arousalFamily}
+              acts={acts}
+              accent={accent}
+              cue={cue}
+              onCue={setCue}
+            />
 
             {hasStats ? (
               <div className="report-arousal__stats">

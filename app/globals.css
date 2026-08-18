@@ -23979,6 +23979,248 @@ input.autofill-dark:-internal-autofill-previewed {
   opacity: 1;
 }
 
+/* ── The arc answers its conditions ────────────────────────────────────────
+   Three dots climb through act 1 and three chips underneath name what each one
+   IS, and nothing said so. Pointing at either half now lights both: the dot the
+   reader is on, and the condition it stands for. `cue` state in ArousalSection
+   drives it, so it works from the dot to the chip, from the chip to the dot, and
+   from the keyboard (the chips are focusable; the dots are decoration inside an
+   aria-hidden svg).
+
+   The whole thing is one gesture built from five parts that arrive in order —
+   bar, lift, dot, label, note — over ~450ms on one easing curve
+   (cubic-bezier(0.22, 1, 0.36, 1), a fast-out settle with no overshoot). What
+   makes it read as ONE motion rather than five is that they share that curve and
+   overlap: nothing waits for the part before it to finish. */
+
+/* The group owns the pointer target; the dot and halo inside it do the moving. */
+.report-arousal-arc__cue-group {
+  cursor: pointer;
+}
+
+/* Brightening and dimming both ride `filter`, never `opacity`.
+   These cues carry the reveal stagger on their opacity transition — a delay of up
+   to 1.32s (`calc(420ms + --row * 300ms)`) — so anything hover-driven that touches
+   opacity arrives up to a second after the cursor does. `filter` in that same
+   shorthand has no delay. `opacity(3)` multiplies alpha and clamps, taking a cue
+   that rests at 0.4 to fully opaque at once; `opacity(0.3)` dims the others the
+   same way. Same look, none of the lag. */
+.report-arousal-arc__cue-group.is-active .report-arousal-arc__cue,
+.report-arousal-arc .report-arousal-arc__cue-group.is-active .report-arousal-arc__cue {
+  transform: scale(1.55);
+  filter: drop-shadow(0 0 7px rgb(var(--report-accent-rgb) / 0.7)) opacity(3);
+}
+
+/* The other dots step back so the cued one is unmistakable. No movement — that
+   would read as the chart rearranging itself. */
+.report-arousal-arc.is-cued
+  .report-arousal-arc__cue-group:not(.is-active)
+  .report-arousal-arc__cue {
+  filter: opacity(0.3);
+}
+
+.report-arousal-arc.is-cued .report-arousal-arc__cue-group:not(.is-active) .report-draw-dot {
+  filter: opacity(0.32);
+}
+
+/* The end dot animates in rather than transitioning, so it needs its own. */
+.report-arousal-arc .report-draw-dot {
+  transition: filter 240ms ease;
+}
+
+/* A ring leaving the dot, twice a second and a half. Slow enough to read as a
+   pulse rather than a blink, and it starts AT the dot's edge so it looks like it
+   came off the dot. */
+.report-arousal-arc__halo {
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+  pointer-events: none;
+}
+
+.report-arousal-arc__cue-group.is-active .report-arousal-arc__halo {
+  animation: report-cue-halo 1500ms cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
+@keyframes report-cue-halo {
+  0% {
+    opacity: 0.4;
+    transform: scale(1);
+  }
+  65% {
+    opacity: 0;
+    transform: scale(2.85);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(2.85);
+  }
+}
+
+/* The chip. `overflow: hidden` clips the light sweep to the pill. */
+.report-arousal__condition {
+  position: relative;
+  overflow: hidden;
+  transition:
+    transform 440ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 320ms ease,
+    background-color 320ms ease,
+    box-shadow 440ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 300ms ease;
+}
+
+/* Accent bar, wiping in from the left edge — the part that says "this one". */
+.report-arousal__condition::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--act-accent, #795fc8);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 400ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* A single pass of accent light, tinted rather than white: a white sheen on a
+   near-white pill is invisible. Runs once per activation, not on a loop. */
+.report-arousal__condition::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    104deg,
+    transparent 34%,
+    color-mix(in srgb, var(--act-accent, #795fc8) 26%, transparent) 50%,
+    transparent 66%
+  );
+  transform: translateX(-130%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.report-arousal__condition.is-active {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--act-accent, #795fc8) 45%, transparent);
+  background-color: color-mix(in srgb, var(--act-accent, #795fc8) 9%, #ffffff);
+  box-shadow: 0 12px 26px -14px color-mix(in srgb, var(--act-accent, #795fc8) 70%, transparent);
+}
+
+.report-arousal__condition.is-active::before {
+  transform: scaleX(1);
+}
+
+.report-arousal__condition.is-active::after {
+  animation: report-chip-sheen 760ms cubic-bezier(0.4, 0, 0.2, 1) 40ms;
+}
+
+@keyframes report-chip-sheen {
+  0% {
+    transform: translateX(-130%);
+    opacity: 0;
+  }
+  22% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(130%);
+    opacity: 0;
+  }
+}
+
+/* Its own dot grows and takes a soft ring — the same event as the halo out on the
+   curve, so the two halves read as the same object. */
+.report-arousal__condition-dot {
+  transition:
+    transform 440ms cubic-bezier(0.34, 1.4, 0.5, 1),
+    box-shadow 400ms ease;
+}
+
+.report-arousal__condition.is-active .report-arousal__condition-dot {
+  transform: scale(1.5);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--act-accent, #795fc8) 20%, transparent);
+}
+
+/* Label then note, 30ms apart: the eye lands on the name first. */
+.report-arousal__condition-label {
+  transition: transform 440ms cubic-bezier(0.22, 1, 0.36, 1) 30ms;
+}
+
+.report-arousal__condition-note {
+  transition:
+    transform 440ms cubic-bezier(0.22, 1, 0.36, 1) 60ms,
+    color 320ms ease 60ms;
+}
+
+.report-arousal__condition.is-active .report-arousal__condition-label {
+  transform: translateX(2px);
+}
+
+.report-arousal__condition.is-active .report-arousal__condition-note {
+  transform: translateX(3px);
+  color: #3f3a4d;
+}
+
+/* The unpicked chips recede rather than disappear, so the group still reads as
+   three conditions. */
+.report-arousal__act.is-cued .report-arousal__condition:not(.is-active) {
+  opacity: 0.42;
+}
+
+/* Keyboard parity: the chips are focusable, so give them a real focus ring on top
+   of the hover treatment they already share. */
+.report-arousal__condition:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--act-accent, #795fc8) 70%, transparent);
+  outline-offset: 2px;
+}
+
+/* Acts 2 and 3 carry a paragraph rather than chips, so their cue is quieter: the
+   eyebrow takes the accent and the column lifts a hair. */
+.report-arousal__act {
+  border-radius: 10px;
+  transition:
+    background-color 320ms ease,
+    transform 440ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.report-arousal__act.is-cued:not(:has(.report-arousal__conditions)) {
+  transform: translateY(-2px);
+  background-color: color-mix(in srgb, var(--act-accent, #795fc8) 5%, transparent);
+}
+
+.report-arousal__act.is-cued .report-arousal__act-eyebrow {
+  color: var(--act-accent, #795fc8);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Keep the LINK — colour, weight, the recede — and drop the movement. */
+  .report-arousal-arc__cue-group.is-active .report-arousal-arc__halo {
+    animation: none;
+  }
+
+  .report-arousal__condition,
+  .report-arousal__condition-dot,
+  .report-arousal__condition-label,
+  .report-arousal__condition-note,
+  .report-arousal__act {
+    transition-duration: 1ms;
+  }
+
+  .report-arousal__condition.is-active,
+  .report-arousal__act.is-cued:not(:has(.report-arousal__conditions)) {
+    transform: none;
+  }
+
+  .report-arousal__condition.is-active .report-arousal__condition-dot,
+  .report-arousal__condition.is-active .report-arousal__condition-label,
+  .report-arousal__condition.is-active .report-arousal__condition-note {
+    transform: none;
+  }
+
+  .report-arousal__condition.is-active::after {
+    animation: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .report-arousal-arc.report-chart-reveal:not(.is-revealed) .report-arousal-arc__cue {
     opacity: 1;
