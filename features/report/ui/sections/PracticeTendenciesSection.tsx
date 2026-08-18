@@ -367,7 +367,13 @@ const PracticeGroupTable: FC<{
   onClose: (rowId: string) => void;
   openRowId: string | null;
   useDesktopPopover: boolean;
-}> = ({ group, interactive, onOpen, onClose, openRowId, useDesktopPopover }) => (
+  /**
+   * Rows to show, or null for all of them. Collapsed, Figma prints the first three
+   * (8480:16003) — the panel used to open with the whole first category, nine rows
+   * of scores, before the teaser of the next one.
+   */
+  maxRows?: number | null;
+}> = ({ group, interactive, onOpen, onClose, openRowId, useDesktopPopover, maxRows = null }) => (
   <section
     className="report-practice-group"
     aria-labelledby={`practice-group-${slugifyPracticeKey(group.title)}`}
@@ -399,7 +405,7 @@ const PracticeGroupTable: FC<{
         </div>
 
         <div className="report-practice-table__body" role="rowgroup">
-          {group.rows.map((row) => (
+          {(maxRows === null ? group.rows : group.rows.slice(0, maxRows)).map((row) => (
             <PracticeRow
               key={`${group.title}-${row.practice}`}
               group={group}
@@ -416,6 +422,9 @@ const PracticeGroupTable: FC<{
     </div>
   </section>
 );
+
+/** Rows of the first category the collapsed panel prints (Figma 8480:16003). */
+const COLLAPSED_ROWS = 3;
 
 const PracticePanel: FC<{
   archetype: string;
@@ -625,6 +634,8 @@ const PracticePanel: FC<{
             onClose={handleClose}
             openRowId={openRowId}
             useDesktopPopover={useDesktopPopover}
+            // Collapsed: three rows, then the next category fading under them.
+            maxRows={showAll ? null : COLLAPSED_ROWS}
           />
         ))}
       </div>
@@ -640,6 +651,7 @@ const PracticePanel: FC<{
             onClose={handleClose}
             openRowId={null}
             useDesktopPopover={false}
+            maxRows={2}
           />
         </div>
       ) : null}
