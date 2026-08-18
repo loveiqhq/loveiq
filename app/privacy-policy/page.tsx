@@ -10,7 +10,6 @@ export const metadata: Metadata = {
   alternates: {
     canonical: `${siteUrl}/privacy-policy`,
   },
-  robots: { index: false },
 };
 
 export default function PrivacyPolicyPage() {

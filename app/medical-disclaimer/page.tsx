@@ -11,7 +11,6 @@ export const metadata: Metadata = {
   alternates: {
     canonical: `${siteUrl}/medical-disclaimer`,
   },
-  robots: { index: false },
 };
 
 export default function MedicalDisclaimerPage() {
