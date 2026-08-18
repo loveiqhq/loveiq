@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type CSSProperties, type FC } from "react";
+import { useState, type CSSProperties, type Dispatch, type FC, type SetStateAction } from "react";
 import LockedPreviewImage from "./LockedPreviewImage";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
@@ -161,13 +161,26 @@ export const ARC_GEOMETRY: Record<string, ArcGeometry> = {
 };
 
 /** The reader's arousal arc (inline SVG, per Figma 8427:2204). */
+/**
+ * Clear the cue only if it is still the one this element set.
+ *
+ * Leave and blur handlers fire in an order that is not the reverse of enter: a tap
+ * on a dot sets its cue and THEN blurs whichever chip had focus, and an
+ * unconditional `onCue(null)` in that blur wiped the cue the tap had just set — so
+ * tapping a dot did nothing at all on a phone. Moving the pointer straight from one
+ * dot to the next has the same shape.
+ */
+const clearOwn = (onCue: Dispatch<SetStateAction<number | null>>, mine: number) => () =>
+  onCue((current) => (current === mine ? null : current));
+
 const ArousalArc: FC<{
   family: string;
   acts: [string, string, string];
   accent: string;
   /** Which cue the reader is pointing at — see `ArousalCard`'s `cue` state. */
   cue: number | null;
-  onCue: (cue: number | null) => void;
+  /** The setter itself, so a handler can clear ONLY its own cue — see `clearOwn`. */
+  onCue: Dispatch<SetStateAction<number | null>>;
 }> = ({ family, acts, accent, cue, onCue }) => {
   const key = ARC_GEOMETRY[family] ? family : "responsive";
   const geo = ARC_GEOMETRY[key]!;
@@ -189,7 +202,18 @@ const ArousalArc: FC<{
       role="img"
       aria-label="How your arousal builds, stalls, and returns"
     >
-      <svg viewBox={`0 0 ${AX.w} ${AX.h}`} preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+      <svg
+        viewBox={`0 0 ${AX.w} ${AX.h}`}
+        preserveAspectRatio="xMidYMid meet"
+        aria-hidden="true"
+        /* Touch has no "leave": a tap sets the cue and it would stay set. Tapping
+           anywhere in the chart that is not a dot clears it, so the chart behaves
+           like tap-to-inspect, tap-away-to-release on a phone while hover keeps
+           working on a pointer. */
+        onPointerDown={(e) => {
+          if (!(e.target as Element).closest(".report-arousal-arc__cue-group")) onCue(null);
+        }}
+      >
         {/* phase panels */}
         {PANELS.map((p, i) => (
           <rect
@@ -235,9 +259,29 @@ const ArousalArc: FC<{
         <g
           className={`report-arousal-arc__cue-group${cue === 4 ? " is-active" : ""}`}
           onMouseEnter={() => onCue(4)}
-          onMouseLeave={() => onCue(null)}
+          onPointerDown={() => onCue(4)}
+          onMouseLeave={clearOwn(onCue, 4)}
         >
-          <circle className="report-draw-dot" cx={arcEnd.x} cy={arcEnd.y} r="7" fill={accent} />
+          <circle
+            className="report-arousal-arc__halo"
+            cx={arcEnd.x}
+            cy={arcEnd.y}
+            r="7"
+            fill={accent}
+          />
+          {/* The end dot's own entrance is an ANIMATION with `forwards`, and an
+              animation's filled value outranks a plain declaration — so a hover
+              `transform` on the circle itself is ignored, which left this one dot
+              flat while every other mark swelled. The swell goes on a wrapper that
+              has no animation of its own. `transform-origin` is given in user units
+              (the default `transform-box: view-box`) rather than `fill-box`, which
+              on a <g> resolves against the group's bounding box. */}
+          <g
+            className="report-arousal-arc__end-wrap"
+            style={{ transformOrigin: `${arcEnd.x}px ${arcEnd.y}px` }}
+          >
+            <circle className="report-draw-dot" cx={arcEnd.x} cy={arcEnd.y} r="7" fill={accent} />
+          </g>
           <circle cx={arcEnd.x} cy={arcEnd.y} r="17" fill="transparent" />
         </g>
 
@@ -248,7 +292,8 @@ const ArousalArc: FC<{
             key={i}
             className={`report-arousal-arc__cue-group${cue === i ? " is-active" : ""}`}
             onMouseEnter={() => onCue(i)}
-            onMouseLeave={() => onCue(null)}
+            onPointerDown={() => onCue(i)}
+            onMouseLeave={clearOwn(onCue, i)}
           >
             {/* Halo. A 6.5px circle cannot carry a pseudo-element, so the ring the
                 dot pulses out lives as its own circle, scaled from the dot's centre.
@@ -272,7 +317,8 @@ const ArousalArc: FC<{
         <g
           className={`report-arousal-arc__cue-group${cue === 3 ? " is-active" : ""}`}
           onMouseEnter={() => onCue(3)}
-          onMouseLeave={() => onCue(null)}
+          onPointerDown={() => onCue(3)}
+          onMouseLeave={clearOwn(onCue, 3)}
         >
           <circle
             className="report-arousal-arc__halo"
@@ -341,7 +387,7 @@ const ActDetail: FC<{
   accent: string;
   /** Cue the reader is pointing at: 0-2 a condition, 3 the slip, 4 the high end. */
   cue: number | null;
-  onCue: (cue: number | null) => void;
+  onCue: Dispatch<SetStateAction<number | null>>;
 }> = ({ family, acts, accent, cue, onCue }) => {
   return (
     <div className="report-arousal__acts">
@@ -359,9 +405,9 @@ const ActDetail: FC<{
                  half a reader can reach, and the dot on the curve answers it. */
               tabIndex={0}
               onMouseEnter={() => onCue(i)}
-              onMouseLeave={() => onCue(null)}
+              onMouseLeave={clearOwn(onCue, i)}
               onFocus={() => onCue(i)}
-              onBlur={() => onCue(null)}
+              onBlur={clearOwn(onCue, i)}
             >
               <span className="report-arousal__condition-dot" aria-hidden="true" />
               <span className="report-arousal__condition-label">{c.label}</span>
@@ -376,7 +422,7 @@ const ActDetail: FC<{
         className={`report-arousal__act${cue === 3 ? " is-cued" : ""}`}
         style={{ "--act-accent": accent } as CSSProperties}
         onMouseEnter={() => onCue(3)}
-        onMouseLeave={() => onCue(null)}
+        onMouseLeave={clearOwn(onCue, 3)}
       >
         <p className="report-arousal__act-eyebrow">2 &middot; {acts[1]}</p>
         <p className="report-arousal__act-body">{family.act2Body}</p>
@@ -386,7 +432,7 @@ const ActDetail: FC<{
         className={`report-arousal__act${cue === 4 ? " is-cued" : ""}`}
         style={{ "--act-accent": accent } as CSSProperties}
         onMouseEnter={() => onCue(4)}
-        onMouseLeave={() => onCue(null)}
+        onMouseLeave={clearOwn(onCue, 4)}
       >
         <p className="report-arousal__act-eyebrow is-live">3 &middot; {acts[2]}</p>
         <p className="report-arousal__act-body">{family.act3Body}</p>

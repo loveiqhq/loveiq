@@ -10,7 +10,6 @@ export const metadata: Metadata = {
   alternates: {
     canonical: `${siteUrl}/imprint`,
   },
-  robots: { index: false },
 };
 
 export default function ImprintPage() {
