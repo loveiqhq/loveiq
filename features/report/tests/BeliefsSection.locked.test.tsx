@@ -108,15 +108,34 @@ describe("BeliefsSection — how much the server ships", () => {
     expect(route).toMatch(/length: beliefsUnlocked \? 10 : BELIEFS_TEASER_ROWS/);
   });
 
-  it("fades on percentages of the column, so the readable band doesn't grow with the row count", () => {
+  it("recedes behind blur rather than fading to white", () => {
+    // The alpha ramp used to reach zero two thirds of the way down, so the bottom
+    // of both columns was blank — the chapter looked empty exactly where it should
+    // look full. The rows stay present and go out of focus instead.
     const css = readFileSync(join(process.cwd(), "app/globals.css"), "utf8");
-    const rule = css.slice(
-      css.indexOf(".report-beliefs__preview-fade--tease .report-beliefs__list")
+    const SCOPE = ".report-beliefs__preview-fade--tease .report-beliefs__list";
+    const ruleBody = (selector: string) => {
+      const at = css.indexOf(selector);
+      expect(at, `missing rule: ${selector}`).toBeGreaterThan(-1);
+      const rest = css.slice(at);
+      return rest.slice(0, rest.indexOf("}"));
+    };
+
+    // The mask survives only as a feather over the last stretch, because the loosen
+    // column is taller than the preview box and `overflow: hidden` would otherwise
+    // cut it with a razor line.
+    const mask = ruleBody(`${SCOPE} {`);
+    expect(mask).toContain("rgba(0, 0, 0, 1) 88%");
+    expect(mask).not.toContain("rgba(0, 0, 0, 0.3)");
+
+    // Rows one and two are the tease; three onward blur, ending on the shared token.
+    expect(css).not.toContain(`${SCOPE} > *:nth-child(1)`);
+    expect(css).not.toContain(`${SCOPE} > *:nth-child(2)`);
+    expect(ruleBody(`${SCOPE} > *:nth-child(3)`)).toContain("filter: blur(1.1px)");
+    expect(ruleBody(`${SCOPE} > *:nth-child(4)`)).toContain("filter: blur(2.2px)");
+    expect(ruleBody(`${SCOPE} > *:nth-child(5)`)).toContain("filter: blur(3.2px)");
+    expect(ruleBody(`${SCOPE} > *:nth-child(n + 6)`)).toContain(
+      "filter: blur(var(--report-lock-blur))"
     );
-    const body = rule.slice(0, rule.indexOf("}"));
-    // Solid through roughly the first third, gone before the column ends.
-    expect(body).toMatch(/rgba\(0, 0, 0, 1\) 31%/);
-    expect(body).toMatch(/rgba\(0, 0, 0, 0\) 92%/);
-    expect(body).not.toMatch(/\dpx/);
   });
 });

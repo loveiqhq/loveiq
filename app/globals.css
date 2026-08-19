@@ -26660,27 +26660,57 @@ input.autofill-dark:-internal-autofill-previewed {
    it to each list makes the stops mean rows: solid through the first two, the rest
    dissolving to nothing.
 
-   Percentages, not pixels, and per list rather than per grid: a keep row is 51px
-   and a loosen row 111px, so one shared px ramp would fade two loosens against
-   four keeps. Percentages of each list's own height mean the stops count ROWS, so
-   the readable band stayed the first two when the server went from three rows per
-   column to six (Eman, 2026-08-19) — the extra rows show how much the chapter
-   holds without handing any of it over. */
+   The rows RECEDE BEHIND BLUR rather than fading out (Eman, 2026-08-19). The old
+   alpha ramp reached zero two thirds of the way down, which left the bottom of both
+   columns as blank white — the chapter looked empty exactly where it should look
+   full. Blur keeps every shipped row visibly present and just as unreadable: by row
+   four it is the same 4px the rest of the locked report uses.
+
+   Per ROW, not a gradient, because a filter cannot take one: the ramp is written
+   out per `nth-child`, which also means it counts rows the way the old percentage
+   stops did — a keep row is 51px and a loosen row 111px, so anything measured in
+   pixels would blur two loosens against four keeps.
+
+   The mask survives only at the very bottom, feathering the last few percent: the
+   loosen column is taller than the preview box, and `overflow: hidden` would
+   otherwise cut it with a razor line. */
 .report-beliefs__preview-fade--tease .report-beliefs__list {
   -webkit-mask-image: linear-gradient(
     to bottom,
     rgba(0, 0, 0, 1) 0%,
-    rgba(0, 0, 0, 1) 31%,
-    rgba(0, 0, 0, 0.3) 58%,
-    rgba(0, 0, 0, 0) 92%
+    rgba(0, 0, 0, 1) 88%,
+    rgba(0, 0, 0, 0) 100%
   );
   mask-image: linear-gradient(
     to bottom,
     rgba(0, 0, 0, 1) 0%,
-    rgba(0, 0, 0, 1) 31%,
-    rgba(0, 0, 0, 0.3) 58%,
-    rgba(0, 0, 0, 0) 92%
+    rgba(0, 0, 0, 1) 88%,
+    rgba(0, 0, 0, 0) 100%
   );
+}
+
+/* Rows one and two stay sharp — that is the tease. From three on, the same ramp
+   the reader already knows from every other locked surface, ending on the shared
+   `--report-lock-blur`. The slight dim rides along so a blurred row reads as
+   "behind glass" instead of a smudge sitting at full contrast. */
+.report-beliefs__preview-fade--tease .report-beliefs__list > *:nth-child(3) {
+  filter: blur(1.1px);
+  opacity: 0.92;
+}
+
+.report-beliefs__preview-fade--tease .report-beliefs__list > *:nth-child(4) {
+  filter: blur(2.2px);
+  opacity: 0.84;
+}
+
+.report-beliefs__preview-fade--tease .report-beliefs__list > *:nth-child(5) {
+  filter: blur(3.2px);
+  opacity: 0.78;
+}
+
+.report-beliefs__preview-fade--tease .report-beliefs__list > *:nth-child(n + 6) {
+  filter: blur(var(--report-lock-blur));
+  opacity: 0.72;
 }
 
 /* ==========================================================================
