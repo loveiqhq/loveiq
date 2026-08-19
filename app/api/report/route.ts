@@ -711,15 +711,20 @@ export async function GET(request: Request) {
      *
      * Shipping the whole list and fading it made the entire chapter legible — the
      * fade is gentle enough that all nine keeps and ten loosens could be read, so
-     * there was nothing left to buy. THREE per column is the tease: the first two
-     * read clearly and the third dissolves, so the reader gets a real taste and the
-     * remaining six keeps and seven loosens never leave the server.
+     * there was nothing left to buy. SIX per column is the tease (Eman,
+     * 2026-08-19; it was three): at three the two columns barely cleared the
+     * paywall card and the chapter looked as though it held almost nothing, which
+     * is the opposite of what a locked chapter should say. Six rows show the
+     * volume; how much of it is READABLE is set by the mask, which fades on
+     * percentages of each column's own height, so the readable band stays the
+     * first two rows regardless of how many are shipped.
      *
      * This is the real boundary: strip the mask in devtools and there is simply
-     * nothing further in the DOM. `body.p1`, the per-archetype closing paragraph,
-     * stays withheld as well.
+     * nothing past row six in the DOM — the remaining three keeps and four loosens
+     * never leave the server. `body.p1`, the per-archetype closing paragraph, stays
+     * withheld as well.
      */
-    const BELIEFS_TEASER_ROWS = 3;
+    const BELIEFS_TEASER_ROWS = 6;
     const beliefsKeep: (string | null)[] = Array.from(
       { length: beliefsUnlocked ? 9 : BELIEFS_TEASER_ROWS },
       (_, i) => beliefsSection[`keep.${i + 1}`] ?? null

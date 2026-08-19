@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import BeliefsSection, { type BeliefsCopy } from "@features/report/ui/sections/BeliefsSection";
@@ -16,14 +18,17 @@ import BeliefsSection, { type BeliefsCopy } from "@features/report/ui/sections/B
  *     black -> grey -> transparent toward the paywall card.
  *
  * The security boundary moved with it. It is no longer "the pixels are destroyed";
- * it is "the server only sent four rows per column" (BELIEFS_TEASER_ROWS in
- * app/api/report/route.ts). These tests pin the client half: the tease renders the
- * rows it was given, sharp, with the fade — and it renders nothing it was not given.
+ * it is "the server only sent the first six rows per column" (BELIEFS_TEASER_ROWS
+ * in app/api/report/route.ts — three until 2026-08-19, when three made the chapter
+ * look as though it held almost nothing). These tests pin the client half: the
+ * tease renders the rows it was given, sharp at the top with the fade below — and
+ * it renders nothing it was not given.
  */
 const lockedCopy: BeliefsCopy = {
   "learn.eyebrow": "What you will learn",
   "learn.body": "In this chapter you will learn where your beliefs came from.",
-  // What a locked client now receives: the first four rows of each column.
+  // What a locked client now receives: the first six rows of each column (two
+  // shown here — the count itself is asserted against the route below).
   keep: ["Sex is a way we care for each other", "Closeness makes me want to give"],
   loosen: [
     { belief: "My needs should come second", shift: "My pleasure matters too" },
@@ -87,5 +92,31 @@ describe("BeliefsSection — locked tease", () => {
   it("still renders the paywall overlay over the tease", () => {
     const { container } = renderLocked();
     expect(container.querySelector('[class*="premium-overlay"]')).not.toBeNull();
+  });
+});
+
+describe("BeliefsSection — how much the server ships", () => {
+  it("sends six rows per column to a locked client, and all of them to a paid one", () => {
+    // Three rows cleared the paywall card by so little that the chapter read as
+    // empty. Six shows the volume; the mask (percentages of each column's own
+    // height) keeps the READABLE band at the first two rows either way.
+    const route = readFileSync(join(process.cwd(), "app/api/report/route.ts"), "utf8");
+    expect(route).toMatch(/const BELIEFS_TEASER_ROWS = 6;/);
+    // The withheld rows still never leave the server: 9 keeps and 10 loosens only
+    // when unlocked.
+    expect(route).toMatch(/length: beliefsUnlocked \? 9 : BELIEFS_TEASER_ROWS/);
+    expect(route).toMatch(/length: beliefsUnlocked \? 10 : BELIEFS_TEASER_ROWS/);
+  });
+
+  it("fades on percentages of the column, so the readable band doesn't grow with the row count", () => {
+    const css = readFileSync(join(process.cwd(), "app/globals.css"), "utf8");
+    const rule = css.slice(
+      css.indexOf(".report-beliefs__preview-fade--tease .report-beliefs__list")
+    );
+    const body = rule.slice(0, rule.indexOf("}"));
+    // Solid through roughly the first third, gone before the column ends.
+    expect(body).toMatch(/rgba\(0, 0, 0, 1\) 31%/);
+    expect(body).toMatch(/rgba\(0, 0, 0, 0\) 92%/);
+    expect(body).not.toMatch(/\dpx/);
   });
 });

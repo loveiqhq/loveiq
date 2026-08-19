@@ -26657,26 +26657,29 @@ input.autofill-dark:-internal-autofill-previewed {
    card's, not the content's. A percentage ramp there landed the fade far below a
    short teaser — every row sat in the solid band, so nothing faded — and when the
    full list was shipped it landed so late that everything stayed readable. Sizing
-   it to each list makes the stops mean rows: solid through the first two, the third
+   it to each list makes the stops mean rows: solid through the first two, the rest
    dissolving to nothing.
 
-   Per list rather than per grid on purpose: a keep row is 51px and a loosen row
-   111px, so one shared ramp over the grid would fade two loosens against four
-   keeps. */
+   Percentages, not pixels, and per list rather than per grid: a keep row is 51px
+   and a loosen row 111px, so one shared px ramp would fade two loosens against
+   four keeps. Percentages of each list's own height mean the stops count ROWS, so
+   the readable band stayed the first two when the server went from three rows per
+   column to six (Eman, 2026-08-19) — the extra rows show how much the chapter
+   holds without handing any of it over. */
 .report-beliefs__preview-fade--tease .report-beliefs__list {
   -webkit-mask-image: linear-gradient(
     to bottom,
     rgba(0, 0, 0, 1) 0%,
-    rgba(0, 0, 0, 1) 62%,
-    rgba(0, 0, 0, 0.28) 84%,
-    rgba(0, 0, 0, 0) 100%
+    rgba(0, 0, 0, 1) 31%,
+    rgba(0, 0, 0, 0.3) 58%,
+    rgba(0, 0, 0, 0) 92%
   );
   mask-image: linear-gradient(
     to bottom,
     rgba(0, 0, 0, 1) 0%,
-    rgba(0, 0, 0, 1) 62%,
-    rgba(0, 0, 0, 0.28) 84%,
-    rgba(0, 0, 0, 0) 100%
+    rgba(0, 0, 0, 1) 31%,
+    rgba(0, 0, 0, 0.3) 58%,
+    rgba(0, 0, 0, 0) 92%
   );
 }
 
