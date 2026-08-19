@@ -26819,18 +26819,54 @@ input.autofill-dark:-internal-autofill-previewed {
   padding-bottom: clamp(30px, 3.2vw, 46px);
 }
 
-/* Mobile: the paywall card is nearly the full width of the box, so nothing showed
+/* THE CARD SITS BELOW WHAT CAN BE READ
+   The paywall card was centred in the box, which put its top edge at 32px — above
+   the live rows. The reader could see there was text there and could not finish it:
+   measured, the card covered 202px of readable rows at 1440, 168 at 1100 and 223 at
+   900. It now starts below them.
+
+   A fixed offset rather than a computed one, because the card is `position:
+   absolute` and cannot know the rows' height. 300px clears the worst case: the live
+   band is tallest where the columns are narrowest before they stack (255px at
+   900px wide), plus a gap. Wider viewports get a little more clearance, which shows
+   more of the blurred rows above the card rather than empty space. */
+@media (min-width: 769px) {
+  .report-beliefs__preview--locked > .report-premium-overlay {
+    align-items: flex-start;
+    padding-top: 300px;
+  }
+}
+
+/* Mobile: the paywall card is nearly the full width of the box, so nothing shows
    through beside it — only the column label and a sliver of rule. On desktop the
    card is narrower than the box and the tease reads to its left and right; on a
    phone the tease has to live ABOVE it. Extra height plus bottom-aligning the card
-   opens roughly four rows of clear space at the top. */
+   opens the live rows at the top. */
 @media (max-width: 768px) {
   /* The height goes on the OVERLAY, not the preview. The overlay is the in-flow
      child, so it is what sizes the box — putting min-height on the preview just
      left dead space under a content-sized overlay, and `flex-end` had nothing to
-     push against. */
+     push against.
+
+     The columns STACK here, so both sets of live rows have to clear the card, not
+     just the first: keep's end at 137px but loosen's end at 830px, and at 840px of
+     box the card started at 268px — straight over the second column's readable rows.
+     The box is sized so the bottom-aligned card begins under them: loosen's live
+     rows end at 830 (390px wide) and the card is 560 tall, so 1440 puts its top at
+     880. Deep, but the sticky "Unlock full report" bar is on screen the whole way
+     down, so the offer is never out of reach — and everything scrolled past is real
+     blurred content rather than empty space. */
   .report-beliefs__preview--locked > .report-premium-overlay {
-    min-height: 840px;
+    min-height: 1440px;
     align-items: flex-end;
+  }
+}
+
+/* Below 360 the card grows to 697px and the live rows run to 908, so 1440 would put
+   it back over them. Its own breakpoint rather than one value for every phone, which
+   would add ~200px of scroll on the common widths for the sake of the narrowest. */
+@media (max-width: 359px) {
+  .report-beliefs__preview--locked > .report-premium-overlay {
+    min-height: 1650px;
   }
 }

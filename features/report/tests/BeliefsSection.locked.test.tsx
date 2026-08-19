@@ -181,6 +181,33 @@ describe("BeliefsSection — how much the server ships", () => {
     expect(graded).toContain("rgba(0, 0, 0, 1) 100%");
   });
 
+  it("keeps the paywall card below every row the reader can actually read", () => {
+    // Centred, the card's top edge sat at 32px — above the live rows — so the reader
+    // could see there was text and not finish it: measured, it covered 202px of
+    // readable rows at 1440, 168 at 1100, 223 at 900.
+    const css = readFileSync(join(process.cwd(), "app/globals.css"), "utf8");
+    const OVERLAY = ".report-beliefs__preview--locked > .report-premium-overlay";
+    const rules = [
+      ...css.matchAll(
+        new RegExp(`${OVERLAY.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} \\{([^}]*)\\}`, "g")
+      ),
+    ].map((m) => m[1]!);
+    expect(rules.length, "the card's placement rules are gone").toBeGreaterThanOrEqual(3);
+
+    // Desktop: pushed down past the live band.
+    const desktop = rules.find((r) => r.includes("padding-top"))!;
+    expect(desktop).toContain("align-items: flex-start");
+    expect(Number(desktop.match(/padding-top: (\d+)px/)![1])).toBeGreaterThanOrEqual(280);
+
+    // Mobile: the columns stack, so the box has to clear BOTH sets of live rows —
+    // the second column's end at 830px, and the card is 560 tall.
+    const mobileHeights = rules
+      .map((r) => r.match(/min-height: (\d+)px/))
+      .filter(Boolean)
+      .map((m) => Number(m![1]));
+    expect(Math.min(...mobileHeights)).toBeGreaterThanOrEqual(1400);
+  });
+
   it("adds no CSS filter of its own, and no mask anywhere", () => {
     // The rasters arrive blurred and quarter-scaled; a filter on top would make this
     // chapter visibly softer than every other locked surface. And nothing fades to
