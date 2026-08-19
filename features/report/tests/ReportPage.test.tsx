@@ -17,9 +17,10 @@ const mockGetReportSessionId = vi.fn();
 vi.mock("@features/survey/ui/hooks/surveySession", () => ({
   getReportSessionId: () => mockGetReportSessionId(),
   getReportPaywallDeadline: () => 1_700_000_000_000,
+  peekReportPaywallDeadline: () => null,
   setReportNurturePromo: () => {},
   setReportPricingSessionId: () => {},
-  REPORT_PAYWALL_COUNTDOWN_MS: 120_000,
+  REPORT_PAYWALL_COUNTDOWN_MS: 180_000,
 }));
 
 const mockUseReportData = vi.fn();

@@ -68,8 +68,43 @@ describe("plans pop-up trigger", () => {
   });
 
   it("fires at most once, and not while the modal is already open", () => {
-    expect(SOURCE).toMatch(/if \(scrollTeaserFiredRef\.current\) return;/);
+    expect(SOURCE).toMatch(
+      /if \(scrollTeaserFiredRef\.current \|\| plansOfferedRef\.current\) return;/
+    );
     expect(SOURCE).toMatch(/if \(!isPricingModalOpenRef\.current\)/);
+  });
+
+  it("cannot re-offer itself after the reader dismisses it", () => {
+    // `scrollTeaserFiredRef` is reset by the effect's cleanup, so a data refetch or
+    // view switch re-arms the trigger — and by then the reader is usually BELOW the
+    // chapter, which the "already passed it" check reads as an arrival. A ref that
+    // survives cleanup is what keeps the offer to one per report session.
+    expect(SOURCE).toMatch(/plansOfferedRef\.current = true;/);
+    const cleanup = SOURCE.slice(SOURCE.indexOf("scrollTeaserFiredRef.current = false"));
+    expect(cleanup).not.toMatch(/plansOfferedRef\.current = false/);
+  });
+
+  it("starts the urgency countdown on arrival, not on page load", () => {
+    // Reading the free chapters for ten minutes used to burn the clock to 00:00
+    // before the offer had been made: the deadline was created in a mount effect.
+    // Mount now only PEEKS (an entry already in storage = this tab has seen the
+    // paywall); `openPlans` arms it, before the settle beat so the chapter's own
+    // locked card and the pop-up show the same number.
+    expect(SOURCE).toMatch(/const running = peekReportPaywallDeadline\(/);
+    const openPlans = SOURCE.slice(SOURCE.indexOf("function openPlans()"));
+    const armIdx = openPlans.indexOf("armPaywallCountdown()");
+    const timerIdx = openPlans.indexOf("scrollTeaserTimerRef.current = setTimeout");
+    expect(armIdx, "openPlans no longer arms the countdown").toBeGreaterThan(-1);
+    expect(armIdx).toBeLessThan(timerIdx);
+  });
+
+  it("also arms the countdown for every other route to the paywall", () => {
+    // Forced arm on load, ?offer=1 deep-link, 24h ladder auto-open, manual
+    // "Unlock" CTAs — one effect covers them all, so no open path can show a
+    // countdown that was never anchored.
+    expect(SOURCE).toMatch(
+      /if \(!isPricingModalOpen && !isScrollTeaserOpen\) return;[\s\S]{0,220}?armPaywallCountdown\(\)/
+    );
   });
 
   it("keeps the forced-paywall arm opening immediately", () => {

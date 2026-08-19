@@ -6,7 +6,7 @@ import { REPORT_PAYWALL_COUNTDOWN_MS } from "@features/survey/ui/hooks/surveySes
 export type CountdownValue = { mm: string; ss: string; expired: boolean };
 
 /**
- * Single source of truth for the report paywall's 2-minute urgency countdown.
+ * Single source of truth for the report paywall's 3-minute urgency countdown.
  * One interval per mounted modal feeds BOTH the big digit tiles (in the pricing
  * card) and the small "Expires" pill (in the sticky bar), so they never drift
  * apart. Recomputes from the absolute `deadline` each tick (drift-free) and
@@ -14,7 +14,8 @@ export type CountdownValue = { mm: string; ss: string; expired: boolean };
  * urgency UI.
  *
  * `deadline` is an epoch-ms value resolved once per report session (persisted
- * in sessionStorage by the caller) so it survives view switches and reopening.
+ * in sessionStorage by the caller, armed on reaching the first paywalled chapter)
+ * so it survives view switches and reopening.
  * `active` gates the interval — pass the modal's `open` so the timer never
  * ticks (or leaks) while the modal is closed.
  */
@@ -66,7 +67,12 @@ export function usePaywallCountdown(
 const PaywallCountdownContext = createContext<CountdownValue | null>(null);
 
 export const PaywallCountdownProvider: FC<{
-  /** Resolved epoch-ms deadline; falls back to a fresh 2-minute window when null. */
+  /**
+   * Resolved epoch-ms deadline; falls back to a fresh window when null — i.e.
+   * before the clock is armed (it arms on reaching the first paywalled chapter),
+   * which is above every countdown surface in the report, so no reader sees the
+   * fallback tick and then re-anchor.
+   */
   deadline: number | null;
   /** Gate the single interval (pass false when no countdown UI is on the page). */
   active: boolean;

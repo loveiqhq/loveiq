@@ -20,7 +20,7 @@ import {
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import TrustpilotReviews from "@shared/ui/trustpilot/TrustpilotReviews";
 import PaywallTestimonials from "./PaywallTestimonials";
-import { usePaywallCountdown, PaywallCountdownDigits } from "./PaywallCountdown";
+import { usePaywallCountdownValue, PaywallCountdownDigits } from "./PaywallCountdown";
 import { REPORT_PAYWALL_COUNTDOWN_MS } from "@features/survey/ui/hooks/surveySession";
 import { isTrustpilotEnabled } from "@shared/ui/trustpilot/config";
 import { isPlanOwnedForArchetype, type ReportAccessPlan } from "@features/report/server/access";
@@ -231,12 +231,15 @@ const ReportPricingModal: FC<Props> = ({
         : `Unlock your complete ${archetype} report \u2014 attachment style, core insecurities, confidence, love language, arousal, desire drivers, fantasies, and more.`;
   const planCards = REPORT_PURCHASE_PLANS;
 
-  // Urgency countdown (Figma 8442-16168) — same drift-free hook as the locked-
-  // section cards, gated on `open` so it never ticks while hidden.
+  // Urgency countdown (Figma 8442-16168). Reads the SHARED provider value, like
+  // the locked-section cards and the sticky pill, rather than running a second
+  // interval of its own — two intervals drifted up to a second apart, so the
+  // modal's tiles and the card behind it could show 02:57 and 02:58. Falls back to
+  // a local ticker only when there is no provider (isolated unit tests).
   const [fallbackDeadline] = useState(() =>
     typeof window === "undefined" ? 0 : Date.now() + REPORT_PAYWALL_COUNTDOWN_MS
   );
-  const { mm, ss } = usePaywallCountdown(offerDeadline ?? fallbackDeadline, open);
+  const { mm, ss } = usePaywallCountdownValue(offerDeadline ?? fallbackDeadline);
   // Cheapest live price — prefixes the "Lifetime value" why-card ("€9.99, one time…").
   const cheapestPriceLabel = quotes?.full_report
     ? formatReportPurchasePrice(quotes.full_report.currentPriceCents)

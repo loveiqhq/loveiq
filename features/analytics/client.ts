@@ -490,7 +490,7 @@ export const trackBeginCheckout = (
 
 /**
  * Fires once per report the first time a LOCKED CHAPTER CARD renders a live
- * price + 2-minute countdown (the `PremiumOverlay` surface — distinct from the
+ * price + urgency countdown (the `PremiumOverlay` surface — distinct from the
  * pricing modal's `price_shown`). Lets the funnel measure the inline card as
  * its own price-exposure surface, tagged `surface: "locked_chapter_card"`.
  * Caller dedupes to one fire per report load.
@@ -505,7 +505,7 @@ export const trackLockedCardPriceShown = (params: PriceShownParams) => {
 };
 
 /**
- * Fires once per report when the shared 2-minute urgency countdown reaches
+ * Fires once per report when the shared urgency countdown reaches
  * 0:00 *during the session* (the same deadline drives the modal + every locked
  * card). Powers "did the timer expire before they bought?" urgency analysis.
  * Not fired for returning visitors who land after the deadline already passed.

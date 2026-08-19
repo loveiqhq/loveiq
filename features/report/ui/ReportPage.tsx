@@ -44,6 +44,7 @@ import ShareVerifyGate from "./ShareVerifyGate";
 import SharedViewerBanner from "./SharedViewerBanner";
 import {
   getReportPaywallDeadline,
+  peekReportPaywallDeadline,
   getReportSessionId,
   setReportNurturePromo,
   setReportPricingSessionId,
@@ -2000,6 +2001,12 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   const autoOpenedOfferRef = useRef(false);
   const [isScrollTeaserOpen, setIsScrollTeaserOpen] = useState(false);
   const scrollTeaserFiredRef = useRef(false);
+  // Survives the trigger effect's cleanup, unlike `scrollTeaserFiredRef`: the
+  // plans pop-up is offered ONCE per report session. Without it, any re-run of
+  // that effect (a data refetch, a view switch) re-arms the trigger, and the
+  // reader is below the chapter by then — so the "already passed it" check would
+  // re-offer a pop-up they had already dismissed.
+  const plansOfferedRef = useRef(false);
   const scrollTeaserTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isPricingModalOpenRef = useRef(false);
 
@@ -2051,27 +2058,44 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     [data?.forcedPaywallEnabled, devArm, fromEmail, resolvedReportToken]
   );
 
-  // Resolve the paywall countdown deadline once per report session (client-only;
-  // reads/creates a sessionStorage entry keyed by token/session). Kept out of the
-  // render path so it can't cause a hydration mismatch. The 2-minute window then
-  // survives view switches + reopening the modal within the tab.
+  // The paywall countdown deadline (client-only; a sessionStorage entry keyed by
+  // token/session, kept out of the render path so it can't cause a hydration
+  // mismatch). The window survives view switches + reopening the modal within the
+  // tab.
+  //
+  // It is ARMED on reaching the first paywalled chapter — the same moment that
+  // arms the plans pop-up (Eman, 2026-08-19) — not on page load. Reading the
+  // report for ten minutes before getting there no longer burns the clock down to
+  // 00:00 before the offer has been made. On mount we only PEEK: an entry already
+  // in storage means this tab has seen the paywall, so that clock keeps running.
   const [offerDeadline, setOfferDeadline] = useState<number | undefined>(undefined);
   const offerDeadlineSetRef = useRef(false);
   useEffect(() => {
-    // Resolve the deadline exactly once, as soon as a stable storage key exists
-    // (token or session). Re-resolving when `ownerToken` arrives later for
-    // session-based access would key a different sessionStorage entry and make
-    // the visible timer jump — so we lock it in on the first stable key.
+    // Lock in on the first stable storage key (token or session). Re-resolving
+    // when `ownerToken` arrives later for session-based access would key a
+    // different sessionStorage entry and make the visible timer jump.
+    if (offerDeadlineSetRef.current) return;
+    if (!resolvedReportToken && !sessionId) return;
+    const running = peekReportPaywallDeadline({ token: resolvedReportToken, sessionId });
+    if (running == null) return;
+    offerDeadlineSetRef.current = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- client-only sessionStorage read, fires once
+    setOfferDeadline(running);
+  }, [resolvedReportToken, sessionId]);
+
+  // Start the clock. Idempotent: the first caller creates the deadline, everyone
+  // after reads the same one, so the number in the pop-up, the sticky bar and every
+  // locked chapter card always agree.
+  const armPaywallCountdown = useCallback(() => {
     if (offerDeadlineSetRef.current) return;
     if (!resolvedReportToken && !sessionId) return;
     offerDeadlineSetRef.current = true;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- client-only sessionStorage read, fires once
     setOfferDeadline(getReportPaywallDeadline({ token: resolvedReportToken, sessionId }));
   }, [resolvedReportToken, sessionId]);
 
-  // Fire one "countdown expired" event when the shared 2-minute urgency timer
-  // elapses DURING this session — only if time actually remained at resolve and
-  // the report is still locked. Returning visitors who land after it already
+  // Fire one "countdown expired" event when the shared urgency timer
+  // elapses DURING this session — only if time actually remained when it was
+  // armed and the report is still locked. Returning visitors who land after it already
   // expired never schedule it; a purchase mid-session cancels it (dep re-run).
   const countdownExpiredFiredRef = useRef(false);
   useEffect(() => {
@@ -2201,8 +2225,14 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     // chapter they arrived at first, and the modal itself then fades in slowly
     // (see the `.is-visible` entrance transitions in globals.css).
     function openPlans() {
-      if (scrollTeaserFiredRef.current) return;
+      if (scrollTeaserFiredRef.current || plansOfferedRef.current) return;
       scrollTeaserFiredRef.current = true;
+      plansOfferedRef.current = true;
+      // Start the countdown NOW, on arrival — not after the 1.6s settle beat and
+      // not when the modal mounts. The locked chapter's own card shows the same
+      // countdown, and the reader sees that card as they arrive, so arming here is
+      // what keeps the two numbers identical.
+      armPaywallCountdown();
       scrollTeaserTimerRef.current = setTimeout(() => {
         if (!isPricingModalOpenRef.current) {
           // Pricing 2.0: the scroll pop-up shows the NEW 3-tier plans modal
@@ -2259,15 +2289,27 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     // Jumping from the sidebar / mobile chapter nav / a #hash link straight to a
     // chapter BELOW this one never makes it intersect, so the observer alone
     // would never fire and the reader would never see the offer. Passing the
-    // chapter counts as reaching it, measured on the same three-quarter line, so
-    // this check covers the jump. rAF-throttled, and both paths funnel through
-    // the same one-shot `openPlans`.
+    // chapter counts as reaching it, measured on the same three-quarter line the
+    // observer's inset uses.
+    const hasReachedTrigger = () => trigger.getBoundingClientRect().top < window.innerHeight * 0.75;
+
+    // Landing BELOW the chapter — a deep link, or the browser restoring a scroll
+    // position on reload — means it was passed before any of this existed. Checked
+    // once here so such a reader gets an anchored countdown rather than the
+    // provider's unanchored fallback ticking in every locked chapter card until
+    // their first scroll. It cannot misfire at the top of the report: everything
+    // above this chapter is far taller than three quarters of a viewport.
+    if (hasReachedTrigger()) {
+      openPlans();
+    }
+
+    // rAF-throttled; both paths funnel through the same one-shot `openPlans`.
     let rafId: number | null = null;
     const handleScroll = () => {
       if (rafId !== null) return;
       rafId = requestAnimationFrame(() => {
         rafId = null;
-        if (trigger.getBoundingClientRect().top >= window.innerHeight * 0.75) return;
+        if (!hasReachedTrigger()) return;
         stop();
         openPlans();
       });
@@ -2291,7 +2333,25 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       }
       scrollTeaserFiredRef.current = false;
     };
-  }, [accessPlan, data, viewMode, forcedPaywallCohort, shouldShowOfferVariant]);
+  }, [
+    accessPlan,
+    armPaywallCountdown,
+    data,
+    viewMode,
+    forcedPaywallCohort,
+    shouldShowOfferVariant,
+  ]);
+
+  // Any other route to the paywall also starts the clock: the forced arm's
+  // on-load wall, an ?offer=1 email deep-link, the 24h ladder auto-open, and every
+  // manual "Unlock" CTA. Whichever comes first arms it; the rest read the same
+  // deadline. Without this a reader who clicked a locked chapter before reaching
+  // Typical Beliefs would see a countdown that was never anchored.
+  useEffect(() => {
+    if (!isPricingModalOpen && !isScrollTeaserOpen) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot, guarded by offerDeadlineSetRef: arms on the first paywall open and never again
+    armPaywallCountdown();
+  }, [isPricingModalOpen, isScrollTeaserOpen, armPaywallCountdown]);
 
   // Experiment exposure — fire once when this report is eligible for the
   // forced-paywall test (locked + owner view). Both arms, for arm analysis.
@@ -2531,11 +2591,17 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   // One shared countdown ticker for the whole locked report — drives the locked
   // chapter cards AND the pricing modal (it reads the value through the portal
   // via React context) from a single interval, so every timer shows the exact
-  // same MM:SS. Active while the report isn't fully unlocked.
+  // same MM:SS.
   const reportLocked = data.accessPlan !== "full_report" && data.accessPlan !== "all_reports";
+  // Active while the report isn't fully unlocked, and additionally whenever a
+  // pricing surface is open. A `full_report` customer upgrading to `all_reports`
+  // (locked archetype tile -> pricing modal) is NOT "locked", so keying purely on
+  // that would leave the modal's own tiles frozen now that it reads this shared
+  // value instead of running a second interval.
+  const countdownActive = reportLocked || isPricingModalOpen || isScrollTeaserOpen;
 
   return (
-    <PaywallCountdownProvider deadline={offerDeadline ?? null} active={reportLocked}>
+    <PaywallCountdownProvider deadline={offerDeadline ?? null} active={countdownActive}>
       <ReportExperience
         key={`${token ?? "browser"}:${sessionId ?? "anon"}`}
         devParam={devParam}
