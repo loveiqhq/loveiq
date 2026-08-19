@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FC } from "react";
+import LockedPreviewImage from "./LockedPreviewImage";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import { renderEduPara } from "./eduPara";
@@ -142,15 +143,21 @@ const BeliefsSection: FC<Props> = ({
                 per-archetype keep/loosen grid is withheld server-side and the
                 PremiumOverlay anchors over the blurred stand-in. */}
             <div className="report-beliefs__preview report-beliefs__preview--locked">
-              {/* The REAL beliefs, sharp and readable, fading out downward — which
-                  is what Figma's locked frame draws. Not blurred: the frame keeps
-                  the top rows crisp black and lets them go grey then transparent
-                  toward the paywall card.
+              {/* Two real beliefs per column, sharp — Figma's locked frame keeps this
+                  chapter's top rows crisp rather than blurring them — and the rest
+                  of each column as PIXELS.
 
-                  The server ships only the first four rows per column
-                  (BELIEFS_TEASER_ROWS), so the fade is a real boundary and not a
-                  CSS trick over the whole list — strip the opacity in devtools and
-                  there is nothing further to read. */}
+                  Those pixels are `beliefs-keep` / `beliefs-loosen`: build-time
+                  rasters of the real remaining rows, blurred and quarter-scaled
+                  before shipping (see LockedPreviewImage). That is what lets the
+                  chapter stand at its true nineteen-row length while only two
+                  beliefs per column are in the payload — strip every filter in
+                  devtools and there is nothing past row two to read.
+
+                  One image per column, not one for the section: the columns sit
+                  side by side but a keep row is 51px against a loosen row's 111px,
+                  so a single raster under the sharp rows would line up with one
+                  column and not the other. */}
               <div className="report-beliefs__preview-fade report-beliefs__preview-fade--tease">
                 <div className="report-beliefs__cols">
                   {keep.length > 0 ? (
@@ -162,6 +169,7 @@ const BeliefsSection: FC<Props> = ({
                         {keep.map((text, i) => (
                           <KeepItem key={i} text={text} />
                         ))}
+                        <LockedPreviewImage name="beliefs-keep" />
                       </div>
                     </div>
                   ) : null}
@@ -175,6 +183,7 @@ const BeliefsSection: FC<Props> = ({
                         {loosen.map((item, i) => (
                           <LoosenItem key={i} belief={item.belief as string} shift={item.shift} />
                         ))}
+                        <LockedPreviewImage name="beliefs-loosen" />
                       </div>
                     </div>
                   ) : null}

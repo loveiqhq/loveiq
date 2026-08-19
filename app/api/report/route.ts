@@ -711,26 +711,34 @@ export async function GET(request: Request) {
      *
      * Shipping the whole list and fading it made the entire chapter legible — the
      * fade is gentle enough that all nine keeps and ten loosens could be read, so
-     * there was nothing left to buy. SIX per column is the tease (Eman,
-     * 2026-08-19; it was three): at three the two columns barely cleared the
-     * paywall card and the chapter looked as though it held almost nothing, which
-     * is the opposite of what a locked chapter should say. Six rows show the
-     * volume; how much of it is READABLE is set by the mask, which fades on
-     * percentages of each column's own height, so the readable band stays the
-     * first two rows regardless of how many are shipped.
+     * there was nothing left to buy. FOUR per column is the tease as of 2026-08-19,
+     * because the rows past them no longer come from here at all: the column
+     * carries `beliefs-keep` / `beliefs-loosen`, build-time rasters of the real
+     * remaining rows whose pixels were blurred and quarter-scaled before they ever
+     * left the build machine (see scripts/generate-locked-previews.mjs). The
+     * chapter therefore stands at its true length — nine keeps, ten loosens — with
+     * only four beliefs per column actually in the payload. Four rather than two so
+     * the blur can COME ON GRADUALLY in live text (rows three and four carry 1.2px
+     * and 2.6px) and the raster picks up where heavy blur already looks natural;
+     * starting the image at row three put a visible seam between sharp text and a
+     * fully blurred block.
      *
-     * This is the real boundary: strip the mask in devtools and there is simply
-     * nothing past row six in the DOM — the remaining three keeps and four loosens
-     * never leave the server. `body.p1`, the per-archetype closing paragraph, stays
-     * withheld as well.
+     * `keepRows` in COLUMN_CAPTURES must match this number, or the two sharp rows
+     * and the image will either double up or skip a row.
+     *
+     * This is the real boundary: strip every filter in devtools and there is
+     * nothing past row two in the DOM. `body.p1`, the per-archetype closing
+     * paragraph, stays withheld as well.
      */
-    const BELIEFS_TEASER_ROWS = 6;
+    const BELIEFS_TEASER_ROWS = 4;
+    const BELIEFS_KEEP_ROWS = 9;
+    const BELIEFS_LOOSEN_ROWS = 10;
     const beliefsKeep: (string | null)[] = Array.from(
-      { length: beliefsUnlocked ? 9 : BELIEFS_TEASER_ROWS },
+      { length: beliefsUnlocked ? BELIEFS_KEEP_ROWS : BELIEFS_TEASER_ROWS },
       (_, i) => beliefsSection[`keep.${i + 1}`] ?? null
     );
     const beliefsLoosen = Array.from(
-      { length: beliefsUnlocked ? 10 : BELIEFS_TEASER_ROWS },
+      { length: beliefsUnlocked ? BELIEFS_LOOSEN_ROWS : BELIEFS_TEASER_ROWS },
       (_, i) => ({
         belief: beliefsSection[`loosen.${i + 1}.belief`] ?? null,
         shift: beliefsSection[`loosen.${i + 1}.shift`] ?? null,

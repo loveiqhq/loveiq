@@ -15,12 +15,15 @@ import { describe, expect, it } from "vitest";
  * Rendering all sixteen sections would need sixteen prop fixtures, so this
  * checks the source and the assets directly.
  *
- * BeliefsSection is deliberately NOT in this registry. Figma's locked frame for
- * that chapter does not blur it — it shows the real rows sharp at the top, fading
- * out toward the paywall card — so it teases server-trimmed copy instead of a
- * raster. See BeliefsSection.locked.test.tsx. Its generated images are therefore
- * unreferenced, which the orphan check below allows for by name.
+ * BeliefsSection is not in the registry below because its shape is different: it
+ * shows its first two beliefs as LIVE text (Figma's locked frame keeps that
+ * chapter's top rows crisp) and then one raster PER COLUMN for the rows past them
+ * — a keep row is 51px against a loosen row's 111px, so a single whole-chapter
+ * raster could not line up with both. It also keeps its own wrapper rather than
+ * `--image`, since only part of the column is pixels. See
+ * BeliefsSection.locked.test.tsx.
  */
+const BELIEFS_COLUMN_PREVIEWS = ["beliefs-keep", "beliefs-loosen"];
 const SECTIONS_DIR = join(process.cwd(), "features/report/ui/sections");
 const PREVIEW_DIR = join(process.cwd(), "public/report-previews");
 
@@ -71,13 +74,25 @@ describe("locked preview images", () => {
     const referenced = new Set(
       Object.values(SECTIONS).flatMap((n) => [`${n}-desktop.jpg`, `${n}-mobile.jpg`])
     );
-    // Beliefs switched to a copy-based tease; its rasters stay on disk so the
-    // generator's section list and the wiring can diverge without failing here.
-    referenced.add("beliefs-desktop.jpg");
-    referenced.add("beliefs-mobile.jpg");
+    for (const name of BELIEFS_COLUMN_PREVIEWS) {
+      referenced.add(`${name}-desktop.jpg`);
+      referenced.add(`${name}-mobile.jpg`);
+    }
     const orphans = readdirSync(PREVIEW_DIR).filter(
       (f) => f.endsWith(".jpg") && !referenced.has(f)
     );
     expect(orphans, "unreferenced preview images — delete them or wire them up").toEqual([]);
   });
+
+  it.each(BELIEFS_COLUMN_PREVIEWS)("BeliefsSection renders %s", (name) => {
+    const src = readFileSync(join(SECTIONS_DIR, "BeliefsSection.tsx"), "utf8");
+    expect(src).toContain(`<LockedPreviewImage name="${name}" />`);
+  });
+
+  it.each(BELIEFS_COLUMN_PREVIEWS.flatMap((n) => [`${n}-desktop.jpg`, `${n}-mobile.jpg`]))(
+    "%s exists and is not empty",
+    (asset) => {
+      expect(statSync(join(PREVIEW_DIR, asset)).size).toBeGreaterThan(1000);
+    }
+  );
 });

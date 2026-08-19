@@ -59,7 +59,10 @@ const CAPTURE_SCALE = 0.25;
  * needed when a new premium chapter ships.
  */
 const SECTION_IDS = [
-  "typical_beliefs",
+  // "typical_beliefs" is captured per COLUMN instead (see COLUMN_CAPTURES): the
+  // chapter shows its first two beliefs as live text, so a whole-chapter raster
+  // would repeat them and could not line up with two columns of different row
+  // heights.
   "typical_arousal_accelerators_turn_ons_of_the_core_archetype",
   "core_insecurities",
   "confidence_level",
@@ -75,6 +78,36 @@ const SECTION_IDS = [
   "challenges_in_partnership",
   "typical_growth_potentials_for_the_core_archetype",
   "recommendations",
+];
+
+/**
+ * Extra captures that are NOT a whole card.
+ *
+ * Typical Beliefs shows the first two beliefs of each column as real, sharp text
+ * and everything past them as pixels. One image cannot do that: the two columns
+ * sit side by side but a keep row is 51px against a loosen row's 111px, so a
+ * single raster placed under the sharp rows would line up with one column and not
+ * the other. Each column therefore gets its own image, captured with its first two
+ * rows hidden, and the component stacks it directly under that column's sharp rows.
+ *
+ * `keepRows` is how many rows the section ships as live text (BELIEFS_TEASER_ROWS
+ * in app/api/report/route.ts) — the capture hides exactly those so nothing appears
+ * twice. Four of them: the last two are blurred in CSS so the softness ramps up
+ * before the image begins, which is what stops the seam from showing.
+ */
+const COLUMN_CAPTURES = [
+  {
+    sectionId: "typical_beliefs",
+    selector: ".report-beliefs__col:not(.report-beliefs__col--loosen-col) .report-beliefs__list",
+    name: "beliefs-keep",
+    keepRows: 4,
+  },
+  {
+    sectionId: "typical_beliefs",
+    selector: ".report-beliefs__col--loosen-col .report-beliefs__list",
+    name: "beliefs-loosen",
+    keepRows: 4,
+  },
 ];
 
 const VIEWPORTS = [
@@ -110,6 +143,41 @@ async function settle(page) {
       await new Promise((r) => setTimeout(r, 90));
     }
     window.scrollTo(0, 0);
+  });
+}
+
+/**
+ * Hides the page's fixed chrome for the whole run.
+ *
+ * An element screenshot captures the PAGE PIXELS inside the element's box, so
+ * anything floating over that box lands in the file. Playwright scrolls the target
+ * to the top of the viewport, which is exactly where the mobile topbar and chapter
+ * pill live — every mobile raster shipped with a blurred "LoveIQ Report" header
+ * baked into its top edge, and on a short capture (a beliefs column) the header was
+ * most of the image.
+ *
+ * Only `position: fixed` is hidden. Those are out of flow, so removing them cannot
+ * move the content being captured; sticky elements are in flow and hiding them
+ * would shift the very thing we are shooting.
+ */
+async function hideFixedChrome(page) {
+  return page.evaluate(() => {
+    const hidden = [];
+    // The dev-server overlay lives in a shadow root, so the sweep below cannot see
+    // it — and it was rasterised into the bottom-left corner of every image.
+    for (const portal of document.querySelectorAll("nextjs-portal")) {
+      if (portal instanceof HTMLElement) {
+        portal.style.setProperty("display", "none", "important");
+        hidden.push("nextjs-portal");
+      }
+    }
+    for (const el of document.querySelectorAll("body *")) {
+      if (!(el instanceof HTMLElement)) continue;
+      if (getComputedStyle(el).position !== "fixed") continue;
+      el.style.setProperty("display", "none", "important");
+      hidden.push(el.className.toString().split(" ")[0] || el.tagName.toLowerCase());
+    }
+    return hidden;
   });
 }
 
@@ -310,6 +378,68 @@ async function captureSection(page, sectionId, viewportName) {
   };
 }
 
+/**
+ * Captures ONE element (a column's list) with its first `keepRows` children hidden,
+ * blurred the same way `captureSection` does.
+ */
+async function captureColumn(page, { sectionId, selector, name, keepRows }, viewportName) {
+  await page.locator(`#${sectionId}`).scrollIntoViewIfNeeded();
+  await page.waitForTimeout(REVEAL_SETTLE_MS);
+
+  const prepared = await page.evaluate(
+    ({ sectionId, selector, keepRows, blur }) => {
+      const section = document.getElementById(sectionId);
+      if (!section) return { error: "section not found" };
+      const list = section.querySelector(selector);
+      if (!list) return { error: `no element for "${selector}"` };
+
+      const rows = Array.from(list.children);
+      if (rows.length <= keepRows) return { error: `only ${rows.length} rows` };
+      for (const row of rows.slice(0, keepRows)) row.style.display = "none";
+
+      list.setAttribute("data-preview-capture", "");
+      list.style.filter = `blur(${blur}px)`;
+      const r = list.getBoundingClientRect();
+      return { width: r.width, height: r.height, rows: rows.length - keepRows };
+    },
+    { sectionId, selector, keepRows, blur: LOCK_BLUR_PX }
+  );
+
+  const restore = () =>
+    page.evaluate(
+      ({ sectionId, selector }) => {
+        const list = document.getElementById(sectionId)?.querySelector(selector);
+        if (!(list instanceof HTMLElement)) return;
+        list.removeAttribute("data-preview-capture");
+        list.style.filter = "";
+        for (const row of Array.from(list.children)) {
+          if (row instanceof HTMLElement && row.style.display === "none") row.style.display = "";
+        }
+      },
+      { sectionId, selector }
+    );
+
+  if (prepared.error) {
+    await restore();
+    return { sectionId, name, error: prepared.error };
+  }
+
+  const file = join(OUT_DIR, `${name}-${viewportName}.jpg`);
+  await page
+    .locator(`#${sectionId} [data-preview-capture]`)
+    .screenshot({ path: file, type: "jpeg", quality: 72 });
+  await restore();
+
+  return {
+    sectionId,
+    name,
+    file,
+    width: Math.round(prepared.width),
+    height: Math.round(prepared.height),
+    rows: prepared.rows,
+  };
+}
+
 async function main() {
   mkdirSync(OUT_DIR, { recursive: true });
   const browser = await chromium.launch();
@@ -327,8 +457,10 @@ async function main() {
 
     const plan = await page.evaluate(() => document.body.dataset.accessPlan ?? null);
     await settle(page);
+    const hidden = await hideFixedChrome(page);
 
     console.log(`\n== ${viewport.name} (${viewport.width}px)${plan ? ` — plan ${plan}` : ""}`);
+    console.log(`   fixed chrome hidden: ${hidden.length ? hidden.join(", ") : "none"}`);
     for (const id of SECTION_IDS) {
       const r = await captureSection(page, id, viewport.name);
       results.push({ ...r, viewport: viewport.name });
@@ -336,6 +468,15 @@ async function main() {
       else
         console.log(
           `   ok   ${r.name.padEnd(22)} ${r.width}x${r.height}${r.shifted ? "  <-- LAYOUT SHIFTED" : ""}`
+        );
+    }
+    for (const spec of COLUMN_CAPTURES) {
+      const r = await captureColumn(page, spec, viewport.name);
+      results.push({ ...r, viewport: viewport.name });
+      if (r.error) console.log(`   FAIL ${spec.name}: ${r.error}`);
+      else
+        console.log(
+          `   ok   ${r.name.padEnd(22)} ${r.width}x${r.height}  (${r.rows} rows past the tease)`
         );
     }
     await page.close();
