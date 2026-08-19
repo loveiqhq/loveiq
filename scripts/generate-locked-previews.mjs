@@ -54,6 +54,19 @@ const LOCK_BLUR_PX = 4;
 const CAPTURE_SCALE = 0.25;
 
 /**
+ * The COLUMN captures use half scale and a heavier in-page blur instead.
+ *
+ * Those crops sit next to live text at full size, where a quarter-scale file
+ * upscaled 4x reads as mush rather than as blur: the row bars came back as grey
+ * blocks and the whole strip looked smudged. At half scale the upscale is 2x, so
+ * what shows is the gaussian rather than the resampling, and 8px of it destroys
+ * more than the 4px did at quarter scale — the security floor goes up, not down,
+ * while the surface reads softer. Files stay around 3-4KB.
+ */
+const COLUMN_CAPTURE_SCALE = 0.5;
+const COLUMN_BLUR_PX = 8;
+
+/**
  * Locked sections, keyed by DOM id. The card class prefix is derived at runtime
  * from `article[class*="__card"]`, so adding a section here is the only change
  * needed when a new premium chapter ships.
@@ -121,6 +134,17 @@ const COLUMN_CAPTURES = [
     selector: ".report-accel__col:last-of-type .report-accel__rows",
     name: "accel-shuts",
     keepRows: 3,
+  },
+  // Everything after the columns: the accelerator-vs-brake meter box and the verdict
+  // line under it. Without this the locked chapter ended at the rows, so a reader
+  // could not see that a whole box and a closing verdict sit behind the paywall.
+  // `keepRows: 0` — nothing here is teased.
+  {
+    sectionId: "typical_arousal_accelerators_turn_ons_of_the_core_archetype",
+    selector: ".report-accel__card",
+    name: "accel-tail",
+    keepRows: 0,
+    only: ".report-accel__meter, .report-accel__verdict",
   },
 ];
 
@@ -396,20 +420,32 @@ async function captureSection(page, sectionId, viewportName) {
  * Captures ONE element (a column's list) with its first `keepRows` children hidden,
  * blurred the same way `captureSection` does.
  */
-async function captureColumn(page, { sectionId, selector, name, keepRows }, viewportName) {
+async function captureColumn(page, { sectionId, selector, name, keepRows, only }, viewportName) {
   await page.locator(`#${sectionId}`).scrollIntoViewIfNeeded();
   await page.waitForTimeout(REVEAL_SETTLE_MS);
 
   const prepared = await page.evaluate(
-    ({ sectionId, selector, keepRows, blur }) => {
+    ({ sectionId, selector, keepRows, blur, only }) => {
       const section = document.getElementById(sectionId);
       if (!section) return { error: "section not found" };
       const list = section.querySelector(selector);
       if (!list) return { error: `no element for "${selector}"` };
 
       const rows = Array.from(list.children);
-      if (rows.length <= keepRows) return { error: `only ${rows.length} rows` };
-      for (const row of rows.slice(0, keepRows)) row.style.display = "none";
+      // `only`: keep just these children (used for the accel tail, where the card
+      // holds the columns as well and we want the meter + verdict alone).
+      if (only) {
+        let kept = 0;
+        for (const child of rows) {
+          if (!(child instanceof HTMLElement)) continue;
+          if (child.matches(only)) kept += 1;
+          else child.style.display = "none";
+        }
+        if (kept === 0) return { error: `nothing matched "${only}"` };
+      } else {
+        if (rows.length <= keepRows) return { error: `only ${rows.length} rows` };
+        for (const row of rows.slice(0, keepRows)) row.style.display = "none";
+      }
 
       // The rows keep their left rule and quote glyph — the column reads as the same
       // column all the way down — but the rule goes to low contrast first.
@@ -436,9 +472,13 @@ async function captureColumn(page, { sectionId, selector, name, keepRows }, view
       list.setAttribute("data-preview-capture", "");
       list.style.filter = `blur(${blur}px)`;
       const r = list.getBoundingClientRect();
-      return { width: r.width, height: r.height, rows: rows.length - keepRows };
+      return {
+        width: r.width,
+        height: r.height,
+        rows: only ? rows.length : rows.length - keepRows,
+      };
     },
-    { sectionId, selector, keepRows, blur: LOCK_BLUR_PX }
+    { sectionId, selector, keepRows, blur: COLUMN_BLUR_PX, only }
   );
 
   const restore = () =>
@@ -510,8 +550,22 @@ async function main() {
           `   ok   ${r.name.padEnd(22)} ${r.width}x${r.height}${r.shifted ? "  <-- LAYOUT SHIFTED" : ""}`
         );
     }
+    await page.close();
+
+    // A second page at the column scale — deviceScaleFactor is fixed per context, so
+    // the finer crops need their own.
+    const columnPage = await browser.newPage({
+      viewport: { width: viewport.width, height: viewport.height },
+      deviceScaleFactor: COLUMN_CAPTURE_SCALE,
+    });
+    await columnPage.goto(`${ORIGIN}/report/${TOKEN}`, {
+      waitUntil: "networkidle",
+      timeout: 120_000,
+    });
+    await settle(columnPage);
+    await hideFixedChrome(columnPage);
     for (const spec of COLUMN_CAPTURES) {
-      const r = await captureColumn(page, spec, viewport.name);
+      const r = await captureColumn(columnPage, spec, viewport.name);
       results.push({ ...r, viewport: viewport.name });
       if (r.error) console.log(`   FAIL ${spec.name}: ${r.error}`);
       else
@@ -519,7 +573,7 @@ async function main() {
           `   ok   ${r.name.padEnd(22)} ${r.width}x${r.height}  (${r.rows} rows past the tease)`
         );
     }
-    await page.close();
+    await columnPage.close();
   }
 
   // Look at the pixels before declaring success.

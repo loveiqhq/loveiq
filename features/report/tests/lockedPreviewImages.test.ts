@@ -26,7 +26,7 @@ import { describe, expect, it } from "vitest";
  */
 const COLUMN_PREVIEWS: Record<string, string[]> = {
   "BeliefsSection.tsx": ["beliefs-keep", "beliefs-loosen"],
-  "AcceleratorsSection.tsx": ["accel-opens", "accel-shuts"],
+  "AcceleratorsSection.tsx": ["accel-opens", "accel-shuts", "accel-tail"],
 };
 const COLUMN_PREVIEW_NAMES = Object.values(COLUMN_PREVIEWS).flat();
 const SECTIONS_DIR = join(process.cwd(), "features/report/ui/sections");

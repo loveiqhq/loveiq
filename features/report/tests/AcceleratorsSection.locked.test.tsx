@@ -74,6 +74,9 @@ describe("AcceleratorsSection — locked tease", () => {
     expect(sources).toEqual([
       "/report-previews/accel-opens-desktop.jpg",
       "/report-previews/accel-shuts-desktop.jpg",
+      // The meter box and the verdict line, so the locked chapter shows the shape of
+      // everything behind the paywall rather than stopping at the rows.
+      "/report-previews/accel-tail-desktop.jpg",
     ]);
     expect(sources.some((s) => s?.includes("/accel-desktop"))).toBe(false);
   });
@@ -93,6 +96,7 @@ describe("AcceleratorsSection — locked tease", () => {
       "Remove the brake first."
     );
     expect(container.querySelectorAll("img")).toHaveLength(0);
+    expect(container.querySelector(".report-accel__tail-preview")).toBeNull();
     expect(container.querySelector(".report-accel__columns--tease")).toBeNull();
   });
 
@@ -123,6 +127,12 @@ describe("AcceleratorsSection — locked tease", () => {
     expect(bodyAt(".report-accel__columns--tease .report-locked-preview::after")).toContain(
       "backdrop-filter"
     );
+    // The tail raster is graded too, so the box does not sit at one flat blur.
+    expect(bodyAt(".report-accel__tail-preview::after")).toContain("backdrop-filter");
+    // Column crops are captured at half scale with a heavier blur: at quarter scale
+    // they upscaled 4x next to live text and read as mush rather than as blur.
+    expect(gen).toMatch(/const COLUMN_CAPTURE_SCALE = 0\.5;/);
+    expect(gen).toMatch(/const COLUMN_BLUR_PX = 8;/);
     // And the card is pushed clear of the live rows.
     expect(bodyAt(".report-accel__verdict--locked .report-accel__preview--tease")).toContain(
       "margin-top"

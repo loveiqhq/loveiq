@@ -259,6 +259,18 @@ const AcceleratorsSection: FC<Props> = ({
           </div>
         )}
 
+        {/* And the shape of everything after the columns: the accelerator-vs-brake
+            meter box and the verdict line, as one raster (`accel-tail`). Without it
+            the locked chapter ended at the rows, so a reader could not see that a
+            whole box and a closing verdict sit behind the paywall. The verdict
+            sentence is the premium slot and never reaches a locked client as text —
+            here it is pixels, blurred and half-scaled at build time. */}
+        {locked ? (
+          <div className="report-accel__tail-preview" aria-hidden="true">
+            <LockedPreviewImage name="accel-tail" />
+          </div>
+        ) : null}
+
         {locked ? (
           <div className="report-accel__verdict report-accel__verdict--locked">
             {/* The paywall card only — the chapter behind it is the teased columns
