@@ -3,25 +3,27 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 /**
- * When the plans pop-up appears.
+ * When the plans pop-up appears, and how gently.
  *
- * It used to fire on the FIRST scroll event, so readers were interrupted about a
- * second into the report, before they had seen anything worth paying for. It now
- * waits until they reach "Your snapshot" — the first section that shows them
- * their own numbers.
+ * Two triggers preceded the current one: the FIRST scroll event of any size,
+ * which interrupted readers a second in, and then "Your snapshot". It now waits
+ * until they reach "Typical Beliefs" — the first chapter that is actually
+ * paywalled.
  *
  * Asserted at source level because the pricing modal is always mounted and only
  * styled open, which jsdom cannot distinguish (it applies no CSS). The behaviour
  * itself is covered in a real browser by `npm run qa:report --phase=trigger`,
- * which checks the pop-up stays shut through the sections above the snapshot and
+ * which checks the pop-up stays shut through the sections above the trigger and
  * opens on arrival, at both viewports.
  */
 const SOURCE = readFileSync(join(process.cwd(), "features/report/ui/ReportPage.tsx"), "utf8");
+const CSS = readFileSync(join(process.cwd(), "app/globals.css"), "utf8");
 
 describe("plans pop-up trigger", () => {
-  it("observes the snapshot section rather than listening for any scroll", () => {
-    expect(SOURCE).toContain('document.getElementById("snapshot")');
+  it("observes the first paywalled chapter rather than listening for any scroll", () => {
+    expect(SOURCE).toContain('document.getElementById("typical_beliefs")');
     expect(SOURCE).toMatch(/new IntersectionObserver\(/);
+    expect(SOURCE).toMatch(/observer\.observe\(trigger\)/);
   });
 
   it("waits until the section has risen into the viewport, not merely touched its edge", () => {
@@ -31,11 +33,38 @@ describe("plans pop-up trigger", () => {
     expect(SOURCE).toMatch(/rootMargin:\s*"0px 0px -25% 0px"/);
   });
 
-  it("still shows the pop-up if the snapshot section is ever absent", () => {
-    // Losing the offer entirely would be worse than firing it early, so the
-    // missing-section path falls back to the old first-scroll trigger.
-    const fallback = SOURCE.slice(SOURCE.indexOf("if (!snapshot)"));
+  it("still shows the pop-up if that chapter is ever absent", () => {
+    // Losing the offer entirely would be worse than firing it early: the snapshot
+    // section is the backstop, and a missing pair falls back to first-scroll.
+    expect(SOURCE).toMatch(
+      /getElementById\("typical_beliefs"\) \?\?\s*document\.getElementById\("snapshot"\)/
+    );
+    const fallback = SOURCE.slice(SOURCE.indexOf("if (!trigger)"));
     expect(fallback).toMatch(/addEventListener\("scroll"/);
+  });
+
+  it("waits a beat after arrival instead of firing on the same frame", () => {
+    // Landing the modal the instant the chapter appears reads as an ambush.
+    const delay = SOURCE.match(/setIsPricingModalOpen\(true\);[\s\S]{0,80}?\}, (\d+)\);/);
+    expect(delay, "the pop-up timer is gone").not.toBeNull();
+    expect(Number(delay![1])).toBeGreaterThanOrEqual(1500);
+  });
+
+  it("fades the pop-up in slowly enough not to startle", () => {
+    // The complaint that produced this: at 220ms the whole report blurs, darkens
+    // and a panel lands inside a fifth of a second. Entrance timing lives on the
+    // `.is-visible` rules (a transition is governed by the state it runs toward).
+    const durations = [
+      /\.report-pricing-modal\.is-visible \.report-pricing-modal__backdrop \{[^}]*?transition: opacity (\d+)ms/,
+      /\.report-pricing-modal\.is-visible \.report-pricing-modal__dialog \{[^}]*?opacity (\d+)ms/,
+      /\.report-page__shell-wrap \{[^}]*?filter (\d+)ms/,
+    ].map((re) => {
+      const m = CSS.match(re);
+      expect(m, `entrance timing missing for ${re}`).not.toBeNull();
+      return Number(m![1]);
+    });
+
+    for (const ms of durations) expect(ms).toBeGreaterThanOrEqual(500);
   });
 
   it("fires at most once, and not while the modal is already open", () => {

@@ -600,7 +600,8 @@ async function phaseUi(browser) {
 }
 
 // ---------------------------------------------------------------------------
-// Phase: trigger — the plans pop-up waits until the reader reaches the snapshot
+// Phase: trigger — the plans pop-up waits until the reader reaches "Typical
+// Beliefs", the first paywalled chapter, and then fades in after a beat
 // ---------------------------------------------------------------------------
 async function phaseTrigger(browser) {
   console.log("\n== PLANS POP-UP TRIGGER (locked report)");
@@ -629,34 +630,36 @@ async function phaseTrigger(browser) {
     await page.waitForTimeout(1800);
     record("trigger", `${viewport.name}: shut after a small scroll nudge`, !(await isOpen(page)));
 
-    const snapshotTop = await page.evaluate(() => {
-      const el = document.getElementById("snapshot");
+    const beliefsTop = await page.evaluate(() => {
+      const el = document.getElementById("typical_beliefs");
       return el ? el.getBoundingClientRect().top + window.scrollY : null;
     });
     record(
       "trigger",
-      `${viewport.name}: snapshot section exists to trigger on`,
-      snapshotTop !== null
+      `${viewport.name}: beliefs chapter exists to trigger on`,
+      beliefsTop !== null
     );
-    if (snapshotTop === null) {
+    if (beliefsTop === null) {
       await page.close();
       continue;
     }
 
-    // Well into the report but still above the snapshot.
-    await page.evaluate((y) => window.scrollTo(0, y), Math.max(0, snapshotTop - viewport.height));
-    await page.waitForTimeout(1800);
+    // Well into the report — past the snapshot and the findings — but still above
+    // the beliefs chapter.
+    await page.evaluate((y) => window.scrollTo(0, y), Math.max(0, beliefsTop - viewport.height));
+    await page.waitForTimeout(2000);
     record(
       "trigger",
-      `${viewport.name}: still shut while above the snapshot`,
+      `${viewport.name}: still shut while above the beliefs`,
       !(await isOpen(page))
     );
 
     await page.evaluate(() =>
-      document.getElementById("snapshot").scrollIntoView({ block: "start" })
+      document.getElementById("typical_beliefs").scrollIntoView({ block: "start" })
     );
-    await page.waitForTimeout(2200);
-    record("trigger", `${viewport.name}: opens on reaching the snapshot`, await isOpen(page));
+    // 1.6s settle beat + up to ~1.05s of entrance fade, plus margin.
+    await page.waitForTimeout(3600);
+    record("trigger", `${viewport.name}: opens on reaching the beliefs`, await isOpen(page));
 
     // Dismissing must stick — no second interruption further down.
     await page.keyboard.press("Escape");

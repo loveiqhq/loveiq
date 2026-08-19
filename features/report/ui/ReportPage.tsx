@@ -2190,11 +2190,16 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       return;
     }
 
-    // Open the plans pop-up once the reader REACHES "Your snapshot", not on the
-    // first scroll event. Firing on first scroll interrupted people a second
-    // into the report, before they had read anything worth paying for; the
-    // snapshot is the first section that shows them their own numbers, so it is
-    // the earliest point the offer makes sense.
+    // Open the plans pop-up once the reader REACHES "Typical Beliefs" (Eman,
+    // 2026-08-19). Two triggers preceded it: the first scroll event of any size,
+    // which interrupted people a second into the report, and then "Your
+    // snapshot". Beliefs is the first chapter that is actually paywalled, so it
+    // is the first place the offer answers a question the reader now has.
+    //
+    // The 1.6s beat after arrival is deliberate: landing the pop-up on the same
+    // frame the chapter appears reads as an ambush. The reader gets to see the
+    // chapter they arrived at first, and the modal itself then fades in slowly
+    // (see the `.is-visible` entrance transitions in globals.css).
     function openPlans() {
       if (scrollTeaserFiredRef.current) return;
       scrollTeaserFiredRef.current = true;
@@ -2208,15 +2213,18 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
           setPricingVariant(shouldShowOfferVariant ? "offer" : "default");
           setIsPricingModalOpen(true);
         }
-      }, 1000);
+      }, 1600);
     }
 
-    const snapshot = document.getElementById("snapshot");
+    // Primary target is the first paywalled chapter; the snapshot section is the
+    // backstop if a layout change ever drops it.
+    const trigger =
+      document.getElementById("typical_beliefs") ?? document.getElementById("snapshot");
 
-    // No snapshot section (an archetype without one, or a future layout change)
-    // must not mean the offer never appears — fall back to the old first-scroll
-    // trigger so the pop-up is never silently lost.
-    if (!snapshot) {
+    // Neither section present (an archetype without them, or a future layout
+    // change) must not mean the offer never appears — fall back to the old
+    // first-scroll trigger so the pop-up is never silently lost.
+    if (!trigger) {
       const handleFirstScroll = () => {
         window.removeEventListener("scroll", handleFirstScroll);
         openPlans();
@@ -2232,24 +2240,51 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       };
     }
 
-    // `threshold: 0` with a -25% bottom inset rather than a ratio: the section is
-    // 620px tall on desktop but 1089px on mobile against a 900px viewport, so it
-    // can never be more than 83% visible there — any threshold high enough to
-    // mean "arrived" on desktop risks never firing on a phone. The inset instead
-    // waits until the section's top has risen past three quarters of the
-    // viewport, which reads as "arrived" at every width.
+    // `threshold: 0` with a -25% bottom inset rather than a ratio: a chapter can
+    // be taller than the viewport (Beliefs is, on a phone), so it may never reach
+    // any high ratio — a threshold that means "arrived" on desktop would then
+    // never fire on mobile. The inset instead waits until the section's top has
+    // risen past three quarters of the viewport, which reads as "arrived" at
+    // every width.
     const observer = new IntersectionObserver(
       (entries) => {
         if (!entries.some((entry) => entry.isIntersecting)) return;
-        observer.disconnect();
+        stop();
         openPlans();
       },
       { threshold: 0, rootMargin: "0px 0px -25% 0px" }
     );
-    observer.observe(snapshot);
+    observer.observe(trigger);
+
+    // Jumping from the sidebar / mobile chapter nav / a #hash link straight to a
+    // chapter BELOW this one never makes it intersect, so the observer alone
+    // would never fire and the reader would never see the offer. Passing the
+    // chapter counts as reaching it, measured on the same three-quarter line, so
+    // this check covers the jump. rAF-throttled, and both paths funnel through
+    // the same one-shot `openPlans`.
+    let rafId: number | null = null;
+    const handleScroll = () => {
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        if (trigger.getBoundingClientRect().top >= window.innerHeight * 0.75) return;
+        stop();
+        openPlans();
+      });
+    };
+    window.addEventListener("scroll", handleScroll, { passive: true });
+
+    function stop() {
+      observer.disconnect();
+      window.removeEventListener("scroll", handleScroll);
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+    }
 
     return () => {
-      observer.disconnect();
+      stop();
       if (scrollTeaserTimerRef.current) {
         clearTimeout(scrollTeaserTimerRef.current);
         scrollTeaserTimerRef.current = null;

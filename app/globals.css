@@ -3579,6 +3579,25 @@ input.autofill-dark:-internal-autofill-previewed {
   /* No `transform` in the transition: applying it (even at scale(1))
      creates a containing block for `position: fixed` descendants on Safari,
      stranding them mid-page. Blur + opacity already deliver the dim. */
+  /* 700ms, not 220ms: the paywall arrives UNPROMPTED while someone is reading,
+     and at 220ms the whole report blurs and darkens inside a fifth of a second —
+     which reads as a jump-scare rather than a modal opening (Eman, 2026-08-19).
+     `filter` and `opacity` are both compositor-animated, so the longer dim costs
+     nothing. Closing is user-initiated and stays snappier (below).
+     The curve is near-symmetric, NOT an ease-out: ease-out-cubic put 40% of the
+     darkening into the first ~90ms, so it still read as a flinch before settling
+     slowly. This ramps evenly across the 700ms instead. */
+  transition:
+    filter 700ms cubic-bezier(0.4, 0.1, 0.4, 1),
+    opacity 700ms cubic-bezier(0.4, 0.1, 0.4, 1);
+}
+
+/* The dim only needs to be gentle on the way IN. Once the reader closes the
+   modal they want their report back immediately, so the un-blur keeps the
+   original 220ms. */
+.report-page__shell-wrap:not(.report-page__shell-wrap--obscured):not(
+    .report-page__shell-wrap--obscured-soft
+  ) {
   transition:
     filter 220ms ease,
     opacity 220ms ease;
@@ -4290,13 +4309,28 @@ input.autofill-dark:-internal-autofill-previewed {
   padding: 2rem 1rem;
 }
 
+/* Entrance timing lives on `.is-visible` and exit timing on the base rules,
+   because a transition is governed by the state it runs TOWARD. Opening is slow
+   and staggered — the room dims, then the panel rises into it — so an unprompted
+   paywall never startles the reader (Eman, 2026-08-19). Closing stays at the
+   original 220ms: that one is asked for, so it should feel instant. */
 .report-pricing-modal.is-visible .report-pricing-modal__backdrop {
   opacity: 1;
+  /* Same even ramp as the page dim behind it, so the two read as one movement. */
+  transition: opacity 700ms cubic-bezier(0.4, 0.1, 0.4, 1);
 }
 
 .report-pricing-modal.is-visible .report-pricing-modal__dialog {
   opacity: 1;
   transform: translateY(0) scale(1);
+  /* Starts 180ms after the dim so the two read as one movement instead of a
+     simultaneous flash. The panel MATERIALISES on the even curve (an ease-out
+     had it 93% opaque a third of the way in, which is the "too fast" part) while
+     its 32px rise settles on the decelerating curve the report's charts use, so
+     the last few pixels ease in rather than arrive. */
+  transition:
+    opacity 720ms cubic-bezier(0.4, 0.1, 0.4, 1) 180ms,
+    transform 860ms cubic-bezier(0.16, 1, 0.3, 1) 180ms;
 }
 
 .report-pricing-modal__close {
