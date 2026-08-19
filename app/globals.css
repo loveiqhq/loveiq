@@ -15747,9 +15747,12 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 /* ── Constellation ("Other Archetypes") — last free Part I section ──────────
-   Figma 8427:1070. A header card ("You're a constellation, not a type") over a
-   card listing all 14 archetypes ranked by match %. Per-row accent colour +
-   icon come from getReportTheme(name) (--accent set inline per row). */
+   Figma 8427:1070. A chapter headline ("You're a constellation, not a type")
+   over a card listing all 14 archetypes ranked by match %, whose first row is
+   the "most people are a blend" line. Figma drew the headline INSIDE the card;
+   it was lifted out on 2026-08-19 so this chapter reads heading-then-card like
+   every other one. Per-row accent colour + icon come from getReportTheme(name)
+   (--accent set inline per row). */
 #constellation .report-section__header {
   display: none;
 }
@@ -15765,16 +15768,13 @@ input.autofill-dark:-internal-autofill-previewed {
   box-shadow: 0 22.5px 56.4px rgba(22, 16, 33, 0.06);
 }
 
-.report-constellation__intro {
-  display: flex;
-  flex-direction: column;
-  gap: clamp(16px, 2vw, 26px);
-  max-width: 453px;
-  margin-bottom: clamp(20px, 2.4vw, 29px);
-}
-
 .report-constellation__heading {
-  margin: 0;
+  /* The heading left the card and became the chapter headline (Eman,
+     2026-08-19), so it carries the gap the card used to get from the deleted
+     `__intro` wrapper. `max-width` keeps the two-line break the design draws
+     instead of letting it run the full column width. */
+  max-width: 453px;
+  margin: 0 0 clamp(16px, 1.8vw, 22px);
   color: #161021;
   font-family: var(--font-serif);
   font-weight: 400;
@@ -15796,7 +15796,11 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 .report-constellation__subline {
+  /* Now the card's FIRST ROW, so it takes the ranked rows' padding and their
+     hairline divider — otherwise it read as a caption floating above the list. */
   margin: 0;
+  padding: 4px 12px 15px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
   color: #6b6678;
   font-family: var(--font-sans);
   font-weight: 400;

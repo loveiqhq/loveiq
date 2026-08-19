@@ -78,80 +78,85 @@ const ConstellationSection: FC<Props> = ({
   if (ranking.length === 0) return null;
 
   return (
-    <section className="report-constellation" aria-label="Other archetypes">
-      <div className="report-constellation__intro">
-        <h3 className="report-constellation__heading">
-          You&apos;re a <em className="report-constellation__heading-accent">constellation,</em>
-          <br />
-          not a type
-        </h3>
+    <>
+      {/* The heading is the chapter's HEADLINE and now sits above the card rather
+          than inside it, with the line under it pulled in as the card's first row
+          (Eman, 2026-08-19). Every other chapter reads heading-then-card, and this
+          one was the only section carrying its title inside the box. */}
+      <h3 className="report-constellation__heading">
+        You&apos;re a <em className="report-constellation__heading-accent">constellation,</em>
+        <br />
+        not a type
+      </h3>
+
+      <section className="report-constellation" aria-label="Other archetypes">
         <p className="report-constellation__subline">
           Most people are a blend, and yours shifts with safety, attachment, stress and the phase of
           your life you&apos;re in.
         </p>
-      </div>
 
-      <ol
-        ref={listRef}
-        className={`report-constellation__list report-chart-reveal${revealed ? " is-revealed" : ""}`}
-      >
-        {ranking.map((name, idx) => {
-          const theme = getReportTheme(name);
-          const Icon = theme.Icon;
-          const pct = percentages[name] ?? 0;
-          const motto = mottos[name] ?? null;
-          const isYou = name === viewArchetype;
-          const fillFraction = Math.max(0, Math.min(1, pct / 100));
-          const rowStyle: CssVarStyle = {
-            "--accent": theme.accent,
-            "--accent-rgb": hexToRgbTriplet(theme.accent),
-            "--icon-ink": DARK_GLYPH_CHIPS.has(name) ? "#000000" : "#ffffff",
-            "--fill-fraction": fillFraction,
-            // Staggers this bar behind the one above it (see .report-chart-reveal).
-            "--row": idx,
-          };
+        <ol
+          ref={listRef}
+          className={`report-constellation__list report-chart-reveal${revealed ? " is-revealed" : ""}`}
+        >
+          {ranking.map((name, idx) => {
+            const theme = getReportTheme(name);
+            const Icon = theme.Icon;
+            const pct = percentages[name] ?? 0;
+            const motto = mottos[name] ?? null;
+            const isYou = name === viewArchetype;
+            const fillFraction = Math.max(0, Math.min(1, pct / 100));
+            const rowStyle: CssVarStyle = {
+              "--accent": theme.accent,
+              "--accent-rgb": hexToRgbTriplet(theme.accent),
+              "--icon-ink": DARK_GLYPH_CHIPS.has(name) ? "#000000" : "#ffffff",
+              "--fill-fraction": fillFraction,
+              // Staggers this bar behind the one above it (see .report-chart-reveal).
+              "--row": idx,
+            };
 
-          return (
-            <li key={name} style={rowStyle} className="report-constellation__row">
-              <span className="report-constellation__rank">{padRank(idx + 1)}</span>
+            return (
+              <li key={name} style={rowStyle} className="report-constellation__row">
+                <span className="report-constellation__rank">{padRank(idx + 1)}</span>
 
-              <span className="report-constellation__icon" aria-hidden="true">
-                <Icon className="report-constellation__icon-glyph" />
-              </span>
+                <span className="report-constellation__icon" aria-hidden="true">
+                  <Icon className="report-constellation__icon-glyph" />
+                </span>
 
-              <div className="report-constellation__nametag">
-                <h4 className="report-constellation__name">{name}</h4>
-                {motto ? <p className="report-constellation__motto">{motto}</p> : null}
-              </div>
+                <div className="report-constellation__nametag">
+                  <h4 className="report-constellation__name">{name}</h4>
+                  {motto ? <p className="report-constellation__motto">{motto}</p> : null}
+                </div>
 
-              <div
-                className="report-constellation__bar"
-                role="progressbar"
-                aria-label={`${name} match strength`}
-                aria-valuenow={Number(pct.toFixed(1))}
-                aria-valuemin={0}
-                aria-valuemax={100}
-              >
-                <span className="report-constellation__bar-track" />
-                <span className="report-constellation__bar-fill" />
-                <span className="report-constellation__bar-dot" />
-              </div>
+                <div
+                  className="report-constellation__bar"
+                  role="progressbar"
+                  aria-label={`${name} match strength`}
+                  aria-valuenow={Number(pct.toFixed(1))}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                >
+                  <span className="report-constellation__bar-track" />
+                  <span className="report-constellation__bar-fill" />
+                  <span className="report-constellation__bar-dot" />
+                </div>
 
-              <span className="report-constellation__pct">{formatPct(pct)}</span>
+                <span className="report-constellation__pct">{formatPct(pct)}</span>
 
-              <button
-                type="button"
-                onClick={() => onViewArchetype(name)}
-                aria-label={isYou ? `View your ${name} report` : `View ${name} report`}
-                className="report-constellation__view"
-              >
-                View report
-              </button>
-            </li>
-          );
-        })}
-      </ol>
-    </section>
+                <button
+                  type="button"
+                  onClick={() => onViewArchetype(name)}
+                  aria-label={isYou ? `View your ${name} report` : `View ${name} report`}
+                  className="report-constellation__view"
+                >
+                  View report
+                </button>
+              </li>
+            );
+          })}
+        </ol>
+      </section>
+    </>
   );
 };
 
