@@ -13786,40 +13786,248 @@ input.autofill-dark:-internal-autofill-previewed {
    the curve of the paper, and a drop that sits under the object. Built with
    box-shadow layers rather than a wrapper element so no markup changes and the
    `<img>` keeps its own aspect ratio. */
+/* ── The books are objects, not thumbnails ─────────────────────────────────
+   The jacket was a flat image with four inset shadows painting a spine and a fore
+   edge onto it, which is what a book looks like in a screenshot rather than on a
+   shelf. It is now three faces in perspective:
+
+     jacket        the front, at the front of the stack
+     page block    the fore edge, a rotateY(90deg) face of paper hairlines
+     hinge         the spine side, a rotateY(-90deg) face in the jacket's shadow
+
+   Because the thickness is geometry, it turns WITH the book: at rest the book sits
+   almost square to the reader with a sliver of pages showing, and on hover it opens
+   toward them, the page block widening into view as the jacket rotates away. A
+   contact shadow under the whole thing (on the wrapper, outside the 3D) does the
+   sitting-on-the-card part — a box-shadow on a rotated face skews with it and stops
+   reading as a shadow.
+
+   `--book-depth` is the spine thickness: 11px against a 79px jacket, the ratio a
+   trade paperback actually has (≈20mm on 130mm). ======================== */
+.report-reading__book {
+  --book-depth: 11px;
+  flex: 0 0 auto;
+  position: relative;
+  display: block;
+  width: clamp(64px, 8vw, 79px);
+  /* Every book the same size, like a row on a shelf. The jacket used to set its own
+     height (`height: auto` on the img), and the covers on file run from 0.616 to
+     1.000 wide-to-tall — so a paper with no jacket (fixed at 97px) sat visibly
+     shorter than the books beside it, and two real jackets could differ by 25px.
+     0.648 is the median aspect of the forty covers, so the crop on a typical one is
+     a pixel or two. */
+  height: clamp(99px, 12.4vw, 122px);
+  perspective: 620px;
+  /* Origin left of centre, since the book turns its right-hand fore edge toward the
+     reader — the same asymmetry a book has sitting on a table. */
+  perspective-origin: 34% 50%;
+}
+
+/* The contact shadow. Sits under the book, outside the 3D so it stays flat. */
+.report-reading__book::after {
+  content: "";
+  position: absolute;
+  left: 2%;
+  right: 6%;
+  bottom: -7px;
+  height: 12px;
+  border-radius: 50%;
+  background: radial-gradient(50% 50% at 50% 50%, rgba(22, 16, 33, 0.34), transparent 72%);
+  filter: blur(3px);
+  transition:
+    opacity 320ms ease,
+    transform 420ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.report-reading__book-3d {
+  position: relative;
+  display: block;
+  /* Definite height, or the faces' `height: 100%` resolves against an auto-height
+     parent — which means `auto`, so each jacket went back to its own intrinsic size
+     and the shell's uniform box did nothing. */
+  height: 100%;
+  transform-style: preserve-3d;
+  opacity: 1;
+  /* POSITIVE rotateY, so the +X face — the page block — turns toward the reader and
+     the spine side hides behind the jacket. Negative turned the spine forward and
+     left the fore edge showing its own back face, which is the inside of the book.
+     15deg is enough that the paper reads at rest; the jacket art is barely skewed. */
+  transform: rotateY(15deg) rotateX(1.5deg);
+  /* Slower on the way in (the book opening as the section arrives), quicker into
+     hover — see the hover rule. */
+  transition:
+    transform 780ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 520ms ease;
+}
+
+/* Fore edge: a slab of paper sitting BEHIND the jacket and proud of its right
+   edge, pushed back in Z so perspective gives it real depth.
+   The first attempt made this a face rotated 90deg on the hinge, which is
+   geometrically the honest thing and visually useless: at a 15deg turn it projects
+   to約 1px, so the book read flat until it was hovered hard. Offset in Z instead, the
+   paper is a visible 6-8px of cream at rest and deepens as the book turns. */
+.report-reading__book-pages {
+  position: absolute;
+  top: 2.5%;
+  bottom: 2.5%;
+  right: calc(var(--book-depth) * -0.62);
+  width: var(--book-depth);
+  transform: translateZ(calc(var(--book-depth) * -0.7));
+  border-radius: 1px 3px 3px 1px;
+  background:
+    repeating-linear-gradient(to right, #fdfcf8 0, #fdfcf8 1px, #e6e1d5 1px, #e6e1d5 1.7px),
+    linear-gradient(to bottom, #f7f4ed, #e7e2d6);
+  box-shadow: inset -1px 0 2px rgba(22, 16, 33, 0.18);
+  transition:
+    width 480ms cubic-bezier(0.16, 1, 0.3, 1),
+    right 480ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Back cover, a shade of the jacket, showing as a dark hairline down the hinge —
+   what you see of the far side of a book turned this way. */
+.report-reading__book-hinge {
+  position: absolute;
+  inset: 1.5% auto 1.5% 0;
+  width: 3px;
+  transform: translateZ(calc(var(--book-depth) * -0.7));
+  border-radius: 2px 0 0 2px;
+  background: linear-gradient(to bottom, rgba(22, 16, 33, 0.42), rgba(22, 16, 33, 0.6));
+}
+
+/* Laminate: one soft diagonal highlight across the jacket, which is what makes a
+   printed cover read as a physical surface. It slides as the book turns. */
+.report-reading__book-gloss {
+  position: absolute;
+  inset: 0;
+  border-radius: 3px 6px 6px 3px;
+  background: linear-gradient(
+    108deg,
+    rgba(255, 255, 255, 0) 26%,
+    rgba(255, 255, 255, 0.34) 44%,
+    rgba(255, 255, 255, 0) 62%
+  );
+  transform: translateX(-14%);
+  opacity: 0.75;
+  transition:
+    transform 620ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 320ms ease;
+  pointer-events: none;
+}
+
 .report-reading__cover,
 .report-reading__spine {
+  /* The faces of a solid object: a hairline of white along the top edge where the
+     light lands, and the jacket's own drop under it. No painted spine or fore edge
+     any more — those are the two faces above. */
   box-shadow:
-    /* spine edge */
-    2px 0 0 rgba(255, 255, 255, 0.16) inset,
-    5px 0 6px -4px rgba(22, 16, 33, 0.55) inset,
-    /* page block on the fore edge */ -1.5px 0 0 rgba(255, 255, 255, 0.75) inset,
-    -3px 0 0 rgba(22, 16, 33, 0.1) inset,
-    /* the book sitting on the card */ 0 10px 18px -8px rgba(22, 16, 33, 0.45),
-    0 2px 4px rgba(22, 16, 33, 0.18);
-  transition:
-    transform 320ms cubic-bezier(0.16, 1, 0.3, 1),
-    box-shadow 320ms ease;
+    /* light along the top edge, the hinge crease down the left, and the jacket's
+       own drop onto the pages behind it */
+    inset 0 1px 0 rgba(255, 255, 255, 0.34),
+    inset 3px 0 5px -3px rgba(22, 16, 33, 0.5),
+    inset -1px 0 0 rgba(255, 255, 255, 0.5),
+    0 6px 12px -6px rgba(22, 16, 33, 0.38);
+  transition: box-shadow 320ms ease;
+}
+
+/* A phone has no hover, so the resting pose carries more turn there: the page
+   block is visible from the start instead of only to a cursor. */
+@media (max-width: 768px) {
+  .report-reading__book {
+    /* Less room beside the text on a phone; the fore edge stays proportional to the
+       smaller jacket. */
+    --book-depth: 8px;
+  }
+
+  .report-reading__book-3d {
+    transform: rotateY(19deg) rotateX(1.5deg);
+  }
+}
+
+/* It also opens ITSELF once, when the section arrives — the only way a touch reader
+   sees the book move at all. Done as a TRANSITION between two states of the same
+   property hover uses, not as a keyframe animation.
+   The animation version flashed: hover set `animation: none` (it had to, or the
+   animation's filled value outranked the hover transform), so releasing the hover
+   removed that declaration and the browser started `report-book-open` again from
+   its first keyframe — a flat, half-transparent book for an instant before it
+   settled back. Two states of one property cannot collide that way. */
+.report-section:not(.is-visible) .report-reading__book-3d {
+  transform: rotateY(2deg) rotateX(0deg) translateY(5px);
+  opacity: 0.55;
+}
+
+/* Opens toward the reader: more turn, a lift, the pages swinging into view and the
+   contact shadow spreading as it rises. */
+.report-reading__card:hover .report-reading__book-3d {
+  transform: rotateY(22deg) rotateX(2.5deg) translateY(-5px) scale(1.035);
+  transition: transform 420ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.report-reading__card:hover .report-reading__book::after {
+  opacity: 0.72;
+  transform: translateY(4px) scaleX(1.12);
+}
+
+/* The fore edge thickens as the book comes forward — the turn alone cannot do it,
+   because an offset slab projects to almost the same width at every angle
+   (measured 5.4-6.9px from -24deg to +30deg). Widening the slab is what reads as
+   "this book has pages". */
+.report-reading__card:hover .report-reading__book-pages {
+  right: calc(var(--book-depth) * -0.95);
+  width: calc(var(--book-depth) * 1.4);
+}
+
+.report-reading__card:hover .report-reading__book-gloss {
+  transform: translateX(16%);
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Placed AFTER the book rules on purpose: these overrides carry the same
+     specificity as the ones they replace, so in the shared reduce block near the
+     top of the file — 10,000 lines earlier — source order silently kept the
+     animation and the hover turn alive (measured: both still ran).
+     The pose stays, since a pose is not motion; only the movement goes. */
+  .report-reading__book-3d,
+  .report-section:not(.is-visible) .report-reading__book-3d {
+    transform: rotateY(15deg) rotateX(1.5deg);
+    opacity: 1;
+    transition: none;
+  }
+
+  .report-reading__card:hover .report-reading__book-3d {
+    transform: rotateY(15deg) rotateX(1.5deg);
+  }
+
+  .report-reading__card:hover .report-reading__book-pages {
+    right: calc(var(--book-depth) * -0.62);
+    width: var(--book-depth);
+  }
+
+  .report-reading__book-pages,
+  .report-reading__book-gloss,
+  .report-reading__book::after {
+    transition: none;
+  }
+
+  .report-reading__card:hover .report-reading__book-gloss {
+    transform: translateX(-14%);
+  }
+
+  .report-reading__card:hover .report-reading__book::after {
+    transform: none;
+  }
 }
 
 .report-reading__cover {
-  flex: 0 0 auto;
   display: block;
-  width: clamp(64px, 8vw, 79px);
-  height: auto;
+  width: 100%;
+  height: 100%;
+  /* `cover` keeps the jacket's own proportions and fills the box; anchored to the
+     top because that is where a cover carries its title. */
+  object-fit: cover;
+  object-position: center top;
   border-radius: 3px 6px 6px 3px;
-}
-
-/* Lifts and turns very slightly towards the reader on hover. */
-.report-reading__card:hover .report-reading__cover,
-.report-reading__card:hover .report-reading__spine {
-  transform: translateY(-3px) rotate(-0.6deg);
-  box-shadow:
-    2px 0 0 rgba(255, 255, 255, 0.16) inset,
-    5px 0 6px -4px rgba(22, 16, 33, 0.55) inset,
-    -1.5px 0 0 rgba(255, 255, 255, 0.75) inset,
-    -3px 0 0 rgba(22, 16, 33, 0.1) inset,
-    0 16px 26px -10px rgba(22, 16, 33, 0.5),
-    0 3px 6px rgba(22, 16, 33, 0.2);
 }
 
 /*
@@ -13829,13 +14037,15 @@ input.autofill-dark:-internal-autofill-previewed {
  * the top and the title in serif beneath.
  */
 .report-reading__spine {
-  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   overflow: hidden;
-  width: clamp(64px, 8vw, 79px);
-  height: clamp(85px, 10.5vw, 97px);
+  /* The shell owns the box now (it is the thing in perspective); the fallback fills
+     it exactly like a jacket does, which is what makes it the same size as its
+     neighbours. */
+  width: 100%;
+  height: 100%;
   padding: 8px 9px 9px;
   border-radius: 3px 6px 6px 3px;
   background: linear-gradient(150deg, #241a35 0%, #3b2452 100%);

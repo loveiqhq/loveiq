@@ -105,24 +105,40 @@ const BookCard: FC<{ book: Book }> = ({ book }) => {
   const isPaper = Boolean(source?.doi);
   return (
     <article className="report-reading__card">
-      {source?.cover ? (
-        // eslint-disable-next-line @next/next/no-img-element -- 180px-wide local jacket at a 79px spine; next/image adds nothing
-        <img
-          className="report-reading__cover"
-          src={`/report/books/${source.cover}`}
-          width={source.w}
-          height={source.h}
-          alt=""
-          aria-hidden="true"
-          loading="lazy"
-          decoding="async"
-        />
-      ) : (
-        <span className="report-reading__spine" aria-hidden="true">
-          {book.author ? <span className="report-reading__spine-author">{book.author}</span> : null}
-          <span className="report-reading__spine-title">{book.title}</span>
+      {/*
+        A real object rather than a picture of one. The jacket used to be a flat
+        <img> with inset shadows drawing a fake spine and fore edge; it read as a
+        thumbnail. This is a three-face book in perspective — jacket, page block on
+        the fore edge, spine on the hinge — so the thickness is geometry and turns
+        with the book instead of being painted on. Both the real jacket and the
+        no-jacket fallback ride the same shell.
+      */}
+      <span className="report-reading__book" aria-hidden="true">
+        <span className="report-reading__book-3d">
+          <span className="report-reading__book-pages" />
+          <span className="report-reading__book-hinge" />
+          {source?.cover ? (
+            // eslint-disable-next-line @next/next/no-img-element -- 180px-wide local jacket at a 79px spine; next/image adds nothing
+            <img
+              className="report-reading__cover"
+              src={`/report/books/${source.cover}`}
+              width={source.w}
+              height={source.h}
+              alt=""
+              loading="lazy"
+              decoding="async"
+            />
+          ) : (
+            <span className="report-reading__spine">
+              {book.author ? (
+                <span className="report-reading__spine-author">{book.author}</span>
+              ) : null}
+              <span className="report-reading__spine-title">{book.title}</span>
+            </span>
+          )}
+          <span className="report-reading__book-gloss" />
         </span>
-      )}
+      </span>
       <div className="report-reading__body">
         {book.tag ? <p className="report-reading__tag">{book.tag}</p> : null}
         <h4 className="report-reading__title">{book.title}</h4>
