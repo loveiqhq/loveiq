@@ -24881,22 +24881,52 @@ input.autofill-dark:-internal-autofill-previewed {
    disclosure keeps its own peek + unlock CTA, so it is excluded here rather than
    blurred twice.
    ========================================================================== */
-/* The Learn band joins this list for Attachment ONLY. This is the one chapter
-   whose expander is SURROUNDED by locked content — the plane and caption above it,
-   the pattern cards below — so leaving it sharp made it the single clear island in
-   a blurred chapter. Everywhere else the band sits after the paywall card with
-   nothing blurred beside it, and its three-line tease stays readable: that tease is
-   the hook, and blurring it there would leave a locked chapter with nothing to read.
-   The summary row and the teaser are listed individually rather than blurring
-   `__details`, because the pill inside it must stay sharp (the paywall card sits
-   sharp over blurred content the same way) and because the pattern cards already
-   carry their own blur — nesting one filter inside another compounds it. */
-.report-attachment__article--locked .report-attachment__details-summary,
-.report-attachment__article--locked .report-attachment__details-teaser,
+/* The Learn band is NOT listed here any more: every locked chapter's expander is
+   blurred by the shared rule below ("Locked chapters: the Learn expander"),
+   Attachment included. Listing its summary and teaser here as well would blur them
+   twice — 4px inside 4px — since that rule blurs the band as a whole. */
 .report-attachment__article--locked .report-attachment__map-eyebrow,
 .report-attachment__article--locked .report-attachment__map-caption,
 .report-attachment__article--locked .report-attachment-plane,
 .report-attachment__article--locked .report-attachment__patterns {
+  filter: blur(var(--report-lock-blur));
+  user-select: none;
+  pointer-events: none;
+}
+
+/* ==========================================================================
+   Locked chapters: the Learn expander goes behind the blur too
+   --------------------------------------------------------------------------
+   The band used to stay sharp everywhere except Attachment, on the reasoning that
+   its three-line tease was the hook. Eman's call on 2026-08-19: on a locked report
+   every one of these expanders is blurred, CTA included, and an unlocked report is
+   untouched.
+
+   "Locked" is read off the paywall card the chapter renders — `:has()` on the
+   PremiumOverlay — because most chapters carry no `--locked` marker of their own.
+
+   The band ROOT is blurred, not its summary/peek/teaser individually: one filter
+   for the whole thing, so nothing inside can end up blurred twice (4px inside 4px
+   reads as 8px). Every expander root is listed by name rather than matched on a
+   class suffix, so a chapter added later shows up as a missing line here instead of
+   silently opting out.
+   ========================================================================== */
+.report-section:has(.report-premium-overlay) .report-accel__details,
+.report-section:has(.report-premium-overlay) .report-arousal__details,
+.report-section:has(.report-premium-overlay) .report-attachment__details,
+.report-section:has(.report-premium-overlay) .report-beliefs__details,
+.report-section:has(.report-premium-overlay) .report-confidence__details,
+.report-section:has(.report-premium-overlay) .report-curiosity__details,
+.report-section:has(.report-premium-overlay) .report-energy__details,
+.report-section:has(.report-premium-overlay) .report-enjoy__details,
+.report-section:has(.report-premium-overlay) .report-fantasy__details,
+.report-section:has(.report-premium-overlay) .report-initiation__details,
+.report-section:has(.report-premium-overlay) .report-insecurities__details,
+.report-section:has(.report-premium-overlay) .report-libido__details,
+.report-section:has(.report-premium-overlay) .report-lovelang__details,
+.report-section:has(.report-premium-overlay) .report-partnership__details,
+.report-section:has(.report-premium-overlay) .report-power__details,
+.report-section:has(.report-premium-overlay) .report-reward__details {
   filter: blur(var(--report-lock-blur));
   user-select: none;
   pointer-events: none;
