@@ -397,6 +397,20 @@ async function captureColumn(page, { sectionId, selector, name, keepRows }, view
       if (rows.length <= keepRows) return { error: `only ${rows.length} rows` };
       for (const row of rows.slice(0, keepRows)) row.style.display = "none";
 
+      // Strip the STRAIGHT EDGES before shooting: each row carries a coloured left
+      // rule and an opening quote glyph, and a long vertical line is the one shape a
+      // blur cannot destroy. At quarter scale that rule is sub-pixel in the file, so
+      // the 4x upscale on display turned it back into a hard-edged band running the
+      // height of the image — the one thing in the picture that still read as sharp.
+      // Text alone upscales to mush, which is the point.
+      for (const row of rows.slice(keepRows)) {
+        if (!(row instanceof HTMLElement)) continue;
+        row.style.borderLeftColor = "transparent";
+        for (const quote of row.querySelectorAll(".report-beliefs__quote")) {
+          if (quote instanceof HTMLElement) quote.style.visibility = "hidden";
+        }
+      }
+
       list.setAttribute("data-preview-capture", "");
       list.style.filter = `blur(${blur}px)`;
       const r = list.getBoundingClientRect();
@@ -413,7 +427,12 @@ async function captureColumn(page, { sectionId, selector, name, keepRows }, view
         list.removeAttribute("data-preview-capture");
         list.style.filter = "";
         for (const row of Array.from(list.children)) {
-          if (row instanceof HTMLElement && row.style.display === "none") row.style.display = "";
+          if (!(row instanceof HTMLElement)) continue;
+          if (row.style.display === "none") row.style.display = "";
+          row.style.borderLeftColor = "";
+          for (const quote of row.querySelectorAll(".report-beliefs__quote")) {
+            if (quote instanceof HTMLElement) quote.style.visibility = "";
+          }
         }
       },
       { sectionId, selector }
@@ -425,9 +444,11 @@ async function captureColumn(page, { sectionId, selector, name, keepRows }, view
   }
 
   const file = join(OUT_DIR, `${name}-${viewportName}.jpg`);
+  // 88 rather than the section captures' 72: these are upscaled 4x on display, so
+  // JPEG block boundaries land as visible banding rather than as noise. Still ~2KB.
   await page
     .locator(`#${sectionId} [data-preview-capture]`)
-    .screenshot({ path: file, type: "jpeg", quality: 72 });
+    .screenshot({ path: file, type: "jpeg", quality: 88 });
   await restore();
 
   return {

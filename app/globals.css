@@ -26726,6 +26726,10 @@ input.autofill-dark:-internal-autofill-previewed {
   display: block;
   width: 100%;
   height: auto;
+  /* Sub-pixel smoothing, not a second lock blur. The file is 89px wide and displays
+     at 355, so the browser's upscale leaves faint JPEG block boundaries; half a
+     pixel of blur dissolves them without touching how soft the chapter reads. */
+  filter: blur(0.5px);
 }
 
 /* And the softness keeps CLIMBING down the image, instead of sitting flat at one

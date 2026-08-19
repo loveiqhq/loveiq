@@ -123,6 +123,18 @@ describe("BeliefsSection — how much the server ships", () => {
     expect(route).toMatch(/length: beliefsUnlocked \? BELIEFS_LOOSEN_ROWS : BELIEFS_TEASER_ROWS/);
   });
 
+  it("captures the rasters without the row rules, which a blur cannot destroy", () => {
+    // A long vertical line survives any blur, and at quarter scale the row's left
+    // rule is sub-pixel in the file — the 4x upscale turned it back into a hard-edged
+    // band down the image, the one thing in the picture that still read as sharp.
+    const gen = readFileSync(join(process.cwd(), "scripts/generate-locked-previews.mjs"), "utf8");
+    expect(gen).toContain('row.style.borderLeftColor = "transparent"');
+    expect(gen).toMatch(/quote\.style\.visibility = "hidden"/);
+    // ...and restored afterwards, so the unlocked page the script is walking is not
+    // left mutated for the next capture.
+    expect(gen).toContain('row.style.borderLeftColor = ""');
+  });
+
   it("captures the rasters with exactly the shipped rows hidden", () => {
     // If these numbers drift apart, the sharp rows and the image either double up
     // the same beliefs or skip one.
@@ -172,6 +184,13 @@ describe("BeliefsSection — how much the server ships", () => {
     expect(bodyAt(".report-beliefs__preview-fade--tease .report-locked-preview {")).not.toContain(
       "filter"
     );
+    // The image carries half a pixel to dissolve JPEG block boundaries from the 4x
+    // upscale — sub-pixel smoothing, not a second lock blur. Anything ≥1px here
+    // would make this chapter visibly softer than every other locked surface.
+    const img = bodyAt(".report-beliefs__preview-fade--tease .report-locked-preview__img");
+    const blur = img.match(/filter: blur\(([\d.]+)px\)/);
+    expect(blur, "the smoothing pass is gone").not.toBeNull();
+    expect(Number(blur![1])).toBeLessThan(1);
     expect(bodyAt(".report-beliefs__preview-fade--tease .report-beliefs__list {")).toContain(
       "mask-image: none"
     );
