@@ -79,6 +79,16 @@ const BookIcon: FC = () => (
  * 6.77px marker at its end). The marker is positioned at the fill percentage so
  * bar and dot can never disagree.
  */
+/**
+ * Triggers shown as live text on a locked report. Three: the first two read sharp
+ * and the third carries a light blur, so the softness ramps before the raster takes
+ * over at row four — a fully blurred image starting under sharp text reads as a
+ * pasted block. Must match `keepRows` in the accel entries of COLUMN_CAPTURES
+ * (scripts/generate-locked-previews.mjs), or the live rows and the image will double
+ * up or skip one.
+ */
+const ACCEL_TEASE_ROWS = 3;
+
 const AccelTriggerRow: FC<{ row: AccelRow; kind: "open" | "shut"; index: number }> = ({
   row,
   kind,
@@ -213,24 +223,49 @@ const AcceleratorsSection: FC<Props> = ({
             </div>
           </>
         ) : (
-          <div className="report-accel__legend" aria-hidden="true">
-            <span className="report-accel__legend-open">&#9650; What opens you</span>
-            <span className="report-accel__legend-shut">&#9660; What shuts you down</span>
+          /* Locked: the same two columns, teased the way Typical Beliefs is (Eman,
+             2026-08-19). The first three triggers per column are live — rows one and
+             two sharp, the third under a light CSS blur — and the rows past them are
+             PIXELS: `accel-opens` / `accel-shuts`, build-time rasters of the real
+             remaining rows, blurred and quarter-scaled before they ship (see
+             LockedPreviewImage). Before this the locked chapter showed nothing but
+             two legend words over a whole-chapter raster.
+
+             One image per column for the same reason as beliefs: a single raster
+             under the live rows could only line up with one of the two. */
+          <div className="report-accel__columns report-accel__columns--tease" aria-hidden="true">
+            <section className="report-accel__col">
+              <h4 className="report-accel__col-heading report-accel__col-heading--open">
+                <span aria-hidden="true">&#9650;</span> What opens you
+              </h4>
+              <ul className="report-accel__rows">
+                {rows.opens.slice(0, ACCEL_TEASE_ROWS).map((row, i) => (
+                  <AccelTriggerRow key={row.label} row={row} kind="open" index={i} />
+                ))}
+                <LockedPreviewImage name="accel-opens" />
+              </ul>
+            </section>
+            <section className="report-accel__col">
+              <h4 className="report-accel__col-heading report-accel__col-heading--shut">
+                <span aria-hidden="true">&#9660;</span> What shuts you down
+              </h4>
+              <ul className="report-accel__rows">
+                {rows.shuts.slice(0, ACCEL_TEASE_ROWS).map((row, i) => (
+                  <AccelTriggerRow key={row.label} row={row} kind="shut" index={i} />
+                ))}
+                <LockedPreviewImage name="accel-shuts" />
+              </ul>
+            </section>
           </div>
         )}
 
         {locked ? (
           <div className="report-accel__verdict report-accel__verdict--locked">
-            <div className="report-accel__preview">
-              {/* A pre-blurred render of the REAL chapter. Blurring the PIXELS at
-                  build time means the paid copy is not in the file that ships, so
-                  it cannot be read back out of the DOM. See LockedPreviewImage. */}
-              <div
-                className="report-accel__preview-fade report-preview-fade--image"
-                aria-hidden="true"
-              >
-                <LockedPreviewImage name="accel" />
-              </div>
+            {/* The paywall card only — the chapter behind it is the teased columns
+                above, not a whole-chapter raster. The card is pulled down past the
+                live rows in CSS so the triggers a reader is allowed to read are not
+                sitting under it. */}
+            <div className="report-accel__preview report-accel__preview--tease">
               <PremiumOverlay
                 archetype={archetype}
                 sectionTitle={sectionTitle}

@@ -150,9 +150,12 @@ describe("BeliefsSection — how much the server ships", () => {
     // the same beliefs or skip one.
     const gen = readFileSync(join(process.cwd(), "scripts/generate-locked-previews.mjs"), "utf8");
     const block = gen.slice(gen.indexOf("const COLUMN_CAPTURES"), gen.indexOf("const VIEWPORTS"));
-    expect(block).toContain('name: "beliefs-keep"');
-    expect(block).toContain('name: "beliefs-loosen"');
-    expect([...block.matchAll(/keepRows: (\d+)/g)].map((m) => Number(m[1]))).toEqual([4, 4]);
+    // Scoped to the beliefs entries — the accelerators chapter shares this list and
+    // teases a different number of rows (see AcceleratorsSection.locked.test.tsx).
+    const beliefs = block.slice(0, block.indexOf('name: "accel-opens"'));
+    expect(beliefs).toContain('name: "beliefs-keep"');
+    expect(beliefs).toContain('name: "beliefs-loosen"');
+    expect([...beliefs.matchAll(/keepRows: (\d+)/g)].map((m) => Number(m[1]))).toEqual([4, 4]);
   });
 
   it("ramps the blur up before the raster starts", () => {

@@ -59,11 +59,10 @@ const CAPTURE_SCALE = 0.25;
  * needed when a new premium chapter ships.
  */
 const SECTION_IDS = [
-  // "typical_beliefs" is captured per COLUMN instead (see COLUMN_CAPTURES): the
-  // chapter shows its first two beliefs as live text, so a whole-chapter raster
-  // would repeat them and could not line up with two columns of different row
-  // heights.
-  "typical_arousal_accelerators_turn_ons_of_the_core_archetype",
+  // "typical_beliefs" and the accelerators chapter are captured per COLUMN instead
+  // (see COLUMN_CAPTURES): both show their first rows as live text, so a
+  // whole-chapter raster would repeat them and could not line up with two columns of
+  // different row heights.
   "core_insecurities",
   "confidence_level",
   "biochemical_reward_system_dynamics",
@@ -107,6 +106,21 @@ const COLUMN_CAPTURES = [
     selector: ".report-beliefs__col--loosen-col .report-beliefs__list",
     name: "beliefs-loosen",
     keepRows: 4,
+  },
+  // Accelerators & Brakes, same treatment: three live triggers per column
+  // (ACCEL_TEASE_ROWS in AcceleratorsSection.tsx) and the rest as pixels. Five rows
+  // per column, so each image carries two.
+  {
+    sectionId: "typical_arousal_accelerators_turn_ons_of_the_core_archetype",
+    selector: ".report-accel__col:first-of-type .report-accel__rows",
+    name: "accel-opens",
+    keepRows: 3,
+  },
+  {
+    sectionId: "typical_arousal_accelerators_turn_ons_of_the_core_archetype",
+    selector: ".report-accel__col:last-of-type .report-accel__rows",
+    name: "accel-shuts",
+    keepRows: 3,
   },
 ];
 
@@ -409,8 +423,14 @@ async function captureColumn(page, { sectionId, selector, name, keepRows }, view
       // for loosen, as the sharp rows above show.
       for (const row of rows.slice(keepRows)) {
         if (!(row instanceof HTMLElement)) continue;
-        const rgb = getComputedStyle(row).borderLeftColor.match(/(\d+),\s*(\d+),\s*(\d+)/);
-        if (rgb) row.style.borderLeftColor = `rgba(${rgb[1]}, ${rgb[2]}, ${rgb[3]}, 0.16)`;
+        const cs = getComputedStyle(row);
+        // Only where there IS a rule: beliefs rows carry one, accelerator rows do
+        // not (their straight line is the progress track, which is short and
+        // horizontal — a blur handles that fine).
+        if (parseFloat(cs.borderLeftWidth) > 0) {
+          const rgb = cs.borderLeftColor.match(/(\d+),\s*(\d+),\s*(\d+)/);
+          if (rgb) row.style.borderLeftColor = `rgba(${rgb[1]}, ${rgb[2]}, ${rgb[3]}, 0.16)`;
+        }
       }
 
       list.setAttribute("data-preview-capture", "");

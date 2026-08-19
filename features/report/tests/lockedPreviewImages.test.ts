@@ -15,7 +15,8 @@ import { describe, expect, it } from "vitest";
  * Rendering all sixteen sections would need sixteen prop fixtures, so this
  * checks the source and the assets directly.
  *
- * BeliefsSection is not in the registry below because its shape is different: it
+ * BeliefsSection and AcceleratorsSection are not in the registry below because
+ * their shape is different: they
  * shows its first two beliefs as LIVE text (Figma's locked frame keeps that
  * chapter's top rows crisp) and then one raster PER COLUMN for the rows past them
  * — a keep row is 51px against a loosen row's 111px, so a single whole-chapter
@@ -23,13 +24,16 @@ import { describe, expect, it } from "vitest";
  * `--image`, since only part of the column is pixels. See
  * BeliefsSection.locked.test.tsx.
  */
-const BELIEFS_COLUMN_PREVIEWS = ["beliefs-keep", "beliefs-loosen"];
+const COLUMN_PREVIEWS: Record<string, string[]> = {
+  "BeliefsSection.tsx": ["beliefs-keep", "beliefs-loosen"],
+  "AcceleratorsSection.tsx": ["accel-opens", "accel-shuts"],
+};
+const COLUMN_PREVIEW_NAMES = Object.values(COLUMN_PREVIEWS).flat();
 const SECTIONS_DIR = join(process.cwd(), "features/report/ui/sections");
 const PREVIEW_DIR = join(process.cwd(), "public/report-previews");
 
 /** section component file -> preview asset name */
 const SECTIONS: Record<string, string> = {
-  "AcceleratorsSection.tsx": "accel",
   "ArousalSection.tsx": "arousal",
   "ConfidenceSection.tsx": "confidence",
   "CuriositySection.tsx": "curiosity",
@@ -74,7 +78,7 @@ describe("locked preview images", () => {
     const referenced = new Set(
       Object.values(SECTIONS).flatMap((n) => [`${n}-desktop.jpg`, `${n}-mobile.jpg`])
     );
-    for (const name of BELIEFS_COLUMN_PREVIEWS) {
+    for (const name of COLUMN_PREVIEW_NAMES) {
       referenced.add(`${name}-desktop.jpg`);
       referenced.add(`${name}-mobile.jpg`);
     }
@@ -84,12 +88,15 @@ describe("locked preview images", () => {
     expect(orphans, "unreferenced preview images — delete them or wire them up").toEqual([]);
   });
 
-  it.each(BELIEFS_COLUMN_PREVIEWS)("BeliefsSection renders %s", (name) => {
-    const src = readFileSync(join(SECTIONS_DIR, "BeliefsSection.tsx"), "utf8");
-    expect(src).toContain(`<LockedPreviewImage name="${name}" />`);
-  });
+  it.each(Object.entries(COLUMN_PREVIEWS).flatMap(([file, names]) => names.map((n) => [file, n])))(
+    "%s renders %s",
+    (file, name) => {
+      const src = readFileSync(join(SECTIONS_DIR, file), "utf8");
+      expect(src).toContain(`<LockedPreviewImage name="${name}" />`);
+    }
+  );
 
-  it.each(BELIEFS_COLUMN_PREVIEWS.flatMap((n) => [`${n}-desktop.jpg`, `${n}-mobile.jpg`]))(
+  it.each(COLUMN_PREVIEW_NAMES.flatMap((n) => [`${n}-desktop.jpg`, `${n}-mobile.jpg`]))(
     "%s exists and is not empty",
     (asset) => {
       expect(statSync(join(PREVIEW_DIR, asset)).size).toBeGreaterThan(1000);
