@@ -11,118 +11,44 @@ import {
   type FC,
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
+import { resolveStageId, STAGES, type Stage, type StageId } from "@/data/report2-stages";
 
-type StageId = "recharging" | "repairing" | "awakening" | "expanding" | "grounded" | "evolving";
-
-interface Stage {
-  id: StageId;
-  label: string;
-  shortLabel: string;
-  feels: string;
-  focus: string;
-  thought: string;
-  need: string;
-  accent: string;
-  eyebrowAccent: string;
-}
-
-const STAGES: readonly Stage[] = [
-  {
-    id: "recharging",
-    label: "Recharging / Pausing",
-    shortLabel: "Recharging",
-    feels: "Quieter, lower-drive, restoring",
-    focus: "Rest, nervous system downshift, simplification",
-    thought: "Sex feels far away right now.",
-    need: "No pressure + recovery",
-    accent: "#818cf8",
-    eyebrowAccent: "#a5b4fc",
-  },
-  {
-    id: "repairing",
-    label: "Repairing / Reconnecting",
-    shortLabel: "Repairing",
-    feels: "Tender, cautious, sensitive",
-    focus: "Healing shame/pain, rebuilding trust, safety in the body",
-    thought: "Can I feel safe and open again?",
-    need: "Safety, gentleness, repair",
-    accent: "#a78bfa",
-    eyebrowAccent: "#c4b5fd",
-  },
-  {
-    id: "awakening",
-    label: "Awakening / Exploring",
-    shortLabel: "Awakening",
-    feels: "Curious, warming up, uncertain but alive",
-    focus: "Discovering desire, naming preferences, experimenting lightly",
-    thought: "What do I actually like?",
-    need: "Permission + low-stakes exploration",
-    accent: "#c084fc",
-    eyebrowAccent: "#d8b4fe",
-  },
-  {
-    id: "expanding",
-    label: "Expanding / Experimenting",
-    shortLabel: "Expanding",
-    feels: "Confident, expressive, more playful",
-    focus: "Novelty, communication, co-creating pleasure, skill-building",
-    thought: "Let\u2019s try more, what else is possible?",
-    need: "Freedom + boundaries + feedback",
-    accent: "#e879f9",
-    eyebrowAccent: "#f0abfc",
-  },
-  {
-    id: "grounded",
-    label: "Grounded / Integrated",
-    shortLabel: "Grounded",
-    feels: "Steady, familiar, embodied",
-    focus: "Consistency, sustainable intimacy, appreciation, rhythm",
-    thought: "This works for me.",
-    need: "Presence + maintenance + nuance",
-    accent: "#f472b6",
-    eyebrowAccent: "#f9a8d4",
-  },
-  {
-    id: "evolving",
-    label: "Evolving / Transcending",
-    shortLabel: "Evolving",
-    feels: "Expansive, meaningful, connected beyond the physical",
-    focus: "Purpose, intimacy-as-growth, creativity/spirituality, surrender",
-    thought: "This is bigger than sex.",
-    need: "Integration + grounding + devotion",
-    accent: "#fb7185",
-    eyebrowAccent: "#fda4af",
-  },
-];
+/**
+ * A chip in the wheel: one of the six canonical stages, or `your-stage` — the
+ * reader's own stage phrase when it is not one of the six.
+ */
+type ChipId = StageId | "your-stage";
 
 interface Props {
   userStageLabel: string | null;
 }
 
-function resolveUserStageId(userStageLabel: string | null): StageId | null {
-  if (!userStageLabel) return null;
-  const normalized = userStageLabel.toLowerCase().trim();
-  for (const stage of STAGES) {
-    if (
-      normalized.startsWith(stage.id) ||
-      normalized.startsWith(stage.shortLabel.toLowerCase()) ||
-      normalized.includes(stage.shortLabel.toLowerCase())
-    ) {
-      return stage.id;
-    }
-  }
-  return null;
-}
-
 const ORBIT_SIZE_PX = 520;
 const ORBIT_RING_RADIUS_PCT = 54; // distance of chip centre from orbit centre — slightly outside the circle so chips graze the perimeter, matching Figma.
+// Extra ring radius for chips low in the circle when a sixth chip has to fit —
+// see the `lowness` note at the ring's placement.
+const CROWDED_RING_EXTRA_PCT = 10;
 const MOBILE_ORBIT_DOT_RADIUS_PCT = 47; // dots sit just inside the outermost ring on the mobile mini orbit.
 
 const SexualStageExplorer: FC<Props> = ({ userStageLabel }) => {
-  const userStageId = useMemo(() => resolveUserStageId(userStageLabel), [userStageLabel]);
-  const initialSelected: StageId = userStageId ?? "awakening";
-  const [selectedId, setSelectedId] = useState<StageId>(initialSelected);
-  const [hoveredId, setHoveredId] = useState<StageId | null>(null);
+  const userStageId = useMemo(() => resolveStageId(userStageLabel), [userStageLabel]);
+  /**
+   * The reader's stage EXACTLY as the copy matrix words it — "Deepening /
+   * Balancing", "Rooting / Sustaining", "Leading / Opening". Ten of the fourteen
+   * archetypes carry a phrase that is not one of the six canonical stages, so
+   * `resolveStageId` returns null for them and the anchor used to fall back to
+   * "Awakening / Exploring": the wheel marked a stage the reader is not in, one
+   * card below the card naming the stage they are.
+   *
+   * Figma 8435:688 settles it — that node is still NAMED "3. Awakening (Current
+   * Active Stage)" from the template but its text reads "Evolving / Transcending",
+   * the sample archetype's own phrase, under the "YOUR likely CURRENT STAGE"
+   * eyebrow. The anchor carries the reader's words, whatever they are.
+   */
+  const userStageName = userStageLabel?.trim() || null;
+  const anchorId: ChipId = userStageId ?? (userStageName ? "your-stage" : "awakening");
+  const [selectedId, setSelectedId] = useState<ChipId>(anchorId);
+  const [hoveredId, setHoveredId] = useState<ChipId | null>(null);
 
   const rootRef = useRef<HTMLDivElement>(null);
   const [isRevealed, setIsRevealed] = useState(() => typeof IntersectionObserver === "undefined");
@@ -150,7 +76,11 @@ const SexualStageExplorer: FC<Props> = ({ userStageLabel }) => {
   const orbitIndicatorRef = useRef<HTMLSpanElement>(null);
   const cardSpacingRef = useRef(0);
   const initialMobileIndex = useMemo(() => {
-    const idx = STAGES.findIndex((s) => s.id === (userStageId ?? "awakening"));
+    // Only when the reader's stage IS one of the six; otherwise the carousel is a
+    // plain explainer and opens at the first stage rather than on a card that
+    // isn't theirs.
+    if (!userStageId) return 0;
+    const idx = STAGES.findIndex((s) => s.id === userStageId);
     return idx >= 0 ? idx : 0;
   }, [userStageId]);
   const [mobileActiveIndex, setMobileActiveIndex] = useState(initialMobileIndex);
@@ -262,19 +192,23 @@ const SexualStageExplorer: FC<Props> = ({ userStageLabel }) => {
     }
   }, [isRevealed, userStageId]);
 
-  // The user's current stage (or a sensible fallback) is always rendered as
-  // the large card at the top of the orbit. Hovering/selecting other chips
-  // swaps the detail card content without changing this anchor.
-  const anchorStageId: StageId = userStageId ?? "awakening";
-  // STAGES has 6 entries; index 2 always exists. Both branches return Stage, never undefined.
-  const anchorStage: Stage = STAGES.find((s) => s.id === anchorStageId) ?? STAGES[2]!;
-  const ringStages = useMemo(() => STAGES.filter((s) => s.id !== anchorStageId), [anchorStageId]);
+  // The reader's stage is always the large chip at the top of the orbit.
+  // Hovering/selecting other chips swaps their detail without moving this anchor.
+  // STAGES has 6 entries; index 2 always exists, so both branches return a Stage.
+  const anchorStyleStage: Stage = STAGES.find((s) => s.id === userStageId) ?? STAGES[2]!;
+  const anchorLabel = userStageName ?? anchorStyleStage.label;
+  // A ring chip is dropped only when the ANCHOR occupies that canonical stage —
+  // it would otherwise appear twice (and, with no stage at all, the anchor's
+  // "awakening" fallback would collide with awakening's own ring chip). When the
+  // reader's phrase is its own, `anchorId` is `your-stage` and all six canonical
+  // stages stay on the ring: none of the model is withheld to make room.
+  const ringStages = useMemo(() => STAGES.filter((s) => s.id !== anchorId), [anchorId]);
 
   // Order around the orbit, going clockwise from top: anchor first, then the
-  // five remaining stages in their natural array order.
-  const orbitOrder = useMemo<readonly Stage[]>(
-    () => [anchorStage, ...ringStages],
-    [anchorStage, ringStages]
+  // remaining stages in their natural array order.
+  const orbitOrder = useMemo<readonly ChipId[]>(
+    () => [anchorId, ...ringStages.map((s) => s.id)],
+    [anchorId, ringStages]
   );
 
   const onChipKeyDown = useCallback(
@@ -286,7 +220,7 @@ const SexualStageExplorer: FC<Props> = ({ userStageLabel }) => {
       const dir = isRight ? 1 : -1;
       const nextIdx = (currentIndex + dir + orbitOrder.length) % orbitOrder.length;
       // nextIdx is mod orbitOrder.length, so the lookup is always defined.
-      const nextId = orbitOrder[nextIdx]!.id;
+      const nextId = orbitOrder[nextIdx]!;
       setSelectedId(nextId);
       const root = rootRef.current;
       if (!root) return;
@@ -295,8 +229,6 @@ const SexualStageExplorer: FC<Props> = ({ userStageLabel }) => {
     },
     [orbitOrder]
   );
-
-  const userStage = userStageId ? (STAGES.find((s) => s.id === userStageId) ?? null) : null;
 
   return (
     <div
@@ -308,8 +240,14 @@ const SexualStageExplorer: FC<Props> = ({ userStageLabel }) => {
           orbit (rendered by SexualStageSection) replaces the old detail card. */}
       <div className="stage-explorer__desktop">
         <div className="stage-explorer__orbit-wrap">
+          {/* `--crowded` when a sixth chip has to share the ring: the reader's own
+              phrase holds the anchor and no canonical stage is displaced, so the
+              two chips nearest the bottom sit 50° apart and need narrower pills to
+              clear each other (see the CSS rule of the same name). */}
           <div
-            className="stage-explorer__orbit"
+            className={`stage-explorer__orbit${
+              ringStages.length > 5 ? " stage-explorer__orbit--crowded" : ""
+            }`}
             style={{ "--orbit-size": `${ORBIT_SIZE_PX}px` } as CSSProperties}
           >
             <span className="stage-explorer__ring stage-explorer__ring--outer" aria-hidden="true" />
@@ -324,36 +262,36 @@ const SexualStageExplorer: FC<Props> = ({ userStageLabel }) => {
               </p>
             </div>
 
-            {/* Anchor (user's current stage) — large card at top */}
+            {/* Anchor (the reader's own stage) — large card at top */}
             <button
-              key={anchorStage.id}
+              key={anchorId}
               type="button"
-              data-chip-id={anchorStage.id}
+              data-chip-id={anchorId}
               className={`stage-explorer__chip stage-explorer__chip--anchor${
-                selectedId === anchorStage.id ? " is-selected" : ""
-              }${userStage ? " is-user-stage" : ""}`}
+                selectedId === anchorId ? " is-selected" : ""
+              }${userStageName ? " is-user-stage" : ""}`}
               style={
                 {
-                  "--chip-accent": anchorStage.accent,
-                  "--chip-eyebrow-accent": anchorStage.eyebrowAccent,
+                  "--chip-accent": anchorStyleStage.accent,
+                  "--chip-eyebrow-accent": anchorStyleStage.eyebrowAccent,
                   "--chip-delay": "0ms",
                 } as CSSProperties
               }
-              aria-pressed={selectedId === anchorStage.id}
-              aria-label={`${anchorStage.label}${userStage ? " — your current stage" : ""}`}
-              onClick={() => setSelectedId(anchorStage.id)}
-              onMouseEnter={() => setHoveredId(anchorStage.id)}
+              aria-pressed={selectedId === anchorId}
+              aria-label={`${anchorLabel}${userStageName ? " — your current stage" : ""}`}
+              onClick={() => setSelectedId(anchorId)}
+              onMouseEnter={() => setHoveredId(anchorId)}
               onMouseLeave={() => setHoveredId(null)}
-              onFocus={() => setHoveredId(anchorStage.id)}
+              onFocus={() => setHoveredId(anchorId)}
               onBlur={() => setHoveredId(null)}
               onKeyDown={(e) => onChipKeyDown(e, 0)}
             >
-              {userStage ? (
+              {userStageName ? (
                 <span className="stage-explorer__chip-eyebrow">YOUR LIKELY CURRENT STAGE</span>
               ) : null}
               <span className="stage-explorer__chip-row">
                 <span className="stage-explorer__chip-dot" aria-hidden="true" />
-                <span className="stage-explorer__chip-title">{anchorStage.label}</span>
+                <span className="stage-explorer__chip-title">{anchorLabel}</span>
               </span>
             </button>
 
@@ -362,15 +300,26 @@ const SexualStageExplorer: FC<Props> = ({ userStageLabel }) => {
                 stage's detail rows + need block, while the four un-hovered
                 siblings dim to focus attention. */}
             {ringStages.map((stage, ringIdx) => {
-              const positionIndex = ringIdx + 1; // 1..5 (anchor occupies 0)
-              // Distribute the five ring chips evenly across the bottom 300°
-              // of the circle, leaving the anchor's slot at the top free.
-              // Angles measured clockwise from top (12 o'clock = 0°).
-              const angleDegFromTop = 60 * positionIndex;
+              const positionIndex = ringIdx + 1; // 1..N (anchor occupies 0)
+              // Distribute the ring chips evenly across the bottom 300° of the
+              // circle, leaving the anchor's slot at the top free. Angles measured
+              // clockwise from top (12 o'clock = 0°). Five chips land on the
+              // design's 60° spacing; six (when the reader's own phrase takes the
+              // anchor and no canonical stage is displaced) land on 50°.
+              const angleDegFromTop = (300 / ringStages.length) * positionIndex;
               // Convert to standard math angle (counter-clockwise from +x axis).
               const angleRad = ((angleDegFromTop - 90) * Math.PI) / 180;
-              const x = 50 + ORBIT_RING_RADIUS_PCT * Math.cos(angleRad);
-              const y = 50 + ORBIT_RING_RADIUS_PCT * Math.sin(angleRad);
+              // At six chips the two nearest the bottom sit ~51° apart, and at the
+              // design's radius their pills overlapped by 64px. Chips low in the
+              // circle push outward, where the same angle buys more horizontal
+              // separation; 0 at the top, full at the bottom, and untouched in the
+              // five-chip case that matches the design.
+              const lowness = Math.max(0, -Math.cos((angleDegFromTop * Math.PI) / 180));
+              const radius =
+                ORBIT_RING_RADIUS_PCT +
+                (ringStages.length > 5 ? CROWDED_RING_EXTRA_PCT * lowness : 0);
+              const x = 50 + radius * Math.cos(angleRad);
+              const y = 50 + radius * Math.sin(angleRad);
               const isSelected = selectedId === stage.id;
               const isHovered = hoveredId === stage.id;
               const isExpanded = isHovered || isSelected;
@@ -442,11 +391,14 @@ const SexualStageExplorer: FC<Props> = ({ userStageLabel }) => {
 
       {/* Mobile: pill header → heading → mini orbit → card carousel → pager */}
       <div className="stage-explorer__mobile">
-        <div className="stage-explorer__mobile-pill" aria-live={userStage ? "polite" : "off"}>
-          {userStage ? (
+        <div className="stage-explorer__mobile-pill" aria-live={userStageName ? "polite" : "off"}>
+          {userStageName ? (
             <>
               <span className="stage-explorer__mobile-pill-eyebrow">YOUR CURRENT STAGE</span>
-              <span className="stage-explorer__mobile-pill-value">{userStage.label}</span>
+              {/* Their phrase, not the nearest canonical stage — the ten
+                  archetypes whose stage is its own read the generic explainer
+                  line here before, while desktop showed them a wrong stage. */}
+              <span className="stage-explorer__mobile-pill-value">{userStageName}</span>
             </>
           ) : (
             <span className="stage-explorer__mobile-pill-value">Explore the 6 sexual stages</span>

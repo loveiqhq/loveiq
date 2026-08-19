@@ -246,14 +246,26 @@ function scaleToPercent(value: number | null): number | null {
   return SCALE_TO_PERCENT[value] ?? null;
 }
 
-/** Maps scoring engine answer codes to display labels */
+/**
+ * The reader's OWN answer to "Which of these best describes where your sexuality
+ * feels right now?" (survey Q16005 → `OVL_PHASE_NOW`), mapped to the six stage
+ * names the report and the stage wheel use.
+ *
+ * The keys were the label slugs — `recharging`, `awakening`, `expanding`,
+ * `grounded`, `evolving` — and NOT the answer codes the survey actually stores
+ * (`pausing`, `waking_up`, `experimenting`, `steady`, `transcending`). Only
+ * `repairing` happened to be spelled the same, so five of the six answers fell
+ * through to `toTitleCase(code)`: someone who answered "Pausing — I need a break
+ * from sex right now" had their stage rendered as the bare word "Pausing", and the
+ * stage wheel could never mark the season they had just told us they were in.
+ */
 const STAGE_CODE_TO_LABEL: Record<string, string> = {
-  recharging: "Recharging / Pausing",
+  pausing: "Recharging / Pausing",
   repairing: "Repairing / Reconnecting",
-  awakening: "Awakening / Exploring",
-  expanding: "Expanding / Experimenting",
-  grounded: "Grounded / Integrated",
-  evolving: "Evolving / Transcending",
+  waking_up: "Awakening / Exploring",
+  experimenting: "Expanding / Experimenting",
+  steady: "Grounded / Integrated",
+  transcending: "Evolving / Transcending",
 };
 
 function describeSatisfactionStatus(value: number | null) {

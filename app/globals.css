@@ -20792,6 +20792,24 @@ input.autofill-dark:-internal-autofill-previewed {
     box-shadow 350ms ease;
 }
 
+/* Six ring chips instead of five — the case where the reader's stage phrase is
+   its own ("Deepening / Balancing" and nine others), so it takes the anchor
+   without displacing a canonical stage. The two chips nearest the bottom then sit
+   50° apart, and at the design's 300px pill width they overlapped by 64px. The
+   ring already pushes low chips outward (see `lowness` in the component); this
+   trims the pills the rest of the way, which also keeps the side chips inside the
+   report column. Labels are single-line and well under this width — the 300px cap
+   is set by the collapsed detail panel behind them, not by the title. */
+.stage-explorer__orbit--crowded .stage-explorer__chip-slot .stage-explorer__chip {
+  max-width: 250px;
+}
+
+.stage-explorer__orbit--crowded .stage-explorer__chip-slot:hover .stage-explorer__chip,
+.stage-explorer__orbit--crowded .stage-explorer__chip-slot:focus-within .stage-explorer__chip,
+.stage-explorer__orbit--crowded .stage-explorer__chip-slot .stage-explorer__chip.is-expanded {
+  width: 250px;
+}
+
 .stage-explorer__chip-slot:hover .stage-explorer__chip,
 .stage-explorer__chip-slot:focus-within .stage-explorer__chip,
 .stage-explorer__chip-slot .stage-explorer__chip.is-expanded {
