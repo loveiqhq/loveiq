@@ -26717,18 +26717,21 @@ input.autofill-dark:-internal-autofill-previewed {
   opacity: 0.84;
 }
 
-.report-beliefs__preview-fade--tease .report-locked-preview {
-  display: block;
-  width: 100%;
-}
-
 .report-beliefs__preview-fade--tease .report-locked-preview__img {
   display: block;
-  width: 100%;
+  /* The capture carries `--lp-pad` of padding on every side so the blur's falloff
+     is inside the image instead of clipped at its edge (COLUMN_CAPTURE_PAD_PX in
+     scripts/generate-locked-previews.mjs). Widening by twice that and pulling the
+     margins back keeps the CONTENT at 1:1 with the live rows above, with the soft
+     edge overhanging into the card's padding. */
+  width: calc(100% + var(--lp-pad) * 2);
+  /* Tailwind's preflight caps every img at max-width:100%, which would clamp the
+     widened box straight back to the column and shrink the content by the pad. */
+  max-width: none;
   height: auto;
-  /* Sub-pixel smoothing, not a second lock blur. The file is 89px wide and displays
-     at 355, so the browser's upscale leaves faint JPEG block boundaries; half a
-     pixel of blur dissolves them without touching how soft the chapter reads. */
+  margin: calc(var(--lp-pad) * -1) calc(var(--lp-pad) * -1) calc(var(--lp-pad) * -1);
+  /* Sub-pixel smoothing, not a second lock blur: dissolves the JPEG block
+     boundaries the upscale leaves behind. */
   filter: blur(0.5px);
 }
 
@@ -26787,6 +26790,13 @@ input.autofill-dark:-internal-autofill-previewed {
 
 .report-beliefs__preview-fade--tease .report-locked-preview {
   position: relative;
+  width: 100%;
+  /* flow-root, not overflow:hidden — the wrapper must NOT clip the feather, but it
+     must stop the image's negative margins collapsing out of it, so its own box
+     stays exactly the content region the pad surrounds. */
+  display: flow-root;
+  /* Must match COLUMN_CAPTURE_PAD_PX in scripts/generate-locked-previews.mjs. */
+  --lp-pad: 20px;
 }
 
 /* The box's height comes from the paywall card, and the wrapper holding the columns
@@ -26839,18 +26849,33 @@ input.autofill-dark:-internal-autofill-previewed {
   opacity: 0.9;
 }
 
-.report-accel__columns--tease .report-locked-preview {
+.report-accel__columns--tease .report-locked-preview,
+.report-accel__tail-preview .report-locked-preview {
   position: relative;
-  display: block;
+  /* See the beliefs rule: contains the feather's negative margins without clipping. */
+  display: flow-root;
   width: 100%;
-  margin-top: clamp(10px, 1vw, 14px);
+  /* Must match COLUMN_CAPTURE_PAD_PX in scripts/generate-locked-previews.mjs. */
+  --lp-pad: 20px;
 }
 
-.report-accel__columns--tease .report-locked-preview__img {
+.report-accel__columns--tease .report-locked-preview {
+  /* The image's own feather covers the gap the rows used to need. */
+  margin-top: 0;
+}
+
+.report-accel__columns--tease .report-locked-preview__img,
+.report-accel__tail-preview .report-locked-preview__img {
   display: block;
-  width: 100%;
+  /* Same trick as beliefs: widen by the feather and pull the margins back, so the
+     content stays 1:1 with the live rows and only the soft edge overhangs. */
+  width: calc(100% + var(--lp-pad) * 2);
+  /* Tailwind's preflight caps every img at max-width:100%, which would clamp the
+     widened box straight back to the column and shrink the content by the pad. */
+  max-width: none;
   height: auto;
-  /* Sub-pixel smoothing for the upscale, as on beliefs — not a second lock blur. */
+  margin: calc(var(--lp-pad) * -1) calc(var(--lp-pad) * -1) calc(var(--lp-pad) * -1);
+  /* Sub-pixel smoothing for the upscale — not a second lock blur. */
   filter: blur(0.5px);
 }
 
@@ -26885,13 +26910,6 @@ input.autofill-dark:-internal-autofill-previewed {
   margin-top: clamp(16px, 1.8vw, 24px);
   user-select: none;
   pointer-events: none;
-}
-
-.report-accel__tail-preview .report-locked-preview__img {
-  display: block;
-  width: 100%;
-  height: auto;
-  filter: blur(0.5px);
 }
 
 .report-accel__tail-preview::after {

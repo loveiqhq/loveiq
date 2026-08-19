@@ -184,6 +184,49 @@ describe("BeliefsSection — how much the server ships", () => {
     expect(graded).toContain("rgba(0, 0, 0, 1) 100%");
   });
 
+  it("captures a feather and pulls it back out, in both raster scopes", () => {
+    // A CSS blur bleeds past the element's box but an element screenshot clips TO
+    // that box, so every column crop used to end on four razor-straight edges —
+    // soft inside, hard border. The capture now pads the element and the page pulls
+    // the padding back out with negative margins, so the falloff is inside the file
+    // and the CONTENT still lands 1:1 on the live rows above it. Both halves have to
+    // agree: pad the capture without widening the img and the chapter shrinks; widen
+    // without padding and the hard edge is back.
+    const gen = readFileSync(join(process.cwd(), "scripts/generate-locked-previews.mjs"), "utf8");
+    expect(gen).toMatch(/const COLUMN_CAPTURE_PAD_PX = COLUMN_BLUR_PX \* 2\.5;/);
+    // The pad overhangs into the gutter, where the next column's rule would be
+    // captured as a sharp vertical line — the one shape a blur cannot destroy.
+    expect(gen).toContain('sib.style.visibility = "hidden"');
+    expect(gen).toContain("window.__previewHidden");
+
+    const css = readFileSync(join(process.cwd(), "app/globals.css"), "utf8");
+    const bodyAt = (selector: string) => {
+      const at = css.indexOf(selector);
+      expect(at, `missing rule: ${selector}`).toBeGreaterThan(-1);
+      return css.slice(at, css.indexOf("}", at));
+    };
+    for (const wrapper of [
+      ".report-beliefs__preview-fade--tease .report-locked-preview {",
+      ".report-accel__columns--tease .report-locked-preview,",
+    ]) {
+      const rule = bodyAt(wrapper);
+      // Must match COLUMN_CAPTURE_PAD_PX: 8 * 2.5.
+      expect(rule).toContain("--lp-pad: 20px");
+      // Contains the negative margins without clipping the feather off again.
+      expect(rule).toContain("display: flow-root");
+    }
+    for (const img of [
+      ".report-beliefs__preview-fade--tease .report-locked-preview__img {",
+      ".report-accel__columns--tease .report-locked-preview__img,",
+    ]) {
+      const rule = bodyAt(img);
+      expect(rule).toContain("width: calc(100% + var(--lp-pad) * 2)");
+      // Tailwind's preflight caps images at 100%, which clamps that straight back.
+      expect(rule).toContain("max-width: none");
+      expect(rule).toContain("margin: calc(var(--lp-pad) * -1)");
+    }
+  });
+
   it("keeps the paywall card below every row the reader can actually read", () => {
     // Centred, the card's top edge sat at 32px — above the live rows — so the reader
     // could see there was text and not finish it: measured, it covered 202px of

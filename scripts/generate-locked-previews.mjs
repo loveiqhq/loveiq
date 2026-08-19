@@ -67,6 +67,19 @@ const COLUMN_CAPTURE_SCALE = 0.5;
 const COLUMN_BLUR_PX = 8;
 
 /**
+ * Padding added around a column crop before it is shot.
+ *
+ * A CSS blur bleeds OUTSIDE the element's box, but `locator.screenshot()` clips to
+ * that box — so the soft interior ended on a razor-straight edge on all four sides,
+ * which is what read as sharp. Wrapping the element in this much padding puts the
+ * falloff inside the frame, so the image's own edges are soft. The app pulls the
+ * padding back out with a negative margin (`--lp-pad` in globals.css) so the content
+ * still lines up 1:1 with the live rows above it. 2.5x the blur: a gaussian is
+ * visually finished by about 2.5 sigma.
+ */
+const COLUMN_CAPTURE_PAD_PX = COLUMN_BLUR_PX * 2.5;
+
+/**
  * Locked sections, keyed by DOM id. The card class prefix is derived at runtime
  * from `article[class*="__card"]`, so adding a section here is the only change
  * needed when a new premium chapter ships.
@@ -425,7 +438,7 @@ async function captureColumn(page, { sectionId, selector, name, keepRows, only }
   await page.waitForTimeout(REVEAL_SETTLE_MS);
 
   const prepared = await page.evaluate(
-    ({ sectionId, selector, keepRows, blur, only }) => {
+    ({ sectionId, selector, keepRows, blur, only, pad }) => {
       const section = document.getElementById(sectionId);
       if (!section) return { error: "section not found" };
       const list = section.querySelector(selector);
@@ -469,24 +482,68 @@ async function captureColumn(page, { sectionId, selector, name, keepRows, only }
         }
       }
 
-      list.setAttribute("data-preview-capture", "");
+      // Wrap so the blur's falloff lands INSIDE the capture instead of being clipped
+      // at the element's edge. The wrapper carries the card's own white, so the
+      // falloff fades into the colour the chapter already sits on.
+      const wrapper = document.createElement("div");
+      wrapper.setAttribute("data-preview-capture", "");
+      wrapper.setAttribute("data-preview-wrapper", "");
+      wrapper.style.padding = `${pad}px`;
+      wrapper.style.background = "#ffffff";
+      // content-box + 100% width so the CONTENT stays the column's own width and the
+      // padding overhangs: with the default border-box the content would shrink by
+      // 2x pad and the blurred rows would re-wrap narrower than the live ones above.
+      wrapper.style.boxSizing = "content-box";
+      wrapper.style.width = "100%";
+      wrapper.style.margin = `0 -${pad}px`;
+      list.parentElement?.insertBefore(wrapper, list);
+      wrapper.appendChild(list);
+
+      // The padding overhangs into the gutter, and the neighbouring column paints
+      // after this one (later in DOM order) — so without this the pad captures the
+      // next column's left rule as a razor-sharp vertical line inside the raster,
+      // which is exactly the edge a blur cannot destroy. Hide everything that isn't
+      // an ancestor of the wrapper (visibility keeps layout intact) and lift the
+      // wrapper above whatever is left.
+      wrapper.style.position = "relative";
+      wrapper.style.zIndex = "9999";
+      const hidden = [];
+      for (let node = wrapper; node && node !== document.body; node = node.parentElement) {
+        for (const sib of Array.from(node.parentElement?.children ?? [])) {
+          if (sib === node || !(sib instanceof HTMLElement) || sib.contains(wrapper)) continue;
+          hidden.push([sib, sib.style.visibility]);
+          sib.style.visibility = "hidden";
+        }
+      }
+      window.__previewHidden = hidden;
+
       list.style.filter = `blur(${blur}px)`;
-      const r = list.getBoundingClientRect();
+      const r = wrapper.getBoundingClientRect();
       return {
         width: r.width,
         height: r.height,
+        pad,
         rows: only ? rows.length : rows.length - keepRows,
       };
     },
-    { sectionId, selector, keepRows, blur: COLUMN_BLUR_PX, only }
+    { sectionId, selector, keepRows, blur: COLUMN_BLUR_PX, only, pad: COLUMN_CAPTURE_PAD_PX }
   );
 
   const restore = () =>
     page.evaluate(
       ({ sectionId, selector }) => {
-        const list = document.getElementById(sectionId)?.querySelector(selector);
+        const section = document.getElementById(sectionId);
+        for (const [el, prev] of window.__previewHidden ?? []) el.style.visibility = prev;
+        window.__previewHidden = undefined;
+        // Unwrap the feather wrapper first, so the list goes back where it was.
+        const wrapper = section?.querySelector("[data-preview-wrapper]");
+        if (wrapper instanceof HTMLElement) {
+          const parent = wrapper.parentElement;
+          while (wrapper.firstChild) parent?.insertBefore(wrapper.firstChild, wrapper);
+          wrapper.remove();
+        }
+        const list = section?.querySelector(selector);
         if (!(list instanceof HTMLElement)) return;
-        list.removeAttribute("data-preview-capture");
         list.style.filter = "";
         for (const row of Array.from(list.children)) {
           if (!(row instanceof HTMLElement)) continue;
@@ -516,6 +573,7 @@ async function captureColumn(page, { sectionId, selector, name, keepRows, only }
     file,
     width: Math.round(prepared.width),
     height: Math.round(prepared.height),
+    pad: prepared.pad,
     rows: prepared.rows,
   };
 }
@@ -570,7 +628,7 @@ async function main() {
       if (r.error) console.log(`   FAIL ${spec.name}: ${r.error}`);
       else
         console.log(
-          `   ok   ${r.name.padEnd(22)} ${r.width}x${r.height}  (${r.rows} rows past the tease)`
+          `   ok   ${r.name.padEnd(22)} ${r.width}x${r.height}  (${r.rows} rows past the tease, ${r.pad}px feather)`
         );
     }
     await columnPage.close();
