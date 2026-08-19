@@ -8620,9 +8620,14 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-hero-card__content {
   display: flex;
   flex-direction: column;
-  gap: clamp(30px, 3.6vw, 44px);
+  /* Straight off the frame the designer measured for us: `padding: 24px 0; gap:
+     32px` on a 471px column. Ours ran 38-44px of gap plus two extra margins below
+     (see the deleted rules further down), so the four blocks sat 38 / 52 / 50 apart
+     against the design's flat 32, and the column had 18px of top padding and none at
+     the bottom. */
+  gap: 32px;
   width: 100%;
-  padding-top: 18px;
+  padding: 24px 0;
 }
 
 .report-hero-card__label {
@@ -8768,10 +8773,11 @@ input.autofill-dark:-internal-autofill-previewed {
   }
 
   .report-hero-card__content {
-    /* Figma leaves real air between the hero's four blocks (48-55px between the
-       label, the motivation card, the trait grid and the meters). This used to
-       tighten it to 12px, which ran them together — the "no space" report. */
-    gap: 38px;
+    /* This block is `min-width: 1280px` — the WIDEST screens, not mobile, whatever
+       the comment that used to sit here said. The desktop frame's gap is 32px, the
+       same as the base, so this exists only to state it and stop the next person
+       reading 38px as intentional. */
+    gap: 32px;
   }
 
   .report-hero-card__motivation {
@@ -18023,9 +18029,8 @@ input.autofill-dark:-internal-autofill-previewed {
 
   .report-hero-card__content {
     max-width: 100%;
-    /* Mobile Figma (9087:9524) is even more generous than desktop — 49-70px
-       between the same four blocks. This was 14px. */
-    gap: 28px;
+    /* Same 24px as the ≤768 block above — see there for why it is not 49-70px. */
+    gap: 24px;
   }
 
   .report-hero-card__motivation {
@@ -24871,16 +24876,9 @@ input.autofill-dark:-internal-autofill-previewed {
   box-shadow: none;
 }
 
-/* Figma's two widest breaks in the hero card: into the trait grid and into the
-   meters. Additive on top of the base gap above rather than replacing it, so the
-   rhythm still scales with the viewport. */
-.report-hero-card__content > .report-hero-card__traits {
-  margin-top: clamp(6px, 1.2vw, 14px);
-}
-
-.report-hero-card__content > .report-hero-card__progress {
-  margin-top: clamp(4px, 1vw, 12px);
-}
+/* No extra margin into the trait grid or the meters: both frames space these four
+   blocks with a flat gap (32px desktop, 24px mobile) and nothing else. These two
+   rules added 14px and 12px on top of it, which is how 32 became 52 and 50. */
 
 /* ── LEARN panels bleed to their card's edges ──────────────────────────────
    The collapsible LEARN panel is the same component in every chapter, but
