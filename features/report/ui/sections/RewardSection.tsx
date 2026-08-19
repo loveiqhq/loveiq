@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type CSSProperties, type FC } from "react";
+import VerdictStar from "./VerdictStar";
 import LockedPreviewImage from "./LockedPreviewImage";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import { useRevealOnView } from "../hooks/useRevealOnView";
@@ -397,10 +398,9 @@ const RewardSection: FC<Props> = ({
 
             {copy.takeaway ? (
               <div className="report-reward__verdict">
-                <span className="report-reward__star" aria-hidden="true">
-                  &#10037;
-                </span>
+                <VerdictStar />
                 <p className="report-reward__takeaway">{copy.takeaway}</p>
+                <span className="report-verdict-rule" aria-hidden="true" />
               </div>
             ) : null}
           </>

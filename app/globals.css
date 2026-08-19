@@ -9987,13 +9987,6 @@ input.autofill-dark:-internal-autofill-previewed {
   padding: clamp(6px, 1.4vw, 16px) 0 clamp(2px, 0.6vw, 6px);
 }
 
-.report-insecurities__star {
-  color: rgba(157, 138, 215, 0.85);
-  font-size: 0.9rem;
-  line-height: 1;
-  user-select: none;
-}
-
 .report-insecurities__takeaway {
   margin: 0;
   max-width: none;
@@ -10405,13 +10398,6 @@ input.autofill-dark:-internal-autofill-previewed {
   align-items: center;
   gap: 8px;
   padding: clamp(4px, 1vw, 10px) 0 clamp(2px, 0.6vw, 6px);
-}
-
-.report-reward__star {
-  color: rgba(157, 138, 215, 0.85);
-  font-size: 0.9rem;
-  line-height: 1;
-  user-select: none;
 }
 
 .report-reward__takeaway {
@@ -10858,13 +10844,6 @@ input.autofill-dark:-internal-autofill-previewed {
   align-items: center;
   gap: 8px;
   padding: clamp(4px, 1vw, 10px) 0 clamp(2px, 0.6vw, 6px);
-}
-
-.report-energy__star {
-  color: rgba(157, 138, 215, 0.85);
-  font-size: 0.9rem;
-  line-height: 1;
-  user-select: none;
 }
 
 .report-energy__takeaway {
@@ -12228,12 +12207,6 @@ input.autofill-dark:-internal-autofill-previewed {
   gap: 7.6px;
   width: 100%;
   padding-top: 10px;
-}
-
-.report-initiation__star {
-  color: #795fc8;
-  font-size: 0.813rem;
-  line-height: 1;
 }
 
 .report-initiation__takeaway {
@@ -13615,6 +13588,36 @@ input.autofill-dark:-internal-autofill-previewed {
   color: rgba(22, 16, 33, 0.38);
 }
 
+/* The ✳ that closes a chapter — a 13x13 vector, not a font glyph (see
+   VerdictStar.tsx for why). The fill is the design's #795FC8; only layout lives
+   here, so the eight per-section star rules that carried three different colours
+   are gone. */
+.report-verdict-star {
+  display: block;
+  flex: 0 0 auto;
+  width: 13px;
+  height: 13px;
+}
+
+/* ── The closing flourish's rule ────────────────────────────────────────────
+   Eight chapters close on a ✳ over an italic line, and the design puts a short
+   rule UNDER that line as well (visible in the Initiation frame, and the ten
+   per-section copies of this rule that used to live here carried identical values:
+   42.9 x 1.7px, 2.3px radius, rgba(157,138,215,0.4)). They were dropped in the
+   review pass on 2026-08-17 as decorative; they are not — the designer draws the
+   star and the rule as one closing mark, so the chapters that had only one of the
+   two now have both.
+
+   One shared class rather than eight identical per-section rules, which is what
+   made them look optional in the first place. */
+.report-verdict-rule {
+  width: 42.9px;
+  height: 1.7px;
+  flex: 0 0 auto;
+  border-radius: 2.3px;
+  background: rgba(157, 138, 215, 0.4);
+}
+
 /* ✳ divider + italic closing line (Figma 8427:2766). */
 .report-growth__close {
   display: flex;
@@ -13624,12 +13627,6 @@ input.autofill-dark:-internal-autofill-previewed {
   width: 100%;
   margin-top: clamp(8px, 1.4vw, 16px);
   text-align: center;
-}
-
-.report-growth__star {
-  color: #6b5b95;
-  font-size: 0.9rem;
-  line-height: 1;
 }
 
 .report-growth__close-line {
@@ -14995,13 +14992,6 @@ input.autofill-dark:-internal-autofill-previewed {
   align-items: center;
   gap: 10px;
   padding: clamp(6px, 1.4vw, 16px) 0 clamp(2px, 0.6vw, 6px);
-}
-
-.report-accel__star {
-  color: rgba(157, 138, 215, 0.85);
-  font-size: 0.9rem;
-  line-height: 1;
-  user-select: none;
 }
 
 .report-accel__quote {
@@ -22136,13 +22126,6 @@ input.autofill-dark:-internal-autofill-previewed {
   padding: clamp(4px, 1vw, 10px) 0 clamp(2px, 0.6vw, 6px);
 }
 
-.report-power__star {
-  color: rgba(157, 138, 215, 0.85);
-  font-size: 0.9rem;
-  line-height: 1;
-  user-select: none;
-}
-
 .report-power__takeaway {
   margin: 0;
   max-width: none;
@@ -23014,13 +22997,6 @@ input.autofill-dark:-internal-autofill-previewed {
   align-items: center;
   gap: 8px;
   padding: clamp(12px, 1.6vw, 22.5px) 0 clamp(8px, 1.2vw, 18px);
-}
-
-.report-curiosity__star {
-  color: rgba(157, 138, 215, 0.85);
-  font-size: 0.9rem;
-  line-height: 1;
-  user-select: none;
 }
 
 .report-curiosity__takeaway {

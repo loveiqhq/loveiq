@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type CSSProperties, type FC } from "react";
+import VerdictStar from "./VerdictStar";
 import LockedPreviewImage from "./LockedPreviewImage";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
@@ -333,10 +334,9 @@ const GrowthSection: FC<Props> = ({
 
             {copy["ladder.close"] ? (
               <div className="report-growth__close">
-                <span className="report-growth__star" aria-hidden="true">
-                  &#10037;
-                </span>
+                <VerdictStar />
                 <p className="report-growth__close-line">{copy["ladder.close"]}</p>
+                <span className="report-verdict-rule" aria-hidden="true" />
               </div>
             ) : null}
           </>

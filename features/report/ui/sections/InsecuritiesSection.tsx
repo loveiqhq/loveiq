@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type CSSProperties, type FC } from "react";
+import VerdictStar from "./VerdictStar";
 import LockedPreviewImage from "./LockedPreviewImage";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
@@ -422,10 +423,9 @@ const InsecuritiesSection: FC<Props> = ({
 
             {copy.takeaway ? (
               <div className="report-insecurities__verdict">
-                <span className="report-insecurities__star" aria-hidden="true">
-                  &#10037;
-                </span>
+                <VerdictStar />
                 <p className="report-insecurities__takeaway">{copy.takeaway}</p>
+                <span className="report-verdict-rule" aria-hidden="true" />
               </div>
             ) : null}
           </>

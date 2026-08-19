@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FC } from "react";
+import VerdictStar from "./VerdictStar";
 import LockedPreviewImage from "./LockedPreviewImage";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
@@ -232,10 +233,9 @@ const CuriositySection: FC<Props> = ({
 
             {copy.takeaway ? (
               <div className="report-curiosity__verdict">
-                <span className="report-curiosity__star" aria-hidden="true">
-                  &#10037;
-                </span>
+                <VerdictStar />
                 <p className="report-curiosity__takeaway">{copy.takeaway}</p>
+                <span className="report-verdict-rule" aria-hidden="true" />
               </div>
             ) : null}
           </>
