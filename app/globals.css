@@ -8889,10 +8889,16 @@ input.autofill-dark:-internal-autofill-previewed {
   gap: 14px;
   /* `flex` is inert on a grid item — width/max-width is what actually sizes it. */
   width: 100%;
-  max-width: 290px;
+  /* Scaled down ~9% from Figma's 290x361 at the designer's request (2026-08-19):
+     at full size the three cards dominated the desktop page and carried visible
+     slack between the value, the graphic and the caption. Box only — the type and
+     the graphics keep their design sizes, so this tightens the card rather than
+     shrinking its content. Mobile is untouched: the ≤767px block sets its own
+     340px / min-height: 0 / 24px-20px padding. */
+  max-width: 264px;
   margin-inline: auto;
-  min-height: 361px;
-  padding: clamp(28px, 2.6vw, 36px) clamp(22px, 2vw, 28px) clamp(26px, 2.4vw, 34px);
+  min-height: 328px;
+  padding: clamp(26px, 2.4vw, 33px) clamp(20px, 1.8vw, 26px) clamp(24px, 2.2vw, 31px);
   border: 0.9px solid rgba(0, 0, 0, 0.1);
   border-radius: 22px;
   background: rgba(255, 255, 255, 0.72);
