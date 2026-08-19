@@ -15985,14 +15985,31 @@ input.autofill-dark:-internal-autofill-previewed {
   }
 }
 
-/* Mobile: rank+icon+name on row 1, motto full-width, bar+pct+view on row 2. */
+/* Mobile: rank+icon+name on row 1, motto full-width, bar+pct+view on row 3.
+   This is what the comment always claimed and the areas never did: the motto used
+   to share row 1 with the 92px "View report" pill, so it was measured at 42px wide
+   at 320, 112px at 390 — four to ten lines of two-word wrapping, and rows up to
+   252px tall. Figma has no mobile frame for this section (8427:1070 is 896px
+   wide), so the responsive layout is ours to get right.
+
+   `display: contents` on the nametag promotes the name and motto to grid items in
+   place, which is what lets the motto span the row without restructuring the
+   component or touching the desktop layout. Rows come out SHORTER than before
+   (~133px vs 157 at 390) while the motto reads in two lines instead of four. */
 @media (max-width: 640px) {
   .report-constellation__row {
     grid-template-columns: auto auto minmax(0, 1fr) auto;
+    /* Four rows so nothing competes for a column: the name spans the flexible
+       track, the motto spans everything, the bar keeps the flexible track (it
+       becomes a 60px stub if it only spans the two auto gutter columns) with the
+       % at its end as on desktop, and the pill sits on its own line. Sharing one
+       column between the % and the 92px pill is what squeezed the name to 42px. */
     grid-template-areas:
-      "rank icon nametag view"
-      "rank icon bar pct";
-    row-gap: 8px;
+      "rank icon name name"
+      "motto motto motto motto"
+      "bar bar bar pct"
+      "view view view view";
+    row-gap: 6px;
     align-items: center;
   }
 
@@ -16002,10 +16019,15 @@ input.autofill-dark:-internal-autofill-previewed {
   }
 
   .report-constellation__nametag {
-    grid-column: nametag;
+    display: contents;
+  }
+
+  .report-constellation__name {
+    grid-area: name;
   }
 
   .report-constellation__motto {
+    grid-area: motto;
     max-width: none;
   }
 
@@ -16017,6 +16039,8 @@ input.autofill-dark:-internal-autofill-previewed {
     width: 92px;
     height: 32px;
     justify-self: end;
+    /* Its own row now, so the 6px row-gap alone would sit it tight under the bar. */
+    margin-top: 2px;
   }
 }
 
