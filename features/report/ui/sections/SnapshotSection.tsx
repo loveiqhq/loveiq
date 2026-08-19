@@ -237,12 +237,18 @@ const CompareBar: FC<{ stat?: string }> = ({ stat }) => {
   );
 };
 
-const SnapshotSection: FC<Props> = ({ archetype, copy, stageResult = null }) => {
-  // Its own reveal root, like the three mini-stat boxes. This box rides
-  // `.report-section.is-visible` as a fallback, and that fires when the SECTION's
-  // top crosses the fold — which for a box further down the section means the dots
-  // have finished landing before the reader gets there.
-  const [compareRef, compareRevealed] = useRevealOnView<HTMLElement>({ threshold: 0 });
+/**
+ * The three mini-stat cards (Hidden Edge / Arousal Type / Likely Current Sexual
+ * Stage). Pulled from the live report on 2026-08-19 — "remove this for now, just
+ * hide it, maybe we will reuse it" — so it is parked behind
+ * `SHOW_SNAPSHOT_CARDS` rather than deleted: still exported, still type-checked
+ * against the section's props, still covered by
+ * `SnapshotSection.hiddenEdgeArc.test.tsx` + `arousalCurves.test.tsx`. Flip the
+ * flag to `true` to put the row back exactly as it shipped.
+ */
+const SHOW_SNAPSHOT_CARDS: boolean = false;
+
+export const SnapshotCards: FC<Props> = ({ archetype, copy, stageResult = null }) => {
   const slug = archetypeSlug(archetype) as Report2CopySlug;
   const config = getReport2Config(archetype);
   const cards = snapshotCards[slug];
@@ -273,6 +279,85 @@ const SnapshotSection: FC<Props> = ({ archetype, copy, stageResult = null }) => 
     ? openingStat.charAt(0).toUpperCase() + openingStat.slice(1)
     : null;
 
+  return (
+    <div className="report-snapshot__cards">
+      {/* Card 1 — Figma's "Your Hidden Edge" composition (eyebrow → value → 46px
+          ring → subtext, node 8719:8895) with the label kept verbatim per
+          Eman's call. The NUMBER is not Figma's `1 in 3`: STATS-AUDIT.md
+          retracted that value, so the card carries the audited per-archetype
+          first-move share instead, which reads as an edge (being one of the few
+          who open). Renders for all 14 archetypes.
+          `displayStat` only fixes capitalisation — Mark's matrix has
+          "Rarely first" for loyal-ritualist but "rarely first" for
+          minimalist-companion, and this value renders as a large serif figure. */}
+      {openingStat && openingCaption ? (
+        <article className="report-snapshot-card">
+          <p className="report-snapshot-card__eyebrow">Your Hidden Edge</p>
+          <span className="report-snapshot-card__value">{displayStat}</span>
+          <HiddenEdgeArc value={displayStat} />
+          <p className="report-snapshot-card__subtext">{openingCaption}</p>
+        </article>
+      ) : cards?.hiddenEdge ? (
+        <article className="report-snapshot-card">
+          <p className="report-snapshot-card__eyebrow">Your Hidden Edge</p>
+          {/* Figma 8719:8895 puts the value ABOVE the ring (y≈82) and the 46px
+              ring below it (y≈142) — it is not a value-inside-donut. Same
+              stack order as card 2: eyebrow → value → viz → subtext. */}
+          <span className="report-snapshot-card__value">{cards.hiddenEdge.value}</span>
+          <HiddenEdgeArc value={cards.hiddenEdge.value} />
+          <p className="report-snapshot-card__subtext">{cards.hiddenEdge.subtext}</p>
+        </article>
+      ) : null}
+
+      {/* Card 2 — Your arousal type */}
+      {arousalValue ? (
+        <article className="report-snapshot-card">
+          <p className="report-snapshot-card__eyebrow">Your Arousal Type</p>
+          <span className="report-snapshot-card__value">{arousalValue}</span>
+          <ArousalWave family={arousalFamily} />
+          {/* The body line is per FAMILY, not per archetype ("only the family
+              word, the body line and the arc change"). `snapshotCards` only
+              ever carried a Spiritual Lover entry, so the other 13 rendered no
+              line at all — fall back to the family text from Figma. */}
+          <p className="report-snapshot-card__subtext">
+            {cards?.arousalSubtext ?? AROUSAL_CURVES[arousalFamily].snapshotSubtext}
+          </p>
+        </article>
+      ) : null}
+
+      {/* Card 3 — Likely current / sexual stage */}
+      {stageWord ? (
+        <article className="report-snapshot-card report-snapshot-card--stage">
+          {/* Figma 8719:8921 breaks the line with no separator — the "/" was
+              rendering as a literal slash in the eyebrow. */}
+          <p className="report-snapshot-card__eyebrow">
+            Likely Current
+            <br />
+            Sexual Stage
+          </p>
+          <div className="report-snapshot-card__stage-value-wrap">
+            <span className="report-snapshot-card__stage-glow" aria-hidden="true" />
+            <span className="report-snapshot-card__stage-value">{stageWord}</span>
+          </div>
+          {stageFull ? <p className="report-snapshot-card__stage-full">{stageFull}</p> : null}
+          {stageSubline ? <p className="report-snapshot-card__subtext">{stageSubline}</p> : null}
+        </article>
+      ) : null}
+    </div>
+  );
+};
+
+/**
+ * "How you compare" — split out of the section body because it now renders AFTER
+ * the findings list ("Five things this report found"), which is the order Eman
+ * asked for: snapshot heading -> five findings -> this box.
+ */
+export const SnapshotCompare: FC<{ copy: SnapshotCopy | null }> = ({ copy }) => {
+  // Its own reveal root, like the three mini-stat boxes. This box rides
+  // `.report-section.is-visible` as a fallback, and that fires when the SECTION's
+  // top crosses the fold — which for a box further down the section means the dots
+  // have finished landing before the reader gets there.
+  const [compareRef, compareRevealed] = useRevealOnView<HTMLElement>({ threshold: 0 });
   const compares = [
     {
       stat: copy?.["compare1.stat"],
@@ -299,101 +384,41 @@ const SnapshotSection: FC<Props> = ({ archetype, copy, stageResult = null }) => 
     },
   ].filter((c) => c.stat || c.caption);
 
+  if (compares.length === 0) return null;
+
   return (
-    <div className="report-snapshot">
-      <h3 className="report-snapshot__heading">Your snapshot</h3>
-
-      <div className="report-snapshot__cards">
-        {/* Card 1 — Figma's "Your Hidden Edge" composition (eyebrow → value → 46px
-            ring → subtext, node 8719:8895) with the label kept verbatim per
-            Eman's call. The NUMBER is not Figma's `1 in 3`: STATS-AUDIT.md
-            retracted that value, so the card carries the audited per-archetype
-            first-move share instead, which reads as an edge (being one of the few
-            who open). Renders for all 14 archetypes.
-            `displayStat` only fixes capitalisation — Mark's matrix has
-            "Rarely first" for loyal-ritualist but "rarely first" for
-            minimalist-companion, and this value renders as a large serif figure. */}
-        {openingStat && openingCaption ? (
-          <article className="report-snapshot-card">
-            <p className="report-snapshot-card__eyebrow">Your Hidden Edge</p>
-            <span className="report-snapshot-card__value">{displayStat}</span>
-            <HiddenEdgeArc value={displayStat} />
-            <p className="report-snapshot-card__subtext">{openingCaption}</p>
-          </article>
-        ) : cards?.hiddenEdge ? (
-          <article className="report-snapshot-card">
-            <p className="report-snapshot-card__eyebrow">Your Hidden Edge</p>
-            {/* Figma 8719:8895 puts the value ABOVE the ring (y≈82) and the 46px
-                ring below it (y≈142) — it is not a value-inside-donut. Same
-                stack order as card 2: eyebrow → value → viz → subtext. */}
-            <span className="report-snapshot-card__value">{cards.hiddenEdge.value}</span>
-            <HiddenEdgeArc value={cards.hiddenEdge.value} />
-            <p className="report-snapshot-card__subtext">{cards.hiddenEdge.subtext}</p>
-          </article>
-        ) : null}
-
-        {/* Card 2 — Your arousal type */}
-        {arousalValue ? (
-          <article className="report-snapshot-card">
-            <p className="report-snapshot-card__eyebrow">Your Arousal Type</p>
-            <span className="report-snapshot-card__value">{arousalValue}</span>
-            <ArousalWave family={arousalFamily} />
-            {/* The body line is per FAMILY, not per archetype ("only the family
-                word, the body line and the arc change"). `snapshotCards` only
-                ever carried a Spiritual Lover entry, so the other 13 rendered no
-                line at all — fall back to the family text from Figma. */}
-            <p className="report-snapshot-card__subtext">
-              {cards?.arousalSubtext ?? AROUSAL_CURVES[arousalFamily].snapshotSubtext}
-            </p>
-          </article>
-        ) : null}
-
-        {/* Card 3 — Likely current / sexual stage */}
-        {stageWord ? (
-          <article className="report-snapshot-card report-snapshot-card--stage">
-            {/* Figma 8719:8921 breaks the line with no separator — the "/" was
-                rendering as a literal slash in the eyebrow. */}
-            <p className="report-snapshot-card__eyebrow">
-              Likely Current
-              <br />
-              Sexual Stage
-            </p>
-            <div className="report-snapshot-card__stage-value-wrap">
-              <span className="report-snapshot-card__stage-glow" aria-hidden="true" />
-              <span className="report-snapshot-card__stage-value">{stageWord}</span>
-            </div>
-            {stageFull ? <p className="report-snapshot-card__stage-full">{stageFull}</p> : null}
-            {stageSubline ? <p className="report-snapshot-card__subtext">{stageSubline}</p> : null}
-          </article>
-        ) : null}
-      </div>
-
-      {/* How you compare */}
-      {compares.length > 0 ? (
-        <article
-          ref={compareRef}
-          className={`report-snapshot-compare report-chart-reveal${
-            compareRevealed ? " is-revealed" : ""
-          }`}
-        >
-          <p className="report-snapshot-compare__eyebrow">How you compare</p>
-          <div className="report-snapshot-compare__cols">
-            {compares.map((c, i) => (
-              <div key={i} className="report-snapshot-compare__col">
-                {c.viz === "bar" ? (
-                  <CompareBar stat={c.stat} />
-                ) : (
-                  <CompareDots filled={c.filled} total={c.total} />
-                )}
-                {c.stat ? <p className="report-snapshot-compare__stat">{c.stat}</p> : null}
-                {c.caption ? <p className="report-snapshot-compare__caption">{c.caption}</p> : null}
-              </div>
-            ))}
+    <article
+      ref={compareRef}
+      className={`report-snapshot-compare report-chart-reveal${
+        compareRevealed ? " is-revealed" : ""
+      }`}
+    >
+      <p className="report-snapshot-compare__eyebrow">How you compare</p>
+      <div className="report-snapshot-compare__cols">
+        {compares.map((c, i) => (
+          <div key={i} className="report-snapshot-compare__col">
+            {c.viz === "bar" ? (
+              <CompareBar stat={c.stat} />
+            ) : (
+              <CompareDots filled={c.filled} total={c.total} />
+            )}
+            {c.stat ? <p className="report-snapshot-compare__stat">{c.stat}</p> : null}
+            {c.caption ? <p className="report-snapshot-compare__caption">{c.caption}</p> : null}
           </div>
-        </article>
-      ) : null}
-    </div>
+        ))}
+      </div>
+    </article>
   );
 };
+
+const SnapshotSection: FC<Props> = ({ archetype, copy, stageResult = null }) => (
+  <div className="report-snapshot">
+    <h3 className="report-snapshot__heading">Your snapshot</h3>
+
+    {SHOW_SNAPSHOT_CARDS ? (
+      <SnapshotCards archetype={archetype} copy={copy} stageResult={stageResult} />
+    ) : null}
+  </div>
+);
 
 export default SnapshotSection;

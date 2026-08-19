@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, render } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import SnapshotSection from "@features/report/ui/sections/SnapshotSection";
+import { SnapshotCards } from "@features/report/ui/sections/SnapshotSection";
 import { getReport2Section } from "@/data/report2";
 import { KNOWN_ARCHETYPES } from "@features/report/server/archetypeSlug";
 
@@ -16,10 +16,14 @@ import { KNOWN_ARCHETYPES } from "@features/report/server/archetypeSlug";
  * The arc is expressed as `--arc-offset` (1 − fraction) because the draw-in
  * animates `stroke-dashoffset` from 1 down to that value, matching the
  * `.report-draw-line` primitive the rest of the report's charts use.
+ *
+ * Renders `SnapshotCards` directly: the row is parked behind
+ * `SHOW_SNAPSHOT_CARDS` (hidden from the live report 2026-08-19, kept for
+ * reuse), so the section no longer mounts it.
  */
 function renderCard(stat: string | null, caption = "share who open first") {
   return render(
-    <SnapshotSection
+    <SnapshotCards
       archetype="Relational Nurturer"
       copy={{ "openingMove.stat": stat, "openingMove.caption": caption }}
     />

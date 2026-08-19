@@ -92,7 +92,7 @@ import PowerSection, { type PowerCopy } from "./sections/PowerSection";
 import PracticeTendenciesSection from "./sections/PracticeTendenciesSection";
 import RewardSection, { type RewardCopy, type RewardConfig } from "./sections/RewardSection";
 import SexualStageSection, { type StageCopy } from "./sections/SexualStageSection";
-import SnapshotSection, { type SnapshotCopy } from "./sections/SnapshotSection";
+import SnapshotSection, { SnapshotCompare, type SnapshotCopy } from "./sections/SnapshotSection";
 import ReportPartDivider, { type ReportPartDividerProps } from "./sections/ReportPartDivider";
 import { summaryArchetypeContent } from "@/data/report-summary";
 import { normalizeReportHtml } from "./reportContent";
@@ -1011,6 +1011,12 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                           )}
                         >
                           <FindingsSection copy={findingsCopy} onUnlock={() => unlockFindings()} />
+                          {/* "How you compare" belongs to the snapshot copy but
+                              reads AFTER the five findings (Eman, 2026-08-19),
+                              so it renders here rather than in SnapshotSection.
+                              Same section wrapper, so it keeps the shared
+                              `.report-section.is-visible` reveal. */}
+                          <SnapshotCompare copy={snapshotCopy} />
                         </ReportSection>
                         {/* Insight Map renders directly after Findings with the
                           same reveal treatment (Figma 8762:15822). Fully visible

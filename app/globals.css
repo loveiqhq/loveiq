@@ -9299,6 +9299,22 @@ input.autofill-dark:-internal-autofill-previewed {
   display: none;
 }
 
+/* Snapshot now carries only its "Your snapshot" heading — the three mini-stat
+   cards are parked (SHOW_SNAPSHOT_CARDS in SnapshotSection.tsx) and "How you
+   compare" moved below the findings. The standard 80px/48px section gap left
+   that heading floating alone, so the pair closes up to the same rhythm the
+   heading used to have with the cards under it. Two ids, so it wins over
+   `.report-section + .report-section` on both viewports without a media rule. */
+#snapshot + #findings {
+  margin-top: clamp(20px, 2.6vw, 30px);
+}
+
+/* "How you compare" is rendered inside the findings section now, so it needs the
+   gap the snapshot column's own `gap` used to give it. */
+.report-findings + .report-snapshot-compare {
+  margin-top: clamp(20px, 2.6vw, 30px);
+}
+
 .report-findings {
   display: flex;
   flex-direction: column;

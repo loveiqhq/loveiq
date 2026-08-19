@@ -7,7 +7,9 @@ import {
   AROUSAL_FAMILIES,
   resolveArousalFamily,
 } from "@features/report/ui/arousalCurves";
-import SnapshotSection from "@features/report/ui/sections/SnapshotSection";
+import { SnapshotCards } from "@features/report/ui/sections/SnapshotSection";
+// SnapshotCards, not SnapshotSection: the card row is parked behind
+// SHOW_SNAPSHOT_CARDS (hidden 2026-08-19, kept for reuse).
 
 afterEach(cleanup);
 
@@ -86,7 +88,7 @@ describe("arousal families", () => {
   it("renders the family body line for an archetype with no per-archetype copy", () => {
     // Only Spiritual Lover has a `snapshotCards` entry, so before this fell back
     // to the family text the other 13 rendered no arousal body line at all.
-    const { container } = render(<SnapshotSection archetype="Authority Conductor" copy={null} />);
+    const { container } = render(<SnapshotCards archetype="Authority Conductor" copy={null} />);
     const subtexts = [...container.querySelectorAll(".report-snapshot-card__subtext")].map(
       (n) => n.textContent
     );
@@ -101,7 +103,7 @@ describe("arousal families", () => {
   });
 
   it("draws the spontaneous arc for a spontaneous archetype, not the responsive one", () => {
-    const { container } = render(<SnapshotSection archetype="Spark Seeker" copy={null} />);
+    const { container } = render(<SnapshotCards archetype="Spark Seeker" copy={null} />);
     const path = container.querySelector(".report-snapshot-card__viz--curve path");
 
     expect(path).not.toBeNull();
@@ -110,7 +112,7 @@ describe("arousal families", () => {
   });
 
   it("draws the responsive arc for a responsive archetype", () => {
-    const { container } = render(<SnapshotSection archetype="Spiritual Lover" copy={null} />);
+    const { container } = render(<SnapshotCards archetype="Spiritual Lover" copy={null} />);
     const path = container.querySelector(".report-snapshot-card__viz--curve path");
 
     expect(path?.getAttribute("d")).toBe(AROUSAL_CURVES.responsive.snapshot.path);
