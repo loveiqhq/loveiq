@@ -15679,7 +15679,10 @@ input.autofill-dark:-internal-autofill-previewed {
 
 .report-map-row__learn-label {
   margin: 0;
-  color: #795fc8;
+  /* Muted ink instead of the purple this label used to carry (Eman, 2026-08-19,
+     from the Figma value). Colour only — the size, weight and tracking are the
+     ones already pinned to the row. */
+  color: rgba(22, 16, 33, 0.38);
   font-family: var(--font-sans);
   font-weight: 800;
   font-size: 0.635rem;
@@ -26091,28 +26094,6 @@ input.autofill-dark:-internal-autofill-previewed {
   .report-section.is-visible .report-snapshot-compare__caption {
     animation: none;
   }
-}
-
-/* Access mark on the Insight Map rows. Sits with the title, inheriting the
-   row's ink at a muted opacity so it reads as metadata rather than decoration. */
-.report-map-row__lock {
-  /* Top-right corner of the row, per Figma's section name ("lock top-right").
-     It sat inline beside the title first, which put it in the middle of the
-     heading rather than marking the row.
-     Insets measured off the design's locked frame: the padlock's INK sits 10.7px
-     from the card's right edge and 8px from its top. Our glyph carries 2.25px of
-     right padding and 1.25px of top padding inside its 14px box (the 14x14
-     PadlockIcon viewBox), and the row's own 1px border shifts this box in again, so
-     5.5/7.5 is what lands the ink where Figma puts it. The old clamp(10px, 1.1vw, 14px) sat it 15px in on both axes — a
-     corner mark drifting toward the middle of the row. */
-  position: absolute;
-  top: 5.5px;
-  right: 7.5px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: #9a93a6;
-  z-index: 1;
 }
 
 /* ==========================================================================

@@ -166,20 +166,10 @@ const PatternRow: FC<{
   if (!sub) return null;
   return (
     <div className="report-map-row">
-      {/* Top-right, per Figma's own name for this section: "Section - INSIGHT MAP
-          — B2 final, lock top-right". The five rows carried no access mark at
-          all, so a withheld chapter looked identical to an owned one until you
-          clicked its CTA and hit the paywall.
-
-          An owned chapter gets NOTHING here — not an open padlock. Figma's
-          unlocked variant (8762:15833) draws no lock on any row, and at this size
-          an open padlock reads as "still locked" anyway. */}
-      {isSectionOpen(target) ? null : (
-        <span className="report-map-row__lock" title="Locked chapter">
-          <span className="sr-only">Locked chapter</span>
-          <PadlockIcon open={false} />
-        </span>
-      )}
+      {/* No per-row padlock. Figma names this section "… lock top-right" and one
+          was added per withheld row, but Eman had them pulled on 2026-08-19 — in
+          BOTH states. Access is still legible without them: the group carries its
+          own "Locked" mark, and a withheld row's CTA opens the paywall. */}
       <div className="report-map-row__left">
         <div className="report-map-row__title-line">
           <span
