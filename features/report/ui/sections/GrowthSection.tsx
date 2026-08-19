@@ -157,9 +157,16 @@ const ElevationProfile: FC<{
       role="img"
       aria-label="Each shift is a step up from the one before"
     >
+      {/* `pathLength={1}` normalises the dash units, so one dasharray draws this
+          curve correctly whatever its real length — the same thing the arousal arc
+          and the energy curve do. It used to carry a flat `stroke-dasharray: 2000`
+          against a path of roughly 700, so the visible stroke finished about a
+          third of the way into the animation and the rest of the duration moved
+          nothing: the line looked done with two steps still to land. */}
       <path
         className="report-growth__profile-line"
         d={roundedPolyline(pts, CORNER)}
+        pathLength={1}
         fill="none"
         stroke="#b7a6e3"
         strokeWidth="3"
