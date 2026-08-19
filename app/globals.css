@@ -14852,6 +14852,20 @@ input.autofill-dark:-internal-autofill-previewed {
    ON the faded tail, and with only its 4px offset it collided with the next
    heading). The pill's own `bottom` is raised to match, so the overlap with the
    teaser's last line — which is the Figma behaviour — is preserved. */
+/* Doubled class, for the same reason the pill's rule is doubled: THIRTEEN sections
+   set `padding: 8px 20px 16px 69px` on their own peek, and nine of those rules sit
+   after this one in the file — so they won on source order and left the peek 90px
+   tall instead of 122. On a phone the pill sits under the tease at 88px and is 29px
+   tall, so a 90px box clipped it in half against the card edge (measured in WebKit
+   on an iPhone 15 Pro: Power, Curiosity, Love Language and Fantasy, 11px past their
+   card; the other eight were fine purely because their rules come first).
+   (0,2,0) beats every one of them wherever they sit, and only the vertical padding is
+   claimed here — the 69px left indent stays each section's own. */
+.report-learn-peek.report-learn-peek {
+  padding-top: 8px;
+  padding-bottom: clamp(48px, 4vw, 62px);
+}
+
 .report-learn-peek {
   position: relative;
   /* The pill sits ON the faded tail, so this padding is what separates the whole
