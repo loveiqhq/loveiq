@@ -24930,6 +24930,14 @@ input.autofill-dark:-internal-autofill-previewed {
   filter: blur(var(--report-lock-blur));
   user-select: none;
   pointer-events: none;
+  /* The band carries a 1px top hairline (rgba(157,138,215,0.22)) and a soft
+     gradient. Safari re-rasterises a filtered layer as the page scrolls, and at
+     4px blur that hairline lands on a different sub-pixel row each time, which
+     reads as the line twitching. Promoting the band to its own compositing layer
+     has it rasterised once and reused. Safe here: `transform` makes a containing
+     block for `position: fixed` descendants and this band has none. */
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 /* Slightly stronger than the 6px it used to be: at 6px the result card's rows
@@ -26671,23 +26679,23 @@ input.autofill-dark:-internal-autofill-previewed {
    stops did — a keep row is 51px and a loosen row 111px, so anything measured in
    pixels would blur two loosens against four keeps.
 
-   The mask survives only at the very bottom, feathering the last few percent: the
-   loosen column is taller than the preview box, and `overflow: hidden` would
-   otherwise cut it with a razor line. */
+   NO mask at all — not even a feather at the bottom (Eman, 2026-08-19: "i dont want
+   that white fade at all on it, just blurr"). The shared lock mask that every other
+   locked surface uses is cancelled on the wrapper above; this cancels it on the
+   lists too, so the only thing withholding these rows is the blur. The columns are
+   sized to fit instead of being cut (see the `min-height` on the preview), because
+   with no fade a clipped column would end on a razor line. */
 .report-beliefs__preview-fade--tease .report-beliefs__list {
-  -webkit-mask-image: linear-gradient(
-    to bottom,
-    rgba(0, 0, 0, 1) 0%,
-    rgba(0, 0, 0, 1) 88%,
-    rgba(0, 0, 0, 0) 100%
-  );
-  mask-image: linear-gradient(
-    to bottom,
-    rgba(0, 0, 0, 1) 0%,
-    rgba(0, 0, 0, 1) 88%,
-    rgba(0, 0, 0, 0) 100%
-  );
+  -webkit-mask-image: none;
+  mask-image: none;
 }
+
+/* The box keeps its own height (the paywall card's) rather than growing to fit the
+   taller column. Stretching it to 740px did fit all six loosen rows, but the keep
+   column is 361px against the loosen column's 696px, so the extra height landed as
+   dead white space under the shorter column — the very thing the fade was removed
+   to avoid. Cut at the box edge, the last blurred row instead reads as content
+   continuing past it, which is what a locked chapter wants to say. */
 
 /* Rows one and two stay sharp — that is the tease. From three on, the same ramp
    the reader already knows from every other locked surface, ending on the shared

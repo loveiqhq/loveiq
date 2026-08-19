@@ -121,12 +121,12 @@ describe("BeliefsSection — how much the server ships", () => {
       return rest.slice(0, rest.indexOf("}"));
     };
 
-    // The mask survives only as a feather over the last stretch, because the loosen
-    // column is taller than the preview box and `overflow: hidden` would otherwise
-    // cut it with a razor line.
+    // No mask at all — not even a feather at the bottom. The only thing withholding
+    // these rows is the blur ("i dont want that white fade at all on it, just
+    // blurr"), so the wrapper's cancellation is repeated on the lists.
     const mask = ruleBody(`${SCOPE} {`);
-    expect(mask).toContain("rgba(0, 0, 0, 1) 88%");
-    expect(mask).not.toContain("rgba(0, 0, 0, 0.3)");
+    expect(mask).toContain("mask-image: none");
+    expect(mask).not.toContain("rgba(");
 
     // Rows one and two are the tease; three onward blur, ending on the shared token.
     expect(css).not.toContain(`${SCOPE} > *:nth-child(1)`);
