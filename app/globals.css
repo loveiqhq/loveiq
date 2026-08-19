@@ -8390,13 +8390,33 @@ input.autofill-dark:-internal-autofill-previewed {
   position: relative;
   overflow: hidden;
   width: 100%;
-  padding: clamp(24px, 3.4vw, 41px);
+  /* One dial for the whole card. The designer asked for it smaller than the frame
+     twice over, so the type and the box scale together from here rather than a
+     dozen hand-tuned sizes — change these numbers, not the sizes below.
+     TWO dials, because they have different floors: type cannot shrink past the
+     report's own hierarchy (at a flat 0.72 the hero title fell to 34.6px, under the
+     40px section headings, and at 1100 the trait value fell under its own label),
+     while spacing can go further without hurting anything. */
+  --hero-scale: 0.8;
+  --hero-space: 0.58;
+  padding: calc(clamp(24px, 3.4vw, 41px) * var(--hero-space));
   border: 1px solid rgb(var(--report-accent-rgb) / 0.45);
   border-radius: 24px;
   background: #ffffff;
   box-shadow:
     inset 0 1px 0 rgb(var(--report-accent-rgb) / 0.14),
     0 20px 80px -24px rgb(var(--report-accent-rgb) / 0.28);
+}
+
+@media (max-width: 767px) {
+  /* The desktop scale-down does not apply on a phone: the mobile frame is already
+     tight, and its own overrides further down are the verified values. This has to
+     sit AFTER the rule above — the first attempt was 5,000 lines earlier in the
+     file, where the base's 0.78 simply won and the phone got scaled too. */
+  .report-hero-card {
+    --hero-scale: 1;
+    --hero-space: 1;
+  }
 }
 
 /* "What this means for you" (Figma 8719:8865) — sits between the Hero card and
@@ -8528,7 +8548,7 @@ input.autofill-dark:-internal-autofill-previewed {
   font-family: var(--font-serif);
   /* Lora ships 400/500/600/700, so 500 is a real Medium cut, not a synthesised one. */
   font-weight: 500;
-  font-size: clamp(2rem, 3.4vw, 3rem);
+  font-size: calc(clamp(2rem, 3.4vw, 3rem) * var(--hero-scale, 1));
   line-height: 1;
   letter-spacing: 0;
 }
@@ -8538,7 +8558,7 @@ input.autofill-dark:-internal-autofill-previewed {
   margin: 0;
   width: 100%;
   font-family: var(--font-sans);
-  font-size: clamp(1.375rem, 2.2vw, 1.875rem);
+  font-size: calc(clamp(1.375rem, 2.2vw, 1.875rem) * var(--hero-scale, 1));
   font-weight: 300;
   font-style: normal;
   line-height: 1.3;
@@ -8625,16 +8645,17 @@ input.autofill-dark:-internal-autofill-previewed {
      (see the deleted rules further down), so the four blocks sat 38 / 52 / 50 apart
      against the design's flat 32, and the column had 18px of top padding and none at
      the bottom. */
-  gap: 32px;
+  gap: calc(32px * var(--hero-space, 1));
   width: 100%;
-  padding: 24px 0;
+  padding: calc(24px * var(--hero-space, 1)) 0;
 }
 
 .report-hero-card__label {
   margin: 0;
   color: #191a1b;
   font-family: var(--font-sans);
-  font-size: clamp(1rem, 1.5vw, 1.25rem);
+  /* Floored: the dial must not take a 16px label below reading size. */
+  font-size: max(15px, calc(clamp(1rem, 1.5vw, 1.25rem) * var(--hero-scale, 1)));
   line-height: 1.2;
 }
 
@@ -8677,7 +8698,7 @@ input.autofill-dark:-internal-autofill-previewed {
   margin: 0;
   color: #161021;
   font-family: var(--font-serif);
-  font-size: clamp(1.5rem, 2.6vw, 1.9375rem);
+  font-size: calc(clamp(1.5rem, 2.6vw, 1.9375rem) * var(--hero-scale, 1));
   font-weight: 500;
   line-height: 1.15;
 }
@@ -8719,7 +8740,7 @@ input.autofill-dark:-internal-autofill-previewed {
   margin: 6px 0 0;
   color: #161021;
   font-family: var(--font-serif);
-  font-size: clamp(1.375rem, 1.9vw, 1.5625rem);
+  font-size: calc(clamp(1.375rem, 1.9vw, 1.5625rem) * var(--hero-scale, 1));
   font-weight: 500;
   line-height: 1.12;
 }
@@ -8740,8 +8761,10 @@ input.autofill-dark:-internal-autofill-previewed {
      Figma 8430:703/711 puts 24px here — the same as the gap INSIDE a reading, so
      the design relies on the bars themselves to group the pairs. That reads as one
      block of four rows at our type sizes, so this is deliberately above the
-     design: enough that a label clearly belongs to the bars under it. */
-  gap: clamp(28px, 2.6vw, 38px);
+     design: enough that a label clearly belongs to the bars under it.
+     On `--hero-space` like the rest of the card — held off it at first, which left
+     this pair with the card's original air inside a card scaled 42% tighter. */
+  gap: calc(clamp(28px, 2.6vw, 38px) * var(--hero-space, 1));
   width: 100%;
 }
 
@@ -8755,7 +8778,7 @@ input.autofill-dark:-internal-autofill-previewed {
    and is untouched. */
 @media (min-width: 1280px) {
   .report-hero-card {
-    padding: 28px 30px;
+    padding: calc(28px * var(--hero-space)) calc(30px * var(--hero-space));
   }
 
   .report-hero-card__header {
@@ -8764,12 +8787,12 @@ input.autofill-dark:-internal-autofill-previewed {
 
   .report-hero-card__title {
     /* Pinned to the spec's 48px rather than left to 3.4vw, which only reaches 48
-       at ~1412px and rendered 43.5px at 1280. */
-    font-size: 3rem;
+       at ~1412px and rendered 43.5px at 1280 — then taken down by `--hero-scale`. */
+    font-size: calc(3rem * var(--hero-scale));
   }
 
   .report-hero-card__motto {
-    font-size: 1.4rem;
+    font-size: calc(1.4rem * var(--hero-scale));
   }
 
   .report-hero-card__content {
@@ -8777,15 +8800,15 @@ input.autofill-dark:-internal-autofill-previewed {
        the comment that used to sit here said. The desktop frame's gap is 32px, the
        same as the base, so this exists only to state it and stop the next person
        reading 38px as intentional. */
-    gap: 32px;
+    gap: calc(32px * var(--hero-space));
   }
 
   .report-hero-card__motivation {
-    padding: 14px 16px;
+    padding: calc(14px * var(--hero-space)) calc(16px * var(--hero-space));
   }
 
   .report-hero-card__motivation-value {
-    font-size: 1.55rem;
+    font-size: calc(1.55rem * var(--hero-scale));
   }
 
   /* traits 2×2 (180px), progress rows (103px) and the motivation strip (106px)
@@ -8798,7 +8821,7 @@ input.autofill-dark:-internal-autofill-previewed {
   .report-hero-card__progress {
     /* Was 10px here — TIGHTER than the base, so the widest layout had the least
        room between the two readings. */
-    gap: 38px;
+    gap: calc(38px * var(--hero-space));
   }
 }
 
@@ -8809,8 +8832,9 @@ input.autofill-dark:-internal-autofill-previewed {
   /* Air between the reading's label row and the bars it belongs to.
      Figma 8430:704/707 puts 24px here (label ends y=20, bars start y=44); this
      shipped at 12px, then 22px, and now sits at or above the design's 24 at every
-     width — 30px on a wide desktop, where there is room for it. */
-  margin-bottom: clamp(19px, 1.95vw, 28px);
+     width — 30px on a wide desktop, where there is room for it. Scaled with the
+     card, so the label stays visibly tied to its own bars at any dial setting. */
+  margin-bottom: calc(clamp(19px, 1.95vw, 28px) * var(--hero-space, 1));
   color: #191a1b;
   font-family: var(--font-sans);
   font-size: clamp(1rem, 1.5vw, 1.25rem);
@@ -18037,6 +18061,7 @@ input.autofill-dark:-internal-autofill-previewed {
     max-width: 100%;
     /* Same 24px as the ≤768 block above — see there for why it is not 49-70px. */
     gap: 24px;
+    padding: 24px 0;
   }
 
   .report-hero-card__motivation {
