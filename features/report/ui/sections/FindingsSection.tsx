@@ -86,10 +86,14 @@ const FindingsSection: FC<Props> = ({ copy, onUnlock }) => {
   if (!copy) return null;
 
   const locked = copy.locked;
+  // Three findings free, two behind the paywall (Eman, 2026-08-19; it was two and
+  // three). The server matches this split — a locked client is never sent the real
+  // f4/f5 head or body, only the universal teaser — so moving the line here alone
+  // would show a blurred teaser where a real finding should be.
   const rows = [
     { head: copy["f1.head"], body: copy["f1.body"], locked: false },
     { head: copy["f2.head"], body: copy["f2.body"], locked: false },
-    { head: copy["f3.head"], body: copy["f3.body"], locked },
+    { head: copy["f3.head"], body: copy["f3.body"], locked: false },
     { head: copy["f4.head"], body: copy["f4.body"], locked },
     { head: copy["f5.head"], body: copy["f5.body"], locked },
   ];
@@ -103,7 +107,7 @@ const FindingsSection: FC<Props> = ({ copy, onUnlock }) => {
 
       <article className="report-findings__card">
         <div className="report-findings__rows">
-          {rows.slice(0, 2).map((r, i) => (
+          {rows.slice(0, 3).map((r, i) => (
             <FindingRow key={i} index={i + 1} head={r.head} body={r.body} locked={r.locked} />
           ))}
 
@@ -115,8 +119,8 @@ const FindingsSection: FC<Props> = ({ copy, onUnlock }) => {
           <div
             className={`report-findings__group${locked ? " report-findings__group--locked" : ""}`}
           >
-            {rows.slice(2).map((r, i) => (
-              <FindingRow key={i + 2} index={i + 3} head={r.head} body={r.body} locked={r.locked} />
+            {rows.slice(3).map((r, i) => (
+              <FindingRow key={i + 3} index={i + 4} head={r.head} body={r.body} locked={r.locked} />
             ))}
 
             {locked ? (

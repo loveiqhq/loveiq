@@ -650,10 +650,11 @@ export async function GET(request: Request) {
       "openingMove.caption": snapshotInitiation["stat1.caption"] ?? null,
     };
 
-    // Report 2.0 Findings section copy — findings 1-2 are always the real
-    // head/body; findings 3-5 are gated. A user WITHOUT a paid plan
+    // Report 2.0 Findings section copy — findings 1-3 are always the real
+    // head/body; findings 4-5 are gated. A user WITHOUT a paid plan
     // (accessPlan === null) receives ONLY the universal `.locked.` teaser text
-    // for f3-5 — the real f3-5 head/body is never shipped to a locked client.
+    // for f4-5 — the real f4-5 head/body is never shipped to a locked client.
+    // (Three free findings since 2026-08-19, Eman's call; it was two.)
     // Any purchase (essentials/full_report/all_reports/core, or the paywall
     // kill-switch's all_reports) unlocks the real findings. Shared viewers
     // inherit the owner's plan here, matching the report's gift-view gating.
@@ -664,12 +665,8 @@ export async function GET(request: Request) {
       "f1.body": findingsSection["f1.body"] ?? null,
       "f2.head": findingsSection["f2.head"] ?? null,
       "f2.body": findingsSection["f2.body"] ?? null,
-      "f3.head": findingsUnlocked
-        ? (findingsSection["f3.head"] ?? null)
-        : (findingsSection["f3.locked.head"] ?? null),
-      "f3.body": findingsUnlocked
-        ? (findingsSection["f3.body"] ?? null)
-        : (findingsSection["f3.locked.body"] ?? null),
+      "f3.head": findingsSection["f3.head"] ?? null,
+      "f3.body": findingsSection["f3.body"] ?? null,
       "f4.head": findingsUnlocked
         ? (findingsSection["f4.head"] ?? null)
         : (findingsSection["f4.locked.head"] ?? null),
