@@ -204,3 +204,20 @@ export const REPORT_NAV_PARTS: readonly ReportNavPart[] = [
     ],
   },
 ];
+
+/**
+ * Every nav anchor, in nav order — the flat form of {@link REPORT_NAV_PARTS}.
+ *
+ * This is what the scroll-spy walks. It used to walk the SECTION list from
+ * `data/report-general.ts`, which contains none of the Report 2.0 anchors the nav
+ * actually lists (`snapshot`, `map`, `constellation`, and the inline
+ * `means_for_you` / `findings` / `challenges_in_partnership`). So through the whole
+ * of Part I the highlight lagged: the sidebar said "Core Archetype" while the
+ * reader was on Your Snapshot, Five Things or the Insight Map (225px to 3787px of
+ * page), and said "Importance of Sexuality" while they were on Other Archetypes.
+ * Spying on the nav's own ids means the active id is always a row the nav can
+ * actually highlight.
+ */
+export const REPORT_NAV_IDS: readonly string[] = REPORT_NAV_PARTS.flatMap((part) =>
+  part.items.map((item) => item.id)
+);

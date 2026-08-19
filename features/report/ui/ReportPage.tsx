@@ -27,6 +27,7 @@ import MeansForYouSection from "./sections/MeansForYouSection";
 import type { PartnershipLoop } from "@/data/report2-partnership-loops";
 import type { ReportNavAccess } from "./ReportNavBadge";
 import {
+  REPORT_NAV_IDS,
   REPORT_NAV_PARTS,
   REPORT_PART_FIRST_SECTION,
   REPORT_SECTION_ORDER,
@@ -563,9 +564,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
       onFeedback={(payload) => submitFeedback(sectionId, payload)}
     />
   );
-  const [activeSectionId, setActiveSectionId] = useState(
-    resolvedSections[0]?.id ?? "core_archetype"
-  );
+  const [activeSectionId, setActiveSectionId] = useState(REPORT_NAV_IDS[0] ?? "core_archetype");
   // Live full-report quote used by the locked premium cards' price/strike/save.
   // Same source the pricing modal and sticky bar read, so all three agree.
   const fullReportQuote = pricingQuotes?.full_report ?? null;
@@ -717,14 +716,26 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   useEffect(() => {
     const ACTIVATION_LINE = 90;
 
+    // Spy on the NAV's ids, not the section list from `data/report-general.ts`.
+    // That list has no row for the Report 2.0 anchors the nav lists (`snapshot`,
+    // `map`, `constellation`) nor for the inline ones (`means_for_you`,
+    // `findings`), so scrolling Part I left the highlight a chapter behind:
+    // "Core Archetype" stayed lit from 225px all the way to the Insight Map at
+    // 3787px, and "Importance of Sexuality" stayed lit through Other Archetypes.
+    // See REPORT_NAV_IDS.
     function buildSectionTops() {
-      return resolvedSections
-        .map((section) => {
-          const el = document.getElementById(section.id);
+      return (
+        REPORT_NAV_IDS.map((id) => {
+          const el = document.getElementById(id);
           if (!el) return null;
-          return { id: section.id, top: el.getBoundingClientRect().top + window.scrollY };
+          return { id, top: el.getBoundingClientRect().top + window.scrollY };
         })
-        .filter((section): section is { id: string; top: number } => section !== null);
+          .filter((section): section is { id: string; top: number } => section !== null)
+          // Sorted so the early `break` below is correct by construction: nav order
+          // matches DOM order today, and a future reorder of either can't silently
+          // truncate the scan.
+          .sort((a, b) => a.top - b.top)
+      );
     }
 
     let sectionTops = buildSectionTops();
@@ -733,7 +744,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
     function updateActive() {
       if (Date.now() < clickLockUntilRef.current) return;
       const threshold = window.scrollY + ACTIVATION_LINE;
-      let activeId = sectionTops[0]?.id ?? resolvedSections[0]?.id ?? "core_archetype";
+      let activeId = sectionTops[0]?.id ?? REPORT_NAV_IDS[0] ?? "core_archetype";
       for (const section of sectionTops) {
         if (section.top <= threshold) {
           activeId = section.id;
@@ -766,6 +777,8 @@ const ReportExperience: FC<ReportExperienceProps> = ({
       window.removeEventListener("resize", onResize);
       if (rafId !== null) cancelAnimationFrame(rafId);
     };
+    // `REPORT_NAV_IDS` is a module constant; `resolvedSections` only matters
+    // because the sections have to be in the DOM before the tops are measured.
   }, [resolvedSections]);
 
   const viewArchetypeTier = archetypeTiers[viewArchetype] ?? null;
