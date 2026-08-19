@@ -26759,6 +26759,32 @@ input.autofill-dark:-internal-autofill-previewed {
   );
 }
 
+/* A second graded pass, this one across the LEFT edge, where the rows' rules live.
+   The rules are back in the capture (at low contrast) and a vertical line is what a
+   blur handles worst, so the strip they sit in gets extra softness that falls off
+   within ~40px — the lines read as a tint rather than an edge, at any depth in the
+   image where the vertical ramp above has not reached full strength yet. */
+.report-beliefs__preview-fade--tease .report-locked-preview::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+  -webkit-mask-image: linear-gradient(
+    to right,
+    rgba(0, 0, 0, 1) 0px,
+    rgba(0, 0, 0, 0.5) 18px,
+    rgba(0, 0, 0, 0) 40px
+  );
+  mask-image: linear-gradient(
+    to right,
+    rgba(0, 0, 0, 1) 0px,
+    rgba(0, 0, 0, 0.5) 18px,
+    rgba(0, 0, 0, 0) 40px
+  );
+}
+
 .report-beliefs__preview-fade--tease .report-locked-preview {
   position: relative;
 }

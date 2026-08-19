@@ -397,18 +397,20 @@ async function captureColumn(page, { sectionId, selector, name, keepRows }, view
       if (rows.length <= keepRows) return { error: `only ${rows.length} rows` };
       for (const row of rows.slice(0, keepRows)) row.style.display = "none";
 
-      // Strip the STRAIGHT EDGES before shooting: each row carries a coloured left
-      // rule and an opening quote glyph, and a long vertical line is the one shape a
-      // blur cannot destroy. At quarter scale that rule is sub-pixel in the file, so
-      // the 4x upscale on display turned it back into a hard-edged band running the
-      // height of the image — the one thing in the picture that still read as sharp.
-      // Text alone upscales to mush, which is the point.
+      // The rows keep their left rule and quote glyph — the column reads as the same
+      // column all the way down — but the rule goes to low contrast first.
+      //
+      // A long straight line is the one shape a blur cannot destroy, and at quarter
+      // scale a 3px rule sits sub-pixel in the file, so the 4x upscale on display
+      // rebuilds it as a crisp band down the image. Hiding it outright fixed the
+      // sharpness and lost the lines; dropping the alpha to 0.16 keeps them present
+      // as a soft tint of the same hue while giving the upscale no hard edge to
+      // reconstruct. The hue is preserved rather than greyed: green for keep, orange
+      // for loosen, as the sharp rows above show.
       for (const row of rows.slice(keepRows)) {
         if (!(row instanceof HTMLElement)) continue;
-        row.style.borderLeftColor = "transparent";
-        for (const quote of row.querySelectorAll(".report-beliefs__quote")) {
-          if (quote instanceof HTMLElement) quote.style.visibility = "hidden";
-        }
+        const rgb = getComputedStyle(row).borderLeftColor.match(/(\d+),\s*(\d+),\s*(\d+)/);
+        if (rgb) row.style.borderLeftColor = `rgba(${rgb[1]}, ${rgb[2]}, ${rgb[3]}, 0.16)`;
       }
 
       list.setAttribute("data-preview-capture", "");
@@ -430,9 +432,6 @@ async function captureColumn(page, { sectionId, selector, name, keepRows }, view
           if (!(row instanceof HTMLElement)) continue;
           if (row.style.display === "none") row.style.display = "";
           row.style.borderLeftColor = "";
-          for (const quote of row.querySelectorAll(".report-beliefs__quote")) {
-            if (quote instanceof HTMLElement) quote.style.visibility = "";
-          }
         }
       },
       { sectionId, selector }

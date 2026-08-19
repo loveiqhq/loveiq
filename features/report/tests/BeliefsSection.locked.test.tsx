@@ -123,16 +123,26 @@ describe("BeliefsSection — how much the server ships", () => {
     expect(route).toMatch(/length: beliefsUnlocked \? BELIEFS_LOOSEN_ROWS : BELIEFS_TEASER_ROWS/);
   });
 
-  it("captures the rasters without the row rules, which a blur cannot destroy", () => {
-    // A long vertical line survives any blur, and at quarter scale the row's left
-    // rule is sub-pixel in the file — the 4x upscale turned it back into a hard-edged
-    // band down the image, the one thing in the picture that still read as sharp.
+  it("captures the row rules at low contrast, since a blur cannot destroy a line", () => {
+    // A long vertical line is the one shape a blur cannot destroy, and at quarter
+    // scale a 3px rule sits sub-pixel in the file, so the 4x upscale rebuilds it as a
+    // crisp band down the image. Hiding it outright fixed the sharpness and lost the
+    // lines; 0.16 alpha keeps them as a tint of the same hue with no edge to rebuild.
     const gen = readFileSync(join(process.cwd(), "scripts/generate-locked-previews.mjs"), "utf8");
-    expect(gen).toContain('row.style.borderLeftColor = "transparent"');
-    expect(gen).toMatch(/quote\.style\.visibility = "hidden"/);
-    // ...and restored afterwards, so the unlocked page the script is walking is not
-    // left mutated for the next capture.
+    expect(gen).toMatch(
+      /borderLeftColor = `rgba\(\$\{rgb\[1\]\}, \$\{rgb\[2\]\}, \$\{rgb\[3\]\}, 0\.16\)`/
+    );
+    // Restored afterwards, so the unlocked page the script walks is not left mutated
+    // for the next capture.
     expect(gen).toContain('row.style.borderLeftColor = ""');
+
+    // And a second graded pass across the left edge, where those rules sit.
+    const css = readFileSync(join(process.cwd(), "app/globals.css"), "utf8");
+    const at = css.indexOf(".report-beliefs__preview-fade--tease .report-locked-preview::before");
+    expect(at, "the left-edge softening pass is missing").toBeGreaterThan(-1);
+    const body = css.slice(at, css.indexOf("}", at));
+    expect(body).toContain("backdrop-filter: blur(3px)");
+    expect(body).toContain("to right");
   });
 
   it("captures the rasters with exactly the shipped rows hidden", () => {
