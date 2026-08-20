@@ -27,6 +27,10 @@ import { describe, expect, it } from "vitest";
 const COLUMN_PREVIEWS: Record<string, string[]> = {
   "BeliefsSection.tsx": ["beliefs-keep", "beliefs-loosen"],
   "AcceleratorsSection.tsx": ["accel-opens", "accel-shuts", "accel-tail"],
+  // Attachment locks in two places — the result card (behind the paywall card) and
+  // the map with its caption — with the universal learn pill, map eyebrow and Learn
+  // expander staying live between them, so it cannot be one whole-chapter raster.
+  "AttachmentPatternsSection.tsx": ["attach-card", "attach-map"],
 };
 const COLUMN_PREVIEW_NAMES = Object.values(COLUMN_PREVIEWS).flat();
 const SECTIONS_DIR = join(process.cwd(), "features/report/ui/sections");

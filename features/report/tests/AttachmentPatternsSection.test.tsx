@@ -116,7 +116,22 @@ describe("AttachmentPatternsSection", () => {
     expect(screen.queryByText("Secure")).not.toBeInTheDocument();
     // The overlay anchors over the blurred stand-in.
     expect(document.querySelector(".report-premium-overlay")).toBeInTheDocument();
-    expect(document.querySelector(".report-attachment-card--blur")).toBeInTheDocument();
+    // The card behind it is a pre-blurred raster of the REAL card, not a stand-in:
+    // it used to be hand-written DOM ("Your pattern", one placeholder sentence down
+    // all three rows) so the locked chapter showed a shape with nothing in it.
+    expect(document.querySelector(".report-attachment-card--blur")).toBeNull();
+    expect(
+      document.querySelector('.report-attachment__card-preview img[src*="attach-card"]')
+    ).toBeInTheDocument();
+    // The map is real too: the plane used to render EMPTY when locked — no dots, no
+    // glow, no path — which is the single most valuable visual in the chapter.
+    expect(document.querySelector(".report-attachment-plane")).toBeNull();
+    expect(
+      document.querySelector('.report-attachment__map-preview img[src*="attach-map"]')
+    ).toBeInTheDocument();
+    // And no stand-in copy is left behind either.
+    expect(screen.queryByText(/Where your desire settles/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Two dots, one person/)).not.toBeInTheDocument();
 
     // The universal learn block is STILL shown when locked...
     expect(screen.getByText("What you will learn")).toBeInTheDocument();

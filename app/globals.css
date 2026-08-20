@@ -7491,12 +7491,6 @@ input.autofill-dark:-internal-autofill-previewed {
   isolation: isolate;
 }
 
-.report-attachment-card--blur {
-  filter: blur(var(--report-lock-blur));
-  user-select: none;
-  pointer-events: none;
-}
-
 .report-attachment-card__glow {
   position: absolute;
   left: 50%;
@@ -24857,9 +24851,68 @@ input.autofill-dark:-internal-autofill-previewed {
   overflow: hidden;
 }
 
-.report-attachment__result-wrap--locked > .report-attachment-card--blur {
+/* THE CARD SIZES THE BOX; THE RASTER IS A 1:1 BACKDROP BEHIND IT
+   Same split as the accelerators chapter: the paywall card stays in flow and sets the
+   height, and the raster sits behind it at its natural ratio rather than being
+   stretched to fill (object-fit would scale the chapter's own type, and magnify the
+   blur with it). Top-anchored, because the result word and the first row are what the
+   reader should see continuing behind the card. */
+.report-attachment__result-wrap--locked > .report-attachment__card-preview {
   position: absolute;
-  inset: 0;
+  inset: 0 0 auto 0;
+  /* Must match the attach-card entry's blur x COLUMN_PAD_RATIO in
+     scripts/generate-locked-previews.mjs (12 x 2.5): the capture carries this much
+     padding so its blur fades out inside the file instead of being clipped square. */
+  --lp-pad: 30px;
+}
+
+.report-attachment__result-wrap--locked > .report-attachment__card-preview .report-locked-preview {
+  display: flow-root;
+  width: 100%;
+}
+
+.report-attachment__result-wrap--locked > .report-attachment__card-preview img {
+  display: block;
+  width: calc(100% + var(--lp-pad) * 2);
+  max-width: none;
+  height: auto;
+  margin: calc(var(--lp-pad) * -1) calc(var(--lp-pad) * -1) calc(var(--lp-pad) * -1);
+  /* Sub-pixel smoothing for the 2x upscale — not a second lock blur. */
+  filter: blur(0.5px);
+}
+
+/* The frame the capture is taken from, and the box the raster renders into. Same
+   layout the article gives its children, so the unlocked view is byte-identical. */
+.report-attachment__map {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+
+/* THE MAP: the real plane and caption, in flow where the stand-in used to be. */
+.report-attachment__map-preview {
+  /* Matches COLUMN_CAPTURE_PAD_PX (the shared 5px blur x 2.5). */
+  --lp-pad: 12.5px;
+  /* The article centres its children (the plane is a fixed square), so without this
+     the wrapper shrink-wraps the image's intrinsic 440px and the map renders at half
+     width. The capture is the article's full width, so it has to fill it to sit 1:1. */
+  width: 100%;
+  align-self: stretch;
+}
+
+.report-attachment__map-preview .report-locked-preview {
+  display: flow-root;
+  width: 100%;
+}
+
+.report-attachment__map-preview img {
+  display: block;
+  width: calc(100% + var(--lp-pad) * 2);
+  max-width: none;
+  height: auto;
+  margin: calc(var(--lp-pad) * -1) calc(var(--lp-pad) * -1) calc(var(--lp-pad) * -1);
+  filter: blur(0.5px);
 }
 
 .report-attachment__result-wrap--locked > .report-premium-overlay {
@@ -24885,10 +24938,11 @@ input.autofill-dark:-internal-autofill-previewed {
    blurred by the shared rule below ("Locked chapters: the Learn expander"),
    Attachment included. Listing its summary and teaser here as well would blur them
    twice — 4px inside 4px — since that rule blurs the band as a whole. */
-.report-attachment__article--locked .report-attachment__map-eyebrow,
-.report-attachment__article--locked .report-attachment__map-caption,
-.report-attachment__article--locked .report-attachment-plane,
-.report-attachment__article--locked .report-attachment__patterns {
+/* The eyebrow is the only live text left in a locked map block: the plane, its
+   caption and the five-patterns table are no longer rendered there at all — the
+   plane and caption arrive as a pre-blurred raster of the real map, and the table
+   only ever appears once the Learn expander is opened. */
+.report-attachment__article--locked .report-attachment__map-eyebrow {
   filter: blur(var(--report-lock-blur));
   user-select: none;
   pointer-events: none;
@@ -24938,12 +24992,6 @@ input.autofill-dark:-internal-autofill-previewed {
      block for `position: fixed` descendants and this band has none. */
   transform: translateZ(0);
   backface-visibility: hidden;
-}
-
-/* Slightly stronger than the 6px it used to be: at 6px the result card's rows
-   were still legible, which defeats the paywall. */
-.report-attachment-card--blur {
-  filter: blur(var(--report-lock-blur));
 }
 
 /* The same "lock the whole chapter" rule as Attachment, for the two other places
@@ -24996,9 +25044,6 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-fantasy__preview-fade,
 .report-curiosity__preview-fade,
 .report-lovelang__preview-fade,
-.report-attachment-card--blur,
-.report-attachment__article--locked .report-attachment__patterns,
-.report-attachment__article--locked .report-attachment-plane,
 .report-fantasy__tables--locked,
 .report-insecurities__graph-wrap--locked {
   -webkit-mask-image:

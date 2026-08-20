@@ -77,7 +77,8 @@ const COLUMN_BLUR_PX = 5;
  * still lines up 1:1 with the live rows above it. 2.5x the blur: a gaussian is
  * visually finished by about 2.5 sigma.
  */
-const COLUMN_CAPTURE_PAD_PX = COLUMN_BLUR_PX * 2.5;
+const COLUMN_PAD_RATIO = 2.5;
+const COLUMN_CAPTURE_PAD_PX = COLUMN_BLUR_PX * COLUMN_PAD_RATIO;
 
 /**
  * Locked sections, keyed by DOM id. The card class prefix is derived at runtime
@@ -149,6 +150,37 @@ const COLUMN_CAPTURES = [
     selector: ".report-accel__col:last-of-type .report-accel__rows",
     name: "accel-shuts",
     keepRows: 3,
+  },
+  // ATTACHMENT STYLE — two captures, because the chapter locks in two places.
+  //
+  // It cannot be a whole-card capture: the section has no `article[class*="__card"]`
+  // (its card is `report-attachment-card`), the paywall overlay sits over the result
+  // card only, and the map plus the universal Learn expander live in a separate
+  // article below it. It used to render hand-written stand-ins instead — "Your
+  // pattern", one placeholder sentence repeated down all three rows, and an EMPTY
+  // plane with no dots, no glow and no path — so the locked chapter showed almost
+  // none of the shape a reader actually buys.
+  {
+    sectionId: "attachment_style",
+    selector: ".report-attachment__result-wrap",
+    name: "attach-card",
+    keepRows: 0,
+    // The shared 5px is tuned for body text. This card's result word is a 35px
+    // headline, and at half scale with 5px it stayed READABLE in the file — the
+    // archetype's own attachment style, handed over for free. 12px destroys it while
+    // the card's shape (eyebrow, result, three rows, the Key box) still reads.
+    blur: 12,
+  },
+  // The map and its per-archetype caption. `.report-attachment__map` wraps exactly
+  // those two, at the width the plane occupies unlocked — the eyebrow above it and
+  // the Learn expander below are universal and stay live, and framing the whole
+  // article instead pulled in its padding, which rendered the raster ~6% small on
+  // desktop and ~20% small on a phone.
+  {
+    sectionId: "attachment_style",
+    selector: ".report-attachment__map",
+    name: "attach-map",
+    keepRows: 0,
   },
   // Everything after the columns: the accelerator-vs-brake meter box and the verdict
   // line under it. Without this the locked chapter ended at the rows, so a reader
@@ -435,7 +467,11 @@ async function captureSection(page, sectionId, viewportName) {
  * Captures ONE element (a column's list) with its first `keepRows` children hidden,
  * blurred the same way `captureSection` does.
  */
-async function captureColumn(page, { sectionId, selector, name, keepRows, only }, viewportName) {
+async function captureColumn(
+  page,
+  { sectionId, selector, name, keepRows, only, blur: blurPx },
+  viewportName
+) {
   await page.locator(`#${sectionId}`).scrollIntoViewIfNeeded();
   await page.waitForTimeout(REVEAL_SETTLE_MS);
 
@@ -528,7 +564,17 @@ async function captureColumn(page, { sectionId, selector, name, keepRows, only }
         rows: only ? rows.length : rows.length - keepRows,
       };
     },
-    { sectionId, selector, keepRows, blur: COLUMN_BLUR_PX, only, pad: COLUMN_CAPTURE_PAD_PX }
+    {
+      sectionId,
+      selector,
+      keepRows,
+      // Per-entry override, for a block whose text is too LARGE for the shared blur:
+      // see the attach-card entry in COLUMN_CAPTURES. The feather always follows the
+      // blur it has to hide.
+      blur: blurPx ?? COLUMN_BLUR_PX,
+      only,
+      pad: (blurPx ?? COLUMN_BLUR_PX) * COLUMN_PAD_RATIO,
+    }
   );
 
   const restore = () =>

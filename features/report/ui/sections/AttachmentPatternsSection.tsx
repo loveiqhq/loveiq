@@ -2,6 +2,7 @@
 
 import { useId, useState, type FC } from "react";
 import { useRevealOnView } from "../hooks/useRevealOnView";
+import LockedPreviewImage from "./LockedPreviewImage";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import { renderEduPara } from "./eduPara";
@@ -458,30 +459,17 @@ const AttachmentPatternsSection: FC<Props> = ({
         >
           {locked ? (
             <>
-              <article
-                className="report-attachment-card report-attachment-card--blur"
-                aria-hidden="true"
-              >
-                <span className="report-attachment-card__glow" />
-                <p className="report-attachment-card__eyebrow">
-                  {copy.eyebrow ?? "Your Attachment Style"}
-                </p>
-                <h3 className="report-attachment-card__result">Your pattern</h3>
-                <dl className="report-attachment-card__rows">
-                  {["Most of the time", "Under strain", "After conflict"].map((label) => (
-                    <div key={label} className="report-attachment-card__row">
-                      <dt>{label}</dt>
-                      <dd>Where your desire settles, and what quietly moves it.</dd>
-                    </div>
-                  ))}
-                </dl>
-                <div className="report-attachment-card__insight">
-                  <p className="report-attachment-card__insight-label">The Key</p>
-                  <p className="report-attachment-card__insight-value">
-                    The one move that changes how closeness feels for you.
-                  </p>
-                </div>
-              </article>
+              {/* A pre-blurred render of the REAL card, not a stand-in. This used to be
+                  hand-written DOM — "Your pattern", one placeholder sentence repeated
+                  down all three rows, a generic Key — so a reader saw a shape with
+                  nothing in it. The raster is the paid card's own pixels, blurred and
+                  half-scaled at build time (see LockedPreviewImage), so the reader sees
+                  the real thing: a result word, a qualifier under it, three DIFFERENT
+                  rows and the Key box. Blurred at 12px rather than the shared 5,
+                  because the result word is a 35px headline. */}
+              <div className="report-attachment__card-preview" aria-hidden="true">
+                <LockedPreviewImage name="attach-card" />
+              </div>
               <PremiumOverlay
                 archetype={archetype}
                 sectionTitle={sectionTitle}
@@ -534,44 +522,60 @@ const AttachmentPatternsSection: FC<Props> = ({
       >
         <p className="report-attachment__map-eyebrow">The map — where those two states live</p>
 
-        {plane && !locked ? (
-          <AttachmentPlane plane={plane} />
-        ) : (
-          <div
-            /* is-revealed from the start: this stand-in never mounts the reveal
+        {/* One box around the map and its caption in BOTH states: it is what the
+            capture frames, so the raster lands at exactly the width the plane
+            occupies unlocked. Capturing the article instead included its padding,
+            and the raster then rendered ~6% small on desktop and ~20% small on a
+            phone. Same flex layout as the article, so the unlocked view is unchanged. */}
+        <div className="report-attachment__map">
+          {/* Locked shows a raster of the REAL map and its caption: the two dots, the
+            path between them, the glow and the per-archetype line under it. The
+            stand-in below is what a locked reader used to get — the empty quadrant
+            grid, no dots at all — and it is still the fallback for an unlocked report
+            whose plane data is missing. */}
+          {locked ? (
+            <div className="report-attachment__map-preview" aria-hidden="true">
+              <LockedPreviewImage name="attach-map" />
+            </div>
+          ) : plane ? (
+            <AttachmentPlane plane={plane} />
+          ) : (
+            <div
+              /* is-revealed from the start: this stand-in never mounts the reveal
                observer, and without it the shared arrival styles would leave
                the field and its labels sitting at opacity 0 forever. */
-            className="report-attachment-plane report-attachment-plane--empty is-revealed"
-            role="img"
-            aria-label="Attachment map"
-          >
-            <span className="report-attachment-plane__field" aria-hidden="true" />
-            <span
-              className="report-attachment-plane__axis report-attachment-plane__axis--v"
-              aria-hidden="true"
-            />
-            <span
-              className="report-attachment-plane__axis report-attachment-plane__axis--h"
-              aria-hidden="true"
-            />
-            {CORNERS.map((c) => (
-              <span key={c.key} className={`report-attachment-plane__corner ${c.pos}`}>
-                {c.label}
-              </span>
-            ))}
-          </div>
-        )}
+              className="report-attachment-plane report-attachment-plane--empty is-revealed"
+              role="img"
+              aria-label="Attachment map"
+            >
+              <span className="report-attachment-plane__field" aria-hidden="true" />
+              <span
+                className="report-attachment-plane__axis report-attachment-plane__axis--v"
+                aria-hidden="true"
+              />
+              <span
+                className="report-attachment-plane__axis report-attachment-plane__axis--h"
+                aria-hidden="true"
+              />
+              {CORNERS.map((c) => (
+                <span key={c.key} className={`report-attachment-plane__corner ${c.pos}`}>
+                  {c.label}
+                </span>
+              ))}
+            </div>
+          )}
 
-        {copy["body.p1"] && !locked ? (
-          <p className="report-attachment__map-caption">{copy["body.p1"]}</p>
-        ) : (
-          <p className="report-attachment__map-caption">
-            Two dots, one person. The solid dot is where you live; the glow around it shows how much
-            of the map feels like home. The hollow dot is where unrepaired distance takes you — not
-            a different attachment style, just your secure base under strain. Repair brings the dot
-            home.
-          </p>
-        )}
+          {locked ? null : copy["body.p1"] ? (
+            <p className="report-attachment__map-caption">{copy["body.p1"]}</p>
+          ) : (
+            <p className="report-attachment__map-caption">
+              Two dots, one person. The solid dot is where you live; the glow around it shows how
+              much of the map feels like home. The hollow dot is where unrepaired distance takes you
+              — not a different attachment style, just your secure base under strain. Repair brings
+              the dot home.
+            </p>
+          )}
+        </div>
 
         {/* Educational block — universal, always shown. */}
         <div className="report-attachment__edu">

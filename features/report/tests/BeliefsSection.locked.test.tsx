@@ -223,7 +223,8 @@ describe("BeliefsSection — how much the server ships", () => {
     // agree: pad the capture without widening the img and the chapter shrinks; widen
     // without padding and the hard edge is back.
     const gen = readFileSync(join(process.cwd(), "scripts/generate-locked-previews.mjs"), "utf8");
-    expect(gen).toMatch(/const COLUMN_CAPTURE_PAD_PX = COLUMN_BLUR_PX \* 2\.5;/);
+    expect(gen).toMatch(/const COLUMN_PAD_RATIO = 2\.5;/);
+    expect(gen).toMatch(/const COLUMN_CAPTURE_PAD_PX = COLUMN_BLUR_PX \* COLUMN_PAD_RATIO;/);
     // The pad overhangs into the gutter, where the next column's rule would be
     // captured as a sharp vertical line — the one shape a blur cannot destroy.
     expect(gen).toContain('sib.style.visibility = "hidden"');
@@ -235,10 +236,20 @@ describe("BeliefsSection — how much the server ships", () => {
       expect(at, `missing rule: ${selector}`).toBeGreaterThan(-1);
       return css.slice(at, css.indexOf("}", at));
     };
-    for (const wrapper of [
-      ".report-beliefs__preview-fade--tease .report-locked-preview {",
-      ".report-accel__columns--tease .report-locked-preview,",
-    ]) {
+    // The attachment chapter's card is captured at its OWN blur (its result word is a
+    // 35px headline that survived the shared one), so its feather is that blur x the
+    // same ratio — the pair still has to agree, just at a different number.
+    const cardBlur = Number(
+      gen.slice(gen.indexOf('name: "attach-card"')).match(/blur: ([\d.]+),/)?.[1]
+    );
+    expect(cardBlur).toBeGreaterThan(0);
+    const scopes: [string, number][] = [
+      [".report-beliefs__preview-fade--tease .report-locked-preview {", 0],
+      [".report-accel__columns--tease .report-locked-preview,", 0],
+      [".report-attachment__map-preview {", 0],
+      [".report-attachment__result-wrap--locked > .report-attachment__card-preview {", cardBlur],
+    ];
+    for (const [wrapper, ownBlur] of scopes) {
       const rule = bodyAt(wrapper);
       // Must match COLUMN_CAPTURE_PAD_PX: 8 * 2.5.
       // Derived from the generator, not hardcoded: --lp-pad must equal
@@ -247,13 +258,23 @@ describe("BeliefsSection — how much the server ships", () => {
       // cannot silently desync the CSS — it fails here instead.
       const blurPx = Number(gen.match(/const COLUMN_BLUR_PX = ([\d.]+);/)?.[1]);
       expect(blurPx).toBeGreaterThan(0);
-      expect(rule).toContain(`--lp-pad: ${blurPx * 2.5}px`);
-      // Contains the negative margins without clipping the feather off again.
-      expect(rule).toContain("display: flow-root");
+      expect(rule).toContain(`--lp-pad: ${(ownBlur || blurPx) * 2.5}px`);
+    }
+    // Contains the negative margins without clipping the feather off again. The
+    // attachment wrappers carry it on the <picture> inside them, not on the scope.
+    for (const wrapper of [
+      ".report-beliefs__preview-fade--tease .report-locked-preview {",
+      ".report-accel__columns--tease .report-locked-preview,",
+      ".report-attachment__map-preview .report-locked-preview {",
+      ".report-attachment__result-wrap--locked > .report-attachment__card-preview .report-locked-preview {",
+    ]) {
+      expect(bodyAt(wrapper)).toContain("display: flow-root");
     }
     for (const img of [
       ".report-beliefs__preview-fade--tease .report-locked-preview__img {",
       ".report-accel__columns--tease .report-locked-preview__img,",
+      ".report-attachment__map-preview img {",
+      ".report-attachment__result-wrap--locked > .report-attachment__card-preview img {",
     ]) {
       const rule = bodyAt(img);
       expect(rule).toContain("width: calc(100% + var(--lp-pad) * 2)");
