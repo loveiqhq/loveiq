@@ -265,27 +265,33 @@ const AcceleratorsSection: FC<Props> = ({
             whole box and a closing verdict sit behind the paywall. The verdict
             sentence is the premium slot and never reaches a locked client as text —
             here it is pixels, blurred and half-scaled at build time. */}
+        {/* The raster is the BACKDROP and the card is what sizes this box.
+            Both in normal flow stacked ~330px of blurred tail ON TOP of a ~740px
+            card, so the chapter reserved height for the pair: raising the card with
+            negative margins left white either side of it, and raising it harder
+            clipped it against the chapter's `overflow: hidden`. Taking the raster out
+            of flow makes the box exactly as tall as the card at every width, with no
+            measured offsets to drift. */}
         {locked ? (
-          <div className="report-accel__tail-preview" aria-hidden="true">
-            <LockedPreviewImage name="accel-tail" />
-          </div>
-        ) : null}
-
-        {locked ? (
-          <div className="report-accel__verdict report-accel__verdict--locked">
-            {/* The paywall card only — the chapter behind it is the teased columns
+          <div className="report-accel__locked-tail">
+            <div className="report-accel__tail-preview" aria-hidden="true">
+              <LockedPreviewImage name="accel-tail" />
+            </div>
+            <div className="report-accel__verdict report-accel__verdict--locked">
+              {/* The paywall card only — the chapter behind it is the teased columns
                 above, not a whole-chapter raster. The card is pulled down past the
                 live rows in CSS so the triggers a reader is allowed to read are not
                 sitting under it. */}
-            <div className="report-accel__preview report-accel__preview--tease">
-              <PremiumOverlay
-                archetype={archetype}
-                sectionTitle={sectionTitle}
-                tier={tier}
-                quote={quote}
-                offerDeadline={offerDeadline}
-                onUnlock={onUnlock}
-              />
+              <div className="report-accel__preview report-accel__preview--tease">
+                <PremiumOverlay
+                  archetype={archetype}
+                  sectionTitle={sectionTitle}
+                  tier={tier}
+                  quote={quote}
+                  offerDeadline={offerDeadline}
+                  onUnlock={onUnlock}
+                />
+              </div>
             </div>
           </div>
         ) : copy.takeaway ? (

@@ -132,7 +132,7 @@ describe("AcceleratorsSection — locked tease", () => {
     // Column crops are captured at half scale with a heavier blur: at quarter scale
     // they upscaled 4x next to live text and read as mush rather than as blur.
     expect(gen).toMatch(/const COLUMN_CAPTURE_SCALE = 0\.5;/);
-    expect(gen).toMatch(/const COLUMN_BLUR_PX = 8;/);
+    expect(gen).toMatch(/const COLUMN_BLUR_PX = 5;/);
     // And the card is pushed clear of the live rows.
     expect(bodyAt(".report-accel__verdict--locked .report-accel__preview--tease")).toContain(
       "margin-top"

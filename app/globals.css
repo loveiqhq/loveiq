@@ -26708,12 +26708,12 @@ input.autofill-dark:-internal-autofill-previewed {
    stacking a filter on top would make this chapter visibly softer than every other
    locked surface. */
 .report-beliefs__preview-fade--tease .report-beliefs__list > *:nth-child(3) {
-  filter: blur(1.2px);
+  filter: blur(0.6px);
   opacity: 0.92;
 }
 
 .report-beliefs__preview-fade--tease .report-beliefs__list > *:nth-child(4) {
-  filter: blur(2.6px);
+  filter: blur(1.4px);
   opacity: 0.84;
 }
 
@@ -26746,8 +26746,8 @@ input.autofill-dark:-internal-autofill-previewed {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  -webkit-backdrop-filter: blur(5px);
-  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
   -webkit-mask-image: linear-gradient(
     to bottom,
     rgba(0, 0, 0, 0) 0%,
@@ -26772,8 +26772,8 @@ input.autofill-dark:-internal-autofill-previewed {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  -webkit-backdrop-filter: blur(3px);
-  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(1.5px);
+  backdrop-filter: blur(1.5px);
   -webkit-mask-image: linear-gradient(
     to right,
     rgba(0, 0, 0, 1) 0px,
@@ -26796,7 +26796,7 @@ input.autofill-dark:-internal-autofill-previewed {
      stays exactly the content region the pad surrounds. */
   display: flow-root;
   /* Must match COLUMN_CAPTURE_PAD_PX in scripts/generate-locked-previews.mjs. */
-  --lp-pad: 20px;
+  --lp-pad: 12.5px;
 }
 
 /* The box's height comes from the paywall card, and the wrapper holding the columns
@@ -26856,7 +26856,7 @@ input.autofill-dark:-internal-autofill-previewed {
   display: flow-root;
   width: 100%;
   /* Must match COLUMN_CAPTURE_PAD_PX in scripts/generate-locked-previews.mjs. */
-  --lp-pad: 20px;
+  --lp-pad: 12.5px;
 }
 
 .report-accel__columns--tease .report-locked-preview {
@@ -26887,8 +26887,8 @@ input.autofill-dark:-internal-autofill-previewed {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  -webkit-backdrop-filter: blur(4px);
-  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(1.5px);
+  backdrop-filter: blur(1.5px);
   -webkit-mask-image: linear-gradient(
     to bottom,
     rgba(0, 0, 0, 0) 0%,
@@ -26959,6 +26959,154 @@ input.autofill-dark:-internal-autofill-previewed {
     align-items: flex-start;
     padding-top: 300px;
   }
+}
+
+/* ACCELERATORS & BRAKES: THE RASTER IS A BACKDROP, THE CARD SETS THE HEIGHT
+   The card used to sit in normal flow AFTER the whole blurred stack, so a reader
+   scrolled most of a screen of mush before the CTA appeared. Raising it with a
+   negative margin only moved it visually — it still OCCUPIED its height, so the
+   chapter reserved room for the raster AND the card and the surplus rendered as bare
+   white either side of it; raising it far enough to close that gap pushed it through
+   `.report-accel__card`'s `overflow: hidden` and clipped the button off.
+
+   Every version of that was a measured pixel offset, and the rasters scale with the
+   column width (the stack is ~502px at 1440 but ~573px at 1100, peaking mid-range
+   where the columns are widest just before they stack) — so no single number, and no
+   set of breakpoints, stays correct.
+
+   Taking the raster out of flow removes the arithmetic entirely: the box is exactly
+   as tall as the card, the blur sits behind it at any size, and there is nothing to
+   clip or to leave over. Works the same on a phone as at 1440. */
+.report-accel__locked-tail {
+  position: relative;
+  /* Tight to the blurred rows above: the card is the offer and should read as the
+     next thing after the triggers you are allowed to see, not a separate block. */
+  margin-top: clamp(6px, 0.6vw, 10px);
+}
+
+/* Start the card at the TOP of the blurred rows, directly under the last trigger a
+   reader is allowed to finish — not below the whole blurred block.
+
+   The offset has to be the column raster's height, and that scales with the column
+   (height = columnWidth x 86/205, and a column is about half the chapter). A pixel
+   value drifts at every width, but a PERCENTAGE margin resolves against the
+   containing block's WIDTH — the chapter — so it tracks the raster automatically:
+   ~0.5 x 0.42 = ~21% of the chapter width. Desktop only; below 769 the columns stack
+   and the second column's live rows would end up under the card. */
+
+/* The shared overlay carries 2rem of top padding to centre a card in a tall box. Here
+   the box is the card, so that padding is just a gap above it. */
+.report-accel__locked-tail .report-premium-overlay {
+  /* The shared overlay carries 2rem top/bottom to centre a card inside a tall box.
+     Here the box IS the card, so that padding is just dead space around it. */
+  padding-top: 6px;
+  padding-bottom: 0;
+}
+
+/* THE CARD SIZES THE BOX; THE RASTER IS A 1:1 BACKDROP BEHIND IT
+   Two constraints that pull against each other, and each single-property fix broke
+   the other one:
+
+   - The raster is a capture of the real chapter and MUST render at 1:1. Stretching it
+     to the card's height (object-fit: cover) scaled it 1.66x, so the meter and the
+     verdict line rendered half again as large as the same content unlocked — and
+     magnified the blur by the same factor, which is what read as "too strong".
+   - The box must be at least as tall as the CARD. Sizing it to the raster instead let
+     the card run past `.report-accel__card`'s `overflow: hidden` and clipped the
+     button off at 4 of 9 widths, because the raster's height follows the column width
+     while the card's follows its content — they are independent.
+
+   So: the card stays in flow and sizes the box (never clipped, no leftover space), and
+   the raster is absolutely positioned behind it at its natural ratio (never scaled).
+   Where the raster is shorter than the card it is faded out at its bottom edge rather
+   than left to stop against bare white. */
+.report-accel__locked-tail > .report-accel__tail-preview {
+  position: static;
+  margin-top: 0;
+  /* Dissolve BOTH edges. The capture starts exactly on the meter box's own top border,
+     so an unfaded top cut that rule into a hard horizontal line running the width of
+     the chapter — which read as a stray rectangle rather than as content continuing
+     behind the card. The bottom fade stops a short raster ending on the same hard line. */
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 28px,
+    #000 calc(100% - 64px),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 28px,
+    #000 calc(100% - 64px),
+    transparent 100%
+  );
+}
+
+/* The card is OUT of flow so the box is exactly the blurred content behind it and
+   nothing is reserved underneath: if the card is taller than that content it simply
+   runs on over the learn block, which is what the design does, instead of padding the
+   chapter with white. */
+.report-accel__locked-tail > .report-accel__verdict--locked {
+  /* Phones keep it IN flow: the columns stack there, so the raster behind it is short
+     and an out-of-flow card overran the chapter's clip edge and lost its button
+     (measured: +17px at 390, +58 at 375, +212 at 320). In flow the box is the card, so
+     it can never be clipped. */
+  position: relative;
+  z-index: 2;
+  margin-bottom: 0;
+}
+
+/* Raise the CARD, not the box. Pulling the whole box up dragged the tail raster with
+   it — it is pinned to the box's top — so it landed on top of the column rasters and
+   two blurred layers stacked into a doubled, muddy strip. The backdrop has to stay
+   where the tail content actually belongs; only the card moves.
+
+   The offset is the column raster's height, which scales with the column
+   (height = columnWidth x 86/205, a column being about half the chapter). A pixel
+   value drifts at every width, but a PERCENTAGE margin resolves against the
+   containing block's WIDTH — the chapter — so it tracks automatically. The +5px is a
+   floor, not a fudge: at 21% flat the card's top landed 1px INTO the last readable
+   trigger around 800-834, where the column is narrowest before the layout stacks.
+
+   Because the card is the in-flow child, its negative margin also shortens the box by
+   the same amount, so nothing below it is left with a gap. Desktop only: below 769 the
+   columns stack and the second column's live rows would end up under the card. */
+/* Phones need the same lift, for the same reason: the columns STACK there, so in flow
+   the card landed after the second column's blurred rows AND the whole meter/verdict
+   raster — 380px of blur at 375 and 451px at 430 before the offer appeared.
+
+   It stays IN flow (out of flow overran the chapter's clip edge and cost the button:
+   +17px at 390, +58 at 375, +212 at 320). A negative margin on an in-flow card also
+   shortens the box by the same amount, so nothing below is left with a gap.
+
+   ~121% of the container's width: both rasters above it scale with that width, so the
+   distance to clear does too. Measured, not guessed — at 106% the wide end was still
+   147px short at 768 and 125 at 600, while 320 was already tight. The +8px keeps the
+   narrow end, where the ratio runs smallest, off the last readable row. */
+@media (max-width: 768px) {
+  .report-accel__locked-tail > .report-accel__verdict--locked {
+    margin-top: calc(-121% + 8px);
+  }
+}
+
+@media (min-width: 769px) {
+  .report-accel__locked-tail > .report-accel__verdict--locked {
+    /* Desktop takes it OUT of flow, so the box is exactly the blurred content and
+       nothing is reserved below the card: a card taller than that content runs on over
+       the learn block, as the design does, instead of padding the chapter with white.
+       Percentage margins resolve against the containing block's WIDTH even when
+       absolutely positioned, so this keeps tracking the column raster's height. */
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    margin-top: calc(-21% + 5px);
+  }
+}
+
+.report-accel__locked-tail .report-accel__preview--tease {
+  margin-top: 0;
 }
 
 /* Mobile: the paywall card is nearly the full width of the box, so nothing shows

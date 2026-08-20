@@ -141,7 +141,7 @@ describe("BeliefsSection — how much the server ships", () => {
     const at = css.indexOf(".report-beliefs__preview-fade--tease .report-locked-preview::before");
     expect(at, "the left-edge softening pass is missing").toBeGreaterThan(-1);
     const body = css.slice(at, css.indexOf("}", at));
-    expect(body).toContain("backdrop-filter: blur(3px)");
+    expect(body).toContain("backdrop-filter: blur(1.5px)");
     expect(body).toContain("to right");
   });
 
@@ -170,14 +170,14 @@ describe("BeliefsSection — how much the server ships", () => {
       return css.slice(at, css.indexOf("}", at));
     };
     const SCOPE = ".report-beliefs__preview-fade--tease .report-beliefs__list";
-    expect(bodyAt(`${SCOPE} > *:nth-child(3)`)).toContain("filter: blur(1.2px)");
-    expect(bodyAt(`${SCOPE} > *:nth-child(4)`)).toContain("filter: blur(2.6px)");
+    expect(bodyAt(`${SCOPE} > *:nth-child(3)`)).toContain("filter: blur(0.6px)");
+    expect(bodyAt(`${SCOPE} > *:nth-child(4)`)).toContain("filter: blur(1.4px)");
     // Rows one and two are untouched.
     expect(css).not.toContain(`${SCOPE} > *:nth-child(1)`);
     expect(css).not.toContain(`${SCOPE} > *:nth-child(2)`);
 
     const graded = bodyAt(".report-beliefs__preview-fade--tease .report-locked-preview::after");
-    expect(graded).toContain("backdrop-filter: blur(5px)");
+    expect(graded).toContain("backdrop-filter: blur(2px)");
     // Masked from nothing at the top to full at the bottom — it can only ADD to the
     // raster's own blur, never subtract, so the withheld rows stay unrecoverable.
     expect(graded).toContain("rgba(0, 0, 0, 0) 0%");
@@ -211,7 +211,13 @@ describe("BeliefsSection — how much the server ships", () => {
     ]) {
       const rule = bodyAt(wrapper);
       // Must match COLUMN_CAPTURE_PAD_PX: 8 * 2.5.
-      expect(rule).toContain("--lp-pad: 20px");
+      // Derived from the generator, not hardcoded: --lp-pad must equal
+      // COLUMN_BLUR_PX * 2.5 or the raster stops lining up 1:1 with the live rows
+      // above it. Reading the constant out of the script means changing the blur
+      // cannot silently desync the CSS — it fails here instead.
+      const blurPx = Number(gen.match(/const COLUMN_BLUR_PX = ([\d.]+);/)?.[1]);
+      expect(blurPx).toBeGreaterThan(0);
+      expect(rule).toContain(`--lp-pad: ${blurPx * 2.5}px`);
       // Contains the negative margins without clipping the feather off again.
       expect(rule).toContain("display: flow-root");
     }

@@ -64,7 +64,7 @@ const CAPTURE_SCALE = 0.25;
  * while the surface reads softer. Files stay around 3-4KB.
  */
 const COLUMN_CAPTURE_SCALE = 0.5;
-const COLUMN_BLUR_PX = 8;
+const COLUMN_BLUR_PX = 5;
 
 /**
  * Padding added around a column crop before it is shot.
