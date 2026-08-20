@@ -151,6 +151,34 @@ const COLUMN_CAPTURES = [
     name: "accel-shuts",
     keepRows: 3,
   },
+  // THE THREE GOLD "PRACTICAL" EXPANDERS — teaser only.
+  //
+  // The eleven purple expanders show a universal teaser to a locked reader, so their
+  // block reads as label + teaser + unlock CTA. These three ("Working with your
+  // sensitivity: three moves", "The fix: one conversation", "The Exit") have a
+  // PER-ARCHETYPE teaser, withheld server-side — so the block rendered label + CTA and
+  // read visibly emptier than every other chapter's. The teaser arrives as pixels
+  // instead, in the same slot, so the shape matches.
+  //
+  // The teaser element itself is the frame — not the peek around it, whose padding
+  // would be baked in and then applied a second time on the page.
+  ...["insecurities", "initiation", "libido"].map((slug) => ({
+    sectionId: {
+      insecurities: "core_insecurities",
+      initiation: "initiation_style",
+      libido: "libido_challenges_in_relationships",
+    }[slug],
+    selector: `.report-${slug}__details-teaser`,
+    name: `practical-${slug}`,
+    keepRows: 0,
+    // LOCK_BLUR_PX, the blur the CSS puts on the live block around it.
+    blur: 4,
+    // The gold wash sits behind this text. Captured on flat white with the wash
+    // cleared, and multiplied onto the live wash by the page — baking the wash in
+    // left a seam where the raster's slice of the gradient met the live one.
+    clearBackdrop: true,
+  })),
+
   // ATTACHMENT STYLE — two captures, because the chapter locks in two places.
   //
   // It cannot be a whole-card capture: the section has no `article[class*="__card"]`
@@ -222,10 +250,45 @@ const VIEWPORTS = [
  * Letting the real animations run and simply waiting them out is what a reader
  * actually sees, and it needs no per-section knowledge.
  *
- * The wait covers the longest stagger in the report: the growth rungs finish at
- * 420ms delay + 4 x 130ms stagger + 520ms duration.
+ * A FIXED wait cannot cover it. 2500ms was computed from the growth ladder's own
+ * numbers (420ms delay + 4 x 130ms stagger + 520ms duration) and still fell short in
+ * practice — measured, that chapter's last rung only reaches full opacity between
+ * 2.5s and 4s, so the raster shipped with three of five rungs invisible and read as an
+ * empty card. `settleReveal` waits for the section to STOP CHANGING instead, so a
+ * chapter can take as long as it likes and a static one costs nothing.
  */
-const REVEAL_SETTLE_MS = 2500;
+const REVEAL_MIN_MS = 900;
+const REVEAL_MAX_MS = 12000;
+
+/**
+ * Wait until nothing in the section is still animating.
+ *
+ * Samples every element's opacity and transform, and returns once two consecutive
+ * samples 250ms apart are identical. The initial minimum wait is there so a reveal
+ * that has not started yet cannot read as "already settled".
+ */
+async function settleReveal(page, sectionId) {
+  const signature = () =>
+    page.evaluate((id) => {
+      const sec = document.getElementById(id);
+      if (!sec) return "";
+      let out = "";
+      for (const el of sec.querySelectorAll("*")) {
+        const cs = getComputedStyle(el);
+        out += `${cs.opacity}|${cs.transform}|${cs.strokeDashoffset};`;
+      }
+      return out;
+    }, sectionId);
+
+  await page.waitForTimeout(REVEAL_MIN_MS);
+  let prev = await signature();
+  for (let waited = 0; waited < REVEAL_MAX_MS; waited += 250) {
+    await page.waitForTimeout(250);
+    const now = await signature();
+    if (now === prev) return;
+    prev = now;
+  }
+}
 
 async function settle(page) {
   await page.evaluate(async () => {
@@ -315,24 +378,6 @@ async function verifyNotBlank(page, files) {
 }
 
 /**
- * Sections whose `__details` expander is PER-ARCHETYPE, not universal education.
- *
- * Eleven chapters carry a "Learn: ..." expander whose teaser is the same for
- * everyone, so it stays live (and blurred) under the overlay and is excluded from
- * the raster. These three carry a `practical.*` block instead — "The fix: one
- * conversation", "The Exit", "Working with your sensitivity: three moves" — whose
- * teaser and lines are the reader's own and are withheld server-side. `hasPractical`
- * is therefore false on a locked report and the block does not render at all, so
- * excluding it from the capture too made it invisible in BOTH places: 205px, 194px
- * and 205px of the chapter that a locked reader had no way to know existed.
- */
-const KEEP_DETAILS_IN_RASTER = new Set([
-  "core_insecurities",
-  "initiation_style",
-  "libido_challenges_in_relationships",
-]);
-
-/**
  * The real chapter content is every child of the card UP TO the `__details`
  * educational expander. `__details` is excluded deliberately (except for the
  * sections above): it renders in the locked view too, directly under the overlay,
@@ -347,10 +392,10 @@ async function captureSection(page, sectionId, viewportName) {
   // immediately, catching the chapter at opacity 0. That is why an earlier run
   // reported a confident "ok 792x832" for 21 cards that were blank white.
   await page.locator(`#${sectionId}`).scrollIntoViewIfNeeded();
-  await page.waitForTimeout(REVEAL_SETTLE_MS);
+  await settleReveal(page, sectionId);
 
   const prepared = await page.evaluate(
-    ({ sectionId, blur, keepDetails }) => {
+    ({ sectionId, blur }) => {
       const section = document.getElementById(sectionId);
       if (!section) return { error: "section not found" };
       const cards = Array.from(section.querySelectorAll("article[class*='__card']"));
@@ -375,11 +420,9 @@ async function captureSection(page, sectionId, viewportName) {
       // Hide the educational expander: it renders in the LOCKED view too,
       // directly under the overlay, so capturing it would show the same block
       // twice — once blurred in the image and once sharp below it.
-      const details = keepDetails
-        ? []
-        : Array.from(card.children).filter((c) =>
-            /__details\b/.test((c.className || "").toString())
-          );
+      const details = Array.from(card.children).filter((c) =>
+        /__details\b/.test((c.className || "").toString())
+      );
       for (const d of details) d.style.display = "none";
 
       const kids = Array.from(card.children).filter((c) => c.style.display !== "none");
@@ -444,7 +487,7 @@ async function captureSection(page, sectionId, viewportName) {
         shifted: Math.abs(card.getBoundingClientRect().height - heightBefore) > 2,
       };
     },
-    { sectionId, blur: LOCK_BLUR_PX, keepDetails: KEEP_DETAILS_IN_RASTER.has(sectionId) }
+    { sectionId, blur: LOCK_BLUR_PX }
   );
 
   // Restores via the wrapper itself rather than re-deriving the anchor, so it
@@ -477,6 +520,12 @@ async function captureSection(page, sectionId, viewportName) {
   }
 
   const name = prepared.prefix.replace(/^report-/, "");
+  // Settle AGAIN, after the wrapper has gone in. Moving the card's children into it
+  // re-parents them, which RESTARTS their CSS animations from zero — so a chapter that
+  // had finished revealing is mid-reveal again by the time we shoot. That is what left
+  // the growth ladder's five rungs invisible and shipped an all but empty card.
+  await settleReveal(page, sectionId);
+
   const file = join(OUT_DIR, `${name}-${viewportName}.jpg`);
   // Section ids are plain identifiers, so no selector escaping is needed.
   await page
@@ -501,14 +550,14 @@ async function captureSection(page, sectionId, viewportName) {
  */
 async function captureColumn(
   page,
-  { sectionId, selector, name, keepRows, only, blur: blurPx },
+  { sectionId, selector, name, keepRows, only, blur: blurPx, bg, clearBackdrop },
   viewportName
 ) {
   await page.locator(`#${sectionId}`).scrollIntoViewIfNeeded();
-  await page.waitForTimeout(REVEAL_SETTLE_MS);
+  await settleReveal(page, sectionId);
 
   const prepared = await page.evaluate(
-    ({ sectionId, selector, keepRows, blur, only, pad }) => {
+    ({ sectionId, selector, keepRows, blur, only, pad, bg, clearBackdrop }) => {
       const section = document.getElementById(sectionId);
       if (!section) return { error: "section not found" };
       const list = section.querySelector(selector);
@@ -525,6 +574,13 @@ async function captureColumn(
           else child.style.display = "none";
         }
         if (kept === 0) return { error: `nothing matched "${only}"` };
+      } else if (rows.length === 0 && keepRows === 0) {
+        // A text element with no element children — the gold expanders' teaser is a
+        // single <p>. Nothing to hide; frame it as it is. Framing its WRAPPER instead
+        // baked that wrapper's padding into the file, and the page then applied the
+        // same padding again: the text landed 69px right of where the live teasers in
+        // the other chapters sit, with the wrapper's vertical padding as dead space
+        // under it.
       } else {
         if (rows.length <= keepRows) return { error: `only ${rows.length} rows` };
         for (const row of rows.slice(0, keepRows)) row.style.display = "none";
@@ -559,7 +615,11 @@ async function captureColumn(
       wrapper.setAttribute("data-preview-capture", "");
       wrapper.setAttribute("data-preview-wrapper", "");
       wrapper.style.padding = `${pad}px`;
-      wrapper.style.background = "#ffffff";
+      // Usually white — the colour the chapter sits on. A block with a wash behind it
+      // (the gold practical expanders) passes `transparent` instead, so the capture
+      // bakes in that wash and the raster blends into the live one rather than
+      // landing as a white tile on top of it.
+      wrapper.style.background = bg;
       // content-box + 100% width so the CONTENT stays the column's own width and the
       // padding overhangs: with the default border-box the content would shrink by
       // 2x pad and the blurred rows would re-wrap narrower than the live ones above.
@@ -577,6 +637,22 @@ async function captureColumn(
       // wrapper above whatever is left.
       wrapper.style.position = "relative";
       wrapper.style.zIndex = "9999";
+
+      // Capture the GLYPHS only, on flat white, for a block that sits on a wash (the
+      // gold practical expanders). Baking the wash in left a visible tonal seam where
+      // the raster's slice of the gradient met the live one at a different phase; the
+      // page composites this with `mix-blend-mode: multiply` instead, where white
+      // disappears into whatever is behind it.
+      const cleared = [];
+      if (clearBackdrop) {
+        for (let node = list; node && node !== document.body; node = node.parentElement) {
+          const cs = getComputedStyle(node);
+          if (cs.backgroundImage === "none" && cs.backgroundColor === "rgba(0, 0, 0, 0)") continue;
+          cleared.push([node, node.style.background]);
+          node.style.background = "transparent";
+        }
+      }
+      window.__previewCleared = cleared;
       const hidden = [];
       for (let node = wrapper; node && node !== document.body; node = node.parentElement) {
         for (const sib of Array.from(node.parentElement?.children ?? [])) {
@@ -606,6 +682,8 @@ async function captureColumn(
       blur: blurPx ?? COLUMN_BLUR_PX,
       only,
       pad: (blurPx ?? COLUMN_BLUR_PX) * COLUMN_PAD_RATIO,
+      bg: bg ?? "#ffffff",
+      clearBackdrop: clearBackdrop ?? false,
     }
   );
 
@@ -615,6 +693,8 @@ async function captureColumn(
         const section = document.getElementById(sectionId);
         for (const [el, prev] of window.__previewHidden ?? []) el.style.visibility = prev;
         window.__previewHidden = undefined;
+        for (const [el, prev] of window.__previewCleared ?? []) el.style.background = prev;
+        window.__previewCleared = undefined;
         // Unwrap the feather wrapper first, so the list goes back where it was.
         const wrapper = section?.querySelector("[data-preview-wrapper]");
         if (wrapper instanceof HTMLElement) {
@@ -639,12 +719,20 @@ async function captureColumn(
     return { sectionId, name, error: prepared.error };
   }
 
+  // Same as the section captures: the wrapper re-parents the rows, which restarts
+  // their reveal animations, so wait for them to land again before shooting.
+  await settleReveal(page, sectionId);
+
   const file = join(OUT_DIR, `${name}-${viewportName}.jpg`);
   // 88 rather than the section captures' 72: these are upscaled 4x on display, so
   // JPEG block boundaries land as visible banding rather than as noise. Still ~2KB.
+  //
+  // A glyphs-on-white capture goes higher: the page multiplies it onto a wash, so
+  // "nearly white" is not white enough — at 88 the file's own edges came back a
+  // shade under 255 and multiply drew them as a faint rectangle.
   await page
     .locator(`#${sectionId} [data-preview-capture]`)
-    .screenshot({ path: file, type: "jpeg", quality: 88 });
+    .screenshot({ path: file, type: "jpeg", quality: clearBackdrop ? 98 : 88 });
   await restore();
 
   return {

@@ -31,6 +31,12 @@ const COLUMN_PREVIEWS: Record<string, string[]> = {
   // the map with its caption — with the universal learn pill, map eyebrow and Learn
   // expander staying live between them, so it cannot be one whole-chapter raster.
   "AttachmentPatternsSection.tsx": ["attach-card", "attach-map"],
+  // The three gold "practical" expanders' teaser, on top of each chapter's own
+  // whole-section raster in SECTIONS below: their teaser is per-archetype and withheld,
+  // so it ships as pixels in the slot the eleven universal expanders fill with text.
+  "InsecuritiesSection.tsx": ["practical-insecurities"],
+  "InitiationSection.tsx": ["practical-initiation"],
+  "LibidoSection.tsx": ["practical-libido"],
 };
 const COLUMN_PREVIEW_NAMES = Object.values(COLUMN_PREVIEWS).flat();
 const SECTIONS_DIR = join(process.cwd(), "features/report/ui/sections");
@@ -81,25 +87,60 @@ describe("locked preview images", () => {
     expect(block).toContain("object-fit: fill");
   });
 
-  it("keeps a per-archetype expander inside the raster, and a universal one live", () => {
-    // `__details` is hidden before the capture because it renders live under the
-    // overlay — true for the eleven chapters whose expander is universal education.
-    // Three carry a `practical.*` block instead: the reader's own, withheld
-    // server-side, so `hasPractical` is false and it does not render at all. Excluded
-    // from the capture too, it was invisible in BOTH places.
+  it("waits for a chapter's reveal to finish before and after the DOM surgery", () => {
+    // Two ways a capture shipped a half-drawn chapter:
+    //  1. a flat wait. 2500ms was derived from the growth ladder's own timings and
+    //     still fell short — measured, its last rung only reaches full opacity between
+    //     2.5s and 4s, so the file held two of five rungs and read as an empty card.
+    //  2. the wrapper. Moving the card's children into it RE-PARENTS them, which
+    //     restarts their CSS animations from zero, so even a settled chapter was
+    //     mid-reveal again at the moment of the screenshot.
     const gen = readFileSync(join(process.cwd(), "scripts/generate-locked-previews.mjs"), "utf8");
-    const set = gen.slice(
-      gen.indexOf("const KEEP_DETAILS_IN_RASTER"),
-      gen.indexOf("async function captureSection")
-    );
-    for (const id of [
-      "core_insecurities",
-      "initiation_style",
-      "libido_challenges_in_relationships",
-    ]) {
-      expect(set, `${id} must stay in its raster`).toContain(`"${id}"`);
+    expect(gen).not.toContain("REVEAL_SETTLE_MS");
+    expect(gen).toContain("async function settleReveal(page, sectionId)");
+    // Once before the wrapper goes in, once after — both capture paths.
+    expect([...gen.matchAll(/await settleReveal\(page, sectionId\);/g)]).toHaveLength(4);
+    // The growth raster is the canary: it was 1.3KB of white.
+    for (const v of ["desktop", "mobile"]) {
+      expect(statSync(join(PREVIEW_DIR, `growth-${v}.jpg`)).size).toBeGreaterThan(1800);
     }
-    expect(gen).toContain("keepDetails: KEEP_DETAILS_IN_RASTER.has(sectionId)");
+  });
+
+  it("renders every locked expander live, the gold three included", () => {
+    // All sixteen chapters' expanders render live under the overlay and are blurred by
+    // CSS — that is what makes them look alike. The three gold "practical" blocks used
+    // to be gated on `hasPractical`, which is false on a locked report (the teaser and
+    // the moves are the reader's own, withheld server-side), so they either vanished
+    // or — captured into the raster instead — read at the raster's wash while every
+    // other chapter's expander sat live beside it.
+    for (const [file, slug] of [
+      ["InsecuritiesSection.tsx", "insecurities"],
+      ["InitiationSection.tsx", "initiation"],
+      ["LibidoSection.tsx", "libido"],
+    ]) {
+      const src = readFileSync(join(SECTIONS_DIR, file), "utf8");
+      expect(src, `${file} must render its expander when locked`).toContain(
+        "{locked || hasPractical ? ("
+      );
+      // ...and the withheld teaser arrives as pixels in the same slot the universal
+      // expanders fill with live text, so the block is not just a label and a button.
+      expect(src).toContain(`<LockedPreviewImage name="practical-${slug}" />`);
+    }
+    // The capture takes the GLYPHS on flat white (the gold wash cleared) and the page
+    // multiplies them onto the live wash. Baking the wash in left a visible rectangle
+    // where the raster's slice of the gradient met the live one at a different phase,
+    // so both halves have to stay in step.
+    const gen = readFileSync(join(process.cwd(), "scripts/generate-locked-previews.mjs"), "utf8");
+    expect(gen).toContain("clearBackdrop: true");
+    expect(gen).toContain("quality: clearBackdrop ? 98 : 88");
+    const css = readFileSync(join(process.cwd(), "app/globals.css"), "utf8");
+    const at = css.indexOf(
+      ".report-learn-peek > .report-locked-preview .report-locked-preview__img"
+    );
+    expect(at, "the shared peek-raster rule is gone").toBeGreaterThan(-1);
+    expect(css.slice(at, css.indexOf("}", at))).toContain("mix-blend-mode: multiply");
+    // No chapter keeps its expander inside a raster any more.
+    expect(gen).not.toContain("KEEP_DETAILS_IN_RASTER");
   });
 
   it("renders no stand-in beside the raster", () => {

@@ -24926,6 +24926,64 @@ input.autofill-dark:-internal-autofill-previewed {
    folding it into the list above. */
 .report-attachment__result-wrap--locked {
   overflow: hidden;
+  /* The box carries the result card's own frame. The raster inside it is a capture of
+     that card, so its own border sits at the very edge of the image, where the feather
+     softens it away to nothing — the blurred chapter then floated on white with no
+     edges, unlike every other locked chapter, where the card's frame is inside the
+     capture. Same radius, background and glow as `.report-attachment-card`. */
+  border-radius: clamp(20px, 3vw, 27px);
+  background: #ffffff;
+  box-shadow: 0 0 22.569px 0 rgba(157, 138, 215, 0.13);
+}
+
+/* THE GOLD EXPANDERS' TEASER, AS PIXELS
+   One rule for all three: `.report-learn-peek` is the shared class every chapter's
+   collapsed expander carries, so the raster is styled once here rather than per
+   section. Same feather as the other column captures — the capture carries `--lp-pad`
+   of padding so its blur fades out inside the file, and the page pulls that back out
+   on the sides and the bottom, never the top, where the white feather would clip the
+   label above it. */
+.report-learn-peek > .report-locked-preview {
+  position: relative;
+  display: flow-root;
+  width: 100%;
+  /* blur 4 x COLUMN_PAD_RATIO — see the practical-* entries in
+     scripts/generate-locked-previews.mjs. */
+  --lp-pad: 10px;
+}
+
+.report-learn-peek > .report-locked-preview .report-locked-preview__img {
+  display: block;
+  width: calc(100% + var(--lp-pad) * 2);
+  max-width: none;
+  height: auto;
+  /* Symmetric, top included: this raster is multiplied, so its feather is white and
+     white is a no-op under multiply — nothing to clip the label above it. Without the
+     negative top the content sat 10px lower than the live teasers in the other
+     chapters, measured against the purple reference. */
+  margin: calc(var(--lp-pad) * -1);
+  object-fit: fill;
+  /* The capture is glyphs on flat white (clearBackdrop in the generator), so multiply
+     drops the white into the gold wash behind it and leaves only the text. Baking the
+     wash into the file instead left a visible rectangle: the raster's slice of the
+     gradient met the live one at a different phase. */
+  mix-blend-mode: multiply;
+  /* Sub-pixel smoothing for the upscale, not a second lock blur. */
+  filter: blur(0.5px);
+}
+
+/* The border is drawn as an overlay rather than on the box itself, for two reasons:
+   the raster overhangs the box by its feather on both sides and its white edge
+   painted straight over a real border (the corners looked unfinished), and a border on
+   the box would shrink its content width by 2px so the capture no longer rendered 1:1.
+   Above the raster, below the paywall card, which is inset from these edges. */
+.report-attachment__result-wrap--locked::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1.128px solid rgba(157, 138, 215, 0.35);
+  border-radius: inherit;
+  pointer-events: none;
 }
 
 /* THE CARD SIZES THE BOX; THE RASTER IS A 1:1 BACKDROP BEHIND IT
@@ -24953,7 +25011,11 @@ input.autofill-dark:-internal-autofill-previewed {
   width: calc(100% + var(--lp-pad) * 2);
   max-width: none;
   height: auto;
-  margin: calc(var(--lp-pad) * -1) calc(var(--lp-pad) * -1) calc(var(--lp-pad) * -1);
+  /* No negative TOP margin: the feather is white, and pulling it up covered the
+     bottom of whatever sits above — on the map that clipped the eyebrow in half, and
+     here it reached into the learn paragraph. Sides and bottom still overhang, which
+     is where the feather has nothing to damage. */
+  margin: 0 calc(var(--lp-pad) * -1) calc(var(--lp-pad) * -1);
   /* Sub-pixel smoothing for the 2x upscale — not a second lock blur. */
   filter: blur(0.5px);
 }
@@ -24988,7 +25050,9 @@ input.autofill-dark:-internal-autofill-previewed {
   width: calc(100% + var(--lp-pad) * 2);
   max-width: none;
   height: auto;
-  margin: calc(var(--lp-pad) * -1) calc(var(--lp-pad) * -1) calc(var(--lp-pad) * -1);
+  /* See the card raster above: no negative top margin, or the white feather clips the
+     eyebrow sitting directly above this block. */
+  margin: 0 calc(var(--lp-pad) * -1) calc(var(--lp-pad) * -1);
   filter: blur(0.5px);
 }
 
@@ -25015,11 +25079,16 @@ input.autofill-dark:-internal-autofill-previewed {
    blurred by the shared rule below ("Locked chapters: the Learn expander"),
    Attachment included. Listing its summary and teaser here as well would blur them
    twice — 4px inside 4px — since that rule blurs the band as a whole. */
-/* The map eyebrow stays SHARP on a locked report. It is universal chrome, the same
-   line the paid chapter prints, and it is now the only live text in the block — the
-   plane and its caption arrive as a raster, and the five-patterns table only appears
-   once the Learn expander is opened. Blurred, it left the whole block unreadable and
-   read as a rendering fault rather than as withheld content. */
+/* The map eyebrow sits behind the blur with the rest of its block. It is the only
+   live text left there — the plane and caption arrive as a raster, and the
+   five-patterns table only appears once the Learn expander is opened — so leaving it
+   sharp made the block read as half-finished. 4px is LOCK_BLUR_PX, the same blur the
+   raster under it was captured at, so the two read as one surface. */
+.report-attachment__article--locked .report-attachment__map-eyebrow {
+  filter: blur(var(--report-lock-blur));
+  user-select: none;
+  pointer-events: none;
+}
 
 /* ==========================================================================
    Locked chapters: the Learn expander goes behind the blur too

@@ -285,8 +285,31 @@ describe("BeliefsSection — how much the server ships", () => {
       expect(rule).toContain("width: calc(100% + var(--lp-pad) * 2)");
       // Tailwind's preflight caps images at 100%, which clamps that straight back.
       expect(rule).toContain("max-width: none");
-      expect(rule).toContain("margin: calc(var(--lp-pad) * -1)");
+      expect(rule).toMatch(
+        /margin: (0|calc\(var\(--lp-pad\) \* -1\)) calc\(var\(--lp-pad\) \* -1\)/
+      );
     }
+    // The two attachment rasters have live text directly above them — the map's
+    // eyebrow and the chapter's learn paragraph — and the feather is WHITE, so a
+    // negative top margin clipped those lines in half. Sides and bottom only.
+    for (const img of [
+      ".report-attachment__map-preview img {",
+      ".report-attachment__result-wrap--locked > .report-attachment__card-preview img {",
+    ]) {
+      expect(bodyAt(img)).toContain("margin: 0 calc(var(--lp-pad) * -1)");
+    }
+    // ...and the locked box wears the result card's own frame, since the raster's copy
+    // of it sits under the feather at the very edge and softens away to nothing. Drawn
+    // as an overlay: the raster overhangs the box by its feather, so a border on the
+    // box itself was painted over at both sides, and it would also shrink the content
+    // width so the capture no longer rendered 1:1.
+    const box = bodyAt(".report-attachment__result-wrap--locked {");
+    expect(box).toContain("border-radius: clamp(20px, 3vw, 27px)");
+    expect(box).not.toContain("border: ");
+    const frame = bodyAt(".report-attachment__result-wrap--locked::after {");
+    expect(frame).toContain("border: 1.128px solid rgba(157, 138, 215, 0.35)");
+    expect(frame).toContain("border-radius: inherit");
+    expect(frame).toContain("pointer-events: none");
   });
 
   it("keeps the paywall card below every row the reader can actually read", () => {

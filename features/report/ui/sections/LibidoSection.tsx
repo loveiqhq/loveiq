@@ -321,7 +321,13 @@ const LibidoSection: FC<Props> = ({
           </>
         )}
 
-        {hasPractical ? (
+        {/* Locked renders this too, exactly as the eleven purple "Learn" expanders do:
+            the label is universal and the block is already locked-aware (closed, with
+            an unlock CTA). `hasPractical` is false on a locked report — the teaser and
+            the moves are the reader's own and withheld — so gating on it alone dropped
+            the block entirely, and putting it in the raster instead made it read at the
+            raster's 62% wash while every other chapter's expander sat live beside it. */}
+        {locked || hasPractical ? (
           <div className="report-libido__details">
             <button
               type="button"
@@ -345,7 +351,14 @@ const LibidoSection: FC<Props> = ({
 
             {locked || !expanded ? (
               <div className="report-libido__details-peek report-learn-peek">
-                {copy["practical.teaser"] ? (
+                {/* The teaser is per-archetype and withheld from a locked client, so it
+                    arrives as pixels — a build-time capture of the real line, in the
+                    slot the eleven universal expanders fill with live text. Without it
+                    the block read as label + button while every other chapter's showed
+                    a sentence. */}
+                {locked ? (
+                  <LockedPreviewImage name="practical-libido" />
+                ) : copy["practical.teaser"] ? (
                   <p className="report-libido__details-teaser report-learn-teaser">
                     {practicalTease}
                   </p>
