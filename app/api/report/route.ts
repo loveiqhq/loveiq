@@ -711,34 +711,43 @@ export async function GET(request: Request) {
      *
      * Shipping the whole list and fading it made the entire chapter legible — the
      * fade is gentle enough that all nine keeps and ten loosens could be read, so
-     * there was nothing left to buy. FOUR per column is the tease as of 2026-08-19,
+     * there was nothing left to buy. FIVE keeps and THREE loosens as of 2026-08-20,
      * because the rows past them no longer come from here at all: the column
      * carries `beliefs-keep` / `beliefs-loosen`, build-time rasters of the real
      * remaining rows whose pixels were blurred and quarter-scaled before they ever
      * left the build machine (see scripts/generate-locked-previews.mjs). The
      * chapter therefore stands at its true length — nine keeps, ten loosens — with
-     * only four beliefs per column actually in the payload. Four rather than two so
-     * the blur can COME ON GRADUALLY in live text (rows three and four carry 1.2px
-     * and 2.6px) and the raster picks up where heavy blur already looks natural;
-     * starting the image at row three put a visible seam between sharp text and a
-     * fully blurred block.
+     * only these rows actually in the payload. More than two per column so the blur
+     * can COME ON GRADUALLY in live text (the last two rows of each column carry
+     * 1.2px and 2.6px) and the raster picks up where heavy blur already looks
+     * natural; starting the image earlier put a visible seam between sharp text and
+     * a fully blurred block.
      *
-     * `keepRows` in COLUMN_CAPTURES must match this number, or the two sharp rows
-     * and the image will either double up or skip a row.
+     * The counts DIFFER per column on purpose. A keep row is one line (51px at
+     * 1440); a loosen row carries its THE SHIFT reframe underneath (111px). Four
+     * and four therefore started the blur 214px lower in the loosen column than in
+     * the keep column — a stepped edge across the card. Five and three land the two
+     * bands within ~30px at every desktop width, and the columns share grid row
+     * tracks (see .report-beliefs__cols in globals.css) so the rasters begin on one
+     * straight line.
+     *
+     * `keepRows` in COLUMN_CAPTURES must match these numbers per column, or the
+     * sharp rows and the image will either double up or skip a row.
      *
      * This is the real boundary: strip every filter in devtools and there is
-     * nothing past row two in the DOM. `body.p1`, the per-archetype closing
+     * nothing past these rows in the DOM. `body.p1`, the per-archetype closing
      * paragraph, stays withheld as well.
      */
-    const BELIEFS_TEASER_ROWS = 4;
+    const BELIEFS_TEASER_KEEP_ROWS = 5;
+    const BELIEFS_TEASER_LOOSEN_ROWS = 3;
     const BELIEFS_KEEP_ROWS = 9;
     const BELIEFS_LOOSEN_ROWS = 10;
     const beliefsKeep: (string | null)[] = Array.from(
-      { length: beliefsUnlocked ? BELIEFS_KEEP_ROWS : BELIEFS_TEASER_ROWS },
+      { length: beliefsUnlocked ? BELIEFS_KEEP_ROWS : BELIEFS_TEASER_KEEP_ROWS },
       (_, i) => beliefsSection[`keep.${i + 1}`] ?? null
     );
     const beliefsLoosen = Array.from(
-      { length: beliefsUnlocked ? BELIEFS_LOOSEN_ROWS : BELIEFS_TEASER_ROWS },
+      { length: beliefsUnlocked ? BELIEFS_LOOSEN_ROWS : BELIEFS_TEASER_LOOSEN_ROWS },
       (_, i) => ({
         belief: beliefsSection[`loosen.${i + 1}.belief`] ?? null,
         shift: beliefsSection[`loosen.${i + 1}.shift`] ?? null,

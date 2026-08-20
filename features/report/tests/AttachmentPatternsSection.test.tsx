@@ -118,11 +118,19 @@ describe("AttachmentPatternsSection", () => {
     expect(document.querySelector(".report-premium-overlay")).toBeInTheDocument();
     expect(document.querySelector(".report-attachment-card--blur")).toBeInTheDocument();
 
-    // Universal educational content is STILL shown when locked.
+    // The universal learn block is STILL shown when locked...
     expect(screen.getByText("What you will learn")).toBeInTheDocument();
+    // ...but the collapsible reads as closed, exactly like paid-collapsed does: the
+    // teaser and its CTA, and NOT the five-patterns block. Rendering the patterns
+    // inside the closed peek made the expander look open (1,786px of blur).
+    expect(document.querySelector(".report-attachment__details-peek")).toBeInTheDocument();
+    expect(document.querySelector(".report-attachment__details-summary")).toHaveAttribute(
+      "aria-expanded",
+      "false"
+    );
     expect(
-      screen.getByText("Common Attachment Style Patterns Across Archetypes")
-    ).toBeInTheDocument();
+      screen.queryByText("Common Attachment Style Patterns Across Archetypes")
+    ).not.toBeInTheDocument();
   });
 });
 

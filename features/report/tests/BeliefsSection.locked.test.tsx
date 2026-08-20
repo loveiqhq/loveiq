@@ -78,10 +78,13 @@ describe("BeliefsSection — locked tease", () => {
       "/report-previews/beliefs-keep-desktop.jpg",
       "/report-previews/beliefs-loosen-desktop.jpg",
     ]);
-    // Each image is the LAST child of its column's list, so it continues that
-    // column rather than floating beside it.
+    // Each image follows its column's list as the NEXT sibling — not the list's last
+    // child — so both columns can share grid row tracks (label / rows / raster) and
+    // the blur starts on one line across the card. Inside the list it inherited the
+    // list's own height and the two columns drifted apart.
     for (const list of fade.querySelectorAll(".report-beliefs__list")) {
-      expect(list.lastElementChild?.className).toContain("report-locked-preview");
+      expect(list.lastElementChild?.className).toContain("report-beliefs__item");
+      expect(list.nextElementSibling?.className).toContain("report-locked-preview");
     }
   });
 
@@ -112,15 +115,25 @@ describe("BeliefsSection — locked tease", () => {
 });
 
 describe("BeliefsSection — how much the server ships", () => {
-  it("ships four rows per column to a locked client, and all of them to a paid one", () => {
-    // Four, because the rows past them are not in the payload at all — they are the
-    // per-column rasters — and because the last two are what let the blur come on
-    // gradually before the image starts. It was three rows and a fade, then six and
-    // a blur, then two and a raster that began at full strength under sharp text.
+  it("ships five keeps and three loosens to a locked client, all of them to a paid one", () => {
+    // The rows past the tease are not in the payload at all — they are the per-column
+    // rasters — and the last two of each column are what let the blur come on
+    // gradually before the image starts.
+    //
+    // The counts differ per column BY DESIGN: a keep row is one line, a loosen row
+    // carries its reframe underneath and is twice as tall, so four and four started
+    // the blur 214px lower in the loosen column. Five and three put the two bands
+    // within ~30px at every desktop width, which is what lets the shared row tracks
+    // land both rasters on one line.
     const route = readFileSync(join(process.cwd(), "app/api/report/route.ts"), "utf8");
-    expect(route).toMatch(/const BELIEFS_TEASER_ROWS = 4;/);
-    expect(route).toMatch(/length: beliefsUnlocked \? BELIEFS_KEEP_ROWS : BELIEFS_TEASER_ROWS/);
-    expect(route).toMatch(/length: beliefsUnlocked \? BELIEFS_LOOSEN_ROWS : BELIEFS_TEASER_ROWS/);
+    expect(route).toMatch(/const BELIEFS_TEASER_KEEP_ROWS = 5;/);
+    expect(route).toMatch(/const BELIEFS_TEASER_LOOSEN_ROWS = 3;/);
+    expect(route).toMatch(
+      /length: beliefsUnlocked \? BELIEFS_KEEP_ROWS : BELIEFS_TEASER_KEEP_ROWS/
+    );
+    expect(route).toMatch(
+      /length: beliefsUnlocked \? BELIEFS_LOOSEN_ROWS : BELIEFS_TEASER_LOOSEN_ROWS/
+    );
   });
 
   it("captures the row rules at low contrast, since a blur cannot destroy a line", () => {
@@ -155,14 +168,16 @@ describe("BeliefsSection — how much the server ships", () => {
     const beliefs = block.slice(0, block.indexOf('name: "accel-opens"'));
     expect(beliefs).toContain('name: "beliefs-keep"');
     expect(beliefs).toContain('name: "beliefs-loosen"');
-    expect([...beliefs.matchAll(/keepRows: (\d+)/g)].map((m) => Number(m[1]))).toEqual([4, 4]);
+    expect([...beliefs.matchAll(/keepRows: (\d+)/g)].map((m) => Number(m[1]))).toEqual([5, 3]);
   });
 
   it("ramps the blur up before the raster starts", () => {
-    // A fully blurred image directly under sharp text reads as a pasted block. Rows
-    // three and four carry a light CSS blur so softness climbs 0 -> 1.2 -> 2.6 ->
-    // the image's own baseline, and the overlay keeps it climbing down the image
-    // instead of sitting flat, which is what read as "too strong in the middle".
+    // A fully blurred image directly under sharp text reads as a pasted block. The
+    // LAST TWO rows of each column carry a light CSS blur so softness climbs
+    // 0 -> 0.6 -> 1.4 -> the image's own baseline, and the overlay keeps it climbing
+    // down the image instead of sitting flat, which is what read as "too strong in
+    // the middle". Addressed from the END of the list, not by index: the two columns
+    // ship different row counts (five keeps, three loosens).
     const css = readFileSync(join(process.cwd(), "app/globals.css"), "utf8");
     const bodyAt = (selector: string) => {
       const at = css.indexOf(selector);
@@ -170,11 +185,10 @@ describe("BeliefsSection — how much the server ships", () => {
       return css.slice(at, css.indexOf("}", at));
     };
     const SCOPE = ".report-beliefs__preview-fade--tease .report-beliefs__list";
-    expect(bodyAt(`${SCOPE} > *:nth-child(3)`)).toContain("filter: blur(0.6px)");
-    expect(bodyAt(`${SCOPE} > *:nth-child(4)`)).toContain("filter: blur(1.4px)");
-    // Rows one and two are untouched.
-    expect(css).not.toContain(`${SCOPE} > *:nth-child(1)`);
-    expect(css).not.toContain(`${SCOPE} > *:nth-child(2)`);
+    expect(bodyAt(`${SCOPE} > *:nth-last-child(2)`)).toContain("filter: blur(0.6px)");
+    expect(bodyAt(`${SCOPE} > *:last-child`)).toContain("filter: blur(1.4px)");
+    // Every row above those two is untouched, in both columns.
+    expect(css).not.toContain(`${SCOPE} > *:nth-child(`);
 
     const graded = bodyAt(".report-beliefs__preview-fade--tease .report-locked-preview::after");
     expect(graded).toContain("backdrop-filter: blur(2px)");
@@ -182,6 +196,22 @@ describe("BeliefsSection — how much the server ships", () => {
     // raster's own blur, never subtract, so the withheld rows stay unrecoverable.
     expect(graded).toContain("rgba(0, 0, 0, 0) 0%");
     expect(graded).toContain("rgba(0, 0, 0, 1) 100%");
+  });
+
+  it("gives both columns the same row tracks so the blur starts on one line", () => {
+    // Equal row counts put the two blurs at different heights because the rows are
+    // different heights; the counts fix most of it and subgrid closes the rest by
+    // sharing three tracks — label, rows, raster — between the columns. Desktop only:
+    // below 769px the columns stack, where there is no line to match.
+    const css = readFileSync(join(process.cwd(), "app/globals.css"), "utf8");
+    const at = css.indexOf(".report-beliefs__preview-fade--tease .report-beliefs__cols");
+    expect(at, "the shared-track rule is gone").toBeGreaterThan(-1);
+    const block = css.slice(at, css.indexOf("\n}", css.indexOf(".report-beliefs__col {", at)));
+    expect(block).toContain("grid-template-rows: auto auto auto");
+    expect(block).toContain("grid-template-rows: subgrid");
+    expect(block).toContain("grid-row: span 3");
+    // Guarded to the side-by-side layout.
+    expect(css.slice(0, at)).toMatch(/@media \(min-width: 769px\)[^@]*$/);
   });
 
   it("captures a feather and pulls it back out, in both raster scopes", () => {
@@ -246,18 +276,21 @@ describe("BeliefsSection — how much the server ships", () => {
     ].map((m) => m[1]!);
     expect(rules.length, "the card's placement rules are gone").toBeGreaterThanOrEqual(3);
 
-    // Desktop: pushed down past the live band.
+    // Desktop: pushed down past the live band. The deepest live row across BOTH
+    // columns is 409px from the box top (at 769, where the columns are narrowest
+    // before they stack); 300 was measured against the keep column alone and covered
+    // the loosen column's tail.
     const desktop = rules.find((r) => r.includes("padding-top"))!;
     expect(desktop).toContain("align-items: flex-start");
-    expect(Number(desktop.match(/padding-top: (\d+)px/)![1])).toBeGreaterThanOrEqual(280);
+    expect(Number(desktop.match(/padding-top: (\d+)px/)![1])).toBeGreaterThanOrEqual(420);
 
     // Mobile: the columns stack, so the box has to clear BOTH sets of live rows —
-    // the second column's end at 830px, and the card is 560 tall.
+    // they run to 1047px at 768 — with the ~560px card pinned to the bottom.
     const mobileHeights = rules
       .map((r) => r.match(/min-height: (\d+)px/))
       .filter(Boolean)
       .map((m) => Number(m![1]));
-    expect(Math.min(...mobileHeights)).toBeGreaterThanOrEqual(1400);
+    expect(Math.min(...mobileHeights)).toBeGreaterThanOrEqual(1650);
   });
 
   it("adds no CSS filter of its own, and no mask anywhere", () => {

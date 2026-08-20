@@ -157,7 +157,12 @@ const BeliefsSection: FC<Props> = ({
                   One image per column, not one for the section: the columns sit
                   side by side but a keep row is 51px against a loosen row's 111px,
                   so a single raster under the sharp rows would line up with one
-                  column and not the other. */}
+                  column and not the other.
+
+                  Each raster is a SIBLING of its list, not its last child, so the
+                  two columns can share grid row tracks (label / rows / raster) and
+                  the blur starts on one straight line across the card however the
+                  rows wrap. */}
               <div className="report-beliefs__preview-fade report-beliefs__preview-fade--tease">
                 <div className="report-beliefs__cols">
                   {keep.length > 0 ? (
@@ -169,8 +174,8 @@ const BeliefsSection: FC<Props> = ({
                         {keep.map((text, i) => (
                           <KeepItem key={i} text={text} />
                         ))}
-                        <LockedPreviewImage name="beliefs-keep" />
                       </div>
+                      <LockedPreviewImage name="beliefs-keep" />
                     </div>
                   ) : null}
 
@@ -183,8 +188,8 @@ const BeliefsSection: FC<Props> = ({
                         {loosen.map((item, i) => (
                           <LoosenItem key={i} belief={item.belief as string} shift={item.shift} />
                         ))}
-                        <LockedPreviewImage name="beliefs-loosen" />
                       </div>
+                      <LockedPreviewImage name="beliefs-loosen" />
                     </div>
                   ) : null}
                 </div>

@@ -602,6 +602,9 @@ const AttachmentPatternsSection: FC<Props> = ({
                   explanation"). 13 of the report's 16 collapsibles already ship
                   this button; Attachment was one of three that never did, so the
                   only way to expand was the header row. */}
+              {/* Locked reads exactly like paid-collapsed: teaser + peek CTA. It used
+                  to render the whole five-patterns block in here too, which made a
+                  closed expander look like an open 1,900px drawer of blur. */}
               {locked || !expanded ? (
                 <div className="report-attachment__details-peek report-learn-peek">
                   {copy["edu.teaser"] ? (
@@ -619,7 +622,6 @@ const AttachmentPatternsSection: FC<Props> = ({
                       {locked ? "Unlock to read the full explanation" : "Read the full explanation"}
                     </button>
                   ) : null}
-                  {locked ? patternsBlock : null}
                 </div>
               ) : (
                 <div className="report-attachment__details-body">

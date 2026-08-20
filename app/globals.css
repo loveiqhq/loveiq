@@ -26707,12 +26707,12 @@ input.autofill-dark:-internal-autofill-previewed {
    The image itself takes no CSS filter — it arrives blurred and quarter-scaled, and
    stacking a filter on top would make this chapter visibly softer than every other
    locked surface. */
-.report-beliefs__preview-fade--tease .report-beliefs__list > *:nth-child(3) {
+.report-beliefs__preview-fade--tease .report-beliefs__list > *:nth-last-child(2) {
   filter: blur(0.6px);
   opacity: 0.92;
 }
 
-.report-beliefs__preview-fade--tease .report-beliefs__list > *:nth-child(4) {
+.report-beliefs__preview-fade--tease .report-beliefs__list > *:last-child {
   filter: blur(1.4px);
   opacity: 0.84;
 }
@@ -26786,6 +26786,27 @@ input.autofill-dark:-internal-autofill-previewed {
     rgba(0, 0, 0, 0.5) 18px,
     rgba(0, 0, 0, 0) 40px
   );
+}
+
+/* ONE BLUR LINE ACROSS BOTH COLUMNS
+   A keep row is one line, a loosen row carries its reframe underneath, so equal row
+   counts put the two blurs on different heights — a stepped edge down the middle of
+   the card. The counts are already picked to land the bands within ~30px (five keeps
+   against three loosens, see app/api/report/route.ts); subgrid closes the rest by
+   giving both columns the SAME three row tracks — label, rows, raster — so the
+   rasters begin on one straight line however the text wraps. Where it is not
+   supported the columns simply keep their own heights, which is where they were. */
+@media (min-width: 769px) {
+  .report-beliefs__preview-fade--tease .report-beliefs__cols {
+    grid-template-rows: auto auto auto;
+    row-gap: 9px;
+  }
+
+  .report-beliefs__preview-fade--tease .report-beliefs__col {
+    display: grid;
+    grid-row: span 3;
+    grid-template-rows: subgrid;
+  }
 }
 
 .report-beliefs__preview-fade--tease .report-locked-preview {
@@ -26950,14 +26971,16 @@ input.autofill-dark:-internal-autofill-previewed {
    900. It now starts below them.
 
    A fixed offset rather than a computed one, because the card is `position:
-   absolute` and cannot know the rows' height. 300px clears the worst case: the live
-   band is tallest where the columns are narrowest before they stack (255px at
-   900px wide), plus a gap. Wider viewports get a little more clearance, which shows
-   more of the blurred rows above the card rather than empty space. */
+   absolute` and cannot know the rows' height. 430px clears the worst case at every
+   desktop width — measured from the box top, the deepest live row sits at 318px
+   (1024-1200), 356 (1440), 375 (900), 398 (800) and 409 (769, where the columns are
+   narrowest before they stack) — plus a gap. 300px was measured against the keep
+   column alone and covered the loosen column's tail by up to 109px. The card is
+   562px tall, so it still ends well inside the 1250px box. */
 @media (min-width: 769px) {
   .report-beliefs__preview--locked > .report-premium-overlay {
     align-items: flex-start;
-    padding-top: 300px;
+    padding-top: 430px;
   }
 }
 
@@ -27129,16 +27152,20 @@ input.autofill-dark:-internal-autofill-previewed {
      down, so the offer is never out of reach — and everything scrolled past is real
      blurred content rather than empty space. */
   .report-beliefs__preview--locked > .report-premium-overlay {
-    min-height: 1440px;
+    /* Stacked, both columns' live rows run to 1047px (768), 997 (390) and 956 (430)
+       from the box top, and the card is ~560 tall and pinned to the bottom — so the
+       box has to be at least their sum for the card to clear the rows it is meant to
+       sit under. 1440 left it 202px over them at 768. */
+    min-height: 1680px;
     align-items: flex-end;
   }
 }
 
-/* Below 360 the card grows to 697px and the live rows run to 908, so 1440 would put
-   it back over them. Its own breakpoint rather than one value for every phone, which
-   would add ~200px of scroll on the common widths for the sake of the narrowest. */
+/* Below 360 the card grows to 697px and the live rows run to 1108, so the common-phone
+   value would put it back over them. Its own breakpoint rather than one value for every
+   phone, which would add ~200px of scroll on the common widths for the narrowest. */
 @media (max-width: 359px) {
   .report-beliefs__preview--locked > .report-premium-overlay {
-    min-height: 1650px;
+    min-height: 1860px;
   }
 }

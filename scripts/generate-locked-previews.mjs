@@ -115,23 +115,25 @@ const SECTION_IDS = [
  * the other. Each column therefore gets its own image, captured with its first two
  * rows hidden, and the component stacks it directly under that column's sharp rows.
  *
- * `keepRows` is how many rows the section ships as live text (BELIEFS_TEASER_ROWS
+ * `keepRows` is how many rows the section ships as live text (the BELIEFS_TEASER_*
  * in app/api/report/route.ts) — the capture hides exactly those so nothing appears
- * twice. Four of them: the last two are blurred in CSS so the softness ramps up
- * before the image begins, which is what stops the seam from showing.
+ * twice. The count differs per column — five keeps against three loosens, because a
+ * loosen row is twice as tall — so both bands end at the same height and the blur
+ * starts on one line. The last two rows of each are blurred in CSS so the softness
+ * ramps up before the image begins, which is what stops the seam from showing.
  */
 const COLUMN_CAPTURES = [
   {
     sectionId: "typical_beliefs",
     selector: ".report-beliefs__col:not(.report-beliefs__col--loosen-col) .report-beliefs__list",
     name: "beliefs-keep",
-    keepRows: 4,
+    keepRows: 5,
   },
   {
     sectionId: "typical_beliefs",
     selector: ".report-beliefs__col--loosen-col .report-beliefs__list",
     name: "beliefs-loosen",
-    keepRows: 4,
+    keepRows: 3,
   },
   // Accelerators & Brakes, same treatment: three live triggers per column
   // (ACCEL_TEASE_ROWS in AcceleratorsSection.tsx) and the rest as pixels. Five rows
