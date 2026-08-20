@@ -167,9 +167,10 @@ const COLUMN_CAPTURES = [
     keepRows: 0,
     // The shared 5px is tuned for body text. This card's result word is a 35px
     // headline, and at half scale with 5px it stayed READABLE in the file — the
-    // archetype's own attachment style, handed over for free. 12px destroys it while
-    // the card's shape (eyebrow, result, three rows, the Key box) still reads.
-    blur: 12,
+    // archetype's own attachment style, handed over for free. 8px destroys it (checked
+    // at display scale) while reading noticeably softer than the 12 it started at,
+    // which looked like mush beside the rest of the chapter.
+    blur: 8,
   },
   // The map and its per-archetype caption. `.report-attachment__map` wraps exactly
   // those two, at the width the plane occupies unlocked — the eyebrow above it and
@@ -181,6 +182,11 @@ const COLUMN_CAPTURES = [
     selector: ".report-attachment__map",
     name: "attach-map",
     keepRows: 0,
+    // 4px, matching LOCK_BLUR_PX — every other locked chapter's blur — rather than
+    // the column default of 5. This block is a chart and a caption, not rows sitting
+    // beside live text, and at 5 the whole chapter read heavier than the rest of the
+    // report. The caption is 14px type: still unreadable, checked at display scale.
+    blur: 4,
   },
   // Everything after the columns: the accelerator-vs-brake meter box and the verdict
   // line under it. Without this the locked chapter ended at the rows, so a reader

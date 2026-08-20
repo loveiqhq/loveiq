@@ -243,10 +243,15 @@ describe("BeliefsSection — how much the server ships", () => {
       gen.slice(gen.indexOf('name: "attach-card"')).match(/blur: ([\d.]+),/)?.[1]
     );
     expect(cardBlur).toBeGreaterThan(0);
+    // attach-map carries its own blur too (4px, matching every other locked chapter).
+    const mapBlur = Number(
+      gen.slice(gen.indexOf('name: "attach-map"')).match(/blur: ([\d.]+),/)?.[1]
+    );
+    expect(mapBlur).toBeGreaterThan(0);
     const scopes: [string, number][] = [
       [".report-beliefs__preview-fade--tease .report-locked-preview {", 0],
       [".report-accel__columns--tease .report-locked-preview,", 0],
-      [".report-attachment__map-preview {", 0],
+      [".report-attachment__map-preview {", mapBlur],
       [".report-attachment__result-wrap--locked > .report-attachment__card-preview {", cardBlur],
     ];
     for (const [wrapper, ownBlur] of scopes) {

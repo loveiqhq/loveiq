@@ -24938,9 +24938,9 @@ input.autofill-dark:-internal-autofill-previewed {
   position: absolute;
   inset: 0 0 auto 0;
   /* Must match the attach-card entry's blur x COLUMN_PAD_RATIO in
-     scripts/generate-locked-previews.mjs (12 x 2.5): the capture carries this much
+     scripts/generate-locked-previews.mjs (8 x 2.5): the capture carries this much
      padding so its blur fades out inside the file instead of being clipped square. */
-  --lp-pad: 30px;
+  --lp-pad: 20px;
 }
 
 .report-attachment__result-wrap--locked > .report-attachment__card-preview .report-locked-preview {
@@ -24969,8 +24969,8 @@ input.autofill-dark:-internal-autofill-previewed {
 
 /* THE MAP: the real plane and caption, in flow where the stand-in used to be. */
 .report-attachment__map-preview {
-  /* Matches COLUMN_CAPTURE_PAD_PX (the shared 5px blur x 2.5). */
-  --lp-pad: 12.5px;
+  /* Matches the attach-map entry's own blur x COLUMN_PAD_RATIO (4 x 2.5). */
+  --lp-pad: 10px;
   /* The article centres its children (the plane is a fixed square), so without this
      the wrapper shrink-wraps the image's intrinsic 440px and the map renders at half
      width. The capture is the article's full width, so it has to fill it to sit 1:1. */
@@ -25015,15 +25015,11 @@ input.autofill-dark:-internal-autofill-previewed {
    blurred by the shared rule below ("Locked chapters: the Learn expander"),
    Attachment included. Listing its summary and teaser here as well would blur them
    twice — 4px inside 4px — since that rule blurs the band as a whole. */
-/* The eyebrow is the only live text left in a locked map block: the plane, its
-   caption and the five-patterns table are no longer rendered there at all — the
-   plane and caption arrive as a pre-blurred raster of the real map, and the table
-   only ever appears once the Learn expander is opened. */
-.report-attachment__article--locked .report-attachment__map-eyebrow {
-  filter: blur(var(--report-lock-blur));
-  user-select: none;
-  pointer-events: none;
-}
+/* The map eyebrow stays SHARP on a locked report. It is universal chrome, the same
+   line the paid chapter prints, and it is now the only live text in the block — the
+   plane and its caption arrive as a raster, and the five-patterns table only appears
+   once the Learn expander is opened. Blurred, it left the whole block unreadable and
+   read as a rendering fault rather than as withheld content. */
 
 /* ==========================================================================
    Locked chapters: the Learn expander goes behind the blur too
