@@ -34,6 +34,8 @@ const COLUMN_PREVIEWS: Record<string, string[]> = {
 };
 const COLUMN_PREVIEW_NAMES = Object.values(COLUMN_PREVIEWS).flat();
 const SECTIONS_DIR = join(process.cwd(), "features/report/ui/sections");
+/** asset name -> CSS class prefix, where the two differ. */
+const SECTION_SCOPES: Record<string, string> = { reading: "reading", lovelang: "lovelang" };
 const PREVIEW_DIR = join(process.cwd(), "public/report-previews");
 
 /** section component file -> preview asset name */
@@ -55,6 +57,66 @@ const SECTIONS: Record<string, string> = {
 };
 
 describe("locked preview images", () => {
+  it("shows the WHOLE chapter, not the top of it", () => {
+    // The boxes used to be sized by the paywall CARD, with the raster an absolute
+    // backdrop cropped to fit (`object-fit: cover`). That was right when the backdrop
+    // was a short piece of stand-in DOM; with a raster of the real chapter it cut the
+    // chapter off — 626px of a 1332px fantasy chapter, 52-83% for the rest.
+    //
+    // Both children now share ONE grid cell, so the box is as tall as the taller of
+    // the two: no crop, and no min-height to keep in step with the card.
+    const css = readFileSync(join(process.cwd(), "app/globals.css"), "utf8");
+    const at = css.indexOf("THE WHOLE CHAPTER SHOWS, NOT THE TOP OF IT");
+    expect(at, "the shared grid rule is gone").toBeGreaterThan(-1);
+    const block = css.slice(at, at + 9000);
+    for (const name of Object.values(SECTIONS)) {
+      const scope = SECTION_SCOPES[name] ?? name;
+      expect(block, `${name} is not in the grid rule`).toContain(`.report-${scope}__preview`);
+    }
+    expect(block).toContain("display: grid");
+    expect(block).toContain("grid-area: 1 / 1");
+    expect(block).toContain("align-self: start");
+    // ...and the base rule's crop is overridden for them.
+    expect(block).toContain("height: auto");
+    expect(block).toContain("object-fit: fill");
+  });
+
+  it("keeps a per-archetype expander inside the raster, and a universal one live", () => {
+    // `__details` is hidden before the capture because it renders live under the
+    // overlay — true for the eleven chapters whose expander is universal education.
+    // Three carry a `practical.*` block instead: the reader's own, withheld
+    // server-side, so `hasPractical` is false and it does not render at all. Excluded
+    // from the capture too, it was invisible in BOTH places.
+    const gen = readFileSync(join(process.cwd(), "scripts/generate-locked-previews.mjs"), "utf8");
+    const set = gen.slice(
+      gen.indexOf("const KEEP_DETAILS_IN_RASTER"),
+      gen.indexOf("async function captureSection")
+    );
+    for (const id of [
+      "core_insecurities",
+      "initiation_style",
+      "libido_challenges_in_relationships",
+    ]) {
+      expect(set, `${id} must stay in its raster`).toContain(`"${id}"`);
+    }
+    expect(gen).toContain("keepDetails: KEEP_DETAILS_IN_RASTER.has(sectionId)");
+  });
+
+  it("renders no stand-in beside the raster", () => {
+    // Both of these drew a second, live copy of content the raster already carries:
+    // fantasy's category tables (771px) and the insecurities curve, which also drew a
+    // DEFAULT cue family because the reader's own is withheld.
+    const fantasy = readFileSync(join(SECTIONS_DIR, "FantasySection.tsx"), "utf8");
+    expect(fantasy).not.toContain("report-fantasy__tables--locked");
+    expect(fantasy).toContain("{tables && !locked ?");
+    const ins = readFileSync(join(SECTIONS_DIR, "InsecuritiesSection.tsx"), "utf8");
+    expect(ins).not.toContain("report-insecurities__graph-wrap--locked");
+    // And the dead CSS went with them.
+    const css = readFileSync(join(process.cwd(), "app/globals.css"), "utf8");
+    expect(css).not.toContain("tables--locked");
+    expect(css).not.toContain("graph-wrap--locked");
+  });
+
   it.each(Object.entries(SECTIONS))("%s renders the preview image", (file, name) => {
     const src = readFileSync(join(SECTIONS_DIR, file), "utf8");
     expect(src).toContain(`<LockedPreviewImage name="${name}" />`);

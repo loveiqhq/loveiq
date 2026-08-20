@@ -465,16 +465,12 @@ const FantasySection: FC<Props> = ({
         )}
 
         {/* Category tables sit inside the card, after the chart note and before
-            the Learn block (Figma 8427:2466 child order). */}
-        {tables ? (
-          <div
-            className={`report-fantasy__tables${
-              copy.locked ? " report-fantasy__tables--locked" : ""
-            }`}
-          >
-            {tables}
-          </div>
-        ) : null}
+            the Learn block (Figma 8427:2466 child order).
+
+            Locked does NOT render them: the raster above is a capture of this card
+            from the filters down to the tables, so a second, blurred stand-in set
+            underneath it showed the same block twice and added 771px of height. */}
+        {tables && !locked ? <div className="report-fantasy__tables">{tables}</div> : null}
 
         {hasEdu ? (
           <div className="report-fantasy__details">

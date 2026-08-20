@@ -309,10 +309,29 @@ async function verifyNotBlank(page, files) {
 }
 
 /**
+ * Sections whose `__details` expander is PER-ARCHETYPE, not universal education.
+ *
+ * Eleven chapters carry a "Learn: ..." expander whose teaser is the same for
+ * everyone, so it stays live (and blurred) under the overlay and is excluded from
+ * the raster. These three carry a `practical.*` block instead — "The fix: one
+ * conversation", "The Exit", "Working with your sensitivity: three moves" — whose
+ * teaser and lines are the reader's own and are withheld server-side. `hasPractical`
+ * is therefore false on a locked report and the block does not render at all, so
+ * excluding it from the capture too made it invisible in BOTH places: 205px, 194px
+ * and 205px of the chapter that a locked reader had no way to know existed.
+ */
+const KEEP_DETAILS_IN_RASTER = new Set([
+  "core_insecurities",
+  "initiation_style",
+  "libido_challenges_in_relationships",
+]);
+
+/**
  * The real chapter content is every child of the card UP TO the `__details`
- * educational expander. `__details` is excluded deliberately: it renders in the
- * locked view too, directly under the overlay, so including it would show the
- * same block twice — once blurred in the image and once sharp below it.
+ * educational expander. `__details` is excluded deliberately (except for the
+ * sections above): it renders in the locked view too, directly under the overlay,
+ * so including it would show the same block twice — once blurred in the image and
+ * once sharp below it.
  */
 async function captureSection(page, sectionId, viewportName) {
   // Bring the section into view and let it finish revealing BEFORE capturing.
@@ -325,7 +344,7 @@ async function captureSection(page, sectionId, viewportName) {
   await page.waitForTimeout(REVEAL_SETTLE_MS);
 
   const prepared = await page.evaluate(
-    ({ sectionId, blur }) => {
+    ({ sectionId, blur, keepDetails }) => {
       const section = document.getElementById(sectionId);
       if (!section) return { error: "section not found" };
       const cards = Array.from(section.querySelectorAll("article[class*='__card']"));
@@ -350,18 +369,25 @@ async function captureSection(page, sectionId, viewportName) {
       // Hide the educational expander: it renders in the LOCKED view too,
       // directly under the overlay, so capturing it would show the same block
       // twice — once blurred in the image and once sharp below it.
-      const details = Array.from(card.children).filter((c) =>
-        /__details\b/.test((c.className || "").toString())
-      );
+      const details = keepDetails
+        ? []
+        : Array.from(card.children).filter((c) =>
+            /__details\b/.test((c.className || "").toString())
+          );
       for (const d of details) d.style.display = "none";
 
       const kids = Array.from(card.children).filter((c) => c.style.display !== "none");
       if (kids.length === 0) return { error: "no content children" };
 
-      // Nothing to exclude — capture the container as-is. Wrapping here would be
-      // actively wrong: on a grid container (the reading list) the wrapper
-      // becomes a single grid ITEM, so the capture collapses to one column.
-      if (details.length === 0) {
+      // A grid container (the reading list) has to be captured as-is: a wrapper
+      // there becomes a single grid ITEM, so the capture collapses to one column.
+      //
+      // Everything else is wrapped, whether or not there was anything to exclude.
+      // Capturing the card itself includes its PADDING, so the file came out at the
+      // card's border box (855px) while the locked box that renders it is the card's
+      // content box (792) — a 7% downscale, i.e. the whole chapter rendered smaller
+      // than it really is. Wrapping frames the content at the width it will display at.
+      if (cards.length > 1) {
         card.setAttribute("data-preview-capture", "");
         card.style.filter = `blur(${blur}px)`;
         const r = card.getBoundingClientRect();
@@ -412,7 +438,7 @@ async function captureSection(page, sectionId, viewportName) {
         shifted: Math.abs(card.getBoundingClientRect().height - heightBefore) > 2,
       };
     },
-    { sectionId, blur: LOCK_BLUR_PX }
+    { sectionId, blur: LOCK_BLUR_PX, keepDetails: KEEP_DETAILS_IN_RASTER.has(sectionId) }
   );
 
   // Restores via the wrapper itself rather than re-deriving the anchor, so it

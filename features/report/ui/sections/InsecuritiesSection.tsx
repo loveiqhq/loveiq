@@ -377,21 +377,25 @@ const InsecuritiesSection: FC<Props> = ({
       ) : null}
 
       <article className="report-insecurities__card">
-        <p className="report-insecurities__eyebrow">Where your sensitivity sits</p>
+        {/* The eyebrow and the curve are INSIDE the raster on a locked report — it is
+            a capture of this card from the top down. Rendering them here as well
+            showed the label twice and drew a stand-in curve (the reader's own cue
+            family is withheld server-side) directly above the blurred real one. */}
+        {locked ? null : (
+          <>
+            <p className="report-insecurities__eyebrow">Where your sensitivity sits</p>
 
-        <div
-          className={`report-insecurities__graph-wrap${
-            locked ? " report-insecurities__graph-wrap--locked" : ""
-          }`}
-        >
-          <CueGraph
-            yAxis={yAxis}
-            xAxis={xAxis}
-            curveKey={curveKey}
-            youLabel={`You — the ${archetype}`}
-            accent={getReportTheme(archetype).accent}
-          />
-        </div>
+            <div className="report-insecurities__graph-wrap">
+              <CueGraph
+                yAxis={yAxis}
+                xAxis={xAxis}
+                curveKey={curveKey}
+                youLabel={`You — the ${archetype}`}
+                accent={getReportTheme(archetype).accent}
+              />
+            </div>
+          </>
+        )}
 
         {locked ? (
           <div className="report-insecurities__locked">
