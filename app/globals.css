@@ -8673,7 +8673,11 @@ input.autofill-dark:-internal-autofill-previewed {
      (see the deleted rules further down), so the four blocks sat 38 / 52 / 50 apart
      against the design's flat 32, and the column had 18px of top padding and none at
      the bottom. */
-  gap: calc(32px * var(--hero-space, 1));
+  /* 50, not the frame's 32: at --hero-space 0.58 the frame's number rendered as
+     19px between the motivation box and the traits, and again between the traits and
+     the progress rows — the card read as one dense block. Feedback 2026-08-21 asked
+     for air at exactly those two seams. 50 x 0.58 = 29. */
+  gap: calc(50px * var(--hero-space, 1));
   width: 100%;
   padding: calc(24px * var(--hero-space, 1)) 0;
 }
@@ -8735,7 +8739,9 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-hero-card__traits {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: clamp(26px, 3.4vw, 33px) clamp(32px, 9vw, 120px);
+  /* Row floor raised 26 -> 30 so the two trait rows never sit closer than the
+     blocks around them (same feedback as the content gap above). */
+  gap: clamp(30px, 3.4vw, 33px) clamp(32px, 9vw, 120px);
   width: 100%;
 }
 
@@ -8825,10 +8831,9 @@ input.autofill-dark:-internal-autofill-previewed {
 
   .report-hero-card__content {
     /* This block is `min-width: 1280px` — the WIDEST screens, not mobile, whatever
-       the comment that used to sit here said. The desktop frame's gap is 32px, the
-       same as the base, so this exists only to state it and stop the next person
-       reading 38px as intentional. */
-    gap: calc(32px * var(--hero-space));
+       the comment that used to sit here said. Restates the base rather than leaving
+       the next person to read a different number as intentional. */
+    gap: calc(50px * var(--hero-space));
   }
 
   .report-hero-card__motivation {
@@ -8843,7 +8848,9 @@ input.autofill-dark:-internal-autofill-previewed {
      are what actually make the card fill the viewport, so the row gaps come in
      rather than shrinking the type further. */
   .report-hero-card__traits {
-    gap: 20px clamp(32px, 9vw, 120px);
+    /* Was 20px — the widest layout had the TIGHTEST gap between the Communication
+       and Attachment rows, which is the seam the 2026-08-21 feedback singled out. */
+    gap: 30px clamp(32px, 9vw, 120px);
   }
 
   .report-hero-card__progress {
@@ -18134,8 +18141,10 @@ input.autofill-dark:-internal-autofill-previewed {
 
   .report-hero-card__content {
     max-width: 100%;
-    /* Same 24px as the ≤768 block above — see there for why it is not 49-70px. */
-    gap: 24px;
+    /* 34, up from 24: the phone card has the same three seams and the same feedback
+       applies — the desktop gap is 29 here, so this stays a touch airier, which is
+       what a single column wants. */
+    gap: 34px;
     padding: 24px 0;
   }
 
@@ -18152,7 +18161,8 @@ input.autofill-dark:-internal-autofill-previewed {
 
   .report-hero-card__traits {
     grid-template-columns: 1fr 1fr;
-    gap: 14px 16px;
+    /* 22, up from 14 — the tightest gap in the whole card before this. */
+    gap: 22px 16px;
   }
 
   .report-hero-card__motivation-value {
