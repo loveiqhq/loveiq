@@ -32,6 +32,7 @@ import { getForcedPaywallCohort } from "@shared/experiments/forcedPaywall";
 import {
   LANDING_VARIANT_COOKIE,
   normalizeLandingVariant,
+  type LandingVariant,
 } from "@shared/experiments/landingVariant";
 import logger from "@shared/observability/logger";
 import {
@@ -255,7 +256,7 @@ export async function POST(request: Request) {
     // attributable to the landing variant the buyer first saw. Defaults to
     // "control" when the cookie is absent (e.g. they never hit `/`) or when
     // there is no request scope (cookies() throws — e.g. unit tests).
-    let landingVariant: "control" | "white" = "control";
+    let landingVariant: LandingVariant = "white";
     try {
       landingVariant = normalizeLandingVariant(
         (await cookies()).get(LANDING_VARIANT_COOKIE)?.value
