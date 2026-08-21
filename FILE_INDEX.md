@@ -65,8 +65,10 @@
 
 ## Landing Page
 
-> The landing page is the white design at `features/landing/ui/white/` (served to
-> 100% of traffic since 2026-06-19; the dark A/B arm was retired). `S06Archetypes.tsx`
+> The landing page is the white design at `features/landing/ui/white/`, in a 50/50
+> A/B against `features/landing/ui/white-v1/` — the white landing as it stood before
+> the 2026-08-10 rebuild (round 1, white-vs-dark, concluded 2026-06-19 and the dark
+> sections were deleted). `S06Archetypes.tsx`
 > is kept outside `white/` because `WArchetypeCards` imports its `ArchetypeCard` +
 > `archetypes`. `FooterSection`/`ScrollAnimator`/`NavSection` are shared with other routes.
 

@@ -21,6 +21,26 @@ export default defineConfig({
     trace: "on-first-retry",
     screenshot: "only-on-failure",
     video: "on-first-retry",
+    // Pin the landing A/B arm for every spec. `/` is a 50/50 split between two
+    // different designs (see shared/experiments/landingVariant.ts), so without this
+    // every landing assertion — and every visual-regression baseline — would flip
+    // arm at random. The cookie is what proxy.ts reads, so no spec needs a query
+    // string; to test the other arm, override storageState in that spec.
+    storageState: {
+      cookies: [
+        {
+          name: "__liq_lv",
+          value: "white",
+          domain: "localhost",
+          path: "/",
+          expires: -1,
+          httpOnly: false,
+          secure: false,
+          sameSite: "Lax",
+        },
+      ],
+      origins: [],
+    },
   },
   projects: [
     { name: "Desktop Chrome", use: { ...devices["Desktop Chrome"] } },

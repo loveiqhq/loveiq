@@ -439,7 +439,7 @@ describe("proxy middleware", () => {
   });
 });
 
-describe("proxy middleware — white-landing A/B (__liq_lv)", () => {
+describe("proxy middleware — landing A/B (__liq_lv)", () => {
   beforeEach(() => {
     mockResponseHeaders.clear();
     mockNextOpts.value = null;
@@ -451,35 +451,73 @@ describe("proxy middleware — white-landing A/B (__liq_lv)", () => {
     mockCookiesSet.mock.calls.filter((c) => c[0] === "__liq_lv" || c[0] === "__Host-liq_lv");
   const variantHeader = () => mockNextOpts.value?.request?.headers?.get("x-landing-variant");
 
-  it("mints a sticky white cookie + request header on / for a fresh non-bot visitor", async () => {
+  it("assigns one of the two live arms on / and mints it as a sticky cookie", async () => {
     await proxy(makeNextRequest("http://localhost:3000/"));
-    // A/B concluded: every visitor gets "white".
-    expect(variantHeader()).toBe("white");
+    // Round 2 is current-white vs previous-white, 50/50 — either is valid here,
+    // and the distribution itself is asserted below.
+    expect(["white", "white_prev"]).toContain(variantHeader());
     const calls = landingCookieCalls();
     expect(calls).toHaveLength(1);
-    expect(calls[0]![1]).toBe("white");
+    expect(calls[0]![1]).toBe(variantHeader());
     expect(calls[0]![2]).toEqual(
       expect.objectContaining({ path: "/", sameSite: "lax", maxAge: 60 * 60 * 24 * 365 })
     );
   });
 
-  it("ignores a ?variant=control override — the A/B is over, everyone is white", async () => {
-    await proxy(makeNextRequest("http://localhost:3000/?variant=control"));
-    expect(variantHeader()).toBe("white");
+  it("maps the coin flip to both arms", async () => {
+    // `crypto.getRandomValues` is stubbed deterministically at the top of this file
+    // (byte 0 = 0), so a plain loop would only ever exercise one side. Drive the
+    // byte directly instead: even -> the current arm, odd -> the previous one.
+    const original = globalThis.crypto.getRandomValues;
+    try {
+      for (const [byte, expected] of [
+        [0, "white"],
+        [2, "white"],
+        [1, "white_prev"],
+        [255, "white_prev"],
+      ] as const) {
+        (globalThis.crypto as { getRandomValues: (a: Uint8Array) => Uint8Array }).getRandomValues =
+          (arr: Uint8Array) => {
+            arr[0] = byte;
+            return arr;
+          };
+        mockNextOpts.value = null;
+        mockCookiesSet.mockClear();
+        await proxy(makeNextRequest("http://localhost:3000/"));
+        expect(variantHeader()).toBe(expected);
+        expect(landingCookieCalls()[0]![1]).toBe(expected);
+      }
+    } finally {
+      (globalThis.crypto as { getRandomValues: typeof original }).getRandomValues = original;
+    }
+  });
+
+  it("honours a ?variant= override and makes it stick", async () => {
+    await proxy(makeNextRequest("http://localhost:3000/?variant=white_prev"));
+    expect(variantHeader()).toBe("white_prev");
     const calls = landingCookieCalls();
     expect(calls).toHaveLength(1);
-    expect(calls[0]![1]).toBe("white");
+    expect(calls[0]![1]).toBe("white_prev");
   });
 
-  it("keeps an existing white cookie and does not re-set it", async () => {
-    await proxy(
-      makeNextRequest("http://localhost:3000/", undefined, undefined, undefined, undefined, "white")
-    );
-    expect(variantHeader()).toBe("white");
-    expect(landingCookieCalls()).toHaveLength(0);
+  it("ignores an unknown ?variant= value", async () => {
+    await proxy(makeNextRequest("http://localhost:3000/?variant=purple"));
+    expect(["white", "white_prev"]).toContain(variantHeader());
   });
 
-  it("migrates a returning visitor off a stale control cookie to white", async () => {
+  it("keeps an existing arm cookie and does not re-set it", async () => {
+    for (const arm of ["white", "white_prev"]) {
+      mockNextOpts.value = null;
+      mockCookiesSet.mockClear();
+      await proxy(
+        makeNextRequest("http://localhost:3000/", undefined, undefined, undefined, undefined, arm)
+      );
+      expect(variantHeader()).toBe(arm);
+      expect(landingCookieCalls()).toHaveLength(0);
+    }
+  });
+
+  it("re-assigns a visitor still carrying the retired control cookie", async () => {
     await proxy(
       makeNextRequest(
         "http://localhost:3000/",
@@ -490,13 +528,15 @@ describe("proxy middleware — white-landing A/B (__liq_lv)", () => {
         "control"
       )
     );
-    expect(variantHeader()).toBe("white");
+    // The dark landing no longer exists, so "control" cannot be served: the
+    // visitor joins one of the two live arms and the cookie is re-stamped.
+    expect(["white", "white_prev"]).toContain(variantHeader());
     const calls = landingCookieCalls();
     expect(calls).toHaveLength(1);
-    expect(calls[0]![1]).toBe("white");
+    expect(calls[0]![1]).toBe(variantHeader());
   });
 
-  it("serves white to crawlers too and never sets a cookie (no cloaking — one page for all)", async () => {
+  it("serves the current arm to crawlers and never sets a cookie (one indexed page)", async () => {
     await proxy(
       makeNextRequest(
         "http://localhost:3000/",
@@ -508,8 +548,8 @@ describe("proxy middleware — white-landing A/B (__liq_lv)", () => {
         "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
       )
     );
-    // Bots see the same white page as everyone (no separate indexed arm), and
-    // are still never given a cookie.
+    // Bots are pinned to "white" so `/` has one canonical rendering in the index,
+    // and they are still never given a cookie.
     expect(variantHeader()).toBe("white");
     expect(landingCookieCalls()).toHaveLength(0);
   });

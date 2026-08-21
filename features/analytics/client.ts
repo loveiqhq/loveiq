@@ -1,5 +1,9 @@
 import { getCsrfToken } from "@shared/http/csrf-client";
-import { LANDING_VARIANT_COOKIE } from "@shared/experiments/landingVariant";
+import {
+  LANDING_VARIANT_COOKIE,
+  isLandingVariant,
+  type LandingVariant,
+} from "@shared/experiments/landingVariant";
 
 type GTag = {
   (command: "event", eventName: string, params?: Record<string, unknown>): void;
@@ -256,9 +260,12 @@ export const getGaMeasurementContext = (): {
  * no-PII functional cookie, and reading it just classifies an already-allowed
  * analytics event — it never sets anything.
  */
-const getLandingVariant = (): "control" | "white" | null => {
+const getLandingVariant = (): LandingVariant | null => {
+  // Guarded by the shared type guard, not a literal list: this restated the two
+  // round-1 arms, so a round-2 `white_prev` cookie read as null and every durable
+  // event for that arm shipped without its variant stamp.
   const v = getCookieValue(LANDING_VARIANT_COOKIE);
-  return v === "control" || v === "white" ? v : null;
+  return isLandingVariant(v) ? v : null;
 };
 
 /**
@@ -268,7 +275,7 @@ const getLandingVariant = (): "control" | "white" | null => {
  * custom dimension "landing_variant" (user-scoped) in GA4 Admin → Custom
  * definitions to surface it in reports (one-time config, not code).
  */
-export const setLandingVariant = (variant: "control" | "white" | null) => {
+export const setLandingVariant = (variant: LandingVariant | null) => {
   if (typeof window === "undefined") return;
   if (variant && window.__loveiqAnalyticsEnabled && hasCookieYesConsent("analytics")) {
     window.gtag?.("set", "user_properties", { landing_variant: variant });

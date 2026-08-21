@@ -1,4 +1,10 @@
+import { headers } from "next/headers";
 import LandingPageWhite from "@features/landing/ui/white/LandingPageWhite";
+import LandingPageWhiteV1 from "@features/landing/ui/white-v1/LandingPageWhiteV1";
+import {
+  LANDING_VARIANT_HEADER,
+  normalizeLandingVariant,
+} from "@shared/experiments/landingVariant";
 import { jsonLdString } from "@shared/seo/json-ld";
 import { faqs } from "@/data/faqs";
 
@@ -89,10 +95,17 @@ const academicBoardSchema = {
   ],
 };
 
-export default function Page() {
-  // The landing A/B concluded: white is served to 100% of traffic (the dark
-  // landing was retired 2026-06-19). The white hero is CSS-only, so there is no
-  // video asset to preload. JSON-LD is product/site metadata, variant-independent.
+export default async function Page() {
+  // 50/50 A/B between the current white landing and the one before the 2026-08-10
+  // rebuild. The arm is decided in proxy.ts and handed over as a request header
+  // rather than read from cookies() here — on the visit that MINTS the cookie,
+  // cookies() cannot see it yet, so the first render would show the wrong arm and
+  // the second would flip. Both heroes are CSS-only, so neither needs a video
+  // preload, and the JSON-LD below is product/site metadata: identical for both
+  // arms, which is also what keeps `/` a single canonical page for crawlers (bots
+  // are always served the current arm — see resolveLandingVariant).
+  const variant = normalizeLandingVariant((await headers()).get(LANDING_VARIANT_HEADER));
+
   return (
     <>
       <script
@@ -107,7 +120,7 @@ export default function Page() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: jsonLdString(academicBoardSchema) }}
       />
-      <LandingPageWhite />
+      {variant === "white_prev" ? <LandingPageWhiteV1 /> : <LandingPageWhite />}
     </>
   );
 }

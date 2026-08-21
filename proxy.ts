@@ -21,14 +21,33 @@ const LANDING_BOT_UA_REGEX =
   /bot|crawl|spider|slurp|bingpreview|facebookexternalhit|embedly|quora link preview|outbrain|pinterest|vkshare|w3c_validator|whatsapp|telegrambot|applebot|gptbot|chatgpt|ccbot|claudebot|claude-web|perplexity|google-extended|amazonbot|bytespider/i;
 
 /**
- * Landing variant for a `/` request. The white-vs-dark A/B concluded in favour
- * of white (decision 2026-06-19), so EVERY visitor now gets "white" — the dark
- * landing has been retired. The `landing_variant` value is still threaded
- * through the cookie / visit tag / analytics so the funnel stays attributable
- * (now constant "white") and the historical split is preserved.
+ * Landing variant for a `/` request — a 50/50 split between the current white
+ * landing ("white") and the one that preceded the 2026-08-10 rebuild
+ * ("white_prev"). See shared/experiments/landingVariant.ts for the history.
+ *
+ * Order matters:
+ *   - bots always get "white", so crawlers index one canonical landing and never
+ *     dilute the split;
+ *   - `?variant=` is a QA override (it also re-stamps the cookie below, so the
+ *     arm sticks for the rest of the session);
+ *   - an existing cookie wins, so a returning visitor keeps their arm;
+ *   - otherwise a coin flip from crypto, not Math.random.
  */
-function resolveLandingVariant(_request: NextRequest): LandingVariant {
-  return "white";
+function resolveLandingVariant(request: NextRequest): LandingVariant {
+  const ua = request.headers.get("user-agent") || "";
+  if (LANDING_BOT_UA_REGEX.test(ua)) return "white";
+
+  const override = request.nextUrl.searchParams.get("variant");
+  if (isLandingVariant(override)) return override;
+
+  const existing = request.cookies.get(LANDING_VARIANT_COOKIE)?.value;
+  // "control" is a retired round-1 arm: a visitor still carrying that cookie is
+  // re-assigned rather than served a landing that no longer exists.
+  if (existing === "white" || existing === "white_prev") return existing;
+
+  const buf = new Uint8Array(1);
+  crypto.getRandomValues(buf);
+  return (buf[0]! & 1) === 0 ? "white" : "white_prev";
 }
 
 // Daily dedup flag for the consent-independent unique-visit count (the
@@ -250,9 +269,9 @@ export async function proxy(request: NextRequest) {
   const isNewDailyVisit =
     shouldCountVisit(request) && request.cookies.get(VISIT_DAY_COOKIE)?.value !== visitDay;
   if (isNewDailyVisit) {
-    // Tag the visit with the landing arm. On "/" the arm is freshly resolved
-    // (now always "white"); elsewhere read the sticky __liq_lv cookie. The A/B
-    // concluded, so an absent/unknown cookie defaults to "white" (no dark arm).
+    // Tag the visit with the landing arm. On "/" the arm is freshly resolved;
+    // elsewhere read the sticky __liq_lv cookie. An absent or unrecognised value
+    // defaults to "white", the arm a bot or a cookieless visitor is served.
     const cookieVariant = request.cookies.get(LANDING_VARIANT_COOKIE)?.value;
     const visitVariant =
       landingVariant ?? (isLandingVariant(cookieVariant) ? cookieVariant : "white");
@@ -455,9 +474,9 @@ export async function proxy(request: NextRequest) {
   }
 
   // Landing variant cookie. The A/B concluded → everyone is "white", so we
-  // (re)mint the cookie on `/` for non-bots whenever it isn't already "white".
-  // This also migrates returning pre-cutover visitors off a stale "control"
-  // cookie so their analytics stamp "white" going forward. FUNCTIONAL cookie —
+  // (re)mint the cookie on `/` for non-bots whenever it differs from the resolved
+  // arm — which is also how the `?variant=` override sticks, and how a visitor on
+  // the retired "control" cookie gets moved onto a live arm. FUNCTIONAL cookie —
   // stores only the variant, no PII — set regardless of analytics consent, like
   // the CSRF cookie. Bots are never given a cookie.
   if (isLandingRoute && landingVariant) {
