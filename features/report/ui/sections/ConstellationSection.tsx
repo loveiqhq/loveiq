@@ -83,16 +83,25 @@ const ConstellationSection: FC<Props> = ({
           than inside it, with the line under it pulled in as the card's first row
           (Eman, 2026-08-19). Every other chapter reads heading-then-card, and this
           one was the only section carrying its title inside the box. */}
+      {/* The chapter-title TYPE, with this headline's own colour kept: size, weight,
+          spacing and upright roman all match "The Importance of Sexuality" per the
+          2026-08-21 feedback, and the gradient on `constellation,` is back per Eman —
+          the italic is not, that belonged to the type that was being matched away. */}
       <h3 className="report-constellation__heading">
-        You&apos;re a <em className="report-constellation__heading-accent">constellation,</em>
+        You&apos;re a <span className="report-constellation__heading-accent">constellation,</span>
         <br />
         not a type
       </h3>
 
       <section className="report-constellation" aria-label="Other archetypes">
         <p className="report-constellation__subline">
-          Most people are a blend, and yours shifts with safety, attachment, stress and the phase of
-          your life you&apos;re in.
+          {/* The measure is capped on this span, not the paragraph: the paragraph is
+              the card's first row and carries the hairline under it, so constraining
+              IT would shorten the divider with the text. */}
+          <span className="report-constellation__subline-text">
+            Most people are a blend, and yours shifts with safety, attachment, stress and the phase
+            of your life you&apos;re in.
+          </span>
         </p>
 
         <ol

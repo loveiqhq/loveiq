@@ -397,7 +397,7 @@ const RewardSection: FC<Props> = ({
             ) : null}
 
             {copy.takeaway ? (
-              <div className="report-reward__verdict">
+              <div className="report-reward__verdict report-verdict">
                 <VerdictStar />
                 <p className="report-reward__takeaway">{copy.takeaway}</p>
                 <span className="report-verdict-rule" aria-hidden="true" />

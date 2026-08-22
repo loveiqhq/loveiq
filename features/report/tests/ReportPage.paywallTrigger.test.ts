@@ -5,10 +5,11 @@ import { describe, expect, it } from "vitest";
 /**
  * When the plans pop-up appears, and how gently.
  *
- * Two triggers preceded the current one: the FIRST scroll event of any size,
- * which interrupted readers a second in, and then "Your snapshot". It now waits
- * until they reach "Typical Beliefs" — the first chapter that is actually
- * paywalled.
+ * Three triggers preceded the current one: the FIRST scroll event of any size,
+ * which interrupted readers a second in, then "Your snapshot", then "Typical
+ * Beliefs". It now waits until they reach "Attachment Style" — one chapter past the
+ * two half-shown ones, so the reader has seen twice what sits behind the paywall
+ * before being asked to pay for it (MO, 2026-08-21).
  *
  * Asserted at source level because the pricing modal is always mounted and only
  * styled open, which jsdom cannot distinguish (it applies no CSS). The behaviour
@@ -20,10 +21,23 @@ const SOURCE = readFileSync(join(process.cwd(), "features/report/ui/ReportPage.t
 const CSS = readFileSync(join(process.cwd(), "app/globals.css"), "utf8");
 
 describe("plans pop-up trigger", () => {
-  it("observes the first paywalled chapter rather than listening for any scroll", () => {
-    expect(SOURCE).toContain('document.getElementById("typical_beliefs")');
+  it("observes the chapter after the two teased ones, not any scroll", () => {
+    expect(SOURCE).toContain('document.getElementById("attachment_style")');
     expect(SOURCE).toMatch(/new IntersectionObserver\(/);
     expect(SOURCE).toMatch(/observer\.observe\(trigger\)/);
+  });
+
+  it("arms the countdown on the first offer card, not only on the pop-up", () => {
+    // Every locked chapter's card prints "Time left to secure this price" over this
+    // countdown, and with no deadline those digits render 00:00 — a dead offer. While
+    // the pop-up sat on the FIRST paywalled chapter that could not happen: no card was
+    // ever on screen before it fired. Now that it waits for Attachment, the two
+    // half-shown chapters come first, so the first card arms the clock instead.
+    expect(SOURCE).toContain('document.querySelector(".report-premium-overlay")');
+    const block = SOURCE.slice(SOURCE.indexOf("const firstOfferCard"));
+    expect(block.slice(0, 900)).toMatch(/armPaywallCountdown\(\)/);
+    // ...and it is torn down with the rest of the effect.
+    expect(SOURCE).toMatch(/cardObserver\?\.disconnect\(\)/);
   });
 
   it("waits until the section has risen into the viewport, not merely touched its edge", () => {
@@ -34,10 +48,11 @@ describe("plans pop-up trigger", () => {
   });
 
   it("still shows the pop-up if that chapter is ever absent", () => {
-    // Losing the offer entirely would be worse than firing it early: the snapshot
-    // section is the backstop, and a missing pair falls back to first-scroll.
+    // Losing the offer entirely would be worse than firing it early, so the chain
+    // degrades to the chapter this trigger used to sit on, then to the snapshot, then
+    // to first-scroll.
     expect(SOURCE).toMatch(
-      /getElementById\("typical_beliefs"\) \?\?\s*document\.getElementById\("snapshot"\)/
+      /getElementById\("attachment_style"\) \?\?\s*document\.getElementById\("typical_beliefs"\) \?\?\s*document\.getElementById\("snapshot"\)/
     );
     const fallback = SOURCE.slice(SOURCE.indexOf("if (!trigger)"));
     expect(fallback).toMatch(/addEventListener\("scroll"/);

@@ -2239,11 +2239,12 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       return;
     }
 
-    // Open the plans pop-up once the reader REACHES "Typical Beliefs" (Eman,
-    // 2026-08-19). Two triggers preceded it: the first scroll event of any size,
-    // which interrupted people a second into the report, and then "Your
-    // snapshot". Beliefs is the first chapter that is actually paywalled, so it
-    // is the first place the offer answers a question the reader now has.
+    // Open the plans pop-up once the reader REACHES "Attachment Style" (MO,
+    // 2026-08-21). The trigger has moved three times: the first scroll event of any
+    // size (which interrupted people a second into the report), then "Your snapshot",
+    // then "Typical Beliefs". Attachment is one chapter further down on purpose — the
+    // reader passes the two half-shown chapters (Beliefs and Accelerators & Brakes)
+    // first, so by the time the offer arrives they have seen twice what is behind it.
     //
     // The 1.6s beat after arrival is deliberate: landing the pop-up on the same
     // frame the chapter appears reads as an ambush. The reader gets to see the
@@ -2271,10 +2272,38 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       }, 1600);
     }
 
-    // Primary target is the first paywalled chapter; the snapshot section is the
-    // backstop if a layout change ever drops it.
+    // Primary target is Attachment Style — the chapter after the two teased ones.
+    // Beliefs is the first backstop (the chapter this trigger used to sit on) and the
+    // snapshot the second, so a layout change that drops a chapter moves the pop-up
+    // earlier rather than losing it.
     const trigger =
-      document.getElementById("typical_beliefs") ?? document.getElementById("snapshot");
+      document.getElementById("attachment_style") ??
+      document.getElementById("typical_beliefs") ??
+      document.getElementById("snapshot");
+
+    // ARM THE CLOCK ON THE FIRST OFFER THE READER ACTUALLY SEES.
+    //
+    // Every locked chapter's card prints "Time left to secure this price" over this
+    // same countdown, and with no deadline the digits render 00:00 — a dead offer.
+    // While the pop-up sat on the first paywalled chapter that could not happen: no
+    // card was ever on screen before it fired. Now that it waits for Attachment, the
+    // two half-shown chapters come first, so the clock is armed by whichever paywall
+    // card arrives first instead. `armPaywallCountdown` is idempotent, so the pop-up
+    // arming it again later is a no-op and every number still agrees.
+    const firstOfferCard = document.querySelector(".report-premium-overlay");
+    let cardObserver: IntersectionObserver | null = null;
+    if (firstOfferCard) {
+      cardObserver = new IntersectionObserver(
+        (entries) => {
+          if (!entries.some((entry) => entry.isIntersecting)) return;
+          cardObserver?.disconnect();
+          cardObserver = null;
+          armPaywallCountdown();
+        },
+        { threshold: 0, rootMargin: "0px 0px -25% 0px" }
+      );
+      cardObserver.observe(firstOfferCard);
+    }
 
     // Neither section present (an archetype without them, or a future layout
     // change) must not mean the offer never appears — fall back to the old
@@ -2286,6 +2315,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       };
       window.addEventListener("scroll", handleFirstScroll, { passive: true });
       return () => {
+        cardObserver?.disconnect();
         window.removeEventListener("scroll", handleFirstScroll);
         if (scrollTeaserTimerRef.current) {
           clearTimeout(scrollTeaserTimerRef.current);
@@ -2343,6 +2373,10 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
 
     function stop() {
       observer.disconnect();
+      // The card observer arms the countdown and is independent of the pop-up, but it
+      // must not outlive the effect either.
+      cardObserver?.disconnect();
+      cardObserver = null;
       window.removeEventListener("scroll", handleScroll);
       if (rafId !== null) {
         cancelAnimationFrame(rafId);

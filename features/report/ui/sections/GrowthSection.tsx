@@ -1,6 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState, type CSSProperties, type FC } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type Dispatch,
+  type FC,
+  type SetStateAction,
+} from "react";
 import VerdictStar from "./VerdictStar";
 import LockedPreviewImage from "./LockedPreviewImage";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
@@ -99,6 +107,14 @@ type Rung = { from: string; to: string; move: string | null };
 const PROFILE_W = 835;
 const PROFILE_H = 143;
 /** Figma dot centres, x/y in the 835×143 frame. */
+/**
+ * Clear the cue only if it is still MINE. Two elements answer for each step (the dot
+ * and its row), so a plain `onCue(null)` on leave would wipe the cue the other one just
+ * set as the pointer travels between them.
+ */
+const clearOwnCue = (onCue: Dispatch<SetStateAction<number | null>>, mine: number) => () =>
+  onCue((current) => (current === mine ? null : current));
+
 const PROFILE_DOTS: { x: number; y: number; r: number; fill: string }[] = [
   { x: 77.5, y: 128.2, r: 8.9, fill: "#fe6839" },
   { x: 256.5, y: 101.4, r: 7.5, fill: "#c4b5fd" },
@@ -140,7 +156,11 @@ const ElevationProfile: FC<{
   n: number;
   animated: boolean;
   svgRef?: React.Ref<SVGSVGElement>;
-}> = ({ n, animated, svgRef }) => {
+  /** Which step the reader is pointing at — shared with the ladder below. */
+  cue: number | null;
+  /** The setter itself, so a leave clears ONLY its own step (see `clearOwnCue`). */
+  onCue: Dispatch<SetStateAction<number | null>>;
+}> = ({ n, animated, svgRef, cue, onCue }) => {
   const dots = PROFILE_DOTS.slice(0, Math.max(2, Math.min(n, PROFILE_DOTS.length)));
   const pts: { x: number; y: number }[] = [{ x: 0, y: dots[0]!.y }];
   dots.forEach((dot, i) => {
@@ -152,10 +172,18 @@ const ElevationProfile: FC<{
   return (
     <svg
       ref={svgRef}
-      className={`report-growth__profile${animated ? " is-animated" : ""}`}
+      className={`report-growth__profile${animated ? " is-animated" : ""}${
+        cue === null ? "" : " is-cued"
+      }`}
       viewBox={`0 0 ${PROFILE_W} ${PROFILE_H}`}
       role="img"
       aria-label="Each shift is a step up from the one before"
+      /* Touch has no "leave", so a tap would stick. Tapping the chart anywhere but a
+         step releases it — tap-to-inspect, tap-away-to-release, the same contract the
+         arousal arc uses. */
+      onPointerDown={(e) => {
+        if (!(e.target as Element).closest(".report-growth__profile-cue")) onCue(null);
+      }}
     >
       {/* `pathLength={1}` normalises the dash units, so one dasharray draws this
           curve correctly whatever its real length — the same thing the arousal arc
@@ -174,15 +202,33 @@ const ElevationProfile: FC<{
         strokeLinejoin="round"
       />
       {dots.map((dot, i) => (
-        <circle
+        <g
           key={i}
-          className="report-growth__profile-dot"
-          style={{ "--dot-i": i } as CSSProperties}
-          cx={dot.x}
-          cy={dot.y}
-          r={dot.r}
-          fill={dot.fill}
-        />
+          className={`report-growth__profile-cue${cue === i ? " is-active" : ""}`}
+          /* The swell goes on this wrapper, not on the circle: the dot's entrance is an
+             animation with `forwards`, and an animation's filled value outranks a plain
+             declaration, so a `transform` on the circle itself is ignored — the same
+             trap the arousal arc's end dot hit. Origin in user units (the default
+             `transform-box: view-box`), because `fill-box` on a <g> resolves against the
+             group's bounding box, which here includes the invisible hit circle. */
+          style={{ transformOrigin: `${dot.x}px ${dot.y}px` }}
+          onMouseEnter={() => onCue(i)}
+          onMouseLeave={clearOwnCue(onCue, i)}
+        >
+          {/* A dot is 7.5-8.9 units across, which is a hard target on a phone. This
+              invisible circle is the thing you actually hit; the visible dot rides
+              inside it. r=38 measures ~30px on a phone and ~38px on a desktop, and the
+              steps are 179 units apart, so neighbouring targets never overlap. */}
+          <circle className="report-growth__profile-hit" cx={dot.x} cy={dot.y} r={38} />
+          <circle
+            className="report-growth__profile-dot"
+            style={{ "--dot-i": i } as CSSProperties}
+            cx={dot.x}
+            cy={dot.y}
+            r={dot.r}
+            fill={dot.fill}
+          />
+        </g>
       ))}
       <text className="report-growth__profile-start" x={dots[0]!.x - 36} y={dots[0]!.y - 18}>
         START HERE
@@ -197,14 +243,26 @@ const ElevationProfile: FC<{
  * progressively (the climb) — the first rung is highlighted (orange, START HERE
  * pill) and the rest are purple, deepening down the ladder.
  */
-const RungItem: FC<{ rung: Rung; index: number; isFirst: boolean }> = ({
-  rung,
-  index,
-  isFirst,
-}) => (
+const RungItem: FC<{
+  rung: Rung;
+  index: number;
+  isFirst: boolean;
+  cue: number | null;
+  onCue: Dispatch<SetStateAction<number | null>>;
+}> = ({ rung, index, isFirst, cue, onCue }) => (
   <li
-    className={`report-growth__rung${isFirst ? " is-first" : ""}`}
+    className={`report-growth__rung${isFirst ? " is-first" : ""}${
+      cue === index ? " is-active" : ""
+    }`}
     style={{ marginLeft: `${index * 22.5}px`, "--rung-i": index } as CSSProperties}
+    /* Both halves cue each other: point at the step on the graph and this row lights,
+       point at the row and the step lights. Focusable so it works from the keyboard,
+       which is also the only way to reach the dots without a pointer. */
+    tabIndex={0}
+    onMouseEnter={() => onCue(index)}
+    onMouseLeave={clearOwnCue(onCue, index)}
+    onFocus={() => onCue(index)}
+    onBlur={clearOwnCue(onCue, index)}
   >
     <span className="report-growth__rung-dot" aria-hidden="true" />
     <div className="report-growth__rung-body">
@@ -260,6 +318,12 @@ const GrowthSection: FC<Props> = ({
     observer.observe(el);
     return () => observer.disconnect();
   }, [isAnimated]);
+
+  /* Which step of the climb the reader is pointing at — the graph and the ladder share
+     it, so hovering either half lights both (MO, 2026-08-22, asking for the arousal
+     chart's behaviour here). `null` is nothing cued. Declared with the other hooks,
+     above the early return: hooks must run in the same order on every render. */
+  const [cue, setCue] = useState<number | null>(null);
 
   if (!copy) return null;
 
@@ -328,19 +392,32 @@ const GrowthSection: FC<Props> = ({
             ) : null}
 
             {hasLadder ? (
-              <ElevationProfile n={profileSteps} animated={isAnimated} svgRef={chartRef} />
+              <ElevationProfile
+                n={profileSteps}
+                animated={isAnimated}
+                svgRef={chartRef}
+                cue={cue}
+                onCue={setCue}
+              />
             ) : null}
 
             {hasLadder ? (
-              <ol className="report-growth__ladder">
+              <ol className={`report-growth__ladder${cue === null ? "" : " is-cued"}`}>
                 {rungs.map((rung, i) => (
-                  <RungItem key={i} rung={rung} index={i} isFirst={i === 0} />
+                  <RungItem
+                    key={i}
+                    rung={rung}
+                    index={i}
+                    isFirst={i === 0}
+                    cue={cue}
+                    onCue={setCue}
+                  />
                 ))}
               </ol>
             ) : null}
 
             {copy["ladder.close"] ? (
-              <div className="report-growth__close">
+              <div className="report-growth__close report-verdict">
                 <VerdictStar />
                 <p className="report-growth__close-line">{copy["ladder.close"]}</p>
                 <span className="report-verdict-rule" aria-hidden="true" />

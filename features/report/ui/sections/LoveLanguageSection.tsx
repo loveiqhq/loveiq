@@ -6,6 +6,7 @@ import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import { useRevealOnView } from "../hooks/useRevealOnView";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import { renderEduPara } from "./eduPara";
+import { copyParagraphs } from "./copyParagraphs";
 
 /**
  * Server-resolved love-language copy (`getReport2Section(name, "lovelang")`),
@@ -252,7 +253,9 @@ const LoveLanguageSection: FC<Props> = ({
 
             {hasOrder ? <RankedList order={order!} /> : null}
 
-            {copy["body.p1"] ? <p className="report-lovelang__catch">{copy["body.p1"]}</p> : null}
+            {copy["body.p1"] ? (
+              <p className="report-lovelang__catch">{copyParagraphs(copy["body.p1"])}</p>
+            ) : null}
           </>
         )}
 

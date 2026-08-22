@@ -295,7 +295,7 @@ const AcceleratorsSection: FC<Props> = ({
             </div>
           </div>
         ) : copy.takeaway ? (
-          <div className="report-accel__verdict">
+          <div className="report-accel__verdict report-verdict">
             <VerdictStar />
             <p className="report-accel__quote">{copy.takeaway}</p>
             <span className="report-verdict-rule" aria-hidden="true" />

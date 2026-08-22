@@ -8,6 +8,7 @@ import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPri
 import { getReportTheme } from "../reportTheme";
 import { useRevealOnView } from "../hooks/useRevealOnView";
 import { curveEndPoint } from "../curveEnd";
+import { copyParagraphs } from "./copyParagraphs";
 
 /**
  * Server-resolved insecurities copy (`getReport2Section(name, "insecurities")`),
@@ -422,11 +423,11 @@ const InsecuritiesSection: FC<Props> = ({
         ) : (
           <>
             {copy["body.p1"] ? (
-              <p className="report-insecurities__body">{copy["body.p1"]}</p>
+              <p className="report-insecurities__body">{copyParagraphs(copy["body.p1"])}</p>
             ) : null}
 
             {copy.takeaway ? (
-              <div className="report-insecurities__verdict">
+              <div className="report-insecurities__verdict report-verdict">
                 <VerdictStar />
                 <p className="report-insecurities__takeaway">{copy.takeaway}</p>
                 <span className="report-verdict-rule" aria-hidden="true" />

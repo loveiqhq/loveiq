@@ -261,8 +261,6 @@ const ConfidenceSection: FC<Props> = ({
       ) : null}
 
       <article className="report-confidence__card">
-        <p className="report-confidence__eyebrow">Your Sexual Confidence</p>
-
         {locked ? (
           <>
             <div className="report-confidence__preview">
@@ -287,6 +285,11 @@ const ConfidenceSection: FC<Props> = ({
           </>
         ) : (
           <>
+            {/* Paid only. Locked, this was the last live sub-headline sitting ABOVE a
+                raster that already contains its own blurred copy of it, so the reader
+                saw the same line twice — sharp, then blurred (MO, 2026-08-21). Every
+                other chapter already renders its eyebrow inside this arm. */}
+            <p className="report-confidence__eyebrow">Your Sexual Confidence</p>
             {resultWord ? (
               <div className="report-confidence__result">
                 <p className="report-confidence__result-word">{resultWord}</p>
@@ -338,13 +341,13 @@ const ConfidenceSection: FC<Props> = ({
                 </dl>
 
                 <div className="report-confidence__trap">
-                  <p className="report-confidence__block-label">The trap</p>
+                  <p className="report-block-label">The trap</p>
                   <p className="report-confidence__trap-body">{profile.trap}</p>
                 </div>
 
-                <div className="report-confidence__wayout">
-                  <p className="report-confidence__block-label">The way out</p>
-                  <p className="report-confidence__wayout-body">{profile.wayOut}</p>
+                <div className="report-confidence__wayout report-purple-block">
+                  <p className="report-block-label">The way out</p>
+                  <p className="report-purple-block__body">{profile.wayOut}</p>
                 </div>
               </>
             ) : null}

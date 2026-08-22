@@ -6,6 +6,7 @@ import LockedPreviewImage from "./LockedPreviewImage";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import { renderEduPara } from "./eduPara";
+import { copyParagraphs } from "./copyParagraphs";
 
 /**
  * Server-resolved curiosity copy (`getReport2Section(name, "curiosity")`),
@@ -136,7 +137,8 @@ const FitRow: FC<{ label: string; score: number | null }> = ({ label, score }) =
  * condition:"), so the early-colon form is bolded too. Anything else is left
  * plain rather than guessing where the emphasis ends.
  */
-function renderCuriosityLead(text: string) {
+function renderCuriosityLead(raw: string) {
+  const text = copyParagraphs(raw);
   const typed = /^[A-Z][\w-]*-first curiosity/.exec(text);
   const colon = typed ? null : /^[^.!?]{0,44}?:/.exec(text);
   const lead = typed?.[0] ?? colon?.[0];
@@ -228,11 +230,21 @@ const CuriositySection: FC<Props> = ({
             {copy["body.p1"] ? (
               <p className="report-curiosity__lead">{renderCuriosityLead(copy["body.p1"])}</p>
             ) : null}
+            {/* p2 and p3 exist in the copy for all 14 archetypes and the server already
+                gates and sends them (see `curiosityUnlocked` in the report route), but
+                nothing rendered them, so two paragraphs per archetype never reached a
+                reader. Only the first paragraph gets the bold lead-in. */}
+            {copy["body.p2"] ? (
+              <p className="report-curiosity__lead">{copyParagraphs(copy["body.p2"])}</p>
+            ) : null}
+            {copy["body.p3"] ? (
+              <p className="report-curiosity__lead">{copyParagraphs(copy["body.p3"])}</p>
+            ) : null}
 
             <FitTable fit={relationshipFit} />
 
             {copy.takeaway ? (
-              <div className="report-curiosity__verdict">
+              <div className="report-curiosity__verdict report-verdict">
                 <VerdictStar />
                 <p className="report-curiosity__takeaway">{copy.takeaway}</p>
                 <span className="report-verdict-rule" aria-hidden="true" />

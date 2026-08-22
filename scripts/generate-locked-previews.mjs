@@ -378,6 +378,22 @@ async function verifyNotBlank(page, files) {
 }
 
 /**
+ * Elements to tone down before a section is shot, keyed by DOM id.
+ *
+ * A gaussian blur destroys text and it destroys thin lines, but it cannot destroy a
+ * solid high-contrast SLAB — that just becomes a soft dark blob, and a blob reads as a
+ * hard shape sitting in an otherwise soft image. Fantasy's active filter pill is
+ * `background: #161021` with white text, so it survived the blur as exactly that and
+ * the top of the locked chapter read "sharp" (MO, 2026-08-21). Toned down to the
+ * inactive pill's own treatment, the row still reads as a row of pills.
+ *
+ * Same idea as the beliefs row rules, which are dropped to 0.16 alpha for the shot.
+ */
+const SOFTEN_BEFORE_CAPTURE = {
+  typical_sexual_fantasy_amp_practice_tendencies: [".report-fantasy__filter.is-active"],
+};
+
+/**
  * The real chapter content is every child of the card UP TO the `__details`
  * educational expander. `__details` is excluded deliberately (except for the
  * sections above): it renders in the locked view too, directly under the overlay,
@@ -395,7 +411,7 @@ async function captureSection(page, sectionId, viewportName) {
   await settleReveal(page, sectionId);
 
   const prepared = await page.evaluate(
-    ({ sectionId, blur }) => {
+    ({ sectionId, blur, soften }) => {
       const section = document.getElementById(sectionId);
       if (!section) return { error: "section not found" };
       const cards = Array.from(section.querySelectorAll("article[class*='__card']"));
@@ -420,6 +436,20 @@ async function captureSection(page, sectionId, viewportName) {
       // Hide the educational expander: it renders in the LOCKED view too,
       // directly under the overlay, so capturing it would show the same block
       // twice — once blurred in the image and once sharp below it.
+      // Tone down anything that would survive the blur as a solid slab (see
+      // SOFTEN_BEFORE_CAPTURE). Recorded so `restore()` puts it back.
+      const softened = [];
+      for (const selector of soften) {
+        for (const el of card.querySelectorAll(selector)) {
+          if (!(el instanceof HTMLElement)) continue;
+          softened.push([el, el.style.background, el.style.color, el.style.borderColor]);
+          el.style.background = "#ffffff";
+          el.style.color = "rgba(22, 16, 33, 0.45)";
+          el.style.borderColor = "rgba(22, 16, 33, 0.12)";
+        }
+      }
+      window.__previewSoftened = softened;
+
       const details = Array.from(card.children).filter((c) =>
         /__details\b/.test((c.className || "").toString())
       );
@@ -487,11 +517,12 @@ async function captureSection(page, sectionId, viewportName) {
         shifted: Math.abs(card.getBoundingClientRect().height - heightBefore) > 2,
       };
     },
-    { sectionId, blur: LOCK_BLUR_PX }
+    { sectionId, blur: LOCK_BLUR_PX, soften: SOFTEN_BEFORE_CAPTURE[sectionId] ?? [] }
   );
 
   // Restores via the wrapper itself rather than re-deriving the anchor, so it
-  // works for both the single-card and the card-grid shapes.
+  // works for both the single-card and the card-grid shapes. The softened elements
+  // are put back from the list the prep step left on `window`.
   const restore = async () =>
     page.evaluate((id) => {
       const section = document.getElementById(id);
@@ -512,6 +543,13 @@ async function captureSection(page, sectionId, viewportName) {
       for (const el of section.querySelectorAll("*")) {
         if (el instanceof HTMLElement && el.style.display === "none") el.style.display = "";
       }
+      // Put back anything SOFTEN_BEFORE_CAPTURE toned down for the shot.
+      for (const [el, bg, color, border] of window.__previewSoftened ?? []) {
+        el.style.background = bg;
+        el.style.color = color;
+        el.style.borderColor = border;
+      }
+      window.__previewSoftened = undefined;
     }, sectionId);
 
   if (prepared.error) {

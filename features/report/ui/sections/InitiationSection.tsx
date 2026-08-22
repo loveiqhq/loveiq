@@ -8,6 +8,7 @@ import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPri
 import { getReportTheme } from "../reportTheme";
 import { useRevealOnView } from "../hooks/useRevealOnView";
 import { rewardStatDots } from "./RewardSection";
+import { copyParagraphs } from "./copyParagraphs";
 
 /**
  * Server-resolved initiation copy (`getReport2Section(name, "initiation")`),
@@ -338,7 +339,9 @@ const InitiationSection: FC<Props> = ({
 
             <TimelineChart fam={fam} />
 
-            {copy["body.p1"] ? <p className="report-initiation__body">{copy["body.p1"]}</p> : null}
+            {copy["body.p1"] ? (
+              <p className="report-initiation__body">{copyParagraphs(copy["body.p1"])}</p>
+            ) : null}
 
             {hasRow1 ? (
               <div className="report-initiation__row">
@@ -363,7 +366,7 @@ const InitiationSection: FC<Props> = ({
             ) : null}
 
             {copy.takeaway ? (
-              <div className="report-initiation__verdict">
+              <div className="report-initiation__verdict report-verdict">
                 <VerdictStar />
                 <p className="report-initiation__takeaway">{copy.takeaway}</p>
                 <span className="report-verdict-rule" aria-hidden="true" />

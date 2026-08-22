@@ -10,6 +10,7 @@ import { archetypePresentation } from "@features/report/data/archetypePresentati
 import type { ArchetypeName } from "@features/report/server/archetypeSlug";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import { renderEduPara } from "./eduPara";
+import { copyParagraphs } from "./copyParagraphs";
 
 /**
  * Server-resolved power copy (`getReport2Section(name, "power")`), threaded as a
@@ -355,10 +356,12 @@ const PowerSection: FC<Props> = ({
 
             <PowerPlane archetype={archetype} youZoneLabel={zoneLabel} />
 
-            {copy["body.p1"] ? <p className="report-power__body">{copy["body.p1"]}</p> : null}
+            {copy["body.p1"] ? (
+              <p className="report-power__body">{copyParagraphs(copy["body.p1"])}</p>
+            ) : null}
 
             {copy.takeaway ? (
-              <div className="report-power__verdict">
+              <div className="report-power__verdict report-verdict">
                 <VerdictStar />
                 <p className="report-power__takeaway">{copy.takeaway}</p>
                 <span className="report-verdict-rule" aria-hidden="true" />

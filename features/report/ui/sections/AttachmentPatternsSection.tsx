@@ -6,6 +6,7 @@ import LockedPreviewImage from "./LockedPreviewImage";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import { renderEduPara } from "./eduPara";
+import { copyParagraphs } from "./copyParagraphs";
 
 /**
  * Server-resolved attachment copy (`getReport2Section(name, "attachment")`),
@@ -437,7 +438,7 @@ const AttachmentPatternsSection: FC<Props> = ({
   const hasEdu = !!copy["edu.teaser"] || eduParas.length > 0;
 
   return (
-    <div className="report-attachment">
+    <div className={`report-attachment${locked ? " report-attachment--locked" : ""}`}>
       {copy["learn.body"] ? (
         <div className="report-attachment__learn-pill-wrap">
           <span className="report-attachment__learn-pill">
@@ -470,14 +471,6 @@ const AttachmentPatternsSection: FC<Props> = ({
               <div className="report-attachment__card-preview" aria-hidden="true">
                 <LockedPreviewImage name="attach-card" />
               </div>
-              <PremiumOverlay
-                archetype={archetype}
-                sectionTitle={sectionTitle}
-                tier={tier}
-                quote={quote}
-                offerDeadline={offerDeadline}
-                onUnlock={onUnlock}
-              />
             </>
           ) : (
             <article className="report-attachment-card">
@@ -566,7 +559,7 @@ const AttachmentPatternsSection: FC<Props> = ({
           )}
 
           {locked ? null : copy["body.p1"] ? (
-            <p className="report-attachment__map-caption">{copy["body.p1"]}</p>
+            <p className="report-attachment__map-caption">{copyParagraphs(copy["body.p1"])}</p>
           ) : (
             <p className="report-attachment__map-caption">
               Two dots, one person. The solid dot is where you live; the glow around it shows how
@@ -646,6 +639,23 @@ const AttachmentPatternsSection: FC<Props> = ({
           ) : null}
         </div>
       </article>
+
+      {/* The offer spans BOTH blurred boxes — the result card and the map — and sits
+          centred across the pair, which is the same rule every other chapter follows
+          on its single box. It cannot live inside the result card's box to do that:
+          from there it either sits centred on that box alone (too high) or hangs out
+          of it (which read as a card cut in half by the box's own frame). Placed on
+          the section's grid instead, spanning the last two rows. */}
+      {locked ? (
+        <PremiumOverlay
+          archetype={archetype}
+          sectionTitle={sectionTitle}
+          tier={tier}
+          quote={quote}
+          offerDeadline={offerDeadline}
+          onUnlock={onUnlock}
+        />
+      ) : null}
     </div>
   );
 };

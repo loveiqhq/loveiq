@@ -106,6 +106,123 @@ describe("locked preview images", () => {
     }
   });
 
+  it("centres the offer in the blurred chapter rather than sitting on top of it", () => {
+    // MO, 2026-08-21: the paywall block should sit in the MIDDLE of each blurred
+    // section. Measured at 1440 before this, the card sat 55-468px above the blurred
+    // region's centre, the drift growing with the chapter's length. The card and the
+    // raster share one grid cell, so `align-self` is the whole fix — and the cell is
+    // the raster whenever the raster is the taller of the two.
+    const css = readFileSync(join(process.cwd(), "app/globals.css"), "utf8");
+    const at = css.indexOf("THE WHOLE CHAPTER SHOWS, NOT THE TOP OF IT");
+    const block = css.slice(at, at + 9000);
+    expect(block).toContain("align-self: center");
+    expect(block).not.toContain("align-self: start;\n}");
+    // Attachment locks in TWO boxes — the result card and the map article — and "the
+    // middle" means the middle of the PAIR: half the card over each, centred on the
+    // gap between them (MO, 2026-08-21). Centring on the two boxes' combined height
+    // was arithmetically the middle but did not look like it: the map box is about
+    // twice the result box, so the card sat almost entirely on the map.
+    const root = css.slice(css.indexOf(".report-attachment--locked {"));
+    const rootBody = root.slice(0, root.indexOf("}"));
+    expect(rootBody).toContain("display: grid");
+    // The grid area is the offer's containing block only if the grid is positioned...
+    expect(rootBody).toContain("position: relative");
+    // ...and the rows must be EXPLICIT: an absolutely positioned grid child cannot
+    // reference implicit lines, and its area then falls back to the container's
+    // padding box — which ends at the last box's bottom edge, so a wrong placement
+    // still looked right until the offer needed a row's BOTTOM edge.
+    expect(rootBody).toContain("grid-template-rows: auto auto");
+    const rootWithPill = css.slice(
+      css.indexOf(".report-attachment--locked:has(> .report-attachment__learn-pill-wrap) {")
+    );
+    expect(rootWithPill.slice(0, rootWithPill.indexOf("}"))).toContain(
+      "grid-template-rows: auto auto auto"
+    );
+    // One source of truth for the gap, since the offer is centred on the middle of it.
+    const attachRule = css.slice(css.indexOf(".report-attachment {"));
+    expect(attachRule.slice(0, attachRule.indexOf("}"))).toContain(
+      "--report-attach-gap: clamp(18px, 2.2vw, 27px)"
+    );
+
+    const overlayRule = css.slice(
+      css.indexOf(".report-attachment--locked > .report-premium-overlay {")
+    );
+    const overlayBody = overlayRule.slice(0, overlayRule.indexOf("}"));
+    // The result box's row: 1 without the "what you will learn" pill, 2 with it.
+    expect(overlayBody).toContain("grid-row: 1 / 2");
+    const withPill = css.slice(
+      css.indexOf(
+        ".report-attachment--locked:has(> .report-attachment__learn-pill-wrap) > .report-premium-overlay {"
+      )
+    );
+    expect(withPill.slice(0, withPill.indexOf("}"))).toContain("grid-row: 2 / 3");
+    // Hugging that row's bottom edge, shrunk to the card, so the translate is half the
+    // CARD's height rather than half the box's.
+    expect(overlayBody).toContain("top: auto");
+    expect(overlayBody).toContain("bottom: 0");
+    expect(overlayBody).toContain("height: max-content");
+    // Half the card + half the gap = centred on the seam. It has to be written on the
+    // OVERLAY: the card's own transform belongs to its reveal animation, and an
+    // animated value beats a normal declaration, so the same rule on the card was
+    // silently dropped (computed transform stayed the identity matrix).
+    expect(overlayBody).toContain(
+      "transform: translateY(calc(50% + var(--report-attach-gap) / 2))"
+    );
+    const cardRule = css.slice(
+      css.indexOf(".report-attachment--locked > .report-premium-overlay > * {")
+    );
+    const cardBody = cardRule.slice(0, cardRule.indexOf("}"));
+    expect(cardBody).toContain("pointer-events: auto");
+    expect(cardBody).not.toContain("transform");
+    // It must stay OUT of flow. An in-flow item placed on a row of a one-column grid
+    // occupies that cell, so the boxes were auto-placed after it and the whole chapter
+    // slid below the offer.
+    expect(overlayBody).not.toContain("position: relative");
+    expect(overlayBody).not.toContain("position: static");
+    // Its empty area must not swallow clicks meant for what is under it.
+    expect(overlayBody).toContain("pointer-events: none");
+
+    // With the offer gone from the result box, the raster is back in flow and is what
+    // gives that box its height — no absolute centring left behind.
+    const rasterRule = css.slice(
+      css.indexOf(".report-attachment__result-wrap--locked > .report-attachment__card-preview {")
+    );
+    const body = rasterRule.slice(0, rasterRule.indexOf("}"));
+    expect(body).toContain("position: relative");
+    expect(body).not.toContain("transform: translateY(-50%)");
+  });
+
+  it("keeps the confidence sub-headline out of the locked view", () => {
+    // "Your Sexual Confidence" sat ABOVE the raster in both states, and the raster —
+    // a capture of the paid card — contains its own blurred copy of that same line, so
+    // a locked reader saw it twice: sharp, then blurred (MO, 2026-08-21, the last of
+    // these). Every other chapter already renders its eyebrow in the paid arm only.
+    const src = readFileSync(
+      join(process.cwd(), "features/report/ui/sections/ConfidenceSection.tsx"),
+      "utf8"
+    );
+    const card = src.slice(src.indexOf('<article className="report-confidence__card">'));
+    const lockedArm = card.slice(card.indexOf("{locked ? ("), card.indexOf(") : ("));
+    expect(lockedArm).toContain("LockedPreviewImage");
+    expect(lockedArm).not.toContain("report-confidence__eyebrow");
+    // ...and the paid arm still has it.
+    expect(card.slice(card.indexOf(") : ("))).toContain(
+      'report-confidence__eyebrow">Your Sexual Confidence'
+    );
+  });
+
+  it("tones down anything that would survive the blur as a solid slab", () => {
+    // A gaussian destroys text and thin lines, but a solid high-contrast slab just
+    // becomes a soft dark blob — and a blob reads as a hard shape in an otherwise soft
+    // image. Fantasy's active filter pill is `background: #161021`, so the top of that
+    // locked chapter read "sharp" (MO, 2026-08-21).
+    const gen = readFileSync(join(process.cwd(), "scripts/generate-locked-previews.mjs"), "utf8");
+    expect(gen).toContain("SOFTEN_BEFORE_CAPTURE");
+    expect(gen).toContain('".report-fantasy__filter.is-active"');
+    // ...and it is put back afterwards, or the next capture on the same page inherits it.
+    expect(gen).toContain("window.__previewSoftened");
+  });
+
   it("renders every locked expander live, the gold three included", () => {
     // All sixteen chapters' expanders render live under the overlay and are blurred by
     // CSS — that is what makes them look alike. The three gold "practical" blocks used

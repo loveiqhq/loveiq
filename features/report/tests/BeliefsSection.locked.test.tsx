@@ -325,12 +325,14 @@ describe("BeliefsSection — how much the server ships", () => {
     ].map((m) => m[1]!);
     expect(rules.length, "the card's placement rules are gone").toBeGreaterThanOrEqual(3);
 
-    // Desktop: pushed down past the live band. The deepest live row across BOTH
-    // columns is 409px from the box top (at 769, where the columns are narrowest
-    // before they stack); 300 was measured against the keep column alone and covered
-    // the loosen column's tail.
+    // Desktop: pushed down past the live band, then CENTRED in what is left — the
+    // blurred part (MO, 2026-08-21: the offer belongs in the middle of the blurred
+    // section, not on top of it). The padding is what keeps it clear of the rows: the
+    // deepest live row across BOTH columns is 409px from the box top (at 769, where
+    // the columns are narrowest before they stack), and 300 was measured against the
+    // keep column alone and covered the loosen column's tail.
     const desktop = rules.find((r) => r.includes("padding-top"))!;
-    expect(desktop).toContain("align-items: flex-start");
+    expect(desktop).toContain("align-items: center");
     expect(Number(desktop.match(/padding-top: (\d+)px/)![1])).toBeGreaterThanOrEqual(420);
 
     // Mobile: the columns stack, so the box has to clear BOTH sets of live rows —

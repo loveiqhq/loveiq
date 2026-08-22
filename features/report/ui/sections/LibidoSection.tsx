@@ -132,11 +132,20 @@ const LOCKED_PREVIEW_STEPS = [
 ];
 
 /**
- * The loop-back arrow (Figma 8427:2601): a dashed curve running from step 3 up
- * the left side to an arrowhead beside step 1 — the cycle restarting. It is an
- * OPEN curve that never touches the chips, not a closed bracket, and it carries
- * an arrowhead. Colour is Figma's `#9D8AD7` at 45%; `preserveAspectRatio="none"`
- * matches the Figma node's own setting so it stretches with the chip stack.
+ * The loop-back arrow (Figma 8427:2601): a dashed curve running from step 3 up the
+ * left side to an arrowhead beside step 1 — the cycle restarting. Figma's own
+ * `preserveAspectRatio="none"`, so it stretches with the chip stack.
+ *
+ * The dashes are the animation: they march up the curve into the arrowhead, forever.
+ *
+ * They never used to be dashes at all. The path carried `pathLength={1}`, which
+ * normalises its length to one unit, so `stroke-dasharray: 3 4.5` asked for a
+ * three-unit dash on a one-unit path — one dash covering everything, i.e. a plain
+ * hairline (and the CSS then overrode the pattern to a single dash anyway). That is
+ * what read as broken, and why nothing appeared to move: the moving part was a
+ * separate bright segment that retired after three passes (MO, 2026-08-22).
+ * Without `pathLength` the pattern is in user units, and `vectorEffect` keeps both
+ * the stroke and the dashes at a constant size however far the curve is stretched.
  */
 const LoopArrow: FC = () => (
   <svg
@@ -146,10 +155,37 @@ const LoopArrow: FC = () => (
     fill="none"
     aria-hidden="true"
   >
+    <defs>
+      {/* Feathered at both ends, so the window's arrival and exit are invisible and
+          the climb reads as one continuous pass rather than a block sliding by. */}
+      <linearGradient id="libido-loop-window-grad" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stopColor="#fff" stopOpacity="0" />
+        <stop offset="0.3" stopColor="#fff" stopOpacity="0.55" />
+        <stop offset="0.5" stopColor="#fff" stopOpacity="1" />
+        <stop offset="0.7" stopColor="#fff" stopOpacity="0.55" />
+        <stop offset="1" stopColor="#fff" stopOpacity="0" />
+      </linearGradient>
+      <mask
+        id="libido-loop-window"
+        maskUnits="userSpaceOnUse"
+        x="0"
+        y="-60"
+        width="22.57"
+        height="280"
+      >
+        <rect
+          className="report-libido__loop-window"
+          x="0"
+          y="157.84"
+          width="22.57"
+          height="32"
+          fill="url(#libido-loop-window-grad)"
+        />
+      </mask>
+    </defs>
     <path
       className="report-libido__loop-curve"
       d="M19.7 135.7 C4.5 127 2.4 92 6.9 71.7 C10.2 56.6 15.5 32 19.6 14.5"
-      pathLength={1}
       stroke="#9D8AD7"
       strokeOpacity="0.45"
       strokeWidth="1.5"
@@ -157,19 +193,20 @@ const LoopArrow: FC = () => (
       strokeLinecap="round"
       vectorEffect="non-scaling-stroke"
     />
-    {/* A bright short segment that travels the curve forever. The base dashed
-        path above stays put; this rides on top of it, so the line reads as a
-        current still running rather than a drawn decoration — which is the
-        whole claim of the section: the loop has not stopped. Separate path
-        because a dashed stroke cannot be drawn AND travelled at once. */}
+    {/* The same dashes again, brighter, shown only through a soft window that climbs
+        the curve — so a pulse of light travels up the marching dashes and lands at the
+        arrowhead. Both copies share the dash animation, so their dashes stay in
+        register; the window moves independently, which is what lets the dashes march
+        calmly while the pulse sweeps. */}
     <path
-      className="report-libido__loop-current"
+      className="report-libido__loop-glow"
       d="M19.7 135.7 C4.5 127 2.4 92 6.9 71.7 C10.2 56.6 15.5 32 19.6 14.5"
-      pathLength={1}
-      stroke="#795FC8"
-      strokeWidth="1.9"
+      stroke="#6B4FC0"
+      strokeWidth="2.5"
+      strokeDasharray="3 4.5"
       strokeLinecap="round"
       vectorEffect="non-scaling-stroke"
+      mask="url(#libido-loop-window)"
     />
     <path
       className="report-libido__loop-head"

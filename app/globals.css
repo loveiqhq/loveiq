@@ -3502,6 +3502,41 @@ input.autofill-dark:-internal-autofill-previewed {
   --report-ink: #161021;
   --report-border: rgba(22, 16, 33, 0.12);
   --report-border-soft: rgba(22, 16, 33, 0.07);
+  /* The chapter body text block — the paragraph that explains a chapter's visual.
+     Seven chapters each had their own size: 14.5px fixed in Attachment, a smaller
+     0.906rem in Beliefs, and in Curiosity and Power a clamp whose min (1rem) was
+     ABOVE its max (0.988rem), which silently pinned them to 16px. Core Insecurities
+     is the one MO picked, so its pair is the token (MO, 2026-08-21). */
+  --report-body-size: clamp(0.95rem, 1.35vw, 0.987rem);
+  --report-body-lh: 1.68;
+  /* The prose inside an expander — the educational "Learn:" pieces and the gold
+     practical ones. It was written chapter by chapter: fifteen rules, four different
+     results (Manrope 14.5, Manrope 15.2, Lora 17, Lora 17.008), and six of the sans
+     clamps had their min ABOVE their max, which pins them to the min — so half the
+     chapters were rendering a size nobody chose. One pair now, the same as the
+     chapter body prose, so a reader meets one voice (MO, 2026-08-22). */
+  --report-prose-size: var(--report-body-size);
+  --report-prose-lh: var(--report-body-lh);
+  /* The italic serif line that opens each of those blocks. Already uniform apart from
+     one chapter's rounding; a token keeps it that way. */
+  --report-teaser-size: clamp(0.95rem, 1.2vw, 1.023rem);
+  --report-teaser-lh: 1.45;
+  /* A line break typed into the copy sheet survives into the page, wherever it is
+     typed — MO asked for breaks "here and there" (2026-08-21) and the report had this
+     on 12 of its 82 prose blocks, so a break in any other chapter was silently
+     collapsed to a space. `pre-line` differs from `normal` ONLY in honouring newlines
+     (spaces still collapse), it inherits, and nothing in the report renders a string
+     that contains a newline it does not want broken — the only copy with newlines
+     today is the "• " lists in `edu.body.p2/p3`, which are meant to break and already
+     did in the three chapters that had this set by hand. */
+  white-space: pre-line;
+  /* Every block that uses the pair also carries `white-space: pre-line`, so a line
+     break typed into the copy sheet survives into the page and a blank line reads as a
+     paragraph break — which is how MO asked to be able to split these blobs
+     (2026-08-21). The educational paragraphs have worked this way for a while (that is
+     how the "• " lists in `edu.body.p2/p3` break); the body blocks did not, so their
+     newlines collapsed to a space. No `body.p*` value contains a newline today, so
+     this changes nothing until someone types one. */
   color: var(--report-copy);
   background:
     radial-gradient(circle at 10% 20%, rgba(124, 58, 237, 0.06), transparent 0 32%),
@@ -7330,7 +7365,12 @@ input.autofill-dark:-internal-autofill-previewed {
   text-transform: uppercase;
 }
 
-.report-section__title {
+/* `You're a constellation, not a type` opens its section the way a chapter title
+   does, so it takes the chapter title's type outright rather than a size of its own
+   — same family, size, line-height, tracking, weight and ink. Asked for 2026-08-21,
+   with "The Importance of Sexuality" named as the reference. */
+.report-section__title,
+.report-constellation__heading {
   margin: 0;
   font-family: var(--font-serif);
   font-size: 40px;
@@ -7425,7 +7465,9 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-attachment {
   display: flex;
   flex-direction: column;
-  gap: clamp(18px, 2.2vw, 27px);
+  /* Named, because the locked offer is centred on the middle of this gap. */
+  --report-attach-gap: clamp(18px, 2.2vw, 27px);
+  gap: var(--report-attach-gap);
   width: 100%;
 }
 
@@ -7636,12 +7678,12 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-attachment__map-caption {
   margin: clamp(12px, 1.6vw, 18px) 0 0;
   align-self: stretch;
-  text-align: center;
   font-family: var(--font-sans);
   font-weight: 400;
-  font-size: 14.5px;
-  line-height: 1.5;
+  font-size: var(--report-body-size);
+  line-height: var(--report-body-lh);
   color: #3f3a4d;
+  white-space: pre-line;
 }
 
 /* ── The 2-D attachment map (Figma 8427:1488). ── */
@@ -8123,8 +8165,8 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #161021;
   font-family: var(--font-serif);
   font-style: italic;
-  font-size: clamp(0.95rem, 1.2vw, 1.0227rem);
-  line-height: 1.45;
+  font-size: var(--report-teaser-size);
+  line-height: var(--report-teaser-lh);
 }
 
 .report-attachment__details-body {
@@ -8139,16 +8181,21 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #3f3a4d;
   font-family: var(--font-sans);
   font-weight: 400;
-  font-size: 0.906rem;
-  line-height: 1.5;
+  font-size: var(--report-prose-size);
+  line-height: var(--report-prose-lh);
 }
 
 /* ── "Common Attachment Style Patterns Across Archetypes" — 5 universal cards. ── */
 .report-attachment__patterns {
   display: flex;
   flex-direction: column;
-  gap: 40px;
-  padding: 5px 0 24px;
+  /* Title → first card. It was 40px here against 15px above the title, so the
+     headline read as the tail of the paragraph above it ("Attachment isn't
+     static…") rather than as the label for the cards under it (MO, 2026-08-21).
+     Swapped: the headline now sits close to what it introduces. */
+  gap: 16px;
+  /* 30px + the parent's own 10px row-gap = 40px of air above the title. */
+  padding: 30px 0 24px;
 }
 
 .report-attachment__patterns-title {
@@ -8193,9 +8240,12 @@ input.autofill-dark:-internal-autofill-previewed {
   margin: 0;
   color: #161021;
   font-family: var(--font-sans);
-  font-weight: 300;
-  font-size: 14.5px;
-  line-height: 29.25px;
+  /* The pattern cards sit inside the educational piece, so they take its prose too.
+     They were 14.5px on a 29.25px line — a 2.0 leading nothing else in the report
+     uses, and a lighter weight than the prose around them. */
+  font-weight: 400;
+  font-size: var(--report-prose-size);
+  line-height: var(--report-prose-lh);
 }
 
 .report-attachment-family__chips-wrap {
@@ -9397,6 +9447,16 @@ input.autofill-dark:-internal-autofill-previewed {
   border-top: 1.128px solid rgba(22, 16, 33, 0.09);
 }
 
+/* The divider between the third and fourth finding. The rule above is an
+   adjacent-sibling one, and findings 4 and 5 sit inside `__group` (the positioning
+   context for the centred CTA) — so row 3 and row 4 are not siblings and that one
+   line was missing, in both the locked and the unlocked state. Reported 2026-08-21.
+   Carried on the GROUP, not its first row: `+` still requires a row to precede it,
+   so an archetype with no free findings does not get a stray line above the block. */
+.report-findings__row + .report-findings__group {
+  border-top: 1.128px solid rgba(22, 16, 33, 0.09);
+}
+
 .report-findings__num {
   flex: 0 0 auto;
   width: 56px;
@@ -9740,8 +9800,9 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #3f3a4d;
   font-family: var(--font-sans);
   font-weight: 400;
-  font-size: clamp(0.85rem, 1.05vw, 0.90625rem);
-  line-height: 1.5;
+  font-size: var(--report-body-size);
+  line-height: var(--report-body-lh);
+  white-space: pre-line;
 }
 
 /* Locked teaser: a peek column plus a blurred stand-in the overlay anchors on.
@@ -9869,8 +9930,8 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #161021;
   font-family: var(--font-serif);
   font-style: italic;
-  font-size: clamp(0.95rem, 1.2vw, 1.0227rem);
-  line-height: 1.45;
+  font-size: var(--report-teaser-size);
+  line-height: var(--report-teaser-lh);
 }
 
 .report-beliefs__details-body {
@@ -9885,8 +9946,8 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #3f3a4d;
   font-family: var(--font-sans);
   font-weight: 400;
-  font-size: 0.906rem;
-  line-height: 1.5;
+  font-size: var(--report-prose-size);
+  line-height: var(--report-prose-lh);
   white-space: pre-wrap;
 }
 
@@ -10061,17 +10122,15 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #3f3a4d;
   font-family: var(--font-sans);
   font-weight: 400;
-  font-size: clamp(0.95rem, 1.35vw, 0.987rem);
-  line-height: 1.68;
+  font-size: var(--report-body-size);
+  line-height: var(--report-body-lh);
+  white-space: pre-line;
 }
 
 /* Centered italic takeaway pull-quote with a star divider above it. */
 .report-insecurities__verdict {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  padding: clamp(6px, 1.4vw, 16px) 0 clamp(2px, 0.6vw, 6px);
+  /* = .report-insecurities__card's row-gap */
+  --verdict-parent-gap: clamp(9px, 1vw, 11.3px);
 }
 
 .report-insecurities__takeaway {
@@ -10185,8 +10244,8 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #161021;
   font-family: var(--font-serif);
   font-style: italic;
-  font-size: clamp(0.95rem, 1.2vw, 1.023rem);
-  line-height: 1.45;
+  font-size: var(--report-teaser-size);
+  line-height: var(--report-teaser-lh);
 }
 
 .report-insecurities__peek-cta {
@@ -10213,10 +10272,10 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-insecurities__details-para {
   margin: 0;
   color: #161021;
-  font-family: var(--font-serif);
+  font-family: var(--font-sans);
   font-weight: 400;
-  font-size: clamp(1rem, 1.3vw, 1.0625rem);
-  line-height: 1.55;
+  font-size: var(--report-prose-size);
+  line-height: var(--report-prose-lh);
   white-space: pre-wrap;
 }
 
@@ -10480,11 +10539,8 @@ input.autofill-dark:-internal-autofill-previewed {
 
 /* Centered italic takeaway pull-quote with a star divider above it. */
 .report-reward__verdict {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: clamp(4px, 1vw, 10px) 0 clamp(2px, 0.6vw, 6px);
+  /* = .report-reward__card's row-gap */
+  --verdict-parent-gap: clamp(14px, 1.6vw, 20.3px);
 }
 
 .report-reward__takeaway {
@@ -10601,8 +10657,8 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #161021;
   font-family: var(--font-serif);
   font-style: italic;
-  font-size: clamp(0.95rem, 1.2vw, 1.023rem);
-  line-height: 1.45;
+  font-size: var(--report-teaser-size);
+  line-height: var(--report-teaser-lh);
 }
 
 .report-reward__peek-cta {
@@ -10631,8 +10687,8 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #3f3a4d;
   font-family: var(--font-sans);
   font-weight: 400;
-  font-size: clamp(0.95rem, 1.3vw, 0.9rem);
-  line-height: 1.5;
+  font-size: var(--report-prose-size);
+  line-height: var(--report-prose-lh);
 }
 
 @media (max-width: 768px) {
@@ -10847,20 +10903,6 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-energy__note {
   width: 100%;
   margin: 0;
-  padding: clamp(14px, 1.6vw, 18px);
-  border-radius: 13.542px;
-  background: rgba(157, 138, 215, 0.08);
-  color: #161021;
-  font-family: var(--font-sans);
-  font-weight: 400;
-  font-size: 0.917rem;
-  line-height: 1.6;
-}
-
-.report-energy__note-em {
-  color: #795fc8;
-  font-family: var(--font-serif);
-  font-style: italic;
 }
 
 /* Graph block — eyebrow + tinted rounded box with the wave SVG. */
@@ -10926,11 +10968,8 @@ input.autofill-dark:-internal-autofill-previewed {
 
 /* Centered italic takeaway pull-quote with a star divider above it. */
 .report-energy__verdict {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: clamp(4px, 1vw, 10px) 0 clamp(2px, 0.6vw, 6px);
+  /* = .report-energy__card's row-gap */
+  --verdict-parent-gap: clamp(14px, 1.6vw, 20.3px);
 }
 
 .report-energy__takeaway {
@@ -11052,8 +11091,8 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #161021;
   font-family: var(--font-serif);
   font-style: italic;
-  font-size: clamp(0.95rem, 1.2vw, 1.023rem);
-  line-height: 1.45;
+  font-size: var(--report-teaser-size);
+  line-height: var(--report-teaser-lh);
 }
 
 .report-energy__peek-cta {
@@ -11082,8 +11121,8 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #3f3a4d;
   font-family: var(--font-sans);
   font-weight: 400;
-  font-size: clamp(0.95rem, 1.3vw, 0.9rem);
-  line-height: 1.5;
+  font-size: var(--report-prose-size);
+  line-height: var(--report-prose-lh);
 }
 
 @media (max-width: 768px) {
@@ -11542,8 +11581,8 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #161021;
   font-family: var(--font-serif);
   font-style: italic;
-  font-size: clamp(0.95rem, 1.2vw, 1.023rem);
-  line-height: 1.45;
+  font-size: var(--report-teaser-size);
+  line-height: var(--report-teaser-lh);
 }
 
 .report-arousal__peek-cta {
@@ -11572,8 +11611,8 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #3f3a4d;
   font-family: var(--font-sans);
   font-weight: 400;
-  font-size: clamp(0.95rem, 1.3vw, 0.9rem);
-  line-height: 1.5;
+  font-size: var(--report-prose-size);
+  line-height: var(--report-prose-lh);
 }
 
 @media (max-width: 768px) {
@@ -12196,8 +12235,9 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #3f3a4d;
   font-family: var(--font-sans);
   font-weight: 400;
-  font-size: clamp(0.95rem, 1.3vw, 0.987rem);
-  line-height: 1.68;
+  font-size: var(--report-body-size);
+  line-height: var(--report-body-lh);
+  white-space: pre-line;
 }
 
 /* "How you start" tinted row (Figma 8427:2325). */
@@ -12288,12 +12328,8 @@ input.autofill-dark:-internal-autofill-previewed {
 
 /* Italic takeaway with a ✳ divider above + a short rule below (8427:2320). */
 .report-initiation__verdict {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 7.6px;
-  width: 100%;
-  padding-top: 10px;
+  /* = .report-initiation__card's row-gap */
+  --verdict-parent-gap: clamp(14px, 1.6vw, 20.3px);
 }
 
 .report-initiation__takeaway {
@@ -12402,8 +12438,8 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #161021;
   font-family: var(--font-serif);
   font-style: italic;
-  font-size: clamp(0.95rem, 1.2vw, 1.023rem);
-  line-height: 1.45;
+  font-size: var(--report-teaser-size);
+  line-height: var(--report-teaser-lh);
 }
 
 .report-initiation__peek-cta {
@@ -12430,10 +12466,10 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-initiation__details-para {
   margin: 0;
   color: #161021;
-  font-family: var(--font-serif);
+  font-family: var(--font-sans);
   font-weight: 400;
-  font-size: clamp(0.98rem, 1.3vw, 1.063rem);
-  line-height: 1.55;
+  font-size: var(--report-prose-size);
+  line-height: var(--report-prose-lh);
 }
 
 @media (max-width: 768px) {
@@ -12580,16 +12616,20 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 /*
- * Figma 8427:2601 — a dashed OPEN curve with an arrowhead at the top, sitting in
- * the 22.6px gutter left of the chips. It replaced a CSS three-sided bracket,
- * which had no arrowhead and read as a closed box joining the chips.
+ * Figma 8427:2601 — the dashed open curve with its arrowhead, in the 22.6px gutter
+ * left of the chips. The same box it always had; only the dashes move now.
  */
 .report-libido__loop-arrow {
   position: absolute;
   left: 0;
   top: 9px;
-  bottom: 9px;
   width: 22.6px;
+  /* NOT `bottom: 9px`. An <svg> is a replaced element, so with `height: auto` the
+     browser takes its intrinsic height from the viewBox (157.84px) and ignores
+     `bottom` — the curve stopped 158px down however tall the stack was, which on a
+     phone (a ~300px stack) left it ending in the middle of row 2. An explicit height
+     is what makes `preserveAspectRatio="none"` stretch it over the whole stack. */
+  height: calc(100% - 18px);
   overflow: visible;
   pointer-events: none;
 }
@@ -12768,8 +12808,8 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #161021;
   font-family: var(--font-serif);
   font-style: italic;
-  font-size: clamp(0.95rem, 1.2vw, 1.023rem);
-  line-height: 1.45;
+  font-size: var(--report-teaser-size);
+  line-height: var(--report-teaser-lh);
 }
 
 .report-libido__peek-cta {
@@ -12796,10 +12836,10 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-libido__details-para {
   margin: 0;
   color: #161021;
-  font-family: var(--font-serif);
+  font-family: var(--font-sans);
   font-weight: 400;
-  font-size: clamp(0.98rem, 1.3vw, 1.063rem);
-  line-height: 1.55;
+  font-size: var(--report-prose-size);
+  line-height: var(--report-prose-lh);
 }
 
 @media (max-width: 768px) {
@@ -12953,7 +12993,11 @@ input.autofill-dark:-internal-autofill-previewed {
   position: relative;
   width: 100%;
   aspect-ratio: 100 / 66;
-  margin: 2px 0 0;
+  /* The first step pill sits at the top of the circle, 3px inside this box, and it was
+     landing 25px under the "what it costs" line at 1440 and 16px at 768 — the reader
+     read them as one block (MO, 2026-08-22). Margin, not padding: padding would eat
+     into the aspect-ratio box and squash the circle. */
+  margin: clamp(10px, 2.4vw, 34px) 0 0;
 }
 
 .report-partnership__orbit-ring {
@@ -13292,8 +13336,8 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #161021;
   font-family: var(--font-serif);
   font-style: italic;
-  font-size: clamp(0.95rem, 1.2vw, 1.023rem);
-  line-height: 1.45;
+  font-size: var(--report-teaser-size);
+  line-height: var(--report-teaser-lh);
 }
 
 .report-partnership__peek-cta {
@@ -13322,8 +13366,8 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #3f3a4d;
   font-family: var(--font-sans);
   font-weight: 400;
-  font-size: clamp(0.9rem, 1.3vw, 0.906rem);
-  line-height: 1.5;
+  font-size: var(--report-prose-size);
+  line-height: var(--report-prose-lh);
 }
 
 @media (max-width: 768px) {
@@ -13576,6 +13620,15 @@ input.autofill-dark:-internal-autofill-previewed {
   gap: 13.5px;
   padding: 12.4px 16px;
   border-radius: 15.8px;
+  /* Pointing at a rung cues its step on the graph above (see "Growth Potentials: the
+     graph and the ladder answer each other"). The border is reserved at rest so the
+     row does not shift by a pixel when the cue draws it. */
+  border: 1.128px solid transparent;
+  cursor: pointer;
+  transition:
+    border-color 200ms ease,
+    background 200ms ease,
+    opacity 200ms ease;
 }
 
 /* First rung highlighted: terracotta wash + border (the START HERE step). */
@@ -13708,6 +13761,37 @@ input.autofill-dark:-internal-autofill-previewed {
 
    One shared class rather than eight identical per-section rules, which is what
    made them look optional in the first place. */
+/* THE ✳ TAKE-AWAY BLOCK — ONE TREATMENT WHEREVER IT APPEARS
+   Eight chapters close with the same three pieces: the ✳, an italic line, a short
+   rule. They were built chapter by chapter, so no two were spaced alike — measured at
+   1440, the space above the star ran from 16px (accelerators) to 38px (curiosity), the
+   space below the rule from 17px to 44px, over five different internal gaps (7.6 / 8 /
+   10px). Standardised here, and given more room, per MO 2026-08-21.
+   The parent card is a flex column with its own row-gap, which lands both above and
+   below this block and differs per chapter (0 / 11.3 / 16 / 20.3px), so each chapter
+   declares its own as `--verdict-parent-gap` and it is subtracted below: what has to
+   be identical is the RENDERED space, not the padding we happen to write. */
+.report-verdict {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  text-align: center;
+  /* ✳ → line → rule */
+  gap: clamp(13px, 1.5vw, 16px);
+  padding-block: calc(clamp(30px, 3.4vw, 48px) - var(--verdict-parent-gap, 0px));
+  margin-block: 0;
+}
+
+/* Whatever follows — the purple "Learn:" expander in every chapter but Growth — brings
+   its own top margin, which would sit on top of the standard space below the rule.
+   `[class]` is there to out-weigh those single-class rules rather than relying on this
+   block coming later in the file: two of the eight chapters (Power, Curiosity) declare
+   theirs further down, and won until this had the extra specificity. */
+.report-verdict + [class] {
+  margin-top: 0;
+}
+
 .report-verdict-rule {
   width: 42.9px;
   height: 1.7px;
@@ -13718,13 +13802,8 @@ input.autofill-dark:-internal-autofill-previewed {
 
 /* ✳ divider + italic closing line (Figma 8427:2766). */
 .report-growth__close {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  margin-top: clamp(8px, 1.4vw, 16px);
-  text-align: center;
+  /* = .report-growth__card's row-gap */
+  --verdict-parent-gap: clamp(14px, 1.8vw, 20.3px);
 }
 
 .report-growth__close-line {
@@ -14487,16 +14566,6 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #3f3a4d;
 }
 
-.report-confidence__block-label {
-  margin: 0 0 6px;
-  font-family: var(--font-sans);
-  font-weight: 800;
-  font-size: 0.66rem;
-  letter-spacing: 1.3px;
-  text-transform: uppercase;
-  color: #6b5b95;
-}
-
 .report-confidence__trap {
   margin-top: clamp(18px, 2.2vw, 24px);
 }
@@ -14510,21 +14579,41 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #3f3a4d;
 }
 
-/* The way out reads as the resolution, so it sits in a tinted panel. */
-.report-confidence__wayout {
-  margin-top: clamp(16px, 2vw, 22px);
+/* THE TINTED PURPLE BLOCK — ONE DEFINITION
+   Confidence's "the way out" panel is the standard (MO called it that, 2026-08-21):
+   a tinted bordered panel, an uppercase label, serif body. Energy & Risk's callout
+   was the same idea drawn differently — no border, a heavier tint, and Manrope 14.7px
+   where the standard is Lora 17.3px — so the values live here now and both chapters
+   point at them. */
+.report-purple-block {
   padding: 16px 18px;
   border: 1px solid rgba(157, 138, 215, 0.28);
   border-radius: 14px;
   background: rgba(157, 138, 215, 0.06);
 }
 
-.report-confidence__wayout-body {
+.report-purple-block__body {
   margin: 0;
   font-family: var(--font-serif);
   font-size: clamp(0.98rem, 1.3vw, 1.08rem);
   line-height: 1.5;
   color: #161021;
+}
+
+/* The small uppercase label above it ("THE WAY OUT", "THE TRAP", …). */
+.report-block-label {
+  margin: 0 0 6px;
+  font-family: var(--font-sans);
+  font-weight: 800;
+  font-size: 0.66rem;
+  letter-spacing: 1.3px;
+  text-transform: uppercase;
+  color: #6b5b95;
+}
+
+/* The way out reads as the resolution, so it sits in a tinted panel. */
+.report-confidence__wayout {
+  margin-top: clamp(16px, 2vw, 22px);
 }
 
 @media (max-width: 768px) {
@@ -14539,7 +14628,7 @@ input.autofill-dark:-internal-autofill-previewed {
     font-size: 0.85rem;
   }
 
-  .report-confidence__wayout {
+  .report-purple-block {
     padding: 14px 14px;
   }
 }
@@ -14792,8 +14881,8 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #161021;
   font-family: var(--font-serif);
   font-style: italic;
-  font-size: clamp(0.95rem, 1.2vw, 1.023rem);
-  line-height: 1.45;
+  font-size: var(--report-teaser-size);
+  line-height: var(--report-teaser-lh);
 }
 
 .report-confidence__peek-cta {
@@ -14820,10 +14909,10 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-confidence__details-para {
   margin: 0;
   color: #161021;
-  font-family: var(--font-serif);
+  font-family: var(--font-sans);
   font-weight: 400;
-  font-size: clamp(1rem, 1.3vw, 1.0625rem);
-  line-height: 1.55;
+  font-size: var(--report-prose-size);
+  line-height: var(--report-prose-lh);
   white-space: pre-wrap;
 }
 
@@ -15309,11 +15398,7 @@ input.autofill-dark:-internal-autofill-previewed {
 /* Verdict block — the centered star divider + the per-archetype `takeaway`
    sentence rendered as the Figma's italic pull-quote. */
 .report-accel__verdict {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  padding: clamp(6px, 1.4vw, 16px) 0 clamp(2px, 0.6vw, 6px);
+  /* Its card is block-level, so there is no parent row-gap to subtract. */
 }
 
 .report-accel__quote {
@@ -15450,8 +15535,8 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #161021;
   font-family: var(--font-serif);
   font-style: italic;
-  font-size: clamp(0.95rem, 1.2vw, 1.0227rem);
-  line-height: 1.45;
+  font-size: var(--report-teaser-size);
+  line-height: var(--report-teaser-lh);
 }
 
 .report-accel__details-body {
@@ -15466,8 +15551,8 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #3f3a4d;
   font-family: var(--font-sans);
   font-weight: 400;
-  font-size: 0.906rem;
-  line-height: 1.5;
+  font-size: var(--report-prose-size);
+  line-height: var(--report-prose-lh);
   white-space: pre-wrap;
 }
 
@@ -15773,26 +15858,18 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 .report-constellation__heading {
-  /* The heading left the card and became the chapter headline (Eman,
-     2026-08-19), so it carries the gap the card used to get from the deleted
-     `__intro` wrapper. `max-width` keeps the two-line break the design draws
-     instead of letting it run the full column width. */
-  max-width: 453px;
+  /* The heading left the card and became the chapter headline (Eman, 2026-08-19), so
+     it carries the gap the card used to get from the deleted `__intro` wrapper. Its
+     TYPE now comes from `.report-section__title` above; the two-line break comes from
+     the <br /> in the markup, so there is no max-width to fight the larger size. */
   margin: 0 0 clamp(16px, 1.8vw, 22px);
-  color: #161021;
-  font-family: var(--font-serif);
-  font-weight: 400;
-  /* Figma 8427:1072: Lora Regular 31.597px, tracking -0.474px — a size of its
-     own, ABOVE the chapter scale, because this heading opens the section that
-     reframes the whole report. Restored after being flattened to 29.34px. */
-  font-size: clamp(1.6rem, 2.6vw, 1.975rem);
-  letter-spacing: -0.474px;
-  line-height: 1.12;
-  letter-spacing: -0.47px;
 }
 
+/* Colour only — no italic. The gradient is this headline's own accent (Figma's
+   156.8deg pink → violet), kept when the rest of the treatment was matched to the
+   other chapter titles. Painted through the text, so the glyphs need a transparent
+   fill; everything else in the headline stays #161021. */
 .report-constellation__heading-accent {
-  font-style: italic;
   background-image: linear-gradient(156.8deg, #d05976 20.5%, #c167cf 48.1%, #8887f6 79.2%);
   -webkit-background-clip: text;
   background-clip: text;
@@ -15810,6 +15887,15 @@ input.autofill-dark:-internal-autofill-previewed {
   font-weight: 400;
   font-size: clamp(0.85rem, 1.1vw, 0.917rem);
   line-height: 1.6;
+}
+
+/* Capped measure, matching `.report-lovelang__caption` (30rem) — the line ran the
+   card's full width and read as a strip rather than a sentence. Reported
+   2026-08-21, with Love Language named as the reference. The cap sits on the inner
+   span so the paragraph keeps its full width and the divider under it stays whole. */
+.report-constellation__subline-text {
+  display: block;
+  max-width: 30rem;
 }
 
 .report-constellation__list {
@@ -17938,7 +18024,8 @@ input.autofill-dark:-internal-autofill-previewed {
     letter-spacing: 0.14em;
   }
 
-  .report-section__title {
+  .report-section__title,
+  .report-constellation__heading {
     font-size: 28px;
     line-height: 32px;
   }
@@ -22487,17 +22574,15 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #3f3a4d;
   font-family: var(--font-sans);
   font-weight: 400;
-  font-size: clamp(1rem, 1.4vw, 0.988rem);
-  line-height: 1.68;
+  font-size: var(--report-body-size);
+  line-height: var(--report-body-lh);
+  white-space: pre-line;
 }
 
 /* Centered italic takeaway pull-quote with a star divider above it. */
 .report-power__verdict {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: clamp(4px, 1vw, 10px) 0 clamp(2px, 0.6vw, 6px);
+  /* = .report-power__card's row-gap */
+  --verdict-parent-gap: clamp(14px, 1.6vw, 20.3px);
 }
 
 .report-power__takeaway {
@@ -22617,8 +22702,8 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #161021;
   font-family: var(--font-serif);
   font-style: italic;
-  font-size: clamp(0.95rem, 1.2vw, 1.023rem);
-  line-height: 1.45;
+  font-size: var(--report-teaser-size);
+  line-height: var(--report-teaser-lh);
 }
 
 .report-power__peek-cta {
@@ -22649,8 +22734,8 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #3f3a4d;
   font-family: var(--font-sans);
   font-weight: 400;
-  font-size: clamp(0.95rem, 1.3vw, 0.9rem);
-  line-height: 1.5;
+  font-size: var(--report-prose-size);
+  line-height: var(--report-prose-lh);
 }
 
 @media (max-width: 768px) {
@@ -23135,8 +23220,8 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #161021;
   font-family: var(--font-serif);
   font-style: italic;
-  font-size: clamp(0.95rem, 1.2vw, 1.023rem);
-  line-height: 1.45;
+  font-size: var(--report-teaser-size);
+  line-height: var(--report-teaser-lh);
 }
 
 .report-fantasy__peek-cta {
@@ -23165,8 +23250,8 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #3f3a4d;
   font-family: var(--font-sans);
   font-weight: 400;
-  font-size: clamp(0.95rem, 1.3vw, 0.9rem);
-  line-height: 1.5;
+  font-size: var(--report-prose-size);
+  line-height: var(--report-prose-lh);
 }
 
 @media (max-width: 768px) {
@@ -23289,8 +23374,9 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #3f3a4d;
   font-family: var(--font-sans);
   font-weight: 400;
-  font-size: clamp(1rem, 1.4vw, 0.988rem);
-  line-height: 1.68;
+  font-size: var(--report-body-size);
+  line-height: var(--report-body-lh);
+  white-space: pre-line;
 }
 
 /* Opening phrase of the lead paragraph (Figma 8427:2010). */
@@ -23366,11 +23452,8 @@ input.autofill-dark:-internal-autofill-previewed {
 
 /* Centered italic pull-quote with a star divider above it (matches Power). */
 .report-curiosity__verdict {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: clamp(12px, 1.6vw, 22.5px) 0 clamp(8px, 1.2vw, 18px);
+  /* = .report-curiosity__card's row-gap */
+  --verdict-parent-gap: clamp(12px, 1.4vw, 16px);
 }
 
 .report-curiosity__takeaway {
@@ -23490,8 +23573,8 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #161021;
   font-family: var(--font-serif);
   font-style: italic;
-  font-size: clamp(0.95rem, 1.2vw, 1.023rem);
-  line-height: 1.45;
+  font-size: var(--report-teaser-size);
+  line-height: var(--report-teaser-lh);
 }
 
 .report-curiosity__peek-cta {
@@ -23520,8 +23603,8 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #3f3a4d;
   font-family: var(--font-sans);
   font-weight: 400;
-  font-size: clamp(0.95rem, 1.3vw, 0.906rem);
-  line-height: 1.5;
+  font-size: var(--report-prose-size);
+  line-height: var(--report-prose-lh);
 }
 
 .report-curiosity__struct-list {
@@ -23775,12 +23858,12 @@ input.autofill-dark:-internal-autofill-previewed {
   /* The closing line sat tight against the ranked list above and the expander
      below, so the chapter's takeaway had nowhere to breathe. */
   margin: clamp(18px, 2.2vw, 30px) 0 clamp(10px, 1.2vw, 16px);
-  text-align: center;
   color: #3f3a4d;
   font-family: var(--font-sans);
   font-weight: 400;
-  font-size: clamp(0.95rem, 1.4vw, 0.988rem);
-  line-height: 1.68;
+  font-size: var(--report-body-size);
+  line-height: var(--report-body-lh);
+  white-space: pre-line;
 }
 
 /* Locked: blurred stand-in the PremiumOverlay anchors on — the reader's real
@@ -23888,8 +23971,8 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #161021;
   font-family: var(--font-serif);
   font-style: italic;
-  font-size: clamp(0.95rem, 1.2vw, 1.023rem);
-  line-height: 1.45;
+  font-size: var(--report-teaser-size);
+  line-height: var(--report-teaser-lh);
 }
 
 .report-lovelang__peek-cta {
@@ -23918,8 +24001,8 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #3f3a4d;
   font-family: var(--font-sans);
   font-weight: 400;
-  font-size: clamp(0.95rem, 1.3vw, 0.906rem);
-  line-height: 1.5;
+  font-size: var(--report-prose-size);
+  line-height: var(--report-prose-lh);
 }
 
 @media (max-width: 768px) {
@@ -24220,40 +24303,6 @@ input.autofill-dark:-internal-autofill-previewed {
   transition-delay: calc(var(--row, 0) * 240ms);
 }
 
-.report-libido__loop.report-chart-reveal:not(.is-revealed) .report-libido__loop-curve,
-.report-libido__loop.report-chart-reveal:not(.is-revealed) .report-libido__loop-arrow path {
-  opacity: 0;
-}
-
-.report-libido__loop.report-chart-reveal .report-libido__loop-curve {
-  stroke-dasharray: 1;
-  stroke-dashoffset: 1;
-  opacity: 1;
-  /* The path ships a `3 4.5` dashed presentation attribute, which read as a
-     line broken in the middle. CSS overrides it to a single full-length dash so
-     the loop-back arc is continuous once drawn, and a little more ink so it does
-     not disappear against the card at 1.5px. */
-  stroke-opacity: 0.7;
-  stroke-width: 1.8;
-}
-
-.report-libido__loop.report-chart-reveal.is-revealed .report-libido__loop-curve {
-  /* `linear`: a timing function is applied per keyframe interval, and easing a
-     self-drawing stroke reads as a stutter. */
-  animation: w-draw-line 900ms linear 820ms forwards;
-}
-
-/* The arrowhead is a separate filled path — it appears once the curve reaches it. */
-.report-libido__loop.report-chart-reveal
-  .report-libido__loop-arrow
-  path:not(.report-libido__loop-curve) {
-  transition: opacity 260ms ease-out 1.62s;
-}
-
-.report-libido__loop.report-chart-reveal.is-revealed .report-libido__loop-arrow path {
-  opacity: 1;
-}
-
 /* --- Initiation chart: send, then land, pair by pair ------------------------
    "What arrived" trails its own "what you sent" by 150ms, so each row plays as a
    send-then-land beat and the mismatch the chart is about lands as a sequence
@@ -24295,8 +24344,6 @@ input.autofill-dark:-internal-autofill-previewed {
 
 @media (prefers-reduced-motion: reduce) {
   .report-libido__loop.report-chart-reveal:not(.is-revealed) .report-libido__loop-chip,
-  .report-libido__loop.report-chart-reveal:not(.is-revealed) .report-libido__loop-curve,
-  .report-libido__loop.report-chart-reveal:not(.is-revealed) .report-libido__loop-arrow path,
   .report-initiation__chart.report-chart-reveal:not(.is-revealed) .report-initiation__chart-cell,
   .report-initiation__chart.report-chart-reveal:not(.is-revealed) .report-initiation__chart-head,
   .report-initiation__chart.report-chart-reveal:not(.is-revealed)
@@ -24306,15 +24353,7 @@ input.autofill-dark:-internal-autofill-previewed {
     scale: none;
   }
 
-  .report-libido__loop.report-chart-reveal .report-libido__loop-curve,
-  .report-libido__loop.report-chart-reveal.is-revealed .report-libido__loop-curve {
-    stroke-dasharray: none;
-    stroke-dashoffset: 0;
-    animation: none;
-  }
-
   .report-libido__loop.report-chart-reveal .report-libido__loop-chip,
-  .report-libido__loop.report-chart-reveal .report-libido__loop-arrow path,
   .report-initiation__chart.report-chart-reveal .report-initiation__chart-cell,
   .report-initiation__chart.report-chart-reveal .report-initiation__chart-head,
   .report-initiation__chart.report-chart-reveal .report-initiation__chart-divider {
@@ -24888,7 +24927,13 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-reading__preview > .report-premium-overlay,
 .report-reward__preview > .report-premium-overlay {
   grid-area: 1 / 1;
-  align-self: start;
+  /* Centred in the cell — which is the raster whenever the raster is the taller of
+     the two — so the offer sits in the MIDDLE of the blurred chapter rather than on
+     top of it (MO, 2026-08-21). Measured at 1440 before this, the card sat 55-468px
+     above the blurred region's centre depending on the chapter's length. Where the
+     card is the taller one (Reading Recommendations) the cell is the card and this
+     changes nothing. */
+  align-self: center;
 }
 
 /* Natural ratio and full height: the base rule crops to the box with object-fit. */
@@ -24936,6 +24981,7 @@ input.autofill-dark:-internal-autofill-previewed {
    folding it into the list above. */
 .report-attachment__result-wrap--locked {
   overflow: hidden;
+  position: relative;
   /* The box carries the result card's own frame. The raster inside it is a capture of
      that card, so its own border sits at the very edge of the image, where the feather
      softens it away to nothing — the blurred chapter then floated on white with no
@@ -24996,15 +25042,12 @@ input.autofill-dark:-internal-autofill-previewed {
   pointer-events: none;
 }
 
-/* THE CARD SIZES THE BOX; THE RASTER IS A 1:1 BACKDROP BEHIND IT
-   Same split as the accelerators chapter: the paywall card stays in flow and sets the
-   height, and the raster sits behind it at its natural ratio rather than being
-   stretched to fill (object-fit would scale the chapter's own type, and magnify the
-   blur with it). Top-anchored, because the result word and the first row are what the
-   reader should see continuing behind the card. */
+/* THE RASTER SIZES THE BOX, 1:1 */
 .report-attachment__result-wrap--locked > .report-attachment__card-preview {
-  position: absolute;
-  inset: 0 0 auto 0;
+  /* In flow: the offer left this box (it spans this box and the map now), so the
+     raster is what gives the box its height — the blurred card at its own scale,
+     never stretched, which would scale the chapter's type and its blur with it. */
+  position: relative;
   /* Must match the attach-card entry's blur x COLUMN_PAD_RATIO in
      scripts/generate-locked-previews.mjs (8 x 2.5): the capture carries this much
      padding so its blur fades out inside the file instead of being clipped square. */
@@ -25066,9 +25109,77 @@ input.autofill-dark:-internal-autofill-previewed {
   filter: blur(0.5px);
 }
 
-.report-attachment__result-wrap--locked > .report-premium-overlay {
+/* THE OFFER SITS ON THE SEAM BETWEEN THE TWO BLURRED BOXES
+   Attachment is the one chapter that locks in two places — the result card and the
+   map article — so "the middle" here means the middle of the PAIR: half the card over
+   each box, centred on the white gap between them.
+   Being a child of the SECTION rather than of either box is what makes that possible:
+   the result box clips (`overflow: hidden`), so an offer on the seam was sliced in
+   half from in there. From in there it could also only be centred on that one box,
+   which is what it did before this.
+   Centring on the two boxes' combined HEIGHT was the attempt in between: that is
+   arithmetically the middle but does not look like it, because the map box is about
+   twice the result box, so the card sat almost entirely on the map.
+   The row lines are positive, and the optional "what you will learn" row is handled
+   with `:has()`: counting from the end (`-3 / -1`) does NOT work here, because
+   negative grid lines resolve against the EXPLICIT grid and these rows are all
+   implicit — it silently placed the offer in two new rows ABOVE the chapter. */
+.report-attachment--locked {
+  /* Same single column and gap as the flex base; grid only so the offer can span the
+     two box rows. Positioned, so the offer's grid area becomes its containing block. */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  /* The rows are declared EXPLICITLY (result box, article) because an absolutely
+     positioned grid child can only reference lines of the explicit grid: against
+     implicit rows its area silently falls back to the container's padding box, which
+     here happens to end at the last box's bottom edge — so a wrong placement looked
+     right and only broke once the offer needed a row's BOTTOM edge. */
+  grid-template-rows: auto auto;
   position: relative;
-  inset: auto;
+}
+
+.report-attachment--locked:has(> .report-attachment__learn-pill-wrap) {
+  /* learn pill, result box, article */
+  grid-template-rows: auto auto auto;
+}
+
+.report-attachment--locked > .report-premium-overlay {
+  /* The result box's row — row 1 when the learn pill is absent. */
+  grid-row: 1 / 2;
+  grid-column: 1;
+  /* Hug the bottom edge of that row and shrink to the card, so the translate below is
+     half the CARD's height. */
+  top: auto;
+  bottom: 0;
+  height: max-content;
+  padding-top: 0;
+  padding-bottom: 0;
+  /* Down by half the card plus half the gap: its centre lands on the middle of the
+     white gap between the two boxes, half the card over each.
+     The transform is on the OVERLAY, not on the card: the card's own transform belongs
+     to its reveal animation, and an animated value beats a normal declaration, so the
+     same translate written on the card was silently dropped. */
+  transform: translateY(calc(50% + var(--report-attach-gap) / 2));
+  /* Stays absolute + inset: 0 from the base rule, which now resolves against that
+     two-row grid area: the offer covers both boxes and the gap between them, and the
+     base rule's flex centring lands the card in the middle of the pair.
+     Absolute is also what keeps the three boxes where they are — an in-flow item
+     placed on rows 2-3 of a one-column grid OCCUPIES those cells, so the boxes were
+     auto-placed after it and the whole chapter slid below the offer. Out of flow, it
+     takes no part in auto-placement. */
+  z-index: 5;
+  /* Only the card itself should swallow clicks: the article's own "unlock to read the
+     full explanation" button sits under the overlay's empty lower half. */
+  pointer-events: none;
+}
+
+.report-attachment--locked > .report-premium-overlay > * {
+  pointer-events: auto;
+}
+
+/* With the pill (the usual case) the result box is row 2. */
+.report-attachment--locked:has(> .report-attachment__learn-pill-wrap) > .report-premium-overlay {
+  grid-row: 2 / 3;
 }
 
 /* ==========================================================================
@@ -25849,87 +25960,76 @@ input.autofill-dark:-internal-autofill-previewed {
   }
 }
 
-/* ── The Over-Giving Loop: the arrow behaves like a loop ───────────────────
-   The curve draws itself in, then a bright short segment runs the path forever.
-   The section's whole claim is that the cycle has not stopped, so a static
-   arrow undersells it — a current still moving says it without a word of copy.
-   The three steps light in sequence and then keep re-lighting 1 -> 2 -> 3 on
-   the same 3.2s period as the current, so the chips and the arrow are visibly
-   the same loop rather than two unrelated animations. */
-.report-libido__loop-curve {
-  stroke-dasharray: 1;
-  stroke-dashoffset: 1;
+/* ── The Over-Giving Loop: the dashes march into the arrowhead ──────────────
+   Figma's dashed curve, in its own place in the gutter, with the dash pattern doing
+   the moving: one dash-period of `stroke-dashoffset` per cycle, linear and endless,
+   so the small lines travel up the curve and arrive at the arrowhead.
+   Nothing draws itself in here. A self-drawing stroke is invisible until it is drawn
+   and can be caught halfway, which is how this piece came to look broken; the dashes
+   are painted at rest and only their phase moves. */
+.report-libido__loop-curve,
+.report-libido__loop-glow {
+  /* 3 + 4.5 is the path's own dash period, so the pattern repeats seamlessly and the
+     motion never jumps. Both copies run the same animation, so the bright dashes sit
+     exactly on the base ones — a fraction out and it would read as double vision. */
+  animation: libido-dash-flow 1000ms linear infinite;
 }
 
-.report-libido__loop.is-revealed .report-libido__loop-curve {
-  animation: libido-loop-draw 1100ms cubic-bezier(0.16, 1, 0.3, 1) 200ms forwards;
+/* The bright copy is only visible where the climbing window uncovers it. A little
+   bloom, so the pulse reads as light rather than a second line. */
+.report-libido__loop-glow {
+  filter: drop-shadow(0 0 3.5px rgba(107, 79, 192, 0.65));
 }
 
-@keyframes libido-loop-draw {
-  to {
-    stroke-dashoffset: 0;
-  }
+/* The window: from just below the curve to clear of the top, once per pass. Linear,
+   because the wrap has to be invisible — the gradient's feathered ends do the hiding,
+   and any easing would show up as a hesitation at the seam. 189.84 = the viewBox's
+   157.84 plus the window's own 32. */
+.report-libido__loop.is-revealed .report-libido__loop-window {
+  animation: libido-glow-climb 2600ms linear infinite;
 }
 
-/* Hidden until the base curve has finished drawing. */
-.report-libido__loop-current {
-  stroke-dasharray: 0.14 0.86;
-  stroke-dashoffset: 1;
-  opacity: 0;
-}
-
-.report-libido__loop.is-revealed .report-libido__loop-current {
-  animation:
-    libido-loop-fade 400ms ease 1300ms forwards,
-    /* Three passes, not forever: the point lands in three and a permanent
-       flicker kept pulling the eye for the rest of the chapter. The dim at the
-       end (1300 + 3 x 3200) retires the travelling segment so it does not
-       freeze halfway along the curve. */
-    libido-loop-travel 3200ms linear 1300ms 3,
-    libido-loop-dim 600ms ease 10900ms forwards;
-}
-
-@keyframes libido-loop-fade {
-  to {
-    opacity: 0.85;
-  }
-}
-
-@keyframes libido-loop-dim {
-  to {
-    opacity: 0;
-  }
-}
-
-@keyframes libido-loop-travel {
+@keyframes libido-glow-climb {
   from {
-    stroke-dashoffset: 1;
+    translate: 0 0;
   }
   to {
-    stroke-dashoffset: 0;
+    translate: 0 -189.84px;
   }
 }
 
-.report-libido__loop-head {
-  transform-box: fill-box;
-  transform-origin: center;
-}
-
+/* The arrowhead takes the pulse as it lands — at 90% of the same period, which is
+   where the window reaches the top. */
 .report-libido__loop.is-revealed .report-libido__loop-head {
-  animation: libido-loop-head 3200ms ease-in-out 1300ms 3;
+  animation: libido-head-land 2600ms ease-out infinite;
+  transform-box: fill-box;
+  transform-origin: 60% 50%;
 }
 
-@keyframes libido-loop-head {
+@keyframes libido-head-land {
   0%,
-  62%,
+  84%,
   100% {
     fill-opacity: 0.45;
-    transform: scale(1);
+    scale: 1;
+    filter: none;
   }
-  /* Brightens as the current arrives at the head. */
-  78% {
+  91% {
     fill-opacity: 1;
-    transform: scale(1.18);
+    scale: 1.16;
+    filter: drop-shadow(0 0 4px rgba(107, 79, 192, 0.6));
+  }
+}
+
+@keyframes libido-dash-flow {
+  from {
+    /* A positive offset shifts the pattern BACK along the path, so walking it down to
+       zero carries the dashes forward — and this path runs bottom → top, into the
+       head. Verified in a browser by cross-correlating two frames. */
+    stroke-dashoffset: 7.5px;
+  }
+  to {
+    stroke-dashoffset: 0;
   }
 }
 
@@ -25963,19 +26063,97 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .report-libido__loop-curve {
-    stroke-dashoffset: 0 !important;
-    animation: none !important;
-  }
-
-  .report-libido__loop-current,
+  .report-libido__loop-curve,
+  .report-libido__loop-glow,
+  .report-libido__loop-window,
   .report-libido__loop-head,
   .report-libido__loop-chip {
     animation: none !important;
   }
 
-  .report-libido__loop-current {
-    opacity: 0 !important;
+  /* No sweep, so the bright copy would sit as a hard-edged patch wherever the window
+     happens to rest: hide it and leave the plain dashed curve. */
+  .report-libido__loop-glow {
+    display: none;
+  }
+}
+
+/* ── Growth Potentials: the graph and the ladder answer each other ──────────
+   Point at a step on the graph and its row lights up underneath; point at a row and
+   its step lights up. The arousal chart already worked this way and MO asked for the
+   same here (2026-08-22). Both halves set one `cue`, so there is no notion of which
+   one is "the control".
+   The highlight borrows the FIRST rung's own treatment — tinted wash plus a hairline
+   — so a cued row looks like something the page already does, in the ladder's purple
+   (or a deeper orange on the first rung, which is orange to begin with). */
+.report-growth__profile-hit {
+  fill: transparent;
+  /* The hit area must take the pointer even though it paints nothing. */
+  pointer-events: all;
+  cursor: pointer;
+}
+
+/* The swell and the glow live on the wrapper <g>, never on the circle: the dot's
+   entrance animation is `forwards` and its filled `transform: scale(1)` beats a plain
+   declaration, so a transform on the circle is silently dropped — the dot stayed flat
+   while its row lit up (reported 2026-08-22). The arousal arc's end dot hit this too. */
+.report-growth__profile-cue {
+  transition:
+    transform 220ms cubic-bezier(0.34, 1.4, 0.64, 1),
+    filter 220ms ease;
+}
+
+/* The cued step: bigger, with a glow the colour of the ladder. */
+.report-growth__profile-cue.is-active {
+  transform: scale(1.55);
+  filter: drop-shadow(0 0 7px rgba(121, 95, 200, 0.6));
+}
+
+/* The others step back so the cued one is unmistakable — opacity only, never
+   position: moving them would read as the chart rearranging itself. */
+.report-growth__profile.is-cued .report-growth__profile-cue:not(.is-active) {
+  filter: opacity(0.32);
+}
+
+.report-growth__rung:focus-visible {
+  outline: 2px solid rgba(121, 95, 200, 0.55);
+  outline-offset: 2px;
+}
+
+.report-growth__rung.is-active {
+  border-color: rgba(157, 138, 215, 0.45);
+  background: linear-gradient(180deg, rgba(157, 138, 215, 0.12) 0%, rgba(157, 138, 215, 0.04) 100%);
+}
+
+.report-growth__rung.is-first.is-active {
+  border-color: rgba(254, 104, 57, 0.45);
+  background: linear-gradient(180deg, rgba(254, 104, 57, 0.16) 0%, rgba(254, 104, 57, 0.05) 100%);
+}
+
+.report-growth__ladder.is-cued .report-growth__rung:not(.is-active) {
+  opacity: 0.55;
+}
+
+.report-growth__ladder.is-cued .report-growth__rung.is-active .report-growth__rung-dot {
+  scale: 1.25;
+}
+
+.report-growth__rung-dot {
+  transition: scale 200ms cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* The highlight is information, so it stays; only the movement goes. */
+  .report-growth__profile-cue,
+  .report-growth__rung,
+  .report-growth__rung-dot {
+    transition: none;
+  }
+
+  .report-growth__profile-cue.is-active,
+  .report-growth__ladder.is-cued .report-growth__rung.is-active .report-growth__rung-dot {
+    transform: none;
+    scale: 1;
   }
 }
 
@@ -27114,7 +27292,10 @@ input.autofill-dark:-internal-autofill-previewed {
    562px tall, so it still ends well inside the 1250px box. */
 @media (min-width: 769px) {
   .report-beliefs__preview--locked > .report-premium-overlay {
-    align-items: flex-start;
+    /* `center` rather than `flex-start`, with the padding kept: the padding holds the
+       card clear of the live rows and the centring then happens inside the blurred
+       part below them, which is where the offer belongs (MO, 2026-08-21). */
+    align-items: center;
     padding-top: 430px;
   }
 }

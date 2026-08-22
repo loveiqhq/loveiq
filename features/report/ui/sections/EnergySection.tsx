@@ -485,10 +485,17 @@ const EnergySection: FC<Props> = ({
             </div>
 
             {/* Tinted callout under the readings (Figma 8427:1894) — universal. */}
-            <p className="report-energy__note">
-              {ENERGY_THIRD_READING.body}{" "}
-              <em className="report-energy__note-em">{ENERGY_THIRD_READING.emphasis}</em>
-            </p>
+            {/* The standard purple block: label, then serif body. "Depth replaces
+                speed." used to run inline at the end of the paragraph in italic; it is
+                the block's sub-headline now, the way "THE WAY OUT" reads in Confidence
+                (MO, 2026-08-21). The trailing full stop is dropped because the label is
+                uppercased — the words are untouched. */}
+            <div className="report-energy__note report-purple-block">
+              <p className="report-block-label">
+                {ENERGY_THIRD_READING.emphasis.replace(/\.$/, "")}
+              </p>
+              <p className="report-purple-block__body">{ENERGY_THIRD_READING.body}</p>
+            </div>
 
             {/* Wide rule between the callout and the graph (Figma 8427:1897). */}
 
@@ -506,7 +513,7 @@ const EnergySection: FC<Props> = ({
             </div>
 
             {copy.takeaway ? (
-              <div className="report-energy__verdict">
+              <div className="report-energy__verdict report-verdict">
                 <VerdictStar />
                 <p className="report-energy__takeaway">{copy.takeaway}</p>
                 <span className="report-verdict-rule" aria-hidden="true" />

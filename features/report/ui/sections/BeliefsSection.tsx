@@ -5,6 +5,7 @@ import LockedPreviewImage from "./LockedPreviewImage";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import { renderEduPara } from "./eduPara";
+import { copyParagraphs } from "./copyParagraphs";
 
 /**
  * Server-resolved beliefs copy (`getReport2Section(name, "beliefs")`), threaded
@@ -234,7 +235,9 @@ const BeliefsSection: FC<Props> = ({
               ) : null}
             </div>
 
-            {copy["body.p1"] ? <p className="report-beliefs__note">{copy["body.p1"]}</p> : null}
+            {copy["body.p1"] ? (
+              <p className="report-beliefs__note">{copyParagraphs(copy["body.p1"])}</p>
+            ) : null}
           </>
         )}
 
