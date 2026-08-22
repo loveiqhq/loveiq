@@ -211,6 +211,44 @@ describe("locked preview images", () => {
     );
   });
 
+  it("starts every reveal before capturing, wherever it sits in the card", () => {
+    // `scrollIntoViewIfNeeded` only puts the section's TOP in view, and these cards run
+    // 700-1200px, so anything lower never met its own IntersectionObserver and stayed at
+    // `opacity: 0`. `settleReveal` then measured a perfectly stable HIDDEN element and
+    // passed — the arousal raster shipped with a blank stat panel inside it (found
+    // 2026-08-22; the same blank is in the previously committed file, so it was not a
+    // regression). Adding the gate classes by hand starts the same transitions the
+    // observer would, so the capture no longer depends on the viewport's height.
+    const gen = readFileSync(join(process.cwd(), "scripts/generate-locked-previews.mjs"), "utf8");
+    expect(gen).toContain("async function armReveals(");
+    // every gate the report uses, or a chart stays hidden in its own way
+    for (const gate of [
+      '[".report-chart-reveal", "is-revealed"]',
+      '[".report-part-reveal", "is-revealed"]',
+      '[".report-attachment-plane", "is-revealed"]',
+      '[".report-energy-graph", "is-revealed"]',
+      '[".report-growth", "is-animated"]',
+      '[".report-fantasy-map", "is-animated"]',
+      '[".report-power-plane", "is-animated"]',
+    ]) {
+      expect(gen, gate).toContain(gate);
+    }
+    // armed BEFORE settling, in both capture paths, or the settle waits on nothing
+    expect(
+      gen.match(/await armReveals\(page, sectionId\);\n\s*await settleReveal\(/g)?.length
+    ).toBe(2);
+  });
+
+  it("can regenerate one chapter instead of all 47 files", () => {
+    // A one-chapter layout change used to mean re-encoding every raster and reading a
+    // 47-line diff to find the two that mattered.
+    const gen = readFileSync(join(process.cwd(), "scripts/generate-locked-previews.mjs"), "utf8");
+    expect(gen).toContain("--only=");
+    // both capture paths honour it, or a filtered run silently redoes half the set
+    expect(gen).toContain("SECTION_IDS.filter(wanted)");
+    expect(gen).toContain("COLUMN_CAPTURES.filter((c) => wanted(c.name) || wanted(c.sectionId))");
+  });
+
   it("tones down anything that would survive the blur as a solid slab", () => {
     // A gaussian destroys text and thin lines, but a solid high-contrast slab just
     // becomes a soft dark blob — and a blob reads as a hard shape in an otherwise soft

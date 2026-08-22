@@ -495,11 +495,9 @@ const AttachmentPatternsSection: FC<Props> = ({
               ) : null}
 
               {copy["insight.value"] ? (
-                <div className="report-attachment-card__insight">
-                  <p className="report-attachment-card__insight-label">
-                    {copy["insight.label"] ?? "The Key"}
-                  </p>
-                  <p className="report-attachment-card__insight-value">{copy["insight.value"]}</p>
+                <div className="report-attachment-card__insight report-purple-block">
+                  <p className="report-block-label">{copy["insight.label"] ?? "The Key"}</p>
+                  <p className="report-purple-block__body">{copy["insight.value"]}</p>
                 </div>
               ) : null}
             </article>

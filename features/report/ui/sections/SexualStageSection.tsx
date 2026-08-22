@@ -125,11 +125,10 @@ const SexualStageSection: FC<Props> = ({ userStageLabel, copy }) => {
           ) : null}
 
           {needLabel || practicalLead ? (
-            <div className="report-stage2-card__need">
-              <span className="report-stage2-card__need-glow" aria-hidden="true" />
-              {needLabel ? <p className="report-stage2-card__need-label">{needLabel}</p> : null}
+            <div className="report-stage2-card__need report-purple-block">
+              {needLabel ? <p className="report-block-label">{needLabel}</p> : null}
               {practicalLead ? (
-                <p className="report-stage2-card__need-body">
+                <p className="report-stage2-card__need-body report-purple-block__body">
                   <span className="report-stage2-card__need-lead">{practicalLead}</span>
                   {practicalAccent ? (
                     <span className="report-stage2-card__need-accent"> {practicalAccent}</span>

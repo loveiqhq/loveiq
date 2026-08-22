@@ -5,6 +5,7 @@ import type { FC } from "react";
 import Link from "next/link";
 import { trackStartSurvey } from "@features/analytics/client";
 import { LoveIQMark, LoveIQWordmark } from "@shared/ui/branding/LoveIQBrand";
+import { restoreScroll } from "@shared/ui/restore-scroll";
 
 const navLinks = [
   { label: "Home", href: "/" },
@@ -167,7 +168,7 @@ const AboutNavSection: FC = () => {
         document.body.style.top = "";
         document.body.style.width = "";
         document.body.style.overflow = "";
-        window.scrollTo(0, scrollY);
+        restoreScroll(scrollY);
       };
     }
   }, [menuOpen]);

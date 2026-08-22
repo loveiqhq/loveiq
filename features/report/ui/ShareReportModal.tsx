@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type FC, type FormEvent, type MutableRefObject } from "react";
 import { canSharePlan } from "@features/report/server/planAccess";
 import { useReportShares } from "./hooks/useReportShares";
+import { restoreScroll } from "@shared/ui/restore-scroll";
 
 interface Props {
   open: boolean;
@@ -124,7 +125,7 @@ const ShareReportModal: FC<Props> = ({
       document.body.style.position = restore.bodyPosition;
       document.body.style.top = restore.bodyTop;
       document.body.style.width = restore.bodyWidth;
-      window.scrollTo(0, scrollY);
+      restoreScroll(scrollY);
       document.removeEventListener("keydown", handleKey);
     };
   }, [onClose, open]);

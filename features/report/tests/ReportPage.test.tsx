@@ -534,7 +534,11 @@ describe("ReportPage", () => {
       expect(document.body.style.right).toBe("");
       expect(document.body.style.width).toBe("");
       expect(document.body.style.overflow).toBe("");
-      expect(mockScrollTo).toHaveBeenCalledWith(0, 240);
+      // Restored through `restoreScroll`, which passes `behavior: "instant"`: the bare
+      // `scrollTo(0, y)` obeyed `html { scroll-behavior: smooth }` and, since the page
+      // is at 0 the instant `position: fixed` comes off, it animated from the top of the
+      // page down to where the reader was (MO, 2026-08-22).
+      expect(mockScrollTo).toHaveBeenCalledWith({ top: 240, left: 0, behavior: "instant" });
     },
     REPORT_MODAL_TEST_TIMEOUT_MS
   );

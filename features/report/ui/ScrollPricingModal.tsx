@@ -31,6 +31,7 @@ import {
   trackScrollPaywallShown,
   type PaywallDismissSource,
 } from "@features/analytics/client";
+import { restoreScroll } from "@shared/ui/restore-scroll";
 
 interface Props {
   open: boolean;
@@ -365,7 +366,7 @@ const ScrollPricingModal: FC<Props> = ({
       document.body.style.right = lock?.bodyRight ?? "";
       document.body.style.top = lock?.bodyTop ?? "";
       document.body.style.width = lock?.bodyWidth ?? "";
-      if (lock) window.scrollTo(0, lock.scrollY);
+      if (lock) restoreScroll(lock.scrollY);
       scrollLockRef.current = null;
       document.removeEventListener("keydown", handleKeyDown);
       document.removeEventListener("touchmove", handleTouchMove);

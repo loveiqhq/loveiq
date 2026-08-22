@@ -5,6 +5,7 @@ import type { FC } from "react";
 import Link from "next/link";
 import { trackStartSurvey } from "@features/analytics/client";
 import { LoveIQMark, LoveIQWordmark } from "@shared/ui/branding/LoveIQBrand";
+import { restoreScroll } from "@shared/ui/restore-scroll";
 
 // White-landing nav. Links point to the existing (dark) sub-pages — only the
 // landing page has a white variant. Labels follow the Figma design
@@ -145,7 +146,7 @@ const WNavSection: FC = () => {
       document.body.style.top = "";
       document.body.style.width = "";
       document.body.style.overflow = "";
-      window.scrollTo(0, scrollY);
+      restoreScroll(scrollY);
     };
   }, [menuOpen]);
 

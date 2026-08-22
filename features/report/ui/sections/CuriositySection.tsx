@@ -227,18 +227,19 @@ const CuriositySection: FC<Props> = ({
           </>
         ) : (
           <>
+            {/* Lead line, then the fit table — the order in Figma's Report_2.0 frame,
+                confirmed 2026-08-22.
+
+                `body.p2` and `body.p3` are deliberately NOT rendered. They exist in the
+                copy handoff (14 archetypes each, `data/report2-copy.ts`, generated from
+                copy-matrix-v2.csv) and the report route has gated and sent them since
+                the original Report 2.0 build (79903323) — but the design has one
+                paragraph here, not three. Rendering them was what made the text block
+                look like it had "moved up" over the illustration. Left in the payload
+                rather than deleted: it is real copy with no place in this layout, so it
+                is the designer's call where it goes. */}
             {copy["body.p1"] ? (
               <p className="report-curiosity__lead">{renderCuriosityLead(copy["body.p1"])}</p>
-            ) : null}
-            {/* p2 and p3 exist in the copy for all 14 archetypes and the server already
-                gates and sends them (see `curiosityUnlocked` in the report route), but
-                nothing rendered them, so two paragraphs per archetype never reached a
-                reader. Only the first paragraph gets the bold lead-in. */}
-            {copy["body.p2"] ? (
-              <p className="report-curiosity__lead">{copyParagraphs(copy["body.p2"])}</p>
-            ) : null}
-            {copy["body.p3"] ? (
-              <p className="report-curiosity__lead">{copyParagraphs(copy["body.p3"])}</p>
             ) : null}
 
             <FitTable fit={relationshipFit} />

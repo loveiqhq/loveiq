@@ -30,6 +30,7 @@ import {
   trackPriceShown,
   type PaywallDismissSource,
 } from "@features/analytics/client";
+import { restoreScroll } from "@shared/ui/restore-scroll";
 
 interface Props {
   accessPlan?: ReportAccessPlan;
@@ -421,7 +422,7 @@ const ReportPricingModal: FC<Props> = ({
       document.body.style.top = scrollLock?.bodyTop ?? "";
       document.body.style.width = scrollLock?.bodyWidth ?? "";
       if (scrollLock) {
-        window.scrollTo(0, scrollLock.scrollY);
+        restoreScroll(scrollLock.scrollY);
       }
       scrollLockRef.current = null;
       document.removeEventListener("keydown", handleKeyDown);

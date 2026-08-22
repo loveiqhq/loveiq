@@ -637,11 +637,9 @@ const ArousalSection: FC<Props> = ({
             ) : null}
 
             {copy["insight.value"] ? (
-              <div className="report-arousal__reframe">
-                <span className="report-arousal__reframe-label">
-                  {copy["insight.label"] ?? "The Reframe"}
-                </span>
-                <p className="report-arousal__reframe-value">{copy["insight.value"]}</p>
+              <div className="report-arousal__reframe report-purple-block">
+                <span className="report-block-label">{copy["insight.label"] ?? "The Reframe"}</span>
+                <p className="report-purple-block__body">{copy["insight.value"]}</p>
               </div>
             ) : null}
           </>

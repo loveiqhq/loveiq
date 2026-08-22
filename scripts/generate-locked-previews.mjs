@@ -267,6 +267,50 @@ const REVEAL_MAX_MS = 12000;
  * samples 250ms apart are identical. The initial minimum wait is there so a reveal
  * that has not started yet cannot read as "already settled".
  */
+/**
+ * Start every reveal in a section, wherever it sits.
+ *
+ * `scrollIntoViewIfNeeded` puts the section's TOP in view, which starts the reveals
+ * that happen to land in the viewport — but these cards run 700-1200px, so anything
+ * lower (the arousal chapter's stat row, for one) never met its own
+ * IntersectionObserver and stayed at `opacity: 0`. `settleReveal` then measured a
+ * perfectly stable hidden element and passed: the arousal raster has shipped with a
+ * blank stat panel in it.
+ *
+ * Adding the gate classes by hand starts the same transitions the observer would, so
+ * `settleReveal` waits them out as usual and the capture no longer depends on how tall
+ * the viewport happens to be.
+ */
+const REVEAL_GATES = [
+  [".report-chart-reveal", "is-revealed"],
+  [".report-part-reveal", "is-revealed"],
+  [".report-attachment-plane", "is-revealed"],
+  [".report-energy-graph", "is-revealed"],
+  [".report-growth", "is-animated"],
+  [".report-growth__profile", "is-animated"],
+  [".report-fantasy-map", "is-animated"],
+  [".report-power-plane", "is-animated"],
+];
+
+async function armReveals(page, sectionId) {
+  return page.evaluate(
+    ({ sectionId, gates }) => {
+      const root = document.getElementById(sectionId);
+      if (!root) return 0;
+      let n = 0;
+      for (const [selector, cls] of gates) {
+        for (const el of [root, ...root.querySelectorAll(selector)]) {
+          if (!el.matches(selector) || el.classList.contains(cls)) continue;
+          el.classList.add(cls);
+          n += 1;
+        }
+      }
+      return n;
+    },
+    { sectionId, gates: REVEAL_GATES }
+  );
+}
+
 async function settleReveal(page, sectionId) {
   const signature = () =>
     page.evaluate((id) => {
@@ -408,6 +452,7 @@ async function captureSection(page, sectionId, viewportName) {
   // immediately, catching the chapter at opacity 0. That is why an earlier run
   // reported a confident "ok 792x832" for 21 cards that were blank white.
   await page.locator(`#${sectionId}`).scrollIntoViewIfNeeded();
+  await armReveals(page, sectionId);
   await settleReveal(page, sectionId);
 
   const prepared = await page.evaluate(
@@ -592,6 +637,7 @@ async function captureColumn(
   viewportName
 ) {
   await page.locator(`#${sectionId}`).scrollIntoViewIfNeeded();
+  await armReveals(page, sectionId);
   await settleReveal(page, sectionId);
 
   const prepared = await page.evaluate(
@@ -784,8 +830,18 @@ async function captureColumn(
   };
 }
 
+/**
+ * `--only=<substring>` regenerates just the captures whose section id or name matches,
+ * e.g. `npm run previews:generate -- --only=curiosity`. A one-chapter change used to
+ * mean re-encoding all 47 files and reading a 47-line diff to find the two that
+ * mattered. No flag = everything, as before.
+ */
+const ONLY = (process.argv.find((a) => a.startsWith("--only=")) ?? "").slice(7).toLowerCase();
+const wanted = (name) => !ONLY || name.toLowerCase().includes(ONLY);
+
 async function main() {
   mkdirSync(OUT_DIR, { recursive: true });
+  if (ONLY) console.log(`only: captures matching "${ONLY}"`);
   const browser = await chromium.launch();
   const results = [];
 
@@ -805,7 +861,7 @@ async function main() {
 
     console.log(`\n== ${viewport.name} (${viewport.width}px)${plan ? ` — plan ${plan}` : ""}`);
     console.log(`   fixed chrome hidden: ${hidden.length ? hidden.join(", ") : "none"}`);
-    for (const id of SECTION_IDS) {
+    for (const id of SECTION_IDS.filter(wanted)) {
       const r = await captureSection(page, id, viewport.name);
       results.push({ ...r, viewport: viewport.name });
       if (r.error) console.log(`   FAIL ${id}: ${r.error}`);
@@ -828,7 +884,7 @@ async function main() {
     });
     await settle(columnPage);
     await hideFixedChrome(columnPage);
-    for (const spec of COLUMN_CAPTURES) {
+    for (const spec of COLUMN_CAPTURES.filter((c) => wanted(c.name) || wanted(c.sectionId))) {
       const r = await captureColumn(columnPage, spec, viewport.name);
       results.push({ ...r, viewport: viewport.name });
       if (r.error) console.log(`   FAIL ${spec.name}: ${r.error}`);

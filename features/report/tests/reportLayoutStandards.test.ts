@@ -109,6 +109,35 @@ describe("report layout standards", () => {
     }
   });
 
+  it("leaves no purple box carrying its own box or type", () => {
+    for (const dead of [
+      ".report-stage2-card__need {",
+      ".report-stage2-card__need-label {",
+      ".report-stage2-card__need-glow {",
+      ".report-attachment-card__insight {",
+      ".report-attachment-card__insight-label {",
+      ".report-attachment-card__insight-value {",
+      ".report-arousal__reframe-label {",
+      ".report-arousal__reframe-value {",
+    ]) {
+      expect(css, `${dead} should be the shared block's job now`).not.toContain(dead);
+    }
+    // the glow is gone from the markup too
+    const stage = readFileSync(
+      join(process.cwd(), "features/report/ui/sections/SexualStageSection.tsx"),
+      "utf8"
+    );
+    expect(stage).not.toContain("need-glow");
+  });
+
+  it("gives the beliefs closing line room on both sides", () => {
+    // It sat 18px under the belief columns and 26px above the purple Learn band, so the
+    // three read as one block (MO, 2026-08-22). The same seam elsewhere runs 31-43px,
+    // and the chapters that close with the star block carry 48.
+    expect(ruleBody(".report-beliefs__note")).toContain("margin: clamp(26px, 2.8vw, 40px) 0 0");
+    expect(ruleBody(".report-beliefs__details")).toContain("margin-top: clamp(26px, 2.8vw, 40px)");
+  });
+
   it("gives every educational and practical piece the same prose", () => {
     // "Standardise fonts and font sizes in educational pieces and practical pieces"
     // (MO, 2026-08-22). Fifteen chapters, fifteen hand-written rules, four different
@@ -218,25 +247,40 @@ describe("report layout standards", () => {
       ["BeliefsSection.tsx", 'copyParagraphs(copy["body.p1"])'],
       ["InitiationSection.tsx", 'copyParagraphs(copy["body.p1"])'],
       ["PowerSection.tsx", 'copyParagraphs(copy["body.p1"])'],
-      ["CuriositySection.tsx", 'copyParagraphs(copy["body.p2"])'],
+      // Curiosity's lead goes through it inside `renderCuriosityLead`, which is where
+      // its bold opening phrase is applied.
+      ["CuriositySection.tsx", "const text = copyParagraphs(raw)"],
     ] as const) {
       const src = readFileSync(join(process.cwd(), "features/report/ui/sections", file), "utf8");
       expect(src, file).toContain(slot);
     }
   });
 
-  it("renders the curiosity paragraphs the server already sends", () => {
-    // `body.p2`/`body.p3` exist for all 14 archetypes and the route gates and ships
-    // them, but no component read them, so two paragraphs per archetype never reached
-    // a reader.
+  it("leaves the curiosity paragraphs the design has no place for unrendered", () => {
+    // `body.p2` and `body.p3` are real handoff copy — 14 archetypes each in
+    // `data/report2-copy.ts`, generated from copy-matrix-v2.csv — and the report route
+    // has gated and sent them since the original Report 2.0 build (79903323). Nothing
+    // rendered them. Rendering them (2026-08-22) put three paragraphs where Figma's
+    // Report_2.0 frame has one, which is what made the block look like it had moved up
+    // over the illustration; the design won. The payload keeps them: the copy exists,
+    // so where it goes is the designer's call, not something to delete quietly.
     const route = readFileSync(join(process.cwd(), "app/api/report/route.ts"), "utf8");
     expect(route).toContain('"body.p2": curiosityUnlocked');
+    expect(route).toContain('"body.p3": curiosityUnlocked');
     const src = readFileSync(
       join(process.cwd(), "features/report/ui/sections/CuriositySection.tsx"),
       "utf8"
     );
-    expect(src).toContain('copy["body.p2"] ?');
-    expect(src).toContain('copy["body.p3"] ?');
+    // declared on the props, so the payload stays typed and visible to the next reader
+    expect(src).toContain('"body.p2"?: string | null;');
+    // ...but not rendered
+    expect(src).not.toMatch(/copy\["body\.p2"\]\s*\?/);
+    expect(src).not.toMatch(/copy\["body\.p3"\]\s*\?/);
+    // and the lead sits ABOVE the fit table, the order in the Figma frame
+    const lead = src.indexOf('renderCuriosityLead(copy["body.p1"])');
+    const table = src.indexOf("<FitTable fit={relationshipFit} />");
+    expect(lead).toBeGreaterThan(-1);
+    expect(table).toBeGreaterThan(lead);
   });
 
   it("draws the Energy & Risk callout as the standard purple block", () => {
@@ -249,14 +293,25 @@ describe("report layout standards", () => {
     expect(ruleBody(".report-purple-block__body")).toContain("font-family: var(--font-serif)");
     expect(ruleBody(".report-block-label")).toContain("text-transform: uppercase");
 
+    // "Lets keep the same look and feel for ALL purple boxes" (MO, 2026-08-22). Five of
+    // them: Confidence's way-out (the reference), Energy's callout, Attachment's key,
+    // Arousal's reframe, and the Sexual Stage need tile — which was the furthest off,
+    // with an opaque #f2ecfa fill, an 18px non-uppercase label, a 15px sans body and a
+    // radial glow blob behind it. Verified in a browser: box, label and body computed
+    // identically across all five at 1440/768/390.
     for (const [file, sel] of [
       ["ConfidenceSection.tsx", "report-confidence__wayout report-purple-block"],
       ["EnergySection.tsx", "report-energy__note report-purple-block"],
+      ["AttachmentPatternsSection.tsx", "report-attachment-card__insight report-purple-block"],
+      ["ArousalSection.tsx", "report-arousal__reframe report-purple-block"],
+      ["SexualStageSection.tsx", "report-stage2-card__need report-purple-block"],
     ] as const) {
       const src = readFileSync(join(process.cwd(), "features/report/ui/sections", file), "utf8");
       expect(src, file).toContain(`className="${sel}"`);
       expect(src, file).toContain('className="report-block-label"');
-      expect(src, file).toContain('className="report-purple-block__body"');
+      // the stage tile keeps its own class for its margin, so match the class not the
+      // whole attribute
+      expect(src, file).toContain("report-purple-block__body");
     }
     // the inline italic emphasis and its rule are gone
     expect(css).not.toContain(".report-energy__note-em");

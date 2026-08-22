@@ -7616,37 +7616,6 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #3f3a4d;
 }
 
-/* "The Key" tile — lilac panel, faint tint + hairline. */
-.report-attachment-card__insight {
-  display: flex;
-  flex-direction: column;
-  gap: 2.257px;
-  padding: 16.926px 17.128px;
-  border: 1.128px solid rgba(157, 138, 215, 0.2);
-  border-radius: 13.542px;
-  background: rgba(157, 138, 215, 0.09);
-}
-
-.report-attachment-card__insight-label {
-  margin: 0;
-  font-family: var(--font-sans);
-  font-weight: 700;
-  font-size: 11.285px;
-  line-height: 18.62px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: #6b5b95;
-}
-
-.report-attachment-card__insight-value {
-  margin: 0;
-  font-family: var(--font-serif);
-  font-weight: 400;
-  font-size: clamp(15px, 1.9vw, 16.927px);
-  line-height: 1.5;
-  color: #161021;
-}
-
 /* ── Article: the map + caption + educational block ──
    White card with the bottom rounding + a deeper drop shadow (the card
    this article visually continues from the result card in the Figma). */
@@ -9798,7 +9767,11 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 .report-beliefs__note {
-  margin: 18px 0 0;
+  /* 18 -> 40: this closing line sat 18px under the belief columns and 26px above the
+     purple Learn band, so the three read as one block. The same seam in the other
+     chapters runs 31-43px, and the ones that close with the star block carry 48
+     (MO, 2026-08-22). */
+  margin: clamp(26px, 2.8vw, 40px) 0 0;
   color: #3f3a4d;
   font-family: var(--font-sans);
   font-weight: 400;
@@ -9830,7 +9803,9 @@ input.autofill-dark:-internal-autofill-previewed {
    italic teaser, and an expandable body. Peek CTA sits over the teaser. */
 .report-beliefs__details {
   position: relative;
-  margin-top: clamp(18px, 2vw, 26px);
+  /* Matches the note's own top margin, so the closing line sits evenly between the
+     belief columns above it and this band below it (MO, 2026-08-22). */
+  margin-top: clamp(26px, 2.8vw, 40px);
   padding-top: 18px;
   border-top: 1.128px solid rgba(157, 138, 215, 0.22);
   background: linear-gradient(180deg, rgba(157, 138, 215, 0.1) 0%, rgba(157, 138, 215, 0.02) 100%);
@@ -10058,7 +10033,11 @@ input.autofill-dark:-internal-autofill-previewed {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: clamp(9px, 1vw, 11.3px);
+  /* 11.3 -> 32: the tightest card in the report. Its sensitivity graph, the
+     closing paragraph and the star block sat 11px apart at 1440 and 9px on a phone,
+     so the chapter read as one dense column (MO, 2026-08-22, "also more padding").
+     Same value as the arousal card, the other one MO named. */
+  gap: clamp(18px, 2.2vw, 32px);
   width: 100%;
   padding: clamp(22px, 2.4vw, 30.5px);
   border: 1.128px solid rgba(22, 16, 33, 0.09);
@@ -10132,7 +10111,7 @@ input.autofill-dark:-internal-autofill-previewed {
 /* Centered italic takeaway pull-quote with a star divider above it. */
 .report-insecurities__verdict {
   /* = .report-insecurities__card's row-gap */
-  --verdict-parent-gap: clamp(9px, 1vw, 11.3px);
+  --verdict-parent-gap: clamp(18px, 2.2vw, 32px);
 }
 
 .report-insecurities__takeaway {
@@ -11216,7 +11195,10 @@ input.autofill-dark:-internal-autofill-previewed {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: clamp(14px, 1.6vw, 20.3px);
+  /* 20.3 -> 32: the curve, the acts, the stat row and the reframe box were all
+     20px apart, which read as a stack rather than four separate reads (MO,
+     2026-08-22, "give these elements more spacing between them"). */
+  gap: clamp(18px, 2.2vw, 32px);
   width: 100%;
   padding: clamp(22px, 2.4vw, 30.5px);
   border: 1.128px solid rgba(157, 138, 215, 0.35);
@@ -11445,37 +11427,6 @@ input.autofill-dark:-internal-autofill-previewed {
   font-weight: 400;
   font-size: 0.741rem;
   line-height: 1.4;
-}
-
-/* The Reframe box — tinted purple band with a label + serif value (8427:2261). */
-.report-arousal__reframe {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  width: 100%;
-  padding: 17px;
-  border: 1.128px solid rgba(157, 138, 215, 0.2);
-  border-radius: 13.5px;
-  background: rgba(157, 138, 215, 0.09);
-}
-
-.report-arousal__reframe-label {
-  color: #6b5b95;
-  font-family: var(--font-sans);
-  font-weight: 700;
-  font-size: 0.705rem;
-  letter-spacing: 1.58px;
-  text-transform: uppercase;
-  line-height: 1.65;
-}
-
-.report-arousal__reframe-value {
-  margin: 0;
-  color: #161021;
-  font-family: var(--font-serif);
-  font-weight: 400;
-  font-size: clamp(1rem, 1.4vw, 1.058rem);
-  line-height: 1.5;
 }
 
 /* Locked: blurred stand-in the PremiumOverlay anchors on — the real
@@ -20608,46 +20559,8 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #3f3a4d;
 }
 
-/* "Main Need Right Now" tile — lilac panel with a blurred glow on the left. */
-.report-stage2-card__need {
-  position: relative;
-  border-radius: 14px;
-  border: 1px solid #d6c7ed;
-  background: #f2ecfa;
-  padding: 23px clamp(20px, 3.2vw, 29px);
-  overflow: hidden;
-  isolation: isolate;
-}
-
-.report-stage2-card__need-glow {
-  position: absolute;
-  left: -71px;
-  top: 11px;
-  width: 260px;
-  height: 170px;
-  border-radius: 9999px;
-  background: radial-gradient(
-    50% 50% at 50% 50%,
-    rgba(157, 138, 215, 0.28) 0%,
-    rgba(157, 138, 215, 0) 100%
-  );
-  z-index: -1;
-  pointer-events: none;
-}
-
-.report-stage2-card__need-label {
-  margin: 0;
-  font-family: var(--font-sans);
-  font-weight: 600;
-  font-size: 18px;
-  line-height: 1.35;
-  color: #1a1429;
-}
-
 .report-stage2-card__need-body {
   margin: 10px 0 0;
-  font-size: 15px;
-  line-height: 1.5;
 }
 
 .report-stage2-card__need-lead {
