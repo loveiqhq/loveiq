@@ -21,7 +21,15 @@ import { test, expect } from "@playwright/test";
 // To refresh: bump the date here, run `npx playwright test visual-regression
 // --update-snapshots --project="Desktop Chrome"`, eyeball every diff, commit.
 
-// Helper to disable all animations/transitions for stable screenshots
+// Helper to disable all animations/transitions for stable screenshots, AND to
+// force scroll-reveal elements visible.
+//
+// The reveal rules belong here rather than in individual tests: a `fullPage`
+// capture stitches the page without ever scrolling it, so anything still waiting
+// on its IntersectionObserver stays at opacity 0 and is captured as blank space.
+// Three tests used to inject these rules themselves and four did not, which is
+// why the about-page baseline came out as a hero, six thousand blank pixels and a
+// footer. Every test calls this helper, so putting them here covers all of them.
 async function disableAnimations(page: import("@playwright/test").Page) {
   await page.addStyleTag({
     content: `
@@ -32,7 +40,15 @@ async function disableAnimations(page: import("@playwright/test").Page) {
         transition-delay: 0s !important;
         scroll-behavior: auto !important;
       }
-      video { visibility: hidden !important; }
+      .animate-on-scroll,
+      .reveal-on-scroll {
+        opacity: 1 !important;
+        transform: none !important;
+      }
+      video,
+      iframe {
+        visibility: hidden !important;
+      }
     `,
   });
 }
@@ -67,14 +83,6 @@ test.describe("Visual Regression", () => {
     await page.goto("/");
     await page.waitForLoadState("networkidle");
     await disableAnimations(page);
-    // Force all scroll-triggered elements visible (full-page capture triggers scroll animations)
-    await page.addStyleTag({
-      content: `
-        .animate-on-scroll { opacity: 1 !important; transform: none !important; }
-        .reveal-on-scroll { opacity: 1 !important; transform: none !important; }
-        iframe { visibility: hidden !important; }
-      `,
-    });
     // Landing page has lots of scroll-triggered content + late-arriving images.
     // Wait for fonts + network idle a second time to catch any deferred fetches.
     await waitForVisualReady(page);
@@ -112,10 +120,6 @@ test.describe("Visual Regression", () => {
     await page.goto("/glossary");
     await page.waitForLoadState("networkidle");
     await disableAnimations(page);
-    // Force scroll-triggered content visible for a deterministic full-page capture.
-    await page.addStyleTag({
-      content: `.reveal-on-scroll { opacity: 1 !important; transform: none !important; }`,
-    });
     await waitForVisualReady(page);
     await expect(page).toHaveScreenshot("glossary-page.png", {
       fullPage: true,
@@ -127,9 +131,6 @@ test.describe("Visual Regression", () => {
     await page.goto("/glossary/abandonment-insecurity");
     await page.waitForLoadState("networkidle");
     await disableAnimations(page);
-    await page.addStyleTag({
-      content: `.reveal-on-scroll { opacity: 1 !important; transform: none !important; }`,
-    });
     await waitForVisualReady(page);
     await expect(page).toHaveScreenshot("glossary-term-page.png", {
       fullPage: true,
