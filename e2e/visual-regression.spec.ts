@@ -54,8 +54,16 @@ async function disableAnimations(page: import("@playwright/test").Page) {
 }
 
 // Deterministic "everything has settled" wait — replaces ad-hoc waitForTimeout
-// in screenshot tests. Waits for fonts to load and one extra requestAnimationFrame
-// pass so any layout caused by font-swap is visible before capture.
+// in screenshot tests. Waits for fonts to load, forces every lazy image to load
+// and waits for it, then gives one extra requestAnimationFrame pass so any layout
+// caused by font-swap is visible before capture.
+//
+// The lazy-image step matters for `fullPage` captures. next/image emits
+// loading="lazy" unless it is marked priority, so an image below the fold may or
+// may not have arrived by capture time — networkidle does not help, because the
+// request is never made until the element approaches the viewport. That is a
+// coin-flip baseline: the about page's two leadership photos came out as empty
+// grey boxes. Flipping them to eager and awaiting each one removes the race.
 async function waitForVisualReady(page: import("@playwright/test").Page) {
   await page.evaluate(
     () =>
@@ -68,6 +76,28 @@ async function waitForVisualReady(page: import("@playwright/test").Page) {
         }
       })
   );
+
+  await page.evaluate(async () => {
+    const images = Array.from(document.images);
+    for (const img of images) {
+      img.loading = "eager";
+    }
+    await Promise.all(
+      images
+        .filter((img) => !img.complete)
+        .map(
+          (img) =>
+            new Promise<void>((resolve) => {
+              // resolve on error too — a genuinely broken image should show up as a
+              // diff against the baseline, not hang the test until it times out
+              img.addEventListener("load", () => resolve(), { once: true });
+              img.addEventListener("error", () => resolve(), { once: true });
+            })
+        )
+    );
+  });
+
+  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
 }
 
 test.describe("Visual Regression", () => {
