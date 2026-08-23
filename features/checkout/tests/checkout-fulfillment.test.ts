@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { __resetSlackDedupForTests } from "@shared/observability/slack";
 
 const mockFetchWithTimeout = vi.fn();
 
@@ -781,6 +782,42 @@ describe("checkout fulfillment", () => {
   describe("Slack purchase notification", () => {
     const SLACK_URL = "https://hooks.slack.com/services/TEST/PAYMENTS/secret";
 
+    beforeEach(() => {
+      // notifySlack dedups identical messages for 60s, keyed on the first 100
+      // chars of the fallback text. These fixtures all reuse submission #70 with
+      // the same plan and amount, so without a reset the 2nd and 3rd assertions
+      // would silently receive zero calls. Real buyers have distinct ids.
+      __resetSlackDedupForTests();
+    });
+
+    /**
+     * The purchase ping now sends Block Kit, so the detail lives in `blocks`, not
+     * in `text` (which is only the fallback / dead-letter string). Flatten
+     * everything Slack will actually display so these assertions cover the whole
+     * message.
+     */
+    function rendered(body: string): string {
+      const parsed = JSON.parse(body) as {
+        text: string;
+        blocks?: Array<{
+          text?: { text?: string };
+          fields?: Array<{ text?: string }>;
+          elements?: Array<{ text?: { text?: string }; url?: string; text_?: string }>;
+        }>;
+      };
+      const parts: string[] = [parsed.text];
+      for (const block of parsed.blocks ?? []) {
+        if (block.text?.text) parts.push(block.text.text);
+        for (const field of block.fields ?? []) if (field.text) parts.push(field.text);
+        for (const el of block.elements ?? []) {
+          if (typeof el.text === "string") parts.push(el.text);
+          else if (el.text?.text) parts.push(el.text.text);
+          if (el.url) parts.push(el.url);
+        }
+      }
+      return parts.join("\n");
+    }
+
     function setupHappyPathMocks(
       opts: { existingPayment?: boolean; utmTracker?: string | null } = {}
     ) {
@@ -905,18 +942,27 @@ describe("checkout fulfillment", () => {
 
       expect(slackCalls).toHaveLength(1);
       const body = JSON.parse(slackCalls[0]!.body) as { text: string; username: string };
+      const all = rendered(slackCalls[0]!.body);
       expect(body.username).toBe("payment_notification");
-      expect(body.text).toContain("*Eman*");
+      expect(all).toContain("*Eman*");
       // lookupRecipientForSubmission lowercases the email before returning it,
-      // so the masked output is also lowercase.
-      expect(body.text).toContain("e***@loveiq.org");
-      expect(body.text).toContain("Just a snapshot");
-      expect(body.text).toContain("Relational Nurturer");
+      // so the masked output is also lowercase. It is rendered as a code span so
+      // Slack does not treat the mask's asterisks as bold markers.
+      expect(all).toContain("`e***@loveiq.org`");
+      expect(all).toContain("Just a snapshot");
+      expect(all).toContain("Relational Nurturer");
+      expect(all).toContain("EUR 19.99");
+      // The fallback text must stand alone: it is all that gets dead-lettered on a
+      // delivery failure, and its first 100 chars are the 60s dedup key.
+      expect(body.text).toContain("Purchase #");
       expect(body.text).toContain("EUR 19.99");
-      // No utm_tracker, no forcedPaywallArm, no landingVariant → Direct + unknown.
-      expect(body.text).toContain("Source: Direct");
-      expect(body.text).toContain("Paywall: unknown");
-      expect(body.text).toContain("Journey: unknown");
+      // No utm_tracker → Direct. No forcedPaywallArm/landingVariant → not recorded,
+      // stated as such rather than guessed.
+      expect(all).toContain("Direct");
+      expect(all).toContain("Paywall style");
+      expect(all).toContain("Not recorded");
+      // every arm is named in plain English, never as a raw code
+      expect(all).not.toContain("white_prev");
 
       delete process.env.SLACK_PAYMENTS_WEBHOOK_URL;
     });
@@ -959,14 +1005,15 @@ describe("checkout fulfillment", () => {
       });
 
       expect(slackCalls).toHaveLength(1);
-      const body = JSON.parse(slackCalls[0]!.body) as { text: string };
-      expect(body.text).toContain("Source: Referral");
+      const all = rendered(slackCalls[0]!.body);
+      expect(all).toContain("Referral");
       // utm values are escaped for Slack (underscore → \_ so it isn't italicised).
-      expect(body.text).toContain("referral / email / survey\\_invite");
-      expect(body.text).toContain("Paywall: Forced (must pay to view)");
-      expect(body.text).toContain("Journey: White landing");
-      // utm_content (base64 referrer email) must never reach Slack.
-      expect(body.text).not.toContain("cmVmZXJyZXJAZXhhbXBsZS5jb20=");
+      expect(all).toContain("referral / email / survey\\_invite");
+      expect(all).toContain("Forced paywall");
+      expect(all).toContain("Current homepage");
+      // utm_content (base64 referrer email) must never reach Slack — in the
+      // fallback text OR in any block.
+      expect(all).not.toContain("cmVmZXJyZXJAZXhhbXBsZS5jb20=");
 
       delete process.env.SLACK_PAYMENTS_WEBHOOK_URL;
     });
@@ -1003,10 +1050,14 @@ describe("checkout fulfillment", () => {
       });
 
       expect(slackCalls).toHaveLength(1);
-      const body = JSON.parse(slackCalls[0]!.body) as { text: string };
-      expect(body.text).toContain("Source: Organic");
-      expect(body.text).toContain("Paywall: Closeable (can dismiss & pay later)");
-      expect(body.text).toContain("Journey: Dark / Control landing");
+      const all = rendered(slackCalls[0]!.body);
+      expect(all).toContain("Organic");
+      expect(all).toContain("Dismissible paywall");
+      // landingVariant "control" is the RETIRED round-1 dark arm and must be
+      // labelled as itself — not conflated with the round-2 "previous design".
+      expect(all).toContain("Original dark homepage");
+      expect(all).toContain("retired arm");
+      expect(all).not.toContain("Previous homepage");
 
       delete process.env.SLACK_PAYMENTS_WEBHOOK_URL;
     });
@@ -1033,9 +1084,10 @@ describe("checkout fulfillment", () => {
       });
 
       expect(slackCalls).toHaveLength(1);
-      const body = JSON.parse(slackCalls[0]!.body) as { text: string };
-      expect(body.text).toContain("For you & your partner");
-      expect(body.text).not.toMatch(/\([A-Z][a-z]+ [A-Z][a-z]+\)/);
+      const all = rendered(slackCalls[0]!.body);
+      expect(all).toContain("For you & your partner");
+      // all_reports unlocks every archetype, so naming one would mislead.
+      expect(all).not.toContain("Relational Nurturer");
 
       delete process.env.SLACK_PAYMENTS_WEBHOOK_URL;
     });

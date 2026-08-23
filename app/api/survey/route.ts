@@ -10,6 +10,9 @@ import { scheduleAfterResponse } from "@shared/http/after-response";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { verifyCsrfToken } from "@shared/http/csrf";
 import logger from "@shared/observability/logger";
+import { buildSubmissionJourney } from "@features/attribution/server/journey";
+import { buildJourneyMessage } from "@features/attribution/server/slack-journey";
+import { codeSpan } from "@shared/observability/slack-blocks";
 import { notifySlack, maskEmail, escapeSlack } from "@shared/observability/slack";
 import { surveyCompleteEmail } from "@features/survey/server/emails/survey-complete";
 import { surveyCompleteBEmail } from "@features/survey/server/emails/survey-complete-b";
@@ -95,41 +98,46 @@ const notifySlackSurvey = async ({
   questionCount: number;
   durationMs: number;
 }) => {
-  const url = process.env.SLACK_SURVEY_WEBHOOK_URL;
+  // Routed through notifySlack rather than a bespoke fetch, which is what buys the
+  // 60s dedup, the dead-letter row on failure, and Block Kit support. The old
+  // hand-rolled sender had none of those and re-implemented email masking inline.
+  const journey = await buildSubmissionJourney(submissionId);
 
-  if (!url) {
-    logger.warn(
-      { submissionId, sessionId },
-      "Slack webhook missing: set SLACK_SURVEY_WEBHOOK_URL to enable survey alerts."
-    );
+  if (!journey) {
+    // The submission row was unreadable (a slow replica, say). Still tell the team
+    // something rather than going silent.
+    await notifySlack({
+      channel: "survey",
+      kind: "survey_completed",
+      text: `:memo: Survey completed #${submissionId} — ${escapeSlack(firstName)} (${codeSpan(maskEmail(email))}) — ${questionCount} questions in ~${Math.round(durationMs / 60_000)} min`,
+      username: "survey_response",
+      context: { submissionId, sessionId },
+    });
     return;
   }
 
-  const maskedEmail = email.replace(/^(.).+(@.+)$/, "$1***$2");
-  const minutes = Math.round(durationMs / 60_000);
-  const text = `Survey completed: *${firstName}* (${maskedEmail}) - ${questionCount} questions in ~${minutes} min`;
+  const message = buildJourneyMessage(journey, { kind: "survey_completed", questionCount });
 
-  try {
-    logger.info({ submissionId, sessionId, maskedEmail }, "Sending Slack survey notification");
-    const res = await fetchWithTimeout(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, username: "survey_response" }),
-      timeoutMs: 5000,
-    });
+  logger.info(
+    {
+      submissionId,
+      sessionId,
+      blocks: message.blocks.length,
+      payloadChars: message.size,
+      trimmed: message.trimmed,
+      arms: journey.arms,
+    },
+    "Sending Slack survey notification"
+  );
 
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      logger.error(
-        { submissionId, sessionId, status: res.status, body },
-        "Slack survey webhook failed"
-      );
-    } else {
-      logger.info({ submissionId, sessionId, status: res.status }, "Slack survey webhook sent");
-    }
-  } catch (err) {
-    logger.error({ err, submissionId, sessionId }, "Slack survey webhook error");
-  }
+  await notifySlack({
+    channel: "survey",
+    kind: "survey_completed",
+    text: message.text,
+    blocks: message.blocks,
+    username: "survey_response",
+    context: { submissionId, sessionId },
+  });
 };
 
 export async function POST(request: Request) {

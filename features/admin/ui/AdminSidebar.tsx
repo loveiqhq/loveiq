@@ -5,6 +5,12 @@ import { getCsrfToken } from "@shared/http/csrf-client";
 
 const analyticsItems = [
   {
+    href: "/admin",
+    label: "Overview",
+    // house-style: a single SVG path string, matching the other icons
+    icon: "M3 12h4l3 8 4-16 3 8h4",
+  },
+  {
     href: "/admin/analytics",
     label: "Core KPIs",
     icon: "M9 19V6l7 13V6m4 13V10m-4 9V3m-8 16V13",

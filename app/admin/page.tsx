@@ -1,7 +1,15 @@
-import { redirect } from "next/navigation";
+import type { Metadata } from "next";
 
-// The admin home is now Core KPIs (the Command Center was removed in the
-// 2026-07 admin cleanup). Land admins straight on the KPIs dashboard.
+import AbOverviewDashboard from "@features/admin/ui/AbOverviewDashboard";
+
+// Was a bare redirect to /admin/analytics — there was no landing page at all.
+// It is now the first screen an admin sees: how the funnel is doing and what the
+// A/B tests are saying, in plain language.
+export const metadata: Metadata = {
+  title: "Overview",
+  robots: { index: false, follow: false },
+};
+
 export default function AdminPage() {
-  redirect("/admin/analytics");
+  return <AbOverviewDashboard />;
 }

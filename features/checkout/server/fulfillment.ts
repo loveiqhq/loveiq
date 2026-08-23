@@ -80,71 +80,24 @@ async function lookupRecipientForSubmission(submissionId: number): Promise<{
   }
 }
 
-// Paid-traffic media identifiers (utm_medium). Anything here, or any utm_campaign
-// at all, classifies the visit as a paid acquisition.
-const PAID_UTM_MEDIA = new Set(["cpc", "ppc", "paid", "paid_social", "ads", "display"]);
+// classifyTraffic moved to features/attribution/server/traffic.ts so the survey
+// notification can share it. Imported for local use here and re-exported, because
+// the existing tests (and any other caller) import it from this module.
+import { journeyFromPurchase } from "@features/attribution/server/journey";
+import { buildJourneyMessage } from "@features/attribution/server/slack-journey";
+import { classifyTraffic } from "@features/attribution/server/traffic";
 
-type TrafficInfo = {
-  bucket: "Direct" | "Referral" | "Paid" | "Organic";
-  source: string | null;
-  medium: string | null;
-  campaign: string | null;
-};
-
-// Classify the buyer's acquisition channel from the survey_submission.utm_tracker
-// JSON blob, for the purchase Slack ping. utm_* values are user-controllable (they
-// ride in on the landing URL), so callers MUST escape every string returned here
-// before it reaches Slack. We deliberately ignore utm_content: invite links base64
-// the referrer's email into it, and that must never be echoed to Slack.
-export function classifyTraffic(utmTracker: string | null): TrafficInfo {
-  // Real utm values are short; cap each one so a padded/oversized tracker can't
-  // blow past Slack's 3,000-char message limit (which would 400 the webhook).
-  const MAX_UTM_LEN = 100;
-  const str = (value: unknown): string | null => {
-    if (typeof value !== "string") return null;
-    const trimmed = value.trim();
-    return trimmed ? trimmed.slice(0, MAX_UTM_LEN) : null;
-  };
-
-  let parsed: Record<string, unknown> = {};
-  if (utmTracker?.trim()) {
-    try {
-      const json: unknown = JSON.parse(utmTracker);
-      // Arrays are typeof "object" too — exclude them so we never read utm_* off
-      // an array (which would silently mislabel as Direct).
-      if (json !== null && typeof json === "object" && !Array.isArray(json)) {
-        parsed = json as Record<string, unknown>;
-      }
-    } catch {
-      // Malformed tracker — treat the raw string as the source so we still
-      // surface something rather than silently dropping it.
-      parsed = { utm_source: utmTracker };
-    }
-  }
-
-  const source = str(parsed.utm_source);
-  const medium = str(parsed.utm_medium);
-  const campaign = str(parsed.utm_campaign);
-
-  let bucket: TrafficInfo["bucket"];
-  if (!source && !medium && !campaign) {
-    bucket = "Direct";
-  } else if (source?.toLowerCase() === "referral") {
-    bucket = "Referral";
-  } else if (campaign || (medium && PAID_UTM_MEDIA.has(medium.toLowerCase()))) {
-    bucket = "Paid";
-  } else {
-    bucket = "Organic";
-  }
-
-  return { bucket, source, medium, campaign };
-}
+export { classifyTraffic };
 
 async function notifySlackPurchase({
   amount,
   archetype,
+  basePriceBucket,
+  countryTier,
   currency,
+  deviceType,
   email,
+  experimentGroup,
   firstName,
   forcedPaywallArm,
   landingVariant,
@@ -155,8 +108,12 @@ async function notifySlackPurchase({
 }: {
   amount: number | null;
   archetype: string | null;
+  basePriceBucket: string | null;
+  countryTier: string | null;
   currency: string | null;
+  deviceType: string | null;
   email: string | null;
+  experimentGroup: string | null;
   firstName: string | null;
   forcedPaywallArm: string | null;
   landingVariant: string | null;
@@ -165,72 +122,61 @@ async function notifySlackPurchase({
   submissionId: number;
   utmTracker: string | null;
 }) {
-  const url = process.env.SLACK_PAYMENTS_WEBHOOK_URL;
-
-  if (!url) {
-    logger.info(
-      { paymentId, plan, submissionId },
-      "Slack payments webhook env unset — skipping purchase notification"
-    );
-    return;
-  }
-
   const planLabel = getReportPurchasePlan(plan).title;
-  const archetypeSuffix = plan === "all_reports" || !archetype ? "" : ` (${archetype})`;
-  const safeName = firstName?.trim() || "anonymous";
-  const safeEmail = email?.trim() || null;
-  const maskedEmail = safeEmail ? safeEmail.replace(/^(.).+(@.+)$/, "$1***$2") : "no-email";
   const formattedAmount =
     typeof amount === "number" && Number.isFinite(amount)
       ? `${(currency ?? "EUR").toUpperCase()} ${amount.toFixed(2)}`
-      : "amount unknown";
+      : null;
 
-  // Traffic source line — derived from the buyer's utm_tracker. utm_* values are
-  // user-controllable, so escape each before it reaches Slack. utm_content is
-  // intentionally excluded (invite links base64 the referrer's email into it).
-  const traffic = classifyTraffic(utmTracker);
-  const utmParts = [traffic.source, traffic.medium, traffic.campaign]
-    .map((part) => (part ? escapeSlack(part) : "—"))
-    .join(" / ");
-  const sourceLine = `:chart_with_upwards_trend: Source: ${traffic.bucket} · utm: ${utmParts}`;
+  // Built from the Stripe session metadata already in hand — a frozen snapshot of
+  // what this buyer actually experienced. Deliberately no extra queries: this runs
+  // inside the webhook, and re-reading would add latency while telling us nothing
+  // the session does not already carry.
+  const journey = journeyFromPurchase({
+    submissionId,
+    firstName,
+    email,
+    utmTracker,
+    experimentGroup,
+    basePriceBucket,
+    forcedPaywallArm,
+    landingVariant,
+    deviceType,
+    countryTier,
+    amount,
+    currency,
+    plan,
+  });
 
-  // Paywall A/B arm the buyer experienced: "treatment" = forced (non-dismissible),
-  // "control" = closeable. Anything else (null/empty/unexpected) renders unknown.
-  const paywallLine =
-    forcedPaywallArm === "treatment"
-      ? ":lock: Paywall: Forced (must pay to view)"
-      : forcedPaywallArm === "control"
-        ? ":unlock: Paywall: Closeable (can dismiss & pay later)"
-        : ":lock: Paywall: unknown";
+  const message = buildJourneyMessage(journey, {
+    kind: "purchase",
+    planLabel,
+    // all_reports covers every archetype, so naming one would be misleading.
+    archetype: plan === "all_reports" ? null : archetype,
+    amountText: formattedAmount,
+  });
 
-  // Landing A/B journey the buyer came through, so revenue is attributable to the
-  // landing variant they first saw. "white" = the new pay-first white landing,
-  // "control" = the original dark landing.
-  const journeyLine =
-    landingVariant === "white"
-      ? ":sparkles: Journey: White landing"
-      : landingVariant === "control"
-        ? ":crescent_moon: Journey: Dark / Control landing"
-        : ":grey_question: Journey: unknown";
+  logger.info(
+    {
+      paymentId,
+      plan,
+      submissionId,
+      blocks: message.blocks.length,
+      payloadChars: message.size,
+      trimmed: message.trimmed,
+      arms: journey.arms,
+    },
+    "Sending Slack purchase notification"
+  );
 
-  const text = `:credit_card: New purchase: *${safeName}* (${maskedEmail}) — ${planLabel}${archetypeSuffix} — ${formattedAmount}\n${sourceLine}\n${paywallLine}\n${journeyLine}`;
-
-  try {
-    logger.info({ paymentId, plan, submissionId }, "Sending Slack purchase notification");
-    const res = await fetchWithTimeout(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, username: "payment_notification" }),
-      timeoutMs: 5000,
-    });
-
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      logger.error({ paymentId, plan, status: res.status, body }, "Slack purchase webhook failed");
-    }
-  } catch (err) {
-    logger.error({ err, paymentId, plan }, "Slack purchase webhook error");
-  }
+  await notifySlack({
+    channel: "payments",
+    kind: "purchase",
+    text: message.text,
+    blocks: message.blocks,
+    username: "payment_notification",
+    context: { paymentId, plan, submissionId },
+  });
 }
 
 async function lookupReportTokenForSubmission(submissionId: number): Promise<string | null> {
@@ -1419,7 +1365,11 @@ async function syncCheckoutSessionPayment({
       await notifySlackPurchase({
         amount,
         archetype: unlockedArchetype,
+        basePriceBucket: metadata.basePriceBucket,
+        countryTier: metadata.countryTier,
         currency: settledSession.currency ?? null,
+        deviceType: metadata.deviceType,
+        experimentGroup: metadata.experimentGroup,
         email: recipient.email,
         firstName: recipient.firstName,
         forcedPaywallArm: settledSession.metadata?.forcedPaywallArm ?? null,

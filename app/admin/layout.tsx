@@ -7,6 +7,7 @@ import AdminHeader from "@features/admin/ui/AdminHeader";
 import PagePresence from "@features/admin/ui/PagePresence";
 
 const pageTitles: Record<string, string> = {
+  "/admin": "Overview",
   "/admin/analytics": "Core KPIs",
   "/admin/explorer": "Data Explorer",
   "/admin/journey": "User Journey",
@@ -18,6 +19,8 @@ const pageTitles: Record<string, string> = {
 };
 
 const pageDescriptions: Record<string, string> = {
+  "/admin":
+    "How the funnel is performing and what each A/B test is actually telling us, with sample sizes and a plain-English verdict.",
   "/admin/analytics":
     "Single source of truth for marketing, funnel, monetization, engagement, virality, retention, and segmentation KPIs.",
   "/admin/explorer":
