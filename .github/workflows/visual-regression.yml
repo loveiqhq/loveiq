@@ -12,6 +12,11 @@ on:
         description: "Target URL (defaults to staging)"
         required: false
         default: "https://staging.loveiq.org"
+      update_baselines:
+        description: "Regenerate the golden images instead of comparing them, then upload them as an artifact to commit"
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -41,9 +46,24 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run visual regression tests
-        run: npx playwright test visual-regression --project="Desktop Chrome"
+        # Playwright names golden images per platform, so the runner can only ever
+        # compare against `*-linux.png`. The committed baselines were generated on a
+        # Windows machine (`*-win32.png`), so every scheduled run since this workflow
+        # was added found no baseline at all and failed with "a snapshot doesn't
+        # exist … writing actual". Seed the Linux set from this job (the only place
+        # that renders on the same image the comparison runs on), download the
+        # artifact, and commit it.
+        run: npx playwright test visual-regression --project="Desktop Chrome" ${{ inputs.update_baselines && '--update-snapshots' || '' }}
         env:
           PLAYWRIGHT_BASE_URL: ${{ env.TARGET_URL }}
+
+      - name: Upload regenerated baselines
+        if: ${{ inputs.update_baselines }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: visual-regression-baselines
+          path: e2e/visual-regression.spec.ts-snapshots/
+          retention-days: 14
 
       - name: Upload Playwright report
         if: always()
