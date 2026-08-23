@@ -53,9 +53,15 @@ jobs:
         # exist … writing actual". Seed the Linux set from this job (the only place
         # that renders on the same image the comparison runs on), download the
         # artifact, and commit it.
-        run: npx playwright test visual-regression --project="Desktop Chrome" ${{ inputs.update_baselines && '--update-snapshots' || '' }}
+        run: |
+          if [ "$UPDATE_BASELINES" = "true" ]; then
+            npx playwright test visual-regression --project="Desktop Chrome" --update-snapshots
+          else
+            npx playwright test visual-regression --project="Desktop Chrome"
+          fi
         env:
           PLAYWRIGHT_BASE_URL: ${{ env.TARGET_URL }}
+          UPDATE_BASELINES: ${{ inputs.update_baselines }}
 
       - name: Upload regenerated baselines
         if: ${{ inputs.update_baselines }}
