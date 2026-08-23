@@ -227,18 +227,21 @@ jobs:
           #    (lib/report/contentGating.ts + the report data pipeline). Substitution
           #    helpers escape every variable; the HTML body comes from our own .docx
           #    pipeline, not user input. Reviewed and intentional.
-          #  - features/landing/ui/white/LandingPageWhite.tsx — a single static
+          #  - features/landing/ui/white{,-v1}/LandingPageWhite{,V1}.tsx — a single static
           #    literal <style> ("html,body{background:#fff}"): NO interpolation and
           #    NO user input, server-rendered to stop the dark body bg showing
-          #    through on the white A/B arm. A constant string cannot carry XSS.
+          #    through on the white A/B arms. A constant string cannot carry XSS.
+          #    `-v1` is the pinned pre-rebuild arm of the landing A/B and carries the
+          #    identical literal; it was added without this allow-list entry, which is
+          #    what turned this job red on 2026-08-21.
           #  - app/glossary/page.tsx + app/glossary/[slug]/page.tsx — the same
           #    single static literal <style> ("html,body{background:#fff}"),
           #    server-rendered so the dark body bg doesn't flash before the white
           #    glossary hydrates. Constant string, no interpolation/user input.
-          if grep -r "dangerouslySetInnerHTML" app/ components/ features/ --include="*.tsx" --include="*.jsx" \
+          if grep -r "dangerouslySetInnerHTML" app/ features/ shared/ --include="*.tsx" --include="*.jsx" \
               | grep -v "JSON\.stringify" \
               | grep -v "jsonLdString" \
-              | grep -v "white/LandingPageWhite\.tsx" \
+              | grep -vE "white/LandingPageWhite\.tsx|white-v1/LandingPageWhiteV1\.tsx" \
               | grep -vE "app/glossary/(page|\[slug\]/page)\.tsx" \
               | grep -vE "(components|features/report/ui)/(sections/|ReportPage\.tsx)"; then
             echo "⚠️  Found dangerouslySetInnerHTML usage - review for XSS risks"
