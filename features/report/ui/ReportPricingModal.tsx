@@ -164,7 +164,11 @@ function getCardPricing(
     };
   }
 
-  const currentCents = quote.currentPriceCents;
+  // The charged price, i.e. base + urgency surcharge once this reader's countdown has
+  // run out. `strikeEligible` and the badge below both compare against it, so a bucket
+  // whose MSRP the surcharge overtakes simply loses its anchor instead of advertising a
+  // cheaper past.
+  const currentCents = quote.chargedPriceCents;
   const strikeCents = quote.msrpCents;
   const startingCents = quote.startingPriceCents;
   // Hide strike when the MSRP and current price are equal (e.g. legacy
@@ -243,7 +247,7 @@ const ReportPricingModal: FC<Props> = ({
   const { mm, ss } = usePaywallCountdownValue(offerDeadline ?? fallbackDeadline);
   // Cheapest live price — prefixes the "Lifetime value" why-card ("€9.99, one time…").
   const cheapestPriceLabel = quotes?.full_report
-    ? formatReportPurchasePrice(quotes.full_report.currentPriceCents)
+    ? formatReportPurchasePrice(quotes.full_report.chargedPriceCents)
     : null;
 
   // "Extra N% OFF" pill on Full card — communicates the ladder depth relative
@@ -254,7 +258,7 @@ const ReportPricingModal: FC<Props> = ({
     fullQuote && fullQuote.startingPriceCents > 0
       ? Math.max(
           0,
-          Math.round((1 - fullQuote.currentPriceCents / fullQuote.startingPriceCents) * 100)
+          Math.round((1 - fullQuote.chargedPriceCents / fullQuote.startingPriceCents) * 100)
         )
       : 0;
   const showExtraDiscountPill =
@@ -316,7 +320,8 @@ const ReportPricingModal: FC<Props> = ({
       priceShownFiredRef.current.add(dedupeKey);
       trackPriceShown({
         plan: card.plan,
-        price: quote.currentPriceCents / 100,
+        price: quote.chargedPriceCents / 100,
+        surcharge: quote.surchargeCents / 100,
         currency: quote.currency,
         bucket: quote.basePriceBucket,
         pricing_cluster_id: quote.pricingClusterId,
@@ -651,7 +656,7 @@ const ReportPricingModal: FC<Props> = ({
                                 if (quote) {
                                   trackBeginCheckout(
                                     card.plan,
-                                    quote.currentPriceCents / 100,
+                                    quote.chargedPriceCents / 100,
                                     quote.currency
                                   );
                                 }

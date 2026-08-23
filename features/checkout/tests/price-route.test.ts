@@ -14,14 +14,16 @@ vi.mock("@shared/observability/logger", () => ({
 }));
 
 vi.mock("@features/pricing/logic/reportPricing", () => ({
+  armReportUrgencyWindow: vi.fn(),
   getReportPriceQuoteForContext: vi.fn(),
   getReportPriceQuotesForContext: vi.fn(),
 }));
 
-import { GET } from "@/app/api/price/route";
+import { GET, POST } from "@/app/api/price/route";
 import { verifyCsrfToken } from "@shared/http/csrf";
 import { checkRateLimit } from "@shared/http/ratelimit";
 import {
+  armReportUrgencyWindow,
   getReportPriceQuoteForContext,
   getReportPriceQuotesForContext,
 } from "@features/pricing/logic/reportPricing";
@@ -46,6 +48,9 @@ describe("GET /api/price", () => {
       basePriceBucket: "full_center",
       basePriceCents: 2999,
       currentPriceCents: 2749,
+      urgencyDeadlineAt: null,
+      surchargeCents: 0,
+      chargedPriceCents: 2749,
       initialPriceCents: 2999,
       discountMultiplier: 1,
       discountStep: 0,
@@ -86,6 +91,9 @@ describe("GET /api/price", () => {
     await expect(res.json()).resolves.toEqual({
       quote: expect.objectContaining({
         currentPriceCents: 2749,
+        urgencyDeadlineAt: null,
+        surchargeCents: 0,
+        chargedPriceCents: 2749,
         plan: "full_report",
       }),
     });
@@ -101,6 +109,9 @@ describe("GET /api/price", () => {
         basePriceBucket: "essentials_center",
         basePriceCents: 1499,
         currentPriceCents: 1499,
+        urgencyDeadlineAt: null,
+        surchargeCents: 0,
+        chargedPriceCents: 1499,
         initialPriceCents: 1499,
         discountMultiplier: 1,
         discountStep: 0,
@@ -132,6 +143,9 @@ describe("GET /api/price", () => {
         basePriceBucket: "full_center",
         basePriceCents: 2999,
         currentPriceCents: 2999,
+        urgencyDeadlineAt: null,
+        surchargeCents: 0,
+        chargedPriceCents: 2999,
         initialPriceCents: 2999,
         discountMultiplier: 1,
         discountStep: 0,
@@ -163,6 +177,9 @@ describe("GET /api/price", () => {
         basePriceBucket: "all_center",
         basePriceCents: 12999,
         currentPriceCents: 12999,
+        urgencyDeadlineAt: null,
+        surchargeCents: 0,
+        chargedPriceCents: 12999,
         initialPriceCents: 12999,
         discountMultiplier: 1,
         discountStep: 0,
@@ -200,5 +217,81 @@ describe("GET /api/price", () => {
         all_reports: expect.objectContaining({ currentPriceCents: 12999 }),
       }),
     });
+  });
+});
+
+/**
+ * Arming the urgency window — the three minutes after which every plan costs two euros
+ * more.
+ *
+ * A POST rather than a flag on the GET: the GET is fetched by things that are not
+ * readers (a shared report link unfurling in Slack), and arming has a price
+ * consequence, so it must only be reachable from our own page.
+ */
+describe("POST /api/price", () => {
+  const armed = "2026-08-23T12:03:00.000Z";
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(verifyCsrfToken).mockResolvedValue(true);
+    vi.mocked(checkRateLimit).mockResolvedValue({
+      allowed: true,
+      remaining: 59,
+      resetAt: new Date(),
+    });
+  });
+
+  function armRequest(body: unknown) {
+    return new Request("http://localhost/api/price", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-csrf-token": "valid" },
+      body: JSON.stringify(body),
+    });
+  }
+
+  it("arms the window and returns the deadline", async () => {
+    vi.mocked(armReportUrgencyWindow).mockResolvedValue(armed);
+
+    const res = await POST(armRequest({ token: "rpt_ABCDEFGHIJKLMNOPQRST" }));
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toEqual({ urgencyDeadlineAt: armed });
+  });
+
+  it("returns the same deadline when called again — it is never re-armed or extended", async () => {
+    // Re-arming would hand a reader the lower price back by reopening the report.
+    vi.mocked(armReportUrgencyWindow).mockResolvedValue(armed);
+
+    const first = await POST(armRequest({ token: "rpt_ABCDEFGHIJKLMNOPQRST" }));
+    const second = await POST(armRequest({ token: "rpt_ABCDEFGHIJKLMNOPQRST" }));
+
+    await expect(first.json()).resolves.toEqual({ urgencyDeadlineAt: armed });
+    await expect(second.json()).resolves.toEqual({ urgencyDeadlineAt: armed });
+  });
+
+  it("refuses a request without a CSRF token", async () => {
+    vi.mocked(verifyCsrfToken).mockResolvedValue(false);
+
+    const res = await POST(armRequest({ token: "rpt_ABCDEFGHIJKLMNOPQRST" }));
+
+    expect(res.status).toBe(403);
+    expect(armReportUrgencyWindow).not.toHaveBeenCalled();
+  });
+
+  it("refuses a request with no report context", async () => {
+    const res = await POST(armRequest({}));
+
+    expect(res.status).toBe(400);
+    expect(armReportUrgencyWindow).not.toHaveBeenCalled();
+  });
+
+  it("reports no deadline rather than failing when arming throws", async () => {
+    // The reader keeps the base price; they never see an error for this.
+    vi.mocked(armReportUrgencyWindow).mockRejectedValue(new Error("supabase down"));
+
+    const res = await POST(armRequest({ token: "rpt_ABCDEFGHIJKLMNOPQRST" }));
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toEqual({ urgencyDeadlineAt: null });
   });
 });

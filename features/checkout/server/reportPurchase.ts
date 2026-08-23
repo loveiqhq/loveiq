@@ -169,11 +169,42 @@ export function formatReportPurchasePrice(cents: number, currency = "EUR") {
  * Format the MSRP strike for display. Accepts the cents value directly so
  * callers can pull it from a live quote (`snapshot.msrpCents`) or from a
  * static catalogue fallback when no quote is present.
+ *
+ * Pass `currentCents` to suppress a strike that has stopped being one. Some buckets
+ * price at their own MSRP (Group B's full report is 29.00 against a 29.00 anchor), so
+ * once the urgency surcharge lands the charged price OVERTAKES the anchor and the strike
+ * would read "€31.00, was €29.00" — an advert for the cheaper past. Omitting
+ * `currentCents` keeps the old unconditional behaviour for callers with no price to
+ * compare against.
  */
-export function getReportPurchaseStrikePrice(strikeCents: number | null | undefined) {
-  return typeof strikeCents === "number" && strikeCents > 0
-    ? formatReportPurchasePrice(strikeCents)
-    : null;
+export function getReportPurchaseStrikePrice(
+  strikeCents: number | null | undefined,
+  currentCents?: number
+) {
+  if (typeof strikeCents !== "number" || strikeCents <= 0) {
+    return null;
+  }
+  if (typeof currentCents === "number" && currentCents >= strikeCents) {
+    return null;
+  }
+  return formatReportPurchasePrice(strikeCents);
+}
+
+/**
+ * The "Save €X" amount, or null when there is nothing to save. Same guard as the strike
+ * above, so the two can never disagree.
+ */
+export function getReportPurchaseSaveCents({
+  strikeCents,
+  currentCents,
+}: {
+  strikeCents: number | null | undefined;
+  currentCents: number;
+}): number | null {
+  if (typeof strikeCents !== "number" || strikeCents <= 0 || currentCents >= strikeCents) {
+    return null;
+  }
+  return strikeCents - currentCents;
 }
 
 /**

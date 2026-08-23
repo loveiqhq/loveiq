@@ -51,6 +51,42 @@ import {
 } from "@features/pricing/logic/reportPricing";
 import { getForcedPaywallCohort } from "@shared/experiments/forcedPaywall";
 
+/** The quote the route resolves: full report, €27.49, urgency window still open. */
+const BASE_QUOTE = {
+  id: 22,
+  plan: "full_report",
+  currency: "EUR",
+  experimentGroup: "B",
+  basePriceBucket: "full_center",
+  basePriceCents: 2999,
+  currentPriceCents: 2749,
+  urgencyDeadlineAt: null,
+  surchargeCents: 0,
+  chargedPriceCents: 2749,
+  initialPriceCents: 2999,
+  discountMultiplier: 1,
+  discountStep: 0,
+  pricingClusterId: "B-full_report-full_center-tier_2-desktop-google-serious-engaged-d0",
+  countryTier: "tier_2",
+  countryMultiplier: 1,
+  deviceType: "Desktop",
+  deviceMultiplier: 1.05,
+  trafficSource: "google",
+  trafficMultiplier: 1.1,
+  behavioralBucket: "serious",
+  behavioralMultiplier: 1.2,
+  engagementScore: 40,
+  engagementMultiplier: 1.1,
+  reportPreviewViews: 2,
+  fantasySignalCount: 1,
+  surveyDurationMs: 600000,
+  initialPriceTimestamp: "2026-04-14T10:00:00.000Z",
+  expiresAt: "2026-05-05T10:00:00.000Z",
+  checkoutStartedAt: null,
+  purchasedAt: null,
+  viewCount: 1,
+} as const;
+
 function makeRequest(body: unknown) {
   return new Request("http://localhost/api/stripe/checkout-session", {
     method: "POST",
@@ -74,37 +110,7 @@ describe("POST /api/stripe/checkout-session", () => {
     });
     vi.mocked(isStripeCheckoutEnabled).mockReturnValue(false);
     vi.mocked(getStripeCheckoutCustomerEmail).mockResolvedValue("test@example.com");
-    vi.mocked(getReportPriceQuoteForContext).mockResolvedValue({
-      id: 22,
-      plan: "full_report",
-      currency: "EUR",
-      experimentGroup: "B",
-      basePriceBucket: "full_center",
-      basePriceCents: 2999,
-      currentPriceCents: 2749,
-      initialPriceCents: 2999,
-      discountMultiplier: 1,
-      discountStep: 0,
-      pricingClusterId: "B-full_report-full_center-tier_2-desktop-google-serious-engaged-d0",
-      countryTier: "tier_2",
-      countryMultiplier: 1,
-      deviceType: "Desktop",
-      deviceMultiplier: 1.05,
-      trafficSource: "google",
-      trafficMultiplier: 1.1,
-      behavioralBucket: "serious",
-      behavioralMultiplier: 1.2,
-      engagementScore: 40,
-      engagementMultiplier: 1.1,
-      reportPreviewViews: 2,
-      fantasySignalCount: 1,
-      surveyDurationMs: 600000,
-      initialPriceTimestamp: "2026-04-14T10:00:00.000Z",
-      expiresAt: "2026-05-05T10:00:00.000Z",
-      checkoutStartedAt: null,
-      purchasedAt: null,
-      viewCount: 1,
-    });
+    vi.mocked(getReportPriceQuoteForContext).mockResolvedValue({ ...BASE_QUOTE });
   });
 
   it("returns the disabled placeholder payload while checkout is not enabled", async () => {
@@ -340,6 +346,58 @@ describe("POST /api/stripe/checkout-session", () => {
       expect.objectContaining({
         idempotencyKey: expect.stringMatching(/^[0-9a-f]{64}$/),
       })
+    );
+  });
+
+  it("charges the surcharged price once the reader's urgency window has closed", async () => {
+    // The number Stripe receives has to be the one the report showed. `chargedPriceCents`
+    // is that number; `currentPriceCents` is the base it was built from and must never be
+    // the amount charged.
+    const createSession = vi.fn().mockResolvedValue({
+      id: "cs_test_session_expired",
+      url: "https://checkout.stripe.com/c/pay/cs_test_session_expired",
+    });
+    vi.mocked(isStripeCheckoutEnabled).mockReturnValue(true);
+    vi.mocked(getStripeCheckoutCustomerEmail).mockResolvedValue("test@example.com");
+    vi.mocked(getStripeServerClient).mockReturnValue({
+      checkout: { sessions: { create: createSession } },
+    } as never);
+
+    const closed = {
+      ...BASE_QUOTE,
+      currentPriceCents: 2749,
+      surchargeCents: 200,
+      chargedPriceCents: 2949,
+      urgencyDeadlineAt: "2026-08-23T12:00:00.000Z",
+    };
+    vi.mocked(getReportPriceQuoteForContext).mockResolvedValue(closed);
+
+    const res = await POST(
+      makeRequest({
+        archetype: "Spark Seeker",
+        plan: "full_report",
+        reportSessionId: "02d88f31-eceb-4402-940d-c8cd98d01848",
+      })
+    );
+
+    expect(res.status).toBe(200);
+    expect(createSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        line_items: [
+          expect.objectContaining({
+            price_data: expect.objectContaining({ unit_amount: 2949 }),
+          }),
+        ],
+        // The audit trail carries both halves, so a support question about a two-euro
+        // difference is answerable from the payment alone.
+        metadata: expect.objectContaining({
+          currentPrice: "29.49",
+          basePrice: "27.49",
+          urgencySurcharge: "2.00",
+          urgencyExpired: "1",
+        }),
+      }),
+      expect.anything()
     );
   });
 });

@@ -15,6 +15,9 @@ const READY_QUOTE = {
   basePriceBucket: "full_center",
   basePriceCents: 2999,
   currentPriceCents: 2749,
+  urgencyDeadlineAt: null,
+  surchargeCents: 0,
+  chargedPriceCents: 2749,
   initialPriceCents: 2999,
   discountMultiplier: 1,
   discountStep: 0,
@@ -163,7 +166,12 @@ describe("CheckoutPage", () => {
   });
 
   it("uses the report token for back navigation and hosted checkout creation when present", async () => {
-    const tokenQuote = { ...READY_QUOTE, plan: "all_reports", currentPriceCents: 11499 };
+    const tokenQuote = {
+      ...READY_QUOTE,
+      plan: "all_reports",
+      currentPriceCents: 11499,
+      chargedPriceCents: 11499,
+    };
     const mockFetch = vi.fn(async (input: string | URL | Request) => {
       const url =
         typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
@@ -320,7 +328,12 @@ describe("CheckoutPage", () => {
   });
 
   it("shows the disabled fallback if hosted checkout is unavailable", async () => {
-    const essentialsQuote = { ...READY_QUOTE, plan: "essentials", currentPriceCents: 1499 };
+    const essentialsQuote = {
+      ...READY_QUOTE,
+      plan: "essentials",
+      currentPriceCents: 1499,
+      chargedPriceCents: 1499,
+    };
     const mockFetch = vi.fn(async (input: string | URL | Request) => {
       const url =
         typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;

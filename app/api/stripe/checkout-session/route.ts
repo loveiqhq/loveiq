@@ -332,7 +332,10 @@ export async function POST(request: Request) {
                 description: plan.description,
                 name: `LoveIQ ${planTitle}`,
               },
-              unit_amount: quote.currentPriceCents,
+              // `chargedPriceCents`, never `currentPriceCents`: it carries the urgency
+              // surcharge, and it is the same number every price surface renders, so
+              // the screen and the invoice cannot disagree.
+              unit_amount: quote.chargedPriceCents,
             },
             quantity: 1,
           },
@@ -342,7 +345,13 @@ export async function POST(request: Request) {
           basePriceBucket: quote.basePriceBucket,
           behavioralBucket: quote.behavioralBucket,
           countryTier: quote.countryTier,
-          currentPrice: String((quote.currentPriceCents / 100).toFixed(2)),
+          // What we charged, and the base it was built from — so a support question
+          // about a €2 difference is answerable from the payment alone.
+          currentPrice: String((quote.chargedPriceCents / 100).toFixed(2)),
+          basePrice: String((quote.currentPriceCents / 100).toFixed(2)),
+          urgencySurcharge: String((quote.surchargeCents / 100).toFixed(2)),
+          urgencyExpired: quote.surchargeCents > 0 ? "1" : "0",
+          urgencyDeadlineAt: toStripeMetadataValue(quote.urgencyDeadlineAt),
           deviceType: quote.deviceType,
           discountStep: String(quote.discountStep),
           engagementScore: String(quote.engagementScore),

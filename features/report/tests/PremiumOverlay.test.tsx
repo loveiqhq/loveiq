@@ -21,6 +21,9 @@ function makeQuote(overrides: Partial<ReportPriceQuoteSnapshot> = {}): ReportPri
     msrpCents: 4999,
     startingPriceCents: 1499,
     currentPriceCents: 1499,
+    urgencyDeadlineAt: null,
+    surchargeCents: 0,
+    chargedPriceCents: 1499,
     initialPriceCents: 1499,
     discountMultiplier: 1,
     discountStep: 0,
@@ -78,7 +81,7 @@ describe("PremiumOverlay", () => {
         archetype="Spark Seeker"
         sectionTitle="Arousal, Desire & Pleasure"
         tier="full_report"
-        quote={makeQuote({ currentPriceCents: 1499, msrpCents: 4999 })}
+        quote={makeQuote({ currentPriceCents: 1499, chargedPriceCents: 1499, msrpCents: 4999 })}
         offerDeadline={Date.now() + 180_000}
       />
     );
@@ -143,7 +146,7 @@ describe("PremiumOverlay", () => {
         archetype="Spark Seeker"
         sectionTitle="Arousal, Desire & Pleasure"
         tier="full_report"
-        quote={makeQuote({ currentPriceCents: 1499, msrpCents: 4999 })}
+        quote={makeQuote({ currentPriceCents: 1499, chargedPriceCents: 1499, msrpCents: 4999 })}
         offerDeadline={Date.now() - 10_000}
       />
     );

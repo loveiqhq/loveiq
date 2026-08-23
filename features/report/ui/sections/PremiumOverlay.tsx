@@ -112,7 +112,11 @@ const FlaskIcon: FC = () => (
 const PremiumOverlay: FC<Props> = ({ onUnlock, quote = null, offerDeadline }) => {
   // ── Live pricing — identical computation to the paywall modal so the card
   //    and modal always agree. ────────────────────────────────────────────────
-  const currentCents = quote?.currentPriceCents ?? 0;
+  // `chargedPriceCents` — the base price PLUS the urgency surcharge once this reader's
+  // countdown has run out. Every price surface and the Stripe line item read the same
+  // field, so what the card promises is what the invoice says. `strikeEligible` below
+  // then hides the anchor automatically for buckets whose MSRP the surcharge overtakes.
+  const currentCents = quote?.chargedPriceCents ?? 0;
   const msrpCents = quote?.msrpCents ?? null;
   const strikeEligible = typeof msrpCents === "number" && msrpCents > currentCents;
   const priceLabel = quote ? formatReportPurchasePrice(currentCents) : null;

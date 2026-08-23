@@ -196,7 +196,7 @@ function CheckoutReviewSurface({
             <li>
               Your current quoted total is{" "}
               <strong>
-                {quote ? formatReportPurchasePrice(quote.currentPriceCents) : "loading..."}
+                {quote ? formatReportPurchasePrice(quote.chargedPriceCents) : "loading..."}
               </strong>
               .
             </li>
@@ -548,7 +548,7 @@ const CheckoutPage: FC<Props> = ({ archetype = null, planId, token = null }) => 
             </div>
             {(() => {
               const strikeCents = activeQuote?.msrpCents ?? null;
-              const currentCents = activeQuote?.currentPriceCents ?? plan.priceCents;
+              const currentCents = activeQuote?.chargedPriceCents ?? plan.priceCents;
               const badge = getReportPurchaseBadgeFromPrice({ strikeCents, currentCents });
               return badge ? <span className="checkout-page__badge">{badge}</span> : null;
             })()}
@@ -557,7 +557,7 @@ const CheckoutPage: FC<Props> = ({ archetype = null, planId, token = null }) => 
           <div className="checkout-page__summary-price">
             {(() => {
               const strikeCents = activeQuote?.msrpCents ?? null;
-              const currentCents = activeQuote?.currentPriceCents ?? plan.priceCents;
+              const currentCents = activeQuote?.chargedPriceCents ?? plan.priceCents;
               const showStrike = typeof strikeCents === "number" && strikeCents > currentCents;
               return showStrike ? (
                 <span className="checkout-page__summary-strike">
@@ -572,7 +572,7 @@ const CheckoutPage: FC<Props> = ({ archetype = null, planId, token = null }) => 
             <div className="checkout-page__summary-amount">
               <strong>
                 {activeQuote
-                  ? formatReportPurchasePrice(activeQuote.currentPriceCents)
+                  ? formatReportPurchasePrice(activeQuote.chargedPriceCents)
                   : "Preparing quote..."}
               </strong>
               <span>{plan.priceSuffix}</span>

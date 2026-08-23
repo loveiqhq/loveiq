@@ -18,6 +18,9 @@ import { trackBeginCheckout, trackScrollPaywallShown } from "@features/analytics
 // Minimal quote with a discount (msrp > current) so the discount/save pills render.
 const discountQuote = {
   currentPriceCents: 999,
+  urgencyDeadlineAt: null,
+  surchargeCents: 0,
+  chargedPriceCents: 999,
   msrpCents: 5900,
   currency: "EUR",
   basePriceBucket: "A",

@@ -450,7 +450,11 @@ export const trackPaywallInitiated = (params: PaywallInitiatedParams) => {
 
 export interface PriceShownParams {
   plan: "essentials" | "full_report" | "core" | "all_reports";
-  /** Final EUR amount the user sees (post-multipliers, post-ladder, normalized). */
+  /**
+   * Final EUR amount the user sees — post-multipliers, post-ladder, normalized, and
+   * INCLUDING the urgency surcharge when it applies, because this is meant to be what
+   * was on screen. See `surcharge` for how much of it that was.
+   */
   price: number;
   /** ISO currency code, e.g. "EUR". */
   currency: string;
@@ -470,6 +474,12 @@ export interface PriceShownParams {
   msrp?: number;
   /** Initial price before ladder discount. */
   initial_price?: number;
+  /**
+   * The urgency surcharge included in `price` (EUR, 0 when the reader's countdown was
+   * still running). Sent so the two cohorts can be separated without having to infer
+   * them from the amount.
+   */
+  surcharge?: number;
 }
 
 /**

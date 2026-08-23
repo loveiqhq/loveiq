@@ -272,7 +272,8 @@ const ScrollPricingModal: FC<Props> = ({
     priceShownFiredRef.current = true;
     trackPriceShown({
       plan: "full_report",
-      price: quote.currentPriceCents / 100,
+      price: quote.chargedPriceCents / 100,
+      surcharge: quote.surchargeCents / 100,
       currency: quote.currency,
       bucket: quote.basePriceBucket,
       pricing_cluster_id: quote.pricingClusterId,
@@ -395,7 +396,9 @@ const ScrollPricingModal: FC<Props> = ({
   };
 
   // ── Pricing ────────────────────────────────────────────────────────────────
-  const currentCents = quote?.currentPriceCents ?? 0;
+  // `chargedPriceCents` carries the urgency surcharge; the same field feeds the locked
+  // cards, the plan modal, /checkout and the Stripe line item.
+  const currentCents = quote?.chargedPriceCents ?? 0;
   const msrpCents = quote?.msrpCents ?? null;
   const strikeEligible = typeof msrpCents === "number" && msrpCents > currentCents;
   const strikePriceLabel = strikeEligible ? getReportPurchaseStrikePrice(msrpCents) : null;
@@ -422,7 +425,9 @@ const ScrollPricingModal: FC<Props> = ({
   const { mm, ss, expired } = usePaywallCountdownValue(deadline);
 
   // Offer pill: drop "· expires soon" once the timer has elapsed so it never
-  // contradicts a 00:00 readout. The discount itself stays valid.
+  // contradicts a 00:00 readout. The remaining badge is still honest — it is recomputed
+  // from the price actually being charged, which now includes the surcharge, so the
+  // percentage shrinks rather than lying.
   const offerPillText = badge
     ? expired
       ? `${badge.replace(/\s*off\s*$/i, "")} off`
@@ -432,7 +437,7 @@ const ScrollPricingModal: FC<Props> = ({
   const handleCtaClick = () => {
     checkoutInitiatedRef.current = true;
     if (quote) {
-      trackBeginCheckout("full_report", quote.currentPriceCents / 100, quote.currency);
+      trackBeginCheckout("full_report", quote.chargedPriceCents / 100, quote.currency);
     }
     onCheckout();
   };

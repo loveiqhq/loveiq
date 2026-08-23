@@ -31,7 +31,7 @@ const ReportStickyUnlockBar: FC<Props> = ({ quote, onCheckout, hidden = false, a
   const handleClick = (variant: "mobile" | "desktop") => () => {
     trackStickyUnlockClicked({ variant, archetype });
     if (quote) {
-      trackBeginCheckout("full_report", quote.currentPriceCents / 100, quote.currency);
+      trackBeginCheckout("full_report", quote.chargedPriceCents / 100, quote.currency);
     }
     onCheckout();
   };

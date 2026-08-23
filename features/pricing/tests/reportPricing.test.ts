@@ -199,6 +199,10 @@ describe("reportPricing", () => {
 
     mockFetchWithTimeout.mockImplementation(
       async (url: string, options?: { body?: string; method?: string }) => {
+        // Report-wide urgency-window read (no window armed in these fixtures).
+        if (url.includes("select=metadata")) {
+          return createJsonResponse([]);
+        }
         if (url.includes("/rest/v1/survey_submission?id=eq.42")) {
           return createJsonResponse([
             {
@@ -349,6 +353,10 @@ describe("reportPricing", () => {
     };
 
     mockFetchWithTimeout.mockImplementation(async (url: string) => {
+      // Report-wide urgency-window read (no window armed in these fixtures).
+      if (url.includes("select=metadata")) {
+        return createJsonResponse([]);
+      }
       if (url.includes("/rest/v1/survey_submission?id=eq.42")) {
         return createJsonResponse([
           {
@@ -408,6 +416,10 @@ describe("reportPricing", () => {
 
     mockFetchWithTimeout.mockImplementation(
       async (url: string, options?: { body?: string; method?: string }) => {
+        // Report-wide urgency-window read (no window armed in these fixtures).
+        if (url.includes("select=metadata")) {
+          return createJsonResponse([]);
+        }
         if (url.includes("/rest/v1/survey_submission?id=eq.42")) {
           return createJsonResponse([
             {
@@ -490,6 +502,10 @@ describe("reportPricing", () => {
 
     mockFetchWithTimeout.mockImplementation(
       async (url: string, options?: { body?: string; method?: string }) => {
+        // Report-wide urgency-window read (no window armed in these fixtures).
+        if (url.includes("select=metadata")) {
+          return createJsonResponse([]);
+        }
         if (url.includes("/rest/v1/survey_submission?id=eq.42")) {
           return createJsonResponse([
             {
@@ -561,6 +577,10 @@ describe("reportPricing", () => {
 
     mockFetchWithTimeout.mockImplementation(
       async (url: string, options?: { body?: string; method?: string }) => {
+        // Report-wide urgency-window read (no window armed in these fixtures).
+        if (url.includes("select=metadata")) {
+          return createJsonResponse([]);
+        }
         if (url.includes("/rest/v1/survey_submission?id=eq.42")) {
           return createJsonResponse([
             {

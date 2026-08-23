@@ -23,6 +23,12 @@ function buildPricingQuote(
     msrpCents: plan === "all_reports" ? 5800 : plan === "full_report" ? 2900 : 2999,
     startingPriceCents: plan === "all_reports" ? 4900 : plan === "full_report" ? 2900 : 999,
     currentPriceCents: plan === "all_reports" ? 4900 : plan === "full_report" ? 2900 : 999,
+    // The urgency window is unarmed in these fixtures, so the charged price is the base
+    // one. Without these three the modal renders "€NaN": every price surface reads
+    // `chargedPriceCents`, not `currentPriceCents`.
+    urgencyDeadlineAt: null,
+    surchargeCents: 0,
+    chargedPriceCents: plan === "all_reports" ? 4900 : plan === "full_report" ? 2900 : 999,
     initialPriceCents: plan === "all_reports" ? 4900 : plan === "full_report" ? 2900 : 999,
     discountMultiplier: discountStep === 0 ? 1 : 0.9,
     discountStep,

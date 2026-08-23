@@ -46,10 +46,12 @@ import SharedViewerBanner from "./SharedViewerBanner";
 import {
   getReportPaywallDeadline,
   peekReportPaywallDeadline,
+  getReportPricingSessionId,
   getReportSessionId,
   setReportNurturePromo,
   setReportPricingSessionId,
 } from "@features/survey/ui/hooks/surveySession";
+import { getCsrfToken } from "@shared/http/csrf-client";
 import { useReportData, type ReportRequestError } from "./hooks/useReportData";
 import { useSectionFeedback, type FeedbackPayload } from "./hooks/useSectionFeedback";
 import { resolveReportSections, type DisplayReportSection } from "./reportTitles";
@@ -600,7 +602,8 @@ const ReportExperience: FC<ReportExperienceProps> = ({
     lockedCardPriceFiredRef.current = true;
     trackLockedCardPriceShown({
       plan: "full_report",
-      price: fullReportQuote.currentPriceCents / 100,
+      price: fullReportQuote.chargedPriceCents / 100,
+      surcharge: fullReportQuote.surchargeCents / 100,
       currency: fullReportQuote.currency,
       bucket: fullReportQuote.basePriceBucket,
       pricing_cluster_id: fullReportQuote.pricingClusterId,
@@ -2108,15 +2111,100 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     setOfferDeadline(running);
   }, [resolvedReportToken, sessionId]);
 
+  /**
+   * Prices re-read from the server after the urgency window closes.
+   *
+   * The report's quotes are fetched once, at load, which is BEFORE the countdown even
+   * arms. When the window closes the server's price goes up by the surcharge, so
+   * without this the page would keep showing the old number while checkout charged the
+   * new one — the one thing this feature must never do.
+   */
+  const [refreshedQuotes, setRefreshedQuotes] = useState<Record<
+    ReportPurchasePlanId,
+    ReportPriceQuoteSnapshot
+  > | null>(null);
+
+  /**
+   * The prices in force right now: the ones re-read after the urgency window closed if
+   * we have them, else the ones the page loaded with. Everything that displays or
+   * caches a price reads THIS, so no surface can be left showing the pre-surcharge
+   * figure.
+   */
+  const effectiveQuotes = refreshedQuotes ?? data?.pricingQuotes ?? null;
+
+  const refreshPricingQuotes = useCallback(async () => {
+    if (!resolvedReportToken && !sessionId) return;
+    const params = new URLSearchParams();
+    if (resolvedReportToken) params.set("token", resolvedReportToken);
+    else if (sessionId) params.set("reportSessionId", sessionId);
+    const storedPricingSessionId = getReportPricingSessionId({
+      sessionId,
+      token: resolvedReportToken,
+    });
+    if (storedPricingSessionId) params.set("pricingSessionId", storedPricingSessionId);
+    try {
+      const response = await fetch(`/api/price?${params.toString()}`, {
+        headers: { "x-csrf-token": getCsrfToken() ?? "" },
+      });
+      if (!response.ok) return;
+      const payload = (await response.json()) as {
+        quotes?: Record<ReportPurchasePlanId, ReportPriceQuoteSnapshot> | null;
+      };
+      if (payload.quotes) setRefreshedQuotes(payload.quotes);
+    } catch {
+      // Leave the prices as they are. The checkout page re-reads them anyway, so the
+      // worst case is a stale figure on this page for one navigation — never a charge
+      // that disagrees with a page the reader actually paid from.
+    }
+  }, [resolvedReportToken, sessionId]);
+
   // Start the clock. Idempotent: the first caller creates the deadline, everyone
   // after reads the same one, so the number in the pop-up, the sticky bar and every
   // locked chapter card always agree.
+  //
+  // The deadline is ARMED ON THE SERVER too, on the quote row, because the price
+  // depends on it: a browser-only clock could be reset by opening the report in a new
+  // tab. The server's answer wins — including when it hands back a window that closed
+  // days ago, which is how "once expired, expired" survives a fresh browser.
   const armPaywallCountdown = useCallback(() => {
     if (offerDeadlineSetRef.current) return;
     if (!resolvedReportToken && !sessionId) return;
     offerDeadlineSetRef.current = true;
     setOfferDeadline(getReportPaywallDeadline({ token: resolvedReportToken, sessionId }));
-  }, [resolvedReportToken, sessionId]);
+
+    void (async () => {
+      try {
+        const response = await fetch("/api/price", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-csrf-token": getCsrfToken() ?? "" },
+          body: JSON.stringify({
+            ...(resolvedReportToken
+              ? { token: resolvedReportToken }
+              : { reportSessionId: sessionId }),
+            ...(() => {
+              const pricingSessionId = getReportPricingSessionId({
+                sessionId,
+                token: resolvedReportToken,
+              });
+              return pricingSessionId ? { pricingSessionId } : {};
+            })(),
+          }),
+        });
+        if (!response.ok) return;
+        const payload = (await response.json()) as { urgencyDeadlineAt?: string | null };
+        if (!payload.urgencyDeadlineAt) return;
+        const serverDeadline = Date.parse(payload.urgencyDeadlineAt);
+        if (Number.isNaN(serverDeadline)) return;
+        setOfferDeadline(serverDeadline);
+        // An already-closed window means this reader's price is the higher one, and the
+        // page is holding the pre-surcharge figures it loaded with.
+        if (serverDeadline <= Date.now()) void refreshPricingQuotes();
+      } catch {
+        // The visible timer still runs off the local deadline; the price simply stays
+        // at the base until a surface re-reads it.
+      }
+    })();
+  }, [refreshPricingQuotes, resolvedReportToken, sessionId]);
 
   // Fire one "countdown expired" event when the shared urgency timer
   // elapses DURING this session — only if time actually remained when it was
@@ -2133,9 +2221,12 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     const id = window.setTimeout(() => {
       countdownExpiredFiredRef.current = true;
       trackPaywallCountdownExpired(data?.primaryArchetype ?? null);
+      // The window just closed: re-read the prices so every surface shows the surcharge
+      // the checkout is about to apply.
+      void refreshPricingQuotes();
     }, msLeft);
     return () => window.clearTimeout(id);
-  }, [offerDeadline, data?.accessPlan, data?.primaryArchetype]);
+  }, [offerDeadline, data?.accessPlan, data?.primaryArchetype, refreshPricingQuotes]);
 
   // Single guarded closer for the scroll teaser. For the forced (treatment)
   // arm the teaser must only be exitable via checkout, so every other close
@@ -2496,7 +2587,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   );
 
   const beginCheckout = (plan: ReportPurchasePlanId, archetype?: string | null) => {
-    const quote = data?.pricingQuotes?.[plan];
+    const quote = effectiveQuotes?.[plan];
     if (quote) {
       cacheReportCheckoutQuote({
         plan,
@@ -2683,7 +2774,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
         percentages={percentages}
         placeholderValues={placeholderValues}
         primaryArchetype={primaryArchetype}
-        pricingQuotes={data.pricingQuotes}
+        pricingQuotes={effectiveQuotes}
         archetypeContent={data.archetypeContent ?? {}}
         practiceTendencies={data.practiceTendencies ?? {}}
         pricingTargetArchetype={pricingTargetArchetype}
@@ -2743,13 +2834,13 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
         onClose={dismissScrollTeaser}
         onCheckout={handleTeaserCheckout}
         userName={data.userName}
-        quote={data.pricingQuotes?.full_report ?? null}
+        quote={effectiveQuotes?.full_report ?? null}
         dismissible={forcedPaywallCohort !== "treatment"}
         offerDeadline={offerDeadline}
       />
       {data.accessPlan !== "full_report" && data.accessPlan !== "all_reports" && (
         <ReportStickyUnlockBar
-          quote={data.pricingQuotes?.full_report ?? null}
+          quote={effectiveQuotes?.full_report ?? null}
           onCheckout={() => beginCheckout("full_report", effectiveViewArchetype)}
           hidden={isPricingModalOpen || isShareModalOpen || isScrollTeaserOpen}
           archetype={effectiveViewArchetype}
