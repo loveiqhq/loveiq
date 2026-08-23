@@ -10,13 +10,18 @@ import { test, expect } from "@playwright/test";
 // If a baseline gets older than ~90 days, schedule a refresh — otherwise
 // "no regression" silently rots and stale screenshots become noise.
 //
-//   landing-page          last reviewed: 2026-06-19 — white landing (dark A/B retired)
-//   about-page            last reviewed: 2026-05-11 — initial baseline
-//   survey-intro          last reviewed: 2026-05-11 — initial baseline
-//   glossary-page         last reviewed: 2026-06-27 — full-white redesign
-//   glossary-term-page    last reviewed: 2026-06-27 — full-white redesign (new baseline)
-//   admin-login           last reviewed: 2026-05-11 — initial baseline
-//   nav-mobile-menu-open  last reviewed: 2026-06-19 — white landing nav (dark A/B retired)
+//   landing-page            last reviewed: 2026-08-23 — Linux baseline, `white` arm
+//   landing-page-white-prev last reviewed: 2026-08-23 — Linux baseline, `white_prev` arm
+//   about-page              last reviewed: 2026-08-23 — Linux baseline
+//   survey-intro            last reviewed: 2026-08-23 — Linux baseline
+//   glossary-page           last reviewed: 2026-08-23 — Linux baseline
+//   glossary-term-page      last reviewed: 2026-08-23 — Linux baseline
+//   admin-login             last reviewed: 2026-08-23 — Linux baseline
+//   nav-mobile-menu-open    last reviewed: 2026-06-19 — Windows only; no Desktop Chrome run
+//
+// The committed `*-win32.png` set predates the Linux baselines and is only used
+// by anyone running the suite on Windows locally; CI compares the `*-linux.png`
+// files, which are the ones the dates above refer to.
 //
 // To refresh: bump the date here, run `npx playwright test visual-regression
 // --update-snapshots --project="Desktop Chrome"`, eyeball every diff, commit.
@@ -109,20 +114,35 @@ test.describe("Visual Regression", () => {
     );
   });
 
-  test("landing page full screenshot", async ({ page }) => {
-    await page.goto("/");
-    await page.waitForLoadState("networkidle");
-    await disableAnimations(page);
-    // Landing page has lots of scroll-triggered content + late-arriving images.
-    // Wait for fonts + network idle a second time to catch any deferred fetches.
-    await waitForVisualReady(page);
-    await page.waitForLoadState("networkidle");
-    await expect(page).toHaveScreenshot("landing-page.png", {
-      fullPage: true,
-      maxDiffPixelRatio: 0.03,
-      timeout: 30000,
+  // The landing is a live A/B and the two arms are entirely different pages —
+  // 9,789 vs 12,195 pixels tall, different sections, different headline.
+  // proxy.ts picks one on a crypto coin flip, so a baseline captured from a bare
+  // "/" compares whichever arm the runner was dealt against whichever arm was
+  // dealt when the baseline was taken: red roughly half the time, for a reason
+  // that has nothing to do with the page changing. `?variant=` is the QA
+  // override the middleware already honours, so pin the arm and keep one
+  // baseline each — a regression in either arm is a real regression.
+  const LANDING_ARMS = [
+    { variant: "white", snapshot: "landing-page.png" },
+    { variant: "white_prev", snapshot: "landing-page-white-prev.png" },
+  ] as const;
+
+  for (const arm of LANDING_ARMS) {
+    test(`landing page full screenshot (${arm.variant})`, async ({ page }) => {
+      await page.goto(`/?variant=${arm.variant}`);
+      await page.waitForLoadState("networkidle");
+      await disableAnimations(page);
+      // Landing page has lots of scroll-triggered content + late-arriving images.
+      // Wait for fonts + network idle a second time to catch any deferred fetches.
+      await waitForVisualReady(page);
+      await page.waitForLoadState("networkidle");
+      await expect(page).toHaveScreenshot(arm.snapshot, {
+        fullPage: true,
+        maxDiffPixelRatio: 0.03,
+        timeout: 30000,
+      });
     });
-  });
+  }
 
   test("about page full screenshot", async ({ page }) => {
     await page.goto("/about");
