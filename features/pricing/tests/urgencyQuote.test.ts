@@ -26,6 +26,7 @@ vi.mock("@features/report/server/personalReport", () => ({
 import {
   armReportUrgencyWindow,
   getReportPriceQuoteForContext,
+  getReportPriceQuotesForContext,
 } from "@features/pricing/logic/reportPricing";
 import {
   ensurePersonalReportForSubmission,
@@ -303,6 +304,142 @@ describe("urgency surcharge on the quote", () => {
       expect(mockFetchWithTimeout.mock.calls.filter(([, i]) => i?.method === "PATCH")).toHaveLength(
         0
       );
+    });
+  });
+
+  /**
+   * "Does the +€2 land on EVERY plan?" — the reader's window belongs to the reader, not
+   * to a plan, so one expired deadline has to surcharge all four tiers at once. The
+   * per-plan rows are separate rows, which is exactly how the first version of this got
+   * it wrong: only the plan whose own row carried the deadline was surcharged.
+   */
+  describe("across every plan", () => {
+    const PLANS = ["essentials", "full_report", "core", "all_reports"] as const;
+    // one distinct base per plan so a mixed-up row cannot pass by coincidence
+    const BASE: Record<(typeof PLANS)[number], number> = {
+      essentials: 9.99,
+      full_report: 26.99,
+      core: 39,
+      all_reports: 49,
+    };
+    const ROW_ID: Record<(typeof PLANS)[number], number> = {
+      essentials: 101,
+      full_report: 102,
+      core: 103,
+      all_reports: 104,
+    };
+
+    function mockAllPlans(deadlineAt: string | null) {
+      mockFetchWithTimeout.mockImplementation(async (url: string, init?: RequestInit) => {
+        if (url.includes("/rest/v1/survey_submission?id=eq.42")) {
+          return createJsonResponse([
+            {
+              id: 42,
+              user_id: 7,
+              utm_tracker: "utm_source=google",
+              duration_ms: 600000,
+              app_user: {
+                id: 7,
+                email: "user@example.com",
+                utm_tracker: null,
+                user_profile: { location_primary: "Germany" },
+              },
+            },
+          ]);
+        }
+        if (url.includes("/rest/v1/survey_submission_answer?survey_submission_id=eq.42")) {
+          return createJsonResponse([]);
+        }
+        if (url.includes("/rest/v1/report_session?personal_report_id=eq.9")) {
+          return createJsonResponse([{ id: 1 }]);
+        }
+        // the reader-wide deadline scan: only ONE plan's row carries the window,
+        // proving the deadline is not read per-plan
+        if (url.includes("select=metadata")) {
+          return createJsonResponse([
+            { metadata: {} },
+            { metadata: deadlineAt ? { urgency: { deadlineAt } } : {} },
+            { metadata: {} },
+            { metadata: {} },
+          ]);
+        }
+        // a distinct row id per plan, so the persist PATCH (which addresses the row
+        // by id, not by plan) can be answered with the right plan's row
+        const rowFor = (plan: (typeof PLANS)[number]) => ({
+          ...storedQuote(null),
+          id: ROW_ID[plan],
+          plan,
+          current_price: BASE[plan],
+          initial_price: BASE[plan],
+          starting_price: BASE[plan],
+        });
+        const planMatch = /plan=eq\.([a-z_]+)/.exec(url);
+        if (planMatch) {
+          return createJsonResponse([rowFor(planMatch[1] as (typeof PLANS)[number])]);
+        }
+        const idMatch = /id=eq\.(\d+)/.exec(url);
+        if (idMatch) {
+          const plan = PLANS.find((candidate) => ROW_ID[candidate] === Number(idMatch[1]));
+          if (plan) return createJsonResponse([rowFor(plan)]);
+        }
+        if (init?.method === "PATCH" || init?.method === "POST") {
+          return createJsonResponse({});
+        }
+        throw new Error(`Unexpected fetch call: ${url}`);
+      });
+    }
+
+    it("adds two euros to all four plans from a single expired window", async () => {
+      mockAllPlans(PAST);
+
+      const quotes = await getReportPriceQuotesForContext({
+        reportToken: "rpt_ABCDEFGHIJKLMNOPQRST",
+      });
+
+      for (const plan of PLANS) {
+        const base = Math.round(BASE[plan] * 100);
+        expect(quotes[plan], plan).toEqual(
+          expect.objectContaining({
+            currentPriceCents: base,
+            surchargeCents: 200,
+            chargedPriceCents: base + 200,
+            urgencyDeadlineAt: PAST,
+          })
+        );
+      }
+    });
+
+    it("leaves all four plans at their base price while the window is open", async () => {
+      mockAllPlans(FUTURE);
+
+      const quotes = await getReportPriceQuotesForContext({
+        reportToken: "rpt_ABCDEFGHIJKLMNOPQRST",
+      });
+
+      for (const plan of PLANS) {
+        const base = Math.round(BASE[plan] * 100);
+        expect(quotes[plan], plan).toEqual(
+          expect.objectContaining({ surchargeCents: 0, chargedPriceCents: base })
+        );
+      }
+    });
+
+    it("leaves all four plans at their base price with the flag off", async () => {
+      mockIsFeatureEnabled.mockResolvedValue(false);
+      mockAllPlans(PAST);
+
+      const quotes = await getReportPriceQuotesForContext({
+        reportToken: "rpt_ABCDEFGHIJKLMNOPQRST",
+      });
+
+      for (const plan of PLANS) {
+        expect(quotes[plan], plan).toEqual(
+          expect.objectContaining({
+            surchargeCents: 0,
+            chargedPriceCents: Math.round(BASE[plan] * 100),
+          })
+        );
+      }
     });
   });
 });
