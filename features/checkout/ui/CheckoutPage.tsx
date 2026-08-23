@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState, useSyncExternalStore, type FC } from "react";
+import posthog from "posthog-js";
 import {
   getReportNurturePromo,
   getReportPricingSessionId,
@@ -456,6 +457,11 @@ const CheckoutPage: FC<Props> = ({ archetype = null, planId, token = null }) => 
         });
         return;
       }
+
+      posthog.capture("checkout_started", {
+        currency: activeQuote.currency,
+        plan: planId,
+      });
 
       try {
         sessionStorage.setItem(CHECKOUT_SENT_KEY, checkoutKey);

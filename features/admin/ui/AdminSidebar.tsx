@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import posthog from "posthog-js";
 import { getCsrfToken } from "@shared/http/csrf-client";
 
 const analyticsItems = [
@@ -59,10 +60,13 @@ export default function AdminSidebar({ open, onClose }: AdminSidebarProps) {
   };
 
   async function handleLogout() {
-    await fetch("/api/admin/logout", {
+    const response = await fetch("/api/admin/logout", {
       method: "POST",
       headers: { "x-csrf-token": getCsrfToken() },
     });
+    if (response.ok) {
+      posthog.reset();
+    }
     window.location.href = "/admin/login";
   }
 

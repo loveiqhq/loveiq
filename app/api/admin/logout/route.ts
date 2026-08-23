@@ -25,5 +25,6 @@ export async function POST(request: Request) {
   const response = NextResponse.redirect(new URL("/admin/login", request.url));
   // Clear the old admin_session cookie if still present (backward compat cleanup)
   response.cookies.set("admin_session", "", { maxAge: 0, path: "/" });
+  response.cookies.set("admin_posthog_distinct_id", "", { maxAge: 0, path: "/admin" });
   return response;
 }

@@ -120,6 +120,17 @@ export async function GET(request: NextRequest) {
     username: "ops_alerts",
   });
 
+  // Make the authenticated user's immutable Supabase ID available to the admin
+  // client for PostHog identification. Scope it to /admin so public-site
+  // activity is never associated with an administrator account.
+  redirectToAdmin.cookies.set("admin_posthog_distinct_id", user.id, {
+    httpOnly: false,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/admin",
+    maxAge: 7 * 24 * 60 * 60,
+  });
+
   // R-03: rotate the CSRF cookie on privilege change. Clearing both prod and
   // dev names is a no-op for whichever one isn't present in the request. The
   // middleware re-mints a fresh CSRF value on the next request.

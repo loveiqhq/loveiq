@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import posthog from "posthog-js";
 import { surveyQuestions } from "@/data/survey-data";
 import { getCsrfToken } from "@shared/http/csrf-client";
 import type { SurveyAnswers } from "@features/survey/server/types";
@@ -100,6 +101,10 @@ export function useSubmitSurvey() {
             /* token extraction is best-effort */
           }
           syncPendingCompletion(null);
+          posthog.capture("survey_completed", {
+            duration_ms: payload.durationMs,
+            total_questions: surveyQuestions.length,
+          });
           setStatus("success");
           return;
         }
