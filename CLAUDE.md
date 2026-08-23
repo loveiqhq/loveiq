@@ -136,7 +136,7 @@ loveiq-web/
 1. **Page Load:** SSR → Client hydration → Smooth scroll init → Analytics pageview
 2. **Contact Form:** Form → reCAPTCHA → CSRF check → Rate limit → Zod validation → Resend email → Slack notification
 3. **Survey Submission:** Form → CSRF check → Rate limit → Zod validation → Honeypot check → Email cooldown → Supabase RPC → Slack notification
-4. **Pre-Report Wizard:** Survey submit success → 3s success animation → fade to PreReportWizard (5 slides) → SurveyConfirmation final CTA
+4. **Pre-Report Wizard:** Survey submit → ProcessingSequence (white; 5 animated steps around a progress ring, ~11s, waits for the POST) → fade to PreReportWizard (5 slides, dark) → `/report/<token>`. SurveyConfirmation is the error path only.
 5. **Survey Tracking:** Question transition → Buffer events → Flush batch → CSRF check → Rate limit → Zod validation → Supabase insert
 6. **Admin Panel:** `/admin/*` → Supabase Auth middleware gate (magic link session) → API routes with session + CSRF + rate limit → Supabase queries
 7. **Invite Send:** Form → CSRF check → Rate limit → Zod validation → Resend email (after response) → Supabase invite_event insert (after response)

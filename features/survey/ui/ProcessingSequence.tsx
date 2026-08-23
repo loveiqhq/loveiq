@@ -139,11 +139,11 @@ const CircularProgress: FC<{
     <defs>
       <linearGradient id="circ-progress-grad" x1="1" y1="0" x2="0" y2="1">
         <stop offset="0%" stopColor="#fe6839" />
-        <stop offset="100%" stopColor="#a78bfa" />
+        <stop offset="100%" stopColor="#8b6fbf" />
       </linearGradient>
     </defs>
     {/* Background track */}
-    <circle cx="100" cy="100" r={RING_R} stroke="rgba(255,255,255,0.04)" strokeWidth="2.5" />
+    <circle cx="100" cy="100" r={RING_R} stroke="rgba(22,16,33,0.12)" strokeWidth="2.5" />
     {/* Progress arc — updated directly via ref for 60fps smoothness */}
     <circle
       ref={progressRef}
@@ -155,7 +155,7 @@ const CircularProgress: FC<{
       strokeLinecap="round"
       strokeDasharray={CIRCUMFERENCE}
       strokeDashoffset={CIRCUMFERENCE}
-      style={{ filter: "drop-shadow(0 0 6px rgba(254,104,57,0.4))" }}
+      style={{ filter: "drop-shadow(0 0 5px rgba(254,104,57,0.18))" }}
     />
   </svg>
 );
@@ -182,7 +182,7 @@ const BackgroundOrbs: FC = () => (
       style={{
         opacity: 0.8351,
         background:
-          "radial-gradient(70.71% 70.71% at 50% 50%, rgba(167, 139, 250, 0.18) 0%, rgba(120, 80, 200, 0.06) 50%, rgba(0, 0, 0, 0) 75%)",
+          "radial-gradient(70.71% 70.71% at 50% 50%, rgba(167, 139, 250, 0.10) 0%, rgba(139, 111, 191, 0.05) 50%, rgba(255, 255, 255, 0) 75%)",
         left: "50%",
         top: "50%",
         transform: "translate(-50%, -50%)",
@@ -193,7 +193,7 @@ const BackgroundOrbs: FC = () => (
     <div
       className="animate-float3 absolute h-[200px] w-[200px] rounded-full sm:h-[300px] sm:w-[300px]"
       style={{
-        background: "rgba(254, 104, 57, 0.10)",
+        background: "rgba(254, 104, 57, 0.08)",
         filter: "blur(70px)",
         right: "5%",
         bottom: "15%",
@@ -351,7 +351,7 @@ const ProcessingSequence: FC<ProcessingSequenceProps> = ({ onComplete, submitDon
 
   return (
     <main
-      className="relative flex min-h-dvh flex-col items-center justify-center overflow-hidden bg-[#0a0510]"
+      className="relative flex min-h-dvh flex-col items-center justify-center overflow-hidden bg-white"
       role="status"
       aria-live="polite"
       aria-label={step.message}
@@ -372,7 +372,7 @@ const ProcessingSequence: FC<ProcessingSequenceProps> = ({ onComplete, submitDon
               width: "240px",
               height: "240px",
               background:
-                "radial-gradient(circle, rgba(167,139,250,0.18) 0%, rgba(120,80,200,0.06) 50%, transparent 75%)",
+                "radial-gradient(circle, rgba(167,139,250,0.10) 0%, rgba(139,111,191,0.04) 50%, rgba(255,255,255,0) 75%)",
             }}
           />
 
@@ -383,14 +383,13 @@ const ProcessingSequence: FC<ProcessingSequenceProps> = ({ onComplete, submitDon
 
           {/* Inner circle (persistent) */}
           <div
-            className="relative flex h-[108px] w-[108px] items-center justify-center rounded-full shadow-[0_0_60px_0_rgba(167,139,250,0.12)] sm:h-[144px] sm:w-[144px]"
+            className="relative flex h-[108px] w-[108px] items-center justify-center rounded-full shadow-[0_0_60px_0_rgba(22,16,33,0.08)] sm:h-[144px] sm:w-[144px]"
             style={{
               background:
-                "radial-gradient(circle at 40% 35%, rgba(30,20,50,1) 0%, rgba(14,8,24,1) 100%)",
+                "radial-gradient(circle at 40% 35%, rgba(255,255,255,1) 0%, rgba(245,246,248,1) 100%)",
             }}
           >
-            <div className="absolute inset-0 rounded-full border border-white/[0.06]" />
-            <div className="pointer-events-none absolute inset-0 rounded-full shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]" />
+            <div className="absolute inset-0 rounded-full border border-black/[0.08]" />
 
             {/* Icon — only this transitions */}
             <div key={stepIndex} style={iconStyle}>
@@ -403,14 +402,14 @@ const ProcessingSequence: FC<ProcessingSequenceProps> = ({ onComplete, submitDon
         {/* Fixed height prevents layout shift when text length changes between steps */}
         <div className="mt-8 flex h-[56px] items-center justify-center sm:mt-10 sm:h-[60px]">
           <div key={`msg-${stepIndex}`} style={textStyle}>
-            <p className="max-w-[400px] text-center font-serif text-[17px] leading-[28px] text-white sm:text-[20px] sm:leading-[30px]">
+            <p className="max-w-[400px] text-center font-serif text-[17px] leading-[28px] text-[#161021] sm:text-[20px] sm:leading-[30px]">
               {step.message}
             </p>
           </div>
         </div>
 
         {/* ---- Percentage (PERSISTENT) ---- */}
-        <span className="mt-3 font-sans text-[13px] font-normal tracking-[0.025em] text-white/50">
+        <span className="mt-3 font-sans text-[13px] font-normal tracking-[0.025em] text-[#6b6678]">
           {displayPercent}% complete
         </span>
       </div>
