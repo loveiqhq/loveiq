@@ -19,6 +19,7 @@ Lenis
 Manrope
 Lora
 Stripe
+PostHog
 Playwright
 Vitest
 gtag

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type FC, type FormEvent, type MutableRefObject } from "react";
+import posthog from "posthog-js";
 import { canSharePlan } from "@features/report/server/planAccess";
 import { useReportShares } from "./hooks/useReportShares";
 import { restoreScroll } from "@shared/ui/restore-scroll";
@@ -144,6 +145,7 @@ const ShareReportModal: FC<Props> = ({
     const trimmedMsg = messageInput.trim();
     const result = await add(trimmedEmail, trimmedMsg.length > 0 ? trimmedMsg : null);
     if (result.ok) {
+      posthog.capture("report_shared");
       setLastSentEmail(trimmedEmail);
       setPhase("sent");
     } else {

@@ -189,6 +189,21 @@ export async function proxy(request: NextRequest) {
     "https://api.stripe.com https://m.stripe.com https://m.stripe.network https://r.stripe.com";
   const stripeFrameSources =
     "https://js.stripe.com https://*.js.stripe.com https://hooks.stripe.com https://checkout.stripe.com";
+  // Widen CSP to the configured PostHog host plus its registrable domain (the
+  // SDK pulls the recorder/assets from sibling subdomains). Parsing is guarded
+  // because this runs in middleware on every request: an unparseable
+  // NEXT_PUBLIC_POSTHOG_HOST would otherwise throw and 500 the entire site
+  // rather than merely dropping analytics.
+  const posthogCspSources = (() => {
+    const host = process.env.NEXT_PUBLIC_POSTHOG_HOST;
+    if (!host) return "";
+    try {
+      const { hostname } = new URL(host);
+      return `${host} https://*.${hostname.split(".").slice(-2).join(".")}`;
+    } catch {
+      return "";
+    }
+  })();
 
   // Build CSP header
   // Production: 'self' + 'unsafe-inline' + explicit external domain allowlist.
@@ -201,13 +216,14 @@ export async function proxy(request: NextRequest) {
   const cspHeader = [
     "default-src 'self'",
     isDev
-      ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'"
-      : `script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://www.google-analytics.com https://googleads.g.doubleclick.net https://www.googleadservices.com https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/ https://cdn-cookieyes.com https://cookieyes.com https://connect.facebook.net https://analytics.tiktok.com https://www.clarity.ms https://*.clarity.ms https://widget.trustpilot.com ${stripeScriptSources}`,
+      ? `script-src 'self' 'unsafe-inline' 'unsafe-eval' ${posthogCspSources}`
+      : `script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://www.google-analytics.com https://googleads.g.doubleclick.net https://www.googleadservices.com https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/ https://cdn-cookieyes.com https://cookieyes.com https://connect.facebook.net https://analytics.tiktok.com https://www.clarity.ms https://*.clarity.ms https://widget.trustpilot.com ${posthogCspSources} ${stripeScriptSources}`,
     `style-src 'self' 'unsafe-inline' ${googleFontStyleSources}`, // Tailwind requires unsafe-inline for styles
+    "worker-src 'self' blob:",
     `font-src 'self' data: ${googleFontSources}`,
     `img-src 'self' data: blob: https://images.unsplash.com https://www.google-analytics.com https://www.googletagmanager.com https://googleads.g.doubleclick.net https://www.googleadservices.com https://www.google.com https://cdn-cookieyes.com https://flagcdn.com https://www.facebook.com https://*.clarity.ms https://c.bing.com https://*.trustpilot.com https://*.trustpilotcdn.net ${stripeImageSources}`,
     "media-src 'self'",
-    `connect-src 'self'${isDev ? " ws://localhost:* http://localhost:*" : ""} https://www.google-analytics.com https://www.googletagmanager.com https://googleads.g.doubleclick.net https://www.googleadservices.com https://www.google.com https://images.unsplash.com https://www.google.com/recaptcha/ https://cdn-cookieyes.com https://log.cookieyes.com https://cookieyes.com https://www.facebook.com https://analytics.tiktok.com https://*.clarity.ms https://c.bing.com https://widget.trustpilot.com ${stripeConnectSources}`,
+    `connect-src 'self'${isDev ? " ws://localhost:* http://localhost:*" : ""} https://www.google-analytics.com https://www.googletagmanager.com https://googleads.g.doubleclick.net https://www.googleadservices.com https://www.google.com https://images.unsplash.com https://www.google.com/recaptcha/ https://cdn-cookieyes.com https://log.cookieyes.com https://cookieyes.com https://www.facebook.com https://analytics.tiktok.com https://*.clarity.ms https://c.bing.com https://widget.trustpilot.com ${posthogCspSources} ${stripeConnectSources}`,
     `frame-src 'self' https://www.google.com/recaptcha/ https://recaptcha.google.com/recaptcha/ https://www.gstatic.com/recaptcha/ https://cdn-cookieyes.com https://widget.trustpilot.com ${stripeFrameSources}`,
     "frame-ancestors 'none'",
     "base-uri 'self'",
