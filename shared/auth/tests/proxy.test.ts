@@ -356,6 +356,31 @@ describe("proxy middleware", () => {
     delete process.env.NEXT_PUBLIC_POSTHOG_HOST;
   });
 
+  it("CSP allows Google Ads remarketing pixels on local country domains", () => {
+    proxy(makeNextRequest());
+    const csp = mockResponseHeaders.get("Content-Security-Policy");
+    // CSP cannot wildcard a TLD, so these are enumerated. A few representative
+    // markets, including .ba (our own region) which we caught being blocked.
+    for (const host of [
+      "https://www.google.de",
+      "https://www.google.fr",
+      "https://www.google.co.uk",
+      "https://www.google.ba",
+    ]) {
+      expect(csp).toContain(host);
+    }
+  });
+
+  it("keeps the CSP header within a sane size budget", () => {
+    proxy(makeNextRequest());
+    const csp = mockResponseHeaders.get("Content-Security-Policy") ?? "";
+    // This header goes out on every page and API response. Enumerating all ~190
+    // Google country domains measured at 6.7KB; the curated list is ~3.4KB.
+    // If this trips, something re-inflated the allowlist — trim it rather than
+    // raising the ceiling.
+    expect(csp.length).toBeLessThan(4500);
+  });
+
   it("CSP includes frame-ancestors 'none'", () => {
     proxy(makeNextRequest());
     const csp = mockResponseHeaders.get("Content-Security-Policy");
