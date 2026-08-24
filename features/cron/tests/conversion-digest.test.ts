@@ -189,6 +189,63 @@ describe("conversion-digest handler", () => {
     );
   });
 
+  it("preview mode re-sends without claiming or consuming the day", async () => {
+    // So the message can be looked at and tweaked without waiting for tomorrow.
+    const res = await GET(
+      new Request("https://www.loveiq.org/api/cron/conversion-digest?preview=1", {
+        headers: { authorization: "Bearer test-cron-secret" },
+      })
+    );
+    expect(await res.json()).toMatchObject({ sent: true, preview: true });
+    expect(mockNotifySlack).toHaveBeenCalledTimes(1);
+    // Neither half of the idempotency handshake runs, so the real 09:00 send is
+    // still pending and still fires exactly once.
+    expect(mockTryClaim).not.toHaveBeenCalled();
+    expect(mockMarkDelivered).not.toHaveBeenCalled();
+  });
+
+  it("preview still sends when the day is already claimed", async () => {
+    mockTryClaim.mockResolvedValue(false);
+    const res = await GET(
+      new Request("https://www.loveiq.org/api/cron/conversion-digest?preview=1", {
+        headers: { authorization: "Bearer test-cron-secret" },
+      })
+    );
+    expect(await res.json()).toMatchObject({ sent: true });
+    expect(mockNotifySlack).toHaveBeenCalledTimes(1);
+  });
+
+  it("preview uses a unique kind so the 60s dedup cannot swallow a repeat", async () => {
+    const req = () =>
+      new Request("https://www.loveiq.org/api/cron/conversion-digest?preview=1", {
+        headers: { authorization: "Bearer test-cron-secret" },
+      });
+    await GET(req());
+    await GET(req());
+    const kinds = mockNotifySlack.mock.calls.map((c) => (c[0] as { kind: string }).kind);
+    expect(kinds).toHaveLength(2);
+    expect(kinds[0]).not.toBe(kinds[1]);
+    expect(kinds.every((k) => k.startsWith("conversion_digest_preview_"))).toBe(true);
+  });
+
+  it("preview still refuses without the cron secret, and off the prod host", async () => {
+    const bad = await GET(
+      new Request("https://www.loveiq.org/api/cron/conversion-digest?preview=1", {
+        headers: { authorization: "Bearer wrong" },
+      })
+    );
+    expect(bad.status).toBe(401);
+
+    mockIsProdCronHost.mockReturnValue(false);
+    const staging = await GET(
+      new Request("https://www.loveiq.org/api/cron/conversion-digest?preview=1", {
+        headers: { authorization: "Bearer test-cron-secret" },
+      })
+    );
+    expect(await staging.json()).toMatchObject({ skipped: true });
+    expect(mockNotifySlack).not.toHaveBeenCalled();
+  });
+
   it("records the run and 500s when a source throws", async () => {
     mockFetchArmCohorts.mockRejectedValue(new Error("boom"));
     const res = await GET(request());

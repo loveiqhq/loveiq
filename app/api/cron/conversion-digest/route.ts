@@ -362,9 +362,26 @@ export async function GET(request: Request) {
     const yesterdayStart = new Date(dayStart.getTime() - 86_400_000);
     const dayKey = dayString(yesterdayStart);
 
-    const claimed = await tryClaimSlackAlert("conversion_digest", "day", dayKey);
-    if (!claimed) {
-      return NextResponse.json({ ok: true, day: dayKey, sent: false, reason: "already-claimed" });
+    /**
+     * `?preview=1` re-sends on demand, for looking at the message and tweaking it
+     * without waiting for tomorrow.
+     *
+     * The normal path claims the UTC day in `slack_alert_sent` so two instances
+     * cannot both post — but that also means the first manual run of the day is
+     * the only one you get to see. Preview skips the claim AND skips marking the
+     * day delivered, so the real 09:00 run still happens exactly once afterwards.
+     *
+     * Not a hole: this route already requires the CRON_SECRET bearer and refuses
+     * to run off the production host, so the only callers are Vercel and whoever
+     * holds the secret.
+     */
+    const preview = new URL(request.url).searchParams.get("preview") === "1";
+
+    if (!preview) {
+      const claimed = await tryClaimSlackAlert("conversion_digest", "day", dayKey);
+      if (!claimed) {
+        return NextResponse.json({ ok: true, day: dayKey, sent: false, reason: "already-claimed" });
+      }
     }
 
     const windowStart = new Date(dayStart.getTime() - WINDOW_DAYS * 86_400_000).toISOString();
@@ -381,14 +398,18 @@ export async function GET(request: Request) {
 
     await notifySlack({
       channel: "ops",
-      kind: "conversion_digest",
+      // A distinct kind on previews so the 60s text-dedup cannot swallow a repeat
+      // send while we iterate on the wording.
+      kind: preview ? `conversion_digest_preview_${Date.now()}` : "conversion_digest",
       text: digest.text,
       blocks: digest.blocks,
       username: "ops_alerts",
     });
-    await markSlackAlertDelivered("conversion_digest", "day", dayKey);
+    if (!preview) {
+      await markSlackAlertDelivered("conversion_digest", "day", dayKey);
+    }
 
-    return NextResponse.json({ ok: true, day: dayKey, sent: true });
+    return NextResponse.json({ ok: true, day: dayKey, sent: true, preview });
   } catch (err) {
     logger.error({ err }, "conversion-digest cron failed");
     cronError = err instanceof Error ? err.message : String(err);
