@@ -266,6 +266,31 @@ export async function proxy(request: NextRequest) {
   // because this runs in middleware on every request: an unparseable
   // NEXT_PUBLIC_POSTHOG_HOST would otherwise throw and 500 the entire site
   // rather than merely dropping analytics.
+  /*
+   * Supabase origins for connect-src, including the wss:// scheme.
+   *
+   * The admin panel's PagePresence widget opens a Supabase Realtime WebSocket.
+   * connect-src never listed supabase.co, so that socket has always been refused
+   * — silently in Chromium, but Safari THROWS a SecurityError straight out of the
+   * WebSocket constructor. That throw escapes PagePresence's useEffect into the
+   * app error boundary, which is why every admin page except /admin/login (which
+   * returns before PagePresence mounts) rendered and was then replaced by
+   * "Something went wrong".
+   *
+   * Parsed defensively: this runs in middleware on every request, so a malformed
+   * NEXT_PUBLIC_SUPABASE_URL must degrade to "no entry" rather than 500 the site.
+   */
+  const supabaseCspSources = (() => {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    if (!url) return "";
+    try {
+      const { origin, hostname } = new URL(url);
+      return `${origin} wss://${hostname}`;
+    } catch {
+      return "";
+    }
+  })();
+
   const posthogCspSources = (() => {
     const host = process.env.NEXT_PUBLIC_POSTHOG_HOST;
     if (!host) return "";
@@ -305,7 +330,7 @@ export async function proxy(request: NextRequest) {
     // (www.google.<cc>/ads/ga-audiences, /pagead/1p-user-list) still fail —
     // CSP host-source cannot wildcard a TLD and enumerating ~190 ccTLDs is worse
     // than losing audience pixels. Conversion measurement is unaffected by that.
-    `connect-src 'self'${isDev ? " ws://localhost:* http://localhost:*" : ""} https://www.google-analytics.com https://*.google-analytics.com https://analytics.google.com https://*.analytics.google.com https://www.googletagmanager.com https://googleads.g.doubleclick.net https://stats.g.doubleclick.net https://ad.doubleclick.net https://pagead2.googlesyndication.com https://www.googleadservices.com https://www.google.com https://images.unsplash.com https://www.google.com/recaptcha/ https://cdn-cookieyes.com https://log.cookieyes.com https://cookieyes.com https://www.facebook.com https://analytics.tiktok.com https://*.clarity.ms https://c.bing.com https://widget.trustpilot.com ${posthogCspSources} ${stripeConnectSources}`,
+    `connect-src 'self'${isDev ? " ws://localhost:* http://localhost:*" : ""} https://www.google-analytics.com https://*.google-analytics.com https://analytics.google.com https://*.analytics.google.com https://www.googletagmanager.com https://googleads.g.doubleclick.net https://stats.g.doubleclick.net https://ad.doubleclick.net https://pagead2.googlesyndication.com https://www.googleadservices.com https://www.google.com https://images.unsplash.com https://www.google.com/recaptcha/ https://cdn-cookieyes.com https://log.cookieyes.com https://cookieyes.com https://www.facebook.com https://analytics.tiktok.com https://*.clarity.ms https://c.bing.com https://widget.trustpilot.com ${posthogCspSources} ${supabaseCspSources} ${stripeConnectSources}`,
     `frame-src 'self' https://www.google.com/recaptcha/ https://recaptcha.google.com/recaptcha/ https://www.gstatic.com/recaptcha/ https://cdn-cookieyes.com https://widget.trustpilot.com ${stripeFrameSources}`,
     "frame-ancestors 'none'",
     "base-uri 'self'",

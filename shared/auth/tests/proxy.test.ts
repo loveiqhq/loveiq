@@ -162,6 +162,32 @@ describe("proxy middleware", () => {
     expect(csp).toContain("googletagmanager.com");
   });
 
+  /**
+   * Regression: connect-src never listed supabase.co, so the admin panel's
+   * PagePresence Realtime socket was refused. Chromium fails it silently, but
+   * Safari throws a SecurityError out of the WebSocket constructor, which escaped
+   * the effect and replaced every admin page with the app error boundary.
+   */
+  it("allows the Supabase Realtime socket in connect-src, over https and wss", () => {
+    process.env.NEXT_PUBLIC_SUPABASE_URL = "https://abcdefgh.supabase.co";
+    proxy(makeNextRequest());
+    const csp = mockResponseHeaders.get("Content-Security-Policy") ?? "";
+    const connectSrc = csp.split(";").find((part) => part.trim().startsWith("connect-src")) ?? "";
+    expect(connectSrc).toContain("https://abcdefgh.supabase.co");
+    // the WebSocket needs the wss scheme explicitly — an https entry does not cover it
+    expect(connectSrc).toContain("wss://abcdefgh.supabase.co");
+    delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+  });
+
+  it("omits the Supabase entry rather than throwing when the URL is unusable", () => {
+    // middleware runs on every request: a malformed value must not 500 the site
+    process.env.NEXT_PUBLIC_SUPABASE_URL = "not a url";
+    expect(() => proxy(makeNextRequest())).not.toThrow();
+    const csp = mockResponseHeaders.get("Content-Security-Policy") ?? "";
+    expect(csp).not.toContain("wss://not a url");
+    delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+  });
+
   it("sets X-Frame-Options to DENY", () => {
     proxy(makeNextRequest());
     expect(mockResponseHeaders.get("X-Frame-Options")).toBe("DENY");
