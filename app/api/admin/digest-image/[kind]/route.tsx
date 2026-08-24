@@ -41,16 +41,23 @@ const COLORS = {
   surface: "#0f0a18",
   text: "#e8e0f0",
   textMuted: "#9ca3af",
-  // Validated with the data-viz palette checker against this dark surface
-  // (#0b0613): both inside the dark lightness band L 0.48-0.67, CVD separation
-  // 25.7 protan / 23.8 tritan, normal-vision 27.8, contrast >= 3:1. The brand
-  // steps (#f26d4f / #9c7dff) failed the lightness band -- too light for this
-  // surface -- so these are the same hues stepped down for it.
+  // Validated with the data-viz palette checker against this dark surface:
+  //   node scripts/validate_palette.js "#8a63f0,#e0552f" --mode dark --surface "#0b0613"
+  //   lightness band PASS (both inside L 0.48-0.67) - chroma PASS -
+  //   CVD separation 29.2 protan / 26.3 tritan - normal-vision 30.3 - contrast PASS
+  // The brand steps (#f26d4f / #9c7dff) FAILED the lightness band -- too light
+  // for this surface -- so these are the same hues stepped down for it. (An
+  // earlier version of this comment quoted the rejected pair's numbers.)
   accentOrange: "#e0552f",
   accentPurple: "#8a63f0",
   barTrack: "#1a1424",
-  // Hairline grid: recessive, never dashed.
-  gridline: "#171122",
+  // Hairline grid + axis rule. Measured against this surface with the data-viz
+  // reference: the previous values sat at 1.09:1 and 1.11:1 — fainter than the
+  // rulebook's own gridline floor, and Slack downscales an 800px image to the
+  // message column, which collapses a 1px hairline further. These match the
+  // reference (gridline 1.24:1, baseline 1.44:1).
+  gridline: "#261d33",
+  baseline: "#332742",
   warn: "#fbbf24",
   danger: "#f87171",
   good: "#4ade80",
@@ -659,21 +666,37 @@ const DROPOUT_ARM_HEIGHT = 520;
  * narrow ranges keep a decimal.
  */
 /**
- * Round the axis ceiling up to a human number, so the labels read 0/1/2/3/4/5
- * instead of 0/1.3/2.6/3.9/5.2. Five intervals keeps the ticks dense enough to
- * read a point off without crowding.
+ * Axis ceiling + tick count: a round step, as close above the peak as possible.
+ *
+ * A fixed 5 intervals over a step list that jumps 1 -> 2 put a 5.9% peak on a
+ * 10% axis and a 34% peak on a 50% axis, throwing away 40% of the plot height
+ * and squashing the series. Searching 4-6 intervals across the standard
+ * 1/2/2.5/5 decades keeps the ticks round AND the ceiling tight: 5.9 -> 6,
+ * 34 -> 40, 4.5 -> 5.
  */
-function niceAxisMax(rawPeak: number, intervals = 5): number {
-  if (!Number.isFinite(rawPeak) || rawPeak <= 0) return 1;
-  const steps = [0.05, 0.1, 0.2, 0.25, 0.5, 1, 2, 2.5, 5, 10, 20, 25, 50, 100];
-  const target = rawPeak / intervals;
-  const step = steps.find((c) => c >= target) ?? Math.ceil(target);
-  return step * intervals;
+function niceAxis(rawPeak: number): { max: number; intervals: number } {
+  if (!Number.isFinite(rawPeak) || rawPeak <= 0) return { max: 1, intervals: 5 };
+  let best: { max: number; intervals: number } | null = null;
+  for (const mult of [0.01, 0.1, 1, 10, 100]) {
+    for (const base of [1, 2, 2.5, 5]) {
+      const step = base * mult;
+      for (const intervals of [5, 4, 6]) {
+        const max = step * intervals;
+        if (max < rawPeak) continue;
+        if (!best || max < best.max) best = { max, intervals };
+      }
+    }
+  }
+  return best ?? { max: Math.ceil(rawPeak), intervals: 5 };
 }
 
 function fmtAxis(value: number): string {
   if (!Number.isFinite(value) || value === 0) return "0";
-  if (value >= 10) return String(Math.round(value));
+  // Never round a real value away. This used to be Math.round above 10, which
+  // labelled a gridline sitting at 12.5 as "13" — the tick disagreed with the
+  // line it named, and the same formatter prints the end labels and the footnote
+  // peak, so a 12.7% rate was published as 13%.
+  if (value >= 10) return Number.isInteger(value) ? String(value) : value.toFixed(1);
   if (value >= 1) return value.toFixed(1).replace(/\.0$/, "");
   // Narrow ranges keep a decimal: a 0-1.2% axis rounded to whole numbers would
   // label its ticks 1/1/1/0/0.
@@ -707,92 +730,123 @@ function renderDropoutByArm(p: DropoutByArmPayload): {
     };
   }
 
-  // Shared y-scale across BOTH arms so the comparison is fair (svgPoints scaled
-  // to its own peak would distort one arm against the other). Headroom above the
-  // peak keeps the top line off the ceiling.
+  // Shared y-scale across BOTH arms so the comparison is fair (a per-arm peak
+  // would distort one against the other).
   const rawPeak = Math.max(...first, ...last, 0);
-  const peak = niceAxisMax(rawPeak);
+  const { max: peak, intervals } = niceAxis(rawPeak);
   const w = DROPOUT_ARM_PLOT_W;
   const h = DROPOUT_ARM_PLOT_H;
-  const firstPts = svgPoints(first, peak, w, h);
-  const lastPts = svgPoints(last, peak, w, h);
-  const ticks = sampleTicks(labels);
 
-  // Direct end labels. With two series the legend carries identity, but a label
-  // at the line's own end is what makes a flat-at-zero arm legible instead of
-  // looking like a catastrophic result.
+  // Inset the drawn band so a value at 0 or at the ceiling is not half-clipped
+  // by the SVG frame. A 2.5px stroke at y=h put half the zero line outside the
+  // viewport, which is exactly how an all-zero arm came to look absent rather
+  // than flat.
+  const INSET = 4;
+  const yFor = (v: number) => Math.round(INSET + (h - 2 * INSET) * (1 - v / (peak > 0 ? peak : 1)));
+  const pointsFor = (vals: number[]): string => {
+    if (vals.length === 0) return "";
+    // A one-point polyline draws nothing at all, so give it a short flat segment
+    // rather than an empty plot.
+    if (vals.length === 1) return `0,${yFor(vals[0]!)} ${w},${yFor(vals[0]!)}`;
+    const step = w / (vals.length - 1);
+    return vals.map((v, i) => `${Math.round(i * step)},${yFor(v)}`).join(" ");
+  };
+  const firstPts = pointsFor(first);
+  const lastPts = pointsFor(last);
+
   const endOf = (vals: number[]) => (vals.length > 0 ? vals[vals.length - 1]! : 0);
-  const yFor = (v: number) => Math.round(h - (v / peak) * h);
   const endFirst = endOf(first);
   const endLast = endOf(last);
-  let yFirst = yFor(endFirst);
-  let yLast = yFor(endLast);
-  // Each label is two stacked lines (~30px), so anything closer than that
-  // overlaps. Nudge both apart and clamp inside the plot.
-  const LABEL_H = 32;
-  if (Math.abs(yFirst - yLast) < LABEL_H) {
-    const mid = (yFirst + yLast) / 2;
-    const half = LABEL_H / 2;
-    if (yFirst <= yLast) {
-      yFirst = mid - half;
-      yLast = mid + half;
-    } else {
-      yLast = mid - half;
-      yFirst = mid + half;
-    }
-  }
-  const clamp = (y: number) => Math.max(0, Math.min(h - LABEL_H, Math.round(y)));
-  yFirst = clamp(yFirst);
-  yLast = clamp(yLast);
+  const yEndFirst = yFor(endFirst);
+  const yEndLast = yFor(endLast);
 
-  const legendFirst = p.legendFirst ?? "Email first (control)";
-  const legendLast = p.legendLast ?? "Email last";
-  // Short names for the end labels: drop the words the two arms SHARE, so the
-  // label keeps only what tells them apart. Taking the first word instead gave
-  // "Email" for both arms of the email-position chart — two identical labels.
+  // Direct end labels ONLY when the two lines separate at the right edge.
+  //
+  // The previous version nudged colliding labels apart and clamped each one
+  // independently, which the data-viz rulebook names explicitly ("nudging labels
+  // apart detaches them from their lines and reads as noise") and which was also
+  // simply broken: two labels pushed past the same boundary clamped to the same
+  // pixel and overprinted into unreadable glyph soup. That fired for any pair
+  // ending within a label-height of the floor — the normal state of a 1-3%
+  // conversion chart. So when they would collide, the labels are dropped and the
+  // two values go into the footnote instead, where they cannot overlap.
+  const LABEL_H = 32;
+  const labelsFit = Math.abs(yEndFirst - yEndLast) >= LABEL_H;
+
+  // Ticks: sample five x positions and keep their INDEX, so each label can sit
+  // over the point it actually names. `space-between` on sampled strings put them
+  // at the wrong fractions (index 8 of 29 laid out at the 25% slot) and aligned
+  // box edges rather than centres.
+  const tickCount = Math.min(5, n);
+  const tickIdx = Array.from(
+    new Set(
+      Array.from({ length: tickCount }, (_, i) =>
+        tickCount <= 1 ? 0 : Math.round((i * (n - 1)) / (tickCount - 1))
+      )
+    )
+  );
+
+  const legendFirstRaw = p.legendFirst ?? "Email first (control)";
+  const legendLastRaw = p.legendLast ?? "Email last";
+  // Long arm names ran straight off the 800px canvas, hard-cut mid-word.
+  const clip = (t: string, max: number) => (t.length > max ? `${t.slice(0, max - 1)}\u2026` : t);
+  const legendFirst = clip(legendFirstRaw, 34);
+  const legendLast = clip(legendLastRaw, 34);
+
+  // Short names for the end labels: keep only the words that DIFFER between the
+  // arms, so "Current homepage" / "Previous homepage" become "Current" /
+  // "Previous". Taking the first word gave "Email" for both arms of the
+  // email-position chart. Parentheticals are dropped only when doing so still
+  // tells the arms apart — for "White (current)" / "White (previous)" the
+  // distinction lives inside the parens, and stripping them collapses both to
+  // one word.
   const [shortFirst, shortLast] = ((): [string, string] => {
-    // Drop parentheticals first: "first (control)" truncates to "first (contro…",
-    // and the legend above already carries the full wording.
+    const diff = (a: string, b: string): [string, string] => {
+      const av = a.split(/\s+/).filter(Boolean);
+      const bv = b.split(/\s+/).filter(Boolean);
+      let lead = 0;
+      while (lead < av.length - 1 && lead < bv.length - 1 && av[lead] === bv[lead]) lead += 1;
+      let trail = 0;
+      while (
+        trail < av.length - lead - 1 &&
+        trail < bv.length - lead - 1 &&
+        av[av.length - 1 - trail] === bv[bv.length - 1 - trail]
+      ) {
+        trail += 1;
+      }
+      const cut = (parts: string[]) => parts.slice(lead, parts.length - trail).join(" ");
+      return [cut(av) || a, cut(bv) || b];
+    };
     const bare = (t: string) => t.replace(/\s*\([^)]*\)/g, "").trim();
-    const a = bare(legendFirst).split(/\s+/).filter(Boolean);
-    const b = bare(legendLast).split(/\s+/).filter(Boolean);
-    let lead = 0;
-    while (lead < a.length - 1 && lead < b.length - 1 && a[lead] === b[lead]) lead += 1;
-    let trail = 0;
-    while (
-      trail < a.length - lead - 1 &&
-      trail < b.length - lead - 1 &&
-      a[a.length - 1 - trail] === b[b.length - 1 - trail]
-    ) {
-      trail += 1;
-    }
-    const cut = (parts: string[]) => parts.slice(lead, parts.length - trail).join(" ");
-    const first = cut(a) || bare(legendFirst);
-    const last = cut(b) || bare(legendLast);
-    // 14 chars is what fits the label gutter at 11px.
-    const trim = (t: string) => (t.length > 14 ? `${t.slice(0, 13)}\u2026` : t);
-    return [trim(first), trim(last)];
+    const stripped = diff(bare(legendFirstRaw), bare(legendLastRaw));
+    if (stripped[0] !== stripped[1]) return [clip(stripped[0], 14), clip(stripped[1], 14)];
+    const kept = diff(legendFirstRaw, legendLastRaw);
+    return [clip(kept[0], 14), clip(kept[1], 14)];
   })();
 
   const swatch = (color: string, text: string) => (
-    <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-      <div style={{ display: "flex", width: 10, height: 10, background: color, borderRadius: 5 }} />
+    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      {/* A line chart's legend key is a line, not a dot. */}
+      <div style={{ display: "flex", width: 16, height: 2, background: color, borderRadius: 1 }} />
       <div style={{ display: "flex", fontSize: 13, color: COLORS.textMuted }}>{text}</div>
     </div>
   );
 
-  const endLabel = (color: string, name: string, value: number, top: number) => (
+  // The value wears a TEXT token; the coloured end-dot beside it carries
+  // identity. Colouring the number itself is what the rulebook forbids.
+  const endLabel = (color: string, name: string, value: number, yEnd: number) => (
     <div
+      key={name}
       style={{
         display: "flex",
         flexDirection: "column",
         position: "absolute",
-        left: w + 10,
-        top,
-        width: DROPOUT_ARM_LABEL_W - 10,
+        left: DROPOUT_ARM_AXIS_W + w + 14,
+        top: yEnd - 15,
+        width: DROPOUT_ARM_LABEL_W - 14,
       }}
     >
-      <div style={{ display: "flex", fontSize: 15, fontWeight: 700, color }}>
+      <div style={{ display: "flex", fontSize: 15, fontWeight: 700, color: COLORS.text }}>
         {`${fmtAxis(value)}%`}
       </div>
       <div style={{ display: "flex", fontSize: 11, color: COLORS.textMuted, lineHeight: 1.1 }}>
@@ -801,74 +855,101 @@ function renderDropoutByArm(p: DropoutByArmPayload): {
     </div>
   );
 
+  // End-dot: 12px with a 2px surface ring so it stays legible where the two arms
+  // cross. An all-zero arm now has a visible mark of its own instead of a
+  // half-clipped hairline hiding under the axis rule.
+  const endDot = (color: string, yEnd: number) => (
+    <div
+      style={{
+        display: "flex",
+        position: "absolute",
+        left: DROPOUT_ARM_AXIS_W + w - 6,
+        top: yEnd - 6,
+        width: 12,
+        height: 12,
+        borderRadius: 6,
+        background: color,
+        border: `2px solid ${COLORS.bg}`,
+      }}
+    />
+  );
+
+  const footnoteBase = (
+    p.footnote ??
+    "drop-off % per question · shared y-scale (peak {peak}%) · x-axis = question order"
+  ).replace("{peak}", fmtAxis(rawPeak));
+  // When the end labels had to be dropped, the two values still have to be
+  // readable somewhere.
+  const footnote = labelsFit
+    ? footnoteBase
+    : `${shortFirst} ${fmtAxis(endFirst)}% · ${shortLast} ${fmtAxis(endLast)}% — ${footnoteBase}`;
+
   const element = chartShell(
     title,
     p.windowLabel ?? "",
-    <div style={{ display: "flex", flexDirection: "column" }}>
+    <div style={{ display: "flex", flexDirection: "column", flexShrink: 0 }}>
       {/* Legend — always present for two series, so identity is never colour alone. */}
-      <div style={{ display: "flex", flexDirection: "row", gap: 20, marginBottom: 14 }}>
+      <div style={{ display: "flex", flexDirection: "row", gap: 22, marginBottom: 14 }}>
         {swatch(COLORS.accentPurple, legendFirst)}
         {swatch(COLORS.accentOrange, legendLast)}
       </div>
 
-      {/* y-axis, then the plot. Without the axis a reader cannot tell whether the
-          curve tops out at 2% or 40% — the peak was only ever stated in the
-          footnote text. */}
-      <div style={{ display: "flex", flexDirection: "row" }}>
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            justifyContent: "space-between",
-            alignItems: "flex-end",
-            width: DROPOUT_ARM_AXIS_W,
-            height: h,
-            paddingRight: 8,
-          }}
-        >
-          {[1, 0.8, 0.6, 0.4, 0.2, 0].map((f) => (
+      {/* ONE coordinate system for the whole plot: axis labels, gridlines, lines,
+          end marks and x ticks are all positioned against the same origin, so a
+          tick sits over the point it names and a y label sits on its gridline.
+          Two flex rows with space-between drifted both by up to 4.5px. */}
+      <div
+        style={{
+          display: "flex",
+          position: "relative",
+          width: DROPOUT_ARM_AXIS_W + w + DROPOUT_ARM_LABEL_W,
+          height: h + 26,
+        }}
+      >
+        {/* y-axis labels, each centred on its own gridline */}
+        {Array.from({ length: intervals + 1 }, (_, i) => {
+          const value = (peak * i) / intervals;
+          return (
             <div
-              key={`y-${f}`}
-              style={{ display: "flex", fontSize: 11, color: COLORS.textMuted, lineHeight: 1 }}
+              key={`y-${i}`}
+              style={{
+                display: "flex",
+                position: "absolute",
+                left: 0,
+                top: yFor(value) - 6,
+                width: DROPOUT_ARM_AXIS_W - 8,
+                justifyContent: "flex-end",
+                fontSize: 11,
+                color: COLORS.textMuted,
+              }}
             >
-              {`${fmtAxis(peak * f)}%`}
+              {`${fmtAxis(value)}%`}
             </div>
-          ))}
-        </div>
+          );
+        })}
 
-        <div
-          style={{
-            display: "flex",
-            position: "relative",
-            width: w + DROPOUT_ARM_LABEL_W,
-            height: h,
-          }}
-        >
+        <div style={{ display: "flex", position: "absolute", left: DROPOUT_ARM_AXIS_W, top: 0 }}>
           <svg width={w} height={h}>
-            {/* Hairline gridlines at the same fractions as the axis labels, so a
-                point can actually be read off. polyline only — the proven Satori
-                primitive in this file. */}
-            {[0.2, 0.4, 0.6, 0.8, 1].map((f) => (
-              <polyline
-                key={`grid-${f}`}
-                points={`0,${Math.round(h - f * h) + 1} ${w},${Math.round(h - f * h) + 1}`}
-                fill="none"
-                stroke={COLORS.gridline}
-                strokeWidth="1"
-              />
-            ))}
-            <polyline
-              points={`0,${h - 1} ${w},${h - 1}`}
-              fill="none"
-              stroke={COLORS.barTrack}
-              strokeWidth="1"
-            />
+            {/* Hairline gridlines on the same values as the labels. polyline only
+                — the proven Satori primitive in this file. */}
+            {Array.from({ length: intervals + 1 }, (_, i) => {
+              const y = yFor((peak * i) / intervals);
+              return (
+                <polyline
+                  key={`grid-${i}`}
+                  points={`0,${y} ${w},${y}`}
+                  fill="none"
+                  stroke={i === 0 ? COLORS.baseline : COLORS.gridline}
+                  strokeWidth="1"
+                />
+              );
+            })}
             {lastPts && (
               <polyline
                 points={lastPts}
                 fill="none"
                 stroke={COLORS.accentOrange}
-                strokeWidth="2.5"
+                strokeWidth="2"
                 strokeLinejoin="round"
                 strokeLinecap="round"
               />
@@ -878,31 +959,35 @@ function renderDropoutByArm(p: DropoutByArmPayload): {
                 points={firstPts}
                 fill="none"
                 stroke={COLORS.accentPurple}
-                strokeWidth="2.5"
+                strokeWidth="2"
                 strokeLinejoin="round"
                 strokeLinecap="round"
               />
             )}
           </svg>
-          {endLabel(COLORS.accentOrange, shortLast, endLast, yLast)}
-          {endLabel(COLORS.accentPurple, shortFirst, endFirst, yFirst)}
         </div>
-      </div>
 
-      {/* X-axis ticks, offset to line up under the plot rather than the axis labels */}
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "row",
-          width: w,
-          marginLeft: DROPOUT_ARM_AXIS_W,
-          justifyContent: "space-between",
-          marginTop: 8,
-        }}
-      >
-        {ticks.map((t, i) => (
-          <div key={`${t}-${i}`} style={{ display: "flex", fontSize: 11, color: COLORS.textMuted }}>
-            {t}
+        {endDot(COLORS.accentOrange, yEndLast)}
+        {endDot(COLORS.accentPurple, yEndFirst)}
+        {labelsFit && endLabel(COLORS.accentOrange, shortLast, endLast, yEndLast)}
+        {labelsFit && endLabel(COLORS.accentPurple, shortFirst, endFirst, yEndFirst)}
+
+        {/* x ticks, each centred on the data point it names */}
+        {tickIdx.map((idx) => (
+          <div
+            key={`x-${idx}`}
+            style={{
+              display: "flex",
+              position: "absolute",
+              left: DROPOUT_ARM_AXIS_W + (n <= 1 ? 0 : Math.round((idx * w) / (n - 1))) - 26,
+              top: h + 8,
+              width: 52,
+              justifyContent: "center",
+              fontSize: 11,
+              color: COLORS.textMuted,
+            }}
+          >
+            {labels[idx] ?? ""}
           </div>
         ))}
       </div>
@@ -911,7 +996,7 @@ function renderDropoutByArm(p: DropoutByArmPayload): {
       <div
         style={{
           display: "flex",
-          marginTop: 18,
+          marginTop: 12,
           fontSize: 15,
           color: COLORS.text,
           fontWeight: 700,
@@ -920,10 +1005,7 @@ function renderDropoutByArm(p: DropoutByArmPayload): {
         {p.headline ?? `Latest — ${fmtAxis(endFirst)}% vs ${fmtAxis(endLast)}%`}
       </div>
       <div style={{ display: "flex", marginTop: 5, fontSize: 12, color: COLORS.textMuted }}>
-        {(
-          p.footnote ??
-          "drop-off % per question · shared y-scale (peak {peak}%) · x-axis = question order"
-        ).replace("{peak}", fmtAxis(rawPeak))}
+        {footnote}
       </div>
     </div>,
     DROPOUT_ARM_HEIGHT
