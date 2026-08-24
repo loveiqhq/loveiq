@@ -9,7 +9,8 @@ type Status = "idle" | "sending" | "sent" | "error";
 
 const ERROR_MESSAGES: Record<string, string> = {
   not_authorized: "You are not authorized to access the admin panel.",
-  auth_failed: "Authentication failed. Please try again.",
+  auth_failed:
+    "That link has already been used or has expired. Sign-in links work once only — request a new one below and open it in this same browser.",
   missing_code: "Invalid login link. Please request a new one.",
   no_email: "Unable to verify your email. Please try again.",
 };
