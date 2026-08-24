@@ -313,6 +313,49 @@ describe("proxy middleware", () => {
     expect(csp).toContain("https://fonts.gstatic.com");
   });
 
+  // Regression guard: these hosts were missing for a long time, so GA4 and Ads
+  // /collect calls were refused by CSP and the numbers were silently lossy.
+  // A dropped entry here loses analytics data without failing any build.
+  it("CSP includes every GA4 + Google Ads measurement endpoint", () => {
+    proxy(makeNextRequest());
+    const csp = mockResponseHeaders.get("Content-Security-Policy");
+    for (const host of [
+      "https://www.google-analytics.com",
+      "https://*.google-analytics.com",
+      "https://analytics.google.com",
+      "https://*.analytics.google.com",
+      "https://googleads.g.doubleclick.net",
+      "https://stats.g.doubleclick.net",
+      "https://ad.doubleclick.net",
+      "https://pagead2.googlesyndication.com",
+    ]) {
+      expect(csp).toContain(host);
+    }
+  });
+
+  it("CSP includes the configured PostHog host and a blob: worker source", () => {
+    process.env.NEXT_PUBLIC_POSTHOG_HOST = "https://eu.i.posthog.com";
+    proxy(makeNextRequest());
+    const csp = mockResponseHeaders.get("Content-Security-Policy");
+    // The SDK pulls the recorder/assets from sibling subdomains, and session
+    // replay needs a blob: worker (which default-src 'self' would block).
+    expect(csp).toContain("https://eu.i.posthog.com");
+    expect(csp).toContain("https://*.posthog.com");
+    expect(csp).toContain("worker-src 'self' blob:");
+    delete process.env.NEXT_PUBLIC_POSTHOG_HOST;
+  });
+
+  it("survives an unparseable NEXT_PUBLIC_POSTHOG_HOST instead of 500ing", () => {
+    // This runs in middleware on every request, so a bad env value must
+    // degrade to "no PostHog CSP entry", never throw.
+    process.env.NEXT_PUBLIC_POSTHOG_HOST = "eu.i.posthog.com";
+    expect(() => proxy(makeNextRequest())).not.toThrow();
+    const csp = mockResponseHeaders.get("Content-Security-Policy");
+    expect(csp).toContain("default-src 'self'");
+    expect(csp).not.toContain("posthog.com");
+    delete process.env.NEXT_PUBLIC_POSTHOG_HOST;
+  });
+
   it("CSP includes frame-ancestors 'none'", () => {
     proxy(makeNextRequest());
     const csp = mockResponseHeaders.get("Content-Security-Policy");
