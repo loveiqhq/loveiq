@@ -22,6 +22,8 @@ import {
 } from "@features/checkout/server/promoCodes";
 import { verifyCsrfToken } from "@shared/http/csrf";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
+import { scheduleAfterResponse } from "@shared/http/after-response";
+import { refreshJourneyMessage } from "@features/attribution/server/journey-message";
 import {
   getReportAccessPlanForSubmission,
   resolveReportAccessToken,
@@ -405,6 +407,15 @@ export async function POST(request: Request) {
     );
 
     await markReportPriceQuoteCheckoutStarted({ quoteId: quote.id });
+
+    // Advance the Slack journey message to "checkout". After-response so the
+    // redirect to Stripe is never delayed by a Slack call.
+    if (accessContext?.submissionId) {
+      const submissionIdForJourney = accessContext.submissionId;
+      scheduleAfterResponse("journey-message-checkout", async () => {
+        await refreshJourneyMessage(submissionIdForJourney);
+      });
+    }
 
     if (!session.url) {
       logger.error({ sessionId: session.id }, "Stripe checkout session missing hosted URL");

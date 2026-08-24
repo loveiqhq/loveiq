@@ -12,6 +12,7 @@ import { verifyCsrfToken } from "@shared/http/csrf";
 import logger from "@shared/observability/logger";
 import { buildSubmissionJourney } from "@features/attribution/server/journey";
 import { buildJourneyMessage } from "@features/attribution/server/slack-journey";
+import { tryPostJourneyViaBot } from "@features/attribution/server/journey-message";
 import { codeSpan } from "@shared/observability/slack-blocks";
 import { notifySlack, maskEmail, escapeSlack } from "@shared/observability/slack";
 import { surveyCompleteEmail } from "@features/survey/server/emails/survey-complete";
@@ -129,6 +130,22 @@ const notifySlackSurvey = async ({
     },
     "Sending Slack survey notification"
   );
+
+  // Post via the Slack bot when it is configured, so later milestones can EDIT
+  // this message instead of it being frozen at the one instant of submission (the
+  // rail here can only ever show step 1 of 5 — nothing downstream exists yet).
+  // Falls through to the webhook when unconfigured or on failure, so behaviour is
+  // unchanged without a token.
+  if (
+    await tryPostJourneyViaBot({
+      submissionId,
+      questionCount,
+      message,
+      milestones: journey.milestones,
+    })
+  ) {
+    return;
+  }
 
   await notifySlack({
     channel: "survey",

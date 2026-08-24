@@ -85,6 +85,8 @@ async function lookupRecipientForSubmission(submissionId: number): Promise<{
 // notification can share it. Imported for local use here and re-exported, because
 // the existing tests (and any other caller) import it from this module.
 import { journeyFromPurchase } from "@features/attribution/server/journey";
+import { scheduleAfterResponse } from "@shared/http/after-response";
+import { refreshJourneyMessage } from "@features/attribution/server/journey-message";
 import { buildJourneyMessage } from "@features/attribution/server/slack-journey";
 import { classifyTraffic } from "@features/attribution/server/traffic";
 
@@ -177,6 +179,14 @@ async function notifySlackPurchase({
     blocks: message.blocks,
     username: "payment_notification",
     context: { paymentId, plan, submissionId },
+  });
+
+  // Also fill in the ORIGINAL survey-completion message, so the rail there reaches
+  // "Paid" instead of staying frozen at the moment the survey was submitted. This
+  // is the money ping's counterpart in the survey channel, not a duplicate of it.
+  // Never throws, and skips itself when the Slack bot is not configured.
+  scheduleAfterResponse("journey-message-paid", async () => {
+    await refreshJourneyMessage(submissionId);
   });
 }
 

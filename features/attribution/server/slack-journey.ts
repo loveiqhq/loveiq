@@ -49,28 +49,39 @@ function trafficLine(journey: SubmissionJourney): string {
 }
 
 /**
- * A one-line progress rail. Milestones sourced from analytics_event are
- * consent-gated, so a hollow marker means "not recorded", which is not the same
- * as "did not happen" — hence the caveat line the caller adds below.
+ * A one-line progress rail.
+ *
+ * FILLED means reached. This was INVERTED until 2026-08-24: `:white_circle:`
+ * meant done and `:black_circle:` meant not-done, so the solid dot — which every
+ * reader takes as "complete" — actually marked the steps that had NOT happened.
+ * The message was stating the opposite of the truth in a channel people read to
+ * judge how the funnel is doing.
+ *
+ * A later step proves every earlier one: nobody pays without finishing the
+ * survey, opening the report and reaching the paywall. That matters because two
+ * of these milestones come from `analytics_event`, which is consent-gated — so
+ * without the implication a purchase ping would render "Report opened" hollow and
+ * appear to contradict the payment it is announcing.
  */
 function journeyRail(journey: SubmissionJourney): string {
-  const paid = Boolean(journey.milestones.purchasedAt);
   const steps: Array<[string, boolean]> = [
     ["Survey done", Boolean(journey.timings.completedAt)],
     ["Report opened", Boolean(journey.milestones.reportViewedAt)],
     ["Paywall hit", Boolean(journey.milestones.paywallInitiatedAt)],
     ["Checkout", Boolean(journey.milestones.checkoutStartedAt)],
-    ["Paid", paid],
+    ["Paid", Boolean(journey.milestones.purchasedAt)],
   ];
-  return (
-    steps
-      // A payment is proof of everything before it — nobody can buy without
-      // finishing the survey, opening the report and reaching the paywall. Without
-      // this, a purchase ping would render "Report opened" hollow and appear to
-      // contradict the payment it is announcing.
-      .map(([label, done]) => `${done || paid ? ":white_circle:" : ":black_circle:"} ${label}`)
-      .join("  \u2192  ")
-  );
+  // Walk backwards so the FURTHEST step reached fills in everything before it,
+  // rather than only a payment doing so.
+  let reached = false;
+  const filled: boolean[] = [];
+  for (let i = steps.length - 1; i >= 0; i -= 1) {
+    reached = reached || steps[i]![1];
+    filled[i] = reached;
+  }
+  return steps
+    .map(([label], i) => `${filled[i] ? ":large_blue_circle:" : ":white_circle:"} ${label}`)
+    .join("  \u2192  ");
 }
 
 /** The four arms as a two-column fields block, always all four so absence is visible. */

@@ -1,102 +1,94 @@
-# Project dictionary for cspell — domain, brand, and technical vocabulary.
-# These are legitimate words (not typos). Add new terms as needed.
-
-# Brands / products / tools
-loveiq
-Supabase
-Resend
-Svix
-Semgrep
-semgrepignore
-Hotjar
-Contentsquare
-Trustpilot
-TrustBox
-cookieyes
-Vercel
-Upstash
-Lenis
-Manrope
-Lora
-Stripe
-PostHog
-Playwright
-Vitest
-gtag
-Waitlist
-
-# GA4 web-stream measurement ID fragment (from G-QTYY69L46N in app/layout.tsx)
-QTYY
-
 # AI-assistant config filenames
-clinerules
-continuerules
-cursorrules
-windsurfrules
-
-# Security / compliance / infra acronyms + terms
-recaptcha
-HSTS
-WCAG
-DPIA
-DSAR
-ROPA
-PITR
-SLSA
-SBOM
-GHAS
-Clickjacking
-Subresource
-Subprocessors
-exfiltration
-explainability
-webshells
-creds
-livemode
-whsec
-passwordless
-kubeconfig
-apiserver
-Dockerfiles
-backout
-
+# Brands / products / tools
+# British spelling used in some docs
 # Email auth (SPF/DKIM/DMARC)
-dmarc
-adkim
-aspf
-domainkey
-
+# GA4 web-stream measurement ID fragment (from G-QTYY69L46N in app/layout.tsx)
+# Misc identifiers appearing in prose
+# People (git authors / team)
 # Product / analytics / scoring vocabulary
+# Project dictionary for cspell — domain, brand, and technical vocabulary.
+# Security / compliance / infra acronyms + terms
+# These are legitimate words (not typos). Add new terms as needed.
+adkim
+apiserver
 archetype
 archetypes
-softmax
-cutover
+aspf
+backout
+behaviours
+blindspot
+Clickjacking
+clinerules
+Contentsquare
+continuerules
+cookieyes
 cooldown
+creds
+cursorrules
+cutover
 dedup
+dmarc
+Dockerfiles
+domainkey
+DPIA
 drilldowns
 drillthrough
-blindspot
+DSAR
+Eman
+exfiltration
+explainability
+GHAS
+gtag
+Hotjar
 hotspot
 hotspots
-multimethod
-navigations
-paywalled
-signups
-unconfigured
-watchlist
-Virality
-XLOOKUP
-trgm
-
-# British spelling used in some docs
-behaviours
-organisational
-stabilises
-
-# People (git authors / team)
-Eman
-Marcus
-
-# Misc identifiers appearing in prose
+HSTS
 Idxy
 JSYR
+kubeconfig
+Lenis
+livemode
+Lora
+loveiq
+Manrope
+Marcus
+multimethod
+navigations
+organisational
+passwordless
+paywalled
+PITR
+Playwright
+PostHog
+QTYY
+recaptcha
+Resend
+ROPA
+SBOM
+Semgrep
+semgrepignore
+signups
+SLSA
+softmax
+stabilises
+Stripe
+Subprocessors
+Subresource
+Supabase
+Svix
+trgm
+TrustBox
+Trustpilot
+unconfigured
+Upstash
+Vercel
+Virality
+Vitest
+Waitlist
+watchlist
+WCAG
+webshells
+whsec
+windsurfrules
+XLOOKUP
+xoxb

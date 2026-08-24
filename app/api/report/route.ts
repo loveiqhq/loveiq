@@ -14,6 +14,7 @@ import {
   resolveUnlockedArchetypes,
 } from "@features/report/server/personalReport";
 import { getReportPriceQuotesForContext } from "@features/pricing/logic/reportPricing";
+import { refreshJourneyMessage } from "@features/attribution/server/journey-message";
 import {
   buildArchetypeContentForUser,
   buildPracticeTendenciesForUser,
@@ -518,6 +519,16 @@ export async function GET(request: Request) {
             userId: submission.user_id,
             utmTracker: submission.utm_tracker,
           });
+        });
+      }
+
+      // Advance the Slack journey message now that the report has actually been
+      // opened. report_session is the server-side truth here — analytics_event's
+      // report_viewed sits behind the consent gate and undercounts it by ~31%.
+      // After-response and self-skipping, so a re-read costs nothing.
+      if (access.personalReportId) {
+        scheduleAfterResponse("journey-message-report-open", async () => {
+          await refreshJourneyMessage(submission.id);
         });
       }
     } catch (err) {
