@@ -93,6 +93,7 @@ function quote(subId: number, group: string, paid: boolean, price = 29) {
     forced_paywall_arm: "treatment",
     current_price: price,
     purchased_at: paid ? "2026-08-21T00:00:00.000Z" : null,
+    checkout_started_at: paid ? "2026-08-21T00:00:00.000Z" : null,
   };
 }
 
@@ -281,6 +282,30 @@ describe("GET /api/admin/ab-overview", () => {
     const body = await (await GET(req(42))).json();
     const step = body.funnel.find((f: { step: string }) => f.step === "Answered question 1");
     expect(step.count).toBe(250);
+  });
+
+  it("counts paid the same way in the funnel and in the headline", async () => {
+    // The funnel used to take Paid from distinct succeeded payment.user_id (36)
+    // while the headline counted submissions with a purchased quote (37) — two
+    // different numbers for one thing on one page.
+    routeData(
+      [submission(1, "white", null), submission(2, "white", null)],
+      [quote(1, "A", true), quote(2, "B", false)]
+    );
+    const body = await (await GET(req(44))).json();
+    const paidStep = body.funnel.find((f: { step: string }) => f.step === "Paid");
+    expect(paidStep.count).toBe(body.totals.purchases);
+  });
+
+  it("measures checkout server-side instead of the consent-gated paywall event", async () => {
+    routeData([submission(1, "white", null)], [quote(1, "A", true)]);
+    const body = await (await GET(req(45))).json();
+    const labels = body.funnel.map((f: { step: string }) => f.step);
+    // paywall_initiated saw 41 submissions against 37 purchases in production —
+    // a 96.9% "drop" that was missing data, not behaviour.
+    expect(labels).not.toContain("Reached the paywall");
+    expect(labels).toContain("Started checkout");
+    expect(body.funnelCaveats.join(" ")).toContain("our own servers");
   });
 
   it("does not present the paywall as a live A/B test", async () => {

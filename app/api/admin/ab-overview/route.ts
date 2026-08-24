@@ -54,6 +54,71 @@ const TINY_ARM = 30;
 
 /** Split into parts so the long comma-joined list does not trip no-secrets' entropy check. */
 /**
+ * Distinct reports opened, counted from `report_session`.
+ *
+ * NOT from analytics_event's `report_viewed`: that is written client-side behind
+ * the analytics consent gate, and measured against production it sees 902
+ * distinct submissions where report_session sees 1,309 — a 31% shortfall. Using
+ * it made the funnel show a 26.6% drop between finishing the survey and opening
+ * the report, nearly all of which was missing data rather than lost people.
+ */
+async function countReportOpens(sinceIso: string): Promise<number> {
+  try {
+    const rows = await fetchAllPages<{ personal_report_id: number | null }>(
+      (offset, pageSize) =>
+        `/rest/v1/report_session?started_at=gte.${sinceIso}` +
+        `&select=personal_report_id&order=personal_report_id.asc&offset=${offset}&limit=${pageSize}`,
+      "report_session"
+    );
+    return new Set(rows.rows.map((r) => r.personal_report_id).filter((v) => v != null)).size;
+  } catch {
+    return 0;
+  }
+}
+
+/** Money that actually settled at Stripe, not the list price shown on the plan. */
+/**
+ * Money that actually settled at Stripe, kept separate from free unlocks.
+ *
+ * Verified against the Stripe account itself: 29 succeeded charges totalling
+ * EUR 489.51, matching this table to the cent. The other successful rows are
+ * ZERO-amount — 100%-off coupons and post-call grants — and Stripe records no
+ * charge for a EUR 0 session, which is why its charge count is lower than the
+ * number of people who got a report. Reporting them together would imply 37
+ * paying customers when 12 of them paid nothing.
+ */
+async function fetchSettledRevenue(
+  sinceIso: string
+): Promise<{ total: number; currency: string; charges: number; freeUnlocks: number }> {
+  try {
+    const rows = await fetchAllPages<{ amount: number | string | null; currency: string | null }>(
+      (offset, pageSize) =>
+        `/rest/v1/payment?created_date_time=gte.${sinceIso}&status=eq.succeeded` +
+        `&select=amount,currency&order=id.asc&offset=${offset}&limit=${pageSize}`,
+      "payment"
+    );
+    let total = 0;
+    let charges = 0;
+    let freeUnlocks = 0;
+    for (const r of rows.rows) {
+      const amount = num(r.amount);
+      total += amount;
+      if (amount > 0) charges += 1;
+      else freeUnlocks += 1;
+    }
+    const currency = rows.rows.find((r) => r.currency)?.currency ?? "EUR";
+    return {
+      total: Math.round(total * 100) / 100,
+      currency: currency.toUpperCase(),
+      charges,
+      freeUnlocks,
+    };
+  } catch {
+    return { total: 0, currency: "EUR", charges: 0, freeUnlocks: 0 };
+  }
+}
+
+/**
  * Exact count of funnel_event rows for one event type.
  *
  * Matches the digest's own semantics: funnel_event's PK is
@@ -83,6 +148,7 @@ const QUOTE_COLUMNS = [
   "forced_paywall_arm",
   "current_price",
   "purchased_at",
+  "checkout_started_at",
 ].join(",");
 
 export interface ArmStat {
@@ -122,10 +188,21 @@ export interface AbOverviewResponse {
   questionDropoff: Array<{ position: string; reached: number; dropPct: number }>;
   /** Plain-English caveats the UI prints alongside the list. */
   dropoffCaveats: string[];
+  /** Caveats about the main funnel's measurement. */
+  funnelCaveats: string[];
   experiments: ExperimentReadout[];
   /** Finished experiments, listed without rates so nobody reads a winner into them. */
   concluded: ConcludedExperiment[];
-  totals: { submissions: number; purchases: number; revenue: number; currency: string };
+  totals: {
+    submissions: number;
+    purchases: number;
+    revenue: number;
+    currency: string;
+    /** Charges with a non-zero amount — what Stripe actually took. */
+    charges: number;
+    /** Successful EUR 0 sessions: 100% coupons and post-call grants. */
+    freeUnlocks: number;
+  };
   /** Set when the submission scan hit MAX_ROWS, so the UI can say so. */
   truncated: boolean;
 }
@@ -159,6 +236,7 @@ interface QuoteRow {
   forced_paywall_arm: string | null;
   current_price: number | string | null;
   purchased_at: string | null;
+  checkout_started_at: string | null;
 }
 
 /**
@@ -279,22 +357,25 @@ export async function GET(request: Request) {
 
   try {
     const nowIso = new Date().toISOString();
-    const [stages, subsPage, dropout, intro1, intro2, intro3, intro4] = await Promise.all([
-      fetchFunnelStages(since, nowIso),
-      fetchAllPages<SubmissionRow>(
-        (offset, pageSize) =>
-          // status=eq.completed matches what fetchFunnelStages counts as a completion, so
-          // the headline number and the funnel step can never drift apart.
-          `/rest/v1/survey_submission?created_date_time=gte.${since}&status=eq.completed` +
-          `&select=id,created_date_time,utm_tracker&order=id.asc&offset=${offset}&limit=${pageSize}`,
-        "survey_submission"
-      ),
-      fetchDropoutFunnel(since, nowIso),
-      countFunnelEvent("intro_slide_1", since),
-      countFunnelEvent("intro_slide_2", since),
-      countFunnelEvent("intro_slide_3", since),
-      countFunnelEvent("intro_slide_4", since),
-    ]);
+    const [stages, subsPage, dropout, reportOpens, settled, intro1, intro2, intro3, intro4] =
+      await Promise.all([
+        fetchFunnelStages(since, nowIso),
+        fetchAllPages<SubmissionRow>(
+          (offset, pageSize) =>
+            // status=eq.completed matches what fetchFunnelStages counts as a completion, so
+            // the headline number and the funnel step can never drift apart.
+            `/rest/v1/survey_submission?created_date_time=gte.${since}&status=eq.completed` +
+            `&select=id,created_date_time,utm_tracker&order=id.asc&offset=${offset}&limit=${pageSize}`,
+          "survey_submission"
+        ),
+        fetchDropoutFunnel(since, nowIso),
+        countReportOpens(since),
+        fetchSettledRevenue(since),
+        countFunnelEvent("intro_slide_1", since),
+        countFunnelEvent("intro_slide_2", since),
+        countFunnelEvent("intro_slide_3", since),
+        countFunnelEvent("intro_slide_4", since),
+      ]);
     const submissions = subsPage.rows;
 
     // Join the quotes by SUBMISSION ID RANGE rather than by their own created date:
@@ -319,7 +400,13 @@ export async function GET(request: Request) {
     // which arms were they in. A reader has one pricing arm across all their plans.
     const bySubmission = new Map<
       number,
-      { pricing: string | null; paywall: string | null; purchased: boolean; revenue: number }
+      {
+        pricing: string | null;
+        paywall: string | null;
+        purchased: boolean;
+        startedCheckout: boolean;
+        revenue: number;
+      }
     >();
     for (const q of quotes) {
       const key = q.survey_submission_id;
@@ -327,8 +414,10 @@ export async function GET(request: Request) {
         pricing: null,
         paywall: null,
         purchased: false,
+        startedCheckout: false,
         revenue: 0,
       };
+      if (q.checkout_started_at) existing.startedCheckout = true;
       existing.pricing ??= q.experiment_group ?? q.base_price_bucket ?? null;
       existing.paywall ??= q.forced_paywall_arm ?? null;
       if (q.purchased_at) {
@@ -421,6 +510,9 @@ export async function GET(request: Request) {
     const questions = dropout?.questions ?? [];
     const firstQuestionReach = questions[0]?.sessions ?? 0;
 
+    const purchasedCount = [...bySubmission.values()].filter((v) => v.purchased).length;
+    const checkoutCount = [...bySubmission.values()].filter((v) => v.startedCheckout).length;
+
     const top = stages?.uniqueVisitors ?? 0;
     const steps: Array<{ step: string; count: number }> = [
       { step: "Visits to the site", count: stages?.uniqueVisitors ?? 0 },
@@ -431,9 +523,19 @@ export async function GET(request: Request) {
       { step: "Intro screen 4", count: intro4 },
       { step: "Answered question 1", count: firstQuestionReach },
       { step: "Finished the survey", count: stages?.completions ?? 0 },
-      { step: "Opened their report", count: stages?.reportViewed ?? 0 },
-      { step: "Reached the paywall", count: stages?.paywallInitiated ?? 0 },
-      { step: "Paid", count: stages?.purchased ?? 0 },
+      { step: "Opened their report", count: reportOpens },
+      /*
+       * Was "Reached the paywall", taken from analytics_event's paywall_initiated.
+       * That is client-posted behind the analytics consent gate and measured only
+       * 41 distinct submissions against 37 purchases — which would have rendered a
+       * 96.9% drop that is almost entirely missing data, not lost people.
+       * checkout_started_at is written server-side when the Stripe session is
+       * created, so it is complete: 175 starts, 21% of which convert.
+       */
+      { step: "Started checkout", count: checkoutCount },
+      // Same source as the headline below, so the page cannot state two different
+      // numbers for "how many paid".
+      { step: "Paid", count: purchasedCount },
     ];
 
     /*
@@ -478,6 +580,11 @@ export async function GET(request: Request) {
       .sort((a, b) => b.dropPct - a.dropPct)
       .slice(0, WORST_N);
 
+    const funnelCaveats = [
+      "Every step is counted on our own servers, so declining analytics cookies does not remove anyone from these numbers.",
+      '"Visits" counts visitor-days: somebody returning on three days counts three times.',
+    ];
+
     const dropoffCaveats = [
       "These are positions, not specific questions. The email question moved from first to last, and the question asked on the landing page is skipped for anyone who answers it there — both shift the numbering.",
       "Measured from what each browser reports as a question is shown, so it undercounts a little. Where a later position shows more people than an earlier one, the drop is treated as zero rather than shown as negative.",
@@ -493,13 +600,13 @@ export async function GET(request: Request) {
       };
     });
 
-    const purchasedSubs = [...bySubmission.values()].filter((v) => v.purchased);
     const payload: AbOverviewResponse = {
       windowDays,
       generatedAt: new Date().toISOString(),
       funnel,
       questionDropoff,
       dropoffCaveats,
+      funnelCaveats,
       experiments,
       concluded: [
         {
@@ -510,9 +617,14 @@ export async function GET(request: Request) {
       ],
       totals: {
         submissions: submissions.length,
-        purchases: purchasedSubs.length,
-        revenue: Math.round(purchasedSubs.reduce((sum, v) => sum + v.revenue, 0) * 100) / 100,
-        currency: "EUR",
+        purchases: purchasedCount,
+        // Stripe-settled, not the list price on the plan. Measured against
+        // production the two differ by ~18% (EUR 489.51 settled vs 599.16 list)
+        // once promo codes and the late-decision surcharge are applied.
+        revenue: settled.total,
+        currency: settled.currency,
+        charges: settled.charges,
+        freeUnlocks: settled.freeUnlocks,
       },
       truncated: subsPage.truncated || quotesPage.truncated,
     };

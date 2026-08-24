@@ -40,9 +40,17 @@ export interface AbOverview {
   funnel: Array<{ step: string; count: number; pctOfTop: number; dropFromPrev: number }>;
   questionDropoff: Array<{ position: string; reached: number; dropPct: number }>;
   dropoffCaveats: string[];
+  funnelCaveats: string[];
   experiments: ExperimentReadout[];
   concluded: Array<{ title: string; outcome: string }>;
-  totals: { submissions: number; purchases: number; revenue: number; currency: string };
+  totals: {
+    submissions: number;
+    purchases: number;
+    revenue: number;
+    currency: string;
+    charges: number;
+    freeUnlocks: number;
+  };
   truncated: boolean;
 }
 
@@ -261,19 +269,23 @@ export function AbOverviewView({
           }
         />
         <HeadlineNumber
-          label="Paid for a report"
+          label="Got a report"
           value={paid.toLocaleString()}
           hint={
             visitors > 0 ? `${Math.round((paid / visitors) * 1000) / 10}% of visitors` : undefined
           }
         />
         <HeadlineNumber
-          label="Revenue (list price)"
+          label="Revenue"
           value={`${totals.currency} ${totals.revenue.toLocaleString()}`}
-          // The sum of the prices shown on the purchased plans. Discount codes and
-          // the late-decision surcharge are applied at Stripe, so the money that
-          // actually settled can differ — say so rather than implying this is banked.
-          hint={`${totals.purchases} purchase${totals.purchases === 1 ? "" : "s"} · before discounts`}
+          // Stripe-settled. Reported alongside the free unlocks, because 100%
+          // coupons and post-call grants complete without a charge — quoting the
+          // total against the access count would imply everyone paid.
+          hint={
+            totals.freeUnlocks > 0
+              ? `${totals.charges} paid · ${totals.freeUnlocks} unlocked free`
+              : `${totals.charges} payment${totals.charges === 1 ? "" : "s"}`
+          }
         />
       </div>
 
@@ -282,6 +294,13 @@ export function AbOverviewView({
         subtitle="Each bar is how many got that far. The arrows show the share who stopped between one step and the next. The first row is the baseline everything else is measured against."
       >
         <Funnel steps={funnel} />
+        <ul className="mt-4 space-y-1">
+          {data.funnelCaveats.map((c) => (
+            <li key={c} className="text-xs text-text-muted">
+              · {c}
+            </li>
+          ))}
+        </ul>
       </Card>
 
       {data.questionDropoff.length > 0 && (
