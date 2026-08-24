@@ -8722,6 +8722,12 @@ input.autofill-dark:-internal-autofill-previewed {
   background: #ffffff;
 }
 
+/* With a gloss the block runs several lines, so a vertically centred icon
+   floats away from the label it belongs to. */
+.report-hero-card__motivation:has(.report-hero-card__motivation-sub) {
+  align-items: flex-start;
+}
+
 .report-hero-card__motivation-icon {
   flex-shrink: 0;
   width: clamp(44px, 4.5vw, 56px);
@@ -8729,6 +8735,16 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 .report-hero-card__motivation-copy {
+  /* Column since 2026-08-24: the gloss sits under the label+value row, which is
+     now its own flex row (`__motivation-line`). */
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+
+.report-hero-card__motivation-line {
   display: flex;
   flex-direction: row;
   align-items: center;

@@ -163,8 +163,13 @@ const CoreArchetypeSection: FC<Props> = ({ matchScore, theme }) => {
               </svg>
             </div>
             <div className="report-hero-card__motivation-copy">
-              <p className="report-hero-card__motivation-label">Core motivation:</p>
-              <p className="report-hero-card__motivation-value">{theme.motivation}</p>
+              {/* label + value stay a row; the gloss goes under both. Without the
+                  inner wrapper the copy block's own row direction puts the
+                  sentence beside "Healing" instead of beneath it. */}
+              <div className="report-hero-card__motivation-line">
+                <p className="report-hero-card__motivation-label">Core motivation:</p>
+                <p className="report-hero-card__motivation-value">{theme.motivation}</p>
+              </div>
               {motivationSub ? (
                 <p className="report-hero-card__motivation-sub">{motivationSub}</p>
               ) : null}
