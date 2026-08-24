@@ -21,6 +21,7 @@ import {
   type ReportPurchasePlanId,
 } from "./reportPurchase";
 import { sendGa4PurchaseEvent } from "@features/analytics/server/ga4";
+import { sendPosthogPurchaseEvent } from "@features/analytics/server/posthog";
 
 let _resend: Resend | null = null;
 function getResend(): Resend | null {
@@ -1416,6 +1417,33 @@ async function syncCheckoutSessionPayment({
           traffic_source: metadata.trafficSource ?? undefined,
           forced_paywall_arm: metadata.forcedPaywallArm ?? undefined,
           landing_variant: metadata.landingVariant ?? undefined,
+        },
+      });
+
+      // Same purchase to PostHog, for the same reason as the GA4 send above:
+      // the client-side half only fires for buyers who return to
+      // /checkout/return, so ad blockers and closed tabs silently undercount
+      // revenue. Not consent-gated (see the module doc) because PostHog itself
+      // is un-gated on this site. Best-effort: never throws.
+      await sendPosthogPurchaseEvent({
+        email: recipient.email,
+        transactionId: settledSession.id,
+        value: amount ?? 0,
+        currency: (settledSession.currency ?? "eur").toUpperCase(),
+        plan,
+        itemName: getReportPurchasePlan(plan).title,
+        params: {
+          archetype: unlockedArchetype ?? undefined,
+          pricing_cluster_id: metadata.pricingClusterId ?? undefined,
+          experiment_group: metadata.experimentGroup ?? undefined,
+          base_price_bucket: metadata.basePriceBucket ?? undefined,
+          discount_step: metadata.discountStep ?? undefined,
+          country_tier: metadata.countryTier ?? undefined,
+          device_type: metadata.deviceType ?? undefined,
+          traffic_source: metadata.trafficSource ?? undefined,
+          forced_paywall_arm: metadata.forcedPaywallArm ?? undefined,
+          landing_variant: metadata.landingVariant ?? undefined,
+          submission_id: context.submissionId ?? undefined,
         },
       });
 
