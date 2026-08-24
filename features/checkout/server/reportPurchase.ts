@@ -35,6 +35,11 @@ export interface ReportPurchasePlan {
    * Flat selling price (cents) — display fallback when a live quote isn't
    * available. The live per-visitor quote (report_price_quote) is the source of
    * truth; the strike-through MSRP comes from `ReportPriceQuoteSnapshot.msrpCents`.
+   *
+   * Keep this at the HIGHEST arm's price (currently arm A). It renders for the
+   * moment before /api/price resolves, so if it sits below what the visitor is
+   * actually charged the price visibly jumps UP on them — a bait-and-switch on
+   * a paywall. Anchored high, the correction is always downward.
    */
   priceCents: number;
   priceSuffix: string;
@@ -61,7 +66,7 @@ export const REPORT_PURCHASE_PLANS: ReportPurchasePlan[] = [
       { icon: "lock", label: "Where you fit and where you clash" },
     ],
     plan: "full_report",
-    priceCents: 999,
+    priceCents: 3999,
     priceSuffix: "one-off",
     title: "Just a snapshot",
   },
@@ -79,7 +84,7 @@ export const REPORT_PURCHASE_PLANS: ReportPurchasePlan[] = [
       { icon: "lock", label: "Where you fit and where you clash" },
     ],
     plan: "core",
-    priceCents: 1999,
+    priceCents: 4999,
     priceSuffix: "one-off",
     title: "All your core archetypes",
     tone: "highlight",
@@ -100,7 +105,7 @@ export const REPORT_PURCHASE_PLANS: ReportPurchasePlan[] = [
       { icon: "check", label: "Where you fit and where you clash" },
     ],
     plan: "all_reports",
-    priceCents: 2999,
+    priceCents: 5900,
     priceSuffix: "one-off",
     title: "For you & your partner",
   },

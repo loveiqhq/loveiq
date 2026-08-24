@@ -133,3 +133,48 @@ describe("the checkout quote cache and the urgency window", () => {
     ).toBe(2199);
   });
 });
+
+/**
+ * The same guard, but driven off the LIVE catalogue instead of illustrative
+ * numbers — so a future price edit cannot quietly break the anchor.
+ *
+ * Pricing 2.1 (2026-08) raised arm A roughly 4×, and the anchors moved up with
+ * it by only ~€5-6. That leaves far less headroom over the +€2 surcharge than
+ * 2.0 had, and the failure is silent: an anchor that slips under charged+€2
+ * makes the strike, the "Save €X" row and the "N% OFF" pill all vanish, with no
+ * error anywhere. Assert the intended outcome for every live plan × arm.
+ */
+describe("the live catalogue keeps a truthful anchor once the surcharge lands", () => {
+  const cases = [
+    // plan, arm, expected badge with the surcharge applied (null = suppressed)
+    { plan: "full_report" as const, code: "A" as const, badge: "9% OFF" },
+    { plan: "full_report" as const, code: "B" as const, badge: null },
+    { plan: "core" as const, code: "A" as const, badge: "5% OFF" },
+    { plan: "core" as const, code: "B" as const, badge: "53% OFF" },
+    { plan: "all_reports" as const, code: "A" as const, badge: "6% OFF" },
+    { plan: "all_reports" as const, code: "B" as const, badge: "12% OFF" },
+  ];
+
+  it.each(cases)("$plan arm $code → badge $badge", async ({ plan, code, badge }) => {
+    const { getPricingBucketsForPlan } = await import("@features/pricing/logic/reportPricing");
+    const { URGENCY_SURCHARGE_CENTS } = await import("@features/pricing/logic/urgencySurcharge");
+
+    const bucket = getPricingBucketsForPlan(plan).find((entry) => entry.code === code)!;
+    const charged = bucket.startingCents + URGENCY_SURCHARGE_CENTS;
+
+    expect(
+      getReportPurchaseBadgeFromPrice({ strikeCents: bucket.msrpCents, currentCents: charged })
+    ).toBe(badge);
+    // Strike and badge are driven by the same guard, so they must agree: either
+    // both present or both gone. A strike without a badge is the misleading case.
+    expect(getReportPurchaseStrikePrice(bucket.msrpCents, charged) === null).toBe(badge === null);
+  });
+
+  it("arm B's full report is the only live bucket priced at its own anchor", () => {
+    // Documents WHY one row above expects null: B tier 1 is 29.00 against a
+    // 29.00 anchor, so it is already suppressed before any surcharge. If a
+    // future edit gives it a real anchor, this flips and the table above needs
+    // revisiting rather than silently gaining a badge.
+    expect(getReportPurchaseStrikePrice(2900, 2900)).toBeNull();
+  });
+});

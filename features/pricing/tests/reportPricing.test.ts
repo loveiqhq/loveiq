@@ -23,6 +23,7 @@ import {
   getPricingBucketsForPlan,
   getPricingExperimentGroup,
   getReportPriceQuoteForContext,
+  normalizePriceEnding,
 } from "@features/pricing/logic/reportPricing";
 import {
   ensurePersonalReportForSubmission,
@@ -79,10 +80,11 @@ describe("reportPricing", () => {
     });
   });
 
-  describe("bucket catalogue (pricing 2.0)", () => {
-    // Pricing 2.0: per-visitor boosts are paused, so A/B are just two flat base
-    // arms from the CSV (A = the low arm, B = the high arm). Group A always uses
-    // its bucket base verbatim; Group B uses its own (higher) flat base.
+  describe("bucket catalogue (pricing 2.1)", () => {
+    // Per-visitor boosts are paused, so A/B are just two flat base arms from the
+    // CSV. Since Pricing 2.1 (2026-08) A is the HIGH arm and B the low one — the
+    // reverse of 2.0 — so these assert the numbers, not a direction. Each arm is
+    // charged its own bucket base verbatim.
     it("essentials buckets are flat €9.99 (grandfathered, A == B)", () => {
       expect(getPricingBucketsForPlan("essentials")).toEqual([
         { code: "A", weight: 50, msrpCents: 2999, startingCents: 999 },
@@ -90,25 +92,39 @@ describe("reportPricing", () => {
       ]);
     });
 
-    it("full_report buckets: A €9.99 (strike €14.99), B flat €29", () => {
+    it("full_report buckets: A €39.99 (strike €45.99), B flat €29", () => {
       expect(getPricingBucketsForPlan("full_report")).toEqual([
-        { code: "A", weight: 50, msrpCents: 1499, startingCents: 999 },
+        { code: "A", weight: 50, msrpCents: 4599, startingCents: 3999 },
         { code: "B", weight: 50, msrpCents: 2900, startingCents: 2900 },
       ]);
     });
 
-    it("core buckets: A €19.99 (strike €24.99), B €39 (strike €87)", () => {
+    it("core buckets: A €49.99 (strike €54.99), B €39 (strike €87)", () => {
       expect(getPricingBucketsForPlan("core")).toEqual([
-        { code: "A", weight: 50, msrpCents: 2499, startingCents: 1999 },
+        { code: "A", weight: 50, msrpCents: 5499, startingCents: 4999 },
         { code: "B", weight: 50, msrpCents: 8700, startingCents: 3900 },
       ]);
     });
 
-    it("all_reports buckets: A €29.99 (strike €34.99), B €49 (strike €58)", () => {
+    it("all_reports buckets: A €59 (strike €64.99), B €49 (strike €58)", () => {
       expect(getPricingBucketsForPlan("all_reports")).toEqual([
-        { code: "A", weight: 50, msrpCents: 3499, startingCents: 2999 },
+        { code: "A", weight: 50, msrpCents: 6499, startingCents: 5900 },
         { code: "B", weight: 50, msrpCents: 5800, startingCents: 4900 },
       ]);
+    });
+
+    // €59.00 is the only charged price in the catalogue without a .49/.99
+    // ending, so it is the one value where normalizePriceEnding disagrees with
+    // the catalogue: it snaps 5900 UP to 5949. That only stays invisible because
+    // current_price is Math.min(previous, discounted, initial) and initial is
+    // 5900. Guard it, so a future refactor that drops the min surfaces here
+    // rather than as a 49-cent overcharge in production.
+    it("normalizePriceEnding snaps €59.00 up, so the min against initial is what holds the price", () => {
+      expect(normalizePriceEnding(5900)).toBe(5949);
+      expect(Math.min(5900, normalizePriceEnding(5900), 5900)).toBe(5900);
+      // The other two new arm-A prices are already on a .99 ending.
+      expect(normalizePriceEnding(3999)).toBe(3999);
+      expect(normalizePriceEnding(4999)).toBe(4999);
     });
 
     it("weights sum to 100 per plan", () => {
@@ -561,10 +577,12 @@ describe("reportPricing", () => {
     expect(lookupReportTokenBySubmissionId).not.toHaveBeenCalled();
   });
 
-  it("group A all_reports fresh quote is the €29.99 base starting verbatim (step 0)", async () => {
+  it("group A all_reports fresh quote is the €59 base starting verbatim (step 0)", async () => {
     // Group A is charged the flat base `starting` verbatim (no per-user uplift,
-    // no charm-snap). 2026-06 base for all_reports is €29.99. A fresh quote at
-    // step 0 → initial == current == the catalogue starting (2999).
+    // no charm-snap). Pricing 2.1 base for all_reports is €59.00. A fresh quote
+    // at step 0 → initial == current == the catalogue starting (5900). This is
+    // also the only end-to-end guard that €59.00 survives normalizePriceEnding
+    // snapping it to 5949.
     let groupAId = 0;
     for (let id = 1; id <= 5_000; id++) {
       if (getPricingExperimentGroup(id) === "A") {
@@ -629,10 +647,140 @@ describe("reportPricing", () => {
       reportToken: "rpt_ABCDEFGHIJKLMNOPQRST",
     });
 
-    // Group A: €29.99 base verbatim — no uplift, no decay, no charm-snap.
-    // Pricing 2.0 all_reports Group A: starting €29.99, strike (msrp) €34.99.
-    expect(quote.initialPriceCents).toBe(2999);
-    expect(quote.currentPriceCents).toBe(2999);
-    expect(quote.msrpCents).toBe(3499);
+    // Group A: €59.00 base verbatim — no uplift, no decay, no charm-snap.
+    // Pricing 2.1 all_reports Group A: starting €59.00, strike (msrp) €64.99.
+    expect(quote.initialPriceCents).toBe(5900);
+    expect(quote.currentPriceCents).toBe(5900);
+    expect(quote.msrpCents).toBe(6499);
+  });
+
+  // Pricing 2.1 RAISED arm A, and a raise is the one direction the engine
+  // resists: current_price is Math.min(previous, discounted, initial), so an
+  // existing row stays pinned to its old price until every one of those inputs
+  // is rewritten. These two cases are the executable proof that the resync
+  // migration (supabase/migrations/*_pricing_2_1_resync_quotes.sql) IS the
+  // change and not a tidy-up — drop it and case 2 is what production serves.
+  describe("raising a stored group-A quote (pricing 2.1 resync)", () => {
+    const storedQuoteBase = {
+      id: 77,
+      personal_report_id: 9,
+      survey_submission_id: 42,
+      user_id: 7,
+      plan: "full_report",
+      currency: "EUR",
+      experiment_group: "A",
+      forced_paywall_arm: "treatment",
+      base_price_bucket: "A",
+      discount_step: 0,
+      discount_multiplier: 1,
+      pricing_cluster_id: "A-full_report-A-tier_2-desktop-direct-zero-standard-d0",
+      country_tier: "tier_2",
+      country_multiplier: 1,
+      device_type: "Desktop",
+      device_multiplier: 1,
+      traffic_source: "direct",
+      traffic_multiplier: 1,
+      behavioral_bucket: "zero",
+      behavioral_multiplier: 1,
+      engagement_score: 0,
+      engagement_multiplier: 1,
+      report_preview_views: 0,
+      fantasy_signal_count: 0,
+      survey_duration_ms: 600000,
+      initial_price_timestamp: "2026-08-01T10:00:00.000Z",
+      // Deliberately NOT expired, so regenerateInitialPrice stays false and the
+      // stored values are the ones under test.
+      expires_at: "2026-09-30T10:00:00.000Z",
+      checkout_started_at: null,
+      purchased_at: null,
+      metadata: null,
+      view_count: 1,
+    };
+
+    function mockStoredQuote(moneyColumns: Record<string, number>) {
+      const existingQuote = { ...storedQuoteBase, ...moneyColumns };
+      mockFetchWithTimeout.mockImplementation(
+        async (url: string, options?: { body?: string; method?: string }) => {
+          if (url.includes("select=metadata")) return createJsonResponse([]);
+          if (url.includes("/rest/v1/survey_submission?id=eq.42")) {
+            return createJsonResponse([
+              {
+                id: 42,
+                user_id: 7,
+                utm_tracker: null,
+                duration_ms: 600000,
+                app_user: {
+                  id: 7,
+                  email: "user@example.com",
+                  utm_tracker: null,
+                  user_profile: { location_primary: "Germany" },
+                },
+              },
+            ]);
+          }
+          if (url.includes("/rest/v1/survey_submission_answer?survey_submission_id=eq.42")) {
+            return createJsonResponse([]);
+          }
+          if (url.includes("/rest/v1/report_session?personal_report_id=eq.9")) {
+            return createJsonResponse([]);
+          }
+          if (
+            url.includes("/rest/v1/report_price_quote?personal_report_id=eq.9&plan=eq.full_report")
+          ) {
+            return createJsonResponse([existingQuote]);
+          }
+          if (options?.method === "PATCH" && url.includes("/rest/v1/report_price_quote?id=eq.77")) {
+            const patched = JSON.parse(options.body ?? "{}") as Record<string, unknown>;
+            return createJsonResponse([{ ...existingQuote, ...patched }]);
+          }
+          throw new Error(`Unexpected fetch call: ${options?.method ?? "GET"} ${url}`);
+        }
+      );
+    }
+
+    const readQuote = () =>
+      getReportPriceQuoteForContext({
+        now: new Date("2026-08-24T10:00:00.000Z"),
+        plan: "full_report",
+        reportToken: "rpt_ABCDEFGHIJKLMNOPQRST",
+      });
+
+    it("serves the raised €39.99 once ALL the money columns are resynced", async () => {
+      // What supabase/migrations/20260824120000_pricing_2_1_resync_quotes.sql
+      // writes: msrp, base_price, starting_price, initial_price AND
+      // current_price together, so all three Math.min inputs are the new price.
+      mockStoredQuote({
+        base_price: 45.99,
+        msrp: 45.99,
+        starting_price: 39.99,
+        initial_price: 39.99,
+        current_price: 39.99,
+      });
+
+      const quote = await readQuote();
+
+      expect(quote.currentPriceCents).toBe(3999);
+      expect(quote.initialPriceCents).toBe(3999);
+      expect(quote.msrpCents).toBe(4599);
+    });
+
+    it("stays clamped to the OLD €9.99 when only msrp/starting were raised", async () => {
+      // The half-done migration: the strike moved but the charged price did not.
+      // Math.min(previous 999, discounted 999, initial 999) = 999.
+      mockStoredQuote({
+        base_price: 45.99,
+        msrp: 45.99,
+        starting_price: 39.99,
+        initial_price: 9.99,
+        current_price: 9.99,
+      });
+
+      const quote = await readQuote();
+
+      // Still the old price, and now paired with the new anchor — the paywall
+      // would advertise "€9.99, was €45.99", a 78% discount nobody authorised.
+      expect(quote.currentPriceCents).toBe(999);
+      expect(quote.msrpCents).toBe(4599);
+    });
   });
 });

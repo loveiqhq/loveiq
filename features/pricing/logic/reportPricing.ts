@@ -56,14 +56,20 @@ const PRICING_SIGNAL_SELECT = [
 ].join(",");
 
 /**
- * Pricing buckets. Pricing 2.0 (2026-07): each A/B bucket carries its OWN base
- * price per plan (Group A = low arm, Group B = high arm) and all per-visitor
- * boosts are paused, so the charged price is simply the bucket's `startingCents`
- * and the 14-day time-decay ladder is off. `msrpCents` is the struck-out anchor
- * shown in the modal/email. Actual numbers live in PLAN_BUCKETS below — the
- * single source of truth (see its per-tier comments). Existing quotes are frozen
- * on create, so a change here also needs a re-sync of unpurchased rows (see
- * supabase/migrations/*_pricing_2_resync_quotes.sql).
+ * Pricing buckets. Each A/B bucket carries its OWN base price per plan and all
+ * per-visitor boosts are paused, so the charged price is simply the bucket's
+ * `startingCents` and the 14-day time-decay ladder is off. `msrpCents` is the
+ * struck-out anchor shown in the modal/email. Since Pricing 2.1 (2026-08) Group
+ * A is the HIGH arm and Group B the low one — the reverse of 2.0, so do not
+ * assume a direction here; read PLAN_BUCKETS below, which is the single source
+ * of truth (see its per-tier comments).
+ *
+ * Existing quotes are frozen on create, so a change here reprices ONLY new
+ * quotes: the stored msrp/starting_price, initial_price and current_price each
+ * independently pin an existing row to its old price. Every change here
+ * therefore needs a matching re-sync of unpurchased rows, or it silently does
+ * nothing for everyone who already has a quote (see
+ * supabase/migrations/*_resync_quotes.sql).
  */
 // "C" retired 2026-06 (3-bucket → 2-bucket). Kept in the union so legacy quotes
 // stamped base_price_bucket="C" still rehydrate — they read msrp/starting off the
@@ -75,28 +81,31 @@ interface PricingBucket {
   msrpCents: number;
   startingCents: number;
 }
-// Pricing 2.0 (2026-07, from Tracking & Pricing - pricing_2.0.csv). Each bucket
-// carries its OWN base — Group A low, Group B high — so the A/B test survives
-// with boosts paused (no per-visitor multipliers applied). startingCents = the
-// charged price; msrpCents = the strike-through. `essentials` retired (grandfathered).
+// Pricing 2.1 (2026-08, from Tracking & Pricing - pricing_2.0.csv, the "higher
+// validity test (23.08.2026)" block). Each bucket carries its OWN base, and note
+// that 2.1 FLIPPED the direction: arm A is now the HIGH arm on every tier and
+// arm B the low one — the opposite of 2.0. Boosts stay paused (no per-visitor
+// multipliers applied), so the charged price is just `startingCents`;
+// `msrpCents` is the strike-through anchor. Arm B is unchanged from 2.0, and
+// `essentials` (retired/grandfathered) is untouched.
 const PLAN_BUCKETS: Record<ReportPurchasePlanId, readonly PricingBucket[]> = {
   essentials: [
     { code: "A", weight: 50, msrpCents: 2999, startingCents: 999 },
     { code: "B", weight: 50, msrpCents: 2999, startingCents: 999 },
   ],
-  // Tier 1 "Just a snapshot": A €9.99 (was €14.99), B €29 (no strike)
+  // Tier 1 "Just a snapshot": A €39.99 (strike €45.99), B €29 (no strike)
   full_report: [
-    { code: "A", weight: 50, msrpCents: 1499, startingCents: 999 },
+    { code: "A", weight: 50, msrpCents: 4599, startingCents: 3999 },
     { code: "B", weight: 50, msrpCents: 2900, startingCents: 2900 },
   ],
-  // Tier 2 "All your core archetypes": A €19.99 (was €24.99), B €39 (was €87)
+  // Tier 2 "All your core archetypes": A €49.99 (strike €54.99), B €39 (strike €87)
   core: [
-    { code: "A", weight: 50, msrpCents: 2499, startingCents: 1999 },
+    { code: "A", weight: 50, msrpCents: 5499, startingCents: 4999 },
     { code: "B", weight: 50, msrpCents: 8700, startingCents: 3900 },
   ],
-  // Tier 3 "For you & your partner": A €29.99 (was €34.99), B €49 (was €58)
+  // Tier 3 "For you & your partner": A €59 (strike €64.99), B €49 (strike €58)
   all_reports: [
-    { code: "A", weight: 50, msrpCents: 3499, startingCents: 2999 },
+    { code: "A", weight: 50, msrpCents: 6499, startingCents: 5900 },
     { code: "B", weight: 50, msrpCents: 5800, startingCents: 4900 },
   ],
 };
@@ -589,13 +598,6 @@ function mergeSessionLockedQuote({
 
   metadata.sessionLocks = prunedLocks;
   return metadata;
-}
-
-export function formatReportPrice(cents: number, currency = "EUR") {
-  return new Intl.NumberFormat("en-IE", {
-    currency,
-    style: "currency",
-  }).format(cents / 100);
 }
 
 export function normalizePriceEnding(rawCents: number) {
@@ -1219,7 +1221,7 @@ function buildQuotePayload({
       : now.toISOString();
 
   // Per-user pricing (pricing 2.0): each arm is charged its OWN bucket's flat
-  // `starting` price — Group A the low arm, Group B the high arm. While
+  // `starting` price — since Pricing 2.1 Group A is the HIGH arm, B the low. While
   // `pricing_uplift_enabled` is OFF (current default) NO per-visitor uplift is
   // applied to either arm. If uplift is ever re-enabled, Group B additionally
   // gets the contextual multiplier (country × device × traffic × behavioral ×
@@ -1767,20 +1769,6 @@ export async function markReportPriceQuotePurchased({
   if (!response.ok) {
     throw new Error("pricing_quote_purchase_update_failed");
   }
-}
-
-/**
- * Display helper used by legacy admin screens. Returns the bucket-B MSRP as
- * the default "retail" price — the per-user strike is stored on the quote now
- * and should be read from `ReportPriceQuoteSnapshot.msrpCents` instead.
- * Since the 2026-06 reset A and B are identical, so the returned value is
- * unambiguous regardless of the bucket-B preference.
- */
-export function getReportPriceStrikeDisplay(plan: ReportPurchasePlanId) {
-  // eslint-disable-next-line security/detect-object-injection -- plan is a closed union of internal purchase-plan ids.
-  const bucketList = PLAN_BUCKETS[plan];
-  const defaultBucket = bucketList.find((entry) => entry.code === "B") ?? bucketList[0];
-  return defaultBucket ? formatReportPrice(defaultBucket.msrpCents) : null;
 }
 
 /**
