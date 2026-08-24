@@ -245,7 +245,8 @@ const ReportPricingModal: FC<Props> = ({
     typeof window === "undefined" ? 0 : Date.now() + REPORT_PAYWALL_COUNTDOWN_MS
   );
   const { mm, ss } = usePaywallCountdownValue(offerDeadline ?? fallbackDeadline);
-  // Cheapest live price — prefixes the "Lifetime value" why-card ("€9.99, one time…").
+  // Cheapest live price — prefixes the "Lifetime value" why-card ("<price>, one
+  // time…"). Read from the quote, never a literal, so it follows the catalogue.
   const cheapestPriceLabel = quotes?.full_report
     ? formatReportPurchasePrice(quotes.full_report.chargedPriceCents)
     : null;
