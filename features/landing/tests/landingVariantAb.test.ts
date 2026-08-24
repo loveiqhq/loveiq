@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   LANDING_VARIANT_ARMS,
   LANDING_VARIANT_COOKIE,
@@ -107,6 +107,77 @@ describe("landing A/B — the two arms", () => {
     // ...and the rest are shared, so a fix lands on both arms.
     for (const shared of ["../white/WNavSection", "../white/WHowItWorks", "../white/WGlossary"]) {
       expect(previous).toContain(shared);
+    }
+  });
+});
+
+/**
+ * The server write path for per-arm visitor counts.
+ *
+ * `recordUniqueVisit` is the only writer of `funnel_event.landing_variant`, and
+ * it used to store `variant === "white" ? "white" : "control"` — filing round-2's
+ * `white_prev` under round-1's retired `control` label. Nothing broke and nothing
+ * failed; the arm was simply destroyed at write time, leaving one column that
+ * conflated June's dark traffic with today's `white_prev`. Measured in production
+ * before the fix: 19,136 `white`, 1,058 `control`, zero `white_prev` ever.
+ *
+ * These assert the write BODY rather than grepping the source, because the whole
+ * failure mode is a value that is wrong while the code reads fine.
+ */
+describe("landing A/B — the arm survives the funnel_event write", () => {
+  const originalUrl = process.env.SUPABASE_URL;
+  const originalKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  beforeEach(() => {
+    vi.resetModules();
+    process.env.SUPABASE_URL = "https://test.supabase.co";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  });
+
+  afterEach(() => {
+    process.env.SUPABASE_URL = originalUrl;
+    process.env.SUPABASE_SERVICE_ROLE_KEY = originalKey;
+    vi.doUnmock("@shared/http/fetch-with-timeout");
+  });
+
+  async function writtenBodyFor(variant: string): Promise<Record<string, unknown>> {
+    const calls: Array<{ body?: string }> = [];
+    // Reset per CALL, not per test: `doMock` does not rebind a module that has
+    // already been imported, so two calls in one test would otherwise both land
+    // on the first mock and the second would record nothing.
+    vi.resetModules();
+    vi.doMock("@shared/http/fetch-with-timeout", () => ({
+      fetchWithTimeout: async (_url: string, init: { body?: string }) => {
+        calls.push(init);
+        return { ok: true, clone: () => ({ text: async () => "" }) } as unknown as Response;
+      },
+    }));
+    const { recordUniqueVisit } = await import("@shared/observability/recordVisit");
+    await recordUniqueVisit(variant);
+    expect(calls).toHaveLength(1);
+    return JSON.parse(calls[0]!.body ?? "{}") as Record<string, unknown>;
+  }
+
+  it("stores white_prev as itself, not as the retired control arm", async () => {
+    const body = await writtenBodyFor("white_prev");
+    expect(body.landing_variant).toBe("white_prev");
+    expect(body.landing_variant).not.toBe("control");
+  });
+
+  it("stores white as white", async () => {
+    expect((await writtenBodyFor("white")).landing_variant).toBe("white");
+  });
+
+  it("clamps an unrecognised value to the live arm instead of writing it through", async () => {
+    // The value arrives on a header copied from an inbound request in proxy.ts,
+    // so it is not trusted — but the clamp must land on a real arm, not "control".
+    expect((await writtenBodyFor("'; drop table --")).landing_variant).toBe("white");
+    expect((await writtenBodyFor("")).landing_variant).toBe("white");
+  });
+
+  it("covers every live arm, so adding an arm without updating the writer fails here", async () => {
+    for (const arm of LANDING_VARIANT_ARMS) {
+      expect((await writtenBodyFor(arm)).landing_variant).toBe(arm);
     }
   });
 });

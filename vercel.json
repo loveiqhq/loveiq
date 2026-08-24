@@ -72,6 +72,9 @@
     },
     "app/api/cron/chapter-nudge/route.ts": {
       "maxDuration": 60
+    },
+    "app/api/cron/conversion-digest/route.ts": {
+      "maxDuration": 60
     }
   }
 }

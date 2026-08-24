@@ -61,6 +61,7 @@ const VALID_KINDS = new Set([
   "bucket-performance",
   "dropout-funnel",
   "dropout-by-arm",
+  "conversion-by-arm",
   "reactivation-email",
 ]);
 
@@ -123,11 +124,26 @@ interface DropoutPayload {
  * are aligned question labels; `first`/`last` are drop-off % per index.
  */
 interface DropoutByArmPayload {
-  kind: "dropout-by-arm";
+  kind: "dropout-by-arm" | "conversion-by-arm";
   windowLabel?: string;
   labels: string[];
   first: number[];
   last: number[];
+  /**
+   * Optional captions, so the shared-y-scale two-curve renderer can serve any
+   * A/B comparison instead of only the email-position one it was written for.
+   * All default to the drop-off wording, so the original `dropout-by-arm`
+   * payloads render byte-identically.
+   *
+   * `conversion-by-arm` (the daily conversion digest) supplies its own: arm names
+   * come from `armLabel`, so nobody in Slack meets a raw value like `white_prev`.
+   */
+  title?: string;
+  legendFirst?: string;
+  legendLast?: string;
+  headline?: string;
+  /** Footnote under the plot; `{peak}` is replaced with the shared y-scale peak. */
+  footnote?: string;
 }
 
 type AnyPayload =
@@ -637,7 +653,7 @@ function renderDropoutByArm(p: DropoutByArmPayload): {
     (Array.isArray(a) ? a : []).map((v) => Math.max(0, Number(v) || 0));
   const first = toVals(p.first);
   const last = toVals(p.last);
-  const title = "Where users quit by arm — email first vs last";
+  const title = p.title ?? "Where users quit by arm — email first vs last";
   const n = Math.max(first.length, last.length);
 
   if (n === 0) {
@@ -646,7 +662,7 @@ function renderDropoutByArm(p: DropoutByArmPayload): {
         title,
         p.windowLabel ?? "",
         <div style={{ display: "flex", color: COLORS.textMuted, fontSize: 18, padding: 24 }}>
-          Awaiting data — not enough per-arm survey traffic in this window yet.
+          Awaiting data — not enough per-arm traffic in this window yet.
         </div>
       ),
       height: HEIGHT,
@@ -665,9 +681,11 @@ function renderDropoutByArm(p: DropoutByArmPayload): {
   // Headline: the first-question (index 0) drop-off per arm — the hypothesis.
   const q1First = first[0];
   const q1Last = last[0];
-  const headline = `Q1 drop-off — first: ${
-    q1First !== undefined ? Math.round(q1First) : "—"
-  }%  ·  last: ${q1Last !== undefined ? Math.round(q1Last) : "—"}%`;
+  const headline =
+    p.headline ??
+    `Q1 drop-off — first: ${
+      q1First !== undefined ? Math.round(q1First) : "—"
+    }%  ·  last: ${q1Last !== undefined ? Math.round(q1Last) : "—"}%`;
 
   const element = chartShell(
     title,
@@ -686,7 +704,7 @@ function renderDropoutByArm(p: DropoutByArmPayload): {
             }}
           />
           <div style={{ display: "flex", fontSize: 13, color: COLORS.textMuted }}>
-            Email first (control)
+            {p.legendFirst ?? "Email first (control)"}
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -699,7 +717,9 @@ function renderDropoutByArm(p: DropoutByArmPayload): {
               borderRadius: 2,
             }}
           />
-          <div style={{ display: "flex", fontSize: 13, color: COLORS.textMuted }}>Email last</div>
+          <div style={{ display: "flex", fontSize: 13, color: COLORS.textMuted }}>
+            {p.legendLast ?? "Email last"}
+          </div>
         </div>
       </div>
       {/* Overlaid drop-off % curves (shared y-scale) */}
@@ -760,7 +780,10 @@ function renderDropoutByArm(p: DropoutByArmPayload): {
         {headline}
       </div>
       <div style={{ display: "flex", marginTop: 4, fontSize: 12, color: COLORS.textMuted }}>
-        {`drop-off % per question · shared y-scale (peak ${Math.round(peak)}%) · x-axis = question order`}
+        {(
+          p.footnote ??
+          "drop-off % per question · shared y-scale (peak {peak}%) · x-axis = question order"
+        ).replace("{peak}", String(Math.round(peak)))}
       </div>
     </div>,
     DROPOUT_ARM_HEIGHT
@@ -784,6 +807,7 @@ function renderForKind(
     case "dropout-funnel":
       return renderDropoutBars(payload as DropoutPayload);
     case "dropout-by-arm":
+    case "conversion-by-arm":
       return renderDropoutByArm(payload as DropoutByArmPayload);
     case "reactivation-email":
       return renderStageConversion(payload as StageConversionPayload);
