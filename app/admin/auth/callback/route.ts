@@ -64,7 +64,30 @@ export async function GET(request: NextRequest) {
   });
 
   if (error) {
-    logger.error({ error: error.message }, "Admin auth callback failed");
+    /*
+     * A spent link is the NORMAL case here, not an incident. These tokens are
+     * single-use, so the second interaction with the same email always lands in
+     * this branch — paste the URL, then click the button, and the click fails.
+     *
+     * Previously that threw the visitor to /admin/login?error=auth_failed even
+     * when the first interaction had already signed them in successfully, which
+     * is how a working session ends up looking like a lockout. If the request
+     * already carries a valid session, honour it and send them where the link was
+     * taking them anyway. /admin re-checks the session and the allowlist itself
+     * (verifyAdminSession), so this cannot grant access on its own.
+     */
+    const { data: existing } = await supabase.auth.getUser();
+    if (existing.user?.email) {
+      logger.info(
+        { email: existing.user.email },
+        "Admin auth callback: link already spent, but the session is valid — continuing"
+      );
+      return redirectToAdmin;
+    }
+
+    // logger.warn, not logger.error: error mirrors to the ops Slack channel in
+    // production, and a re-clicked sign-in link is not something to page anyone about.
+    logger.warn({ error: error.message }, "Admin auth callback failed");
     return NextResponse.redirect(new URL("/admin/login?error=auth_failed", origin));
   }
 
