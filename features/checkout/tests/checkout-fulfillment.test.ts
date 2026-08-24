@@ -1161,6 +1161,10 @@ describe("classifyTraffic", () => {
         source: null,
         medium: null,
         campaign: null,
+        isGoogleAds: false,
+        keyword: null,
+        matchType: null,
+        network: null,
       });
     }
   });
@@ -1200,7 +1204,18 @@ describe("classifyTraffic", () => {
 
   it("ignores non-string utm values without throwing", () => {
     const result = classifyTraffic(JSON.stringify({ utm_source: 123, utm_campaign: true }));
-    expect(result).toEqual({ bucket: "Direct", source: null, medium: null, campaign: null });
+    expect(result).toEqual({
+      bucket: "Direct",
+      source: null,
+      medium: null,
+      campaign: null,
+      // Google Ads is asserted from the auto-tagging click id, never inferred
+      // from utm_source — any link can set that to "google".
+      isGoogleAds: false,
+      keyword: null,
+      matchType: null,
+      network: null,
+    });
   });
 
   it("treats a JSON array as having no utm fields (Direct, no crash)", () => {
@@ -1209,6 +1224,42 @@ describe("classifyTraffic", () => {
       source: null,
       medium: null,
       campaign: null,
+      isGoogleAds: false,
+      keyword: null,
+      matchType: null,
+      network: null,
+    });
+  });
+
+  it("asserts Google Ads from the click id, never from utm_source", () => {
+    // Measured over 30 days: 287 of 335 submissions carried a click id and only
+    // 2 carried a campaign, because auto-tagging appends ONLY the click id. So
+    // the click id is the proof, and utm_source="google" is not.
+    for (const key of ["gclid", "gbraid", "wbraid"]) {
+      expect(classifyTraffic(JSON.stringify({ [key]: "abc123" })).isGoogleAds).toBe(true);
+    }
+    // Anyone can write this on a link; it must not claim a paid Google click.
+    expect(classifyTraffic(JSON.stringify({ utm_source: "google" })).isGoogleAds).toBe(false);
+    // An empty click id is not a click.
+    expect(classifyTraffic(JSON.stringify({ gclid: "   " })).isGoogleAds).toBe(false);
+  });
+
+  it("carries ValueTrack detail through when the tracking template supplies it", () => {
+    const t = classifyTraffic(
+      JSON.stringify({
+        gclid: "abc",
+        utm_campaign: "brand-eu",
+        utm_term: "love language test",
+        matchtype: "e",
+        network: "g",
+      })
+    );
+    expect(t).toMatchObject({
+      isGoogleAds: true,
+      campaign: "brand-eu",
+      keyword: "love language test",
+      matchType: "e",
+      network: "g",
     });
   });
 

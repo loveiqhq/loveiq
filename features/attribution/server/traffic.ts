@@ -16,6 +16,16 @@ export type TrafficInfo = {
   source: string | null;
   medium: string | null;
   campaign: string | null;
+  /**
+   * A Google Ads click, proven by an auto-tagging click id (gclid, or
+   * gbraid/wbraid on iOS) rather than inferred from utm_source — which anyone
+   * can set to "google".
+   */
+  isGoogleAds: boolean;
+  /** ValueTrack detail, when the tracking template supplies it. */
+  keyword: string | null;
+  matchType: string | null;
+  network: string | null;
 };
 
 // Classify the visitor's acquisition channel from the survey_submission.utm_tracker
@@ -64,7 +74,23 @@ export function classifyTraffic(utmTracker: string | null): TrafficInfo {
     bucket = "Organic";
   }
 
-  return { bucket, source, medium, campaign };
+  const isGoogleAds = ["gclid", "gbraid", "wbraid"].some(
+    (k) => typeof parsed[k] === "string" && (parsed[k] as string).trim() !== ""
+  );
+
+  return {
+    bucket,
+    source,
+    medium,
+    campaign,
+    isGoogleAds,
+    // ValueTrack lands in the standard utm slots when the Google Ads tracking
+    // template is configured to write them; `matchtype`/`network` are the raw
+    // ValueTrack names, captured verbatim when present.
+    keyword: str(parsed.utm_term),
+    matchType: str(parsed.matchtype),
+    network: str(parsed.network),
+  };
 }
 
 /**

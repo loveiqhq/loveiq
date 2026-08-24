@@ -45,6 +45,13 @@ export interface SubmissionJourney {
    * own answer to the country question (falling back to their profile), so it is
    * self-reported.
    */
+  /**
+   * The visitor's own country answer (falling back to their profile). This is
+   * what a reader actually wants — `countryTier` is a pricing band derived from
+   * it, and showing only the band put "tier_1" on screen where "Germany" was
+   * already known.
+   */
+  country: string | null;
   countryTier: string | null;
   timings: {
     /** Client-measured survey wall time. */
@@ -80,7 +87,11 @@ interface SubmissionRow {
   status: string | null;
   duration_ms: number | null;
   utm_tracker: string | null;
-  app_user: { email: string | null; first_name: string | null } | null;
+  app_user: {
+    email: string | null;
+    first_name: string | null;
+    user_profile: { location_primary: string | null } | null;
+  } | null;
 }
 
 interface QuoteRow {
@@ -154,7 +165,7 @@ export async function buildSubmissionJourney(
     fetchJson<SubmissionRow>(
       `/rest/v1/survey_submission?id=eq.${submissionId}` +
         `&select=id,session_id,start_date_time,created_date_time,status,duration_ms,utm_tracker,` +
-        `app_user!fk_survey_submission_user(email,first_name)`,
+        `app_user!fk_survey_submission_user(email,first_name,user_profile(location_primary))`,
       "survey_submission"
     ),
     fetchJson<QuoteRow>(
@@ -203,6 +214,7 @@ export async function buildSubmissionJourney(
     },
     traffic: classifyTraffic(sub.utm_tracker),
     device: anyQuote?.device_type ?? null,
+    country: sub.app_user?.user_profile?.location_primary?.trim() || null,
     countryTier: anyQuote?.country_tier ?? null,
     timings: {
       durationMs: toNumber(sub.duration_ms),
@@ -270,6 +282,9 @@ export function journeyFromPurchase(input: {
     },
     traffic: classifyTraffic(input.utmTracker),
     device: input.deviceType,
+    // The Stripe webhook carries no country — the session metadata never held
+    // one — so this stays null rather than being guessed from the pricing tier.
+    country: null,
     countryTier: input.countryTier,
     timings: {
       durationMs: null,

@@ -143,6 +143,10 @@ describe("buildSubmissionJourney", () => {
       source: "google",
       medium: "cpc",
       campaign: "spring",
+      isGoogleAds: false,
+      keyword: null,
+      matchType: null,
+      network: null,
     });
   });
 

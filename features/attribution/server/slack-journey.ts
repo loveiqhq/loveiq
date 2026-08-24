@@ -46,10 +46,36 @@ function money(amount: number | null, currency: string): string | null {
   return `${currency} ${amount.toFixed(2)}`;
 }
 
-/** "Paid — google / cpc / spring", with every user-controllable part escaped. */
+/**
+ * Where they came from, with every user-controllable part escaped.
+ *
+ * Google Ads is asserted from the auto-tagging CLICK ID, not from `utm_source`,
+ * which any link can set to "google". Measured over 30 days: 287 of 335
+ * submissions carried a click id and only 2 carried a campaign — because
+ * auto-tagging appends the click id and nothing else. So an ad click with no
+ * campaign says so, instead of printing a bare "Paid — google / cpc" that reads
+ * like complete attribution when the campaign is simply not being sent.
+ */
 function trafficLine(journey: SubmissionJourney): string {
-  const { bucket, source, medium, campaign } = journey.traffic;
-  const parts = [source, medium, campaign].filter(Boolean).map((p) => escapeSlack(p!));
+  const { bucket, source, medium, campaign, isGoogleAds, keyword, matchType, network } =
+    journey.traffic;
+  const esc = (v: string) => escapeSlack(v);
+
+  if (isGoogleAds) {
+    const detail: string[] = [];
+    if (campaign) detail.push(esc(campaign));
+    if (keyword) detail.push(`"${esc(keyword)}"`);
+    const qualifiers = [matchType, network].filter(Boolean).map((v) => esc(v!));
+    const tail = qualifiers.length > 0 ? ` (${qualifiers.join(", ")})` : "";
+    if (detail.length === 0) {
+      // The gap is named, with its cause, because a missing campaign here is a
+      // Google Ads settings problem — not an ad that has no campaign.
+      return "Google Ads — campaign not tagged (auto-tagging sends only the click id)";
+    }
+    return `Google Ads — ${detail.join(" / ")}${tail}`;
+  }
+
+  const parts = [source, medium, campaign].filter(Boolean).map((p) => esc(p!));
   return parts.length > 0 ? `${bucket} — ${parts.join(" / ")}` : bucket;
 }
 
@@ -252,11 +278,21 @@ export function buildJourneyMessage(
     { label: "Came from", value: trafficLine(journey) },
   ];
   if (journey.device) whereRows.push({ label: "Device", value: escapeSlack(journey.device) });
-  if (journey.countryTier) {
-    // Not IP geolocation — derived from the visitor's own country answer.
+  // The real country, not the pricing band. Both are self-reported (the visitor's
+  // own country answer, falling back to their profile) — but the band was all
+  // this used to show, so "tier_1" appeared where "Germany" was already known.
+  // The band rides along in parentheses because it is what the price keys off.
+  //
+  // codeSpan, not escapeSlack: Slack mrkdwn has no reliable backslash escape, so
+  // escaping the underscore rendered a literal "tier\_1" on screen — the same
+  // bug the masked email hit.
+  if (journey.country || journey.countryTier) {
+    const band = journey.countryTier ? ` (${codeSpan(journey.countryTier)})` : "";
     whereRows.push({
-      label: "Country tier (self-reported)",
-      value: escapeSlack(journey.countryTier),
+      label: "Country (self-reported)",
+      value: journey.country
+        ? `${escapeSlack(journey.country)}${band}`
+        : codeSpan(journey.countryTier!),
     });
   }
   if (surveyTime) whereRows.push({ label: "Time on survey", value: surveyTime });
