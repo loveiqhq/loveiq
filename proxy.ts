@@ -10,6 +10,78 @@ import {
 } from "@shared/experiments/landingVariant";
 import { sanitizeUtmSource } from "@shared/url/utm";
 
+// Google Ads remarketing/audience pixels (`/ads/ga-audiences` and
+// `/pagead/1p-user-list/<id>`) are requested from the visitor's LOCAL Google
+// country domain, not google.com. CSP host-source syntax cannot wildcard a TLD
+// (`https://www.google.*` is invalid), so each country domain must be named or
+// that visitor's remarketing data is silently dropped. Only `www.` is allowed —
+// narrower than `*.google.<tld>`.
+//
+// Deliberately NOT the full ~190 Google domains: that measured at +4.4KB on a
+// header returned by every page and API response, to serve countries we have no
+// visitors in. This is EU/EEA + UK + Balkans + the major English/LatAm/Asia
+// markets (~1KB). Adding a country later is one line. Since 2017 Google
+// redirects country search domains to google.com, so these pixels are already
+// the minority case.
+//
+// Joined once at module load, not per request: the CSP is otherwise rebuilt on
+// every request through the middleware.
+const GOOGLE_COUNTRY_DOMAINS = [
+  // EU / EEA
+  "at",
+  "be",
+  "bg",
+  "ch",
+  "com.cy",
+  "cz",
+  "de",
+  "dk",
+  "ee",
+  "es",
+  "fi",
+  "fr",
+  "gr",
+  "hr",
+  "hu",
+  "ie",
+  "is",
+  "it",
+  "li",
+  "lt",
+  "lu",
+  "lv",
+  "com.mt",
+  "nl",
+  "no",
+  "pl",
+  "pt",
+  "ro",
+  "se",
+  "si",
+  "sk",
+  // UK + Balkans (our own region)
+  "co.uk",
+  "ba",
+  "me",
+  "mk",
+  "rs",
+  "al",
+  // Major markets outside Europe
+  "com",
+  "ca",
+  "com.au",
+  "co.nz",
+  "co.in",
+  "com.br",
+  "com.mx",
+  "co.za",
+  "co.jp",
+  "com.tr",
+  "com.ua",
+]
+  .map((tld) => `https://www.google.${tld}`)
+  .join(" ");
+
 const isProduction = process.env.NODE_ENV === "production";
 const CSRF_COOKIE_NAME = isProduction ? "__Host-csrf" : "__csrf";
 const CSRF_TOKEN_LENGTH = 32;
@@ -221,7 +293,7 @@ export async function proxy(request: NextRequest) {
     `style-src 'self' 'unsafe-inline' ${googleFontStyleSources}`, // Tailwind requires unsafe-inline for styles
     "worker-src 'self' blob:",
     `font-src 'self' data: ${googleFontSources}`,
-    `img-src 'self' data: blob: https://images.unsplash.com https://www.google-analytics.com https://*.google-analytics.com https://www.googletagmanager.com https://googleads.g.doubleclick.net https://www.googleadservices.com https://www.google.com https://cdn-cookieyes.com https://flagcdn.com https://www.facebook.com https://*.clarity.ms https://c.bing.com https://*.trustpilot.com https://*.trustpilotcdn.net ${stripeImageSources}`,
+    `img-src 'self' data: blob: https://images.unsplash.com https://www.google-analytics.com https://*.google-analytics.com https://www.googletagmanager.com https://googleads.g.doubleclick.net https://www.googleadservices.com https://www.google.com ${GOOGLE_COUNTRY_DOMAINS} https://cdn-cookieyes.com https://flagcdn.com https://www.facebook.com https://*.clarity.ms https://c.bing.com https://*.trustpilot.com https://*.trustpilotcdn.net ${stripeImageSources}`,
     "media-src 'self'",
     // GA4 does not post only to www.google-analytics.com: it uses region-scoped
     // hosts (region1.google-analytics.com, analytics.google.com) and Google Ads
