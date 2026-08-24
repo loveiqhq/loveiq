@@ -27,7 +27,12 @@
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { computeRate, delta } from "@features/admin/server/digest-metrics";
 import { formatSignalSummary, twoProportionSignal } from "@features/admin/server/statistics";
-import { armLabel, AXIS_TITLES, type ExperimentAxis } from "@features/attribution/server/labels";
+import {
+  armLabel,
+  AXIS_TITLES,
+  isKnownArm,
+  type ExperimentAxis,
+} from "@features/attribution/server/labels";
 import logger from "@shared/observability/logger";
 
 /**
@@ -251,7 +256,12 @@ export function buildArmVerdict(
   // carries historical rows, and including it would compare a live design against
   // one nobody has been served for months.
   const arms = rawArms
-    .filter((a) => a.n > 0 && !armLabel(axis, a.arm).retired)
+    // `isKnownArm` is a whitelist. The retired check alone was not: armLabel()
+    // returns "Not recorded" with no retired flag for anything unmapped, so a new
+    // pricing bucket id would have produced "Report pricing: Not recorded is
+    // genuinely ahead — 6.1% vs 3.2%", and two unmapped values would have
+    // compared two identically-named things against each other.
+    .filter((a) => a.n > 0 && isKnownArm(axis, a.arm) && !armLabel(axis, a.arm).retired)
     .map((a) => ({
       label: armLabel(axis, a.arm).short,
       n: a.n,
@@ -276,7 +286,7 @@ export function buildArmVerdict(
       axis,
       axisTitle,
       state: "single-arm",
-      sentence: `${axisTitle}: only ${only.label} is running (${only.n} people, ${only.rate}%) — nothing to compare it against.`,
+      sentence: `${axisTitle}: only ${only.label} is running (${only.n} finished surveys, ${only.rate}% of them paid) — nothing to compare it against.`,
       arms,
     };
   }
@@ -297,12 +307,19 @@ export function buildArmVerdict(
   // Order matters: the sample-size objections come FIRST, because a p-value
   // computed on a lopsided split is answering a question nobody asked.
   if (signal.significance === "insufficient-data") {
-    const needed = Math.max(0, 50 - (leader.n + runnerUp.n));
+    // Two gates have to clear, and the SMALL arm is usually the binding one.
+    // Reporting only the combined-50 shortfall understated the remaining runway
+    // badly: leader 40 / runner-up 5 reads "about 5 more needed" when the small
+    // arm actually needs 25.
+    const combinedShort = Math.max(0, 50 - (leader.n + runnerUp.n));
+    const smallArmShort = Math.max(0, TINY_ARM - smallest.n);
+    const needed = Math.max(combinedShort, smallArmShort);
+    const where = smallArmShort >= combinedShort ? ` in ${smallest.label}` : "";
     return {
       axis,
       axisTitle,
       state: "insufficient-data",
-      sentence: `${axisTitle}: not enough data yet — ${leader.n + runnerUp.n} people so far${needed > 0 ? `, about ${needed} more needed` : ""}.`,
+      sentence: `${axisTitle}: not enough data yet — ${leader.n + runnerUp.n} finished surveys so far${needed > 0 ? `, about ${needed} more needed${where}` : ""}.`,
       arms,
     };
   }
@@ -312,7 +329,7 @@ export function buildArmVerdict(
       axis,
       axisTitle,
       state: "too-early",
-      sentence: `${axisTitle}: too early to compare — ${smallest.label} has only ${smallest.n} ${smallest.n === 1 ? "person" : "people"} so far (needs ${TINY_ARM}).`,
+      sentence: `${axisTitle}: too early to compare — ${smallest.label} has only ${smallest.n} finished ${smallest.n === 1 ? "survey" : "surveys"} so far (needs ${TINY_ARM}). Far more people SAW it; this counts the ones who finished.`,
       arms,
     };
   }
@@ -327,17 +344,12 @@ export function buildArmVerdict(
     };
   }
 
-  // A regression is the same fact stated from the other side; naming the loser is
-  // what makes it actionable.
-  if (signal.significance === "significant-regression") {
-    return {
-      axis,
-      axisTitle,
-      state: "regression",
-      sentence: `${axisTitle}: ${runnerUp.label} is genuinely behind — ${runnerUp.rate}% vs ${leader.rate}% (${formatSignalSummary(signal)}).`,
-      arms,
-    };
-  }
+  // No `significant-regression` branch: `arms` is sorted by rate descending and
+  // the runner-up goes into the control slot, so twoProportionSignal's delta is
+  // always >= 0 and that significance value can never be returned here. A branch
+  // for it was dead code, and the "warnings first" ordering in buildAlerts was
+  // sorting on a severity nothing could produce. A real regression arrives as the
+  // other arm being genuinely ahead, which is the same fact.
 
   return {
     axis,
@@ -370,21 +382,33 @@ export interface FunnelStep {
  */
 export function buildFunnel(cohort: ArmFunnelRow[], visitors: number): FunnelStep[] {
   const sum = (pick: (row: ArmFunnelRow) => number) => cohort.reduce((t, r) => t + pick(r), 0);
+  // Labels say what each number IS. Everything below the first row is cohort:
+  // "of the people who finished in this window, how many ever got this far",
+  // which is NOT the same as "this many happened during the window" — a purchase
+  // two weeks later still counts, and an in-window sale by someone who finished
+  // earlier does not. Calling the last row a bare "Paid" under a "30 days"
+  // heading invited exactly the wrong reading.
   const raw: Array<{ step: string; count: number }> = [
     { step: "Visits to the site", count: visitors },
     { step: "Finished the survey", count: sum((r) => r.completions) },
-    { step: "Opened their report", count: sum((r) => r.reportOpens) },
-    { step: "Started checkout", count: sum((r) => r.checkout) },
-    { step: "Paid", count: sum((r) => r.paid) },
+    { step: "…of those, opened their report", count: sum((r) => r.reportOpens) },
+    { step: "…of those, started checkout", count: sum((r) => r.checkout) },
+    { step: "…of those, ever paid", count: sum((r) => r.paid) },
   ];
 
   const top = raw[0]?.count ?? 0;
   const steps: FunnelStep[] = [];
+  // Clamp only the stages that CAN legitimately over-count against their
+  // predecessor because they are event-day sourced. "ever paid" is not one of
+  // them: a promo one-tap or an admin-granted unlock sets purchased_at without a
+  // checkout, so paid can exceed checkout truthfully — and clamping quietly
+  // rewrote the number of payers downward under a label that said "Paid".
+  const CLAMPED_STEPS = 3;
   let ceiling = Number.POSITIVE_INFINITY;
   for (let i = 0; i < raw.length; i += 1) {
     // eslint-disable-next-line security/detect-object-injection -- numeric loop index over a local array.
     const entry = raw[i]!;
-    const count = Math.min(entry.count, ceiling);
+    const count = i < CLAMPED_STEPS ? Math.min(entry.count, ceiling) : entry.count;
     const prev = i === 0 ? count : steps[i - 1]!.count;
     steps.push({
       step: entry.step,
@@ -443,8 +467,11 @@ export function buildAlerts(input: {
   const ambiguous = input.visitorArms.find((a) => a.arm === AMBIGUOUS_VISITOR_ARM);
   if (ambiguous && ambiguous.n > 0) {
     alerts.push({
-      severity: "warn",
-      message: `${ambiguous.n} visits are recorded under a retired label and cannot be attributed to a homepage, so they are left out of the comparison above. Visits recorded before the tracking fix are permanently unattributable; later ones are correct.`,
+      // `info`, not `warn`: this is a standing measurement caveat that is true
+      // every single day, and warnings sort above everything actionable. A
+      // permanent warning is how the last digest earned itself a mute.
+      severity: "info",
+      message: `${ambiguous.n} visits carry a retired homepage label and cannot be attributed to an arm. They ARE counted in the visits totals above — only the per-arm comparison ignores them, and that comparison is built from finished surveys, not from these visit rows. Visits recorded before today's tracking fix stay unattributable.`,
     });
   }
 
@@ -456,9 +483,10 @@ export function buildAlerts(input: {
   const landing = input.verdicts.find((v) => v.axis === "landing");
   if (landing && landing.arms.length > 1) {
     alerts.push({
-      severity: "warn",
+      // Standing caveat, same reasoning as above: true every day the test runs.
+      severity: "info",
       message:
-        "Homepage arms are not a fair split: returning visitors keep whichever homepage they saw first, so the current design also carries everyone who has been here before. Read its numbers as a floor, not a verdict.",
+        "Homepage arms are not a fair split: returning visitors keep whichever homepage they saw first, so the current design also carries everyone who has been here before. Returning visitors convert BETTER, so treat the current design's number as flattered — an over-estimate, not a floor.",
     });
   }
 
@@ -470,8 +498,8 @@ export function buildAlerts(input: {
       const ageMs = input.now.getTime() - cutover.getTime();
       if (ageMs >= 0 && ageMs < 7 * 86_400_000) {
         alerts.push({
-          severity: "info",
-          message: `Report prices changed ${cutover.toISOString().slice(0, 10)}, so the pricing comparison restarts from that date — earlier sales were a different price and are not pooled in.`,
+          severity: "warn",
+          message: `Report prices changed ${cutover.toISOString().slice(0, 10)}. The pricing comparison above still POOLS both price levels — it is not split at the change — so ignore it until the window is made up of post-change sales.`,
         });
       }
     }

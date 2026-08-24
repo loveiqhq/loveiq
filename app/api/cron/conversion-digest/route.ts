@@ -135,6 +135,15 @@ function shortDay(day: string): string {
   return `${d.getUTCDate()} ${d.toLocaleString("en-GB", { month: "short", timeZone: "UTC" })}`;
 }
 
+/**
+ * Step names carry an "…of those," prefix so each row states what its number
+ * actually is, but that reads badly inside a sentence — "Biggest drop: …of
+ * those, opened their report → …of those, started checkout".
+ */
+function shortStep(step: string): string {
+  return step.replace(/^…of those,\s*/, "");
+}
+
 function money(amount: number): string {
   return `EUR ${amount.toFixed(2)}`;
 }
@@ -214,7 +223,15 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
   }
 
   const blocks: SlackBlock[] = [header(`📈 Conversion — ${dayKey}`)];
-  blocks.push(context(windowLabel));
+  // Definitions ride at the TOP, not the bottom. fitBlocks keeps from the front,
+  // so as the last block this was the first thing dropped when a message ran
+  // long — leaving every number in place and no statement of what any of them
+  // meant.
+  blocks.push(
+    context(
+      `${windowLabel} · counted server-side, no analytics-consent gap · "visits" are visitor-days, not people · arms are compared on finished surveys → ever paid`
+    )
+  );
 
   // ---- The decision, first ----
   if (verdicts.length > 0) {
@@ -222,7 +239,16 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
       section(`*Where the tests stand*\n${verdicts.map((v) => `• ${v.sentence}`).join("\n")}`)
     );
   } else {
-    blocks.push(section("*Where the tests stand*\n• No experiment data in this window."));
+    // `cohorts === null` means the read FAILED; an empty array means there is
+    // genuinely nothing. Saying "no experiment data" for a failed read tells the
+    // reader the experiments are dead.
+    blocks.push(
+      section(
+        cohorts === null
+          ? "*Where the tests stand*\n• Could not read the experiment data — this is a measurement failure, not a result."
+          : "*Where the tests stand*\n• No experiment data in this window."
+      )
+    );
   }
 
   // ---- Yesterday vs the usual ----
@@ -283,7 +309,11 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
     blocks.push(divider());
     blocks.push(
       section(
-        `*The funnel — ${WINDOW_DAYS} days*${leak ? `\nBiggest drop: ${escapeSlack(leak.from)} → ${escapeSlack(leak.to)}, losing ${leak.pct}%` : ""}`
+        `*The funnel — ${WINDOW_DAYS} days*${
+          leak
+            ? `\nBiggest drop: ${escapeSlack(shortStep(leak.from))} → ${escapeSlack(shortStep(leak.to))}, losing ${leak.pct}%`
+            : ""
+        }`
       )
     );
     const rows = steps.map((s) => {
@@ -329,12 +359,18 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
         // null survives to the renderer as a genuine gap in the line.
         first: series.first.map((v) => (v == null ? null : Math.round(v * 10) / 10)),
         last: series.last.map((v) => (v == null ? null : Math.round(v * 10) / 10)),
-        title: "Finished survey → paid, by homepage",
+        title: "Purchases per finished survey, by homepage",
         legendFirst: armLabel("landing", liveArms[0]).short,
         legendLast: armLabel("landing", liveArms[1]).short,
         headline,
         footnote:
-          "7-day trailing rate, % of finishers who paid · shared y-scale (peak {peak}%) · x-axis = day",
+          // NOT "% of finishers who paid": numerator and denominator are both
+          // counted on the day they happened, so the payers are not drawn from
+          // that window's finishers. Nurture mail runs to 78h and post-call
+          // coupons last 14 days, so a real share of any week's sales come from
+          // earlier weeks' finishers — and the most recent days are depressed
+          // because their finishers have not had time to buy yet.
+          "purchases ÷ finished surveys, both counted on the day they happened — not a cohort rate; recent days read low · 7-day trailing · shared y-scale (peak {peak}%)",
       });
       if (url) {
         blocks.push({
@@ -370,20 +406,18 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
     )
   );
 
-  // ---- Provenance. Every number above is a server-side write or a first-party
-  // aggregate; saying so is what stops someone reading a consent gap as behaviour.
-  blocks.push(
-    context(
-      "Counted server-side (visits, finishes, report opens, checkouts, payments) — no analytics-consent gap. " +
-        `Visits count visitor-days, not people. Arm comparison is finishers → paid.`
-    )
-  );
-
   const paidTotal = steps.length > 0 ? (steps[steps.length - 1]?.count ?? 0) : 0;
   // The fallback text is what lands in the dead-letter table when delivery fails
   // (blocks are NOT dead-lettered), and its first 100 chars are the 60s dedup key,
   // so the day goes early to keep it both standalone and unique per day.
-  const text = `:chart_with_upwards_trend: Conversion ${dayKey} — ${yesterday.completions} finished, ${yesterday.paid} paid yesterday; ${paidTotal} paid in ${WINDOW_DAYS} days`;
+  //
+  // When the data could not be read this must NOT say "0 finished, 0 paid" —
+  // that is the same falsehood as plotting a missing day as zero, and it is the
+  // line that shows up in push notifications and sidebar previews.
+  const text =
+    funnel === null
+      ? `:chart_with_upwards_trend: Conversion ${dayKey} — data unavailable (could not read the funnel)`
+      : `:chart_with_upwards_trend: Conversion ${dayKey} — ${yesterday.completions} finished, ${yesterday.paid} paid yesterday; ${paidTotal} ever paid from ${WINDOW_DAYS} days of finishers`;
 
   const fitted = fitBlocks(blocks, text);
   return { text, blocks: fitted.blocks, trimmed: fitted.trimmed };

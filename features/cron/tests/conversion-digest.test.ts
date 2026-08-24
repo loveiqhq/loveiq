@@ -292,14 +292,39 @@ describe("conversion-digest handler", () => {
     );
   });
 
-  it("still posts when both data sources are null, rather than dying", async () => {
+  it("says the read FAILED rather than reporting zeros, when both sources are null", async () => {
+    // A Supabase hiccup used to ship "0 finished, 0 paid yesterday; 0 paid in 30
+    // days" as the notification text — the line that lands in push previews and
+    // the dead-letter table. Asserting zero where the truth is "we could not
+    // read it" is the same falsehood as plotting a missing day as a zero.
     mockFetchLandingArmFunnel.mockResolvedValue(null);
     mockFetchArmCohorts.mockResolvedValue(null);
     const res = await GET(request());
     expect(res.status).toBe(200);
     expect(mockNotifySlack).toHaveBeenCalledTimes(1);
+    const arg = mockNotifySlack.mock.calls[0]![0] as { text: string; blocks: SlackBlock[] };
+    expect(arg.text).toContain("data unavailable");
+    expect(arg.text).not.toContain("0 finished");
+    expect(blockText(arg.blocks)).toContain("measurement failure, not a result");
+  });
+
+  it("distinguishes an empty window from a failed read", async () => {
+    mockFetchArmCohorts.mockResolvedValue([]);
+    const res = await GET(request());
+    expect(res.status).toBe(200);
     const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
     expect(blockText(arg.blocks)).toContain("No experiment data in this window");
+    expect(blockText(arg.blocks)).not.toContain("measurement failure");
+  });
+
+  it("keeps the definitions at the top, where trimming cannot reach them", async () => {
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    // fitBlocks keeps from the front, so as the LAST block this was the first
+    // thing dropped — leaving every number and no statement of what it meant.
+    const idx = arg.blocks.findIndex((b) => JSON.stringify(b).includes("visitor-days"));
+    expect(idx).toBeGreaterThanOrEqual(0);
+    expect(idx).toBeLessThan(3);
   });
 });
 
@@ -422,12 +447,18 @@ describe("conversion-digest alerts", () => {
     expect(alerts[0]!.message).toContain("Nothing crossed a threshold");
   });
 
-  it("flags the ambiguous visitor bucket as a data problem, not an arm", () => {
+  it("flags the ambiguous visitor bucket without claiming it was excluded", () => {
     const alerts = buildAlerts({ ...base, visitorArms: [{ arm: "control", n: 269 }] });
     const message = alerts.map((a) => a.message).join(" ");
     expect(message).toContain("269");
-    expect(message).toContain("retired label");
-    expect(message).toContain("left out of the comparison");
+    expect(message).toContain("retired homepage label");
+    // It used to say these visits were "left out of the comparison above" — they
+    // are in fact COUNTED in the visits totals; only the per-arm comparison
+    // ignores them, and that is built from finished surveys, not visit rows.
+    expect(message).toContain("ARE counted");
+    expect(message).not.toContain("left out of the comparison");
+    // A standing caveat must not sort above genuinely actionable alerts.
+    expect(alerts.find((a) => a.message.includes("269"))?.severity).toBe("info");
   });
 
   it("warns that the homepage arms are not a fair split", () => {
@@ -460,14 +491,22 @@ describe("conversion-digest alerts", () => {
     expect(tiny.some((a) => a.message.includes("below the usual"))).toBe(false);
   });
 
-  it("says the pricing comparison restarts after a recent price change", () => {
+  it("admits the pricing comparison still pools both price levels", () => {
+    // It used to claim the comparison "restarts from that date". Nothing in the
+    // code splits the cohort at the cutover — the value never reaches the RPC —
+    // so the sentence promised a filter that does not exist. On the day of the
+    // change it was maximally wrong: the window closes at 00:00 UTC and the
+    // change landed at 02:46, so every day shown was pre-change.
     const alerts = buildAlerts({ ...base, pricingCutoverIso: "2026-08-24T02:46:49Z" });
-    expect(alerts.some((a) => a.message.includes("restarts"))).toBe(true);
+    const msg = alerts.map((a) => a.message).join(" ");
+    expect(msg).toContain("POOLS both price levels");
+    expect(msg).not.toContain("restarts");
+    expect(msg).not.toContain("are not pooled in");
   });
 
   it("stops mentioning the price change once it is old news", () => {
     const alerts = buildAlerts({ ...base, pricingCutoverIso: "2026-07-01T00:00:00Z" });
-    expect(alerts.some((a) => a.message.includes("restarts"))).toBe(false);
+    expect(alerts.some((a) => a.message.includes("POOLS"))).toBe(false);
   });
 
   it("escalates a regression to a warning", () => {
