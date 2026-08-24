@@ -3,6 +3,9 @@ import { z } from "zod";
 import { verifyCsrfToken } from "@shared/http/csrf";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import logger from "@shared/observability/logger";
+import { scheduleAfterResponse } from "@shared/http/after-response";
+import { resolveSubmissionAccessContext } from "@features/report/server/personalReport";
+import { refreshJourneyMessage } from "@features/attribution/server/journey-message";
 import {
   armReportUrgencyWindow,
   getReportPriceQuoteForContext,
@@ -77,6 +80,26 @@ export async function POST(request: Request) {
       reportSessionId: parsed.data.reportSessionId ?? null,
       reportToken: parsed.data.token ?? null,
       userAgent: request.headers.get("user-agent"),
+    });
+
+    // Advance the Slack journey message to "Paywall hit".
+    //
+    // This POST is the only SERVER-SIDE evidence that a reader reached the paywall:
+    // it is fired when the pricing modal opens (ReportPage.armPaywallCountdown) and
+    // is CSRF-guarded, so it is only reachable from our own page. Without it the
+    // "Paywall hit" step carried no independent information — it could only ever
+    // fill by inference once checkout started, because the `paywall_initiated`
+    // event it would otherwise rely on lives in the consent-gated analytics table.
+    //
+    // After-response and self-skipping, so opening the modal repeatedly is free.
+    scheduleAfterResponse("journey-message-paywall", async () => {
+      const accessContext = await resolveSubmissionAccessContext({
+        reportSessionId: parsed.data.reportSessionId ?? null,
+        reportToken: parsed.data.token ?? null,
+      });
+      if (accessContext?.submissionId) {
+        await refreshJourneyMessage(accessContext.submissionId, "paywall");
+      }
     });
 
     return NextResponse.json({ urgencyDeadlineAt });
