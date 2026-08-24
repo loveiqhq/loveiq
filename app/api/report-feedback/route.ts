@@ -18,6 +18,31 @@ import { notifySlack } from "@shared/observability/slack";
 // endpoint to enumerate or fingerprint internal section names.
 const VALID_SECTION_IDS = new Set<string>(reportSections.map((section) => section.id));
 
+/**
+ * Report 2.0 blocks that render OUTSIDE `data/report-general.ts`.
+ *
+ * They are real chapters with a real "Does this resonate?" control on the page
+ * (`renderFeedback` in `ReportPage.tsx`), but they have no entry in the
+ * generated section list — they are mounted as siblings of the sections they
+ * ride with. So every vote cast on one was rejected here as `unknown_section`
+ * and silently dropped, which is why these ids never appear in
+ * `report_section_feedback`. Adding them keeps the allowlist doing its job
+ * (still a closed set, no free-form ids) while letting the votes land.
+ *
+ * The Slack notifier already falls back to the raw id when a section is not in
+ * `SECTION_BY_ID`, so these read as "blend" / "snapshot" / ... in the alert.
+ */
+const REPORT2_INLINE_SECTION_IDS = [
+  "blend",
+  "means_for_you",
+  "snapshot",
+  "findings",
+  "map",
+  "constellation",
+] as const;
+
+for (const id of REPORT2_INLINE_SECTION_IDS) VALID_SECTION_IDS.add(id);
+
 // Either sessionId or token must be present. Both are accepted so feedback
 // captures even when the survey session UUID is no longer in browser storage
 // (e.g. user clicks the report link from an email on a different device).
