@@ -101,6 +101,18 @@ export function useSubmitSurvey() {
             /* token extraction is best-effort */
           }
           syncPendingCompletion(null);
+          // Identify BEFORE the capture below, so survey_completed is already
+          // attributed. distinct_id is the lower-cased email, which is exactly
+          // what the server-side purchase uses (features/analytics/server/posthog.ts)
+          // — otherwise the Stripe-webhook purchase would land on an orphan
+          // person and no funnel could join browsing to revenue.
+          if (payload.email) {
+            const identity = payload.email.trim().toLowerCase();
+            posthog.identify(identity, {
+              email: identity,
+              ...(payload.firstName ? { first_name: payload.firstName } : {}),
+            });
+          }
           posthog.capture("survey_completed", {
             duration_ms: payload.durationMs,
             total_questions: surveyQuestions.length,

@@ -1,3 +1,4 @@
+import posthog from "posthog-js";
 import { getCsrfToken } from "@shared/http/csrf-client";
 import {
   LANDING_VARIANT_COOKIE,
@@ -102,6 +103,9 @@ export const setReportSubmissionContext = (submissionId: number | null | undefin
 export const setForcedPaywallArm = (arm: "treatment" | "control" | null) => {
   if (typeof window === "undefined") return;
   window.__loveiqForcedPaywallArm = arm;
+  // Super property: attaches to every subsequent PostHog event, mirroring the
+  // GA4 user_properties call below (which is consent-gated; this is not).
+  if (arm) posthog.register({ forced_paywall_arm: arm });
   // Mirror the arm into GA4 as a user-scoped property so EVERY GA4 event (not
   // just experiment_exposure) is segmentable by arm in GA4 Explorations — no
   // per-event wiring. Consent-gated like all GA4 traffic. NOTE: to surface in
@@ -121,6 +125,7 @@ export const setForcedPaywallArm = (arm: "treatment" | "control" | null) => {
 export const setSurveyVariant = (variant: "white" | "dark" | null) => {
   if (typeof window === "undefined") return;
   window.__loveiqSurveyVariant = variant;
+  if (variant) posthog.register({ survey_variant: variant });
   if (variant && window.__loveiqAnalyticsEnabled && hasCookieYesConsent("analytics")) {
     window.gtag?.("set", "user_properties", { survey_variant: variant });
   }
@@ -277,6 +282,7 @@ const getLandingVariant = (): LandingVariant | null => {
  */
 export const setLandingVariant = (variant: LandingVariant | null) => {
   if (typeof window === "undefined") return;
+  if (variant) posthog.register({ landing_variant: variant });
   if (variant && window.__loveiqAnalyticsEnabled && hasCookieYesConsent("analytics")) {
     window.gtag?.("set", "user_properties", { landing_variant: variant });
   }
@@ -284,6 +290,14 @@ export const setLandingVariant = (variant: LandingVariant | null) => {
 
 export const track = (name: string, params?: Record<string, unknown>) => {
   if (typeof window === "undefined") return;
+  // PostHog gets every event, and deliberately BEFORE the two GA4 gates below.
+  // PostHog is not consent-gated on this site (same owner decision as Microsoft
+  // Clarity — see app/layout.tsx) and does not depend on the GA bootstrap flag,
+  // so gating it on either would silently drop the entire custom-event funnel
+  // for visitors who declined analytics while PostHog autocapture kept
+  // recording them. Placed here rather than at the ~33 call sites so a new
+  // trackX() helper is mirrored automatically and can never be forgotten.
+  posthog.capture(name, params);
   if (!window.__loveiqAnalyticsEnabled) return;
   if (!hasCookieYesConsent("analytics")) return;
   window.gtag?.("event", name, params);
