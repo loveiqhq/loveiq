@@ -39,6 +39,7 @@ import { clearPersistedSurveyState } from "./hooks/surveyStorage";
 import { copySurveySessionToReportSession } from "./hooks/surveySession";
 import { getCsrfToken } from "@shared/http/csrf-client";
 import { readCookie } from "@shared/observability/cookie";
+import { isLandingVariant, LANDING_VARIANT_COOKIE } from "@shared/experiments/landingVariant";
 import { getStoredUtm, sanitizeUtmSource } from "@shared/url/utm";
 import SurveyConfirmation from "./SurveyConfirmation";
 import PreReportWizard from "./PreReportWizard";
@@ -158,6 +159,11 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
       // funnel_event PK dedupes per (visitor_id, day) so a re-mount in the
       // same day is a no-op server-side.
       const visitorId = readCookie("__Host-liq_vid") || readCookie("__liq_vid");
+      // Guarded by the shared type guard rather than a literal list — a literal
+      // list of round-1 arms is exactly how `white_prev` previously read as null
+      // and shipped unstamped.
+      const rawArm = readCookie(LANDING_VARIANT_COOKIE);
+      const landingArm = isLandingVariant(rawArm) ? rawArm : null;
       if (visitorId) {
         // First-touch acquisition source, so start-rate can be split by channel
         // (the visitor denominator carries it too — see proxy.ts/recordVisit.ts).
@@ -187,6 +193,11 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
             event: "survey_engine_mount",
             visitor_id: visitorId,
             ...(utmSource ? { utm_source: utmSource } : {}),
+            // The landing arm, so this row can be the NUMERATOR of a
+            // landing→survey-start comparison. Without it these rows carried no
+            // arm and the one metric a homepage actually influences could not be
+            // computed at all.
+            ...(landingArm ? { landing_variant: landingArm } : {}),
           }),
           keepalive: true,
         }).catch(() => {

@@ -393,11 +393,19 @@ export async function proxy(request: NextRequest) {
     shouldCountVisit(request) && request.cookies.get(VISIT_DAY_COOKIE)?.value !== visitDay;
   if (isNewDailyVisit) {
     // Tag the visit with the landing arm. On "/" the arm is freshly resolved;
-    // elsewhere read the sticky __liq_lv cookie. An absent or unrecognised value
-    // defaults to "white", the arm a bot or a cookieless visitor is served.
+    // elsewhere read the sticky __liq_lv cookie.
+    //
+    // An unresolvable arm is recorded as "unknown", NOT as "white". It used to
+    // default to white, which quietly credited one arm with every visit it could
+    // not attribute: the arm is only resolved on "/", but a visit is counted on
+    // any public page, so every first-time entry via /survey, /glossary/*, an
+    // invite link or an email deep-link — plus every cookieless and incognito
+    // client — inflated white's denominator. That is the denominator of the
+    // landing→survey-start comparison, so the bias landed straight on the
+    // headline number.
     const cookieVariant = request.cookies.get(LANDING_VARIANT_COOKIE)?.value;
     const visitVariant =
-      landingVariant ?? (isLandingVariant(cookieVariant) ? cookieVariant : "white");
+      landingVariant ?? (isLandingVariant(cookieVariant) ? cookieVariant : "unknown");
     requestHeaders.set("x-liq-new-visit", visitVariant);
     // Last-touch acquisition source for THIS visit. sanitizeUtmSource strips to
     // a safe charset + length-caps + lowercases at the trust boundary (the raw

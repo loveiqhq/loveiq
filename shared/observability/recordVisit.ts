@@ -1,5 +1,5 @@
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
-import { normalizeLandingVariant } from "@shared/experiments/landingVariant";
+import { isLandingVariant } from "@shared/experiments/landingVariant";
 import { sanitizeUtmSource } from "@shared/url/utm";
 import logger from "@shared/observability/logger";
 
@@ -56,7 +56,11 @@ export async function recordUniqueVisit(variant: string, utmSource?: string): Pr
         // Still clamped, just to the real arm set instead of collapsing: the header
         // this arrives on is copied from an inbound request in proxy.ts, so an
         // unrecognised value must not reach the column.
-        landing_variant: normalizeLandingVariant(variant),
+        // isLandingVariant, not normalizeLandingVariant: the normaliser defaults
+        // anything unrecognised to "white", which is exactly the mis-attribution
+        // proxy.ts now avoids by sending "unknown". Normalising here would undo
+        // it one layer down.
+        landing_variant: isLandingVariant(variant) ? variant : "unknown",
         // Last-touch acquisition source for THIS visit (re-sanitized above).
         // Omitted (stays NULL) for direct/untagged visits so COUNT(utm_source)
         // reflects only real campaign traffic.

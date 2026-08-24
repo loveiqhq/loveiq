@@ -218,6 +218,75 @@ export async function fetchArmCohorts(
   }
 }
 
+export interface StartDayRow {
+  day: string;
+  arm: string;
+  visits: number;
+  starts: number;
+}
+
+export interface StartTotalRow {
+  arm: string;
+  visits: number;
+  starts: number;
+}
+
+export interface LandingStartFunnel {
+  daily: StartDayRow[];
+  totals: StartTotalRow[];
+}
+
+/**
+ * Landing -> survey-start, per day and per arm. The metric a homepage actually
+ * controls, unlike finished-survey -> paid.
+ *
+ * Returns null on any failure INCLUDING the function not existing yet, so the
+ * digest simply omits this chart until the migration is applied rather than
+ * failing the whole send.
+ */
+export async function fetchLandingStartFunnel(
+  sinceIso: string,
+  untilIso: string
+): Promise<LandingStartFunnel | null> {
+  try {
+    const res = await supabaseFetch("/rest/v1/rpc/get_landing_start_funnel_daily", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ since_ts: sinceIso, until_ts: untilIso }),
+    });
+    if (!res.ok) {
+      logger.warn({ status: res.status }, "conversion-digest: landing-start RPC non-2xx");
+      return null;
+    }
+    const raw = (await res.json()) as { daily?: unknown; totals?: unknown } | null;
+    if (!raw) return null;
+
+    const daily: StartDayRow[] = [];
+    for (const row of Array.isArray(raw.daily) ? raw.daily : []) {
+      if (!row || typeof row !== "object") continue;
+      const r = row as Record<string, unknown>;
+      const day = str(r.day);
+      const arm = str(r.arm);
+      if (!day || !arm) continue;
+      daily.push({ day, arm, visits: int(r.visits), starts: int(r.starts) });
+    }
+
+    const totals: StartTotalRow[] = [];
+    for (const row of Array.isArray(raw.totals) ? raw.totals : []) {
+      if (!row || typeof row !== "object") continue;
+      const r = row as Record<string, unknown>;
+      const arm = str(r.arm);
+      if (!arm) continue;
+      totals.push({ arm, visits: int(r.visits), starts: int(r.starts) });
+    }
+
+    return { daily, totals };
+  } catch (err) {
+    logger.warn({ err }, "conversion-digest: landing-start RPC threw");
+    return null;
+  }
+}
+
 export type VerdictState =
   | "winner"
   | "regression"

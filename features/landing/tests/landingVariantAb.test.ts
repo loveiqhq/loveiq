@@ -168,11 +168,17 @@ describe("landing A/B — the arm survives the funnel_event write", () => {
     expect((await writtenBodyFor("white")).landing_variant).toBe("white");
   });
 
-  it("clamps an unrecognised value to the live arm instead of writing it through", async () => {
+  it("records an unrecognised value as unknown, never as a live arm", async () => {
     // The value arrives on a header copied from an inbound request in proxy.ts,
-    // so it is not trusted — but the clamp must land on a real arm, not "control".
-    expect((await writtenBodyFor("'; drop table --")).landing_variant).toBe("white");
-    expect((await writtenBodyFor("")).landing_variant).toBe("white");
+    // so it is not trusted. It used to clamp to "white" — which quietly credited
+    // one arm with every visit that could not be attributed, and that column is
+    // the DENOMINATOR of the landing→survey-start comparison, so the bias landed
+    // straight on the headline number.
+    for (const bad of ["'; drop table --", "", "purple"]) {
+      const arm = (await writtenBodyFor(bad)).landing_variant;
+      expect(arm).toBe("unknown");
+      expect(arm).not.toBe("white");
+    }
   });
 
   it("covers every live arm, so adding an arm without updating the writer fails here", async () => {

@@ -8,6 +8,7 @@ const mockStartCronTimer = vi.fn();
 const mockIsProdCronHost = vi.fn();
 const mockFetchLandingArmFunnel = vi.fn();
 const mockFetchArmCohorts = vi.fn();
+const mockFetchLandingStartFunnel = vi.fn();
 
 vi.mock("@shared/observability/logger", () => ({
   default: { warn: vi.fn(), error: vi.fn(), info: vi.fn(), debug: vi.fn() },
@@ -40,10 +41,16 @@ vi.mock("@features/admin/server/conversion-digest", async (importActual) => {
     ...actual,
     fetchLandingArmFunnel: (...args: unknown[]) => mockFetchLandingArmFunnel(...args),
     fetchArmCohorts: (...args: unknown[]) => mockFetchArmCohorts(...args),
+    fetchLandingStartFunnel: (...args: unknown[]) => mockFetchLandingStartFunnel(...args),
   };
 });
 
-import { GET, buildConversionDigest, buildArmSeries } from "@/app/api/cron/conversion-digest/route";
+import {
+  GET,
+  buildConversionDigest,
+  buildArmSeries,
+  buildStartSeries,
+} from "@/app/api/cron/conversion-digest/route";
 import {
   buildAlerts,
   buildArmVerdict,
@@ -108,6 +115,34 @@ function makeFunnel(overrides: Partial<{ visitorArms: Record<string, number> }> 
   };
 }
 
+/** Landing -> survey-start, with the second arm launching part-way through. */
+function makeStartFunnel(opts: { prevFromDay?: number } = {}) {
+  const prevFrom = opts.prevFromDay ?? 27;
+  const days: string[] = [];
+  for (let i = 30; i >= 1; i -= 1) {
+    const d = new Date("2026-08-24T00:00:00Z");
+    d.setUTCDate(d.getUTCDate() - i);
+    days.push(d.toISOString().slice(0, 10));
+  }
+  const daily = days.flatMap((day, i) => [
+    { day, arm: "white", visits: 300 + (i % 5) * 20, starts: 22 + (i % 4) },
+    ...(i >= prevFrom ? [{ day, arm: "white_prev", visits: 90, starts: 5 }] : []),
+  ]);
+  const sum = (arm: string, k: "visits" | "starts") =>
+    daily.filter((r) => r.arm === arm).reduce((t, r) => t + r[k], 0);
+  return {
+    daily,
+    totals: [
+      { arm: "white", visits: sum("white", "visits"), starts: sum("white", "starts") },
+      {
+        arm: "white_prev",
+        visits: sum("white_prev", "visits"),
+        starts: sum("white_prev", "starts"),
+      },
+    ],
+  };
+}
+
 function blockText(blocks: SlackBlock[]): string {
   return JSON.stringify(blocks);
 }
@@ -129,6 +164,7 @@ describe("conversion-digest handler", () => {
     mockIsProdCronHost.mockReturnValue(true);
     mockTryClaim.mockResolvedValue(true);
     mockFetchLandingArmFunnel.mockResolvedValue(makeFunnel());
+    mockFetchLandingStartFunnel.mockResolvedValue(makeStartFunnel());
     mockFetchArmCohorts.mockResolvedValue([
       { axis: "landing", arm: "white", n: 300, conversions: 10 },
       { axis: "landing", arm: "white_prev", n: 240, conversions: 6 },
@@ -278,6 +314,31 @@ describe("conversion-digest handler", () => {
     );
     expect(await staging.json()).toMatchObject({ skipped: true });
     expect(mockNotifySlack).not.toHaveBeenCalled();
+  });
+
+  it("leads with visits → survey-started, the metric the homepage controls", async () => {
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    const images = arg.blocks.filter((b) => (b as { type?: string }).type === "image");
+    // Two charts, and the landing→start one comes FIRST: finished→paid is
+    // downstream of the homepage and must not be read as the headline result.
+    expect(images).toHaveLength(2);
+    const flat = blockText(arg.blocks);
+    const startIdx = flat.indexOf("survey-start");
+    const paidIdx = flat.indexOf("finished%20survey");
+    expect(startIdx).toBeGreaterThanOrEqual(0);
+    if (paidIdx >= 0) expect(startIdx).toBeLessThan(paidIdx);
+  });
+
+  it("says so plainly when the landing→start migration is not applied yet", async () => {
+    mockFetchLandingStartFunnel.mockResolvedValue(null);
+    const res = await GET(request());
+    expect(res.status).toBe(200);
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    // Degrades to a stated absence, never to a silent omission or a zero.
+    expect(blockText(arg.blocks)).toContain("migration has not been applied");
+    // The secondary chart still ships.
+    expect(arg.blocks.filter((b) => (b as { type?: string }).type === "image")).toHaveLength(1);
   });
 
   it("records the run and 500s when a source throws", async () => {
@@ -563,6 +624,31 @@ describe("conversion-digest chart series", () => {
     const series = buildArmSeries(funnel, ["white", "white_prev"]);
     expect(series.last.some((v) => v === 0)).toBe(true);
     expect(series.last.every((v) => v === null)).toBe(false);
+  });
+
+  it("gaps the start series for days an arm had no visits", () => {
+    // The second arm launched part-way through the window. Its earlier days must
+    // be absent, not a plotted 0% — that is the falsehood the paid chart carried.
+    const series = buildStartSeries(makeStartFunnel({ prevFromDay: 27 }), ["white", "white_prev"]);
+    expect(series.first.every((v) => v != null)).toBe(true);
+    expect(series.last.slice(0, 20).every((v) => v === null)).toBe(true);
+    expect(series.last.some((v) => v != null)).toBe(true);
+    expect(series.last.some((v) => v === 0)).toBe(false);
+  });
+
+  it("computes the start rate off visits, not off finishers", () => {
+    const series = buildStartSeries(
+      {
+        daily: [
+          { day: "2026-08-20", arm: "white", visits: 100, starts: 10 },
+          { day: "2026-08-21", arm: "white", visits: 100, starts: 20 },
+        ],
+        totals: [{ arm: "white", visits: 200, starts: 30 }],
+      },
+      ["white", "white_prev"]
+    );
+    // Trailing window covers both days: 30/200 = 15%.
+    expect(series.first[1]).toBe(15);
   });
 
   it("keeps the signed chart URL under Slack's image_url cap at a full 30 days", async () => {

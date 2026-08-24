@@ -50,6 +50,7 @@ import {
   type DigestAlert,
   type FunnelStep,
   type LandingArmFunnel,
+  type LandingStartFunnel,
   biggestLeak,
   buildAlerts,
   buildArmVerdict,
@@ -57,6 +58,7 @@ import {
   delta,
   fetchArmCohorts,
   fetchLandingArmFunnel,
+  fetchLandingStartFunnel,
   TINY_ARM,
   sumDays,
   sumVisitors,
@@ -194,10 +196,46 @@ export function buildArmSeries(
   };
 }
 
+/**
+ * Visits -> survey-started per day, per arm, as a 7-day trailing rate.
+ *
+ * `null` for any day the arm had no visits, so an arm that had not launched is a
+ * GAP rather than a plotted zero. Trailing rather than daily because a handful of
+ * starts on a low-traffic day swings a daily rate wildly.
+ */
+export function buildStartSeries(
+  funnel: LandingStartFunnel,
+  arms: [string, string]
+): { labels: string[]; first: Array<number | null>; last: Array<number | null> } {
+  const days = Array.from(new Set(funnel.daily.map((r) => r.day))).sort();
+  const dayIndex = new Map(days.map((day, i) => [day, i]));
+  const rateFor = (arm: string): Array<number | null> =>
+    days.map((_, idx) => {
+      const from = Math.max(0, idx - 6);
+      let visits = 0;
+      let starts = 0;
+      for (const row of funnel.daily) {
+        if (row.arm !== arm) continue;
+        const i = dayIndex.get(row.day);
+        if (i === undefined || i < from || i > idx) continue;
+        visits += row.visits;
+        starts += row.starts;
+      }
+      return visits > 0 ? computeRate(starts, visits) : null;
+    });
+  return {
+    labels: days.map(shortDay),
+    first: rateFor(arms[0]),
+    last: rateFor(arms[1]),
+  };
+}
+
 interface DigestInput {
   dayKey: string;
   funnel: LandingArmFunnel | null;
   cohorts: AxisCohort[] | null;
+  /** Landing -> survey-start. Null until its migration is applied. */
+  startFunnel?: LandingStartFunnel | null;
   now: Date;
 }
 
@@ -209,6 +247,7 @@ export interface BuiltDigest {
 
 export async function buildConversionDigest(input: DigestInput): Promise<BuiltDigest> {
   const { dayKey, funnel, cohorts, now } = input;
+  const startFunnel = input.startFunnel ?? null;
   const windowLabel = `${WINDOW_DAYS}-day window ending ${dayKey} UTC`;
 
   const verdicts: ArmVerdict[] = [];
@@ -323,7 +362,59 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
     blocks.push(section(rows.join("\n")));
   }
 
-  // ---- One chart, underneath ----
+  // ---- PRIMARY chart: the metric the homepage actually controls ----
+  //
+  // A homepage decides whether a visitor starts a survey. Whether someone who
+  // already finished a 60-question assessment later buys is driven by the report,
+  // the price they were shown and the paywall — so finished→paid (below) is
+  // downstream of the homepage, contaminated by the independently-randomised
+  // pricing test, and so low-powered that a new arm reads "too early" for weeks.
+  if (startFunnel) {
+    const liveArms = ["white", "white_prev"] as const;
+    const series = buildStartSeries(startFunnel, [liveArms[0], liveArms[1]]);
+    const totalFor = (arm: string) => startFunnel.totals.find((t) => t.arm === arm);
+    const summary = (arm: string) => {
+      const label = armLabel("landing", arm).short;
+      const row = totalFor(arm);
+      if (!row || row.visits === 0) return `${label} no visits recorded yet`;
+      return `${label} ${row.starts}/${row.visits} started`;
+    };
+    const hasAny = series.first.some((v) => v != null) || series.last.some((v) => v != null);
+    if (hasAny && series.labels.length > 1) {
+      const url = await signedChartUrl({
+        windowLabel,
+        labels: series.labels,
+        first: series.first.map((v) => (v == null ? null : Math.round(v * 10) / 10)),
+        last: series.last.map((v) => (v == null ? null : Math.round(v * 10) / 10)),
+        title: "Visits → survey started, by homepage",
+        legendFirst: armLabel("landing", liveArms[0]).short,
+        legendLast: armLabel("landing", liveArms[1]).short,
+        headline: `${summary(liveArms[0])}  ·  ${summary(liveArms[1])}`,
+        // Honest about the two id spaces: the denominator is server-side and uses
+        // a throwaway id per visit, the numerator is client-side and keyed on the
+        // durable visitor cookie. So this is starts per visit-day, not a
+        // per-person rate — and per-arm recording only began 2026-08-25, so
+        // earlier days are absent rather than zero.
+        footnote:
+          "starts ÷ visit-days, 7-day trailing · the two counts use different visitor ids, so this is not a per-person rate · per-arm recording began 25 Aug · shared y-scale (peak {peak}%)",
+      });
+      if (url) {
+        blocks.push({
+          type: "image",
+          image_url: url,
+          alt_text: "Visits to survey-start rate by homepage arm",
+        });
+      }
+    }
+  } else {
+    blocks.push(
+      context(
+        "_Visits → survey-started by homepage is not available yet — its migration has not been applied._"
+      )
+    );
+  }
+
+  // ---- SECONDARY chart: downstream of the homepage, kept for context ----
   if (funnel) {
     const liveArms = ["white", "white_prev"] as const;
     const series = buildArmSeries(funnel, [liveArms[0], liveArms[1]]);
@@ -359,7 +450,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
         // null survives to the renderer as a genuine gap in the line.
         first: series.first.map((v) => (v == null ? null : Math.round(v * 10) / 10)),
         last: series.last.map((v) => (v == null ? null : Math.round(v * 10) / 10)),
-        title: "Purchases per finished survey, by homepage",
+        title: "Secondary — purchases per finished survey, by homepage",
         legendFirst: armLabel("landing", liveArms[0]).short,
         legendLast: armLabel("landing", liveArms[1]).short,
         headline,
@@ -476,12 +567,13 @@ export async function GET(request: Request) {
 
     const windowStart = new Date(dayStart.getTime() - WINDOW_DAYS * 86_400_000).toISOString();
     const windowEnd = dayStart.toISOString();
-    const [funnel, cohorts] = await Promise.all([
+    const [funnel, cohorts, startFunnel] = await Promise.all([
       fetchLandingArmFunnel(windowStart, windowEnd),
       fetchArmCohorts(windowStart, windowEnd),
+      fetchLandingStartFunnel(windowStart, windowEnd),
     ]);
 
-    const digest = await buildConversionDigest({ dayKey, funnel, cohorts, now });
+    const digest = await buildConversionDigest({ dayKey, funnel, cohorts, startFunnel, now });
     if (digest.trimmed) {
       logger.warn({ day: dayKey }, "conversion-digest: blocks trimmed to fit Slack");
     }
