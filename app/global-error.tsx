@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import posthog from "posthog-js";
 import Link from "next/link";
 import "@/app/globals.css";
 
@@ -12,6 +13,20 @@ interface GlobalErrorProps {
 export default function GlobalError({ error, reset }: GlobalErrorProps) {
   useEffect(() => {
     console.error(error);
+    // PostHog's exception autocapture listens on window.onerror /
+    // unhandledrejection. A React error boundary CATCHES the error, so it never
+    // reaches either — every error that renders this page was invisible in
+    // error tracking. Wrapped because a throw inside the error page's own
+    // effect would break the fallback UI, which is the one thing that must
+    // always render.
+    try {
+      posthog.captureException(error, {
+        error_boundary: "app/global-error.tsx",
+        digest: error.digest,
+      });
+    } catch {
+      /* analytics must never break the error page */
+    }
   }, [error]);
 
   return (
