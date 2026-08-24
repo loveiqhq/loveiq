@@ -961,11 +961,13 @@ describe("checkout fulfillment", () => {
       // delivery failure, and its first 100 chars are the 60s dedup key.
       expect(body.text).toContain("Purchase #");
       expect(body.text).toContain("EUR 19.99");
-      // No utm_tracker → Direct. No forcedPaywallArm/landingVariant → not recorded,
-      // stated as such rather than guessed.
+      // No utm_tracker → Direct. No landingVariant → not recorded, stated as such
+      // rather than guessed.
       expect(all).toContain("Direct");
-      expect(all).toContain("Paywall style");
       expect(all).toContain("Not recorded");
+      // The concluded paywall experiment is NOT listed as one they were "in":
+      // nothing randomises it any more, so it is a finished test, not a live arm.
+      expect(all).not.toContain("Paywall style");
       // every arm is named in plain English, never as a raw code
       expect(all).not.toContain("white_prev");
 

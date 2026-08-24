@@ -141,26 +141,47 @@ function describePricingArm(arm: string | null, plan: string | null): string | n
   return `${side} side, base ${money(mine.startingCents)} vs ${money(other.startingCents)}`;
 }
 
-/** The four arms as a two-column fields block, always all four so absence is visible. */
+/**
+ * The experiments as a two-column fields block.
+ *
+ * The three LIVE axes are always shown, so an arm that failed to record stays
+ * visible rather than quietly missing. `paywall` is shown only when it actually
+ * has a value: that experiment concluded in favour of the forced paywall and
+ * nothing randomises it any more, so an empty row for it was a permanent
+ * "Not recorded" on every survey message — one of the blank rows that made these
+ * look broken. When it IS set (purchases carry it in the Stripe metadata) it says
+ * whether the reader met the forced or the dismissible paywall, which is worth
+ * keeping.
+ */
 function armFields(journey: SubmissionJourney): SlackBlock {
   const axes: ExperimentAxis[] = ["landing", "survey", "pricing", "paywall"];
   return fields(
-    axes.map((axis) => {
-      // eslint-disable-next-line security/detect-object-injection -- axis is a closed union.
-      const label = armLabel(axis, journey.arms[axis]);
-      let value = label.retired ? `${label.short} _(retired arm)_` : label.short;
-      if (axis === "pricing") {
-        // Which SIDE of the price test they were on, in words plus the two
-        // numbers — the thing you actually want to know from a payment ping.
-        const side = describePricingArm(journey.arms.pricing, journey.money?.plan ?? null);
-        if (side) value = `${value} — ${side}`;
-      }
-      return {
+    axes
+      .filter((axis) => axis !== "paywall" || Boolean(journey.arms.paywall))
+      .map((axis) => {
         // eslint-disable-next-line security/detect-object-injection -- axis is a closed union.
-        label: AXIS_TITLES[axis],
-        value,
-      };
-    })
+        const label = armLabel(axis, journey.arms[axis]);
+        let value = label.retired ? `${label.short} _(retired arm)_` : label.short;
+        if (axis === "pricing") {
+          // Which SIDE of the price test they were on, in words plus the two
+          // numbers — the thing you actually want to know from one of these pings.
+          const side = describePricingArm(journey.arms.pricing, journey.money?.plan ?? null);
+          if (side) {
+            value = `${value} — ${side}`;
+          } else if (!journey.arms.pricing) {
+            // "Not recorded" read like a failure. The arm genuinely does not exist
+            // yet at submit time: it is stamped on the price quote, and no quote is
+            // created until the reader first opens their report. Saying which
+            // explains why the row is blank and that it will fill itself in.
+            value = "Not priced yet — set when they first open their report";
+          }
+        }
+        return {
+          // eslint-disable-next-line security/detect-object-injection -- axis is a closed union.
+          label: AXIS_TITLES[axis],
+          value,
+        };
+      })
   );
 }
 

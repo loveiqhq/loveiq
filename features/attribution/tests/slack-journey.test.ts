@@ -215,16 +215,39 @@ describe("pricing arm — which side of the test, in words and numbers", () => {
     expect(row).not.toContain("cheaper");
   });
 
-  it("adds nothing when the arm is not known yet", () => {
-    // At survey-completion time there is no quote, so there is no arm to describe.
+  it("explains the blank row instead of reading like a failure", () => {
+    // At survey-completion time no quote exists, so there genuinely is no arm.
+    // "Not recorded" made that look like lost data; it is simply not assigned yet.
     const message = buildJourneyMessage(journey(), {
       kind: "survey_completed",
       questionCount: 59,
     });
     const row = pricingRow(message.blocks);
-    expect(row).toContain("Not recorded");
+    expect(row).toContain("Not priced yet");
+    expect(row).not.toContain("Not recorded");
     expect(row).not.toContain("dearer");
     expect(row).not.toContain("cheaper");
+  });
+
+  it("omits the concluded paywall row rather than showing it permanently blank", () => {
+    const survey = buildJourneyMessage(journey(), {
+      kind: "survey_completed",
+      questionCount: 59,
+    });
+    expect(JSON.stringify(survey.blocks)).not.toContain("Paywall style");
+
+    // ...but keeps it when it actually has a value, which purchases do.
+    const purchase = buildJourneyMessage(
+      journey({
+        arms: { landing: "white", survey: "white", pricing: "A", paywall: "treatment" },
+        money: { plan: "full_report", amount: 39.99, currency: "EUR" },
+        milestones: { ...journey().milestones, purchasedAt: "2026-08-24T19:10:00.000Z" },
+      }),
+      { kind: "purchase", planLabel: "Just a snapshot", archetype: null, amountText: "EUR 39.99" }
+    );
+    const text = JSON.stringify(purchase.blocks);
+    expect(text).toContain("Paywall style");
+    expect(text).toContain("Forced paywall");
   });
 });
 
