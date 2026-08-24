@@ -18,7 +18,11 @@
  */
 
 import { buildSubmissionJourney } from "@features/attribution/server/journey";
-import { buildJourneyMessage } from "@features/attribution/server/slack-journey";
+import {
+  buildJourneyMessage,
+  JOURNEY_STEPS,
+  type JourneyStep,
+} from "@features/attribution/server/slack-journey";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import type { SlackBlock } from "@shared/observability/slack";
 import {
@@ -37,8 +41,10 @@ const TABLE = "/rest/v1/slack_journey_message";
  *
  * Ordered, and compared by index — never by string.
  */
-const STATES = ["completed", "report_opened", "paywall", "checkout", "paid"] as const;
-export type JourneyState = (typeof STATES)[number];
+// One ordered list, shared with the rail, so the stored state and what is drawn
+// can never disagree about what "further along" means.
+const STATES = JOURNEY_STEPS;
+export type JourneyState = JourneyStep;
 
 export function journeyStateOf(milestones: {
   reportViewedAt: string | null;
@@ -170,7 +176,18 @@ export async function tryPostJourneyViaBot(input: {
  * this shipped, or posted via webhook), or the journey has not actually advanced
  * past what is already on screen.
  */
-export async function refreshJourneyMessage(submissionId: number): Promise<void> {
+export async function refreshJourneyMessage(
+  submissionId: number,
+  /**
+   * The step the CALLER just witnessed server-side. Required, because deriving it
+   * is not reliable: `reportViewedAt` and `paywallInitiatedAt` come from
+   * `analytics_event`, which is consent-gated, so a reader who declined analytics
+   * looks like they never opened the report. The first version of this derived
+   * the state and therefore never advanced past "completed" for those readers —
+   * the update silently no-opped.
+   */
+  witnessed: JourneyState
+): Promise<void> {
   if (!isSlackBotConfigured()) return;
   try {
     const stored = await readStored(submissionId);
@@ -179,7 +196,9 @@ export async function refreshJourneyMessage(submissionId: number): Promise<void>
     const journey = await buildSubmissionJourney(submissionId);
     if (!journey) return;
 
-    const state = journeyStateOf(journey.milestones);
+    // Whichever is further along: what the data shows, or what the caller saw.
+    const derived = journeyStateOf(journey.milestones);
+    const state = STATES.indexOf(witnessed) > STATES.indexOf(derived) ? witnessed : derived;
     if (!isAdvance(stored.state, state)) return;
 
     // Rebuilt from source, so the arms that were unknowable at submit time
@@ -191,6 +210,9 @@ export async function refreshJourneyMessage(submissionId: number): Promise<void>
       // reuse the STORED question count, which is not derivable here. Rendering
       // 0 would silently downgrade "59 questions in 12 min" on the first update.
       questionCount: stored.question_count ?? 0,
+      // Fill the rail up to what the server witnessed, so a consent gap cannot
+      // render a step hollow that we know was reached.
+      reachedFloor: state,
     });
 
     const ok = await updateJourneyMessage({

@@ -528,7 +528,7 @@ export async function GET(request: Request) {
       // After-response and self-skipping, so a re-read costs nothing.
       if (access.personalReportId) {
         scheduleAfterResponse("journey-message-report-open", async () => {
-          await refreshJourneyMessage(submission.id);
+          await refreshJourneyMessage(submission.id, "report_opened");
         });
       }
     } catch (err) {

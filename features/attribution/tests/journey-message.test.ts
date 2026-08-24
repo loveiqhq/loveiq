@@ -221,13 +221,13 @@ describe("refreshJourneyMessage", () => {
 
   it("does nothing when the bot is not configured", async () => {
     unconfigureBot();
-    await refreshJourneyMessage(1756);
+    await refreshJourneyMessage(1756, "report_opened");
     expect(mockSupabaseFetch).not.toHaveBeenCalled();
   });
 
   it("does nothing for a submission with no stored message", async () => {
     mockSupabaseFetch.mockResolvedValue(json([]));
-    await refreshJourneyMessage(1756);
+    await refreshJourneyMessage(1756, "report_opened");
     expect(mockFetchWithTimeout).not.toHaveBeenCalled();
   });
 
@@ -237,7 +237,7 @@ describe("refreshJourneyMessage", () => {
     mockFetchWithTimeout.mockResolvedValue(json({ ok: true, ts: "1724537.001" }));
     mockSupabaseFetch.mockResolvedValue(json([], true, 204));
 
-    await refreshJourneyMessage(1756);
+    await refreshJourneyMessage(1756, "report_opened");
 
     const [url, init] = mockFetchWithTimeout.mock.calls[0] as [string, { body: string }];
     expect(url).toBe("https://slack.com/api/chat.update");
@@ -256,14 +256,14 @@ describe("refreshJourneyMessage", () => {
     // A reader opening the same report twenty times must not spend twenty edits.
     mockSupabaseFetch.mockResolvedValueOnce(storedRow("checkout"));
     mockBuildSubmissionJourney.mockResolvedValue(journeyAt({ reportViewedAt: "x" }));
-    await refreshJourneyMessage(1756);
+    await refreshJourneyMessage(1756, "report_opened");
     expect(mockFetchWithTimeout).not.toHaveBeenCalled();
   });
 
   it("skips when the state is already the furthest one", async () => {
     mockSupabaseFetch.mockResolvedValueOnce(storedRow("paid"));
     mockBuildSubmissionJourney.mockResolvedValue(journeyAt({ purchasedAt: "x" }));
-    await refreshJourneyMessage(1756);
+    await refreshJourneyMessage(1756, "report_opened");
     expect(mockFetchWithTimeout).not.toHaveBeenCalled();
   });
 
@@ -272,7 +272,7 @@ describe("refreshJourneyMessage", () => {
     mockBuildSubmissionJourney.mockResolvedValue(journeyAt({}));
     mockFetchWithTimeout.mockResolvedValue(json({ ok: true }));
     mockSupabaseFetch.mockResolvedValue(json([], true, 204));
-    await refreshJourneyMessage(1756);
+    await refreshJourneyMessage(1756, "report_opened");
     expect(mockFetchWithTimeout).toHaveBeenCalled();
   });
 
@@ -280,7 +280,7 @@ describe("refreshJourneyMessage", () => {
     mockSupabaseFetch.mockResolvedValueOnce(storedRow("completed"));
     mockBuildSubmissionJourney.mockResolvedValue(journeyAt({ purchasedAt: "x" }));
     mockFetchWithTimeout.mockResolvedValue(json({ ok: false, error: "message_not_found" }));
-    await refreshJourneyMessage(1756);
+    await refreshJourneyMessage(1756, "report_opened");
     // Only the initial SELECT — no PATCH, so a later retry can still succeed.
     expect(mockSupabaseFetch).toHaveBeenCalledTimes(1);
   });
@@ -288,13 +288,58 @@ describe("refreshJourneyMessage", () => {
   it("never throws when the journey cannot be rebuilt", async () => {
     mockSupabaseFetch.mockResolvedValueOnce(storedRow("completed"));
     mockBuildSubmissionJourney.mockResolvedValue(null);
-    await expect(refreshJourneyMessage(1756)).resolves.toBeUndefined();
+    await expect(refreshJourneyMessage(1756, "report_opened")).resolves.toBeUndefined();
+    expect(mockFetchWithTimeout).not.toHaveBeenCalled();
+  });
+
+  it("advances on a report open even with NO analytics consent — the bug that shipped", async () => {
+    // Exactly the case that failed in production: the report was opened, so
+    // report_session exists, but analytics_event has no report_viewed because the
+    // reader declined analytics. Deriving the state from milestones returns
+    // "completed", isAdvance says no, and the message never updated. The caller
+    // witnessed the open, so its word wins.
+    mockSupabaseFetch.mockResolvedValueOnce(storedRow("completed"));
+    mockBuildSubmissionJourney.mockResolvedValue(journeyAt({}));
+    mockFetchWithTimeout.mockResolvedValue(json({ ok: true }));
+    mockSupabaseFetch.mockResolvedValue(json([], true, 204));
+
+    await refreshJourneyMessage(1756, "report_opened");
+
+    expect(mockFetchWithTimeout).toHaveBeenCalled();
+    const [, init] = mockFetchWithTimeout.mock.calls[0] as [string, { body: string }];
+    const body = JSON.parse(init.body) as Record<string, unknown>;
+    // ...and the rail must SHOW it, not just record it.
+    const rail = JSON.stringify(body.blocks);
+    expect(rail).toContain(":large_blue_circle: Report opened");
+    expect(rail).toContain(":white_circle: Checkout");
+    const patch = mockSupabaseFetch.mock.calls.at(-1) as [string, { body: string }];
+    expect(JSON.parse(patch[1].body).state).toBe("report_opened");
+  });
+
+  it("takes whichever is further along, the data or the caller", async () => {
+    // Caller only witnessed the report open, but the row already shows a payment:
+    // the payment wins, and the rail fills completely.
+    mockSupabaseFetch.mockResolvedValueOnce(storedRow("completed"));
+    mockBuildSubmissionJourney.mockResolvedValue(journeyAt({ purchasedAt: "x" }));
+    mockFetchWithTimeout.mockResolvedValue(json({ ok: true }));
+    mockSupabaseFetch.mockResolvedValue(json([], true, 204));
+
+    await refreshJourneyMessage(1756, "report_opened");
+
+    const patch = mockSupabaseFetch.mock.calls.at(-1) as [string, { body: string }];
+    expect(JSON.parse(patch[1].body).state).toBe("paid");
+  });
+
+  it("still skips when the witnessed step is behind what is already drawn", async () => {
+    mockSupabaseFetch.mockResolvedValueOnce(storedRow("checkout"));
+    mockBuildSubmissionJourney.mockResolvedValue(journeyAt({}));
+    await refreshJourneyMessage(1756, "report_opened");
     expect(mockFetchWithTimeout).not.toHaveBeenCalled();
   });
 
   it("never throws when the journey lookup itself explodes", async () => {
     mockSupabaseFetch.mockResolvedValueOnce(storedRow("completed"));
     mockBuildSubmissionJourney.mockRejectedValue(new Error("db down"));
-    await expect(refreshJourneyMessage(1756)).resolves.toBeUndefined();
+    await expect(refreshJourneyMessage(1756, "report_opened")).resolves.toBeUndefined();
   });
 });

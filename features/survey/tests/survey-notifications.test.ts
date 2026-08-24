@@ -215,7 +215,7 @@ describe("POST /api/survey notifications", () => {
     // all four arms, in plain English — never the raw codes
     expect(flat).toContain("Previous homepage");
     expect(flat).toContain("Dark survey");
-    expect(flat).toContain("Pricing B (higher)");
+    expect(flat).toContain("Pricing B");
     expect(flat).toContain("Forced paywall");
     expect(flat).not.toContain("white_prev");
 

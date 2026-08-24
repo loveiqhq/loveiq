@@ -63,7 +63,26 @@ function trafficLine(journey: SubmissionJourney): string {
  * without the implication a purchase ping would render "Report opened" hollow and
  * appear to contradict the payment it is announcing.
  */
-function journeyRail(journey: SubmissionJourney): string {
+/**
+ * The rail's steps, in order. Exported so the milestone that a caller KNOWS
+ * happened can be named rather than passed as a bare index.
+ */
+export const JOURNEY_STEPS = ["completed", "report_opened", "paywall", "checkout", "paid"] as const;
+export type JourneyStep = (typeof JOURNEY_STEPS)[number];
+
+/**
+ * `reachedFloor` is a step the SERVER witnessed directly, and it wins over the
+ * derived milestones.
+ *
+ * Needed because two of the five milestones come from `analytics_event`, which is
+ * consent-gated: a reader who opened their report but declined analytics has a
+ * null `reportViewedAt`, so deriving the rail purely from milestones renders the
+ * step hollow and — worse — made the live update no-op, because the state never
+ * appeared to advance. The route that just wrote `report_session` knows better
+ * than the consent gate does.
+ */
+function journeyRail(journey: SubmissionJourney, reachedFloor?: JourneyStep): string {
+  const floorIdx = reachedFloor ? JOURNEY_STEPS.indexOf(reachedFloor) : -1;
   const steps: Array<[string, boolean]> = [
     ["Survey done", Boolean(journey.timings.completedAt)],
     ["Report opened", Boolean(journey.milestones.reportViewedAt)],
@@ -76,7 +95,7 @@ function journeyRail(journey: SubmissionJourney): string {
   let reached = false;
   const filled: boolean[] = [];
   for (let i = steps.length - 1; i >= 0; i -= 1) {
-    reached = reached || steps[i]![1];
+    reached = reached || steps[i]![1] || i <= floorIdx;
     filled[i] = reached;
   }
   return steps
@@ -121,8 +140,14 @@ export interface JourneyMessage {
 export function buildJourneyMessage(
   journey: SubmissionJourney,
   options:
-    | { kind: "survey_completed"; questionCount: number }
-    | { kind: "purchase"; planLabel: string; archetype: string | null; amountText: string | null }
+    | { kind: "survey_completed"; questionCount: number; reachedFloor?: JourneyStep }
+    | {
+        kind: "purchase";
+        planLabel: string;
+        archetype: string | null;
+        amountText: string | null;
+        reachedFloor?: JourneyStep;
+      }
 ): JourneyMessage {
   const name = journey.firstName ? escapeSlack(journey.firstName) : "anonymous";
   const email = journey.emailMasked ? codeSpan(journey.emailMasked) : "no email";
@@ -154,7 +179,7 @@ export function buildJourneyMessage(
     );
   }
 
-  blocks.push(section(journeyRail(journey)));
+  blocks.push(section(journeyRail(journey, options.reachedFloor)));
 
   // Where they came from and on what.
   const whereRows: Array<{ label: string; value: string }> = [

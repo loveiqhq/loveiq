@@ -14,8 +14,15 @@ describe("arm labels", () => {
     expect(armLabel("landing", "white_prev").long).toBe("Homepage: previous design");
     expect(armLabel("survey", "dark").long).toBe("Survey questions: dark");
     expect(armLabel("survey", "white").long).toBe("Survey questions: white");
-    expect(armLabel("pricing", "A").long).toBe("Pricing: group A — lower prices");
-    expect(armLabel("pricing", "B").long).toBe("Pricing: group B — higher prices");
+    // Deliberately direction-free: these used to claim A was the lower arm, which
+    // pricing 2.1 inverted on 2026-08-24 without anything failing.
+    expect(armLabel("pricing", "A").long).toBe("Pricing: group A");
+    expect(armLabel("pricing", "B").long).toBe("Pricing: group B");
+    for (const arm of ["A", "B"] as const) {
+      for (const field of ["short", "long"] as const) {
+        expect(armLabel("pricing", arm)[field]).not.toMatch(/lower|higher/i);
+      }
+    }
     expect(armLabel("paywall", "treatment").long).toBe("Paywall: forced — had to pay to read on");
     expect(armLabel("paywall", "control").long).toBe("Paywall: dismissible — could close it");
   });

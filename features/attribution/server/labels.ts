@@ -54,8 +54,15 @@ const LABELS: Record<ExperimentAxis, Record<string, ArmLabel>> = {
     dark: { short: "Dark survey", long: "Survey questions: dark" },
   },
   pricing: {
-    A: { short: "Pricing A (lower)", long: "Pricing: group A — lower prices" },
-    B: { short: "Pricing B (higher)", long: "Pricing: group B — higher prices" },
+    // No "(lower)" / "(higher)" here on purpose. These labels said A was the lower
+    // arm, which was true for pricing 2.0 and became FALSE on 2026-08-24 when 2.1
+    // raised A above B (A 39.99/49.99/59 vs B 29/39/49). Nothing failed — the
+    // label just quietly started lying to Slack and /admin about which price a
+    // buyer was shown. A direction baked into a name goes stale silently every
+    // time the test flips, so the name identifies the arm and the surrounding
+    // numbers (the amount paid, the digest's rates) carry the direction.
+    A: { short: "Pricing A", long: "Pricing: group A" },
+    B: { short: "Pricing B", long: "Pricing: group B" },
     // Retired 2026-06 in the 3-bucket → 2-bucket cut. Legacy quotes still read back as C.
     C: { short: "Pricing C", long: "Pricing: group C", retired: true },
   },

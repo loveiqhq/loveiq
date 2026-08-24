@@ -186,7 +186,7 @@ async function notifySlackPurchase({
   // is the money ping's counterpart in the survey channel, not a duplicate of it.
   // Never throws, and skips itself when the Slack bot is not configured.
   scheduleAfterResponse("journey-message-paid", async () => {
-    await refreshJourneyMessage(submissionId);
+    await refreshJourneyMessage(submissionId, "paid");
   });
 }
 

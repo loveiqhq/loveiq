@@ -413,7 +413,7 @@ export async function POST(request: Request) {
     if (accessContext?.submissionId) {
       const submissionIdForJourney = accessContext.submissionId;
       scheduleAfterResponse("journey-message-checkout", async () => {
-        await refreshJourneyMessage(submissionIdForJourney);
+        await refreshJourneyMessage(submissionIdForJourney, "checkout");
       });
     }
 
