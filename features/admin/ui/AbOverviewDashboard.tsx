@@ -38,6 +38,8 @@ export interface AbOverview {
   windowDays: number;
   generatedAt: string;
   funnel: Array<{ step: string; count: number; pctOfTop: number; dropFromPrev: number }>;
+  questionDropoff: Array<{ position: string; reached: number; dropPct: number }>;
+  dropoffCaveats: string[];
   experiments: ExperimentReadout[];
   concluded: Array<{ title: string; outcome: string }>;
   totals: { submissions: number; purchases: number; revenue: number; currency: string };
@@ -78,6 +80,14 @@ function Funnel({ steps }: { steps: AbOverview["funnel"] }) {
   const top = Math.max(...steps.map((s) => s.count), 1);
   return (
     <div className="space-y-2">
+      {/* Column headers: without them the first row's 100% reads as "everyone did
+          the next thing", when it is only the baseline the rest is measured against. */}
+      <div className="hidden items-center gap-3 pb-1 text-[11px] uppercase tracking-wide text-text-muted sm:flex">
+        <div className="w-44 shrink-0 text-right">Step</div>
+        <div className="flex-1">How many got this far</div>
+        <div className="w-16 shrink-0 text-right">People</div>
+        <div className="w-12 shrink-0 text-right">Of all</div>
+      </div>
       {steps.map((step, idx) => (
         <div key={step.step}>
           {idx > 0 && step.dropFromPrev > 0 && (
@@ -131,7 +141,7 @@ function Funnel({ steps }: { steps: AbOverview["funnel"] }) {
               {step.count.toLocaleString()}
             </div>
             <div className="hidden w-12 shrink-0 text-right text-sm tabular-nums text-text-muted sm:block">
-              {step.pctOfTop}%
+              {idx === 0 ? "base" : `${step.pctOfTop}%`}
             </div>
           </div>
         </div>
@@ -235,9 +245,11 @@ export function AbOverviewView({
     <div className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <HeadlineNumber
-          label="People who visited"
+          label="Visits to the site"
           value={visitors.toLocaleString()}
-          hint={`last ${data.windowDays} days`}
+          // funnel_event is keyed (visitor, day, event), so this counts visits, not
+          // distinct people — somebody returning on three days counts three times.
+          hint={`last ${data.windowDays} days · counts repeat days`}
         />
         <HeadlineNumber
           label="Finished the survey"
@@ -267,10 +279,53 @@ export function AbOverviewView({
 
       <Card
         title="Where people drop out"
-        subtitle="Each bar is how many people reached that step. The arrows show how many gave up between steps."
+        subtitle="Each bar is how many got that far. The arrows show the share who stopped between one step and the next. The first row is the baseline everything else is measured against."
       >
         <Funnel steps={funnel} />
       </Card>
+
+      {data.questionDropoff.length > 0 && (
+        <Card
+          title="The survey questions losing the most people"
+          subtitle="Of everyone who reached each point in the survey, the share who never reached the next one. Worst first."
+        >
+          <div className="space-y-2">
+            {data.questionDropoff.map((q) => (
+              <div key={q.position} className="sm:flex sm:items-center sm:gap-3">
+                <div className="mb-1 flex items-baseline justify-between gap-2 sm:mb-0 sm:w-44 sm:shrink-0 sm:justify-end">
+                  <span className="text-sm text-text-muted sm:text-right">{q.position}</span>
+                  <span className="text-sm tabular-nums text-text-primary sm:hidden">
+                    {q.dropPct}%
+                  </span>
+                </div>
+                <div className="h-5 flex-1 rounded bg-white/5">
+                  <div
+                    className="h-5 rounded bg-accent-purple"
+                    // scaled against the worst bar so the differences between them
+                    // stay visible; a fixed 100% scale flattens everything
+                    style={{
+                      width: `${Math.max((q.dropPct / (data.questionDropoff[0]?.dropPct || 1)) * 100, 2)}%`,
+                    }}
+                  />
+                </div>
+                <div className="hidden w-12 shrink-0 text-right text-sm tabular-nums text-text-primary sm:block">
+                  {q.dropPct}%
+                </div>
+                <div className="hidden w-24 shrink-0 text-right text-xs tabular-nums text-text-muted sm:block">
+                  {q.reached.toLocaleString()} got here
+                </div>
+              </div>
+            ))}
+          </div>
+          <ul className="mt-4 space-y-1">
+            {data.dropoffCaveats.map((c) => (
+              <li key={c} className="text-xs text-text-muted">
+                · {c}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
 
       <div>
         <h2 className="mb-1 font-serif text-xl font-semibold text-text-primary">

@@ -32,11 +32,34 @@ function page(rows: unknown[]) {
   return { ok: true, status: 200, json: async () => rows } as Response;
 }
 
+/** A funnel_event exact-count reply: the route reads the total off content-range. */
+function countReply(total: number) {
+  return {
+    ok: true,
+    status: 200,
+    headers: new Headers({ "content-range": `0-0/${total}` }),
+    json: async () => [],
+  } as unknown as Response;
+}
+
+/** Per-question reach, newest-first as the RPC returns it. */
+const DROPOUT = {
+  questions: [
+    { question_index: 0, q_id: "00000", sessions: 250 },
+    { question_index: 1, q_id: "00001", sessions: 200 },
+    { question_index: 2, q_id: "01002", sessions: 100 },
+    { question_index: 3, q_id: "01005", sessions: 3 }, // below the reach floor
+  ],
+};
+
 /** submissions then quotes; each collection returns one short page (< 1000) so paging stops. */
-function routeData(submissions: unknown[], quotes: unknown[]) {
+function routeData(submissions: unknown[], quotes: unknown[], intro = 300) {
   mockSupabaseFetch.mockImplementation(async (path: string) => {
     if (path.includes("/survey_submission?")) return page(submissions);
     if (path.includes("/report_price_quote?")) return page(quotes);
+    if (path.includes("/rpc/get_dropout_funnel"))
+      return { ok: true, status: 200, json: async () => DROPOUT } as Response;
+    if (path.includes("/funnel_event?")) return countReply(intro);
     throw new Error(`unexpected path ${path}`);
   });
 }
@@ -102,17 +125,32 @@ describe("GET /api/admin/ab-overview", () => {
       dropFromPrev: number;
     }>;
     expect(steps[0]).toEqual({
-      step: "Visited the site",
+      step: "Visits to the site",
       count: 1000,
       pctOfTop: 100,
       dropFromPrev: 0,
     });
     // 1000 → 500 is half of them lost
+    expect(steps[1]!.step).toBe("Opened the survey page");
     expect(steps[1]!.pctOfTop).toBe(50);
     expect(steps[1]!.dropFromPrev).toBe(50);
-    // last step: 50 → 10 loses 80%
     expect(steps.at(-1)!.step).toBe("Paid");
-    expect(steps.at(-1)!.dropFromPrev).toBe(80);
+
+    /*
+     * Drop-off is never reported as negative, however the counts fall out.
+     *
+     * Deliberately NOT asserting that each step is <= the one before it. That
+     * looks like it should hold but does not: the landing page asks one survey
+     * question inline, and answering it there means the survey skips it — so a
+     * visitor can be absent from Q1's reach and still present in completions.
+     * `survey_behavior_event`, which the reach curve is built from, is also
+     * client-posted and therefore lossy. What must never happen is the UI showing
+     * a nonsense negative drop.
+     */
+    for (const step of steps) {
+      expect(step.dropFromPrev).toBeGreaterThanOrEqual(0);
+      expect(step.pctOfTop).toBeGreaterThanOrEqual(0);
+    }
   });
 
   it("attributes each arm and computes its purchase rate", async () => {
@@ -195,6 +233,54 @@ describe("GET /api/admin/ab-overview", () => {
     const landing = body.experiments.find((e: { axis: string }) => e.axis === "landing");
     expect(landing.arms.map((a: { arm: string }) => a.arm)).not.toContain("control");
     expect(landing.unattributed).toBe(1); // the retired-arm person, still counted
+  });
+
+  it("returns the worst positions first, labelled by position rather than question", async () => {
+    routeData([submission(1, "white", null)], []);
+    const body = await (await GET(req(41))).json();
+    // 250→200 = 20%, 200→100 = 50%, 100→3 = 97%. Sorted worst first.
+    expect(body.questionDropoff).toEqual([
+      { position: "Question 3 of 4", reached: 100, dropPct: 97 },
+      { position: "Question 2 of 4", reached: 200, dropPct: 50 },
+      { position: "Question 1 of 4", reached: 250, dropPct: 20 },
+    ]);
+    // never a question NAME: the email question moved first→last and the landing
+    // page skips one, so position cannot be mapped to a question.
+    expect(JSON.stringify(body.questionDropoff)).not.toMatch(/email|satisfied/i);
+    expect(body.dropoffCaveats.length).toBeGreaterThan(0);
+  });
+
+  it("never reports a negative drop, even where reach increases", async () => {
+    // survey_behavior_event is client-posted and lossy, so a later position can
+    // legitimately show MORE sessions than an earlier one.
+    mockSupabaseFetch.mockImplementation(async (path: string) => {
+      if (path.includes("/survey_submission?")) return page([submission(1, "white", null)]);
+      if (path.includes("/report_price_quote?")) return page([]);
+      if (path.includes("/rpc/get_dropout_funnel"))
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            questions: [
+              { question_index: 0, q_id: "a", sessions: 100 },
+              { question_index: 1, q_id: "b", sessions: 140 }, // reach goes UP
+              { question_index: 2, q_id: "c", sessions: 90 },
+            ],
+          }),
+        } as Response;
+      if (path.includes("/funnel_event?")) return countReply(300);
+      throw new Error(`unexpected path ${path}`);
+    });
+    const body = await (await GET(req(43))).json();
+    for (const d of body.questionDropoff) expect(d.dropPct).toBeGreaterThanOrEqual(0);
+    for (const f of body.funnel) expect(f.dropFromPrev).toBeGreaterThanOrEqual(0);
+  });
+
+  it("uses the first question's real reach as the 'answered question 1' step", async () => {
+    routeData([submission(1, "white", null)], []);
+    const body = await (await GET(req(42))).json();
+    const step = body.funnel.find((f: { step: string }) => f.step === "Answered question 1");
+    expect(step.count).toBe(250);
   });
 
   it("does not present the paywall as a live A/B test", async () => {

@@ -22,7 +22,11 @@ import { NextResponse } from "next/server";
 
 import { verifyAdminSession } from "@features/admin/server/auth";
 import { hasRole } from "@features/admin/server/roles";
-import { computeRate, fetchFunnelStages } from "@features/admin/server/digest-metrics";
+import {
+  computeRate,
+  fetchDropoutFunnel,
+  fetchFunnelStages,
+} from "@features/admin/server/digest-metrics";
 import { formatSignalSummary, twoProportionSignal } from "@features/admin/server/statistics";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import {
@@ -32,6 +36,7 @@ import {
   type ExperimentAxis,
 } from "@features/attribution/server/labels";
 import { readStampedArms } from "@features/attribution/server/traffic";
+import { surveyQuestions } from "@/data/survey-data";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import logger from "@shared/observability/logger";
 
@@ -48,6 +53,29 @@ const CACHE_TTL_MS = 60_000;
 const TINY_ARM = 30;
 
 /** Split into parts so the long comma-joined list does not trip no-secrets' entropy check. */
+/**
+ * Exact count of funnel_event rows for one event type.
+ *
+ * Matches the digest's own semantics: funnel_event's PK is
+ * (visitor_id, day, event_type), so this counts visitor-DAYS, not distinct
+ * people. A visitor returning on three days counts three times. The UI must say
+ * "visits", never "people".
+ */
+async function countFunnelEvent(eventType: string, sinceIso: string): Promise<number> {
+  const sinceDay = sinceIso.slice(0, 10);
+  try {
+    const res = await supabaseFetch(
+      `/rest/v1/funnel_event?select=visitor_id&event_type=eq.${eventType}&day=gte.${sinceDay}`,
+      { headers: { Prefer: "count=exact", Range: "0-0" } }
+    );
+    const range = res.headers.get("content-range");
+    const total = range?.split("/")[1];
+    return total && total !== "*" ? Number(total) : 0;
+  } catch {
+    return 0;
+  }
+}
+
 const QUOTE_COLUMNS = [
   "survey_submission_id",
   "experiment_group",
@@ -89,6 +117,11 @@ export interface AbOverviewResponse {
   windowDays: number;
   generatedAt: string;
   funnel: Array<{ step: string; count: number; pctOfTop: number; dropFromPrev: number }>;
+  /** The questions losing the most people, worst first. Named, not numbered — see below. */
+  /** Positions losing the most people, worst first. Position, not question — see the route notes. */
+  questionDropoff: Array<{ position: string; reached: number; dropPct: number }>;
+  /** Plain-English caveats the UI prints alongside the list. */
+  dropoffCaveats: string[];
   experiments: ExperimentReadout[];
   /** Finished experiments, listed without rates so nobody reads a winner into them. */
   concluded: ConcludedExperiment[];
@@ -245,8 +278,9 @@ export async function GET(request: Request) {
   const since = new Date(Date.now() - windowDays * 86_400_000).toISOString();
 
   try {
-    const [stages, subsPage] = await Promise.all([
-      fetchFunnelStages(since, new Date().toISOString()),
+    const nowIso = new Date().toISOString();
+    const [stages, subsPage, dropout, intro1, intro2, intro3, intro4] = await Promise.all([
+      fetchFunnelStages(since, nowIso),
       fetchAllPages<SubmissionRow>(
         (offset, pageSize) =>
           // status=eq.completed matches what fetchFunnelStages counts as a completion, so
@@ -255,6 +289,11 @@ export async function GET(request: Request) {
           `&select=id,created_date_time,utm_tracker&order=id.asc&offset=${offset}&limit=${pageSize}`,
         "survey_submission"
       ),
+      fetchDropoutFunnel(since, nowIso),
+      countFunnelEvent("intro_slide_1", since),
+      countFunnelEvent("intro_slide_2", since),
+      countFunnelEvent("intro_slide_3", since),
+      countFunnelEvent("intro_slide_4", since),
     ]);
     const submissions = subsPage.rows;
 
@@ -365,15 +404,83 @@ export async function GET(request: Request) {
       tally("pricing", (id) => bySubmission.get(id)?.pricing ?? null),
     ];
 
+    /*
+     * Order matters and was wrong before. `survey_engine_mount` fires when the
+     * survey route mounts — BEFORE the intro slides, which are steps inside it.
+     * That is why the mount count (2,601) exceeds intro slide 1 (2,497), and the
+     * same order is already used by /api/admin/journey/flow.
+     *
+     * The old "Started answering" step came from fetchFunnelStages().starts,
+     * which counts distinct sessions in survey_partial_save. Drafts do not
+     * survive completion, so that number (851) came out BELOW completions
+     * (1,313) — a funnel step smaller than the one after it, which is
+     * impossible and made the whole chart untrustworthy. Replaced with the first
+     * question's reach from the drop-out curve, which is a real measurement of
+     * "started answering".
+     */
+    const questions = dropout?.questions ?? [];
+    const firstQuestionReach = questions[0]?.sessions ?? 0;
+
     const top = stages?.uniqueVisitors ?? 0;
     const steps: Array<{ step: string; count: number }> = [
-      { step: "Visited the site", count: stages?.uniqueVisitors ?? 0 },
-      { step: "Opened the survey", count: stages?.engineMounts ?? 0 },
-      { step: "Started answering", count: stages?.starts ?? 0 },
+      { step: "Visits to the site", count: stages?.uniqueVisitors ?? 0 },
+      { step: "Opened the survey page", count: stages?.engineMounts ?? 0 },
+      { step: "Intro screen 1", count: intro1 },
+      { step: "Intro screen 2", count: intro2 },
+      { step: "Intro screen 3", count: intro3 },
+      { step: "Intro screen 4", count: intro4 },
+      { step: "Answered question 1", count: firstQuestionReach },
       { step: "Finished the survey", count: stages?.completions ?? 0 },
       { step: "Opened their report", count: stages?.reportViewed ?? 0 },
       { step: "Reached the paywall", count: stages?.paywallInitiated ?? 0 },
       { step: "Paid", count: stages?.purchased ?? 0 },
+    ];
+
+    /*
+     * Which POSITIONS in the survey lose the most people.
+     *
+     * Labelled by position and never by question name, because position cannot be
+     * mapped to a question reliably:
+     *   - the email question (q_id 00000) used to be asked FIRST and is now asked
+     *     LAST (orderEmailLast). It still shows at indices 0, 56 and 57 here,
+     *     because get_dropout_funnel filters `email_position IS DISTINCT FROM
+     *     'first'` and NULL passes that test, so pre-experiment sessions leak in.
+     *     Early positions therefore mix two different survey orders.
+     *   - the landing page asks q_id 01002 inline (LANDING_PREFILL_QID); answering
+     *     it there drops it from the array and shifts every later index for that
+     *     visitor.
+     * Naming a question would be false precision. The shape of the curve is sound,
+     * and that is what "where do people drop out" actually needs.
+     *
+     * Only the worst few are returned — the full curve is 59 positions, and 59
+     * bars is not a chart anyone reads.
+     */
+    const REACH_FLOOR = 30;
+    const WORST_N = 8;
+    const drops: Array<{ position: string; reached: number; dropPct: number }> = [];
+    for (let i = 0; i < questions.length - 1; i += 1) {
+      // eslint-disable-next-line security/detect-object-injection -- i is a loop counter over a fixed array.
+      const current = questions[i]!;
+      const next = questions[i + 1]!.sessions;
+      const reached = current.sessions;
+      // Under the floor a percentage is noise. The tail also carries small
+      // NEGATIVE drops (reach going up) because survey_behavior_event is
+      // client-posted and lossy; those clamp to zero, never render as negative.
+      if (reached < REACH_FLOOR) continue;
+      drops.push({
+        position: `Question ${current.question_index + 1} of ${questions.length}`,
+        reached,
+        dropPct: computeRate(Math.max(0, reached - next), reached),
+      });
+    }
+    const questionDropoff = drops
+      .filter((d) => d.dropPct > 0)
+      .sort((a, b) => b.dropPct - a.dropPct)
+      .slice(0, WORST_N);
+
+    const dropoffCaveats = [
+      "These are positions, not specific questions. The email question moved from first to last, and the question asked on the landing page is skipped for anyone who answers it there — both shift the numbering.",
+      "Measured from what each browser reports as a question is shown, so it undercounts a little. Where a later position shows more people than an earlier one, the drop is treated as zero rather than shown as negative.",
     ];
     const funnel = steps.map((s, i) => {
       const prev = i === 0 ? s.count : steps[i - 1]!.count;
@@ -391,6 +498,8 @@ export async function GET(request: Request) {
       windowDays,
       generatedAt: new Date().toISOString(),
       funnel,
+      questionDropoff,
+      dropoffCaveats,
       experiments,
       concluded: [
         {
