@@ -268,7 +268,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
   // meant.
   blocks.push(
     context(
-      `${windowLabel} · counted server-side, no analytics-consent gap · "visits" are visitor-days, not people · arms are compared on finished surveys → ever paid`
+      `${windowLabel} · "visits" are visitor-days on any page, not people · the verdicts below compare arms on finished surveys → ever paid, counted server-side with no consent gap · the reached-survey chart is NOT arm-comparable yet (see its caption)`
     )
   );
 
@@ -362,13 +362,38 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
     blocks.push(section(rows.join("\n")));
   }
 
-  // ---- PRIMARY chart: the metric the homepage actually controls ----
+  // ---- Visits → reached the survey. NOT arm-comparable yet. ----
   //
-  // A homepage decides whether a visitor starts a survey. Whether someone who
-  // already finished a 60-question assessment later buys is driven by the report,
-  // the price they were shown and the paywall — so finished→paid (below) is
-  // downstream of the homepage, contaminated by the independently-randomised
-  // pricing test, and so low-powered that a new arm reads "too early" for weeks.
+  // The intent is right: a homepage decides whether a visitor starts a survey,
+  // which finished→paid (below) cannot measure. The INSTRUMENTATION is not there
+  // yet, and an audit found three reasons the two arms are not measuring the same
+  // thing. Until they are fixed this is a trend line for the site, not a verdict
+  // on a homepage, and it is titled and captioned to say so.
+  //
+  //  1. The numerator is a different funnel step per arm. `survey_engine_mount`
+  //     fires when the survey ENGINE mounts. The current homepage has an inline
+  //     first question (white/WQuestionCard.tsx) whose answer is written to the
+  //     survey's localStorage, and SurveyPage.loadInitialStep() then skips
+  //     straight to the engine ("If localStorage has answers, skip to engine").
+  //     The previous homepage has no such component, so its visitors reach the
+  //     engine only after four wizard slides and a consent screen. Same event
+  //     name, different step — worth roughly a third in relative terms at
+  //     plausible survival rates, from instrumentation alone.
+  //  2. The denominator is every public page, not the homepage. shouldCountVisit
+  //     excludes only /api, /admin, /_next and /login, so /glossary/*,
+  //     /report/<token> and the legal pages all count — credited to whatever arm
+  //     the visitor's year-old cookie holds. A report buyer re-reading their
+  //     report adds visit-days and can never add a start, so the better-
+  //     converting arm is PENALISED. That runs opposite to (1), so the gap is
+  //     uninterpretable in either direction rather than merely noisy.
+  //  3. The numerator is consent-gated and the denominator is not.
+  //     SurveyEngine only pings when __liq_vid exists, and proxy.ts mints that
+  //     cookie only under hasAnalyticsConsent. The visit row is written
+  //     server-side with a throwaway id and no consent check.
+  //
+  // The fix is one arm-symmetric, path-scoped, server-side event pair; it needs
+  // RSC-navigation detection in middleware, because both homepages link to
+  // /survey with next/link and that is not a document request.
   if (startFunnel) {
     const liveArms = ["white", "white_prev"] as const;
     const series = buildStartSeries(startFunnel, [liveArms[0], liveArms[1]]);
@@ -386,23 +411,24 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
         labels: series.labels,
         first: series.first.map((v) => (v == null ? null : Math.round(v * 10) / 10)),
         last: series.last.map((v) => (v == null ? null : Math.round(v * 10) / 10)),
-        title: "Visits → survey started, by homepage",
+        title: "Site visit-days → reached the survey questions",
         legendFirst: armLabel("landing", liveArms[0]).short,
         legendLast: armLabel("landing", liveArms[1]).short,
-        headline: `${summary(liveArms[0])}  ·  ${summary(liveArms[1])}`,
+        headline: `NOT comparable between arms yet — see caption  ·  ${summary(liveArms[0])}  ·  ${summary(liveArms[1])}`,
         // Honest about the two id spaces: the denominator is server-side and uses
         // a throwaway id per visit, the numerator is client-side and keyed on the
         // durable visitor cookie. So this is starts per visit-day, not a
         // per-person rate — and per-arm recording only began 2026-08-25, so
         // earlier days are absent rather than zero.
         footnote:
-          "starts ÷ visit-days, 7-day trailing · the two counts use different visitor ids, so this is not a per-person rate · per-arm recording began 25 Aug · shared y-scale (peak {peak}%)",
+          "reached-survey ÷ ALL-PAGE visit-days, 7-day trailing · the arms are NOT measuring the same step: the current homepage's inline question skips its visitors straight to the survey engine · the denominator counts every page, so re-reading a report penalises the arm that sold it · the numerator needs analytics consent, the denominator does not · per-arm recording began 25 Aug · peak {peak}%",
       });
       if (url) {
         blocks.push({
           type: "image",
           image_url: url,
-          alt_text: "Visits to survey-start rate by homepage arm",
+          alt_text:
+            "Site visit-days to reached-survey rate, by homepage arm. Not comparable between arms yet — the two arms measure different funnel steps.",
         });
       }
     }
@@ -414,7 +440,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
     );
   }
 
-  // ---- SECONDARY chart: downstream of the homepage, kept for context ----
+  // ---- Finished survey → paid. Downstream of the homepage. ----
   if (funnel) {
     const liveArms = ["white", "white_prev"] as const;
     const series = buildArmSeries(funnel, [liveArms[0], liveArms[1]]);
@@ -450,7 +476,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
         // null survives to the renderer as a genuine gap in the line.
         first: series.first.map((v) => (v == null ? null : Math.round(v * 10) / 10)),
         last: series.last.map((v) => (v == null ? null : Math.round(v * 10) / 10)),
-        title: "Secondary — purchases per finished survey, by homepage",
+        title: "Purchases per finished survey, by homepage",
         legendFirst: armLabel("landing", liveArms[0]).short,
         legendLast: armLabel("landing", liveArms[1]).short,
         headline,

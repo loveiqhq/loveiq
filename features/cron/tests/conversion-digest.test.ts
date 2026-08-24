@@ -316,18 +316,32 @@ describe("conversion-digest handler", () => {
     expect(mockNotifySlack).not.toHaveBeenCalled();
   });
 
-  it("leads with visits → survey-started, the metric the homepage controls", async () => {
+  it("ships the reached-survey chart flagged as NOT arm-comparable", async () => {
+    // It was briefly titled "Visits → survey started, by homepage" and framed as
+    // the primary metric. An audit found the two arms are not measuring the same
+    // step: the current homepage's inline question writes the survey's
+    // localStorage, and SurveyPage then skips straight to the engine — so
+    // `survey_engine_mount` means "tapped the homepage question" for one arm and
+    // "survived four wizard slides plus consent" for the other. Until the
+    // instrumentation is symmetric the chart must not read as a verdict.
     await GET(request());
     const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
     const images = arg.blocks.filter((b) => (b as { type?: string }).type === "image");
-    // Two charts, and the landing→start one comes FIRST: finished→paid is
-    // downstream of the homepage and must not be read as the headline result.
     expect(images).toHaveLength(2);
+    const alt = JSON.stringify(images);
+    expect(alt).toContain("Not comparable between arms yet");
+    expect(alt).not.toContain("survey%20started%2C%20by%20homepage");
+  });
+
+  it("does not claim the reached-survey number is consent-free", async () => {
+    // The denominator is server-side and consent-free; the numerator needs
+    // __liq_vid, which is minted only under analytics consent. The definitions
+    // line used to assert "no analytics-consent gap" over both.
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
     const flat = blockText(arg.blocks);
-    const startIdx = flat.indexOf("survey-start");
-    const paidIdx = flat.indexOf("finished%20survey");
-    expect(startIdx).toBeGreaterThanOrEqual(0);
-    if (paidIdx >= 0) expect(startIdx).toBeLessThan(paidIdx);
+    expect(flat).toContain("NOT arm-comparable yet");
+    expect(flat).not.toMatch(/counted server-side, no analytics-consent gap/);
   });
 
   it("says so plainly when the landing→start migration is not applied yet", async () => {

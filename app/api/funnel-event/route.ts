@@ -24,7 +24,8 @@ import { verifyCsrfHeaderOrBody } from "@shared/http/csrf";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { sanitizeUtmSource } from "@shared/url/utm";
-import { isLandingVariant } from "@shared/experiments/landingVariant";
+import { cookies } from "next/headers";
+import { isLandingVariant, LANDING_VARIANT_COOKIE } from "@shared/experiments/landingVariant";
 import logger from "@shared/observability/logger";
 
 // Top-of-funnel signals that all predate survey_submission, so analytics_event
@@ -44,12 +45,6 @@ const ALLOWED_EVENTS = [
 const schema = z.object({
   event: z.enum(ALLOWED_EVENTS),
   visitor_id: z.string().uuid(),
-  // The landing arm, read client-side from the sticky cookie. Without it these
-  // rows carried no arm at all, so there was no per-arm survey-start count —
-  // which made a landing→survey-start comparison impossible to compute, the one
-  // metric a homepage test actually controls. Validated against the real arm set
-  // below; anything else is dropped rather than stored.
-  landing_variant: z.string().max(32).optional(),
   // Generous bound only to reject abuse — sanitizeUtmSource() below is the real
   // length authority (slice 0,64). A raw value between 64 and 2048 chars is
   // trimmed-and-stored, NOT rejected, so an over-long UTM never drops the whole
@@ -89,6 +84,8 @@ export async function POST(request: Request) {
   // PK (visitor_id, day, event_type) handles dedup — duplicates are no-ops
   // thanks to Prefer: resolution=ignore-duplicates.
   try {
+    const armFromCookie = (await cookies()).get(LANDING_VARIANT_COOKIE)?.value ?? null;
+
     const insertRes = await supabaseFetch("/rest/v1/funnel_event", {
       method: "POST",
       headers: {
@@ -99,11 +96,15 @@ export async function POST(request: Request) {
         day: new Date().toISOString().slice(0, 10),
         event_type: event,
         ...(cleanUtm ? { utm_source: cleanUtm } : {}),
-        // Only a recognised arm is stored. A client-supplied value is untrusted,
-        // and an unrecognised one must not become a phantom arm in the digest.
-        ...(isLandingVariant(parsed.data.landing_variant)
-          ? { landing_variant: parsed.data.landing_variant }
-          : {}),
+        // The landing arm, read SERVER-SIDE from the sticky cookie rather than
+        // taken from the request body. The body version was client-attested on a
+        // surface that decides which homepage ships: this route accepts a
+        // client-chosen visitor_id at 30 requests/min/IP, so a caller could have
+        // written tens of thousands of survey-start rows a day naming whichever
+        // arm it wanted, with no matching visit row. The fetch is same-origin, so
+        // the cookie arrives anyway — reading it here is both the smaller diff
+        // and one trust boundary fewer.
+        ...(isLandingVariant(armFromCookie) ? { landing_variant: armFromCookie } : {}),
       }),
     });
 

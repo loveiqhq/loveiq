@@ -31,8 +31,15 @@
 -- The result is starts per visit-day, not a per-person conversion rate, and the
 -- digest says so. This is the same shape the existing conversion funnel uses.
 --
--- Consent-free: both event types are first-party aggregates written regardless of
--- analytics consent.
+-- CONSENT IS ASYMMETRIC, and this is a known limitation rather than a property.
+-- The denominator (`unique_visitor`) is written server-side with a throwaway id
+-- and no consent check. The numerator (`survey_engine_mount`) is written by the
+-- client only when `__liq_vid` exists, and proxy.ts mints that cookie only under
+-- analytics consent — so the numerator is gated and the denominator is not, and
+-- the ratio is understated by roughly the consent-refusal rate. It need not even
+-- cancel between arms, because the cookie banner is part of the landing
+-- experience and the two arms are different landings. The chart says so in its
+-- caption; the fix is to write the survey-reached signal server-side too.
 --
 -- Half-open [since_ts, until_ts), matching every other longitudinal RPC here.
 -- Only observed (day, arm) pairs are emitted; callers fill gaps with ABSENT.
@@ -48,7 +55,24 @@ DECLARE
   result JSON;
   -- ::date on a timestamptz uses the SESSION TimeZone. Pin it so the visit-day
   -- buckets cannot drift a day relative to the window on a non-UTC session.
-  since_day DATE := (since_ts AT TIME ZONE 'UTC')::date;
+  -- Floored at the first day BOTH sides were instrumented.
+  --
+  -- Without this the chart draws a solid measured 0% across almost the whole
+  -- window instead of a gap, and the caller cannot detect it: `unique_visitor`
+  -- rows have carried `landing_variant` since 2026-06-14, so the DENOMINATOR
+  -- exists for every past day, while the numerator (`survey_engine_mount`) only
+  -- began carrying an arm at this deploy. The caller gaps a day only when its
+  -- visits are missing, so it sees visits>0, starts=0 and plots a real zero. The
+  -- headline is worse: it sums a post-deploy numerator over a 30-day
+  -- denominator, understating the rate by roughly the window length.
+  --
+  -- 08-26, not 08-25: on the deploy day itself, a browser that pinged with the
+  -- old bundle wrote an arm-less row, and the client insert uses
+  -- `resolution=ignore-duplicates` against a (visitor_id, day, event_type) key —
+  -- so that arm-less row wins for the rest of that UTC day. It self-heals the
+  -- next day, because `day` is part of the key.
+  first_instrumented_day CONSTANT DATE := DATE '2026-08-26';
+  since_day DATE := GREATEST((since_ts AT TIME ZONE 'UTC')::date, first_instrumented_day);
   until_day DATE := (until_ts AT TIME ZONE 'UTC')::date;
 BEGIN
   WITH visits AS (
@@ -116,4 +140,9 @@ BEGIN
 END;
 $$;
 
+-- CREATE FUNCTION grants EXECUTE to PUBLIC, and SECURITY DEFINER bypasses
+-- funnel_event's RLS — so without these REVOKEs the daily traffic volume and the
+-- live A/B split are readable by anyone holding the published anon key.
+REVOKE EXECUTE ON FUNCTION get_landing_start_funnel_daily(TIMESTAMPTZ, TIMESTAMPTZ) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION get_landing_start_funnel_daily(TIMESTAMPTZ, TIMESTAMPTZ) FROM anon, authenticated;
 GRANT EXECUTE ON FUNCTION get_landing_start_funnel_daily(TIMESTAMPTZ, TIMESTAMPTZ) TO service_role;

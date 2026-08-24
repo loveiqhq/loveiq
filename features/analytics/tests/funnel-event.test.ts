@@ -20,6 +20,14 @@ vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
+// The route reads the landing arm from the cookie SERVER-side rather than taking
+// it from the request body — the body version was client-attested on a surface
+// that decides which homepage ships.
+const mockCookieValue = vi.fn<() => string | undefined>(() => undefined);
+vi.mock("next/headers", () => ({
+  cookies: async () => ({ get: (_n: string) => ({ value: mockCookieValue() }) }),
+}));
+
 import * as csrf from "@shared/http/csrf";
 import * as ratelimit from "@shared/http/ratelimit";
 import { POST } from "@/app/api/funnel-event/route";
@@ -164,5 +172,50 @@ describe("POST /api/funnel-event", () => {
     );
     expect(res.status).toBe(400);
     expect(mockSupabaseFetch).not.toHaveBeenCalled();
+  });
+
+  it("stamps the landing arm from the cookie, not from the request body", async () => {
+    mockCookieValue.mockReturnValue("white_prev");
+    mockSupabaseFetch.mockResolvedValue({ ok: true, status: 201 });
+    const { POST } = await import("@/app/api/funnel-event/route");
+    const res = await POST(
+      new Request("https://www.loveiq.org/api/funnel-event", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-csrf-token": "t" },
+        body: JSON.stringify({
+          event: "survey_engine_mount",
+          visitor_id: "11111111-1111-4111-8111-111111111111",
+          // A caller trying to attest an arm must be ignored.
+          landing_variant: "white",
+        }),
+      })
+    );
+    expect(res.status).toBe(204);
+    const body = JSON.parse(
+      (mockSupabaseFetch.mock.calls.at(-1)![1] as { body: string }).body
+    ) as Record<string, unknown>;
+    expect(body.landing_variant).toBe("white_prev");
+  });
+
+  it("omits the arm entirely when the visitor carries no landing cookie", async () => {
+    mockCookieValue.mockReturnValue(undefined);
+    mockSupabaseFetch.mockResolvedValue({ ok: true, status: 201 });
+    const { POST } = await import("@/app/api/funnel-event/route");
+    await POST(
+      new Request("https://www.loveiq.org/api/funnel-event", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-csrf-token": "t" },
+        body: JSON.stringify({
+          event: "survey_engine_mount",
+          visitor_id: "22222222-2222-4222-8222-222222222222",
+        }),
+      })
+    );
+    const body = JSON.parse(
+      (mockSupabaseFetch.mock.calls.at(-1)![1] as { body: string }).body
+    ) as Record<string, unknown>;
+    // Absent, not defaulted to a live arm — the reader must be able to see that
+    // this start could not be attributed.
+    expect(body.landing_variant).toBeUndefined();
   });
 });
