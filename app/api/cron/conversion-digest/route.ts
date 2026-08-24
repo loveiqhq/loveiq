@@ -57,6 +57,7 @@ import {
   delta,
   fetchArmCohorts,
   fetchLandingArmFunnel,
+  TINY_ARM,
   sumDays,
   sumVisitors,
 } from "@features/admin/server/conversion-digest";
@@ -273,11 +274,31 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
   if (funnel) {
     const liveArms = ["white", "white_prev"] as const;
     const series = buildArmSeries(funnel, [liveArms[0], liveArms[1]]);
-    // Only chart it when BOTH arms have something to plot; a flat zero line
-    // against a real curve reads as a catastrophic result rather than as an arm
-    // that has barely been served yet.
-    const hasBoth = series.first.some((v) => v > 0) || series.last.some((v) => v > 0);
-    if (hasBoth && series.labels.length > 1) {
+
+    // An arm with no sales yet plots as a flat line along the bottom, and a flat
+    // line against a real curve reads as "this homepage converts at nothing" when
+    // the truth is "13 people, far too few to say". Hiding the chart until both
+    // arms have a sale would cost weeks of the other arm's trend, so the sample
+    // sizes go in the HEADLINE instead and the flat line explains itself.
+    const cohortFor = (arm: string) => funnel.cohort.find((c) => c.arm === arm);
+    const armSummary = (arm: string) => {
+      const label = armLabel("landing", arm).short;
+      const row = cohortFor(arm);
+      if (!row || row.completions === 0) return `${label} no finishers yet`;
+      return `${label} ${row.paid}/${row.completions} paid`;
+    };
+    const smallest = Math.min(
+      cohortFor(liveArms[0])?.completions ?? 0,
+      cohortFor(liveArms[1])?.completions ?? 0
+    );
+    const headline =
+      `${armSummary(liveArms[0])}  ·  ${armSummary(liveArms[1])}` +
+      (smallest < TINY_ARM ? "  —  too early to compare" : "");
+
+    // Chart whenever EITHER arm has something to show; the headline above carries
+    // the caveat when one of them is effectively empty.
+    const hasAnySignal = series.first.some((v) => v > 0) || series.last.some((v) => v > 0);
+    if (hasAnySignal && series.labels.length > 1) {
       const url = await signedChartUrl({
         windowLabel,
         labels: series.labels,
@@ -286,8 +307,9 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
         title: "Finished survey → paid, by homepage",
         legendFirst: armLabel("landing", liveArms[0]).short,
         legendLast: armLabel("landing", liveArms[1]).short,
-        headline: "7-day trailing rate — daily rates on a few sales are too spiky to read",
-        footnote: "% of finishers who paid · shared y-scale (peak {peak}%) · x-axis = day",
+        headline,
+        footnote:
+          "7-day trailing rate, % of finishers who paid · shared y-scale (peak {peak}%) · x-axis = day",
       });
       if (url) {
         blocks.push({
