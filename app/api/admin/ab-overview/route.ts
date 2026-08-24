@@ -80,11 +80,18 @@ export interface ExperimentReadout {
   significance: string;
 }
 
+export interface ConcludedExperiment {
+  title: string;
+  outcome: string;
+}
+
 export interface AbOverviewResponse {
   windowDays: number;
   generatedAt: string;
   funnel: Array<{ step: string; count: number; pctOfTop: number; dropFromPrev: number }>;
   experiments: ExperimentReadout[];
+  /** Finished experiments, listed without rates so nobody reads a winner into them. */
+  concluded: ConcludedExperiment[];
   totals: { submissions: number; purchases: number; revenue: number; currency: string };
   /** Set when the submission scan hit MAX_ROWS, so the UI can say so. */
   truncated: boolean;
@@ -242,7 +249,9 @@ export async function GET(request: Request) {
       fetchFunnelStages(since, new Date().toISOString()),
       fetchAllPages<SubmissionRow>(
         (offset, pageSize) =>
-          `/rest/v1/survey_submission?created_date_time=gte.${since}` +
+          // status=eq.completed matches what fetchFunnelStages counts as a completion, so
+          // the headline number and the funnel step can never drift apart.
+          `/rest/v1/survey_submission?created_date_time=gte.${since}&status=eq.completed` +
           `&select=id,created_date_time,utm_tracker&order=id.asc&offset=${offset}&limit=${pageSize}`,
         "survey_submission"
       ),
@@ -329,18 +338,31 @@ export async function GET(request: Request) {
           revenue: Math.round(c.revenue * 100) / 100,
         };
       });
-      return buildReadout(
-        axis,
-        arms.filter((a) => !a.retired || a.n > 0),
-        unattributed
-      );
+      // Retired arms are dropped from the display entirely: they are not being
+      // assigned to anyone, so a row for them is noise at best and an invitation
+      // to compare against a dead arm at worst. Their traffic still shows up in
+      // `unattributed` so no one is silently uncounted.
+      const live = arms.filter((a) => !a.retired);
+      const retiredCount = arms.filter((a) => a.retired).reduce((sum, a) => sum + a.n, 0);
+      return buildReadout(axis, live, unattributed + retiredCount);
     }
 
+    /*
+     * Only genuinely randomised, currently-running splits belong here.
+     *
+     * The paywall arm is deliberately EXCLUDED. That experiment concluded in
+     * favour of the forced wall: getForcedPaywallCohort is now deterministic
+     * (`token ? "treatment" : "control"`), and with the forced_paywall_enabled
+     * flag off, new quotes stamp "control" outright. The surviving "treatment"
+     * rows are historical, so comparing the two arms compares two time periods,
+     * not two randomly-assigned groups. Presenting that with a winner would
+     * invite a decision the data cannot support, so it is reported as concluded
+     * with no rates attached.
+     */
     const experiments: ExperimentReadout[] = [
       tally("landing", (_id, tracker) => readStampedArms(tracker).landing),
       tally("survey", (_id, tracker) => readStampedArms(tracker).survey),
       tally("pricing", (id) => bySubmission.get(id)?.pricing ?? null),
-      tally("paywall", (id) => bySubmission.get(id)?.paywall ?? null),
     ];
 
     const top = stages?.uniqueVisitors ?? 0;
@@ -370,6 +392,13 @@ export async function GET(request: Request) {
       generatedAt: new Date().toISOString(),
       funnel,
       experiments,
+      concluded: [
+        {
+          title: "Paywall style",
+          outcome:
+            "Concluded in favour of the forced paywall, and the forced screen is currently switched off, so everyone now gets the same experience. No comparison to make.",
+        },
+      ],
       totals: {
         submissions: submissions.length,
         purchases: purchasedSubs.length,

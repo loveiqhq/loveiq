@@ -187,17 +187,29 @@ describe("GET /api/admin/ab-overview", () => {
     expect(landing.arms.find((a: { arm: string }) => a.arm === "white_prev").n).toBe(0);
   });
 
-  it("hides a retired arm that has no data, but keeps it when it does", async () => {
-    routeData([submission(1, "white", null)], []);
-    let body = await (await GET(req(31))).json();
-    let landing = body.experiments.find((e: { axis: string }) => e.axis === "landing");
-    expect(landing.arms.map((a: { arm: string }) => a.arm)).not.toContain("control");
-
+  it("drops retired arms entirely and counts them as unattributable", async () => {
+    // A retired arm is not being assigned to anyone, so a row for it invites a
+    // comparison against a dead arm. Its people still have to be accounted for.
     routeData([submission(1, "white", null), submission(2, "control", null)], []);
-    body = await (await GET(req(32))).json();
-    landing = body.experiments.find((e: { axis: string }) => e.axis === "landing");
-    const retired = landing.arms.find((a: { arm: string }) => a.arm === "control");
-    expect(retired).toMatchObject({ retired: true, n: 1 });
+    const body = await (await GET(req(32))).json();
+    const landing = body.experiments.find((e: { axis: string }) => e.axis === "landing");
+    expect(landing.arms.map((a: { arm: string }) => a.arm)).not.toContain("control");
+    expect(landing.unattributed).toBe(1); // the retired-arm person, still counted
+  });
+
+  it("does not present the paywall as a live A/B test", async () => {
+    // It concluded in favour of forced, and with the forced screen switched off
+    // the two arms are two different time periods — not a randomised split.
+    routeData([submission(1, "white", null)], [quote(1, "A", false)]);
+    const body = await (await GET(req(36))).json();
+    expect(body.experiments.map((e: { axis: string }) => e.axis)).toEqual([
+      "landing",
+      "survey",
+      "pricing",
+    ]);
+    expect(body.concluded.map((c: { title: string }) => c.title)).toContain("Paywall style");
+    // and it must carry no rate anyone could read a winner into
+    expect(JSON.stringify(body.concluded)).not.toMatch(/\d+(\.\d+)?%/);
   });
 
   it("survives a source failing, returning zeros instead of a 500", async () => {

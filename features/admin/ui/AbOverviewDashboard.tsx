@@ -39,6 +39,7 @@ export interface AbOverview {
   generatedAt: string;
   funnel: Array<{ step: string; count: number; pctOfTop: number; dropFromPrev: number }>;
   experiments: ExperimentReadout[];
+  concluded: Array<{ title: string; outcome: string }>;
   totals: { submissions: number; purchases: number; revenue: number; currency: string };
   truncated: boolean;
 }
@@ -255,9 +256,12 @@ export function AbOverviewView({
           }
         />
         <HeadlineNumber
-          label="Revenue"
+          label="Revenue (list price)"
           value={`${totals.currency} ${totals.revenue.toLocaleString()}`}
-          hint={`${totals.purchases} purchase${totals.purchases === 1 ? "" : "s"}`}
+          // The sum of the prices shown on the purchased plans. Discount codes and
+          // the late-decision surcharge are applied at Stripe, so the money that
+          // actually settled can differ — say so rather than implying this is banked.
+          hint={`${totals.purchases} purchase${totals.purchases === 1 ? "" : "s"} · before discounts`}
         />
       </div>
 
@@ -281,6 +285,27 @@ export function AbOverviewView({
             <Experiment key={readout.axis} readout={readout} />
           ))}
         </div>
+
+        <p className="mt-3 text-xs text-text-muted">
+          &ldquo;Not attributable&rdquo; means we have no record of which version that person saw —
+          mostly people who took the survey before we started recording it in June, plus anyone who
+          arrived without the cookie. They are counted here but excluded from the comparison.
+        </p>
+
+        {data.concluded.length > 0 && (
+          <div className="mt-6 rounded-xl border border-white/10 bg-surface p-5">
+            <h3 className="font-serif text-base font-semibold text-text-primary">
+              Finished — not being tested any more
+            </h3>
+            <ul className="mt-3 space-y-2">
+              {data.concluded.map((item) => (
+                <li key={item.title} className="text-sm text-text-muted">
+                  <span className="text-text-primary">{item.title}:</span> {item.outcome}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
 
       {data.truncated && (
