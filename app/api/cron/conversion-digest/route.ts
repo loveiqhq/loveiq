@@ -150,22 +150,34 @@ function money(amount: number): string {
 export function buildArmSeries(
   funnel: LandingArmFunnel,
   arms: [string, string]
-): { labels: string[]; first: number[]; last: number[] } {
+): { labels: string[]; first: Array<number | null>; last: Array<number | null> } {
   const days = Array.from(new Set(funnel.daily.map((r) => r.day))).sort();
-  const rateFor = (arm: string): number[] =>
-    days.map((day) => {
-      const idx = days.indexOf(day);
+  const dayIndex = new Map(days.map((day, i) => [day, i]));
+
+  /**
+   * A day with NO finishers in the arm's trailing window returns null, not 0.
+   *
+   * Zero and "not running" are different facts and the chart cannot say so if
+   * they share a value. The second homepage arm only began on 2026-08-21, so
+   * filling its earlier days with 0% drew a flat line a month long and claimed a
+   * month of zero conversion for an arm that did not exist — which is exactly
+   * how the first version read.
+   */
+  const rateFor = (arm: string): Array<number | null> =>
+    days.map((_, idx) => {
       const from = Math.max(0, idx - 6);
-      const window = days.slice(from, idx + 1);
       let completions = 0;
       let paid = 0;
       for (const row of funnel.daily) {
-        if (row.arm !== arm || !window.includes(row.day)) continue;
+        if (row.arm !== arm) continue;
+        const i = dayIndex.get(row.day);
+        if (i === undefined || i < from || i > idx) continue;
         completions += row.completions;
         paid += row.paid;
       }
-      return computeRate(paid, completions);
+      return completions > 0 ? computeRate(paid, completions) : null;
     });
+
   return {
     labels: days.map(shortDay),
     first: rateFor(arms[0]),
@@ -308,13 +320,15 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
 
     // Chart whenever EITHER arm has something to show; the headline above carries
     // the caveat when one of them is effectively empty.
-    const hasAnySignal = series.first.some((v) => v > 0) || series.last.some((v) => v > 0);
+    const hasAnySignal =
+      series.first.some((v) => v != null && v > 0) || series.last.some((v) => v != null && v > 0);
     if (hasAnySignal && series.labels.length > 1) {
       const url = await signedChartUrl({
         windowLabel,
         labels: series.labels,
-        first: series.first.map((v) => Math.round(v * 10) / 10),
-        last: series.last.map((v) => Math.round(v * 10) / 10),
+        // null survives to the renderer as a genuine gap in the line.
+        first: series.first.map((v) => (v == null ? null : Math.round(v * 10) / 10)),
+        last: series.last.map((v) => (v == null ? null : Math.round(v * 10) / 10)),
         title: "Finished survey → paid, by homepage",
         legendFirst: armLabel("landing", liveArms[0]).short,
         legendLast: armLabel("landing", liveArms[1]).short,

@@ -438,8 +438,11 @@ async function buildDropoutByArmChartBlock(
   const labels = [...new Set([...firstMap.keys(), ...lastMap.keys()])].sort(
     (a, b) => Number(a.slice(1)) - Number(b.slice(1))
   );
-  const first = labels.map((l) => firstMap.get(l) ?? 0);
-  const last = labels.map((l) => lastMap.get(l) ?? 0);
+  // null, not 0: a question that an arm has no reading for is a GAP, not a
+  // measured zero drop-off. `?? 0` drew a flat line along the axis and published
+  // it as a real result — the same falsehood the conversion chart was carrying.
+  const first = labels.map((l) => firstMap.get(l) ?? null);
+  const last = labels.map((l) => lastMap.get(l) ?? null);
 
   const url = await buildSignedImageUrl("dropout-by-arm", { windowLabel, labels, first, last });
   if (!url) return null;

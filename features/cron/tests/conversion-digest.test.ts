@@ -505,9 +505,25 @@ describe("conversion-digest chart series", () => {
     expect(Math.max(...series.first)).toBeLessThan(20);
   });
 
-  it("returns zeroes rather than NaN for an arm with no data", () => {
+  it("returns null, not zero, for days an arm had no traffic", () => {
+    // This test previously asserted zeros — encoding the bug. 0% and "not running"
+    // are different facts: the second homepage arm launched mid-window, and
+    // filling its earlier days with 0 drew a flat line back to the start of the
+    // window and claimed weeks of zero conversion for an arm that did not exist.
     const series = buildArmSeries(makeFunnel(), ["white", "does_not_exist"]);
-    expect(series.last.every((v) => v === 0)).toBe(true);
+    expect(series.last.every((v) => v === null)).toBe(true);
+    expect(series.last.some((v) => v === 0)).toBe(false);
+  });
+
+  it("keeps a real zero distinct from a gap", () => {
+    // An arm WITH finishers and no sales is a genuine 0% and must still plot.
+    const funnel = makeFunnel();
+    funnel.daily = funnel.daily.map((r) =>
+      r.arm === "white_prev" ? { ...r, paid: 0, charges: 0, revenue: 0 } : r
+    );
+    const series = buildArmSeries(funnel, ["white", "white_prev"]);
+    expect(series.last.some((v) => v === 0)).toBe(true);
+    expect(series.last.every((v) => v === null)).toBe(false);
   });
 
   it("keeps the signed chart URL under Slack's image_url cap at a full 30 days", async () => {

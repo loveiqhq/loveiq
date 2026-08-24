@@ -141,8 +141,14 @@ interface DropoutByArmPayload {
   kind: "dropout-by-arm" | "conversion-by-arm";
   windowLabel?: string;
   labels: string[];
-  first: number[];
-  last: number[];
+  /**
+   * `null` means the arm had NO traffic that day — a gap in the line, not a zero.
+   * Zero and "not running yet" are different facts, and an arm that launched
+   * mid-window otherwise draws a flat 0% line back to the start of the window and
+   * claims weeks of zero conversion it was never measured for.
+   */
+  first: Array<number | null>;
+  last: Array<number | null>;
   /**
    * Optional captions, so the shared-y-scale two-curve renderer can serve any
    * A/B comparison instead of only the email-position one it was written for.
@@ -710,14 +716,22 @@ function renderDropoutByArm(p: DropoutByArmPayload): {
   const labels = Array.isArray(p.labels)
     ? p.labels.map((l) => (typeof l === "string" ? l : ""))
     : [];
-  const toVals = (a: unknown): number[] =>
-    (Array.isArray(a) ? a : []).map((v) => Math.max(0, Number(v) || 0));
+  const toVals = (a: unknown): Array<number | null> =>
+    (Array.isArray(a) ? a : []).map((v) =>
+      v == null || v === "" ? null : Math.max(0, Number(v) || 0)
+    );
   const first = toVals(p.first);
   const last = toVals(p.last);
   const title = p.title ?? "Where users quit by arm — email first vs last";
   const n = Math.max(first.length, last.length);
 
-  if (n === 0) {
+  // Full-length arrays of nulls are "no data" just as much as empty arrays are.
+  // Without this the chart invented a 0-1% axis and asserted "0% - 0% - peak 0%"
+  // in prose for two arms that had never reported anything.
+  const anyReal =
+    first.some((v) => typeof v === "number") || last.some((v) => typeof v === "number");
+
+  if (n === 0 || !anyReal) {
     return {
       element: chartShell(
         title,
@@ -732,7 +746,8 @@ function renderDropoutByArm(p: DropoutByArmPayload): {
 
   // Shared y-scale across BOTH arms so the comparison is fair (a per-arm peak
   // would distort one against the other).
-  const rawPeak = Math.max(...first, ...last, 0);
+  const real = (vals: Array<number | null>): number[] => vals.filter((v): v is number => v != null);
+  const rawPeak = Math.max(...real(first), ...real(last), 0);
   const { max: peak, intervals } = niceAxis(rawPeak);
   const w = DROPOUT_ARM_PLOT_W;
   const h = DROPOUT_ARM_PLOT_H;
@@ -743,22 +758,78 @@ function renderDropoutByArm(p: DropoutByArmPayload): {
   // than flat.
   const INSET = 4;
   const yFor = (v: number) => Math.round(INSET + (h - 2 * INSET) * (1 - v / (peak > 0 ? peak : 1)));
-  const pointsFor = (vals: number[]): string => {
-    if (vals.length === 0) return "";
-    // A one-point polyline draws nothing at all, so give it a short flat segment
-    // rather than an empty plot.
-    if (vals.length === 1) return `0,${yFor(vals[0]!)} ${w},${yFor(vals[0]!)}`;
-    const step = w / (vals.length - 1);
-    return vals.map((v, i) => `${Math.round(i * step)},${yFor(v)}`).join(" ");
+  /**
+   * One polyline per contiguous run of real values, so a gap is drawn as a gap.
+   * A single isolated point becomes a short flat stub — a one-point polyline has
+   * no geometry and renders nothing at all.
+   */
+  const segmentsFor = (vals: Array<number | null>): string[] => {
+    if (vals.length === 0) return [];
+    const step = vals.length > 1 ? w / (vals.length - 1) : 0;
+    const x = (i: number) => Math.round(i * step);
+    const out: string[] = [];
+    let run: string[] = [];
+    let runStart = 0;
+    const flush = (endIdx: number) => {
+      if (run.length === 0) return;
+      if (run.length === 1) {
+        // Widen a lone point so it is visible, without letting it leave the plot.
+        const left = Math.max(0, x(runStart) - 3);
+        const right = Math.min(w, x(endIdx) + 3);
+        const y = run[0]!.split(",")[1]!;
+        out.push(`${left},${y} ${right},${y}`);
+      } else {
+        out.push(run.join(" "));
+      }
+      run = [];
+    };
+    vals.forEach((v, i) => {
+      if (v == null) {
+        flush(i - 1);
+        return;
+      }
+      if (run.length === 0) runStart = i;
+      run.push(`${x(i)},${yFor(v)}`);
+    });
+    flush(vals.length - 1);
+    return out;
   };
-  const firstPts = pointsFor(first);
-  const lastPts = pointsFor(last);
+  const firstSegments = segmentsFor(first);
+  const lastSegments = segmentsFor(last);
 
-  const endOf = (vals: number[]) => (vals.length > 0 ? vals[vals.length - 1]! : 0);
+  // The last day the arm actually had traffic, not the last day on the axis.
+  const endOf = (vals: Array<number | null>) => {
+    for (let i = vals.length - 1; i >= 0; i -= 1) {
+      const v = vals[i];
+      if (v != null) return v;
+    }
+    return 0;
+  };
+  const lastRealIdx = (vals: Array<number | null>) => {
+    for (let i = vals.length - 1; i >= 0; i -= 1) if (vals[i] != null) return i;
+    return -1;
+  };
+  // Absence must PROPAGATE. endOf() returning 0 for an all-null arm is how an arm
+  // with no data at all came to publish "0%" at the right edge while the caption
+  // beside it said "no finishers yet" — the chart contradicted its own headline.
+  const idxFirst = lastRealIdx(first);
+  const idxLast = lastRealIdx(last);
+  const hasFirst = idxFirst >= 0;
+  const hasLast = idxLast >= 0;
   const endFirst = endOf(first);
   const endLast = endOf(last);
   const yEndFirst = yFor(endFirst);
   const yEndLast = yFor(endLast);
+  // x of the arm's LAST REAL day. Pinning the marker to the right edge would put
+  // it three days past where an arm that stopped reporting actually ends, so the
+  // dot would float in empty space claiming a value it never had there.
+  const xEnd = (vals: Array<number | null>) => {
+    const idx = lastRealIdx(vals);
+    if (idx < 0 || n <= 1) return w;
+    return Math.round((idx * w) / (n - 1));
+  };
+  const xEndFirst = xEnd(first);
+  const xEndLast = xEnd(last);
 
   // Direct end labels ONLY when the two lines separate at the right edge.
   //
@@ -771,7 +842,16 @@ function renderDropoutByArm(p: DropoutByArmPayload): {
   // conversion chart. So when they would collide, the labels are dropped and the
   // two values go into the footnote instead, where they cannot overlap.
   const LABEL_H = 32;
-  const labelsFit = Math.abs(yEndFirst - yEndLast) >= LABEL_H;
+  // A direct end label only makes sense when the arm's last real day is the last
+  // day on the axis. Otherwise the label sits in the right gutter while its dot
+  // is hundreds of pixels away, and two such labels stack into what looks like a
+  // matched pair of current values when they are from different days.
+  const firstAtEnd = hasFirst && idxFirst === n - 1;
+  const lastAtEnd = hasLast && idxLast === n - 1;
+  const bothWantLabels = firstAtEnd && lastAtEnd;
+  const collide = bothWantLabels && Math.abs(yEndFirst - yEndLast) < LABEL_H;
+  const showFirstLabel = firstAtEnd && !collide;
+  const showLastLabel = lastAtEnd && !collide;
 
   // Ticks: sample five x positions and keep their INDEX, so each label can sit
   // over the point it actually names. `space-between` on sampled strings put them
@@ -858,12 +938,12 @@ function renderDropoutByArm(p: DropoutByArmPayload): {
   // End-dot: 12px with a 2px surface ring so it stays legible where the two arms
   // cross. An all-zero arm now has a visible mark of its own instead of a
   // half-clipped hairline hiding under the axis rule.
-  const endDot = (color: string, yEnd: number) => (
+  const endDot = (color: string, yEnd: number, xPos: number) => (
     <div
       style={{
         display: "flex",
         position: "absolute",
-        left: DROPOUT_ARM_AXIS_W + w - 6,
+        left: DROPOUT_ARM_AXIS_W + xPos - 6,
         top: yEnd - 6,
         width: 12,
         height: 12,
@@ -878,11 +958,12 @@ function renderDropoutByArm(p: DropoutByArmPayload): {
     p.footnote ??
     "drop-off % per question · shared y-scale (peak {peak}%) · x-axis = question order"
   ).replace("{peak}", fmtAxis(rawPeak));
-  // When the end labels had to be dropped, the two values still have to be
-  // readable somewhere.
-  const footnote = labelsFit
-    ? footnoteBase
-    : `${shortFirst} ${fmtAxis(endFirst)}% · ${shortLast} ${fmtAxis(endLast)}% — ${footnoteBase}`;
+  // Any value whose label is not on the plot still has to be readable somewhere —
+  // but only for arms that HAVE a value. An arm with no data contributes nothing.
+  const carried: string[] = [];
+  if (hasFirst && !showFirstLabel) carried.push(`${shortFirst} ${fmtAxis(endFirst)}%`);
+  if (hasLast && !showLastLabel) carried.push(`${shortLast} ${fmtAxis(endLast)}%`);
+  const footnote = carried.length > 0 ? `${carried.join(" · ")} — ${footnoteBase}` : footnoteBase;
 
   const element = chartShell(
     title,
@@ -890,8 +971,10 @@ function renderDropoutByArm(p: DropoutByArmPayload): {
     <div style={{ display: "flex", flexDirection: "column", flexShrink: 0 }}>
       {/* Legend — always present for two series, so identity is never colour alone. */}
       <div style={{ display: "flex", flexDirection: "row", gap: 22, marginBottom: 14 }}>
-        {swatch(COLORS.accentPurple, legendFirst)}
-        {swatch(COLORS.accentOrange, legendLast)}
+        {/* An arm with no readings says so in the legend, so a missing line is
+            never mistaken for a line hidden behind the other one. */}
+        {swatch(COLORS.accentPurple, hasFirst ? legendFirst : `${legendFirst} — no data yet`)}
+        {swatch(COLORS.accentOrange, hasLast ? legendLast : `${legendLast} — no data yet`)}
       </div>
 
       {/* ONE coordinate system for the whole plot: axis labels, gridlines, lines,
@@ -944,33 +1027,35 @@ function renderDropoutByArm(p: DropoutByArmPayload): {
                 />
               );
             })}
-            {lastPts && (
+            {lastSegments.map((seg, i) => (
               <polyline
-                points={lastPts}
+                key={`last-${i}`}
+                points={seg}
                 fill="none"
                 stroke={COLORS.accentOrange}
                 strokeWidth="2"
                 strokeLinejoin="round"
                 strokeLinecap="round"
               />
-            )}
-            {firstPts && (
+            ))}
+            {firstSegments.map((seg, i) => (
               <polyline
-                points={firstPts}
+                key={`first-${i}`}
+                points={seg}
                 fill="none"
                 stroke={COLORS.accentPurple}
                 strokeWidth="2"
                 strokeLinejoin="round"
                 strokeLinecap="round"
               />
-            )}
+            ))}
           </svg>
         </div>
 
-        {endDot(COLORS.accentOrange, yEndLast)}
-        {endDot(COLORS.accentPurple, yEndFirst)}
-        {labelsFit && endLabel(COLORS.accentOrange, shortLast, endLast, yEndLast)}
-        {labelsFit && endLabel(COLORS.accentPurple, shortFirst, endFirst, yEndFirst)}
+        {hasLast && endDot(COLORS.accentOrange, yEndLast, xEndLast)}
+        {hasFirst && endDot(COLORS.accentPurple, yEndFirst, xEndFirst)}
+        {showLastLabel && endLabel(COLORS.accentOrange, shortLast, endLast, yEndLast)}
+        {showFirstLabel && endLabel(COLORS.accentPurple, shortFirst, endFirst, yEndFirst)}
 
         {/* x ticks, each centred on the data point it names */}
         {tickIdx.map((idx) => (
@@ -1002,7 +1087,12 @@ function renderDropoutByArm(p: DropoutByArmPayload): {
           fontWeight: 700,
         }}
       >
-        {p.headline ?? `Latest — ${fmtAxis(endFirst)}% vs ${fmtAxis(endLast)}%`}
+        {p.headline ??
+          (hasFirst && hasLast
+            ? `Latest — ${fmtAxis(endFirst)}% vs ${fmtAxis(endLast)}%`
+            : hasFirst
+              ? `Latest — ${fmtAxis(endFirst)}% (${shortLast}: no data yet)`
+              : `Latest — ${fmtAxis(endLast)}% (${shortFirst}: no data yet)`)}
       </div>
       <div style={{ display: "flex", marginTop: 5, fontSize: 12, color: COLORS.textMuted }}>
         {footnote}
