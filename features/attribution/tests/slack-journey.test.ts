@@ -138,6 +138,96 @@ describe("journey rail — filled means reached", () => {
   });
 });
 
+describe("pricing arm — which side of the test, in words and numbers", () => {
+  function pricingRow(blocks: SlackBlock[]): string {
+    const text = JSON.stringify(blocks);
+    const m = /Report pricing[^"]*/.exec(text);
+    return m ? m[0] : "";
+  }
+
+  it("names the dearer side for arm A, which is dearer since pricing 2.1", () => {
+    // Derived from PLAN_BUCKETS, not from a label: arm A is 39.99 on the entry
+    // tier against arm B's 29.00. The old labels said "Pricing A (lower)" and
+    // kept saying it after 2.1 inverted the test.
+    const message = buildJourneyMessage(
+      journey({
+        arms: { landing: "white", survey: "white", pricing: "A", paywall: null },
+        money: { plan: "full_report", amount: 39.99, currency: "EUR" },
+        milestones: { ...journey().milestones, purchasedAt: "2026-08-24T19:10:00.000Z" },
+      }),
+      { kind: "purchase", planLabel: "Just a snapshot", archetype: null, amountText: "EUR 39.99" }
+    );
+    const row = pricingRow(message.blocks);
+    expect(row).toContain("dearer");
+    expect(row).not.toContain("cheaper");
+    expect(row).toContain("EUR 39.99");
+    expect(row).toContain("EUR 29.00");
+  });
+
+  it("names the cheaper side for arm B", () => {
+    const message = buildJourneyMessage(
+      journey({
+        arms: { landing: "white", survey: "white", pricing: "B", paywall: null },
+        money: { plan: "full_report", amount: 29, currency: "EUR" },
+        milestones: { ...journey().milestones, purchasedAt: "2026-08-24T19:10:00.000Z" },
+      }),
+      { kind: "purchase", planLabel: "Just a snapshot", archetype: null, amountText: "EUR 29.00" }
+    );
+    const row = pricingRow(message.blocks);
+    expect(row).toContain("cheaper");
+    expect(row).not.toContain("dearer");
+  });
+
+  it("compares on the plan actually bought, not always the entry tier", () => {
+    // all_reports: A 59.00 vs B 49.00 — different numbers from the entry tier, so
+    // a hardcoded reference plan would print the wrong pair here.
+    const message = buildJourneyMessage(
+      journey({
+        arms: { landing: "white", survey: "white", pricing: "A", paywall: null },
+        money: { plan: "all_reports", amount: 59, currency: "EUR" },
+        milestones: { ...journey().milestones, purchasedAt: "2026-08-24T19:10:00.000Z" },
+      }),
+      {
+        kind: "purchase",
+        planLabel: "For you & your partner",
+        archetype: null,
+        amountText: "EUR 59.00",
+      }
+    );
+    const row = pricingRow(message.blocks);
+    expect(row).toContain("EUR 59.00");
+    expect(row).toContain("EUR 49.00");
+  });
+
+  it("says so when both sides cost the same rather than inventing a direction", () => {
+    // essentials is grandfathered at one price for both arms.
+    const message = buildJourneyMessage(
+      journey({
+        arms: { landing: "white", survey: "white", pricing: "A", paywall: null },
+        money: { plan: "essentials", amount: 9.99, currency: "EUR" },
+        milestones: { ...journey().milestones, purchasedAt: "2026-08-24T19:10:00.000Z" },
+      }),
+      { kind: "purchase", planLabel: "Essentials", archetype: null, amountText: "EUR 9.99" }
+    );
+    const row = pricingRow(message.blocks);
+    expect(row).toContain("same base price both sides");
+    expect(row).not.toContain("dearer");
+    expect(row).not.toContain("cheaper");
+  });
+
+  it("adds nothing when the arm is not known yet", () => {
+    // At survey-completion time there is no quote, so there is no arm to describe.
+    const message = buildJourneyMessage(journey(), {
+      kind: "survey_completed",
+      questionCount: 59,
+    });
+    const row = pricingRow(message.blocks);
+    expect(row).toContain("Not recorded");
+    expect(row).not.toContain("dearer");
+    expect(row).not.toContain("cheaper");
+  });
+});
+
 describe("journey message safety", () => {
   it("escapes a name containing Slack markup so the layout cannot break", () => {
     const message = buildJourneyMessage(journey({ firstName: "Ki*tt*en" }), {

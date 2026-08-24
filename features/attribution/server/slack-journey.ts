@@ -13,6 +13,11 @@
  */
 
 import { armLabel, AXIS_TITLES, type ExperimentAxis } from "@features/attribution/server/labels";
+import { getPricingBucketsForPlan } from "@features/pricing/logic/reportPricing";
+import {
+  DEFAULT_REPORT_PURCHASE_PLAN_ID,
+  isReportPurchasePlanId,
+} from "@features/checkout/server/reportPurchase";
 import type { SubmissionJourney } from "@features/attribution/server/journey";
 import { escapeSlack, type SlackBlock } from "@shared/observability/slack";
 import {
@@ -103,6 +108,39 @@ function journeyRail(journey: SubmissionJourney, reachedFloor?: JourneyStep): st
     .join("  \u2192  ");
 }
 
+/**
+ * "dearer, EUR 39.99 vs EUR 29.00" for a pricing arm — DERIVED from the live
+ * catalogue, never hardcoded.
+ *
+ * The arm labels used to carry the direction in their names ("Pricing A (lower)"),
+ * and pricing 2.1 inverted it on 2026-08-24 without anything failing: Slack went
+ * on calling the dearer arm the lower one. A name cannot know which side is
+ * cheaper, so the numbers answer it instead and the next flip needs no edit here.
+ *
+ * Compared on the plan they bought when we know it, otherwise on the entry tier —
+ * every reader is shown that one, so it is the fairest single reference. Reads the
+ * catalogue at send time, which for a purchase ping is the price that was live.
+ */
+function describePricingArm(arm: string | null, plan: string | null): string | null {
+  if (arm !== "A" && arm !== "B") return null;
+  const referencePlan = isReportPurchasePlanId(plan) ? plan : DEFAULT_REPORT_PURCHASE_PLAN_ID;
+  const buckets = getPricingBucketsForPlan(referencePlan);
+  const mine = buckets.find((b) => b.code === arm);
+  const other = buckets.find((b) => b.code !== arm && (b.code === "A" || b.code === "B"));
+  if (!mine || !other) return null;
+
+  // "base" because the amount in the header can be higher: the urgency surcharge
+  // is added at the edges and applies to BOTH arms equally, so the bases are the
+  // apples-to-apples comparison — but a reader seeing 41.99 up top and 39.99 here
+  // would otherwise think one of them was wrong.
+  const money = (cents: number) => `EUR ${(cents / 100).toFixed(2)}`;
+  if (mine.startingCents === other.startingCents) {
+    return `same base price both sides, ${money(mine.startingCents)}`;
+  }
+  const side = mine.startingCents > other.startingCents ? "dearer" : "cheaper";
+  return `${side} side, base ${money(mine.startingCents)} vs ${money(other.startingCents)}`;
+}
+
 /** The four arms as a two-column fields block, always all four so absence is visible. */
 function armFields(journey: SubmissionJourney): SlackBlock {
   const axes: ExperimentAxis[] = ["landing", "survey", "pricing", "paywall"];
@@ -110,10 +148,17 @@ function armFields(journey: SubmissionJourney): SlackBlock {
     axes.map((axis) => {
       // eslint-disable-next-line security/detect-object-injection -- axis is a closed union.
       const label = armLabel(axis, journey.arms[axis]);
+      let value = label.retired ? `${label.short} _(retired arm)_` : label.short;
+      if (axis === "pricing") {
+        // Which SIDE of the price test they were on, in words plus the two
+        // numbers — the thing you actually want to know from a payment ping.
+        const side = describePricingArm(journey.arms.pricing, journey.money?.plan ?? null);
+        if (side) value = `${value} — ${side}`;
+      }
       return {
         // eslint-disable-next-line security/detect-object-injection -- axis is a closed union.
         label: AXIS_TITLES[axis],
-        value: label.retired ? `${label.short} _(retired arm)_` : label.short,
+        value,
       };
     })
   );

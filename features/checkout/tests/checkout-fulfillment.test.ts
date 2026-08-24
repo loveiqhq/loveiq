@@ -23,9 +23,14 @@ vi.mock("@features/report/server/personalReport", () => ({
   upsertArchetypeTierForPersonalReport: vi.fn(),
 }));
 
-vi.mock("@features/pricing/logic/reportPricing", () => ({
-  markReportPriceQuotePurchased: vi.fn(),
-}));
+// Spread the real module rather than listing exports: the purchase notification
+// reads the live price catalogue (getPricingBucketsForPlan) to say which SIDE of
+// the price test the buyer was on, and a hand-listed mock silently breaks the
+// moment the notification reaches for one more export.
+vi.mock("@features/pricing/logic/reportPricing", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@features/pricing/logic/reportPricing")>();
+  return { ...actual, markReportPriceQuotePurchased: vi.fn() };
+});
 
 import { classifyTraffic, processStripeWebhookEvent } from "@features/checkout/server/fulfillment";
 import {
