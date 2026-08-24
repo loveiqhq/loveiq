@@ -85,6 +85,17 @@ const VERDICT_AXES: ExperimentAxis[] = ["landing", "survey", "pricing"];
  */
 const PRICING_CUTOVER_ISO = "2026-08-24T02:46:49Z";
 
+/**
+ * Makes each preview's Slack `kind` distinct so notifySlack's 60-second dedup
+ * (which keys on channel + kind + the first 100 chars of the fallback text)
+ * cannot swallow a repeat send while the wording is being iterated on.
+ *
+ * A counter rather than a timestamp alone: two previews inside the same
+ * millisecond produced the same kind, and the whole point is that a second look
+ * always arrives.
+ */
+let previewSequence = 0;
+
 function deployStamp(): string {
   const sha = process.env.VERCEL_GIT_COMMIT_SHA;
   if (sha && sha.length >= 7) return sha.slice(0, 7);
@@ -385,19 +396,28 @@ export async function GET(request: Request) {
     const dayKey = dayString(yesterdayStart);
 
     /**
-     * `?preview=1` re-sends on demand, for looking at the message and tweaking it
-     * without waiting for tomorrow.
+     * Only the SCHEDULED run consumes the day.
      *
-     * The normal path claims the UTC day in `slack_alert_sent` so two instances
-     * cannot both post — but that also means the first manual run of the day is
-     * the only one you get to see. Preview skips the claim AND skips marking the
-     * day delivered, so the real 09:00 run still happens exactly once afterwards.
+     * The claim in `slack_alert_sent` stops two instances both posting, but it
+     * also made the first manual run of the day the only one anyone could look
+     * at — and Vercel's "Run" button hits the bare path, so it cannot ask for a
+     * preview. Anything fired outside the scheduled hour is therefore treated as
+     * someone taking a look: no claim, no delivery mark, repeatable. `?preview=1`
+     * forces that behaviour even during the scheduled hour.
      *
-     * Not a hole: this route already requires the CRON_SECRET bearer and refuses
+     * The window is two hours wide to absorb cron drift, so a run that starts a
+     * few minutes late still counts as the real one and still claims exactly
+     * once. A retry after 11:00 UTC would post again without claiming — a
+     * duplicate digest, which is a far smaller problem than not being able to
+     * preview the thing at all.
+     *
+     * Not a hole: the route already requires the CRON_SECRET bearer and refuses
      * to run off the production host, so the only callers are Vercel and whoever
      * holds the secret.
      */
-    const preview = new URL(request.url).searchParams.get("preview") === "1";
+    const SCHEDULED_HOURS_UTC = [9, 10];
+    const inScheduledWindow = SCHEDULED_HOURS_UTC.includes(now.getUTCHours());
+    const preview = new URL(request.url).searchParams.get("preview") === "1" || !inScheduledWindow;
 
     if (!preview) {
       const claimed = await tryClaimSlackAlert("conversion_digest", "day", dayKey);
@@ -422,7 +442,9 @@ export async function GET(request: Request) {
       channel: "ops",
       // A distinct kind on previews so the 60s text-dedup cannot swallow a repeat
       // send while we iterate on the wording.
-      kind: preview ? `conversion_digest_preview_${Date.now()}` : "conversion_digest",
+      kind: preview
+        ? `conversion_digest_preview_${Date.now()}_${(previewSequence += 1)}`
+        : "conversion_digest",
       text: digest.text,
       blocks: digest.blocks,
       username: "ops_alerts",

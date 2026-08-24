@@ -121,6 +121,11 @@ describe("conversion-digest handler", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Pin the clock INSIDE the scheduled window. Only the scheduled run consumes
+    // the day, so without this these tests would pass or fail depending on what
+    // time of day the suite happened to run.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-24T09:05:00.000Z"));
     mockIsProdCronHost.mockReturnValue(true);
     mockTryClaim.mockResolvedValue(true);
     mockFetchLandingArmFunnel.mockResolvedValue(makeFunnel());
@@ -130,6 +135,10 @@ describe("conversion-digest handler", () => {
       { axis: "survey", arm: "white", n: 187, conversions: 5 },
       { axis: "survey", arm: "dark", n: 144, conversions: 5 },
     ]);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   function request(auth = "Bearer test-cron-secret") {
@@ -187,6 +196,31 @@ describe("conversion-digest handler", () => {
     expect(image?.image_url).toMatch(
       /^https:\/\/www\.loveiq\.org\/api\/admin\/digest-image\/conversion-by-arm\?d=[\w-]+&s=[\w-]+$/
     );
+  });
+
+  it("outside the scheduled hour a bare run behaves as a preview", async () => {
+    // Vercel's "Run" button hits the bare path and cannot pass ?preview=1, so a
+    // manual look must not consume the day.
+    vi.setSystemTime(new Date("2026-08-24T20:00:00.000Z"));
+    const res = await GET(request());
+    expect(await res.json()).toMatchObject({ sent: true, preview: true });
+    expect(mockNotifySlack).toHaveBeenCalledTimes(1);
+    expect(mockTryClaim).not.toHaveBeenCalled();
+    expect(mockMarkDelivered).not.toHaveBeenCalled();
+  });
+
+  it("inside the scheduled hour a bare run DOES consume the day", async () => {
+    const res = await GET(request());
+    expect(await res.json()).toMatchObject({ sent: true, preview: false });
+    expect(mockTryClaim).toHaveBeenCalledWith("conversion_digest", "day", expect.any(String));
+    expect(mockMarkDelivered).toHaveBeenCalled();
+  });
+
+  it("absorbs cron drift into the next hour rather than double-claiming", async () => {
+    vi.setSystemTime(new Date("2026-08-24T10:04:00.000Z"));
+    const res = await GET(request());
+    expect(await res.json()).toMatchObject({ preview: false });
+    expect(mockTryClaim).toHaveBeenCalled();
   });
 
   it("preview mode re-sends without claiming or consuming the day", async () => {
