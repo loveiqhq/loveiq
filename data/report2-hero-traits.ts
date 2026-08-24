@@ -152,3 +152,63 @@ export const heroTraitSubtexts: Partial<Record<Report2CopySlug, HeroTraitSubtext
     power: "slowing things down, yielding easily",
   },
 };
+
+/**
+ * The one-line gloss under "Core motivation" in the hero card.
+ *
+ * Added 2026-08-24. The hero showed a bare noun ("Core motivation: Healing"),
+ * and the friends-and-family read on it was blunt: it "says nothing", and a
+ * superficial statement at the top costs more trust than leaving it out would.
+ * The noun is worth keeping — it is the only line in the hero that answers
+ * *why* rather than *how* — so it gets the same treatment the four trait rows
+ * already have: the value stays, and a plain sentence underneath says what it
+ * means in this reader's life.
+ *
+ * Rendered only when present, so a missing entry drops the line rather than
+ * showing something invented. Longer than the trait subtexts on purpose (a full
+ * sentence, not a fragment): this is the line that has to earn the word above it.
+ */
+export const heroMotivationSubtexts: Partial<Record<Report2CopySlug, string>> = {
+  // Meaning
+  "spiritual-lover":
+    "sex is where you go to be known, not to be entertained. Anything that stays on the surface reads as a waste of the moment.",
+  // Pleasure & play
+  "spark-seeker":
+    "you are in it for the aliveness, not the milestone. The moment it starts feeling like a duty, the whole thing loses its point.",
+  // Intimacy & bonding
+  "sensual-connector":
+    "sex is how the bond gets renewed. It is less about what happens and more about whether you both came back to each other.",
+  // Healing
+  "relational-nurturer":
+    "sex is where you repair things, for them and quietly for yourself. You reach for closeness when something needs mending, which is also why it stops when nothing is coming back.",
+  // Validation
+  "radiant-performer":
+    "sex confirms something you cannot confirm alone. Being visibly wanted is not vanity here, it is the part that makes you feel real.",
+  // Intensity & transformation
+  "explorer-of-edges":
+    "you are after the version of yourself that only shows up at the edge. Comfortable sex is not disappointing, it is beside the point.",
+  // Growth
+  "curious-apprentice":
+    "sex is somewhere you are still becoming something. You would rather learn something true than perform something impressive.",
+  // Connection
+  "minimalist-companion":
+    "you are there for the person, not the event. Sex matters as one of the ways you stay close, and it does not have to carry more than that.",
+  // Emotional fantasy
+  "emotional-voyeur":
+    "the feeling is the point, and it starts long before anyone is touched. Your imagination is not a substitute for intimacy, it is how you get there.",
+  // Power
+  "authority-conductor":
+    "sex is where the shape of things gets decided and held. Given clearly and taken willingly, that structure is what lets you finally let go inside it.",
+  // Stability
+  "loyal-ritualist":
+    "sex is a way of confirming the ground is still there. Familiarity is not a rut for you, it is the condition that lets desire show up at all.",
+  // Validation
+  "tender-devotee":
+    "you need to know you were chosen, not merely available. Being wanted out loud does more for you than anything technique can add.",
+  // Mastery
+  "analytical-sexualist":
+    "you want to understand it as much as feel it. Getting it right is genuinely satisfying to you, and getting it vague is genuinely not.",
+  // Avoidance
+  "quiet-withdrawer":
+    "your first move under pressure is to protect the peace, and desire goes quiet with it. What looks like not wanting is usually wanting with the volume turned down.",
+};

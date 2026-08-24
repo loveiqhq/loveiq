@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type FC } from "react";
 import { TraitIcons, type ReportTheme } from "../reportTheme";
 import { archetypeSlug, getReport2Config, type Report2CopySlug } from "@/data/report2-config";
-import { heroTraitSubtexts } from "@/data/report2-hero-traits";
+import { heroMotivationSubtexts, heroTraitSubtexts } from "@/data/report2-hero-traits";
 
 interface Props {
   matchScore: number;
@@ -31,7 +31,11 @@ const CoreArchetypeSection: FC<Props> = ({ matchScore, theme }) => {
   // Report 2.0 config drives the ratified behavioural-tendency values + segment
   // fills; fall back to the existing theme where an archetype's config is a stub.
   const hero = getReport2Config(theme.archetype)?.hero ?? null;
-  const heroSubs = heroTraitSubtexts[archetypeSlug(theme.archetype) as Report2CopySlug];
+  const slug = archetypeSlug(theme.archetype) as Report2CopySlug;
+  const heroSubs = heroTraitSubtexts[slug];
+  // "Core motivation: Healing" on its own was read as saying nothing at all
+  // (2026-08-24 feedback). The noun stays; this is the sentence that earns it.
+  const motivationSub = heroMotivationSubtexts[slug];
   const fillRef = useRef<HTMLDivElement>(null);
   const hasAnimated = useRef(false);
   const [displayPct, setDisplayPct] = useState(0);
@@ -161,6 +165,9 @@ const CoreArchetypeSection: FC<Props> = ({ matchScore, theme }) => {
             <div className="report-hero-card__motivation-copy">
               <p className="report-hero-card__motivation-label">Core motivation:</p>
               <p className="report-hero-card__motivation-value">{theme.motivation}</p>
+              {motivationSub ? (
+                <p className="report-hero-card__motivation-sub">{motivationSub}</p>
+              ) : null}
             </div>
           </div>
 

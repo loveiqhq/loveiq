@@ -8754,6 +8754,19 @@ input.autofill-dark:-internal-autofill-previewed {
   line-height: 1.15;
 }
 
+/* The sentence that makes the motivation noun mean something (2026-08-24).
+   Sans against the serif value above it, so the two read as label and gloss
+   rather than as two competing headlines. */
+.report-hero-card__motivation-sub {
+  margin: 7px 0 0;
+  max-width: 32rem;
+  color: #3f3a4d;
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: calc(clamp(0.875rem, 1.05vw, 0.9375rem) * var(--hero-scale, 1));
+  line-height: 1.55;
+}
+
 /* Traits 2×2 grid */
 .report-hero-card__traits {
   display: grid;
@@ -15611,7 +15624,9 @@ input.autofill-dark:-internal-autofill-previewed {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  margin-top: clamp(4px, 0.7vw, 8px);
+  /* Was clamp(4px, .7vw, 8px), which sat under the ignition curve's own top
+     margin. The curve was removed on 2026-08-24, so the gap moved here. */
+  margin-top: clamp(14px, 1.6vw, 20px);
   padding: 8px 17px 9.4px;
   border: 1.128px solid rgba(157, 138, 215, 0.35);
   border-radius: 9999px;
@@ -15736,6 +15751,20 @@ input.autofill-dark:-internal-autofill-previewed {
   font-weight: 400;
   font-size: 0.844rem;
   line-height: 1.44;
+}
+
+/* The second "what you'll learn" line (2026-08-24). Deliberately the SAME size
+   as the line above it and only a shade lighter: it is the half of the pair
+   that actually carries an insight, so making it look like a caption would undo
+   the point of adding it. */
+.report-map-row__learn-detail {
+  margin: 6px 0 0;
+  max-width: 34rem;
+  color: rgba(63, 58, 77, 0.78);
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: 0.844rem;
+  line-height: 1.5;
 }
 
 .report-map-row__cta {
@@ -16084,6 +16113,294 @@ input.autofill-dark:-internal-autofill-previewed {
     justify-self: end;
     /* Its own row now, so the 6px row-gap alone would sit it tight under the bar. */
     margin-top: 2px;
+  }
+}
+
+/* --- "You're a constellation, not a type" — the report's opening primer -----
+   Mounted ABOVE the Part I divider, so it frames the result before the hero
+   names it (2026-08-24 feedback: an unattributed match score, and a primary
+   archetype that has nowhere to land when it does not resonate).
+
+   Deliberately lighter than `.report-constellation`: prose leads, the ranked
+   card is small and carries only three rows, and there are no per-row CTAs
+   competing with the reader's own result. The row internals mirror the
+   fourteen-row section on purpose so the two read as the same instrument at
+   two zoom levels. */
+/* The primer renders its own headline, so the generic section header is off. */
+#blend .report-section__header {
+  display: none;
+}
+
+.report-blend {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  margin-bottom: clamp(28px, 3.4vw, 44px);
+}
+
+.report-blend__eyebrow {
+  margin: 0 0 clamp(10px, 1.2vw, 14px);
+  color: #8b7bbe;
+  font-family: var(--font-sans);
+  font-weight: 800;
+  font-size: 0.6875rem;
+  line-height: 1;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.report-blend__heading {
+  margin: 0 0 clamp(14px, 1.7vw, 20px);
+  color: #161021;
+  font-family: var(--font-serif);
+  font-weight: 500;
+  font-size: clamp(2rem, 4.4vw, 3rem);
+  line-height: 1.06;
+  letter-spacing: -0.02em;
+}
+
+/* Same 156.8deg pink → violet as the fourteen-row section's headline, so the
+   two blocks are visibly the same idea. Painted through the text, so the glyphs
+   need a transparent fill. */
+.report-blend__heading-accent {
+  background-image: linear-gradient(156.8deg, #d05976 20.5%, #c167cf 48.1%, #8887f6 79.2%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.report-blend__intro {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85em;
+  max-width: 34rem;
+  margin: 0 0 clamp(20px, 2.4vw, 28px);
+}
+
+.report-blend__intro p {
+  margin: 0;
+  color: #3f3a4a;
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: clamp(0.95rem, 1.2vw, 1.0625rem);
+  line-height: 1.65;
+}
+
+.report-blend__intro strong {
+  color: #161021;
+  font-weight: 600;
+}
+
+.report-blend__card {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: clamp(18px, 2vw, 24px) clamp(16px, 1.9vw, 22px);
+  border: 1.128px solid rgba(157, 138, 215, 0.3);
+  border-radius: 22px;
+  background: #ffffff;
+  box-shadow: 0 18px 44px rgba(22, 16, 33, 0.05);
+}
+
+.report-blend__card-label {
+  margin: 0 0 6px;
+  padding: 0 12px 12px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  color: #6b6678;
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.report-blend__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.report-blend__row {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+  grid-template-areas: "rank icon nametag bar pct";
+  align-items: center;
+  column-gap: clamp(12px, 1.4vw, 16px);
+  padding: 14px 12px 15px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  border-radius: 12px;
+}
+
+.report-blend__row:last-child {
+  border-bottom: none;
+}
+
+/* The reader's own row. The fourteen-row section deliberately does NOT mark it
+   (it is simply first), but here the whole point is "these three are all you",
+   so rank 1 gets a faint accent wash to say which one the next chapters speak
+   in. */
+.report-blend__row:first-child {
+  background: rgb(var(--accent-rgb, 139 92 246) / 0.05);
+}
+
+.report-blend__rank {
+  grid-area: rank;
+  min-width: 24px;
+  color: #4b5563;
+  font-family: var(--font-serif);
+  font-weight: 400;
+  font-size: clamp(1.05rem, 1.5vw, 1.375rem);
+  line-height: 1.17;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.report-blend__icon {
+  grid-area: icon;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  background: var(--accent, #8b7bbe);
+  overflow: hidden;
+}
+
+.report-blend__icon-glyph {
+  width: 14px;
+  height: 14px;
+  color: var(--icon-ink, #ffffff);
+}
+
+.report-blend__nametag {
+  grid-area: nametag;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.report-blend__name {
+  margin: 0;
+  color: #161021;
+  font-family: var(--font-serif);
+  font-weight: 500;
+  font-size: clamp(1rem, 1.5vw, 1.25rem);
+  line-height: 1.125;
+}
+
+.report-blend__motto {
+  margin: 0;
+  max-width: 384px;
+  color: #191a1b;
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: 0.6875rem;
+  line-height: 1.45;
+}
+
+.report-blend__bar {
+  grid-area: bar;
+  position: relative;
+  width: clamp(96px, 12vw, 160px);
+  height: 8px;
+}
+
+.report-blend__bar-track {
+  position: absolute;
+  inset: 3px 0;
+  border-radius: 9999px;
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.report-blend__bar-fill {
+  position: absolute;
+  top: 3px;
+  left: 0;
+  height: 2px;
+  width: calc(var(--fill-fraction, 0) * 100%);
+  border-radius: 9999px;
+  background: rgb(var(--accent-rgb, 139 92 246) / 0.6);
+}
+
+.report-blend__bar-dot {
+  position: absolute;
+  top: 0;
+  left: calc(var(--fill-fraction, 0) * 100%);
+  width: 8px;
+  height: 8px;
+  margin-left: -4px;
+  border-radius: 9999px;
+  background: var(--accent, #8b5cf6);
+  box-shadow: 0 0 8px rgb(var(--accent-rgb, 139 92 246) / 0.85);
+}
+
+.report-blend__pct {
+  grid-area: pct;
+  min-width: 48px;
+  color: #161021;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: clamp(0.875rem, 1.2vw, 1rem);
+  line-height: 1.22;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The handoff sentence. Set apart with a rule rather than a box: it is an aside
+   from the report to the reader, not another card. */
+.report-blend__handoff {
+  max-width: 36rem;
+  margin: clamp(18px, 2vw, 24px) 0 0;
+  padding-left: clamp(12px, 1.4vw, 16px);
+  border-left: 2px solid rgba(157, 138, 215, 0.45);
+  color: #3f3a4a;
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: clamp(0.9rem, 1.1vw, 1rem);
+  line-height: 1.6;
+}
+
+.report-blend__handoff strong {
+  color: #161021;
+  font-weight: 600;
+}
+
+/* Mobile: rank+icon+name on row 1, motto full width, bar+pct on row 3 — the
+   same restructure the fourteen-row section needs, minus the CTA row. */
+@media (max-width: 640px) {
+  .report-blend__row {
+    grid-template-columns: auto auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "rank icon name name"
+      "motto motto motto motto"
+      "bar bar bar pct";
+    row-gap: 6px;
+    align-items: center;
+  }
+
+  .report-blend__icon {
+    align-self: start;
+    margin-top: 2px;
+  }
+
+  .report-blend__nametag {
+    display: contents;
+  }
+
+  .report-blend__name {
+    grid-area: name;
+  }
+
+  .report-blend__motto {
+    grid-area: motto;
+    max-width: none;
+  }
+
+  .report-blend__bar {
+    width: 100%;
   }
 }
 
@@ -17145,7 +17462,13 @@ input.autofill-dark:-internal-autofill-previewed {
   font-size: 52px;
   line-height: 52px;
   letter-spacing: -2.6px;
-  color: rgb(var(--report-accent-ink-rgb, var(--report-accent-rgb)));
+  /* Ink, NOT the archetype accent (2026-08-24 feedback). Painted in the accent,
+     a green-accented archetype read "High" as a green pass mark: the reader took
+     it as a score he was doing well on rather than a description of how much
+     weight sex carries for him. The word is a band label, so it is set in the
+     same ink as the rest of the report's prose and the accent stays on the
+     things that actually encode the archetype (the dot, the halo, the bars). */
+  color: #161021;
   text-shadow: 0 1px 1px rgba(0, 0, 0, 0.05);
   flex-shrink: 0;
 }
@@ -17169,6 +17492,35 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-importance__desc strong {
   font-weight: 700;
   color: #3f3a4d;
+}
+
+/* Names the archetype the band belongs to (2026-08-24). Sits between the result
+   row and the strip, quieter than the description above it so it reads as the
+   attribution it is rather than a second headline. */
+.report-importance__attribution {
+  max-width: 40rem;
+  margin: 18px 0 0;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1.6;
+  color: #6b6678;
+}
+
+.report-importance__attribution strong {
+  font-weight: 600;
+  color: #161021;
+}
+
+.report-importance__divergence {
+  color: #3f3a4d;
+}
+
+@media (max-width: 640px) {
+  .report-importance__attribution {
+    font-size: 14px;
+    margin-top: 14px;
+  }
 }
 
 /* Continuum: matters less ●——●——(You)——●—— matters more.
@@ -23988,14 +24340,16 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-chart-reveal:not(.is-revealed) .report-lovelang__meter-fill,
 .report-chart-reveal:not(.is-revealed) .report-reward__meter-fill,
 .report-chart-reveal:not(.is-revealed) .report-accel__track-fill,
-.report-chart-reveal:not(.is-revealed) .report-constellation__bar-fill {
+.report-chart-reveal:not(.is-revealed) .report-constellation__bar-fill,
+.report-chart-reveal:not(.is-revealed) .report-blend__bar-fill {
   transform: scaleX(0);
 }
 
 .report-chart-reveal .report-lovelang__meter-fill,
 .report-chart-reveal .report-reward__meter-fill,
 .report-chart-reveal .report-accel__track-fill,
-.report-chart-reveal .report-constellation__bar-fill {
+.report-chart-reveal .report-constellation__bar-fill,
+.report-chart-reveal .report-blend__bar-fill {
   transform-origin: left center;
   transition: transform 820ms cubic-bezier(0.22, 1, 0.36, 1);
   transition-delay: calc(var(--row, 0) * 70ms);
@@ -24015,7 +24369,8 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 /* Offset with a negative margin instead, so it has no transform of its own. */
-.report-chart-reveal:not(.is-revealed) .report-constellation__bar-dot {
+.report-chart-reveal:not(.is-revealed) .report-constellation__bar-dot,
+.report-chart-reveal:not(.is-revealed) .report-blend__bar-dot {
   opacity: 0;
   transform: scale(0.35);
 }
@@ -24023,7 +24378,8 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-chart-reveal .report-lovelang__meter-dot,
 .report-chart-reveal .report-reward__meter-dot,
 .report-chart-reveal .report-accel__track-dot,
-.report-chart-reveal .report-constellation__bar-dot {
+.report-chart-reveal .report-constellation__bar-dot,
+.report-chart-reveal .report-blend__bar-dot {
   transition:
     opacity 260ms ease-out,
     transform 380ms cubic-bezier(0.16, 1, 0.3, 1);
@@ -24056,7 +24412,8 @@ input.autofill-dark:-internal-autofill-previewed {
   .report-chart-reveal:not(.is-revealed) .report-lovelang__meter-fill,
   .report-chart-reveal:not(.is-revealed) .report-reward__meter-fill,
   .report-chart-reveal:not(.is-revealed) .report-accel__track-fill,
-  .report-chart-reveal:not(.is-revealed) .report-constellation__bar-fill {
+  .report-chart-reveal:not(.is-revealed) .report-constellation__bar-fill,
+  .report-chart-reveal:not(.is-revealed) .report-blend__bar-fill {
     transform: none;
   }
 
@@ -24067,7 +24424,8 @@ input.autofill-dark:-internal-autofill-previewed {
     transform: translate(-50%, -50%);
   }
 
-  .report-chart-reveal:not(.is-revealed) .report-constellation__bar-dot {
+  .report-chart-reveal:not(.is-revealed) .report-constellation__bar-dot,
+  .report-chart-reveal:not(.is-revealed) .report-blend__bar-dot {
     opacity: 1;
     transform: none;
   }
@@ -24081,10 +24439,12 @@ input.autofill-dark:-internal-autofill-previewed {
   .report-chart-reveal .report-reward__meter-fill,
   .report-chart-reveal .report-accel__track-fill,
   .report-chart-reveal .report-constellation__bar-fill,
+  .report-chart-reveal .report-blend__bar-fill,
   .report-chart-reveal .report-lovelang__meter-dot,
   .report-chart-reveal .report-reward__meter-dot,
   .report-chart-reveal .report-accel__track-dot,
   .report-chart-reveal .report-constellation__bar-dot,
+  .report-chart-reveal .report-blend__bar-dot,
   .report-chart-reveal .report-accel__meter-dot {
     transition: none;
   }

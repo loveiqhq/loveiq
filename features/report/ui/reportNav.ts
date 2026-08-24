@@ -88,8 +88,11 @@ export const RETIRED_REPORT_SECTION_IDS: ReadonlySet<string> = new Set([
 export const REPORT_SECTION_ORDER: readonly string[] = [
   // Part I — Your core archetype
   "core_archetype",
-  "sexual_stage",
+  // Importance moved AHEAD of Sexual Stage on 2026-08-24: it is the chapter that
+  // says how much weight sex carries for this reader at all, so it frames the
+  // stage rather than trailing it.
   "the_importance_of_sexuality",
+  "sexual_stage",
   "constellation",
   // Part II — How you work
   "typical_beliefs",
@@ -151,8 +154,8 @@ export const REPORT_NAV_PARTS: readonly ReportNavPart[] = [
       { label: "Core Archetype", id: "core_archetype" },
       { label: "Your Snapshot", id: "snapshot" },
       { label: "Your Insight Map", id: "map" },
-      { label: "Sexual Stage", id: "sexual_stage" },
       { label: "Importance of Sexuality", id: "the_importance_of_sexuality" },
+      { label: "Sexual Stage", id: "sexual_stage" },
       { label: "Other Archetypes", id: "constellation" },
     ],
   },

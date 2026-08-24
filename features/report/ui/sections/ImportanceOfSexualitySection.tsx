@@ -29,6 +29,9 @@ const BAND_DESCRIPTION: Record<Band, string> = {
   High: "Sex feels central to vitality, identity, and connection, and it carries real weight in overall life satisfaction.",
 };
 
+/** Low < Medium < High, for comparing the reader's own answer to the archetype's band. */
+const BAND_RANK: Record<Band, number> = { Low: 0, Medium: 1, High: 2 };
+
 // Bold fragment inside the High description, per Figma (Manrope Bold run).
 const HIGH_BOLD = "central to vitality, identity, and connection";
 
@@ -58,6 +61,23 @@ const RANKING: { name: string; x: number }[] = [
 // First + last of the ranking are labelled directly under the axis (Figma).
 const END_LABELS = new Set([RANKING[0]!.name, RANKING[RANKING.length - 1]!.name]);
 
+/**
+ * Where this archetype sits on the scale, in words.
+ *
+ * Added 2026-08-24: the chapter showed a band word and a dot and never said
+ * out loud that both come from the ARCHETYPE, so a reader who did not connect
+ * the two read "High" as a mark he had scored. Deliberately phrased as weight
+ * rather than rank ("more weight than almost any other pattern", not "1st of
+ * 14") — a leaderboard reading is the same failure the accent colour caused.
+ */
+function archetypePositionPhrase(x: number): string {
+  if (x >= 0.85) return "carries more weight than for almost any other pattern in the model";
+  if (x >= 0.6) return "carries more weight than it does for most other patterns";
+  if (x >= 0.4) return "sits mid-scale, holding its place alongside other sources of meaning";
+  if (x >= 0.15) return "carries less weight than it does for most other patterns";
+  return "carries less weight than for almost any other pattern in the model";
+}
+
 /** Fallback band from the raw 1-7 answer when config has no band (stub archetypes). */
 function bandFromValue(value: number | null): Band {
   if (value === null || value <= 2) return value === null ? "Medium" : "Low";
@@ -83,6 +103,24 @@ const ImportanceOfSexualitySection: FC<Props> = ({ archetype, importanceValue })
   const band: Band =
     getReport2Config(archetype)?.importance_strip?.band ?? bandFromValue(importanceValue);
   const description = BAND_DESCRIPTION[band];
+
+  // Both the band above and the "You" dot below are ARCHETYPE-level, not
+  // answer-level — the strip plots a fixed ranking and highlights the reader's
+  // archetype in it. Saying so is the whole point of this line.
+  const positionEntry = RANKING.find((d) => d.name === archetype) ?? null;
+  const positionPhrase = positionEntry ? archetypePositionPhrase(positionEntry.x) : null;
+
+  // When the reader's own 1-7 answer lands in a different band than the
+  // archetype's, the honest move is to name the gap rather than let "Your
+  // Result" quietly show them the archetype's number. Only shown when we
+  // actually have their answer AND the archetype has a configured band.
+  const ownBand: Band | null = importanceValue === null ? null : bandFromValue(importanceValue);
+  const divergence: "higher" | "lower" | null =
+    ownBand === null || ownBand === band
+      ? null
+      : BAND_RANK[ownBand] > BAND_RANK[band]
+        ? "higher"
+        : "lower";
 
   // Was a mount-time requestAnimationFrame — the dots had finished landing
   // before the reader ever reached the strip.
@@ -160,6 +198,20 @@ const ImportanceOfSexualitySection: FC<Props> = ({ archetype, importanceValue })
               {band === "High" ? highDescriptionNodes(description) : description}
             </p>
           </div>
+
+          {positionPhrase ? (
+            <p className="report-importance__attribution">
+              This band is the <strong>{archetype}</strong> pattern: for it, sex {positionPhrase}.
+              The highlighted dot below is where that puts you among all fourteen.
+              {divergence ? (
+                <span className="report-importance__divergence">
+                  {" "}
+                  Your own answer sat {divergence} than the pattern usually runs, which is worth
+                  holding on to as you read the rest.
+                </span>
+              ) : null}
+            </p>
+          ) : null}
         </div>
 
         {/* Continuum: matters less ●———●———(You)———●——— matters more */}

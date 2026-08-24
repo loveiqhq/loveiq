@@ -37,7 +37,8 @@ export const meansForYou: Partial<Record<Report2CopySlug, MeansForYou>> = {
     },
     body: [
       "At your best you create intimacy that is both sacred and deeply human, the kind most people only catch in glimpses. That same depth is why routine, distance, or a conflict left unrepaired can quietly close you down faster than you would expect.",
-      "Your full report maps what opens you, what shuts you off, the one pattern that most often gets in your way, and the rare strength that sets you apart.",
+      "You have probably had the experience of everything looking fine on paper, the two of you getting along, nothing obviously wrong, and still not reaching for each other. For you that is rarely about sex. It is usually something small left unsaid a week ago that never got closed.",
+      "From here the report gets specific. Which conditions reliably open you and which quietly close you, why your invitations keep getting missed by someone who genuinely wants you, and the loop you fall into while you wait for the moment to feel right. There is also one strength in your profile that very few people carry, and it is not the one you would guess.",
     ],
     closing: "Not a verdict. A mirror, and a map for where your intimacy goes next.",
   },
@@ -47,9 +48,24 @@ export const meansForYou: Partial<Record<Report2CopySlug, MeansForYou>> = {
   // paragraph pairing the archetype's strength with what closes it — and take
   // their CONTENT from that archetype's own `core_archetype` / `motivation` /
   // `turn_offs` prose in `data/report-archetypes.ts`, converted from its third
-  // person to the second person this block speaks in. The closing line and the
-  // "Your full report maps…" paragraph are universal in the frame and are reused
-  // verbatim. The source clause each one derives from is quoted above it.
+  // person to the second person this block speaks in. The source clause each one
+  // derives from is quoted above it.
+  //
+  // EXPANDED 2026-08-24. Friends-and-family feedback was that this block is "too
+  // short, not inspiring enough" and should read as a real summary of the
+  // reader's highest-scoring archetype. Two paragraphs were added to every entry
+  // and one was removed:
+  //   3rd — RECOGNITION. One ordinary, specific scene the reader has already
+  //         lived, said plainly. This is the paragraph that has to land.
+  //   4th — OPEN LOOP. Replaces the universal "Your full report maps what opens
+  //         you, what shuts you off…" line, which was identical for all fourteen
+  //         and therefore told nobody anything. Each version now names the
+  //         specific things the paid chapters answer, in that archetype's own
+  //         terms, without answering them. Resonance here, resolution behind the
+  //         unlock — the free block must be worth reading on its own and must
+  //         still leave something to buy.
+  // Only the accent-coloured `closing` line is still universal, by design: it is
+  // the frame's signature sign-off, not an argument.
 
   // "desire does not begin in the body alone, but in the nervous system and the
   // heart" / collapses when "rushed, emotionally disconnected, or unsafe".
@@ -62,7 +78,8 @@ export const meansForYou: Partial<Record<Report2CopySlug, MeansForYou>> = {
     },
     body: [
       "At your best you turn ordinary touch into something unhurried and deeply bonding, the kind of intimacy that feels safe and awake at the same time. That same sensitivity is why being rushed, or sex that has gone emotionally cold, can quietly close you down faster than you would expect.",
-      "Your full report maps what opens you, what shuts you off, the one pattern that most often gets in your way, and the rare strength that sets you apart.",
+      "The version you know well: the day was fine, the evening was fine, and by the time you are in bed you are somewhere else entirely. Nothing went wrong. Nobody was unkind. You were just not met anywhere along the way, and your body kept score of that without telling you.",
+      "From here the report gets specific about what being met actually means for you, hour by hour rather than in the last five minutes. It also names the thing you do to keep the peace, what that quietly costs you, and why you and your partner can both be waiting for the other one to make it safe to start.",
     ],
     closing: "Not a verdict. A mirror, and a map for where your intimacy goes next.",
   },
@@ -79,7 +96,8 @@ export const meansForYou: Partial<Record<Report2CopySlug, MeansForYou>> = {
     },
     body: [
       "At your best you bring a playful heat that makes intimacy feel like something being discovered rather than repeated. That same appetite for charge is why predictability, or sex that starts to feel like an obligation, can quietly close you down faster than you would expect.",
-      "Your full report maps what opens you, what shuts you off, the one pattern that most often gets in your way, and the rare strength that sets you apart.",
+      "You have felt it fade before, and you have probably read the fade as a verdict on the relationship. Six weeks in it was effortless, and now you are working at it. The fade is real. What it means is almost never what it looks like from inside it.",
+      "From here the report gets specific: what actually reignites it for you, why the lever you reach for first is usually the wrong one, and the exact loop that has you chasing something new when the distance is the thing that needs attention. Relighting it is a skill, and it has steps.",
     ],
     closing: "Not a verdict. A mirror, and a map for where your intimacy goes next.",
   },
@@ -96,7 +114,8 @@ export const meansForYou: Partial<Record<Report2CopySlug, MeansForYou>> = {
     },
     body: [
       "At your best you make a partner feel genuinely cherished, and you build a steadiness most people only feel in glimpses. That same devotion is why one-sided giving, or care that never comes back the other way, can quietly close you down faster than you would expect.",
-      "Your full report maps what opens you, what shuts you off, the one pattern that most often gets in your way, and the rare strength that sets you apart.",
+      "You know the tiredness. Not dramatic, not a fight, just less reaching for your partner and no obvious reason why. You will usually explain it as stress or a busy month. More often it is the arithmetic of how much has gone out and how little has come back.",
+      "From here the report gets specific. What being tended to actually looks like for you and how to ask for it without it costing you something, why your care lands as care rather than as an invitation, and the loop where giving more is the very thing draining you. There is also a strength in here you have never been properly credited for.",
     ],
     closing: "Not a verdict. A mirror, and a map for where your intimacy goes next.",
   },
@@ -112,7 +131,8 @@ export const meansForYou: Partial<Record<Report2CopySlug, MeansForYou>> = {
     },
     body: [
       "At your best you are magnetic and generous with your energy, able to make a partner feel like the only person in the room. That same responsiveness to attention is why indifference, or the quiet that creeps in with familiarity, can quietly close you down faster than you would expect.",
-      "Your full report maps what opens you, what shuts you off, the one pattern that most often gets in your way, and the rare strength that sets you apart.",
+      "There is a particular silence you know. They are there, they are willing, and they show you nothing. Your body reads that as an answer even when your head knows better, and the evening goes quiet without either of you deciding it should.",
+      "From here the report gets specific about what actually feeds you, why it has to happen outside the bedroom before it can happen in it, and how to ask to be wanted out loud without feeling like you are begging for it. It also names the pattern you fall into when the attention goes quiet, which starts weeks before you notice.",
     ],
     closing: "Not a verdict. A mirror, and a map for where your intimacy goes next.",
   },
@@ -129,7 +149,8 @@ export const meansForYou: Partial<Record<Report2CopySlug, MeansForYou>> = {
     },
     body: [
       "At your best you can take intimacy somewhere most people never reach, and make the edge feel deliberate rather than reckless. That same appetite for intensity is why a dulled routine, or consent and trust left unspoken, can quietly close you down faster than you would expect.",
-      "Your full report maps what opens you, what shuts you off, the one pattern that most often gets in your way, and the rare strength that sets you apart.",
+      "You have made yourself smaller before. Not dramatically, just editing what you asked for down to something safe and telling yourself it was fine. It usually was fine. It also cost you something you did not price at the time.",
+      "From here the report gets specific about where your edge actually sits, what turns intensity into pressure and permission into something you can want, and why the landing matters at least as much as the crossing. It also names the loop that starts when you shrink to fit, and what that loop eventually takes with it.",
     ],
     closing: "Not a verdict. A mirror, and a map for where your intimacy goes next.",
   },
@@ -146,7 +167,8 @@ export const meansForYou: Partial<Record<Report2CopySlug, MeansForYou>> = {
     },
     body: [
       "At your best you bring an openness that makes experimenting together feel easy and genuinely fun. That same care about doing well is why ridicule, or exploration that turns into evaluation, can quietly close you down faster than you would expect.",
-      "Your full report maps what opens you, what shuts you off, the one pattern that most often gets in your way, and the rare strength that sets you apart.",
+      "You know the feeling of being in the room and slightly outside it at the same time. Watching how it is going. Grading yourself. It is not that you were not interested, it is that you never quite got in.",
+      "From here the report gets specific about what makes it safe enough for you to stop assessing, why encouragement is the mechanism rather than a nicety, and how your hesitation reads to someone who is waiting for a sign. There is also a way you learn in this that almost nobody else has access to.",
     ],
     closing: "Not a verdict. A mirror, and a map for where your intimacy goes next.",
   },
@@ -162,7 +184,8 @@ export const meansForYou: Partial<Record<Report2CopySlug, MeansForYou>> = {
     },
     body: [
       "At your best you make closeness feel effortless — the kind of unhurried warmth that asks nothing and settles everything. That same need for ease is why an elaborate build-up, or intensity you did not ask for, can quietly close you down faster than you would expect.",
-      "Your full report maps what opens you, what shuts you off, the one pattern that most often gets in your way, and the rare strength that sets you apart.",
+      "Someone has probably told you that you want it less than other people do, and it has probably stuck. What is closer to true is that intimacy starts asking for more than you have, and wanting steps back to make room.",
+      "From here the report gets specific about what pressure looks like when it arrives dressed as care, why touch with nowhere to go opens you while touch heading somewhere closes you, and how your version of closeness works when nobody is trying to make it more than it is.",
     ],
     closing: "Not a verdict. A mirror, and a map for where your intimacy goes next.",
   },
@@ -180,7 +203,8 @@ export const meansForYou: Partial<Record<Report2CopySlug, MeansForYou>> = {
     },
     body: [
       "At your best you hold an inner erotic life richer than most people ever put into words, and you read the charge in a room before anyone names it. That same privacy is why being pushed into performance, or exposed before you chose it, can quietly close you down faster than you would expect.",
-      "Your full report maps what opens you, what shuts you off, the one pattern that most often gets in your way, and the rare strength that sets you apart.",
+      "Most of it happens before anything happens. You have a rich and specific inner life around this that almost nobody has seen, and there is a moment where being asked to bring it into the room makes it disappear.",
+      "From here the report gets specific about why privacy is a condition rather than a preference, what lets your imagination actually reach your body, and the loop where wanting is loud in private and vanishes the moment it has to be witnessed. That is not the same as not wanting, and the difference matters more than you think.",
     ],
     closing: "Not a verdict. A mirror, and a map for where your intimacy goes next.",
   },
@@ -197,7 +221,8 @@ export const meansForYou: Partial<Record<Report2CopySlug, MeansForYou>> = {
     },
     body: [
       "At your best you build a container so clear that a partner can let go completely inside it, which is rarer than it sounds. That same reliance on clarity is why a messy dynamic, or respect and consent left vague, can quietly close you down faster than you would expect.",
-      "Your full report maps what opens you, what shuts you off, the one pattern that most often gets in your way, and the rare strength that sets you apart.",
+      "You know the difference between someone doing what you asked and someone actually giving it to you. From the outside those look identical. One of them does nothing for you at all, and it is hard to explain why without sounding ungrateful.",
+      "From here the report gets specific about what makes surrender real rather than compliant, why the calm afterwards is part of the thing and not the epilogue, and the point where holding the frame stops being play and turns into defence. Catching that turn early is most of the work.",
     ],
     closing: "Not a verdict. A mirror, and a map for where your intimacy goes next.",
   },
@@ -214,7 +239,8 @@ export const meansForYou: Partial<Record<Report2CopySlug, MeansForYou>> = {
     },
     body: [
       "At your best you build an erotic life that gets richer with time, the kind most people assume is only possible at the beginning. That same reliance on rhythm is why inconsistency, or hot-and-cold attention, can quietly close you down faster than you would expect.",
-      "Your full report maps what opens you, what shuts you off, the one pattern that most often gets in your way, and the rare strength that sets you apart.",
+      "When the routine slips, the wanting slips with it, and the two rarely get connected. A run of travel, a changed schedule, something small rearranged, and a few weeks later it looks like a problem with desire rather than a problem with rhythm.",
+      "From here the report gets specific about which parts of your rhythm are load-bearing and which are only habit, why the path your body already knows opens you where novelty does not, and how to rebuild it after a break without trying to force yourself to want more.",
     ],
     closing: "Not a verdict. A mirror, and a map for where your intimacy goes next.",
   },
@@ -231,7 +257,8 @@ export const meansForYou: Partial<Record<Report2CopySlug, MeansForYou>> = {
     },
     body: [
       "At your best you love with an openness that makes a partner feel unmistakably adored. That same sensitivity to approval is why criticism, or a small withdrawal nobody explains, can quietly close you down faster than you would expect.",
-      "Your full report maps what opens you, what shuts you off, the one pattern that most often gets in your way, and the rare strength that sets you apart.",
+      "Being compared to someone lands differently on you than being criticised does. It closes something that then takes days of ordinary kindness to reopen, and the person who said it will have forgotten by dinner.",
+      "From here the report gets specific about why said out loud and said early both matter, how your way of inviting gets received as sweetness and left there, and the loop where saying yes becomes a way of staying wanted until you have lost track of what you wanted.",
     ],
     closing: "Not a verdict. A mirror, and a map for where your intimacy goes next.",
   },
@@ -248,7 +275,8 @@ export const meansForYou: Partial<Record<Report2CopySlug, MeansForYou>> = {
     },
     body: [
       "At your best you bring a rare, attentive competence — you notice what works and you can find it again. That same need for clarity is why vague communication, or a moment that turns emotionally volatile, can quietly close you down faster than you would expect.",
-      "Your full report maps what opens you, what shuts you off, the one pattern that most often gets in your way, and the rare strength that sets you apart.",
+      "You will recognise the moment you stop being in it and start working it out. Reading the situation, adjusting, checking whether it is going well. The trouble is that the working out happens instead of the experience rather than alongside it.",
+      "From here the report gets specific about why ambiguity costs you more than conflict does, what honest feedback actually does to your arousal, and the loop where solving the moment quietly removes you from it. There is also a form of intimacy available to you that most people never get near.",
     ],
     closing: "Not a verdict. A mirror, and a map for where your intimacy goes next.",
   },
@@ -266,7 +294,8 @@ export const meansForYou: Partial<Record<Report2CopySlug, MeansForYou>> = {
     },
     body: [
       "At your best you offer a calm, undemanding closeness a partner can genuinely rest in. That same protectiveness is why pressure to engage, or too much stimulation at once, can quietly close you down faster than you would expect.",
-      "Your full report maps what opens you, what shuts you off, the one pattern that most often gets in your way, and the rare strength that sets you apart.",
+      "You have probably concluded at some point that you are simply someone who does not want it much. Notice how often that conclusion arrives just after a stretch where you felt pushed. Take the rush out and something is usually still there.",
+      "From here the report gets specific about what your body counts as pressure, why time to warm up is the mechanism rather than a concession you are asking for, and the loop where pulling away to lower the pressure reliably produces more of it. That loop has a way out, and it is not trying harder.",
     ],
     closing: "Not a verdict. A mirror, and a map for where your intimacy goes next.",
   },

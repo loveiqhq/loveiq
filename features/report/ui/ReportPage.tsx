@@ -66,6 +66,7 @@ import ConfidenceSection, {
   type ConfidenceCopy,
   type ConfidenceStrip,
 } from "./sections/ConfidenceSection";
+import ArchetypeBlendSection from "./sections/ArchetypeBlendSection";
 import ConstellationSection from "./sections/ConstellationSection";
 import CoreArchetypeSection from "./sections/CoreArchetypeSection";
 import DimensionSection from "./sections/DimensionSection";
@@ -925,6 +926,31 @@ const ReportExperience: FC<ReportExperienceProps> = ({
             />
 
             <div className="report-content">
+              {/* "You're a constellation, not a type" — the opening primer, and
+                  the FIRST thing in the report body: above the Part I divider,
+                  above the hero. It is not a Part I member, it is the frame the
+                  whole report is read through, so it sits outside the section
+                  map rather than inside the core_archetype branch.
+
+                  Why it exists (friends-and-family feedback, 2026-08-24): the
+                  hero's "Match Strength 71%" had nothing to attribute itself to,
+                  and a primary archetype that does not resonate took the whole
+                  report down with it. Both are framing problems, so the frame
+                  now comes first. The fourteen-row ConstellationSection at the
+                  end of Part I is unchanged and still does its own job. */}
+              <ReportSection
+                primaryArchetype={viewArchetype}
+                sectionId="blend"
+                title=""
+                feedbackWidget={renderFeedback("blend", "You're a constellation, not a type")}
+              >
+                <ArchetypeBlendSection
+                  ranking={ranking}
+                  percentages={percentages}
+                  mottos={constellationMottos}
+                  viewArchetype={viewArchetype}
+                />
+              </ReportSection>
               {resolvedSections.map((section) => {
                 const partDivider = REPORT_PART_DIVIDER_BY_SECTION[section.id];
                 const sectionNode = (() => {
@@ -1070,20 +1096,6 @@ const ReportExperience: FC<ReportExperienceProps> = ({
 
                   if (section.sectionNumber === 6) {
                     return (
-                      <ReportSection
-                        key={section.id}
-                        feedbackWidget={feedbackWidget}
-                        primaryArchetype={viewArchetype}
-                        sectionId={section.id}
-                        title={title}
-                      >
-                        <SexualStageSection userStageLabel={snapshot.stage} copy={stageCopy} />
-                      </ReportSection>
-                    );
-                  }
-
-                  if (section.sectionNumber === 7) {
-                    return (
                       <Fragment key={section.id}>
                         <ReportSection
                           feedbackWidget={feedbackWidget}
@@ -1091,22 +1103,22 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                           sectionId={section.id}
                           title={title}
                         >
-                          <ImportanceOfSexualitySection
-                            archetype={viewArchetype}
-                            importanceValue={snapshot.importanceValue}
-                          />
+                          <SexualStageSection userStageLabel={snapshot.stage} copy={stageCopy} />
                         </ReportSection>
                         {/* Constellation ("Other Archetypes") is the LAST free
-                          Part I section — mounted here as Importance's sibling so
-                          it renders directly after it (Hero…→Stage→Importance→
-                          Constellation), just before Part II (attachment, sec 8+)
-                          begins. Empty title suppresses ReportSection's own header
-                          (hidden via CSS on #constellation); the section renders
-                          its own "You're a constellation…" heading per Figma
-                          8427:1070. The wrapper only provides scroll-reveal + the
-                          #constellation anchor + the section divider. Free — no
-                          gating; every archetype's row shows its own motto and
-                          links to that archetype's report (unlock-gated on click).*/}
+                          Part I section, so it is mounted as the sibling of
+                          whichever chapter Part I now ends on. Importance and
+                          Sexual Stage swapped places on 2026-08-24, so it moved
+                          from Importance to here: order is Hero…→Importance→
+                          Stage→Constellation, just before Part II (attachment,
+                          sec 8+) begins. Empty title suppresses ReportSection's
+                          own header (hidden via CSS on #constellation); the
+                          section renders its own "You're a constellation…"
+                          heading per Figma 8427:1070. The wrapper only provides
+                          scroll-reveal + the #constellation anchor + the section
+                          divider. Free — no gating; every archetype's row shows
+                          its own motto and links to that archetype's report
+                          (unlock-gated on click). */}
                         <ReportSection
                           primaryArchetype={viewArchetype}
                           sectionId="constellation"
@@ -1122,6 +1134,23 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                           />
                         </ReportSection>
                       </Fragment>
+                    );
+                  }
+
+                  if (section.sectionNumber === 7) {
+                    return (
+                      <ReportSection
+                        key={section.id}
+                        feedbackWidget={feedbackWidget}
+                        primaryArchetype={viewArchetype}
+                        sectionId={section.id}
+                        title={title}
+                      >
+                        <ImportanceOfSexualitySection
+                          archetype={viewArchetype}
+                          importanceValue={snapshot.importanceValue}
+                        />
+                      </ReportSection>
                     );
                   }
 

@@ -1,16 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState, type FC, type ReactNode } from "react";
+import { type FC, type ReactNode } from "react";
 import { PadlockIcon } from "../ReportNavBadge";
-import { getReport2Config } from "@/data/report2-config";
-import {
-  AROUSAL_CURVES,
-  resolveArousalFamily,
-  TEASER_DOT_R,
-  TEASER_STROKE,
-  TEASER_VB_WIDTH,
-  type ArousalFamily,
-} from "../arousalCurves";
+import { archetypeSlug, getReport2Config, type Report2CopySlug } from "@/data/report2-config";
+import { mapLearnDetail } from "@/data/report2-map-detail";
+import { AROUSAL_CURVES, resolveArousalFamily } from "../arousalCurves";
 
 /**
  * Server-resolved insight-map copy (`getReport2Section(name, "map")`). The 634KB
@@ -48,108 +42,20 @@ interface Props {
   isSectionOpen: (sectionId: string) => boolean;
 }
 
-/**
- * Ignition curve for the featured tile. The arc SHAPE is family-driven — this
- * was previously hardcoded to `responsive` "universal in the frame", so a
- * Spark Seeker read "Your desire is spontaneous" above a warm-up arc. Shape,
- * colours and marker all come from the shared `AROUSAL_CURVES`.
+/*
+ * The featured tile's ignition curve was REMOVED on 2026-08-24.
  *
- * The stroke draws itself on reveal using the landing page's `pathLength={1}`
- * + dash-offset technique (`.w-draw-line`), so the two behave identically.
+ * Friends-and-family feedback: the insight map "does not create ANY real
+ * value", the chart being the loudest thing in it. It plotted no reader data —
+ * the arc was one of a handful of family shapes, identical for everyone in that
+ * family — so it looked like a measurement and was a decoration, and it pushed
+ * the actual copy down the card. The headline and subline it sat under say the
+ * same thing in words, and they are per-archetype.
+ *
+ * The shapes themselves are untouched in `../arousalCurves` and still drive the
+ * real Arousal Style chapter, which is where a curve belongs. If it ever comes
+ * back here, it should carry the reader's own answers.
  */
-const IgnitionCurve: FC<{ family: ArousalFamily }> = ({ family }) => {
-  const curve = AROUSAL_CURVES[family];
-  const gradientId = `report-map-ignition-${family}`;
-  const svgRef = useRef<SVGSVGElement>(null);
-  // x-stretch that cancels the outer squeeze: renders 1 until measured, which is
-  // the current (elliptical) behaviour rather than a missing marker.
-  const [xStretch, setXStretch] = useState(1);
-  const vbHeight = curve.teaser.vbHeight;
-
-  useEffect(() => {
-    const el = svgRef.current;
-    if (!el || typeof ResizeObserver === "undefined") return;
-    const measure = () => {
-      const box = el.getBoundingClientRect();
-      if (!box.width || !box.height) return;
-      const sx = box.width / TEASER_VB_WIDTH;
-      const sy = box.height / vbHeight;
-      // Pre-stretching x by sy/sx makes the rendered x-radius equal the y-radius.
-      setXStretch(sx > 0 ? sy / sx : 1);
-    };
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [vbHeight]);
-
-  const { x: dotX, y: dotY } = curve.teaser.dot;
-
-  // `preserveAspectRatio="none"` stretches the viewBox non-uniformly so the path
-  // spans the card's full width — which also stretches the marker. The earlier
-  // note here measured only 1440px, where it is ~6% taller than wide and hard to
-  // see. On a 390px screen the same SVG scales x by 0.39 and y by 0.71, so the
-  // marker rendered 6x10: a vertical ellipse whose ends poke out above and below
-  // the stroke, which reads as a dot sitting off its own line (its CENTRE is on
-  // the curve to 0.01px — the position was never wrong, the shape was).
-  //
-  // Fixed by counter-stretching a wrapper <g> by the inverse of the outer
-  // squeeze, so the marker stays inside the SVG — the previous attempt used an
-  // HTML element over the chart and never painted in real Safari.
-  //
-  // The factor has to be measured: it is the SVG's rendered box over its viewBox,
-  // and the rendered width is whatever the card is. A nested <svg> with
-  // `xMidYMid` does NOT work here — preserveAspectRatio resolves in the nested
-  // element's own user space, and the ancestor's non-uniform transform is applied
-  // afterwards, so the ellipse comes back (verified: still 5.72x10.38).
-  //
-  // The stretch goes on a wrapper <g>, not the circle: `.report-draw-dot` animates
-  // `transform` in CSS, and a CSS transform overrides the presentation attribute,
-  // so putting both on one element loses the correction the moment the reveal
-  // animation runs.
-  return (
-    <svg
-      ref={svgRef}
-      viewBox={`0 0 ${TEASER_VB_WIDTH} ${curve.teaser.vbHeight}`}
-      fill="none"
-      preserveAspectRatio="none"
-      className="report-map-featured__curve"
-      aria-hidden="true"
-    >
-      <defs>
-        <linearGradient
-          id={gradientId}
-          x1="0"
-          y1="0"
-          x2={TEASER_VB_WIDTH}
-          y2="0"
-          gradientUnits="userSpaceOnUse"
-        >
-          <stop offset="0" stopColor={curve.from} />
-          <stop offset="1" stopColor={curve.to} />
-        </linearGradient>
-      </defs>
-      <path
-        className="report-draw-line"
-        pathLength={1}
-        d={curve.teaser.path}
-        stroke={`url(#${gradientId})`}
-        strokeWidth={TEASER_STROKE}
-        strokeLinecap="round"
-        fill="none"
-      />
-      <g transform={`translate(${dotX} ${dotY}) scale(${xStretch} 1) translate(${-dotX} ${-dotY})`}>
-        <circle
-          className="report-draw-dot"
-          cx={dotX}
-          cy={dotY}
-          r={TEASER_DOT_R}
-          fill={curve.dotColor}
-        />
-      </g>
-    </svg>
-  );
-};
 
 /** One "five more patterns" row: symbol + Lora title, "WHAT YOU'LL LEARN"
  *  label + subline, and the gradient pill CTA on the right. */
@@ -158,11 +64,13 @@ const PatternRow: FC<{
   symbolColor: string;
   title: string;
   sub: string | null | undefined;
+  /** Second "what you'll learn" line — the specific, recognisable one. */
+  detail: string | null | undefined;
   cta: string;
   target: string;
   onOpen: (sectionId: string) => void;
   isSectionOpen: (sectionId: string) => boolean;
-}> = ({ symbol, symbolColor, title, sub, cta, target, onOpen, isSectionOpen }) => {
+}> = ({ symbol, symbolColor, title, sub, detail, cta, target, onOpen, isSectionOpen }) => {
   if (!sub) return null;
   return (
     <div className="report-map-row">
@@ -184,6 +92,7 @@ const PatternRow: FC<{
         <div className="report-map-row__learn">
           <p className="report-map-row__learn-label">WHAT YOU&apos;LL LEARN</p>
           <p className="report-map-row__learn-text">{sub}</p>
+          {detail ? <p className="report-map-row__learn-detail">{detail}</p> : null}
         </div>
       </div>
       {/* A real anchor when the section is owned: that is the sidebar's proven
@@ -216,6 +125,8 @@ const HeartGlyph: FC = () => (
 
 const InsightMapSection: FC<Props> = ({ archetype, copy, onOpen, isSectionOpen }) => {
   const family = resolveArousalFamily(getReport2Config(archetype)?.families?.arousal);
+  const slug = archetypeSlug(archetype) as Report2CopySlug;
+  const detail = mapLearnDetail[slug];
 
   if (!copy) return null;
 
@@ -226,13 +137,21 @@ const InsightMapSection: FC<Props> = ({ archetype, copy, onOpen, isSectionOpen }
   const featuredTitle = copy["featured.title"] ?? AROUSAL_CURVES[family].headline;
   const featuredSub = copy["featured.sub"] ?? AROUSAL_CURVES[family].subline;
 
+  // CTA copy shortened on 2026-08-24. Each row used to carry its own six-word
+  // sentence ("See what quietly shuts it down"), which restated the row title in
+  // the loudest element on the row and made five rows read as five different
+  // offers. The two learn lines now do the specifics; the pill only has to say
+  // where it goes.
+  const CTA = "Learn more →";
+
   const rows = [
     {
       symbol: "▼",
       symbolColor: "#c2542f",
       title: "Desire Brakes",
       sub: copy["tile1.sub"],
-      cta: "See what quietly shuts it down →",
+      detail: detail?.tile1,
+      cta: CTA,
       target: "typical_arousal_accelerators_turn_ons_of_the_core_archetype",
     },
     {
@@ -240,7 +159,8 @@ const InsightMapSection: FC<Props> = ({ archetype, copy, onOpen, isSectionOpen }
       symbolColor: "#2e7d5b",
       title: "Desire Accelerators",
       sub: copy["tile2.sub"],
-      cta: "See what opens you fastest →",
+      detail: detail?.tile2,
+      cta: CTA,
       target: "typical_arousal_accelerators_turn_ons_of_the_core_archetype",
     },
     {
@@ -248,7 +168,8 @@ const InsightMapSection: FC<Props> = ({ archetype, copy, onOpen, isSectionOpen }
       symbolColor: "#818cf8",
       title: "Initiation Pattern",
       sub: copy["tile3.sub"],
-      cta: "See why your invites get lost →",
+      detail: detail?.tile3,
+      cta: CTA,
       target: "initiation_style",
     },
     {
@@ -256,7 +177,8 @@ const InsightMapSection: FC<Props> = ({ archetype, copy, onOpen, isSectionOpen }
       symbolColor: "#c36ddf",
       title: "Peak Zone",
       sub: copy["tile4.sub"],
-      cta: "See where body & mind agree →",
+      detail: detail?.tile4,
+      cta: CTA,
       target: "typical_sexual_fantasy_amp_practice_tendencies",
     },
     {
@@ -264,7 +186,8 @@ const InsightMapSection: FC<Props> = ({ archetype, copy, onOpen, isSectionOpen }
       symbolColor: "#fe6839",
       title: "Libido Pattern",
       sub: copy["tile5.sub"],
-      cta: "See the loop that eats desire →",
+      detail: detail?.tile5,
+      cta: CTA,
       target: "libido_challenges_in_relationships",
     },
   ];
@@ -285,13 +208,12 @@ const InsightMapSection: FC<Props> = ({ archetype, copy, onOpen, isSectionOpen }
           </div>
           <h4 className="report-map-featured__title">{featuredTitle}</h4>
           {featuredSub ? <p className="report-map-featured__sub">{featuredSub}</p> : null}
-          <IgnitionCurve family={family} />
           <button
             type="button"
             className="report-map-featured__link"
             onClick={() => onOpen("arousal_style")}
           >
-            See how your desire switches on →
+            Learn more →
           </button>
         </article>
       ) : null}
@@ -320,6 +242,7 @@ const InsightMapSection: FC<Props> = ({ archetype, copy, onOpen, isSectionOpen }
               symbolColor={r.symbolColor}
               title={r.title}
               sub={r.sub}
+              detail={r.detail}
               cta={r.cta}
               target={r.target}
               onOpen={onOpen}

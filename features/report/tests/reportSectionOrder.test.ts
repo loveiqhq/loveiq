@@ -66,6 +66,33 @@ describe("report body order", () => {
     );
   });
 
+  it("orders Part I hero → importance → stage → constellation", () => {
+    const at = (id: string) => REPORT_SECTION_ORDER.indexOf(id);
+
+    // Importance was moved AHEAD of Sexual Stage on 2026-08-24 (it says how much
+    // weight sex carries at all, so it frames the stage rather than trailing it).
+    expect(at("core_archetype")).toBeLessThan(at("the_importance_of_sexuality"));
+    expect(at("the_importance_of_sexuality")).toBeLessThan(at("sexual_stage"));
+
+    // Constellation stays the LAST free Part I block. It is mounted as the
+    // sibling of whichever chapter Part I ends on, so this order and that mount
+    // point in ReportPage have to agree — if this flips, the fourteen-row list
+    // renders mid-part.
+    expect(at("sexual_stage")).toBeLessThan(at("constellation"));
+    expect(at("constellation")).toBeLessThan(at("typical_beliefs"));
+  });
+
+  it("keeps the sidebar in the same order as the body", () => {
+    // The scroll-spy reads the body and highlights the nav, so a disagreement
+    // shows up as a sidebar that jumps backwards while the reader scrolls on.
+    for (const part of REPORT_NAV_PARTS) {
+      const ordered = part.items
+        .map((item) => REPORT_SECTION_ORDER.indexOf(item.id))
+        .filter((i) => i >= 0);
+      expect(ordered, `${part.part} nav order`).toEqual([...ordered].sort((a, b) => a - b));
+    }
+  });
+
   it("starts each part divider on the section that actually opens that part", () => {
     for (const id of Object.values(REPORT_PART_FIRST_SECTION)) {
       expect(REPORT_SECTION_ORDER).toContain(id);
