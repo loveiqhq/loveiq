@@ -101,7 +101,6 @@ const CoreArchetypeSection: FC<Props> = ({ matchScore, theme }) => {
         {/* Header: badge + name + motto (left) + match strength (right) */}
         <div className="report-hero-card__header">
           <div className="report-hero-card__header-copy">
-            <div className="report-hero-card__badge">Your Core Archetype</div>
             <h3 className="report-hero-card__title">{theme.archetype}</h3>
           </div>
           <p className="report-hero-card__motto">
@@ -235,7 +234,9 @@ const TraitItem: FC<{
       <span>{label}</span>
     </p>
     <p className="report-trait__value">{value}</p>
-    {sub ? <p className="report-trait__sub">yours: {sub}</p> : null}
+    {/* The "yours:" prefix was dropped on 2026-08-25 — the whole card is the
+        reader's, so labelling each line as theirs was noise on four rows. */}
+    {sub ? <p className="report-trait__sub">{sub}</p> : null}
   </div>
 );
 

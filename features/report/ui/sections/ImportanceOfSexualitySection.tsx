@@ -184,13 +184,10 @@ const ImportanceOfSexualitySection: FC<Props> = ({ archetype, importanceValue })
       <article className="report-importance">
         <div className="report-importance__highlight" aria-hidden="true" />
 
-        {/* Header */}
+        {/* Header. The "Your Result" overline went on 2026-08-25 — the chapter
+            heading already says what this is, and the band word under it is
+            unmissable. */}
         <div className="report-importance__header">
-          <div className="report-importance__overline">
-            <span className="report-importance__overline-line" />
-            <span>Your Result</span>
-          </div>
-
           <div className="report-importance__result">
             <p className="report-importance__band">{band}</p>
             <span className="report-importance__divider" aria-hidden="true" />
@@ -245,7 +242,12 @@ const ImportanceOfSexualitySection: FC<Props> = ({ archetype, importanceValue })
                   style={style}
                 >
                   <span className="report-importance__dot-disc" />
-                  {isYou && <span className="report-importance__dot-pill">You</span>}
+                  {/* Named rather than "You" (2026-08-25): the dot marks where the
+                      ARCHETYPE sits, which is the same thing the attribution line
+                      below says in words. */}
+                  {isYou && (
+                    <span className="report-importance__dot-pill">{shortLabel(dot.name)}</span>
+                  )}
                   {END_LABELS.has(dot.name) && !isYou && (
                     <span className="report-importance__dot-label">{shortLabel(dot.name)}</span>
                   )}

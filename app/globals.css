@@ -14715,6 +14715,8 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 .report-confidence__dot-pill {
+  /* Carries an archetype name since 2026-08-25, so it must not wrap. */
+  white-space: nowrap;
   position: absolute;
   bottom: calc(100% + 12px);
   left: 50%;
@@ -17640,6 +17642,8 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 .report-importance__dot-pill {
+  /* Carries an archetype name since 2026-08-25, so it must not wrap. */
+  white-space: nowrap;
   position: absolute;
   bottom: calc(100% + 14px);
   left: 50%;
@@ -22712,6 +22716,8 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 .report-power-plane__dot-pill {
+  /* Carries an archetype name since 2026-08-25, so it must not wrap. */
+  white-space: nowrap;
   position: absolute;
   left: calc(100% + 8px);
   top: 50%;

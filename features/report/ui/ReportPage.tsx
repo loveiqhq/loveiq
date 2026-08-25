@@ -157,17 +157,38 @@ const subscribeNoop = () => () => {};
 // Keyed by section ID, not sectionNumber: the body is ordered by
 // REPORT_SECTION_ORDER (the Figma order), which deliberately does NOT follow
 // the numbering, so a numeric key would drop the divider in the wrong place.
-const REPORT_PART_DIVIDER_BY_SECTION: Record<string, ReportPartDividerProps> = {
-  [REPORT_PART_FIRST_SECTION.partI]: {
-    part: "Part I",
-    lead: "Your ",
-    accent: "Core",
-    tail: " Archetype",
-  },
-  [REPORT_PART_FIRST_SECTION.partII]: { part: "Part II", lead: "How you ", accent: "work" },
-  [REPORT_PART_FIRST_SECTION.partIII]: { part: "Part III", lead: "Your erotic ", accent: "engine" },
-  [REPORT_PART_FIRST_SECTION.partIV]: { part: "Part IV", lead: "Your growth edges" },
-};
+/** "Explorer of Edges" -> "Explorer of Edges’"; everything else takes ’s. */
+function possessive(name: string) {
+  return name.endsWith("s") ? `${name}’` : `${name}’s`;
+}
+
+/**
+ * Parts II and III name the archetype (2026-08-25): "How the Spiritual Lover
+ * works", "The Spiritual Lover’s erotic engine". Each keeps the accent on the
+ * same word it accented before, so only the subject changed. Parts I and IV
+ * still address the reader directly.
+ */
+function reportPartDividers(archetype: string): Record<string, ReportPartDividerProps> {
+  return {
+    [REPORT_PART_FIRST_SECTION.partI]: {
+      part: "Part I",
+      lead: "Your ",
+      accent: "Core",
+      tail: " Archetype",
+    },
+    [REPORT_PART_FIRST_SECTION.partII]: {
+      part: "Part II",
+      lead: `How the ${archetype} `,
+      accent: "works",
+    },
+    [REPORT_PART_FIRST_SECTION.partIII]: {
+      part: "Part III",
+      lead: `The ${possessive(archetype)} erotic `,
+      accent: "engine",
+    },
+    [REPORT_PART_FIRST_SECTION.partIV]: { part: "Part IV", lead: "Your growth edges" },
+  };
+}
 
 function getScalarOverlay(diagnostics: Record<string, unknown> | null, key: string) {
   const overlays = diagnostics?.overlaysScalar;
@@ -571,6 +592,9 @@ const ReportExperience: FC<ReportExperienceProps> = ({
    * Constellation, Partnership) are rendered outside that map and so had no way
    * to receive one — Figma 8988:15822 puts the control on all five.
    */
+  // Part headings name the archetype the report is speaking in.
+  const partDividers = reportPartDividers(viewArchetype);
+
   const renderFeedback = (sectionId: string, sectionTitle: string) => (
     <SectionFeedback
       sectionTitle={sectionTitle}
@@ -947,7 +971,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                 <ArchetypeBlendSection ranking={ranking} percentages={percentages} />
               </ReportSection>
               {resolvedSections.map((section) => {
-                const partDivider = REPORT_PART_DIVIDER_BY_SECTION[section.id];
+                const partDivider = partDividers[section.id];
                 const sectionNode = (() => {
                   const title = section.displayTitle;
                   const generalHtml = replacePlaceholders(

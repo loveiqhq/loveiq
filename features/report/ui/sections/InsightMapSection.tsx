@@ -90,8 +90,10 @@ const PatternRow: FC<{
             matrix and the specific sentence under it used to render separately
             and read as a label arguing with its own footnote; they are merged
             per archetype in `report2-map-detail.ts` now. */}
+        {/* The "WHAT YOU'LL LEARN" eyebrow went on 2026-08-25: once each row
+            carried one real description, the label was announcing the obvious
+            five times down the card. */}
         <div className="report-map-row__learn">
-          <p className="report-map-row__learn-label">WHAT YOU&apos;LL LEARN</p>
           <p className="report-map-row__learn-text">{sub}</p>
         </div>
       </div>

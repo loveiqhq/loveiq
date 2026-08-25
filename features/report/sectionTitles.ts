@@ -2,6 +2,10 @@ import type { ReportSection } from "@/data/report-general";
 
 const TITLE_OVERRIDES: Record<string, string> = {
   summary: "Summary of the {{CORE_ARCHETYPE}}",
+  // Both chapters plot the reader against all fourteen archetypes, so the
+  // heading says WHOSE band and WHOSE level is being described (2026-08-25).
+  the_importance_of_sexuality: "The Importance of Sexuality of the {{CORE_ARCHETYPE}}",
+  confidence_level: "Confidence Level of the {{CORE_ARCHETYPE}}",
   about_fantasies_desire_amp_pleasure_per_context: "About Fantasies, Desire & Pleasure by Context",
   typical_challenges_to_sustain_partner_for_the_core_archetype:
     "Typical Challenges in Sustaining Partnership for the {{CORE_ARCHETYPE}}",

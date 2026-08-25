@@ -160,7 +160,9 @@ const ConfidenceStripGraphic: FC<{
   youX: number | null;
   youAccent: string;
   youLabel: string;
-}> = ({ youX, youAccent, youLabel }) => {
+  /** Pill text on the reader's dot — the archetype name, not "You". */
+  youName: string;
+}> = ({ youX, youAccent, youLabel, youName }) => {
   // Was a mount-time requestAnimationFrame, so the marker had already slid into
   // place long before the reader scrolled down to the strip.
   const [stripRef, isAnimated] = useRevealOnView<HTMLDivElement>();
@@ -200,7 +202,9 @@ const ConfidenceStripGraphic: FC<{
               className={`report-confidence__dot${isYou ? " is-you" : ""}`}
               style={style}
             >
-              {isYou && <span className="report-confidence__dot-pill">You</span>}
+              {/* Named rather than "You" (2026-08-25) — same change as the
+                  importance strip: the dot marks where the ARCHETYPE sits. */}
+              {isYou && <span className="report-confidence__dot-pill">{youName}</span>}
             </span>
           );
         })}
@@ -308,6 +312,7 @@ const ConfidenceSection: FC<Props> = ({
               youX={youX}
               youAccent={accent}
               youLabel={`You — the ${archetype}`}
+              youName={archetype}
             />
 
             {copy.chartnote1 ? (

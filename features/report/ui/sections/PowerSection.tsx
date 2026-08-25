@@ -259,7 +259,9 @@ const PowerPlane: FC<{ archetype: string; youZoneLabel: string | null }> = ({
               }`}
               style={style}
             >
-              {isYou ? <span className="report-power-plane__dot-pill">You</span> : null}
+              {/* Named rather than "You" (2026-08-25) — the plane plots all
+                  fourteen and this dot is the archetype's position on it. */}
+              {isYou ? <span className="report-power-plane__dot-pill">{archetype}</span> : null}
             </span>
           );
         })}
