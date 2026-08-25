@@ -47,7 +47,11 @@ import {
   tryClaimSlackAlert,
   verifyCronAuth,
 } from "@shared/observability/slack-alert-dedup";
-import { computeRate, dayString } from "@features/admin/server/digest-metrics";
+import {
+  computeRate,
+  dayString,
+  fetchFunnelCvrSparklines,
+} from "@features/admin/server/digest-metrics";
 import {
   AMBIGUOUS_VISITOR_ARM,
   type ArmVerdict,
@@ -114,7 +118,15 @@ function deployStamp(): string {
  * Slack's image proxy is anonymous, so authenticity has to travel in the URL.
  * `v` is the deploy stamp, which busts the proxy cache on each deploy.
  */
-async function signedChartUrl(payload: Record<string, unknown>): Promise<string | null> {
+/**
+ * `kind` selects the renderer. Defaults to the two-arm comparison every existing
+ * caller wants; `cvr-visitor-start` is the single-line longitudinal renderer that
+ * already exists for the funnel digest, reused here rather than reimplemented.
+ */
+async function signedChartUrl(
+  payload: Record<string, unknown>,
+  kind: "conversion-by-arm" | "cvr-visitor-start" = "conversion-by-arm"
+): Promise<string | null> {
   const base = process.env.NEXT_PUBLIC_SITE_URL;
   if (!base) {
     logger.warn("conversion-digest: NEXT_PUBLIC_SITE_URL unset; skipping chart");
@@ -122,11 +134,11 @@ async function signedChartUrl(payload: Record<string, unknown>): Promise<string 
   }
   try {
     const { d, s } = await signImagePayload({
-      kind: "conversion-by-arm",
+      kind,
       v: deployStamp(),
       ...payload,
     });
-    const u = new URL("/api/admin/digest-image/conversion-by-arm", base);
+    const u = new URL(`/api/admin/digest-image/${kind}`, base);
     u.searchParams.set("d", d);
     u.searchParams.set("s", s);
     return u.toString();
@@ -221,6 +233,43 @@ export function buildArmSeries<T extends { arm: string; day: string; completions
 }
 
 /**
+ * Site-wide visits → survey-started, as a 7-day trailing rate.
+ *
+ * No arm split, and that is the point: per-arm labelling of the survey-start
+ * event only began on 2026-08-24, so the A/B version of this metric is days old,
+ * while the site-wide version reaches back as far as the window does. This is
+ * "how is the trend looking"; the per-arm comparison is a separate block that
+ * fills in on its own.
+ *
+ * Reuses `get_funnel_cvr_sparklines`, which already returns visitors + starts per
+ * UTC day for the funnel digest — no new RPC for a series that was already being
+ * computed and simply never shown here.
+ */
+export function buildSiteStartSeries(
+  days: Array<{ day: string; visitors: number; starts: number }>
+): {
+  labels: string[];
+  values: Array<number | null>;
+} {
+  const sorted = [...days].sort((a, b) => a.day.localeCompare(b.day));
+  return {
+    labels: sorted.map((d) => shortDay(d.day)),
+    values: sorted.map((_, idx) => {
+      // Same warm-up rule as the other trailing series: a window without seven
+      // days behind it is not the rate the footnote promises.
+      if (idx < 6) return null;
+      let visitors = 0;
+      let starts = 0;
+      for (let i = idx - 6; i <= idx; i += 1) {
+        visitors += sorted[i]!.visitors;
+        starts += sorted[i]!.starts;
+      }
+      return visitors > 0 ? computeRate(starts, visitors) : null;
+    }),
+  };
+}
+
+/**
  * Visits -> survey-started per day, per arm, as a 7-day trailing rate.
  *
  * `null` for any day the arm had no visits, so an arm that had not launched is a
@@ -273,6 +322,8 @@ interface DigestInput {
   startFunnel?: LandingStartFunnel | null;
   /** Per-day, per-arm rows for every live axis. [] when the RPC is unavailable. */
   axisRows?: AxisFunnelRow[];
+  /** Site-wide visitors + starts per day, for the landing→survey trend line. */
+  cvrDays?: Array<{ day: string; visitors: number; starts: number }> | null;
   now: Date;
 }
 
@@ -283,7 +334,7 @@ export interface BuiltDigest {
 }
 
 export async function buildConversionDigest(input: DigestInput): Promise<BuiltDigest> {
-  const { dayKey, funnel, cohorts, now } = input;
+  const { dayKey, funnel, cohorts, now, cvrDays } = input;
   const startFunnel = input.startFunnel ?? null;
   const axisRows = input.axisRows ?? [];
   const windowLabel = `${WINDOW_DAYS}-day window ending ${dayKey} UTC`;
@@ -401,6 +452,55 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
         ].join("\n")
       )
     );
+  }
+
+  /**
+   * Landing → survey, SITE-WIDE. The trend line, sitting with the funnel above
+   * rather than under *The tests*, because it is not an A/B result — it is the
+   * whole site's visits→started rate over the window.
+   *
+   * It exists here because the per-arm version cannot be a trend yet: the
+   * survey-start event only began carrying a landing arm on 2026-08-24. This one
+   * reaches back as far as the window does, from `get_funnel_cvr_sparklines` —
+   * an RPC that has been computing visitors + starts per day all along for the
+   * funnel digest, a cron that is not currently scheduled, which is why nobody
+   * has seen this line.
+   */
+  if (cvrDays && cvrDays.length > 0) {
+    const site = buildSiteStartSeries(cvrDays);
+    // The first six days are warm-up and have no trailing rate. The payload for
+    // this renderer is `number[][]` with no null, and plotting them as 0 would be
+    // the false-zero this file keeps having to fix — so they are dropped and the
+    // line simply starts where it becomes real.
+    const firstReal = site.values.findIndex((v) => v != null);
+    if (firstReal >= 0) {
+      const values = site.values.slice(firstReal).map((v) => v ?? 0);
+      const xAxis = site.labels.slice(firstReal);
+      const url = await signedChartUrl(
+        {
+          windowLabel,
+          labels: ["Visitor → survey start"],
+          series: [values],
+          rate: true,
+          xAxis,
+        },
+        "cvr-visitor-start"
+      );
+      if (url) {
+        const latest = values[values.length - 1] ?? 0;
+        blocks.push(
+          section(
+            `*Landing → survey start* — ${latest}% of visitor-days reach the survey questions, 7-day trailing.`
+          )
+        );
+        blocks.push({
+          type: "image",
+          image_url: url,
+          alt_text:
+            "Site-wide visitor to survey-start conversion rate over the reporting window, as a 7-day trailing rate.",
+        });
+      }
+    }
   }
 
   /**
@@ -719,11 +819,12 @@ export async function GET(request: Request) {
 
     const windowStart = new Date(dayStart.getTime() - WINDOW_DAYS * 86_400_000).toISOString();
     const windowEnd = dayStart.toISOString();
-    const [funnel, cohorts, startFunnel, axisRows] = await Promise.all([
+    const [funnel, cohorts, startFunnel, axisRows, cvrSnap] = await Promise.all([
       fetchLandingArmFunnel(windowStart, windowEnd),
       fetchArmCohorts(windowStart, windowEnd),
       fetchLandingStartFunnel(windowStart, windowEnd),
       fetchAxisFunnelDaily(windowStart, windowEnd),
+      fetchFunnelCvrSparklines(windowStart, windowEnd),
     ]);
 
     const digest = await buildConversionDigest({
@@ -732,6 +833,7 @@ export async function GET(request: Request) {
       cohorts,
       startFunnel,
       axisRows,
+      cvrDays: cvrSnap?.days ?? null,
       now,
     });
     if (digest.trimmed) {

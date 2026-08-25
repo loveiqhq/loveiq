@@ -10,6 +10,7 @@ const mockFetchLandingArmFunnel = vi.fn();
 const mockFetchArmCohorts = vi.fn();
 const mockFetchLandingStartFunnel = vi.fn();
 const mockFetchAxisFunnelDaily = vi.fn();
+const mockFetchFunnelCvrSparklines = vi.fn();
 
 vi.mock("@shared/observability/logger", () => ({
   default: { warn: vi.fn(), error: vi.fn(), info: vi.fn(), debug: vi.fn() },
@@ -36,6 +37,16 @@ vi.mock("@shared/http/is-prod-cron-host", () => ({
   isProdCronHost: () => mockIsProdCronHost(),
 }));
 
+// Partial: the digest also imports computeRate and dayString from here, and the
+// site-wide trend must be able to fail independently of them.
+vi.mock("@features/admin/server/digest-metrics", async (importActual) => {
+  const actual = await importActual<typeof import("@features/admin/server/digest-metrics")>();
+  return {
+    ...actual,
+    fetchFunnelCvrSparklines: (...args: unknown[]) => mockFetchFunnelCvrSparklines(...args),
+  };
+});
+
 vi.mock("@features/admin/server/conversion-digest", async (importActual) => {
   const actual = await importActual<typeof import("@features/admin/server/conversion-digest")>();
   return {
@@ -51,6 +62,7 @@ import {
   GET,
   buildConversionDigest,
   buildArmSeries,
+  buildSiteStartSeries,
   buildStartSeries,
 } from "@/app/api/cron/conversion-digest/route";
 import {
@@ -183,6 +195,9 @@ describe("conversion-digest handler", () => {
     mockFetchLandingArmFunnel.mockResolvedValue(makeFunnel());
     mockFetchLandingStartFunnel.mockResolvedValue(makeStartFunnel());
     mockFetchAxisFunnelDaily.mockResolvedValue(makeAxisRows());
+    // Default: no site-wide CVR source, so the existing expectations about which
+    // images a digest contains stay exactly as they were.
+    mockFetchFunnelCvrSparklines.mockResolvedValue(null);
     mockFetchArmCohorts.mockResolvedValue([
       { axis: "landing", arm: "white", n: 300, conversions: 10 },
       { axis: "landing", arm: "white_prev", n: 240, conversions: 6 },
@@ -414,6 +429,72 @@ describe("conversion-digest handler", () => {
     // The rest of the digest still ships — one missing source takes nothing else.
     expect(flat).toContain("*The tests*");
     expect(arg.blocks.filter((b) => (b as { type?: string }).type === "image")).toHaveLength(0);
+  });
+
+  it("gaps the site-wide trend's warm-up instead of plotting a partial window", () => {
+    // Same rule as every other trailing series here. Without it the first six
+    // points are 1- to 6-day windows under a footnote promising seven days.
+    const days = Array.from({ length: 10 }, (_, i) => ({
+      day: new Date(Date.UTC(2026, 7, 1) + i * 86_400_000).toISOString().slice(0, 10),
+      visitors: 100,
+      starts: i === 9 ? 20 : 10,
+    }));
+    const series = buildSiteStartSeries(days);
+    expect(series.values.slice(0, 6).every((v) => v === null)).toBe(true);
+    expect(series.values.slice(6).every((v) => v != null)).toBe(true);
+    // Index 9 trails days 3-9: six days at 10/100 plus one at 20/100 = 80/700.
+    expect(series.values[9]).toBe(11.4);
+    expect(series.labels).toHaveLength(10);
+  });
+
+  it("sorts the site-wide trend by day rather than trusting the RPC's order", () => {
+    const shuffled = [
+      { day: "2026-08-08", visitors: 100, starts: 30 },
+      { day: "2026-08-01", visitors: 100, starts: 10 },
+      { day: "2026-08-05", visitors: 100, starts: 10 },
+      { day: "2026-08-02", visitors: 100, starts: 10 },
+      { day: "2026-08-03", visitors: 100, starts: 10 },
+      { day: "2026-08-07", visitors: 100, starts: 10 },
+      { day: "2026-08-04", visitors: 100, starts: 10 },
+      { day: "2026-08-06", visitors: 100, starts: 10 },
+    ];
+    const series = buildSiteStartSeries(shuffled);
+    expect(series.labels[0]).toBe("1 Aug");
+    expect(series.labels[7]).toBe("8 Aug");
+    // Trailing window over days 2-8: 6x10 + 30 = 90/700.
+    expect(series.values[7]).toBe(12.9);
+  });
+
+  it("draws the site-wide landing→survey trend, and skips it with no source", async () => {
+    // The picture the digest leads with. Its per-arm sibling cannot be a trend
+    // yet, so this one carries "how is it looking".
+    const cvrDays = Array.from({ length: 14 }, (_, i) => ({
+      day: new Date(Date.UTC(2026, 7, 10) + i * 86_400_000).toISOString().slice(0, 10),
+      visitors: 200,
+      starts: 20 + i,
+    }));
+    mockFetchFunnelCvrSparklines.mockResolvedValue({ days: cvrDays });
+    await GET(request());
+    let arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    const flat = blockText(arg.blocks);
+    expect(flat).toContain("*Landing → survey start*");
+    expect(flat).toMatch(/of visitor-days reach the survey questions/);
+    const img = arg.blocks.find((b) =>
+      (b as { alt_text?: string }).alt_text?.startsWith("Site-wide visitor")
+    ) as { image_url: string } | undefined;
+    expect(img).toBeDefined();
+    // The single-line longitudinal renderer, not the two-arm one.
+    expect(img!.image_url).toContain("/digest-image/cvr-visitor-start");
+
+    // And with no source at all it is simply absent — no empty plot, no zero.
+    mockNotifySlack.mockClear();
+    mockFetchFunnelCvrSparklines.mockResolvedValue(null);
+    await GET(request());
+    arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    expect(blockText(arg.blocks)).not.toContain("*Landing → survey start*");
+    expect(
+      arg.blocks.filter((b) => (b as { alt_text?: string }).alt_text?.startsWith("Site-wide"))
+    ).toHaveLength(0);
   });
 
   it("says landing→survey has no data in ONE line, not four empty ones", async () => {
