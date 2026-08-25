@@ -270,20 +270,34 @@ export function buildJourneyMessage(
     );
   } else {
     text = `:memo: Survey completed #${journey.submissionId} — ${name} (${email}) — ${options.questionCount} questions${surveyTime ? ` in ${surveyTime}` : ""}`;
-    // The time goes in the HEADER, not a field row: it is the number the team
-    // scans for first, and as a field it was the least prominent thing here while
-    // also being duplicated in the context line below. Header text renders
-    // largest, so this is the one place it cannot be missed.
+    /**
+     * How many questions and how long, both in the HEADER.
+     *
+     * These are the two numbers the team scans for, and both were in the wrong
+     * place: the question count sat only in the context line — Slack's smallest,
+     * greyest text, the least prominent thing in the message — while the time was
+     * in the header AND repeated in that same context line. So the more prominent
+     * of the two was the duplicated one.
+     *
+     * A header is plain_text, so it cannot carry bold, but it renders larger than
+     * anything else available and larger than a bolded section. Putting both here
+     * is the strongest emphasis Block Kit offers, and it lets the context line
+     * drop the repetition and go back to being identity only.
+     *
+     * Both degrade independently: no recorded duration drops just that clause.
+     */
+    const headerFacts = [
+      `${options.questionCount} question${options.questionCount === 1 ? "" : "s"}`,
+      surveyTime,
+    ].filter(Boolean);
     blocks.push(
       header(
-        `📝 Survey completed — ${journey.firstName ?? "anonymous"}${surveyTime ? ` · ${surveyTime}` : ""}`
+        `📝 Survey completed — ${journey.firstName ?? "anonymous"}${
+          headerFacts.length > 0 ? ` · ${headerFacts.join(" · ")}` : ""
+        }`
       )
     );
-    blocks.push(
-      context(
-        `*${name}* (${email}) · submission #${journey.submissionId} · ${options.questionCount} questions${surveyTime ? ` in ${surveyTime}` : ""}`
-      )
-    );
+    blocks.push(context(`*${name}* (${email}) · submission #${journey.submissionId}`));
   }
 
   blocks.push(section(journeyRail(journey, options.reachedFloor)));

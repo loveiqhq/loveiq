@@ -142,6 +142,63 @@ describe("journey rail — filled means reached", () => {
   });
 });
 
+describe("the two numbers the team scans for", () => {
+  /**
+   * How long it took and how many questions. Both belong in the HEADER, which is
+   * the largest text Block Kit offers — larger than a bolded section, and a
+   * header is plain_text so it cannot be bolded anyway.
+   *
+   * This is pinned because it silently drifted once already: the question count
+   * ended up in the `context` block, Slack's smallest and greyest text, while the
+   * duration was in the header AND repeated in that same context line — so the
+   * more prominent of the two was the one that was duplicated.
+   */
+  const headerOf = (blocks: unknown[]) =>
+    (blocks as Array<{ type: string; text?: { text?: string } }>).find((b) => b.type === "header")
+      ?.text?.text ?? "";
+  const contextOf = (blocks: unknown[]) =>
+    (blocks as Array<{ type: string; elements?: Array<{ text?: string }> }>)
+      .filter((b) => b.type === "context")
+      .map((b) => (b.elements ?? []).map((e) => e.text ?? "").join(" "))
+      .join(" ");
+
+  it("puts the question count AND the duration in the header", () => {
+    const message = buildJourneyMessage(journey({ timings: { durationMs: 612_000 } }), {
+      kind: "survey_completed",
+      questionCount: 59,
+    });
+    const head = headerOf(message.blocks);
+    expect(head).toContain("59 questions");
+    expect(head).toContain("10 min");
+    // And neither is repeated in the small grey line below it.
+    const ctx = contextOf(message.blocks);
+    expect(ctx).not.toContain("59 questions");
+    expect(ctx).not.toContain("10 min");
+    // which still carries identity.
+    expect(ctx).toContain("submission #");
+  });
+
+  it("drops only the duration when it was never recorded", () => {
+    const message = buildJourneyMessage(journey({ timings: { durationMs: null } }), {
+      kind: "survey_completed",
+      questionCount: 59,
+    });
+    const head = headerOf(message.blocks);
+    expect(head).toContain("59 questions");
+    // No dangling separator where the time would have been.
+    expect(head).not.toMatch(/·\s*$/);
+    expect(head).not.toContain("· ·");
+  });
+
+  it("says question, not questions, for a single answer", () => {
+    const message = buildJourneyMessage(journey(), {
+      kind: "survey_completed",
+      questionCount: 1,
+    });
+    expect(headerOf(message.blocks)).toContain("1 question ");
+  });
+});
+
 describe("pricing arm — which side of the test, in words and numbers", () => {
   function pricingRow(blocks: SlackBlock[]): string {
     const text = JSON.stringify(blocks);
