@@ -465,38 +465,68 @@ describe("conversion-digest handler", () => {
     expect(series.values[7]).toBe(12.9);
   });
 
-  it("draws the site-wide landing→survey trend, and skips it with no source", async () => {
+  it("draws the site-wide survey-reach trend through the AUDITED renderer", async () => {
     // The picture the digest leads with. Its per-arm sibling cannot be a trend
     // yet, so this one carries "how is it looking".
     const cvrDays = Array.from({ length: 14 }, (_, i) => ({
       day: new Date(Date.UTC(2026, 7, 10) + i * 86_400_000).toISOString().slice(0, 10),
-      visitors: 200,
+      // 190, deliberately: the trailing rate then lands on 15.8%, a value with a
+      // decimal, so the precision assertion below has something to protect.
+      visitors: 190,
       starts: 20 + i,
     }));
     mockFetchFunnelCvrSparklines.mockResolvedValue({ days: cvrDays });
     await GET(request());
     let arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
     const flat = blockText(arg.blocks);
-    expect(flat).toContain("*Landing → survey start*");
-    expect(flat).toMatch(/of visitor-days reach the survey questions/);
+    expect(flat).toContain("*Visits that reach the survey*");
+    expect(flat).toMatch(/of visit-days, 7-day trailing/);
+
     const img = arg.blocks.find((b) =>
-      (b as { alt_text?: string }).alt_text?.startsWith("Site-wide visitor")
-    ) as { image_url: string } | undefined;
+      (b as { alt_text?: string }).alt_text?.startsWith("Site-wide share")
+    ) as { image_url: string; alt_text: string } | undefined;
     expect(img).toBeDefined();
-    // The single-line longitudinal renderer, not the two-arm one.
-    expect(img!.image_url).toContain("/digest-image/cvr-visitor-start");
+    /**
+     * The AUDITED renderer, in single-series mode — not the sparkline one this
+     * started on. That one pinned its y-scale to the series' own maximum with no
+     * axis labels, so the plot came out byte-identical when the same shape was
+     * re-rendered at a tenth of the magnitude: a 6% rate and a 0.6% rate drew the
+     * same picture. `conversion-by-arm` has gridlines, an absolute scale, the
+     * inset that stops the peak clipping, and one-decimal labels.
+     */
+    expect(img!.image_url).toContain("/digest-image/conversion-by-arm");
+
+    const payload = JSON.parse(
+      Buffer.from(new URL(img!.image_url).searchParams.get("d")!, "base64").toString("utf8")
+    ) as { first: Array<number | null>; last?: unknown; title: string; headline: string };
+    // Single-series mode is the ABSENCE of `last`. An all-null `last` would be a
+    // second arm with no data, which the renderer names in the legend instead.
+    expect(payload.last).toBeUndefined();
+    expect(payload.title).toBe("Visits that reach the survey");
+    // Nulls survive to the renderer as gaps. Flattened to 0 they would draw a
+    // plunge to the floor on any day the site recorded no visits.
+    expect(payload.first.slice(0, 6).every((v) => v === null)).toBe(true);
+    expect(payload.headline).toMatch(/% of visits reach the survey/);
+    // ONE DECIMAL, not rounded. `Math.round` here is what published a 12.7% rate
+    // as "13%" and made the image disagree with its own caption.
+    expect(payload.headline).toMatch(/\d+\.\d+% of visits/);
+    // The image and the caption beside it must agree — they did not when the
+    // image rounded 6.1 to "6" while the caption said 6.1%.
+    const caption = flat.match(/\*Visits that reach the survey\* — ([\d.]+)% of visit-days/);
+    expect(caption).not.toBeNull();
+    expect(payload.headline).toContain(`${caption![1]}%`);
+    expect(img!.alt_text).toContain(`${caption![1]}%`);
 
     // And with no source at all it is simply absent — no empty plot, no zero.
     mockNotifySlack.mockClear();
     mockFetchFunnelCvrSparklines.mockResolvedValue(null);
     await GET(request());
     arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
-    expect(blockText(arg.blocks)).not.toContain("*Landing → survey start*");
+    expect(blockText(arg.blocks)).not.toContain("*Visits that reach the survey*");
     expect(
       arg.blocks.filter((b) => (b as { alt_text?: string }).alt_text?.startsWith("Site-wide"))
     ).toHaveLength(0);
   });
-
   it("says landing→survey has no data in ONE line, not four empty ones", async () => {
     // The RPC floors its window at the first day both sides carried an arm, so
     // before then it correctly answers with empty arrays. Four lines of "no

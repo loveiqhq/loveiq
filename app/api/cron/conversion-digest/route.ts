@@ -468,36 +468,55 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
    */
   if (cvrDays && cvrDays.length > 0) {
     const site = buildSiteStartSeries(cvrDays);
-    // The first six days are warm-up and have no trailing rate. The payload for
-    // this renderer is `number[][]` with no null, and plotting them as 0 would be
-    // the false-zero this file keeps having to fix — so they are dropped and the
-    // line simply starts where it becomes real.
-    const firstReal = site.values.findIndex((v) => v != null);
-    if (firstReal >= 0) {
-      const values = site.values.slice(firstReal).map((v) => v ?? 0);
-      const xAxis = site.labels.slice(firstReal);
-      const url = await signedChartUrl(
-        {
-          windowLabel,
-          labels: ["Visitor → survey start"],
-          series: [values],
-          rate: true,
-          xAxis,
-        },
-        "cvr-visitor-start"
-      );
+    const real = site.values.filter((v): v is number => v != null);
+    if (real.length > 0) {
+      /**
+       * Drawn by the ARM renderer in single-series mode, not by the sparkline
+       * one it started on. That renderer pinned its y-scale to the series' own
+       * max with no axis labels, which was measured: re-rendering the same shape
+       * at a tenth of the magnitude produced a byte-identical plot — a 6% rate
+       * and a 0.6% rate drew the same picture, and the only thing that moved was
+       * a 98x10px text readout. Three earlier commits fixed gridlines, tick
+       * alignment, the clipped peak and the rounding in the arm renderer and
+       * never touched the other one, so this metric was promoted onto the
+       * pre-audit code path.
+       *
+       * Nulls are passed straight through now: the arm renderer draws them as
+       * gaps, so the six warm-up days need no slicing and — the part that
+       * actually mattered — an interior null from a day with no visitors stays a
+       * gap instead of being flattened to a plotted 0%.
+       */
+      const latest = real[real.length - 1]!;
+      const peak = Math.max(...real);
+      const direction =
+        peak - latest >= 1
+          ? ` — down from ${peak}% at its peak this window`
+          : latest - Math.min(...real) >= 1
+            ? ` — up from ${Math.min(...real)}% this window`
+            : "";
+      const url = await signedChartUrl({
+        windowLabel,
+        labels: site.labels,
+        first: site.values,
+        // No `last` key at all: single-series mode. An all-null `last` would be a
+        // second arm with no data, which is a different statement.
+        title: "Visits that reach the survey",
+        legendFirst: "Visits that reach the survey",
+        headline: `${latest}% of visits reach the survey${direction}`,
+        footnote:
+          "survey starts ÷ all-page visit-days, 7-day trailing · a gap is a day with no visits",
+        emptyLabel: "Awaiting data — no visits recorded in this window yet.",
+      });
       if (url) {
-        const latest = values[values.length - 1] ?? 0;
         blocks.push(
           section(
-            `*Landing → survey start* — ${latest}% of visitor-days reach the survey questions, 7-day trailing.`
+            `*Visits that reach the survey* — ${latest}% of visit-days, 7-day trailing${direction}.`
           )
         );
         blocks.push({
           type: "image",
           image_url: url,
-          alt_text:
-            "Site-wide visitor to survey-start conversion rate over the reporting window, as a 7-day trailing rate.",
+          alt_text: `Site-wide share of visit-days that reach the survey questions, 7-day trailing, over the reporting window. Currently ${latest}%, peak ${peak}%.`,
         });
       }
     }
