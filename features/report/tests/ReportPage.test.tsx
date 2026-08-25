@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, configure, render, screen, waitFor } from "@testing-library/react";
 
 const mockRouterPush = vi.fn();
 const mockCacheReportCheckoutQuote = vi.fn();
@@ -93,6 +93,24 @@ import type { ReportPracticeTendencyContentForUser } from "@features/report/ui/h
 const TREATMENT_TOKEN = "rpt_report_test_001";
 
 const REPORT_MODAL_TEST_TIMEOUT_MS = 60_000;
+
+/**
+ * How long an async assertion in this file may wait.
+ *
+ * These tests budget 60s PER TEST (above) because one ReportPage commit renders
+ * twenty-five chapters and is genuinely slow. Every `waitFor` inside them was
+ * still using testing-library's 1s default, so the two budgets disagreed by a
+ * factor of sixty: a commit that took longer than a second — routine when the
+ * full suite saturates the machine — had `waitFor` give up while the render was
+ * still in flight. That surfaced as two modal tests failing intermittently and
+ * blocking pushes, always on a timeout and never on a behaviour change, and
+ * always passing when the file ran on its own.
+ *
+ * This changes patience only. Every assertion still asserts exactly what it did;
+ * `waitFor` resolves the moment its condition holds, so a genuine regression
+ * still fails, it just fails after the render has actually had its chance.
+ */
+const REPORT_ASYNC_ASSERTION_TIMEOUT_MS = 15_000;
 const mockScrollTo = vi.fn();
 
 describe("ReportPage", () => {
@@ -289,6 +307,7 @@ describe("ReportPage", () => {
   }
 
   beforeEach(() => {
+    configure({ asyncUtilTimeout: REPORT_ASYNC_ASSERTION_TIMEOUT_MS });
     mockTrackReportViewed.mockReset();
     mockTrackPaywallView.mockReset();
     mockTrackBeginCheckout.mockReset();
@@ -330,6 +349,8 @@ describe("ReportPage", () => {
   });
 
   afterEach(() => {
+    // Back to the library default so this file cannot slow another one down.
+    configure({ asyncUtilTimeout: 1_000 });
     vi.unstubAllGlobals();
     mockScrollTo.mockReset();
     document.documentElement.style.overflow = "";
