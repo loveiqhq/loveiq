@@ -226,7 +226,13 @@ export function buildAxisTrends(rows: AxisFunnelRow[], today: string): AxisTrend
       skipped.push({
         axis,
         axisTitle,
-        caption: `*${axisTitle}* — no chart yet: only ${arms.length === 1 ? `${armLabel(axis, arms[0]!.arm).short} has` : "no arms have"} data in the comparable window, so there is nothing to compare against.`,
+        // "only" belongs INSIDE the one-arm branch. Hoisted out it produced
+        // "no chart yet: only no arms have data" on the zero-arm path.
+        caption: `*${axisTitle}* — no chart yet: ${
+          arms.length === 1
+            ? `only ${armLabel(axis, arms[0]!.arm).short} has data`
+            : "no arm has data"
+        } in the comparable window, so there is nothing to compare against.`,
       });
       continue;
     }

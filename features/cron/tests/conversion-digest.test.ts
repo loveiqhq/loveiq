@@ -345,9 +345,10 @@ describe("conversion-digest handler", () => {
     await GET(request());
     const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
     const images = arg.blocks.filter((b) => (b as { type?: string }).type === "image");
-    // Three: reached-survey, purchases-by-landing-page, and the per-axis A/B
-    // chart for the survey design test.
-    expect(images).toHaveLength(3);
+    // Two: reached-survey, and the per-axis A/B chart for the survey design
+    // test. The landing axis's own purchases chart was removed — the per-axis
+    // section is the only place landing is charted now.
+    expect(images).toHaveLength(2);
     const alt = JSON.stringify(images);
     expect(alt).toContain("Not comparable between arms yet");
     expect(alt).not.toContain("survey%20started%2C%20by%20homepage");
@@ -361,24 +362,45 @@ describe("conversion-digest handler", () => {
     await GET(request());
     const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
     const flat = blockText(arg.blocks);
-    expect(flat).toContain("NOT arm-comparable yet");
     expect(flat).not.toMatch(/counted server-side, no analytics-consent gap/);
+    // The caveat rides on the chart itself — headline, footnote and alt text —
+    // so it cannot outlive the chart. The header must not carry it: the chart is
+    // absent for whole days at a time and the sentence would point at nothing.
+    const alt = JSON.stringify(arg.blocks.filter((b) => (b as { type?: string }).type === "image"));
+    expect(alt).toContain("Not comparable between arms yet");
+    const definitions = blockText(arg.blocks.slice(0, 2));
+    expect(definitions).not.toContain("arm-comparable");
   });
 
-  it("says so plainly when the landing→start migration is not applied yet", async () => {
+  it("says so plainly when the landing→start source does not answer", async () => {
     mockFetchLandingStartFunnel.mockResolvedValue(null);
     const res = await GET(request());
     expect(res.status).toBe(200);
     const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
-    // Degrades to a stated absence, never to a silent omission or a zero.
-    expect(blockText(arg.blocks)).toContain("migration has not been applied");
-    // The other charts still ship: purchases-by-landing-page and the per-axis
-    // A/B chart. One missing source must not take the rest of the digest with it.
-    expect(arg.blocks.filter((b) => (b as { type?: string }).type === "image")).toHaveLength(2);
+    // Degrades to a stated absence, never to a silent omission or a zero. It no
+    // longer blames an unapplied migration: the migration IS applied, and null
+    // here only ever means the RPC did not answer.
+    expect(blockText(arg.blocks)).toContain("did not answer");
+    // The per-axis A/B chart still ships. One missing source must not take the
+    // rest of the digest with it.
+    expect(arg.blocks.filter((b) => (b as { type?: string }).type === "image")).toHaveLength(1);
+  });
+
+  it("states the reached-survey chart's absence when its source is empty, not just null", async () => {
+    // The RPC floors its window at the first day BOTH arms were instrumented, so
+    // it correctly answers with empty arrays for days before that. That path used
+    // to render nothing at all while the header still advertised the chart.
+    mockFetchLandingStartFunnel.mockResolvedValue({ daily: [], totals: [] });
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    const flat = blockText(arg.blocks);
+    expect(flat).toContain("Visits → survey-started by landing page: no chart yet");
+    expect(flat).not.toContain("arm-comparable");
+    expect(arg.blocks.filter((b) => (b as { type?: string }).type === "image")).toHaveLength(1);
   });
 
   it("keeps the whole message inside Slack's block and size limits with every chart", async () => {
-    // Three images plus their captions. fitBlocks caps at 50 blocks / ~38k
+    // Two images plus their captions. fitBlocks caps at 50 blocks / ~38k
     // serialized and drops from the TAIL, so an overflow would silently delete
     // the alerts at the bottom rather than fail — which is why this asserts the
     // TOTAL rather than the delta from before.

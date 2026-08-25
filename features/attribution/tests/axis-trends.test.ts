@@ -189,6 +189,22 @@ describe("axis trend charts — which experiments may be drawn", () => {
     );
     const gap = trends.skipped.find((s) => s.axis === "survey")!;
     expect(gap.caption).toContain("nothing to compare");
+    expect(gap.caption).toContain("only White survey has data");
+  });
+
+  it("reads as English when NO arm has data", () => {
+    // "only" used to be hoisted out of the one-arm branch, which made the
+    // zero-arm caption read "no chart yet: only no arms have data".
+    const trends = buildAxisTrends(
+      rows("survey", "white", { days: 30, lastDay: "2026-09-30", completions: 10, checkouts: 2 }),
+      "2026-09-30"
+    );
+    for (const gap of trends.skipped) {
+      expect(gap.caption).not.toContain("only no");
+      expect(gap.caption).not.toMatch(/only no arms? have/);
+    }
+    const pricing = trends.skipped.find((s) => s.axis === "pricing")!;
+    expect(pricing.caption).toContain("no arm has data");
   });
 
   it("clips each axis to its own like-for-like window", () => {

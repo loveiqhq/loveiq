@@ -65,7 +65,6 @@ import {
   fetchAxisFunnelDaily,
   fetchLandingArmFunnel,
   fetchLandingStartFunnel,
-  TINY_ARM,
   sumDays,
   sumVisitors,
 } from "@features/admin/server/conversion-digest";
@@ -295,7 +294,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
   // meant.
   blocks.push(
     context(
-      `${windowLabel} · "visits" are visitor-days on any page, not people · the verdicts below compare arms on finished surveys → ever paid, counted server-side with no consent gap · the reached-survey chart is NOT arm-comparable yet (see its caption)`
+      `${windowLabel} · "visits" are visitor-days on any page, not people · the verdicts below compare arms on finished surveys → ever paid, counted server-side with no consent gap`
     )
   );
 
@@ -458,73 +457,36 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
             "Site visit-days to reached-survey rate, by landing page arm. Not comparable between arms yet — the two arms measure different funnel steps.",
         });
       }
+    } else {
+      // Not silence. The RPC floors its window at the first day BOTH sides were
+      // instrumented, so before then it correctly returns nothing — and a reader
+      // who was told last week that this chart was coming needs to know why it
+      // is not here rather than assume it was dropped.
+      blocks.push(
+        context(
+          "_Visits → survey-started by landing page: no chart yet — per-arm recording of survey starts has only just begun, so there is not enough history for a 7-day trailing rate._"
+        )
+      );
     }
   } else {
     blocks.push(
       context(
-        "_Visits → survey-started by landing page is not available yet — its migration has not been applied._"
+        "_Visits → survey-started by landing page is not available right now — its data source did not answer._"
       )
     );
   }
 
-  // ---- Finished survey → paid. Downstream of the landing page. ----
-  if (funnel) {
-    const liveArms = ["white", "white_prev"] as const;
-    const series = buildArmSeries(funnel.daily, [liveArms[0], liveArms[1]], (r) => r.paid);
-
-    // An arm with no sales yet plots as a flat line along the bottom, and a flat
-    // line against a real curve reads as "this landing page converts at nothing" when
-    // the truth is "13 people, far too few to say". Hiding the chart until both
-    // arms have a sale would cost weeks of the other arm's trend, so the sample
-    // sizes go in the HEADLINE instead and the flat line explains itself.
-    const cohortFor = (arm: string) => funnel.cohort.find((c) => c.arm === arm);
-    const armSummary = (arm: string) => {
-      const label = armLabel("landing", arm).short;
-      const row = cohortFor(arm);
-      if (!row || row.completions === 0) return `${label} no finishers yet`;
-      return `${label} ${row.paid}/${row.completions} paid`;
-    };
-    const smallest = Math.min(
-      cohortFor(liveArms[0])?.completions ?? 0,
-      cohortFor(liveArms[1])?.completions ?? 0
-    );
-    const headline =
-      `${armSummary(liveArms[0])}  ·  ${armSummary(liveArms[1])}` +
-      (smallest < TINY_ARM ? "  —  too early to compare" : "");
-
-    // Chart whenever EITHER arm has something to show; the headline above carries
-    // the caveat when one of them is effectively empty.
-    const hasAnySignal =
-      series.first.some((v) => v != null && v > 0) || series.last.some((v) => v != null && v > 0);
-    if (hasAnySignal && series.labels.length > 1) {
-      const url = await signedChartUrl({
-        windowLabel,
-        labels: series.labels,
-        // null survives to the renderer as a genuine gap in the line.
-        first: series.first.map((v) => (v == null ? null : Math.round(v * 10) / 10)),
-        last: series.last.map((v) => (v == null ? null : Math.round(v * 10) / 10)),
-        title: "Purchases per finished survey, by landing page",
-        legendFirst: armLabel("landing", liveArms[0]).short,
-        legendLast: armLabel("landing", liveArms[1]).short,
-        headline,
-        footnote:
-          // NOT "% of finishers who paid": numerator and denominator are both
-          // counted on the day they happened, so the payers are not drawn from
-          // that window's finishers. Nurture mail runs to 78h and post-call
-          // coupons last 14 days, so a real share of any week's sales come from
-          // earlier weeks' finishers — and the most recent days are depressed
-          // because their finishers have not had time to buy yet.
-          "purchases ÷ finished surveys, both counted on the day they happened — not a cohort rate; recent days read low · 7-day trailing · shared y-scale (peak {peak}%)",
-      });
-      if (url) {
-        blocks.push({
-          type: "image",
-          image_url: url,
-          alt_text: "Conversion rate by landing page arm over the last 30 days",
-        });
-      }
-    }
-  }
+  // The landing axis had its own purchases-per-finished-survey chart here. It is
+  // gone, and the per-axis section below is the only place landing is charted.
+  //
+  // Three of that chart's own rules said not to draw it. Its purple line ran from
+  // 26 Jul under the legend "Landing page A (current design)", but the current
+  // design only exists since the 10 Aug rebuild and the round-2 comparison since
+  // 21 Aug (AXIS_VALID_FROM.landing) — so most of that line was the PREVIOUS
+  // design wearing the current one's label, next to a 4-day stub of the other arm
+  // flat on zero. It also drew purchases, which the section below refuses to draw
+  // below MIN_PAID_TO_DRAW, from the same 10 the captions call too few. A message
+  // cannot both show a landing chart and say landing has no chart yet.
 
   // ---- One chart per live A/B test ----
   //

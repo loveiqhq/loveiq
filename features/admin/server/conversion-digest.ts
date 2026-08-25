@@ -615,7 +615,7 @@ export function buildAlerts(input: {
       // every single day, and warnings sort above everything actionable. A
       // permanent warning is how the last digest earned itself a mute.
       severity: "info",
-      message: `${ambiguous.n} visits carry a retired landing page label and cannot be attributed to an arm. They ARE counted in the visits totals above — only the per-arm comparison ignores them, and that comparison is built from finished surveys, not from these visit rows. Visits recorded before today's tracking fix stay unattributable.`,
+      message: `${ambiguous.n} visits carry a retired landing page label and cannot be attributed to an arm. They ARE counted in the visits totals above — only the per-arm comparison ignores them, and that comparison is built from finished surveys, not from these visit rows. Visits recorded before the tracking fix landed stay unattributable.`,
     });
   }
 
