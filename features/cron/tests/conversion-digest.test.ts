@@ -9,6 +9,7 @@ const mockIsProdCronHost = vi.fn();
 const mockFetchLandingArmFunnel = vi.fn();
 const mockFetchArmCohorts = vi.fn();
 const mockFetchLandingStartFunnel = vi.fn();
+const mockFetchAxisFunnelDaily = vi.fn();
 
 vi.mock("@shared/observability/logger", () => ({
   default: { warn: vi.fn(), error: vi.fn(), info: vi.fn(), debug: vi.fn() },
@@ -42,6 +43,7 @@ vi.mock("@features/admin/server/conversion-digest", async (importActual) => {
     fetchLandingArmFunnel: (...args: unknown[]) => mockFetchLandingArmFunnel(...args),
     fetchArmCohorts: (...args: unknown[]) => mockFetchArmCohorts(...args),
     fetchLandingStartFunnel: (...args: unknown[]) => mockFetchLandingStartFunnel(...args),
+    fetchAxisFunnelDaily: (...args: unknown[]) => mockFetchAxisFunnelDaily(...args),
   };
 });
 
@@ -116,6 +118,21 @@ function makeFunnel(overrides: Partial<{ visitorArms: Record<string, number> }> 
 }
 
 /** Landing -> survey-start, with the second arm launching part-way through. */
+/**
+ * 30 days x two arms on the SURVEY axis, which has no valid-from clip — so the
+ * handler tests actually exercise the per-axis chart path rather than silently
+ * skipping every axis.
+ */
+function makeAxisRows() {
+  const rows = [];
+  for (let d = 0; d < 30; d += 1) {
+    const day = new Date(Date.UTC(2026, 6, 26) + d * 86_400_000).toISOString().slice(0, 10);
+    rows.push({ axis: "survey", arm: "white", day, completions: 10, checkouts: 2, paid: 0 });
+    rows.push({ axis: "survey", arm: "dark", day, completions: 8, checkouts: 1, paid: 0 });
+  }
+  return rows;
+}
+
 function makeStartFunnel(opts: { prevFromDay?: number } = {}) {
   const prevFrom = opts.prevFromDay ?? 27;
   const days: string[] = [];
@@ -165,6 +182,7 @@ describe("conversion-digest handler", () => {
     mockTryClaim.mockResolvedValue(true);
     mockFetchLandingArmFunnel.mockResolvedValue(makeFunnel());
     mockFetchLandingStartFunnel.mockResolvedValue(makeStartFunnel());
+    mockFetchAxisFunnelDaily.mockResolvedValue(makeAxisRows());
     mockFetchArmCohorts.mockResolvedValue([
       { axis: "landing", arm: "white", n: 300, conversions: 10 },
       { axis: "landing", arm: "white_prev", n: 240, conversions: 6 },
@@ -327,10 +345,13 @@ describe("conversion-digest handler", () => {
     await GET(request());
     const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
     const images = arg.blocks.filter((b) => (b as { type?: string }).type === "image");
-    expect(images).toHaveLength(2);
+    // Three: reached-survey, purchases-by-landing-page, and the per-axis A/B
+    // chart for the survey design test.
+    expect(images).toHaveLength(3);
     const alt = JSON.stringify(images);
     expect(alt).toContain("Not comparable between arms yet");
     expect(alt).not.toContain("survey%20started%2C%20by%20homepage");
+    expect(alt).toContain("Survey design");
   });
 
   it("does not claim the reached-survey number is consent-free", async () => {
@@ -351,8 +372,36 @@ describe("conversion-digest handler", () => {
     const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
     // Degrades to a stated absence, never to a silent omission or a zero.
     expect(blockText(arg.blocks)).toContain("migration has not been applied");
-    // The secondary chart still ships.
-    expect(arg.blocks.filter((b) => (b as { type?: string }).type === "image")).toHaveLength(1);
+    // The other charts still ship: purchases-by-landing-page and the per-axis
+    // A/B chart. One missing source must not take the rest of the digest with it.
+    expect(arg.blocks.filter((b) => (b as { type?: string }).type === "image")).toHaveLength(2);
+  });
+
+  it("keeps the whole message inside Slack's block and size limits with every chart", async () => {
+    // Three images plus their captions. fitBlocks caps at 50 blocks / ~38k
+    // serialized and drops from the TAIL, so an overflow would silently delete
+    // the alerts at the bottom rather than fail — which is why this asserts the
+    // TOTAL rather than the delta from before.
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    expect(arg.blocks.length).toBeLessThanOrEqual(50);
+    expect(JSON.stringify(arg.blocks).length).toBeLessThan(38_000);
+    // Every chart URL independently under Slack's image_url cap.
+    for (const b of arg.blocks) {
+      const url = (b as { image_url?: string }).image_url;
+      if (url) expect(url.length).toBeLessThan(2800);
+    }
+  });
+
+  it("explains an axis it cannot chart instead of silently omitting it", async () => {
+    // Only one arm has data, so nothing can be compared. The digest must say so
+    // rather than leave the reader wondering where the test went.
+    mockFetchAxisFunnelDaily.mockResolvedValue(makeAxisRows().filter((r) => r.arm === "white"));
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    const flat = blockText(arg.blocks);
+    expect(flat).toContain("nothing to compare");
+    expect(flat).toContain("How each A/B test is performing");
   });
 
   it("records the run and 500s when a source throws", async () => {
@@ -628,27 +677,36 @@ describe("conversion-digest alerts", () => {
 describe("conversion-digest chart series", () => {
   it("smooths daily rates over 7 days so one sale cannot dominate the y-scale", () => {
     const funnel = makeFunnel();
-    const series = buildArmSeries(funnel, ["white", "white_prev"]);
+    const series = buildArmSeries(funnel.daily, ["white", "white_prev"], (r) => r.paid);
     expect(series.labels).toHaveLength(30);
     expect(series.first).toHaveLength(30);
     expect(series.last).toHaveLength(30);
-    // Every point is a real percentage.
-    for (const v of [...series.first, ...series.last]) {
+    // The first six days have no full 7-day window behind them, so they are
+    // gaps. Plotting them drew 1- to 6-day rates on a chart whose footnote
+    // promises a trailing one: on the real survey data day one was 7 of 12
+    // finishers = 58% against a true rate of 10-17%, which set the y-scale and
+    // squashed every honest value into the bottom sixth of the plot.
+    expect(series.first.slice(0, 6).every((v) => v === null)).toBe(true);
+    expect(series.last.slice(0, 6).every((v) => v === null)).toBe(true);
+    expect(series.first[6]).not.toBeNull();
+    // Every plotted point is a real percentage.
+    for (const v of [...series.first, ...series.last].slice(6)) {
+      if (v === null) continue;
       expect(v).toBeGreaterThanOrEqual(0);
       expect(v).toBeLessThanOrEqual(100);
     }
     // A trailing window cannot produce the 100% spikes a single-day rate would:
     // 1 paid / 10 completions on its own day would be 10%, but across 7 days of
     // 70 completions it is ~3%.
-    expect(Math.max(...series.first)).toBeLessThan(20);
+    expect(Math.max(...(series.first.filter((v) => v !== null) as number[]))).toBeLessThan(20);
   });
 
   it("returns null, not zero, for days an arm had no traffic", () => {
     // This test previously asserted zeros — encoding the bug. 0% and "not running"
-    // are different facts: the second homepage arm launched mid-window, and
+    // are different facts: the second landing page arm launched mid-window, and
     // filling its earlier days with 0 drew a flat line back to the start of the
     // window and claimed weeks of zero conversion for an arm that did not exist.
-    const series = buildArmSeries(makeFunnel(), ["white", "does_not_exist"]);
+    const series = buildArmSeries(makeFunnel().daily, ["white", "does_not_exist"], (r) => r.paid);
     expect(series.last.every((v) => v === null)).toBe(true);
     expect(series.last.some((v) => v === 0)).toBe(false);
   });
@@ -659,7 +717,7 @@ describe("conversion-digest chart series", () => {
     funnel.daily = funnel.daily.map((r) =>
       r.arm === "white_prev" ? { ...r, paid: 0, charges: 0, revenue: 0 } : r
     );
-    const series = buildArmSeries(funnel, ["white", "white_prev"]);
+    const series = buildArmSeries(funnel.daily, ["white", "white_prev"], (r) => r.paid);
     expect(series.last.some((v) => v === 0)).toBe(true);
     expect(series.last.every((v) => v === null)).toBe(false);
   });

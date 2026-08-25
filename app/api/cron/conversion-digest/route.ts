@@ -23,6 +23,11 @@
  */
 
 import { NextResponse } from "next/server";
+import {
+  buildAxisTrends,
+  rowsForAxis,
+  type AxisFunnelRow,
+} from "@features/attribution/server/axis-trends";
 import logger from "@shared/observability/logger";
 import { notifySlack, escapeSlack, type SlackBlock } from "@shared/observability/slack";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
@@ -57,6 +62,7 @@ import {
   buildFunnel,
   delta,
   fetchArmCohorts,
+  fetchAxisFunnelDaily,
   fetchLandingArmFunnel,
   fetchLandingStartFunnel,
   TINY_ARM,
@@ -151,18 +157,24 @@ function money(amount: number): string {
 }
 
 /**
- * The two-arm trend chart: completion→paid conversion per day for the two live
- * landing arms, on a shared y-scale.
+ * A two-arm trend chart series: a per-day conversion rate for two arms, on a
+ * shared y-scale.
  *
- * Daily rates on a handful of purchases are extremely spiky, so this plots a
- * 7-day trailing rate — a single purchase on a 3-completion day is 33%, which
+ * Daily rates on a handful of conversions are extremely spiky, so this plots a
+ * 7-day TRAILING rate — a single purchase on a 3-completion day is 33%, which
  * would dominate the y-scale and make the chart lie about the trend.
+ *
+ * Generic in the numerator and in the row type, because the same shape draws
+ * four charts now: completion→paid for the landing arms, and completion→checkout
+ * for each of the three live experiment axes. One builder means the trailing
+ * window and the null-gap rule below cannot drift between them.
  */
-export function buildArmSeries(
-  funnel: LandingArmFunnel,
-  arms: [string, string]
+export function buildArmSeries<T extends { arm: string; day: string; completions: number }>(
+  rows: T[],
+  arms: [string, string],
+  numerator: (row: T) => number
 ): { labels: string[]; first: Array<number | null>; last: Array<number | null> } {
-  const days = Array.from(new Set(funnel.daily.map((r) => r.day))).sort();
+  const days = Array.from(new Set(rows.map((r) => r.day))).sort();
   const dayIndex = new Map(days.map((day, i) => [day, i]));
 
   /**
@@ -176,17 +188,29 @@ export function buildArmSeries(
    */
   const rateFor = (arm: string): Array<number | null> =>
     days.map((_, idx) => {
-      const from = Math.max(0, idx - 6);
+      /**
+       * The first six days have no full window behind them, so they are gaps.
+       *
+       * Without this the opening points are 1-, 2-, ... 6-day rates drawn on a
+       * chart whose footnote promises a 7-day trailing one. Measured on the real
+       * survey data, day one was 7 checkouts from 12 finishers = 58%, against a
+       * true trailing rate of 10-17% for the rest of the month — so the warm-up
+       * artefact set the y-scale, squashed every real value into the bottom
+       * sixth of the plot, and drew a dramatic month-long "decline" that was
+       * nothing but the window filling up.
+       */
+      if (idx < 6) return null;
+      const from = idx - 6;
       let completions = 0;
-      let paid = 0;
-      for (const row of funnel.daily) {
+      let converted = 0;
+      for (const row of rows) {
         if (row.arm !== arm) continue;
         const i = dayIndex.get(row.day);
         if (i === undefined || i < from || i > idx) continue;
         completions += row.completions;
-        paid += row.paid;
+        converted += numerator(row);
       }
-      return completions > 0 ? computeRate(paid, completions) : null;
+      return completions > 0 ? computeRate(converted, completions) : null;
     });
 
   return {
@@ -236,6 +260,8 @@ interface DigestInput {
   cohorts: AxisCohort[] | null;
   /** Landing -> survey-start. Null until its migration is applied. */
   startFunnel?: LandingStartFunnel | null;
+  /** Per-day, per-arm rows for every live axis. [] when the RPC is unavailable. */
+  axisRows?: AxisFunnelRow[];
   now: Date;
 }
 
@@ -248,6 +274,7 @@ export interface BuiltDigest {
 export async function buildConversionDigest(input: DigestInput): Promise<BuiltDigest> {
   const { dayKey, funnel, cohorts, now } = input;
   const startFunnel = input.startFunnel ?? null;
+  const axisRows = input.axisRows ?? [];
   const windowLabel = `${WINDOW_DAYS}-day window ending ${dayKey} UTC`;
 
   const verdicts: ArmVerdict[] = [];
@@ -443,7 +470,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
   // ---- Finished survey → paid. Downstream of the landing page. ----
   if (funnel) {
     const liveArms = ["white", "white_prev"] as const;
-    const series = buildArmSeries(funnel, [liveArms[0], liveArms[1]]);
+    const series = buildArmSeries(funnel.daily, [liveArms[0], liveArms[1]], (r) => r.paid);
 
     // An arm with no sales yet plots as a flat line along the bottom, and a flat
     // line against a real curve reads as "this landing page converts at nothing" when
@@ -496,6 +523,52 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
           alt_text: "Conversion rate by landing page arm over the last 30 days",
         });
       }
+    }
+  }
+
+  // ---- One chart per live A/B test ----
+  //
+  // Each axis is gated on its own data (see buildAxisTrends): an axis whose
+  // comparison is too young, or whose smaller arm is too thin, gets a sentence
+  // saying so instead of a line that looks confident over data that cannot
+  // support one. The caption goes ABOVE its image deliberately — fitBlocks drops
+  // from the tail, so a cut can only ever lose the picture and keep the caveat,
+  // never the reverse.
+  {
+    const trends = buildAxisTrends(axisRows, dayKey);
+    if (trends.charted.length > 0 || trends.skipped.length > 0) {
+      blocks.push(section("*How each A/B test is performing*"));
+    }
+    for (const chart of trends.charted) {
+      const series = buildArmSeries(
+        rowsForAxis(axisRows, chart.axis).rows,
+        chart.arms,
+        (r) => r.checkouts
+      );
+      blocks.push(context(chart.caption));
+      if (series.labels.length > 1) {
+        const url = await signedChartUrl({
+          windowLabel,
+          labels: series.labels,
+          first: series.first.map((v) => (v == null ? null : Math.round(v * 10) / 10)),
+          last: series.last.map((v) => (v == null ? null : Math.round(v * 10) / 10)),
+          title: chart.title,
+          legendFirst: chart.legendFirst,
+          legendLast: chart.legendLast,
+          headline: chart.headline,
+          footnote: chart.footnote,
+        });
+        if (url) {
+          blocks.push({
+            type: "image",
+            image_url: url,
+            alt_text: `${chart.axisTitle}: reached-checkout rate per arm over the reporting window`,
+          });
+        }
+      }
+    }
+    for (const gap of trends.skipped) {
+      blocks.push(context(gap.caption));
     }
   }
 
@@ -593,13 +666,21 @@ export async function GET(request: Request) {
 
     const windowStart = new Date(dayStart.getTime() - WINDOW_DAYS * 86_400_000).toISOString();
     const windowEnd = dayStart.toISOString();
-    const [funnel, cohorts, startFunnel] = await Promise.all([
+    const [funnel, cohorts, startFunnel, axisRows] = await Promise.all([
       fetchLandingArmFunnel(windowStart, windowEnd),
       fetchArmCohorts(windowStart, windowEnd),
       fetchLandingStartFunnel(windowStart, windowEnd),
+      fetchAxisFunnelDaily(windowStart, windowEnd),
     ]);
 
-    const digest = await buildConversionDigest({ dayKey, funnel, cohorts, startFunnel, now });
+    const digest = await buildConversionDigest({
+      dayKey,
+      funnel,
+      cohorts,
+      startFunnel,
+      axisRows,
+      now,
+    });
     if (digest.trimmed) {
       logger.warn({ day: dayKey }, "conversion-digest: blocks trimmed to fit Slack");
     }

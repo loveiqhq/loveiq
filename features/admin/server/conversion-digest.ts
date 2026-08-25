@@ -37,6 +37,7 @@ import {
   isKnownArm,
   type ExperimentAxis,
 } from "@features/attribution/server/labels";
+import type { AxisFunnelRow } from "@features/attribution/server/axis-trends";
 import logger from "@shared/observability/logger";
 
 /**
@@ -104,6 +105,54 @@ function str(v: unknown): string {
  * section as "skip", matching the convention in `digest-metrics.ts`: one slow or
  * broken source must not lose the whole digest.
  */
+/**
+ * Per-day, per-arm completions/checkouts/paid for EVERY live axis.
+ *
+ * Returns [] rather than null on any failure, for the same reason every other
+ * fetcher here degrades quietly: one broken source must not lose the whole
+ * digest. An empty array simply means no axis clears its chart gate, and the
+ * digest says so in one line instead of dying.
+ */
+export async function fetchAxisFunnelDaily(
+  sinceIso: string,
+  untilIso: string
+): Promise<AxisFunnelRow[]> {
+  let raw: unknown = null;
+  try {
+    const res = await supabaseFetch("/rest/v1/rpc/get_axis_funnel_daily", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ since_ts: sinceIso, until_ts: untilIso }),
+    });
+    if (!res.ok) {
+      logger.warn({ status: res.status }, "conversion-digest: axis funnel RPC non-2xx");
+      return [];
+    }
+    raw = await res.json();
+  } catch (err) {
+    logger.warn({ err }, "conversion-digest: axis funnel RPC threw");
+    return [];
+  }
+  const out: AxisFunnelRow[] = [];
+  for (const row of Array.isArray(raw) ? raw : []) {
+    if (!row || typeof row !== "object") continue;
+    const r = row as Record<string, unknown>;
+    const axis = str(r.axis);
+    const arm = str(r.arm);
+    const day = str(r.day);
+    if (!axis || !arm || !day) continue;
+    out.push({
+      axis,
+      arm,
+      day,
+      completions: int(r.completions),
+      checkouts: int(r.checkouts),
+      paid: int(r.paid),
+    });
+  }
+  return out;
+}
+
 export async function fetchLandingArmFunnel(
   sinceIso: string,
   untilIso: string
