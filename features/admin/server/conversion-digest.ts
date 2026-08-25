@@ -26,7 +26,11 @@
 
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { computeRate, delta } from "@features/admin/server/digest-metrics";
-import { formatSignalSummary, twoProportionSignal } from "@features/admin/server/statistics";
+import {
+  formatSignalSummary,
+  MIN_CELL_COUNT,
+  twoProportionSignal,
+} from "@features/admin/server/statistics";
 import {
   armLabel,
   AXIS_TITLES,
@@ -237,7 +241,7 @@ export interface LandingStartFunnel {
 }
 
 /**
- * Landing -> survey-start, per day and per arm. The metric a homepage actually
+ * Landing -> survey-start, per day and per arm. The metric a landing page actually
  * controls, unlike finished-survey -> paid.
  *
  * Returns null on any failure INCLUDING the function not existing yet, so the
@@ -375,12 +379,20 @@ export function buildArmVerdict(
 
   // Order matters: the sample-size objections come FIRST, because a p-value
   // computed on a lopsided split is answering a question nobody asked.
-  if (signal.significance === "insufficient-data") {
+  //
+  // There are THREE separate reasons not to decide, and each one names its own
+  // cause. They used to collapse into a single "not enough data" sentence, which
+  // for the real pricing split reported "328 finished surveys so far" and no
+  // shortfall at all — true, and useless, because the actual blocker was ten
+  // purchases between the two arms.
+  const combinedShort = Math.max(0, 50 - (leader.n + runnerUp.n));
+
+  // 1. Too few finished surveys in total.
+  if (combinedShort > 0) {
     // Two gates have to clear, and the SMALL arm is usually the binding one.
     // Reporting only the combined-50 shortfall understated the remaining runway
     // badly: leader 40 / runner-up 5 reads "about 5 more needed" when the small
     // arm actually needs 25.
-    const combinedShort = Math.max(0, 50 - (leader.n + runnerUp.n));
     const smallArmShort = Math.max(0, TINY_ARM - smallest.n);
     const needed = Math.max(combinedShort, smallArmShort);
     const where = smallArmShort >= combinedShort ? ` in ${smallest.label}` : "";
@@ -399,6 +411,20 @@ export function buildArmVerdict(
       axisTitle,
       state: "too-early",
       sentence: `${axisTitle}: too early to compare — ${smallest.label} has only ${smallest.n} finished ${smallest.n === 1 ? "survey" : "surveys"} so far (needs ${TINY_ARM}). Far more people SAW it; this counts the ones who finished.`,
+      arms,
+    };
+  }
+
+  // 3. Plenty of finished surveys in both arms, but too few CONVERSIONS for the
+  //    z-test to be valid. Saying "no clear winner" here would claim we measured
+  //    and found the arms equal, when the truth is the measurement cannot run.
+  if (signal.significance === "insufficient-data") {
+    const totalConversions = leader.conversions + runnerUp.conversions;
+    return {
+      axis,
+      axisTitle,
+      state: "insufficient-data",
+      sentence: `${axisTitle}: not enough purchases yet to compare — only ${totalConversions} across ${leader.n + runnerUp.n} finished surveys. Each side needs at least ${MIN_CELL_COUNT} before a comparison means anything.`,
       arms,
     };
   }
@@ -540,7 +566,7 @@ export function buildAlerts(input: {
       // every single day, and warnings sort above everything actionable. A
       // permanent warning is how the last digest earned itself a mute.
       severity: "info",
-      message: `${ambiguous.n} visits carry a retired homepage label and cannot be attributed to an arm. They ARE counted in the visits totals above — only the per-arm comparison ignores them, and that comparison is built from finished surveys, not from these visit rows. Visits recorded before today's tracking fix stay unattributable.`,
+      message: `${ambiguous.n} visits carry a retired landing page label and cannot be attributed to an arm. They ARE counted in the visits totals above — only the per-arm comparison ignores them, and that comparison is built from finished surveys, not from these visit rows. Visits recorded before today's tracking fix stay unattributable.`,
     });
   }
 
@@ -555,7 +581,7 @@ export function buildAlerts(input: {
       // Standing caveat, same reasoning as above: true every day the test runs.
       severity: "info",
       message:
-        "Homepage arms are not a fair split: returning visitors keep whichever homepage they saw first, so the current design also carries everyone who has been here before. Returning visitors convert BETTER, so treat the current design's number as flattered — an over-estimate, not a floor.",
+        "Landing page arms are not a fair split: returning visitors keep whichever landing page they saw first, so the current design also carries everyone who has been here before. Returning visitors convert BETTER, so treat the current design's number as flattered — an over-estimate, not a floor.",
     });
   }
 

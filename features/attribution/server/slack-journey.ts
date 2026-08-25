@@ -82,11 +82,19 @@ function trafficLine(journey: SubmissionJourney): string {
 /**
  * A one-line progress rail.
  *
- * FILLED means reached. This was INVERTED until 2026-08-24: `:white_circle:`
- * meant done and `:black_circle:` meant not-done, so the solid dot — which every
- * reader takes as "complete" — actually marked the steps that had NOT happened.
- * The message was stating the opposite of the truth in a channel people read to
- * judge how the funnel is doing.
+ * GREEN means reached, RED means not reached yet — the Formula One convention
+ * asked for at the 2026-08-25 strategy meeting, so the rail is readable at a
+ * glance without parsing labels.
+ *
+ * Every step keeps its text label, so colour is never the only channel. That is
+ * deliberate: green/red is the worst possible pair for a colourblind reader, and
+ * the label is what keeps the rail legible for them.
+ *
+ * The pairing was INVERTED until 2026-08-24, when this was blue/hollow:
+ * `:white_circle:` meant done and `:black_circle:` meant not-done, so the solid
+ * dot — which every reader takes as "complete" — actually marked the steps that
+ * had NOT happened. The message stated the opposite of the truth in a channel
+ * people read to judge how the funnel is doing.
  *
  * A later step proves every earlier one: nobody pays without finishing the
  * survey, opening the report and reaching the paywall. That matters because two
@@ -130,7 +138,7 @@ function journeyRail(journey: SubmissionJourney, reachedFloor?: JourneyStep): st
     filled[i] = reached;
   }
   return steps
-    .map(([label], i) => `${filled[i] ? ":large_blue_circle:" : ":white_circle:"} ${label}`)
+    .map(([label], i) => `${filled[i] ? ":large_green_circle:" : ":red_circle:"} ${label}`)
     .join("  \u2192  ");
 }
 
@@ -180,34 +188,32 @@ function describePricingArm(arm: string | null, plan: string | null): string | n
  * keeping.
  */
 function armFields(journey: SubmissionJourney): SlackBlock {
-  const axes: ExperimentAxis[] = ["landing", "survey", "pricing", "paywall"];
+  const axes: ExperimentAxis[] = ["landing", "survey", "pricing"];
   return fields(
-    axes
-      .filter((axis) => axis !== "paywall" || Boolean(journey.arms.paywall))
-      .map((axis) => {
-        // eslint-disable-next-line security/detect-object-injection -- axis is a closed union.
-        const label = armLabel(axis, journey.arms[axis]);
-        let value = label.retired ? `${label.short} _(retired arm)_` : label.short;
-        if (axis === "pricing") {
-          // Which SIDE of the price test they were on, in words plus the two
-          // numbers — the thing you actually want to know from one of these pings.
-          const side = describePricingArm(journey.arms.pricing, journey.money?.plan ?? null);
-          if (side) {
-            value = `${value} — ${side}`;
-          } else if (!journey.arms.pricing) {
-            // "Not recorded" read like a failure. The arm genuinely does not exist
-            // yet at submit time: it is stamped on the price quote, and no quote is
-            // created until the reader first opens their report. Saying which
-            // explains why the row is blank and that it will fill itself in.
-            value = "Not priced yet — set when they first open their report";
-          }
+    axes.map((axis) => {
+      // eslint-disable-next-line security/detect-object-injection -- axis is a closed union.
+      const label = armLabel(axis, journey.arms[axis]);
+      let value = label.retired ? `${label.short} _(retired arm)_` : label.short;
+      if (axis === "pricing") {
+        // Which SIDE of the price test they were on, in words plus the two
+        // numbers — the thing you actually want to know from one of these pings.
+        const side = describePricingArm(journey.arms.pricing, journey.money?.plan ?? null);
+        if (side) {
+          value = `${value} — ${side}`;
+        } else if (!journey.arms.pricing) {
+          // "Not recorded" read like a failure. The arm genuinely does not exist
+          // yet at submit time: it is stamped on the price quote, and no quote is
+          // created until the reader first opens their report. Saying which
+          // explains why the row is blank and that it will fill itself in.
+          value = "Not priced yet — set when they first open their report";
         }
-        return {
-          // eslint-disable-next-line security/detect-object-injection -- axis is a closed union.
-          label: AXIS_TITLES[axis],
-          value,
-        };
-      })
+      }
+      return {
+        // eslint-disable-next-line security/detect-object-injection -- axis is a closed union.
+        label: AXIS_TITLES[axis],
+        value,
+      };
+    })
   );
 }
 
@@ -263,7 +269,15 @@ export function buildJourneyMessage(
     );
   } else {
     text = `:memo: Survey completed #${journey.submissionId} — ${name} (${email}) — ${options.questionCount} questions${surveyTime ? ` in ${surveyTime}` : ""}`;
-    blocks.push(header(`📝 Survey completed — ${journey.firstName ?? "anonymous"}`));
+    // The time goes in the HEADER, not a field row: it is the number the team
+    // scans for first, and as a field it was the least prominent thing here while
+    // also being duplicated in the context line below. Header text renders
+    // largest, so this is the one place it cannot be missed.
+    blocks.push(
+      header(
+        `📝 Survey completed — ${journey.firstName ?? "anonymous"}${surveyTime ? ` · ${surveyTime}` : ""}`
+      )
+    );
     blocks.push(
       context(
         `*${name}* (${email}) · submission #${journey.submissionId} · ${options.questionCount} questions${surveyTime ? ` in ${surveyTime}` : ""}`
@@ -278,25 +292,16 @@ export function buildJourneyMessage(
     { label: "Came from", value: trafficLine(journey) },
   ];
   if (journey.device) whereRows.push({ label: "Device", value: escapeSlack(journey.device) });
-  // The real country, not the pricing band. Both are self-reported (the visitor's
-  // own country answer, falling back to their profile) — but the band was all
-  // this used to show, so "tier_1" appeared where "Germany" was already known.
-  // The band rides along in parentheses because it is what the price keys off.
-  //
-  // codeSpan, not escapeSlack: Slack mrkdwn has no reliable backslash escape, so
-  // escaping the underscore rendered a literal "tier\_1" on screen — the same
-  // bug the masked email hit.
-  if (journey.country || journey.countryTier) {
-    const band = journey.countryTier ? ` (${codeSpan(journey.countryTier)})` : "";
+  // The country only — never the pricing band. The band is an internal key
+  // ("tier_1"), and showing it was the whole reason this row read as broken to
+  // the team. If the country is unknown the row is omitted rather than falling
+  // back to the band, because a band is not an answer to "where are they from".
+  if (journey.country) {
     whereRows.push({
       label: "Country (self-reported)",
-      value: journey.country
-        ? `${escapeSlack(journey.country)}${band}`
-        : codeSpan(journey.countryTier!),
+      value: escapeSlack(journey.country),
     });
   }
-  if (surveyTime) whereRows.push({ label: "Time on survey", value: surveyTime });
-
   const toPurchase = formatDuration(journey.timings.msToPurchase);
   if (toPurchase) whereRows.push({ label: "Bought after finishing", value: toPurchase });
   const hesitation = formatDuration(journey.timings.msCheckoutHesitation);

@@ -178,7 +178,7 @@ describe("GET /api/admin/ab-overview", () => {
   it("labels every arm in plain English and never leaks a raw code", async () => {
     routeData([submission(1, "white_prev", "dark")], [quote(1, "B", false)]);
     const text = JSON.stringify(await (await GET(req())).json());
-    expect(text).toContain("Previous homepage");
+    expect(text).toContain("Landing page B (previous design)");
     expect(text).toContain("Dark survey");
     // the raw code may appear as the `arm` key, but never inside a human label
     const body = JSON.parse(text);

@@ -39,6 +39,13 @@ function normalCdf(z: number) {
   return 0.5 * (1 + erf(z / Math.SQRT2));
 }
 
+/**
+ * The normal approximation needs at least this many successes AND this many
+ * failures in every cell before its p-value and interval mean anything. Exported
+ * so a caller explaining WHY it refused to judge quotes the same number.
+ */
+export const MIN_CELL_COUNT = 5;
+
 export function twoProportionSignal(
   controlSampleSize: number,
   controlSuccessCount: number,
@@ -82,7 +89,22 @@ export function twoProportionSignal(
   const ciHigh = unpooledSe > 0 ? (variantRate - controlRate + 1.96 * unpooledSe) * 100 : null;
 
   let significance: StatisticalSignificance = "inconclusive";
-  if (controlSampleSize + variantSampleSize < 50) {
+  // Two floors, because the sample-size one alone was not enough.
+  //
+  // The normal approximation this function just ran needs at least ~5 successes
+  // AND ~5 failures in EVERY cell; below that the p-value and the interval are
+  // decoration. Counting only denominators let the report purchases split
+  // (5/145 vs 4/187, n = 332) sail through as "inconclusive" with a printed
+  // p-value and CI — so a reader saw a delta and an interval and concluded
+  // "measured, no winner" when the honest answer is "cannot be measured yet".
+  // That is exactly how someone decides an A/B test off nine payments.
+  const minCell = Math.min(
+    controlSuccessCount,
+    controlSampleSize - controlSuccessCount,
+    variantSuccessCount,
+    variantSampleSize - variantSuccessCount
+  );
+  if (controlSampleSize + variantSampleSize < 50 || minCell < MIN_CELL_COUNT) {
     significance = "insufficient-data";
   } else if (pValue != null && pValue < 0.05) {
     significance = delta >= 0 ? "significant-lift" : "significant-regression";

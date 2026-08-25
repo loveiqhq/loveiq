@@ -443,10 +443,34 @@ describe("conversion-digest verdicts", () => {
     expect(verdict.sentence).toContain("28 more");
   });
 
-  it("reports a close race as no winner rather than picking the leader", () => {
+  it("blames the conversion count, not the survey count, when purchases are the blocker", () => {
+    // The real pricing split, 30 days to 2026-08-25. 328 finished surveys is
+    // plenty; TEN purchases between them is not. This used to say "no clear
+    // winner", which claims we measured the two arms and found them equal — but
+    // the z-test's normal approximation is not even valid at 3 successes, so
+    // nothing was measured. It must say which number is missing.
     const verdict = buildArmVerdict("pricing", [
       { arm: "A", n: 165, conversions: 3 },
       { arm: "B", n: 163, conversions: 7 },
+    ]);
+    expect(verdict.state).toBe("insufficient-data");
+    expect(verdict.sentence).toContain("not enough purchases");
+    expect(verdict.sentence).toContain("10");
+    expect(verdict.sentence).toContain("328");
+    // The two wrong answers: a winner, or a measured dead heat.
+    expect(verdict.sentence).not.toContain("no clear winner");
+    expect(verdict.sentence).not.toContain("ahead");
+    // And it must not blame the survey count, which is not short.
+    expect(verdict.sentence).not.toContain("more needed");
+  });
+
+  it("reports a close race as no winner once both arms have enough conversions", () => {
+    // Same shape, but with conversions above the validity floor on both sides —
+    // so the comparison genuinely runs and genuinely finds no winner. Keeps the
+    // no-winner branch covered now that thin data no longer reaches it.
+    const verdict = buildArmVerdict("pricing", [
+      { arm: "A", n: 165, conversions: 20 },
+      { arm: "B", n: 163, conversions: 24 },
     ]);
     expect(verdict.state).toBe("no-winner");
     expect(verdict.sentence).toContain("no clear winner");
@@ -458,7 +482,7 @@ describe("conversion-digest verdicts", () => {
       // `control` is the retired dark landing — nobody has been served it for months.
       { arm: "control", n: 800, conversions: 40 },
     ]);
-    expect(verdict.arms.map((a) => a.label)).toEqual(["Current homepage"]);
+    expect(verdict.arms.map((a) => a.label)).toEqual(["Landing page A (current design)"]);
     expect(verdict.state).toBe("single-arm");
     expect(verdict.sentence).toContain("nothing to compare");
   });
@@ -526,7 +550,7 @@ describe("conversion-digest alerts", () => {
     const alerts = buildAlerts({ ...base, visitorArms: [{ arm: "control", n: 269 }] });
     const message = alerts.map((a) => a.message).join(" ");
     expect(message).toContain("269");
-    expect(message).toContain("retired homepage label");
+    expect(message).toContain("retired landing page label");
     // It used to say these visits were "left out of the comparison above" — they
     // are in fact COUNTED in the visits totals; only the per-arm comparison
     // ignores them, and that is built from finished surveys, not visit rows.

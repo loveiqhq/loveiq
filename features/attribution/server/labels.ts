@@ -4,7 +4,7 @@
  * Both the Slack notifications and the /admin dashboard render arms through
  * these helpers, so the two surfaces can never disagree about what an arm is
  * called. The audience is non-technical: nobody reading a Slack message should
- * have to know that `white_prev` means the pre-rebuild homepage.
+ * have to know that `white_prev` means the pre-rebuild landing page.
  *
  * Read the RAW stored value. Three existing helpers in this repo
  * (`recordVisit.ts`, the admin explorer, and the `get_landing_variant_funnel`
@@ -18,9 +18,9 @@
 export type ExperimentAxis = "landing" | "survey" | "pricing" | "paywall";
 
 export interface ArmLabel {
-  /** Short name for a chart axis or a table cell, e.g. "Current homepage". */
+  /** Short name for a chart axis or a table cell, e.g. "Landing page A (current design)". */
   short: string;
-  /** Sentence for Slack, e.g. "Homepage: current design". */
+  /** Sentence for Slack, e.g. "Landing page A: the current design". */
   long: string;
   /** Set when the arm is no longer being assigned to new visitors. */
   retired?: boolean;
@@ -39,13 +39,24 @@ const UNKNOWN: ArmLabel = {
  */
 const LABELS: Record<ExperimentAxis, Record<string, ArmLabel>> = {
   landing: {
-    white: { short: "Current homepage", long: "Homepage: current design" },
-    white_prev: { short: "Previous homepage", long: "Homepage: previous design" },
-    // Round-1 dark landing. Never assigned since 2026-08-21, but ~5% of stored
+    // The A/B letter carries the identity and the parenthetical says which is
+    // which, so "variant A" in a meeting and "Landing page A" in Slack are
+    // unambiguously the same thing. Parentheses rather than a dash because these
+    // strings are interpolated into whole sentences in the digest, where a second
+    // dash reads as a break in the sentence.
+    white: {
+      short: "Landing page A (current design)",
+      long: "Landing page A: the current design",
+    },
+    white_prev: {
+      short: "Landing page B (previous design)",
+      long: "Landing page B: the design it replaced",
+    },
+    // Round-1 dark landing page. Never assigned since 2026-08-21, but ~5% of stored
     // submissions still carry it, so it needs a truthful label of its own.
     control: {
-      short: "Original dark homepage",
-      long: "Homepage: original dark design",
+      short: "Original dark landing page",
+      long: "Landing page: the original dark design",
       retired: true,
     },
   },
@@ -95,7 +106,7 @@ export function isKnownArm(axis: ExperimentAxis, arm: string | null | undefined)
 
 /** Human name for the experiment itself, for chart titles and Slack section headings. */
 export const AXIS_TITLES: Record<ExperimentAxis, string> = {
-  landing: "Homepage design",
+  landing: "Landing page design",
   survey: "Survey design",
   pricing: "Report pricing",
   paywall: "Paywall style",

@@ -1016,8 +1016,12 @@ describe("checkout fulfillment", () => {
       expect(all).toContain("Referral");
       // utm values are escaped for Slack (underscore → \_ so it isn't italicised).
       expect(all).toContain("referral / email / survey\\_invite");
-      expect(all).toContain("Forced paywall");
-      expect(all).toContain("Current homepage");
+      // The paywall arm is no longer listed: that experiment concluded, so
+      // presenting it as one the buyer "was in" was wrong. It is still stored
+      // and still shown in /admin's concluded section.
+      expect(all).not.toContain("Forced paywall");
+      expect(all).not.toContain("Paywall style");
+      expect(all).toContain("Landing page A (current design)");
       // utm_content (base64 referrer email) must never reach Slack — in the
       // fallback text OR in any block.
       expect(all).not.toContain("cmVmZXJyZXJAZXhhbXBsZS5jb20=");
@@ -1059,12 +1063,12 @@ describe("checkout fulfillment", () => {
       expect(slackCalls).toHaveLength(1);
       const all = rendered(slackCalls[0]!.body);
       expect(all).toContain("Organic");
-      expect(all).toContain("Dismissible paywall");
+      expect(all).not.toContain("Dismissible paywall");
       // landingVariant "control" is the RETIRED round-1 dark arm and must be
       // labelled as itself — not conflated with the round-2 "previous design".
-      expect(all).toContain("Original dark homepage");
+      expect(all).toContain("Original dark landing page");
       expect(all).toContain("retired arm");
-      expect(all).not.toContain("Previous homepage");
+      expect(all).not.toContain("Landing page B (previous design)");
 
       delete process.env.SLACK_PAYMENTS_WEBHOOK_URL;
     });

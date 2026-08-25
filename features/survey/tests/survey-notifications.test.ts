@@ -213,10 +213,12 @@ describe("POST /api/survey notifications", () => {
     expect(flat).toContain("`a***@example.com`");
     expect(flat).not.toContain("ada@example.com");
     // all four arms, in plain English — never the raw codes
-    expect(flat).toContain("Previous homepage");
+    expect(flat).toContain("Landing page B (previous design)");
     expect(flat).toContain("Dark survey");
     expect(flat).toContain("Pricing B");
-    expect(flat).toContain("Forced paywall");
+    // The concluded paywall experiment is no longer listed as one they were in.
+    expect(flat).not.toContain("Forced paywall");
+    expect(flat).not.toContain("Paywall style");
     expect(flat).not.toContain("white_prev");
 
     expect(mockLogger.info).toHaveBeenCalledWith(

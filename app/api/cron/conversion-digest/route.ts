@@ -169,7 +169,7 @@ export function buildArmSeries(
    * A day with NO finishers in the arm's trailing window returns null, not 0.
    *
    * Zero and "not running" are different facts and the chart cannot say so if
-   * they share a value. The second homepage arm only began on 2026-08-21, so
+   * they share a value. The second landing page arm only began on 2026-08-21, so
    * filling its earlier days with 0% drew a flat line a month long and claimed a
    * month of zero conversion for an arm that did not exist — which is exactly
    * how the first version read.
@@ -364,22 +364,22 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
 
   // ---- Visits → reached the survey. NOT arm-comparable yet. ----
   //
-  // The intent is right: a homepage decides whether a visitor starts a survey,
+  // The intent is right: a landing page decides whether a visitor starts a survey,
   // which finished→paid (below) cannot measure. The INSTRUMENTATION is not there
   // yet, and an audit found three reasons the two arms are not measuring the same
   // thing. Until they are fixed this is a trend line for the site, not a verdict
-  // on a homepage, and it is titled and captioned to say so.
+  // on a landing page, and it is titled and captioned to say so.
   //
   //  1. The numerator is a different funnel step per arm. `survey_engine_mount`
-  //     fires when the survey ENGINE mounts. The current homepage has an inline
+  //     fires when the survey ENGINE mounts. The current landing page has an inline
   //     first question (white/WQuestionCard.tsx) whose answer is written to the
   //     survey's localStorage, and SurveyPage.loadInitialStep() then skips
   //     straight to the engine ("If localStorage has answers, skip to engine").
-  //     The previous homepage has no such component, so its visitors reach the
+  //     The previous landing page has no such component, so its visitors reach the
   //     engine only after four wizard slides and a consent screen. Same event
   //     name, different step — worth roughly a third in relative terms at
   //     plausible survival rates, from instrumentation alone.
-  //  2. The denominator is every public page, not the homepage. shouldCountVisit
+  //  2. The denominator is every public page, not the landing page. shouldCountVisit
   //     excludes only /api, /admin, /_next and /login, so /glossary/*,
   //     /report/<token> and the legal pages all count — credited to whatever arm
   //     the visitor's year-old cookie holds. A report buyer re-reading their
@@ -392,7 +392,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
   //     server-side with a throwaway id and no consent check.
   //
   // The fix is one arm-symmetric, path-scoped, server-side event pair; it needs
-  // RSC-navigation detection in middleware, because both homepages link to
+  // RSC-navigation detection in middleware, because both landing pages link to
   // /survey with next/link and that is not a document request.
   if (startFunnel) {
     const liveArms = ["white", "white_prev"] as const;
@@ -421,32 +421,32 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
         // per-person rate — and per-arm recording only began 2026-08-25, so
         // earlier days are absent rather than zero.
         footnote:
-          "reached-survey ÷ ALL-PAGE visit-days, 7-day trailing · the arms are NOT measuring the same step: the current homepage's inline question skips its visitors straight to the survey engine · the denominator counts every page, so re-reading a report penalises the arm that sold it · the numerator needs analytics consent, the denominator does not · per-arm recording began 25 Aug · peak {peak}%",
+          "reached-survey ÷ ALL-PAGE visit-days, 7-day trailing · the arms are NOT measuring the same step: the current landing page's inline question skips its visitors straight to the survey engine · the denominator counts every page, so re-reading a report penalises the arm that sold it · the numerator needs analytics consent, the denominator does not · per-arm recording began 25 Aug · peak {peak}%",
       });
       if (url) {
         blocks.push({
           type: "image",
           image_url: url,
           alt_text:
-            "Site visit-days to reached-survey rate, by homepage arm. Not comparable between arms yet — the two arms measure different funnel steps.",
+            "Site visit-days to reached-survey rate, by landing page arm. Not comparable between arms yet — the two arms measure different funnel steps.",
         });
       }
     }
   } else {
     blocks.push(
       context(
-        "_Visits → survey-started by homepage is not available yet — its migration has not been applied._"
+        "_Visits → survey-started by landing page is not available yet — its migration has not been applied._"
       )
     );
   }
 
-  // ---- Finished survey → paid. Downstream of the homepage. ----
+  // ---- Finished survey → paid. Downstream of the landing page. ----
   if (funnel) {
     const liveArms = ["white", "white_prev"] as const;
     const series = buildArmSeries(funnel, [liveArms[0], liveArms[1]]);
 
     // An arm with no sales yet plots as a flat line along the bottom, and a flat
-    // line against a real curve reads as "this homepage converts at nothing" when
+    // line against a real curve reads as "this landing page converts at nothing" when
     // the truth is "13 people, far too few to say". Hiding the chart until both
     // arms have a sale would cost weeks of the other arm's trend, so the sample
     // sizes go in the HEADLINE instead and the flat line explains itself.
@@ -476,7 +476,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
         // null survives to the renderer as a genuine gap in the line.
         first: series.first.map((v) => (v == null ? null : Math.round(v * 10) / 10)),
         last: series.last.map((v) => (v == null ? null : Math.round(v * 10) / 10)),
-        title: "Purchases per finished survey, by homepage",
+        title: "Purchases per finished survey, by landing page",
         legendFirst: armLabel("landing", liveArms[0]).short,
         legendLast: armLabel("landing", liveArms[1]).short,
         headline,
@@ -493,7 +493,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
         blocks.push({
           type: "image",
           image_url: url,
-          alt_text: "Conversion rate by homepage arm over the last 30 days",
+          alt_text: "Conversion rate by landing page arm over the last 30 days",
         });
       }
     }
