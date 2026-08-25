@@ -192,11 +192,19 @@ describe("locked preview images", () => {
     expect(body).not.toContain("transform: translateY(-50%)");
   });
 
-  it("keeps the confidence sub-headline out of the locked view", () => {
-    // "Your Sexual Confidence" sat ABOVE the raster in both states, and the raster —
-    // a capture of the paid card — contains its own blurred copy of that same line, so
-    // a locked reader saw it twice: sharp, then blurred (MO, 2026-08-21, the last of
-    // these). Every other chapter already renders its eyebrow in the paid arm only.
+  it("has no confidence sub-headline in either view", () => {
+    // History: "Your Sexual Confidence" sat ABOVE the raster in both states, and the
+    // raster — a capture of the paid card — carries its own blurred copy of the line,
+    // so a locked reader saw it twice, sharp then blurred (MO, 2026-08-21). It was
+    // moved into the paid arm only. On 2026-08-25 it was dropped altogether: the
+    // chapter heading names it and the result word below is unmissable.
+    //
+    // ⚠️ THE RASTERS STILL SHOW IT. `public/report-previews/confidence_level-*.jpg`
+    // was captured from the paid card while the eyebrow was still there, so a LOCKED
+    // reader currently sees a heading the paid chapter no longer has — and the result
+    // word in the old archetype accent rather than grey. Regenerating needs a dev
+    // server pointed at real data (`npm run dev` + `npm run previews:generate`), which
+    // is why it is recorded here rather than done: whoever can run it should.
     const src = readFileSync(
       join(process.cwd(), "features/report/ui/sections/ConfidenceSection.tsx"),
       "utf8"
@@ -204,11 +212,9 @@ describe("locked preview images", () => {
     const card = src.slice(src.indexOf('<article className="report-confidence__card">'));
     const lockedArm = card.slice(card.indexOf("{locked ? ("), card.indexOf(") : ("));
     expect(lockedArm).toContain("LockedPreviewImage");
-    expect(lockedArm).not.toContain("report-confidence__eyebrow");
-    // ...and the paid arm still has it.
-    expect(card.slice(card.indexOf(") : ("))).toContain(
-      'report-confidence__eyebrow">Your Sexual Confidence'
-    );
+    // Neither arm renders it now. Re-adding it to the paid arm without recapturing
+    // the raster is what put the line on screen twice the first time.
+    expect(card).not.toContain("report-confidence__eyebrow");
   });
 
   it("starts every reveal before capturing, wherever it sits in the card", () => {
