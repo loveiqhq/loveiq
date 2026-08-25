@@ -34,8 +34,6 @@ interface Props {
   ranking: string[];
   /** Match percentage per archetype name (0-100). */
   percentages: Record<string, number>;
-  /** Per-archetype motto, keyed by name; null when copy is absent. */
-  mottos: Record<string, string | null>;
 }
 
 type CssVarStyle = CSSProperties & Record<`--${string}`, string | number>;
@@ -67,7 +65,7 @@ function hexToRgbTriplet(hex: string): string {
   return `${(n >> 16) & 255} ${(n >> 8) & 255} ${n & 255}`;
 }
 
-const ArchetypeBlendSection: FC<Props> = ({ ranking, percentages, mottos }) => {
+const ArchetypeBlendSection: FC<Props> = ({ ranking, percentages }) => {
   // Before the early return — a hook may not be conditional.
   const [listRef, revealed] = useRevealOnView<HTMLOListElement>();
 
@@ -91,10 +89,7 @@ const ArchetypeBlendSection: FC<Props> = ({ ranking, percentages, mottos }) => {
           nobody is a single clean pattern, and which one leads depends on who you are with, how
           safe you feel, and what your body needs at the time.
         </p>
-        <p>
-          The percentages show how well each pattern fits your answers. They are{" "}
-          <strong>not scores</strong>, and there is nothing to pass.
-        </p>
+        <p>The percentages show how well each personality fits your answers.</p>
       </div>
 
       <section className="report-blend__card" aria-label="Your three strongest archetypes">
@@ -108,7 +103,6 @@ const ArchetypeBlendSection: FC<Props> = ({ ranking, percentages, mottos }) => {
             const theme = getReportTheme(name);
             const Icon = theme.Icon;
             const pct = percentages[name] ?? 0;
-            const motto = mottos[name] ?? null;
             const blurb = archetypeBlurbs[archetypeSlug(name) as Report2CopySlug] ?? null;
             const rowStyle: CssVarStyle = {
               "--accent": theme.accent,
@@ -127,11 +121,13 @@ const ArchetypeBlendSection: FC<Props> = ({ ranking, percentages, mottos }) => {
                   <Icon className="report-blend__icon-glyph" />
                 </span>
 
+                {/* Name then description. The motto used to sit between them and was
+                    cut on 2026-08-25: it is evocative rather than descriptive, so once
+                    the blurb below said what the pattern actually is, the quote was a
+                    second voice in a row that only needs one. The fourteen-row
+                    ConstellationSection still carries the mottos. */}
                 <div className="report-blend__nametag">
                   <h3 className="report-blend__name">{name}</h3>
-                  {motto ? <p className="report-blend__motto">{motto}</p> : null}
-                  {/* The motto is evocative, not descriptive, so on its own the row
-                      never says what the pattern actually is. */}
                   {blurb ? <p className="report-blend__blurb">{blurb}</p> : null}
                 </div>
 

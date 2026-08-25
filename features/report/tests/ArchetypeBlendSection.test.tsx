@@ -32,13 +32,11 @@ function pcts(spread: number): Record<string, number> {
   return out;
 }
 
-const MOTTOS = Object.fromEntries(ALL_14.map((n) => [n, `"${n} motto."`]));
-
 afterEach(cleanup);
 
 describe("ArchetypeBlendSection", () => {
   it("shows only the top three of the fourteen", () => {
-    render(<ArchetypeBlendSection ranking={ALL_14} percentages={pcts(20)} mottos={MOTTOS} />);
+    render(<ArchetypeBlendSection ranking={ALL_14} percentages={pcts(20)} />);
 
     for (const name of ALL_14.slice(0, 3)) {
       expect(screen.getByRole("heading", { name })).toBeTruthy();
@@ -52,7 +50,7 @@ describe("ArchetypeBlendSection", () => {
   });
 
   it("renders each match percentage, so the hero's number has a reference", () => {
-    render(<ArchetypeBlendSection ranking={ALL_14} percentages={pcts(20)} mottos={MOTTOS} />);
+    render(<ArchetypeBlendSection ranking={ALL_14} percentages={pcts(20)} />);
     // The whole reason this block exists: an unattributed "71%" in the hero.
     expect(screen.getByText("70.0%")).toBeTruthy();
     expect(screen.getByText("60.0%")).toBeTruthy();
@@ -60,7 +58,7 @@ describe("ArchetypeBlendSection", () => {
   });
 
   it("describes each of the three, not just names it", () => {
-    render(<ArchetypeBlendSection ranking={ALL_14} percentages={pcts(20)} mottos={MOTTOS} />);
+    render(<ArchetypeBlendSection ranking={ALL_14} percentages={pcts(20)} />);
     // The motto is evocative, not descriptive; the blurb is what says what the
     // pattern actually is. All three rows carry one.
     const blurbs = document.querySelectorAll(".report-blend__blurb");
@@ -71,9 +69,7 @@ describe("ArchetypeBlendSection", () => {
   it("ends on the ranked card, with no closing paragraph", () => {
     // The "the chapters ahead read X in depth" handoff was cut on 2026-08-25.
     // It is the block most likely to come back by reflex, so this pins it.
-    const { container } = render(
-      <ArchetypeBlendSection ranking={ALL_14} percentages={pcts(20)} mottos={MOTTOS} />
-    );
+    const { container } = render(<ArchetypeBlendSection ranking={ALL_14} percentages={pcts(20)} />);
     expect(container.querySelector(".report-blend__handoff")).toBeNull();
     expect(container.textContent).not.toContain("chapters ahead");
     expect(container.querySelector(".report-blend")!.lastElementChild!.className).toContain(
@@ -81,23 +77,22 @@ describe("ArchetypeBlendSection", () => {
     );
   });
 
-  it("says the percentages are not scores", () => {
-    render(<ArchetypeBlendSection ranking={ALL_14} percentages={pcts(20)} mottos={MOTTOS} />);
-    const intro = document.querySelector(".report-blend__intro");
-    expect(intro?.textContent).toContain("not scores");
-    expect(intro?.textContent).toContain("nothing to pass");
+  it("explains the percentages without grading language", () => {
+    render(<ArchetypeBlendSection ranking={ALL_14} percentages={pcts(20)} />);
+    const intro = document.querySelector(".report-blend__intro")!.textContent!;
+    expect(intro).toContain("how well each personality fits your answers");
+    // "scores" and "pass or fail" invite exactly the reading this block exists
+    // to prevent, so naming them at all was doing more harm than good.
+    expect(intro).not.toMatch(/\bscores?\b/i);
+    expect(intro).not.toMatch(/\bpass\b/i);
   });
 
-  it("renders a row without a motto rather than dropping it", () => {
-    render(
-      <ArchetypeBlendSection
-        ranking={ALL_14}
-        percentages={pcts(20)}
-        mottos={{ ...MOTTOS, "Tender Devotee": null }}
-      />
-    );
-    expect(screen.getAllByRole("progressbar")).toHaveLength(3);
-    expect(screen.getByRole("heading", { name: "Tender Devotee" })).toBeTruthy();
+  it("carries no motto quotes", () => {
+    // Cut on 2026-08-25: the blurb says what the pattern is, so the quote was a
+    // second voice in a row that only needs one. The fourteen-row
+    // ConstellationSection still shows them.
+    const { container } = render(<ArchetypeBlendSection ranking={ALL_14} percentages={pcts(20)} />);
+    expect(container.querySelector(".report-blend__motto")).toBeNull();
   });
 
   it("renders nothing without a ranking", () => {

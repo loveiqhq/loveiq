@@ -944,11 +944,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                 title=""
                 feedbackWidget={renderFeedback("blend", "You're a constellation, not a type")}
               >
-                <ArchetypeBlendSection
-                  ranking={ranking}
-                  percentages={percentages}
-                  mottos={constellationMottos}
-                />
+                <ArchetypeBlendSection ranking={ranking} percentages={percentages} />
               </ReportSection>
               {resolvedSections.map((section) => {
                 const partDivider = REPORT_PART_DIVIDER_BY_SECTION[section.id];

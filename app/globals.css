@@ -8775,6 +8775,10 @@ input.autofill-dark:-internal-autofill-previewed {
    Sans against the serif value above it, so the two read as label and gloss
    rather than as two competing headlines. */
 .report-hero-card__motivation-sub {
+  /* The gloss carries a literal \n between its two sentences (see
+     `heroMotivationSubtexts`); without pre-line HTML collapses it to a space
+     and the two run together. */
+  white-space: pre-line;
   margin: 0;
   max-width: 32rem;
   color: #3f3a4d;
@@ -16069,6 +16073,9 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 .report-blend__heading {
+  /* Centred on request (2026-08-25). The prose and the card under it stay left
+     aligned — the headline is the only element treated as a title here. */
+  text-align: center;
   margin: 0 0 clamp(14px, 1.7vw, 20px);
   color: #161021;
   font-family: var(--font-serif);
@@ -16160,10 +16167,28 @@ input.autofill-dark:-internal-autofill-previewed {
 
 /* The reader's own row. The fourteen-row section deliberately does NOT mark it
    (it is simply first), but here the whole point is "these three are all you",
-   so rank 1 gets a faint accent wash to say which one the next chapters speak
-   in. */
+   so rank 1 is marked as the one the next chapters speak in.
+   Strengthened on 2026-08-25: a 0.05 wash was too faint to read as a highlight
+   at all, so it now takes a deeper wash, its accent's own border and a soft
+   lift, and its rank and name step up a size. Everything keys off the
+   archetype's accent, so it stays correct for all fourteen. */
 .report-blend__row:first-child {
-  background: rgb(var(--accent-rgb, 139 92 246) / 0.05);
+  background: rgb(var(--accent-rgb, 139 92 246) / 0.1);
+  border: 1px solid rgb(var(--accent-rgb, 139 92 246) / 0.38);
+  box-shadow: 0 8px 22px -14px rgb(var(--accent-rgb, 139 92 246) / 0.65);
+}
+
+.report-blend__row:first-child .report-blend__rank {
+  color: rgb(var(--report-accent-ink-rgb, var(--accent-rgb, 139 92 246)));
+  font-weight: 500;
+}
+
+.report-blend__row:first-child .report-blend__name {
+  font-size: clamp(1.125rem, 1.7vw, 1.4rem);
+}
+
+.report-blend__row:first-child .report-blend__pct {
+  font-weight: 700;
 }
 
 .report-blend__rank {
@@ -16213,21 +16238,11 @@ input.autofill-dark:-internal-autofill-previewed {
   line-height: 1.125;
 }
 
-.report-blend__motto {
-  margin: 0;
-  max-width: 384px;
-  color: #191a1b;
-  font-family: var(--font-sans);
-  font-weight: 400;
-  font-size: 0.6875rem;
-  line-height: 1.45;
-}
-
 /* What the pattern actually is, under the motto (2026-08-25). Sized between the
    motto and the row name so the three rows can be compared at a glance without
    the block turning into a paragraph. */
 .report-blend__blurb {
-  margin: 4px 0 0;
+  margin: 5px 0 0;
   max-width: 34rem;
   color: rgba(63, 58, 77, 0.85);
   font-family: var(--font-sans);
@@ -16291,7 +16306,6 @@ input.autofill-dark:-internal-autofill-previewed {
     grid-template-columns: auto auto minmax(0, 1fr) auto;
     grid-template-areas:
       "rank icon name name"
-      "motto motto motto motto"
       "blurb blurb blurb blurb"
       "bar bar bar pct";
     row-gap: 6px;
@@ -16309,11 +16323,6 @@ input.autofill-dark:-internal-autofill-previewed {
 
   .report-blend__name {
     grid-area: name;
-  }
-
-  .report-blend__motto {
-    grid-area: motto;
-    max-width: none;
   }
 
   .report-blend__blurb {

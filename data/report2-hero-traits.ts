@@ -167,48 +167,53 @@ export const heroTraitSubtexts: Partial<Record<Report2CopySlug, HeroTraitSubtext
  * Rendered only when present, so a missing entry drops the line rather than
  * showing something invented. Longer than the trait subtexts on purpose (a full
  * sentence, not a fragment): this is the line that has to earn the word above it.
+ *
+ * Each entry is TWO sentences separated by a literal newline (2026-08-25): the
+ * claim, then what follows from it, on its own line. The break only survives
+ * because `.report-hero-card__motivation-sub` sets `white-space: pre-line` —
+ * drop that and the two sentences run together.
  */
 export const heroMotivationSubtexts: Partial<Record<Report2CopySlug, string>> = {
   // Meaning
   "spiritual-lover":
-    "sex is where you go to be known, not to be entertained. Anything that stays on the surface reads as a waste of the moment.",
+    "sex is where you go to be known, not to be entertained.\nAnything that stays on the surface reads as a waste of the moment.",
   // Pleasure & play
   "spark-seeker":
-    "you are in it for the aliveness, not the milestone. The moment it starts feeling like a duty, the whole thing loses its point.",
+    "you are in it for the aliveness, not the milestone.\nThe moment it starts feeling like a duty, the whole thing loses its point.",
   // Intimacy & bonding
   "sensual-connector":
-    "sex is how the bond gets renewed. It is less about what happens and more about whether you both came back to each other.",
+    "sex is how the bond gets renewed.\nIt is less about what happens and more about whether you both came back to each other.",
   // Healing
   "relational-nurturer":
-    "sex is where you repair things, for them and quietly for yourself. You reach for closeness when something needs mending, which is also why it stops when nothing is coming back.",
+    "sex is where you repair things, for them and quietly for yourself.\nYou reach for closeness when something needs mending, which is also why it stops when nothing is coming back.",
   // Validation
   "radiant-performer":
-    "sex confirms something you cannot confirm alone. Being visibly wanted is not vanity here, it is the part that makes you feel real.",
+    "sex confirms something you cannot confirm alone.\nBeing visibly wanted is not vanity here, it is the part that makes you feel real.",
   // Intensity & transformation
   "explorer-of-edges":
-    "you are after the version of yourself that only shows up at the edge. Comfortable sex is not disappointing, it is beside the point.",
+    "you are after the version of yourself that only shows up at the edge.\nComfortable sex is not disappointing, it is beside the point.",
   // Growth
   "curious-apprentice":
-    "sex is somewhere you are still becoming something. You would rather learn something true than perform something impressive.",
+    "sex is somewhere you are still becoming something.\nYou would rather learn something true than perform something impressive.",
   // Connection
   "minimalist-companion":
-    "you are there for the person, not the event. Sex matters as one of the ways you stay close, and it does not have to carry more than that.",
+    "you are there for the person, not the event.\nSex matters as one of the ways you stay close, and it does not have to carry more than that.",
   // Emotional fantasy
   "emotional-voyeur":
-    "the feeling is the point, and it starts long before anyone is touched. Your imagination is not a substitute for intimacy, it is how you get there.",
+    "the feeling is the point, and it starts long before anyone is touched.\nYour imagination is not a substitute for intimacy, it is how you get there.",
   // Power
   "authority-conductor":
-    "sex is where the shape of things gets decided and held. Given clearly and taken willingly, that structure is what lets you finally let go inside it.",
+    "sex is where the shape of things gets decided and held.\nGiven clearly and taken willingly, that structure is what lets you finally let go inside it.",
   // Stability
   "loyal-ritualist":
-    "sex is a way of confirming the ground is still there. Familiarity is not a rut for you, it is the condition that lets desire show up at all.",
+    "sex is a way of confirming the ground is still there.\nFamiliarity is not a rut for you, it is the condition that lets desire show up at all.",
   // Validation
   "tender-devotee":
-    "you need to know you were chosen, not merely available. Being wanted out loud does more for you than anything technique can add.",
+    "you need to know you were chosen, not merely available.\nBeing wanted out loud does more for you than anything technique can add.",
   // Mastery
   "analytical-sexualist":
-    "you want to understand it as much as feel it. Getting it right is genuinely satisfying to you, and getting it vague is genuinely not.",
+    "you want to understand it as much as feel it.\nGetting it right is genuinely satisfying to you, and getting it vague is genuinely not.",
   // Avoidance
   "quiet-withdrawer":
-    "your first move under pressure is to protect the peace, and desire goes quiet with it. What looks like not wanting is usually wanting with the volume turned down.",
+    "your first move under pressure is to protect the peace, and desire goes quiet with it.\nWhat looks like not wanting is usually wanting with the volume turned down.",
 };

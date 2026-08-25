@@ -58,6 +58,9 @@ describe("hero core-motivation gloss", () => {
       // A fragment here would reproduce the problem it was written to fix.
       expect(line!.length, `${slug} motivation gloss too thin`).toBeGreaterThan(80);
       expect(line!, `${slug} motivation gloss uses an em dash`).not.toMatch(/—/);
+      // Two sentences on two lines (2026-08-25). Only renders as a break because
+      // `.report-hero-card__motivation-sub` sets `white-space: pre-line`.
+      expect(line!.split("\n"), `${slug} motivation gloss is not two lines`).toHaveLength(2);
     }
   });
 
