@@ -31,7 +31,7 @@
 import { timingSafeEqual } from "crypto";
 import { NextResponse } from "next/server";
 import { buildSubmissionJourney } from "@features/attribution/server/journey";
-import { buildJourneyMessage } from "@features/attribution/server/slack-journey";
+import { buildJourneyMessage, JOURNEY_STEPS } from "@features/attribution/server/slack-journey";
 import { journeyStateOf, type JourneyState } from "@features/attribution/server/journey-message";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
@@ -77,11 +77,24 @@ function safeCompare(a: string, b: string): boolean {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * The furthest of several claimed steps. Compared by index in JOURNEY_STEPS,
+ * never as strings, and an unrecognised value is ignored rather than trusted.
+ */
+function furthest(claims: Array<string | null | undefined>): JourneyState {
+  let best = 0;
+  for (const claim of claims) {
+    const i = claim ? JOURNEY_STEPS.indexOf(claim as JourneyState) : -1;
+    if (i > best) best = i;
+  }
+  return JOURNEY_STEPS[best]!;
+}
+
 interface Candidate {
   id: number;
   questionCount: number;
   /** Row already exists, so its original message is editable in place. */
-  stored: { channel: string; ts: string } | null;
+  stored: { channel: string; ts: string; state: string | null } | null;
 }
 
 /** Completions in the window that have not been backfilled yet, oldest first. */
@@ -103,7 +116,7 @@ async function loadCandidates(sinceIso: string): Promise<Candidate[]> {
   const ids = rows.map((r) => r.id);
   const marks = await supabaseFetch(
     `${TABLE}?survey_submission_id=in.(${ids.join(",")})` +
-      `&select=survey_submission_id,channel,message_ts,backfilled_at`
+      `&select=survey_submission_id,channel,message_ts,state,backfilled_at`
   );
   if (!marks.ok) throw new Error(`marks ${marks.status}`);
   const byId = new Map(
@@ -112,6 +125,7 @@ async function loadCandidates(sinceIso: string): Promise<Candidate[]> {
         survey_submission_id: number;
         channel: string;
         message_ts: string;
+        state: string | null;
         backfilled_at: string | null;
       }>
     ).map((m) => [m.survey_submission_id, m])
@@ -124,7 +138,7 @@ async function loadCandidates(sinceIso: string): Promise<Candidate[]> {
     out.push({
       id: r.id,
       questionCount: r.survey_submission_answer?.[0]?.count ?? 0,
-      stored: mark ? { channel: mark.channel, ts: mark.message_ts } : null,
+      stored: mark ? { channel: mark.channel, ts: mark.message_ts, state: mark.state } : null,
     });
   }
   return out;
@@ -266,12 +280,26 @@ export async function GET(request: Request) {
         failed += 1;
         continue;
       }
-      // Assert what the server can see, so the consent gate cannot paint a step
-      // red that we know was reached. journeyStateOf never goes backwards, so
-      // the further of the two wins.
+      /**
+       * The furthest step of THREE sources, because each alone is lossy:
+       *
+       *  - the derived milestones, whose report-open and paywall steps come from
+       *    consent-gated `analytics_event`;
+       *  - what `report_session` proves server-side (28 of the 83 in this window
+       *    opened their report but are absent from analytics);
+       *  - and the state already on the row, which for the messages that ARE
+       *    live was written from a step the server WITNESSED at the time.
+       *
+       * That last one matters. Without it, re-rendering a live message could
+       * DOWNGRADE it: a submission whose stored state is `paywall` — witnessed by
+       * the route that recorded it — comes back as `report_opened` if the reader
+       * declined analytics, and the edit would replace a correct green step with
+       * a red one. Re-rendering must never show less than the message it
+       * replaces.
+       */
       const derived = journeyStateOf(journey.milestones);
-      const floor: JourneyState = serverOpens.has(c.id) ? "report_opened" : "completed";
-      const state: JourneyState = derived === "completed" ? floor : derived;
+      const seen: JourneyState = serverOpens.has(c.id) ? "report_opened" : "completed";
+      const state = furthest([derived, seen, c.stored?.state]);
       const message = buildJourneyMessage(journey, {
         kind: "survey_completed",
         questionCount: c.questionCount,

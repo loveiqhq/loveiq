@@ -72,6 +72,7 @@ function routeData(opts: {
     survey_submission_id: number;
     channel: string;
     message_ts: string;
+    state?: string | null;
     backfilled_at: string | null;
   }>;
   serverOpens?: number[];
@@ -219,6 +220,55 @@ describe("GET /api/cron/journey-backfill", () => {
     const rendered = JSON.stringify((reply[0] as { blocks: unknown }).blocks);
     expect(rendered).toContain(":large_green_circle: Report opened");
     expect(rendered).not.toContain(":red_circle: Report opened");
+  });
+
+  it("never re-renders a live message with FEWER steps than it already shows", async () => {
+    // The regression this guards: the stored state was written from a step the
+    // server WITNESSED at the time. Both `paywall` and `report_opened` are read
+    // back from consent-gated analytics_event, so a reader who declined
+    // analytics derives as `completed` — and re-rendering off the milestones
+    // alone would replace a correct green "Paywall hit" with a red one.
+    routeData({
+      submissions: [{ id: 101, count: 59 }],
+      marks: [
+        {
+          survey_submission_id: 101,
+          channel: "CHAN",
+          message_ts: "555.5",
+          state: "paywall",
+          backfilled_at: null,
+        },
+      ],
+      serverOpens: [],
+    });
+    await GET(req());
+    const reply = mockPost.mock.calls.find((c) => (c[0] as { threadTs?: string }).threadTs)!;
+    const rendered = JSON.stringify((reply[0] as { blocks: unknown }).blocks);
+    expect(rendered).toContain(":large_green_circle: Report opened");
+    expect(rendered).toContain(":large_green_circle: Paywall hit");
+    // Steps genuinely not reached stay red.
+    expect(rendered).toContain(":red_circle: Checkout");
+    expect(rendered).toContain(":red_circle: Paid");
+  });
+
+  it("ignores a stored state it does not recognise rather than trusting it", async () => {
+    routeData({
+      submissions: [{ id: 101, count: 59 }],
+      marks: [
+        {
+          survey_submission_id: 101,
+          channel: "CHAN",
+          message_ts: "555.5",
+          state: "not_a_step",
+          backfilled_at: null,
+        },
+      ],
+      serverOpens: [],
+    });
+    await GET(req());
+    const reply = mockPost.mock.calls.find((c) => (c[0] as { threadTs?: string }).threadTs)!;
+    const rendered = JSON.stringify((reply[0] as { blocks: unknown }).blocks);
+    expect(rendered).toContain(":red_circle: Report opened");
   });
 
   it("leaves a step red when neither the server nor analytics saw it", async () => {
