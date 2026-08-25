@@ -38,6 +38,7 @@ Eman
 exfiltration
 explainability
 GHAS
+Groq
 gtag
 Hotjar
 hotspot

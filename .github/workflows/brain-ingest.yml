@@ -1,0 +1,54 @@
+name: Company Brain Ingest
+
+# Docs and commit messages only change on push, so ingest-on-push is both simpler
+# and fresher than a nightly crawl -- and in an Action the git history and every
+# markdown file are already on disk, which is not true inside a Vercel function.
+#
+# The other half of the corpus (Jira, Supabase) changes outside git and is handled
+# by the /api/cron/brain-ingest route instead.
+on:
+  push:
+    branches: [main]
+  # Manual trigger for a first backfill, or after changing the chunker.
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  # Never cancel: a half-finished upsert is fine to repeat, but cancelling
+  # mid-sweep could delete rows a later run has not rewritten yet.
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  ingest:
+    name: Ingest docs + commits
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          # REQUIRED. The default shallow clone has one commit, which would
+          # ingest one commit and then sweep nothing -- silently reducing the
+          # corpus to the last push instead of the full history.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: "20"
+
+      # No `npm ci`: the ingester imports only node:child_process and node:fs, so
+      # there is nothing to install and nothing to keep in sync.
+      - name: Ingest
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_SERVICE_ROLE_KEY:-}" ]; then
+            echo "Supabase secrets not set; skipping ingest."
+            exit 0
+          fi
+
+          node scripts/brain-ingest-repo.mjs

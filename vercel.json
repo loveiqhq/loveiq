@@ -32,10 +32,20 @@
     {
       "path": "/api/cron/conversion-digest",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/brain-ingest",
+      "schedule": "47 4 * * *"
     }
   ],
   "functions": {
     "app/api/stripe/webhook/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/slack/events/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/cron/brain-ingest/route.ts": {
       "maxDuration": 60
     },
     "app/api/cron/survey-paused/route.ts": {
