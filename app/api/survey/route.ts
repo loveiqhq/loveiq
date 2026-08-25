@@ -4,7 +4,6 @@ import { cookies } from "next/headers";
 import { Resend } from "resend";
 import { z } from "zod";
 import { LANDING_VARIANT_COOKIE, isLandingVariant } from "@shared/experiments/landingVariant";
-import { SURVEY_VARIANT_COOKIE, isSurveyVariant } from "@shared/experiments/surveyVariant";
 import { checkRateLimit, checkCooldown, getClientIp } from "@shared/http/ratelimit";
 import { scheduleAfterResponse } from "@shared/http/after-response";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
@@ -215,28 +214,32 @@ export async function POST(request: Request) {
   // Wrapped in try/catch because cookies() throws when there is no request
   // scope (e.g. unit tests that call POST directly) — then we leave them unset.
   let landingVariantRaw: string | undefined;
-  let surveyVariantRaw: string | undefined;
   try {
     const cookieStore = await cookies();
     landingVariantRaw = cookieStore.get(LANDING_VARIANT_COOKIE)?.value;
-    surveyVariantRaw = cookieStore.get(SURVEY_VARIANT_COOKIE)?.value;
   } catch {
-    /* no request scope — leave the variants undefined (no stamp) */
+    /* no request scope — leave the variant undefined (no stamp) */
   }
 
-  // A/B: stamp the sticky landing + survey variants onto the submission's
-  // utm_tracker JSON so submissions are sliceable by arm in the DB (survey_variant
-  // is the survey-white A/B's completion-rate denominator). Guarded so the merged
-  // blob never exceeds the 1000-char utm_tracker budget, and a non-JSON /
-  // unparseable tracker is left untouched. Each arm only stamps when its cookie is
-  // actually present, preserving "no cookie → no stamp" for crawlers / direct hits.
+  /**
+   * Stamp the sticky landing arm onto the submission's utm_tracker JSON so
+   * submissions stay sliceable by arm in the DB. Guarded so the merged blob never
+   * exceeds the 1000-char utm_tracker budget, and a non-JSON tracker is left
+   * untouched. Only stamps when the cookie is present, preserving "no cookie → no
+   * stamp" for crawlers and direct hits.
+   *
+   * `survey_variant` is no longer stamped. The survey theme test concluded on
+   * 2026-08-25, the arm cookie is expired rather than written, so this read could
+   * only ever have produced nothing — a dead branch reading a cookie with no
+   * writer. Past submissions keep theirs; new ones legitimately have no survey
+   * arm, which also makes the final 453/411 split permanently reproducible.
+   */
   let mergedUtmTracker = utmTracker ?? null;
   try {
-    if (isLandingVariant(landingVariantRaw) || isSurveyVariant(surveyVariantRaw)) {
+    if (isLandingVariant(landingVariantRaw)) {
       const base = utmTracker ? JSON.parse(utmTracker) : {};
       if (base && typeof base === "object" && !Array.isArray(base)) {
-        if (isLandingVariant(landingVariantRaw)) base.landing_variant = landingVariantRaw;
-        if (isSurveyVariant(surveyVariantRaw)) base.survey_variant = surveyVariantRaw;
+        base.landing_variant = landingVariantRaw;
         const candidate = JSON.stringify(base);
         if (candidate.length <= 1000) mergedUtmTracker = candidate;
       }

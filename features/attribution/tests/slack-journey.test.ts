@@ -233,7 +233,7 @@ describe("pricing arm — which side of the test, in words and numbers", () => {
     expect(row).not.toContain("cheaper");
   });
 
-  it("never shows the paywall row — that experiment concluded", () => {
+  it("never shows a concluded experiment's row — paywall or survey theme", () => {
     // It used to appear whenever the arm happened to have a value, which
     // purchases do (they carry it in the Stripe metadata). But nothing
     // randomises the paywall any more, so listing it under "experiments they
@@ -257,9 +257,14 @@ describe("pricing arm — which side of the test, in words and numbers", () => {
     const text = JSON.stringify(purchase.blocks);
     expect(text).not.toContain("Paywall style");
     expect(text).not.toContain("Forced paywall");
-    // The three LIVE experiments are still all there.
+    // The survey theme test concluded 2026-08-25. Everyone gets white, so the
+    // row would be a permanent constant on every message — the same reason the
+    // paywall row went. Note the fixture DOES carry a survey arm, so this asserts
+    // the axis list is what excludes it, not an absent value.
+    expect(text).not.toContain("Survey design");
+    expect(text).not.toContain("White survey");
+    // The LIVE experiments are still there.
     expect(text).toContain("Landing page design");
-    expect(text).toContain("Survey design");
     expect(text).toContain("Report pricing");
   });
 });

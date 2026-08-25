@@ -20,14 +20,9 @@ import {
   setReportSubmissionContext,
   setForcedPaywallArm,
   setSurveyVariant,
-  trackExperimentExposure,
 } from "@features/analytics/client";
 import { getForcedPaywallCohort } from "@shared/experiments/forcedPaywall";
-import {
-  assignSurveyVariant,
-  SURVEY_VARIANT_EXPERIMENT,
-  type SurveyVariant,
-} from "@shared/experiments/surveyVariant";
+import { assignSurveyVariant, type SurveyVariant } from "@shared/experiments/surveyVariant";
 import { orderEmailLast } from "./questionOrder";
 import { SurveyThemeProvider } from "./SurveyThemeContext";
 import { useSubmitSurvey } from "./hooks/useSubmitSurvey";
@@ -119,10 +114,10 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
   const totalQuestions = orderedQuestions.length;
   const question = orderedQuestions[currentIndex];
 
-  // Survey white A/B. Resolve (and stick) the arm on first render so the very
-  // first question paint is already themed (the engine renders client-only,
-  // behind SurveyPage's hydration gate, so reading/minting the cookie here is
-  // SSR-safe and flash-free). `?survey=white|dark` is a dev-only override.
+  // Survey theme. The A/B concluded in white's favour on 2026-08-25, so this is
+  // "white" for everyone; `?survey=white|dark` still previews either on
+  // dev/staging. Resolved on first render so the first question paint is already
+  // themed (the engine renders client-only, behind SurveyPage's hydration gate).
   const [surveyVariant] = useState<SurveyVariant>(() => {
     const devParam =
       typeof window === "undefined"
@@ -134,14 +129,16 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
   useEffect(() => {
     if (surveyExposureFired.current) return;
     surveyExposureFired.current = true;
-    // Stamp the arm onto every persisted survey event + fire the one-per-user
-    // exposure record (the per-arm denominator for completion-rate analysis).
+    /**
+     * Stamp the theme onto persisted survey events. Still worth doing — on
+     * staging `?survey=dark` previews the old arm and the events should say so.
+     *
+     * No `trackExperimentExposure` any more. That wrote a one-per-visitor
+     * `experiment_exposure` row as the denominator for a per-arm completion
+     * rate, and the experiment is over: it would have gone on recording
+     * exposures to a concluded test, for one arm, forever.
+     */
     setSurveyVariant(surveyVariant);
-    trackExperimentExposure({
-      experiment: SURVEY_VARIANT_EXPERIMENT,
-      variant: surveyVariant,
-      surface: "survey",
-    });
   }, [surveyVariant]);
 
   // Post-survey completion phase management
@@ -476,9 +473,11 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
   const isWhite = surveyVariant === "white";
 
   return (
-    // Survey white A/B: the QUESTIONS-only theme. The provider + data attribute
-    // scope it to this <main> (the post-submit processing/wizard/confirmation are
-    // separate early returns above and stay dark). Dark branch = current literal.
+    // The QUESTIONS-only theme, white for everyone since the test concluded
+    // 2026-08-25. The provider + data attribute scope it to this <main> (the
+    // post-submit processing/wizard/confirmation are separate early returns above
+    // and stay dark). The dark branches remain, reachable via ?survey=dark on
+    // dev/staging.
     <SurveyThemeProvider variant={surveyVariant}>
       {/* NOTE: the survey root is deliberately NOT masked from session replay
           (owner decision, 2026-08-10) — this reverses audit finding L8. It

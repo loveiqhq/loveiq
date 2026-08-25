@@ -334,7 +334,7 @@ describe("conversion-digest handler", () => {
     expect(mockNotifySlack).not.toHaveBeenCalled();
   });
 
-  it("ships the reached-survey chart flagged as NOT arm-comparable", async () => {
+  it("ships the landing→survey chart as a trend, never as a verdict", async () => {
     // It was briefly titled "Visits → survey started, by homepage" and framed as
     // the primary metric. An audit found the two arms are not measuring the same
     // step: the current homepage's inline question writes the survey's
@@ -345,14 +345,22 @@ describe("conversion-digest handler", () => {
     await GET(request());
     const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
     const images = arg.blocks.filter((b) => (b as { type?: string }).type === "image");
-    // Two: reached-survey, and the per-axis A/B chart for the survey design
-    // test. The landing axis's own purchases chart was removed — the per-axis
-    // section is the only place landing is charted now.
-    expect(images).toHaveLength(2);
+    // One: reached-survey. The survey-theme chart went with the concluded
+    // experiment (2026-08-25), and the landing axis's own purchases chart was
+    // removed earlier — the per-axis section is the only place landing is charted.
+    expect(images).toHaveLength(1);
     const alt = JSON.stringify(images);
-    expect(alt).toContain("Not comparable between arms yet");
+    // Wording trimmed with the promotion into *The tests*: the alt text now says
+    // "A trend, not a verdict" and names the reason, in place of five clauses.
+    expect(alt).toContain("A trend, not a verdict");
+    expect(alt).toContain("different funnel steps");
     expect(alt).not.toContain("survey%20started%2C%20by%20homepage");
-    expect(alt).toContain("Survey design");
+    // And the caption beside it carries the counts AND the caveat, because Slack
+    // can fail to load an image and the caption is the accessible text.
+    const flat = blockText(arg.blocks);
+    expect(flat).toContain("*Landing page → survey*");
+    expect(flat).toContain("Not a like-for-like comparison");
+    expect(flat).toMatch(/\d+\/\d+ started/);
   });
 
   it("does not claim the reached-survey number is consent-free", async () => {
@@ -367,7 +375,10 @@ describe("conversion-digest handler", () => {
     // so it cannot outlive the chart. The header must not carry it: the chart is
     // absent for whole days at a time and the sentence would point at nothing.
     const alt = JSON.stringify(arg.blocks.filter((b) => (b as { type?: string }).type === "image"));
-    expect(alt).toContain("Not comparable between arms yet");
+    // Wording trimmed with the promotion into *The tests*: the alt text now says
+    // "A trend, not a verdict" and names the reason, in place of five clauses.
+    expect(alt).toContain("A trend, not a verdict");
+    expect(alt).toContain("different funnel steps");
     const definitions = blockText(arg.blocks.slice(0, 2));
     expect(definitions).not.toContain("arm-comparable");
   });
@@ -381,9 +392,11 @@ describe("conversion-digest handler", () => {
     // longer blames an unapplied migration: the migration IS applied, and null
     // here only ever means the RPC did not answer.
     expect(blockText(arg.blocks)).toContain("did not answer");
-    // The per-axis A/B chart still ships. One missing source must not take the
-    // rest of the digest with it.
-    expect(arg.blocks.filter((b) => (b as { type?: string }).type === "image")).toHaveLength(1);
+    // No images left at all once this source is the one that failed: the fixture's
+    // only other chart was the survey theme's, which retired with the experiment.
+    // The rest of the digest must still ship — that is what this asserts.
+    expect(blockText(arg.blocks)).toContain("*The funnel");
+    expect(arg.blocks.filter((b) => (b as { type?: string }).type === "image")).toHaveLength(0);
   });
 
   it("says nothing at all about the reached-survey chart when it has no data", async () => {
@@ -400,7 +413,52 @@ describe("conversion-digest handler", () => {
     expect(flat).not.toContain("arm-comparable");
     // The rest of the digest still ships — one missing source takes nothing else.
     expect(flat).toContain("*The tests*");
-    expect(arg.blocks.filter((b) => (b as { type?: string }).type === "image")).toHaveLength(1);
+    expect(arg.blocks.filter((b) => (b as { type?: string }).type === "image")).toHaveLength(0);
+  });
+
+  it("says landing→survey has no data in ONE line, not four empty ones", async () => {
+    // The RPC floors its window at the first day both sides carried an arm, so
+    // before then it correctly answers with empty arrays. Four lines of "no
+    // visits recorded yet" every morning is the filler that teaches people to
+    // skim the whole message.
+    mockFetchLandingStartFunnel.mockResolvedValue({ daily: [], totals: [] });
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    const block = arg.blocks.find((b) =>
+      (b as { text?: { text?: string } }).text?.text?.startsWith("*Landing page → survey*")
+    ) as { text: { text: string } } | undefined;
+    expect(block).toBeDefined();
+    expect(block!.text.text.split("\n")).toHaveLength(1);
+    expect(block!.text.text).toContain("no per-arm data in this window yet");
+    expect(block!.text.text).not.toContain("no visits recorded yet");
+  });
+
+  it("counts landing→survey per arm until a trend can be drawn, and dates it", async () => {
+    // One day of data: too few for a 7-day trailing rate, but the numbers exist
+    // and are what a reader came for. The date must be DERIVED — the window is
+    // half-open and ends yesterday, so a day only enters the series in the
+    // following run, and every hardcoded version of this has been a day out.
+    mockFetchLandingStartFunnel.mockResolvedValue({
+      daily: [
+        { day: "2026-08-20", arm: "white", visits: 80, starts: 13 },
+        { day: "2026-08-20", arm: "white_prev", visits: 64, starts: 10 },
+      ],
+      totals: [
+        { arm: "white", visits: 80, starts: 13 },
+        { arm: "white_prev", visits: 64, starts: 10 },
+      ],
+    });
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    const text = blockText(arg.blocks);
+    expect(text).toContain("*Landing page → survey* — one day of per-arm data");
+    // first day + 7, not +6: 20 Aug -> 27 Aug.
+    expect(text).toContain("chart from 27 Aug");
+    expect(text).toContain("80 visit-days → 13 started the survey");
+    expect(text).toContain("64 visit-days → 10 started the survey");
+    expect(text).toContain("Not a like-for-like comparison");
+    // No image while it cannot honestly draw one.
+    expect(arg.blocks.filter((b) => (b as { type?: string }).type === "image")).toHaveLength(0);
   });
 
   it("puts a too-young test's numbers in a full-size section, not a footnote", async () => {
@@ -520,16 +578,18 @@ describe("conversion-digest handler", () => {
 
 describe("conversion-digest verdicts", () => {
   it("calls a real winner and quotes the confidence interval", () => {
-    // 60/500 vs 20/500 — a wide, unambiguous gap.
-    const verdict = buildArmVerdict("survey", [
+    // 60/500 vs 20/500 — a wide, unambiguous gap. On the LANDING axis: the survey
+    // axis used to host this fixture, and its `dark` arm is retired now, so
+    // buildArmVerdict correctly filters it and the pair collapses to one arm.
+    const verdict = buildArmVerdict("landing", [
       { arm: "white", n: 500, conversions: 60 },
-      { arm: "dark", n: 500, conversions: 20 },
+      { arm: "white_prev", n: 500, conversions: 20 },
     ]);
     expect(verdict.state).toBe("winner");
     expect(verdict.sentence).toContain("genuinely ahead");
     expect(verdict.sentence).toContain("95% CI");
     // Plain-English arm names only — never a raw stored value.
-    expect(verdict.sentence).toContain("White survey");
+    expect(verdict.sentence).toContain("Landing page A (current design)");
     expect(verdict.sentence).not.toContain("white_prev");
   });
 
@@ -549,9 +609,9 @@ describe("conversion-digest verdicts", () => {
   });
 
   it("says insufficient data below a combined 50, and how many more are needed", () => {
-    const verdict = buildArmVerdict("survey", [
+    const verdict = buildArmVerdict("landing", [
       { arm: "white", n: 12, conversions: 1 },
-      { arm: "dark", n: 10, conversions: 0 },
+      { arm: "white_prev", n: 10, conversions: 0 },
     ]);
     expect(verdict.state).toBe("insufficient-data");
     expect(verdict.sentence).toContain("not enough data");
@@ -785,25 +845,32 @@ describe("conversion-digest chart series", () => {
     // The second arm launched part-way through the window. Its earlier days must
     // be absent, not a plotted 0% — that is the falsehood the paid chart carried.
     const series = buildStartSeries(makeStartFunnel({ prevFromDay: 27 }), ["white", "white_prev"]);
-    expect(series.first.every((v) => v != null)).toBe(true);
+    // The first six days are the WARM-UP gap, not missing traffic: a window with
+    // fewer than seven days behind it is not the 7-day trailing rate the footnote
+    // promises. Everything after that is present for the arm that ran all window.
+    expect(series.first.slice(0, 6).every((v) => v === null)).toBe(true);
+    expect(series.first.slice(6).every((v) => v != null)).toBe(true);
     expect(series.last.slice(0, 20).every((v) => v === null)).toBe(true);
     expect(series.last.some((v) => v != null)).toBe(true);
     expect(series.last.some((v) => v === 0)).toBe(false);
   });
 
   it("computes the start rate off visits, not off finishers", () => {
+    // Seven days, because a point needs a full window inside it now. Days 1-6 are
+    // 10 starts per 100 visits and day 7 is 20, so the first drawable point is
+    // 80/700 = 11.4%.
+    const daily = Array.from({ length: 7 }, (_, i) => ({
+      day: `2026-08-2${i}`,
+      arm: "white",
+      visits: 100,
+      starts: i === 6 ? 20 : 10,
+    }));
     const series = buildStartSeries(
-      {
-        daily: [
-          { day: "2026-08-20", arm: "white", visits: 100, starts: 10 },
-          { day: "2026-08-21", arm: "white", visits: 100, starts: 20 },
-        ],
-        totals: [{ arm: "white", visits: 200, starts: 30 }],
-      },
+      { daily, totals: [{ arm: "white", visits: 700, starts: 80 }] },
       ["white", "white_prev"]
     );
-    // Trailing window covers both days: 30/200 = 15%.
-    expect(series.first[1]).toBe(15);
+    expect(series.first.slice(0, 6).every((v) => v === null)).toBe(true);
+    expect(series.first[6]).toBe(11.4);
   });
 
   it("keeps the signed chart URL under Slack's image_url cap at a full 30 days", async () => {

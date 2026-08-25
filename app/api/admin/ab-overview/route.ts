@@ -508,7 +508,6 @@ export async function GET(request: Request) {
      */
     const experiments: ExperimentReadout[] = [
       tally("landing", (_id, tracker) => readStampedArms(tracker).landing),
-      tally("survey", (_id, tracker) => readStampedArms(tracker).survey),
       tally("pricing", (id) => bySubmission.get(id)?.pricing ?? null),
     ];
 
@@ -632,6 +631,14 @@ export async function GET(request: Request) {
           title: "Paywall style",
           outcome:
             "Concluded in favour of the forced paywall, and the forced screen is currently switched off, so everyone now gets the same experience. No comparison to make.",
+        },
+        {
+          title: "Survey design (white vs dark)",
+          // No rates, by the same rule as the paywall entry above: this section
+          // exists so a finished test cannot be read as a live one. The numbers
+          // that settled it are in the commit and in the digest history.
+          outcome:
+            "Stopped 2026-08-25 and settled on the white survey. White reached checkout more often, but not by a margin this many people can prove — the range the true gap could sit in still includes zero — and purchases were level. It was called on the checkout rate, not because the test reached a verdict. Everyone now sees white, so there is nothing left to compare.",
         },
       ],
       totals: {

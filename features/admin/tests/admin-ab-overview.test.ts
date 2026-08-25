@@ -179,7 +179,9 @@ describe("GET /api/admin/ab-overview", () => {
     routeData([submission(1, "white_prev", "dark")], [quote(1, "B", false)]);
     const text = JSON.stringify(await (await GET(req())).json());
     expect(text).toContain("Landing page B (previous design)");
-    expect(text).toContain("Dark survey");
+    // No "Dark survey" — the survey theme axis concluded 2026-08-25 and left the
+    // live experiments list, so no arm of it is presented for analysis here.
+    expect(text).not.toContain("Dark survey");
     // the raw code may appear as the `arm` key, but never inside a human label
     const body = JSON.parse(text);
     for (const exp of body.experiments) {
@@ -308,18 +310,21 @@ describe("GET /api/admin/ab-overview", () => {
     expect(body.funnelCaveats.join(" ")).toContain("our own servers");
   });
 
-  it("does not present the paywall as a live A/B test", async () => {
-    // It concluded in favour of forced, and with the forced screen switched off
-    // the two arms are two different time periods — not a randomised split.
-    routeData([submission(1, "white", null)], [quote(1, "A", false)]);
+  it("does not present a concluded experiment as a live A/B test", async () => {
+    // The paywall concluded in favour of forced, and with the forced screen
+    // switched off its two arms are two different time periods, not a randomised
+    // split. The survey theme concluded 2026-08-25 in favour of white. Both are
+    // listed under `concluded`, which carries prose and no rates.
+    //
+    // The fixture deliberately supplies a dark survey arm: this asserts the axis
+    // list is what removes it, not an absent value.
+    routeData([submission(1, "white", "dark")], [quote(1, "A", false)]);
     const body = await (await GET(req(36))).json();
-    expect(body.experiments.map((e: { axis: string }) => e.axis)).toEqual([
-      "landing",
-      "survey",
-      "pricing",
-    ]);
-    expect(body.concluded.map((c: { title: string }) => c.title)).toContain("Paywall style");
-    // and it must carry no rate anyone could read a winner into
+    expect(body.experiments.map((e: { axis: string }) => e.axis)).toEqual(["landing", "pricing"]);
+    const titles = body.concluded.map((c: { title: string }) => c.title);
+    expect(titles).toContain("Paywall style");
+    expect(titles.join(" ")).toContain("Survey design");
+    // and neither may carry a rate anyone could read a winner into
     expect(JSON.stringify(body.concluded)).not.toMatch(/\d+(\.\d+)?%/);
   });
 

@@ -178,17 +178,18 @@ function describePricingArm(arm: string | null, plan: string | null): string | n
 /**
  * The experiments as a two-column fields block.
  *
- * The three LIVE axes are always shown, so an arm that failed to record stays
- * visible rather than quietly missing. `paywall` is shown only when it actually
- * has a value: that experiment concluded in favour of the forced paywall and
- * nothing randomises it any more, so an empty row for it was a permanent
- * "Not recorded" on every survey message — one of the blank rows that made these
- * look broken. When it IS set (purchases carry it in the Stripe metadata) it says
- * whether the reader met the forced or the dismissible paywall, which is worth
- * keeping.
+ * The LIVE axes are always shown, so an arm that failed to record stays visible
+ * rather than quietly missing. Concluded axes are not: `paywall` since it was
+ * settled in favour of the forced wall, and `survey` since the theme test was
+ * settled in favour of white on 2026-08-25. An arm nothing randomises is either a
+ * permanent "Not recorded" or a permanent constant, and both are noise on every
+ * single message — the class of blank row that made these look broken. The
+ * historical value is still stored, and still in the structured log line beside
+ * this message; no /admin screen renders it, which is the point of retiring the
+ * axis rather than the arm.
  */
 function armFields(journey: SubmissionJourney): SlackBlock {
-  const axes: ExperimentAxis[] = ["landing", "survey", "pricing"];
+  const axes: ExperimentAxis[] = ["landing", "pricing"];
   return fields(
     axes.map((axis) => {
       // eslint-disable-next-line security/detect-object-injection -- axis is a closed union.

@@ -78,7 +78,7 @@ loveiq-web/
 │   ├── trust-zone/ui/          # /trust-zone
 │   ├── not-found/ui/           # 404 page
 │   ├── staging/                # Staging password gate (ui/ + tests/)
-│   ├── survey/                 # ui/, server/, tests/, server/emails/ — assessment funnel
+│   ├── survey/                 # ui/, server/, tests/, server/emails/ — assessment funnel (white/dark theme A/B concluded 2026-08-25 in favour of white)
 │   ├── report/                 # ui/, server/, tests/, server/emails/ — /report paywalled
 │   ├── checkout/               # ui/, server/, tests/ — Stripe checkout
 │   ├── pricing/                # logic/ — report pricing math

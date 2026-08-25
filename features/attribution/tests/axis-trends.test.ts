@@ -27,46 +27,43 @@ function rows(
 }
 
 describe("axis trend charts — which experiments may be drawn", () => {
-  it("never charts the concluded paywall experiment", () => {
+  it("never charts a concluded experiment — paywall or survey theme", () => {
     // Three independent layers, because the way this bug actually happens is a
-    // developer writing `Object.keys(AXIS_TITLES)` — which contains `paywall`.
+    // developer writing `Object.keys(AXIS_TITLES)` — which contains both.
     expect([...CHART_AXES]).not.toContain("paywall");
-    expect([...CHART_AXES]).toEqual(["survey", "pricing", "landing"]);
+    expect([...CHART_AXES]).not.toContain("survey");
+    expect([...CHART_AXES]).toEqual(["pricing", "landing"]);
 
-    // Even if the RPC regressed and started emitting paywall rows, nothing
-    // reaches Slack.
-    const trends = buildAxisTrends(
-      [
-        ...rows("paywall", "treatment", {
-          days: 30,
-          lastDay: "2026-09-30",
-          completions: 20,
-          checkouts: 4,
-        }),
-        ...rows("paywall", "control", {
-          days: 30,
-          lastDay: "2026-09-30",
-          completions: 20,
-          checkouts: 4,
-        }),
-      ],
-      "2026-09-30"
-    );
-    expect(trends.charted).toHaveLength(0);
-    expect(trends.skipped.map((s) => s.axis)).not.toContain("paywall");
+    // Even if the RPC regressed and started emitting rows for either, nothing
+    // reaches Slack — not a chart, not a counts block, not a skip caption.
+    for (const [axis, a, b] of [
+      ["paywall", "treatment", "control"],
+      ["survey", "white", "dark"],
+    ] as const) {
+      const trends = buildAxisTrends(
+        [
+          ...rows(axis, a, { days: 30, lastDay: "2026-09-30", completions: 20, checkouts: 4 }),
+          ...rows(axis, b, { days: 30, lastDay: "2026-09-30", completions: 20, checkouts: 4 }),
+        ],
+        "2026-09-30"
+      );
+      expect(trends.charted).toHaveLength(0);
+      expect(trends.counts.map((c) => c.axis)).not.toContain(axis);
+      expect(trends.skipped.map((s) => s.axis)).not.toContain(axis);
+    }
   });
 
   it("charts an axis with enough history and computes the rate from the rows", () => {
     const trends = buildAxisTrends(
       [
-        ...rows("survey", "white", {
+        ...rows("pricing", "A", {
           days: 30,
           lastDay: "2026-09-30",
           completions: 10,
           checkouts: 2,
           paid: 1,
         }),
-        ...rows("survey", "dark", {
+        ...rows("pricing", "B", {
           days: 30,
           lastDay: "2026-09-30",
           completions: 10,
@@ -75,15 +72,15 @@ describe("axis trend charts — which experiments may be drawn", () => {
       ],
       "2026-09-30"
     );
-    const chart = trends.charted.find((c) => c.axis === "survey");
+    const chart = trends.charted.find((c) => c.axis === "pricing");
     expect(chart).toBeDefined();
     // 30 days x 10 = 300 completions, x2 = 60 checkouts => 20%.
     expect(chart!.headline).toContain("60/300 = 20%");
     expect(chart!.headline).toContain("30/300 = 10%");
-    // Ordered by LABEL ("Dark survey" < "White survey"), not by volume. Volume
+    // Ordered by LABEL ("Pricing B" < "Pricing A"), not by volume. Volume
     // order flipped colours between consecutive digests once two arms were
     // within one day of each other.
-    expect(chart!.arms[0]).toBe("dark");
+    expect(chart!.arms[0]).toBe("A");
     // Paid is a COUNT on each arm's own line, never a second drawn series. The
     // sentence that used to argue why it is not drawn is gone.
     expect(chart!.caption).toContain("30 paid");
@@ -96,14 +93,14 @@ describe("axis trend charts — which experiments may be drawn", () => {
     // needed from it, and they are now unconditional.
     const many = buildAxisTrends(
       [
-        ...rows("survey", "white", {
+        ...rows("pricing", "A", {
           days: 30,
           lastDay: "2026-09-30",
           completions: 10,
           checkouts: 5,
           paid: 3,
         }),
-        ...rows("survey", "dark", {
+        ...rows("pricing", "B", {
           days: 30,
           lastDay: "2026-09-30",
           completions: 10,
@@ -113,7 +110,7 @@ describe("axis trend charts — which experiments may be drawn", () => {
       ],
       "2026-09-30"
     );
-    const chart = many.charted.find((c) => c.axis === "survey")!;
+    const chart = many.charted.find((c) => c.axis === "pricing")!;
     expect(chart.caption).toContain("90 paid");
     expect(chart.caption).toContain("60 paid");
     expect(chart.caption).not.toContain("too few");
@@ -162,19 +159,19 @@ describe("axis trend charts — which experiments may be drawn", () => {
   it("refuses an axis whose smaller arm is too thin to trend", () => {
     const trends = buildAxisTrends(
       [
-        ...rows("survey", "white", {
+        ...rows("pricing", "A", {
           days: 30,
           lastDay: "2026-09-30",
           completions: 10,
           checkouts: 2,
         }),
         // One finisher a day for three days: far below the floor.
-        ...rows("survey", "dark", { days: 3, lastDay: "2026-09-30", completions: 1, checkouts: 0 }),
+        ...rows("pricing", "B", { days: 3, lastDay: "2026-09-30", completions: 1, checkouts: 0 }),
       ],
       "2026-09-30"
     );
     expect(trends.charted.map((c) => c.axis)).not.toContain("survey");
-    const young = trends.counts.find((c) => c.axis === "survey")!;
+    const young = trends.counts.find((c) => c.axis === "pricing")!;
     expect(young.text).toContain(`passes ${MIN_ARM_COMPLETIONS} finished`);
     expect(young.text).toContain("3 finished →");
     // Still shows both arms' numbers rather than withholding them.
@@ -187,14 +184,14 @@ describe("axis trend charts — which experiments may be drawn", () => {
     // significant branch printed the winner's gap as a negative number.
     const trends = buildAxisTrends(
       [
-        // "Dark survey" sorts first but converts far worse.
-        ...rows("survey", "dark", {
+        // "Pricing B" sorts first but converts far worse.
+        ...rows("pricing", "B", {
           days: 30,
           lastDay: "2026-09-30",
           completions: 40,
           checkouts: 2,
         }),
-        ...rows("survey", "white", {
+        ...rows("pricing", "A", {
           days: 30,
           lastDay: "2026-09-30",
           completions: 40,
@@ -203,37 +200,41 @@ describe("axis trend charts — which experiments may be drawn", () => {
       ],
       "2026-09-30"
     );
-    const chart = trends.charted.find((c) => c.axis === "survey")!;
-    expect(chart.arms[0]).toBe("dark");
-    expect(chart.caption).toContain("White survey is genuinely ahead");
-    expect(chart.caption).not.toContain("Dark survey is genuinely ahead");
+    const chart = trends.charted.find((c) => c.axis === "pricing")!;
+    expect(chart.arms[0]).toBe("A");
+    expect(chart.caption).toContain("Pricing A is genuinely ahead");
+    expect(chart.caption).not.toContain("Pricing B is genuinely ahead");
     // The winner's gap reads as a gain, not a loss.
     expect(chart.caption).toMatch(/ahead \(\+\d/);
   });
 
   it("says so plainly when only one arm has data", () => {
     const trends = buildAxisTrends(
-      rows("survey", "white", { days: 30, lastDay: "2026-09-30", completions: 10, checkouts: 2 }),
+      rows("pricing", "A", { days: 30, lastDay: "2026-09-30", completions: 10, checkouts: 2 }),
       "2026-09-30"
     );
-    const gap = trends.skipped.find((s) => s.axis === "survey")!;
+    const gap = trends.skipped.find((s) => s.axis === "pricing")!;
     expect(gap.caption).toContain("nothing to compare");
-    expect(gap.caption).toContain("only White survey has data");
+    expect(gap.caption).toContain("only Pricing A has data");
   });
 
   it("reads as English when NO arm has data", () => {
     // "only" used to be hoisted out of the one-arm branch, which made the
     // zero-arm caption read "no chart yet: only no arms have data".
     const trends = buildAxisTrends(
-      rows("survey", "white", { days: 30, lastDay: "2026-09-30", completions: 10, checkouts: 2 }),
+      rows("pricing", "A", { days: 30, lastDay: "2026-09-30", completions: 10, checkouts: 2 }),
       "2026-09-30"
     );
     for (const gap of trends.skipped) {
       expect(gap.caption).not.toContain("only no");
       expect(gap.caption).not.toMatch(/only no arms? have/);
     }
-    const pricing = trends.skipped.find((s) => s.axis === "pricing")!;
-    expect(pricing.caption).toContain("no arm has data");
+    // Pricing has the one arm this fixture supplies; landing has none at all, so
+    // it is the axis that exercises the zero-arm branch.
+    const oneArm = trends.skipped.find((s) => s.axis === "pricing")!;
+    expect(oneArm.caption).toContain("only Pricing A has data");
+    const noArm = trends.skipped.find((s) => s.axis === "landing")!;
+    expect(noArm.caption).toContain("no arm has data");
   });
 
   it("clips each axis to its own like-for-like window", () => {
@@ -294,13 +295,13 @@ describe("axis trend charts — which experiments may be drawn", () => {
     // must refuse rather than report a measured dead heat.
     const trends = buildAxisTrends(
       [
-        ...rows("survey", "white", {
+        ...rows("pricing", "A", {
           days: 30,
           lastDay: "2026-09-30",
           completions: 10,
           checkouts: 0,
         }),
-        ...rows("survey", "dark", {
+        ...rows("pricing", "B", {
           days: 30,
           lastDay: "2026-09-30",
           completions: 10,
@@ -309,7 +310,7 @@ describe("axis trend charts — which experiments may be drawn", () => {
       ],
       "2026-09-30"
     );
-    const chart = trends.charted.find((c) => c.axis === "survey")!;
+    const chart = trends.charted.find((c) => c.axis === "pricing")!;
     expect(chart.caption).toContain("Not enough to compare yet");
     expect(chart.caption).not.toContain("No clear winner");
     expect(chart.caption).not.toContain("genuinely ahead");

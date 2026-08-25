@@ -1,37 +1,43 @@
 /**
- * Survey white A/B experiment.
+ * Survey theme — CONCLUDED 2026-08-25 in favour of white.
  *
- * A 50/50 split testing whether a WHITE survey (the question screens) converts
- * better than the current dark one. Scope is the survey QUESTIONS only — the
- * pre-survey intro/consent and the pre-report wizard stay dark.
+ * This was a 50/50 test of a white question screen against the original dark
+ * one, live in production from 2026-06-20. Final numbers: white 453 completions
+ * / 84 reached checkout (18.5%) / 8 purchases, dark 411 / 62 (15.1%) / 9. White
+ * won clearly on reaching checkout; purchases were a dead heat, which is why the
+ * decision was made on the checkout rate.
  *
- * Assignment is a sticky, no-PII functional cookie minted CLIENT-SIDE in
- * `SurveyEngine` on first render (the engine is client-only, behind SurveyPage's
- * hydration gate, and the theme is applied client-side — so no middleware/SSR
- * involvement is needed, unlike the landing A/B). The arm is read back from the
- * same cookie server-side at `/api/survey` to stamp the submission for
- * completion-rate-by-arm analysis.
+ * Everyone now gets white. `assignSurveyVariant` returns `"white"`
+ * unconditionally — see the comment on it for why simply changing the coin flip
+ * would NOT have been enough.
  *
- * Un-gated: a real 50/50 wherever deployed. Currently shipped to staging only;
- * promotable to prod by merging staging→main when approved.
+ * The dark branches are still in the UI (33 theme ternaries across 10
+ * components, not a separate tree) and `?survey=dark` still previews them on
+ * dev/staging, so the old look can be inspected without a revert. What is gone is the assignment and the
+ * reporting: the `survey` axis is dropped from every live-axis list, following
+ * the same pattern as the concluded paywall experiment, and `/admin` lists it
+ * under "Finished — not being tested any more" with no rates attached.
+ *
+ * What survives is the RECORD, not a rendering of it.
+ * `survey_submission.utm_tracker.survey_variant` still holds what each past
+ * visitor saw and it is still in the structured Slack log line, but no /admin
+ * screen displays it — the submission-detail route reduces `utm_tracker` to
+ * `utm_source`. That is the point of retiring the axis; it also means "still
+ * visible in /admin" would be false if anyone wrote it.
+ *
+ * From this deploy nothing writes the arm either: /api/survey stamped it from the
+ * cookie, and the cookie is gone, so new submissions carry no survey arm at all.
+ * The 453/411 split is therefore final and permanently reproducible.
  */
 
 const isProduction = process.env.NODE_ENV === "production";
 
 export type SurveyVariant = "white" | "dark";
 
-export const SURVEY_VARIANT_EXPERIMENT = "survey-white-ab";
-
 export const SURVEY_VARIANT_COOKIE = isProduction ? "__Host-liq_sv" : "__liq_sv";
-
-const COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 365; // 1 year
 
 export function isSurveyVariant(value: string | null | undefined): value is SurveyVariant {
   return value === "white" || value === "dark";
-}
-
-export function normalizeSurveyVariant(value: string | null | undefined): SurveyVariant {
-  return value === "white" ? "white" : "dark";
 }
 
 /**
@@ -71,30 +77,38 @@ function readSurveyCookie(): SurveyVariant | null {
 }
 
 /**
- * Resolve (and persist) this browser's survey arm. Client-only. Precedence:
- *   1. dev `?survey=` override (dev builds only).
- *   2. Existing sticky cookie.
- *   3. Fresh random 50/50 (one crypto byte, low bit) → written to the sticky
- *      cookie so the arm holds across reloads/pause-resume.
- * Functional cookie (stores only "white"|"dark", no PII) — set regardless of
- * analytics consent, like the CSRF cookie.
+ * Everyone gets white. Only the `?survey=` preview override can say otherwise,
+ * and only on dev/staging builds.
+ *
+ * WHY THIS IS NOT JUST A CHANGED COIN FLIP. Assignment used to be sticky in a
+ * one-year cookie that was consulted BEFORE the randomiser. Deleting the flip
+ * alone would have left every browser already holding `dark` on the dark survey
+ * for up to a year after the test was called — the arm would have looked
+ * concluded in the code and in the reporting while real people kept being served
+ * the losing variant. So the cookie is no longer READ — which is what flips a
+ * returning dark visitor, on this visit and not a later one — and it is also
+ * actively EXPIRED, so a dead value does not sit in a browser for a year. The
+ * expiry runs when the survey engine mounts, so someone who never opens the
+ * survey again keeps the stale value; nothing reads it.
  */
 export function assignSurveyVariant(devParam?: string | null): SurveyVariant {
+  // Expire FIRST, before the override can return. Nothing reads this cookie any
+  // more, so it should not survive a visit under any path — and on staging, which
+  // shares the production database, a previewer holding a pre-conclusion `dark`
+  // could otherwise keep it and have it stamped onto a real submission.
+  if (typeof document !== "undefined") clearSurveyCookie();
+
   const dev = resolveSurveyDevOverride(devParam);
   if (dev) return dev;
+  return "white";
+}
 
-  if (typeof document === "undefined") return "dark";
-
-  const existing = readSurveyCookie();
-  if (existing) return existing;
-
-  const buf = new Uint8Array(1);
-  crypto.getRandomValues(buf);
-  const assigned: SurveyVariant = (buf[0]! & 1) === 0 ? "dark" : "white";
-
+/**
+ * Expire the sticky arm cookie. Max-Age=0 on the same Path the cookie was
+ * written with, or the browser keeps the original alongside the deletion.
+ */
+function clearSurveyCookie(): void {
+  if (!readSurveyCookie()) return;
   const secure = isProduction ? "; Secure" : "";
-  document.cookie =
-    `${SURVEY_VARIANT_COOKIE}=${assigned}; Path=/; Max-Age=${COOKIE_MAX_AGE_SECONDS}` +
-    `; SameSite=Lax${secure}`;
-  return assigned;
+  document.cookie = `${SURVEY_VARIANT_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax${secure}`;
 }

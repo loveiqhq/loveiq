@@ -3,7 +3,7 @@
  *
  * WHY A GATE RATHER THAN THREE CHARTS. The digest used to draw the landing axis
  * only. Charting all three unconditionally looks like more information and is
- * usually less: measured on 2026-08-25, only the survey axis had enough history
+ * usually less: measured on 2026-08-25, only one axis had enough history
  * to say anything. Pricing's arm A was repriced ~4x on 24 Aug, so a line
  * spanning that date averages two different products under one label; the
  * landing test restarted on 21 Aug, so it had five days against a 7-day
@@ -15,8 +15,12 @@
  * will appear — and it starts charting itself as soon as its window matures,
  * with no code change and nobody having to remember.
  *
- * `paywall` is absent by construction: it is not in CHART_AXES, and the RPC does
- * not emit it either. That experiment concluded, so a chart would be inventing a
+ * `paywall` is absent by construction: not in CHART_AXES, and the RPC does not
+ * emit it either. `survey` is absent differently and is worth the distinction —
+ * it IS still emitted by the RPC, and is dropped purely because CHART_AXES does
+ * not list it. Extra rows for an unlisted axis are filtered by `rowsForAxis`, so
+ * they cost nothing; do not take the paywall sentence to mean an unlisted axis
+ * cannot arrive in the data. That experiment concluded, so a chart would be inventing a
  * test that is not running.
  */
 
@@ -32,9 +36,9 @@ import {
 } from "@features/admin/server/statistics";
 
 /** The axes that are actively randomised. Deliberately NOT derived from
- *  AXIS_TITLES, which also contains the concluded paywall axis — a keys() loop
- *  over that is exactly how a dead experiment gets charted. */
-export const CHART_AXES = ["survey", "pricing", "landing"] as const;
+ *  AXIS_TITLES, which also contains the CONCLUDED paywall and survey-theme axes —
+ *  a keys() loop over that is exactly how a dead experiment gets charted. */
+export const CHART_AXES = ["pricing", "landing"] as const;
 export type ChartAxis = (typeof CHART_AXES)[number];
 
 export interface AxisFunnelRow {
@@ -53,8 +57,6 @@ export interface AxisFunnelRow {
  * than caveated — a caveat under a misleading line is still a misleading line.
  */
 export const AXIS_VALID_FROM: Record<ChartAxis, { day: string; why: string } | null> = {
-  // The survey theme test has run unchanged throughout the reporting window.
-  survey: null,
   // Pricing 2.1 raised arm A roughly 4x (A 39.99/49.99/59 vs B 29/39/49).
   pricing: {
     day: "2026-08-24",

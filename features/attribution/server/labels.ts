@@ -62,7 +62,12 @@ const LABELS: Record<ExperimentAxis, Record<string, ArmLabel>> = {
   },
   survey: {
     white: { short: "White survey", long: "Survey questions: white" },
-    dark: { short: "Dark survey", long: "Survey questions: dark" },
+    // Concluded 2026-08-25 in favour of white. The AXIS is retired too — it is
+    // absent from every live-axis list, the same as `paywall` — but the flag is
+    // what makes `activeArms("survey")` truthful, and it is a second guard: if
+    // anyone re-adds the axis to CHART_AXES, `rowsForAxis` drops this arm and the
+    // comparison collapses to one arm rather than quietly reviving a dead test.
+    dark: { short: "Dark survey", long: "Survey questions: dark", retired: true },
   },
   pricing: {
     // No "(lower)" / "(higher)" here on purpose. These labels said A was the lower

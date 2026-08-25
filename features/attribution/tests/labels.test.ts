@@ -72,7 +72,13 @@ describe("arm labels", () => {
   it("excludes retired arms from the active set used for charts", () => {
     expect(activeArms("landing")).toEqual(["white", "white_prev"]);
     expect(activeArms("pricing")).toEqual(["A", "B"]);
-    expect(activeArms("survey")).toEqual(["white", "dark"]);
+    // Dark is retired (the theme test concluded 2026-08-25 in favour of white), so
+    // it must not read as an arm we still assign.
+    expect(activeArms("survey")).toEqual(["white"]);
+    expect(armLabel("survey", "dark").retired).toBe(true);
+    // …but it is still KNOWN, so historical rows keep a plain-English label.
+    expect(isKnownArm("survey", "dark")).toBe(true);
+    expect(armLabel("survey", "dark").short).toBe("Dark survey");
   });
 
   it("recognises retired arms as known, so they are labelled not dropped", () => {
