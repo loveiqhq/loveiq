@@ -948,7 +948,6 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                   ranking={ranking}
                   percentages={percentages}
                   mottos={constellationMottos}
-                  viewArchetype={viewArchetype}
                 />
               </ReportSection>
               {resolvedSections.map((section) => {

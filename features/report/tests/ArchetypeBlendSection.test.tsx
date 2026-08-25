@@ -23,7 +23,7 @@ const ALL_14 = [
   "Explorer of Edges",
 ];
 
-/** Descending percentages with a controllable gap between rank 1 and rank 3. */
+/** Descending percentages, top three separated by `spread`. */
 function pcts(spread: number): Record<string, number> {
   const out: Record<string, number> = {};
   ALL_14.forEach((name, i) => {
@@ -38,14 +38,7 @@ afterEach(cleanup);
 
 describe("ArchetypeBlendSection", () => {
   it("shows only the top three of the fourteen", () => {
-    render(
-      <ArchetypeBlendSection
-        ranking={ALL_14}
-        percentages={pcts(20)}
-        mottos={MOTTOS}
-        viewArchetype={ALL_14[0]!}
-      />
-    );
+    render(<ArchetypeBlendSection ranking={ALL_14} percentages={pcts(20)} mottos={MOTTOS} />);
 
     for (const name of ALL_14.slice(0, 3)) {
       expect(screen.getByRole("heading", { name })).toBeTruthy();
@@ -59,67 +52,40 @@ describe("ArchetypeBlendSection", () => {
   });
 
   it("renders each match percentage, so the hero's number has a reference", () => {
-    render(
-      <ArchetypeBlendSection
-        ranking={ALL_14}
-        percentages={pcts(20)}
-        mottos={MOTTOS}
-        viewArchetype={ALL_14[0]!}
-      />
-    );
+    render(<ArchetypeBlendSection ranking={ALL_14} percentages={pcts(20)} mottos={MOTTOS} />);
     // The whole reason this block exists: an unattributed "71%" in the hero.
     expect(screen.getByText("70.0%")).toBeTruthy();
     expect(screen.getByText("60.0%")).toBeTruthy();
     expect(screen.getByText("50.0%")).toBeTruthy();
   });
 
-  it("names the archetype the rest of the report speaks in", () => {
-    render(
-      <ArchetypeBlendSection
-        ranking={ALL_14}
-        percentages={pcts(20)}
-        mottos={MOTTOS}
-        viewArchetype={ALL_14[0]!}
-      />
-    );
-    const handoff = document.querySelector(".report-blend__handoff");
-    expect(handoff?.textContent).toContain("Relational Nurturer");
-    // Wide spread: the reader is told a miss points at what sits underneath,
-    // rather than being told they are an even blend.
-    expect(handoff?.textContent).toContain("explains the most");
-    expect(handoff?.textContent).not.toContain("sit close together");
-  });
-
-  it("says the same thing however close the top three are", () => {
-    // A spread-keyed "your top three sit close together" variant was cut on
-    // 2026-08-25: the bars above already show how close they are.
-    render(
-      <ArchetypeBlendSection
-        ranking={ALL_14}
-        percentages={pcts(4)}
-        mottos={MOTTOS}
-        viewArchetype={ALL_14[0]!}
-      />
-    );
-    const handoff = document.querySelector(".report-blend__handoff");
-    expect(handoff?.textContent).toContain("explains the most");
-    expect(handoff?.textContent).not.toContain("sit close together");
-  });
-
   it("describes each of the three, not just names it", () => {
-    render(
-      <ArchetypeBlendSection
-        ranking={ALL_14}
-        percentages={pcts(20)}
-        mottos={MOTTOS}
-        viewArchetype={ALL_14[0]!}
-      />
-    );
+    render(<ArchetypeBlendSection ranking={ALL_14} percentages={pcts(20)} mottos={MOTTOS} />);
     // The motto is evocative, not descriptive; the blurb is what says what the
     // pattern actually is. All three rows carry one.
     const blurbs = document.querySelectorAll(".report-blend__blurb");
     expect(blurbs).toHaveLength(3);
     expect(blurbs[0]!.textContent).toContain("Desire that runs through care");
+  });
+
+  it("ends on the ranked card, with no closing paragraph", () => {
+    // The "the chapters ahead read X in depth" handoff was cut on 2026-08-25.
+    // It is the block most likely to come back by reflex, so this pins it.
+    const { container } = render(
+      <ArchetypeBlendSection ranking={ALL_14} percentages={pcts(20)} mottos={MOTTOS} />
+    );
+    expect(container.querySelector(".report-blend__handoff")).toBeNull();
+    expect(container.textContent).not.toContain("chapters ahead");
+    expect(container.querySelector(".report-blend")!.lastElementChild!.className).toContain(
+      "report-blend__card"
+    );
+  });
+
+  it("says the percentages are not scores", () => {
+    render(<ArchetypeBlendSection ranking={ALL_14} percentages={pcts(20)} mottos={MOTTOS} />);
+    const intro = document.querySelector(".report-blend__intro");
+    expect(intro?.textContent).toContain("not scores");
+    expect(intro?.textContent).toContain("nothing to pass");
   });
 
   it("renders a row without a motto rather than dropping it", () => {
@@ -128,33 +94,15 @@ describe("ArchetypeBlendSection", () => {
         ranking={ALL_14}
         percentages={pcts(20)}
         mottos={{ ...MOTTOS, "Tender Devotee": null }}
-        viewArchetype={ALL_14[0]!}
       />
     );
     expect(screen.getAllByRole("progressbar")).toHaveLength(3);
     expect(screen.getByRole("heading", { name: "Tender Devotee" })).toBeTruthy();
   });
 
-  it("does not claim someone else's chapters are your top match", () => {
-    // Reached by opening another archetype from the constellation list. Saying
-    // "the chapters ahead read your strongest match" would be false there.
-    render(
-      <ArchetypeBlendSection
-        ranking={ALL_14}
-        percentages={pcts(20)}
-        mottos={MOTTOS}
-        viewArchetype="Spark Seeker"
-      />
-    );
-    const handoff = document.querySelector(".report-blend__handoff");
-    expect(handoff?.textContent).toContain("You are reading the Spark Seeker chapters");
-    expect(handoff?.textContent).toContain("Your own strongest match is Relational Nurturer");
-    expect(handoff?.textContent).not.toContain("explains the most");
-  });
-
   it("renders nothing without a ranking", () => {
     const { container } = render(
-      <ArchetypeBlendSection ranking={[]} percentages={{}} mottos={{}} viewArchetype="" />
+      <ArchetypeBlendSection ranking={[]} percentages={{}} mottos={{}} />
     );
     expect(container.firstChild).toBeNull();
   });

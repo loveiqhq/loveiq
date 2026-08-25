@@ -23,6 +23,11 @@ import { useRevealOnView } from "../hooks/useRevealOnView";
  * full fourteen-row ranking at the end of Part I and stays exactly where it
  * is. This one is a three-row primer: prose first, ranking second, no
  * per-archetype CTAs competing with the reader's own result.
+ *
+ * A closing "the chapters ahead read <archetype> in depth" paragraph was cut on
+ * 2026-08-25. It also carried the only note telling a reader browsing ANOTHER
+ * archetype's chapters that they were not looking at their own top match; that
+ * caveat went with it.
  */
 interface Props {
   /** Archetype names, already sorted by match % descending (all 14). */
@@ -31,13 +36,6 @@ interface Props {
   percentages: Record<string, number>;
   /** Per-archetype motto, keyed by name; null when copy is absent. */
   mottos: Record<string, string | null>;
-  /**
-   * The archetype the chapters below are actually written in. Usually the
-   * reader's own top match, but the report can be browsed in another
-   * archetype's voice, and the handoff line must name the one they are about to
-   * read rather than assuming rank 1.
-   */
-  viewArchetype: string;
 }
 
 type CssVarStyle = CSSProperties & Record<`--${string}`, string | number>;
@@ -69,18 +67,13 @@ function hexToRgbTriplet(hex: string): string {
   return `${(n >> 16) & 255} ${(n >> 8) & 255} ${n & 255}`;
 }
 
-const ArchetypeBlendSection: FC<Props> = ({ ranking, percentages, mottos, viewArchetype }) => {
+const ArchetypeBlendSection: FC<Props> = ({ ranking, percentages, mottos }) => {
   // Before the early return — a hook may not be conditional.
   const [listRef, revealed] = useRevealOnView<HTMLOListElement>();
 
   if (ranking.length === 0) return null;
 
   const top = ranking.slice(0, TOP_N);
-  const primary = top[0]!;
-  // True in the ordinary case. False when the reader has opened someone else's
-  // archetype from the constellation list, where "the chapters ahead read your
-  // top match" would simply be untrue.
-  const readingOwnTop = viewArchetype === primary;
 
   return (
     <div className="report-blend">
@@ -99,8 +92,8 @@ const ArchetypeBlendSection: FC<Props> = ({ ranking, percentages, mottos, viewAr
           safe you feel, and what your body needs at the time.
         </p>
         <p>
-          So read the numbers as <strong>pull, not identity</strong>: how closely your answers track
-          each pattern next to the other thirteen. Not a mark you can pass or fail.
+          The percentages show how well each pattern fits your answers. They are{" "}
+          <strong>not scores</strong>, and there is nothing to pass.
         </p>
       </div>
 
@@ -161,33 +154,6 @@ const ArchetypeBlendSection: FC<Props> = ({ ranking, percentages, mottos, viewAr
           })}
         </ol>
       </section>
-
-      {/*
-        The handoff line is the one that has to do real work: it tells the
-        reader why the report is about to speak in one archetype's voice, and
-        gives them somewhere to put it when a passage does not fit. Without it,
-        "this isn't me" has nowhere to go except away from the page.
-
-        A "your top three sit close together" variant keyed on the spread was
-        cut on 2026-08-25 — the two rows above already show how close they are,
-        so saying it in words was the third time the reader had been told.
-      */}
-      <p className="report-blend__handoff">
-        {!readingOwnTop ? (
-          <>
-            You are reading the <strong>{viewArchetype}</strong> chapters, which came out at{" "}
-            {formatPct(percentages[viewArchetype] ?? 0)} for you. Your own strongest match is{" "}
-            <strong>{primary}</strong>, and its chapters are one click away in the full ranking.
-          </>
-        ) : (
-          <>
-            The chapters ahead read <strong>{primary}</strong> in depth, because it explains the
-            most of what you told us. Where a passage misses, that is information rather than a
-            broken result: it usually points at the pattern sitting just underneath.
-          </>
-        )}{" "}
-        Your full ranking across all fourteen is at the end of this part.
-      </p>
     </div>
   );
 };

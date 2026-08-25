@@ -15608,7 +15608,9 @@ input.autofill-dark:-internal-autofill-previewed {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: clamp(14px, 1.6vw, 20px);
+  /* Widened with the CTA's second trim (2026-08-25): a smaller pill sitting the
+     same distance from a full-width paragraph reads as crowded. */
+  gap: clamp(24px, 3vw, 40px);
   padding: clamp(18px, 2vw, 25.1px);
   border: 1.128px solid rgba(22, 16, 33, 0.09);
   border-radius: 20.3px;
@@ -15700,18 +15702,19 @@ input.autofill-dark:-internal-autofill-previewed {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  /* 248 -> 174, i.e. 30% narrower (2026-08-25). It stays at the flex end, so
-     it is still right-aligned; the row's text column takes the width back. */
-  width: 174px;
+  /* 248 -> 174 -> 157: 30% narrower, then another 10% (2026-08-25). It stays at
+     the flex end, so it is still right-aligned; the row's text column takes the
+     width back. */
+  width: 157px;
   max-width: 100%;
-  padding: 5.6px 11px 7.1px;
+  padding: 5px 10px 6.4px;
   border: none;
   border-radius: 9999px;
   background: linear-gradient(90deg, #fe6839 0%, #c36ddf 100%);
   color: #ffffff;
   font-family: var(--font-sans);
   font-weight: 800;
-  font-size: 0.7rem;
+  font-size: 0.63rem;
   line-height: 1.65;
   text-align: center;
   cursor: pointer;
@@ -16279,25 +16282,6 @@ input.autofill-dark:-internal-autofill-previewed {
   line-height: 1.22;
   text-align: right;
   font-variant-numeric: tabular-nums;
-}
-
-/* The handoff sentence. Set apart with a rule rather than a box: it is an aside
-   from the report to the reader, not another card. */
-.report-blend__handoff {
-  max-width: 36rem;
-  margin: clamp(18px, 2vw, 24px) 0 0;
-  padding-left: clamp(12px, 1.4vw, 16px);
-  border-left: 2px solid rgba(157, 138, 215, 0.45);
-  color: #3f3a4a;
-  font-family: var(--font-sans);
-  font-weight: 400;
-  font-size: clamp(0.9rem, 1.1vw, 1rem);
-  line-height: 1.6;
-}
-
-.report-blend__handoff strong {
-  color: #161021;
-  font-weight: 600;
 }
 
 /* Mobile: rank+icon+name on row 1, motto full width, bar+pct on row 3 — the
