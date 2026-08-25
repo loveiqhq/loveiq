@@ -227,6 +227,47 @@ const CompareDots: FC<{ filled: number; total: number }> = ({ filled, total }) =
  * bar contradicted its own caption for every archetype whose number wasn't 62.
  * Falls back to Figma's own 66% when the stat carries no percentage.
  */
+/**
+ * The third compare column since 2026-08-25: what sex is worth to this reader
+ * against what it is currently delivering, both on the 1-7 scale they answered.
+ *
+ * It replaces "68% — Sensual Connector runs nearly as deep", which showed the
+ * reader their SECOND archetype's score. The opening primer now lists the top
+ * three with exact percentages, so that column had become a vaguer restatement
+ * of something said a minute earlier.
+ *
+ * Two positions rather than the difference between them: a reader told their
+ * gap is "2.1 points" has to subtract two numbers they were never shown, on a
+ * scale nobody named. Two labelled bars need no arithmetic and no unit.
+ *
+ * Both values come from answers the reader already gave (`01002` satisfaction,
+ * `16013` importance) and are already on the client in `snapshotAnswers`, so
+ * this needs no new question and no population estimate.
+ */
+const CompareWantVsGetting: FC<{ importance: number; satisfaction: number }> = ({
+  importance,
+  satisfaction,
+}) => {
+  const rows = [
+    { label: "matters to you", value: importance },
+    { label: "working right now", value: satisfaction },
+  ];
+  return (
+    <div className="report-snapshot-compare__gap">
+      {rows.map((row) => (
+        <div key={row.label} className="report-snapshot-compare__gap-row">
+          <div className="report-snapshot-compare__bar" aria-hidden="true">
+            <span style={{ width: `${Math.round((row.value / 7) * 100)}%` }} />
+          </div>
+          <p className="report-snapshot-compare__gap-label">
+            <strong>{row.value} of 7</strong> {row.label}
+          </p>
+        </div>
+      ))}
+    </div>
+  );
+};
+
 const CompareBar: FC<{ stat?: string }> = ({ stat }) => {
   const pct = Number.parseInt(stat?.match(/(\d{1,3})\s*%/)?.[1] ?? "", 10);
   const fill = Number.isFinite(pct) ? Math.min(Math.max(pct, 4), 100) : 66;
@@ -352,12 +393,23 @@ export const SnapshotCards: FC<Props> = ({ archetype, copy, stageResult = null }
  * the findings list ("Five things this report found"), which is the order Eman
  * asked for: snapshot heading -> five findings -> this box.
  */
-export const SnapshotCompare: FC<{ copy: SnapshotCopy | null }> = ({ copy }) => {
+export const SnapshotCompare: FC<{
+  copy: SnapshotCopy | null;
+  /**
+   * The reader's own 1-7 answers. When both are present the third column shows
+   * want-versus-getting; otherwise it falls back to the matrix's `compare3`, so
+   * a reader who skipped either question still gets a full row.
+   */
+  wantVsGetting?: { importance: number | null; satisfaction: number | null };
+}> = ({ copy, wantVsGetting }) => {
   // Its own reveal root, like the three mini-stat boxes. This box rides
   // `.report-section.is-visible` as a fallback, and that fires when the SECTION's
   // top crosses the fold — which for a box further down the section means the dots
   // have finished landing before the reader gets there.
   const [compareRef, compareRevealed] = useRevealOnView<HTMLElement>({ threshold: 0 });
+  const importance = wantVsGetting?.importance ?? null;
+  const satisfaction = wantVsGetting?.satisfaction ?? null;
+  const hasGap = importance !== null && satisfaction !== null;
   const compares = [
     {
       stat: copy?.["compare1.stat"],
@@ -375,13 +427,21 @@ export const SnapshotCompare: FC<{ copy: SnapshotCopy | null }> = ({ copy }) => 
       viz: "dots" as const,
       ...dotsFromStat(copy?.["compare2.stat"]),
     },
-    {
-      stat: copy?.["compare3.stat"],
-      caption: copy?.["compare3.caption"],
-      viz: "bar" as const,
-      filled: 0,
-      total: 0,
-    },
+    hasGap
+      ? {
+          stat: undefined,
+          caption: "what it's worth to you, against what it's giving you",
+          viz: "gap" as const,
+          filled: 0,
+          total: 0,
+        }
+      : {
+          stat: copy?.["compare3.stat"],
+          caption: copy?.["compare3.caption"],
+          viz: "bar" as const,
+          filled: 0,
+          total: 0,
+        },
   ].filter((c) => c.stat || c.caption);
 
   if (compares.length === 0) return null;
@@ -397,7 +457,9 @@ export const SnapshotCompare: FC<{ copy: SnapshotCopy | null }> = ({ copy }) => 
       <div className="report-snapshot-compare__cols">
         {compares.map((c, i) => (
           <div key={i} className="report-snapshot-compare__col">
-            {c.viz === "bar" ? (
+            {c.viz === "gap" ? (
+              <CompareWantVsGetting importance={importance!} satisfaction={satisfaction!} />
+            ) : c.viz === "bar" ? (
               <CompareBar stat={c.stat} />
             ) : (
               <CompareDots filled={c.filled} total={c.total} />

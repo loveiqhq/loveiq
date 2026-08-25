@@ -9332,6 +9332,46 @@ input.autofill-dark:-internal-autofill-previewed {
   background: rgb(var(--report-accent-ink-rgb, var(--report-accent-rgb)));
 }
 
+/* Third compare column since 2026-08-25: two positions on the reader's own 1-7
+   scale rather than one archetype percentage. Stacked so the distance between
+   the two bars IS the gap, with no arithmetic asked of the reader. */
+.report-snapshot-compare__gap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.report-snapshot-compare__gap-row {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+
+/* Wider than the single 72px stat bar it replaces: two bars only read as a gap
+   if the difference between them is visible, and 72px cannot show three
+   sevenths. */
+.report-snapshot-compare__gap-row .report-snapshot-compare__bar {
+  width: 100%;
+  max-width: 150px;
+}
+
+.report-snapshot-compare__gap-label {
+  margin: 0;
+  text-align: center;
+  color: #6b6678;
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
+.report-snapshot-compare__gap-label strong {
+  color: #161021;
+  font-weight: 700;
+}
+
 .report-snapshot-compare__bar {
   width: 72px;
   height: 8px;

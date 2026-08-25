@@ -1090,7 +1090,13 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                               so it renders here rather than in SnapshotSection.
                               Same section wrapper, so it keeps the shared
                               `.report-section.is-visible` reveal. */}
-                          <SnapshotCompare copy={snapshotCopy} />
+                          <SnapshotCompare
+                            copy={snapshotCopy}
+                            wantVsGetting={{
+                              importance: snapshot.importanceValue,
+                              satisfaction: snapshot.satisfactionValue,
+                            }}
+                          />
                         </ReportSection>
                         {/* Insight Map renders directly after Findings with the
                           same reveal treatment (Figma 8762:15822). Fully visible
