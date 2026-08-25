@@ -16073,9 +16073,8 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 .report-blend__heading {
-  /* Centred on request (2026-08-25). The prose and the card under it stay left
-     aligned — the headline is the only element treated as a title here. */
-  text-align: center;
+  /* Left, like everything else in the block. Centring was tried on 2026-08-25
+     and reverted the same day. */
   margin: 0 0 clamp(14px, 1.7vw, 20px);
   color: #161021;
   font-family: var(--font-serif);
