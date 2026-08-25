@@ -292,27 +292,27 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
   // so as the last block this was the first thing dropped when a message ran
   // long — leaving every number in place and no statement of what any of them
   // meant.
-  blocks.push(
-    context(
-      `${windowLabel} · "visits" are visitor-days on any page, not people · the verdicts below compare arms on finished surveys → ever paid, counted server-side with no consent gap`
-    )
-  );
+  blocks.push(context(`${windowLabel} · "visits" are visitor-days on any page, not people`));
 
-  // ---- The decision, first ----
-  if (verdicts.length > 0) {
+  /**
+   * "Where the tests stand" used to sit here: a 30-day, paid-based verdict per
+   * axis. It is gone because the per-test section below reported the same three
+   * tests again on their own like-for-like windows and a different metric, and
+   * two verdicts per test that disagree is worse than one — it took an alert to
+   * explain which of them to ignore.
+   *
+   * Nothing decision-relevant is lost. The survey axis has no cutover, so its
+   * like-for-like window IS the 30 days, and its paid counts moved into the line
+   * below. For pricing and landing the 30-day figure pooled a price change and a
+   * different pair of arms respectively, which is exactly the number that should
+   * not be quoted.
+   *
+   * A FAILED read still has to speak, though: silence would read as "no tests
+   * running" rather than "we could not measure them".
+   */
+  if (cohorts === null) {
     blocks.push(
-      section(`*Where the tests stand*\n${verdicts.map((v) => `• ${v.sentence}`).join("\n")}`)
-    );
-  } else {
-    // `cohorts === null` means the read FAILED; an empty array means there is
-    // genuinely nothing. Saying "no experiment data" for a failed read tells the
-    // reader the experiments are dead.
-    blocks.push(
-      section(
-        cohorts === null
-          ? "*Where the tests stand*\n• Could not read the experiment data — this is a measurement failure, not a result."
-          : "*Where the tests stand*\n• No experiment data in this window."
-      )
+      section("*Could not read the experiment data* — a measurement failure, not a result.")
     );
   }
 
@@ -341,7 +341,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
     };
 
     blocks.push(divider());
-    blocks.push(section("*Yesterday, against the usual day*"));
+    blocks.push(section("*Yesterday vs a normal day*"));
     blocks.push(
       fields([
         { label: "Visits", value: `${yVisitors}  _(${delta(yVisitors, pVisitors / 7)})_` },
@@ -372,20 +372,24 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
     // someone can act on.
     const leak = biggestLeak(steps.slice(1));
     blocks.push(divider());
-    blocks.push(
-      section(
-        `*The funnel — ${WINDOW_DAYS} days*${
-          leak
-            ? `\nBiggest drop: ${escapeSlack(shortStep(leak.from))} → ${escapeSlack(shortStep(leak.to))}, losing ${leak.pct}%`
-            : ""
-        }`
-      )
-    );
     const rows = steps.map((s) => {
       const drop = s.dropFromPrev > 0 ? `  ▼ ${s.dropFromPrev}%` : "";
       return `\`${String(s.count).padStart(6)}\`  ${String(s.pctOfTop).padStart(5)}%  ${escapeSlack(s.step)}${drop}`;
     });
-    blocks.push(section(rows.join("\n")));
+    // Heading, headline and table in ONE block. Split across two, Slack put a
+    // paragraph gap between the title and the numbers it titles.
+    blocks.push(
+      section(
+        [
+          `*The funnel — ${WINDOW_DAYS} days*${
+            leak
+              ? `  ·  biggest drop ${escapeSlack(shortStep(leak.from))} → ${escapeSlack(shortStep(leak.to))}, losing ${leak.pct}%`
+              : ""
+          }`,
+          rows.join("\n"),
+        ].join("\n")
+      )
+    );
   }
 
   // ---- Visits → reached the survey. NOT arm-comparable yet. ----
@@ -457,17 +461,13 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
             "Site visit-days to reached-survey rate, by landing page arm. Not comparable between arms yet — the two arms measure different funnel steps.",
         });
       }
-    } else {
-      // Not silence. The RPC floors its window at the first day BOTH sides were
-      // instrumented, so before then it correctly returns nothing — and a reader
-      // who was told last week that this chart was coming needs to know why it
-      // is not here rather than assume it was dropped.
-      blocks.push(
-        context(
-          "_Visits → survey-started by landing page: no chart yet — per-arm recording of survey starts has only just begun, so there is not enough history for a 7-day trailing rate._"
-        )
-      );
     }
+    // No "not enough history yet" line here. It was added when the header still
+    // advertised this chart, so its absence needed accounting for; the header
+    // does not any more, and a daily line about a picture nobody is waiting for
+    // is how a digest teaches people to skim it. A source that FAILS still
+    // speaks — see the else below — because that is breakage, not a routine
+    // state.
   } else {
     blocks.push(
       context(
@@ -499,7 +499,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
   {
     const trends = buildAxisTrends(axisRows, dayKey);
     if (trends.charted.length > 0 || trends.skipped.length > 0) {
-      blocks.push(section("*How each A/B test is performing*"));
+      blocks.push(section("*The tests*"));
     }
     for (const chart of trends.charted) {
       const series = buildArmSeries(

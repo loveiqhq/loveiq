@@ -234,6 +234,14 @@ function verdictSentence(
   return `${leader} is genuinely ahead (${formatSignalSummary(oriented)}).`;
 }
 
+/** Three words for a header line; the full sentence is for a charted axis. */
+function verdictShort(aN: number, aConv: number, bN: number, bConv: number): string {
+  const signal = twoProportionSignal(bN, bConv, aN, aConv);
+  if (signal.significance === "insufficient-data") return "too early to call";
+  if (signal.significance === "inconclusive") return "no clear winner yet";
+  return "a real difference — see /admin";
+}
+
 type ArmTotals = { arm: string; completions: number; checkouts: number; paid: number };
 
 /**
@@ -248,37 +256,30 @@ function countsFor(
   validFrom: string | null,
   reason: string
 ): AxisCounts {
-  const since = validFrom ? ` since ${human(validFrom)}` : "";
+  const since = validFrom ? `since ${human(validFrom)} · ` : "";
   const armLine = (t: ArmTotals) =>
-    `• *${armLabel(axis, t.arm).short}*${pricingSide(axis, t.arm)} — ${t.completions} finished → ${t.checkouts} reached checkout → ${t.paid} paid`;
+    `• *${armLabel(axis, t.arm).short}*${pricingSide(axis, t.arm)} — ${t.completions} finished → ${t.checkouts} checkout → ${t.paid} paid`;
   return {
     axis,
     axisTitle,
+    // One header line carrying the window, the verdict and when a chart arrives,
+    // then one line per arm. What used to be here as well — the full significance
+    // sentence, why the window starts where it does, what a trailing rate needs —
+    // was explanation of an absence rather than information.
     text: [
-      `*${axisTitle}* — ${a.completions} vs ${b.completions} finished surveys${since}`,
+      `*${axisTitle}* — ${since}${verdictShort(a.completions, a.checkouts, b.completions, b.checkouts)} · ${reason}`,
       armLine(a),
       armLine(b),
-      `• ${verdictSentence(armLabel(axis, a.arm).short, a.completions, a.checkouts, armLabel(axis, b.arm).short, b.completions, b.checkouts)}`,
-      `• ${reason}`,
     ].join("\n"),
   };
 }
 
 /**
- * Why purchases are a number here and not a second line.
- *
- * Conditional on the count, not a fixed sentence. The claim "too few to make a
- * line mean anything" was unconditional, which is the one thing this module is
- * not allowed to do — every other statement it makes is gated on the data. It is
- * true at today's volumes and would quietly become a lie the moment purchases
- * grow, which is exactly when someone would want the line drawn.
+ * `purchaseNote` used to explain, in a sentence, why purchases were not drawn as
+ * a second line. Removed: the reader does not need the argument for a chart that
+ * is not there, and the paid COUNT now sits on each arm's own line, where it is
+ * useful rather than defensive.
  */
-function purchaseNote(paidTotal: number): string {
-  if (paidTotal < MIN_PAID_TO_DRAW) {
-    return `Purchases are in the totals below and deliberately not drawn — ${paidTotal} in this window is too few for a line to mean anything.`;
-  }
-  return `${paidTotal} purchases in this window; see the totals below.`;
-}
 
 export interface AxisTrends {
   charted: AxisChart[];
@@ -358,16 +359,7 @@ export function buildAxisTrends(rows: AxisFunnelRow[], today: string): AxisTrend
       const readyOn = human(addDays(validFrom ?? firstDay, MIN_TREND_DAYS));
       // eslint-disable-next-line security/detect-object-injection -- closed union.
       const why = AXIS_VALID_FROM[axis]?.why;
-      counts.push(
-        countsFor(
-          axis,
-          axisTitle,
-          a,
-          b,
-          validFrom,
-          `No trend chart yet: only ${daysAvailable} ${daysAvailable === 1 ? "day" : "days"} of like-for-like data.${why ? ` That is because ${why}.` : ""} It needs ${MIN_TREND_DAYS} days, so expect it from ${readyOn}.`
-        )
-      );
+      counts.push(countsFor(axis, axisTitle, a, b, validFrom, `chart from ${readyOn}`));
       continue;
     }
 
@@ -382,7 +374,7 @@ export function buildAxisTrends(rows: AxisFunnelRow[], today: string): AxisTrend
           a,
           b,
           validFrom,
-          `No trend chart yet: ${smallLabel} has only ${smaller} finished ${smaller === 1 ? "survey" : "surveys"} (needs ${MIN_ARM_COMPLETIONS}), so its line would move on single people rather than on a trend.`
+          `chart once ${smallLabel} passes ${MIN_ARM_COMPLETIONS} finished`
         )
       );
       continue;
@@ -411,7 +403,7 @@ export function buildAxisTrends(rows: AxisFunnelRow[], today: string): AxisTrend
       labels: [],
       headline: `${aLabel} ${a.checkouts}/${a.completions} = ${aRate}%  ·  ${bLabel} ${b.checkouts}/${b.completions} = ${bRate}%`,
       footnote: `7-day trailing rate · a gap means no finished surveys that day${validFrom ? ` · from ${human(validFrom)}` : ""}`,
-      caption: `*${axisTitle}* — ${aLabel} ${aRate}% (${a.checkouts}/${a.completions}) vs ${bLabel} ${bRate}% (${b.checkouts}/${b.completions}) reaching checkout. ${verdictSentence(aLabel, a.completions, a.checkouts, bLabel, b.completions, b.checkouts)}${key} ${purchaseNote(paidTotal)}`,
+      caption: `*${axisTitle}* — ${aLabel} ${aRate}% (${a.checkouts}/${a.completions}) to checkout, ${a.paid} paid · ${bLabel} ${bRate}% (${b.checkouts}/${b.completions}), ${b.paid} paid. ${verdictSentence(aLabel, a.completions, a.checkouts, bLabel, b.completions, b.checkouts)}`,
     });
   }
 

@@ -386,16 +386,20 @@ describe("conversion-digest handler", () => {
     expect(arg.blocks.filter((b) => (b as { type?: string }).type === "image")).toHaveLength(1);
   });
 
-  it("states the reached-survey chart's absence when its source is empty, not just null", async () => {
+  it("says nothing at all about the reached-survey chart when it has no data", async () => {
     // The RPC floors its window at the first day BOTH arms were instrumented, so
-    // it correctly answers with empty arrays for days before that. That path used
-    // to render nothing at all while the header still advertised the chart.
+    // it correctly answers with empty arrays for days before that. There used to
+    // be a line accounting for the absence, because the header advertised the
+    // chart; the header does not any more, so the correct behaviour is silence —
+    // no dangling reference anywhere in the message, in either direction.
     mockFetchLandingStartFunnel.mockResolvedValue({ daily: [], totals: [] });
     await GET(request());
     const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
     const flat = blockText(arg.blocks);
-    expect(flat).toContain("Visits → survey-started by landing page: no chart yet");
+    expect(flat).not.toContain("survey-started by landing page");
     expect(flat).not.toContain("arm-comparable");
+    // The rest of the digest still ships — one missing source takes nothing else.
+    expect(flat).toContain("*The tests*");
     expect(arg.blocks.filter((b) => (b as { type?: string }).type === "image")).toHaveLength(1);
   });
 
@@ -418,10 +422,10 @@ describe("conversion-digest handler", () => {
     ) as { text: { text: string } } | undefined;
     expect(section).toBeDefined();
     const text = section!.text.text;
-    expect(text).toContain("21 vs 18 finished surveys since 21 Aug");
-    expect(text).toContain("21 finished → 3 reached checkout → 0 paid");
-    expect(text).toContain("18 finished → 6 reached checkout → 0 paid");
-    expect(text).toMatch(/No trend chart yet/);
+    expect(text).toContain("since 21 Aug");
+    expect(text).toContain("21 finished → 3 checkout → 0 paid");
+    expect(text).toContain("18 finished → 6 checkout → 0 paid");
+    expect(text).toMatch(/chart (from|once)/);
     // And no image was emitted for it — the whole point of the counts path.
     const imgs = arg.blocks.filter((b) =>
       (b as { alt_text?: string }).alt_text?.startsWith("Landing page")
@@ -453,7 +457,7 @@ describe("conversion-digest handler", () => {
     const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
     const flat = blockText(arg.blocks);
     expect(flat).toContain("nothing to compare");
-    expect(flat).toContain("How each A/B test is performing");
+    expect(flat).toContain("*The tests*");
   });
 
   it("records the run and 500s when a source throws", async () => {
@@ -484,13 +488,23 @@ describe("conversion-digest handler", () => {
     expect(blockText(arg.blocks)).toContain("measurement failure, not a result");
   });
 
-  it("distinguishes an empty window from a failed read", async () => {
+  it("speaks up for a FAILED read and stays quiet for an empty one", async () => {
+    // "No experiment data in this window" was removed with the 30-day verdict
+    // block it headed: an empty window is already evident from the per-test
+    // section. A failed READ is different — silence there would read as "no
+    // tests running" rather than "we could not measure them".
     mockFetchArmCohorts.mockResolvedValue([]);
     const res = await GET(request());
     expect(res.status).toBe(200);
-    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
-    expect(blockText(arg.blocks)).toContain("No experiment data in this window");
+    let arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
     expect(blockText(arg.blocks)).not.toContain("measurement failure");
+    expect(blockText(arg.blocks)).not.toContain("No experiment data");
+
+    mockNotifySlack.mockClear();
+    mockFetchArmCohorts.mockResolvedValue(null);
+    await GET(request());
+    arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    expect(blockText(arg.blocks)).toContain("measurement failure");
   });
 
   it("keeps the definitions at the top, where trimming cannot reach them", async () => {
@@ -647,18 +661,24 @@ describe("conversion-digest alerts", () => {
     expect(alerts[0]!.message).toContain("Nothing crossed a threshold");
   });
 
-  it("flags the ambiguous visitor bucket without claiming it was excluded", () => {
-    const alerts = buildAlerts({ ...base, visitorArms: [{ arm: "control", n: 269 }] });
+  it("emits no standing daily caveats, only things that happened", () => {
+    // Two alerts were removed as noise: the retired-landing-label bucket (whose
+    // subject, per-arm visit counts, the message no longer prints) and the
+    // pricing-cutover warning (which pointed at a pooled 30-day line that no
+    // longer exists). Both were true EVERY day, which is how a digest teaches
+    // people to skim its alerts. This is the guard against them coming back.
+    const alerts = buildAlerts({
+      ...base,
+      visitorArms: [{ arm: "control", n: 269 }],
+      pricingCutoverIso: "2026-08-24T02:46:49Z",
+    });
     const message = alerts.map((a) => a.message).join(" ");
-    expect(message).toContain("269");
-    expect(message).toContain("retired landing page label");
-    // It used to say these visits were "left out of the comparison above" — they
-    // are in fact COUNTED in the visits totals; only the per-arm comparison
-    // ignores them, and that is built from finished surveys, not visit rows.
-    expect(message).toContain("ARE counted");
-    expect(message).not.toContain("left out of the comparison");
-    // A standing caveat must not sort above genuinely actionable alerts.
-    expect(alerts.find((a) => a.message.includes("269"))?.severity).toBe("info");
+    expect(message).not.toContain("retired landing page label");
+    expect(message).not.toContain("POOLS both price levels");
+    // The one standing caveat that survives changes a decision, and stays `info`
+    // so it cannot sort above something actionable.
+    const unfair = alerts.find((a) => a.message.includes("not a fair split"));
+    if (unfair) expect(unfair.severity).toBe("info");
   });
 
   it("warns that the homepage arms are not a fair split", () => {
@@ -689,19 +709,6 @@ describe("conversion-digest alerts", () => {
       baseline: { visitors: 4, completions: 1, paid: 0 },
     });
     expect(tiny.some((a) => a.message.includes("below the usual"))).toBe(false);
-  });
-
-  it("admits the pricing comparison still pools both price levels", () => {
-    // It used to claim the comparison "restarts from that date". Nothing in the
-    // code splits the cohort at the cutover — the value never reaches the RPC —
-    // so the sentence promised a filter that does not exist. On the day of the
-    // change it was maximally wrong: the window closes at 00:00 UTC and the
-    // change landed at 02:46, so every day shown was pre-change.
-    const alerts = buildAlerts({ ...base, pricingCutoverIso: "2026-08-24T02:46:49Z" });
-    const msg = alerts.map((a) => a.message).join(" ");
-    expect(msg).toContain("POOLS both price levels");
-    expect(msg).not.toContain("restarts");
-    expect(msg).not.toContain("are not pooled in");
   });
 
   it("stops mentioning the price change once it is old news", () => {

@@ -84,14 +84,16 @@ describe("axis trend charts — which experiments may be drawn", () => {
     // order flipped colours between consecutive digests once two arms were
     // within one day of each other.
     expect(chart!.arms[0]).toBe("dark");
-    // Purchases are reported as a COUNT and never drawn as a second line.
-    expect(chart!.caption).toMatch(/[Pp]urchases/);
+    // Paid is a COUNT on each arm's own line, never a second drawn series. The
+    // sentence that used to argue why it is not drawn is gone.
+    expect(chart!.caption).toContain("30 paid");
+    expect(chart!.caption).not.toMatch(/too few|deliberately not drawn/);
   });
 
-  it("only calls the purchase count too small when it actually is", () => {
-    // The claim used to be unconditional, which is the one thing this module is
-    // not allowed to do: it would have kept saying "too few for a line to mean
-    // anything" after purchases grew past the point where a line works.
+  it("puts each arm's paid count on its line at any volume", () => {
+    // Replaces a test for the sentence that used to argue why purchases were not
+    // drawn as a second line. That argument is gone; the counts are what a reader
+    // needed from it, and they are now unconditional.
     const many = buildAxisTrends(
       [
         ...rows("survey", "white", {
@@ -112,38 +114,10 @@ describe("axis trend charts — which experiments may be drawn", () => {
       "2026-09-30"
     );
     const chart = many.charted.find((c) => c.axis === "survey")!;
-    // 30 days x (3 + 2) = 150 purchases: plenty.
-    expect(chart.caption).toContain("150 purchases");
+    expect(chart.caption).toContain("90 paid");
+    expect(chart.caption).toContain("60 paid");
     expect(chart.caption).not.toContain("too few");
-
-    // And the shape it was written for. 20 purchases is ~2 per arm per week,
-    // which draws a flat zero with spikes — so the line stays undrawn and says
-    // why. Deliberately ABOVE the first threshold I picked (MIN_CELL_COUNT * 2 =
-    // 10) and below the real one, so this test fails if that mistake comes back;
-    // a fixture with zero purchases passed under either and proved nothing.
-    const few = buildAxisTrends(
-      [
-        ...rows("survey", "white", {
-          days: 10,
-          lastDay: "2026-09-30",
-          completions: 10,
-          checkouts: 5,
-          paid: 1,
-        }),
-        ...rows("survey", "dark", {
-          days: 10,
-          lastDay: "2026-09-30",
-          completions: 10,
-          checkouts: 4,
-          paid: 1,
-        }),
-      ],
-      "2026-09-30"
-    );
-    const fewChart = few.charted.find((c) => c.axis === "survey")!;
-    expect(fewChart.caption).toContain("20 in this window is too few");
   });
-
   it("gives a too-young axis its counts instead of only a sentence", () => {
     // Pricing's arms only became like-for-like on its repricing date. A trend
     // line needs 7 days; the numbers do not, and they are what the reader came
@@ -161,15 +135,14 @@ describe("axis trend charts — which experiments may be drawn", () => {
     expect(trends.skipped.map((s) => s.axis)).not.toContain("pricing");
     const young = trends.counts.find((c) => c.axis === "pricing")!;
     // Glance line, then both arms' raw counts, never a rate.
-    expect(young.text).toContain("*Report pricing* — 90 vs 90 finished surveys since 24 Aug");
-    expect(young.text).toContain("90 finished → 15 reached checkout → 0 paid");
+    expect(young.text).toContain("*Report pricing* — since 24 Aug");
+    expect(young.text).toContain("90 finished → 15 checkout → 0 paid");
     // Which side is dearer, DERIVED from the live catalogue rather than named.
     expect(young.text).toMatch(/\*Pricing A\* — (dearer|cheaper), base EUR/);
     // It must say how much data there is, why the window starts where it does,
     // and when the chart will appear — not just "not enough data".
-    expect(young.text).toContain("3 days");
-    expect(young.text).toContain("prices were changed");
-    expect(young.text).toMatch(/expect it from/);
+    expect(young.text).toContain("no clear winner yet");
+    expect(young.text).toMatch(/chart from \d/);
     expect(validFrom).toBe("2026-08-24");
   });
 
@@ -183,9 +156,7 @@ describe("axis trend charts — which experiments may be drawn", () => {
       ],
       "2026-08-24"
     );
-    expect(trends.counts.find((c) => c.axis === "pricing")!.text).toContain(
-      "expect it from 31 Aug"
-    );
+    expect(trends.counts.find((c) => c.axis === "pricing")!.text).toContain("chart from 31 Aug");
   });
 
   it("refuses an axis whose smaller arm is too thin to trend", () => {
@@ -204,8 +175,8 @@ describe("axis trend charts — which experiments may be drawn", () => {
     );
     expect(trends.charted.map((c) => c.axis)).not.toContain("survey");
     const young = trends.counts.find((c) => c.axis === "survey")!;
-    expect(young.text).toContain(`needs ${MIN_ARM_COMPLETIONS}`);
-    expect(young.text).toContain("3 finished surveys");
+    expect(young.text).toContain(`passes ${MIN_ARM_COMPLETIONS} finished`);
+    expect(young.text).toContain("3 finished →");
     // Still shows both arms' numbers rather than withholding them.
     expect(young.text).toContain("300 finished");
   });

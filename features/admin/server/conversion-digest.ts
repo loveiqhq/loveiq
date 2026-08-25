@@ -607,17 +607,13 @@ export function buildAlerts(input: {
     }
   }
 
-  // The ambiguous visitor bucket. Reported as a data problem, not charted as an arm.
-  const ambiguous = input.visitorArms.find((a) => a.arm === AMBIGUOUS_VISITOR_ARM);
-  if (ambiguous && ambiguous.n > 0) {
-    alerts.push({
-      // `info`, not `warn`: this is a standing measurement caveat that is true
-      // every single day, and warnings sort above everything actionable. A
-      // permanent warning is how the last digest earned itself a mute.
-      severity: "info",
-      message: `${ambiguous.n} visits carry a retired landing page label and cannot be attributed to an arm. They ARE counted in the visits totals above — only the per-arm comparison ignores them, and that comparison is built from finished surveys, not from these visit rows. Visits recorded before the tracking fix landed stay unattributable.`,
-    });
-  }
+  /**
+   * The retired-label visit bucket used to be reported here in three sentences.
+   * Removed with the per-arm visit numbers it was explaining: the message no
+   * longer quotes visits by arm anywhere, so the caveat had no subject left. It
+   * was also `info` severity and true every single day, which is how a digest
+   * teaches people to skim past its alerts.
+   */
 
   // The landing arms are not comparable populations: proxy.ts returns an existing
   // white/white_prev cookie unchanged, so everyone who visited between the end of
@@ -629,30 +625,21 @@ export function buildAlerts(input: {
     alerts.push({
       // Standing caveat, same reasoning as above: true every day the test runs.
       severity: "info",
+      // Three sentences cut to one. The fact that changes a decision is that the
+      // current design's number is flattered; the mechanism behind it does not
+      // need re-explaining every morning.
       message:
-        "Landing page arms are not a fair split: returning visitors keep whichever landing page they saw first, so the current design also carries everyone who has been here before. Returning visitors convert BETTER, so treat the current design's number as flattered — an over-estimate, not a floor.",
+        "Landing arms are not a fair split — returning visitors keep the design they first saw, so the current design's number is flattered.",
     });
   }
 
-  // A same-day pricing change resets the pricing comparison — pre- and post-change
-  // arm A are different products and must not be pooled into one rate.
-  if (input.pricingCutoverIso) {
-    const cutover = new Date(input.pricingCutoverIso);
-    if (!Number.isNaN(cutover.getTime())) {
-      const ageMs = input.now.getTime() - cutover.getTime();
-      if (ageMs >= 0 && ageMs < 7 * 86_400_000) {
-        alerts.push({
-          severity: "warn",
-          // Names WHICH comparison, because there are now two. The per-test
-          // section counts only post-change surveys; the "Where the tests stand"
-          // line is the 30-day one and is the pooled figure. Saying "the pricing
-          // comparison above" told the reader to ignore both, including the only
-          // one that is actually clean.
-          message: `Report prices changed ${cutover.toISOString().slice(0, 10)}. The pricing line under *Where the tests stand* covers the whole 30 days, so it POOLS both price levels — ignore that one until the window is made up of post-change sales. The per-test numbers further down count only surveys since the change.`,
-        });
-      }
-    }
-  }
+  /**
+   * The pricing-cutover warning is gone with the pooled 30-day line it warned
+   * about. The pricing entry under *The tests* is scoped to the change date and
+   * says so on its own first line ("since 24 Aug"), so an alert telling the
+   * reader to ignore a number the message no longer prints was pure noise —
+   * and a `warn` at that, sorted above everything actionable.
+   */
 
   // Traffic collapse: only when the baseline is big enough for a percentage to
   // mean anything, mirroring `delta`'s own low-base annotation.
