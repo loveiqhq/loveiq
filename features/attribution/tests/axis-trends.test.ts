@@ -82,8 +82,64 @@ describe("axis trend charts — which experiments may be drawn", () => {
     expect(chart!.headline).toContain("30/300 = 10%");
     // Higher-volume arm first, so colour is stable between runs.
     expect(chart!.arms[0]).toBe("white");
-    // Purchases are reported as a count, never drawn.
-    expect(chart!.caption).toContain("deliberately not drawn");
+    // Purchases are reported as a COUNT and never drawn as a second line.
+    expect(chart!.caption).toMatch(/[Pp]urchases/);
+  });
+
+  it("only calls the purchase count too small when it actually is", () => {
+    // The claim used to be unconditional, which is the one thing this module is
+    // not allowed to do: it would have kept saying "too few for a line to mean
+    // anything" after purchases grew past the point where a line works.
+    const many = buildAxisTrends(
+      [
+        ...rows("survey", "white", {
+          days: 30,
+          lastDay: "2026-09-30",
+          completions: 10,
+          checkouts: 5,
+          paid: 3,
+        }),
+        ...rows("survey", "dark", {
+          days: 30,
+          lastDay: "2026-09-30",
+          completions: 10,
+          checkouts: 4,
+          paid: 2,
+        }),
+      ],
+      "2026-09-30"
+    );
+    const chart = many.charted.find((c) => c.axis === "survey")!;
+    // 30 days x (3 + 2) = 150 purchases: plenty.
+    expect(chart.caption).toContain("150 purchases");
+    expect(chart.caption).not.toContain("too few");
+
+    // And the shape it was written for. 20 purchases is ~2 per arm per week,
+    // which draws a flat zero with spikes — so the line stays undrawn and says
+    // why. Deliberately ABOVE the first threshold I picked (MIN_CELL_COUNT * 2 =
+    // 10) and below the real one, so this test fails if that mistake comes back;
+    // a fixture with zero purchases passed under either and proved nothing.
+    const few = buildAxisTrends(
+      [
+        ...rows("survey", "white", {
+          days: 10,
+          lastDay: "2026-09-30",
+          completions: 10,
+          checkouts: 5,
+          paid: 1,
+        }),
+        ...rows("survey", "dark", {
+          days: 10,
+          lastDay: "2026-09-30",
+          completions: 10,
+          checkouts: 4,
+          paid: 1,
+        }),
+      ],
+      "2026-09-30"
+    );
+    const fewChart = few.charted.find((c) => c.axis === "survey")!;
+    expect(fewChart.caption).toContain("20 in this window is too few");
   });
 
   it("refuses an axis whose comparison is younger than the trailing window", () => {

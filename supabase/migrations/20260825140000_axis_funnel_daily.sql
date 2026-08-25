@@ -10,11 +10,27 @@
 -- either: the landing RPC also returns raw funnel_event visitor rows and the
 -- revenue columns, which no chart needs.
 --
--- ARM DERIVATION IS SHARED, NOT COPIED. Both this and get_arm_cohorts call
--- tracker_arm(), so they cannot drift apart on what an arm is. A copy-pasted
--- CASE would agree today and diverge on the next edit — the agreement has to be
--- structural, and there is a test asserting the two RPCs return equal window
--- totals per arm.
+-- ARM DERIVATION IS SHARED, NOT COPIED — with one honest exception.
+--
+-- The landing and survey arms come from tracker_arm(), the same function
+-- get_arm_cohorts calls, so those two cannot drift apart on what an arm is. A
+-- copy-pasted CASE would agree today and diverge on the next edit.
+--
+-- The PRICING arm is not a tracker value at all: it is a column on
+-- report_price_quote, so "shared function" does not apply. Instead it uses the
+-- identical expression get_arm_cohorts uses — COALESCE(experiment_group,
+-- base_price_bucket) — so the two still cannot disagree. experiment_group is
+-- authoritative and base_price_bucket is only a fallback: the two columns
+-- disagree on 40 of the 331 submissions in the last 30 days, and the pricing
+-- resyncs (20260727130000, 20260824120000) both key on experiment_group.
+-- Measured 2026-08-25: experiment_group is populated for ALL 331, so the
+-- fallback never fires today and the two RPCs return identical pricing totals.
+--
+-- Verified by hand on 2026-08-25 rather than by a test: asserting cross-RPC
+-- parity needs a live database, and the integration suite is opt-in via
+-- SUPABASE_TEST_URL. Re-run this if either RPC's arm derivation is edited:
+--   SELECT axis, arm, SUM(completions) FROM get_axis_funnel_daily($1,$2)
+--    GROUP BY 1,2;  -- must equal get_arm_cohorts($1,$2)'s n per (axis,arm)
 --
 -- COHORT ATTRIBUTION, NOT EVENT-DAY. Every stage is counted on the day the
 -- SURVEY was finished, never the day the checkout or payment happened. That is
@@ -71,8 +87,9 @@ SET search_path = public, pg_temp AS $$
   ),
   quote AS (
     SELECT q.survey_submission_id                     AS id,
-           MIN(q.experiment_group)                    AS pricing_arm,
-           COUNT(DISTINCT q.experiment_group)         AS arm_variants,
+           -- Same expression as get_arm_cohorts, so the two cannot disagree.
+           MIN(COALESCE(q.experiment_group, q.base_price_bucket)) AS pricing_arm,
+           COUNT(DISTINCT COALESCE(q.experiment_group, q.base_price_bucket)) AS arm_variants,
            bool_or(q.checkout_started_at IS NOT NULL) AS reached_checkout,
            bool_or(q.purchased_at IS NOT NULL)        AS reached_paid
       FROM report_price_quote q

@@ -299,6 +299,46 @@ describe("GET /api/cron/journey-backfill", () => {
     expect(calls[0]!.threadTs).toBe("PARENT.1");
   });
 
+  it("aborts loudly rather than silently leaving a posted message unmarked", async () => {
+    // fetchWithTimeout only throws on abort/timeout/network, so a PostgREST
+    // 4xx/5xx arrives as a normal response with ok:false. When the Slack reply
+    // has ALREADY been posted, a discarded write status means the submission
+    // stays unmarked and the NEXT run posts it a second time — the one thing the
+    // idempotency marker exists to prevent.
+    mockSupabaseFetch.mockImplementation((url: string, init?: { method?: string }) => {
+      const ok = (body: unknown) => Promise.resolve({ ok: true, json: async () => body } as never);
+      if (init?.method === "POST") {
+        return Promise.resolve({ ok: false, status: 503, json: async () => ({}) } as never);
+      }
+      if (url.includes("survey_submission?status=eq.completed")) {
+        return ok([{ id: 101, survey_submission_answer: [{ count: 59 }] }]);
+      }
+      if (url.includes("survey_submission_id=eq.0")) return ok([]);
+      return ok([]);
+    });
+    const res = await GET(req());
+    expect(res.status).toBe(500);
+  });
+
+  it("aborts rather than starting a second thread when the parent read fails", async () => {
+    // Returning null on a failed read made "the read broke" look identical to
+    // "there is no thread yet", and the caller's answer to that is to post a new
+    // parent — splitting the week across two threads.
+    mockSupabaseFetch.mockImplementation((url: string) => {
+      const ok = (body: unknown) => Promise.resolve({ ok: true, json: async () => body } as never);
+      if (url.includes("survey_submission?status=eq.completed")) {
+        return ok([{ id: 101, survey_submission_answer: [{ count: 59 }] }]);
+      }
+      if (url.includes("survey_submission_id=eq.0")) {
+        return Promise.resolve({ ok: false, status: 500, json: async () => ({}) } as never);
+      }
+      return ok([]);
+    });
+    const res = await GET(req());
+    expect(res.status).toBe(500);
+    expect(mockPost).not.toHaveBeenCalled();
+  });
+
   it("does not mark a submission done when its Slack post failed", async () => {
     mockPost
       .mockResolvedValueOnce({ channel: "C1", ts: "111.1" }) // parent

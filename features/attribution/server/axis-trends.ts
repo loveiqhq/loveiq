@@ -71,6 +71,19 @@ export const MIN_TREND_DAYS = 7;
 /** Below this the smaller arm's daily rate swings on single events. */
 export const MIN_ARM_COMPLETIONS = 20;
 
+/**
+ * Purchases needed across the window before a LINE of them would be readable.
+ *
+ * The unit that matters is conversions per arm per TRAILING WINDOW, not per
+ * month: the chart plots a 7-day rate, so ten purchases over thirty days is
+ * about two per arm per week and draws a flat zero with occasional spikes. This
+ * is MIN_CELL_COUNT per arm per week across two arms and roughly four weeks of
+ * chart — the smallest total at which a typical window has enough to shape a
+ * curve. My first attempt used MIN_CELL_COUNT * 2, which flipped to "plenty" at
+ * exactly the ten purchases that motivated not drawing them.
+ */
+export const MIN_PAID_TO_DRAW = MIN_CELL_COUNT * 2 * 4;
+
 export interface AxisChart {
   axis: ChartAxis;
   axisTitle: string;
@@ -157,6 +170,22 @@ function verdictSentence(
   }
   const leader = signal.delta >= 0 ? aLabel : bLabel;
   return `${leader} is genuinely ahead (${formatSignalSummary(signal)}).`;
+}
+
+/**
+ * Why purchases are a number here and not a second line.
+ *
+ * Conditional on the count, not a fixed sentence. The claim "too few to make a
+ * line mean anything" was unconditional, which is the one thing this module is
+ * not allowed to do — every other statement it makes is gated on the data. It is
+ * true at today's volumes and would quietly become a lie the moment purchases
+ * grow, which is exactly when someone would want the line drawn.
+ */
+function purchaseNote(paidTotal: number): string {
+  if (paidTotal < MIN_PAID_TO_DRAW) {
+    return `Purchases are in the totals below and deliberately not drawn — ${paidTotal} in this window is too few for a line to mean anything.`;
+  }
+  return `${paidTotal} purchases in this window; see the totals below.`;
 }
 
 export interface AxisTrends {
@@ -256,7 +285,7 @@ export function buildAxisTrends(rows: AxisFunnelRow[], today: string): AxisTrend
       labels: [],
       headline: `${aLabel} ${a.checkouts}/${a.completions} = ${aRate}%  ·  ${bLabel} ${b.checkouts}/${b.completions} = ${bRate}%`,
       footnote: `7-day trailing rate · a gap means no finished surveys that day${validFrom ? ` · from ${human(validFrom)}` : ""}`,
-      caption: `*${axisTitle}* — ${aLabel} ${aRate}% (${a.checkouts}/${a.completions}) vs ${bLabel} ${bRate}% (${b.checkouts}/${b.completions}) reaching checkout. ${verdictSentence(aLabel, a.completions, a.checkouts, bLabel, b.completions, b.checkouts)}${key} Purchases are counted below and deliberately not drawn — ${paidTotal} in this window is too few to make a line mean anything.`,
+      caption: `*${axisTitle}* — ${aLabel} ${aRate}% (${a.checkouts}/${a.completions}) vs ${bLabel} ${bRate}% (${b.checkouts}/${b.completions}) reaching checkout. ${verdictSentence(aLabel, a.completions, a.checkouts, bLabel, b.completions, b.checkouts)}${key} ${purchaseNote(paidTotal)}`,
     });
   }
 

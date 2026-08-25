@@ -171,17 +171,38 @@ async function loadServerOpens(ids: number[]): Promise<Set<number>> {
   );
 }
 
+/**
+ * The thread parent's ts, or null when there genuinely is not one yet.
+ *
+ * THROWS on a failed read rather than returning null. Returning null made a
+ * transient PostgREST error indistinguishable from "no thread exists", and the
+ * caller's response to that is to post a NEW parent — so one bad read would
+ * silently start a second thread and split the week across two of them.
+ */
 async function readThreadParent(): Promise<string | null> {
   const res = await supabaseFetch(
     `${TABLE}?survey_submission_id=eq.${THREAD_PARENT_ID}&select=message_ts&limit=1`
   );
-  if (!res.ok) return null;
+  if (!res.ok) throw new Error(`readThreadParent ${res.status}`);
   const rows = (await res.json()) as Array<{ message_ts: string }>;
   return rows[0]?.message_ts ?? null;
 }
 
+/**
+ * Upsert a row, THROWING if the write did not land.
+ *
+ * The status check is the whole point. `fetchWithTimeout` only throws on abort,
+ * timeout or network failure — an HTTP 4xx/5xx resolves normally with
+ * `ok: false`. Discarding the response meant a failed `backfilled_at` write
+ * looked identical to a successful one, so a submission whose Slack reply had
+ * ALREADY been posted stayed unmarked, and the next run posted it a second time.
+ * Across ~83 sequential writes one transient non-2xx is entirely plausible.
+ *
+ * Throwing aborts the run loudly, which is safe precisely because the job is
+ * resumable: everything already marked stays done.
+ */
 async function writeRow(body: Record<string, unknown>): Promise<void> {
-  await supabaseFetch(TABLE, {
+  const res = await supabaseFetch(TABLE, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -191,6 +212,7 @@ async function writeRow(body: Record<string, unknown>): Promise<void> {
     },
     body: JSON.stringify({ ...body, updated_at: new Date().toISOString() }),
   });
+  if (!res.ok) throw new Error(`writeRow ${res.status}`);
 }
 
 export async function GET(request: Request) {
