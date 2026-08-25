@@ -6,7 +6,7 @@ import { mapLearnDetail } from "@/data/report2-map-detail";
 const slugs = Object.keys(config as Record<string, unknown>).filter((s) => !s.startsWith("_"));
 const TILES = ["tile1", "tile2", "tile3", "tile4", "tile5"] as const;
 
-describe("insight-map second learn line", () => {
+describe("insight-map pattern descriptions", () => {
   it("covers all 14 archetypes across all five patterns", () => {
     expect(slugs).toHaveLength(14);
     for (const slug of slugs) {
@@ -33,9 +33,13 @@ describe("insight-map second learn line", () => {
       const entry = mapLearnDetail[slug as keyof typeof mapLearnDetail]!;
       for (const tile of TILES) {
         const line = entry[tile]!;
-        // Long enough to say something, short enough to stay a caption.
-        expect(line.length, `${slug}.${tile} too short`).toBeGreaterThan(60);
-        expect(line.length, `${slug}.${tile} too long`).toBeLessThan(180);
+        // A full description since the two lines were merged on 2026-08-25:
+        // long enough to carry the clause AND the specific part, short enough
+        // that a row stays scannable.
+        expect(line.length, `${slug}.${tile} too short`).toBeGreaterThan(110);
+        expect(line.length, `${slug}.${tile} too long`).toBeLessThan(300);
+        // Prose, not a lowercase fragment glued to a sentence.
+        expect(line[0], `${slug}.${tile} does not open as a sentence`).toBe(line[0]!.toUpperCase());
         expect(line, `${slug}.${tile} uses an em dash`).not.toMatch(/—/);
         // Second person throughout, like the tile subline above it.
         expect(line.toLowerCase(), `${slug}.${tile} never addresses the reader`).toMatch(

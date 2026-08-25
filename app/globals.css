@@ -8740,7 +8740,8 @@ input.autofill-dark:-internal-autofill-previewed {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 6px;
+  /* 6px read as a gap between two blocks rather than a value and its gloss. */
+  gap: 2px;
   min-width: 0;
 }
 
@@ -8774,7 +8775,7 @@ input.autofill-dark:-internal-autofill-previewed {
    Sans against the serif value above it, so the two read as label and gloss
    rather than as two competing headlines. */
 .report-hero-card__motivation-sub {
-  margin: 7px 0 0;
+  margin: 0;
   max-width: 32rem;
   color: #3f3a4d;
   font-family: var(--font-sans);
@@ -15573,107 +15574,15 @@ input.autofill-dark:-internal-autofill-previewed {
   letter-spacing: -0.29px;
 }
 
-/* Featured tile — top-rounded, purple gradient wash + purple border. */
-.report-map-featured {
-  position: relative;
-  overflow: hidden;
-  width: 100%;
-  padding: clamp(22px, 2.4vw, 29.3px);
-  border: 1.128px solid rgba(157, 138, 215, 0.3);
-  border-bottom: none;
-  border-radius: 27px 27px 0 0;
-  background: linear-gradient(180deg, #faf7fe 0%, #ffffff 100%);
-  box-shadow: 0 22.5px 56.4px rgba(22, 16, 33, 0.06);
-}
-
-.report-map-featured__eyebrow {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.report-map-featured__dot {
-  flex: 0 0 auto;
-  width: 7.9px;
-  height: 7.9px;
-  border-radius: 9999px;
-  background: #9d8ad7;
-}
-
-.report-map-featured__eyebrow-text {
-  color: #795fc8;
-  font-family: var(--font-sans);
-  font-weight: 700;
-  font-size: 0.705rem;
-  line-height: 1.65;
-  letter-spacing: 1.47px;
-  text-transform: uppercase;
-}
-
-.report-map-featured__title {
-  margin: clamp(20px, 1.9vw, 24px) 0 0;
-  color: #161021;
-  font-family: var(--font-serif);
-  font-weight: 500;
-  font-size: clamp(1.35rem, 2vw, 1.5516rem);
-  line-height: 1.32;
-  letter-spacing: -0.25px;
-}
-
-.report-map-featured__sub {
-  margin: clamp(8px, 1vw, 12px) 0 0;
-  color: #6b6678;
-  font-family: var(--font-sans);
-  font-weight: 400;
-  font-size: clamp(0.9rem, 1.1vw, 0.952rem);
-  line-height: 1.65;
-}
-
-.report-map-featured__curve {
-  display: block;
-  width: calc(100% + clamp(44px, 4.8vw, 58.6px));
-  height: clamp(150px, 20vw, 210px);
-  margin: clamp(10px, 1.4vw, 18px) calc(-1 * clamp(22px, 2.4vw, 29.3px)) 0;
-}
-
-.report-map-featured__link {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  /* Was clamp(4px, .7vw, 8px), which sat under the ignition curve's own top
-     margin. The curve was removed on 2026-08-24, so the gap moved here. */
-  margin-top: clamp(14px, 1.6vw, 20px);
-  padding: 8px 17px 9.4px;
-  border: 1.128px solid rgba(157, 138, 215, 0.35);
-  border-radius: 9999px;
-  background: #ffffff;
-  color: #795fc8;
-  font-family: var(--font-sans);
-  font-weight: 800;
-  font-size: 0.7405rem;
-  line-height: 1.65;
-  cursor: pointer;
-  transition:
-    transform 0.15s ease,
-    box-shadow 0.15s ease;
-}
-
-.report-map-featured__link:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 12px 26px -16px rgba(121, 95, 200, 0.7);
-}
-
-.report-map-featured__link:focus-visible {
-  outline: 2px solid #795fc8;
-  outline-offset: 2px;
-}
-
 /* Patterns card — bottom-rounded, sits flush under the featured tile. */
 .report-map-patterns {
   width: 100%;
   padding: clamp(22px, 2.4vw, 30.5px);
   border: 1.128px solid rgba(22, 16, 33, 0.09);
-  border-radius: 0 0 27px 27px;
+  /* Square-topped while the featured Arousal tile sat on top of it and supplied
+     the top corners. That tile was removed on 2026-08-25, so this card is the
+     whole chapter and rounds on all four. */
+  border-radius: 27px;
   background: #ffffff;
   box-shadow: 0 22.5px 56.4px rgba(22, 16, 33, 0.06);
 }
@@ -15791,16 +15700,18 @@ input.autofill-dark:-internal-autofill-previewed {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 248px;
+  /* 248 -> 174, i.e. 30% narrower (2026-08-25). It stays at the flex end, so
+     it is still right-aligned; the row's text column takes the width back. */
+  width: 174px;
   max-width: 100%;
-  padding: 5.6px 15.8px 7.1px;
+  padding: 5.6px 11px 7.1px;
   border: none;
   border-radius: 9999px;
   background: linear-gradient(90deg, #fe6839 0%, #c36ddf 100%);
   color: #ffffff;
   font-family: var(--font-sans);
   font-weight: 800;
-  font-size: 0.7405rem;
+  font-size: 0.7rem;
   line-height: 1.65;
   text-align: center;
   cursor: pointer;
@@ -16154,17 +16065,6 @@ input.autofill-dark:-internal-autofill-previewed {
   margin-bottom: clamp(28px, 3.4vw, 44px);
 }
 
-.report-blend__eyebrow {
-  margin: 0 0 clamp(10px, 1.2vw, 14px);
-  color: #8b7bbe;
-  font-family: var(--font-sans);
-  font-weight: 800;
-  font-size: 0.6875rem;
-  line-height: 1;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
 .report-blend__heading {
   margin: 0 0 clamp(14px, 1.7vw, 20px);
   color: #161021;
@@ -16185,26 +16085,29 @@ input.autofill-dark:-internal-autofill-previewed {
   color: transparent;
 }
 
+/* Deliberately identical to `.report-means__body` (2026-08-25): these are the
+   report's two opening prose blocks and they were set differently, so the page
+   read as two voices before it had said anything. Indent, measure, size, colour
+   and gap all come from there. */
 .report-blend__intro {
   display: flex;
   flex-direction: column;
-  gap: 0.85em;
-  max-width: 34rem;
+  gap: 16px;
+  padding-left: clamp(0px, 1.4vw, 20px);
   margin: 0 0 clamp(20px, 2.4vw, 28px);
+  color: #3f3a4d;
+  font-family: var(--font-sans);
+  font-size: clamp(0.95rem, 1.15vw, 1.0625rem);
+  line-height: 1.6;
 }
 
 .report-blend__intro p {
   margin: 0;
-  color: #3f3a4a;
-  font-family: var(--font-sans);
-  font-weight: 400;
-  font-size: clamp(0.95rem, 1.2vw, 1.0625rem);
-  line-height: 1.65;
 }
 
 .report-blend__intro strong {
   color: #161021;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .report-blend__card {
@@ -16317,6 +16220,19 @@ input.autofill-dark:-internal-autofill-previewed {
   line-height: 1.45;
 }
 
+/* What the pattern actually is, under the motto (2026-08-25). Sized between the
+   motto and the row name so the three rows can be compared at a glance without
+   the block turning into a paragraph. */
+.report-blend__blurb {
+  margin: 4px 0 0;
+  max-width: 34rem;
+  color: rgba(63, 58, 77, 0.85);
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
 .report-blend__bar {
   grid-area: bar;
   position: relative;
@@ -16392,6 +16308,7 @@ input.autofill-dark:-internal-autofill-previewed {
     grid-template-areas:
       "rank icon name name"
       "motto motto motto motto"
+      "blurb blurb blurb blurb"
       "bar bar bar pct";
     row-gap: 6px;
     align-items: center;
@@ -16412,6 +16329,11 @@ input.autofill-dark:-internal-autofill-previewed {
 
   .report-blend__motto {
     grid-area: motto;
+    max-width: none;
+  }
+
+  .report-blend__blurb {
+    grid-area: blurb;
     max-width: none;
   }
 
@@ -17483,8 +17405,11 @@ input.autofill-dark:-internal-autofill-previewed {
      it as a score he was doing well on rather than a description of how much
      weight sex carries for him. The word is a band label, so it is set in the
      same ink as the rest of the report's prose and the accent stays on the
-     things that actually encode the archetype (the dot, the halo, the bars). */
-  color: #161021;
+     things that actually encode the archetype (the dot, the halo, the bars).
+     Grey rather than ink since 2026-08-25: at 52px the near-black read as too
+     strong a verdict. #6b6678 is the report's existing muted grey (constellation
+     subline, importance attribution). */
+  color: #6b6678;
   text-shadow: 0 1px 1px rgba(0, 0, 0, 0.05);
   flex-shrink: 0;
 }

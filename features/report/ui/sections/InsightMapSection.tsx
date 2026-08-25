@@ -4,7 +4,6 @@ import { type FC, type ReactNode } from "react";
 import { PadlockIcon } from "../ReportNavBadge";
 import { archetypeSlug, getReport2Config, type Report2CopySlug } from "@/data/report2-config";
 import { mapLearnDetail } from "@/data/report2-map-detail";
-import { AROUSAL_CURVES, resolveArousalFamily } from "../arousalCurves";
 
 /**
  * Server-resolved insight-map copy (`getReport2Section(name, "map")`). The 634KB
@@ -64,13 +63,11 @@ const PatternRow: FC<{
   symbolColor: string;
   title: string;
   sub: string | null | undefined;
-  /** Second "what you'll learn" line — the specific, recognisable one. */
-  detail: string | null | undefined;
   cta: string;
   target: string;
   onOpen: (sectionId: string) => void;
   isSectionOpen: (sectionId: string) => boolean;
-}> = ({ symbol, symbolColor, title, sub, detail, cta, target, onOpen, isSectionOpen }) => {
+}> = ({ symbol, symbolColor, title, sub, cta, target, onOpen, isSectionOpen }) => {
   if (!sub) return null;
   return (
     <div className="report-map-row">
@@ -89,10 +86,13 @@ const PatternRow: FC<{
           </span>
           <h4 className="report-map-row__title">{title}</h4>
         </div>
+        {/* One description, not two stacked lines. The clause from the copy
+            matrix and the specific sentence under it used to render separately
+            and read as a label arguing with its own footnote; they are merged
+            per archetype in `report2-map-detail.ts` now. */}
         <div className="report-map-row__learn">
           <p className="report-map-row__learn-label">WHAT YOU&apos;LL LEARN</p>
           <p className="report-map-row__learn-text">{sub}</p>
-          {detail ? <p className="report-map-row__learn-detail">{detail}</p> : null}
         </div>
       </div>
       {/* A real anchor when the section is owned: that is the sidebar's proven
@@ -124,18 +124,10 @@ const HeartGlyph: FC = () => (
 );
 
 const InsightMapSection: FC<Props> = ({ archetype, copy, onOpen, isSectionOpen }) => {
-  const family = resolveArousalFamily(getReport2Config(archetype)?.families?.arousal);
   const slug = archetypeSlug(archetype) as Report2CopySlug;
   const detail = mapLearnDetail[slug];
 
   if (!copy) return null;
-
-  // Headline + subline are family-level in Figma ("only the family word, the
-  // body line and the arc change"). Server copy wins when an archetype has its
-  // own, otherwise fall back to the family text so no reader gets a headline
-  // that contradicts the arc drawn beneath it.
-  const featuredTitle = copy["featured.title"] ?? AROUSAL_CURVES[family].headline;
-  const featuredSub = copy["featured.sub"] ?? AROUSAL_CURVES[family].subline;
 
   // CTA copy shortened on 2026-08-24. Each row used to carry its own six-word
   // sentence ("See what quietly shuts it down"), which restated the row title in
@@ -149,8 +141,7 @@ const InsightMapSection: FC<Props> = ({ archetype, copy, onOpen, isSectionOpen }
       symbol: "▼",
       symbolColor: "#c2542f",
       title: "Desire Brakes",
-      sub: copy["tile1.sub"],
-      detail: detail?.tile1,
+      sub: detail?.tile1 ?? copy["tile1.sub"],
       cta: CTA,
       target: "typical_arousal_accelerators_turn_ons_of_the_core_archetype",
     },
@@ -158,8 +149,7 @@ const InsightMapSection: FC<Props> = ({ archetype, copy, onOpen, isSectionOpen }
       symbol: "▲",
       symbolColor: "#2e7d5b",
       title: "Desire Accelerators",
-      sub: copy["tile2.sub"],
-      detail: detail?.tile2,
+      sub: detail?.tile2 ?? copy["tile2.sub"],
       cta: CTA,
       target: "typical_arousal_accelerators_turn_ons_of_the_core_archetype",
     },
@@ -167,8 +157,7 @@ const InsightMapSection: FC<Props> = ({ archetype, copy, onOpen, isSectionOpen }
       symbol: "⇄",
       symbolColor: "#818cf8",
       title: "Initiation Pattern",
-      sub: copy["tile3.sub"],
-      detail: detail?.tile3,
+      sub: detail?.tile3 ?? copy["tile3.sub"],
       cta: CTA,
       target: "initiation_style",
     },
@@ -176,8 +165,7 @@ const InsightMapSection: FC<Props> = ({ archetype, copy, onOpen, isSectionOpen }
       symbol: <HeartGlyph />,
       symbolColor: "#c36ddf",
       title: "Peak Zone",
-      sub: copy["tile4.sub"],
-      detail: detail?.tile4,
+      sub: detail?.tile4 ?? copy["tile4.sub"],
       cta: CTA,
       target: "typical_sexual_fantasy_amp_practice_tendencies",
     },
@@ -185,40 +173,27 @@ const InsightMapSection: FC<Props> = ({ archetype, copy, onOpen, isSectionOpen }
       symbol: "↻",
       symbolColor: "#fe6839",
       title: "Libido Pattern",
-      sub: copy["tile5.sub"],
-      detail: detail?.tile5,
+      sub: detail?.tile5 ?? copy["tile5.sub"],
       cta: CTA,
       target: "libido_challenges_in_relationships",
     },
   ];
 
   // Nothing to render (archetype without a map block) — bail.
-  if (!featuredTitle && rows.every((r) => !r.sub)) return null;
+  if (rows.every((r) => !r.sub)) return null;
 
   return (
     <div className="report-map">
       <h3 className="report-map__heading">Your insight map</h3>
 
-      {/* Featured tile — Arousal, always unlocked (Figma "Article"). */}
-      {featuredTitle ? (
-        <article className="report-map-featured">
-          <div className="report-map-featured__eyebrow">
-            <span className="report-map-featured__dot" aria-hidden="true" />
-            <span className="report-map-featured__eyebrow-text">Arousal · always unlocked</span>
-          </div>
-          <h4 className="report-map-featured__title">{featuredTitle}</h4>
-          {featuredSub ? <p className="report-map-featured__sub">{featuredSub}</p> : null}
-          <button
-            type="button"
-            className="report-map-featured__link"
-            onClick={() => onOpen("arousal_style")}
-          >
-            Learn more →
-          </button>
-        </article>
-      ) : null}
-
-      {/* Five more patterns (Figma "5 Patterns — Variant C"). */}
+      {/*
+        The featured Arousal tile was removed on 2026-08-25. It had already lost
+        its ignition curve the day before; what was left was a headline, a
+        subline and a CTA sitting above the five rows and competing with them
+        for the same job. The chapter it linked to is still reachable from the
+        sidebar and from Part III. The map now opens straight on the patterns.
+      */}
+      {/* The five patterns (Figma "5 Patterns — Variant C"). */}
       <article className="report-map-patterns">
         {/* Figma puts a "LOCKED" chip at the FAR RIGHT of this header row — the
             empty right-hand container at x=830 in the unlocked variant is where
@@ -226,7 +201,7 @@ const InsightMapSection: FC<Props> = ({ archetype, copy, onOpen, isSectionOpen }
             in each row's top-right corner, and it disappears with them once the
             chapters are owned. */}
         <div className="report-map-patterns__head">
-          <p className="report-map-patterns__label">Five more patterns</p>
+          <p className="report-map-patterns__label">Five patterns</p>
           {rows.some((r) => !isSectionOpen(r.target)) ? (
             <span className="report-map-patterns__locked">
               <PadlockIcon open={false} />
@@ -242,7 +217,6 @@ const InsightMapSection: FC<Props> = ({ archetype, copy, onOpen, isSectionOpen }
               symbolColor={r.symbolColor}
               title={r.title}
               sub={r.sub}
-              detail={r.detail}
               cta={r.cta}
               target={r.target}
               onOpen={onOpen}

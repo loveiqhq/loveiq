@@ -1,6 +1,8 @@
 "use client";
 
 import { type CSSProperties, type FC } from "react";
+import { archetypeSlug, type Report2CopySlug } from "@/data/report2-config";
+import { archetypeBlurbs } from "@/data/report2-archetype-blurbs";
 import { getReportTheme } from "../reportTheme";
 import { useRevealOnView } from "../hooks/useRevealOnView";
 
@@ -75,7 +77,6 @@ const ArchetypeBlendSection: FC<Props> = ({ ranking, percentages, mottos, viewAr
 
   const top = ranking.slice(0, TOP_N);
   const primary = top[0]!;
-  const spread = (percentages[primary] ?? 0) - (percentages[top[top.length - 1]!] ?? 0);
   // True in the ordinary case. False when the reader has opened someone else's
   // archetype from the constellation list, where "the chapters ahead read your
   // top match" would simply be untrue.
@@ -83,26 +84,23 @@ const ArchetypeBlendSection: FC<Props> = ({ ranking, percentages, mottos, viewAr
 
   return (
     <div className="report-blend">
-      <p className="report-blend__eyebrow">Start here</p>
-
       <h2 className="report-blend__heading">
         You&apos;re a <span className="report-blend__heading-accent">constellation,</span>
         <br />
         not a type
       </h2>
 
+      {/* Same treatment as "What this means for you" (`.report-means__body`):
+          one prose voice for the two blocks that open the report. */}
       <div className="report-blend__intro">
         <p>
-          Your answers were scored against all fourteen LoveIQ archetypes at once, not sorted into
-          one of them. Almost nobody comes out as a single clean pattern. Most people carry several,
-          and which one runs the show depends on who you are with, how safe you feel, the phase of
-          life you are in, and what your body needs at the time.
+          You were scored against all fourteen archetypes at once, not sorted into one. Almost
+          nobody is a single clean pattern, and which one leads depends on who you are with, how
+          safe you feel, and what your body needs at the time.
         </p>
         <p>
-          So read the numbers below as <strong>pull, not identity</strong>. They say how closely
-          your answers track each pattern compared with the other thirteen. A high score means that
-          pattern explains a lot of what you told us. It does not mean the others are absent, and it
-          is not a mark you can pass or fail.
+          So read the numbers as <strong>pull, not identity</strong>: how closely your answers track
+          each pattern next to the other thirteen. Not a mark you can pass or fail.
         </p>
       </div>
 
@@ -118,6 +116,7 @@ const ArchetypeBlendSection: FC<Props> = ({ ranking, percentages, mottos, viewAr
             const Icon = theme.Icon;
             const pct = percentages[name] ?? 0;
             const motto = mottos[name] ?? null;
+            const blurb = archetypeBlurbs[archetypeSlug(name) as Report2CopySlug] ?? null;
             const rowStyle: CssVarStyle = {
               "--accent": theme.accent,
               "--accent-rgb": hexToRgbTriplet(theme.accent),
@@ -138,6 +137,9 @@ const ArchetypeBlendSection: FC<Props> = ({ ranking, percentages, mottos, viewAr
                 <div className="report-blend__nametag">
                   <h3 className="report-blend__name">{name}</h3>
                   {motto ? <p className="report-blend__motto">{motto}</p> : null}
+                  {/* The motto is evocative, not descriptive, so on its own the row
+                      never says what the pattern actually is. */}
+                  {blurb ? <p className="report-blend__blurb">{blurb}</p> : null}
                 </div>
 
                 <div
@@ -166,9 +168,9 @@ const ArchetypeBlendSection: FC<Props> = ({ ranking, percentages, mottos, viewAr
         gives them somewhere to put it when a passage does not fit. Without it,
         "this isn't me" has nowhere to go except away from the page.
 
-        `spread` makes the sentence honest per reader. Under 8 points the three
-        genuinely sit on top of each other and saying so is more accurate than
-        implying a clear winner.
+        A "your top three sit close together" variant keyed on the spread was
+        cut on 2026-08-25 — the two rows above already show how close they are,
+        so saying it in words was the third time the reader had been told.
       */}
       <p className="report-blend__handoff">
         {!readingOwnTop ? (
@@ -176,12 +178,6 @@ const ArchetypeBlendSection: FC<Props> = ({ ranking, percentages, mottos, viewAr
             You are reading the <strong>{viewArchetype}</strong> chapters, which came out at{" "}
             {formatPct(percentages[viewArchetype] ?? 0)} for you. Your own strongest match is{" "}
             <strong>{primary}</strong>, and its chapters are one click away in the full ranking.
-          </>
-        ) : spread < 8 ? (
-          <>
-            Your top three sit close together, within {spread.toFixed(1)} points, so you are a
-            genuine blend. The chapters ahead read <strong>{primary}</strong> in depth because it
-            edges the others out, and you will recognise the second and third in it too.
           </>
         ) : (
           <>

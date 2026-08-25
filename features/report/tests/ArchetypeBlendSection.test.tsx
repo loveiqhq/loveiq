@@ -90,7 +90,9 @@ describe("ArchetypeBlendSection", () => {
     expect(handoff?.textContent).not.toContain("sit close together");
   });
 
-  it("says so when the top three are genuinely level", () => {
+  it("says the same thing however close the top three are", () => {
+    // A spread-keyed "your top three sit close together" variant was cut on
+    // 2026-08-25: the bars above already show how close they are.
     render(
       <ArchetypeBlendSection
         ranking={ALL_14}
@@ -100,9 +102,24 @@ describe("ArchetypeBlendSection", () => {
       />
     );
     const handoff = document.querySelector(".report-blend__handoff");
-    // 70 / 68 / 66 — a 4-point spread, under the 8-point threshold.
-    expect(handoff?.textContent).toContain("sit close together");
-    expect(handoff?.textContent).toContain("within 4.0 points");
+    expect(handoff?.textContent).toContain("explains the most");
+    expect(handoff?.textContent).not.toContain("sit close together");
+  });
+
+  it("describes each of the three, not just names it", () => {
+    render(
+      <ArchetypeBlendSection
+        ranking={ALL_14}
+        percentages={pcts(20)}
+        mottos={MOTTOS}
+        viewArchetype={ALL_14[0]!}
+      />
+    );
+    // The motto is evocative, not descriptive; the blurb is what says what the
+    // pattern actually is. All three rows carry one.
+    const blurbs = document.querySelectorAll(".report-blend__blurb");
+    expect(blurbs).toHaveLength(3);
+    expect(blurbs[0]!.textContent).toContain("Desire that runs through care");
   });
 
   it("renders a row without a motto rather than dropping it", () => {
