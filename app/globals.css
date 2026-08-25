@@ -14411,28 +14411,6 @@ input.autofill-dark:-internal-autofill-previewed {
   overflow: hidden;
 }
 
-.report-confidence__eyebrow {
-  margin: 0;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  color: #6b5b95;
-  font-family: var(--font-sans);
-  font-weight: 600;
-  font-size: 0.776rem;
-  letter-spacing: 2.23px;
-  text-transform: uppercase;
-  line-height: 1.65;
-}
-
-.report-confidence__eyebrow::before {
-  content: "";
-  width: 29px;
-  height: 1.13px;
-  border-radius: 2px;
-  background: rgba(157, 138, 215, 0.5);
-}
-
 /* Result: big serif result word + rule + definition (Figma 8427:1572). */
 .report-confidence__result {
   display: grid;
@@ -14443,11 +14421,12 @@ input.autofill-dark:-internal-autofill-previewed {
 
 .report-confidence__result-word {
   margin: 0;
-  /* Figma 9107:798 sets this word in the ARCHETYPE'S accent, not ink — its demo
-     frame is gold #6b5b95 for Radiant Performer, and the designer's note says
-     "the accent color follows the archetype". Uses the same ink-accent pairing as
-     `.report-snapshot-card__stage-full` so the 34px serif keeps its contrast. */
-  color: rgb(var(--report-accent-ink-rgb, var(--report-accent-rgb)));
+  /* Figma 9107:798 set this word in the ARCHETYPE'S accent ("the accent color
+     follows the archetype"). Changed to the report's muted grey on 2026-08-25,
+     matching the importance band: a big coloured verdict word reads as a mark
+     the reader scored, which is the misreading that change was made to stop.
+     The accent stays on the things that actually encode the archetype. */
+  color: #6b6678;
   font-family: var(--font-serif);
   font-weight: 500;
   font-size: clamp(1.6rem, 2.6vw, 2.12rem);

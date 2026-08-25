@@ -289,11 +289,10 @@ const ConfidenceSection: FC<Props> = ({
           </>
         ) : (
           <>
-            {/* Paid only. Locked, this was the last live sub-headline sitting ABOVE a
-                raster that already contains its own blurred copy of it, so the reader
-                saw the same line twice — sharp, then blurred (MO, 2026-08-21). Every
-                other chapter already renders its eyebrow inside this arm. */}
-            <p className="report-confidence__eyebrow">Your Sexual Confidence</p>
+            {/* The "Your Sexual Confidence" eyebrow went on 2026-08-25, the same
+                change the importance chapter's "Your Result" overline got: the
+                chapter heading already names it and the result word below is
+                unmissable. */}
             {resultWord ? (
               <div className="report-confidence__result">
                 <p className="report-confidence__result-word">{resultWord}</p>
