@@ -137,6 +137,8 @@ interface SnapshotContent {
   importancePct: number | null;
   importanceStatusLabel: string;
   importanceValue: number | null;
+  /** `OVL_BARRIER_TAGS` — what the reader says is in the way of change. */
+  barrierTags: string[] | null;
   satisfactionLabel: string;
   satisfactionPct: number | null;
   satisfactionStatusLabel: string;
@@ -197,6 +199,16 @@ function getScalarOverlay(diagnostics: Record<string, unknown> | null, key: stri
   if (typeof value !== "number") return null;
   // Scoring engine stores 0-1 (scale_1_7_to_0_1). Convert back to 1-7.
   return Math.round(value * 6 + 1);
+}
+
+/** `diagnostics.overlaysTags[key]`, when it is an array of strings. */
+function getTagsOverlay(diagnostics: Record<string, unknown> | null, key: string): string[] | null {
+  const overlays = diagnostics?.overlaysTags;
+  if (!overlays || typeof overlays !== "object") return null;
+  const value = (overlays as Record<string, unknown>)[key];
+  if (!Array.isArray(value)) return null;
+  const tags = value.filter((v): v is string => typeof v === "string");
+  return tags.length > 0 ? tags : null;
 }
 
 function getEnumOverlay(diagnostics: Record<string, unknown> | null, key: string) {
@@ -309,6 +321,7 @@ function getSnapshotContent(
   const satisfactionValue = getScalarOverlay(diagnostics, "OVL_SATISFACTION");
   const importanceValue = getScalarOverlay(diagnostics, "OVL_TOPIC_IMPORTANCE");
   const stageCode = getEnumOverlay(diagnostics, "OVL_PHASE_NOW");
+  const barrierTags = getTagsOverlay(diagnostics, "OVL_BARRIER_TAGS");
 
   const stage = stageCode ? (STAGE_CODE_TO_LABEL[stageCode] ?? toTitleCase(stageCode)) : null;
 
@@ -323,6 +336,7 @@ function getSnapshotContent(
       snapshotAnswers?.currentSexualSatisfaction ?? null
     ),
     importanceValue,
+    barrierTags,
     importancePct: scaleToPercent(importanceValue),
     importanceStatusLabel: describeImportanceStatus(snapshotAnswers?.importanceOfSex ?? null),
     importanceLabel:
@@ -1090,13 +1104,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                               so it renders here rather than in SnapshotSection.
                               Same section wrapper, so it keeps the shared
                               `.report-section.is-visible` reveal. */}
-                          <SnapshotCompare
-                            copy={snapshotCopy}
-                            wantVsGetting={{
-                              importance: snapshot.importanceValue,
-                              satisfaction: snapshot.satisfactionValue,
-                            }}
-                          />
+                          <SnapshotCompare copy={snapshotCopy} barrierTags={snapshot.barrierTags} />
                         </ReportSection>
                         {/* Insight Map renders directly after Findings with the
                           same reveal treatment (Figma 8762:15822). Fully visible
