@@ -250,13 +250,6 @@ const ElevationProfile: FC<{
  * progressively (the climb) — the first rung is highlighted (orange, START HERE
  * pill) and the rest are purple, deepening down the ladder.
  */
-/** ["what you do", "The shift is from … It becomes: …"], or one part if absent. */
-function splitOnShift(body: string): string[] {
-  const at = body.indexOf("The shift is from");
-  if (at <= 0) return [body];
-  return [body.slice(0, at).trim(), body.slice(at).trim()].filter(Boolean);
-}
-
 const RungItem: FC<{
   rung: Rung;
   index: number;
@@ -296,14 +289,16 @@ const RungItem: FC<{
           rather than as the tail of a paragraph — that sentence is the device
           that makes the chapter actionable, and `growthDetail.test.ts` pins its
           presence in every body. */}
-      {rung.body
-        ? splitOnShift(rung.body).map((para) => (
-            <p key={para.slice(0, 32)} className="report-growth__rung-prose">
-              {para}
-            </p>
-          ))
-        : null}
-      {rung.move ? <p className="report-growth__rung-move">First move · {rung.move}</p> : null}
+      {rung.body ? <p className="report-growth__rung-prose">{rung.body}</p> : null}
+      {/* The one thing to actually do. It is the point of the rung, and as a
+          dimmed caption under the prose it read as a footnote — given its own
+          block with a label on 2026-08-26. */}
+      {rung.move ? (
+        <p className="report-growth__rung-move">
+          <span className="report-growth__rung-move-label">First move</span>
+          <span className="report-growth__rung-move-text">{rung.move}</span>
+        </p>
+      ) : null}
     </div>
   </li>
 );
@@ -417,9 +412,6 @@ const GrowthSection: FC<Props> = ({
           </>
         ) : (
           <>
-            {/* The opener names the misconception about this archetype before the
-                ladder starts, so the reader is defended rather than diagnosed. */}
-            {copy.opener ? <p className="report-growth__opener">{copy.opener}</p> : null}
             {copy["ladder.headline"] ? (
               <p className="report-growth__ladder-headline">{copy["ladder.headline"]}</p>
             ) : null}
@@ -433,6 +425,12 @@ const GrowthSection: FC<Props> = ({
                 onCue={setCue}
               />
             ) : null}
+
+            {/* The opener names the misreading of this archetype, so the reader is
+                defended rather than diagnosed. Moved BELOW the graph on
+                2026-08-26: the headline and the climb are what the chapter opens
+                on, and a paragraph in front of them delayed both. */}
+            {copy.opener ? <p className="report-growth__opener">{copy.opener}</p> : null}
 
             {hasLadder ? (
               <ol className={`report-growth__ladder${cue === null ? "" : " is-cued"}`}>

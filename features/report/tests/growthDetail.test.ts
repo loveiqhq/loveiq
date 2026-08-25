@@ -71,20 +71,26 @@ describe("growth chapter prose", () => {
       for (const [label, text] of [["opener", e.opener], ...RUNGS.map((r) => [r, e[r]!])] as Array<
         [string, string]
       >) {
-        // Long enough to carry the shift and the loop rewrite, short enough that
-        // five of them plus an opener stay readable in one chapter.
-        expect(text.split(/\s+/).length, `${slug}.${label} too short`).toBeGreaterThan(40);
-        expect(text.split(/\s+/).length, `${slug}.${label} too long`).toBeLessThan(160);
+        // Tightened 2026-08-26: at most three sentences, weighted to the
+        // practical. By this chapter the reader has been through the report, so
+        // the pattern needs a reference rather than a re-derivation.
+        expect(text.split(/\s+/).length, `${slug}.${label} too short`).toBeGreaterThan(18);
+        expect(text.split(/\s+/).length, `${slug}.${label} too long`).toBeLessThan(60);
+        expect(
+          text.split(/(?<=[.!?])\s+/).length,
+          `${slug}.${label} runs past three sentences`
+        ).toBeLessThanOrEqual(3);
         expect(text, `${slug}.${label} uses an em dash`).not.toMatch(/—/);
         expect(text[0], `${slug}.${label} does not open as a sentence`).toBe(
           text[0]!.toUpperCase()
         );
       }
-      // Every rung body carries the loop rewrite — the device that makes the
-      // chapter actionable rather than aspirational.
+      // The loop-rewrite device ("The shift is from … It becomes: …") was cut
+      // with the tightening: it re-explained the dynamic, which is exactly the
+      // length the rewrite was meant to remove.
       for (const rung of RUNGS) {
-        expect(e[rung], `${slug}.${rung} has no shift-to-becomes rewrite`).toMatch(
-          /The shift is from[\s\S]+It becomes:/
+        expect(e[rung], `${slug}.${rung} still carries the retired loop rewrite`).not.toMatch(
+          /The shift is from/
         );
       }
     }

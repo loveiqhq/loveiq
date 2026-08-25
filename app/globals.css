@@ -13756,7 +13756,8 @@ input.autofill-dark:-internal-autofill-previewed {
    the ladder headline, wider measure than the rungs since it is prose. */
 .report-growth__opener {
   max-width: 44rem;
-  margin: 0 0 clamp(20px, 2.2vw, 28px);
+  /* Sits between the elevation graph and the first rung since 2026-08-26. */
+  margin: clamp(18px, 2vw, 26px) 0 clamp(20px, 2.2vw, 28px);
   color: #3f3a4d;
   font-family: var(--font-sans);
   font-weight: 400;
@@ -13782,13 +13783,40 @@ input.autofill-dark:-internal-autofill-previewed {
   }
 }
 
+/* The practical recommendation, and the point of the rung. It used to be a
+   dimmed caption under the prose, which read as a footnote to the explanation
+   rather than as the thing to go and do (2026-08-26). Now a tinted block in the
+   archetype's own accent, with the label carrying the colour and the action
+   itself in ink. */
 .report-growth__rung-move {
-  margin: 0;
-  color: #6b6678;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin: 12px 0 0;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border-left: 3px solid rgb(var(--report-accent-ink-rgb, var(--report-accent-rgb)));
+  background: rgb(var(--report-accent-rgb) / 0.07);
   font-family: var(--font-sans);
-  font-weight: 400;
-  font-size: clamp(0.8rem, 1.05vw, 0.847rem);
-  line-height: 1.4;
+  line-height: 1.45;
+}
+
+.report-growth__rung-move-label {
+  flex: 0 0 auto;
+  color: rgb(var(--report-accent-ink-rgb, var(--report-accent-rgb)));
+  font-weight: 800;
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.report-growth__rung-move-text {
+  flex: 1 1 12rem;
+  min-width: 0;
+  color: #161021;
+  font-weight: 500;
+  font-size: clamp(0.875rem, 1.1vw, 0.9375rem);
 }
 
 /* Non-first rungs' move line is a touch lighter (Figma rgba .38 ink). */
