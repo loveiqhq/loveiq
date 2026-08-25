@@ -53,6 +53,13 @@ export interface GrowthCopy {
   "rung5.to"?: string | null;
   "rung5.move"?: string | null;
   "ladder.close"?: string | null;
+  /** Chapter opener: the misconception, then what is actually true. */
+  opener?: string | null;
+  "rung1.body"?: string | null;
+  "rung2.body"?: string | null;
+  "rung3.body"?: string | null;
+  "rung4.body"?: string | null;
+  "rung5.body"?: string | null;
   /** True when the per-archetype takeaway/headline/rungs/close were withheld. */
   locked: boolean;
 }
@@ -86,7 +93,7 @@ const BookIcon: FC = () => (
   </svg>
 );
 
-type Rung = { from: string; to: string; move: string | null };
+type Rung = { from: string; to: string; move: string | null; body: string | null };
 
 /**
  * The rising "elevation profile" above the ladder (Figma 8427:2685): a stepped
@@ -243,6 +250,13 @@ const ElevationProfile: FC<{
  * progressively (the climb) — the first rung is highlighted (orange, START HERE
  * pill) and the rest are purple, deepening down the ladder.
  */
+/** ["what you do", "The shift is from … It becomes: …"], or one part if absent. */
+function splitOnShift(body: string): string[] {
+  const at = body.indexOf("The shift is from");
+  if (at <= 0) return [body];
+  return [body.slice(0, at).trim(), body.slice(at).trim()].filter(Boolean);
+}
+
 const RungItem: FC<{
   rung: Rung;
   index: number;
@@ -274,6 +288,21 @@ const RungItem: FC<{
         <span className="report-growth__rung-to">{rung.to}</span>
         {isFirst ? <span className="report-growth__rung-pill">Start here</span> : null}
       </p>
+      {/* The prose that turns a keyword pair into something a reader recognises
+          (2026-08-25). Sits between the shift and its first move, so the rung
+          reads recognition, then loop rewrite, then action. Absent for an
+          archetype with no entry, and withheld entirely from locked clients.
+          Split on "The shift is from" so the rewrite lands as its own beat
+          rather than as the tail of a paragraph — that sentence is the device
+          that makes the chapter actionable, and `growthDetail.test.ts` pins its
+          presence in every body. */}
+      {rung.body
+        ? splitOnShift(rung.body).map((para) => (
+            <p key={para.slice(0, 32)} className="report-growth__rung-prose">
+              {para}
+            </p>
+          ))
+        : null}
       {rung.move ? <p className="report-growth__rung-move">First move · {rung.move}</p> : null}
     </div>
   </li>
@@ -338,6 +367,7 @@ const GrowthSection: FC<Props> = ({
       from: copy[`rung${i}.from`]?.trim(),
       to: copy[`rung${i}.to`]?.trim(),
       move: copy[`rung${i}.move`]?.trim() || null,
+      body: copy[`rung${i}.body`]?.trim() || null,
     }))
     .filter((r): r is Rung => !!r.from && !!r.to);
 
@@ -387,6 +417,9 @@ const GrowthSection: FC<Props> = ({
           </>
         ) : (
           <>
+            {/* The opener names the misconception about this archetype before the
+                ladder starts, so the reader is defended rather than diagnosed. */}
+            {copy.opener ? <p className="report-growth__opener">{copy.opener}</p> : null}
             {copy["ladder.headline"] ? (
               <p className="report-growth__ladder-headline">{copy["ladder.headline"]}</p>
             ) : null}

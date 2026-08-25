@@ -22,7 +22,8 @@ import {
 import { getReport2Section, getReport2Config } from "@/data/report2";
 import { getAttachmentPlaneForFamily } from "@/data/report2-attachment-planes";
 import { getRewardProfile } from "@/data/report2-reward";
-import { archetypeSlug as report2ArchetypeSlug } from "@/data/report2-config";
+import { archetypeSlug as report2ArchetypeSlug, type Report2CopySlug } from "@/data/report2-config";
+import { growthDetail } from "@/data/report2-growth-detail";
 import { getRelationshipFit } from "@/data/report2-relationship-fit";
 import { getPowerZone } from "@/data/report2-power-zones";
 import { getLoveLanguageOrder } from "@/data/report2-love-languages";
@@ -1244,6 +1245,8 @@ export async function GET(request: Request) {
     // carry full growth copy. Shared viewers inherit the owner's plan. Keyed to
     // the primary archetype.
     const growthSection = getReport2Section(primaryArchetype, "growth");
+    const growthDetailForArchetype =
+      growthDetail[report2ArchetypeSlug(primaryArchetype) as Report2CopySlug] ?? null;
     const growthUnlocked = isSectionUnlockedForPlan({
       accessPlan,
       isPremium: true,
@@ -1270,6 +1273,17 @@ export async function GET(request: Request) {
         )
       ),
       "ladder.close": growthUnlocked ? (growthSection["ladder.close"] ?? null) : null,
+      // The prose under each rung (`data/report2-growth-detail.ts`). Server-only
+      // and gated exactly like the rungs it sits with: it IS the paid chapter.
+      // Importing that module from a client component would ship every
+      // archetype's growth chapter into the browser bundle.
+      opener: growthUnlocked ? (growthDetailForArchetype?.opener ?? null) : null,
+      ...Object.fromEntries(
+        ([1, 2, 3, 4, 5] as const).map((i) => [
+          `rung${i}.body`,
+          growthUnlocked ? (growthDetailForArchetype?.[`rung${i}`] ?? null) : null,
+        ])
+      ),
       locked: !growthUnlocked,
     };
 
