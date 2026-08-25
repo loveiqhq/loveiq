@@ -529,6 +529,14 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
         }
       }
     }
+    /**
+     * A section, not a context block: these are the numbers for a test that has
+     * no chart, so they carry the weight the picture would have. A context block
+     * renders them small and italic, which is where a reader's eye goes last.
+     */
+    for (const young of trends.counts) {
+      blocks.push(section(young.text));
+    }
     for (const gap of trends.skipped) {
       blocks.push(context(gap.caption));
     }

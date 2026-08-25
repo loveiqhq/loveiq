@@ -399,6 +399,36 @@ describe("conversion-digest handler", () => {
     expect(arg.blocks.filter((b) => (b as { type?: string }).type === "image")).toHaveLength(1);
   });
 
+  it("puts a too-young test's numbers in a full-size section, not a footnote", async () => {
+    // The counts ARE the content when there is no chart, so they must not render
+    // as a small italic context block, which is where the eye goes last.
+    const rows = [];
+    for (let d = 0; d < 3; d += 1) {
+      const day = new Date(Date.UTC(2026, 7, 21) + d * 86_400_000).toISOString().slice(0, 10);
+      rows.push({ axis: "landing", arm: "white", day, completions: 7, checkouts: 1, paid: 0 });
+      rows.push({ axis: "landing", arm: "white_prev", day, completions: 6, checkouts: 2, paid: 0 });
+    }
+    mockFetchAxisFunnelDaily.mockResolvedValue(rows);
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    const section = arg.blocks.find(
+      (b) =>
+        (b as { type?: string }).type === "section" &&
+        (b as { text?: { text?: string } }).text?.text?.startsWith("*Landing page design*")
+    ) as { text: { text: string } } | undefined;
+    expect(section).toBeDefined();
+    const text = section!.text.text;
+    expect(text).toContain("21 vs 18 finished surveys since 21 Aug");
+    expect(text).toContain("21 finished → 3 reached checkout → 0 paid");
+    expect(text).toContain("18 finished → 6 reached checkout → 0 paid");
+    expect(text).toMatch(/No trend chart yet/);
+    // And no image was emitted for it — the whole point of the counts path.
+    const imgs = arg.blocks.filter((b) =>
+      (b as { alt_text?: string }).alt_text?.startsWith("Landing page")
+    );
+    expect(imgs).toHaveLength(0);
+  });
+
   it("keeps the whole message inside Slack's block and size limits with every chart", async () => {
     // Two images plus their captions. fitBlocks caps at 50 blocks / ~38k
     // serialized and drops from the TAIL, so an overflow would silently delete

@@ -643,7 +643,12 @@ export function buildAlerts(input: {
       if (ageMs >= 0 && ageMs < 7 * 86_400_000) {
         alerts.push({
           severity: "warn",
-          message: `Report prices changed ${cutover.toISOString().slice(0, 10)}. The pricing comparison above still POOLS both price levels — it is not split at the change — so ignore it until the window is made up of post-change sales.`,
+          // Names WHICH comparison, because there are now two. The per-test
+          // section counts only post-change surveys; the "Where the tests stand"
+          // line is the 30-day one and is the pooled figure. Saying "the pricing
+          // comparison above" told the reader to ignore both, including the only
+          // one that is actually clean.
+          message: `Report prices changed ${cutover.toISOString().slice(0, 10)}. The pricing line under *Where the tests stand* covers the whole 30 days, so it POOLS both price levels — ignore that one until the window is made up of post-change sales. The per-test numbers further down count only surveys since the change.`,
         });
       }
     }

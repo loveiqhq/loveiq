@@ -80,8 +80,10 @@ describe("axis trend charts — which experiments may be drawn", () => {
     // 30 days x 10 = 300 completions, x2 = 60 checkouts => 20%.
     expect(chart!.headline).toContain("60/300 = 20%");
     expect(chart!.headline).toContain("30/300 = 10%");
-    // Higher-volume arm first, so colour is stable between runs.
-    expect(chart!.arms[0]).toBe("white");
+    // Ordered by LABEL ("Dark survey" < "White survey"), not by volume. Volume
+    // order flipped colours between consecutive digests once two arms were
+    // within one day of each other.
+    expect(chart!.arms[0]).toBe("dark");
     // Purchases are reported as a COUNT and never drawn as a second line.
     expect(chart!.caption).toMatch(/[Pp]urchases/);
   });
@@ -142,8 +144,11 @@ describe("axis trend charts — which experiments may be drawn", () => {
     expect(fewChart.caption).toContain("20 in this window is too few");
   });
 
-  it("refuses an axis whose comparison is younger than the trailing window", () => {
-    // Pricing's arms only became like-for-like on its repricing date.
+  it("gives a too-young axis its counts instead of only a sentence", () => {
+    // Pricing's arms only became like-for-like on its repricing date. A trend
+    // line needs 7 days; the numbers do not, and they are what the reader came
+    // for. Two reviews of a charted version agreed a picture at this volume
+    // invites a conclusion the data cannot support.
     const validFrom = AXIS_VALID_FROM.pricing!.day;
     const trends = buildAxisTrends(
       [
@@ -153,13 +158,34 @@ describe("axis trend charts — which experiments may be drawn", () => {
       "2026-08-26"
     );
     expect(trends.charted.map((c) => c.axis)).not.toContain("pricing");
-    const gap = trends.skipped.find((s) => s.axis === "pricing")!;
+    expect(trends.skipped.map((s) => s.axis)).not.toContain("pricing");
+    const young = trends.counts.find((c) => c.axis === "pricing")!;
+    // Glance line, then both arms' raw counts, never a rate.
+    expect(young.text).toContain("*Report pricing* — 90 vs 90 finished surveys since 24 Aug");
+    expect(young.text).toContain("90 finished → 15 reached checkout → 0 paid");
+    // Which side is dearer, DERIVED from the live catalogue rather than named.
+    expect(young.text).toMatch(/\*Pricing A\* — (dearer|cheaper), base EUR/);
     // It must say how much data there is, why the window starts where it does,
-    // and roughly when the chart will appear — not just "not enough data".
-    expect(gap.caption).toContain("3 days");
-    expect(gap.caption).toContain("prices were changed");
-    expect(gap.caption).toMatch(/should appear around/);
+    // and when the chart will appear — not just "not enough data".
+    expect(young.text).toContain("3 days");
+    expect(young.text).toContain("prices were changed");
+    expect(young.text).toMatch(/expect it from/);
     expect(validFrom).toBe("2026-08-24");
+  });
+
+  it("names the date the trend chart will actually carry a line", () => {
+    // MIN_TREND_DAYS days must have PASSED, and the digest always reports on
+    // yesterday — so the run that first has a line is validFrom + 7, not + 6.
+    const trends = buildAxisTrends(
+      [
+        ...rows("pricing", "A", { days: 1, lastDay: "2026-08-24", completions: 30, checkouts: 5 }),
+        ...rows("pricing", "B", { days: 1, lastDay: "2026-08-24", completions: 30, checkouts: 5 }),
+      ],
+      "2026-08-24"
+    );
+    expect(trends.counts.find((c) => c.axis === "pricing")!.text).toContain(
+      "expect it from 31 Aug"
+    );
   });
 
   it("refuses an axis whose smaller arm is too thin to trend", () => {
@@ -177,9 +203,41 @@ describe("axis trend charts — which experiments may be drawn", () => {
       "2026-09-30"
     );
     expect(trends.charted.map((c) => c.axis)).not.toContain("survey");
-    const gap = trends.skipped.find((s) => s.axis === "survey")!;
-    expect(gap.caption).toContain(`needs ${MIN_ARM_COMPLETIONS}`);
-    expect(gap.caption).toContain("3 finished surveys");
+    const young = trends.counts.find((c) => c.axis === "survey")!;
+    expect(young.text).toContain(`needs ${MIN_ARM_COMPLETIONS}`);
+    expect(young.text).toContain("3 finished surveys");
+    // Still shows both arms' numbers rather than withholding them.
+    expect(young.text).toContain("300 finished");
+  });
+
+  it("states the gap from the leading arm's side, whichever arm that is", () => {
+    // `delta` is a-minus-b, and arms are label-ordered, so the leader is often
+    // `b`. The inconclusive branch used to name `a` unconditionally, and the
+    // significant branch printed the winner's gap as a negative number.
+    const trends = buildAxisTrends(
+      [
+        // "Dark survey" sorts first but converts far worse.
+        ...rows("survey", "dark", {
+          days: 30,
+          lastDay: "2026-09-30",
+          completions: 40,
+          checkouts: 2,
+        }),
+        ...rows("survey", "white", {
+          days: 30,
+          lastDay: "2026-09-30",
+          completions: 40,
+          checkouts: 12,
+        }),
+      ],
+      "2026-09-30"
+    );
+    const chart = trends.charted.find((c) => c.axis === "survey")!;
+    expect(chart.arms[0]).toBe("dark");
+    expect(chart.caption).toContain("White survey is genuinely ahead");
+    expect(chart.caption).not.toContain("Dark survey is genuinely ahead");
+    // The winner's gap reads as a gain, not a loss.
+    expect(chart.caption).toMatch(/ahead \(\+\d/);
   });
 
   it("says so plainly when only one arm has data", () => {

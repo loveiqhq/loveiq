@@ -21,9 +21,12 @@
  */
 
 import { computeRate } from "@features/admin/server/digest-metrics";
+import { getPricingBucketsForPlan } from "@features/pricing/logic/reportPricing";
+import { DEFAULT_REPORT_PURCHASE_PLAN_ID } from "@features/checkout/server/reportPurchase";
 import { armLabel, AXIS_TITLES, isKnownArm } from "@features/attribution/server/labels";
 import {
   formatSignalSummary,
+  type StatisticalSignal,
   MIN_CELL_COUNT,
   twoProportionSignal,
 } from "@features/admin/server/statistics";
@@ -99,6 +102,23 @@ export interface AxisChart {
   caption: string;
 }
 
+/**
+ * An axis that cannot carry a trend line yet.
+ *
+ * It gets a few bullets rather than a chart. Two independent reviews of a
+ * charted version of this said the same thing: at these volumes a picture
+ * invites a conclusion the numbers cannot support — a rate off three events
+ * reads as a finding, and a line through two days reads as a direction. Counts
+ * in text cannot do that, and they are readable on a phone, which the 11px type
+ * on a downscaled PNG is not.
+ */
+export interface AxisCounts {
+  axis: ChartAxis;
+  axisTitle: string;
+  /** Slack mrkdwn: a headline line plus one bullet per arm plus one caveat. */
+  text: string;
+}
+
 export interface SkippedAxis {
   axis: ChartAxis;
   axisTitle: string;
@@ -117,6 +137,26 @@ function addDays(day: string, n: number): string {
   const t = Date.parse(`${day}T00:00:00Z`);
   if (Number.isNaN(t)) return day;
   return new Date(t + n * 86_400_000).toISOString().slice(0, 10);
+}
+
+/**
+ * "dearer, base EUR 39.99" — DERIVED, never hardcoded.
+ *
+ * Pricing 2.1 inverted which arm was dearer on 2026-08-24 and nothing failed,
+ * because the direction had been baked into arm names. The reader cannot judge a
+ * price test without knowing which side is which, and a name cannot know. The
+ * entry tier is the reference: every reader is shown that one.
+ */
+function pricingSide(axis: ChartAxis, arm: string): string {
+  if (axis !== "pricing" || (arm !== "A" && arm !== "B")) return "";
+  const buckets = getPricingBucketsForPlan(DEFAULT_REPORT_PURCHASE_PLAN_ID);
+  const mine = buckets.find((b) => b.code === arm);
+  const other = buckets.find((b) => b.code !== arm && (b.code === "A" || b.code === "B"));
+  if (!mine || !other) return "";
+  const money = (cents: number) => `EUR ${(cents / 100).toFixed(2)}`;
+  if (mine.startingCents === other.startingCents) return ` — same base price both sides`;
+  const side = mine.startingCents > other.startingCents ? "dearer" : "cheaper";
+  return ` — ${side}, base ${money(mine.startingCents)}`;
 }
 
 /** "31 Aug" */
@@ -165,11 +205,63 @@ function verdictSentence(
   if (signal.significance === "insufficient-data") {
     return `Not enough to compare yet — each side needs at least ${MIN_CELL_COUNT} people reaching checkout.`;
   }
-  if (signal.significance === "inconclusive") {
-    return `No clear winner yet — ${aLabel} is ahead but the gap could still be chance (${formatSignalSummary(signal)}).`;
+  /**
+   * State the gap from the LEADER's side, whoever that is.
+   *
+   * `delta` is a-minus-b, so a negative delta means b leads. The inconclusive
+   * branch hardcoded `aLabel` as the one ahead and was simply wrong whenever b
+   * led; the significant branch named the right arm but printed its gap as a
+   * negative number, so the winning arm appeared to be losing. Both only stayed
+   * hidden because `a` happened to be the higher-converting arm under the old
+   * volume-based ordering.
+   */
+  if (signal.delta === 0) {
+    return `Dead level so far (${formatSignalSummary(signal)}).`;
   }
-  const leader = signal.delta >= 0 ? aLabel : bLabel;
-  return `${leader} is genuinely ahead (${formatSignalSummary(signal)}).`;
+  const aAhead = signal.delta > 0;
+  const leader = aAhead ? aLabel : bLabel;
+  const oriented: StatisticalSignal = aAhead
+    ? signal
+    : {
+        ...signal,
+        delta: -signal.delta,
+        ciLow: signal.ciHigh == null ? null : -signal.ciHigh,
+        ciHigh: signal.ciLow == null ? null : -signal.ciLow,
+      };
+  if (signal.significance === "inconclusive") {
+    return `No clear winner yet — ${leader} is ahead but the gap could still be chance (${formatSignalSummary(oriented)}).`;
+  }
+  return `${leader} is genuinely ahead (${formatSignalSummary(oriented)}).`;
+}
+
+type ArmTotals = { arm: string; completions: number; checkouts: number; paid: number };
+
+/**
+ * The bullets for an axis that cannot carry a trend line: one glance line, one
+ * line per arm, the verdict, and why there is no chart.
+ */
+function countsFor(
+  axis: ChartAxis,
+  axisTitle: string,
+  a: ArmTotals,
+  b: ArmTotals,
+  validFrom: string | null,
+  reason: string
+): AxisCounts {
+  const since = validFrom ? ` since ${human(validFrom)}` : "";
+  const armLine = (t: ArmTotals) =>
+    `• *${armLabel(axis, t.arm).short}*${pricingSide(axis, t.arm)} — ${t.completions} finished → ${t.checkouts} reached checkout → ${t.paid} paid`;
+  return {
+    axis,
+    axisTitle,
+    text: [
+      `*${axisTitle}* — ${a.completions} vs ${b.completions} finished surveys${since}`,
+      armLine(a),
+      armLine(b),
+      `• ${verdictSentence(armLabel(axis, a.arm).short, a.completions, a.checkouts, armLabel(axis, b.arm).short, b.completions, b.checkouts)}`,
+      `• ${reason}`,
+    ].join("\n"),
+  };
 }
 
 /**
@@ -190,6 +282,9 @@ function purchaseNote(paidTotal: number): string {
 
 export interface AxisTrends {
   charted: AxisChart[];
+  /** Too young or too thin for a trend line — drawn as counts. */
+  counts: AxisCounts[];
+  /** Nothing to compare at all (fewer than two arms with data). */
   skipped: SkippedAxis[];
 }
 
@@ -202,6 +297,7 @@ export interface AxisTrends {
  */
 export function buildAxisTrends(rows: AxisFunnelRow[], today: string): AxisTrends {
   const charted: AxisChart[] = [];
+  const counts: AxisCounts[] = [];
   const skipped: SkippedAxis[] = [];
 
   for (const axis of CHART_AXES) {
@@ -218,9 +314,19 @@ export function buildAxisTrends(rows: AxisFunnelRow[], today: string): AxisTrend
       cur.paid += r.paid;
       byArm.set(r.arm, cur);
     }
+    /**
+     * Ordered by LABEL, not by volume.
+     *
+     * Volume order was meant to keep colour stable run to run, and does while an
+     * arm leads comfortably. On a young axis it does the opposite: measured on
+     * real pricing rows the arms sat at 14 and 15 completions, so one ordinary
+     * day flips which arm is purple — and with it the colour of everything the
+     * reader is trying to compare against yesterday's message. Label order also
+     * puts A before B, which is how the arms are named in the meeting.
+     */
     const arms = [...byArm.entries()]
       .map(([arm, t]) => ({ arm, ...t }))
-      .sort((l, r) => r.completions - l.completions);
+      .sort((l, r) => armLabel(axis, l.arm).short.localeCompare(armLabel(axis, r.arm).short));
 
     if (arms.length < 2) {
       skipped.push({
@@ -245,14 +351,23 @@ export function buildAxisTrends(rows: AxisFunnelRow[], today: string): AxisTrend
 
     // Gate 1: a 7-day trailing rate needs 7 days of like-for-like data.
     if (daysAvailable < MIN_TREND_DAYS) {
-      const readyOn = human(addDays(validFrom ?? firstDay, MIN_TREND_DAYS - 1));
+      // +MIN_TREND_DAYS, not +MIN_TREND_DAYS-1: the digest always reports on
+      // YESTERDAY, so the run that first has seven days behind it is the one a
+      // day later. The old arithmetic named a date whose own digest still had no
+      // line on it.
+      const readyOn = human(addDays(validFrom ?? firstDay, MIN_TREND_DAYS));
       // eslint-disable-next-line security/detect-object-injection -- closed union.
       const why = AXIS_VALID_FROM[axis]?.why;
-      skipped.push({
-        axis,
-        axisTitle,
-        caption: `*${axisTitle}* — no chart yet: only ${daysAvailable} ${daysAvailable === 1 ? "day" : "days"} of like-for-like data so far.${why ? ` That is because ${why}.` : ""} The trend needs ${MIN_TREND_DAYS} days, so it should appear around ${readyOn}. Totals are in /admin meanwhile.`,
-      });
+      counts.push(
+        countsFor(
+          axis,
+          axisTitle,
+          a,
+          b,
+          validFrom,
+          `No trend chart yet: only ${daysAvailable} ${daysAvailable === 1 ? "day" : "days"} of like-for-like data.${why ? ` That is because ${why}.` : ""} It needs ${MIN_TREND_DAYS} days, so expect it from ${readyOn}.`
+        )
+      );
       continue;
     }
 
@@ -260,11 +375,16 @@ export function buildAxisTrends(rows: AxisFunnelRow[], today: string): AxisTrend
     // moved bodily by one person.
     if (smaller < MIN_ARM_COMPLETIONS) {
       const smallLabel = armLabel(axis, a.completions <= b.completions ? a.arm : b.arm).short;
-      skipped.push({
-        axis,
-        axisTitle,
-        caption: `*${axisTitle}* — no chart yet: ${smallLabel} has only ${smaller} finished ${smaller === 1 ? "survey" : "surveys"} in the comparable window (needs ${MIN_ARM_COMPLETIONS}), so its line would move on single people rather than on a trend.`,
-      });
+      counts.push(
+        countsFor(
+          axis,
+          axisTitle,
+          a,
+          b,
+          validFrom,
+          `No trend chart yet: ${smallLabel} has only ${smaller} finished ${smaller === 1 ? "survey" : "surveys"} (needs ${MIN_ARM_COMPLETIONS}), so its line would move on single people rather than on a trend.`
+        )
+      );
       continue;
     }
 
@@ -295,5 +415,5 @@ export function buildAxisTrends(rows: AxisFunnelRow[], today: string): AxisTrend
     });
   }
 
-  return { charted, skipped };
+  return { charted, counts, skipped };
 }
