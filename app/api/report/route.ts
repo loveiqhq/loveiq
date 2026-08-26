@@ -56,6 +56,7 @@ import {
 } from "@features/report/server/shareAccess";
 import { maskEmail, verifyCookieForShare } from "@features/report/server/shareVerify";
 import { KNOWN_ARCHETYPES } from "@features/report/server/archetypeSlug";
+import { resolvePreviewArchetype } from "@features/report/server/previewArchetype";
 
 const sessionIdSchema = z.object({
   pricingSessionId: z.string().uuid().optional(),
@@ -630,7 +631,18 @@ export async function GET(request: Request) {
     }
 
     // 7. Build response — prefer v5 fields, fall back to v4
-    const primaryArchetype = scoring.v5_primary_archetype || scoring.primary_archetype;
+    const scoredArchetype = scoring.v5_primary_archetype || scoring.primary_archetype;
+    // Staging-only `?preview_archetype=` override — see resolvePreviewArchetype.
+    const primaryArchetype = resolvePreviewArchetype(
+      url.searchParams.get("preview_archetype"),
+      scoredArchetype
+    );
+    if (primaryArchetype !== scoredArchetype) {
+      logger.info(
+        { scored: scoredArchetype, preview: primaryArchetype },
+        "report: staging archetype preview"
+      );
+    }
     const unlockedArchetypes = resolveUnlockedArchetypes({
       accessPlan,
       archetypeTiers: archetypeTiersFromDb,

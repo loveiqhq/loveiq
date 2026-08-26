@@ -364,6 +364,22 @@ export function useReportData(identifier: ReportIdentifier) {
         if (pricingSessionId) {
           params.set("pricingSessionId", pricingSessionId);
         }
+        /*
+         * Forward the staging-only `?preview_archetype=` from the page URL so the
+         * API resolves the report's chapters for that archetype. Read off
+         * `window.location` rather than threaded through as a prop because it is a
+         * review affordance, not part of the report's own state — and the API
+         * ignores it outright on production, so forwarding it is always safe. See
+         * `resolvePreviewArchetype` in app/api/report/route.ts.
+         */
+        if (typeof window !== "undefined") {
+          const previewArchetype = new URLSearchParams(window.location.search).get(
+            "preview_archetype"
+          );
+          if (previewArchetype) {
+            params.set("preview_archetype", previewArchetype);
+          }
+        }
 
         const res = await fetch(`/api/report?${params.toString()}`, {
           headers: { "x-csrf-token": csrfToken },

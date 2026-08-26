@@ -17,6 +17,43 @@ describe("useReportData", () => {
     vi.restoreAllMocks();
   });
 
+  it("forwards the staging preview_archetype from the page URL to the API", async () => {
+    // The parameter lives on the report PAGE url; the hook has to copy it onto the
+    // API call or the override silently does nothing. The API ignores it on
+    // production, so forwarding it unconditionally is safe.
+    window.history.replaceState({}, "", "/report/rpt_x?preview_archetype=Spark%20Seeker");
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ primaryArchetype: "Spark Seeker", percentages: {} }),
+    });
+    globalThis.fetch = mockFetch;
+
+    renderHook(() => useReportData({ token: "rpt_x", sessionId: null }));
+
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalled();
+    });
+    const requested = String(mockFetch.mock.calls[0]?.[0]);
+    expect(requested).toContain("preview_archetype=Spark+Seeker");
+    window.history.replaceState({}, "", "/");
+  });
+
+  it("sends no preview_archetype when the page url has none", async () => {
+    window.history.replaceState({}, "", "/report/rpt_x");
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ primaryArchetype: "Spark Seeker", percentages: {} }),
+    });
+    globalThis.fetch = mockFetch;
+
+    renderHook(() => useReportData({ token: "rpt_x", sessionId: null }));
+
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalled();
+    });
+    expect(String(mockFetch.mock.calls[0]?.[0])).not.toContain("preview_archetype");
+  });
+
   it("returns a missing status when no report session id exists", () => {
     const { result } = renderHook(() => useReportData({ sessionId: null }));
 
