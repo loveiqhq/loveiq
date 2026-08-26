@@ -25,6 +25,16 @@ import { sweepStale, upsertChunks, type BrainRow, type IngestResult } from "./up
  * ("Signups (completed surveys)", "Paid customers"). This is not keyword
  * stuffing: every line still reads as a sentence a person would write.
  *
+ * AD SPEND IS FOLDED IN FROM THE GA4 CHUNKS, and that is the point of this file.
+ * "What did we spend and what did we earn" is ONE question, but spend lives only
+ * in GA4 and revenue only in our tables — so with the two split across sources,
+ * keyword retrieval returned five GA4 chunks and no revenue at all, and the model
+ * correctly answered only half. Reading `ad_cost` back off the `ga4` rows this
+ * cron just wrote costs no extra API call and makes cost per signup and cost per
+ * paying customer readable from a single chunk.
+ *
+ * This is why `ingestAnalytics` runs AFTER `ingestGa4` in the cron.
+ *
  * EMPTY DAYS ARE NOT INDEXED. Four hundred rows of zeroes would match loosely on
  * every date-shaped question and crowd out the days that actually say something.
  */
@@ -58,11 +68,12 @@ interface Totals {
   opens: number;
   invites: number;
   sources: Record<string, number>;
+  adSpend: number;
   firstDay: string;
   lastDay: string;
 }
 
-function seed(r: RollupRow, day: string): Totals {
+function seed(r: RollupRow, day: string, adCost: Map<string, number>): Totals {
   return {
     visitors: r.unique_visitors,
     starts: r.survey_starts,
@@ -73,13 +84,19 @@ function seed(r: RollupRow, day: string): Totals {
     opens: r.report_opens,
     invites: r.invites_sent,
     sources: { ...(r.top_sources ?? {}) },
+    adSpend: adCost.get(day) ?? 0,
     firstDay: day,
     lastDay: day,
   };
 }
 
-function merge(a: Totals | undefined, r: RollupRow, day: string): Totals {
-  if (!a) return seed(r, day);
+function merge(
+  a: Totals | undefined,
+  r: RollupRow,
+  day: string,
+  adCost: Map<string, number>
+): Totals {
+  if (!a) return seed(r, day, adCost);
   const sources = { ...a.sources };
   for (const [k, v] of Object.entries(r.top_sources ?? {})) {
     sources[k] = (sources[k] ?? 0) + Number(v ?? 0);
@@ -94,6 +111,7 @@ function merge(a: Totals | undefined, r: RollupRow, day: string): Totals {
     opens: a.opens + r.report_opens,
     invites: a.invites + r.invites_sent,
     sources,
+    adSpend: a.adSpend + (adCost.get(day) ?? 0),
     firstDay: day < a.firstDay ? day : a.firstDay,
     lastDay: day > a.lastDay ? day : a.lastDay,
   };
@@ -101,6 +119,32 @@ function merge(a: Totals | undefined, r: RollupRow, day: string): Totals {
 
 function isEmpty(t: Totals): boolean {
   return t.visitors === 0 && t.submissions === 0 && t.reports === 0 && t.paid === 0;
+}
+
+/** Spend per day, read back from the `ga4` chunks written earlier in this run. */
+async function adCostByDay(): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  try {
+    const res = await supabaseFetch(
+      // eslint-disable-next-line no-secrets/no-secrets -- a PostgREST query path, not a secret
+      "/rest/v1/brain_chunk?source=eq.ga4&select=meta&meta->>grain=eq.day",
+      { headers: { Range: "0-999" } }
+    );
+    if (!res.ok) return out;
+    const rows = (await res.json()) as Array<{ meta?: Record<string, unknown> }>;
+    for (const r of rows) {
+      const day = typeof r.meta?.day === "string" ? r.meta.day : null;
+      const cost = Number(r.meta?.ad_cost ?? 0);
+      if (day && Number.isFinite(cost) && cost > 0) out.set(day, cost);
+    }
+  } catch {
+    // Optional enrichment: without GA4 the rollup simply omits the spend lines.
+  }
+  return out;
+}
+
+function money(n: number): string {
+  return `EUR ${n.toFixed(2)}`;
 }
 
 function pct(part: number, whole: number): string {
@@ -185,12 +229,28 @@ function renderBody(period: string, t: Totals): string {
     `Paid customers: ${t.paid} (${pct(t.paid, t.reports)} of reports) · Revenue: EUR ${t.revenue.toFixed(2)}`,
     t.invites ? `Invites sent: ${t.invites}` : null,
     sources ? `Traffic sources: ${sources}` : null,
+    // The two numbers everyone actually wants, next to each other and already
+    // divided — a model asked to compute these from two separate chunks gets
+    // them wrong or declines.
+    t.adSpend > 0 ? `Google Ads spend: ${money(t.adSpend)}` : null,
+    t.adSpend > 0 && t.submissions > 0
+      ? `Cost per signup: ${money(t.adSpend / t.submissions)} · Cost per paying customer: ${
+          t.paid > 0 ? money(t.adSpend / t.paid) : "no paying customers"
+        }`
+      : null,
+    t.adSpend > 0
+      ? `Net: ${money(t.revenue - t.adSpend)} (revenue ${money(t.revenue)} minus ad spend ${money(t.adSpend)})`
+      : null,
   ]
     .filter((line) => line !== null)
     .join("\n");
 }
 
-export function buildAnalyticsRows(rows: RollupRow[], stampedAt: string): BrainRow[] {
+export function buildAnalyticsRows(
+  rows: RollupRow[],
+  stampedAt: string,
+  adCost: Map<string, number> = new Map()
+): BrainRow[] {
   const out: BrainRow[] = [];
   const byWeek = new Map<string, Totals>();
   const byMonth = new Map<string, Totals>();
@@ -198,11 +258,11 @@ export function buildAnalyticsRows(rows: RollupRow[], stampedAt: string): BrainR
   for (const r of rows) {
     const day = String(r.day).slice(0, 10);
     const week = isoWeek(day);
-    byWeek.set(week, merge(byWeek.get(week), r, day));
+    byWeek.set(week, merge(byWeek.get(week), r, day, adCost));
     const month = day.slice(0, 7);
-    byMonth.set(month, merge(byMonth.get(month), r, day));
+    byMonth.set(month, merge(byMonth.get(month), r, day, adCost));
 
-    const totals = seed(r, day);
+    const totals = seed(r, day, adCost);
     if (isEmpty(totals)) continue;
     const label = longDate(day);
     out.push({
@@ -211,7 +271,13 @@ export function buildAnalyticsRows(rows: RollupRow[], stampedAt: string): BrainR
       title: `LoveIQ numbers — ${label}`,
       url: null,
       body: renderBody(`${label} (${day})`, totals),
-      meta: { grain: "day", day, visitors: totals.visitors, revenue: totals.revenue },
+      meta: {
+        grain: "day",
+        day,
+        visitors: totals.visitors,
+        revenue: totals.revenue,
+        ad_spend: totals.adSpend,
+      },
       updated_at: stampedAt,
     });
   }
@@ -226,7 +292,7 @@ export function buildAnalyticsRows(rows: RollupRow[], stampedAt: string): BrainR
       title: `LoveIQ numbers — ${label}`,
       url: null,
       body: renderBody(`${label} (${week})`, t),
-      meta: { grain: "week", week, visitors: t.visitors, revenue: t.revenue },
+      meta: { grain: "week", week, visitors: t.visitors, revenue: t.revenue, ad_spend: t.adSpend },
       updated_at: stampedAt,
     });
   }
@@ -240,7 +306,13 @@ export function buildAnalyticsRows(rows: RollupRow[], stampedAt: string): BrainR
       title: `LoveIQ numbers — ${label} (monthly total)`,
       url: null,
       body: renderBody(`${label} — whole month (${month})`, t),
-      meta: { grain: "month", month, visitors: t.visitors, revenue: t.revenue },
+      meta: {
+        grain: "month",
+        month,
+        visitors: t.visitors,
+        revenue: t.revenue,
+        ad_spend: t.adSpend,
+      },
       updated_at: stampedAt,
     });
   }
@@ -261,7 +333,7 @@ export async function ingestAnalytics(stampedAt: string): Promise<IngestResult> 
     throw new Error("brain_daily_rollup returned a non-array");
   }
 
-  const chunks = buildAnalyticsRows(rows, stampedAt);
+  const chunks = buildAnalyticsRows(rows, stampedAt, await adCostByDay());
   const written = await upsertChunks(chunks);
   // Safe to sweep: this ingester always rewrites the whole window in one call,
   // so anything older is a day that aged out or a grain that emptied.

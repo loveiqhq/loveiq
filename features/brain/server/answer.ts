@@ -10,13 +10,16 @@ import type { SlackBlock } from "@shared/observability/slack";
  */
 
 /**
- * How many chunks go into the prompt. Sized for the TIGHTER of the two candidate
- * free tiers -- `openai/gpt-oss-120b` allows 8K tokens/minute, and 8 chunks of
- * ~1.5K chars is ~3K tokens of sources, leaving room for the instructions and a
- * ~900-token answer. On `groq/compound` (70K/min) this is comfortable rather than
- * tight, so one setting serves both.
+ * How many chunks go into the prompt.
+ *
+ * Raised from 8 after a measured failure: with five sources and three time grains
+ * competing, eight slots could not hold both the ad-spend row and the revenue row
+ * for the same month, so "what did we spend and what did we earn" got answered
+ * from partial weeks. Fourteen leaves room for one of each bucket plus the
+ * strongest few overall, at roughly 1.6K extra prompt tokens — immaterial against
+ * Gemini's context, and still inside a tight per-minute token budget.
  */
-const MAX_SOURCES = 8;
+const MAX_SOURCES = 14;
 
 export type BrainStatus = "answered" | "no_results" | "rate_limited" | "unconfigured" | "error";
 

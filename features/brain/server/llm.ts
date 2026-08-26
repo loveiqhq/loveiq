@@ -13,34 +13,42 @@ import logger from "@shared/observability/logger";
  * NO NEW DEPENDENCY. One POST does not justify an SDK -- the same call this repo
  * already makes by hand for Slack rather than pulling in `@slack/web-api`.
  *
- * DEFAULT MODEL. `groq/compound` on Groq's free tier: 30 req/min, 250 req/day,
- * and -- the number that actually decides this -- 70K tokens/min. The obvious
- * alternative, `openai/gpt-oss-120b`, is a plainer non-agentic model but its free
- * tier allows only 8K tokens/min, which is roughly ONE question a minute once a
- * retrieval set is in the prompt. Both are 131K context. The prompt here is sized
- * to fit the 8K ceiling so either model works with only an env change; pick
- * gpt-oss if `compound`'s built-in tool use is unwanted.
+ * DEFAULT MODEL. `gemini-3.6-flash` on Google's free tier, reached through
+ * Gemini's OpenAI-compatible endpoint. Note `gemini-2.5-flash` is NOT usable —
+ * Google now answers 404 "no longer available to new users" for keys created
+ * after its retirement, so anything copied from an older guide will fail.
+ *
+ * Groq (`https://api.groq.com/openai/v1`, `groq/compound`) is the drop-in
+ * alternative and is preferable on data grounds: it does not train on the prompts
+ * it receives, whereas Google's free tier does, and these prompts carry our docs,
+ * our Jira and our revenue. It is a base-URL, key and model change, nothing more.
  *
  * NEVER LOGS THE KEY OR THE PROMPT. Retrieved chunks are company documents, and
  * the logger mirrors to Slack -- same reasoning as `slack-bot.ts` not logging
  * blocks.
  */
 
-const DEFAULT_BASE_URL = "https://api.groq.com/openai/v1";
-const DEFAULT_MODEL = "groq/compound";
+const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/";
+const DEFAULT_MODEL = "gemini-3.6-flash";
 
-// Generation is the slowest step and runs after the Slack ack, not inside it, so
-// this can be generous. Still bounded: a hung request would hold the function
-// open until the platform kills it, losing the reply entirely.
-const TIMEOUT_MS = 25_000;
+// Generation runs after the Slack ack, not inside it, so this can be generous.
+// Still bounded: a hung request holds the function open until the platform kills
+// it, losing the reply entirely. Set well above the observed worst case — a
+// thinking model with no effort cap measured 13.7s on a trivial prompt, and 25s
+// gave a first real answer 25.4s of latency against a 25s ceiling, which is a
+// coin flip rather than a margin.
+const TIMEOUT_MS = 45_000;
 
 // Grounded answers, not prose. Low but not zero -- at 0 the model tends to parrot
 // a source verbatim instead of answering the question asked.
 const TEMPERATURE = 0.2;
 
-// Slack messages are short. Also keeps the response inside the free tier's
-// tokens-per-minute budget alongside the prompt.
-const MAX_TOKENS = 900;
+// Slack messages are short, but this budget is NOT just the visible answer: on a
+// thinking model the reasoning tokens are drawn from it first. Measured, 900 cut
+// a real answer off mid-sentence ("...and removed from the schedule") because
+// ~360 tokens went to reasoning before a word was written. Sized so the answer
+// survives even when the model thinks hard.
+const MAX_TOKENS = 2500;
 
 export interface LlmMessage {
   role: "system" | "user";
@@ -57,6 +65,20 @@ export function isLlmConfigured(): boolean {
 
 export function llmModel(): string {
   return process.env.BRAIN_LLM_MODEL || DEFAULT_MODEL;
+}
+
+/**
+ * Reasoning budget, sent ONLY when configured.
+ *
+ * Worth an env var rather than a constant because it is the single biggest lever
+ * on latency and it is not portable. Measured on gemini-3.6-flash answering a
+ * real question: 13.7s unconstrained versus 1.7s at "low", for the same answer.
+ * Left unset the field is omitted entirely, so a provider that rejects unknown
+ * parameters (Groq, older OpenAI-compatible servers) is unaffected.
+ */
+function reasoningEffort(): string | null {
+  const value = process.env.BRAIN_LLM_REASONING_EFFORT?.trim();
+  return value ? value : null;
 }
 
 export async function complete(messages: LlmMessage[]): Promise<LlmResult> {
@@ -79,6 +101,7 @@ export async function complete(messages: LlmMessage[]): Promise<LlmResult> {
         temperature: TEMPERATURE,
         max_tokens: MAX_TOKENS,
         stream: false,
+        ...(reasoningEffort() ? { reasoning_effort: reasoningEffort() } : {}),
       }),
       timeoutMs: TIMEOUT_MS,
     });
@@ -104,13 +127,28 @@ export async function complete(messages: LlmMessage[]): Promise<LlmResult> {
   }
 
   const json = (await res.json().catch(() => null)) as {
-    choices?: Array<{ message?: { content?: unknown } }>;
+    choices?: Array<{ message?: { content?: unknown }; finish_reason?: string }>;
   } | null;
 
   const content = json?.choices?.[0]?.message?.content;
   if (typeof content !== "string" || !content.trim()) {
-    logger.error({ hasChoices: Boolean(json?.choices?.length) }, "brain llm returned no content");
-    return { ok: false, reason: "error", detail: "empty completion" };
+    // A thinking model that spends its whole budget reasoning answers 200 with an
+    // EMPTY message and finish_reason "length" — not an error status. Naming that
+    // separately matters because the fix is a bigger `max_tokens` or a lower
+    // reasoning effort, not a retry.
+    const finish = json?.choices?.[0]?.finish_reason;
+    logger.error(
+      { hasChoices: Boolean(json?.choices?.length), finish },
+      "brain llm returned no content"
+    );
+    return {
+      ok: false,
+      reason: "error",
+      detail:
+        finish === "length"
+          ? "the model used its whole token budget on reasoning — raise BRAIN_LLM_REASONING_EFFORT or max_tokens"
+          : "empty completion",
+    };
   }
 
   return { ok: true, text: content.trim() };

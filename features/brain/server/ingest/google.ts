@@ -7,7 +7,7 @@ import {
   isGoogleConfigured,
 } from "@shared/http/google-oauth";
 import logger from "@shared/observability/logger";
-import { longDate } from "./analytics";
+import { isoWeek, longDate, longMonth } from "./analytics";
 import { sweepStale, upsertChunks, type BrainRow, type IngestResult } from "./upsert";
 
 /**
@@ -34,6 +34,17 @@ import { sweepStale, upsertChunks, type BrainRow, type IngestResult } from "./up
  * DATES ARE SPELLED OUT for the same measured reason as `analytics.ts`: nobody
  * asks a question containing the string "2026-08", so a chunk that only carries
  * the ISO form is unreachable by "what did we spend on ads in August".
+ *
+ * THREE GRAINS, ALSO FOR THE SAME MEASURED REASON. Daily rows alone could not
+ * answer "how much did we spend on Google Ads in August and what did we earn" —
+ * retrieval returned a single day and the model correctly refused to guess a
+ * monthly total from it. Weekly and monthly rows are pre-totalled so the answer
+ * is read rather than computed.
+ *
+ * SEARCH CONSOLE RATES ARE RECOMPUTED, NOT AVERAGED. Click-through rate over a
+ * month is total clicks over total impressions, and average position must be
+ * weighted by impressions — averaging daily percentages or positions lets a
+ * single quiet day with one lucky impression drag the month around.
  */
 
 const DAYS = 90;
@@ -45,6 +56,14 @@ function isoDaysAgo(n: number): string {
   const d = new Date();
   d.setUTCDate(d.getUTCDate() - n);
   return d.toISOString().slice(0, 10);
+}
+
+interface AdDay {
+  cost: number;
+  clicks: number;
+  impressions: number;
+  /** Campaign name to spend, so a grain can report where the money went. */
+  campaigns: Map<string, number>;
 }
 
 interface Ga4Row {
@@ -110,7 +129,9 @@ export async function ingestGa4(stampedAt: string): Promise<IngestResult> {
   // Channel mix and ad spend are enrichment: a failure here must not lose the
   // core numbers, and ad metrics 400 outright on a property with no linked Ads
   // account.
-  const channels = new Map<string, string[]>();
+  // Counts per day rather than pre-rendered strings: weekly and monthly grains
+  // sum these, and summing a map is correct where re-parsing prose is not.
+  const channelCounts = new Map<string, Map<string, number>>();
   try {
     const rows = await runGa4Report(token, propertyId, {
       dateRanges,
@@ -123,9 +144,9 @@ export async function ingestGa4(stampedAt: string): Promise<IngestResult> {
       const channel = r.dimensionValues?.[1]?.value ?? "unknown";
       const sessions = num(r.metricValues?.[0]?.value);
       if (!day || sessions <= 0) continue;
-      const list = channels.get(day) ?? [];
-      list.push(`${channel} ${sessions}`);
-      channels.set(day, list);
+      const forDay = channelCounts.get(day) ?? new Map<string, number>();
+      forDay.set(channel, (forDay.get(channel) ?? 0) + sessions);
+      channelCounts.set(day, forDay);
     }
   } catch (err) {
     logger.warn({ err }, "brain-ingest ga4: channel breakdown unavailable");
@@ -140,10 +161,7 @@ export async function ingestGa4(stampedAt: string): Promise<IngestResult> {
   //
   // Still best-effort: a property with no linked Google Ads account returns
   // nothing, and that must not cost us the core numbers above.
-  const ads = new Map<
-    string,
-    { cost: number; clicks: number; impressions: number; campaigns: Map<string, number> }
-  >();
+  const ads = new Map<string, AdDay>();
   try {
     const rows = await runGa4Report(token, propertyId, {
       dateRanges,
@@ -177,50 +195,143 @@ export async function ingestGa4(stampedAt: string): Promise<IngestResult> {
     logger.info({ err }, "brain-ingest ga4: no linked Google Ads data");
   }
 
-  const chunks: BrainRow[] = [];
-  for (const r of core) {
-    const day = ga4Date(r.dimensionValues?.[0]?.value ?? "");
-    if (!day) continue;
-    const [sessions, users, newUsers, views, engaged] = (r.metricValues ?? []).map((m) =>
-      num(m.value)
-    );
-    if (!sessions && !users) continue;
+  interface Ga4Totals {
+    sessions: number;
+    users: number;
+    newUsers: number;
+    views: number;
+    engaged: number;
+    adCost: number;
+    adClicks: number;
+    adImpressions: number;
+    channels: Map<string, number>;
+    campaigns: Map<string, number>;
+    firstDay: string;
+    lastDay: string;
+  }
 
-    const ad = ads.get(day);
-    const body = [
-      `Period: ${longDate(day)} (${day})`,
-      `Sessions: ${sessions} · Users: ${users} · New users: ${newUsers}`,
-      `Page views: ${views} · Engaged sessions: ${engaged}`,
-      channels.get(day)?.length ? `Channels: ${channels.get(day)!.slice(0, 6).join(", ")}` : null,
-      ad
-        ? `Google Ads spend: EUR ${ad.cost.toFixed(2)} · ${ad.clicks} ad clicks · ${ad.impressions} ad impressions`
+  const emptyTotals = (day: string): Ga4Totals => ({
+    sessions: 0,
+    users: 0,
+    newUsers: 0,
+    views: 0,
+    engaged: 0,
+    adCost: 0,
+    adClicks: 0,
+    adImpressions: 0,
+    channels: new Map(),
+    campaigns: new Map(),
+    firstDay: day,
+    lastDay: day,
+  });
+
+  const addInto = (t: Ga4Totals, day: string, m: number[], ad?: AdDay): Ga4Totals => {
+    const [sessions = 0, users = 0, newUsers = 0, views = 0, engaged = 0] = m;
+    t.sessions += sessions;
+    t.users += users;
+    t.newUsers += newUsers;
+    t.views += views;
+    t.engaged += engaged;
+    if (ad) {
+      t.adCost += ad.cost;
+      t.adClicks += ad.clicks;
+      t.adImpressions += ad.impressions;
+      for (const [name, cost] of ad.campaigns) {
+        t.campaigns.set(name, (t.campaigns.get(name) ?? 0) + cost);
+      }
+    }
+    for (const [name, n] of channelCounts.get(day) ?? []) {
+      t.channels.set(name, (t.channels.get(name) ?? 0) + n);
+    }
+    if (day < t.firstDay) t.firstDay = day;
+    if (day > t.lastDay) t.lastDay = day;
+    return t;
+  };
+
+  const topOf = (m: Map<string, number>, unit: (n: number) => string, take = 6): string | null => {
+    const entries = [...m.entries()].filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]);
+    if (!entries.length) return null;
+    return entries
+      .slice(0, take)
+      .map(([name, n]) => `${name} ${unit(n)}`)
+      .join(", ");
+  };
+
+  const renderGa4 = (period: string, t: Ga4Totals): string =>
+    [
+      `Period: ${period}`,
+      `Sessions: ${t.sessions} · Users: ${t.users} · New users: ${t.newUsers}`,
+      `Page views: ${t.views} · Engaged sessions: ${t.engaged}`,
+      topOf(t.channels, (n) => String(n))
+        ? `Channels: ${topOf(t.channels, (n) => String(n))}`
         : null,
-      ad && ad.campaigns.size
-        ? `Ad campaigns: ${[...ad.campaigns.entries()]
-            .sort((a, b) => b[1] - a[1])
-            .slice(0, 5)
-            .map(([name, cost]) => `${name} EUR ${cost.toFixed(2)}`)
-            .join(", ")}`
+      t.adCost || t.adClicks
+        ? `Google Ads spend: EUR ${t.adCost.toFixed(2)} · ${t.adClicks} ad clicks · ${t.adImpressions} ad impressions`
+        : null,
+      topOf(t.campaigns, (n) => `EUR ${n.toFixed(2)}`, 5)
+        ? `Ad campaigns: ${topOf(t.campaigns, (n) => `EUR ${n.toFixed(2)}`, 5)}`
         : null,
     ]
       .filter((l) => l !== null)
       .join("\n");
 
+  const chunks: BrainRow[] = [];
+  const ga4Weeks = new Map<string, Ga4Totals>();
+  const ga4Months = new Map<string, Ga4Totals>();
+
+  for (const r of core) {
+    const day = ga4Date(r.dimensionValues?.[0]?.value ?? "");
+    if (!day) continue;
+    const metrics = (r.metricValues ?? []).map((m) => num(m.value));
+    const [sessions = 0, users = 0] = metrics;
+    if (!sessions && !users) continue;
+
+    const ad = ads.get(day);
+    const week = isoWeek(day);
+    const month = day.slice(0, 7);
+    ga4Weeks.set(week, addInto(ga4Weeks.get(week) ?? emptyTotals(day), day, metrics, ad));
+    ga4Months.set(month, addInto(ga4Months.get(month) ?? emptyTotals(day), day, metrics, ad));
+
+    const daily = addInto(emptyTotals(day), day, metrics, ad);
     chunks.push({
       source: GA4_SOURCE,
       source_id: `daily:${day}`,
       title: `Google Analytics — ${longDate(day)}`,
       url: null,
-      body,
+      body: renderGa4(`${longDate(day)} (${day})`, daily),
       meta: {
+        grain: "day",
         day,
         sessions,
         users,
-        newUsers,
-        views,
-        engaged,
         ...(ad ? { ad_cost: ad.cost, ad_clicks: ad.clicks, ad_impressions: ad.impressions } : {}),
       },
+      updated_at: stampedAt,
+    });
+  }
+
+  for (const [week, t] of ga4Weeks) {
+    const label = `week of ${longDate(t.firstDay)} to ${longDate(t.lastDay)}`;
+    chunks.push({
+      source: GA4_SOURCE,
+      source_id: `weekly:${week}`,
+      title: `Google Analytics — ${label}`,
+      url: null,
+      body: renderGa4(`${label} (${week})`, t),
+      meta: { grain: "week", week, sessions: t.sessions, ad_cost: t.adCost },
+      updated_at: stampedAt,
+    });
+  }
+
+  for (const [month, t] of ga4Months) {
+    const label = longMonth(month);
+    chunks.push({
+      source: GA4_SOURCE,
+      source_id: `monthly:${month}`,
+      title: `Google Analytics — ${label} (monthly total)`,
+      url: null,
+      body: renderGa4(`${label} — whole month (${month})`, t),
+      meta: { grain: "month", month, sessions: t.sessions, ad_cost: t.adCost },
       updated_at: stampedAt,
     });
   }
@@ -281,7 +392,7 @@ export async function ingestSearchConsole(stampedAt: string): Promise<IngestResu
 
   // The queries are the point: nothing else in our stack knows what people typed
   // into Google to find us.
-  const queriesByDay = new Map<string, string[]>();
+  const queryStats = new Map<string, Map<string, { clicks: number; impressions: number }>>();
   try {
     const rows = await queryGsc(token, site, {
       startDate,
@@ -293,46 +404,126 @@ export async function ingestSearchConsole(stampedAt: string): Promise<IngestResu
       const day = r.keys?.[0];
       const query = r.keys?.[1];
       if (!day || !query) continue;
-      const list = queriesByDay.get(day) ?? [];
-      if (list.length < 8) {
-        list.push(`"${query}" (${r.clicks ?? 0} clicks, ${r.impressions ?? 0} impressions)`);
-      }
-      queriesByDay.set(day, list);
+      const forDay =
+        queryStats.get(day) ?? new Map<string, { clicks: number; impressions: number }>();
+      const cur = forDay.get(query) ?? { clicks: 0, impressions: 0 };
+      cur.clicks += r.clicks ?? 0;
+      cur.impressions += r.impressions ?? 0;
+      forDay.set(query, cur);
+      queryStats.set(day, forDay);
     }
   } catch (err) {
     logger.warn({ err }, "brain-ingest gsc: query breakdown unavailable");
   }
 
-  const chunks: BrainRow[] = daily
-    .map((r): BrainRow | null => {
-      const day = r.keys?.[0];
-      if (!day) return null;
-      const clicks = r.clicks ?? 0;
-      const impressions = r.impressions ?? 0;
-      if (!clicks && !impressions) return null;
+  interface GscTotals {
+    clicks: number;
+    impressions: number;
+    /** Sum of position x impressions, so the mean can be impression-weighted. */
+    positionWeighted: number;
+    queries: Map<string, { clicks: number; impressions: number }>;
+    firstDay: string;
+    lastDay: string;
+  }
 
-      const body = [
-        `Period: ${longDate(day)} (${day})`,
-        `Google search clicks: ${clicks} · Impressions: ${impressions}`,
-        `Click-through rate: ${((r.ctr ?? 0) * 100).toFixed(2)}% · Average position: ${(r.position ?? 0).toFixed(1)}`,
-        queriesByDay.get(day)?.length
-          ? `Top search queries: ${queriesByDay.get(day)!.join("; ")}`
-          : null,
-      ]
-        .filter((l) => l !== null)
-        .join("\n");
+  const emptyGsc = (day: string): GscTotals => ({
+    clicks: 0,
+    impressions: 0,
+    positionWeighted: 0,
+    queries: new Map(),
+    firstDay: day,
+    lastDay: day,
+  });
 
-      return {
-        source: GSC_SOURCE,
-        source_id: `daily:${day}`,
-        title: `Google Search Console — ${longDate(day)}`,
-        url: null,
-        body,
-        meta: { day, clicks, impressions, ctr: r.ctr ?? 0, position: r.position ?? 0 },
-        updated_at: stampedAt,
-      };
-    })
-    .filter((r): r is BrainRow => r !== null);
+  const addGsc = (t: GscTotals, day: string, r: GscRow): GscTotals => {
+    const clicks = r.clicks ?? 0;
+    const impressions = r.impressions ?? 0;
+    t.clicks += clicks;
+    t.impressions += impressions;
+    t.positionWeighted += (r.position ?? 0) * impressions;
+    for (const [q, v] of queryStats.get(day) ?? []) {
+      const cur = t.queries.get(q) ?? { clicks: 0, impressions: 0 };
+      cur.clicks += v.clicks;
+      cur.impressions += v.impressions;
+      t.queries.set(q, cur);
+    }
+    if (day < t.firstDay) t.firstDay = day;
+    if (day > t.lastDay) t.lastDay = day;
+    return t;
+  };
+
+  const renderGsc = (period: string, t: GscTotals): string => {
+    // Recomputed from totals, never averaged across days: a quiet day with one
+    // lucky impression would otherwise drag a whole month's rate around.
+    const ctr = t.impressions ? (t.clicks / t.impressions) * 100 : 0;
+    const position = t.impressions ? t.positionWeighted / t.impressions : 0;
+    const top = [...t.queries.entries()]
+      .sort((a, b) => b[1].impressions - a[1].impressions)
+      .slice(0, 10)
+      .map(([q, v]) => `"${q}" (${v.clicks} clicks, ${v.impressions} impressions)`)
+      .join("; ");
+    return [
+      `Period: ${period}`,
+      `Google search clicks: ${t.clicks} · Impressions: ${t.impressions}`,
+      `Click-through rate: ${ctr.toFixed(2)}% · Average position: ${position.toFixed(1)}`,
+      top ? `Top search queries: ${top}` : null,
+    ]
+      .filter((l) => l !== null)
+      .join("\n");
+  };
+
+  const chunks: BrainRow[] = [];
+  const gscWeeks = new Map<string, GscTotals>();
+  const gscMonths = new Map<string, GscTotals>();
+
+  for (const r of daily) {
+    const day = r.keys?.[0];
+    if (!day) continue;
+    const clicks = r.clicks ?? 0;
+    const impressions = r.impressions ?? 0;
+    if (!clicks && !impressions) continue;
+
+    const week = isoWeek(day);
+    const month = day.slice(0, 7);
+    gscWeeks.set(week, addGsc(gscWeeks.get(week) ?? emptyGsc(day), day, r));
+    gscMonths.set(month, addGsc(gscMonths.get(month) ?? emptyGsc(day), day, r));
+
+    chunks.push({
+      source: GSC_SOURCE,
+      source_id: `daily:${day}`,
+      title: `Google Search Console — ${longDate(day)}`,
+      url: null,
+      body: renderGsc(`${longDate(day)} (${day})`, addGsc(emptyGsc(day), day, r)),
+      meta: { grain: "day", day, clicks, impressions, position: r.position ?? 0 },
+      updated_at: stampedAt,
+    });
+  }
+
+  for (const [week, t] of gscWeeks) {
+    const label = `week of ${longDate(t.firstDay)} to ${longDate(t.lastDay)}`;
+    chunks.push({
+      source: GSC_SOURCE,
+      source_id: `weekly:${week}`,
+      title: `Google Search Console — ${label}`,
+      url: null,
+      body: renderGsc(`${label} (${week})`, t),
+      meta: { grain: "week", week, clicks: t.clicks, impressions: t.impressions },
+      updated_at: stampedAt,
+    });
+  }
+
+  for (const [month, t] of gscMonths) {
+    const label = longMonth(month);
+    chunks.push({
+      source: GSC_SOURCE,
+      source_id: `monthly:${month}`,
+      title: `Google Search Console — ${label} (monthly total)`,
+      url: null,
+      body: renderGsc(`${label} — whole month (${month})`, t),
+      meta: { grain: "month", month, clicks: t.clicks, impressions: t.impressions },
+      updated_at: stampedAt,
+    });
+  }
 
   const written = await upsertChunks(chunks);
   const swept = await sweepStale(GSC_SOURCE, stampedAt);

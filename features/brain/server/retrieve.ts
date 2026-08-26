@@ -34,13 +34,23 @@ export interface BrainChunk {
   score: number;
 }
 
-/** Over-fetch factor. Dedupe and the per-source cap both discard rows, so asking
- *  for exactly `limit` would routinely return fewer than `limit`. */
-const OVERFETCH = 4;
+/**
+ * Candidates requested per (source, grain) bucket, and the global ceiling on the
+ * candidate set.
+ *
+ * These two must be sized TOGETHER. The SQL ranks within each bucket and then
+ * applies a global LIMIT, so a global limit that is too tight throws away exactly
+ * the rows the bucketing just protected: measured, the August revenue row ranked
+ * 61st globally and a limit of 56 discarded it, after which the model answered
+ * "what did we spend and what did we earn" from partial weeks. With ~11 buckets
+ * and 3 candidates each, 100 comfortably clears the whole set.
+ */
+const PER_BUCKET_CANDIDATES = 3;
+const CANDIDATE_CEILING = 100;
 
 /**
- * No single source may exceed this share of the returned set, so long as other
- * sources have candidates left to fill the gap.
+ * No single BUCKET — a source at one grain — may exceed this share of the
+ * returned set, so long as other buckets have candidates left to fill the gap.
  *
  * TUNED BY MEASUREMENT, not taste. With 1,475 commit chunks against 454 doc and
  * 171 analytics chunks, and commit titles being short subject lines that score
@@ -54,16 +64,45 @@ const OVERFETCH = 4;
 const MAX_SOURCE_SHARE = 0.3;
 
 /**
- * The thing a chunk is part of. Splitting produced `<sha>-2` and
- * `path#heading-2`, so the parent is the id with any trailing part index removed;
- * docs additionally collapse to their file so two headings of one doc do not both
- * land in a short result set.
+ * Diversity bucket: source AND grain.
+ *
+ * Source alone is not enough. The daily, weekly and monthly rows of one period
+ * are near-identical text differing only in their numbers — measured, the August
+ * daily, weekly and monthly chunks scored ts_rank 0.0507 / 0.0524 / 0.0507, a
+ * spread of 0.002. No weighting can separate a tie that small, so the monthly
+ * total lost to a weekly on noise and "what did we spend in August" got summed
+ * from partial weeks instead of read from the row that already has the answer.
+ * Reserving a slot per grain is the only tie-break that survives.
+ */
+function bucketKey(row: BrainChunk): string {
+  const grain = typeof row.meta?.grain === "string" ? row.meta.grain : "";
+  return `${row.source}:${grain}`;
+}
+
+/**
+ * The thing a chunk is part of, so several pieces of one document or one commit
+ * collapse to their best-scoring piece.
+ *
+ * ONLY `doc` AND `commit` ARE SPLIT, so only they need collapsing. An earlier
+ * version stripped a trailing `-<digits>` from every id to undo the `<sha>-2`
+ * part suffix, and that silently ate real keys: `monthly:2026-08` became
+ * `monthly:2026`, so EVERY month of a year collapsed into one parent and all but
+ * the best-scoring month was discarded before it could ever be returned. Same for
+ * `daily:2026-08-05`. Date-keyed sources are already unique — they must be passed
+ * through untouched.
  */
 function parentKey(row: BrainChunk): string {
+  // `<sha>` and `<sha>-2` are the same commit; the sha is exactly 40 hex chars.
   if (row.source === "commit") return `commit:${row.sourceId.slice(0, 40)}`;
-  const path = typeof row.meta?.path === "string" ? row.meta.path : null;
-  if (path) return `doc:${path}`;
-  return `${row.source}:${row.sourceId.replace(/-\d+$/, "")}`;
+
+  // Two headings of one document are the same document.
+  if (row.source === "doc") {
+    const path = typeof row.meta?.path === "string" ? row.meta.path : null;
+    return `doc:${path ?? row.sourceId.split("#")[0]}`;
+  }
+
+  // analytics / ga4 / gsc / jira: the id is already the natural key.
+  return `${row.source}:${row.sourceId}`;
 }
 
 export async function retrieve(question: string, limit = 12): Promise<BrainChunk[]> {
@@ -74,7 +113,18 @@ export async function retrieve(question: string, limit = 12): Promise<BrainChunk
   try {
     const res = await supabaseFetch("/rest/v1/rpc/brain_search", {
       method: "POST",
-      body: JSON.stringify({ query_text: trimmed, k: limit * OVERFETCH }),
+      // `per_source` is what makes the cap below meaningful. Without it the
+      // over-fetch is not diverse: measured, "how much did we spend on google ads
+      // in august and what did we earn" returned 30 of the top 32 from `ga4`
+      // alone -- every GA4 chunk carries "Google Analytics" in its title -- so the
+      // revenue row was never a candidate and the model could only answer half
+      // the question. Capping candidates PER SOURCE in SQL, before truncation,
+      // is the only place that can be fixed.
+      body: JSON.stringify({
+        query_text: trimmed,
+        k: CANDIDATE_CEILING,
+        per_source: PER_BUCKET_CANDIDATES,
+      }),
     });
     if (!res.ok) {
       logger.error({ status: res.status }, "brain_search RPC failed");
@@ -107,19 +157,37 @@ export async function retrieve(question: string, limit = 12): Promise<BrainChunk
     bestPerParent.push(row);
   }
 
-  const cap = Math.max(1, Math.floor(limit * MAX_SOURCE_SHARE));
+  // TWO caps, because either alone fails.
+  //   * Source only: the three time grains of one source are near-identical text,
+  //     so the monthly total loses a coin-flip tie to a weekly and the answer gets
+  //     summed from partial weeks instead of read whole.
+  //   * Bucket only: a source with three grains quietly gets three times the
+  //     allowance -- measured, ga4 took 12 of 14 slots that way and squeezed the
+  //     revenue row out entirely.
+  // Capping both keeps every grain reachable AND every source represented.
+  const sourceCap = Math.max(1, Math.floor(limit * MAX_SOURCE_SHARE));
+  // ONE per bucket on the first pass, then backfill by score. Anything higher
+  // lets a source spend its whole allowance on the grain that happens to score
+  // marginally best: measured, `analytics` filled all four of its slots with two
+  // weekly and two daily rows (0.850/0.845/0.797/0.793) and never reached the
+  // monthly total at 0.786 — the one row that actually held the answer. The
+  // spread is noise; reserving a slot per grain is what makes it deterministic.
+  const grainCap = 1;
+
   const picked: BrainChunk[] = [];
   const perSource = new Map<string, number>();
+  const perBucket = new Map<string, number>();
   const deferred: BrainChunk[] = [];
 
   for (const row of bestPerParent) {
     if (picked.length >= limit) break;
-    const used = perSource.get(row.source) ?? 0;
-    if (used >= cap) {
+    const bucket = bucketKey(row);
+    if ((perSource.get(row.source) ?? 0) >= sourceCap || (perBucket.get(bucket) ?? 0) >= grainCap) {
       deferred.push(row);
       continue;
     }
-    perSource.set(row.source, used + 1);
+    perSource.set(row.source, (perSource.get(row.source) ?? 0) + 1);
+    perBucket.set(bucket, (perBucket.get(bucket) ?? 0) + 1);
     picked.push(row);
   }
 

@@ -30,10 +30,11 @@ export const maxDuration = 60;
  * single try/catch around both would have made every ingester only as reliable as
  * the least reliable one.
  *
- * ORDER IS DELIBERATE. Analytics is one RPC against our own database and always
- * finishes, so it goes first. Jira goes last because it is a paginated walk of a
- * third-party API and is the one that can run out of time — anything after it
- * would be starved on a slow night.
+ * ORDER IS DELIBERATE. GA4 goes first because `analytics` reads its ad-spend
+ * numbers back out of the chunks it wrote, so that one row can answer "what did
+ * we spend and what did we earn". Jira goes last because it is a paginated walk
+ * of a third-party API and the only one that can run out of time — anything
+ * after it would be starved on a slow night.
  */
 
 /** Leaves ~15s of the 60s budget for the response and the cron bookkeeping. */
@@ -89,9 +90,11 @@ export async function GET(request: Request) {
   };
 
   try {
-    await run("analytics", () => ingestAnalytics(stampedAt));
+    // GA4 first: `analytics` reads the ad spend back off the ga4 chunks to put
+    // spend and revenue in one row, so it must run after them.
     await run("ga4", () => ingestGa4(stampedAt));
     await run("gsc", () => ingestSearchConsole(stampedAt));
+    await run("analytics", () => ingestAnalytics(stampedAt));
     await run("jira", () => ingestJira(stampedAt, isOutOfTime));
 
     logger.info({ results }, "brain-ingest: done");

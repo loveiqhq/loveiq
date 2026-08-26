@@ -108,6 +108,15 @@ END $$;
 -- Hybrid retrieval: full-text as the indexed workhorse, trigram word-similarity
 -- as the arm that survives typos and partial words.
 --
+-- `per_source` EXISTS BECAUSE DIVERSITY MUST HAPPEN BEFORE TRUNCATION. Sources
+-- are wildly uneven in size and in how templated their titles are, so one can
+-- swamp the candidate set entirely. Measured: "how much did we spend on google
+-- ads in august and what did we earn" put 30 of the top 32 in `ga4` -- every GA4
+-- chunk carries "Google Analytics" in its title and they scored 0.92-1.03 as a
+-- block -- so the row holding revenue was never a candidate, and the model
+-- answered only the spend half. Capping per source with a window function fixes
+-- it here; no amount of re-ranking downstream can, because the row never arrived.
+--
 -- DELIBERATELY NOT `SECURITY DEFINER`. Every other analytics RPC here is, and
 -- 20260825140000 had to sweep pg_proc to revoke 20 of them that were anon
 -- callable by default. This reads a service-role-only table and has exactly one
@@ -147,7 +156,13 @@ END $$;
 -- if the corpus grows past a few hundred thousand chunks, hoist the word list
 -- into a lateral join or add the embedding column and let vector search carry
 -- fuzzy recall instead.
-CREATE OR REPLACE FUNCTION public.brain_search(query_text TEXT, k INT DEFAULT 30)
+CREATE OR REPLACE FUNCTION public.brain_search(
+  query_text  TEXT,
+  k           INT DEFAULT 30,
+  -- Max candidates from any ONE source before the global ordering. 0 disables it.
+  -- This is load-bearing, not a nicety: see the note above.
+  per_source  INT DEFAULT 0
+)
 RETURNS TABLE (
   id         BIGINT,
   source     TEXT,
@@ -173,35 +188,46 @@ AS $$
       FROM regexp_split_to_table(lower(query_text), '\W+') AS w
      WHERE length(w) > 3
        AND to_tsvector('english', w) <> ''::tsvector
+  ),
+  scored AS (
+    SELECT c.id, c.source, c.source_id, c.title, c.url, c.body, c.meta, c.updated_at,
+           (
+             -- Weights: a full-text hit is the strong signal; a title match beats
+             -- a body match because chunk titles are headings, commit subjects and
+             -- issue summaries -- already human-written summaries.
+             coalesce(ts_rank(c.fts, p.tsq), 0) * 4.0
+             + word_similarity(query_text, coalesce(c.title, '')) * 2.0
+             + word_similarity(query_text, c.body)
+           )::REAL AS score
+      FROM public.brain_chunk c
+      CROSS JOIN parsed p
+     WHERE c.fts @@ p.tsq
+        -- `<%` is the indexable word_similarity operator, so the whole-question
+        -- arms below use the gin_trgm_ops indexes rather than forcing a scan.
+        OR query_text <% coalesce(c.title, '')
+        OR query_text <% c.body
+        OR EXISTS (SELECT 1 FROM words w
+                    WHERE w.w <% coalesce(c.title, '') OR w.w <% c.body)
+  ),
+  ranked AS (
+    SELECT s.*,
+           row_number() OVER (PARTITION BY s.source ORDER BY s.score DESC, s.updated_at DESC)
+             AS rn_in_source
+      FROM scored s
   )
-  SELECT c.id, c.source, c.source_id, c.title, c.url, c.body, c.meta, c.updated_at,
-         (
-           -- Weights: a full-text hit is the strong signal; a title match beats a
-           -- body match because chunk titles are headings, commit subjects and
-           -- issue summaries -- already human-written summaries.
-           coalesce(ts_rank(c.fts, p.tsq), 0) * 4.0
-           + word_similarity(query_text, coalesce(c.title, '')) * 2.0
-           + word_similarity(query_text, c.body)
-         )::REAL AS score
-    FROM public.brain_chunk c
-    CROSS JOIN parsed p
-   WHERE c.fts @@ p.tsq
-      -- `<%` is the indexable word_similarity operator, so the whole-question
-      -- arms below use the gin_trgm_ops indexes rather than forcing a scan.
-      OR query_text <% coalesce(c.title, '')
-      OR query_text <% c.body
-      OR EXISTS (SELECT 1 FROM words w
-                  WHERE w.w <% coalesce(c.title, '') OR w.w <% c.body)
-   ORDER BY score DESC, c.updated_at DESC
-   LIMIT least(greatest(k, 1), 100);
+  SELECT r.id, r.source, r.source_id, r.title, r.url, r.body, r.meta, r.updated_at, r.score
+    FROM ranked r
+   WHERE per_source <= 0 OR r.rn_in_source <= per_source
+   ORDER BY r.score DESC, r.updated_at DESC
+   LIMIT least(greatest(k, 1), 200);
 $$;
 
-COMMENT ON FUNCTION public.brain_search(TEXT, INT) IS
+COMMENT ON FUNCTION public.brain_search(TEXT, INT, INT) IS
   'Hybrid full-text + trigram retrieval over brain_chunk. Security-invoker by design; service role only.';
 
-REVOKE EXECUTE ON FUNCTION public.brain_search(TEXT, INT) FROM PUBLIC;
-REVOKE EXECUTE ON FUNCTION public.brain_search(TEXT, INT) FROM anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.brain_search(TEXT, INT) TO service_role;
+REVOKE EXECUTE ON FUNCTION public.brain_search(TEXT, INT, INT) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.brain_search(TEXT, INT, INT) FROM anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.brain_search(TEXT, INT, INT) TO service_role;
 
 COMMIT;
 

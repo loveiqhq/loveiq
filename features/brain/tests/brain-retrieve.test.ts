@@ -73,6 +73,34 @@ describe("retrieve — parent dedupe", () => {
     expect(out.map((r) => r.sourceId)).toEqual(["CLAUDE.md#a", "docs/api.md#x"]);
   });
 
+  it("does NOT collapse different months into one parent", async () => {
+    // Regression: parentKey stripped a trailing `-<digits>` to undo the `<sha>-2`
+    // split suffix, which also ate the `-08` in `monthly:2026-08`. Every month of
+    // a year collapsed to one parent and all but the best-scoring month was
+    // discarded before it could be returned — which is why "what did we spend in
+    // August" got answered from partial weeks.
+    respondWith([
+      row({ source: "analytics", source_id: "monthly:2026-08", score: 2.0 }),
+      row({ source: "analytics", source_id: "monthly:2026-07", score: 1.9 }),
+      row({ source: "analytics", source_id: "monthly:2026-06", score: 1.8 }),
+    ]);
+    const out = await retrieve("anything", 8);
+    expect(out.map((r) => r.sourceId).sort()).toEqual([
+      "monthly:2026-06",
+      "monthly:2026-07",
+      "monthly:2026-08",
+    ]);
+  });
+
+  it("does NOT collapse different days into one parent", async () => {
+    respondWith([
+      row({ source: "ga4", source_id: "daily:2026-08-05", score: 2.0 }),
+      row({ source: "ga4", source_id: "daily:2026-08-12", score: 1.9 }),
+    ]);
+    const out = await retrieve("anything", 8);
+    expect(out).toHaveLength(2);
+  });
+
   it("keeps the higher-scoring part when it is not the first-listed one", async () => {
     respondWith([
       row({ source: "commit", source_id: `${SHA_A}-2`, score: 3.0 }),
@@ -120,6 +148,24 @@ describe("retrieve — source diversity", () => {
     expect(out).toHaveLength(5);
   });
 
+  it("reserves a slot for each time grain, so a monthly total is never squeezed out", async () => {
+    // The three grains of one period are near-identical text differing only in
+    // their numbers (measured ts_rank spread: 0.002), so without a per-grain slot
+    // the monthly total loses a coin-flip to a weekly and the answer gets summed
+    // from partial periods instead of read whole.
+    const rows = [
+      row({ source: "analytics", source_id: "weekly:2026-W32", score: 0.85 }),
+      row({ source: "analytics", source_id: "weekly:2026-W33", score: 0.845 }),
+      row({ source: "analytics", source_id: "daily:2026-08-05", score: 0.797 }),
+      row({ source: "analytics", source_id: "daily:2026-08-12", score: 0.793 }),
+      row({ source: "analytics", source_id: "monthly:2026-08", score: 0.786 }),
+    ].map((r, i) => ({ ...r, meta: { grain: ["week", "week", "day", "day", "month"][i] } }));
+    respondWith(rows);
+
+    const out = await retrieve("anything", 8);
+    expect(out.some((r) => r.sourceId === "monthly:2026-08")).toBe(true);
+  });
+
   it("respects the requested limit", async () => {
     respondWith([
       row({ source: "doc", source_id: "a.md#1", score: 3, path: "a.md" }),
@@ -138,11 +184,14 @@ describe("retrieve — failure and edge handling", () => {
     expect(mockSupabaseFetch).not.toHaveBeenCalled();
   });
 
-  it("over-fetches so dedupe cannot leave a short list", async () => {
+  it("asks for candidates PER BUCKET, not just a bigger global slice", async () => {
+    // The global slice alone is not enough: measured, the August revenue row
+    // ranked 61st overall and a flat over-fetch discarded it.
     respondWith([]);
     await retrieve("a real question", 8);
     const body = JSON.parse(String(mockSupabaseFetch.mock.calls[0]![1].body));
-    expect(body.k).toBe(32);
+    expect(body.per_source).toBe(3);
+    expect(body.k).toBeGreaterThanOrEqual(100);
     expect(body.query_text).toBe("a real question");
   });
 
