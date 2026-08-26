@@ -9,6 +9,7 @@ import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPri
 import { archetypeSlug } from "@/data/report2-config";
 import { getAccelRows, type AccelRow, type AccelVerdict } from "@/data/report2-accel-rows";
 import { renderEduPara } from "./eduPara";
+import LearnPill from "./LearnPill";
 
 /**
  * Server-resolved accelerators copy (`getReport2Section(name, "accel")`),
@@ -42,6 +43,8 @@ export interface AccelCopy {
   takeaway?: string | null;
   "learn.eyebrow"?: string | null;
   "learn.body"?: string | null;
+  /** Second Key Concepts paragraph — see data/report2-key-concepts.ts. */
+  "learn.body.p2"?: string | null;
   /** True when the per-archetype `takeaway` was withheld (unpaid). */
   locked: boolean;
 }
@@ -151,17 +154,7 @@ const AcceleratorsSection: FC<Props> = ({
     <div className="report-accel">
       <h3 className="report-accel__heading">Accelerators &amp; Brakes</h3>
 
-      {copy["learn.body"] ? (
-        <div className="report-accel__learn-pill-wrap">
-          <span className="report-accel__learn-pill">
-            <span className="report-accel__learn-pill-icon" aria-hidden="true">
-              <BookIcon />
-            </span>
-            {copy["learn.eyebrow"] ?? "What you will learn"}
-          </span>
-          <p className="report-accel__learn-body">{copy["learn.body"]}</p>
-        </div>
-      ) : null}
+      <LearnPill prefix="accel" copy={copy} />
 
       <article className="report-accel__card">
         {/* Unlocked: the ten ranked rows + verdict meter from Figma 8946:4286.

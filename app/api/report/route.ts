@@ -23,6 +23,19 @@ import { getReport2Section, getReport2Config } from "@/data/report2";
 import { getAttachmentPlaneForFamily } from "@/data/report2-attachment-planes";
 import { getRewardProfile } from "@/data/report2-reward";
 import { archetypeSlug as report2ArchetypeSlug, type Report2CopySlug } from "@/data/report2-config";
+import { getKeyConcepts, KEY_CONCEPTS_EYEBROW } from "@/data/report2-key-concepts";
+import { getArchetypeSummary } from "@/data/report2-archetype-summary";
+import {
+  AROUSAL_STYLES,
+  AROUSAL_STYLE_BY_ARCHETYPE,
+  CURIOSITY_STYLES,
+  CURIOSITY_STYLE_BY_ARCHETYPE,
+  INITIATION_STYLES,
+  INITIATION_STYLE_BY_ARCHETYPE,
+  resolveStyles,
+  type Report2DocStyle,
+  type Report2StyleMatch,
+} from "@/data/report2-doc-styles";
 import { growthDetail } from "@/data/report2-growth-detail";
 import { getRelationshipFit } from "@/data/report2-relationship-fit";
 import { getPowerZone } from "@/data/report2-power-zones";
@@ -236,6 +249,62 @@ function normalizeInitiationConfig(cfg: Record<string, unknown> | null | undefin
     typeof families?.initiation === "string" ? families.initiation : "lost-in-translation";
   const variant = typeof cfg.initiation_variant === "string" ? cfg.initiation_variant : null;
   return { family, variant };
+}
+
+/**
+ * Replace a section's matrix `learn.*` slots with the "Key Concepts" block.
+ *
+ * The matrix ships `learn.eyebrow: "What you will learn"` for all fourteen
+ * archetypes and all eighteen sections, so the components' `?? "What you will
+ * learn"` fallback never fires and the label cannot be changed from the
+ * components. It is changed here instead, for every archetype, because the label
+ * is universal.
+ *
+ * The BODY is per-archetype and per-section, and only the Spark Seeker document
+ * pass has one. Where the layer has nothing, the matrix body is kept exactly as
+ * it was — so no other archetype's report loses text, it only gains the new
+ * label. `learn.*` is universal copy in every section's gating contract, so
+ * there is nothing to withhold from a locked client here.
+ *
+ * See `data/report2-key-concepts.ts` for why this is a layer and not a matrix
+ * edit.
+ */
+function withKeyConcepts<T extends Record<string, unknown>>(
+  copy: T,
+  slug: string,
+  sectionId: string
+): T & {
+  "learn.eyebrow": string;
+  "learn.body": string | null;
+  "learn.body.p2": string | null;
+} {
+  const block = getKeyConcepts(slug, sectionId);
+  const existing = copy["learn.body"];
+  return {
+    ...copy,
+    "learn.eyebrow": KEY_CONCEPTS_EYEBROW,
+    "learn.body": block?.p1 ?? (typeof existing === "string" ? existing : null),
+    "learn.body.p2": block?.p2 ?? null,
+  };
+}
+
+/**
+ * The pre-defined style entries a reader is shown in the curiosity, arousal and
+ * initiation chapters (`data/report2-doc-styles.ts`).
+ *
+ * Resolved here rather than imported by the client component for the same reason
+ * `relationshipFit` is: which style an archetype IS is per-archetype content in
+ * a gated chapter. `unlocked` false ⇒ `null` on the wire.
+ */
+function resolveDocStyles(
+  catalogue: Report2DocStyle[],
+  byArchetype: Record<string, Report2StyleMatch[]>,
+  slug: string,
+  unlocked: boolean
+): (Report2DocStyle & Report2StyleMatch)[] | null {
+  if (!unlocked) return null;
+  const resolved = resolveStyles(catalogue, byArchetype[slug]);
+  return resolved.length > 0 ? resolved : null;
 }
 
 export async function GET(request: Request) {
@@ -1597,6 +1666,42 @@ export async function GET(request: Request) {
       ? false
       : await isFeatureEnabled("forced_paywall_enabled", true);
 
+    /*
+     * ── Document pass, 2026-08-26 ───────────────────────────────────────────
+     * Three things the Spark Seeker source document asked back into the report,
+     * all resolved here so a locked client never receives them:
+     *   - the pre-defined style each of the curiosity / arousal / initiation
+     *     chapters places the reader in, and
+     *   - the closing "Summary" chapter, which is chapter 3 of the document.
+     * `docSlug` is the report2 slug the layers are keyed by.
+     */
+    const docSlug = report2ArchetypeSlug(primaryArchetype);
+    const curiosityStyles = resolveDocStyles(
+      CURIOSITY_STYLES,
+      CURIOSITY_STYLE_BY_ARCHETYPE,
+      docSlug,
+      curiosityUnlocked
+    );
+    const arousalStyles = resolveDocStyles(
+      AROUSAL_STYLES,
+      AROUSAL_STYLE_BY_ARCHETYPE,
+      docSlug,
+      arousalUnlocked
+    );
+    const initiationStyles = resolveDocStyles(
+      INITIATION_STYLES,
+      INITIATION_STYLE_BY_ARCHETYPE,
+      docSlug,
+      initiationUnlocked
+    );
+    /*
+     * The closing chapter. Gated on the growth chapter's plan rather than a plan
+     * of its own: it is the last thing in Part IV and reads as its close, and it
+     * is per-archetype prose, so it must not ship to a client that has not
+     * bought that part.
+     */
+    const archetypeSummary = growthUnlocked ? getArchetypeSummary(docSlug) : null;
+
     // Every section copy goes out through one gate: on a locked section the
     // "Learn:" body paragraphs come off the wire entirely, so the peek→expand
     // control has nothing to reveal to a reader who hasn't bought.
@@ -1625,42 +1730,46 @@ export async function GET(request: Request) {
         practiceTendencies: filteredPracticeTendencies,
         snapshotCopy,
         findingsCopy,
-        beliefsCopy,
-        attachmentCopy,
+        beliefsCopy: withKeyConcepts(beliefsCopy, docSlug, "beliefs"),
+        attachmentCopy: withKeyConcepts(attachmentCopy, docSlug, "attachment"),
         attachmentFamily,
         attachmentPlane,
-        accelCopy,
-        insecuritiesCopy,
+        accelCopy: withKeyConcepts(accelCopy, docSlug, "accel"),
+        insecuritiesCopy: withKeyConcepts(insecuritiesCopy, docSlug, "insecurities"),
         insecurityCueFamily,
         insecurityGraph,
-        rewardCopy,
+        rewardCopy: withKeyConcepts(rewardCopy, docSlug, "reward"),
         rewardConfig,
-        energyCopy,
+        energyCopy: withKeyConcepts(energyCopy, docSlug, "energy"),
         energyConfig,
-        arousalCopy,
+        arousalCopy: withKeyConcepts(arousalCopy, docSlug, "arousal"),
         arousalConfig,
-        initiationCopy,
+        arousalStyles,
+        initiationCopy: withKeyConcepts(initiationCopy, docSlug, "initiation"),
         initiationConfig,
-        libidoCopy,
+        initiationStyles,
+        libidoCopy: withKeyConcepts(libidoCopy, docSlug, "libido"),
         libidoConfig,
-        partnershipCopy,
+        partnershipCopy: withKeyConcepts(partnershipCopy, docSlug, "partnership"),
         partnershipLoop,
-        enjoyCopy,
-        growthCopy,
+        enjoyCopy: withKeyConcepts(enjoyCopy, docSlug, "enjoy"),
+        growthCopy: withKeyConcepts(growthCopy, docSlug, "growth"),
         growthRungs,
-        readingCopy,
-        powerCopy,
-        fantasyCopy,
+        readingCopy: withKeyConcepts(readingCopy, docSlug, "reading"),
+        powerCopy: withKeyConcepts(powerCopy, docSlug, "power"),
+        fantasyCopy: withKeyConcepts(fantasyCopy, docSlug, "fantasy"),
         fantasyDots,
-        curiosityCopy,
+        curiosityCopy: withKeyConcepts(curiosityCopy, docSlug, "curiosity"),
+        curiosityStyles,
         relationshipFit,
-        lovelangCopy,
+        lovelangCopy: withKeyConcepts(lovelangCopy, docSlug, "lovelang"),
         loveLanguageOrder,
-        confidenceCopy,
+        confidenceCopy: withKeyConcepts(confidenceCopy, docSlug, "confidence"),
         confidenceStrip,
         mapCopy,
         stageCopy,
         constellationMottos,
+        archetypeSummary,
       })
     );
     // Personal report data — never let public proxies, browsers, or shared

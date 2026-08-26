@@ -7,6 +7,7 @@ import { useRevealOnView } from "../hooks/useRevealOnView";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import { renderEduPara } from "./eduPara";
 import { copyParagraphs } from "./copyParagraphs";
+import LearnPill from "./LearnPill";
 
 /**
  * Server-resolved love-language copy (`getReport2Section(name, "lovelang")`),
@@ -32,6 +33,8 @@ export interface LoveLanguageCopy {
   "edu.body.p3"?: string | null;
   "learn.eyebrow"?: string | null;
   "learn.body"?: string | null;
+  /** Second Key Concepts paragraph — see data/report2-key-concepts.ts. */
+  "learn.body.p2"?: string | null;
   /** True when the per-archetype `body.p1` + `love_language_order` were withheld (unpaid). */
   locked: boolean;
 }
@@ -207,17 +210,7 @@ const LoveLanguageSection: FC<Props> = ({
     <div className="report-lovelang">
       <h3 className="report-lovelang__heading">Love Language</h3>
 
-      {copy["learn.body"] ? (
-        <div className="report-lovelang__learn-pill-wrap">
-          <span className="report-lovelang__learn-pill">
-            <span className="report-lovelang__learn-pill-icon" aria-hidden="true">
-              <BookIcon />
-            </span>
-            {copy["learn.eyebrow"] ?? "What you will learn"}
-          </span>
-          <p className="report-lovelang__learn-body">{copy["learn.body"]}</p>
-        </div>
-      ) : null}
+      <LearnPill prefix="lovelang" copy={copy} />
 
       <article className="report-lovelang__card">
         {locked ? (

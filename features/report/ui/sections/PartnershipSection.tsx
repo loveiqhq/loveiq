@@ -7,6 +7,7 @@ import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPri
 import { partnershipCentreMessage } from "@/data/report2-partnership-loops";
 import { useRevealOnView } from "../hooks/useRevealOnView";
 import { renderEduPara } from "./eduPara";
+import LearnPill from "./LearnPill";
 
 /**
  * Server-resolved partnership copy (`getReport2Section(name, "partnership")`),
@@ -38,6 +39,8 @@ export interface PartnershipCopy {
   "edu.body.p3"?: string | null;
   "learn.eyebrow"?: string | null;
   "learn.body"?: string | null;
+  /** Second Key Concepts paragraph — see data/report2-key-concepts.ts. */
+  "learn.body.p2"?: string | null;
   // Per-archetype — withheld (null) from locked clients.
   result?: string | null;
   "row1.value"?: string | null;
@@ -252,17 +255,7 @@ const PartnershipSection: FC<Props> = ({
     <div className="report-partnership">
       <h3 className="report-partnership__heading">Challenges in Partnership</h3>
 
-      {copy["learn.body"] ? (
-        <div className="report-partnership__learn-pill-wrap">
-          <span className="report-partnership__learn-pill">
-            <span className="report-partnership__learn-pill-icon" aria-hidden="true">
-              <BookIcon />
-            </span>
-            {copy["learn.eyebrow"] ?? "What you will learn"}
-          </span>
-          <p className="report-partnership__learn-body">{copy["learn.body"]}</p>
-        </div>
-      ) : null}
+      <LearnPill prefix="partnership" copy={copy} />
 
       <article className="report-partnership__card">
         {locked ? (

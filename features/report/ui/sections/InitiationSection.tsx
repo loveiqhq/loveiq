@@ -9,6 +9,13 @@ import { getReportTheme } from "../reportTheme";
 import { useRevealOnView } from "../hooks/useRevealOnView";
 import { rewardStatDots } from "./RewardSection";
 import { copyParagraphs } from "./copyParagraphs";
+import LearnPill from "./LearnPill";
+import DocStyleBlock from "./DocStyleBlock";
+import {
+  INITIATION_STYLES_OUTRO,
+  type Report2DocStyle,
+  type Report2StyleMatch,
+} from "@/data/report2-doc-styles";
 
 /**
  * Server-resolved initiation copy (`getReport2Section(name, "initiation")`),
@@ -35,6 +42,8 @@ export interface InitiationCopy {
   "practical.label"?: string | null;
   "learn.eyebrow"?: string | null;
   "learn.body"?: string | null;
+  /** Second Key Concepts paragraph — see data/report2-key-concepts.ts. */
+  "learn.body.p2"?: string | null;
   // Per-archetype — withheld (null) from locked clients.
   result?: string | null;
   "row1.value"?: string | null;
@@ -66,6 +75,14 @@ export interface InitiationConfig {
 }
 
 interface Props {
+  /**
+   * The reader's initiation style from chapter 22's six pre-defined varieties,
+   * resolved server-side because it is per-archetype content in a full_report
+   * chapter. Read off the document's own "(e.g. …)" list — Spark Seeker is named
+   * under "Active / Direct initiation" — so unlike the arousal list this one is
+   * sourced, not inferred. `null` when locked or unmapped.
+   */
+  initiationStyles: (Report2DocStyle & Report2StyleMatch)[] | null;
   archetype: string;
   copy: InitiationCopy | null;
   /** Timeline-chart config (family + variant); null when locked or absent. */
@@ -76,23 +93,6 @@ interface Props {
   sectionTitle: string;
   tier?: PremiumOverlayTier;
 }
-
-const BookIcon: FC = () => (
-  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <path
-      d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v15.5H5.5A1.5 1.5 0 0 1 4 18V5.5Z"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      strokeLinejoin="round"
-    />
-    <path
-      d="M20 5.5A1.5 1.5 0 0 0 18.5 4H13v15.5h5.5A1.5 1.5 0 0 0 20 18V5.5Z"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      strokeLinejoin="round"
-    />
-  </svg>
-);
 
 /** Lightbulb — the gold "practical" block summary icon (Figma 8762:16002). */
 const BulbIcon: FC = () => (
@@ -231,6 +231,7 @@ const InitiationSection: FC<Props> = ({
   archetype,
   copy,
   config,
+  initiationStyles,
   offerDeadline,
   onUnlock,
   quote = null,
@@ -293,17 +294,7 @@ const InitiationSection: FC<Props> = ({
     <div className="report-initiation" style={accentVars}>
       <h3 className="report-initiation__heading">Initiation Style</h3>
 
-      {copy["learn.body"] ? (
-        <div className="report-initiation__learn-pill-wrap">
-          <span className="report-initiation__learn-pill">
-            <span className="report-initiation__learn-pill-icon" aria-hidden="true">
-              <BookIcon />
-            </span>
-            {copy["learn.eyebrow"] ?? "What you will learn"}
-          </span>
-          <p className="report-initiation__learn-body">{copy["learn.body"]}</p>
-        </div>
-      ) : null}
+      <LearnPill prefix="initiation" copy={copy} />
 
       <article className="report-initiation__card">
         {locked ? (
@@ -336,6 +327,16 @@ const InitiationSection: FC<Props> = ({
               </p>
               {copy.result ? <p className="report-initiation__result">{copy.result}</p> : null}
             </div>
+
+            {/* Chapter 22's own "Core Initiation Style Varieties Across
+                Archetypes", restored 2026-08-26 — the reader's entry, above the
+                timeline. */}
+            <DocStyleBlock
+              eyebrow="Core Initiation Style Varieties Across Archetypes"
+              styles={initiationStyles ?? []}
+              modifier="initiation"
+              outro={INITIATION_STYLES_OUTRO}
+            />
 
             <TimelineChart fam={fam} />
 

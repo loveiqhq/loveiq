@@ -11,6 +11,7 @@ import type { ArchetypeName } from "@features/report/server/archetypeSlug";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import { renderEduPara } from "./eduPara";
 import { copyParagraphs } from "./copyParagraphs";
+import LearnPill from "./LearnPill";
 
 /**
  * Server-resolved power copy (`getReport2Section(name, "power")`), threaded as a
@@ -41,6 +42,8 @@ export interface PowerCopy {
   "edu.body.p4"?: string | null;
   "learn.eyebrow"?: string | null;
   "learn.body"?: string | null;
+  /** Second Key Concepts paragraph — see data/report2-key-concepts.ts. */
+  "learn.body.p2"?: string | null;
   /**
    * The reader's power-zone region label (from config `families.power_zone`),
    * e.g. "Switch zone". Drives the top card label + the highlighted zone label
@@ -315,17 +318,7 @@ const PowerSection: FC<Props> = ({
     <div className="report-power">
       <h3 className="report-power__heading">Power Orientation</h3>
 
-      {copy["learn.body"] ? (
-        <div className="report-power__learn-pill-wrap">
-          <span className="report-power__learn-pill">
-            <span className="report-power__learn-pill-icon" aria-hidden="true">
-              <BookIcon />
-            </span>
-            {copy["learn.eyebrow"] ?? "What you will learn"}
-          </span>
-          <p className="report-power__learn-body">{copy["learn.body"]}</p>
-        </div>
-      ) : null}
+      <LearnPill prefix="power" copy={copy} />
 
       <article className="report-power__card">
         {locked ? (

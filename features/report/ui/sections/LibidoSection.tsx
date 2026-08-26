@@ -5,6 +5,7 @@ import LockedPreviewImage from "./LockedPreviewImage";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import { useRevealOnView } from "../hooks/useRevealOnView";
+import LearnPill from "./LearnPill";
 
 /**
  * Server-resolved libido copy (`getReport2Section(name, "libido")`), threaded as
@@ -33,6 +34,8 @@ export interface LibidoCopy {
   "practical.label"?: string | null;
   "learn.eyebrow"?: string | null;
   "learn.body"?: string | null;
+  /** Second Key Concepts paragraph — see data/report2-key-concepts.ts. */
+  "learn.body.p2"?: string | null;
   // Per-archetype — withheld (null) from locked clients.
   result?: string | null;
   "row1.value"?: string | null;
@@ -67,23 +70,6 @@ interface Props {
   sectionTitle: string;
   tier?: PremiumOverlayTier;
 }
-
-const BookIcon: FC = () => (
-  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <path
-      d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v15.5H5.5A1.5 1.5 0 0 1 4 18V5.5Z"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      strokeLinejoin="round"
-    />
-    <path
-      d="M20 5.5A1.5 1.5 0 0 0 18.5 4H13v15.5h5.5A1.5 1.5 0 0 0 20 18V5.5Z"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      strokeLinejoin="round"
-    />
-  </svg>
-);
 
 /** Lightbulb — the gold "practical" block summary icon (Figma 8762:16071). */
 const BulbIcon: FC = () => (
@@ -301,17 +287,7 @@ const LibidoSection: FC<Props> = ({
     <div className="report-libido">
       <h3 className="report-libido__heading">Libido Challenges</h3>
 
-      {copy["learn.body"] ? (
-        <div className="report-libido__learn-pill-wrap">
-          <span className="report-libido__learn-pill">
-            <span className="report-libido__learn-pill-icon" aria-hidden="true">
-              <BookIcon />
-            </span>
-            {copy["learn.eyebrow"] ?? "What you will learn"}
-          </span>
-          <p className="report-libido__learn-body">{copy["learn.body"]}</p>
-        </div>
-      ) : null}
+      <LearnPill prefix="libido" copy={copy} />
 
       <article className="report-libido__card">
         {locked ? (

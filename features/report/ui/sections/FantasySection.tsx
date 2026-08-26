@@ -7,6 +7,8 @@ import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPri
 import { renderEduPara } from "./eduPara";
 import type { FantasyMapDot } from "@features/report/server/fantasyMap";
 import { useRevealOnView } from "../hooks/useRevealOnView";
+import LearnPill from "./LearnPill";
+import { FANTASY_LEARNINGS } from "@/data/report2-fantasy-context";
 
 /**
  * Server-resolved fantasy copy (`getReport2Section(name, "fantasy")`), threaded
@@ -39,6 +41,8 @@ export interface FantasyCopy {
   chartnote2?: string | null;
   "learn.eyebrow"?: string | null;
   "learn.body"?: string | null;
+  /** Second Key Concepts paragraph — see data/report2-key-concepts.ts. */
+  "learn.body.p2"?: string | null;
   /** True when the section isn't unlocked (blurs the map behind the overlay). */
   locked: boolean;
 }
@@ -395,17 +399,7 @@ const FantasySection: FC<Props> = ({
     <div className="report-fantasy">
       <h3 className="report-fantasy__heading">Fantasy vs. Reality</h3>
 
-      {copy["learn.body"] ? (
-        <div className="report-fantasy__learn-pill-wrap">
-          <span className="report-fantasy__learn-pill">
-            <span className="report-fantasy__learn-pill-icon" aria-hidden="true">
-              <BookIcon />
-            </span>
-            {copy["learn.eyebrow"] ?? "What you will learn"}
-          </span>
-          <p className="report-fantasy__learn-body">{copy["learn.body"]}</p>
-        </div>
-      ) : null}
+      <LearnPill prefix="fantasy" copy={copy} />
 
       <article className="report-fantasy__card">
         {locked ? (
@@ -432,6 +426,35 @@ const FantasySection: FC<Props> = ({
           </>
         ) : (
           <>
+            {/* ── Three learnings, above the map ────────────────────────────────
+                Mark's document comment asked the top of this chapter to carry
+                three learnings before the graph: the relational container, why a
+                fantasy can feel safer with a stranger, and living vs not living
+                one. Every paragraph is a green-highlighted paragraph from
+                chapters 25 and 26 of the source document, verbatim and in
+                document order — see `data/report2-fantasy-context.ts`.
+
+                Universal copy, so it renders for anyone who has unlocked the
+                chapter; it says nothing about this particular reader, which the
+                map below it does. */}
+            <div className="report-fantasy__learnings">
+              {FANTASY_LEARNINGS.map((learning, i) => (
+                <section key={learning.title} className="report-fantasy__learning">
+                  <p className="report-fantasy__learning-eyebrow">
+                    <span className="report-fantasy__learning-num" aria-hidden="true">
+                      {i + 1}
+                    </span>
+                    {learning.title}
+                  </p>
+                  {learning.paras.map((para, j) => (
+                    <p key={j} className="report-fantasy__learning-para">
+                      {para}
+                    </p>
+                  ))}
+                </section>
+              ))}
+            </div>
+
             {/* Quadrant filter tabs (Figma 8427:2467) — the first element of the
                 unlocked card, above the map. The hook eyebrow that used to sit
                 here is not in the Figma Article and was removed; the locked

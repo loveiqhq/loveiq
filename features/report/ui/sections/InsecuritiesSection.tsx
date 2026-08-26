@@ -9,6 +9,13 @@ import { getReportTheme } from "../reportTheme";
 import { useRevealOnView } from "../hooks/useRevealOnView";
 import { curveEndPoint } from "../curveEnd";
 import { copyParagraphs } from "./copyParagraphs";
+import LearnPill from "./LearnPill";
+import {
+  INSECURITY_THEMES,
+  INSECURITY_THEMES_EYEBROW,
+  INSECURITY_THEMES_INTRO,
+  INSECURITY_THEMES_OUTRO,
+} from "@/data/report2-insecurity-themes";
 
 /**
  * Server-resolved insecurities copy (`getReport2Section(name, "insecurities")`),
@@ -29,6 +36,8 @@ export interface InsecuritiesCopy {
   "practical.label"?: string | null;
   "learn.eyebrow"?: string | null;
   "learn.body"?: string | null;
+  /** Second Key Concepts paragraph — see data/report2-key-concepts.ts. */
+  "learn.body.p2"?: string | null;
   // Per-archetype — withheld (null) from locked clients.
   takeaway?: string | null;
   "practical.teaser"?: string | null;
@@ -312,6 +321,28 @@ const CueGraph: FC<{
   );
 };
 
+/**
+ * One insecurity theme, with the insecurity itself bolded.
+ *
+ * These paragraphs are not the "Label: description" shape `renderEduPara`
+ * handles — the document sets the insecurity in bold in the MIDDLE of the
+ * sentence ("Some archetypes are primarily organized around **abandonment
+ * insecurity**. Their deepest fear is…"). So the term is carried beside the text
+ * in the data and matched here, rather than guessed at from punctuation. A term
+ * that is not found leaves the paragraph unstyled instead of throwing.
+ */
+function renderTheme(text: string, term: string) {
+  const at = text.indexOf(term);
+  if (at < 0) return text;
+  return (
+    <>
+      {text.slice(0, at)}
+      <span className="report-insecurities__theme-term">{term}</span>
+      {text.slice(at + term.length)}
+    </>
+  );
+}
+
 const InsecuritiesSection: FC<Props> = ({
   archetype,
   copy,
@@ -324,6 +355,7 @@ const InsecuritiesSection: FC<Props> = ({
   tier = "essentials",
 }) => {
   const [expanded, setExpanded] = useState(false);
+  const [eduExpanded, setEduExpanded] = useState(false);
   if (!copy) return null;
 
   const locked = copy.locked;
@@ -365,17 +397,7 @@ const InsecuritiesSection: FC<Props> = ({
     <div className="report-insecurities">
       <h3 className="report-insecurities__heading">Core Insecurities</h3>
 
-      {copy["learn.body"] ? (
-        <div className="report-insecurities__learn-pill-wrap">
-          <span className="report-insecurities__learn-pill">
-            <span className="report-insecurities__learn-pill-icon" aria-hidden="true">
-              <BookIcon />
-            </span>
-            {copy["learn.eyebrow"] ?? "What you will learn"}
-          </span>
-          <p className="report-insecurities__learn-body">{copy["learn.body"]}</p>
-        </div>
-      ) : null}
+      <LearnPill prefix="insecurities" copy={copy} />
 
       <article className="report-insecurities__card">
         {/* The eyebrow and the curve are INSIDE the raster on a locked report — it is
@@ -504,6 +526,66 @@ const InsecuritiesSection: FC<Props> = ({
             )}
           </div>
         ) : null}
+
+        {/* The educational (purple) expander, BENEATH the practical (gold) one.
+            Core Insecurities was the only chapter with a practical block and no
+            educational block — Mark's document comment, anchored on the five
+            insecurity-theme paragraphs, asked for one here. Its copy is universal
+            (the five themes are the same for every reader), so unlike the
+            practical block above it needs no gating: it renders for a locked
+            client too, closed, with the unlock CTA — the same behaviour the
+            thirteen other `edu.*` expanders already have. */}
+        <div className="report-insecurities__edu">
+          <button
+            type="button"
+            className="report-insecurities__edu-summary"
+            aria-expanded={locked ? false : eduExpanded}
+            onClick={locked ? onUnlock : () => setEduExpanded((v) => !v)}
+          >
+            <span className="report-insecurities__edu-icon" aria-hidden="true">
+              <BookIcon />
+            </span>
+            <span className="report-insecurities__edu-eyebrow">{INSECURITY_THEMES_EYEBROW}</span>
+            <span
+              className={`report-insecurities__edu-chevron${eduExpanded ? " is-open" : ""}`}
+              aria-hidden="true"
+            >
+              ⌄
+            </span>
+          </button>
+
+          {locked || !eduExpanded ? (
+            <div className="report-insecurities__edu-peek report-learn-peek">
+              {/* Three faded lines + the CTA over them, exactly as the other
+                  expanders read when closed — the fade and the pill's placement
+                  come from the shared `report-learn-*` classes. */}
+              <p className="report-insecurities__edu-teaser report-learn-teaser">
+                {INSECURITY_THEMES_INTRO} {INSECURITY_THEMES[0]?.text}
+              </p>
+              <button
+                type="button"
+                className="report-insecurities__edu-cta report-learn-cta"
+                onClick={locked ? onUnlock : () => setEduExpanded(true)}
+              >
+                {locked ? "Unlock to read the full explanation" : "Read the full explanation"}
+              </button>
+            </div>
+          ) : (
+            <div className="report-insecurities__edu-body">
+              <p className="report-insecurities__edu-teaser report-learn-teaser-full">
+                {INSECURITY_THEMES_INTRO}
+              </p>
+              <ul className="report-insecurities__theme-list">
+                {INSECURITY_THEMES.map((theme) => (
+                  <li key={theme.term} className="report-insecurities__theme-item">
+                    {renderTheme(theme.text, theme.term)}
+                  </li>
+                ))}
+              </ul>
+              <p className="report-insecurities__edu-para">{INSECURITY_THEMES_OUTRO}</p>
+            </div>
+          )}
+        </div>
       </article>
     </div>
   );

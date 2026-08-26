@@ -24,8 +24,12 @@
  *
  * Each entry is either an intro the redesign dropped, or content it folded into
  * a combined section:
- *   welcome, the_loveiq_concept, core_motivation, communication_style,
- *   background_know_how…            → dropped outright
+ *   welcome, the_loveiq_concept, core_motivation, communication_style
+ *                                   → dropped outright
+ *   background_know_how…            → REINSTATED 2026-08-26 as "Arousal, Desire
+ *                                     & Pleasure" (Part III, free, universal);
+ *                                     rendered by `KnowHowSection`, not by its
+ *                                     `generalContent` HTML
  *   probability_of_other_archetypes → "Other Archetypes" (constellation)
  *   risk_orientation                → "Energy & Risk"
  *   relationship_form_preference    → "Curiosity & Relationship Form"
@@ -40,7 +44,6 @@ export const RETIRED_REPORT_SECTION_IDS: ReadonlySet<string> = new Set([
   "risk_orientation",
   "relationship_form_preference",
   "communication_style",
-  "background_know_how_arousal_desire_and_pleasure",
   "typical_arousal_brakes_turn_offs_of_the_core_archetype",
   "about_fantasies_desire_amp_pleasure_per_context",
   "about_living_or_not_living_fantasies",
@@ -106,6 +109,11 @@ export const REPORT_SECTION_ORDER: readonly string[] = [
   "power_orientation",
   "curiosity_level",
   "love_language",
+  // Chapter 20, reinstated 2026-08-26. Placed where the source document has it:
+  // after Love Language and immediately before Arousal Style, so the three
+  // systems are named before the chapter that describes how the reader's own
+  // arousal comes online.
+  "background_know_how_arousal_desire_and_pleasure",
   "arousal_style",
   "initiation_style",
   "typical_sexual_fantasy_amp_practice_tendencies",
@@ -182,6 +190,10 @@ export const REPORT_NAV_PARTS: readonly ReportNavPart[] = [
       { label: "Power Orientation", id: "power_orientation" },
       { label: "Curiosity & Relationship Form", id: "curiosity_level" },
       { label: "Love Language", id: "love_language" },
+      {
+        label: "Arousal, Desire & Pleasure",
+        id: "background_know_how_arousal_desire_and_pleasure",
+      },
       { label: "Arousal Style", id: "arousal_style" },
       { label: "Initiation Style", id: "initiation_style" },
       { label: "Fantasy vs. Reality", id: "typical_sexual_fantasy_amp_practice_tendencies" },

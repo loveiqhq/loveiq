@@ -6,6 +6,7 @@ import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import { renderEduPara } from "./eduPara";
 import { copyParagraphs } from "./copyParagraphs";
+import LearnPill from "./LearnPill";
 
 /**
  * Server-resolved beliefs copy (`getReport2Section(name, "beliefs")`), threaded
@@ -30,6 +31,8 @@ export interface BeliefsCopy {
   loosen: { belief: string | null; shift: string | null }[];
   "learn.eyebrow"?: string | null;
   "learn.body"?: string | null;
+  /** Second Key Concepts paragraph — see data/report2-key-concepts.ts. */
+  "learn.body.p2"?: string | null;
   /** True when the per-archetype keep/loosen/body were withheld (unpaid). */
   locked: boolean;
 }
@@ -125,17 +128,7 @@ const BeliefsSection: FC<Props> = ({
     <div className="report-beliefs">
       <h3 className="report-beliefs__heading">Typical Beliefs</h3>
 
-      {copy["learn.body"] ? (
-        <div className="report-beliefs__learn-pill-wrap">
-          <span className="report-beliefs__learn-pill">
-            <span className="report-beliefs__learn-pill-icon" aria-hidden="true">
-              <BookIcon />
-            </span>
-            {copy["learn.eyebrow"] ?? "What you will learn"}
-          </span>
-          <p className="report-beliefs__learn-body">{copy["learn.body"]}</p>
-        </div>
-      ) : null}
+      <LearnPill prefix="beliefs" copy={copy} />
 
       <article className="report-beliefs__card">
         {locked ? (

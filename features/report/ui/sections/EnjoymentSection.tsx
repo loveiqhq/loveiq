@@ -4,6 +4,7 @@ import { useState, type FC } from "react";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import { renderEduPara } from "./eduPara";
+import LearnPill from "./LearnPill";
 
 /**
  * Server-resolved enjoyment copy (`getReport2Section(name, "enjoy")`), threaded
@@ -43,6 +44,8 @@ export interface EnjoyCopy {
   "edu.body.p3"?: string | null;
   "learn.eyebrow"?: string | null;
   "learn.body"?: string | null;
+  /** Second Key Concepts paragraph — see data/report2-key-concepts.ts. */
+  "learn.body.p2"?: string | null;
   // Per-archetype — withheld (null) from locked clients.
   result?: string | null;
   "row1.value"?: string | null;
@@ -123,17 +126,7 @@ const EnjoymentSection: FC<Props> = ({
     <div className="report-enjoy">
       <h3 className="report-enjoy__heading">Challenges to Enjoy Sex</h3>
 
-      {copy["learn.body"] ? (
-        <div className="report-enjoy__learn-pill-wrap">
-          <span className="report-enjoy__learn-pill">
-            <span className="report-enjoy__learn-pill-icon" aria-hidden="true">
-              <BookIcon />
-            </span>
-            {copy["learn.eyebrow"] ?? "What you will learn"}
-          </span>
-          <p className="report-enjoy__learn-body">{copy["learn.body"]}</p>
-        </div>
-      ) : null}
+      <LearnPill prefix="enjoy" copy={copy} />
 
       <article className="report-enjoy__card">
         {locked ? (

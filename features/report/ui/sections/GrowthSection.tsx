@@ -13,6 +13,7 @@ import VerdictStar from "./VerdictStar";
 import LockedPreviewImage from "./LockedPreviewImage";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
+import LearnPill from "./LearnPill";
 
 /**
  * Server-resolved growth copy (`getReport2Section(name, "growth")`), threaded as
@@ -34,6 +35,8 @@ export interface GrowthCopy {
   // Universal (always shipped) — these frame the section for locked clients too.
   "learn.eyebrow"?: string | null;
   "learn.body"?: string | null;
+  /** Second Key Concepts paragraph — see data/report2-key-concepts.ts. */
+  "learn.body.p2"?: string | null;
   // Per-archetype — withheld (null) from locked clients.
   takeaway?: string | null;
   "ladder.headline"?: string | null;
@@ -75,23 +78,6 @@ interface Props {
   sectionTitle: string;
   tier?: PremiumOverlayTier;
 }
-
-const BookIcon: FC = () => (
-  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <path
-      d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v15.5H5.5A1.5 1.5 0 0 1 4 18V5.5Z"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      strokeLinejoin="round"
-    />
-    <path
-      d="M20 5.5A1.5 1.5 0 0 0 18.5 4H13v15.5h5.5A1.5 1.5 0 0 0 20 18V5.5Z"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      strokeLinejoin="round"
-    />
-  </svg>
-);
 
 type Rung = { from: string; to: string; move: string | null; body: string | null };
 
@@ -375,17 +361,7 @@ const GrowthSection: FC<Props> = ({
     <div className={`report-growth${isAnimated ? " is-animated" : ""}`}>
       <h3 className="report-growth__heading">Growth Potentials</h3>
 
-      {copy["learn.body"] ? (
-        <div className="report-growth__learn-pill-wrap">
-          <span className="report-growth__learn-pill">
-            <span className="report-growth__learn-pill-icon" aria-hidden="true">
-              <BookIcon />
-            </span>
-            {copy["learn.eyebrow"] ?? "What you will learn"}
-          </span>
-          <p className="report-growth__learn-body">{copy["learn.body"]}</p>
-        </div>
-      ) : null}
+      <LearnPill prefix="growth" copy={copy} />
 
       <article className="report-growth__card">
         {locked ? (

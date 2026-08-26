@@ -9,6 +9,7 @@ import { renderEduPara } from "./eduPara";
 import { getReportTheme } from "../reportTheme";
 import { useRevealOnView } from "../hooks/useRevealOnView";
 import { curveEndPoint } from "../curveEnd";
+import LearnPill from "./LearnPill";
 import {
   ENERGY_THIRD_READING,
   getEnergyFamilyProfile,
@@ -42,6 +43,8 @@ export interface EnergyCopy {
   chartnote1?: string | null;
   "learn.eyebrow"?: string | null;
   "learn.body"?: string | null;
+  /** Second Key Concepts paragraph — see data/report2-key-concepts.ts. */
+  "learn.body.p2"?: string | null;
   /** True when the per-archetype hook/takeaway + energy config were withheld. */
   locked: boolean;
 }
@@ -432,17 +435,7 @@ const EnergySection: FC<Props> = ({
     <div className="report-energy">
       <h3 className="report-energy__heading">Energy &amp; Risk</h3>
 
-      {copy["learn.body"] ? (
-        <div className="report-energy__learn-pill-wrap">
-          <span className="report-energy__learn-pill">
-            <span className="report-energy__learn-pill-icon" aria-hidden="true">
-              <BookIcon />
-            </span>
-            {copy["learn.eyebrow"] ?? "What you will learn"}
-          </span>
-          <p className="report-energy__learn-body">{copy["learn.body"]}</p>
-        </div>
-      ) : null}
+      <LearnPill prefix="energy" copy={copy} />
 
       <article className="report-energy__card">
         {locked ? (

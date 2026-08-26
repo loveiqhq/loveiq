@@ -7,6 +7,7 @@ import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import { renderEduPara } from "./eduPara";
 import { copyParagraphs } from "./copyParagraphs";
+import LearnPill from "./LearnPill";
 
 /**
  * Server-resolved attachment copy (`getReport2Section(name, "attachment")`),
@@ -46,6 +47,8 @@ export interface AttachmentCopy {
   "body.p1"?: string | null;
   "learn.eyebrow"?: string | null;
   "learn.body"?: string | null;
+  /** Second Key Concepts paragraph — see data/report2-key-concepts.ts. */
+  "learn.body.p2"?: string | null;
   /** True when the per-archetype result/rows/insight/body/plane were withheld. */
   locked: boolean;
 }
@@ -439,17 +442,7 @@ const AttachmentPatternsSection: FC<Props> = ({
 
   return (
     <div className={`report-attachment${locked ? " report-attachment--locked" : ""}`}>
-      {copy["learn.body"] ? (
-        <div className="report-attachment__learn-pill-wrap">
-          <span className="report-attachment__learn-pill">
-            <span className="report-attachment__learn-pill-icon" aria-hidden="true">
-              <BookIcon />
-            </span>
-            {copy["learn.eyebrow"] ?? "What you will learn"}
-          </span>
-          <p className="report-attachment__learn-body">{copy["learn.body"]}</p>
-        </div>
-      ) : null}
+      <LearnPill prefix="attachment" copy={copy} />
 
       {/* ── Result card ("Your Attachment Style") — GATED per-archetype ── */}
       {locked || resultWord || rows.length > 0 ? (

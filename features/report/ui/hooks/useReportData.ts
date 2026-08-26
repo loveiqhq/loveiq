@@ -224,6 +224,31 @@ export interface ReportData {
    * `CuriositySection`.
    */
   curiosityCopy: import("../sections/CuriositySection").CuriosityCopy | null;
+  /**
+   * The pre-defined style the reader's archetype is, in each of the three
+   * chapters whose source document carries an "across the archetypes" list:
+   * curiosity level (16), arousal style (21), initiation style (22). Resolved
+   * and gated server-side; null when that chapter is locked or when the
+   * document names no style for the archetype. See `data/report2-doc-styles.ts`.
+   */
+  curiosityStyles:
+    | (import("@/data/report2-doc-styles").Report2DocStyle &
+        import("@/data/report2-doc-styles").Report2StyleMatch)[]
+    | null;
+  arousalStyles:
+    | (import("@/data/report2-doc-styles").Report2DocStyle &
+        import("@/data/report2-doc-styles").Report2StyleMatch)[]
+    | null;
+  initiationStyles:
+    | (import("@/data/report2-doc-styles").Report2DocStyle &
+        import("@/data/report2-doc-styles").Report2StyleMatch)[]
+    | null;
+  /**
+   * The closing "Summary" chapter — chapter 3 of the source document, one entry
+   * per paragraph. Per-archetype, so null when Part IV is locked or when the
+   * document has no chapter 3 for the archetype.
+   */
+  archetypeSummary: string[] | null;
   /** Config `relationship_fit` (structure → 0..3 fit score); null when locked or when the archetype has no fit map (only Spiritual Lover today). */
   relationshipFit: Record<string, number> | null;
   /** Report 2.0 Love Language copy for the primary archetype, resolved server-side; `locked` mirrors the full_report gate. */

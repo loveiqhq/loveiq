@@ -7,6 +7,13 @@ import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import { renderEduPara } from "./eduPara";
 import { copyParagraphs } from "./copyParagraphs";
+import LearnPill from "./LearnPill";
+import DocStyleBlock from "./DocStyleBlock";
+import {
+  CURIOSITY_STYLES_OUTRO,
+  type Report2DocStyle,
+  type Report2StyleMatch,
+} from "@/data/report2-doc-styles";
 
 /**
  * Server-resolved curiosity copy (`getReport2Section(name, "curiosity")`),
@@ -35,6 +42,8 @@ export interface CuriosityCopy {
   "edu.body.p2"?: string | null;
   "learn.eyebrow"?: string | null;
   "learn.body"?: string | null;
+  /** Second Key Concepts paragraph — see data/report2-key-concepts.ts. */
+  "learn.body.p2"?: string | null;
   /** Universal list of relationship structures (`edu.struct.1` … `edu.struct.14`). */
   [struct: `edu.struct.${number}`]: string | null | undefined;
   /** True when the per-archetype takeaway/body + fit map were withheld (unpaid). */
@@ -44,6 +53,14 @@ export interface CuriosityCopy {
 interface Props {
   archetype: string;
   copy: CuriosityCopy | null;
+  /**
+   * The reader's own curiosity style from chapter 16's six pre-defined styles,
+   * resolved server-side (`resolveStyles(CURIOSITY_STYLES, …)`) for the same
+   * reason `relationshipFit` is: it is per-archetype content in a full_report
+   * chapter, so a locked client must not receive it. `null` when locked or when
+   * the document names no style for this archetype.
+   */
+  curiosityStyles: (Report2DocStyle & Report2StyleMatch)[] | null;
   /**
    * Reader's fit across relationship forms — config `relationship_fit`
    * (structure slug → 0..3 score), falling back to
@@ -166,6 +183,7 @@ const FitTable: FC<{ fit: Record<string, number> | null }> = ({ fit }) => (
 const CuriositySection: FC<Props> = ({
   archetype,
   copy,
+  curiosityStyles,
   relationshipFit,
   offerDeadline,
   onUnlock,
@@ -190,17 +208,7 @@ const CuriositySection: FC<Props> = ({
     <div className="report-curiosity">
       <h3 className="report-curiosity__heading">Curiosity &amp; Relationship Form</h3>
 
-      {copy["learn.body"] ? (
-        <div className="report-curiosity__learn-pill-wrap">
-          <span className="report-curiosity__learn-pill">
-            <span className="report-curiosity__learn-pill-icon" aria-hidden="true">
-              <BookIcon />
-            </span>
-            {copy["learn.eyebrow"] ?? "What you will learn"}
-          </span>
-          <p className="report-curiosity__learn-body">{copy["learn.body"]}</p>
-        </div>
-      ) : null}
+      <LearnPill prefix="curiosity" copy={copy} />
 
       <article className="report-curiosity__card">
         {locked ? (
@@ -241,6 +249,16 @@ const CuriositySection: FC<Props> = ({
             {copy["body.p1"] ? (
               <p className="report-curiosity__lead">{renderCuriosityLead(copy["body.p1"])}</p>
             ) : null}
+
+            {/* Chapter 16's own "Common Curiosity Level Styles Across Archetypes",
+                restored 2026-08-26 — the reader's entry, above the fit table as
+                requested. */}
+            <DocStyleBlock
+              eyebrow="Common Curiosity Level Styles Across Archetypes"
+              styles={curiosityStyles ?? []}
+              modifier="curiosity"
+              outro={CURIOSITY_STYLES_OUTRO}
+            />
 
             <FitTable fit={relationshipFit} />
 

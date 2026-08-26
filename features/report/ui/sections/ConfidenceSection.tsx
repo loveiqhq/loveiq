@@ -9,6 +9,7 @@ import { renderEduPara } from "./eduPara";
 import { archetypeSlug } from "@/data/report2-config";
 import { getConfidenceProfile } from "@/data/report2-confidence";
 import { useRevealOnView } from "../hooks/useRevealOnView";
+import LearnPill from "./LearnPill";
 
 /**
  * Server-resolved Confidence Level copy (`getReport2Section(name, "confidence")`),
@@ -31,6 +32,8 @@ export interface ConfidenceCopy {
   chartnote1?: string | null;
   "learn.eyebrow"?: string | null;
   "learn.body"?: string | null;
+  /** Second Key Concepts paragraph — see data/report2-key-concepts.ts. */
+  "learn.body.p2"?: string | null;
   /** True when the report is not unlocked at the essentials tier. */
   locked: boolean;
 }
@@ -252,17 +255,7 @@ const ConfidenceSection: FC<Props> = ({
     <div className="report-confidence">
       <h3 className="report-confidence__heading">Confidence Level</h3>
 
-      {copy["learn.body"] ? (
-        <div className="report-confidence__learn-pill-wrap">
-          <span className="report-confidence__learn-pill">
-            <span className="report-confidence__learn-pill-icon" aria-hidden="true">
-              <BookIcon />
-            </span>
-            {copy["learn.eyebrow"] ?? "What you will learn"}
-          </span>
-          <p className="report-confidence__learn-body">{copy["learn.body"]}</p>
-        </div>
-      ) : null}
+      <LearnPill prefix="confidence" copy={copy} />
 
       <article className="report-confidence__card">
         {locked ? (

@@ -10307,6 +10307,177 @@ input.autofill-dark:-internal-autofill-previewed {
   }
 }
 
+/* ── Core Insecurities: the educational (purple) expander ──────────────────────
+   Added 2026-08-26. This chapter had the gold PRACTICAL block above and no
+   educational block, which is why its own namespace is `__edu-*` rather than a
+   second `__details-*`: the gold rule, wash and pill colours belong to the block
+   above and must not change.
+
+   Every value here is the purple expander as `.report-curiosity__details` sets
+   it (Figma 8794:16161) — same top gradient bar, same #9d8ad7 wash, same pill
+   metrics — so the two read as one component in two colours. The collapsed fade
+   and the CTA's placement are NOT restated: they come from the shared
+   `.report-learn-peek` / `.report-learn-cta` classes, which is the whole reason
+   the markup carries them. */
+.report-insecurities__edu {
+  position: relative;
+  width: 100%;
+  margin-top: clamp(4px, 1vw, 11px);
+  padding-top: 11px;
+  border-top: 1.128px solid rgba(157, 138, 215, 0.22);
+  background: linear-gradient(180deg, rgba(157, 138, 215, 0.1) 0%, rgba(157, 138, 215, 0.02) 100%);
+}
+
+.report-insecurities__edu::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -1.4px;
+  height: 2.8px;
+  border-radius: 0 0 3.4px 3.4px;
+  background: linear-gradient(90deg, #9d8ad7 0%, #c36ddf 100%);
+}
+
+.report-insecurities__edu-summary {
+  display: flex;
+  align-items: center;
+  gap: 13.5px;
+  width: 100%;
+  padding: 22px 54px 6px 27px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.report-insecurities__edu-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 29px;
+  height: 29px;
+  border-radius: 9px;
+  background: rgba(157, 138, 215, 0.16);
+  color: #6b5b95;
+}
+
+.report-insecurities__edu-icon svg {
+  width: 17px;
+  height: 17px;
+}
+
+.report-insecurities__edu-eyebrow {
+  flex: 1 1 auto;
+  color: #6b5b95;
+  font-family: var(--font-sans);
+  font-weight: 800;
+  font-size: 0.635rem;
+  letter-spacing: 1.42px;
+  text-transform: uppercase;
+  line-height: 1.44;
+}
+
+.report-insecurities__edu-chevron {
+  flex: 0 0 auto;
+  color: #795fc8;
+  font-family: var(--font-sans);
+  font-weight: 800;
+  font-size: 1.06rem;
+  line-height: 1;
+  transition: transform 0.2s ease;
+}
+
+.report-insecurities__edu-chevron.is-open {
+  transform: rotate(180deg);
+}
+
+.report-insecurities__edu-peek {
+  position: relative;
+  padding: 8px 20px 16px 69px;
+}
+
+.report-insecurities__edu-teaser {
+  margin: 0;
+  color: #161021;
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: var(--report-teaser-size);
+  line-height: var(--report-teaser-lh);
+}
+
+.report-insecurities__edu-cta {
+  margin-top: 12px;
+  padding: 7px 16px;
+  border: none;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, #fe6839 0%, #c36ddf 100%);
+  color: #ffffff;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 0.719rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.report-insecurities__edu-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 48px 12px 69px;
+}
+
+.report-insecurities__edu-para {
+  margin: 0;
+  color: #3f3a4d;
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: var(--report-prose-size);
+  line-height: var(--report-prose-lh);
+}
+
+.report-insecurities__theme-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+}
+
+.report-insecurities__theme-item {
+  color: #3f3a4d;
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: clamp(0.9rem, 1.25vw, 0.875rem);
+  line-height: 1.5;
+}
+
+.report-insecurities__theme-item::before {
+  content: "\2022  ";
+  font-weight: 700;
+  color: #161021;
+}
+
+.report-insecurities__theme-term {
+  font-weight: 700;
+  color: #161021;
+}
+
+@media (max-width: 768px) {
+  .report-insecurities__edu-summary {
+    padding-left: 16px;
+    padding-right: 20px;
+  }
+
+  .report-insecurities__edu-peek,
+  .report-insecurities__edu-body {
+    padding-left: 20px;
+    padding-right: 12px;
+  }
+}
+
 /* ── Reward System (Report 2.0, Part III FULL_REPORT premium) — Figma 8427:1758
    Same card/learn-pill chrome as Core Insecurities. The centerpiece is a 4-row
    ranked list of neurochemicals (index · name+blurb · meter bar · role verb),
@@ -12023,6 +12194,23 @@ input.autofill-dark:-internal-autofill-previewed {
   font-weight: 400;
   font-size: clamp(1.05rem, 1.5vw, 1.164rem);
   line-height: 1.7;
+}
+
+/* Seven paragraphs, not one sentence.
+   The closing block's own type is a 1.164rem italic serif pull-quote, which is
+   right for the single line it was built for and unreadable at chapter length —
+   so the summary variant drops the italic, steps down to the report's prose
+   scale, and takes paragraph spacing. Still the serif, because this is the
+   report's closing voice and the panel around it is unchanged. */
+.report-closing__body--summary {
+  padding-bottom: 0;
+  font-style: normal;
+  font-size: var(--report-prose-size);
+  line-height: 1.72;
+}
+
+.report-closing__body--summary + .report-closing__body--summary {
+  margin-top: 12px;
 }
 
 .report-closing__body-strong {
@@ -23629,6 +23817,165 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 /* ── Fit-by-relationship-form table ────────────────────────────────────────── */
+/* ── The document's "across the archetypes" style block ────────────────────────
+   One component in three chapters: Curiosity Level (16), Arousal Style (21) and
+   Initiation Style (22). Added 2026-08-26, when the source document's own
+   pre-defined style lists were brought back — see
+   `features/report/ui/sections/DocStyleBlock.tsx`.
+
+   It is deliberately quiet: it states the reader's style and the paragraph the
+   document gives it, and it must not compete with the chart it sits above. So the
+   eyebrow reuses the fit table's small-caps treatment exactly
+   (`.report-curiosity__fit-eyebrow`, #6b5b95 / 0.705rem / 1.47px), the name takes
+   the ink the lead paragraph's bold half takes (#161021), and the description
+   takes the body colour and the shared prose scale. No new colours, no new type
+   sizes. The left rule is the purple already used for the educational blocks at
+   the wash strength the expanders use for their background. */
+/* ── Fantasy vs. Reality: the three learnings above the map ────────────────────
+   Added 2026-08-26. Seventeen paragraphs of universal explanation now sit between
+   the card's top edge and the quadrant map, so the block's whole job is to stay
+   readable at that length and still hand the reader off to the graph.
+
+   Three moves do that: a numbered eyebrow per learning so the reader can see
+   there are three and where they are; a hairline rule between them rather than a
+   box, because a boxed block this tall would read as three cards inside a card;
+   and the prose scale rather than the body scale, which is what every other long
+   explanatory passage in the report uses. Colours and sizes are the report's
+   existing tokens throughout. */
+.report-fantasy__learnings {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+  margin: 0 0 26px;
+}
+
+.report-fantasy__learning + .report-fantasy__learning {
+  padding-top: 20px;
+  border-top: 1.128px solid rgba(22, 16, 33, 0.08);
+}
+
+.report-fantasy__learning-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 8px;
+  color: #161021;
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: var(--report-body-size);
+  line-height: var(--report-body-lh);
+}
+
+/* The count, in the purple the educational blocks use. Fixed 22px so one- and
+   two-digit numbers cannot shift the title beside them. */
+.report-fantasy__learning-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 9999px;
+  background: rgba(157, 138, 215, 0.16);
+  color: #6b5b95;
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.report-fantasy__learning-para {
+  margin: 0 0 8px;
+  color: #3f3a4d;
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: var(--report-prose-size);
+  line-height: var(--report-prose-lh);
+}
+
+.report-fantasy__learning-para:last-child {
+  margin-bottom: 0;
+}
+
+.report-doc-styles {
+  width: 100%;
+  margin: 14px 0 0;
+}
+
+.report-doc-styles__eyebrow {
+  margin: 0;
+  width: 100%;
+  color: #6b5b95;
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: 0.705rem;
+  letter-spacing: 1.47px;
+  text-transform: uppercase;
+  line-height: 1.65;
+}
+
+.report-doc-styles__list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 8px 0 0;
+  padding: 0;
+}
+
+.report-doc-styles__item {
+  padding-left: 14px;
+  border-left: 2.26px solid rgba(157, 138, 215, 0.35);
+}
+
+.report-doc-styles__name {
+  margin: 0;
+  color: #161021;
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: var(--report-body-size);
+  line-height: var(--report-body-lh);
+}
+
+/* A second or third style is real but not the verdict — two of the three source
+   lists say a reader carries more than one ("Most people carry more than one
+   arousal style"). Set apart from the name rather than below it, so the block
+   still reads as one answer with qualifiers. */
+.report-doc-styles__role {
+  color: #6b6678;
+  font-weight: 500;
+  font-size: 0.82em;
+  letter-spacing: 0.2px;
+  text-transform: none;
+}
+
+.report-doc-styles__desc {
+  margin: 3px 0 0;
+  color: #3f3a4d;
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: var(--report-prose-size);
+  line-height: var(--report-prose-lh);
+}
+
+/* The closing line each list ends on ("Most people carry more than one arousal
+   style, and which one is dominant can shift…"). Lighter than the descriptions,
+   because it qualifies all of them. */
+.report-doc-styles__outro {
+  margin: 10px 0 0;
+  color: #6b6678;
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: var(--report-prose-size);
+  line-height: var(--report-prose-lh);
+}
+
+/* Curiosity sits directly above "Fit by relationship form", which opens with its
+   own 6px-topped eyebrow, so the block below it carries the separation. */
+.report-doc-styles--curiosity {
+  margin-bottom: 18px;
+}
+
 .report-curiosity__fit-eyebrow {
   margin: 6px 0 0;
   width: 100%;
@@ -23900,6 +24247,214 @@ input.autofill-dark:-internal-autofill-previewed {
   .report-curiosity__details-body {
     padding-left: 20px;
     padding-right: 12px;
+  }
+}
+
+/* ══ Arousal, Desire & Pleasure (Part III, FREE + universal) ═══════════════════
+   Chapter 20, reinstated 2026-08-26. There is no Figma frame for this section —
+   it was dropped before Report 2.0 was designed — so nothing here is transcribed
+   from a design. Every value is instead taken from the section it sits between:
+   the heading is `.report-lovelang__heading` exactly, the card is
+   `.report-lovelang__card` exactly (same 1.128px border, 27px radius, shadow and
+   padding), and the prose uses the shared `--report-prose-*` and
+   `--report-body-*` tokens. The purple block and the verdict star are the
+   report's existing shared components, not new ones. So the section is new but
+   its vocabulary is not.
+
+   The three-layer stack is the one piece of structure this section adds: the
+   chapter's own mental model is a numbered list of three systems, so it renders
+   as one, each with the question that system answers set apart from its
+   explanation. */
+#background_know_how_arousal_desire_and_pleasure .report-section__header {
+  display: none;
+}
+
+.report-knowhow {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(10px, 1.1vw, 13.5px);
+  width: 100%;
+}
+
+.report-knowhow__heading {
+  margin: 0;
+  color: #161021;
+  font-family: var(--font-serif);
+  font-weight: 500;
+  font-size: clamp(1.4rem, 2.05vw, 1.834rem);
+  line-height: 1.16;
+  letter-spacing: -0.29px;
+}
+
+.report-knowhow__card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: clamp(12px, 1.4vw, 16px);
+  width: 100%;
+  padding: clamp(22px, 2.4vw, 30.5px);
+  border: 1.128px solid rgba(22, 16, 33, 0.09);
+  border-radius: 27px;
+  background: #ffffff;
+  box-shadow: 0 22.5px 56.4px rgba(22, 16, 33, 0.06);
+  overflow: hidden;
+}
+
+/* The opening claim carries the weight, so it takes the body scale and the ink
+   the report reserves for a lead; everything after it is prose scale. */
+.report-knowhow__lead {
+  margin: 0;
+  color: #161021;
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: var(--report-body-size);
+  line-height: var(--report-body-lh);
+}
+
+.report-knowhow__body {
+  margin: 0;
+  color: #3f3a4d;
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: var(--report-prose-size);
+  line-height: var(--report-prose-lh);
+}
+
+.report-knowhow__eyebrow {
+  margin: 6px 0 0;
+  color: #6b5b95;
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: 0.705rem;
+  letter-spacing: 1.47px;
+  text-transform: uppercase;
+  line-height: 1.65;
+}
+
+.report-knowhow__layers {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  counter-reset: none;
+}
+
+.report-knowhow__layer {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 16px 18px;
+  border-radius: 16px;
+  border: 1.128px solid rgba(22, 16, 33, 0.07);
+  /* The same wash the educational blocks use, at the lighter of its two ends —
+     enough to read as a panel inside a white card without becoming a second card. */
+  background: rgba(157, 138, 215, 0.05);
+}
+
+.report-knowhow__layer-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  border-radius: 9999px;
+  background: rgba(157, 138, 215, 0.18);
+  color: #6b5b95;
+  font-family: var(--font-sans);
+  font-weight: 800;
+  font-size: 0.78rem;
+  line-height: 1;
+}
+
+.report-knowhow__layer-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.report-knowhow__layer-label {
+  margin: 0;
+  color: #161021;
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: var(--report-body-size);
+  line-height: 1.35;
+}
+
+/* "fast, automatic, non-moral" — the chapter's own three words for the layer.
+   Beside the label on a wide column, under it once the column narrows. */
+.report-knowhow__layer-descriptor {
+  display: inline;
+  margin-left: 8px;
+  color: #6b6678;
+  font-weight: 500;
+  font-size: 0.84em;
+}
+
+/* The question the system answers. Set as a quote because the chapter sets it as
+   one, and because it is the fastest way for a reader to tell the three apart. */
+.report-knowhow__layer-question {
+  margin: 6px 0 0;
+  color: #161021;
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: var(--report-teaser-size);
+  line-height: var(--report-teaser-lh);
+}
+
+.report-knowhow__layer-body {
+  margin: 6px 0 0;
+  color: #3f3a4d;
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: var(--report-prose-size);
+  line-height: var(--report-prose-lh);
+}
+
+.report-knowhow__takeaway {
+  margin: 0;
+  color: #161021;
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-weight: 500;
+  font-size: clamp(1rem, 1.4vw, 1.1rem);
+  line-height: 1.5;
+}
+
+/* "Final Reflection" — three short lines the chapter sets apart from the prose,
+   so they are set apart here too rather than run on as two more paragraphs. */
+.report-knowhow__final {
+  margin-top: 4px;
+  padding-top: 16px;
+  border-top: 1.128px solid rgba(22, 16, 33, 0.08);
+}
+
+.report-knowhow__final-para {
+  margin: 0 0 6px;
+  color: #161021;
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: var(--report-teaser-size);
+  line-height: var(--report-teaser-lh);
+}
+
+.report-knowhow__final-para:last-child {
+  margin-bottom: 0;
+}
+
+@media (max-width: 768px) {
+  .report-knowhow__layer {
+    padding: 14px;
+    gap: 11px;
+  }
+
+  .report-knowhow__layer-descriptor {
+    display: block;
+    margin-left: 0;
+    margin-top: 2px;
   }
 }
 

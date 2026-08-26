@@ -423,13 +423,23 @@ describe("ReportPage", () => {
       "risk_orientation",
       "relationship_form_preference",
       "communication_style",
-      "background_know_how_arousal_desire_and_pleasure",
       "typical_arousal_brakes_turn_offs_of_the_core_archetype",
       "about_fantasies_desire_amp_pleasure_per_context",
       "about_living_or_not_living_fantasies",
     ]) {
       expect(container.querySelector(`#${id}`)).toBeNull();
     }
+    // Chapter 20 is NOT in that list any more: it was reinstated on 2026-08-26 as
+    // "Arousal, Desire & Pleasure" (free, universal, `KnowHowSection`), so it has
+    // to render rather than be absent.
+    expect(
+      container.querySelector("#background_know_how_arousal_desire_and_pleasure")
+    ).not.toBeNull();
+    // The nav lists the same label, so this asserts on the section's own heading.
+    expect(container.querySelector(".report-knowhow__heading")?.textContent).toBe(
+      "Arousal, Desire & Pleasure"
+    );
+
     // The satisfaction label is still interpolated into copy via
     // {{SEXUAL_SATISFACTION}} — it just no longer has its own intro section.
     expect(screen.queryByText("Slightly dissatisfied")).not.toBeInTheDocument();

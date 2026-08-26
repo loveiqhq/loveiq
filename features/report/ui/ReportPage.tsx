@@ -25,6 +25,7 @@ import FooterSection from "@features/landing/ui/FooterSection";
 import ReportDesktopSidebar from "./ReportDesktopSidebar";
 import MeansForYouSection from "./sections/MeansForYouSection";
 import type { PartnershipLoop } from "@/data/report2-partnership-loops";
+import type { Report2DocStyle, Report2StyleMatch } from "@/data/report2-doc-styles";
 import type { ReportNavAccess } from "./ReportNavBadge";
 import {
   REPORT_NAV_IDS,
@@ -80,6 +81,7 @@ import LibidoSection, { type LibidoCopy, type LibidoConfig } from "./sections/Li
 import PartnershipSection, { type PartnershipCopy } from "./sections/PartnershipSection";
 import EnjoymentSection, { type EnjoyCopy } from "./sections/EnjoymentSection";
 import ClosingSection from "./sections/ClosingSection";
+import KnowHowSection from "./sections/KnowHowSection";
 import GrowthSection, { type GrowthCopy } from "./sections/GrowthSection";
 import ReadingSection, { type ReadingCopy } from "./sections/ReadingSection";
 import FindingsSection, { type FindingsCopy } from "./sections/FindingsSection";
@@ -491,6 +493,16 @@ interface ReportExperienceProps {
   fantasyCopy: FantasyCopy | null;
   fantasyDots: FantasyMapDot[] | null;
   curiosityCopy: CuriosityCopy | null;
+  /**
+   * The pre-defined curiosity / arousal / initiation style the reader's
+   * archetype is, from the source document's own "across the archetypes" lists.
+   * Resolved and gated server-side — see `data/report2-doc-styles.ts`.
+   */
+  curiosityStyles: (Report2DocStyle & Report2StyleMatch)[] | null;
+  arousalStyles: (Report2DocStyle & Report2StyleMatch)[] | null;
+  initiationStyles: (Report2DocStyle & Report2StyleMatch)[] | null;
+  /** Chapter 3 of the source document, the closing "Summary" chapter. */
+  archetypeSummary: string[] | null;
   relationshipFit: Record<string, number> | null;
   lovelangCopy: LoveLanguageCopy | null;
   loveLanguageOrder: string[] | null;
@@ -579,6 +591,10 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   fantasyCopy,
   fantasyDots,
   curiosityCopy,
+  curiosityStyles,
+  arousalStyles,
+  initiationStyles,
+  archetypeSummary,
   relationshipFit,
   lovelangCopy,
   loveLanguageOrder,
@@ -1406,6 +1422,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                         <CuriositySection
                           archetype={viewArchetype}
                           copy={isPrimaryView ? curiosityCopy : null}
+                          curiosityStyles={isPrimaryView ? curiosityStyles : null}
                           relationshipFit={isPrimaryView ? relationshipFit : null}
                           offerDeadline={offerDeadline}
                           onUnlock={() => unlockSection(section)}
@@ -1459,6 +1476,33 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     );
                   }
 
+                  if (section.sectionNumber === 20) {
+                    /*
+                     * Chapter 20, "Arousal, Desire & Pleasure" — reinstated
+                     * 2026-08-26. The only Part III section that is FREE and fully
+                     * universal (`isPremium: false`, `archetypeBlockId: null`), so
+                     * it takes no copy, no gate and no unlock CTA, and it renders
+                     * the same for a reader browsing another archetype as for the
+                     * owner. Its curated text lives in `data/report2-knowhow.ts`;
+                     * the section row's own `generalContent` HTML is the pre-2.0
+                     * full chapter and is deliberately not rendered.
+                     *
+                     * Empty title suppresses ReportSection's header — the section
+                     * draws its own heading, like every other Report 2.0 chapter.
+                     */
+                    return (
+                      <ReportSection
+                        key={section.id}
+                        feedbackWidget={feedbackWidget}
+                        primaryArchetype={viewArchetype}
+                        sectionId={section.id}
+                        title=""
+                      >
+                        <KnowHowSection />
+                      </ReportSection>
+                    );
+                  }
+
                   if (section.sectionNumber === 21) {
                     // Report 2.0 "Arousal Style" — a Part III, FULL_REPORT-tier
                     // PREMIUM section (arousal_style; NOT in ESSENTIALS_SECTION_IDS,
@@ -1485,6 +1529,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                       >
                         <ArousalSection
                           archetype={viewArchetype}
+                          arousalStyles={isPrimaryView ? arousalStyles : null}
                           copy={isPrimaryView ? arousalCopy : null}
                           config={isPrimaryView ? arousalConfig : null}
                           offerDeadline={offerDeadline}
@@ -1530,6 +1575,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                           archetype={viewArchetype}
                           copy={isPrimaryView ? initiationCopy : null}
                           config={isPrimaryView ? initiationConfig : null}
+                          initiationStyles={isPrimaryView ? initiationStyles : null}
                           offerDeadline={offerDeadline}
                           onUnlock={() => unlockSection(section)}
                           quote={fullReportQuote}
@@ -1987,7 +2033,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
               {/* Report 2.0 closing note (Figma 8427:2837) — universal + free,
                   no gating, no CTA. Mounts LAST in the report content, right
                   before the footer. Same for every archetype and every plan. */}
-              <ClosingSection />
+              <ClosingSection summary={archetypeSummary} />
 
               <FooterSection />
             </div>
@@ -2875,6 +2921,10 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
         fantasyCopy={data.fantasyCopy ?? null}
         fantasyDots={data.fantasyDots ?? null}
         curiosityCopy={data.curiosityCopy ?? null}
+        curiosityStyles={data.curiosityStyles ?? null}
+        arousalStyles={data.arousalStyles ?? null}
+        initiationStyles={data.initiationStyles ?? null}
+        archetypeSummary={data.archetypeSummary ?? null}
         relationshipFit={data.relationshipFit ?? null}
         lovelangCopy={data.lovelangCopy ?? null}
         loveLanguageOrder={data.loveLanguageOrder ?? null}

@@ -7,6 +7,7 @@ import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import { useRevealOnView } from "../hooks/useRevealOnView";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import { renderEduPara } from "./eduPara";
+import LearnPill from "./LearnPill";
 
 /**
  * Server-resolved reward copy (`getReport2Section(name, "reward")`), threaded as
@@ -38,6 +39,8 @@ export interface RewardCopy {
   "stat1.caption"?: string | null;
   "learn.eyebrow"?: string | null;
   "learn.body"?: string | null;
+  /** Second Key Concepts paragraph — see data/report2-key-concepts.ts. */
+  "learn.body.p2"?: string | null;
   /** True when the per-archetype takeaway + reward config were withheld (unpaid). */
   locked: boolean;
 }
@@ -344,17 +347,7 @@ const RewardSection: FC<Props> = ({
     <div className="report-reward">
       <h3 className="report-reward__heading">Reward System</h3>
 
-      {copy["learn.body"] ? (
-        <div className="report-reward__learn-pill-wrap">
-          <span className="report-reward__learn-pill">
-            <span className="report-reward__learn-pill-icon" aria-hidden="true">
-              <BookIcon />
-            </span>
-            {copy["learn.eyebrow"] ?? "What you will learn"}
-          </span>
-          <p className="report-reward__learn-body">{copy["learn.body"]}</p>
-        </div>
-      ) : null}
+      <LearnPill prefix="reward" copy={copy} />
 
       <article className="report-reward__card">
         {locked ? (

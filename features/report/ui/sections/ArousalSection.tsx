@@ -10,6 +10,13 @@ import { getArousalFamily, type ArousalFamily } from "@/data/report2-arousal";
 import { useRevealOnView } from "../hooks/useRevealOnView";
 import { rewardStatDots } from "./RewardSection";
 import { curveEndPoint } from "../curveEnd";
+import LearnPill from "./LearnPill";
+import DocStyleBlock from "./DocStyleBlock";
+import {
+  AROUSAL_STYLES_OUTRO,
+  type Report2DocStyle,
+  type Report2StyleMatch,
+} from "@/data/report2-doc-styles";
 
 /**
  * Server-resolved arousal copy (`getReport2Section(name, "arousal")`), threaded
@@ -40,6 +47,8 @@ export interface ArousalCopy {
   "edu.body.p4"?: string | null;
   "learn.eyebrow"?: string | null;
   "learn.body"?: string | null;
+  /** Second Key Concepts paragraph — see data/report2-key-concepts.ts. */
+  "learn.body.p2"?: string | null;
   // Per-archetype — withheld (null) from locked clients.
   result?: string | null;
   "insight.value"?: string | null;
@@ -67,6 +76,17 @@ export interface ArousalConfig {
 }
 
 interface Props {
+  /**
+   * The reader's arousal style(s) from chapter 21's eight pre-defined styles,
+   * resolved server-side because it is per-archetype content in a full_report
+   * chapter. `null` when locked or unmapped.
+   *
+   * NOTE: chapter 21 names no archetypes against its eight styles, so this
+   * mapping is INFERRED from the archetype's own chapter text — see
+   * `AROUSAL_STYLE_BY_ARCHETYPE` in `data/report2-doc-styles.ts`. It is the one
+   * style list in this pass that is not read off the document's own "(e.g. …)".
+   */
+  arousalStyles: (Report2DocStyle & Report2StyleMatch)[] | null;
   archetype: string;
   copy: ArousalCopy | null;
   /** Arc config (family + act labels); null when locked or absent. */
@@ -511,6 +531,7 @@ const MiniStat: FC<{ value: string; caption: string; viz: "dots" | "bar" }> = ({
 
 const ArousalSection: FC<Props> = ({
   archetype,
+  arousalStyles,
   copy,
   config,
   offerDeadline,
@@ -561,17 +582,7 @@ const ArousalSection: FC<Props> = ({
     <div className="report-arousal">
       <h3 className="report-arousal__heading">Arousal Style</h3>
 
-      {copy["learn.body"] ? (
-        <div className="report-arousal__learn-pill-wrap">
-          <span className="report-arousal__learn-pill">
-            <span className="report-arousal__learn-pill-icon" aria-hidden="true">
-              <BookIcon />
-            </span>
-            {copy["learn.eyebrow"] ?? "What you will learn"}
-          </span>
-          <p className="report-arousal__learn-body">{copy["learn.body"]}</p>
-        </div>
-      ) : null}
+      <LearnPill prefix="arousal" copy={copy} />
 
       <article className="report-arousal__card">
         {locked ? (
@@ -614,6 +625,16 @@ const ArousalSection: FC<Props> = ({
               {/* Centred line under the heading (Figma 8427:2203) — per family. */}
               <p className="report-arousal__intro">{arousalFamily.intro}</p>
             </div>
+
+            {/* Chapter 21's own eight arousal styles, restored 2026-08-26 — the
+                reader's own entry with the document's description, above the arc
+                so the named style frames the graph rather than trailing it. */}
+            <DocStyleBlock
+              eyebrow="Arousal styles across the archetypes"
+              styles={arousalStyles ?? []}
+              modifier="arousal"
+              outro={AROUSAL_STYLES_OUTRO}
+            />
 
             {/* One piece of state links the arc to the columns under it: pointing at
                 a dot lights the condition it stands for, and pointing at a
