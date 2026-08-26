@@ -146,14 +146,45 @@ export const ENERGY_FAMILY_PROFILES: Record<string, EnergyFamilyProfile> = {
 };
 
 /**
- * The tinted callout under the three readings (Figma 8427:1894). Identical in
- * all four family frames, so it is universal framing rather than per-archetype
- * copy. `emphasis` renders inline at the end of `body` in serif italic.
+ * The tinted callout under the three readings (Figma 8427:1894).
+ *
+ * It was ONE constant for all fourteen, on the grounds that the four family
+ * frames carry it identically. They do — but only because the designer duplicated
+ * the base frame and swapped the three readings, and the base frame is the WAVE
+ * one. So its text is the wave's argument, and on a spike report it reads
+ * "what takes longer to start also lasts far longer… more nourishing than fast,
+ * high-spike patterns" directly under three readings that say High ·
+ * fast-activating and directly above a curve labelled "fast up, fast gone". The
+ * callout argued against the reader on the same screen (found 2026-08-26).
+ *
+ * Now keyed by family. Wave keeps the original words exactly. The other three say
+ * the same KIND of thing — "the third reading is the one partners underestimate"
+ * — about their own third reading, in the register their own profile already
+ * uses above. `emphasis` renders inline at the end of `body` in serif italic.
  */
-export const ENERGY_THIRD_READING = {
-  body: "The third reading is the one partners underestimate: what takes longer to start also lasts far longer, and often feels more nourishing than fast, high-spike patterns.",
-  emphasis: "Depth replaces speed.",
-} as const;
+export const ENERGY_THIRD_READINGS: Record<string, { body: string; emphasis: string }> = {
+  wave: {
+    body: "The third reading is the one partners underestimate: what takes longer to start also lasts far longer, and often feels more nourishing than fast, high-spike patterns.",
+    emphasis: "Depth replaces speed.",
+  },
+  spike: {
+    body: "The third reading is the one partners underestimate: energy that returns again and again through variety is not energy running out, and a fade is not a verdict on the relationship.",
+    emphasis: "Recurrence replaces endurance.",
+  },
+  steady: {
+    body: "The third reading is the one partners underestimate: energy you can reach on most days without a run-up asks for no occasion, and needs no build to be real.",
+    emphasis: "Availability replaces intensity.",
+  },
+  conditional: {
+    body: "The third reading is the one partners underestimate: once the conditions are met you hold far longer than spike patterns, so what looks like reluctance is a threshold, not a limit.",
+    emphasis: "Threshold replaces reluctance.",
+  },
+};
+
+/** The callout for a `families.energy` value, falling back to the Figma base. */
+export function getEnergyThirdReading(family: string | null | undefined) {
+  return (family && ENERGY_THIRD_READINGS[family]) || ENERGY_THIRD_READINGS.wave!;
+}
 
 /** Family profile for `families.energy`, falling back to the Figma base (wave). */
 export function getEnergyFamilyProfile(family: string | null | undefined): EnergyFamilyProfile {

@@ -24011,6 +24011,9 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 /* A document passage placed inside a chapter by one of its comments. */
+.report-attachment__insert,
+.report-energy__insert,
+.report-reward__insert,
 .report-curiosity__insert,
 .report-insecurities__above-graph {
   margin: 14px 0 0;
@@ -24023,6 +24026,13 @@ input.autofill-dark:-internal-autofill-previewed {
 
 .report-insecurities__above-graph {
   margin: 0 0 14px;
+}
+
+/* Consecutive inserts read as one passage, not as separate notes. */
+.report-attachment__insert + .report-attachment__insert,
+.report-energy__insert + .report-energy__insert,
+.report-reward__insert + .report-reward__insert {
+  margin-top: 10px;
 }
 
 /* The educational expander spans the card, like every other chapter's does. The

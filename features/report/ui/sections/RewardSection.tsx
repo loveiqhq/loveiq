@@ -382,6 +382,12 @@ const RewardSection: FC<Props> = ({
           </>
         ) : (
           <>
+            {/* Document insert, 2026-08-26: "Part 1 to Add on top of the list of
+                '01 Dopamine - the lead'". */}
+            {copy.inserts?.aboveChemicals ? (
+              <p className="report-reward__insert">{copy.inserts.aboveChemicals}</p>
+            ) : null}
+
             {rows.length > 0 ? <RewardRankedList rows={rows} /> : null}
 
             {hasStat ? (
@@ -396,6 +402,14 @@ const RewardSection: FC<Props> = ({
                 <span className="report-reward__stat-caption">{statCaption}</span>
               </div>
             ) : null}
+
+            {/* Document inserts, 2026-08-26: "to Add under the statistical element
+                under Reward System", parts 1 and 2. */}
+            {copy.inserts?.underStats?.map((para, i) => (
+              <p key={i} className="report-reward__insert">
+                {para}
+              </p>
+            ))}
 
             {copy.takeaway ? (
               <div className="report-reward__verdict report-verdict">

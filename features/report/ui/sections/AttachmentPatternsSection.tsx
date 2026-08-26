@@ -500,6 +500,14 @@ const AttachmentPatternsSection: FC<Props> = ({
                   <p className="report-purple-block__body">{copy["insight.value"]}</p>
                 </div>
               ) : null}
+
+              {/* Document insert, 2026-08-26: "just under the rectangle that reads
+                  'The Key'". */}
+              {copy.inserts?.underKey?.map((para, i) => (
+                <p key={i} className="report-attachment__insert">
+                  {para}
+                </p>
+              ))}
             </article>
           )}
         </div>
@@ -556,7 +564,17 @@ const AttachmentPatternsSection: FC<Props> = ({
             </div>
           )}
 
-          {locked ? null : copy["body.p1"] ? (
+          {/* Document insert, 2026-08-26: "Add this text underneath 'The Map' and
+              replace the current text there 'one dot shows your baseline…'". So the
+              insert takes the caption slot when it exists, and `body.p1` stays the
+              fallback for every archetype the document does not cover. */}
+          {locked ? null : copy.inserts?.underMap?.length ? (
+            copy.inserts.underMap.map((para, i) => (
+              <p key={i} className="report-attachment__map-caption">
+                {para}
+              </p>
+            ))
+          ) : copy["body.p1"] ? (
             <p className="report-attachment__map-caption">{copyParagraphs(copy["body.p1"])}</p>
           ) : (
             <p className="report-attachment__map-caption">

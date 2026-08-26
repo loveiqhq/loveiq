@@ -13,7 +13,7 @@ import LearnPill from "./LearnPill";
 import { chapterHeading } from "./chapterHeading";
 import type { Report2DocInserts } from "@/data/report2-doc-inserts";
 import {
-  ENERGY_THIRD_READING,
+  getEnergyThirdReading,
   getEnergyFamilyProfile,
   type EnergyReading,
 } from "@/data/report2-energy";
@@ -436,6 +436,8 @@ const EnergySection: FC<Props> = ({
   // covers all 14. `energy_readouts` config (Spiritual Lover only) still wins on
   // the meter fill when it is present, so the one real config is never overridden.
   const profile = getEnergyFamilyProfile(curveFamily);
+  // Per family, so the callout cannot contradict the three readings above it.
+  const thirdReading = getEnergyThirdReading(curveFamily);
   const accent = getReportTheme(archetype).accent;
   const readouts = config?.readouts ?? null;
 
@@ -492,13 +494,17 @@ const EnergySection: FC<Props> = ({
                 (MO, 2026-08-21). The trailing full stop is dropped because the label is
                 uppercased — the words are untouched. */}
             <div className="report-energy__note report-purple-block">
-              <p className="report-block-label">
-                {ENERGY_THIRD_READING.emphasis.replace(/\.$/, "")}
-              </p>
-              <p className="report-purple-block__body">{ENERGY_THIRD_READING.body}</p>
+              <p className="report-block-label">{thirdReading.emphasis.replace(/\.$/, "")}</p>
+              <p className="report-purple-block__body">{thirdReading.body}</p>
             </div>
 
             {/* Wide rule between the callout and the graph (Figma 8427:1897). */}
+
+            {/* Document insert, 2026-08-26: "just after the rectangle of 'Depth
+                Replaces Speed'". */}
+            {copy.inserts?.afterDepth ? (
+              <p className="report-energy__insert">{copy.inserts.afterDepth}</p>
+            ) : null}
 
             <div className="report-energy__graph-wrap">
               <p className="report-energy__eyebrow">
@@ -512,6 +518,15 @@ const EnergySection: FC<Props> = ({
                 note={copy.chartnote1}
               />
             </div>
+
+            {/* Document insert, 2026-08-26: "Add just after the graph in the Energy &
+                Risk section". The anchored passage is the risk-orientation opening,
+                which is why it lands here rather than beside the energy readings. */}
+            {copy.inserts?.afterGraph?.map((para, i) => (
+              <p key={i} className="report-energy__insert">
+                {para}
+              </p>
+            ))}
 
             {copy.takeaway ? (
               <div className="report-energy__verdict report-verdict">

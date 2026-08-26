@@ -317,7 +317,16 @@ const ConfidenceSection: FC<Props> = ({
               youName={archetype}
             />
 
-            {copy.chartnote1 ? (
+            {/* Document insert, 2026-08-26: "Lets have this replace the 'Each dot is
+                one of the 14 archetypes…' text." The matrix note stays the fallback
+                for the archetypes the document does not cover. */}
+            {copy.inserts?.replaceStripNote?.length ? (
+              copy.inserts.replaceStripNote.map((para, i) => (
+                <p key={i} className="report-confidence__chartnote">
+                  {para}
+                </p>
+              ))
+            ) : copy.chartnote1 ? (
               <p className="report-confidence__chartnote">{copy.chartnote1}</p>
             ) : null}
 
