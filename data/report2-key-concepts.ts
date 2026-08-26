@@ -72,7 +72,7 @@ export const report2KeyConcepts: Record<string, Record<string, Report2KeyConcept
       // document paragraph 413
       p1: "Energy level is not libido and not motivation. Two people may value sex equally and want it just as much, but with very different energetic signatures.",
       // document paragraph 433
-      p2: "Risk orientation describes how comfortable someone is with uncertainty, intensity, novelty, loss of control, and emotional or sexual exposure in sexuality.It answers questions like:How much risk do I need to feel alive?How much safety do I need to feel open?",
+      p2: "Risk orientation describes how comfortable someone is with uncertainty, intensity, novelty, loss of control, and emotional or sexual exposure in sexuality. It answers questions like: How much risk do I need to feel alive? How much safety do I need to feel open?",
     },
     power: {
       // Chapter 15. The first green paragraph ends "It answers questions like:", so p459 is used.

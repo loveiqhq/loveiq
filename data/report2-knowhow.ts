@@ -81,8 +81,18 @@ export const KNOWHOW_LIBERATING = [
 export const KNOWHOW_MODEL_CLOSE =
   "Healthy sexuality does not require perfect alignment between these layers. It requires understanding mismatches, such as arousal non-concordance, without shame.";
 
-/** "Final Reflection", verbatim. */
+/**
+ * "Final Reflection", verbatim — one entry per LINE.
+ *
+ * The document sets these as five lines across two paragraphs, using soft line
+ * breaks inside each. Read as <w:t> alone they concatenate into "…you do not
+ * want.You may want…", so the breaks are honoured here and each line is its own
+ * entry.
+ */
 export const KNOWHOW_FINAL = [
-  "Your body may react to things you do not want.You may want things your body is slow to follow.And pleasure only emerges when choice, safety, and presence align.",
-  "This is not dysfunction.This is being human.",
+  "Your body may react to things you do not want.",
+  "You may want things your body is slow to follow.",
+  "And pleasure only emerges when choice, safety, and presence align.",
+  "This is not dysfunction.",
+  "This is being human.",
 ];

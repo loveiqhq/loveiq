@@ -25,6 +25,15 @@ export interface Report2FantasyLearning {
   title: string;
   /** Verbatim paragraphs from chapters 25/26, in document order. */
   paras: string[];
+  /** The line introducing {@link questions}, where the chapter has one. */
+  questionsLead?: string;
+  /**
+   * Chapter 26's own four questions, verbatim. They are green-highlighted and
+   * they close the living-or-not-living question, so they belong to that
+   * learning — as a list, because four question paragraphs in a row read as a
+   * wall rather than as four things to ask yourself.
+   */
+  questions?: string[];
 }
 
 export const FANTASY_LEARNINGS: Report2FantasyLearning[] = [
@@ -58,6 +67,13 @@ export const FANTASY_LEARNINGS: Report2FantasyLearning[] = [
       "These fantasies often lose their erotic charge when translated into real-world detail, rely on abstraction, exaggeration, or symbolic distance, evoke arousal without a corresponding wish to live them, and function best precisely because they remain imagined.",
       "Such fantasies are often regulatory rather than aspirational. They allow the psyche to play with intensity, power, risk, or transgression without exposing the self or relationship to real harm or destabilization.",
       "Sexual maturity is not measured by how many fantasies are enacted, but by how consciously one relates to them. Some fantasies want to be lived, carefully, consensually, and with awareness. Others want to remain internal, serving as imaginative spaces where the psyche can explore without consequence.",
+    ],
+    questionsLead: "Rather than asking “Should I live this fantasy?”, more useful questions are:",
+    questions: [
+      "Is this fantasy arousing, desired, or both?",
+      "Does it still appeal when imagined realistically, including emotional and relational consequences?",
+      "Would enacting it increase coherence, or create inner conflict? Does this fantasy expand my sense of self, or does it function as a symbolic release?",
+      "Am I curious to experience it, or simply stimulated by imagining it?",
     ],
   },
 ];

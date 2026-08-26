@@ -23897,6 +23897,28 @@ input.autofill-dark:-internal-autofill-previewed {
   margin-bottom: 0;
 }
 
+/* Chapter 26's four closing questions. Serif italic, because they are addressed
+   to the reader rather than describing anything — the same voice the report uses
+   for every line it puts in the reader's own mouth. */
+.report-fantasy__learning-questions {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 4px 0 0;
+  padding: 0;
+}
+
+.report-fantasy__learning-question {
+  padding-left: 14px;
+  border-left: 2.26px solid rgba(157, 138, 215, 0.35);
+  color: #161021;
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: var(--report-teaser-size);
+  line-height: var(--report-teaser-lh);
+}
+
 .report-doc-styles {
   width: 100%;
   margin: 14px 0 0;

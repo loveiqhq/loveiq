@@ -8,7 +8,7 @@ import { renderEduPara } from "./eduPara";
 import type { FantasyMapDot } from "@features/report/server/fantasyMap";
 import { useRevealOnView } from "../hooks/useRevealOnView";
 import LearnPill from "./LearnPill";
-import { FANTASY_LEARNINGS } from "@/data/report2-fantasy-context";
+import FantasyLearnings from "./FantasyLearnings";
 
 /**
  * Server-resolved fantasy copy (`getReport2Section(name, "fantasy")`), threaded
@@ -437,23 +437,7 @@ const FantasySection: FC<Props> = ({
                 Universal copy, so it renders for anyone who has unlocked the
                 chapter; it says nothing about this particular reader, which the
                 map below it does. */}
-            <div className="report-fantasy__learnings">
-              {FANTASY_LEARNINGS.map((learning, i) => (
-                <section key={learning.title} className="report-fantasy__learning">
-                  <p className="report-fantasy__learning-eyebrow">
-                    <span className="report-fantasy__learning-num" aria-hidden="true">
-                      {i + 1}
-                    </span>
-                    {learning.title}
-                  </p>
-                  {learning.paras.map((para, j) => (
-                    <p key={j} className="report-fantasy__learning-para">
-                      {para}
-                    </p>
-                  ))}
-                </section>
-              ))}
-            </div>
+            <FantasyLearnings />
 
             {/* Quadrant filter tabs (Figma 8427:2467) — the first element of the
                 unlocked card, above the map. The hook eyebrow that used to sit
