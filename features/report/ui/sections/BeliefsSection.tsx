@@ -208,11 +208,24 @@ const BeliefsSection: FC<Props> = ({
           </>
         ) : (
           <>
+            {/* Document insert, 2026-08-26: "add on top of / before 'Serve You -
+                Keep'". */}
+            {copy.inserts?.intro ? (
+              <p className="report-beliefs__insert">{copy.inserts.intro}</p>
+            ) : null}
+
             <div className="report-beliefs__cols">
               {keep.length > 0 ? (
                 <div className="report-beliefs__col">
+                  {/* "Serve you — keep" / "Box you in — loosen" was doing three jobs in
+                      four words: naming what the column contains, judging it, and
+                      instructing the reader. Mark asked for something clearer
+                      (2026-08-26), so each label is now a statement of what the column
+                      IS with the instruction as a second line under it, and the two
+                      lines carry the colour rather than the four-word compound. */}
                   <p className="report-beliefs__col-label report-beliefs__col-label--keep">
-                    Serve you &mdash; keep
+                    Beliefs that open your desire
+                    <span className="report-beliefs__col-sub">Worth keeping as they are</span>
                   </p>
                   <div className="report-beliefs__list">
                     {keep.map((text, i) => (
@@ -225,7 +238,8 @@ const BeliefsSection: FC<Props> = ({
               {loosen.length > 0 ? (
                 <div className="report-beliefs__col report-beliefs__col--loosen-col">
                   <p className="report-beliefs__col-label report-beliefs__col-label--loosen">
-                    Box you in &mdash; loosen
+                    Beliefs that shut it down
+                    <span className="report-beliefs__col-sub">Each one has a loosened version</span>
                   </p>
                   <div className="report-beliefs__list">
                     {loosen.map((item, i) => (
@@ -236,7 +250,18 @@ const BeliefsSection: FC<Props> = ({
               ) : null}
             </div>
 
-            {copy["body.p1"] ? (
+            {/* Document inserts, 2026-08-26: "First part to be added after the list of
+                beliefs and for them to replace the 'Most of these formed where
+                attention arrived…'", plus the second part. `body.p1` IS that sentence,
+                so the inserts take its place and it stays the fallback for the
+                archetypes the document does not cover. */}
+            {copy.inserts?.afterList?.length ? (
+              copy.inserts.afterList.map((para, i) => (
+                <p key={i} className="report-beliefs__note">
+                  {para}
+                </p>
+              ))
+            ) : copy["body.p1"] ? (
               <p className="report-beliefs__note">{copyParagraphs(copy["body.p1"])}</p>
             ) : null}
           </>

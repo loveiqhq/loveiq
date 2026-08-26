@@ -161,7 +161,14 @@ const AcceleratorsSection: FC<Props> = ({
         {chapterHeading("Accelerators & Brakes", archetype)}
       </h3>
 
-      <LearnPill prefix="accel" copy={copy} />
+      {/* Mark asked on 2026-08-26 for this chapter's Key Concepts text to move INTO
+          the card, above "What opens you", and for the brakes paragraph to sit under
+          the verdict meter. So the pill keeps its label and its second paragraph is
+          split out: `learn.body` goes above the columns and `learn.body.p2` (the
+          "Desire doesn't disappear because attraction is gone…" passage) goes under
+          the meter. Nothing is dropped, it is the same two paragraphs in the two
+          places he named. */}
+      <LearnPill prefix="accel" copy={{ ...copy, "learn.body": null, "learn.body.p2": null }} />
 
       <article className="report-accel__card">
         {/* Unlocked: the ten ranked rows + verdict meter from Figma 8946:4286.
@@ -169,6 +176,10 @@ const AcceleratorsSection: FC<Props> = ({
             the blurred stand-in show, exactly as before. */}
         {!locked ? (
           <>
+            {copy["learn.body"] ? (
+              <p className="report-accel__intro">{copy["learn.body"]}</p>
+            ) : null}
+
             <div
               ref={chartRef}
               className={`report-accel__columns report-chart-reveal${revealed ? " is-revealed" : ""}`}
@@ -221,6 +232,10 @@ const AcceleratorsSection: FC<Props> = ({
                 {capAfter}
               </p>
             </div>
+
+            {copy["learn.body.p2"] ? (
+              <p className="report-accel__under-meter">{copy["learn.body.p2"]}</p>
+            ) : null}
           </>
         ) : (
           /* Locked: the same two columns, teased the way Typical Beliefs is (Eman,

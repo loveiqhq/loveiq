@@ -24028,6 +24028,52 @@ input.autofill-dark:-internal-autofill-previewed {
   margin: 0 0 14px;
 }
 
+/* Accelerators & Brakes: the chapter's Key Concepts text, moved inside the card
+   (2026-08-26). Above the two columns it frames them, so it takes the body scale;
+   under the verdict meter it comments on the reading, so it takes the prose scale
+   and the muted ink the other captions use. */
+.report-accel__intro {
+  margin: 0 0 20px;
+  color: #161021;
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: var(--report-body-size);
+  line-height: var(--report-body-lh);
+}
+
+.report-accel__under-meter {
+  margin: 16px 0 0;
+  color: #3f3a4d;
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: var(--report-prose-size);
+  line-height: var(--report-prose-lh);
+}
+
+/* Beliefs: the document passage above the two columns, and the two-line column
+   labels that replaced "Serve you — keep" / "Box you in — loosen". */
+.report-beliefs__insert {
+  margin: 0 0 18px;
+  color: #3f3a4d;
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: var(--report-prose-size);
+  line-height: var(--report-prose-lh);
+}
+
+/* The instruction, under the statement of what the column holds. Lighter and
+   sentence case, so the eye reads the label first and the instruction second
+   instead of parsing a four-word compound. */
+.report-beliefs__col-sub {
+  display: block;
+  margin-top: 3px;
+  color: #6b6678;
+  font-weight: 500;
+  font-size: 0.86em;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
 /* Consecutive inserts read as one passage, not as separate notes. */
 .report-attachment__insert + .report-attachment__insert,
 .report-energy__insert + .report-energy__insert,

@@ -12,11 +12,11 @@ import { curveEndPoint } from "../curveEnd";
 import LearnPill from "./LearnPill";
 import { chapterHeading } from "./chapterHeading";
 import type { Report2DocInserts } from "@/data/report2-doc-inserts";
-import {
-  getEnergyThirdReading,
-  getEnergyFamilyProfile,
-  type EnergyReading,
-} from "@/data/report2-energy";
+import { getEnergyThirdReading } from "@/data/report2-energy";
+import DocStyleBlock from "./DocStyleBlock";
+import { getEnergyLevel } from "@/data/report2-energy-levels";
+import { archetypeSlug } from "@/data/report2-config";
+import { getEnergyFamilyProfile, type EnergyReading } from "@/data/report2-energy";
 
 /**
  * Server-resolved energy copy (`getReport2Section(name, "energy")`), threaded as
@@ -438,6 +438,12 @@ const EnergySection: FC<Props> = ({
   const profile = getEnergyFamilyProfile(curveFamily);
   // Per family, so the callout cannot contradict the three readings above it.
   const thirdReading = getEnergyThirdReading(curveFamily);
+  /*
+   * Chapter 13's own five-level classification, added 2026-08-26. A different
+   * vocabulary from `families.energy` above — that one picks the curve, this one is
+   * the document's named level with the document's description.
+   */
+  const docLevel = getEnergyLevel(archetypeSlug(archetype));
   const accent = getReportTheme(archetype).accent;
   const readouts = config?.readouts ?? null;
 
@@ -502,6 +508,14 @@ const EnergySection: FC<Props> = ({
 
             {/* Document insert, 2026-08-26: "just after the rectangle of 'Depth
                 Replaces Speed'". */}
+            {/* The document's own energy level for this archetype. Above the curve,
+                because it is the classification the curve then illustrates. */}
+            <DocStyleBlock
+              eyebrow="Core Energy Level Varieties Across Archetypes"
+              styles={docLevel ? [{ ...docLevel, role: "primary" as const }] : []}
+              modifier="energy"
+            />
+
             {copy.inserts?.afterDepth ? (
               <p className="report-energy__insert">{copy.inserts.afterDepth}</p>
             ) : null}

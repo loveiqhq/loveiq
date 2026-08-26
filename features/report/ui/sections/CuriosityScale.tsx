@@ -2,11 +2,7 @@
 
 import type { CSSProperties, FC } from "react";
 
-import {
-  CURIOSITY_AXIS,
-  CURIOSITY_BANDS,
-  CURIOSITY_SCALE,
-} from "@/data/report2-curiosity-scale";
+import { CURIOSITY_AXIS, CURIOSITY_BANDS, CURIOSITY_SCALE } from "@/data/report2-curiosity-scale";
 import { getReportTheme } from "../reportTheme";
 import { useRevealOnView } from "../hooks/useRevealOnView";
 
