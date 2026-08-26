@@ -83,6 +83,15 @@ async function callSlack(
 export async function postJourneyMessage(input: {
   text: string;
   blocks: SlackBlock[];
+  /**
+   * Post as a reply under this message instead of into the channel.
+   *
+   * Used by the catch-up backfill: most of the past week's messages were posted
+   * by the incoming webhook — a DIFFERENT Slack app — so chat.update cannot edit
+   * them. Re-posting the week as thread replies gives one place to skim it
+   * without eighty new messages in the channel.
+   */
+  threadTs?: string;
 }): Promise<PostedMessage | null> {
   const cfg = config();
   if (!cfg) return null;
@@ -90,6 +99,7 @@ export async function postJourneyMessage(input: {
     channel: cfg.channel,
     text: input.text,
     blocks: input.blocks,
+    ...(input.threadTs ? { thread_ts: input.threadTs } : {}),
     // Link previews would push the blocks down and add noise.
     unfurl_links: false,
     unfurl_media: false,

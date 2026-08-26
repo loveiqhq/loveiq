@@ -212,11 +212,17 @@ describe("POST /api/survey notifications", () => {
     // masked, in a code span so the mask's asterisks are not read as bold markers
     expect(flat).toContain("`a***@example.com`");
     expect(flat).not.toContain("ada@example.com");
-    // all four arms, in plain English — never the raw codes
-    expect(flat).toContain("Previous homepage");
-    expect(flat).toContain("Dark survey");
+    // the LIVE arms, in plain English — never the raw codes
+    expect(flat).toContain("Landing page B (previous design)");
     expect(flat).toContain("Pricing B");
-    expect(flat).toContain("Forced paywall");
+    // Concluded experiments are not listed as ones they were in — the paywall,
+    // and since 2026-08-25 the survey theme. The fixture still carries a dark
+    // survey arm, so this proves the axis list excludes it rather than the value
+    // being absent; the arm is still in the structured log line asserted below.
+    expect(flat).not.toContain("Dark survey");
+    expect(flat).not.toContain("Survey design");
+    expect(flat).not.toContain("Forced paywall");
+    expect(flat).not.toContain("Paywall style");
     expect(flat).not.toContain("white_prev");
 
     expect(mockLogger.info).toHaveBeenCalledWith(

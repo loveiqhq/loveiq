@@ -1,4 +1,4 @@
--- DOWN migration for 20260826090000_brain_chunk.sql.
+-- DOWN migration for 20260825215317_brain_chunk.sql.
 --
 -- Drops the company-brain corpus, the query log and the retrieval function.
 -- Consequence: the Slack brain answers nothing (retrieval 500s) until the
@@ -10,7 +10,7 @@
 -- what the team asked, which is signal for what to ingest next but is not
 -- referenced by anything. Nothing here is a source of truth.
 --
--- Apply: psql "$DATABASE_URL" -f supabase/rollbacks/20260826090000_brain_chunk_down.sql
+-- Apply: psql "$DATABASE_URL" -f supabase/rollbacks/20260825215317_brain_chunk_down.sql
 
 BEGIN;
 

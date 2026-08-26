@@ -27,7 +27,11 @@ import {
   fetchDropoutFunnel,
   fetchFunnelStages,
 } from "@features/admin/server/digest-metrics";
-import { formatSignalSummary, twoProportionSignal } from "@features/admin/server/statistics";
+import {
+  formatSignalSummary,
+  MIN_CELL_COUNT,
+  twoProportionSignal,
+} from "@features/admin/server/statistics";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import {
   activeArms,
@@ -297,7 +301,14 @@ function buildReadout(
 
     const smallest = contenders.reduce((min, a) => (a.n < min.n ? a : min), contenders[0]!);
 
-    if (signal.significance === "insufficient-data") {
+    /*
+     * Three separate reasons not to decide, each naming its own cause. Testing
+     * `signal.significance === "insufficient-data"` FIRST used to swallow the
+     * other two: once twoProportionSignal also refused on too-few purchases, the
+     * small-arm branch below became unreachable for the very shape it was written
+     * for (300 vs 9), and every case collapsed into one vague sentence.
+     */
+    if (leader.n + runnerUp.n < 50) {
       verdict = `Not enough data to call this yet — the smallest group has ${smallest.n} ${
         smallest.n === 1 ? "person" : "people"
       }. Treat any difference as noise for now.`;
@@ -305,13 +316,21 @@ function buildReadout(
       /*
        * The combined-sample check inside twoProportionSignal is satisfied by a big
        * arm alone: 828 vs 9 clears n>=50 and comes back "inconclusive", so without
-       * this branch the page would read "Current homepage is ahead (2.1% vs 0.0%)"
+       * this branch the page would read "Landing page A is ahead (2.1% vs 0.0%)"
        * and never mention that the comparison rests on nine people. That is exactly
        * the wrong impression to leave with a non-technical reader.
        */
       verdict = `Too early to compare — ${smallest.label} has only ${smallest.n} ${
         smallest.n === 1 ? "person" : "people"
       } so far. Ignore the difference until that grows.`;
+    } else if (signal.significance === "insufficient-data") {
+      // Both groups are big enough; it is the PURCHASES that are too few for the
+      // comparison to mean anything. Naming the group sizes here would be
+      // actively misleading — they are not what is short.
+      const purchases = leader.purchases + runnerUp.purchases;
+      verdict = `Not enough purchases yet to compare — ${purchases} ${
+        purchases === 1 ? "person has" : "people have"
+      } bought across both groups. Each side needs at least ${MIN_CELL_COUNT}.`;
     } else if (signal.significance === "inconclusive") {
       verdict = `No clear winner yet. ${leader.label} is ahead (${leader.rate}% vs ${runnerUp.rate}%) but the gap could still be chance.`;
     } else {
@@ -489,7 +508,6 @@ export async function GET(request: Request) {
      */
     const experiments: ExperimentReadout[] = [
       tally("landing", (_id, tracker) => readStampedArms(tracker).landing),
-      tally("survey", (_id, tracker) => readStampedArms(tracker).survey),
       tally("pricing", (id) => bySubmission.get(id)?.pricing ?? null),
     ];
 
@@ -613,6 +631,14 @@ export async function GET(request: Request) {
           title: "Paywall style",
           outcome:
             "Concluded in favour of the forced paywall, and the forced screen is currently switched off, so everyone now gets the same experience. No comparison to make.",
+        },
+        {
+          title: "Survey design (white vs dark)",
+          // No rates, by the same rule as the paywall entry above: this section
+          // exists so a finished test cannot be read as a live one. The numbers
+          // that settled it are in the commit and in the digest history.
+          outcome:
+            "Stopped 2026-08-25 and settled on the white survey. White reached checkout more often, but not by a margin this many people can prove — the range the true gap could sit in still includes zero — and purchases were level. It was called on the checkout rate, not because the test reached a verdict. Everyone now sees white, so there is nothing left to compare.",
         },
       ],
       totals: {

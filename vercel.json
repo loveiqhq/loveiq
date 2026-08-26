@@ -34,6 +34,10 @@
       "schedule": "0 9 * * *"
     },
     {
+      "path": "/api/cron/journey-backfill",
+      "schedule": "0 4 1 1 *"
+    },
+    {
       "path": "/api/cron/brain-ingest",
       "schedule": "47 4 * * *"
     }
@@ -89,6 +93,9 @@
     },
     "app/api/cron/conversion-digest/route.ts": {
       "maxDuration": 60
+    },
+    "app/api/cron/journey-backfill/route.ts": {
+      "maxDuration": 300
     }
   }
 }

@@ -47,19 +47,23 @@ function journey(overrides: Partial<SubmissionJourney> = {}): SubmissionJourney 
   };
 }
 
+/** Green = reached, red = not reached yet. Named so a recolour is a one-line diff. */
+const REACHED = ":large_green_circle:";
+const NOT_REACHED = ":red_circle:";
+
 function rail(blocks: SlackBlock[]): string {
   const text = JSON.stringify(blocks);
-  const match = /(?::large_blue_circle:|:white_circle:)[^"]*/.exec(text);
+  const match = new RegExp(`(?:${REACHED}|${NOT_REACHED})[^"]*`).exec(text);
   return match ? match[0] : "";
 }
 
-/** The steps rendered as filled, in order. */
+/** The steps rendered as reached, in order. */
 function filledSteps(blocks: SlackBlock[]): string[] {
   return rail(blocks)
     .split("\u2192")
     .map((chunk) => chunk.trim())
-    .filter((chunk) => chunk.startsWith(":large_blue_circle:"))
-    .map((chunk) => chunk.replace(":large_blue_circle:", "").trim());
+    .filter((chunk) => chunk.startsWith(REACHED))
+    .map((chunk) => chunk.replace(REACHED, "").trim());
 }
 
 describe("journey rail — filled means reached", () => {
@@ -70,8 +74,8 @@ describe("journey rail — filled means reached", () => {
     });
     expect(filledSteps(message.blocks)).toEqual(["Survey done"]);
     // The regression that shipped: the solid marker on everything NOT reached.
-    expect(rail(message.blocks)).toContain(":white_circle: Report opened");
-    expect(rail(message.blocks)).not.toContain(":large_blue_circle: Paid");
+    expect(rail(message.blocks)).toContain(`${NOT_REACHED} Report opened`);
+    expect(rail(message.blocks)).not.toContain(`${REACHED} Paid`);
   });
 
   it("fills every earlier step from the furthest one reached", () => {
@@ -96,7 +100,7 @@ describe("journey rail — filled means reached", () => {
       "Paywall hit",
       "Checkout",
     ]);
-    expect(rail(message.blocks)).toContain(":white_circle: Paid");
+    expect(rail(message.blocks)).toContain(`${NOT_REACHED} Paid`);
   });
 
   it("fills the whole rail on a purchase, even with no analytics milestones", () => {
@@ -126,7 +130,7 @@ describe("journey rail — filled means reached", () => {
     ]);
     // A purchase message that showed "Report opened" hollow would contradict the
     // payment it is announcing.
-    expect(rail(message.blocks)).not.toContain(":white_circle:");
+    expect(rail(message.blocks)).not.toContain(NOT_REACHED);
   });
 
   it("never uses the old inverted glyph pair", () => {
@@ -135,6 +139,63 @@ describe("journey rail — filled means reached", () => {
       questionCount: 59,
     });
     expect(JSON.stringify(message.blocks)).not.toContain(":black_circle:");
+  });
+});
+
+describe("the two numbers the team scans for", () => {
+  /**
+   * How long it took and how many questions. Both belong in the HEADER, which is
+   * the largest text Block Kit offers — larger than a bolded section, and a
+   * header is plain_text so it cannot be bolded anyway.
+   *
+   * This is pinned because it silently drifted once already: the question count
+   * ended up in the `context` block, Slack's smallest and greyest text, while the
+   * duration was in the header AND repeated in that same context line — so the
+   * more prominent of the two was the one that was duplicated.
+   */
+  const headerOf = (blocks: unknown[]) =>
+    (blocks as Array<{ type: string; text?: { text?: string } }>).find((b) => b.type === "header")
+      ?.text?.text ?? "";
+  const contextOf = (blocks: unknown[]) =>
+    (blocks as Array<{ type: string; elements?: Array<{ text?: string }> }>)
+      .filter((b) => b.type === "context")
+      .map((b) => (b.elements ?? []).map((e) => e.text ?? "").join(" "))
+      .join(" ");
+
+  it("puts the question count AND the duration in the header", () => {
+    const message = buildJourneyMessage(journey({ timings: { durationMs: 612_000 } }), {
+      kind: "survey_completed",
+      questionCount: 59,
+    });
+    const head = headerOf(message.blocks);
+    expect(head).toContain("59 questions");
+    expect(head).toContain("10 min");
+    // And neither is repeated in the small grey line below it.
+    const ctx = contextOf(message.blocks);
+    expect(ctx).not.toContain("59 questions");
+    expect(ctx).not.toContain("10 min");
+    // which still carries identity.
+    expect(ctx).toContain("submission #");
+  });
+
+  it("drops only the duration when it was never recorded", () => {
+    const message = buildJourneyMessage(journey({ timings: { durationMs: null } }), {
+      kind: "survey_completed",
+      questionCount: 59,
+    });
+    const head = headerOf(message.blocks);
+    expect(head).toContain("59 questions");
+    // No dangling separator where the time would have been.
+    expect(head).not.toMatch(/·\s*$/);
+    expect(head).not.toContain("· ·");
+  });
+
+  it("says question, not questions, for a single answer", () => {
+    const message = buildJourneyMessage(journey(), {
+      kind: "survey_completed",
+      questionCount: 1,
+    });
+    expect(headerOf(message.blocks)).toContain("1 question ");
   });
 });
 
@@ -229,14 +290,19 @@ describe("pricing arm — which side of the test, in words and numbers", () => {
     expect(row).not.toContain("cheaper");
   });
 
-  it("omits the concluded paywall row rather than showing it permanently blank", () => {
+  it("never shows a concluded experiment's row — paywall or survey theme", () => {
+    // It used to appear whenever the arm happened to have a value, which
+    // purchases do (they carry it in the Stripe metadata). But nothing
+    // randomises the paywall any more, so listing it under "experiments they
+    // were in" told the reader they were in a test that is not running. The arm
+    // is still stored and still shown in /admin's CONCLUDED section, which is
+    // where a finished experiment belongs.
     const survey = buildJourneyMessage(journey(), {
       kind: "survey_completed",
       questionCount: 59,
     });
     expect(JSON.stringify(survey.blocks)).not.toContain("Paywall style");
 
-    // ...but keeps it when it actually has a value, which purchases do.
     const purchase = buildJourneyMessage(
       journey({
         arms: { landing: "white", survey: "white", pricing: "A", paywall: "treatment" },
@@ -246,8 +312,39 @@ describe("pricing arm — which side of the test, in words and numbers", () => {
       { kind: "purchase", planLabel: "Just a snapshot", archetype: null, amountText: "EUR 39.99" }
     );
     const text = JSON.stringify(purchase.blocks);
-    expect(text).toContain("Paywall style");
-    expect(text).toContain("Forced paywall");
+    expect(text).not.toContain("Paywall style");
+    expect(text).not.toContain("Forced paywall");
+    // The survey theme test concluded 2026-08-25. Everyone gets white, so the
+    // row would be a permanent constant on every message — the same reason the
+    // paywall row went. Note the fixture DOES carry a survey arm, so this asserts
+    // the axis list is what excludes it, not an absent value.
+    expect(text).not.toContain("Survey design");
+    expect(text).not.toContain("White survey");
+    // The LIVE experiments are still there.
+    expect(text).toContain("Landing page design");
+    expect(text).toContain("Report pricing");
+  });
+});
+
+describe("journey rail — the glyphs themselves", () => {
+  it("uses green for reached and red for not-yet, and never colour alone", () => {
+    const message = buildJourneyMessage(
+      journey({
+        milestones: { ...journey().milestones, reportViewedAt: "2026-08-24T19:00:00.000Z" },
+      }),
+      { kind: "survey_completed", questionCount: 59 }
+    );
+    const drawn = rail(message.blocks);
+    // The literals, so a silent recolour fails here rather than in Slack.
+    expect(drawn).toContain(":large_green_circle: Survey done");
+    expect(drawn).toContain(":red_circle: Paid");
+    expect(drawn).not.toContain(":large_blue_circle:");
+    expect(drawn).not.toContain(":white_circle:");
+    // Green/red is the worst pair for a colourblind reader, so every step must
+    // keep its text label — colour is never the only channel carrying meaning.
+    for (const label of ["Survey done", "Report opened", "Paywall hit", "Checkout", "Paid"]) {
+      expect(drawn).toContain(label);
+    }
   });
 });
 

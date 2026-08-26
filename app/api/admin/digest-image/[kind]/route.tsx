@@ -148,7 +148,14 @@ interface DropoutByArmPayload {
    * claims weeks of zero conversion it was never measured for.
    */
   first: Array<number | null>;
-  last: Array<number | null>;
+  /**
+   * Omit for a SINGLE-series chart. One series is named by the title, so the
+   * legend, the end-label sub-name and the two-arm headline all drop out — see
+   * the guards below. This exists because the alternative was a second renderer:
+   * the sparkline one had no y-axis, no gridlines and a scale pinned to the
+   * series' own max, so a 6% rate and a 0.6% rate drew the same picture.
+   */
+  last?: Array<number | null>;
   /**
    * Optional captions, so the shared-y-scale two-curve renderer can serve any
    * A/B comparison instead of only the email-position one it was written for.
@@ -164,6 +171,8 @@ interface DropoutByArmPayload {
   headline?: string;
   /** Footnote under the plot; `{peak}` is replaced with the shared y-scale peak. */
   footnote?: string;
+  /** Overrides the "not enough per-arm traffic" copy, which is wrong for a site metric. */
+  emptyLabel?: string;
 }
 
 type AnyPayload =
@@ -722,6 +731,11 @@ function renderDropoutByArm(p: DropoutByArmPayload): {
     );
   const first = toVals(p.first);
   const last = toVals(p.last);
+  /**
+   * Single-series mode: no `last` key at all. Distinct from an all-null `last`,
+   * which is a real second arm that has no data yet and must still be named.
+   */
+  const solo = p.last === undefined;
   const title = p.title ?? "Where users quit by arm — email first vs last";
   const n = Math.max(first.length, last.length);
 
@@ -737,7 +751,7 @@ function renderDropoutByArm(p: DropoutByArmPayload): {
         title,
         p.windowLabel ?? "",
         <div style={{ display: "flex", color: COLORS.textMuted, fontSize: 18, padding: 24 }}>
-          Awaiting data — not enough per-arm traffic in this window yet.
+          {p.emptyLabel ?? "Awaiting data — not enough per-arm traffic in this window yet."}
         </div>
       ),
       height: HEIGHT,
@@ -973,8 +987,12 @@ function renderDropoutByArm(p: DropoutByArmPayload): {
       <div style={{ display: "flex", flexDirection: "row", gap: 22, marginBottom: 14 }}>
         {/* An arm with no readings says so in the legend, so a missing line is
             never mistaken for a line hidden behind the other one. */}
-        {swatch(COLORS.accentPurple, hasFirst ? legendFirst : `${legendFirst} — no data yet`)}
-        {swatch(COLORS.accentOrange, hasLast ? legendLast : `${legendLast} — no data yet`)}
+        {/* A single series is named by the title, so it gets no legend at all —
+            two swatches for one line is the "(unused) — no data yet" row this
+            renderer produced the first time it was handed one series. */}
+        {!solo &&
+          swatch(COLORS.accentPurple, hasFirst ? legendFirst : `${legendFirst} — no data yet`)}
+        {!solo && swatch(COLORS.accentOrange, hasLast ? legendLast : `${legendLast} — no data yet`)}
       </div>
 
       {/* ONE coordinate system for the whole plot: axis labels, gridlines, lines,
@@ -1055,7 +1073,10 @@ function renderDropoutByArm(p: DropoutByArmPayload): {
         {hasLast && endDot(COLORS.accentOrange, yEndLast, xEndLast)}
         {hasFirst && endDot(COLORS.accentPurple, yEndFirst, xEndFirst)}
         {showLastLabel && endLabel(COLORS.accentOrange, shortLast, endLast, yEndLast)}
-        {showFirstLabel && endLabel(COLORS.accentPurple, shortFirst, endFirst, yEndFirst)}
+        {/* Solo: no sub-name under the value. `shortFirst` is a word-diff of the
+            two legend strings, which with one series clipped to "Visitor → sur…". */}
+        {showFirstLabel &&
+          endLabel(COLORS.accentPurple, solo ? "" : shortFirst, endFirst, yEndFirst)}
 
         {/* x ticks, each centred on the data point it names */}
         {tickIdx.map((idx) => (
@@ -1088,11 +1109,13 @@ function renderDropoutByArm(p: DropoutByArmPayload): {
         }}
       >
         {p.headline ??
-          (hasFirst && hasLast
-            ? `Latest — ${fmtAxis(endFirst)}% vs ${fmtAxis(endLast)}%`
-            : hasFirst
-              ? `Latest — ${fmtAxis(endFirst)}% (${shortLast}: no data yet)`
-              : `Latest — ${fmtAxis(endLast)}% (${shortFirst}: no data yet)`)}
+          (solo
+            ? `Latest — ${fmtAxis(endFirst)}%`
+            : hasFirst && hasLast
+              ? `Latest — ${fmtAxis(endFirst)}% vs ${fmtAxis(endLast)}%`
+              : hasFirst
+                ? `Latest — ${fmtAxis(endFirst)}% (${shortLast}: no data yet)`
+                : `Latest — ${fmtAxis(endLast)}% (${shortFirst}: no data yet)`)}
       </div>
       <div style={{ display: "flex", marginTop: 5, fontSize: 12, color: COLORS.textMuted }}>
         {footnote}

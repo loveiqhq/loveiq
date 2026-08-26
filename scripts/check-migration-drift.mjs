@@ -102,6 +102,49 @@ async function fetchLiveState(client) {
   };
 }
 
+/**
+ * Compare the migration LEDGER to the filenames.
+ *
+ * The artifact check above asks "is everything the repo declares actually live".
+ * This asks a different question the repo had no check for: does
+ * `supabase_migrations.schema_migrations` agree with the files on disk? It went
+ * wrong three separate times in one day — once as two files sharing a version
+ * (a security migration ended up with no row at all), and twice as a migration
+ * applied by name so the tool clock-stamped a version the filename does not
+ * have. Nothing caught any of them, because `check-migrations` only ever
+ * compares filenames to each other and never reaches the database.
+ *
+ * The failure it prevents is quiet: `supabase db push` from a clean checkout
+ * decides what to apply from these versions, so a mismatched pair is either an
+ * out-of-order refusal or a migration that silently never runs.
+ */
+async function checkLedger(client) {
+  const { rows } = await client.query(
+    "SELECT version, name FROM supabase_migrations.schema_migrations ORDER BY version"
+  );
+  const ledgerByName = new Map(rows.map((r) => [r.name, r.version]));
+  const fileByName = new Map();
+  for (const f of listMigrationFiles()) {
+    const base = f.replace(/\.sql$/, "");
+    const idx = base.indexOf("_");
+    if (idx > 0) fileByName.set(base.slice(idx + 1), base.slice(0, idx));
+  }
+
+  const mismatched = [];
+  const missingRow = [];
+  const missingFile = [];
+  for (const [name, fileVersion] of fileByName) {
+    const ledgerVersion = ledgerByName.get(name);
+    if (!ledgerVersion) missingRow.push(`${fileVersion}_${name}`);
+    else if (ledgerVersion !== fileVersion)
+      mismatched.push(`${name}: file ${fileVersion} vs ledger ${ledgerVersion}`);
+  }
+  for (const [name, ledgerVersion] of ledgerByName) {
+    if (!fileByName.has(name)) missingFile.push(`${ledgerVersion}_${name}`);
+  }
+  return { mismatched, missingRow, missingFile };
+}
+
 async function main() {
   const url = process.env[CONNECTION_ENV];
   if (!url) {
@@ -133,16 +176,35 @@ async function main() {
       columns: [...repo.columns.keys()].filter((n) => !live.columns.has(n)),
     };
 
+    const ledger = await checkLedger(client);
+    const ledgerTotal =
+      ledger.mismatched.length + ledger.missingRow.length + ledger.missingFile.length;
+
     const total =
       drift.functions.length +
       drift.indexes.length +
       drift.constraints.length +
       drift.columns.length;
 
-    if (total === 0) {
-      console.log("✅ No migration drift — repo files match live DB.");
+    if (ledgerTotal > 0) {
+      console.error("⚠️  Migration LEDGER does not match the files on disk:\n");
+      for (const m of ledger.mismatched) console.error(`  version mismatch  ${m}`);
+      for (const m of ledger.missingRow) console.error(`  file, no ledger row  ${m}`);
+      for (const m of ledger.missingFile) console.error(`  ledger row, no file  ${m}`);
+      console.error(
+        "\nA mismatched pair makes `supabase db push` from a clean checkout either refuse\n" +
+          "(out-of-order) or skip the migration entirely. Fix the LEDGER to match the\n" +
+          "filename — it is metadata, so no DDL re-runs:\n" +
+          "  UPDATE supabase_migrations.schema_migrations SET version = '<from filename>'\n" +
+          "   WHERE name = '<name>';\n"
+      );
+    }
+
+    if (total === 0 && ledgerTotal === 0) {
+      console.log("✅ No migration drift — repo files match live DB, ledger matches filenames.");
       process.exit(0);
     }
+    if (total === 0) process.exit(1);
 
     console.error("❌ Migration drift detected — these artifacts exist in repo but NOT live:\n");
     if (drift.functions.length) console.error("  Functions:", drift.functions.join(", "));

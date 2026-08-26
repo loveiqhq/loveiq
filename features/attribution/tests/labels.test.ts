@@ -10,8 +10,18 @@ import {
 
 describe("arm labels", () => {
   it("names every arm we actively assign, in plain English", () => {
-    expect(armLabel("landing", "white").long).toBe("Homepage: current design");
-    expect(armLabel("landing", "white_prev").long).toBe("Homepage: previous design");
+    // The A/B letter is part of the name so "variant A" in a meeting and
+    // "Landing page A" in Slack are unambiguously the same arm, and the
+    // parenthetical says which is which without the reader knowing dates.
+    expect(armLabel("landing", "white").long).toBe("Landing page A: the current design");
+    expect(armLabel("landing", "white_prev").long).toBe("Landing page B: the design it replaced");
+    expect(armLabel("landing", "white").short).toContain("A");
+    expect(armLabel("landing", "white_prev").short).toContain("B");
+    // "homepage" is not the term the team uses; every landing label says so.
+    for (const arm of ["white", "white_prev", "control"]) {
+      expect(armLabel("landing", arm).short.toLowerCase()).not.toContain("homepage");
+      expect(armLabel("landing", arm).long.toLowerCase()).not.toContain("homepage");
+    }
     expect(armLabel("survey", "dark").long).toBe("Survey questions: dark");
     expect(armLabel("survey", "white").long).toBe("Survey questions: white");
     // Deliberately direction-free: these used to claim A was the lower arm, which
@@ -44,7 +54,7 @@ describe("arm labels", () => {
     // and it must NOT be conflated with the round-2 previous-design arm.
     const retired = armLabel("landing", "control");
     expect(retired.retired).toBe(true);
-    expect(retired.long).toBe("Homepage: original dark design");
+    expect(retired.long).toBe("Landing page: the original dark design");
     expect(retired.long).not.toBe(armLabel("landing", "white_prev").long);
   });
 
@@ -62,7 +72,13 @@ describe("arm labels", () => {
   it("excludes retired arms from the active set used for charts", () => {
     expect(activeArms("landing")).toEqual(["white", "white_prev"]);
     expect(activeArms("pricing")).toEqual(["A", "B"]);
-    expect(activeArms("survey")).toEqual(["white", "dark"]);
+    // Dark is retired (the theme test concluded 2026-08-25 in favour of white), so
+    // it must not read as an arm we still assign.
+    expect(activeArms("survey")).toEqual(["white"]);
+    expect(armLabel("survey", "dark").retired).toBe(true);
+    // …but it is still KNOWN, so historical rows keep a plain-English label.
+    expect(isKnownArm("survey", "dark")).toBe(true);
+    expect(armLabel("survey", "dark").short).toBe("Dark survey");
   });
 
   it("recognises retired arms as known, so they are labelled not dropped", () => {

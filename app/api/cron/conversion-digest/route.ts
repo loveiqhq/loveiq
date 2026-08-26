@@ -23,6 +23,11 @@
  */
 
 import { NextResponse } from "next/server";
+import {
+  buildAxisTrends,
+  rowsForAxis,
+  type AxisFunnelRow,
+} from "@features/attribution/server/axis-trends";
 import logger from "@shared/observability/logger";
 import { notifySlack, escapeSlack, type SlackBlock } from "@shared/observability/slack";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
@@ -42,7 +47,11 @@ import {
   tryClaimSlackAlert,
   verifyCronAuth,
 } from "@shared/observability/slack-alert-dedup";
-import { computeRate, dayString } from "@features/admin/server/digest-metrics";
+import {
+  computeRate,
+  dayString,
+  fetchFunnelCvrSparklines,
+} from "@features/admin/server/digest-metrics";
 import {
   AMBIGUOUS_VISITOR_ARM,
   type ArmVerdict,
@@ -57,9 +66,9 @@ import {
   buildFunnel,
   delta,
   fetchArmCohorts,
+  fetchAxisFunnelDaily,
   fetchLandingArmFunnel,
   fetchLandingStartFunnel,
-  TINY_ARM,
   sumDays,
   sumVisitors,
 } from "@features/admin/server/conversion-digest";
@@ -73,12 +82,13 @@ export const maxDuration = 60;
 const WINDOW_DAYS = 30;
 
 /**
- * The axes worth a verdict. `paywall` is deliberately absent — that experiment
- * concluded in favour of the forced paywall and nothing randomises it any more,
- * so presenting it as a live test is exactly the mistake the /admin dashboard
- * made before it was corrected.
+ * The axes worth a verdict. `paywall` and `survey` are deliberately absent —
+ * both experiments are concluded (the paywall in favour of the forced wall, the
+ * survey theme in favour of white on 2026-08-25) and nothing randomises either
+ * any more, so presenting one as a live test is exactly the mistake the /admin
+ * dashboard made before it was corrected.
  */
-const VERDICT_AXES: ExperimentAxis[] = ["landing", "survey", "pricing"];
+const VERDICT_AXES: ExperimentAxis[] = ["landing", "pricing"];
 
 /**
  * When report prices last changed. Pre- and post-change arm A are different
@@ -108,7 +118,15 @@ function deployStamp(): string {
  * Slack's image proxy is anonymous, so authenticity has to travel in the URL.
  * `v` is the deploy stamp, which busts the proxy cache on each deploy.
  */
-async function signedChartUrl(payload: Record<string, unknown>): Promise<string | null> {
+/**
+ * `kind` selects the renderer. Defaults to the two-arm comparison every existing
+ * caller wants; `cvr-visitor-start` is the single-line longitudinal renderer that
+ * already exists for the funnel digest, reused here rather than reimplemented.
+ */
+async function signedChartUrl(
+  payload: Record<string, unknown>,
+  kind: "conversion-by-arm" | "cvr-visitor-start" = "conversion-by-arm"
+): Promise<string | null> {
   const base = process.env.NEXT_PUBLIC_SITE_URL;
   if (!base) {
     logger.warn("conversion-digest: NEXT_PUBLIC_SITE_URL unset; skipping chart");
@@ -116,11 +134,11 @@ async function signedChartUrl(payload: Record<string, unknown>): Promise<string 
   }
   try {
     const { d, s } = await signImagePayload({
-      kind: "conversion-by-arm",
+      kind,
       v: deployStamp(),
       ...payload,
     });
-    const u = new URL("/api/admin/digest-image/conversion-by-arm", base);
+    const u = new URL(`/api/admin/digest-image/${kind}`, base);
     u.searchParams.set("d", d);
     u.searchParams.set("s", s);
     return u.toString();
@@ -151,48 +169,103 @@ function money(amount: number): string {
 }
 
 /**
- * The two-arm trend chart: completion→paid conversion per day for the two live
- * landing arms, on a shared y-scale.
+ * A two-arm trend chart series: a per-day conversion rate for two arms, on a
+ * shared y-scale.
  *
- * Daily rates on a handful of purchases are extremely spiky, so this plots a
- * 7-day trailing rate — a single purchase on a 3-completion day is 33%, which
+ * Daily rates on a handful of conversions are extremely spiky, so this plots a
+ * 7-day TRAILING rate — a single purchase on a 3-completion day is 33%, which
  * would dominate the y-scale and make the chart lie about the trend.
+ *
+ * Generic in the numerator and in the row type, because one shape serves every
+ * axis chart: completion→checkout for each live experiment axis. One builder
+ * means the trailing window and the null-gap rule below cannot drift between
+ * them.
  */
-export function buildArmSeries(
-  funnel: LandingArmFunnel,
-  arms: [string, string]
+export function buildArmSeries<T extends { arm: string; day: string; completions: number }>(
+  rows: T[],
+  arms: [string, string],
+  numerator: (row: T) => number
 ): { labels: string[]; first: Array<number | null>; last: Array<number | null> } {
-  const days = Array.from(new Set(funnel.daily.map((r) => r.day))).sort();
+  const days = Array.from(new Set(rows.map((r) => r.day))).sort();
   const dayIndex = new Map(days.map((day, i) => [day, i]));
 
   /**
    * A day with NO finishers in the arm's trailing window returns null, not 0.
    *
    * Zero and "not running" are different facts and the chart cannot say so if
-   * they share a value. The second homepage arm only began on 2026-08-21, so
+   * they share a value. The second landing page arm only began on 2026-08-21, so
    * filling its earlier days with 0% drew a flat line a month long and claimed a
    * month of zero conversion for an arm that did not exist — which is exactly
    * how the first version read.
    */
   const rateFor = (arm: string): Array<number | null> =>
     days.map((_, idx) => {
-      const from = Math.max(0, idx - 6);
+      /**
+       * The first six days have no full window behind them, so they are gaps.
+       *
+       * Without this the opening points are 1-, 2-, ... 6-day rates drawn on a
+       * chart whose footnote promises a 7-day trailing one. Measured on the real
+       * survey data, day one was 7 checkouts from 12 finishers = 58%, against a
+       * true trailing rate of 10-17% for the rest of the month — so the warm-up
+       * artefact set the y-scale, squashed every real value into the bottom
+       * sixth of the plot, and drew a dramatic month-long "decline" that was
+       * nothing but the window filling up.
+       */
+      if (idx < 6) return null;
+      const from = idx - 6;
       let completions = 0;
-      let paid = 0;
-      for (const row of funnel.daily) {
+      let converted = 0;
+      for (const row of rows) {
         if (row.arm !== arm) continue;
         const i = dayIndex.get(row.day);
         if (i === undefined || i < from || i > idx) continue;
         completions += row.completions;
-        paid += row.paid;
+        converted += numerator(row);
       }
-      return completions > 0 ? computeRate(paid, completions) : null;
+      return completions > 0 ? computeRate(converted, completions) : null;
     });
 
   return {
     labels: days.map(shortDay),
     first: rateFor(arms[0]),
     last: rateFor(arms[1]),
+  };
+}
+
+/**
+ * Site-wide visits → survey-started, as a 7-day trailing rate.
+ *
+ * No arm split, and that is the point: per-arm labelling of the survey-start
+ * event only began on 2026-08-24, so the A/B version of this metric is days old,
+ * while the site-wide version reaches back as far as the window does. This is
+ * "how is the trend looking"; the per-arm comparison is a separate block that
+ * fills in on its own.
+ *
+ * Reuses `get_funnel_cvr_sparklines`, which already returns visitors + starts per
+ * UTC day for the funnel digest — no new RPC for a series that was already being
+ * computed and simply never shown here.
+ */
+export function buildSiteStartSeries(
+  days: Array<{ day: string; visitors: number; starts: number }>
+): {
+  labels: string[];
+  values: Array<number | null>;
+} {
+  const sorted = [...days].sort((a, b) => a.day.localeCompare(b.day));
+  return {
+    labels: sorted.map((d) => shortDay(d.day)),
+    values: sorted.map((_, idx) => {
+      // Same warm-up rule as the other trailing series: a window without seven
+      // days behind it is not the rate the footnote promises.
+      if (idx < 6) return null;
+      let visitors = 0;
+      let starts = 0;
+      for (let i = idx - 6; i <= idx; i += 1) {
+        visitors += sorted[i]!.visitors;
+        starts += sorted[i]!.starts;
+      }
+      return visitors > 0 ? computeRate(starts, visitors) : null;
+    }),
   };
 }
 
@@ -211,7 +284,18 @@ export function buildStartSeries(
   const dayIndex = new Map(days.map((day, i) => [day, i]));
   const rateFor = (arm: string): Array<number | null> =>
     days.map((_, idx) => {
-      const from = Math.max(0, idx - 6);
+      /**
+       * The first six days are gaps, not partial windows.
+       *
+       * Same rule as `buildArmSeries`, and it was missing here: this builder
+       * averaged whatever it had — a 1-day, then 2-day, then 3-day window — and
+       * the footnote underneath called all of them a "7-day trailing" rate.
+       * Measured on the sibling chart's real data, a warm-up point read 58%
+       * against a true 10-17%, which then set the y-scale and squashed every
+       * honest value into the bottom sixth of the plot.
+       */
+      if (idx < 6) return null;
+      const from = idx - 6;
       let visits = 0;
       let starts = 0;
       for (const row of funnel.daily) {
@@ -236,6 +320,10 @@ interface DigestInput {
   cohorts: AxisCohort[] | null;
   /** Landing -> survey-start. Null until its migration is applied. */
   startFunnel?: LandingStartFunnel | null;
+  /** Per-day, per-arm rows for every live axis. [] when the RPC is unavailable. */
+  axisRows?: AxisFunnelRow[];
+  /** Site-wide visitors + starts per day, for the landing→survey trend line. */
+  cvrDays?: Array<{ day: string; visitors: number; starts: number }> | null;
   now: Date;
 }
 
@@ -246,8 +334,9 @@ export interface BuiltDigest {
 }
 
 export async function buildConversionDigest(input: DigestInput): Promise<BuiltDigest> {
-  const { dayKey, funnel, cohorts, now } = input;
+  const { dayKey, funnel, cohorts, now, cvrDays } = input;
   const startFunnel = input.startFunnel ?? null;
+  const axisRows = input.axisRows ?? [];
   const windowLabel = `${WINDOW_DAYS}-day window ending ${dayKey} UTC`;
 
   const verdicts: ArmVerdict[] = [];
@@ -266,27 +355,26 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
   // so as the last block this was the first thing dropped when a message ran
   // long — leaving every number in place and no statement of what any of them
   // meant.
-  blocks.push(
-    context(
-      `${windowLabel} · "visits" are visitor-days on any page, not people · the verdicts below compare arms on finished surveys → ever paid, counted server-side with no consent gap · the reached-survey chart is NOT arm-comparable yet (see its caption)`
-    )
-  );
+  blocks.push(context(`${windowLabel} · "visits" are visitor-days on any page, not people`));
 
-  // ---- The decision, first ----
-  if (verdicts.length > 0) {
+  /**
+   * "Where the tests stand" used to sit here: a 30-day, paid-based verdict per
+   * axis. It is gone because the per-test section below reported the same tests
+   * again on their own like-for-like windows and a different metric, and two
+   * verdicts per test that disagree is worse than one — it took an alert to
+   * explain which of them to ignore.
+   *
+   * Nothing decision-relevant is lost. Paid counts are on each arm's own line
+   * below, and for pricing and landing the 30-day figure pooled a price change
+   * and a different pair of arms respectively — exactly the number that should
+   * not be quoted.
+   *
+   * A FAILED read still has to speak, though: silence would read as "no tests
+   * running" rather than "we could not measure them".
+   */
+  if (cohorts === null) {
     blocks.push(
-      section(`*Where the tests stand*\n${verdicts.map((v) => `• ${v.sentence}`).join("\n")}`)
-    );
-  } else {
-    // `cohorts === null` means the read FAILED; an empty array means there is
-    // genuinely nothing. Saying "no experiment data" for a failed read tells the
-    // reader the experiments are dead.
-    blocks.push(
-      section(
-        cohorts === null
-          ? "*Where the tests stand*\n• Could not read the experiment data — this is a measurement failure, not a result."
-          : "*Where the tests stand*\n• No experiment data in this window."
-      )
+      section("*Could not read the experiment data* — a measurement failure, not a result.")
     );
   }
 
@@ -315,7 +403,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
     };
 
     blocks.push(divider());
-    blocks.push(section("*Yesterday, against the usual day*"));
+    blocks.push(section("*Yesterday vs a normal day*"));
     blocks.push(
       fields([
         { label: "Visits", value: `${yVisitors}  _(${delta(yVisitors, pVisitors / 7)})_` },
@@ -346,156 +434,313 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
     // someone can act on.
     const leak = biggestLeak(steps.slice(1));
     blocks.push(divider());
-    blocks.push(
-      section(
-        `*The funnel — ${WINDOW_DAYS} days*${
-          leak
-            ? `\nBiggest drop: ${escapeSlack(shortStep(leak.from))} → ${escapeSlack(shortStep(leak.to))}, losing ${leak.pct}%`
-            : ""
-        }`
-      )
-    );
     const rows = steps.map((s) => {
       const drop = s.dropFromPrev > 0 ? `  ▼ ${s.dropFromPrev}%` : "";
       return `\`${String(s.count).padStart(6)}\`  ${String(s.pctOfTop).padStart(5)}%  ${escapeSlack(s.step)}${drop}`;
     });
-    blocks.push(section(rows.join("\n")));
+    // Heading, headline and table in ONE block. Split across two, Slack put a
+    // paragraph gap between the title and the numbers it titles.
+    blocks.push(
+      section(
+        [
+          `*The funnel — ${WINDOW_DAYS} days*${
+            leak
+              ? `  ·  biggest drop ${escapeSlack(shortStep(leak.from))} → ${escapeSlack(shortStep(leak.to))}, losing ${leak.pct}%`
+              : ""
+          }`,
+          rows.join("\n"),
+        ].join("\n")
+      )
+    );
   }
 
-  // ---- Visits → reached the survey. NOT arm-comparable yet. ----
-  //
-  // The intent is right: a homepage decides whether a visitor starts a survey,
-  // which finished→paid (below) cannot measure. The INSTRUMENTATION is not there
-  // yet, and an audit found three reasons the two arms are not measuring the same
-  // thing. Until they are fixed this is a trend line for the site, not a verdict
-  // on a homepage, and it is titled and captioned to say so.
-  //
-  //  1. The numerator is a different funnel step per arm. `survey_engine_mount`
-  //     fires when the survey ENGINE mounts. The current homepage has an inline
-  //     first question (white/WQuestionCard.tsx) whose answer is written to the
-  //     survey's localStorage, and SurveyPage.loadInitialStep() then skips
-  //     straight to the engine ("If localStorage has answers, skip to engine").
-  //     The previous homepage has no such component, so its visitors reach the
-  //     engine only after four wizard slides and a consent screen. Same event
-  //     name, different step — worth roughly a third in relative terms at
-  //     plausible survival rates, from instrumentation alone.
-  //  2. The denominator is every public page, not the homepage. shouldCountVisit
-  //     excludes only /api, /admin, /_next and /login, so /glossary/*,
-  //     /report/<token> and the legal pages all count — credited to whatever arm
-  //     the visitor's year-old cookie holds. A report buyer re-reading their
-  //     report adds visit-days and can never add a start, so the better-
-  //     converting arm is PENALISED. That runs opposite to (1), so the gap is
-  //     uninterpretable in either direction rather than merely noisy.
-  //  3. The numerator is consent-gated and the denominator is not.
-  //     SurveyEngine only pings when __liq_vid exists, and proxy.ts mints that
-  //     cookie only under hasAnalyticsConsent. The visit row is written
-  //     server-side with a throwaway id and no consent check.
-  //
-  // The fix is one arm-symmetric, path-scoped, server-side event pair; it needs
-  // RSC-navigation detection in middleware, because both homepages link to
-  // /survey with next/link and that is not a document request.
+  /**
+   * Landing → survey, SITE-WIDE. The trend line, sitting with the funnel above
+   * rather than under *The tests*, because it is not an A/B result — it is the
+   * whole site's visits→started rate over the window.
+   *
+   * It exists here because the per-arm version cannot be a trend yet: the
+   * survey-start event only began carrying a landing arm on 2026-08-24. This one
+   * reaches back as far as the window does, from `get_funnel_cvr_sparklines` —
+   * an RPC that has been computing visitors + starts per day all along for the
+   * funnel digest, a cron that is not currently scheduled, which is why nobody
+   * has seen this line.
+   */
+  if (cvrDays && cvrDays.length > 0) {
+    const site = buildSiteStartSeries(cvrDays);
+    const real = site.values.filter((v): v is number => v != null);
+    if (real.length > 0) {
+      /**
+       * Drawn by the ARM renderer in single-series mode, not by the sparkline
+       * one it started on. That renderer pinned its y-scale to the series' own
+       * max with no axis labels, which was measured: re-rendering the same shape
+       * at a tenth of the magnitude produced a byte-identical plot — a 6% rate
+       * and a 0.6% rate drew the same picture, and the only thing that moved was
+       * a 98x10px text readout. Three earlier commits fixed gridlines, tick
+       * alignment, the clipped peak and the rounding in the arm renderer and
+       * never touched the other one, so this metric was promoted onto the
+       * pre-audit code path.
+       *
+       * Nulls are passed straight through now: the arm renderer draws them as
+       * gaps, so the six warm-up days need no slicing and — the part that
+       * actually mattered — an interior null from a day with no visitors stays a
+       * gap instead of being flattened to a plotted 0%.
+       */
+      const latest = real[real.length - 1]!;
+      const peak = Math.max(...real);
+      const direction =
+        peak - latest >= 1
+          ? ` — down from ${peak}% at its peak this window`
+          : latest - Math.min(...real) >= 1
+            ? ` — up from ${Math.min(...real)}% this window`
+            : "";
+      const url = await signedChartUrl({
+        windowLabel,
+        labels: site.labels,
+        first: site.values,
+        // No `last` key at all: single-series mode. An all-null `last` would be a
+        // second arm with no data, which is a different statement.
+        title: "Visits that reach the survey",
+        legendFirst: "Visits that reach the survey",
+        headline: `${latest}% of visits reach the survey${direction}`,
+        footnote:
+          "survey starts ÷ all-page visit-days, 7-day trailing · a gap is a day with no visits",
+        emptyLabel: "Awaiting data — no visits recorded in this window yet.",
+      });
+      if (url) {
+        blocks.push(
+          section(
+            `*Visits that reach the survey* — ${latest}% of visit-days, 7-day trailing${direction}.`
+          )
+        );
+        blocks.push({
+          type: "image",
+          image_url: url,
+          alt_text: `Site-wide share of visit-days that reach the survey questions, 7-day trailing, over the reporting window. Currently ${latest}%, peak ${peak}%.`,
+        });
+      }
+    }
+  }
+
+  /**
+   * Landing → survey start. Built here, RENDERED inside *The tests* below.
+   *
+   * A landing page's job is to get someone into the survey, which the
+   * finished→paid axes cannot measure — so this is the picture the section
+   * leads with. It is a TREND, not a verdict, and the caption says so in one
+   * line, because the two arms do not sit at the same funnel step: the current
+   * landing's inline question (white/WQuestionCard.tsx) writes an answer to
+   * localStorage and SurveyPage.loadInitialStep() skips straight to the engine,
+   * while the previous landing's visitors clear an intro, four slides and a
+   * consent screen first. Two further biases, in writing so nobody has to
+   * rediscover them: the denominator counts every public page, so a buyer
+   * re-reading their report adds visit-days to the arm that sold it and can
+   * never add a start — which pushes the OPPOSITE way to the first bias, so the
+   * sign of the gap is unknown, not merely noisy; and the numerator needs
+   * analytics consent while the denominator does not.
+   *
+   * The honest fix is one arm-symmetric, path-scoped, server-side event pair at
+   * arrival on /survey. It needs RSC-navigation detection in proxy.ts, because
+   * both landings link with next/link and a soft navigation is not a document
+   * request. Until then: trend, caveat, no verdict.
+   */
+  const landingStartBlocks: SlackBlock[] = [];
   if (startFunnel) {
     const liveArms = ["white", "white_prev"] as const;
     const series = buildStartSeries(startFunnel, [liveArms[0], liveArms[1]]);
     const totalFor = (arm: string) => startFunnel.totals.find((t) => t.arm === arm);
-    const summary = (arm: string) => {
+    const hasVisits = (arm: string) => (totalFor(arm)?.visits ?? 0) > 0;
+    const armLine = (arm: string) => {
       const label = armLabel("landing", arm).short;
       const row = totalFor(arm);
-      if (!row || row.visits === 0) return `${label} no visits recorded yet`;
-      return `${label} ${row.starts}/${row.visits} started`;
+      if (!row || row.visits === 0) return `• *${label}* — no visits recorded yet`;
+      return `• *${label}* — ${row.visits} visit-days → ${row.starts} started the survey`;
     };
+    /**
+     * Both directions, in one line. The step mismatch flatters the current design;
+     * the all-page denominator penalises whichever arm sold reports, since a buyer
+     * re-reading theirs adds visit-days and can never add a start. Naming only the
+     * first — as a shorter version of this did — leaves the reader with a caveat
+     * that points one way when the real answer is that the direction is unknown.
+     */
+    const caveat =
+      "Not a like-for-like comparison: the current design's inline question puts its visitors straight into the survey, and the denominator counts every page rather than landing views — the two pull opposite ways, so treat the gap as unknown.";
     const hasAny = series.first.some((v) => v != null) || series.last.some((v) => v != null);
+
     if (hasAny && series.labels.length > 1) {
       const url = await signedChartUrl({
         windowLabel,
         labels: series.labels,
         first: series.first.map((v) => (v == null ? null : Math.round(v * 10) / 10)),
         last: series.last.map((v) => (v == null ? null : Math.round(v * 10) / 10)),
-        title: "Site visit-days → reached the survey questions",
+        // "Site visit-days", not "landing page": the denominator is every public
+        // page, split by the landing cookie, not landing-page views. The previous
+        // title said so and the shorter one quietly stopped being true.
+        title: "Site visit-days → started the survey, by landing page",
         legendFirst: armLabel("landing", liveArms[0]).short,
         legendLast: armLabel("landing", liveArms[1]).short,
-        headline: `NOT comparable between arms yet — see caption  ·  ${summary(liveArms[0])}  ·  ${summary(liveArms[1])}`,
-        // Honest about the two id spaces: the denominator is server-side and uses
-        // a throwaway id per visit, the numerator is client-side and keyed on the
-        // durable visitor cookie. So this is starts per visit-day, not a
-        // per-person rate — and per-arm recording only began 2026-08-25, so
-        // earlier days are absent rather than zero.
-        footnote:
-          "reached-survey ÷ ALL-PAGE visit-days, 7-day trailing · the arms are NOT measuring the same step: the current homepage's inline question skips its visitors straight to the survey engine · the denominator counts every page, so re-reading a report penalises the arm that sold it · the numerator needs analytics consent, the denominator does not · per-arm recording began 25 Aug · peak {peak}%",
+        // Labelled. Unlabelled fractions ("12/300 · 3/90 started") are ambiguous
+        // in the image alone, and the image is what gets forwarded.
+        headline: `${armLabel("landing", liveArms[0]).short} ${totalFor(liveArms[0])?.starts ?? 0}/${totalFor(liveArms[0])?.visits ?? 0}  ·  ${armLabel("landing", liveArms[1]).short} ${totalFor(liveArms[1])?.starts ?? 0}/${totalFor(liveArms[1])?.visits ?? 0}`,
+        // One clause, not five. The full reasoning is in the comment above this
+        // block; a footnote is read at a glance on a phone, where the old
+        // five-clause version was an illegible grey band.
+        footnote: "starts ÷ all-page visit-days, 7-day trailing · peak {peak}%",
       });
       if (url) {
-        blocks.push({
+        // The counts ride in the CAPTION as well as the image headline. Slack can
+        // fail to load an image, and the caption is the accessible text — a
+        // caveat with no numbers next to it is not worth reading.
+        const countOf = (arm: string) => {
+          const row = totalFor(arm);
+          return row ? `${row.starts}/${row.visits}` : "no visits";
+        };
+        landingStartBlocks.push(
+          section(
+            `*Landing page → survey* — ${armLabel("landing", liveArms[0]).short} ${countOf(liveArms[0])} started · ${armLabel("landing", liveArms[1]).short} ${countOf(liveArms[1])}. ${caveat}`
+          )
+        );
+        landingStartBlocks.push({
           type: "image",
           image_url: url,
           alt_text:
-            "Site visit-days to reached-survey rate, by homepage arm. Not comparable between arms yet — the two arms measure different funnel steps.",
+            "Started-the-survey rate per landing page arm over the reporting window. A trend, not a verdict — the two arms measure different funnel steps.",
         });
       }
+    } else if (!hasVisits(liveArms[0]) && !hasVisits(liveArms[1])) {
+      /**
+       * Nothing for EITHER live arm. ONE line — four lines of "no visits recorded
+       * yet" is the daily filler that teaches people to skim the whole message.
+       *
+       * Gated on visits, not on label count. `liveArms` is hardcoded, so a window
+       * whose rows are all `unknown`/`control` — an arm rename, say — has plenty
+       * of labels and no arm data, and the count branch below would then report
+       * "10 days of per-arm data" above two empty bullets.
+       */
+      landingStartBlocks.push(
+        section("*Landing page → survey* — no per-arm data in this window yet.")
+      );
+    } else {
+      /**
+       * Counts until the trailing rate has seven days behind it — the same
+       * treatment the other young axes get, and visible from the first day
+       * rather than an empty slot and a promise.
+       *
+       * The date is derived, not written down. The window is half-open and ends
+       * at yesterday, so a day only enters the series in the FOLLOWING run: the
+       * first day of data plus six more makes seven labels, and the digest that
+       * carries them is one further day on. Every attempt to state that as a
+       * constant has been off by a day.
+       */
+      const days = series.labels.length;
+      /**
+       * Counted forward from the LAST day of data, not the first.
+       *
+       * From the first, the promise is fixed the moment the series starts — so a
+       * window with a missing day names a date the chart cannot make, and one
+       * that never accumulates a seventh day repeats a date in the past every
+       * morning. From the last, the arithmetic is "how many more days do we
+       * need", which is the actual question. Still +1 on top, because the window
+       * is half-open and ends yesterday: a day only enters the series in the
+       * following run.
+       */
+      const lastDay = [...new Set(startFunnel.daily.map((r) => r.day))].sort().at(-1)!;
+      const readyOn = new Date(`${lastDay}T00:00:00Z`);
+      readyOn.setUTCDate(readyOn.getUTCDate() + (7 - days) + 1);
+      const readyLabel = `${readyOn.getUTCDate()} ${readyOn.toLocaleString("en-GB", { month: "short", timeZone: "UTC" })}`;
+      // And no promise at all once the window is full but the line still cannot
+      // be drawn — that is not a waiting game, it is a different problem.
+      const readyClause = days < 7 ? ` · chart from ${readyLabel}` : "";
+      landingStartBlocks.push(
+        section(
+          [
+            `*Landing page → survey* — ${days === 1 ? "one day" : `${days} days`} of per-arm data${readyClause}`,
+            armLine(liveArms[0]),
+            armLine(liveArms[1]),
+            `• ${caveat}`,
+          ].join("\n")
+        )
+      );
     }
   } else {
-    blocks.push(
+    landingStartBlocks.push(
       context(
-        "_Visits → survey-started by homepage is not available yet — its migration has not been applied._"
+        "_Landing page → survey is not available right now — its data source did not answer._"
       )
     );
   }
 
-  // ---- Finished survey → paid. Downstream of the homepage. ----
-  if (funnel) {
-    const liveArms = ["white", "white_prev"] as const;
-    const series = buildArmSeries(funnel, [liveArms[0], liveArms[1]]);
+  // The landing axis had its own purchases-per-finished-survey chart here. It is
+  // gone, and the per-axis section below is the only place landing is charted.
+  //
+  // Three of that chart's own rules said not to draw it. Its purple line ran from
+  // 26 Jul under the legend "Landing page A (current design)", but the current
+  // design only exists since the 10 Aug rebuild and the round-2 comparison since
+  // 21 Aug (AXIS_VALID_FROM.landing) — so most of that line was the PREVIOUS
+  // design wearing the current one's label, next to a 4-day stub of the other arm
+  // flat on zero. It also drew purchases, which the section below refuses to draw
+  // below MIN_PAID_TO_DRAW, from the same 10 the captions call too few. A message
+  // cannot both show a landing chart and say landing has no chart yet.
 
-    // An arm with no sales yet plots as a flat line along the bottom, and a flat
-    // line against a real curve reads as "this homepage converts at nothing" when
-    // the truth is "13 people, far too few to say". Hiding the chart until both
-    // arms have a sale would cost weeks of the other arm's trend, so the sample
-    // sizes go in the HEADLINE instead and the flat line explains itself.
-    const cohortFor = (arm: string) => funnel.cohort.find((c) => c.arm === arm);
-    const armSummary = (arm: string) => {
-      const label = armLabel("landing", arm).short;
-      const row = cohortFor(arm);
-      if (!row || row.completions === 0) return `${label} no finishers yet`;
-      return `${label} ${row.paid}/${row.completions} paid`;
-    };
-    const smallest = Math.min(
-      cohortFor(liveArms[0])?.completions ?? 0,
-      cohortFor(liveArms[1])?.completions ?? 0
-    );
-    const headline =
-      `${armSummary(liveArms[0])}  ·  ${armSummary(liveArms[1])}` +
-      (smallest < TINY_ARM ? "  —  too early to compare" : "");
-
-    // Chart whenever EITHER arm has something to show; the headline above carries
-    // the caveat when one of them is effectively empty.
-    const hasAnySignal =
-      series.first.some((v) => v != null && v > 0) || series.last.some((v) => v != null && v > 0);
-    if (hasAnySignal && series.labels.length > 1) {
-      const url = await signedChartUrl({
-        windowLabel,
-        labels: series.labels,
-        // null survives to the renderer as a genuine gap in the line.
-        first: series.first.map((v) => (v == null ? null : Math.round(v * 10) / 10)),
-        last: series.last.map((v) => (v == null ? null : Math.round(v * 10) / 10)),
-        title: "Purchases per finished survey, by homepage",
-        legendFirst: armLabel("landing", liveArms[0]).short,
-        legendLast: armLabel("landing", liveArms[1]).short,
-        headline,
-        footnote:
-          // NOT "% of finishers who paid": numerator and denominator are both
-          // counted on the day they happened, so the payers are not drawn from
-          // that window's finishers. Nurture mail runs to 78h and post-call
-          // coupons last 14 days, so a real share of any week's sales come from
-          // earlier weeks' finishers — and the most recent days are depressed
-          // because their finishers have not had time to buy yet.
-          "purchases ÷ finished surveys, both counted on the day they happened — not a cohort rate; recent days read low · 7-day trailing · shared y-scale (peak {peak}%)",
-      });
-      if (url) {
-        blocks.push({
-          type: "image",
-          image_url: url,
-          alt_text: "Conversion rate by homepage arm over the last 30 days",
+  // ---- One chart per live A/B test ----
+  //
+  // Each axis is gated on its own data (see buildAxisTrends): an axis whose
+  // comparison is too young, or whose smaller arm is too thin, gets a sentence
+  // saying so instead of a line that looks confident over data that cannot
+  // support one. The caption goes ABOVE its image deliberately — fitBlocks drops
+  // from the tail, so a cut can only ever lose the picture and keep the caveat,
+  // never the reverse.
+  {
+    const trends = buildAxisTrends(axisRows, dayKey);
+    if (
+      trends.charted.length > 0 ||
+      trends.counts.length > 0 ||
+      trends.skipped.length > 0 ||
+      landingStartBlocks.length > 0
+    ) {
+      blocks.push(section("*The tests*"));
+    }
+    // Landing → survey leads: it is the only axis that measures what a landing
+    // page is FOR, and the one the section was reorganised around.
+    blocks.push(...landingStartBlocks);
+    for (const chart of trends.charted) {
+      const series = buildArmSeries(
+        rowsForAxis(axisRows, chart.axis).rows,
+        chart.arms,
+        (r) => r.checkouts
+      );
+      blocks.push(context(chart.caption));
+      if (series.labels.length > 1) {
+        const url = await signedChartUrl({
+          windowLabel,
+          labels: series.labels,
+          first: series.first.map((v) => (v == null ? null : Math.round(v * 10) / 10)),
+          last: series.last.map((v) => (v == null ? null : Math.round(v * 10) / 10)),
+          title: chart.title,
+          legendFirst: chart.legendFirst,
+          legendLast: chart.legendLast,
+          headline: chart.headline,
+          footnote: chart.footnote,
         });
+        if (url) {
+          blocks.push({
+            type: "image",
+            image_url: url,
+            alt_text: `${chart.axisTitle}: reached-checkout rate per arm over the reporting window`,
+          });
+        }
       }
+    }
+    /**
+     * A section, not a context block: these are the numbers for a test that has
+     * no chart, so they carry the weight the picture would have. A context block
+     * renders them small and italic, which is where a reader's eye goes last.
+     */
+    for (const young of trends.counts) {
+      blocks.push(section(young.text));
+    }
+    for (const gap of trends.skipped) {
+      blocks.push(context(gap.caption));
     }
   }
 
@@ -593,13 +838,23 @@ export async function GET(request: Request) {
 
     const windowStart = new Date(dayStart.getTime() - WINDOW_DAYS * 86_400_000).toISOString();
     const windowEnd = dayStart.toISOString();
-    const [funnel, cohorts, startFunnel] = await Promise.all([
+    const [funnel, cohorts, startFunnel, axisRows, cvrSnap] = await Promise.all([
       fetchLandingArmFunnel(windowStart, windowEnd),
       fetchArmCohorts(windowStart, windowEnd),
       fetchLandingStartFunnel(windowStart, windowEnd),
+      fetchAxisFunnelDaily(windowStart, windowEnd),
+      fetchFunnelCvrSparklines(windowStart, windowEnd),
     ]);
 
-    const digest = await buildConversionDigest({ dayKey, funnel, cohorts, startFunnel, now });
+    const digest = await buildConversionDigest({
+      dayKey,
+      funnel,
+      cohorts,
+      startFunnel,
+      axisRows,
+      cvrDays: cvrSnap?.days ?? null,
+      now,
+    });
     if (digest.trimmed) {
       logger.warn({ day: dayKey }, "conversion-digest: blocks trimmed to fit Slack");
     }

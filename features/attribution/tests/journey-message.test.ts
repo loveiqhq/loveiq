@@ -310,8 +310,8 @@ describe("refreshJourneyMessage", () => {
     const body = JSON.parse(init.body) as Record<string, unknown>;
     // ...and the rail must SHOW it, not just record it.
     const rail = JSON.stringify(body.blocks);
-    expect(rail).toContain(":large_blue_circle: Report opened");
-    expect(rail).toContain(":white_circle: Checkout");
+    expect(rail).toContain(":large_green_circle: Report opened");
+    expect(rail).toContain(":red_circle: Checkout");
     const patch = mockSupabaseFetch.mock.calls.at(-1) as [string, { body: string }];
     expect(JSON.parse(patch[1].body).state).toBe("report_opened");
   });

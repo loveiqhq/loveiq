@@ -26,13 +26,18 @@
 
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { computeRate, delta } from "@features/admin/server/digest-metrics";
-import { formatSignalSummary, twoProportionSignal } from "@features/admin/server/statistics";
+import {
+  formatSignalSummary,
+  MIN_CELL_COUNT,
+  twoProportionSignal,
+} from "@features/admin/server/statistics";
 import {
   armLabel,
   AXIS_TITLES,
   isKnownArm,
   type ExperimentAxis,
 } from "@features/attribution/server/labels";
+import type { AxisFunnelRow } from "@features/attribution/server/axis-trends";
 import logger from "@shared/observability/logger";
 
 /**
@@ -100,6 +105,54 @@ function str(v: unknown): string {
  * section as "skip", matching the convention in `digest-metrics.ts`: one slow or
  * broken source must not lose the whole digest.
  */
+/**
+ * Per-day, per-arm completions/checkouts/paid for EVERY live axis.
+ *
+ * Returns [] rather than null on any failure, for the same reason every other
+ * fetcher here degrades quietly: one broken source must not lose the whole
+ * digest. An empty array simply means no axis clears its chart gate, and the
+ * digest says so in one line instead of dying.
+ */
+export async function fetchAxisFunnelDaily(
+  sinceIso: string,
+  untilIso: string
+): Promise<AxisFunnelRow[]> {
+  let raw: unknown = null;
+  try {
+    const res = await supabaseFetch("/rest/v1/rpc/get_axis_funnel_daily", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ since_ts: sinceIso, until_ts: untilIso }),
+    });
+    if (!res.ok) {
+      logger.warn({ status: res.status }, "conversion-digest: axis funnel RPC non-2xx");
+      return [];
+    }
+    raw = await res.json();
+  } catch (err) {
+    logger.warn({ err }, "conversion-digest: axis funnel RPC threw");
+    return [];
+  }
+  const out: AxisFunnelRow[] = [];
+  for (const row of Array.isArray(raw) ? raw : []) {
+    if (!row || typeof row !== "object") continue;
+    const r = row as Record<string, unknown>;
+    const axis = str(r.axis);
+    const arm = str(r.arm);
+    const day = str(r.day);
+    if (!axis || !arm || !day) continue;
+    out.push({
+      axis,
+      arm,
+      day,
+      completions: int(r.completions),
+      checkouts: int(r.checkouts),
+      paid: int(r.paid),
+    });
+  }
+  return out;
+}
+
 export async function fetchLandingArmFunnel(
   sinceIso: string,
   untilIso: string
@@ -237,7 +290,7 @@ export interface LandingStartFunnel {
 }
 
 /**
- * Landing -> survey-start, per day and per arm. The metric a homepage actually
+ * Landing -> survey-start, per day and per arm. The metric a landing page actually
  * controls, unlike finished-survey -> paid.
  *
  * Returns null on any failure INCLUDING the function not existing yet, so the
@@ -375,12 +428,20 @@ export function buildArmVerdict(
 
   // Order matters: the sample-size objections come FIRST, because a p-value
   // computed on a lopsided split is answering a question nobody asked.
-  if (signal.significance === "insufficient-data") {
+  //
+  // There are THREE separate reasons not to decide, and each one names its own
+  // cause. They used to collapse into a single "not enough data" sentence, which
+  // for the real pricing split reported "328 finished surveys so far" and no
+  // shortfall at all — true, and useless, because the actual blocker was ten
+  // purchases between the two arms.
+  const combinedShort = Math.max(0, 50 - (leader.n + runnerUp.n));
+
+  // 1. Too few finished surveys in total.
+  if (combinedShort > 0) {
     // Two gates have to clear, and the SMALL arm is usually the binding one.
     // Reporting only the combined-50 shortfall understated the remaining runway
     // badly: leader 40 / runner-up 5 reads "about 5 more needed" when the small
     // arm actually needs 25.
-    const combinedShort = Math.max(0, 50 - (leader.n + runnerUp.n));
     const smallArmShort = Math.max(0, TINY_ARM - smallest.n);
     const needed = Math.max(combinedShort, smallArmShort);
     const where = smallArmShort >= combinedShort ? ` in ${smallest.label}` : "";
@@ -399,6 +460,20 @@ export function buildArmVerdict(
       axisTitle,
       state: "too-early",
       sentence: `${axisTitle}: too early to compare — ${smallest.label} has only ${smallest.n} finished ${smallest.n === 1 ? "survey" : "surveys"} so far (needs ${TINY_ARM}). Far more people SAW it; this counts the ones who finished.`,
+      arms,
+    };
+  }
+
+  // 3. Plenty of finished surveys in both arms, but too few CONVERSIONS for the
+  //    z-test to be valid. Saying "no clear winner" here would claim we measured
+  //    and found the arms equal, when the truth is the measurement cannot run.
+  if (signal.significance === "insufficient-data") {
+    const totalConversions = leader.conversions + runnerUp.conversions;
+    return {
+      axis,
+      axisTitle,
+      state: "insufficient-data",
+      sentence: `${axisTitle}: not enough purchases yet to compare — only ${totalConversions} across ${leader.n + runnerUp.n} finished surveys. Each side needs at least ${MIN_CELL_COUNT} before a comparison means anything.`,
       arms,
     };
   }
@@ -532,17 +607,13 @@ export function buildAlerts(input: {
     }
   }
 
-  // The ambiguous visitor bucket. Reported as a data problem, not charted as an arm.
-  const ambiguous = input.visitorArms.find((a) => a.arm === AMBIGUOUS_VISITOR_ARM);
-  if (ambiguous && ambiguous.n > 0) {
-    alerts.push({
-      // `info`, not `warn`: this is a standing measurement caveat that is true
-      // every single day, and warnings sort above everything actionable. A
-      // permanent warning is how the last digest earned itself a mute.
-      severity: "info",
-      message: `${ambiguous.n} visits carry a retired homepage label and cannot be attributed to an arm. They ARE counted in the visits totals above — only the per-arm comparison ignores them, and that comparison is built from finished surveys, not from these visit rows. Visits recorded before today's tracking fix stay unattributable.`,
-    });
-  }
+  /**
+   * The retired-label visit bucket used to be reported here in three sentences.
+   * Removed with the per-arm visit numbers it was explaining: the message no
+   * longer quotes visits by arm anywhere, so the caveat had no subject left. It
+   * was also `info` severity and true every single day, which is how a digest
+   * teaches people to skim past its alerts.
+   */
 
   // The landing arms are not comparable populations: proxy.ts returns an existing
   // white/white_prev cookie unchanged, so everyone who visited between the end of
@@ -554,25 +625,21 @@ export function buildAlerts(input: {
     alerts.push({
       // Standing caveat, same reasoning as above: true every day the test runs.
       severity: "info",
+      // Three sentences cut to one. The fact that changes a decision is that the
+      // current design's number is flattered; the mechanism behind it does not
+      // need re-explaining every morning.
       message:
-        "Homepage arms are not a fair split: returning visitors keep whichever homepage they saw first, so the current design also carries everyone who has been here before. Returning visitors convert BETTER, so treat the current design's number as flattered — an over-estimate, not a floor.",
+        "Landing arms are not a fair split — returning visitors keep the design they first saw, so the current design's number is flattered.",
     });
   }
 
-  // A same-day pricing change resets the pricing comparison — pre- and post-change
-  // arm A are different products and must not be pooled into one rate.
-  if (input.pricingCutoverIso) {
-    const cutover = new Date(input.pricingCutoverIso);
-    if (!Number.isNaN(cutover.getTime())) {
-      const ageMs = input.now.getTime() - cutover.getTime();
-      if (ageMs >= 0 && ageMs < 7 * 86_400_000) {
-        alerts.push({
-          severity: "warn",
-          message: `Report prices changed ${cutover.toISOString().slice(0, 10)}. The pricing comparison above still POOLS both price levels — it is not split at the change — so ignore it until the window is made up of post-change sales.`,
-        });
-      }
-    }
-  }
+  /**
+   * The pricing-cutover warning is gone with the pooled 30-day line it warned
+   * about. The pricing entry under *The tests* is scoped to the change date and
+   * says so on its own first line ("since 24 Aug"), so an alert telling the
+   * reader to ignore a number the message no longer prints was pure noise —
+   * and a `warn` at that, sorted above everything actionable.
+   */
 
   // Traffic collapse: only when the baseline is big enough for a percentage to
   // mean anything, mirroring `delta`'s own low-base annotation.
