@@ -1426,7 +1426,10 @@ export async function GET(request: Request) {
       sectionId: "power_orientation",
     });
     const powerZoneInfo = powerUnlocked
-      ? getPowerZone(getReport2Config(primaryArchetype)?.families?.power_zone)
+      ? getPowerZone(
+          getReport2Config(primaryArchetype)?.families?.power_zone,
+          report2ArchetypeSlug(primaryArchetype)
+        )
       : null;
     const powerCopy = {
       "edu.eyebrow": powerSection["edu.eyebrow"] ?? null,

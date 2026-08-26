@@ -30,11 +30,32 @@ export const POWER_ZONES: Record<string, PowerZone> = {
 };
 
 /**
+ * Per-archetype overrides, because the three family strings above are not
+ * actually per-archetype.
+ *
+ * `switch` covers TEN of the fourteen, so ten readers are told they are a
+ * "Devotional switch — presence-guided". That is the Spiritual Lover's register:
+ * the designer built one switch frame using them as the example and the family
+ * map applies its wording to the other nine. For the Spark Seeker the same
+ * chapter says the opposite kind of thing — "power works on you as play", and the
+ * source document calls it a "freedom guided, playful switch orientation" — so
+ * "devotional" and "presence-guided" read as another archetype's words.
+ *
+ * Only the Spark Seeker is overridden here, from the document's own phrasing. The
+ * other nine `switch` archetypes still take the shared string and still need the
+ * same pass; this map is where their labels go when someone does it.
+ */
+export const POWER_ZONE_OVERRIDES: Record<string, PowerZone> = {
+  "spark-seeker": { label: "Playful switch", result: "Playful switch — freedom-guided" },
+};
+
+/**
  * Zone strings for a `families.power_zone` value. Unknown but non-empty values
  * fall back to the base (switch) rather than fabricating a position; absent
  * values return null so the caller can withhold the "You" highlight entirely.
  */
-export function getPowerZone(zone: unknown): PowerZone | null {
+export function getPowerZone(zone: unknown, slug?: string | null): PowerZone | null {
   if (typeof zone !== "string" || !zone.trim()) return null;
+  if (slug && POWER_ZONE_OVERRIDES[slug]) return POWER_ZONE_OVERRIDES[slug]!;
   return POWER_ZONES[zone] ?? POWER_ZONES.switch!;
 }

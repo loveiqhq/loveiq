@@ -100,9 +100,33 @@ const BookIcon: FC = () => (
  * pastel tints of exactly these accents). Only the "You" dot is labelled on the
  * plane — the Figma labels no other dot — so the 13 others are anonymous
  * context and their name→position pairing only affects dot colour.
+ *
+ * RE-PLOTTED 2026-08-26 — Spark Seeker, from (0.856, 0.115) to (0.63, 0.36).
+ *
+ * The Figma position was the furthest-right and highest of all fourteen: maximum
+ * leading, maximum explicit power. That contradicted three things at once.
+ *   - `families.power_zone` calls the Spark Seeker a `switch`, yet the plot put
+ *     them further into "leading" than BOTH archetypes the same config calls
+ *     `dominant-leaning` (Explorer of Edges 0.737, Authority Conductor 0.659).
+ *   - Their own `body.p1` in this chapter reads "Leading happens when momentum
+ *     grabs you; yielding happens when the game is good" — both directions.
+ *   - The same paragraph says power stays "loose and improvised" and that
+ *     "scripted dominance and solemn rituals drain it fast", which is implicit
+ *     signalling, not the explicit end of the y axis.
+ *
+ * So: x just right of centre, because they do initiate (chapter 22 puts them
+ * under "Active / Direct initiation"), but left of both dominant-leaning
+ * archetypes; y a little above the midline, because they are overt about wanting
+ * but play rather than negotiate. It lands them between Radiant Performer
+ * (0.585, 0.418, leads through seduction) and Authority Conductor (0.659, 0.309,
+ * leads through structure), which is the right company for playful leading.
+ *
+ * The other thirteen are untouched — they are the designer's plot. Anyone
+ * revisiting this should check the same three sources per archetype rather than
+ * nudging dots by eye.
  */
 const PLANE: { name: string; x: number; y: number }[] = [
-  { name: "Spark Seeker", x: 0.856, y: 0.115 },
+  { name: "Spark Seeker", x: 0.63, y: 0.36 },
   { name: "Explorer of Edges", x: 0.737, y: 0.206 },
   { name: "Authority Conductor", x: 0.659, y: 0.309 },
   { name: "Analytical Sexualist", x: 0.641, y: 0.618 },
