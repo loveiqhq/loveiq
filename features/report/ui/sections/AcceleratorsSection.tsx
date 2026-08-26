@@ -162,12 +162,17 @@ const AcceleratorsSection: FC<Props> = ({
       </h3>
 
       {/* Mark asked on 2026-08-26 for this chapter's Key Concepts text to move INTO
-          the card, above "What opens you", and for the brakes paragraph to sit under
-          the verdict meter. So the pill keeps its label and its second paragraph is
-          split out: `learn.body` goes above the columns and `learn.body.p2` (the
-          "Desire doesn't disappear because attraction is gone…" passage) goes under
-          the meter. Nothing is dropped, it is the same two paragraphs in the two
-          places he named. */}
+          the card: `learn.body` above "What opens you", and `learn.body.p2` (the
+          "Desire doesn't disappear because attraction is gone…" passage) under the
+          verdict meter. Both paragraphs are rendered below, in those two places.
+          Nothing is dropped.
+
+          This call therefore renders NOTHING today — LearnPill returns null without a
+          body, which is the wanted outcome, since a labelled pill with no text under
+          it would read as a broken block. It stays because the pill is where any
+          FUTURE Key Concepts text for this chapter belongs, and deleting the call
+          would hide that from the next reader. If the design settles on no pill here
+          at all, delete this line and the two renders keep working. */}
       <LearnPill prefix="accel" copy={{ ...copy, "learn.body": null, "learn.body.p2": null }} />
 
       <article className="report-accel__card">
